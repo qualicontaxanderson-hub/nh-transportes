@@ -1,0 +1,53 @@
+**Caminho:** `templates/veiculos/lista.html`
+
+```html
+{% extends 'base.html' %}
+{% block title %}Veículos - {{ app_name }}{% endblock %}
+{% block content %}
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2><i class="bi bi-truck"></i> Veículos</h2>
+        <a href="{{ url_for('veiculos.novo') }}" class="btn btn-primary">
+            <i class="bi bi-plus-circle"></i> Novo Veículo
+        </a>
+    </div>
+    
+    <div class="card">
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-hover">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Caminhão</th>
+                            <th>Placa</th>
+                            <th>Ações</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for veiculo in veiculos %}
+                        <tr>
+                            <td>{{ veiculo.id }}</td>
+                            <td>{{ veiculo.caminhao }}</td>
+                            <td>{{ veiculo.placa }}</td>
+                            <td>
+                                {% if current_user.is_admin() %}
+                                <a href="{{ url_for('veiculos.excluir', id=veiculo.id) }}" 
+                                   class="btn btn-sm btn-danger"
+                                   onclick="return confirm('Deseja realmente excluir?')">
+                                    <i class="bi bi-trash"></i>
+                                </a>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+```
+
+---
