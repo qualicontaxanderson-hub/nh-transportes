@@ -1,0 +1,50 @@
+**Caminho:** `static/css/style.css`
+
+```css
+:root {
+    --primary-color: #0d6efd;
+    --secondary-color: #6c757d;
+}
+
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background-color: #f8f9fa;
+}
+
+.navbar-brand {
+    font-size: 1.5rem;
+}
+
+.card {
+    border-radius: 10px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    margin-bottom: 20px;
+}
+
+.btn {
+    border-radius: 5px;
+}
+
+.table {
+    background-color: white;
+}
+
+.badge {
+    padding: 0.5em 0.8em;
+}
+
+.display-4 {
+    font-weight: bold;
+}
+
+@media (max-width: 768px) {
+    .navbar-brand {
+        font-size: 1.2rem;
+    }
+    .display-4 {
+        font-size: 2rem;
+    }
+}
+```
+
+---
