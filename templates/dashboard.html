@@ -1,0 +1,74 @@
+**Caminho:** `templates/dashboard.html`
+
+```html
+{% extends 'base.html' %}
+{% block title %}Dashboard - {{ app_name }}{% endblock %}
+{% block content %}
+<div class="container-fluid">
+    <h2 class="mb-4"><i class="bi bi-speedometer2"></i> Dashboard</h2>
+    
+    <div class="row mb-4">
+        <div class="col-md-4">
+            <div class="card text-white bg-primary">
+                <div class="card-body">
+                    <h5 class="card-title"><i class="bi bi-file-earmark-text"></i> Total de Fretes</h5>
+                    <h2 class="display-4">{{ total_fretes }}</h2>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card text-white bg-success">
+                <div class="card-body">
+                    <h5 class="card-title"><i class="bi bi-cash-stack"></i> Faturamento</h5>
+                    <h2 class="display-4">{{ faturamento }}</h2>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card text-white bg-info">
+                <div class="card-body">
+                    <h5 class="card-title"><i class="bi bi-graph-up"></i> Lucro</h5>
+                    <h2 class="display-4">{{ lucro_total }}</h2>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="card">
+        <div class="card-header">
+            <h5><i class="bi bi-clock-history"></i> Últimos Lançamentos</h5>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-hover">
+                    <thead>
+                        <tr>
+                            <th>Data</th>
+                            <th>Cliente</th>
+                            <th>Valor</th>
+                            <th>Situação</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for frete in ultimos_fretes %}
+                        <tr>
+                            <td>{{ frete.data_frete }}</td>
+                            <td>{{ frete.cliente }}</td>
+                            <td>R$ {{ "%.2f"|format(frete.vlr_total_frete) }}</td>
+                            <td>
+                                <span class="badge {% if frete.situacao == 'PAGO' %}bg-success{% else %}bg-warning{% endif %}">
+                                    {{ frete.situacao }}
+                                </span>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+```
+
+---
