@@ -1,0 +1,177 @@
+**Caminho:** `templates/fretes/novo.html`
+
+```html
+{% extends 'base.html' %}
+{% block title %}Novo Frete - {{ app_name }}{% endblock %}
+{% block content %}
+<div class="container-fluid">
+    <h2 class="mb-4"><i class="bi bi-file-earmark-plus"></i> Novo Lançamento de Frete</h2>
+    
+    <div class="card">
+        <div class="card-body">
+            <form method="POST" id="formFrete">
+                <div class="row">
+                    <div class="col-md-3 mb-3">
+                        <label class="form-label">Data do Frete *</label>
+                        <input type="date" name="data_frete" class="form-control" 
+                               value="{{ data_hoje }}" required>
+                    </div>
+                    <div class="col-md-9 mb-3">
+                        <label class="form-label">Cliente *</label>
+                        <select name="cliente_id" class="form-select" required>
+                            <option value="">Selecione...</option>
+                            {% for cliente in clientes %}
+                            <option value="{{ cliente.id }}">{{ cliente.razao_social }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+                
+                <div class="row">
+                    <div class="col-md-4 mb-3">
+                        <label class="form-label">Produto *</label>
+                        <select name="produto_id" class="form-select" required>
+                            <option value="">Selecione...</option>
+                            {% for produto in produtos %}
+                            <option value="{{ produto.id }}">{{ produto.nome }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-4 mb-3">
+                        <label class="form-label">Quantidade *</label>
+                        <select name="quantidade_id" class="form-select" id="quantidade" required>
+                            <option value="">Selecione...</option>
+                            {% for qtd in quantidades %}
+                            <option value="{{ qtd.id }}" data-litros="{{ qtd.litros }}">
+                                {{ qtd.litros }} litros
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-4 mb-3">
+                        <label class="form-label">Preço Unitário</label>
+                        <input type="number" name="preco_produto_unitario" class="form-control" 
+                               step="0.01" placeholder="R$ 0,00">
+                    </div>
+                </div>
+                
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label">Fornecedor</label>
+                        <select name="fornecedor_id" class="form-select">
+                            <option value="">Selecione...</option>
+                            {% for fornecedor in fornecedores %}
+                            <option value="{{ fornecedor.id }}">{{ fornecedor.razao_social }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label">Origem do Produto</label>
+                        <select name="origem_produto_id" class="form-select">
+                            <option value="">Selecione...</option>
+                            {% for origem in origens %}
+                            <option value="{{ origem.id }}">{{ origem.nome }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+                
+                <div class="row">
+                    <div class="col-md-12 mb-3">
+                        <label class="form-label">Preço por Litro *</label>
+                        <select name="preco_litro_id" class="form-select" id="precoLitro" required>
+                            <option value="">Selecione...</option>
+                            {% for preco in precos_litro %}
+                            <option value="{{ preco.id }}" data-valor="{{ preco.valor }}">
+                                R$ {{ "%.2f"|format(preco.valor) }}/litro
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+                
+                <div class="alert alert-info">
+                    <h5><i class="bi bi-calculator"></i> Valor Total do Frete: 
+                        <span id="valorTotal">R$ 0,00</span>
+                    </h5>
+                </div>
+                
+                <div class="row">
+                    <div class="col-md-4 mb-3">
+                        <label class="form-label">Motorista *</label>
+                        <select name="motorista_id" class="form-select" required>
+                            <option value="">Selecione...</option>
+                            {% for motorista in motoristas %}
+                            <option value="{{ motorista.id }}">{{ motorista.nome }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-4 mb-3">
+                        <label class="form-label">Veículo *</label>
+                        <select name="veiculo_id" class="form-select" required>
+                            <option value="">Selecione...</option>
+                            {% for veiculo in veiculos %}
+                            <option value="{{ veiculo.id }}">
+                                {{ veiculo.caminhao }} - {{ veiculo.placa }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-4 mb-3">
+                        <label class="form-label">Comissão CTe *</label>
+                        <select name="comissao_cte_id" class="form-select" required>
+                            <option value="">Selecione...</option>
+                            {% for comissao in comissoes_cte %}
+                            <option value="{{ comissao.id }}">{{ comissao.percentual }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+                
+                <div class="row">
+                    <div class="col-md-12 mb-3">
+                        <label class="form-label">Situação Financeira *</label>
+                        <select name="situacao_financeira_id" class="form-select" required>
+                            <option value="">Selecione...</option>
+                            {% for situacao in situacoes %}
+                            <option value="{{ situacao.id }}">{{ situacao.status }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+                
+                <div class="mt-3">
+                    <button type="submit" class="btn btn-primary btn-lg">
+                        <i class="bi bi-check-circle"></i> Salvar Frete
+                    </button>
+                    <a href="{{ url_for('fretes.lista') }}" class="btn btn-secondary btn-lg">
+                        <i class="bi bi-x-circle"></i> Cancelar
+                    </a>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.getElementById('quantidade').addEventListener('change', calcularTotal);
+document.getElementById('precoLitro').addEventListener('change', calcularTotal);
+
+function calcularTotal() {
+    const qtdSelect = document.getElementById('quantidade');
+    const precoSelect = document.getElementById('precoLitro');
+    
+    if (qtdSelect.value && precoSelect.value) {
+        const litros = parseFloat(qtdSelect.options[qtdSelect.selectedIndex].dataset.litros);
+        const precoLitro = parseFloat(precoSelect.options[precoSelect.selectedIndex].dataset.valor);
+        const total = litros * precoLitro;
+        document.getElementById('valorTotal').textContent = 'R$ ' + total.toFixed(2).replace('.', ',');
+    }
+}
+</script>
+{% endblock %}
+```
+
+---
