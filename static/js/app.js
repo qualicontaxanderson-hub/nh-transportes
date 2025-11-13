@@ -1,5 +1,3 @@
-**Caminho:** `static/js/app.js`
-
 ```javascript
 document.addEventListener('DOMContentLoaded', function() {
     // Máscara CNPJ
