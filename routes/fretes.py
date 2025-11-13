@@ -1,4 +1,3 @@
-```python
 from flask import Blueprint, render_template, request, redirect, url_for, flash
 from flask_login import login_required
 from utils.db import get_db_connection
@@ -110,4 +109,3 @@ def novo():
                          precos_litro=precos_litro, motoristas=motoristas, veiculos=veiculos,
                          comissoes_cte=comissoes_cte, situacoes=situacoes,
                          data_hoje=datetime.now().strftime('%Y-%m-%d'))
-```
