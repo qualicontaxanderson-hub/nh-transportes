@@ -52,4 +52,3 @@ class Usuario(UserMixin):
     def is_admin(self):
         return self.nivel == 'admin'
 ```
----
