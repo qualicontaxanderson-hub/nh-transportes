@@ -1,4 +1,3 @@
-```python
 import re
 
 def formatar_cnpj(cnpj):
@@ -39,4 +38,3 @@ def formatar_moeda(valor):
     if valor is None:
         return "R$ 0,00"
     return f"R$ {float(valor):,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.')
-```
