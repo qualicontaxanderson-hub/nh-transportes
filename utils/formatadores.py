@@ -40,5 +40,3 @@ def formatar_moeda(valor):
         return "R$ 0,00"
     return f"R$ {float(valor):,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.')
 ```
-
----
