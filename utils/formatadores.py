@@ -1,5 +1,3 @@
-**Caminho no GitHub:** `utils/formatadores.py`
-
 ```python
 import re
 
