@@ -42,5 +42,3 @@ def index():
     return render_template('relatorios/index.html', por_cliente=por_cliente,
                          por_motorista=por_motorista, por_situacao=por_situacao)
 ```
-
----
