@@ -1,5 +1,3 @@
-**Caminho no GitHub:** `utils/decorators.py`
-
 ```python
 from functools import wraps
 from flask import abort
