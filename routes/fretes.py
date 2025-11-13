@@ -111,5 +111,3 @@ def novo():
                          comissoes_cte=comissoes_cte, situacoes=situacoes,
                          data_hoje=datetime.now().strftime('%Y-%m-%d'))
 ```
-
----
