@@ -1,4 +1,3 @@
-```python
 from flask import Blueprint, render_template
 from flask_login import login_required
 from utils.db import get_db_connection
@@ -41,4 +40,3 @@ def index():
     
     return render_template('relatorios/index.html', por_cliente=por_cliente,
                          por_motorista=por_motorista, por_situacao=por_situacao)
-```
