@@ -92,3 +92,4 @@ def editar(id):
     cursor.close()
     conn.close()
     return render_template('clientes/editar.html', cliente=cliente)
+
