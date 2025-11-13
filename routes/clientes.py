@@ -121,4 +121,3 @@ def excluir(id):
     return redirect(url_for('clientes.lista'))
 ```
 
----
