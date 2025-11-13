@@ -1,4 +1,3 @@
-```python
 from flask import Blueprint, render_template, request, redirect, url_for, flash
 from flask_login import login_required
 from utils.db import get_db_connection
@@ -48,4 +47,3 @@ def excluir(id):
         cursor.close()
         conn.close()
     return redirect(url_for('motoristas.lista'))
-```
