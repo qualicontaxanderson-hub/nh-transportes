@@ -10,7 +10,7 @@ bp = Blueprint('veiculos', __name__, url_prefix='/veiculos')
 def lista():
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
-    cursor.execute("SELECT * FROM veiculos ORDER BY caminhao")
+    cursor.execute("SELECT * FROM veiculos ORDER BY placa")
     veiculos = cursor.fetchall()
     cursor.close()
     conn.close()
@@ -18,33 +18,23 @@ def lista():
 
 @bp.route('/novo', methods=['GET', 'POST'])
 @login_required
+@admin_required
 def novo():
     if request.method == 'POST':
-        caminhao = request.form.get('caminhao', '').upper()
-        placa = request.form.get('placa', '').upper()
         conn = get_db_connection()
         cursor = conn.cursor()
-        cursor.execute("INSERT INTO veiculos (caminhao, placa) VALUES (%s, %s)", (caminhao, placa))
+        cursor.execute("""
+            INSERT INTO veiculos (placa, modelo, ano, observacoes)
+            VALUES (%s, %s, %s, %s)
+        """, (
+            request.form.get('placa'),
+            request.form.get('modelo'),
+            request.form.get('ano'),
+            request.form.get('observacoes')
+        ))
         conn.commit()
         cursor.close()
         conn.close()
-        flash('Veículo cadastrado!', 'success')
+        flash('Veículo cadastrado com sucesso!', 'success')
         return redirect(url_for('veiculos.lista'))
     return render_template('veiculos/novo.html')
-
-@bp.route('/excluir/<int:id>')
-@login_required
-@admin_required
-def excluir(id):
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    try:
-        cursor.execute("DELETE FROM veiculos WHERE id = %s", (id,))
-        conn.commit()
-        flash('Veículo excluído!', 'success')
-    except Exception as e:
-        flash(f'Erro: {str(e)}', 'danger')
-    finally:
-        cursor.close()
-        conn.close()
-    return redirect(url_for('veiculos.lista'))
