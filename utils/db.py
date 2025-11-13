@@ -1,4 +1,3 @@
-**Código:**
 ``````python
 import mysql.connector
 from config import Config
