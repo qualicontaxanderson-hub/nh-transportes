@@ -165,6 +165,10 @@ def init_db():
         import traceback
         traceback.print_exc()
 
+@app.route('/health')
+def health():
+    return {'status': 'ok'}, 200
+
 @app.route('/')
 @login_required
 def index():
@@ -193,4 +197,4 @@ if __name__ == '__main__':
     print("🚀 Iniciando NH Transportes...")
     init_db()
     print("🌐 Sistema online!")
-    app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 10000)))
+    app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 10000)), debug=False)
