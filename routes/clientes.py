@@ -93,3 +93,16 @@ def editar(id):
     conn.close()
     return render_template('clientes/editar.html', cliente=cliente)
 
+@bp.route('/excluir/<int:id>', methods=['POST'])
+@login_required
+@admin_required
+def excluir(id):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM clientes WHERE id = %s", (id,))
+    conn.commit()
+    cursor.close()
+    conn.close()
+    flash('Cliente excluído com sucesso!', 'success')
+    return redirect(url_for('clientes.lista'))
+
