@@ -49,5 +49,3 @@ def excluir(id):
         conn.close()
     return redirect(url_for('motoristas.lista'))
 ```
-
----
