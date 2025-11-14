@@ -98,11 +98,14 @@ def editar(id):
 @login_required
 @admin_required
 def excluir(id):
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    cursor.execute("DELETE FROM clientes WHERE id = %s", (id,))
-    conn.commit()
-    cursor.close()
-    conn.close()
-    flash('Cliente excluído com sucesso!', 'success')
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM clientes WHERE id = %s", (id,))
+        conn.commit()
+        cursor.close()
+        conn.close()
+        flash('Cliente excluído com sucesso!', 'success')
+    except Exception as e:
+        flash(f'Erro ao excluir cliente: {str(e)}', 'danger')
     return redirect(url_for('clientes.lista'))
