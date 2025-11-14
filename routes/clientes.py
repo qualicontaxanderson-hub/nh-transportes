@@ -25,24 +25,25 @@ def novo():
         conn = get_db_connection()
         cursor = conn.cursor()
         cursor.execute("""
-            INSERT INTO clientes (razao_social, nome_fantasia, cnpj, ie_goias, 
-                                 logradouro, numero, bairro, cidade, uf, cep, 
-                                 telefone, email, observacoes)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            INSERT INTO clientes (razao_social, nome_fantasia, cnpj, ie, contato,
+                                 endereco, numero, complemento, bairro, municipio, uf, cep,
+                                 telefone, email)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         """, (
             request.form.get('razao_social'),
             request.form.get('nome_fantasia') or None,
             request.form.get('cnpj') or None,
-            request.form.get('ie_goias') or None,
-            request.form.get('logradouro') or None,
+            request.form.get('ie') or None,
+            request.form.get('contato') or None,
+            request.form.get('endereco') or None,
             request.form.get('numero') or None,
+            request.form.get('complemento') or None,
             request.form.get('bairro') or None,
-            request.form.get('cidade') or None,
+            request.form.get('municipio') or None,
             request.form.get('uf') or None,
             request.form.get('cep') or None,
             request.form.get('telefone') or None,
             request.form.get('email') or None,
-            request.form.get('observacoes') or None
         ))
         conn.commit()
         cursor.close()
@@ -60,25 +61,25 @@ def editar(id):
     
     if request.method == 'POST':
         cursor.execute("""
-            UPDATE clientes SET razao_social=%s, nome_fantasia=%s, cnpj=%s, 
-                               ie_goias=%s, logradouro=%s, numero=%s, bairro=%s,
-                               cidade=%s, uf=%s, cep=%s, telefone=%s, email=%s,
-                               observacoes=%s
+            UPDATE clientes SET razao_social=%s, nome_fantasia=%s, cnpj=%s, ie=%s, contato=%s,
+                              endereco=%s, numero=%s, complemento=%s, bairro=%s, municipio=%s, uf=%s, cep=%s,
+                              telefone=%s, email=%s
             WHERE id=%s
         """, (
             request.form.get('razao_social'),
             request.form.get('nome_fantasia') or None,
             request.form.get('cnpj') or None,
-            request.form.get('ie_goias') or None,
-            request.form.get('logradouro') or None,
+            request.form.get('ie') or None,
+            request.form.get('contato') or None,
+            request.form.get('endereco') or None,
             request.form.get('numero') or None,
+            request.form.get('complemento') or None,
             request.form.get('bairro') or None,
-            request.form.get('cidade') or None,
+            request.form.get('municipio') or None,
             request.form.get('uf') or None,
             request.form.get('cep') or None,
             request.form.get('telefone') or None,
             request.form.get('email') or None,
-            request.form.get('observacoes') or None,
             id
         ))
         conn.commit()
@@ -105,4 +106,3 @@ def excluir(id):
     conn.close()
     flash('Cliente excluído com sucesso!', 'success')
     return redirect(url_for('clientes.lista'))
-
