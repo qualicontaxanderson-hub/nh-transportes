@@ -24,13 +24,11 @@ def novo():
         conn = get_db_connection()
         cursor = conn.cursor()
         cursor.execute("""
-            INSERT INTO veiculos (placa, modelo, ano, observacoes)
-            VALUES (%s, %s, %s, %s)
+            INSERT INTO veiculos (caminhao, placa)
+            VALUES (%s, %s)
         """, (
+            request.form.get('caminhao'),
             request.form.get('placa'),
-            request.form.get('modelo'),
-            request.form.get('ano'),
-            request.form.get('observacoes')
         ))
         conn.commit()
         cursor.close()
