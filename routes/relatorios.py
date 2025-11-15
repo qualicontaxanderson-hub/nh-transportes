@@ -17,7 +17,7 @@ def index():
                SUM(lf.vlr_total_frete) as total,
                SUM(lf.lucro) as lucro
         FROM lancamento_frete lf
-        LEFT JOIN clientes c ON lf.cliente_id = c.id
+        LEFT JOIN clientes c ON lf.clientes_id = c.id
         GROUP BY c.id, c.razao_social
         ORDER BY lucro DESC
         LIMIT 10
@@ -30,7 +30,7 @@ def index():
                COUNT(lf.id) as fretes,
                SUM(lf.vlr_adiantamento) as total_comissao
         FROM lancamento_frete lf
-        LEFT JOIN motoristas m ON lf.motorista_id = m.id
+        LEFT JOIN motoristas m ON lf.motoristas_id = m.id
         GROUP BY m.id, m.nome
         ORDER BY total_comissao DESC
     """)
