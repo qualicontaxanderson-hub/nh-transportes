@@ -34,17 +34,13 @@ def lista():
 def novo():
     if request.method == 'POST':
         try:
+            caminhao = request.form.get('caminhao')
             placa = request.form.get('placa')
             modelo = request.form.get('modelo')
-            ano = request.form.get('ano')
-            observacoes = request.form.get('observacoes')
             
             conn = get_db_connection()
             cursor = conn.cursor()
-            cursor.execute("""
-                INSERT INTO veiculos (placa, modelo, ano, observacoes)
-                VALUES (%s, %s, %s, %s)
-            """, (placa, modelo, ano, observacoes))
+            cursor.execute("INSERT INTO veiculos (caminhao, placa, modelo) VALUES (%s, %s, %s)", (caminhao, placa, modelo))
             conn.commit()
             cursor.close()
             conn.close()
@@ -64,16 +60,11 @@ def editar(id):
     
     if request.method == 'POST':
         try:
+            caminhao = request.form.get('caminhao')
             placa = request.form.get('placa')
             modelo = request.form.get('modelo')
-            ano = request.form.get('ano')
-            observacoes = request.form.get('observacoes')
             
-            cursor.execute("""
-                UPDATE veiculos 
-                SET placa = %s, modelo = %s, ano = %s, observacoes = %s
-                WHERE id = %s
-            """, (placa, modelo, ano, observacoes, id))
+            cursor.execute("UPDATE veiculos SET caminhao = %s, placa = %s, modelo = %s WHERE id = %s", (caminhao, placa, modelo, id))
             conn.commit()
             cursor.close()
             conn.close()
@@ -81,7 +72,7 @@ def editar(id):
             flash('Veículo atualizado com sucesso!', 'success')
             return redirect(url_for('veiculos.lista'))
         except Exception as e:
-            flash(f'Erro ao atualizar veículo: {str(e)}', 'danger')
+            flash(f'Erro: {str(e)}', 'danger')
             return redirect(url_for('veiculos.lista'))
     
     cursor.execute("SELECT * FROM veiculos WHERE id = %s", (id,))
@@ -115,7 +106,7 @@ def excluir(id):
         cursor.close()
         conn.close()
     except Exception as e:
-        flash(f'Erro ao excluir: {str(e)}', 'danger')
+        flash(f'Erro: {str(e)}', 'danger')
     
     return redirect(url_for('veiculos.lista'))
 
@@ -126,12 +117,7 @@ def api_buscar():
         termo = request.args.get('q', '')
         conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)
-        cursor.execute("""
-            SELECT id, placa, modelo 
-            FROM veiculos 
-            WHERE placa LIKE %s OR modelo LIKE %s
-            LIMIT 10
-        """, (f'%{termo}%', f'%{termo}%'))
+        cursor.execute("SELECT id, placa, modelo FROM veiculos WHERE placa LIKE %s OR modelo LIKE %s LIMIT 10", (f'%{termo}%', f'%{termo}%'))
         veiculos = cursor.fetchall()
         cursor.close()
         conn.close()
