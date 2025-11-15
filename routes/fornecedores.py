@@ -9,16 +9,16 @@ bp = Blueprint('fornecedores', __name__, url_prefix='/fornecedores')
 @login_required
 def lista():
     try:
-    conn = get_db_connection()
-    cursor = conn.cursor(dictionary=True)
-    cursor.execute("SELECT * FROM fornecedores")
-    fornecedores = cursor.fetchall()
-    cursor.close()
-    conn.close()
-    return render_template('fornecedores/lista.html', fornecedores=fornecedores)
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute("SELECT * FROM fornecedores")
+        fornecedores = cursor.fetchall()
+        cursor.close()
+        conn.close()
+        return render_template('fornecedores/lista.html', fornecedores=fornecedores)
     except Exception as e:
-        flash(f'Erro ao carregar fornecedores: {str(e)}', 'danger')
-        return render_template('fornecedores/lista.html', fornecedores=[])
+            flash(f'Erro ao carregar fornecedores: {str(e)}', 'danger')
+            return render_template('fornecedores/lista.html', fornecedores=[])
 @bp.route('/novo', methods=['GET', 'POST'])
 @login_required
 @admin_required
@@ -79,13 +79,13 @@ def editar(id):
 @admin_required
 def excluir(id):
     try:
-conn = get_db_connection()
-cursor = conn.cursor()
-cursor.execute("DELETE FROM fornecedores WHERE id = %s", (id,))
-conn.commit()
-cursor.close()
-conn.close()
-flash('Fornecedor excluído com sucesso!', 'success')
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM fornecedores WHERE id = %s", (id,))
+    conn.commit()
+    cursor.close()
+    conn.close()
+    flash('Fornecedor excluído com sucesso!', 'success')
     except Exception as e:
-        flash(f'Erro ao excluir fornecedor: {str(e)}', 'danger')
-    return redirect(url_for('fornecedores.lista'))
+            flash(f'Erro ao excluir fornecedor: {str(e)}', 'danger')
+        return redirect(url_for('fornecedores.lista'))
