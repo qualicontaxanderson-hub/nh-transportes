@@ -117,7 +117,7 @@ def api_buscar():
         termo = request.args.get('q', '')
         conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)
-        cursor.execute("SELECT id, placa, modelo FROM veiculos WHERE placa LIKE %s OR modelo LIKE %s LIMIT 10", (f'%{termo}%', f'%{termo}%'))
+        cursor.execute("SELECT id, caminhao, placa, modelo FROM veiculos WHERE placa LIKE %s OR modelo LIKE %s OR caminhao LIKE %s LIMIT 10", (f'%{termo}%', f'%{termo}%', f'%{termo}%'))
         veiculos = cursor.fetchall()
         cursor.close()
         conn.close()
