@@ -17,7 +17,7 @@ login_manager.login_view = 'login'
 def load_user(user_id):
     return Usuario.get_by_id(user_id)
 
-from routes import clientes, fornecedores, fretes, motoristas, veiculos, relatorios
+from routes import clientes, fornecedores, fretes, motoristas, veiculos, relatorios, debug
 
 app.register_blueprint(clientes.bp)
 app.register_blueprint(fornecedores.bp)
@@ -25,6 +25,7 @@ app.register_blueprint(fretes.bp)
 app.register_blueprint(motoristas.bp)
 app.register_blueprint(veiculos.bp)
 app.register_blueprint(relatorios.bp)
+app.register_blueprint(debug.bp)
 
 def init_db():
     print("📊 Iniciando inicialização do banco de dados...")
