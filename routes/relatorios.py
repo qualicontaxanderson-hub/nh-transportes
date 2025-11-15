@@ -28,7 +28,7 @@ def index():
     cursor.execute("""
         SELECT m.nome as motorista,
                COUNT(lf.id) as fretes,
-               SUM(lf.vlr_adiantamento) as total_comissao
+               SUM(lf.comissao_motorista) as total_comissao
         FROM lancamento_frete lf
         LEFT JOIN motoristas m ON lf.motoristas_id = m.id
         GROUP BY m.id, m.nome
