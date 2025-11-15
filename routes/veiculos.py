@@ -59,7 +59,7 @@ def novo():
     
     return render_template('veiculos/form.html')
 
-@bp.route('/editar/', methods=['GET', 'POST'])
+@bp.route('/editar/<int:id>', methods=['GET', 'POST'])
 @login_required
 def editar(id):
     """Edita um veículo existente"""
@@ -87,7 +87,6 @@ def editar(id):
         except Exception as e:
             flash(f'Erro ao atualizar veículo: {str(e)}', 'danger')
     
-    # GET: busca dados do veículo
     cursor.execute("SELECT * FROM veiculos WHERE id = %s", (id,))
     veiculo = cursor.fetchone()
     cursor.close()
@@ -99,7 +98,7 @@ def editar(id):
     
     return render_template('veiculos/form.html', veiculo=veiculo)
 
-@bp.route('/excluir/', methods=['POST'])
+@bp.route('/excluir/<int:id>', methods=['POST'])
 @login_required
 def excluir(id):
     """Exclui um veículo"""
@@ -107,14 +106,12 @@ def excluir(id):
         conn = get_db_connection()
         cursor = conn.cursor()
         
-        # Verifica se o veículo existe
         cursor.execute("SELECT id FROM veiculos WHERE id = %s", (id,))
         if not cursor.fetchone():
             flash('Veículo não encontrado!', 'warning')
             return redirect(url_for('veiculos.lista'))
         
-        # Verifica se há fretes vinculados
-        cursor.execute("SELECT COUNT(*) as total FROM lancamento_frete WHERE id_veiculo = %s", (id,))
+        cursor.execute("SELECT COUNT(*) as total FROM lancamento_frete WHERE veiculos_id = %s", (id,))
         result = cursor.fetchone()
         if result[0] > 0:
             flash(f'Não é possível excluir! Existem {result[0]} frete(s) vinculado(s) a este veículo.', 'danger')
@@ -122,7 +119,6 @@ def excluir(id):
             conn.close()
             return redirect(url_for('veiculos.lista'))
         
-        # Exclui o veículo
         cursor.execute("DELETE FROM veiculos WHERE id = %s", (id,))
         conn.commit()
         cursor.close()
