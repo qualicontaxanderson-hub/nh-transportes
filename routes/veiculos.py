@@ -48,7 +48,7 @@ def novo():
             flash('Veículo cadastrado com sucesso!', 'success')
             return redirect(url_for('veiculos.lista'))
         except Exception as e:
-            flash(f'Erro ao cadastrar veículo: {str(e)}', 'danger')
+            flash(f'Erro: {str(e)}', 'danger')
     
     return render_template('veiculos/form.html')
 
