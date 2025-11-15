@@ -8,14 +8,17 @@ bp = Blueprint('fornecedores', __name__, url_prefix='/fornecedores')
 @bp.route('/')
 @login_required
 def lista():
-    conn = get_db_connection()
-    cursor = conn.cursor(dictionary=True)
-    cursor.execute("SELECT * FROM fornecedores")
-    fornecedores = cursor.fetchall()
-    cursor.close()
-    conn.close()
-    return render_template('fornecedores/lista.html', fornecedores=fornecedores)
-
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute("SELECT * FROM fornecedores")
+        fornecedores = cursor.fetchall()
+        cursor.close()
+        conn.close()
+        return render_template('fornecedores/lista.html', fornecedores=fornecedores)
+    except Exception as e:
+        flash(f'Erro ao carregar fornecedores: {str(e)}', 'danger')
+        return render_template('fornecedores/lista.html', fornecedores=[])
 @bp.route('/novo', methods=['GET', 'POST'])
 @login_required
 @admin_required
