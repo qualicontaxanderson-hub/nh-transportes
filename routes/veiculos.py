@@ -1,126 +1,84 @@
-from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify
-from flask_login import login_required
-from config import Config
-import mysql.connector
+from flask import Blueprint, render_template, request, redirect, url_for, flash
+from extensions import mysql
 
-bp = Blueprint('veiculos', __name__, url_prefix='/veiculos')
+veiculos_bp = Blueprint('veiculos', __name__)
 
-def get_db_connection():
-    return mysql.connector.connect(
-        host=Config.DB_HOST,
-        port=Config.DB_PORT,
-        user=Config.DB_USER,
-        password=Config.DB_PASSWORD,
-        database=Config.DB_NAME
-    )
+# 1. LISTAR todos os veículos
+@veiculos_bp.route('/')
+@veiculos_bp.route('/listar')
+def listar():
+    cursor = mysql.connection.cursor()
+    cursor.execute("SELECT * FROM veiculos ORDER BY id DESC")
+    veiculos = cursor.fetchall()
+    cursor.close()
+    return render_template('veiculos/lista.html', veiculos=veiculos)
 
-@bp.route('/')
-@login_required
-def lista():
-    try:
-        conn = get_db_connection()
-        cursor = conn.cursor(dictionary=True)
-        cursor.execute("SELECT * FROM veiculos ORDER BY id DESC")
-        veiculos = cursor.fetchall()
-        cursor.close()
-        conn.close()
-        return render_template('veiculos/lista.html', veiculos=veiculos)
-    except Exception as e:
-        flash(f'Erro ao listar veículos: {str(e)}', 'danger')
-        return render_template('veiculos/lista.html', veiculos=[])
-
-@bp.route('/novo', methods=['GET', 'POST'])
-@login_required
+# 2. EXIBIR formulário para NOVO veículo
+@veiculos_bp.route('/novo', methods=['GET'])
 def novo():
-    if request.method == 'POST':
-        try:
-            caminhao = request.form.get('caminhao')
-            placa = request.form.get('placa')
-            modelo = request.form.get('modelo')
-            
-            conn = get_db_connection()
-            cursor = conn.cursor()
-            cursor.execute("INSERT INTO veiculos (caminhao, placa, modelo) VALUES (%s, %s, %s)", (caminhao, placa, modelo))
-            conn.commit()
-            cursor.close()
-            conn.close()
-            
-            flash('Veículo cadastrado com sucesso!', 'success')
-            return redirect(url_for('veiculos.lista'))
-        except Exception as e:
-            flash(f'Erro: {str(e)}', 'danger')
-    
-    return render_template('veiculos/form.html')
+    return render_template('veiculos/novo.html')  # ✅ CORRIGIDO de form.html para novo.html
 
-@bp.route('/editar/<int:id>', methods=['GET', 'POST'])
-@login_required
+# 3. EXIBIR formulário para EDITAR veículo
+@veiculos_bp.route('/editar/<int:id>', methods=['GET'])
 def editar(id):
-    conn = get_db_connection()
-    cursor = conn.cursor(dictionary=True)
-    
-    if request.method == 'POST':
-        try:
-            caminhao = request.form.get('caminhao')
-            placa = request.form.get('placa')
-            modelo = request.form.get('modelo')
-            
-            cursor.execute("UPDATE veiculos SET caminhao = %s, placa = %s, modelo = %s WHERE id = %s", (caminhao, placa, modelo, id))
-            conn.commit()
-            cursor.close()
-            conn.close()
-            
-            flash('Veículo atualizado com sucesso!', 'success')
-            return redirect(url_for('veiculos.lista'))
-        except Exception as e:
-            flash(f'Erro: {str(e)}', 'danger')
-            return redirect(url_for('veiculos.lista'))
-    
+    cursor = mysql.connection.cursor()
     cursor.execute("SELECT * FROM veiculos WHERE id = %s", (id,))
     veiculo = cursor.fetchone()
     cursor.close()
-    conn.close()
     
     if not veiculo:
-        flash('Veículo não encontrado!', 'warning')
-        return redirect(url_for('veiculos.lista'))
+        flash('Veículo não encontrado!', 'error')
+        return redirect(url_for('veiculos.listar'))
     
-    return render_template('veiculos/form.html', veiculo=veiculo)
+    # Transformar em dicionário para facilitar no template
+    veiculo_dict = {
+        'id': veiculo[0],
+        'placa': veiculo[1],
+        'modelo': veiculo[2],
+        'ano': veiculo[3],
+        'observacoes': veiculo[4] if len(veiculo) > 4 else None
+    }
+    
+    return render_template('veiculos/novo.html', veiculo=veiculo_dict)
 
-@bp.route('/excluir/<int:id>', methods=['POST'])
-@login_required
+# 4. SALVAR (criar novo OU atualizar existente)
+@veiculos_bp.route('/salvar', methods=['POST'])
+@veiculos_bp.route('/salvar/<int:id>', methods=['POST'])
+def salvar(id=None):
+    placa = request.form.get('placa')
+    modelo = request.form.get('modelo')
+    ano = request.form.get('ano')
+    observacoes = request.form.get('observacoes')
+    
+    cursor = mysql.connection.cursor()
+    
+    if id:  # ATUALIZAR veículo existente
+        cursor.execute("""
+            UPDATE veiculos 
+            SET placa = %s, modelo = %s, ano = %s, observacoes = %s 
+            WHERE id = %s
+        """, (placa, modelo, ano, observacoes, id))
+        flash('Veículo atualizado com sucesso!', 'success')
+    else:  # CRIAR novo veículo
+        cursor.execute("""
+            INSERT INTO veiculos (placa, modelo, ano, observacoes) 
+            VALUES (%s, %s, %s, %s)
+        """, (placa, modelo, ano, observacoes))
+        flash('Veículo cadastrado com sucesso!', 'success')
+    
+    mysql.connection.commit()
+    cursor.close()
+    
+    return redirect(url_for('veiculos.listar'))
+
+# 5. EXCLUIR veículo
+@veiculos_bp.route('/excluir/<int:id>')
 def excluir(id):
-    try:
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        
-        cursor.execute("SELECT COUNT(*) as total FROM lancamento_frete WHERE veiculos_id = %s", (id,))
-        result = cursor.fetchone()
-        
-        if result[0] > 0:
-            flash(f'Não é possível excluir! Existem {result[0]} frete(s) vinculado(s).', 'danger')
-        else:
-            cursor.execute("DELETE FROM veiculos WHERE id = %s", (id,))
-            conn.commit()
-            flash('Veículo excluído com sucesso!', 'success')
-        
-        cursor.close()
-        conn.close()
-    except Exception as e:
-        flash(f'Erro: {str(e)}', 'danger')
+    cursor = mysql.connection.cursor()
+    cursor.execute("DELETE FROM veiculos WHERE id = %s", (id,))
+    mysql.connection.commit()
+    cursor.close()
     
-    return redirect(url_for('veiculos.lista'))
+    flash('Veículo excluído com sucesso!', 'success')
+    return redirect(url_for('veiculos.listar'))
 
-@bp.route('/api/buscar')
-@login_required
-def api_buscar():
-    try:
-        termo = request.args.get('q', '')
-        conn = get_db_connection()
-        cursor = conn.cursor(dictionary=True)
-        cursor.execute("SELECT id, caminhao, placa, modelo FROM veiculos WHERE placa LIKE %s OR modelo LIKE %s OR caminhao LIKE %s LIMIT 10", (f'%{termo}%', f'%{termo}%', f'%{termo}%'))
-        veiculos = cursor.fetchall()
-        cursor.close()
-        conn.close()
-        return jsonify(veiculos)
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
