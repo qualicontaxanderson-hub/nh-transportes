@@ -26,7 +26,7 @@ def lista():
         conn.close()
         return render_template('veiculos/lista.html', veiculos=veiculos)
     except Exception as e:
-        flash(f'Erro ao listar veÃ­culos: {str(e)}', 'danger')
+        flash(f'Erro ao listar veículos: {str(e)}', 'danger')
         return render_template('veiculos/lista.html', veiculos=[])
 
 @bp.route('/novo', methods=['GET', 'POST'])
@@ -45,7 +45,7 @@ def novo():
             cursor.close()
             conn.close()
             
-            flash('VeÃ­culo cadastrado com sucesso!', 'success')
+            flash('Veículo cadastrado com sucesso!', 'success')
             return redirect(url_for('veiculos.lista'))
         except Exception as e:
             flash(f'Erro: {str(e)}', 'danger')
@@ -69,7 +69,7 @@ def editar(id):
             cursor.close()
             conn.close()
             
-            flash('VeÃ­culo atualizado com sucesso!', 'success')
+            flash('Veículo atualizado com sucesso!', 'success')
             return redirect(url_for('veiculos.lista'))
         except Exception as e:
             flash(f'Erro: {str(e)}', 'danger')
@@ -81,7 +81,7 @@ def editar(id):
     conn.close()
     
     if not veiculo:
-        flash('VeÃ­culo nÃ£o encontrado!', 'warning')
+        flash('Veículo não encontrado!', 'warning')
         return redirect(url_for('veiculos.lista'))
     
     return render_template('veiculos/form.html', veiculo=veiculo)
@@ -97,11 +97,11 @@ def excluir(id):
         result = cursor.fetchone()
         
         if result[0] > 0:
-            flash(f'NÃ£o Ã© possÃ­vel excluir! Existem {result[0]} frete(s) vinculado(s).', 'danger')
+            flash(f'Não é possível excluir! Existem {result[0]} frete(s) vinculado(s).', 'danger')
         else:
             cursor.execute("DELETE FROM veiculos WHERE id = %s", (id,))
             conn.commit()
-            flash('VeÃ­culo excluÃ­do com sucesso!', 'success')
+            flash('Veículo excluído com sucesso!', 'success')
         
         cursor.close()
         conn.close()
