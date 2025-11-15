@@ -79,13 +79,13 @@ def editar(id):
 @admin_required
 def excluir(id):
     try:
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    cursor.execute("DELETE FROM fornecedores WHERE id = %s", (id,))
-    conn.commit()
-    cursor.close()
-    conn.close()
-    flash('Fornecedor excluído com sucesso!', 'success')
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM fornecedores WHERE id = %s", (id,))
+        conn.commit()
+        cursor.close()
+        conn.close()
+        flash('Fornecedor excluído com sucesso!', 'success')
     except Exception as e:
-            flash(f'Erro ao excluir fornecedor: {str(e)}', 'danger')
-        return redirect(url_for('fornecedores.lista'))
+                flash(f'Erro ao excluir fornecedor: {str(e)}', 'danger')
+            return redirect(url_for('fornecedores.lista'))
