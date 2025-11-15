@@ -25,10 +25,10 @@
                             <tbody>
                                 {% for item in por_cliente %}
                                 <tr>
-                                    <td>{{ item.razao_social[:30] }}</td>
-                                    <td>{{ item.total_fretes }}</td>
-                                    <td>R$ {{ "%.2f"|format(item.total_faturado) }}</td>
-                                    <td>R$ {{ "%.2f"|format(item.total_lucro) }}</td>
+                                    <td>{{ item.cliente[:30] }}</td>
+                                    <td>{{ item.fretes }}</td>
+                                    <td>R$ {{ "%.2f"|format(item.total) }}</td>
+                                    <td>R$ {{ "%.2f"|format(item.lucro) }}</td>
                                 </tr>
                                 {% endfor %}
                             </tbody>
@@ -57,7 +57,7 @@
                                 {% for item in por_motorista %}
                                 <tr>
                                     <td>{{ item.nome }}</td>
-                                    <td>{{ item.total_fretes }}</td>
+                                    <td>{{ item.fretes }}</td>
                                     <td>R$ {{ "%.2f"|format(item.total_comissao) }}</td>
                                 </tr>
                                 {% endfor %}
