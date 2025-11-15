@@ -87,5 +87,5 @@ def excluir(id):
         conn.close()
         flash('Fornecedor excluído com sucesso!', 'success')
     except Exception as e:
-                flash(f'Erro ao excluir fornecedor: {str(e)}', 'danger')
-            return redirect(url_for('fornecedores.lista'))
+        flash(f'Erro ao excluir fornecedor: {str(e)}', 'danger')
+        return redirect(url_for('fornecedores.lista'))
