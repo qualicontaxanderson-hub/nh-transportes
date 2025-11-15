@@ -10,8 +10,7 @@ bp = Blueprint('fornecedores', __name__, url_prefix='/fornecedores')
 def lista():
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
-    cursor.execute("SELECT * FROM fornecedores ORDER BY nome")
-    fornecedores = cursor.fetchall()
+    cursor.execute("SELECT * FROM fornecedores")    fornecedores = cursor.fetchall()
     cursor.close()
     conn.close()
     return render_template('fornecedores/lista.html', fornecedores=fornecedores)
@@ -75,11 +74,14 @@ def editar(id):
 @login_required
 @admin_required
 def excluir(id):
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    cursor.execute("DELETE FROM fornecedores WHERE id = %s", (id,))
-    conn.commit()
-    cursor.close()
-    conn.close()
-    flash('Fornecedor excluído com sucesso!', 'success')
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM fornecedores WHERE id = %s", (id,))
+        conn.commit()
+        cursor.close()
+        conn.close()
+        flash('Fornecedor excluído com sucesso!', 'success')
+    except Exception as e:
+        flash(f'Erro ao excluir fornecedor: {str(e)}', 'danger')
     return redirect(url_for('fornecedores.lista'))
