@@ -87,7 +87,6 @@ def editar(id):
         except Exception as e:
             flash(f'Erro ao atualizar veículo: {str(e)}', 'danger')
     
-    # GET: busca dados do veículo
     cursor.execute("SELECT * FROM veiculos WHERE id = %s", (id,))
     veiculo = cursor.fetchone()
     cursor.close()
@@ -107,13 +106,11 @@ def excluir(id):
         conn = get_db_connection()
         cursor = conn.cursor()
         
-        # Verifica se o veículo existe
         cursor.execute("SELECT id FROM veiculos WHERE id = %s", (id,))
         if not cursor.fetchone():
             flash('Veículo não encontrado!', 'warning')
             return redirect(url_for('veiculos.lista'))
         
-        # Verifica se há fretes vinculados
         cursor.execute("SELECT COUNT(*) as total FROM lancamento_frete WHERE veiculo_id = %s", (id,))
         result = cursor.fetchone()
         if result[0] > 0:
@@ -122,7 +119,6 @@ def excluir(id):
             conn.close()
             return redirect(url_for('veiculos.lista'))
         
-        # Exclui o veículo
         cursor.execute("DELETE FROM veiculos WHERE id = %s", (id,))
         conn.commit()
         cursor.close()
@@ -137,7 +133,7 @@ def excluir(id):
 @bp.route('/api/buscar')
 @login_required
 def api_buscar():
-    """API para buscar veículos (usado em autocomplete)"""
+    """API para buscar veículos"""
     try:
         termo = request.args.get('q', '')
         conn = get_db_connection()
