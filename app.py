@@ -17,7 +17,7 @@ login_manager.login_view = 'login'
 def load_user(user_id):
     return Usuario.get_by_id(user_id)
 
-from routes import clientes, fornecedores, fretes, motoristas, veiculos, relatorios, debug
+from routes import clientes, fornecedores, fretes, motoristas, veiculos, relatorios, debug_bp
 
 app.register_blueprint(clientes.bp)
 app.register_blueprint(fornecedores.bp)
@@ -25,8 +25,7 @@ app.register_blueprint(fretes.bp)
 app.register_blueprint(motoristas.bp)
 app.register_blueprint(veiculos.bp)
 app.register_blueprint(relatorios.bp)
-app.register_blueprint(debug.bp)
-
+app.register_blueprint(debug_bp)
 def init_db():
     print("📊 Iniciando inicialização do banco de dados...")
     try:
@@ -198,4 +197,4 @@ if __name__ == '__main__':
     print("🚀 Iniciando NH Transportes...")
     init_db()
     print("🌐 Sistema online!")
-    app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 10000)), debug=False)
+    app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 10000))=False)
