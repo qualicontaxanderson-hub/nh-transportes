@@ -57,9 +57,12 @@ def novo():
     
     cursor.execute("SELECT id, razao_social FROM clientes ORDER BY razao_social")
     clientes = cursor.fetchall()
-    cursor.execute("SELECT id, nome FROM fornecedores")    fornecedores = cursor.fetchall()
-    cursor.execute("SELECT id, nome FROM motoristas")    motoristas = cursor.fetchall()
-    cursor.execute("SELECT id, placa FROM veiculos")    veiculos = cursor.fetchall()
+    cursor.execute("SELECT id, nome FROM fornecedores")
+    fornecedores = cursor.fetchall()
+    cursor.execute("SELECT id, nome FROM motoristas")
+    motoristas = cursor.fetchall()
+    cursor.execute("SELECT id, placa FROM veiculos")
+    veiculos = cursor.fetchall()
     
     cursor.close()
     conn.close()
