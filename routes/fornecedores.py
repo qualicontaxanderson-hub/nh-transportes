@@ -8,7 +8,7 @@ bp = Blueprint('fornecedores', __name__, url_prefix='/fornecedores')
 @bp.route('/')
 @login_required
 def lista():
-    try:
+        try:
         conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)
         cursor.execute("SELECT * FROM fornecedores")
