@@ -73,11 +73,14 @@ def editar(id):
 @login_required
 @admin_required
 def excluir(id):
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    cursor.execute("DELETE FROM veiculos WHERE id = %s", (id,))
-    conn.commit()
-    cursor.close()
-    conn.close()
-    flash('Veículo excluído com sucesso!', 'success')
+    conn = get_db_connection()    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM veiculos WHERE id = %s", (id,))
+        conn.commit()
+        cursor.close()
+        conn.close()
+        flash('Veículo excluído com sucesso!', 'success')
+    except Exception as e:
+        flash(f'Erro ao excluir veículo: {str(e)}', 'danger')
     return redirect(url_for('veiculos.lista'))
