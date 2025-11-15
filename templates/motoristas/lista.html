@@ -28,10 +28,12 @@
                             <td>{{ motorista.nome }}</td>
                             <td>
                                 {% if current_user.is_admin() %}
-                                <a href="{{ url_for('motoristas.excluir', id=motorista.id) }}" 
-                                   class="btn btn-sm btn-danger"
-                                   onclick="return confirm('Deseja realmente excluir?')">
-                                    <i class="bi bi-trash"></i>
+                                <form action="{{ url_for('motoristas.excluir', id=motorista.id) }}" method="POST" style="display:inline;">
+                                        <button type="submit" class="btn btn-sm btn-danger" 
+                                            onclick="return confirm('Deseja realmente excluir?');">
+                                            <i class="bi bi-trash"></i>
+                                        </button>
+                                    </form>
                                 </a>
                                 {% endif %}
                             </td>
