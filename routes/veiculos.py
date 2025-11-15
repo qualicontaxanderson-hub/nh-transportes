@@ -6,7 +6,6 @@ import mysql.connector
 bp = Blueprint('veiculos', __name__, url_prefix='/veiculos')
 
 def get_db_connection():
-    """Estabelece conexão com o banco de dados"""
     return mysql.connector.connect(
         host=Config.DB_HOST,
         port=Config.DB_PORT,
@@ -18,7 +17,6 @@ def get_db_connection():
 @bp.route('/')
 @login_required
 def lista():
-    """Lista todos os veículos"""
     try:
         conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)
@@ -34,7 +32,6 @@ def lista():
 @bp.route('/novo', methods=['GET', 'POST'])
 @login_required
 def novo():
-    """Cadastra novo veículo"""
     if request.method == 'POST':
         try:
             placa = request.form.get('placa')
@@ -62,7 +59,6 @@ def novo():
 @bp.route('/editar/<int:id>', methods=['GET', 'POST'])
 @login_required
 def editar(id):
-    """Edita um veículo existente"""
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
     
@@ -86,6 +82,7 @@ def editar(id):
             return redirect(url_for('veiculos.lista'))
         except Exception as e:
             flash(f'Erro ao atualizar veículo: {str(e)}', 'danger')
+            return redirect(url_for('veiculos.lista'))
     
     cursor.execute("SELECT * FROM veiculos WHERE id = %s", (id,))
     veiculo = cursor.fetchone()
@@ -101,39 +98,30 @@ def editar(id):
 @bp.route('/excluir/<int:id>', methods=['POST'])
 @login_required
 def excluir(id):
-    """Exclui um veículo"""
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
         
-        cursor.execute("SELECT id FROM veiculos WHERE id = %s", (id,))
-        if not cursor.fetchone():
-            flash('Veículo não encontrado!', 'warning')
-            return redirect(url_for('veiculos.lista'))
-        
         cursor.execute("SELECT COUNT(*) as total FROM lancamento_frete WHERE veiculos_id = %s", (id,))
         result = cursor.fetchone()
-        if result[0] > 0:
-            flash(f'Não é possível excluir! Existem {result[0]} frete(s) vinculado(s) a este veículo.', 'danger')
-            cursor.close()
-            conn.close()
-            return redirect(url_for('veiculos.lista'))
         
-        cursor.execute("DELETE FROM veiculos WHERE id = %s", (id,))
-        conn.commit()
+        if result[0] > 0:
+            flash(f'Não é possível excluir! Existem {result[0]} frete(s) vinculado(s).', 'danger')
+        else:
+            cursor.execute("DELETE FROM veiculos WHERE id = %s", (id,))
+            conn.commit()
+            flash('Veículo excluído com sucesso!', 'success')
+        
         cursor.close()
         conn.close()
-        
-        flash('Veículo excluído com sucesso!', 'success')
     except Exception as e:
-        flash(f'Erro ao excluir veículo: {str(e)}', 'danger')
+        flash(f'Erro ao excluir: {str(e)}', 'danger')
     
     return redirect(url_for('veiculos.lista'))
 
 @bp.route('/api/buscar')
 @login_required
 def api_buscar():
-    """API para buscar veículos (usado em autocomplete)"""
     try:
         termo = request.args.get('q', '')
         conn = get_db_connection()
