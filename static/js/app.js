@@ -1,10 +1,9 @@
-```javascript
 document.addEventListener('DOMContentLoaded', function() {
     // Máscara CNPJ
-    const cnpjInputs = document.querySelectorAll('input[name="cnpj"]');
-    cnpjInputs.forEach(input => {
+    var cnpjInputs = document.querySelectorAll('input[name="cnpj"]');
+    cnpjInputs.forEach(function(input) {
         input.addEventListener('input', function(e) {
-            let value = e.target.value.replace(/\D/g, '');
+            var value = e.target.value.replace(/\D/g, '');
             if (value.length <= 14) {
                 value = value.replace(/^(\d{2})(\d)/, '$1.$2');
                 value = value.replace(/^(\d{2})\.(\d{3})(\d)/, '$1.$2.$3');
@@ -16,10 +15,10 @@ document.addEventListener('DOMContentLoaded', function() {
     });
     
     // Máscara Telefone
-    const telInputs = document.querySelectorAll('input[name="telefone"]');
-    telInputs.forEach(input => {
+    var telInputs = document.querySelectorAll('input[name="telefone"]');
+    telInputs.forEach(function(input) {
         input.addEventListener('input', function(e) {
-            let value = e.target.value.replace(/\D/g, '');
+            var value = e.target.value.replace(/\D/g, '');
             if (value.length <= 11) {
                 if (value.length === 11) {
                     value = value.replace(/^(\d{2})(\d{5})(\d{4})/, '($1) $2-$3');
@@ -32,10 +31,10 @@ document.addEventListener('DOMContentLoaded', function() {
     });
     
     // Máscara CEP
-    const cepInputs = document.querySelectorAll('input[name="cep"]');
-    cepInputs.forEach(input => {
+    var cepInputs = document.querySelectorAll('input[name="cep"]');
+    cepInputs.forEach(function(input) {
         input.addEventListener('input', function(e) {
-            let value = e.target.value.replace(/\D/g, '');
+            var value = e.target.value.replace(/\D/g, '');
             if (value.length <= 8) {
                 value = value.replace(/^(\d{5})(\d)/, '$1-$2');
             }
@@ -43,4 +42,3 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     });
 });
-```
