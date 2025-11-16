@@ -26,6 +26,7 @@ app.register_blueprint(motoristas.bp)
 app.register_blueprint(veiculos.bp)
 app.register_blueprint(relatorios.bp)
 app.register_blueprint(debug_bp)
+
 def init_db():
     print("📊 Iniciando inicialização do banco de dados...")
     try:
@@ -42,6 +43,7 @@ def init_db():
         cursor = conn.cursor()
         print("📋 Criando tabelas...")
         
+        # Tabela usuarios
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS usuarios (
                 id INT AUTO_INCREMENT PRIMARY KEY,
@@ -55,6 +57,7 @@ def init_db():
         """)
         print("✓ Tabela usuarios criada")
         
+        # Tabela clientes
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS clientes (
                 id INT AUTO_INCREMENT PRIMARY KEY,
@@ -70,12 +73,14 @@ def init_db():
                 cep VARCHAR(10),
                 telefone VARCHAR(20),
                 email VARCHAR(100),
+                paga_comissao BOOLEAN DEFAULT TRUE,
                 observacoes TEXT,
                 data_cadastro TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
         print("✓ Tabela clientes criada")
         
+        # Tabela fornecedores
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS fornecedores (
                 id INT AUTO_INCREMENT PRIMARY KEY,
@@ -89,6 +94,7 @@ def init_db():
         """)
         print("✓ Tabela fornecedores criada")
         
+        # Tabela motoristas
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS motoristas (
                 id INT AUTO_INCREMENT PRIMARY KEY,
@@ -102,6 +108,7 @@ def init_db():
         """)
         print("✓ Tabela motoristas criada")
         
+        # Tabela veiculos
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS veiculos (
                 id INT AUTO_INCREMENT PRIMARY KEY,
@@ -114,6 +121,79 @@ def init_db():
         """)
         print("✓ Tabela veiculos criada")
         
+        # ===== NOVAS TABELAS AUXILIARES =====
+        
+        # Tabela quantidades
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS quantidades (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                valor DECIMAL(10,2) NOT NULL,
+                descricao VARCHAR(50),
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        print("✓ Tabela quantidades criada")
+        
+        # Tabela origens
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS origens (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                nome VARCHAR(100) NOT NULL,
+                cidade VARCHAR(100),
+                estado VARCHAR(2) DEFAULT 'GO',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        print("✓ Tabela origens criada")
+        
+        # Tabela destinos
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS destinos (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                nome VARCHAR(100) NOT NULL,
+                cidade VARCHAR(100),
+                estado VARCHAR(2) DEFAULT 'GO',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        print("✓ Tabela destinos criada")
+        
+        # Tabela fretes (nova estrutura)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS fretes (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                clientes_id INT NOT NULL,
+                fornecedores_id INT NOT NULL,
+                motoristas_id INT NOT NULL,
+                veiculos_id INT NOT NULL,
+                quantidade_id INT NOT NULL,
+                origem_id INT NOT NULL,
+                destino_id INT NOT NULL,
+                preco_produto_unitario DECIMAL(10,2) NOT NULL,
+                total_nf_compra DECIMAL(10,2) NOT NULL,
+                preco_por_litro DECIMAL(10,2) NOT NULL,
+                valor_total_frete DECIMAL(10,2) NOT NULL,
+                comissao_motorista DECIMAL(10,2) DEFAULT 0,
+                valor_cte DECIMAL(10,2) NOT NULL,
+                comissao_cte DECIMAL(10,2) NOT NULL,
+                lucro DECIMAL(10,2) NOT NULL,
+                data_frete DATE NOT NULL,
+                status VARCHAR(20) DEFAULT 'pendente',
+                observacoes TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                FOREIGN KEY (clientes_id) REFERENCES clientes(id),
+                FOREIGN KEY (fornecedores_id) REFERENCES fornecedores(id),
+                FOREIGN KEY (motoristas_id) REFERENCES motoristas(id),
+                FOREIGN KEY (veiculos_id) REFERENCES veiculos(id),
+                FOREIGN KEY (quantidade_id) REFERENCES quantidades(id),
+                FOREIGN KEY (origem_id) REFERENCES origens(id),
+                FOREIGN KEY (destino_id) REFERENCES destinos(id)
+            )
+        """)
+        print("✓ Tabela fretes criada")
+        
+        # Tabela lancamento_frete (antiga - manter para compatibilidade)
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS lancamento_frete (
                 id INT AUTO_INCREMENT PRIMARY KEY,
@@ -139,6 +219,76 @@ def init_db():
         """)
         print("✓ Tabela lancamento_frete criada")
         
+        # ===== POPULAR TABELAS AUXILIARES =====
+        
+        # Popular quantidades
+        cursor.execute("SELECT COUNT(*) FROM quantidades")
+        if cursor.fetchone()[0] == 0:
+            print("📦 Populando tabela quantidades...")
+            quantidades_data = [
+                (1000.00, '1.000 litros'),
+                (2000.00, '2.000 litros'),
+                (3000.00, '3.000 litros'),
+                (4000.00, '4.000 litros'),
+                (5000.00, '5.000 litros'),
+                (6000.00, '6.000 litros'),
+                (7000.00, '7.000 litros'),
+                (8000.00, '8.000 litros'),
+                (9000.00, '9.000 litros'),
+                (10000.00, '10.000 litros'),
+                (15000.00, '15.000 litros'),
+                (20000.00, '20.000 litros'),
+                (25000.00, '25.000 litros'),
+                (30000.00, '30.000 litros')
+            ]
+            cursor.executemany(
+                "INSERT INTO quantidades (valor, descricao) VALUES (%s, %s)",
+                quantidades_data
+            )
+            print(f"✅ {len(quantidades_data)} quantidades populadas")
+        
+        # Popular origens
+        cursor.execute("SELECT COUNT(*) FROM origens")
+        if cursor.fetchone()[0] == 0:
+            print("📍 Populando tabela origens...")
+            origens_data = [
+                ('SENADOR CANEDO', 'Senador Canedo', 'GO'),
+                ('GOIÂNIA', 'Goiânia', 'GO'),
+                ('ANÁPOLIS', 'Anápolis', 'GO'),
+                ('APARECIDA DE GOIÂNIA', 'Aparecida de Goiânia', 'GO'),
+                ('TRINDADE', 'Trindade', 'GO'),
+                ('RIO VERDE', 'Rio Verde', 'GO'),
+                ('CATALÃO', 'Catalão', 'GO'),
+                ('ITUMBIARA', 'Itumbiara', 'GO'),
+                ('LUZIÂNIA', 'Luziânia', 'GO'),
+                ('VALPARAÍSO DE GOIÁS', 'Valparaíso de Goiás', 'GO')
+            ]
+            cursor.executemany(
+                "INSERT INTO origens (nome, cidade, estado) VALUES (%s, %s, %s)",
+                origens_data
+            )
+            print(f"✅ {len(origens_data)} origens populadas")
+        
+        # Popular destinos
+        cursor.execute("SELECT COUNT(*) FROM destinos")
+        if cursor.fetchone()[0] == 0:
+            print("🎯 Populando tabela destinos...")
+            destinos_data = [
+                ('POSTO NOVO HORIZONTE', 'Goiânia', 'GO'),
+                ('AUTO POSTO TERRA BRANCA', 'Senador Canedo', 'GO'),
+                ('RLM COMBUSTIVEIS', 'Goiânia', 'GO'),
+                ('AUTO POSTO INTEGRAÇÃO', 'Aparecida de Goiânia', 'GO'),
+                ('POSTO LÍDER', 'Anápolis', 'GO'),
+                ('POSTO CENTRAL', 'Trindade', 'GO'),
+                ('OUTROS', 'Diversos', 'GO')
+            ]
+            cursor.executemany(
+                "INSERT INTO destinos (nome, cidade, estado) VALUES (%s, %s, %s)",
+                destinos_data
+            )
+            print(f"✅ {len(destinos_data)} destinos populados")
+        
+        # Criar usuário admin
         cursor.execute("SELECT COUNT(*) FROM usuarios WHERE username = 'admin'")
         if cursor.fetchone()[0] == 0:
             print("👤 Criando usuário admin...")
@@ -148,10 +298,11 @@ def init_db():
                 VALUES ('admin', %s, 'Administrador', 'admin')
             """, (password_hash,))
             conn.commit()
-            print("✅ Usuário admin criado com sucesso!")
+            print("✅ Usuário admin criado com sucesso! (senha: admin123)")
         else:
             print("ℹ️  Usuário admin já existe")
         
+        conn.commit()
         cursor.close()
         conn.close()
         print("✅ Inicialização do banco concluída!")
