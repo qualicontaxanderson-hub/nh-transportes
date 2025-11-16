@@ -146,27 +146,30 @@
         </div>
     </div>
 </div>
-<link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
-<link href="https://cdn.jsdelivr.net/npm/select2-bootstrap-5-theme@1.3.0/dist/select2-bootstrap-5-theme.min.css" rel="stylesheet" />
+<link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet">
+<link href="https://cdn.jsdelivr.net/npm/select2-bootstrap-5-theme@1.3.0/dist/select2-bootstrap-5-theme.min.css" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
 <script>
-$(document).ready(function() {
-    $('.select2').select2({theme: 'bootstrap-5',placeholder: 'Digite para buscar...',allowClear: true});
+jQuery(document).ready(function($) {
+    $('.select2').select2({theme: 'bootstrap-5', placeholder: 'Digite para buscar...', allowClear: true});
     setTimeout(function() {calcularTudo();}, 500);
 });
-let clientePagaComissao = false, clienteRazaoSocial = '', fornecedorRazaoSocial = '', origemNome = '';
-const clienteSel = document.getElementById('cliente_id');
+var clientePagaComissao = false;
+var clienteRazaoSocial = '';
+var fornecedorRazaoSocial = '';
+var origemNome = '';
+var clienteSel = document.getElementById('cliente_id');
 if (clienteSel.value) {
-    const opt = clienteSel.options[clienteSel.selectedIndex];
+    var opt = clienteSel.options[clienteSel.selectedIndex];
     clientePagaComissao = opt.dataset.pagaComissao == '1';
     clienteRazaoSocial = opt.text.toUpperCase();
 }
-const fornSel = document.getElementById('fornecedor_id');
+var fornSel = document.getElementById('fornecedor_id');
 if (fornSel.value) fornecedorRazaoSocial = fornSel.options[fornSel.selectedIndex].text.toUpperCase();
-const origSel = document.getElementById('origem_id');
+var origSel = document.getElementById('origem_id');
 if (origSel.value) origemNome = origSel.options[origSel.selectedIndex].text.toUpperCase();
 clienteSel.addEventListener('change', function() {
-    const opt = this.options[this.selectedIndex];
+    var opt = this.options[this.selectedIndex];
     clientePagaComissao = opt.dataset.pagaComissao == '1';
     clienteRazaoSocial = opt.text.toUpperCase();
     calcularTudo();
@@ -182,10 +185,10 @@ origSel.addEventListener('change', function() {
 document.getElementById('quantidade').addEventListener('change', calcularTotalNfCompra);
 document.getElementById('precoUnitario').addEventListener('input', calcularTotalNfCompra);
 function calcularTotalNfCompra() {
-    const qtd = document.getElementById('quantidade');
-    const preco = parseFloat(document.getElementById('precoUnitario').value) || 0;
+    var qtd = document.getElementById('quantidade');
+    var preco = parseFloat(document.getElementById('precoUnitario').value) || 0;
     if (qtd.value && preco > 0) {
-        const litros = parseFloat(qtd.options[qtd.selectedIndex].dataset.valor);
+        var litros = parseFloat(qtd.options[qtd.selectedIndex].dataset.valor);
         document.getElementById('totalNfCompra').value = (litros * preco).toFixed(2);
     }
     calcularTudo();
@@ -193,40 +196,41 @@ function calcularTotalNfCompra() {
 document.getElementById('quantidade').addEventListener('change', calcularValorTotalFrete);
 document.getElementById('precoLitro').addEventListener('input', calcularValorTotalFrete);
 function calcularValorTotalFrete() {
-    const qtd = document.getElementById('quantidade');
-    const preco = document.getElementById('precoLitro');
+    var qtd = document.getElementById('quantidade');
+    var preco = document.getElementById('precoLitro');
     if (qtd.value && preco.value) {
-        const litros = parseFloat(qtd.options[qtd.selectedIndex].dataset.valor);
-        const total = litros * parseFloat(preco.value);
+        var litros = parseFloat(qtd.options[qtd.selectedIndex].dataset.valor);
+        var total = litros * parseFloat(preco.value);
         document.getElementById('valorTotal').textContent = 'R$ ' + total.toFixed(2).replace('.', ',');
         document.getElementById('vlr_total_frete').value = total.toFixed(2);
     }
     calcularTudo();
 }
 function calcularTudo() {
-    const qtd = document.getElementById('quantidade');
+    var qtd = document.getElementById('quantidade');
     if (!qtd.value) return;
-    const litros = parseFloat(qtd.options[qtd.selectedIndex].dataset.valor);
-    const vlrTotal = parseFloat(document.getElementById('vlr_total_frete').value) || 0;
-    const totalNf = parseFloat(document.getElementById('totalNfCompra').value) || 0;
-    let comissao = 0;
+    var litros = parseFloat(qtd.options[qtd.selectedIndex].dataset.valor);
+    var vlrTotal = parseFloat(document.getElementById('vlr_total_frete').value) || 0;
+    var totalNf = parseFloat(document.getElementById('totalNfCompra').value) || 0;
+    var comissao = 0;
     if (clientePagaComissao) comissao = litros * 0.01;
     document.getElementById('comissaoMotorista').value = comissao.toFixed(2);
-    let pctCte = 0.08;
-    if (fornecedorRazaoSocial.includes('INTEGRAÇÃO') && (fornecedorRazaoSocial.includes('GOIASA') || fornecedorRazaoSocial.includes('BONSUCESSO'))) {
+    var pctCte = 0.08;
+    if (forn
+ecedorRazaoSocial.includes('INTEGRAÇÃO') && (fornecedorRazaoSocial.includes('GOIASA') || fornecedorRazaoSocial.includes('BONSUCESSO'))) {
         pctCte = 0.05;
     } else if (clienteRazaoSocial.includes('AUTO POSTO TERRA BRANCA')) {
         pctCte = origemNome.includes('SENADOR CANEDO') ? 0.06 : 0.10;
     } else if (clienteRazaoSocial.includes('RLM COMBUSTIVEIS')) {
         pctCte = 0.10;
     }
-    const vlrCte = litros * pctCte;
+    var vlrCte = litros * pctCte;
     document.getElementById('vlrCte').value = vlrCte.toFixed(2);
-    const comCte = vlrCte * 0.08;
+    var comCte = vlrCte * 0.08;
     document.getElementById('comissaoCte').value = comCte.toFixed(2);
-    let lucro = clientePagaComissao ? (vlrTotal - comissao - comCte - totalNf) : 0;
+    var lucro = clientePagaComissao ? (vlrTotal - comissao - comCte - totalNf) : 0;
     document.getElementById('lucro').value = lucro.toFixed(2);
-    const lucroInput = document.getElementById('lucro');
+    var lucroInput = document.getElementById('lucro');
     lucroInput.style.color = lucro > 0 ? '#28a745' : (lucro < 0 ? '#dc3545' : '#6c757d');
 }
 </script>
