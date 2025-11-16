@@ -209,3 +209,25 @@ function calcularTudo() {
     const litros = parseFloat(qtd.options[qtd.selectedIndex].dataset.valor);
     const vlrTotal = parseFloat(document.getElementById('vlr_total_frete').value) || 0;
     const totalNf = parseFloat(document.getElementById('totalNfCompra').value) || 0;
+    let comissao = 0;
+    if (clientePagaComissao) comissao = litros * 0.01;
+    document.getElementById('comissaoMotorista').value = comissao.toFixed(2);
+    let pctCte = 0.08;
+    if (fornecedorRazaoSocial.includes('INTEGRAÇÃO') && (fornecedorRazaoSocial.includes('GOIASA') || fornecedorRazaoSocial.includes('BONSUCESSO'))) {
+        pctCte = 0.05;
+    } else if (clienteRazaoSocial.includes('AUTO POSTO TERRA BRANCA')) {
+        pctCte = origemNome.includes('SENADOR CANEDO') ? 0.06 : 0.10;
+    } else if (clienteRazaoSocial.includes('RLM COMBUSTIVEIS')) {
+        pctCte = 0.10;
+    }
+    const vlrCte = litros * pctCte;
+    document.getElementById('vlrCte').value = vlrCte.toFixed(2);
+    const comCte = vlrCte * 0.08;
+    document.getElementById('comissaoCte').value = comCte.toFixed(2);
+    let lucro = clientePagaComissao ? (vlrTotal - comissao - comCte - totalNf) : 0;
+    document.getElementById('lucro').value = lucro.toFixed(2);
+    const lucroInput = document.getElementById('lucro');
+    lucroInput.style.color = lucro > 0 ? '#28a745' : (lucro < 0 ? '#dc3545' : '#6c757d');
+}
+</script>
+{% endblock %}
