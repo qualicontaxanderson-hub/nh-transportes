@@ -1,3 +1,7 @@
+import sys
+import os
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 from extensions import db
 from datetime import datetime
 
@@ -15,9 +19,6 @@ class Fornecedor(db.Model):
     estado = db.Column(db.String(2))
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-    
-    # Relacionamento com fretes
-    fretes = db.relationship('Frete', backref='fornecedor', lazy=True, foreign_keys='Frete.fornecedores_id')
     
     def __repr__(self):
         return f'<Fornecedor {self.nome}>'
