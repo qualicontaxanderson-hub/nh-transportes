@@ -1,6 +1,5 @@
 {% extends 'base.html' %}
 {% block title %}Novo Frete - {{ app_name }}{% endblock %}
-
 {% block content %}
 <div class="container-fluid">
     <nav aria-label="breadcrumb">
@@ -10,9 +9,7 @@
             <li class="breadcrumb-item active" aria-current="page">Novo Frete</li>
         </ol>
     </nav>
-    
     <h2 class="mb-4" style="color:#1D63A5;"><i class="bi bi-plus-circle"></i> Novo Lançamento de Frete</h2>
-    
     <div class="card">
         <div class="card-header" style="background:#ff9800;color:white;">
             <h5 class="mb-0">Cadastrar Frete</h5>
@@ -25,7 +22,7 @@
                         <input type="date" name="data_frete" class="form-control" value="{{ data_hoje }}" required>
                     </div>
                     <div class="col-md-9 mb-3">
-                        <label class="form-label">Cliente * <small class="text-muted">(digite para buscar)</small></label>
+                        <label class="form-label">Cliente *</label>
                         <select name="cliente_id" id="cliente_id" class="form-select select2" required>
                             <option value="">Selecione...</option>
                             {% for cliente in clientes %}
@@ -34,7 +31,6 @@
                         </select>
                     </div>
                 </div>
-                
                 <div class="row">
                     <div class="col-md-4 mb-3">
                         <label class="form-label">Produto *</label>
@@ -56,24 +52,22 @@
                     </div>
                     <div class="col-md-4 mb-3">
                         <label class="form-label">Preço por Litro *</label>
-                        <input type="number" name="preco_litro" id="precoLitro" class="form-control" step="0.001" placeholder="R$ 0,000" required>
+                        <input type="number" name="preco_litro" id="precoLitro" class="form-control" step="0.001" placeholder="0.000" required>
                     </div>
                 </div>
-                
                 <div class="row">
                     <div class="col-md-6 mb-3">
                         <label class="form-label">Preço Produto Unitário</label>
-                        <input type="number" name="preco_produto_unitario" id="precoUnitario" class="form-control" step="0.01" placeholder="R$ 0,00">
+                        <input type="number" name="preco_produto_unitario" id="precoUnitario" class="form-control" step="0.01" placeholder="0.00">
                     </div>
                     <div class="col-md-6 mb-3">
-                        <label class="form-label">Total NF Compra <small class="text-muted">(calculado automaticamente)</small></label>
-                        <input type="number" name="total_nf_compra" id="totalNfCompra" class="form-control" step="0.01" placeholder="R$ 0,00" readonly style="background:#f0f0f0;">
+                        <label class="form-label">Total NF Compra</label>
+                        <input type="number" name="total_nf_compra" id="totalNfCompra" class="form-control" step="0.01" placeholder="0.00" readonly style="background:#f0f0f0;">
                     </div>
                 </div>
-                
                 <div class="row">
                     <div class="col-md-6 mb-3">
-                        <label class="form-label">Fornecedor <small class="text-muted">(digite para buscar)</small></label>
+                        <label class="form-label">Fornecedor</label>
                         <select name="fornecedor_id" id="fornecedor_id" class="form-select select2">
                             <option value="">Selecione...</option>
                             {% for fornecedor in fornecedores %}
@@ -91,15 +85,13 @@
                         </select>
                     </div>
                 </div>
-                
                 <div class="alert alert-info">
                     <h5><i class="bi bi-calculator"></i> Valor Total do Frete: <span id="valorTotal" style="color:#1D63A5;font-weight:700;">R$ 0,00</span></h5>
                     <input type="hidden" name="vlr_total_frete" id="vlr_total_frete" value="0">
                 </div>
-                
                 <div class="row">
                     <div class="col-md-4 mb-3">
-                        <label class="form-label">Motorista * <small class="text-muted">(digite para buscar)</small></label>
+                        <label class="form-label">Motorista *</label>
                         <select name="motorista_id" id="motorista_id" class="form-select select2" required>
                             <option value="">Selecione...</option>
                             {% for motorista in motoristas %}
@@ -108,7 +100,7 @@
                         </select>
                     </div>
                     <div class="col-md-4 mb-3">
-                        <label class="form-label">Veículo * <small class="text-muted">(digite para buscar)</small></label>
+                        <label class="form-label">Veículo *</label>
                         <select name="veiculo_id" id="veiculo_id" class="form-select select2" required>
                             <option value="">Selecione...</option>
                             {% for veiculo in veiculos %}
@@ -117,26 +109,24 @@
                         </select>
                     </div>
                     <div class="col-md-4 mb-3">
-                        <label class="form-label">Comissão Motorista <small class="text-muted">(R$ 0,01/litro se cliente paga)</small></label>
-                        <input type="number" name="comissao_motorista" id="comissaoMotorista" class="form-control" step="0.01" placeholder="R$ 0,00" readonly style="background:#f0f0f0;">
+                        <label class="form-label">Comissão Motorista</label>
+                        <input type="number" name="comissao_motorista" id="comissaoMotorista" class="form-control" step="0.01" placeholder="0.00" readonly style="background:#f0f0f0;">
                     </div>
                 </div>
-                
                 <div class="row">
                     <div class="col-md-6 mb-3">
-                        <label class="form-label">Valor CTe <small class="text-muted">(calculado automaticamente)</small></label>
-                        <input type="number" name="vlr_cte" id="vlrCte" class="form-control" step="0.01" placeholder="R$ 0,00" readonly style="background:#f0f0f0;">
+                        <label class="form-label">Valor CTe</label>
+                        <input type="number" name="vlr_cte" id="vlrCte" class="form-control" step="0.01" placeholder="0.00" readonly style="background:#f0f0f0;">
                     </div>
                     <div class="col-md-6 mb-3">
-                        <label class="form-label">Comissão CTe (8%) <small class="text-muted">(calculado automaticamente)</small></label>
-                        <input type="number" name="comissao_cte" id="comissaoCte" class="form-control" step="0.01" placeholder="R$ 0,00" readonly style="background:#f0f0f0;">
+                        <label class="form-label">Comissão CTe (8%)</label>
+                        <input type="number" name="comissao_cte" id="comissaoCte" class="form-control" step="0.01" placeholder="0.00" readonly style="background:#f0f0f0;">
                     </div>
                 </div>
-                
                 <div class="row">
                     <div class="col-md-6 mb-3">
-                        <label class="form-label">Lucro <small class="text-muted">(calculado automaticamente)</small></label>
-                        <input type="number" name="lucro" id="lucro" class="form-control" step="0.01" placeholder="R$ 0,00" readonly style="background:#f0f0f0;font-weight:bold;">
+                        <label class="form-label">Lucro</label>
+                        <input type="number" name="lucro" id="lucro" class="form-control" step="0.01" placeholder="0.00" readonly style="background:#f0f0f0;font-weight:bold;">
                     </div>
                     <div class="col-md-6 mb-3">
                         <label class="form-label">Situação Financeira *</label>
@@ -148,7 +138,6 @@
                         </select>
                     </div>
                 </div>
-                
                 <div class="mt-4">
                     <button type="submit" class="btn btn-primary btn-lg" style="background:#1D63A5;border:none;"><i class="bi bi-check-circle"></i> Salvar Frete</button>
                     <a href="{{ url_for('fretes.lista') }}" class="btn btn-secondary btn-lg"><i class="bi bi-x-circle"></i> Cancelar</a>
@@ -157,135 +146,80 @@
         </div>
     </div>
 </div>
-
-<link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
-<link href="https://cdn.jsdelivr.net/npm/select2-bootstrap-5-theme@1.3.0/dist/select2-bootstrap-5-theme.min.css" rel="stylesheet" />
-
+<link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet">
+<link href="https://cdn.jsdelivr.net/npm/select2-bootstrap-5-theme@1.3.0/dist/select2-bootstrap-5-theme.min.css" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
-
 <script>
-$(document).ready(function() {
-    $('.select2').select2({
-        theme: 'bootstrap-5',
-        placeholder: 'Digite para buscar...',
-        allowClear: true
-    });
+jQuery(document).ready(function($) {
+    $('.select2').select2({theme: 'bootstrap-5', placeholder: 'Digite para buscar...', allowClear: true});
 });
-
-let clientePagaComissao = false;
-let clienteRazaoSocial = '';
-let fornecedorRazaoSocial = '';
-let origemNome = '';
-
+var clientePagaComissao = false;
+var clienteRazaoSocial = '';
+var fornecedorRazaoSocial = '';
+var origemNome = '';
 document.getElementById('cliente_id').addEventListener('change', function() {
-    const selectedOption = this.options[this.selectedIndex];
-    clientePagaComissao = selectedOption.dataset.pagaComissao == '1';
-    clienteRazaoSocial = selectedOption.text.toUpperCase();
+    var opt = this.options[this.selectedIndex];
+    clientePagaComissao = opt.dataset.pagaComissao == '1';
+    clienteRazaoSocial = opt.text.toUpperCase();
     calcularTudo();
 });
-
 document.getElementById('fornecedor_id').addEventListener('change', function() {
     fornecedorRazaoSocial = this.options[this.selectedIndex].text.toUpperCase();
     calcularTudo();
 });
-
 document.getElementById('origem_id').addEventListener('change', function() {
     origemNome = this.options[this.selectedIndex].text.toUpperCase();
     calcularTudo();
 });
-
 document.getElementById('quantidade').addEventListener('change', calcularTotalNfCompra);
 document.getElementById('precoUnitario').addEventListener('input', calcularTotalNfCompra);
-
 function calcularTotalNfCompra() {
-    const qtdSelect = document.getElementById('quantidade');
-    const precoUnitario = parseFloat(document.getElementById('precoUnitario').value) || 0;
-    
-    if (qtdSelect.value && precoUnitario > 0) {
-        const litros = parseFloat(qtdSelect.options[qtdSelect.selectedIndex].dataset.valor);
-        const total = litros * precoUnitario;
-        document.getElementById('totalNfCompra').value = total.toFixed(2);
-    } else {
-        document.getElementById('totalNfCompra').value = '';
+    var qtd = document.getElementById('quantidade');
+    var preco = parseFloat(document.getElementById('precoUnitario').value) || 0;
+    if (qtd.value && preco > 0) {
+        var litros = parseFloat(qtd.options[qtd.selectedIndex].dataset.valor);
+        document.getElementById('totalNfCompra').value = (litros * preco).toFixed(2);
     }
     calcularTudo();
 }
-
 document.getElementById('quantidade').addEventListener('change', calcularValorTotalFrete);
 document.getElementById('precoLitro').addEventListener('input', calcularValorTotalFrete);
-
 function calcularValorTotalFrete() {
-    const qtdSelect = document.getElementById('quantidade');
-    const precoInput = document.getElementById('precoLitro');
-    
-    if (qtdSelect.value && precoInput.value) {
-        const litros = parseFloat(qtdSelect.options[qtdSelect.selectedIndex].dataset.valor);
-        const precoLitro = parseFloat(precoInput.value);
-        const total = litros * precoLitro;
-        
+    var qtd = document.getElementById('quantidade');
+    var preco = document.getElementById('precoLitro');
+    if (qtd.value && preco.value) {
+        var litros = parseFloat(qtd.options[qtd.selectedIndex].dataset.valor);
+        var total = litros * parseFloat(preco.value);
         document.getElementById('valorTotal').textContent = 'R$ ' + total.toFixed(2).replace('.', ',');
         document.getElementById('vlr_total_frete').value = total.toFixed(2);
     }
     calcularTudo();
 }
-
 function calcularTudo() {
-    const qtdSelect = document.getElementById('quantidade');
-    if (!qtdSelect.value) return;
-    
-    const litros = parseFloat(qtdSelect.options[qtdSelect.selectedIndex].dataset.valor);
-    const vlrTotalFrete = parseFloat(document.getElementById('vlr_total_frete').value) || 0;
-    const totalNfCompra = parseFloat(document.getElementById('totalNfCompra').value) || 0;
-    
-    let comissaoMotorista = 0;
-    if (clientePagaComissao) {
-        comissaoMotorista = litros * 0.01;
+    var qtd = document.getElementById('quantidade');
+    if (!qtd.value) return;
+    var litros = parseFloat(qtd.options[qtd.selectedIndex].dataset.valor);
+    var vlrTotal = parseFloat(document.getElementById('vlr_total_frete').value) || 0;
+    var totalNf = parseFloat(document.getElementById('totalNfCompra').value) || 0;
+    var comissao = 0;
+    if (clientePagaComissao) comissao = litros * 0.01;
+    document.getElementById('comissaoMotorista').value = comissao.toFixed(2);
+    var pctCte = 0.08;
+    if (fornecedorRazaoSocial.includes('INTEGRAÇÃO') && (fornecedorRazaoSocial.includes('GOIASA') || fornecedorRazaoSocial.includes('BONSUCESSO'))) {
+        pctCte = 0.05;
+    } else if (clienteRazaoSocial.includes('AUTO POSTO TERRA BRANCA')) {
+        pctCte = origemNome.includes('SENADOR CANEDO') ? 0.06 : 0.10;
+    } else if (clienteRazaoSocial.includes('RLM COMBUSTIVEIS')) {
+        pctCte = 0.10;
     }
-    document.getElementById('comissaoMotorista').value = comissaoMotorista.toFixed(2);
-    
-    let percentualCte = 0.08;
-    
-    if (fornecedorRazaoSocial.includes('INTEGRAÇÃO') && 
-        (fornecedorRazaoSocial.includes('GOIASA') || fornecedorRazaoSocial.includes('BONSUCESSO'))) {
-        percentualCte = 0.05;
-    }
-    else if (clienteRazaoSocial.includes('AUTO POSTO TERRA BRANCA')) {
-        if (origemNome.includes('SENADOR CANEDO')) {
-            percentualCte = 0.06;
-        } else {
-            percentualCte = 0.10;
-        }
-    }
-    else if (clienteRazaoSocial.includes('RLM COMBUSTIVEIS')) {
-        percentualCte = 0.10;
-    }
-    
-    const vlrCte = litros * percentualCte;
-    document.getElementById('vlr
-    const vlrCte = litros * percentualCte;
+    var vlrCte = litros * pctCte;
     document.getElementById('vlrCte').value = vlrCte.toFixed(2);
-    
-    const comissaoCte = vlrCte * 0.08;
-    document.getElementById('comissaoCte').value = comissaoCte.toFixed(2);
-    
-    let lucro = 0;
-    
-    if (clientePagaComissao) {
-        lucro = vlrTotalFrete - comissaoMotorista - comissaoCte - totalNfCompra;
-    } else {
-        lucro = 0;
-    }
-    
+    var comCte = vlrCte * 0.08;
+    document.getElementById('comissaoCte').value = comCte.toFixed(2);
+    var lucro = clientePagaComissao ? (vlrTotal - comissao - comCte - totalNf) : 0;
     document.getElementById('lucro').value = lucro.toFixed(2);
-    
-    const lucroInput = document.getElementById('lucro');
-    if (lucro > 0) {
-        lucroInput.style.color = '#28a745';
-    } else if (lucro < 0) {
-        lucroInput.style.color = '#dc3545';
-    } else {
-        lucroInput.style.color = '#6c757d';
-    }
+    var lucroInput = document.getElementById('lucro');
+    lucroInput.style.color = lucro > 0 ? '#28a745' : (lucro < 0 ? '#dc3545' : '#6c757d');
 }
 </script>
 {% endblock %}
