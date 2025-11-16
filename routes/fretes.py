@@ -1,4 +1,5 @@
 from flask import Blueprint, render_template, request, redirect, url_for, flash
+# Atualizado em 16/11/2025 às 20:40 - Corrigido campo nome para razao_social
 from flask_login import login_required
 from config import Config
 import mysql.connector
