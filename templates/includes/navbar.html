@@ -10,50 +10,50 @@
             <ul class="navbar-nav me-auto">
                 <li class="nav-item">
                     <a class="nav-link {% if request.endpoint and 'clientes' in request.endpoint %}active{% endif %}" 
-                       href="{{ url_for('clientes.lista') }}" style="color: #ff9800;">
+                       href="{{ url_for('clientes.lista') }}" style="color: #000; font-weight: 700;">
                         <i class="bi bi-people"></i> Clientes
                     </a>
                 </li>
                 <li class="nav-item">
                     <a class="nav-link {% if request.endpoint and 'fornecedores' in request.endpoint %}active{% endif %}" 
-                       href="{{ url_for('fornecedores.lista') }}" style="color: #ff9800;">
+                       href="{{ url_for('fornecedores.lista') }}" style="color: #000; font-weight: 700;">
                         <i class="bi bi-building"></i> Fornecedores
                     </a>
                 </li>
                 <li class="nav-item">
                     <a class="nav-link {% if request.endpoint and 'motoristas' in request.endpoint %}active{% endif %}" 
-                       href="{{ url_for('motoristas.lista') }}" style="color: #ff9800;">
+                       href="{{ url_for('motoristas.lista') }}" style="color: #000; font-weight: 700;">
                         <i class="bi bi-person-badge"></i> Motoristas
                     </a>
                 </li>
                 <li class="nav-item">
                     <a class="nav-link {% if request.endpoint and 'veiculos' in request.endpoint %}active{% endif %}" 
-                       href="{{ url_for('veiculos.lista') }}" style="color: #ff9800;">
+                       href="{{ url_for('veiculos.lista') }}" style="color: #000; font-weight: 700;">
                         <i class="bi bi-truck"></i> Veículos
                     </a>
                 </li>
                 <li class="nav-item">
                     <a class="nav-link {% if request.endpoint and 'fretes' in request.endpoint %}active{% endif %}" 
-                       href="{{ url_for('fretes.lista') }}" style="color: #ff9800;">
+                       href="{{ url_for('fretes.lista') }}" style="color: #000; font-weight: 700;">
                         <i class="bi bi-box-seam"></i> Fretes
                     </a>
                 </li>
                 <li class="nav-item">
                     <a class="nav-link {% if request.endpoint and 'relatorios' in request.endpoint %}active{% endif %}" 
-                       href="{{ url_for('relatorios.index') }}" style="color: #ff9800;">
+                       href="{{ url_for('relatorios.index') }}" style="color: #000; font-weight: 700;">
                         <i class="bi bi-graph-up"></i> Relatórios
                     </a>
                 </li>
             </ul>
             <ul class="navbar-nav">
                 <li class="nav-item d-flex align-items-center">
-                    <span class="navbar-text me-3" style="color: #ff9800; font-weight: 500;">
+                    <span class="navbar-text me-3" style="color: #000; font-weight: 700;">
                         <i class="bi bi-person-circle"></i> {{ current_user.nome_completo }}
                     </span>
                 </li>
                 <li class="nav-item">
                     <a class="nav-link" href="{{ url_for('logout') }}" 
-                       style="color: #ff9800; border: 2px solid #ff9800; border-radius: 6px; padding: 6px 16px;">
+                       style="color: #000; font-weight: 700; border: 2px solid #ff9800; border-radius: 6px; padding: 6px 16px; background: #ff9800;">
                         <i class="bi bi-box-arrow-right"></i> Sair
                     </a>
                 </li>
@@ -63,27 +63,27 @@
 </nav>
 
 <style>
-    /* Destaque do item ativo - fundo branco com letra azul */
+    /* Destaque do item ativo - fundo branco com letra preta */
     .navbar-nav .nav-link.active {
         background: white;
-        color: #1D63A5 !important;
+        color: #000 !important;
         border-radius: 6px;
         padding: 8px 15px;
-        font-weight: 600;
+        font-weight: 700 !important;
     }
     
-    /* Hover nos links - fundo laranja claro */
+    /* Hover nos links - fundo laranja */
     .navbar-nav .nav-link:hover {
-        background: rgba(255, 152, 0, 0.3);
+        background: #ff9800;
         border-radius: 6px;
         transition: all 0.3s;
-        color: white !important;
+        color: #000 !important;
     }
     
-    /* Botão sair com efeito hover */
+    /* Botão sair com efeito hover mais escuro */
     .navbar-nav .nav-link:last-child:hover {
-        background: #ff9800 !important;
-        color: white !important;
+        background: #e68900 !important;
+        color: #000 !important;
     }
     
     /* Logo hover */
