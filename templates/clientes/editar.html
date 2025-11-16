@@ -2,52 +2,69 @@
 {% block title %}Editar Cliente - {{ app_name }}{% endblock %}
 {% block content %}
 <div class="container-fluid">
-    <h2 class="mb-4"><i class="bi bi-pencil"></i> Editar Cliente</h2>
+    <nav aria-label="breadcrumb">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="{{ url_for('index') }}">Dashboard</a></li>
+            <li class="breadcrumb-item"><a href="{{ url_for('clientes.lista') }}">Clientes</a></li>
+            <li class="breadcrumb-item active" aria-current="page">Editar Cliente</li>
+        </ol>
+    </nav>
+    
+    <h2 class="mb-4" style="color:#1D63A5;"><i class="bi bi-pencil"></i> Editar Cliente</h2>
     
     <div class="card">
+        <div class="card-header" style="background:#151515;color:white;">
+            <h5 class="mb-0">Alterar Dados do Cliente</h5>
+        </div>
         <div class="card-body">
             <form method="POST">
                 <div class="row">
                     <div class="col-md-6 mb-3">
                         <label class="form-label">Razão Social *</label>
-                        <input type="text" name="razao_social" class="form-control" 
-                               value="{{ cliente.razao_social }}" required>
+                        <input type="text" name="razao_social" class="form-control" value="{{ cliente.razao_social }}" required>
                     </div>
                     <div class="col-md-6 mb-3">
                         <label class="form-label">Nome Fantasia</label>
-                        <input type="text" name="nome_fantasia" class="form-control" 
-                               value="{{ cliente.nome_fantasia or '' }}">
+                        <input type="text" name="nome_fantasia" class="form-control" value="{{ cliente.nome_fantasia or '' }}">
                     </div>
                 </div>
                 
                 <div class="row">
                     <div class="col-md-4 mb-3">
                         <label class="form-label">CNPJ</label>
-                        <input type="text" name="cnpj" class="form-control" 
-                               value="{{ cliente.cnpj or '' }}">
+                        <input type="text" name="cnpj" class="form-control" value="{{ cliente.cnpj or '' }}">
                     </div>
                     <div class="col-md-4 mb-3">
                         <label class="form-label">IE</label>
-                        <input type="text" name="ie" class="form-control" 
-                               value="{{ cliente.ie or '' }}">
+                        <input type="text" name="ie" class="form-control" value="{{ cliente.ie or '' }}">
                     </div>
                     <div class="col-md-4 mb-3">
                         <label class="form-label">Telefone</label>
-                        <input type="text" name="telefone" class="form-control" 
-                               value="{{ cliente.telefone or '' }}">
+                        <input type="text" name="telefone" class="form-control" value="{{ cliente.telefone or '' }}">
                     </div>
                 </div>
                 
                 <div class="row">
                     <div class="col-md-6 mb-3">
                         <label class="form-label">Contato</label>
-                        <input type="text" name="contato" class="form-control" 
-                               value="{{ cliente.contato or '' }}">
+                        <input type="text" name="contato" class="form-control" value="{{ cliente.contato or '' }}">
                     </div>
                     <div class="col-md-6 mb-3">
                         <label class="form-label">E-mail</label>
-                        <input type="email" name="email" class="form-control" 
-                               value="{{ cliente.email or '' }}">
+                        <input type="email" name="email" class="form-control" value="{{ cliente.email or '' }}">
+                    </div>
+                </div>
+                
+                <!-- CAMPO: Paga Comissão -->
+                <div class="row">
+                    <div class="col-md-12 mb-3">
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" name="paga_comissao" id="paga_comissao" {% if cliente.paga_comissao == 1 %}checked{% endif %}>
+                            <label class="form-check-label" for="paga_comissao">
+                                <strong>Este cliente paga comissão ao motorista?</strong>
+                                <small class="text-muted d-block">Se marcado, será calculado R$ 0,01 por litro transportado como comissão do motorista</small>
+                            </label>
+                        </div>
                     </div>
                 </div>
                 
@@ -57,46 +74,39 @@
                 <div class="row">
                     <div class="col-md-6 mb-3">
                         <label class="form-label">Endereço</label>
-                        <input type="text" name="endereco" class="form-control" 
-                               value="{{ cliente.endereco or '' }}">
+                        <input type="text" name="endereco" class="form-control" value="{{ cliente.endereco or '' }}">
                     </div>
                     <div class="col-md-2 mb-3">
                         <label class="form-label">Número</label>
-                        <input type="text" name="numero" class="form-control" 
-                               value="{{ cliente.numero or '' }}">
+                        <input type="text" name="numero" class="form-control" value="{{ cliente.numero or '' }}">
                     </div>
                     <div class="col-md-4 mb-3">
                         <label class="form-label">Complemento</label>
-                        <input type="text" name="complemento" class="form-control" 
-                               value="{{ cliente.complemento or '' }}">
+                        <input type="text" name="complemento" class="form-control" value="{{ cliente.complemento or '' }}">
                     </div>
                 </div>
                 
                 <div class="row">
                     <div class="col-md-4 mb-3">
                         <label class="form-label">Bairro</label>
-                        <input type="text" name="bairro" class="form-control" 
-                               value="{{ cliente.bairro or '' }}">
+                        <input type="text" name="bairro" class="form-control" value="{{ cliente.bairro or '' }}">
                     </div>
                     <div class="col-md-4 mb-3">
                         <label class="form-label">Município</label>
-                        <input type="text" name="municipio" class="form-control" 
-                               value="{{ cliente.municipio or '' }}">
+                        <input type="text" name="municipio" class="form-control" value="{{ cliente.municipio or '' }}">
                     </div>
                     <div class="col-md-2 mb-3">
                         <label class="form-label">UF</label>
-                        <input type="text" name="uf" class="form-control" maxlength="2" 
-                               value="{{ cliente.uf or '' }}">
+                        <input type="text" name="uf" class="form-control" maxlength="2" value="{{ cliente.uf or '' }}">
                     </div>
                     <div class="col-md-2 mb-3">
                         <label class="form-label">CEP</label>
-                        <input type="text" name="cep" class="form-control" 
-                               value="{{ cliente.cep or '' }}">
+                        <input type="text" name="cep" class="form-control" value="{{ cliente.cep or '' }}">
                     </div>
                 </div>
                 
-                <div class="mt-3">
-                    <button type="submit" class="btn btn-primary">
+                <div class="mt-4">
+                    <button type="submit" class="btn btn-primary" style="background:#1D63A5;border:none;">
                         <i class="bi bi-check-circle"></i> Atualizar
                     </button>
                     <a href="{{ url_for('clientes.lista') }}" class="btn btn-secondary">
