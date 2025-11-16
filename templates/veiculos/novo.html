@@ -1,62 +1,93 @@
-{% extends 'base.html' %}
-{% block title %}{{ 'Editar' if veiculo else 'Novo' }} Veículo - {{ app_name }}{% endblock %}
-{% block content %}
-<div class="container">
-    <h2 class="mb-4">
-        <i class="bi bi-truck"></i> {{ 'Editar Veículo' if veiculo else 'Novo Veículo' }}
-    </h2>
-    
-    <div class="card">
-        <div class="card-body">
-            <form method="POST" action="{{ url_for('veiculos.salvar', id=veiculo.id if veiculo else None) }}">
-                <div class="row">
-                    <div class="col-md-6 mb-3">
-                        <label class="form-label">Placa *</label>
-                        <input type="text" name="placa" class="form-control" 
-                               value="{{ veiculo.placa if veiculo else '' }}"
-                               placeholder="Ex: ABC-1234" 
-                               maxlength="10"
-                               required>
-                    </div>
-                    
-                    <div class="col-md-6 mb-3">
-                        <label class="form-label">Modelo *</label>
-                        <input type="text" name="modelo" class="form-control" 
-                               value="{{ veiculo.modelo if veiculo else '' }}"
-                               placeholder="Ex: Scania R450, Volvo FH"
-                               maxlength="100"
-                               required>
-                    </div>
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Novo Veículo - NH Transportes</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { 
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f5f5f5;
+            padding: 20px;
+        }
+        .container { max-width: 800px; margin: 0 auto; }
+        h1 { color: #2c5f2d; margin-bottom: 20px; }
+        .card {
+            background: white;
+            border-radius: 8px;
+            padding: 30px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .form-group {
+            margin-bottom: 20px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            color: #333;
+            font-weight: 500;
+        }
+        input, textarea {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            font-size: 14px;
+        }
+        input:focus, textarea:focus {
+            outline: none;
+            border-color: #2c5f2d;
+        }
+        .btn {
+            display: inline-block;
+            padding: 10px 20px;
+            border-radius: 6px;
+            text-decoration: none;
+            font-weight: 500;
+            cursor: pointer;
+            border: none;
+            transition: all 0.3s;
+        }
+        .btn-primary { background: #2c5f2d; color: white; }
+        .btn-primary:hover { background: #1e4620; }
+        .btn-secondary { background: #6c757d; color: white; margin-left: 10px; }
+        .btn-secondary:hover { background: #5a6268; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>➕ Novo Veículo</h1>
+        
+        <div class="card">
+            <form method="POST">
+                <div class="form-group">
+                    <label for="caminhao">Caminhão *</label>
+                    <input type="text" id="caminhao" name="caminhao" 
+                           placeholder="Ex: Mercedes, Scania, Volvo" 
+                           maxlength="20" required>
                 </div>
                 
-                <div class="row">
-                    <div class="col-md-6 mb-3">
-                        <label class="form-label">Ano</label>
-                        <input type="number" name="ano" class="form-control" 
-                               value="{{ veiculo.ano if veiculo else '' }}"
-                               placeholder="Ex: 2023"
-                               min="1900" 
-                               max="2099">
-                    </div>
-                    
-                    <div class="col-md-6 mb-3">
-                        <label class="form-label">Observações</label>
-                        <textarea name="observacoes" class="form-control" 
-                                  rows="3" 
-                                  placeholder="Informações adicionais sobre o veículo">{{ veiculo.observacoes if veiculo else '' }}</textarea>
-                    </div>
+                <div class="form-group">
+                    <label for="placa">Placa *</label>
+                    <input type="text" id="placa" name="placa" 
+                           placeholder="Ex: ABC-1234" 
+                           maxlength="10" required>
                 </div>
                 
-                <div class="mt-3">
-                    <button type="submit" class="btn btn-primary">
-                        <i class="bi bi-check-circle"></i> Salvar
-                    </button>
-                    <a href="{{ url_for('veiculos.listar') }}" class="btn btn-secondary">
-                        <i class="bi bi-x-circle"></i> Cancelar
-                    </a>
+                <div class="form-group">
+                    <label for="modelo">Modelo</label>
+                    <input type="text" id="modelo" name="modelo" 
+                           placeholder="Ex: Actros 2651, R450" 
+                           maxlength="30">
+                </div>
+                
+                <div>
+                    <button type="submit" class="btn btn-primary">✅ Salvar</button>
+                    <a href="{{ url_for('veiculos.lista') }}" class="btn btn-secondary">❌ Cancelar</a>
                 </div>
             </form>
         </div>
     </div>
-</div>
-{% endblock %}
+</body>
+</html>
