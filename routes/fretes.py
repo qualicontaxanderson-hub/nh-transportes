@@ -45,7 +45,7 @@ def lista():
         fretes = cursor.fetchall()
         
         # Buscar clientes e motoristas para filtros
-        cursor.execute("SELECT id, razao_social as nome FROM clientes ORDER BY razao_social")
+        cursor.execute("SELECT id, razao_social FROM clientes ORDER BY razao_social")
         clientes = cursor.fetchall()
         
         cursor.execute("SELECT id, nome FROM motoristas ORDER BY nome")
@@ -117,7 +117,8 @@ def novo():
         conn = get_db()
         cursor = conn.cursor(dictionary=True)
         
-        cursor.execute("SELECT id, razao_social as nome, paga_comissao FROM clientes ORDER BY razao_social")
+        # CORRIGIDO: Buscar apenas os campos que existem
+        cursor.execute("SELECT id, razao_social, paga_comissao FROM clientes ORDER BY razao_social")
         clientes = cursor.fetchall()
         
         cursor.execute("SELECT id, nome FROM fornecedores ORDER BY nome")
@@ -216,7 +217,7 @@ def editar(id):
             flash('Frete não encontrado', 'danger')
             return redirect(url_for('fretes.lista'))
         
-        cursor.execute("SELECT id, razao_social as nome, paga_comissao FROM clientes ORDER BY razao_social")
+        cursor.execute("SELECT id, razao_social, paga_comissao FROM clientes ORDER BY razao_social")
         clientes = cursor.fetchall()
         
         cursor.execute("SELECT id, nome FROM fornecedores ORDER BY nome")
