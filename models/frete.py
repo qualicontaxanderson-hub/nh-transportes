@@ -1,9 +1,4 @@
-import sys
-import os
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
-from extensions import db
-from datetime import datetime
+from models.base import db, datetime
 
 
 class Frete(db.Model):
