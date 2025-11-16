@@ -6,4 +6,5 @@ from .fornecedores import bp as fornecedores_bp
 from .fretes import bp as fretes_bp
 from .relatorios import bp as relatorios_bp
 from .debug import bp as debug_bp
+# FORCE RELOAD: 2025-11-16 21:00 UTC
 
