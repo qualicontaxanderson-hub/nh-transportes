@@ -1,3 +1,7 @@
+import sys
+import os
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 from extensions import db
 from datetime import datetime
 
@@ -16,9 +20,6 @@ class Cliente(db.Model):
     paga_comissao = db.Column(db.Boolean, default=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-    
-    # Relacionamento com fretes
-    fretes = db.relationship('Frete', backref='cliente', lazy=True, foreign_keys='Frete.clientes_id')
     
     def __repr__(self):
         return f'<Cliente {self.nome}>'
