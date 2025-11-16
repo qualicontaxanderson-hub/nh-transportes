@@ -23,7 +23,7 @@
                     </div>
                     <div class="col-md-9 mb-3">
                         <label class="form-label">Cliente *</label>
-                        <select name="cliente_id" id="cliente_id" class="form-select select2" required>
+                        <select name="cliente_id" id="cliente_id" class="form-select" required>
                             <option value="">Selecione...</option>
                             {% for cliente in clientes %}
                             <option value="{{ cliente.id }}" data-paga-comissao="{{ cliente.paga_comissao }}">{{ cliente.razao_social }}</option>
@@ -61,14 +61,14 @@
                         <input type="number" name="preco_produto_unitario" id="precoUnitario" class="form-control" step="0.01" placeholder="0.00">
                     </div>
                     <div class="col-md-6 mb-3">
-                        <label class="form-label">Total NF Compra</label>
-                        <input type="number" name="total_nf_compra" id="totalNfCompra" class="form-control" step="0.01" placeholder="0.00" readonly style="background:#f0f0f0;">
+                        <label class="form-label">Total NF Compra <span style="color:red;">(AUTO)</span></label>
+                        <input type="number" name="total_nf_compra" id="totalNfCompra" class="form-control" step="0.01" placeholder="0.00" readonly style="background:#fff3cd;font-weight:bold;">
                     </div>
                 </div>
                 <div class="row">
                     <div class="col-md-6 mb-3">
                         <label class="form-label">Fornecedor</label>
-                        <select name="fornecedor_id" id="fornecedor_id" class="form-select select2">
+                        <select name="fornecedor_id" id="fornecedor_id" class="form-select">
                             <option value="">Selecione...</option>
                             {% for fornecedor in fornecedores %}
                             <option value="{{ fornecedor.id }}">{{ fornecedor.razao_social }}</option>
@@ -92,7 +92,7 @@
                 <div class="row">
                     <div class="col-md-4 mb-3">
                         <label class="form-label">Motorista *</label>
-                        <select name="motorista_id" id="motorista_id" class="form-select select2" required>
+                        <select name="motorista_id" id="motorista_id" class="form-select" required>
                             <option value="">Selecione...</option>
                             {% for motorista in motoristas %}
                             <option value="{{ motorista.id }}">{{ motorista.nome }}</option>
@@ -101,7 +101,7 @@
                     </div>
                     <div class="col-md-4 mb-3">
                         <label class="form-label">Veículo *</label>
-                        <select name="veiculo_id" id="veiculo_id" class="form-select select2" required>
+                        <select name="veiculo_id" id="veiculo_id" class="form-select" required>
                             <option value="">Selecione...</option>
                             {% for veiculo in veiculos %}
                             <option value="{{ veiculo.id }}">{{ veiculo.caminhao }} - {{ veiculo.placa }}</option>
@@ -109,24 +109,24 @@
                         </select>
                     </div>
                     <div class="col-md-4 mb-3">
-                        <label class="form-label">Comissão Motorista</label>
-                        <input type="number" name="comissao_motorista" id="comissaoMotorista" class="form-control" step="0.01" placeholder="0.00" readonly style="background:#f0f0f0;">
+                        <label class="form-label">Comissão Motorista <span style="color:red;">(AUTO)</span></label>
+                        <input type="number" name="comissao_motorista" id="comissaoMotorista" class="form-control" step="0.01" placeholder="0.00" readonly style="background:#fff3cd;font-weight:bold;">
                     </div>
                 </div>
                 <div class="row">
                     <div class="col-md-6 mb-3">
-                        <label class="form-label">Valor CTe</label>
-                        <input type="number" name="vlr_cte" id="vlrCte" class="form-control" step="0.01" placeholder="0.00" readonly style="background:#f0f0f0;">
+                        <label class="form-label">Valor CTe <span style="color:red;">(AUTO)</span></label>
+                        <input type="number" name="vlr_cte" id="vlrCte" class="form-control" step="0.01" placeholder="0.00" readonly style="background:#fff3cd;font-weight:bold;">
                     </div>
                     <div class="col-md-6 mb-3">
-                        <label class="form-label">Comissão CTe (8%)</label>
-                        <input type="number" name="comissao_cte" id="comissaoCte" class="form-control" step="0.01" placeholder="0.00" readonly style="background:#f0f0f0;">
+                        <label class="form-label">Comissão CTe (8%) <span style="color:red;">(AUTO)</span></label>
+                        <input type="number" name="comissao_cte" id="comissaoCte" class="form-control" step="0.01" placeholder="0.00" readonly style="background:#fff3cd;font-weight:bold;">
                     </div>
                 </div>
                 <div class="row">
                     <div class="col-md-6 mb-3">
-                        <label class="form-label">Lucro</label>
-                        <input type="number" name="lucro" id="lucro" class="form-control" step="0.01" placeholder="0.00" readonly style="background:#f0f0f0;font-weight:bold;">
+                        <label class="form-label">Lucro <span style="color:red;">(AUTO)</span></label>
+                        <input type="number" name="lucro" id="lucro" class="form-control" step="0.01" placeholder="0.00" readonly style="background:#fff3cd;font-weight:bold;">
                     </div>
                     <div class="col-md-6 mb-3">
                         <label class="form-label">Situação Financeira *</label>
@@ -146,44 +146,49 @@
         </div>
     </div>
 </div>
-<link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet">
-<link href="https://cdn.jsdelivr.net/npm/select2-bootstrap-5-theme@1.3.0/dist/select2-bootstrap-5-theme.min.css" rel="stylesheet">
-<script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
 <script>
-jQuery(document).ready(function($) {
-    $('.select2').select2({theme: 'bootstrap-5', placeholder: 'Digite para buscar...', allowClear: true});
-});
+console.log('Script de fretes carregado');
 var clientePagaComissao = false;
 var clienteRazaoSocial = '';
 var fornecedorRazaoSocial = '';
 var origemNome = '';
+
 document.getElementById('cliente_id').addEventListener('change', function() {
     var opt = this.options[this.selectedIndex];
     clientePagaComissao = opt.dataset.pagaComissao == '1';
     clienteRazaoSocial = opt.text.toUpperCase();
     calcularTudo();
 });
+
 document.getElementById('fornecedor_id').addEventListener('change', function() {
     fornecedorRazaoSocial = this.options[this.selectedIndex].text.toUpperCase();
     calcularTudo();
 });
+
 document.getElementById('origem_id').addEventListener('change', function() {
     origemNome = this.options[this.selectedIndex].text.toUpperCase();
     calcularTudo();
 });
-document.getElementById('quantidade').addEventListener('change', calcularTotalNfCompra);
+
+document.getElementById('quantidade').addEventListener('change', function() {
+    calcularTotalNfCompra();
+    calcularValorTotalFrete();
+});
+
 document.getElementById('precoUnitario').addEventListener('input', calcularTotalNfCompra);
+document.getElementById('precoLitro').addEventListener('input', calcularValorTotalFrete);
+
 function calcularTotalNfCompra() {
     var qtd = document.getElementById('quantidade');
     var preco = parseFloat(document.getElementById('precoUnitario').value) || 0;
     if (qtd.value && preco > 0) {
         var litros = parseFloat(qtd.options[qtd.selectedIndex].dataset.valor);
-        document.getElementById('totalNfCompra').value = (litros * preco).toFixed(2);
+        var total = litros * preco;
+        document.getElementById('totalNfCompra').value = total.toFixed(2);
     }
     calcularTudo();
 }
-document.getElementById('quantidade').addEventListener('change', calcularValorTotalFrete);
-document.getElementById('precoLitro').addEventListener('input', calcularValorTotalFrete);
+
 function calcularValorTotalFrete() {
     var qtd = document.getElementById('quantidade');
     var preco = document.getElementById('precoLitro');
@@ -195,15 +200,19 @@ function calcularValorTotalFrete() {
     }
     calcularTudo();
 }
+
 function calcularTudo() {
     var qtd = document.getElementById('quantidade');
     if (!qtd.value) return;
+    
     var litros = parseFloat(qtd.options[qtd.selectedIndex].dataset.valor);
     var vlrTotal = parseFloat(document.getElementById('vlr_total_frete').value) || 0;
     var totalNf = parseFloat(document.getElementById('totalNfCompra').value) || 0;
+    
     var comissao = 0;
     if (clientePagaComissao) comissao = litros * 0.01;
     document.getElementById('comissaoMotorista').value = comissao.toFixed(2);
+    
     var pctCte = 0.08;
     if (fornecedorRazaoSocial.includes('INTEGRAÇÃO') && (fornecedorRazaoSocial.includes('GOIASA') || fornecedorRazaoSocial.includes('BONSUCESSO'))) {
         pctCte = 0.05;
@@ -212,12 +221,16 @@ function calcularTudo() {
     } else if (clienteRazaoSocial.includes('RLM COMBUSTIVEIS')) {
         pctCte = 0.10;
     }
+    
     var vlrCte = litros * pctCte;
     document.getElementById('vlrCte').value = vlrCte.toFixed(2);
+    
     var comCte = vlrCte * 0.08;
     document.getElementById('comissaoCte').value = comCte.toFixed(2);
+    
     var lucro = clientePagaComissao ? (vlrTotal - comissao - comCte - totalNf) : 0;
     document.getElementById('lucro').value = lucro.toFixed(2);
+    
     var lucroInput = document.getElementById('lucro');
     lucroInput.style.color = lucro > 0 ? '#28a745' : (lucro < 0 ? '#dc3545' : '#6c757d');
 }
