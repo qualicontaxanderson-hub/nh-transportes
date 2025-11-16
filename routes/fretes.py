@@ -1,5 +1,5 @@
 from flask import Blueprint, render_template, request, redirect, url_for, flash
-# Atualizado em 16/11/2025 às 20:40 - Corrigido campo nome para razao_social
+# Atualizado em 16/11/2025 às 20:47 - VERSÃO COM DEBUG
 from flask_login import login_required
 from config import Config
 import mysql.connector
@@ -115,33 +115,58 @@ def novo():
             return redirect(url_for('fretes.novo'))
     
     try:
+        print("=" * 80)
+        print("🔍 DEBUG: Entrando na função novo() - VERSÃO 20:47 - ARQUIVO ATUALIZADO")
+        print("=" * 80)
+        
         conn = get_db()
         cursor = conn.cursor(dictionary=True)
+        
+        print("📋 DEBUG: Executando query de clientes com razao_social...")
+        print("SQL: SELECT id, razao_social, paga_comissao FROM clientes ORDER BY razao_social")
         
         # CORRIGIDO: Buscar apenas os campos que existem
         cursor.execute("SELECT id, razao_social, paga_comissao FROM clientes ORDER BY razao_social")
         clientes = cursor.fetchall()
+        print(f"✅ DEBUG: {len(clientes)} clientes carregados com sucesso!")
+        if clientes:
+            print(f"   Exemplo: {clientes[0]}")
         
+        print("📋 DEBUG: Executando query de fornecedores...")
         cursor.execute("SELECT id, nome FROM fornecedores ORDER BY nome")
         fornecedores = cursor.fetchall()
+        print(f"✅ DEBUG: {len(fornecedores)} fornecedores carregados")
         
+        print("📋 DEBUG: Executando query de motoristas...")
         cursor.execute("SELECT id, nome FROM motoristas ORDER BY nome")
         motoristas = cursor.fetchall()
+        print(f"✅ DEBUG: {len(motoristas)} motoristas carregados")
         
+        print("📋 DEBUG: Executando query de veiculos...")
         cursor.execute("SELECT id, placa, modelo FROM veiculos ORDER BY placa")
         veiculos = cursor.fetchall()
+        print(f"✅ DEBUG: {len(veiculos)} veículos carregados")
         
+        print("📋 DEBUG: Executando query de quantidades...")
         cursor.execute("SELECT id, valor, descricao FROM quantidades ORDER BY valor")
         quantidades = cursor.fetchall()
+        print(f"✅ DEBUG: {len(quantidades)} quantidades carregadas")
         
+        print("📋 DEBUG: Executando query de origens...")
         cursor.execute("SELECT id, nome FROM origens ORDER BY nome")
         origens = cursor.fetchall()
+        print(f"✅ DEBUG: {len(origens)} origens carregadas")
         
+        print("📋 DEBUG: Executando query de destinos...")
         cursor.execute("SELECT id, nome FROM destinos ORDER BY nome")
         destinos = cursor.fetchall()
+        print(f"✅ DEBUG: {len(destinos)} destinos carregados")
         
         cursor.close()
         conn.close()
+        
+        print("🎉 DEBUG: Todas as queries executadas com sucesso! Renderizando template...")
+        print("=" * 80)
         
         return render_template('fretes/novo.html',
                              clientes=clientes,
@@ -152,6 +177,10 @@ def novo():
                              origens=origens,
                              destinos=destinos)
     except Exception as e:
+        print("=" * 80)
+        print(f"❌ DEBUG: ERRO CAPTURADO: {e}")
+        print(f"❌ DEBUG: Tipo do erro: {type(e)}")
+        print("=" * 80)
         print(f"Erro ao carregar formulário: {e}")
         flash(f'Erro ao carregar formulário: {str(e)}', 'danger')
         return redirect(url_for('index'))
