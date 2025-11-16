@@ -1,3 +1,7 @@
+import sys
+import os
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 from extensions import db
 from datetime import datetime
 
@@ -10,9 +14,6 @@ class Destino(db.Model):
     cidade = db.Column(db.String(100))
     estado = db.Column(db.String(2), default='GO')
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    
-    # Relacionamento com fretes
-    fretes = db.relationship('Frete', backref='destino', lazy=True)
     
     def __repr__(self):
         return f'<Destino {self.nome}>'
