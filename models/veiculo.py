@@ -1,3 +1,7 @@
+import sys
+import os
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 from extensions import db
 from datetime import datetime
 
@@ -14,9 +18,6 @@ class Veiculo(db.Model):
     tipo = db.Column(db.String(50))
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-    
-    # Relacionamento com fretes
-    fretes = db.relationship('Frete', backref='veiculo', lazy=True, foreign_keys='Frete.veiculos_id')
     
     def __repr__(self):
         return f'<Veiculo {self.placa}>'
