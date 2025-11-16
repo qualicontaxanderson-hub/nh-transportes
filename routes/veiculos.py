@@ -2,13 +2,13 @@ from flask import Blueprint, render_template, request, redirect, url_for, flash
 from flask_login import login_required
 from app import mysql
 
-veiculos_bp = Blueprint('veiculos', __name__, url_prefix='/veiculos')
+bp = Blueprint('veiculos', __name__, url_prefix='/veiculos')
 
 # ==================== LISTAR ====================
-@veiculos_bp.route('/')
-@veiculos_bp.route('/listar')
+@bp.route('/')
+@bp.route('/listar')
 @login_required
-def listar():
+def lista():
     """Lista todos os veículos cadastrados"""
     cursor = mysql.connection.cursor()
     cursor.execute("""
@@ -19,7 +19,6 @@ def listar():
     veiculos_raw = cursor.fetchall()
     cursor.close()
     
-    # Converter tuplas em dicionários
     veiculos = []
     for v in veiculos_raw:
         veiculos.append({
@@ -32,17 +31,15 @@ def listar():
     
     return render_template('veiculos/lista.html', veiculos=veiculos)
 
-
 # ==================== NOVO ====================
-@veiculos_bp.route('/novo', methods=['GET'])
+@bp.route('/novo', methods=['GET'])
 @login_required
 def novo():
     """Exibe formulário para cadastrar novo veículo"""
     return render_template('veiculos/novo.html')
 
-
 # ==================== EDITAR ====================
-@veiculos_bp.route('/editar/<int:id>', methods=['GET'])
+@bp.route('/editar/<int:id>', methods=['GET'])
 @login_required
 def editar(id):
     """Exibe formulário para editar veículo existente"""
@@ -53,9 +50,8 @@ def editar(id):
     
     if not veiculo_raw:
         flash('Veículo não encontrado!', 'danger')
-        return redirect(url_for('veiculos.listar'))
+        return redirect(url_for('veiculos.lista'))
     
-    # Transformar em dicionário
     veiculo = {
         'id': veiculo_raw[0],
         'placa': veiculo_raw[1],
@@ -66,10 +62,9 @@ def editar(id):
     
     return render_template('veiculos/novo.html', veiculo=veiculo)
 
-
 # ==================== SALVAR ====================
-@veiculos_bp.route('/salvar', methods=['POST'])
-@veiculos_bp.route('/salvar/<int:id>', methods=['POST'])
+@bp.route('/salvar', methods=['POST'])
+@bp.route('/salvar/<int:id>', methods=['POST'])
 @login_required
 def salvar(id=None):
     """Salva novo veículo ou atualiza existente"""
@@ -78,12 +73,10 @@ def salvar(id=None):
     ano = request.form.get('ano', '').strip()
     observacoes = request.form.get('observacoes', '').strip()
     
-    # Validações
     if not placa or not modelo:
         flash('Placa e Modelo são obrigatórios!', 'warning')
         return redirect(url_for('veiculos.novo'))
     
-    # Converter ano para inteiro ou None
     ano_int = None
     if ano:
         try:
@@ -95,20 +88,19 @@ def salvar(id=None):
     cursor = mysql.connection.cursor()
     
     try:
-        if id:  # ATUALIZAR
+        if id:
             cursor.execute("""
                 UPDATE veiculos 
                 SET placa = %s, modelo = %s, ano = %s, observacoes = %s 
                 WHERE id = %s
             """, (placa, modelo, ano_int, observacoes or None, id))
             flash('Veículo atualizado com sucesso!', 'success')
-        else:  # CRIAR NOVO
+        else:
             cursor.execute("""
                 INSERT INTO veiculos (placa, modelo, ano, observacoes) 
                 VALUES (%s, %s, %s, %s)
             """, (placa, modelo, ano_int, observacoes or None))
             flash('Veículo cadastrado com sucesso!', 'success')
-        
         mysql.connection.commit()
     except Exception as e:
         mysql.connection.rollback()
@@ -116,16 +108,14 @@ def salvar(id=None):
     finally:
         cursor.close()
     
-    return redirect(url_for('veiculos.listar'))
-
+    return redirect(url_for('veiculos.lista'))
 
 # ==================== EXCLUIR ====================
-@veiculos_bp.route('/excluir/<int:id>', methods=['GET', 'POST'])
+@bp.route('/excluir/<int:id>', methods=['GET', 'POST'])
 @login_required
 def excluir(id):
     """Exclui um veículo"""
     cursor = mysql.connection.cursor()
-    
     try:
         cursor.execute("DELETE FROM veiculos WHERE id = %s", (id,))
         mysql.connection.commit()
@@ -135,5 +125,4 @@ def excluir(id):
         flash(f'Erro ao excluir veículo: {str(e)}', 'danger')
     finally:
         cursor.close()
-    
-    return redirect(url_for('veiculos.listar'))
+    return redirect(url_for('veiculos.lista'))
