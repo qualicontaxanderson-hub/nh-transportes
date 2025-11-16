@@ -57,7 +57,7 @@ def novo():
         return redirect(url_for('veiculos.lista'))
     return render_template('veiculos/novo.html')
 
-@bp.route('/editar/', methods=['GET', 'POST'])
+@bp.route('/editar/<int:id>', methods=['GET', 'POST'])
 @login_required
 @admin_required
 def editar(id):
@@ -86,7 +86,7 @@ def editar(id):
     conn.close()
     return render_template('veiculos/editar.html', veiculo=veiculo)
 
-@bp.route('/excluir/', methods=['POST'])
+@bp.route('/excluir/<int:id>', methods=['POST'])
 @login_required
 @admin_required
 def excluir(id):
