@@ -1,4 +1,3 @@
-
 {% extends 'base.html' %}
 {% block title %}Fornecedores - {{ app_name }}{% endblock %}
 {% block content %}
@@ -18,8 +17,10 @@
                         <tr>
                             <th>ID</th>
                             <th>Razão Social</th>
+                            <th>Nome Fantasia</th>
                             <th>CNPJ</th>
                             <th>Telefone</th>
+                            <th>Município</th>
                             <th>Ações</th>
                         </tr>
                     </thead>
@@ -28,17 +29,29 @@
                         <tr>
                             <td>{{ fornecedor.id }}</td>
                             <td>{{ fornecedor.razao_social }}</td>
+                            <td>{{ fornecedor.nome_fantasia or '-' }}</td>
                             <td>{{ fornecedor.cnpj or '-' }}</td>
                             <td>{{ fornecedor.telefone or '-' }}</td>
+                            <td>{{ fornecedor.municipio or '-' }}</td>
                             <td>
-                                {% if current_user.is_admin() %}
-                                <a href="{{ url_for('fornecedores.excluir', id=fornecedor.id) }}" 
-                                   class="btn btn-sm btn-danger"
-                                   onclick="return confirm('Deseja realmente excluir?')">
-                                    <i class="bi bi-trash"></i>
+                                <a href="{{ url_for('fornecedores.editar', id=fornecedor.id) }}" 
+                                   class="btn btn-sm btn-warning">
+                                    <i class="bi bi-pencil"></i> Editar
                                 </a>
+                                {% if current_user.is_admin() %}
+                                <form method="POST" action="{{ url_for('fornecedores.excluir', id=fornecedor.id) }}" 
+                                      style="display: inline;"
+                                      onsubmit="return confirm('Deseja realmente excluir este fornecedor?')">
+                                    <button type="submit" class="btn btn-sm btn-danger">
+                                        <i class="bi bi-trash"></i> Excluir
+                                    </button>
+                                </form>
                                 {% endif %}
                             </td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="7" class="text-center">Nenhum fornecedor cadastrado</td>
                         </tr>
                         {% endfor %}
                     </tbody>
@@ -48,4 +61,3 @@
     </div>
 </div>
 {% endblock %}
-
