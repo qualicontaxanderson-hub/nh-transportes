@@ -1,11 +1,21 @@
-
 {% extends 'base.html' %}
 {% block title %}Novo Cliente - {{ app_name }}{% endblock %}
 {% block content %}
 <div class="container-fluid">
-    <h2 class="mb-4"><i class="bi bi-person-plus"></i> Novo Cliente</h2>
+    <nav aria-label="breadcrumb">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="{{ url_for('index') }}">Dashboard</a></li>
+            <li class="breadcrumb-item"><a href="{{ url_for('clientes.lista') }}">Clientes</a></li>
+            <li class="breadcrumb-item active" aria-current="page">Novo Cliente</li>
+        </ol>
+    </nav>
+    
+    <h2 class="mb-4" style="color:#1D63A5;"><i class="bi bi-person-plus"></i> Novo Cliente</h2>
     
     <div class="card">
+        <div class="card-header" style="background:#ff9800;color:white;">
+            <h5 class="mb-0">Cadastrar Cliente</h5>
+        </div>
         <div class="card-body">
             <form method="POST">
                 <div class="row">
@@ -42,6 +52,19 @@
                     <div class="col-md-6 mb-3">
                         <label class="form-label">E-mail</label>
                         <input type="email" name="email" class="form-control">
+                    </div>
+                </div>
+                
+                <!-- NOVO CAMPO: Paga Comissão -->
+                <div class="row">
+                    <div class="col-md-12 mb-3">
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" name="paga_comissao" id="paga_comissao" checked>
+                            <label class="form-check-label" for="paga_comissao">
+                                <strong>Este cliente paga comissão ao motorista?</strong>
+                                <small class="text-muted d-block">Se marcado, será calculado R$ 0,01 por litro transportado como comissão do motorista</small>
+                            </label>
+                        </div>
                     </div>
                 </div>
                 
@@ -82,8 +105,8 @@
                     </div>
                 </div>
                 
-                <div class="mt-3">
-                    <button type="submit" class="btn btn-primary">
+                <div class="mt-4">
+                    <button type="submit" class="btn btn-primary" style="background:#1D63A5;border:none;">
                         <i class="bi bi-check-circle"></i> Salvar
                     </button>
                     <a href="{{ url_for('clientes.lista') }}" class="btn btn-secondary">
@@ -95,4 +118,3 @@
     </div>
 </div>
 {% endblock %}
-
