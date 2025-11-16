@@ -1,4 +1,6 @@
 import os
+import sys
+import importlib
 from flask import Flask, render_template, redirect, url_for, request, flash
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user
 from werkzeug.security import generate_password_hash
@@ -18,6 +20,10 @@ def load_user(user_id):
     return Usuario.get_by_id(user_id)
 
 from routes import clientes, fornecedores, fretes, motoristas, veiculos, relatorios, debug_bp
+
+# Forçar reload do módulo routes para evitar cache
+if 'routes.fretes' in sys.modules:
+        importlib.reload(sys.modules['routes.fretes'])
 
 app.register_blueprint(clientes.bp)
 app.register_blueprint(fornecedores.bp)
