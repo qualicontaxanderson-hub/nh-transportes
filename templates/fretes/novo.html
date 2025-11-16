@@ -23,9 +23,9 @@
                         <label for="clientes_id" class="form-label">Cliente *</label>
                         <select class="form-select" id="clientes_id" name="clientes_id" required>
                             <option value="">Selecione um cliente</option>
-                            {% for cliente in clientes %}
+                           {% for cliente in clientes %}
                             <option value="{{ cliente.id }}" data-paga-comissao="{{ cliente.paga_comissao }}">
-                                {{ cliente.nome }}
+                            {{ cliente.razao_social }}  <!-- ✅ CORRIGIDO -->
                             </option>
                             {% endfor %}
                         </select>
