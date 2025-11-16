@@ -76,10 +76,9 @@
             <thead>
                 <tr>
                     <th>ID</th>
+                    <th>Caminhão</th>
                     <th>Placa</th>
                     <th>Modelo</th>
-                    <th>Ano</th>
-                    <th>Observações</th>
                     <th>Ações</th>
                 </tr>
             </thead>
@@ -87,10 +86,9 @@
                 {% for veiculo in veiculos %}
                 <tr>
                     <td>{{ veiculo.id }}</td>
+                    <td>{{ veiculo.caminhao }}</td>
                     <td>{{ veiculo.placa }}</td>
-                    <td>{{ veiculo.modelo }}</td>
-                    <td>{{ veiculo.ano }}</td>
-                    <td>{{ veiculo.observacoes or '-' }}</td>
+                    <td>{{ veiculo.modelo or '-' }}</td>
                     <td>
                         <div class="actions">
                             <a href="{{ url_for('veiculos.editar', id=veiculo.id) }}" 
@@ -107,7 +105,7 @@
                 </tr>
                 {% else %}
                 <tr>
-                    <td colspan="6" style="text-align: center; padding: 30px; color: #999;">
+                    <td colspan="5" style="text-align: center; padding: 30px; color: #999;">
                         Nenhum veículo cadastrado
                     </td>
                 </tr>
