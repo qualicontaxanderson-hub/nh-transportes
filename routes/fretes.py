@@ -1,4 +1,4 @@
-from flask import Blueprint, render_template, request, redirect, url_for, flash
+from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify
 from flask_login import login_required
 from utils.db import get_db_connection
 from utils.decorators import admin_required
@@ -127,7 +127,7 @@ def novo():
             flash(f'Erro ao cadastrar frete: {str(e)}', 'danger')
     
     # Carregar dados para os combobox
-    cursor.execute("SELECT id, razao_social FROM clientes ORDER BY razao_social")
+    cursor.execute("SELECT id, razao_social, paga_comissao FROM clientes ORDER BY razao_social")
     clientes = cursor.fetchall()
     
     cursor.execute("SELECT id, razao_social FROM fornecedores ORDER BY razao_social")
@@ -170,6 +170,18 @@ def novo():
                          comissoes_cte=comissoes_cte,
                          situacoes=situacoes,
                          data_hoje=data_hoje)
+
+# API para buscar dados do cliente (paga_comissao)
+@bp.route('/api/cliente/<int:cliente_id>')
+@login_required
+def api_cliente(cliente_id):
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    cursor.execute("SELECT id, razao_social, paga_comissao FROM clientes WHERE id = %s", (cliente_id,))
+    cliente = cursor.fetchone()
+    cursor.close()
+    conn.close()
+    return jsonify(cliente)
 
 @bp.route('/editar/<int:id>', methods=['GET', 'POST'])
 @login_required
@@ -221,7 +233,7 @@ def editar(id):
     frete = cursor.fetchone()
     
     # Carregar dados para os combobox
-    cursor.execute("SELECT id, razao_social FROM clientes ORDER BY razao_social")
+    cursor.execute("SELECT id, razao_social, paga_comissao FROM clientes ORDER BY razao_social")
     clientes = cursor.fetchall()
     
     cursor.execute("SELECT id, razao_social FROM fornecedores ORDER BY razao_social")
