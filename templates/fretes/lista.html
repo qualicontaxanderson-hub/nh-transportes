@@ -26,13 +26,13 @@
                 -
             {% endif %}
         </td>
-        <td>{{ frete.clientes_id or '-' }}</td>
-        <td>{{ frete.fornecedores_id or '-' }}</td>
-        <td>{{ frete.motoristas_id or '-' }}</td>
-        <td>{{ frete.veiculos_id or '-' }}</td>
-        <td>{{ frete.quantidade_id or '-' }}</td>
-        <td>{{ frete.origem_id or '-' }}</td>
-        <td>{{ frete.destino_id or '-' }}</td>
+        <td>{{ frete.cliente_nome or '-' }}</td>
+        <td>{{ frete.fornecedor_nome or '-' }}</td>
+        <td>{{ frete.motorista_nome or '-' }}</td>
+        <td>{{ frete.veiculo_placa or '-' }}</td>
+        <td>{{ frete.quantidade_valor or '-' }}</td>
+        <td>{{ frete.origem_nome or '-' }}</td>
+        <td>{{ frete.destino_nome or '-' }}</td>
         <td style="text-align:right;">
             {{ "R$ {:,.2f}".format(frete.valor_total_frete|float if frete.valor_total_frete else 0).replace(",", "X").replace(".", ",").replace("X", ".") }}
         </td>
