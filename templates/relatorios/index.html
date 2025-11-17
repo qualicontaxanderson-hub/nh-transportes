@@ -11,20 +11,19 @@
     </nav>
     <h2 class="mb-4" style="color:#1D63A5;"><i class="bi bi-graph-up"></i> Relatórios</h2>
 
-    <form method="get" class="mb-4 row row-cols-lg-auto g-3 align-items-center">
+    <!-- Filtros -->
+    <form method="get" class="mb-4 row row-cols-lg-auto g-3 align-items-end">
         <div class="col-12">
+            <label class="form-label">Data Inicial</label>
             <input type="date" name="data_inicio" value="{{ data_inicio or '' }}" class="form-control" placeholder="Data inicial">
         </div>
         <div class="col-12">
+            <label class="form-label">Data Final</label>
             <input type="date" name="data_fim" value="{{ data_fim or '' }}" class="form-control" placeholder="Data final">
         </div>
         <div class="col-12">
-            <select name="mes" class="form-select">
-                <option value="">Mês...</option>
-                {% for i in range(1,13) %}
-                  <option value="{{ i }}" {% if mes|int == i %}selected{% endif %}>{{ "{:02d}".format(i) }}</option>
-                {% endfor %}
-            </select>
+            <label class="form-label">Mês/Ano</label>
+            <input type="month" name="ano_mes" value="{{ ano_mes or '' }}" class="form-control">
         </div>
         <div class="col-12">
             <button type="submit" class="btn btn-primary"><i class="bi bi-search"></i> Filtrar</button>
@@ -32,34 +31,47 @@
         </div>
     </form>
 
-    <div class="row g-4">
-        <!-- Top 10 Clientes -->
-        <div class="col-md-6">
-            <div class="card h-100">
+    <!-- Top 10 Clientes -->
+    <div class="row g-4 mb-4">
+        <div class="col-md-12">
+            <div class="card">
                 <div class="card-header" style="background:#ff9800;color:white;">
-                    <h5><i class="bi bi-people"></i> Top 10 Clientes</h5>
+                    <h5 class="mb-0"><i class="bi bi-people"></i> Top 10 Clientes</h5>
                 </div>
                 <div class="card-body">
                     {% if por_cliente %}
                     <div class="table-responsive">
-                        <table class="table table-sm">
-                            <thead>
+                        <table class="table table-sm table-hover">
+                            <thead style="background:#FFB84D;">
                                 <tr>
                                     <th>Cliente</th>
-                                    <th>Fretes</th>
-                                    <th>Total</th>
-                                    <th>Lucro</th>
+                                    <th style="text-align:right;">Fretes</th>
+                                    <th style="text-align:right;">Litros Transportados</th>
+                                    <th style="text-align:right;">Total do Frete (R$)</th>
+                                    <th style="text-align:right;">Comissão CTe (R$)</th>
+                                    <th style="text-align:right;">Lucro (R$)</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 {% for item in por_cliente %}
                                 <tr>
-                                    <td>{{ item.cliente[:30] or '-' }}</td>
-                                    <td>{{ item.fretes or 0 }}</td>
-                                    <td style="text-align:right;">{{ "R$ {:,.2f}".format(item.total|float).replace(",", "X").replace(".", ",").replace("X", ".") }}</td>
-                                    <td style="text-align:right;">{{ "R$ {:,.2f}".format(item.lucro|float).replace(",", "X").replace(".", ",").replace("X", ".") }}</td>
+                                    <td>{{ item.cliente or '-' }}</td>
+                                    <td style="text-align:right;">{{ item.fretes or 0 }}</td>
+                                    <td style="text-align:right;">{{ "{:,.0f}".format(item.litros_transportados or 0).replace(',', '.') }}</td>
+                                    <td style="text-align:right;">{{ "R$ {:,.2f}".format(item.total_frete|float if item.total_frete else 0).replace(",", "X").replace(".", ",").replace("X", ".") }}</td>
+                                    <td style="text-align:right;">{{ "R$ {:,.2f}".format(item.total_comissao_cte|float if item.total_comissao_cte else 0).replace(",", "X").replace(".", ",").replace("X", ".") }}</td>
+                                    <td style="text-align:right;">{{ "R$ {:,.2f}".format(item.lucro|float if item.lucro else 0).replace(",", "X").replace(".", ",").replace("X", ".") }}</td>
                                 </tr>
                                 {% endfor %}
+                                <!-- Linha de totais -->
+                                <tr style="background:#E8E8E8; font-weight:bold;">
+                                    <td><strong>TOTAL</strong></td>
+                                    <td style="text-align:right;">{{ total_fretes }}</td>
+                                    <td style="text-align:right;">{{ "{:,.0f}".format(total_litros or 0).replace(',', '.') }}</td>
+                                    <td style="text-align:right;">{{ "R$ {:,.2f}".format(total_frete_clientes|float if total_frete_clientes else 0).replace(",", "X").replace(".", ",").replace("X", ".") }}</td>
+                                    <td style="text-align:right;">{{ "R$ {:,.2f}".format(total_comissao_cte_clientes|float if total_comissao_cte_clientes else 0).replace(",", "X").replace(".", ",").replace("X", ".") }}</td>
+                                    <td style="text-align:right;">{{ "R$ {:,.2f}".format(total_lucro_clientes|float if total_lucro_clientes else 0).replace(",", "X").replace(".", ",").replace("X", ".") }}</td>
+                                </tr>
                             </tbody>
                         </table>
                     </div>
@@ -69,31 +81,43 @@
                 </div>
             </div>
         </div>
-        <!-- Comissões de Motoristas -->
-        <div class="col-md-6">
-            <div class="card h-100">
+    </div>
+
+    <!-- Comissões de Motoristas -->
+    <div class="row g-4 mb-4">
+        <div class="col-md-12">
+            <div class="card">
                 <div class="card-header" style="background:#1D63A5;color:white;">
-                    <h5><i class="bi bi-person-badge"></i> Comissões de Motoristas</h5>
+                    <h5 class="mb-0"><i class="bi bi-person-badge"></i> Comissões de Motoristas</h5>
                 </div>
                 <div class="card-body">
                     {% if por_motorista %}
                     <div class="table-responsive">
-                        <table class="table table-sm">
-                            <thead>
+                        <table class="table table-sm table-hover">
+                            <thead style="background:#4A90E2;">
                                 <tr>
-                                    <th>Motorista</th>
-                                    <th>Fretes</th>
-                                    <th>Total Comissão</th>
+                                    <th>Nome do Motorista</th>
+                                    <th style="text-align:right;">Quantidade de Fretes</th>
+                                    <th style="text-align:right;">Litros Entregues</th>
+                                    <th style="text-align:right;">Total da Comissão (R$)</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 {% for item in por_motorista %}
                                 <tr>
                                     <td>{{ item.motorista or '(Sem nome)' }}</td>
-                                    <td>{{ item.fretes or 0 }}</td>
-                                    <td style="text-align:right;">{{ "R$ {:,.2f}".format(item.total_comissao|float).replace(",", "X").replace(".", ",").replace("X", ".") }}</td>
+                                    <td style="text-align:right;">{{ item.fretes or 0 }}</td>
+                                    <td style="text-align:right;">{{ "{:,.0f}".format(item.litros_entregues or 0).replace(',', '.') }}</td>
+                                    <td style="text-align:right;">{{ "R$ {:,.2f}".format(item.total_comissao|float if item.total_comissao else 0).replace(",", "X").replace(".", ",").replace("X", ".") }}</td>
                                 </tr>
                                 {% endfor %}
+                                <!-- Linha de totais -->
+                                <tr style="background:#E8E8E8; font-weight:bold;">
+                                    <td><strong>TOTAL</strong></td>
+                                    <td style="text-align:right;">{{ total_fretes_mot }}</td>
+                                    <td style="text-align:right;">{{ "{:,.0f}".format(total_litros_mot or 0).replace(',', '.') }}</td>
+                                    <td style="text-align:right;">{{ "R$ {:,.2f}".format(total_comissao_mot|float if total_comissao_mot else 0).replace(",", "X").replace(".", ",").replace("X", ".") }}</td>
+                                </tr>
                             </tbody>
                         </table>
                     </div>
@@ -104,57 +128,6 @@
             </div>
         </div>
     </div>
+
     <!-- Situação Financeira -->
-    <div class="row mt-4">
-        <div class="col-md-12">
-            <div class="card">
-                <div class="card-header" style="background:#151515;color:white;">
-                    <h5><i class="bi bi-cash-stack"></i> Situação Financeira</h5>
-                </div>
-                <div class="card-body">
-                    {% if por_situacao %}
-                    <div class="table-responsive">
-                        <table class="table">
-                            <thead>
-                                <tr>
-                                    <th>Status</th>
-                                    <th>Quantidade</th>
-                                    <th>Valor Total</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {% for item in por_situacao %}
-                                <tr>
-                                    <td>
-                                        <span 
-                                        class="badge
-                                        {% if item.status == 'PAGO' %}
-                                          bg-success
-                                        {% elif item.status == 'EM ABERTO' %}
-                                          bg-warning text-dark
-                                        {% elif item.status == 'PARCIALMENTE PAGO' %}
-                                          bg-info text-dark
-                                        {% elif item.status == 'VENCIDO' %}
-                                          bg-danger
-                                        {% else %}
-                                          bg-secondary
-                                        {% endif %}">
-                                            {{ item.status }}
-                                        </span>
-                                    </td>
-                                    <td>{{ item.quantidade or 0 }}</td>
-                                    <td style="text-align:right;">{{ "R$ {:,.2f}".format(item.valor_total|float).replace(",", "X").replace(".", ",").replace("X", ".") }}</td>
-                                </tr>
-                                {% endfor %}
-                            </tbody>
-                        </table>
-                    </div>
-                    {% else %}
-                        <span class="text-muted">Sem dados para os filtros escolhidos.</span>
-                    {% endif %}
-                </div>
-            </div>
-        </div>
-    </div>
-</div>
-{% endblock %}
+    <div class="row
