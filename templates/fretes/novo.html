@@ -6,7 +6,7 @@
     <!-- Breadcrumb -->
     <nav aria-label="breadcrumb" class="mb-4">
         <ol class="breadcrumb">
-            <li class="breadcrumb-item"><a href="{{ url_for('main.index') }}">Início</a></li>
+            <li class="breadcrumb-item"><a href="{{ url_for('index') }}">Início</a></li>
             <li class="breadcrumb-item"><a href="{{ url_for('fretes.lista') }}">Fretes</a></li>
             <li class="breadcrumb-item active" aria-current="page">Novo Frete</li>
         </ol>
@@ -25,7 +25,7 @@
                             <option value="">Selecione um cliente</option>
                            {% for cliente in clientes %}
                             <option value="{{ cliente.id }}" data-paga-comissao="{{ cliente.paga_comissao }}">
-                            {{ cliente.razao_social }}  <!-- ✅ CORRIGIDO -->
+                            {{ cliente.razao_social }}
                             </option>
                             {% endfor %}
                         </select>
@@ -35,7 +35,7 @@
                         <select class="form-select" id="fornecedores_id" name="fornecedores_id" required>
                             <option value="">Selecione um fornecedor</option>
                             {% for fornecedor in fornecedores %}
-                            <option value="{{ fornecedor.id }}">{{ fornecedor.nome }}</option>
+                            <option value="{{ fornecedor.id }}">{{ fornecedor.razao_social }}</option>
                             {% endfor %}
                         </select>
                     </div>
@@ -260,31 +260,4 @@ function calcularValores() {
     document.getElementById('valor_cte_display').value = formatarReais(valorCte);
     
     var percentualCte = calcularPercentualCte();
-    var comissaoCte = valorCte * percentualCte;
-    document.getElementById('comissao_cte').value = comissaoCte.toFixed(2);
-    document.getElementById('comissao_cte_display').value = formatarReais(comissaoCte);
-    
-    var lucro = 0;
-    if (pagaComissao) {
-        lucro = valorTotalFrete - comissaoMotorista - comissaoCte;
-    } else {
-        lucro = valorTotalFrete - comissaoCte;
-    }
-    document.getElementById('lucro').value = lucro.toFixed(2);
-    document.getElementById('lucro_display').value = formatarReais(lucro);
-}
-
-document.addEventListener('DOMContentLoaded', function() {
-    document.getElementById('quantidade_id').addEventListener('change', calcularValores);
-    document.getElementById('preco_produto_unitario').addEventListener('input', calcularValores);
-    document.getElementById('preco_por_litro').addEventListener('input', calcularValores);
-    document.getElementById('clientes_id').addEventListener('change', calcularValores);
-    document.getElementById('fornecedores_id').addEventListener('change', calcularValores);
-    document.getElementById('origem_id').addEventListener('change', calcularValores);
-    
-    var hoje = new Date().toISOString().split('T')[0];
-    document.getElementById('data_frete').value = hoje;
-});
-</script>
-
-{% endblock %}
+    var comiss
