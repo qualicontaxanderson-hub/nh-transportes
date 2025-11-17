@@ -53,7 +53,7 @@ def migrar_fretes():
             lf.id, lf.clientes_id, COALESCE(lf.fornecedores_id, 1),
             lf.motoristas_id, COALESCE(lf.veiculos_id, 1),
             COALESCE(lf.quantidade_id, 1),
-            COALESCE(lf.origem_produto_id, 1), 1,
+            NULL, NULL,
             COALESCE(lf.preco_produto_unitario, 0.00),
             COALESCE(lf.total_nf_compra, 0.00),
             COALESCE(lf.preco_litro, 0.00),
