@@ -6,7 +6,6 @@ from flask_login import LoginManager, login_user, logout_user, login_required, c
 from werkzeug.security import generate_password_hash
 from models.usuario import Usuario
 from config import Config
-import mysql.connector
 
 app = Flask(__name__)
 app.config.from_object(Config)
@@ -22,31 +21,13 @@ def load_user(user_id):
 # Importar blueprints após definir 'app'
 from routes import clientes, fornecedores, fretes, motoristas, veiculos, relatorios, debug_bp
 
-# (Opcional: Forçar reload do módulo routes/fretes)
-if 'routes.fretes' in sys.modules:
-    importlib.reload(sys.modules['routes.fretes'])
-
-# Registrar blueprints
 app.register_blueprint(clientes.bp)
 app.register_blueprint(fornecedores.bp)
-app.register_blueprint(fretes.bp)  # <-- este ativa a listagem/cadastro de fretes!
+app.register_blueprint(fretes.bp)
 app.register_blueprint(motoristas.bp)
 app.register_blueprint(veiculos.bp)
 app.register_blueprint(relatorios.bp)
 app.register_blueprint(debug_bp)
-
-def get_db():
-    return mysql.connector.connect(
-        host=Config.DB_HOST,
-        port=Config.DB_PORT,
-        user=Config.DB_USER,
-        password=Config.DB_PASSWORD,
-        database=Config.DB_NAME
-    )
-
-def init_db():
-    # ... (mantenha seu bloco de criação de tabelas e dados que você já tem aqui)
-    pass
 
 @app.route('/health')
 def health():
@@ -76,11 +57,7 @@ def logout():
     logout_user()
     return redirect(url_for('login'))
 
-# Script de migração etc, caso necessário.
-
 if __name__ == '__main__':
     print("🚀 Iniciando NH Transportes...")
-    # (Descomente se usar realmente a função de inicialização do banco)
-    # init_db()
     print("🌐 Sistema online!")
     app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 10000)), debug=False)
