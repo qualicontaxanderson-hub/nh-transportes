@@ -7,6 +7,12 @@ Execute este script para migrar os dados da tabela antiga para a nova tabela fre
 Python: python3 migrate_fretes.py
 """
 
+import sys
+import os
+
+# Ensure the script can import modules from the same directory
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
 import mysql.connector
 from config import Config
 
