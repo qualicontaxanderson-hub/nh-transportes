@@ -1,159 +1,72 @@
-{% extends 'base.html' %}
-{% block title %}Fretes - {{ app_name }}{% endblock %}
-{% block content %}
-<div class="container-fluid">
-    <!-- Breadcrumb -->
-    <nav aria-label="breadcrumb">
-        <ol class="breadcrumb">
-            <li class="breadcrumb-item"><a href="{{ url_for('index') }}">Dashboard</a></li>
-            <li class="breadcrumb-item active" aria-current="page">Fretes</li>
-        </ol>
-    </nav>
-    
-    <div class="d-flex justify-content-between align-items-center mb-4">
-        <h2 style="color:#1D63A5;"><i class="bi bi-box-seam"></i> Lançamento de Fretes</h2>
-        <a href="{{ url_for('fretes.novo') }}" class="btn btn-primary" style="background:#ff9800;border:none;">
-            <i class="bi bi-plus-circle"></i> Novo Frete
-        </a>
-    </div>
-    
-    {% with messages = get_flashed_messages(with_categories=true) %}
-        {% if messages %}
-            {% for category, message in messages %}
-                <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
-                    {{ message }}
-                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-                </div>
-            {% endfor %}
-        {% endif %}
-    {% endwith %}
-    
-    <!-- Filtros -->
-    <div class="card mb-4">
-        <div class="card-header" style="background:#151515;color:white;">
-            <h5 class="mb-0"><i class="bi bi-funnel"></i> Filtros</h5>
-        </div>
-        <div class="card-body">
-            <form method="get" class="row g-3">
-                <div class="col-md-3">
-                    <label class="form-label">Data Início</label>
-                    <input type="date" name="data_inicio" value="{{ data_inicio or '' }}" class="form-control">
-                </div>
-                <div class="col-md-3">
-                    <label class="form-label">Data Fim</label>
-                    <input type="date" name="data_fim" value="{{ data_fim or '' }}" class="form-control">
-                </div>
-                <div class="col-md-2">
-                    <label class="form-label">Cliente</label>
-                    <select name="cliente_id" class="form-select">
-                        <option value="">Todos</option>
-                        {% for cliente in clientes %}
-                        <option value="{{ cliente.id }}" {% if cliente_id|string == cliente.id|string %}selected{% endif %}>
-                            {{ cliente.razao_social[:30] }}
-                        </option>
-                        {% endfor %}
-                    </select>
-                </div>
-                <div class="col-md-2">
-                    <label class="form-label">Motorista</label>
-                    <select name="motorista_id" class="form-select">
-                        <option value="">Todos</option>
-                        {% for motorista in motoristas %}
-                        <option value="{{ motorista.id }}" {% if motorista_id|string == motorista.id|string %}selected{% endif %}>
-                            {{ motorista.nome }}
-                        </option>
-                        {% endfor %}
-                    </select>
-                </div>
-                <div class="col-md-2">
-                    <label class="form-label">Status</label>
-                    <select name="status_id" class="form-select">
-                        <option value="">Todos</option>
-                        {% for situacao in situacoes %}
-                        <option value="{{ situacao.id }}" {% if status_id|string == situacao.id|string %}selected{% endif %}>
-                            {{ situacao.status }}
-                        </option>
-                        {% endfor %}
-                    </select>
-                </div>
-                <div class="col-md-12">
-                    <button type="submit" class="btn btn-primary"><i class="bi bi-search"></i> Filtrar</button>
-                    <a href="{{ url_for('fretes.lista') }}" class="btn btn-secondary">Limpar</a>
-                </div>
+<thead style="background:#4A90E2;color:#000;font-weight:700;">
+    <tr>
+        <th>ID</th>
+        <th>Data</th>
+        <th>Cliente</th>
+        <th>Fornecedor</th>
+        <th>Motorista</th>
+        <th>Veículo</th>
+        <th>Quantidade</th>
+        <th>Origem</th>
+        <th>Destino</th>
+        <th>Valor Total</th>
+        <th>Lucro</th>
+        <th>Status</th>
+        <th>Ações</th>
+    </tr>
+</thead>
+<tbody>
+    {% for frete in fretes %}
+    <tr>
+        <td>{{ frete.id }}</td>
+        <td>
+            {% if frete.data_frete %}
+                {{ frete.data_frete.strftime('%d/%m/%Y') }}
+            {% else %}
+                -
+            {% endif %}
+        </td>
+        <td>{{ frete.clientes_id or '-' }}</td>
+        <td>{{ frete.fornecedores_id or '-' }}</td>
+        <td>{{ frete.motoristas_id or '-' }}</td>
+        <td>{{ frete.veiculos_id or '-' }}</td>
+        <td>{{ frete.quantidade_id or '-' }}</td>
+        <td>{{ frete.origem_id or '-' }}</td>
+        <td>{{ frete.destino_id or '-' }}</td>
+        <td style="text-align:right;">
+            {{ "R$ {:,.2f}".format(frete.valor_total_frete|float if frete.valor_total_frete else 0).replace(",", "X").replace(".", ",").replace("X", ".") }}
+        </td>
+        <td style="text-align:right;">
+            {{ "R$ {:,.2f}".format(frete.lucro|float if frete.lucro else 0).replace(",", "X").replace(".", ",").replace("X", ".") }}
+        </td>
+        <td>
+            <span class="badge 
+              {% if frete.status == 'pago' %}bg-success
+              {% elif frete.status == 'em_transito' %}bg-warning text-dark
+              {% elif frete.status == 'entregue' %}bg-info text-dark
+              {% elif frete.status == 'cancelado' %}bg-danger
+              {% else %}bg-secondary{% endif %}">
+                {{ frete.status or 'N/A' }}
+            </span>
+        </td>
+        <td>
+            {# Link de edição, somente se tiver a rota fretes.editar #}
+            <!-- <a href="{{ url_for('fretes.editar', id=frete.id) }}" class="btn btn-sm btn-warning">
+                <i class="bi bi-pencil"></i>
+            </a> -->
+            <form method="POST" action="{{ url_for('fretes.deletar', id=frete.id) }}" style="display: inline;" onsubmit="return confirm('Tem certeza que deseja excluir este frete?');">
+                <button type="submit" class="btn btn-sm btn-danger">
+                    <i class="bi bi-trash"></i>
+                </button>
             </form>
-        </div>
-    </div>
-    
-    <!-- Tabela de Fretes -->
-    <div class="card">
-        <div class="card-header" style="background:#1D63A5;color:white;">
-            <h5 class="mb-0"><i class="bi bi-list"></i> Lista de Fretes</h5>
-        </div>
-        <div class="card-body">
-            <div class="table-responsive">
-                <table class="table table-hover">
-                    <thead style="background:#4A90E2;color:#000;font-weight:700;">
-                        <tr>
-                            <th>ID</th>
-                            <th>Data</th>
-                            <th>Cliente</th>
-                            <th>Produto</th>
-                            <th>Motorista</th>
-                            <th>Veículo</th>
-                            <th>Valor Total</th>
-                            <th>Lucro</th>
-                            <th>Status</th>
-                            <th>Ações</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for frete in fretes %}
-                        <tr>
-                            <td>{{ frete.id }}</td>
-                            <td>{{ frete.data_frete.strftime('%d/%m/%Y') if frete.data_frete else '-' }}</td>
-                            <td>{{ frete.cliente_nome or '-' }}</td>
-                            <td>{{ frete.produto_nome or '-' }}</td>
-                            <td>{{ frete.motorista_nome or '-' }}</td>
-                            <td>{{ frete.veiculo_placa or '-' }}</td>
-                            <td style="text-align:right;">{{ "R$ {:,.2f}".format(frete.vlr_total_frete|float if frete.vlr_total_frete else 0).replace(",", "X").replace(".", ",").replace("X", ".") }}</td>
-                            <td style="text-align:right;">{{ "R$ {:,.2f}".format(frete.lucro|float if frete.lucro else 0).replace(",", "X").replace(".", ",").replace("X", ".") }}</td>
-                            <td>
-                                <span class="badge 
-                                {% if frete.situacao_nome == 'PAGO' %}bg-success
-                                {% elif frete.situacao_nome == 'EM ABERTO' %}bg-warning text-dark
-                                {% elif frete.situacao_nome == 'PARCIALMENTE PAGO' %}bg-info text-dark
-                                {% elif frete.situacao_nome == 'VENCIDO' %}bg-danger
-                                {% else %}bg-secondary{% endif %}">
-                                    {{ frete.situacao_nome or 'N/A' }}
-                                </span>
-                            </td>
-                            <td>
-                                136
-                                , id=frete.id) }}" 
-                                   class="btn btn-sm btn-warning">
-                                    <i class="bi bi-pencil"></i>
-                                </a>
-
-                                    <form method="POST" action="{{ url_for('fretes.deletar', id=frete.id) }}" style="display: inline;" onsubmit="return confirm('Tem certeza que deseja excluir este frete?');">
-                    <button type="submit" class="btn btn-sm btn-danger">
-                        <i class="bi bi-trash"></i>
-                    </button>
-                </form>
-                                
-                            </td>
-                        </tr>
-                        {% else %}
-                        <tr>
-                            <td colspan="10" class="text-center text-muted py-4">
-                                <i class="bi bi-inbox" style="font-size:2rem;"></i><br>
-                                Nenhum frete encontrado
-                            </td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
-        </div>
-    </div>
-</div>
-{% endblock %}
+        </td>
+    </tr>
+    {% else %}
+    <tr>
+        <td colspan="13" class="text-center text-muted py-4">
+            <i class="bi bi-inbox" style="font-size:2rem;"></i><br>
+            Nenhum frete encontrado
+        </td>
+    </tr>
+    {% endfor %}
+</tbody>
