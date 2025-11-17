@@ -32,6 +32,7 @@ def lista():
                    q.valor as quantidade_valor,
                    o.nome as origem_nome,
                    d.nome as destino_nome
+                                s.status as situacao_nome
             FROM fretes f
             LEFT JOIN clientes c ON f.clientes_id = c.id
             LEFT JOIN fornecedores fo ON f.fornecedores_id = fo.id
@@ -40,6 +41,7 @@ def lista():
             LEFT JOIN quantidades q ON f.quantidade_id = q.id
             LEFT JOIN origens o ON f.origem_id = o.id
             LEFT JOIN destinos d ON f.destino_id = d.id
+                         LEFT JOIN situacoes s ON f.status = s.id
             ORDER BY f.data_frete DESC
         """)
         
@@ -51,6 +53,9 @@ def lista():
         
         cursor.execute("SELECT id, nome FROM motoristas ORDER BY nome")
         motoristas = cursor.fetchall()
+
+                cursor.execute("SELECT id, status FROM situacoes ORDER BY status")
+        situacoes = cursor.fetchall()
         
         cursor.close()
         conn.close()
@@ -58,8 +63,8 @@ def lista():
         return render_template('fretes/lista.html', 
                              fretes=fretes,
                              clientes=clientes,
-                             motoristas=motoristas)
-    except Exception as e:
+                             motoristas=motor,
+                            situacoes=situacoes)    except Exception as e:
         print(f"Erro ao listar fretes: {e}")
         flash(f'Erro ao carregar lista de fretes: {str(e)}', 'danger')
         return redirect(url_for('index'))
