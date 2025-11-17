@@ -8,17 +8,14 @@ Python: python3 migrate_fretes.py
 """
 
 import mysql.connector
-import os
-from dotenv import load_dotenv
+from config import Config
 
-load_dotenv()
-
-# Configurações de banco de dados
-DB_HOST = os.getenv('DB_HOST', 'localhost')
-DB_PORT = int(os.getenv('DB_PORT', 3306))
-DB_USER = os.getenv('DB_USER', 'root')
-DB_PASSWORD = os.getenv('DB_PASSWORD', '')
-DB_NAME = os.getenv('DB_NAME', 'nh_transportes')
+# Use database configuration from config.py
+DB_HOST = Config.DB_HOST
+DB_PORT = Config.DB_PORT
+DB_USER = Config.DB_USER
+DB_PASSWORD = Config.DB_PASSWORD
+DB_NAME = Config.DB_NAME
 
 def migrar_fretes():
     """
