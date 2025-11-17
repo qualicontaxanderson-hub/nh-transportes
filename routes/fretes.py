@@ -1,3 +1,6 @@
+from flask import Blueprint, render_template, request, redirect, url_for, flash
+from flask_login import login_required
+bp = Blueprint('fretes', __name__, url_prefix='/fretes')
 @bp.route('/novo', methods=['GET', 'POST'])
 @login_required
 def novo():
