@@ -1,6 +1,6 @@
 from flask import Blueprint, render_template, request, redirect, url_for, flash
 from flask_login import login_required
-from app import get_db   # <-- ADICIONE ESTA LINHA!
+from app import get_db
 
 bp = Blueprint('fretes', __name__, url_prefix='/fretes')
 
@@ -112,4 +112,4 @@ def lista():
     except Exception as e:
         print(f"Erro ao carregar lista de fretes: {e}")
         flash(f"Erro ao carregar lista de fretes: {str(e)}", 'danger')
-        return redirect(url_for('index')
+        return redirect(url_for('index'))
