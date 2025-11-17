@@ -26,7 +26,7 @@ def lista():
         cursor.execute("""
             SELECT f.*, 
                    c.razao_social as cliente_nome,
-                   fo.nome as fornecedor_nome,
+                   fo.razao_social as fornecedor_nome,
                    m.nome as motorista_nome,
                    v.placa as veiculo_placa,
                    q.valor as quantidade_valor,
@@ -133,7 +133,7 @@ def novo():
             print(f"   Exemplo: {clientes[0]}")
         
         print("📋 DEBUG: Executando query de fornecedores...")
-        cursor.execute("SELECT id, nome FROM fornecedores ORDER BY nome")
+        cursor.execute("167 ORDER BY razao_social")
         fornecedores = cursor.fetchall()
         print(f"✅ DEBUG: {len(fornecedores)} fornecedores carregados")
         
@@ -250,7 +250,7 @@ def editar(id):
         cursor.execute("SELECT id, razao_social, paga_comissao FROM clientes ORDER BY razao_social")
         clientes = cursor.fetchall()
         
-        cursor.execute("SELECT id, nome FROM fornecedores ORDER BY nome")
+        cursor.execute("SELECT id, razao_social FROM fornecedores ORDER BY razao_social")
         fornecedores = cursor.fetchall()
         
         cursor.execute("SELECT id, nome FROM motoristas ORDER BY nome")
