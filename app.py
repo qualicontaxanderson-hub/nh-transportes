@@ -353,7 +353,7 @@ def logout():
 @app.route('/migrar-fretes')
 @login_required
 def migrar_fretes():
-    """Migra dados da tabela lancamento_frete para fretes"""
+    """Migra dados da tabela lancamento_frete para fretes - SIMPLIFICADO"""
     try:
         conn = mysql.connector.connect(
             host=Config.DB_HOST,
@@ -362,110 +362,46 @@ def migrar_fretes():
             password=Config.DB_PASSWORD,
             database=Config.DB_NAME
         )
-        cursor = conn.cursor(dictionary=True)
+        cursor = conn.cursor()
         
-        # Buscar todos os registros da tabela antiga
-        cursor.execute("""
-            SELECT * FROM lancamento_frete 
-            WHERE clientes_id IS NOT NULL 
-            AND motoristas_id IS NOT NULL
-            ORDER BY id
-        """)
+        # INSERT com JOIN para performance
+        sql = """
+        INSERT INTO fretes (
+            id, clientes_id, fornecedores_id, motoristas_id, veiculos_id,
+            quantidade_id, origem_id, destino_id, preco_produto_unitario,
+            total_nf_compra, preco_por_litro, valor_total_frete,
+            comissao_motorista, valor_cte, comissao_cte, lucro,
+            data_frete, status
+        )
+        SELECT 
+            lf.id, lf.clientes_id, COALESCE(lf.fornecedores_id, 1) as fornecedores_id,
+            lf.motoristas_id, COALESCE(lf.veiculos_id, 1) as veiculos_id,
+            COALESCE(lf.quantidade_id, 1) as quantidade_id,
+            COALESCE(lf.origem_produto_id, 1) as origem_id,
+            1 as destino_id,
+            COALESCE(lf.preco_produto_unitario, 0.00),
+            COALESCE(lf.total_nf_compra, 0.00),
+            COALESCE(lf.preco_litro, 0.00),
+            COALESCE(lf.vlr_total_frete, 0.00),
+            COALESCE(lf.comissao_motorista, 0.00),
+            COALESCE(lf.vlr_cte, 0.00),
+            COALESCE(lf.comissao_cte, 0.00),
+            COALESCE(lf.lucro, 0.00),
+            COALESCE(lf.data_frete, '2025-01-01'),
+            'concluido' as status
+        FROM lancamento_frete lf
+        WHERE lf.clientes_id IS NOT NULL 
+        AND lf.motoristas_id IS NOT NULL
+        ON DUPLICATE KEY UPDATE id=id
+        """
         
-        registros_antigos = cursor.fetchall()
-        total_registros = len(registros_antigos)
-        
-        if total_registros == 0:
-            flash('Nenhum registro válido encontrado na tabela antiga!', 'warning')
-            return redirect(url_for('fretes.listar'))
-        
-        migrados = 0
-        erros = []
-        
-        # Buscar IDs padrão para campos obrigatórios
-        cursor.execute("SELECT id FROM quantidades LIMIT 1")
-        quantidade_default = cursor.fetchone()['id']
-        
-        cursor.execute("SELECT id FROM origens LIMIT 1")
-        origem_default = cursor.fetchone()['id']
-        
-        cursor.execute("SELECT id FROM destinos LIMIT 1")
-        destino_default = cursor.fetchone()['id']
-        
-        for registro in registros_antigos:
-            try:
-                # Verificar se já foi migrado
-                cursor.execute("SELECT id FROM fretes WHERE id = %s", (registro['id'],))
-                if cursor.fetchone():
-                    continue  # Já migrado
-                
-                clientes_id = registro['clientes_id']
-                motoristas_id = registro['motoristas_id']
-                
-                # Verificar fornecedor
-                fornecedores_id = registro.get('fornecedores_id')
-                if not fornecedores_id:
-                    cursor.execute("SELECT id FROM fornecedores LIMIT 1")
-                    forn = cursor.fetchone()
-                    fornecedores_id = forn['id'] if forn else None
-                
-                # Verificar veículo
-                veiculos_id = registro.get('veiculos_id')
-                if not veiculos_id:
-                    cursor.execute("SELECT id FROM veiculos LIMIT 1")
-                    veic = cursor.fetchone()
-                    veiculos_id = veic['id'] if veic else None
-                
-                # Pular se não tiver fornecedor ou veículo
-                if not fornecedores_id or not veiculos_id:
-                    erros.append(f"ID {registro['id']}: falta fornecedor ou veículo")
-                    continue
-                
-                quantidade_id = registro.get('quantidade_id') or quantidade_default
-                origem_id = registro.get('origem_produto_id') or origem_default
-                destino_id = destino_default
-                
-                # Valores financeiros
-                preco_unitario = registro.get('preco_produto_unitario') or 0.00
-                total_nf = registro.get('total_nf_compra') or 0.00
-                preco_litro = registro.get('preco_litro') or 0.00
-                vlr_frete = registro.get('vlr_total_frete') or 0.00
-                comissao_mot = registro.get('comissao_motorista') or 0.00
-                vlr_cte = registro.get('vlr_cte') or 0.00
-                comissao_cte = registro.get('comissao_cte') or 0.00
-                lucro = registro.get('lucro') or 0.00
-                data_frete = registro.get('data_frete') or '2025-01-01'
-                
-                # Inserir na nova tabela
-                cursor.execute("""
-                    INSERT INTO fretes (
-                        id, clientes_id, fornecedores_id, motoristas_id, 
-                        veiculos_id, quantidade_id, origem_id, destino_id,
-                        preco_produto_unitario, total_nf_compra, preco_por_litro,
-                        valor_total_frete, comissao_motorista, valor_cte, 
-                        comissao_cte, lucro, data_frete, status
-                    ) VALUES (
-                        %s, %s, %s, %s, %s, %s, %s, %s, 
-                        %s, %s, %s, %s, %s, %s, %s, %s, %s, 'concluido'
-                    )
-                """, (
-                    registro['id'], clientes_id, fornecedores_id, motoristas_id,
-                    veiculos_id, quantidade_id, origem_id, destino_id,
-                    preco_unitario, total_nf, preco_litro, vlr_frete,
-                    comissao_mot, vlr_cte, comissao_cte, lucro, data_frete
-                ))
-                
-                migrados += 1
-                
-            except Exception as e:
-                erros.append(f"ID {registro.get('id', '?')}: {str(e)}")
-                continue
-        
+        cursor.execute(sql)
         conn.commit()
+        total_migrados = cursor.rowcount
+        
         cursor.close()
         conn.close()
         
-        # Retornar página com detalhes
         return f"""
         <html>
         <head>
@@ -474,32 +410,27 @@ def migrar_fretes():
                 body {{ font-family: Arial; padding: 40px; background: #f5f5f5; }}
                 .container {{ max-width: 800px; margin: 0 auto; background: white; padding: 30px; border-radius: 10px; }}
                 h1 {{ color: #2c3e50; }}
-                .success {{ color: #27ae60; font-size: 24px; margin: 20px 0; }}
+                .success {{ color: #27ae60; font-size: 24px; }}
                 .stats {{ background: #ecf0f1; padding: 15px; border-radius: 5px; margin: 20px 0; }}
-                .errors {{ background: #ffe5e5; padding: 15px; border-radius: 5px; margin: 20px 0; }}
                 .btn {{ background: #3498db; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; display: inline-block; margin-top: 20px; }}
             </style>
         </head>
         <body>
-            <div class=\"container\">
+            <div class="container">
                 <h1>🚚 Migração de Fretes</h1>
-                <div class=\"success\">✅ Migração Concluída!</div>
-                <div class=\"stats\">
-                    <h3>📊 Estatísticas:</h3>
-                    <p><strong>Total de registros encontrados:</strong> {total_registros}</p>
-                    <p><strong>Registros migrados com sucesso:</strong> {migrados}</p>
-                    <p><strong>Registros com erro:</strong> {len(erros)}</p>
+                <div class="success">✅ Concluída com sucesso!</div>
+                <div class="stats">
+                    <h3>📊 Resultado:</h3>
+                    <p><strong>Registros migrados:</strong> {total_migrados}</p>
                 </div>
-                {f'<div class=\"errors\"><h3>⚠️ Erros:</h3><ul>{"".join([f"<li>{e}</li>" for e in erros[:10]])}</ul></div>' if erros else ''}
-                <a href=\"/fretes/\" class=\"btn\">Ver Fretes Migrados</a>
+                <a href="/fretes/" class="btn">Ver Fretes</a>
             </div>
         </body>
         </html>
         """
         
     except Exception as e:
-        flash(f'Erro na migração: {str(e)}', 'danger')
-        return redirect(url_for('index'))
+        return f"<h1>Erro:</h1><p>{str(e)}</p>", 500
 
 
 if __name__ == '__main__':
