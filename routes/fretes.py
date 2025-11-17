@@ -55,7 +55,7 @@ def lista():
         motoristas = cursor.fetchall()
 
                 cursor.execute("SELECT id, status FROM situacoes ORDER BY status")
-        situacoes = cursor.fetchall()
+        acoes = cursor.fetchall()
         
         cursor.close()
         conn.close()
