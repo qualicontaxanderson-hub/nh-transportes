@@ -113,3 +113,19 @@ def lista():
         print(f"Erro ao carregar lista de fretes: {e}")
         flash(f"Erro ao carregar lista de fretes: {str(e)}", 'danger')
         return redirect(url_for('index'))
+
+# EXCLUIR FRETE
+@bp.route('/deletar/<int:id>', methods=['POST', 'GET'])
+@login_required
+def deletar(id):
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM fretes WHERE id = %s", (id,))
+        conn.commit()
+        cursor.close()
+        conn.close()
+        flash('Frete excluído com sucesso!', 'success')
+    except Exception as e:
+        flash(f'Erro ao excluir frete: {str(e)}', 'danger')
+    return redirect(url_for('fretes.lista'))
