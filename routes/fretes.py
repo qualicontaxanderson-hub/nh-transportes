@@ -92,9 +92,9 @@ def lista():
         conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)
         cursor.execute("""
-            SELECT f.*, c.razao_social as cliente_nome, fo.razao_social as fornecedor_nome, 
-            m.nome as motorista_nome, v.placa as veiculo_placa, q.valor as quantidade_valor, 
-            o.nome as origem_nome, d.nome as destino_nome
+            SELECT f.*, c.razao_social AS cliente_nome, fo.razao_social AS fornecedor_nome,
+            m.nome AS motorista_nome, v.placa AS veiculo_placa, q.valor AS quantidade_valor,
+            o.nome AS origem_nome, d.nome AS destino_nome
             FROM fretes f
             LEFT JOIN clientes c ON f.clientes_id = c.id
             LEFT JOIN fornecedores fo ON f.fornecedores_id = fo.id
@@ -129,3 +129,82 @@ def deletar(id):
     except Exception as e:
         flash(f'Erro ao excluir frete: {str(e)}', 'danger')
     return redirect(url_for('fretes.lista'))
+
+# EDITAR FRETE
+@bp.route('/editar/<int:id>', methods=['GET', 'POST'])
+@login_required
+def editar(id):
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+
+        if request.method == 'POST':
+            cursor.execute("""
+                UPDATE fretes SET
+                    clientes_id=%s, fornecedores_id=%s, motoristas_id=%s, veiculos_id=%s,
+                    quantidade_id=%s, origem_id=%s, destino_id=%s,
+                    preco_produto_unitario=%s, total_nf_compra=%s,
+                    preco_por_litro=%s, valor_total_frete=%s, comissao_motorista=%s,
+                    valor_cte=%s, comissao_cte=%s, lucro=%s,
+                    data_frete=%s, status=%s, observacoes=%s
+                WHERE id=%s
+            """, (
+                request.form['clientes_id'],
+                request.form['fornecedores_id'],
+                request.form['motoristas_id'],
+                request.form['veiculos_id'],
+                request.form['quantidade_id'],
+                request.form['origem_id'],
+                request.form['destino_id'],
+                request.form['preco_produto_unitario'],
+                request.form['total_nf_compra'],
+                request.form['preco_por_litro'],
+                request.form['valor_total_frete'],
+                request.form['comissao_motorista'],
+                request.form['valor_cte'],
+                request.form['comissao_cte'],
+                request.form['lucro'],
+                request.form['data_frete'],
+                request.form['status'],
+                request.form.get('observacoes', ''),
+                id
+            ))
+            conn.commit()
+            cursor.close()
+            conn.close()
+            flash('Frete atualizado com sucesso!', 'success')
+            return redirect(url_for('fretes.lista'))
+
+        # GET: carrega dados para edição
+        cursor.execute("SELECT * FROM fretes WHERE id=%s", (id,))
+        frete = cursor.fetchone()
+        cursor.execute("SELECT id, razao_social, paga_comissao FROM clientes ORDER BY razao_social")
+        clientes = cursor.fetchall()
+        cursor.execute("SELECT id, razao_social FROM fornecedores ORDER BY razao_social")
+        fornecedores = cursor.fetchall()
+        cursor.execute("SELECT id, nome FROM motoristas ORDER BY nome")
+        motoristas = cursor.fetchall()
+        cursor.execute("SELECT id, placa, modelo FROM veiculos ORDER BY placa")
+        veiculos = cursor.fetchall()
+        cursor.execute("SELECT id, valor, descricao FROM quantidades ORDER BY valor")
+        quantidades = cursor.fetchall()
+        cursor.execute("SELECT id, nome FROM origens ORDER BY nome")
+        origens = cursor.fetchall()
+        cursor.execute("SELECT id, nome FROM destinos ORDER BY nome")
+        destinos = cursor.fetchall()
+        cursor.close()
+        conn.close()
+
+        return render_template('fretes/editar.html',
+                               frete=frete,
+                               clientes=clientes,
+                               fornecedores=fornecedores,
+                               motoristas=motoristas,
+                               veiculos=veiculos,
+                               quantidades=quantidades,
+                               origens=origens,
+                               destinos=destinos)
+    except Exception as e:
+        print(f"Erro ao editar frete: {e}")
+        flash(f'Erro ao editar frete: {str(e)}', 'danger')
+        return redirect(url_for('fretes.lista'))
