@@ -68,9 +68,15 @@ def migrar_fretes():
         WHERE lf.clientes_id IS NOT NULL AND lf.motoristas_id IS NOT NULL
         """
         
+                # Desabilitar verificação de chaves estrangeiras
+        cursor.execute("SET FOREIGN_KEY_CHECKS=0")
+
         print("\n📊 Executando migração...")
         cursor.execute(sql_migrate)
         conn.commit()
+                
+        # Reabilitar verificação de chaves estrangeiras
+        cursor.execute("SET FOREIGN_KEY_CHECKS=1")
         
         total_migrados = cursor.rowcount
         print(f"\n✅ Migração concluída com sucesso!")
