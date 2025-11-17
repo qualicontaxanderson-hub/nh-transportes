@@ -1,6 +1,6 @@
 from flask import Blueprint, render_template, request, redirect, url_for, flash
 from flask_login import login_required
-from utils.db import get_db_connection  # <-- troque o import!
+from utils.db import get_db_connection
 
 bp = Blueprint('fretes', __name__, url_prefix='/fretes')
 
