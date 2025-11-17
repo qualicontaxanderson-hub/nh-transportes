@@ -128,10 +128,17 @@
                                 </span>
                             </td>
                             <td>
-                                <a href="{{ url_for('fretes.editar', id=frete.id) }}" 
+                                136
+                                , id=frete.id) }}" 
                                    class="btn btn-sm btn-warning">
                                     <i class="bi bi-pencil"></i>
                                 </a>
+
+                                    <form method="POST" action="{{ url_for('fretes.deletar', id=frete.id) }}" style="display: inline;" onsubmit="return confirm('Tem certeza que deseja excluir este frete?');">
+                    <button type="submit" class="btn btn-sm btn-danger">
+                        <i class="bi bi-trash"></i>
+                    </button>
+                </form>
                                 
                             </td>
                         </tr>
