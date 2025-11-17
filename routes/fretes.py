@@ -1,6 +1,6 @@
 from flask import Blueprint, render_template, request, redirect, url_for, flash
 from flask_login import login_required
-from app import get_db
+from utils.db import get_db_connection  # <-- troque o import!
 
 bp = Blueprint('fretes', __name__, url_prefix='/fretes')
 
@@ -10,7 +10,7 @@ bp = Blueprint('fretes', __name__, url_prefix='/fretes')
 def novo():
     if request.method == 'POST':
         try:
-            conn = get_db()
+            conn = get_db_connection()
             cursor = conn.cursor()
             cursor.execute("""
                 INSERT INTO fretes (
@@ -53,7 +53,7 @@ def novo():
             return redirect(url_for('fretes.novo'))
 
     try:
-        conn = get_db()
+        conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)
         cursor.execute("SELECT id, razao_social, paga_comissao FROM clientes ORDER BY razao_social")
         clientes = cursor.fetchall()
@@ -89,7 +89,7 @@ def novo():
 @login_required
 def lista():
     try:
-        conn = get_db()
+        conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)
         cursor.execute("""
             SELECT f.*, c.razao_social as cliente_nome, fo.razao_social as fornecedor_nome, 
