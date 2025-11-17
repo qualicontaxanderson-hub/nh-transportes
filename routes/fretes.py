@@ -3,7 +3,7 @@ from flask_login import login_required
 
 bp = Blueprint('fretes', __name__, url_prefix='/fretes')
 
-# ROTA CADASTRO: /fretes/novo
+# CADASTRAR FRETE
 @bp.route('/novo', methods=['GET', 'POST'])
 @login_required
 def novo():
@@ -70,7 +70,6 @@ def novo():
         destinos = cursor.fetchall()
         cursor.close()
         conn.close()
-
         return render_template('fretes/novo.html',
                                clientes=clientes,
                                fornecedores=fornecedores,
@@ -79,29 +78,32 @@ def novo():
                                quantidades=quantidades,
                                origens=origens,
                                destinos=destinos)
-
     except Exception as e:
         print(f"Erro ao carregar formulário: {e}")
         flash(f'Erro ao carregar formulário: {str(e)}', 'danger')
         return redirect(url_for('index'))
 
-# ROTA LISTA: /fretes/lista
+# LISTAR FRETES
 @bp.route('/lista')
 @login_required
 def lista():
     try:
         conn = get_db()
         cursor = conn.cursor(dictionary=True)
-        cursor.execute("SELECT f.*, c.razao_social as cliente_nome, fo.razao_social as fornecedor_nome, m.nome as motorista_nome, v.placa as veiculo_placa, q.valor as quantidade_valor, o.nome as origem_nome, d.nome as destino_nome \
-            FROM fretes f \
-            LEFT JOIN clientes c ON f.clientes_id = c.id \
-            LEFT JOIN fornecedores fo ON f.fornecedores_id = fo.id \
-            LEFT JOIN motoristas m ON f.motoristas_id = m.id \
-            LEFT JOIN veiculos v ON f.veiculos_id = v.id \
-            LEFT JOIN quantidades q ON f.quantidade_id = q.id \
-            LEFT JOIN origens o ON f.origem_id = o.id \
-            LEFT JOIN destinos d ON f.destino_id = d.id \
-            ORDER BY f.id DESC")
+        cursor.execute("""
+            SELECT f.*, c.razao_social as cliente_nome, fo.razao_social as fornecedor_nome, 
+            m.nome as motorista_nome, v.placa as veiculo_placa, q.valor as quantidade_valor, 
+            o.nome as origem_nome, d.nome as destino_nome
+            FROM fretes f
+            LEFT JOIN clientes c ON f.clientes_id = c.id
+            LEFT JOIN fornecedores fo ON f.fornecedores_id = fo.id
+            LEFT JOIN motoristas m ON f.motoristas_id = m.id
+            LEFT JOIN veiculos v ON f.veiculos_id = v.id
+            LEFT JOIN quantidades q ON f.quantidade_id = q.id
+            LEFT JOIN origens o ON f.origem_id = o.id
+            LEFT JOIN destinos d ON f.destino_id = d.id
+            ORDER BY f.id DESC
+        """)
         fretes = cursor.fetchall()
         cursor.close()
         conn.close()
