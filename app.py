@@ -354,84 +354,37 @@ def logout():
 @login_required
 def migrar_fretes():
     """Migra dados da tabela lancamento_frete para fretes - SIMPLIFICADO"""
-    try:
-        conn = mysql.connector.connect(
-            host=Config.DB_HOST,
-            port=Config.DB_PORT,
-            user=Config.DB_USER,
-            password=Config.DB_PASSWORD,
-            database=Config.DB_NAME
-        )
-        cursor = conn.cursor()
-        
-        # INSERT com JOIN para performance
-        sql = """
-        INSERT INTO fretes (
-            id, clientes_id, fornecedores_id, motoristas_id, veiculos_id,
-            quantidade_id, origem_id, destino_id, preco_produto_unitario,
-            total_nf_compra, preco_por_litro, valor_total_frete,
-            comissao_motorista, valor_cte, comissao_cte, lucro,
-            data_frete, status
-        )
-        SELECT 
-            lf.id, lf.clientes_id, COALESCE(lf.fornecedores_id, 1) as fornecedores_id,
-            lf.motoristas_id, COALESCE(lf.veiculos_id, 1) as veiculos_id,
-            COALESCE(lf.quantidade_id, 1) as quantidade_id,
-            COALESCE(lf.origem_produto_id, 1) as origem_id,
-            1 as destino_id,
-            COALESCE(lf.preco_produto_unitario, 0.00),
-            COALESCE(lf.total_nf_compra, 0.00),
-            COALESCE(lf.preco_litro, 0.00),
-            COALESCE(lf.vlr_total_frete, 0.00),
-            COALESCE(lf.comissao_motorista, 0.00),
-            COALESCE(lf.vlr_cte, 0.00),
-            COALESCE(lf.comissao_cte, 0.00),
-            COALESCE(lf.lucro, 0.00),
-            COALESCE(lf.data_frete, '2025-01-01'),
-            'concluido' as status
-        FROM lancamento_frete lf
-        WHERE lf.clientes_id IS NOT NULL 
-        AND lf.motoristas_id IS NOT NULL
-        ON DUPLICATE KEY UPDATE id=id
-        """
-        
-        cursor.execute(sql)
-        conn.commit()
-        total_migrados = cursor.rowcount
-        
-        cursor.close()
-        conn.close()
-        
-        return f"""
-        <html>
-        <head>
-            <title>Migração Concluída</title>
-            <style>
-                body {{ font-family: Arial; padding: 40px; background: #f5f5f5; }}
-                .container {{ max-width: 800px; margin: 0 auto; background: white; padding: 30px; border-radius: 10px; }}
-                h1 {{ color: #2c3e50; }}
-                .success {{ color: #27ae60; font-size: 24px; }}
-                .stats {{ background: #ecf0f1; padding: 15px; border-radius: 5px; margin: 20px 0; }}
-                .btn {{ background: #3498db; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; display: inline-block; margin-top: 20px; }}
-            </style>
-        </head>
-        <body>
-            <div class="container">
-                <h1>🚚 Migração de Fretes</h1>
-                <div class="success">✅ Concluída com sucesso!</div>
-                <div class="stats">
-                    <h3>📊 Resultado:</h3>
-                    <p><strong>Registros migrados:</strong> {total_migrados}</p>
-                </div>
-                <a href="/fretes/" class="btn">Ver Fretes</a>
-            </div>
-        </body>
-        </html>
-        """
-        
-    except Exception as e:
-        return f"<h1>Erro:</h1><p>{str(e)}</p>", 500
 
+# ============================================================
+# SCRIPT DE MIGRAÇÃO - Execute manualmente no banco de dados
+# ============================================================
+# Execute este SQL no banco de dados para migrar os dados:
+#
+# INSERT INTO fretes (
+#     id, clientes_id, fornecedores_id, motoristas_id, veiculos_id,
+#     quantidade_id, origem_id, destino_id, preco_produto_unitario,
+#     total_nf_compra, preco_por_litro, valor_total_frete,
+#     comissao_motorista, valor_cte, comissao_cte, lucro,
+#     data_frete, status
+# )
+# SELECT 
+#     lf.id, lf.clientes_id, COALESCE(lf.fornecedores_id, 1),
+#     lf.motoristas_id, COALESCE(lf.veiculos_id, 1),
+#     COALESCE(lf.quantidade_id, 1),
+#     COALESCE(lf.origem_produto_id, 1), 1,
+#     COALESCE(lf.preco_produto_unitario, 0.00),
+#     COALESCE(lf.total_nf_compra, 0.00),
+#     COALESCE(lf.preco_litro, 0.00),
+#     COALESCE(lf.vlr_total_frete, 0.00),
+#     COALESCE(lf.comissao_motorista, 0.00),
+#     COALESCE(lf.vlr_cte, 0.00),
+#     COALESCE(lf.comissao_cte, 0.00),
+#     COALESCE(lf.lucro, 0.00),
+#     COALESCE(lf.data_frete, '2025-01-01'),
+#     'concluido'
+# FROM lancamento_frete lf
+# WHERE lf.clientes_id IS NOT NULL AND lf.motoristas_id IS NOT NULL
+# ============================================================
 
 if __name__ == '__main__':
     print("🚀 Iniciando NH Transportes...")
