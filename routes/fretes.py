@@ -54,8 +54,8 @@ def lista():
         cursor.execute("SELECT id, nome FROM motoristas ORDER BY nome")
         motoristas = cursor.fetchall()
 
-        cursor.execute("SELECT id, status FROM situacoes ORDER BY status")
-                situacoes = cursor.fetchall()
+    cursor.execute("SELECT id, status FROM situacoes ORDER BY status")
+            situacoes = cursor.fetchall()
         cursor.close()
         conn.close()
         
