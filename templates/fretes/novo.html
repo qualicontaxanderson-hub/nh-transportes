@@ -174,10 +174,36 @@
 </div>
 
 <script>
+    // Função para formatar valores em formato brasileiro
     function formatarReais(valor) {
-        return valor.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        return valor.toLocaleString('pt-BR', { 
+            minimumFractionDigits: 2, 
+            maximumFractionDigits: 2 
+        });
     }
 
+    // Função para converter valor brasileiro (1.234,56) para número (1234.56)
+    function converterBrasileiro(valor) {
+        if (!valor) return 0;
+        return parseFloat(valor.replace('.', '').replace(',', '.'));
+    }
+
+    // Função para extrair quantidade corretamente do dropdown
+    function obterQuantidade() {
+        var quantidadeSelect = document.getElementById('quantidade_id');
+        if (!quantidadeSelect || quantidadeSelect.selectedIndex === 0) {
+            return 0;
+        }
+        
+        var selectedQuantidade = quantidadeSelect.options[quantidadeSelect.selectedIndex];
+        var litrosText = selectedQuantidade.getAttribute('data-litros') || '0';
+        
+        // Remove tudo que não é dígito e converte para número inteiro
+        var quantidade = parseInt(litrosText.replace(/[^\d]/g, '')) || 0;
+        return quantidade;
+    }
+
+    // Função para calcular percentual CTe do cliente
     function calcularPercentualCte() {
         var clienteSelect = document.getElementById('clientes_id');
         var selectedOption = clienteSelect.options[clienteSelect.selectedIndex];
@@ -185,52 +211,58 @@
         return percentualCte / 100;
     }
 
+    // FUNÇÃO PRINCIPAL DE CÁLCULO - CORRIGIDA
     function calcularValores() {
-        var quantidadeSelect = document.getElementById('quantidade_id');
-        var selectedQuantidade = quantidadeSelect.options[quantidadeSelect.selectedIndex];
-        
-        if (quantidadeSelect.selectedIndex === 0) {
-            return;
+        try {
+            var quantidade = obterQuantidade();
+            
+            var precoProdutoUnitarioStr = document.getElementById('preco_produto_unitario').value;
+            var precoProdutoUnitario = converterBrasileiro(precoProdutoUnitarioStr);
+            
+            var precoPorLitroStr = document.getElementById('preco_por_litro').value;
+            var precoPorLitro = converterBrasileiro(precoPorLitroStr);
+            
+            // 1. Total NF Compra = Quantidade × Preço Unitário
+            var totalNfCompra = quantidade * precoProdutoUnitario;
+            document.getElementById('total_nf_compra').value = formatarReais(totalNfCompra);
+            
+            // 2. Valor Total Frete = Quantidade × Preço por Litro
+            var valorTotalFrete = quantidade * precoPorLitro;
+            document.getElementById('valor_total_frete').value = formatarReais(valorTotalFrete);
+            
+            // 3. Comissão Motorista = Quantidade × 0,01 (se motorista paga comissão)
+            var motoristaSelect = document.getElementById('motoristas_id');
+            var selectedMotorista = motoristaSelect.options[motoristaSelect.selectedIndex];
+            var pagaComissao = selectedMotorista.getAttribute('data-paga-comissao') === '1';
+            
+            var comissaoMotorista = 0;
+            if (pagaComissao) {
+                comissaoMotorista = quantidade * 0.01;
+            }
+            document.getElementById('comissao_motorista').value = formatarReais(comissaoMotorista);
+            
+            // 4. Valor CTe = Valor Total Frete
+            var valorCte = valorTotalFrete;
+            document.getElementById('valor_cte').value = formatarReais(valorCte);
+            
+            // 5. Comissão CTe = Valor CTe × Percentual do cliente
+            var percentualCte = calcularPercentualCte();
+            var comissaoCte = 0;
+            if (pagaComissao) {
+                comissaoCte = valorCte * percentualCte;
+            }
+            document.getElementById('comissao_cte').value = formatarReais(comissaoCte);
+            
+            // 6. Lucro = Valor CTe - Total NF - Comissão CTe
+            var lucro = valorCte - totalNfCompra - comissaoCte;
+            document.getElementById('lucro').value = formatarReais(lucro);
+            
+        } catch (err) {
+            console.error('Erro ao calcular valores:', err);
         }
-
-        var litros = parseFloat(selectedQuantidade.getAttribute('data-litros')) || 0;
-        
-        var precoProdutoUnitarioStr = document.getElementById('preco_produto_unitario').value.replace('.', '').replace(',', '.');
-        var precoProdutoUnitario = parseFloat(precoProdutoUnitarioStr) || 0;
-        
-        var totalNfCompra = litros * precoProdutoUnitario;
-        document.getElementById('total_nf_compra').value = formatarReais(totalNfCompra);
-        
-        var precoPorLitroStr = document.getElementById('preco_por_litro').value.replace('.', '').replace(',', '.');
-        var precoPorLitro = parseFloat(precoPorLitroStr) || 0;
-        
-        var valorTotalFrete = litros * precoPorLitro;
-        document.getElementById('valor_total_frete').value = formatarReais(valorTotalFrete);
-        var motoristaSelect = document.getElementById('motoristas_id');
-        var selectedMotorista = motoristaSelect.options[motoristaSelect.selectedIndex];
-        var pagaComissao = selectedMotorista.getAttribute('data-paga-comissao') === '1';
-        
-        var comissaoMotorista = 0;
-        if (pagaComissao) {
-            comissaoMotorista = valorTotalFrete * 0.10;
-        }
-        document.getElementById('comissao_motorista').value = formatarReais(comissaoMotorista);
-        
-        var valorCte = valorTotalFrete - comissaoMotorista;
-        document.getElementById('valor_cte').value = formatarReais(valorCte);
-        
-        var percentualCte = calcularPercentualCte();
-        
-        var comissaoCte = 0;
-        if (pagaComissao) {
-            comissaoCte = valorCte * percentualCte;
-        }
-        document.getElementById('comissao_cte').value = formatarReais(comissaoCte);
-        
-        var lucro = valorCte - totalNfCompra - comissaoCte;
-        document.getElementById('lucro').value = formatarReais(lucro);
     }
 
+    // Event listeners
     document.getElementById('quantidade_id').addEventListener('change', calcularValores);
     document.getElementById('preco_produto_unitario').addEventListener('input', calcularValores);
     document.getElementById('preco_por_litro').addEventListener('input', calcularValores);
