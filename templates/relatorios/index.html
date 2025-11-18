@@ -130,4 +130,50 @@
     </div>
 
     <!-- Situação Financeira -->
-    <div class="row
+    <div class="row g-4 mb-4">
+        <div class="col-md-12">
+            <div class="card">
+                <div class="card-header" style="background:#151515;color:white;">
+                    <h5 class="mb-0"><i class="bi bi-cash-stack"></i> Situação Financeira</h5>
+                </div>
+                <div class="card-body">
+                    {% if por_situacao %}
+                    <div class="table-responsive">
+                        <table class="table table-sm table-hover">
+                            <thead style="background:#666666;">
+                                <tr>
+                                    <th>Status</th>
+                                    <th style="text-align:right;">Quantidade</th>
+                                    <th style="text-align:right;">Valor Total (R$)</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for item in por_situacao %}
+                                <tr>
+                                    <td>
+                                        <span class="badge 
+                                          {% if item.status == 'pago' %}bg-success
+                                          {% elif item.status == 'em_transito' %}bg-warning text-dark
+                                          {% elif item.status == 'entregue' %}bg-info text-dark
+                                          {% elif item.status == 'cancelado' %}bg-danger
+                                          {% else %}bg-secondary{% endif %}">
+                                            {{ item.status or 'N/A' }}
+                                        </span>
+                                    </td>
+                                    <td style="text-align:right;">{{ item.quantidade or 0 }}</td>
+                                    <td style="text-align:right;">{{ "R$ {:,.2f}".format(item.valor_total|float if item.valor_total else 0).replace(",", "X").replace(".", ",").replace("X", ".") }}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                        <span class="text-muted">Sem dados para os filtros escolhidos.</span>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+</div>
+{% endblock %}
