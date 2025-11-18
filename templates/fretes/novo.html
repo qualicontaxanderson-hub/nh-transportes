@@ -24,7 +24,7 @@
                         <select class="form-select" id="clientes_id" name="clientes_id" required>
                             <option value="">Selecione um cliente</option>
                             {% for cliente in clientes %}
-                            <option value="{{ cliente.id }}" data-percentual-cte="{{ cliente.percentual_cte }}">{{ cliente.nome }}</option>
+                            <option value="{{ cliente.id }}" data-percentual-cte="{{ cliente.percentual_cte }}">{{ cliente.razao_social }}</option>
                             {% endfor %}
                         </select>
                     </div>
@@ -34,7 +34,7 @@
                         <select class="form-select" id="fornecedores_id" name="fornecedores_id" required>
                             <option value="">Selecione um fornecedor</option>
                             {% for fornecedor in fornecedores %}
-                            <option value="{{ fornecedor.id }}">{{ fornecedor.nome }}</option>
+                            <option value="{{ fornecedor.id }}">{{ fornecedor.razao_social }}</option>
                             {% endfor %}
                         </select>
                     </div>
@@ -68,7 +68,7 @@
                         <select class="form-select" id="quantidade_id" name="quantidade_id" required>
                             <option value="">Selecione a quantidade</option>
                             {% for quantidade in quantidades %}
-                            <option value="{{ quantidade.id }}" data-litros="{{ quantidade.litros }}">{{ quantidade.litros }} L</option>
+                            <option value="{{ quantidade.id }}" data-litros="{{ quantidade.descricao }}">{{ quantidade.descricao }} L</option>
                             {% endfor %}
                         </select>
                     </div>
@@ -90,7 +90,7 @@
                         <select class="form-select" id="origem_id" name="origem_id" required>
                             <option value="">Selecione a origem</option>
                             {% for origem in origens %}
-                            <option value="{{ origem.id }}">{{ origem.cidade }}</option>
+                            <option value="{{ origem.id }}">{{ origem.nome }}</option>
                             {% endfor %}
                         </select>
                     </div>
@@ -100,7 +100,7 @@
                         <select class="form-select" id="destino_id" name="destino_id" required>
                             <option value="">Selecione o destino</option>
                             {% for destino in destinos %}
-                            <option value="{{ destino.id }}">{{ destino.cidade }}</option>
+                            <option value="{{ destino.id }}">{{ destino.nome }}</option>
                             {% endfor %}
                         </select>
                     </div>
