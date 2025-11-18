@@ -259,4 +259,22 @@ function calcularValores() {
     document.getElementById('valor_cte').value = valorCte.toFixed(2);
     document.getElementById('valor_cte_display').value = formatarReais(valorCte);
     
-    var percentualCte = calcularPercent
+    ualCte();
+    var comissaoCte = 0;
+    if (pagaComissao) {
+        comissaoCte = valorCte * percentualCte;
+    }
+    document.getElementById('comissao_cte').value = comissaoCte.toFixed(2);
+    document.getElementById('comissao_cte_display').value = formatarReais(comissaoCte);
+
+    var lucro = valorTotalFrete - totalNfCompra - comissaoMotorista - comissaoCte;
+    document.getElementById('lucro').value = lucro.toFixed(2);
+    document.getElementById('lucro_display').value = formatarReais(lucro);
+}
+
+document.getElementById('quantidade_id').addEventListener('change', calcularValores);
+document.getElementById('preco_produto_unitario').addEventListener('change', calcularValores);
+document.getElementById('preco_por_litro').addEventListener('change', calcularValores);
+document.getElementById('clientes_id').addEventListener('change', calcularValores);
+</script>
+{% endblock %}
