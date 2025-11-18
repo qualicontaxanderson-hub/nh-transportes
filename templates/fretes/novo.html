@@ -23,7 +23,7 @@
                         <label for="clientes_id" class="form-label">Cliente *</label>
                         <select class="form-select" id="clientes_id" name="clientes_id" required>
                             <option value="">Selecione um cliente</option>
-                           {% for cliente in clientes %}
+                            {% for cliente in clientes %}
                             <option value="{{ cliente.id }}" data-paga-comissao="{{ cliente.paga_comissao }}">
                             {{ cliente.razao_social }}
                             </option>
@@ -56,7 +56,7 @@
                         <select class="form-select" id="veiculos_id" name="veiculos_id" required>
                             <option value="">Selecione um veículo</option>
                             {% for veiculo in veiculos %}
-                            <option value="{{ veiculo.id }}">{{ veiculo.placa }} - {{ veiculo.modelo }}</option>
+                            <option value="{{ veiculo.id }}">{{ veiculo.caminhao }} - {{ veiculo.placa }}</option>
                             {% endfor %}
                         </select>
                     </div>
@@ -257,24 +257,4 @@ function calcularValores() {
     
     var valorCte = valorTotalFrete;
     document.getElementById('valor_cte').value = valorCte.toFixed(2);
-    document.getElementById('valor_cte_display').value = formatarReais(valorCte);
-    
-    ualCte();
-    var comissaoCte = 0;
-    if (pagaComissao) {
-        comissaoCte = valorCte * percentualCte;
-    }
-    document.getElementById('comissao_cte').value = comissaoCte.toFixed(2);
-    document.getElementById('comissao_cte_display').value = formatarReais(comissaoCte);
-
-    var lucro = valorTotalFrete - totalNfCompra - comissaoMotorista - comissaoCte;
-    document.getElementById('lucro').value = lucro.toFixed(2);
-    document.getElementById('lucro_display').value = formatarReais(lucro);
-}
-
-document.getElementById('quantidade_id').addEventListener('change', calcularValores);
-document.getElementById('preco_produto_unitario').addEventListener('change', calcularValores);
-document.getElementById('preco_por_litro').addEventListener('change', calcularValores);
-document.getElementById('clientes_id').addEventListener('change', calcularValores);
-</script>
-{% endblock %}
+    document.getElementById('valor_cte_display').value = formatarRe
