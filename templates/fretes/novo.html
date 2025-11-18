@@ -24,7 +24,7 @@
                         <select class="form-select" id="clientes_id" name="clientes_id" required>
                             <option value="">Selecione um cliente</option>
                             {% for cliente in clientes %}
-                            <option value="{{ cliente.id }}" data-percentual-cte="{{ cliente.percentual_cte }}">{{ cliente.razao_social }}</option>
+                            <option value="{{ cliente.id }}" data-paga-comissao="{{ cliente.paga_comissao }}">{{ cliente.razao_social }}</option>
                             {% endfor %}
                         </select>
                     </div>
@@ -46,7 +46,7 @@
                         <select class="form-select" id="motoristas_id" name="motoristas_id" required>
                             <option value="">Selecione um motorista</option>
                             {% for motorista in motoristas %}
-                            <option value="{{ motorista.id }}" data-paga-comissao="{{ motorista.paga_comissao }}">{{ motorista.nome }}</option>
+                            <option value="{{ motorista.id }}">{{ motorista.nome }}</option>
                             {% endfor %}
                         </select>
                     </div>
@@ -68,7 +68,7 @@
                         <select class="form-select" id="quantidade_id" name="quantidade_id" required>
                             <option value="">Selecione a quantidade</option>
                             {% for quantidade in quantidades %}
-                            <option value="{{ quantidade.id }}" data-litros="{{ quantidade.descricao }}">{{ quantidade.descricao }} L</option>
+                            <option value="{{ quantidade.id }}" data-litros="{{ quantidade.descricao }}">{{ quantidade.descricao }}</option>
                             {% endfor %}
                         </select>
                     </div>
@@ -191,57 +191,101 @@
         if (!quantidadeSelect || quantidadeSelect.selectedIndex === 0) {
             return 0;
         }
-        
         var selectedQuantidade = quantidadeSelect.options[quantidadeSelect.selectedIndex];
         var litrosText = selectedQuantidade.getAttribute('data-litros') || '0';
         var quantidade = parseInt(litrosText.replace(/[^\d]/g, '')) || 0;
         return quantidade;
     }
 
-    function calcularPercentualCte() {
+    function obterNomeCliente() {
         var clienteSelect = document.getElementById('clientes_id');
-        var selectedOption = clienteSelect.options[clienteSelect.selectedIndex];
-        var percentualCte = parseFloat(selectedOption.getAttribute('data-percentual-cte')) || 0;
-        return percentualCte / 100;
+        if (!clienteSelect || clienteSelect.selectedIndex === 0) {
+            return '';
+        }
+        return clienteSelect.options[clienteSelect.selectedIndex].text;
+    }
+
+    function obterNomeFornecedor() {
+        var fornecedorSelect = document.getElementById('fornecedores_id');
+        if (!fornecedorSelect || fornecedorSelect.selectedIndex === 0) {
+            return '';
+        }
+        return fornecedorSelect.options[fornecedorSelect.selectedIndex].text;
+    }
+
+    function obterDestino() {
+        var destinoSelect = document.getElementById('destino_id');
+        if (!destinoSelect || destinoSelect.selectedIndex === 0) {
+            return '';
+        }
+        return destinoSelect.options[destinoSelect.selectedIndex].text;
+    }
+
+    function calcularPercentualCte() {
+        var nomeCliente = obterNomeCliente();
+        var nomeFornecedor = obterNomeFornecedor();
+        var destino = obterDestino();
+
+        // Regra 1: RLM COMBUSTIVEIS LTDA - 10% de percentual
+        if (nomeCliente === 'RLM COMBUSTIVEIS LTDA') {
+            return 0.10;
+        }
+
+        // Regra 2: INTEGRAÇÃO GOIASA ou BONSUCESSO - 5%
+        if (nomeFornecedor === 'INTEGRAÇÃO GOIASA' || nomeFornecedor === 'INTEGRAÇÃO BONSUCESSO') {
+            return 0.05;
+        }
+
+        // Regra 3: AUTO POSTO TERRA BRANCA LTDA
+        if (nomeCliente === 'AUTO POSTO TERRA BRANCA LTDA') {
+            if (destino === 'SENADOR CANEDO') {
+                return 0.06;
+            } else {
+                return 0.10;
+            }
+        }
+
+        // Padrão: 8%
+        return 0.08;
     }
 
     function calcularValores() {
         try {
             var quantidade = obterQuantidade();
-            
             var precoProdutoUnitarioStr = document.getElementById('preco_produto_unitario').value;
             var precoProdutoUnitario = converterBrasileiro(precoProdutoUnitarioStr);
-            
             var precoPorLitroStr = document.getElementById('preco_por_litro').value;
             var precoPorLitro = converterBrasileiro(precoPorLitroStr);
             
+            // 1. Total NF Compra = Quantidade × Preço Unitário
             var totalNfCompra = quantidade * precoProdutoUnitario;
             document.getElementById('total_nf_compra').value = formatarReais(totalNfCompra);
             
+            // 2. Valor Total Frete = Quantidade × Preço por Litro
             var valorTotalFrete = quantidade * precoPorLitro;
             document.getElementById('valor_total_frete').value = formatarReais(valorTotalFrete);
             
-            var motoristaSelect = document.getElementById('motoristas_id');
-            var selectedMotorista = motoristaSelect.options[motoristaSelect.selectedIndex];
-            var pagaComissao = selectedMotorista.getAttribute('data-paga-comissao') === '1';
-            
+            // 3. Comissão Motorista (VERIFICAR CLIENTE, NÃO MOTORISTA)
+            var clienteSelect = document.getElementById('clientes_id');
+            var selectedCliente = clienteSelect.options[clienteSelect.selectedIndex];
+            var clientePagaComissao = selectedCliente.getAttribute('data-paga-comissao') === '1';
             var comissaoMotorista = 0;
-            if (pagaComissao) {
+            if (clientePagaComissao) {
                 comissaoMotorista = quantidade * 0.01;
             }
             document.getElementById('comissao_motorista').value = formatarReais(comissaoMotorista);
             
+            // 4. Valor CTe (sempre igual ao Valor Total Frete)
             var valorCte = valorTotalFrete;
             document.getElementById('valor_cte').value = formatarReais(valorCte);
             
+            // 5. Comissão CTe = Valor CTe × percentual (conforme regras)
             var percentualCte = calcularPercentualCte();
-            var comissaoCte = 0;
-            if (pagaComissao) {
-                comissaoCte = valorCte * percentualCte;
-            }
+            var comissaoCte = valorCte * percentualCte;
             document.getElementById('comissao_cte').value = formatarReais(comissaoCte);
             
-            var lucro = valorCte - totalNfCompra - comissaoCte;
+            // 6. Lucro = Valor Total Frete - Comissão Motorista - Comissão CTe
+            var lucro = valorTotalFrete - comissaoMotorista - comissaoCte;
             document.getElementById('lucro').value = formatarReais(lucro);
             
         } catch (err) {
@@ -249,19 +293,21 @@
         }
     }
 
-    // Aguardar DOM carregado
+    // Event listeners
     document.addEventListener('DOMContentLoaded', function() {
         var campoQtd = document.getElementById('quantidade_id');
         var campoPrecoUnit = document.getElementById('preco_produto_unitario');
         var campoPrecoxLitro = document.getElementById('preco_por_litro');
         var campoCliente = document.getElementById('clientes_id');
-        var campoMotorista = document.getElementById('motoristas_id');
+        var campoDestino = document.getElementById('destino_id');
+        var campoFornecedor = document.getElementById('fornecedores_id');
 
         if (campoQtd) campoQtd.addEventListener('change', calcularValores);
         if (campoPrecoUnit) campoPrecoUnit.addEventListener('input', calcularValores);
         if (campoPrecoxLitro) campoPrecoxLitro.addEventListener('input', calcularValores);
         if (campoCliente) campoCliente.addEventListener('change', calcularValores);
-        if (campoMotorista) campoMotorista.addEventListener('change', calcularValores);
+        if (campoDestino) campoDestino.addEventListener('change', calcularValores);
+        if (campoFornecedor) campoFornecedor.addEventListener('change', calcularValores);
     });
 </script>
 
