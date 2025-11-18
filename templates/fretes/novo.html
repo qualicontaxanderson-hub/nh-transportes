@@ -257,4 +257,271 @@ function calcularValores() {
     
     var valorCte = valorTotalFrete;
     document.getElementById('valor_cte').value = valorCte.toFixed(2);
-    document.getElementById('valor_cte_display').value = formatarRe
+    document.getElementById('valor_cte_display').value = formatarRe```
+{% extends "base.html" %}
+{% block title %}Novo Frete - NH Transportes{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- Breadcrumb -->
+    <nav aria-label="breadcrumb" class="mb-4">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="{{ url_for('index') }}">Início</a></li>
+            <li class="breadcrumb-item"><a href="{{ url_for('fretes.lista') }}">Fretes</a></li>
+            <li class="breadcrumb-item active" aria-current="page">Novo Frete</li>
+        </ol>
+    </nav>
+
+    <div class="card shadow-sm">
+        <div class="card-header text-white" style="background-color: #1D63A5;">
+            <h4 class="mb-0"><i class="fas fa-truck me-2"></i>Novo Frete</h4>
+        </div>
+        <div class="card-body">
+            <form method="POST" action="{{ url_for('fretes.novo') }}" id="freteForm">
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <label for="clientes_id" class="form-label">Cliente *</label>
+                        <select class="form-select" id="clientes_id" name="clientes_id" required>
+                            <option value="">Selecione um cliente</option>
+                           {% for cliente in clientes %}
+                            <option value="{{ cliente.id }}" data-paga-comissao="{{ cliente.paga_comissao }}">
+                            {{ cliente.razao_social }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <label for="fornecedores_id" class="form-label">Fornecedor *</label>
+                        <select class="form-select" id="fornecedores_id" name="fornecedores_id" required>
+                            <option value="">Selecione um fornecedor</option>
+                            {% for fornecedor in fornecedores %}
+                            <option value="{{ fornecedor.id }}">{{ fornecedor.razao_social }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <label for="motoristas_id" class="form-label">Motorista *</label>
+                        <select class="form-select" id="motoristas_id" name="motoristas_id" required>
+                            <option value="">Selecione um motorista</option>
+                            {% for motorista in motoristas %}
+                            <option value="{{ motorista.id }}">{{ motorista.nome }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <label for="veiculos_id" class="form-label">Veículo *</label>
+                        <select class="form-select" id="veiculos_id" name="veiculos_id" required>
+                            <option value="">Selecione um veículo</option>
+                            {% for veiculo in veiculos %}
+                            <option value="{{ veiculo.id }}">{{ veiculo.caminhao }} - {{ veiculo.placa }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+
+                <div class="row">
+                    <div class="col-md-4 mb-3">
+                        <label for="quantidade_id" class="form-label">Quantidade (Litros) *</label>
+                        <select class="form-select" id="quantidade_id" name="quantidade_id" required>
+                            <option value="">Selecione a quantidade</option>
+                            {% for qtd in quantidades %}
+                            <option value="{{ qtd.id }}" data-valor="{{ qtd.valor }}">
+                                {{ "{:,.0f}".format(qtd.valor).replace(',', '.') }} litros
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-4 mb-3">
+                        <label for="preco_produto_unitario" class="form-label">Preço Produto Unitário (R$) *</label>
+                        <input type="number" step="0.01" class="form-control" id="preco_produto_unitario" 
+                               name="preco_produto_unitario" placeholder="0.00" required>
+                    </div>
+                    <div class="col-md-4 mb-3">
+                        <label for="total_nf_compra" class="form-label">Total NF Compra (R$)</label>
+                        <input type="text" class="form-control bg-light" id="total_nf_compra_display" 
+                               placeholder="0,00" readonly>
+                        <input type="hidden" id="total_nf_compra" name="total_nf_compra" value="0">
+                    </div>
+                </div>
+
+                <div class="row">
+                    <div class="col-md-4 mb-3">
+                        <label for="origem_id" class="form-label">Origem *</label>
+                        <select class="form-select" id="origem_id" name="origem_id" required>
+                            <option value="">Selecione a origem</option>
+                            {% for origem in origens %}
+                            <option value="{{ origem.id }}">{{ origem.nome }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-4 mb-3">
+                        <label for="destino_id" class="form-label">Destino *</label>
+                        <select class="form-select" id="destino_id" name="destino_id" required>
+                            <option value="">Selecione o destino</option>
+                            {% for destino in destinos %}
+                            <option value="{{ destino.id }}">{{ destino.nome }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-4 mb-3">
+                        <label for="preco_por_litro" class="form-label">Preço por Litro (R$) *</label>
+                        <input type="number" step="0.01" class="form-control" id="preco_por_litro" 
+                               name="preco_por_litro" placeholder="0.00" required>
+                    </div>
+                </div>
+
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <label for="valor_total_frete" class="form-label">Valor Total Frete (R$)</label>
+                        <input type="text" class="form-control bg-light" id="valor_total_frete_display" 
+                               placeholder="0,00" readonly>
+                        <input type="hidden" id="valor_total_frete" name="valor_total_frete" value="0">
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <label for="comissao_motorista" class="form-label">Comissão Motorista (R$)</label>
+                        <input type="text" class="form-control bg-light" id="comissao_motorista_display" 
+                               placeholder="0,00" readonly>
+                        <input type="hidden" id="comissao_motorista" name="comissao_motorista" value="0">
+                    </div>
+                </div>
+
+                <div class="row">
+                    <div class="col-md-4 mb-3">
+                        <label for="valor_cte" class="form-label">Valor CTe (R$)</label>
+                        <input type="text" class="form-control bg-light" id="valor_cte_display" 
+                               placeholder="0,00" readonly>
+                        <input type="hidden" id="valor_cte" name="valor_cte" value="0">
+                    </div>
+                    <div class="col-md-4 mb-3">
+                        <label for="comissao_cte" class="form-label">Comissão CTe (R$)</label>
+                        <input type="text" class="form-control bg-light" id="comissao_cte_display" 
+                               placeholder="0,00" readonly>
+                        <input type="hidden" id="comissao_cte" name="comissao_cte" value="0">
+                    </div>
+                    <div class="col-md-4 mb-3">
+                        <label for="lucro" class="form-label">Lucro (R$)</label>
+                        <input type="text" class="form-control bg-light" id="lucro_display" 
+                               placeholder="0,00" readonly>
+                        <input type="hidden" id="lucro" name="lucro" value="0">
+                    </div>
+                </div>
+
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <label for="data_frete" class="form-label">Data do Frete *</label>
+                        <input type="date" class="form-control" id="data_frete" name="data_frete" required>
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <label for="status" class="form-label">Status *</label>
+                        <select class="form-select" id="status" name="status" required>
+                            <option value="pendente" selected>Pendente</option>
+                            <option value="em_transito">Em Trânsito</option>
+                            <option value="entregue">Entregue</option>
+                            <option value="cancelado">Cancelado</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="mb-3">
+                    <label for="observacoes" class="form-label">Observações</label>
+                    <textarea class="form-control" id="observacoes" name="observacoes" rows="3" 
+                              placeholder="Digite observações adicionais..."></textarea>
+                </div>
+
+                <div class="d-flex justify-content-between">
+                    <a href="{{ url_for('fretes.lista') }}" class="btn btn-secondary">
+                        <i class="fas fa-arrow-left me-2"></i>Voltar
+                    </a>
+                    <button type="submit" class="btn text-white" style="background-color: #ff9800;">
+                        <i class="fas fa-save me-2"></i>Salvar Frete
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+function formatarReais(valor) {
+    return valor.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function calcularPercentualCte() {
+    var clienteSelect = document.getElementById('clientes_id');
+    var fornecedorSelect = document.getElementById('fornecedores_id');
+    var origemSelect = document.getElementById('origem_id');
+    
+    if (clienteSelect.selectedIndex === 0 || fornecedorSelect.selectedIndex === 0 || origemSelect.selectedIndex === 0) {
+        return 0.08;
+    }
+    
+    var clienteTexto = clienteSelect.options[clienteSelect.selectedIndex].text.toUpperCase();
+    var fornecedorTexto = fornecedorSelect.options[fornecedorSelect.selectedIndex].text.toUpperCase();
+    var origemTexto = origemSelect.options[origemSelect.selectedIndex].text.toUpperCase();
+    
+    if (clienteTexto.includes('AUTO POSTO TERRA BRANCA') && origemTexto.includes('SENADOR CANEDO')) {
+        return 0.06;
+    }
+    
+    if (clienteTexto.includes('AUTO POSTO TERRA BRANCA')) {
+        return 0.10;
+    }
+    
+    if (clienteTexto.includes('RLM COMBUSTIVEIS') || fornecedorTexto.includes('RLM COMBUSTIVEIS')) {
+        return 0.10;
+    }
+    
+    if (fornecedorTexto.includes('INTEGRA') && 
+        (fornecedorTexto.includes('GOIASA') || fornecedorTexto.includes('BONSUCESSO') || fornecedorTexto.includes('ITEL'))) {
+        return 0.05;
+    }
+    
+    return 0.08;
+}
+
+function calcularValores() {
+    var quantidadeSelect = document.getElementById('quantidade_id');
+    var precoUnitario = parseFloat(document.getElementById('preco_produto_unitario').value) || 0;
+    var precoPorLitro = parseFloat(document.getElementById('preco_por_litro').value) || 0;
+    var clienteSelect = document.getElementById('clientes_id');
+    
+    if (quantidadeSelect.selectedIndex === 0) {
+        return;
+    }
+    
+    var litros = parseFloat(quantidadeSelect.options[quantidadeSelect.selectedIndex].getAttribute('data-valor')) || 0;
+    
+    var pagaComissao = false;
+    if (clienteSelect.selectedIndex > 0) {
+        var pagaComissaoAttr = clienteSelect.options[clienteSelect.selectedIndex].getAttribute('data-paga-comissao');
+        pagaComissao = (pagaComissaoAttr === '1' || pagaComissaoAttr === 'True' || pagaComissaoAttr === 'true');
+    }
+    
+    var totalNfCompra = litros * precoUnitario;
+    document.getElementById('total_nf_compra').value = totalNfCompra.toFixed(2);
+    document.getElementById('total_nf_compra_display').value = formatarReais(totalNfCompra);
+    
+    var valorTotalFrete = litros * precoPorLitro;
+    document.getElementById('valor_total_frete').value = valorTotalFrete.toFixed(2);
+    document.getElementById('valor_total_frete_display').value = formatarReais(valorTotalFrete);
+    
+    var comissaoMotorista = 0;
+    if (pagaComissao) {
+        comissaoMotorista = litros * 0.01;
+    }
+    document.getElementById('comissao_motorista').value = comissaoMotorista.toFixed(2);
+    document.getElementById('comissao_motorista_display').value = formatarReais(comissaoMotorista);
+    
+    var valorCte = valorTotalFrete;
+    document.getElementById('valor_cte').value = valorCte.toFixed(2);
+    document.getElementById('valor_cte_display').value = formatarReais(valorCte);
+    
+    var percentualCte = calcularPercentualCte();
+    var comissaoCte = 0;
+    if (pagaComissao) {
+        comissaoCte = valorCte * percentualCte;
+    }
+    document.getElementById('comissao_cte').value = comissaoCte.to
