@@ -7,9 +7,11 @@ from werkzeug.security import generate_password_hash
 from models.usuario import Usuario
 from models.rota import Rota
 from config import Config
+from models import db
 
 app = Flask(__name__)
 app.config.from_object(Config)
+db.init_app(app)
 
 login_manager = LoginManager()
 login_manager.init_app(app)
