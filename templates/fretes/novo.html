@@ -173,6 +173,10 @@
 </div>
 
 <script>
+    // ====== CARREGAR ROTAS DO BACKEND ======
+    var rotas = {{ rotas | tojson }};
+    console.log('Rotas carregadas:', rotas);
+
     function formatarReais(valor) {
         return valor.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     }
@@ -193,14 +197,24 @@
         return quantidade;
     }
 
-    // Esta função deve buscar o valor_por_litro da rota correta em algum momento. Por hora, apenas exemplo.
-    function buscarValorPorLitroRota(origemId, destinoId, rotas) {
-        // rotas = array de objetos {origem_id, destino_id, valor_por_litro}
+    function calcularPercentualCte() {
+        var clienteSelect = document.getElementById('clientes_id');
+        var selectedOption = clienteSelect.options[clienteSelect.selectedIndex];
+        var percentualCte = parseFloat(selectedOption.getAttribute('data-percentual-cte')) || 0;
+        return percentualCte / 100;
+    }
+
+    // ====== BUSCAR VALOR DA ROTA ======
+    function buscarValorPorLitroRota(origemId, destinoId) {
+        if (!origemId || !destinoId) return 0;
+        
         for (var i = 0; i < rotas.length; i++) {
             if (rotas[i].origem_id == origemId && rotas[i].destino_id == destinoId) {
-                return rotas[i].valor_por_litro;
+                console.log('Rota encontrada:', rotas[i]);
+                return parseFloat(rotas[i].valor_por_litro) || 0;
             }
         }
+        console.warn('Rota não encontrada para origem=' + origemId + ' e destino=' + destinoId);
         return 0;
     }
 
@@ -212,42 +226,50 @@
             var precoPorLitroStr = document.getElementById('preco_por_litro').value;
             var precoPorLitro = converterBrasileiro(precoPorLitroStr);
 
+            // Total NF Compra
             var totalNfCompra = quantidade * precoProdutoUnitario;
             document.getElementById('total_nf_compra').value = formatarReais(totalNfCompra);
 
+            // Valor Total Frete
             var valorTotalFrete = quantidade * precoPorLitro;
             document.getElementById('valor_total_frete').value = formatarReais(valorTotalFrete);
 
+            // Dados do Cliente
             var clienteSelect = document.getElementById('clientes_id');
             var selectedCliente = clienteSelect.options[clienteSelect.selectedIndex];
             var clientePagaComissao = selectedCliente.getAttribute('data-paga-comissao') === '1';
             var clienteCteIntegral = selectedCliente.getAttribute('data-cte-integral') === '1';
 
+            // Dados do Motorista
             var motoristaSelect = document.getElementById('motoristas_id');
             var selectedMotorista = motoristaSelect.options[motoristaSelect.selectedIndex];
             var motoristaPagaComissao = selectedMotorista.getAttribute('data-paga-comissao') === '1';
 
+            // Comissão Motorista
             var comissaoMotorista = 0;
             if (clientePagaComissao && motoristaPagaComissao) {
                 comissaoMotorista = quantidade * 0.01;
             }
             document.getElementById('comissao_motorista').value = formatarReais(comissaoMotorista);
 
-            // --------- NOVA LÓGICA DO VALOR CTE ----------
+            // ====== CÁLCULO DO VALOR CTE (REGRA CORRIGIDA) ======
             var origemId = document.getElementById('origem_id').value;
             var destinoId = document.getElementById('destino_id').value;
             var valorCte;
 
             if (clienteCteIntegral) {
+                // REGRA 1: Se CTE Integral = SIM, repete o Valor Total Frete
                 valorCte = valorTotalFrete;
+                console.log('CTE Integral ativado. Valor CTE = Valor Total Frete:', valorCte);
             } else {
-                // Exemplificação: troque por busca real na sua lógica JS/AJAX
-                // valorPorLitroRota = buscarValorPorLitroRota(origemId, destinoId, window.rotas);
-                // valorCte = quantidade * valorPorLitroRota;
-                valorCte = quantidade * precoPorLitro; // Mantém por enquanto
+                // REGRA 2: Buscar valor da rota e calcular
+                var valorPorLitroRota = buscarValorPorLitroRota(origemId, destinoId);
+                valorCte = quantidade * valorPorLitroRota;
+                console.log('CTE pela rota. Quantidade:', quantidade, 'x Valor/litro:', valorPorLitroRota, '= Valor CTE:', valorCte);
             }
             document.getElementById('valor_cte').value = formatarReais(valorCte);
 
+            // Comissão CTe
             var percentualCte = calcularPercentualCte();
             var comissaoCte = 0;
             if (clientePagaComissao) {
@@ -255,8 +277,10 @@
             }
             document.getElementById('comissao_cte').value = formatarReais(comissaoCte);
 
+            // Lucro
             var lucro = valorTotalFrete - comissaoMotorista - comissaoCte;
             document.getElementById('lucro').value = formatarReais(lucro);
+
         } catch (err) {
             console.error('Erro ao calcular valores:', err);
         }
