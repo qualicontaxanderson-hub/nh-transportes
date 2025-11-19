@@ -183,7 +183,7 @@
 
     function converterBrasileiro(valor) {
         if (!valor) return 0;
-        return parseFloat(valor.replace('.', '').replace(',', '.'));
+        return parseFloat(valor.replace(/\./g, '').replace(',', '.'));
     }
 
     function obterQuantidade() {
