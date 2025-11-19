@@ -8,16 +8,10 @@ function obterQuantidade() {
     const selectQtd = document.querySelector('#quantidade_id');
     if (!selectQtd) return 0;
     
-    let qtdText = selectQtd.value || selectQtd.selectedOptions[0].text;
-    // Remove tudo que não é dígito e converte para número inteiro
-const quantidade = parseInt(qtdText.replace(/[^0-9]/g, '')) || 0;    return quantidade;
-}
-
-// Função para converter valor brasileiro (1.234,56) para número (1234.56)
-function converterBrasileiro(valor) {
-    if (!valor) return 0;
-return parseFloat(valor.replace(/\./g, '').replace(',', '.'));}
-
+ let dataLitros = selectQtd.selectedOptions[0].getAttribute('data-litros');
+ // Extrai apenas os números do texto "3.000 litros" para "3000"
+ const quantidade = parseInt(dataLitros.replace(/[^0-9]/g, '')) || 0;
+    }
 // Função para formatar número para formato brasileiro
 function formatarBrasileiro(numero) {
     if (isNaN(numero)) return '0,00';
