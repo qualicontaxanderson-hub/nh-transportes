@@ -23,15 +23,20 @@ def novo():
     if request.method == 'POST':
         conn = get_db_connection()
         cursor = conn.cursor()
+        
+        # Verifica se o checkbox foi marcado (paga_comissao)
+        paga_comissao = 1 if request.form.get('paga_comissao') == '1' else 0
+        
         cursor.execute("""
-            INSERT INTO motoristas (nome, cpf, cnh, telefone, observacoes)
-            VALUES (%s, %s, %s, %s, %s)
+            INSERT INTO motoristas (nome, cpf, cnh, telefone, observacoes, paga_comissao)
+            VALUES (%s, %s, %s, %s, %s, %s)
         """, (
             request.form.get('nome'),
             request.form.get('cpf'),
             request.form.get('cnh'),
             request.form.get('telefone'),
-            request.form.get('observacoes')
+            request.form.get('observacoes'),
+            paga_comissao
         ))
         conn.commit()
         cursor.close()
@@ -48,8 +53,11 @@ def editar(id):
     cursor = conn.cursor(dictionary=True)
     
     if request.method == 'POST':
+        # Verifica se o checkbox foi marcado (paga_comissao)
+        paga_comissao = 1 if request.form.get('paga_comissao') == '1' else 0
+        
         cursor.execute("""
-            UPDATE motoristas SET nome=%s, cpf=%s, cnh=%s, telefone=%s, observacoes=%s
+            UPDATE motoristas SET nome=%s, cpf=%s, cnh=%s, telefone=%s, observacoes=%s, paga_comissao=%s
             WHERE id=%s
         """, (
             request.form.get('nome'),
@@ -57,6 +65,7 @@ def editar(id):
             request.form.get('cnh'),
             request.form.get('telefone'),
             request.form.get('observacoes'),
+            paga_comissao,
             id
         ))
         conn.commit()
