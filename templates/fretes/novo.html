@@ -288,8 +288,7 @@
             var selectedCliente = clienteSelect.options[clienteSelect.selectedIndex];
             var clientePagaComissao = selectedCliente.getAttribute('data-paga-comissao') === '1';
             var comissaoMotorista = 0;
-            if (clientePagaComiss
-ao) {
+            if (clientePagaComissao) {
                 comissaoMotorista = quantidade * 0.01;
             }
             document.getElementById('comissao_motorista').value = formatarReais(comissaoMotorista);
