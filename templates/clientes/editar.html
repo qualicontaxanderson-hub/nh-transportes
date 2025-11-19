@@ -55,7 +55,7 @@
                     <div class="col-md-12 mb-3">
                         <div class="form-check form-switch">
                             <input class="form-check-input" type="checkbox" name="paga_comissao" id="paga_comissao"
-                             {% if cliente.paga_comissao == 1 %}checked{% endif %}>
+                                   {% if cliente.paga_comissao == 1 %}checked{% endif %}>
                             <label class="form-check-label" for="paga_comissao">
                                 <strong>Este cliente paga comissão ao motorista?</strong>
                                 <small class="text-muted d-block">Se marcado, será calculado R$ 0,01 por litro transportado como comissão do motorista</small>
@@ -68,7 +68,7 @@
                     <div class="col-md-12 mb-3">
                         <div class="form-check">
                             <input class="form-check-input" type="checkbox" id="cte_integral" name="cte_integral" value="1"
-                             {% if cliente.cte_integral == 1 %}checked{% endif %}>
+                                   {% if cliente.cte_integral == 1 %}checked{% endif %}>
                             <label class="form-check-label" for="cte_integral">
                                 <strong>CTE Integral</strong>
                                 <small class="text-muted d-block">Se marcado, o valor do CTE no frete será igual ao valor total do frete</small>
