@@ -62,4 +62,58 @@
                                                     <input type="text" name="nome" class="form-control" value="{{ destino.nome }}" required>
                                                 </div>
                                                 <div class="mb-3">
-                                                    <label class="form-
+                                                    <label class="form-label">Estado <span class="text-danger">*</span></label>
+                                                    <input type="text" name="estado" class="form-control" value="{{ destino.estado }}" maxlength="2" required>
+                                                </div>
+                                            </div>
+                                            <div class="modal-footer">
+                                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                                                <button type="submit" class="btn btn-warning">Atualizar</button>
+                                            </div>
+                                        </form>
+                                    </div>
+                                </div>
+                            </div>
+                            {% endfor %}
+                        {% else %}
+                            <tr>
+                                <td colspan="4" class="text-center text-muted">
+                                    <i class="bi bi-inbox"></i> Nenhum destino cadastrado
+                                </td>
+                            </tr>
+                        {% endif %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Novo Destino -->
+<div class="modal fade" id="modalNovoDestino" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title">Novo Destino</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form method="POST" action="{{ url_for('origens_destinos.novo_destino') }}">
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">Cidade <span class="text-danger">*</span></label>
+                        <input type="text" name="nome" class="form-control" placeholder="Ex: RIO DE JANEIRO" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Estado <span class="text-danger">*</span></label>
+                        <input type="text" name="estado" class="form-control" placeholder="Ex: RJ" maxlength="2" required>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-primary">Cadastrar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
