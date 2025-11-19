@@ -1,8 +1,19 @@
 from flask import Blueprint, render_template, request, redirect, url_for, flash
 from flask_login import login_required
-from models import db
+import mysql.connector
+import os
 
 bp = Blueprint('rotas', __name__, url_prefix='/rotas')
+
+def get_db():
+    """Retorna conexão com o banco de dados"""
+    return mysql.connector.connect(
+        host=os.environ.get('DB_HOST'),
+        user=os.environ.get('DB_USER'),
+        password=os.environ.get('DB_PASSWORD'),
+        database=os.environ.get('DB_NAME'),
+        port=int(os.environ.get('DB_PORT', 3306))
+    )
 
 def converter_para_decimal(valor):
     """Converte valores do formato brasileiro (1.234,56) para decimal (1234.56)"""
@@ -13,7 +24,8 @@ def converter_para_decimal(valor):
 @bp.route('/')
 @login_required
 def lista():
-    cursor = db.cursor(dictionary=True)
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True)
     cursor.execute("""
         SELECT r.*, 
                o.nome AS origem_nome, 
@@ -25,6 +37,7 @@ def lista():
     """)
     rotas = cursor.fetchall()
     cursor.close()
+    conn.close()
     return render_template('rotas/lista.html', rotas=rotas)
 
 @bp.route('/novo', methods=['GET', 'POST'])
@@ -32,28 +45,31 @@ def lista():
 def novo():
     if request.method == 'POST':
         try:
+            conn = get_db()
+            cursor = conn.cursor()
+            
             origem_id = request.form.get('origem_id')
             destino_id = request.form.get('destino_id')
             valor_por_litro = converter_para_decimal(request.form.get('valor_por_litro'))
             ativo = 1 if request.form.get('ativo') in ['on', '1', 1, True] else 0
             
-            cursor = db.cursor()
             cursor.execute("""
                 INSERT INTO rotas (origem_id, destino_id, valor_por_litro, ativo)
                 VALUES (%s, %s, %s, %s)
             """, (origem_id, destino_id, valor_por_litro, ativo))
             
-            db.commit()
+            conn.commit()
             cursor.close()
+            conn.close()
             
             flash('Rota cadastrada com sucesso!', 'success')
             return redirect(url_for('rotas.lista'))
         except Exception as e:
             flash(f'Erro ao cadastrar rota: {str(e)}', 'danger')
-            db.rollback()
     
     # GET - Carregar origens e destinos
-    cursor = db.cursor(dictionary=True)
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True)
     
     cursor.execute("SELECT * FROM origens ORDER BY nome")
     origens = cursor.fetchall()
@@ -62,13 +78,15 @@ def novo():
     destinos = cursor.fetchall()
     
     cursor.close()
+    conn.close()
     
     return render_template('rotas/novo.html', origens=origens, destinos=destinos)
 
 @bp.route('/editar/<int:id>', methods=['GET', 'POST'])
 @login_required
 def editar(id):
-    cursor = db.cursor(dictionary=True)
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True)
     
     if request.method == 'POST':
         try:
@@ -83,14 +101,14 @@ def editar(id):
                 WHERE id=%s
             """, (origem_id, destino_id, valor_por_litro, ativo, id))
             
-            db.commit()
+            conn.commit()
             cursor.close()
+            conn.close()
             
             flash('Rota atualizada com sucesso!', 'success')
             return redirect(url_for('rotas.lista'))
         except Exception as e:
             flash(f'Erro ao atualizar rota: {str(e)}', 'danger')
-            db.rollback()
     
     # GET - Carregar dados
     cursor.execute("SELECT * FROM rotas WHERE id = %s", (id,))
@@ -98,6 +116,8 @@ def editar(id):
     
     if not rota:
         flash('Rota não encontrada!', 'danger')
+        cursor.close()
+        conn.close()
         return redirect(url_for('rotas.lista'))
     
     cursor.execute("SELECT * FROM origens ORDER BY nome")
@@ -107,6 +127,7 @@ def editar(id):
     destinos = cursor.fetchall()
     
     cursor.close()
+    conn.close()
     
     return render_template('rotas/editar.html', rota=rota, origens=origens, destinos=destinos)
 
@@ -114,13 +135,14 @@ def editar(id):
 @login_required
 def excluir(id):
     try:
-        cursor = db.cursor()
+        conn = get_db()
+        cursor = conn.cursor()
         cursor.execute("DELETE FROM rotas WHERE id = %s", (id,))
-        db.commit()
+        conn.commit()
         cursor.close()
+        conn.close()
         flash('Rota excluída com sucesso!', 'success')
     except Exception as e:
         flash(f'Erro ao excluir rota: {str(e)}', 'danger')
-        db.rollback()
     
     return redirect(url_for('rotas.lista'))
