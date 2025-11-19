@@ -9,9 +9,7 @@
             <li class="breadcrumb-item active" aria-current="page">Editar Cliente</li>
         </ol>
     </nav>
-    
     <h2 class="mb-4" style="color:#1D63A5;"><i class="bi bi-pencil"></i> Editar Cliente</h2>
-    
     <div class="card">
         <div class="card-header" style="background:#151515;color:white;">
             <h5 class="mb-0">Alterar Dados do Cliente</h5>
@@ -28,7 +26,6 @@
                         <input type="text" name="nome_fantasia" class="form-control" value="{{ cliente.nome_fantasia or '' }}">
                     </div>
                 </div>
-                
                 <div class="row">
                     <div class="col-md-4 mb-3">
                         <label class="form-label">CNPJ</label>
@@ -43,7 +40,6 @@
                         <input type="text" name="telefone" class="form-control" value="{{ cliente.telefone or '' }}">
                     </div>
                 </div>
-                
                 <div class="row">
                     <div class="col-md-6 mb-3">
                         <label class="form-label">Contato</label>
@@ -54,12 +50,12 @@
                         <input type="email" name="email" class="form-control" value="{{ cliente.email or '' }}">
                     </div>
                 </div>
-                
-                <!-- CAMPO: Paga Comissão -->
+                <!-- CAMPO PAGA COMISSÃO -->
                 <div class="row">
                     <div class="col-md-12 mb-3">
                         <div class="form-check form-switch">
-                            <input class="form-check-input" type="checkbox" name="paga_comissao" id="paga_comissao" {% if cliente.paga_comissao == 1 %}checked{% endif %}>
+                            <input class="form-check-input" type="checkbox" name="paga_comissao" id="paga_comissao"
+                             {% if cliente.paga_comissao == 1 %}checked{% endif %}>
                             <label class="form-check-label" for="paga_comissao">
                                 <strong>Este cliente paga comissão ao motorista?</strong>
                                 <small class="text-muted d-block">Se marcado, será calculado R$ 0,01 por litro transportado como comissão do motorista</small>
@@ -67,10 +63,21 @@
                         </div>
                     </div>
                 </div>
-                
+                <!-- CAMPO CTE INTEGRAL -->
+                <div class="row">
+                    <div class="col-md-12 mb-3">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="cte_integral" name="cte_integral" value="1"
+                             {% if cliente.cte_integral == 1 %}checked{% endif %}>
+                            <label class="form-check-label" for="cte_integral">
+                                <strong>CTE Integral</strong>
+                                <small class="text-muted d-block">Se marcado, o valor do CTE no frete será igual ao valor total do frete</small>
+                            </label>
+                        </div>
+                    </div>
+                </div>
                 <hr>
                 <h5>Endereço</h5>
-                
                 <div class="row">
                     <div class="col-md-6 mb-3">
                         <label class="form-label">Endereço</label>
@@ -85,7 +92,6 @@
                         <input type="text" name="complemento" class="form-control" value="{{ cliente.complemento or '' }}">
                     </div>
                 </div>
-                
                 <div class="row">
                     <div class="col-md-4 mb-3">
                         <label class="form-label">Bairro</label>
@@ -104,7 +110,6 @@
                         <input type="text" name="cep" class="form-control" value="{{ cliente.cep or '' }}">
                     </div>
                 </div>
-                
                 <div class="mt-4">
                     <button type="submit" class="btn btn-primary" style="background:#1D63A5;border:none;">
                         <i class="bi bi-check-circle"></i> Atualizar
