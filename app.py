@@ -22,7 +22,7 @@ def load_user(user_id):
     return Usuario.get_by_id(user_id)
 
 # Importar blueprints após definir 'app'
-from routes import clientes, fornecedores, fretes, motoristas, veiculos, relatorios, debug_bp, rotas
+from routes import clientes, fornecedores, fretes, motoristas, veiculos, relatorios, debug_bp, rotas, quilometragem
 from routes.api import api_bp
 
 app.register_blueprint(clientes.bp)
@@ -34,6 +34,7 @@ app.register_blueprint(relatorios.bp)
 app.register_blueprint(debug_bp)
 app.register_blueprint(api_bp)
 app.register_blueprint(rotas.bp)
+app.register_blueprint(quilometragem.bp)
 
 @app.route('/health')
 def health():
