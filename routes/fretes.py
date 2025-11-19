@@ -11,6 +11,24 @@ def novo():
         try:
             conn = get_db_connection()
             cursor = conn.cursor()
+            
+            # ====== FUNÇÃO PARA CONVERTER VALORES ======
+            def converter_para_decimal(valor):
+                if not valor:
+                    return 0
+                # Remove pontos de milhar e substitui vírgula por ponto
+                return float(str(valor).replace('.', '').replace(',', '.'))
+            
+            # Converter os valores antes de inserir
+            preco_produto_unitario = converter_para_decimal(request.form.get('preco_produto_unitario'))
+            total_nf_compra = converter_para_decimal(request.form.get('total_nf_compra'))
+            preco_por_litro = converter_para_decimal(request.form.get('preco_por_litro'))
+            valor_total_frete = converter_para_decimal(request.form.get('valor_total_frete'))
+            comissao_motorista = converter_para_decimal(request.form.get('comissao_motorista'))
+            valor_cte = converter_para_decimal(request.form.get('valor_cte'))
+            comissao_cte = converter_para_decimal(request.form.get('comissao_cte'))
+            lucro = converter_para_decimal(request.form.get('lucro'))
+            
             cursor.execute("""
                 INSERT INTO fretes (clientes_id, fornecedores_id, motoristas_id, veiculos_id, quantidade_id, origem_id, destino_id, preco_produto_unitario, total_nf_compra, preco_por_litro, valor_total_frete, comissao_motorista, valor_cte, comissao_cte, lucro, data_frete, status, observacoes)
                 VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
@@ -22,14 +40,14 @@ def novo():
                 request.form.get('quantidade_id'),
                 request.form.get('origem_id'),
                 request.form.get('destino_id'),
-                request.form.get('preco_produto_unitario'),
-                request.form.get('total_nf_compra'),
-                request.form.get('preco_por_litro'),
-                request.form.get('valor_total_frete'),
-                request.form.get('comissao_motorista'),
-                request.form.get('valor_cte'),
-                request.form.get('comissao_cte'),
-                request.form.get('lucro'),
+                preco_produto_unitario,
+                total_nf_compra,
+                preco_por_litro,
+                valor_total_frete,
+                comissao_motorista,
+                valor_cte,
+                comissao_cte,
+                lucro,
                 request.form.get('data_frete'),
                 request.form.get('status'),
                 request.form.get('observacoes')
@@ -49,7 +67,6 @@ def novo():
         conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)
         
-        # IMPORTANTE: Adicionar paga_comissao e cte_integral dos clientes
         cursor.execute("""
             SELECT id, razao_social, paga_comissao, percentual_cte, cte_integral
             FROM clientes 
@@ -64,7 +81,6 @@ def novo():
         """)
         fornecedores = cursor.fetchall()
         
-        # IMPORTANTE: Adicionar paga_comissao dos motoristas
         cursor.execute("""
             SELECT id, nome, paga_comissao 
             FROM motoristas 
@@ -100,7 +116,6 @@ def novo():
         """)
         destinos = cursor.fetchall()
         
-        # ====== ADICIONAR CONSULTA DAS ROTAS ======
         cursor.execute("""
             SELECT id, origem_id, destino_id, valor_por_litro 
             FROM rotas 
@@ -120,7 +135,7 @@ def novo():
             quantidades=quantidades,
             origens=origens,
             destinos=destinos,
-            rotas=rotas  # ====== ADICIONAR ESTE PARÂMETRO ======
+            rotas=rotas
         )
     except Exception as e:
         print(f'Erro ao carregar formulário: {e}')
@@ -188,6 +203,22 @@ def editar(id):
         cursor = conn.cursor(dictionary=True)
         
         if request.method == 'POST':
+            # ====== FUNÇÃO PARA CONVERTER VALORES ======
+            def converter_para_decimal(valor):
+                if not valor:
+                    return 0
+                return float(str(valor).replace('.', '').replace(',', '.'))
+            
+            # Converter os valores antes de atualizar
+            preco_produto_unitario = converter_para_decimal(request.form.get('preco_produto_unitario'))
+            total_nf_compra = converter_para_decimal(request.form.get('total_nf_compra'))
+            preco_por_litro = converter_para_decimal(request.form.get('preco_por_litro'))
+            valor_total_frete = converter_para_decimal(request.form.get('valor_total_frete'))
+            comissao_motorista = converter_para_decimal(request.form.get('comissao_motorista'))
+            valor_cte = converter_para_decimal(request.form.get('valor_cte'))
+            comissao_cte = converter_para_decimal(request.form.get('comissao_cte'))
+            lucro = converter_para_decimal(request.form.get('lucro'))
+            
             cursor.execute("""
                 UPDATE fretes 
                 SET clientes_id=%s, fornecedores_id=%s, motoristas_id=%s, veiculos_id=%s, 
@@ -204,14 +235,14 @@ def editar(id):
                 request.form.get('quantidade_id'),
                 request.form.get('origem_id'),
                 request.form.get('destino_id'),
-                request.form.get('preco_produto_unitario'),
-                request.form.get('total_nf_compra'),
-                request.form.get('preco_por_litro'),
-                request.form.get('valor_total_frete'),
-                request.form.get('comissao_motorista'),
-                request.form.get('valor_cte'),
-                request.form.get('comissao_cte'),
-                request.form.get('lucro'),
+                preco_produto_unitario,
+                total_nf_compra,
+                preco_por_litro,
+                valor_total_frete,
+                comissao_motorista,
+                valor_cte,
+                comissao_cte,
+                lucro,
                 request.form.get('data_frete'),
                 request.form.get('status'),
                 request.form.get('observacoes'),
@@ -276,7 +307,6 @@ def editar(id):
         """)
         destinos = cursor.fetchall()
         
-        # ====== ADICIONAR CONSULTA DAS ROTAS TAMBÉM AQUI ======
         cursor.execute("""
             SELECT id, origem_id, destino_id, valor_por_litro 
             FROM rotas 
@@ -297,7 +327,7 @@ def editar(id):
             quantidades=quantidades,
             origens=origens,
             destinos=destinos,
-            rotas=rotas  # ====== ADICIONAR ESTE PARÂMETRO ======
+            rotas=rotas
         )
     except Exception as e:
         print(f'Erro ao editar frete: {e}')
