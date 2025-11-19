@@ -1,18 +1,18 @@
 from flask import Blueprint, render_template, request, redirect, url_for, flash
 from flask_login import login_required
+from config import Config
 import mysql.connector
-import os
 
 bp = Blueprint('rotas', __name__, url_prefix='/rotas')
 
 def get_db():
-    """Retorna conexão com o banco de dados"""
+    """Retorna conexão com o banco de dados usando Config"""
     return mysql.connector.connect(
-        host=os.environ.get('DB_HOST'),
-        user=os.environ.get('DB_USER'),
-        password=os.environ.get('DB_PASSWORD'),
-        database=os.environ.get('DB_NAME'),
-        port=int(os.environ.get('DB_PORT', 3306))
+        host=Config.DB_HOST,
+        user=Config.DB_USER,
+        password=Config.DB_PASSWORD,
+        database=Config.DB_NAME,
+        port=Config.DB_PORT
     )
 
 def converter_para_decimal(valor):
@@ -67,7 +67,6 @@ def novo():
         except Exception as e:
             flash(f'Erro ao cadastrar rota: {str(e)}', 'danger')
     
-    # GET - Carregar origens e destinos
     conn = get_db()
     cursor = conn.cursor(dictionary=True)
     
@@ -110,7 +109,6 @@ def editar(id):
         except Exception as e:
             flash(f'Erro ao atualizar rota: {str(e)}', 'danger')
     
-    # GET - Carregar dados
     cursor.execute("SELECT * FROM rotas WHERE id = %s", (id,))
     rota = cursor.fetchone()
     
