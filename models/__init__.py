@@ -5,4 +5,4 @@ db = SQLAlchemy()
 
 from models.usuario import Usuario
 
-__all__ = ['Usuario, 'db'']
+__all__ = ['Usuario', 'db']
