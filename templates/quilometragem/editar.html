@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+
+{% block title %}Editar Quilometragem - NH Transportes{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="row justify-content-center">
+        <div class="col-md-8">
+            <div class="card shadow">
+                <div class="card-header bg-warning text-dark">
+                    <h4 class="mb-0"><i class="bi bi-pencil"></i> Editar Quilometragem</h4>
+                </div>
+                <div class="card-body">
+                    <form method="POST" action="{{ url_for('quilometragem.editar', id=quilometragem.id) }}" id="formQuilometragem">
+                        
+                        <div class="row mb-3">
+                            <div class="col-md-6">
+                                <label class="form-label">Veículo <span class="text-danger">*</span></label>
+                                <select name="veiculo_id" class="form-select" required>
+                                    <option value="">Selecione...</option>
+                                    {% for veiculo in veiculos %}
+                                    <option value="{{ veiculo.id }}" {% if veiculo.id == quilometragem.veiculo_id %}
