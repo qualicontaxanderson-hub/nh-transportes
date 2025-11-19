@@ -1,18 +1,31 @@
-from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify
+from flask import Blueprint, render_template, request, redirect, url_for, flash
 from flask_login import login_required
-from models import db
+from config import Config
+import mysql.connector
 
 bp = Blueprint('origens_destinos', __name__, url_prefix='/origens-destinos')
+
+def get_db():
+    """Retorna conexão com o banco de dados usando Config"""
+    return mysql.connector.connect(
+        host=Config.DB_HOST,
+        user=Config.DB_USER,
+        password=Config.DB_PASSWORD,
+        database=Config.DB_NAME,
+        port=Config.DB_PORT
+    )
 
 # ==================== ORIGENS ====================
 
 @bp.route('/origens')
 @login_required
 def lista_origens():
-    cursor = db.cursor(dictionary=True)
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True)
     cursor.execute("SELECT * FROM origens ORDER BY nome")
     origens = cursor.fetchall()
     cursor.close()
+    conn.close()
     return render_template('origens_destinos/lista_origens.html', origens=origens)
 
 @bp.route('/origens/nova', methods=['POST'])
@@ -26,15 +39,16 @@ def nova_origem():
             flash('Nome e Estado são obrigatórios!', 'danger')
             return redirect(url_for('origens_destinos.lista_origens'))
         
-        cursor = db.cursor()
+        conn = get_db()
+        cursor = conn.cursor()
         cursor.execute("INSERT INTO origens (nome, estado) VALUES (%s, %s)", (nome, estado))
-        db.commit()
+        conn.commit()
         cursor.close()
+        conn.close()
         
         flash('Origem cadastrada com sucesso!', 'success')
     except Exception as e:
         flash(f'Erro ao cadastrar origem: {str(e)}', 'danger')
-        db.rollback()
     
     return redirect(url_for('origens_destinos.lista_origens'))
 
@@ -45,15 +59,16 @@ def editar_origem(id):
         nome = request.form.get('nome').strip().upper()
         estado = request.form.get('estado').strip().upper()
         
-        cursor = db.cursor()
+        conn = get_db()
+        cursor = conn.cursor()
         cursor.execute("UPDATE origens SET nome = %s, estado = %s WHERE id = %s", (nome, estado, id))
-        db.commit()
+        conn.commit()
         cursor.close()
+        conn.close()
         
         flash('Origem atualizada com sucesso!', 'success')
     except Exception as e:
         flash(f'Erro ao atualizar origem: {str(e)}', 'danger')
-        db.rollback()
     
     return redirect(url_for('origens_destinos.lista_origens'))
 
@@ -61,14 +76,15 @@ def editar_origem(id):
 @login_required
 def excluir_origem(id):
     try:
-        cursor = db.cursor()
+        conn = get_db()
+        cursor = conn.cursor()
         cursor.execute("DELETE FROM origens WHERE id = %s", (id,))
-        db.commit()
+        conn.commit()
         cursor.close()
+        conn.close()
         flash('Origem excluída com sucesso!', 'success')
     except Exception as e:
         flash(f'Erro ao excluir origem: {str(e)}', 'danger')
-        db.rollback()
     
     return redirect(url_for('origens_destinos.lista_origens'))
 
@@ -77,10 +93,12 @@ def excluir_origem(id):
 @bp.route('/destinos')
 @login_required
 def lista_destinos():
-    cursor = db.cursor(dictionary=True)
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True)
     cursor.execute("SELECT * FROM destinos ORDER BY nome")
     destinos = cursor.fetchall()
     cursor.close()
+    conn.close()
     return render_template('origens_destinos/lista_destinos.html', destinos=destinos)
 
 @bp.route('/destinos/novo', methods=['POST'])
@@ -94,15 +112,16 @@ def novo_destino():
             flash('Nome e Estado são obrigatórios!', 'danger')
             return redirect(url_for('origens_destinos.lista_destinos'))
         
-        cursor = db.cursor()
+        conn = get_db()
+        cursor = conn.cursor()
         cursor.execute("INSERT INTO destinos (nome, estado) VALUES (%s, %s)", (nome, estado))
-        db.commit()
+        conn.commit()
         cursor.close()
+        conn.close()
         
         flash('Destino cadastrado com sucesso!', 'success')
     except Exception as e:
         flash(f'Erro ao cadastrar destino: {str(e)}', 'danger')
-        db.rollback()
     
     return redirect(url_for('origens_destinos.lista_destinos'))
 
@@ -113,15 +132,16 @@ def editar_destino(id):
         nome = request.form.get('nome').strip().upper()
         estado = request.form.get('estado').strip().upper()
         
-        cursor = db.cursor()
+        conn = get_db()
+        cursor = conn.cursor()
         cursor.execute("UPDATE destinos SET nome = %s, estado = %s WHERE id = %s", (nome, estado, id))
-        db.commit()
+        conn.commit()
         cursor.close()
+        conn.close()
         
         flash('Destino atualizado com sucesso!', 'success')
     except Exception as e:
         flash(f'Erro ao atualizar destino: {str(e)}', 'danger')
-        db.rollback()
     
     return redirect(url_for('origens_destinos.lista_destinos'))
 
@@ -129,14 +149,14 @@ def editar_destino(id):
 @login_required
 def excluir_destino(id):
     try:
-        cursor = db.cursor()
+        conn = get_db()
+        cursor = conn.cursor()
         cursor.execute("DELETE FROM destinos WHERE id = %s", (id,))
-        db.commit()
+        conn.commit()
         cursor.close()
+        conn.close()
         flash('Destino excluído com sucesso!', 'success')
     except Exception as e:
         flash(f'Erro ao excluir destino: {str(e)}', 'danger')
-        db.rollback()
     
     return redirect(url_for('origens_destinos.lista_destinos'))
-
