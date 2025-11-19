@@ -5,6 +5,7 @@ from flask import Flask, render_template, redirect, url_for, request, flash
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user
 from werkzeug.security import generate_password_hash
 from models.usuario import Usuario
+from models.rota import Rota
 from config import Config
 
 app = Flask(__name__)
@@ -20,6 +21,7 @@ def load_user(user_id):
 
 # Importar blueprints após definir 'app'
 from routes import clientes, fornecedores, fretes, motoristas, veiculos, relatorios, debug_bp
+from routes.api import api_bp
 
 app.register_blueprint(clientes.bp)
 app.register_blueprint(fornecedores.bp)
@@ -28,6 +30,7 @@ app.register_blueprint(motoristas.bp)
 app.register_blueprint(veiculos.bp)
 app.register_blueprint(relatorios.bp)
 app.register_blueprint(debug_bp)
+app.register_blueprint(api_bp)
 
 @app.route('/health')
 def health():
