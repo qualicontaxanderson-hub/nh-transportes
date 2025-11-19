@@ -1,8 +1,19 @@
 from flask import Blueprint, render_template, request, redirect, url_for, flash
 from flask_login import login_required
-from models import db
+from config import Config
+import mysql.connector
 
 bp = Blueprint('quilometragem', __name__, url_prefix='/quilometragem')
+
+def get_db():
+    """Retorna conexão com o banco de dados usando Config"""
+    return mysql.connector.connect(
+        host=Config.DB_HOST,
+        user=Config.DB_USER,
+        password=Config.DB_PASSWORD,
+        database=Config.DB_NAME,
+        port=Config.DB_PORT
+    )
 
 def converter_para_decimal(valor):
     """Converte valores do formato brasileiro (1.234,56) para decimal (1234.56)"""
@@ -13,7 +24,8 @@ def converter_para_decimal(valor):
 @bp.route('/')
 @login_required
 def lista():
-    cursor = db.cursor(dictionary=True)
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True)
     
     # Filtros
     veiculo_id = request.args.get('veiculo_id', '')
@@ -72,6 +84,7 @@ def lista():
     motoristas = cursor.fetchall()
     
     cursor.close()
+    conn.close()
     
     return render_template('quilometragem/lista.html', 
                          quilometragens=quilometragens,
@@ -99,7 +112,8 @@ def novo():
             litros_abastecidos = converter_para_decimal(request.form.get('litros_abastecidos'))
             observacoes = request.form.get('observacoes', '')
             
-            cursor = db.cursor()
+            conn = get_db()
+            cursor = conn.cursor()
             cursor.execute("""
                 INSERT INTO quilometragem 
                 (veiculo_id, motorista_id, data, km_inicial, km_final, km_rodados, 
@@ -108,18 +122,19 @@ def novo():
             """, (veiculo_id, motorista_id, data, km_inicial, km_final, km_rodados,
                   valor_combustivel, litros_abastecidos, observacoes))
             
-            db.commit()
+            conn.commit()
             cursor.close()
+            conn.close()
             
             flash('Quilometragem cadastrada com sucesso!', 'success')
             return redirect(url_for('quilometragem.lista'))
             
         except Exception as e:
             flash(f'Erro ao cadastrar quilometragem: {str(e)}', 'danger')
-            db.rollback()
     
     # GET - Carregar dados para o formulário
-    cursor = db.cursor(dictionary=True)
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True)
     cursor.execute("SELECT id, placa, modelo FROM veiculos WHERE ativo = 1 ORDER BY placa")
     veiculos = cursor.fetchall()
     
@@ -127,13 +142,15 @@ def novo():
     motoristas = cursor.fetchall()
     
     cursor.close()
+    conn.close()
     
     return render_template('quilometragem/novo.html', veiculos=veiculos, motoristas=motoristas)
 
 @bp.route('/editar/<int:id>', methods=['GET', 'POST'])
 @login_required
 def editar(id):
-    cursor = db.cursor(dictionary=True)
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True)
     
     if request.method == 'POST':
         try:
@@ -156,15 +173,15 @@ def editar(id):
             """, (veiculo_id, motorista_id, data, km_inicial, km_final, km_rodados,
                   valor_combustivel, litros_abastecidos, observacoes, id))
             
-            db.commit()
+            conn.commit()
             cursor.close()
+            conn.close()
             
             flash('Quilometragem atualizada com sucesso!', 'success')
             return redirect(url_for('quilometragem.lista'))
             
         except Exception as e:
             flash(f'Erro ao atualizar quilometragem: {str(e)}', 'danger')
-            db.rollback()
     
     # GET - Carregar dados para edição
     cursor.execute("SELECT * FROM quilometragem WHERE id = %s", (id,))
@@ -172,6 +189,8 @@ def editar(id):
     
     if not quilometragem:
         flash('Quilometragem não encontrada!', 'danger')
+        cursor.close()
+        conn.close()
         return redirect(url_for('quilometragem.lista'))
     
     cursor.execute("SELECT id, placa, modelo FROM veiculos WHERE ativo = 1 ORDER BY placa")
@@ -181,6 +200,7 @@ def editar(id):
     motoristas = cursor.fetchall()
     
     cursor.close()
+    conn.close()
     
     return render_template('quilometragem/editar.html', 
                          quilometragem=quilometragem,
@@ -191,13 +211,14 @@ def editar(id):
 @login_required
 def excluir(id):
     try:
-        cursor = db.cursor()
+        conn = get_db()
+        cursor = conn.cursor()
         cursor.execute("DELETE FROM quilometragem WHERE id = %s", (id,))
-        db.commit()
+        conn.commit()
         cursor.close()
+        conn.close()
         flash('Quilometragem excluída com sucesso!', 'success')
     except Exception as e:
         flash(f'Erro ao excluir quilometragem: {str(e)}', 'danger')
-        db.rollback()
     
     return redirect(url_for('quilometragem.lista'))
