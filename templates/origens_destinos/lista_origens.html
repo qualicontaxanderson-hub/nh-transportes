@@ -1,0 +1,119 @@
+{% extends "base.html" %}
+
+{% block title %}Origens - NH Transportes{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2><i class="bi bi-geo-alt"></i> Origens</h2>
+        <div>
+            <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#modalNovaOrigem">
+                <i class="bi bi-plus-circle"></i> Nova Origem
+            </button>
+            <a href="{{ url_for('rotas.lista') }}" class="btn btn-secondary">
+                <i class="bi bi-arrow-left"></i> Voltar para Rotas
+            </a>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-hover table-striped">
+                    <thead class="table-dark">
+                        <tr>
+                            <th>ID</th>
+                            <th>Cidade</th>
+                            <th>Estado</th>
+                            <th class="text-center">Ações</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% if origens %}
+                            {% for origem in origens %}
+                            <tr>
+                                <td>{{ origem.id }}</td>
+                                <td><strong>{{ origem.nome }}</strong></td>
+                                <td>{{ origem.estado }}</td>
+                                <td class="text-center">
+                                    <button class="btn btn-sm btn-warning" data-bs-toggle="modal" data-bs-target="#modalEditarOrigem{{ origem.id }}">
+                                        <i class="bi bi-pencil"></i>
+                                    </button>
+                                    <a href="{{ url_for('origens_destinos.excluir_origem', id=origem.id) }}" 
+                                       class="btn btn-sm btn-danger"
+                                       onclick="return confirm('Deseja realmente excluir esta origem?')">
+                                        <i class="bi bi-trash"></i>
+                                    </a>
+                                </td>
+                            </tr>
+
+                            <!-- Modal Editar -->
+                            <div class="modal fade" id="modalEditarOrigem{{ origem.id }}" tabindex="-1">
+                                <div class="modal-dialog">
+                                    <div class="modal-content">
+                                        <div class="modal-header bg-warning">
+                                            <h5 class="modal-title">Editar Origem</h5>
+                                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                        </div>
+                                        <form method="POST" action="{{ url_for('origens_destinos.editar_origem', id=origem.id) }}">
+                                            <div class="modal-body">
+                                                <div class="mb-3">
+                                                    <label class="form-label">Cidade <span class="text-danger">*</span></label>
+                                                    <input type="text" name="nome" class="form-control" value="{{ origem.nome }}" required>
+                                                </div>
+                                                <div class="mb-3">
+                                                    <label class="form-label">Estado <span class="text-danger">*</span></label>
+                                                    <input type="text" name="estado" class="form-control" value="{{ origem.estado }}" maxlength="2" required>
+                                                </div>
+                                            </div>
+                                            <div class="modal-footer">
+                                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                                                <button type="submit" class="btn btn-warning">Atualizar</button>
+                                            </div>
+                                        </form>
+                                    </div>
+                                </div>
+                            </div>
+                            {% endfor %}
+                        {% else %}
+                            <tr>
+                                <td colspan="4" class="text-center text-muted">
+                                    <i class="bi bi-inbox"></i> Nenhuma origem cadastrada
+                                </td>
+                            </tr>
+                        {% endif %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Nova Origem -->
+<div class="modal fade" id="modalNovaOrigem" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title">Nova Origem</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form method="POST" action="{{ url_for('origens_destinos.nova_origem') }}">
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">Cidade <span class="text-danger">*</span></label>
+                        <input type="text" name="nome" class="form-control" placeholder="Ex: SÃO PAULO" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Estado <span class="text-danger">*</span></label>
+                        <input type="text" name="estado" class="form-control" placeholder="Ex: SP" maxlength="2" required>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-primary">Cadastrar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
