@@ -197,13 +197,6 @@
         return quantidade;
     }
 
-    function calcularPercentualCte() {
-        var clienteSelect = document.getElementById('clientes_id');
-        var selectedOption = clienteSelect.options[clienteSelect.selectedIndex];
-        var percentualCte = parseFloat(selectedOption.getAttribute('data-percentual-cte')) || 0;
-        return percentualCte / 100;
-    }
-
     // ====== BUSCAR VALOR DA ROTA ======
     function buscarValorPorLitroRota(origemId, destinoId) {
         if (!origemId || !destinoId) return 0;
@@ -227,7 +220,7 @@
             var precoPorLitro = converterBrasileiro(precoPorLitroStr);
 
             // Total NF Compra
-                        var totalNfCompra = quantidade * precoProdutoUnitario;
+            var totalNfCompra = quantidade * precoProdutoUnitario;
             document.getElementById('total_nf_compra').value = formatarReais(totalNfCompra);
 
             // Valor Total Frete
@@ -269,15 +262,11 @@
             }
             document.getElementById('valor_cte').value = formatarReais(valorCte);
 
-            // Comissão CTe
-            var percentualCte = calcularPercentualCte();
-            var comissaoCte = 0;
-            if (clientePagaComissao) {
-                comissaoCte = valorCte * percentualCte;
-            }
+            // Comissão CTe = 8% do Valor CTe (FIXO)
+            var comissaoCte = valorCte * 0.08;
             document.getElementById('comissao_cte').value = formatarReais(comissaoCte);
 
-            // Lucro
+            // Lucro = Valor Total Frete - Comissão Motorista - Comissão CTe
             var lucro = valorTotalFrete - comissaoMotorista - comissaoCte;
             document.getElementById('lucro').value = formatarReais(lucro);
 
