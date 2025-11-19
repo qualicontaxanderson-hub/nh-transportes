@@ -42,8 +42,7 @@ function calcularFrete() {
         // CÁLCULOS CORRETOS
         const total_nf_compra = quantidade * preco_unitario;
         const valor_total_frete = quantidade * preco_por_litro;
-        const comissao_motorista = quantidade * 0.01; // R$ 0,01 por litro
-        
+    const comissao_motorista = valor_total_frete * 0.01; // 1% do valor do frete        
         // Atualizar campos readonly com valores formatados
         document.querySelector('#total_nf_compra').value = formatarBrasileiro(total_nf_compra);
         document.querySelector('#valor_total_frete').value = formatarBrasileiro(valor_total_frete);
