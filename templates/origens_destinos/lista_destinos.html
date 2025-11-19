@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+
+{% block title %}Destinos - NH Transportes{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2><i class="bi bi-pin-map"></i> Destinos</h2>
+        <div>
+            <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#modalNovoDestino">
+                <i class="bi bi-plus-circle"></i> Novo Destino
+            </button>
+            <a href="{{ url_for('rotas.lista') }}" class="btn btn-secondary">
+                <i class="bi bi-arrow-left"></i> Voltar para Rotas
+            </a>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-hover table-striped">
+                    <thead class="table-dark">
+                        <tr>
+                            <th>ID</th>
+                            <th>Cidade</th>
+                            <th>Estado</th>
+                            <th class="text-center">Ações</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% if destinos %}
+                            {% for destino in destinos %}
+                            <tr>
+                                <td>{{ destino.id }}</td>
+                                <td><strong>{{ destino.nome }}</strong></td>
+                                <td>{{ destino.estado }}</td>
+                                <td class="text-center">
+                                    <button class="btn btn-sm btn-warning" data-bs-toggle="modal" data-bs-target="#modalEditarDestino{{ destino.id }}">
+                                        <i class="bi bi-pencil"></i>
+                                    </button>
+                                    <a href="{{ url_for('origens_destinos.excluir_destino', id=destino.id) }}" 
+                                       class="btn btn-sm btn-danger"
+                                       onclick="return confirm('Deseja realmente excluir este destino?')">
+                                        <i class="bi bi-trash"></i>
+                                    </a>
+                                </td>
+                            </tr>
+
+                            <!-- Modal Editar -->
+                            <div class="modal fade" id="modalEditarDestino{{ destino.id }}" tabindex="-1">
+                                <div class="modal-dialog">
+                                    <div class="modal-content">
+                                        <div class="modal-header bg-warning">
+                                            <h5 class="modal-title">Editar Destino</h5>
+                                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                        </div>
+                                        <form method="POST" action="{{ url_for('origens_destinos.editar_destino', id=destino.id) }}">
+                                            <div class="modal-body">
+                                                <div class="mb-3">
+                                                    <label class="form-label">Cidade <span class="text-danger">*</span></label>
+                                                    <input type="text" name="nome" class="form-control" value="{{ destino.nome }}" required>
+                                                </div>
+                                                <div class="mb-3">
+                                                    <label class="form-
