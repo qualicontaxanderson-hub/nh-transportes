@@ -1,4 +1,3 @@
-
 {% extends 'base.html' %}
 {% block title %}Motoristas - {{ app_name }}{% endblock %}
 {% block content %}
@@ -18,6 +17,7 @@
                         <tr>
                             <th>ID</th>
                             <th>Nome</th>
+                            <th>Paga Comissão</th>
                             <th>Ações</th>
                         </tr>
                     </thead>
@@ -27,18 +27,24 @@
                             <td>{{ motorista.id }}</td>
                             <td>{{ motorista.nome }}</td>
                             <td>
+                                {% if motorista.paga_comissao %}
+                                    <span class="badge bg-success">Sim</span>
+                                {% else %}
+                                    <span class="badge bg-danger">Não</span>
+                                {% endif %}
+                            </td>
+                            <td>
                                 {% if current_user.is_admin() %}
-                                                                    <a href="{{ url_for('motoristas.editar', id=motorista.id) }}" class="btn btn-sm btn-warning">
+                                    <a href="{{ url_for('motoristas.editar', id=motorista.id) }}" class="btn btn-sm btn-warning">
                                         <i class="bi bi-pencil"></i>
                                     </a>
 
-                                <form action="{{ url_for('motoristas.excluir', id=motorista.id) }}" method="POST" style="display:inline;">
+                                    <form action="{{ url_for('motoristas.excluir', id=motorista.id) }}" method="POST" style="display:inline;">
                                         <button type="submit" class="btn btn-sm btn-danger" 
                                             onclick="return confirm('Deseja realmente excluir?');">
                                             <i class="bi bi-trash"></i>
                                         </button>
                                     </form>
-                                </a>
                                 {% endif %}
                             </td>
                         </tr>
@@ -50,4 +56,3 @@
     </div>
 </div>
 {% endblock %}
-
