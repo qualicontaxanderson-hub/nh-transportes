@@ -24,14 +24,15 @@ def novo():
         conn = get_db_connection()
         cursor = conn.cursor()
         
-        # Pegar valor do checkbox (se marcado = 1, se não = 0)
+        # Pegar valor dos checkboxes (se marcado = 1, se não = 0)
         paga_comissao = 1 if request.form.get('paga_comissao') == 'on' else 0
+        cte_integral = 1 if request.form.get('cte_integral') == 'on' else 0
         
         cursor.execute("""
             INSERT INTO clientes (razao_social, nome_fantasia, cnpj, ie, contato,
                                  endereco, numero, complemento, bairro, municipio, uf, cep,
-                                 telefone, email, paga_comissao)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                                 telefone, email, paga_comissao, cte_integral)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         """, (
             request.form.get('razao_social'),
             request.form.get('nome_fantasia') or None,
@@ -47,7 +48,8 @@ def novo():
             request.form.get('cep') or None,
             request.form.get('telefone') or None,
             request.form.get('email') or None,
-            paga_comissao
+            paga_comissao,
+            cte_integral
         ))
         conn.commit()
         cursor.close()
@@ -64,13 +66,14 @@ def editar(id):
     cursor = conn.cursor(dictionary=True)
     
     if request.method == 'POST':
-        # Pegar valor do checkbox (se marcado = 1, se não = 0)
+        # Pegar valor dos checkboxes (se marcado = 1, se não = 0)
         paga_comissao = 1 if request.form.get('paga_comissao') == 'on' else 0
+        cte_integral = 1 if request.form.get('cte_integral') == 'on' else 0
         
         cursor.execute("""
             UPDATE clientes SET razao_social=%s, nome_fantasia=%s, cnpj=%s, ie=%s, contato=%s,
                               endereco=%s, numero=%s, complemento=%s, bairro=%s, municipio=%s, uf=%s, cep=%s,
-                              telefone=%s, email=%s, paga_comissao=%s
+                              telefone=%s, email=%s, paga_comissao=%s, cte_integral=%s
             WHERE id=%s
         """, (
             request.form.get('razao_social'),
@@ -88,6 +91,7 @@ def editar(id):
             request.form.get('telefone') or None,
             request.form.get('email') or None,
             paga_comissao,
+            cte_integral,
             id
         ))
         conn.commit()
