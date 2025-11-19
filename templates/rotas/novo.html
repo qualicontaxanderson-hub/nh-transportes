@@ -2,66 +2,76 @@
 {% block title %}Nova Rota - {{ app_name }}{% endblock %}
 {% block content %}
 <div class="container-fluid">
-    <nav aria-label="breadcrumb">
-        <ol class="breadcrumb">
+    <nav aria-label="breadcrumb" class="mt-2 mb-3">
+        <ol class="breadcrumb" style="font-size: 0.85rem;">
             <li class="breadcrumb-item"><a href="{{ url_for('index') }}">Dashboard</a></li>
             <li class="breadcrumb-item"><a href="{{ url_for('rotas.lista') }}">Rotas</a></li>
             <li class="breadcrumb-item active" aria-current="page">Nova Rota</li>
         </ol>
     </nav>
     
-    <h2 class="mb-4" style="color:#1D63A5;"><i class="bi bi-plus-circle"></i> Nova Rota</h2>
+    <h2 class="mb-3" style="color:#1D63A5; font-size: 1.3rem;"><i class="bi bi-plus-circle"></i> Nova Rota</h2>
     
-    <div class="card">
-        <div class="card-header" style="background:#ff9800;color:white;">
-            <h5 class="mb-0">Cadastrar Rota</h5>
+    <div class="card shadow-sm">
+        <div class="card-header" style="background:#ff9800;color:white; font-size: 0.95rem; padding: 0.6rem 1rem;">
+            <h5 class="mb-0" style="font-size: 1rem;">Cadastrar Rota</h5>
         </div>
-        <div class="card-body">
+        <div class="card-body" style="padding: 1rem;">
             <form method="POST">
                 <div class="row">
-                    <div class="col-md-5 mb-3">
-                        <label class="form-label">Origem *</label>
-                        <select name="origem_id" class="form-select" required>
+                    <div class="col-md-5 mb-2">
+                        <label class="form-label" style="font-size: 0.85rem;">Origem *</label>
+                        <select name="origem_id" class="form-select form-select-sm" required>
                             <option value="">Selecione a origem</option>
                             {% for origem in origens %}
                             <option value="{{ origem.id }}">{{ origem.nome }}</option>
                             {% endfor %}
                         </select>
                     </div>
-                    <div class="col-md-5 mb-3">
-                        <label class="form-label">Destino *</label>
-                        <select name="destino_id" class="form-select" required>
+                    <div class="col-md-5 mb-2">
+                        <label class="form-label" style="font-size: 0.85rem;">Destino *</label>
+                        <select name="destino_id" class="form-select form-select-sm" required>
                             <option value="">Selecione o destino</option>
                             {% for destino in destinos %}
                             <option value="{{ destino.id }}">{{ destino.nome }}</option>
                             {% endfor %}
                         </select>
                     </div>
-                    <div class="col-md-2 mb-3">
-                        <label class="form-label">Valor por Litro (R$) *</label>
-                        <input type="text" name="valor_por_litro" class="form-control" value="0,00" required>
+                    <div class="col-md-2 mb-2">
+                        <label class="form-label" style="font-size: 0.85rem;">Valor/Litro (R$) *</label>
+                        <input type="text" name="valor_por_litro" class="form-control form-control-sm" value="0,0000" required>
                     </div>
                 </div>
                 <div class="row">
                     <div class="col-md-12 mb-3">
                         <div class="form-check form-switch">
                             <input class="form-check-input" type="checkbox" name="ativo" id="ativo" checked>
-                            <label class="form-check-label" for="ativo">
+                            <label class="form-check-label" for="ativo" style="font-size: 0.85rem;">
                                 <strong>Rota Ativa</strong>
                             </label>
                         </div>
                     </div>
                 </div>
-                <div class="mt-4">
-                    <button type="submit" class="btn btn-primary" style="background:#1D63A5;border:none;">
+                <div class="d-flex justify-content-between mt-3">
+                    <a href="{{ url_for('rotas.lista') }}" class="btn btn-secondary btn-sm">
+                        <i class="bi bi-arrow-left"></i> Voltar
+                    </a>
+                    <button type="submit" class="btn btn-success btn-sm">
                         <i class="bi bi-check-circle"></i> Salvar
                     </button>
-                    <a href="{{ url_for('rotas.lista') }}" class="btn btn-secondary">
-                        <i class="bi bi-x-circle"></i> Cancelar
-                    </a>
                 </div>
             </form>
         </div>
     </div>
 </div>
+
+<style>
+    .form-control-sm, .form-select-sm {
+        font-size: 0.85rem;
+    }
+    .btn-sm {
+        font-size: 0.85rem;
+        padding: 0.4rem 0.8rem;
+    }
+</style>
 {% endblock %}
