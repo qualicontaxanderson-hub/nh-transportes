@@ -49,9 +49,9 @@ def novo():
         conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)
         
-        # IMPORTANTE: Adicionar paga_comissao dos clientes e motoristas
+        # IMPORTANTE: Adicionar paga_comissao e cte_integral dos clientes
         cursor.execute("""
-            SELECT id, razao_social, paga_comissao, percentual_cte 
+            SELECT id, razao_social, paga_comissao, percentual_cte, cte_integral
             FROM clientes 
             ORDER BY razao_social
         """)
@@ -100,6 +100,14 @@ def novo():
         """)
         destinos = cursor.fetchall()
         
+        # ====== ADICIONAR CONSULTA DAS ROTAS ======
+        cursor.execute("""
+            SELECT id, origem_id, destino_id, valor_por_litro 
+            FROM rotas 
+            WHERE ativo = 1
+        """)
+        rotas = cursor.fetchall()
+        
         cursor.close()
         conn.close()
         
@@ -111,7 +119,8 @@ def novo():
             veiculos=veiculos,
             quantidades=quantidades,
             origens=origens,
-            destinos=destinos
+            destinos=destinos,
+            rotas=rotas  # ====== ADICIONAR ESTE PARÂMETRO ======
         )
     except Exception as e:
         print(f'Erro ao carregar formulário: {e}')
@@ -219,7 +228,7 @@ def editar(id):
         frete = cursor.fetchone()
         
         cursor.execute("""
-            SELECT id, razao_social, paga_comissao, percentual_cte 
+            SELECT id, razao_social, paga_comissao, percentual_cte, cte_integral
             FROM clientes 
             ORDER BY razao_social
         """)
@@ -267,6 +276,14 @@ def editar(id):
         """)
         destinos = cursor.fetchall()
         
+        # ====== ADICIONAR CONSULTA DAS ROTAS TAMBÉM AQUI ======
+        cursor.execute("""
+            SELECT id, origem_id, destino_id, valor_por_litro 
+            FROM rotas 
+            WHERE ativo = 1
+        """)
+        rotas = cursor.fetchall()
+        
         cursor.close()
         conn.close()
         
@@ -279,7 +296,8 @@ def editar(id):
             veiculos=veiculos,
             quantidades=quantidades,
             origens=origens,
-            destinos=destinos
+            destinos=destinos,
+            rotas=rotas  # ====== ADICIONAR ESTE PARÂMETRO ======
         )
     except Exception as e:
         print(f'Erro ao editar frete: {e}')
