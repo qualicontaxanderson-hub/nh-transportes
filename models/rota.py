@@ -1,6 +1,4 @@
-from flask_sqlalchemy import SQLAlchemy
-# db will be imported after app initialization to avoid circular imports
-db = None  # Will be set by app initialization
+from models import db
 import datetime
 
 class Rota(db.Model):
