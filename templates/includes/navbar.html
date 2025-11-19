@@ -1,6 +1,6 @@
 <nav class="navbar navbar-expand-lg navbar-dark mb-4" style="background: linear-gradient(135deg, #4A90E2 0%, #5BA3F5 100%);">
     <div class="container-fluid">
-        <a class="navbar-brand fw-bold" href="{{ url_for('index') }}" style="font-size: 1.4rem; color: #ff9800;">
+        <a class="navbar-brand fw-bold" href="{{ url_for('index') }}" style="font-size: 1.2rem; color: #ff9800;">
             <i class="bi bi-truck-front"></i> NH Transportes
         </a>
         <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
@@ -8,52 +8,59 @@
         </button>
         <div class="collapse navbar-collapse" id="navbarNav">
             <ul class="navbar-nav me-auto">
+                
+                <!-- DROPDOWN: CADASTROS -->
+                <li class="nav-item dropdown">
+                    <a class="nav-link dropdown-toggle" href="#" id="cadastrosDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false" style="color: #000; font-weight: 600; font-size: 0.9rem;">
+                        <i class="bi bi-folder-plus"></i> Cadastros
+                    </a>
+                    <ul class="dropdown-menu" aria-labelledby="cadastrosDropdown">
+                        <li><a class="dropdown-item" href="{{ url_for('clientes.lista') }}"><i class="bi bi-people"></i> Clientes</a></li>
+                        <li><a class="dropdown-item" href="{{ url_for('fornecedores.lista') }}"><i class="bi bi-building"></i> Fornecedores</a></li>
+                        <li><a class="dropdown-item" href="{{ url_for('motoristas.lista') }}"><i class="bi bi-person-badge"></i> Motoristas</a></li>
+                        <li><a class="dropdown-item" href="{{ url_for('veiculos.lista') }}"><i class="bi bi-truck"></i> Veículos</a></li>
+                        <li><hr class="dropdown-divider"></li>
+                        <li><a class="dropdown-item" href="#"><i class="bi bi-map"></i> Rotas <span class="badge bg-success">NOVO</span></a></li>
+                    </ul>
+                </li>
+
+                <!-- DROPDOWN: LANÇAMENTOS -->
+                <li class="nav-item dropdown">
+                    <a class="nav-link dropdown-toggle" href="#" id="lancamentosDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false" style="color: #000; font-weight: 600; font-size: 0.9rem;">
+                        <i class="bi bi-pencil-square"></i> Lançamentos
+                    </a>
+                    <ul class="dropdown-menu" aria-labelledby="lancamentosDropdown">
+                        <li><a class="dropdown-item" href="{{ url_for('fretes.lista') }}"><i class="bi bi-box-seam"></i> Fretes</a></li>
+                        <li><a class="dropdown-item" href="#"><i class="bi bi-speedometer2"></i> Quilometragem <span class="badge bg-success">NOVO</span></a></li>
+                    </ul>
+                </li>
+
+                <!-- FINANCEIRO (vazio por enquanto) -->
                 <li class="nav-item">
-                    <a class="nav-link {% if request.endpoint and 'clientes' in request.endpoint %}active{% endif %}" 
-                       href="{{ url_for('clientes.lista') }}" style="color: #000; font-weight: 700;">
-                        <i class="bi bi-people"></i> Clientes
+                    <a class="nav-link" href="#" style="color: #000; font-weight: 600; font-size: 0.9rem;">
+                        <i class="bi bi-cash-coin"></i> Financeiro
                     </a>
                 </li>
-                <li class="nav-item">
-                    <a class="nav-link {% if request.endpoint and 'fornecedores' in request.endpoint %}active{% endif %}" 
-                       href="{{ url_for('fornecedores.lista') }}" style="color: #000; font-weight: 700;">
-                        <i class="bi bi-building"></i> Fornecedores
-                    </a>
-                </li>
-                <li class="nav-item">
-                    <a class="nav-link {% if request.endpoint and 'motoristas' in request.endpoint %}active{% endif %}" 
-                       href="{{ url_for('motoristas.lista') }}" style="color: #000; font-weight: 700;">
-                        <i class="bi bi-person-badge"></i> Motoristas
-                    </a>
-                </li>
-                <li class="nav-item">
-                    <a class="nav-link {% if request.endpoint and 'veiculos' in request.endpoint %}active{% endif %}" 
-                       href="{{ url_for('veiculos.lista') }}" style="color: #000; font-weight: 700;">
-                        <i class="bi bi-truck"></i> Veículos
-                    </a>
-                </li>
-                <li class="nav-item">
-                    <a class="nav-link {% if request.endpoint and 'fretes' in request.endpoint %}active{% endif %}" 
-                       href="{{ url_for('fretes.lista') }}" style="color: #000; font-weight: 700;">
-                        <i class="bi bi-box-seam"></i> Fretes
-                    </a>
-                </li>
+
+                <!-- RELATÓRIOS -->
                 <li class="nav-item">
                     <a class="nav-link {% if request.endpoint and 'relatorios' in request.endpoint %}active{% endif %}" 
-                       href="{{ url_for('relatorios.index') }}" style="color: #000; font-weight: 700;">
+                       href="{{ url_for('relatorios.index') }}" style="color: #000; font-weight: 600; font-size: 0.9rem;">
                         <i class="bi bi-graph-up"></i> Relatórios
                     </a>
                 </li>
             </ul>
+            
+            <!-- USUÁRIO E SAIR -->
             <ul class="navbar-nav">
                 <li class="nav-item d-flex align-items-center">
-                    <span class="navbar-text me-3" style="color: #000; font-weight: 700;">
+                    <span class="navbar-text me-3" style="color: #000; font-weight: 600; font-size: 0.85rem;">
                         <i class="bi bi-person-circle"></i> {{ current_user.nome_completo }}
                     </span>
                 </li>
                 <li class="nav-item">
-                    <a class="nav-link" href="{{ url_for('logout') }}" 
-                       style="color: #000; font-weight: 700; border: 2px solid #ff9800; border-radius: 6px; padding: 6px 16px; background: #ff9800;">
+                    <a class="nav-link btn-sair" href="{{ url_for('logout') }}" 
+                       style="color: #000; font-weight: 600; font-size: 0.85rem; border: 2px solid #ff9800; border-radius: 6px; padding: 6px 14px; background: #ff9800;">
                         <i class="bi bi-box-arrow-right"></i> Sair
                     </a>
                 </li>
@@ -63,7 +70,45 @@
 </nav>
 
 <style>
-    /* Destaque do item ativo - fundo branco com letra preta */
+    /* === FONTES REDUZIDAS PARA MOBILE === */
+    .navbar-brand {
+        font-size: 1.2rem !important;
+    }
+    
+    .nav-link {
+        font-size: 0.9rem !important;
+    }
+    
+    .navbar-text {
+        font-size: 0.85rem !important;
+    }
+
+    /* === DROPDOWN STYLING === */
+    .dropdown-menu {
+        background: white;
+        border: 2px solid #4A90E2;
+        border-radius: 8px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    }
+    
+    .dropdown-item {
+        color: #333;
+        font-size: 0.9rem;
+        padding: 10px 20px;
+        transition: all 0.2s;
+    }
+    
+    .dropdown-item:hover {
+        background: #ff9800;
+        color: white;
+    }
+    
+    .dropdown-item i {
+        margin-right: 8px;
+        width: 20px;
+    }
+
+    /* === ACTIVE STATE === */
     .navbar-nav .nav-link.active {
         background: white;
         color: #000 !important;
@@ -72,7 +117,7 @@
         font-weight: 700 !important;
     }
     
-    /* Hover nos links - fundo laranja */
+    /* === HOVER EFFECTS === */
     .navbar-nav .nav-link:hover {
         background: #ff9800;
         border-radius: 6px;
@@ -80,15 +125,49 @@
         color: #000 !important;
     }
     
-    /* Botão sair com efeito hover mais escuro */
-    .navbar-nav .nav-link:last-child:hover {
-        background: #e68900 !important;
-        color: #000 !important;
+    .navbar-nav .dropdown-toggle:hover {
+        background: #ff9800;
+        border-radius: 6px;
     }
     
-    /* Logo hover */
+    /* === BOTÃO SAIR === */
+    .btn-sair:hover {
+        background: #e68900 !important;
+        color: #000 !important;
+        border-color: #e68900 !important;
+    }
+    
+    /* === LOGO HOVER === */
     .navbar-brand:hover {
         color: white !important;
         transition: all 0.3s;
+    }
+
+    /* === BADGE NOVO === */
+    .badge {
+        font-size: 0.65rem;
+        padding: 2px 6px;
+        vertical-align: middle;
+        margin-left: 5px;
+    }
+
+    /* === RESPONSIVO MOBILE === */
+    @media (max-width: 768px) {
+        .navbar-brand {
+            font-size: 1rem !important;
+        }
+        
+        .nav-link {
+            font-size: 0.85rem !important;
+            padding: 8px 12px !important;
+        }
+        
+        .navbar-text {
+            font-size: 0.8rem !important;
+        }
+        
+        .dropdown-item {
+            font-size: 0.85rem !important;
+        }
     }
 </style>
