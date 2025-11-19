@@ -66,9 +66,27 @@ def editar(id):
     cursor = conn.cursor(dictionary=True)
     
     if request.method == 'POST':
-        # Pegar valor dos checkboxes (se marcado = 1, se não = 0)
-        paga_comissao = 1 if request.form.get('paga_comissao') == 'on' else 0
-        cte_integral = 1 if request.form.get('cte_integral') == 'on' else 0
+        # ===== DEBUG: Mostrar TODOS os dados do formulário =====
+        print("\n" + "="*50)
+        print("DEBUG - DADOS RECEBIDOS DO FORMULÁRIO:")
+        print("="*50)
+        for key, value in request.form.items():
+            print(f"{key}: {value}")
+        print("="*50 + "\n")
+        
+        # Pegar valor dos checkboxes
+        paga_comissao_raw = request.form.get('paga_comissao')
+        cte_integral_raw = request.form.get('cte_integral')
+        
+        print(f"DEBUG - paga_comissao RAW: '{paga_comissao_raw}'")
+        print(f"DEBUG - cte_integral RAW: '{cte_integral_raw}'")
+        
+        paga_comissao = 1 if paga_comissao_raw == 'on' else 0
+        cte_integral = 1 if cte_integral_raw == 'on' else 0
+        
+        print(f"DEBUG - paga_comissao PROCESSADO: {paga_comissao}")
+        print(f"DEBUG - cte_integral PROCESSADO: {cte_integral}")
+        print("="*50 + "\n")
         
         cursor.execute("""
             UPDATE clientes SET razao_social=%s, nome_fantasia=%s, cnpj=%s, ie=%s, contato=%s,
@@ -94,6 +112,10 @@ def editar(id):
             cte_integral,
             id
         ))
+        
+        print(f"DEBUG - Query executado para cliente ID: {id}")
+        print(f"DEBUG - Rows affected: {cursor.rowcount}")
+        
         conn.commit()
         cursor.close()
         conn.close()
