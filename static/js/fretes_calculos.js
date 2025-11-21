@@ -104,12 +104,13 @@ function calcularFrete() {
         const total_nf_compra = quantidade * preco_unitario;
         const valor_total_frete = quantidade * preco_por_litro;
         
-        // ===== COMISSÃO MOTORISTA =====
-        // Verifica se Cliente paga comissão E se Motorista recebe comissão
-        let comissao_motorista = 0;
-        if (dadosCliente.pagaComissao && dadosMotorista.pagaComissao) {
-            comissao_motorista = valor_total_frete * 0.01; // 1% do valor do frete
-        }
+// ===== COMISSÃO MOTORISTA =====
+// Verifica se Cliente paga comissão E se Motorista recebe comissão
+let comissao_motorista = 0;
+if (dadosCliente.pagaComissao && dadosMotorista.pagaComissao) {
+    comissao_motorista = quantidade * 0.01; // ✅ CORRETO - R$ 0,01 por litro
+}
+
         
         // ===== VALOR CTe =====
         // SE cte_integral = True → Valor CTe = Valor Total Frete
