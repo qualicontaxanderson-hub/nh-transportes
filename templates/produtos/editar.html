@@ -9,25 +9,19 @@
             <li class="breadcrumb-item active" aria-current="page">Editar Produto</li>
         </ol>
     </nav>
-
-    <h2 class="mb-3" style="color:#1D63A5; font-size: 1.3rem;"><i class="bi bi-pencil"></i> Editar Produto</h2>
+    
+    <h2 class="mb-3" style="color:#1D63A5; font-size: 1.3rem;"><i class="bi bi-pencil"></i> Editar Produto #{{ produto.id }}</h2>
     
     <div class="card shadow-sm">
-        <div class="card-header" style="background:#ff9800;color:white; font-size: 0.95rem; padding: 0.6rem 1rem;">
-            <h5 class="mb-0" style="font-size: 1rem;">Editar Produto #{{ produto.id }}</h5>
+        <div class="card-header bg-warning text-dark" style="font-size: 0.95rem; padding: 0.6rem 1rem;">
+            <h5 class="mb-0" style="font-size: 1rem;">Editar Dados do Produto</h5>
         </div>
         <div class="card-body" style="padding: 1rem;">
             <form method="POST">
                 <div class="row">
-                    <div class="col-md-6 mb-2">
+                    <div class="col-md-12 mb-2">
                         <label class="form-label" style="font-size: 0.85rem;">Nome do Produto *</label>
-                        <input type="text" name="nome" class="form-control form-control-sm"
-                        maxlength="50" required value="{{ produto.nome }}">
-                    </div>
-                    <div class="col-md-6 mb-2">
-                        <label class="form-label" style="font-size: 0.85rem;">Descrição</label>
-                        <input type="text" name="descricao" class="form-control form-control-sm"
-                        maxlength="100" value="{{ produto.descricao or '' }}">
+                        <input type="text" name="nome" class="form-control form-control-sm" maxlength="50" required value="{{ produto.nome }}">
                     </div>
                 </div>
                 <div class="d-flex justify-content-between mt-3">
@@ -42,10 +36,14 @@
         </div>
     </div>
 </div>
+
 <style>
+    .form-control-sm, .form-select-sm {
+        font-size: 0.85rem;
+    }
     .btn-sm {
         font-size: 0.85rem;
         padding: 0.4rem 0.8rem;
     }
 </style>
-{% endblock
+{% endblock %}
