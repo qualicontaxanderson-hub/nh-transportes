@@ -40,9 +40,13 @@ function obterDadosCliente() {
     }
     
     const option = selectCliente.selectedOptions[0];
+    const pagaComissaoRaw = option.getAttribute('data-paga-comissao');
+    const cteIntegralRaw = option.getAttribute('data-cte-integral');
+    
     return {
-        pagaComissao: option.getAttribute('data-paga-comissao') === 'True',
-        cteIntegral: option.getAttribute('data-cte-integral') === 'True'
+        // ✅ Aceita: 1, "1", True, "True", true, "true"
+        pagaComissao: pagaComissaoRaw === '1' || pagaComissaoRaw === 'True' || pagaComissaoRaw === 'true' || pagaComissaoRaw === true,
+        cteIntegral: cteIntegralRaw === '1' || cteIntegralRaw === 'True' || cteIntegralRaw === 'true' || cteIntegralRaw === true
     };
 }
 
@@ -54,10 +58,14 @@ function obterDadosMotorista() {
     }
     
     const option = selectMotorista.selectedOptions[0];
+    const pagaComissaoRaw = option.getAttribute('data-paga-comissao');
+    
     return {
-        pagaComissao: option.getAttribute('data-paga-comissao') === 'True'
+        // ✅ Aceita: 1, "1", True, "True", true, "true"
+        pagaComissao: pagaComissaoRaw === '1' || pagaComissaoRaw === 'True' || pagaComissaoRaw === 'true' || pagaComissaoRaw === true
     };
 }
+
 
 // Função para obter valor por litro da rota (origem + destino)
 function obterValorPorLitroRota() {
