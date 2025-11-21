@@ -24,6 +24,10 @@ function obterQuantidade() {
     if (!selectQtd || !selectQtd.selectedOptions[0]) return 0;
     
     let dataLitros = selectQtd.selectedOptions[0].getAttribute('data-litros');
+    
+    // CORREÇÃO: Verificar se dataLitros existe antes de fazer replace
+    if (!dataLitros) return 0;
+    
     const quantidade = parseInt(dataLitros.replace(/[^0-9]/g, '')) || 0;
     return quantidade;
 }
