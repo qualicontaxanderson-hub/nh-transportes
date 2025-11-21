@@ -238,6 +238,24 @@ def editar(id):
         cursor = conn.cursor(dictionary=True)
         
         if request.method == 'POST':
+            # ===== DEBUG: VERIFICAR DADOS RECEBIDOS =====
+            print("=" * 80)
+            print("DEBUG - DADOS RECEBIDOS DO FORMULARIO:")
+            print(f"  origem_id: {request.form.get('origem_id')}")
+            print(f"  destino_id: {request.form.get('destino_id')}")
+            print(f"  produto_id: {request.form.get('produto_id')}")
+            print(f"  clientes_id: {request.form.get('clientes_id')}")
+            print("=" * 80)
+            
+            # Validar campos obrigatórios
+            origem_id = request.form.get('origem_id')
+            destino_id = request.form.get('destino_id')
+            
+            if not destino_id or destino_id == '':
+                flash('ERRO: Destino é obrigatório!', 'danger')
+                print("ERRO: destino_id está vazio ou None")
+                return redirect(url_for('fretes.editar', id=id))
+            
             # FUNÇÃO PARA CONVERTER VALORES
             def converter_para_decimal(valor):
                 if not valor:
@@ -271,8 +289,8 @@ def editar(id):
                     request.form.get('motoristas_id'),
                     request.form.get('veiculos_id'),
                     request.form.get('quantidade_id'),
-                    request.form.get('origem_id'),
-                    request.form.get('destino_id'),
+                    origem_id if origem_id else None,
+                    destino_id,
                     preco_produto_unitario,
                     total_nf_compra,
                     preco_por_litro,
@@ -385,7 +403,7 @@ def editar(id):
             'fretes/editar.html',
             frete=frete,
             clientes=clientes,
-            produtos=produtos,
+                      produtos=produtos,
             fornecedores=fornecedores,
             motoristas=motoristas,
             veiculos=veiculos,
