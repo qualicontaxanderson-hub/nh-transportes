@@ -1,19 +1,25 @@
-{% extends 'base.html' %}
-{% block title %}Fornecedores - {{ app_name }}{% endblock %}
+{% extends "base.html" %}
+
+{% block title %}Fornecedores - NH Transportes{% endblock %}
+
 {% block content %}
 <div class="container-fluid">
-    <div class="d-flex justify-content-between align-items-center mb-4">
-        <h2><i class="bi bi-building"></i> Fornecedores</h2>
-        <a href="{{ url_for('fornecedores.novo') }}" class="btn btn-primary">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h2 style="font-size: 1.5rem;"><i class="bi bi-building"></i> Fornecedores</h2>
+        <a href="{{ url_for('fornecedores.novo') }}" class="btn btn-primary btn-sm">
             <i class="bi bi-plus-circle"></i> Novo Fornecedor
         </a>
     </div>
-    
+
+    <!-- Tabela de Fornecedores -->
     <div class="card">
-        <div class="card-body">
+        <div class="card-header" style="background:#1D63A5;color:white;font-size:0.9rem;font-weight:600;">
+            <i class="bi bi-list"></i> Lista de Fornecedores
+        </div>
+        <div class="card-body" style="padding: 0.5rem;">
             <div class="table-responsive">
-                <table class="table table-hover">
-                    <thead>
+                <table class="table table-hover table-striped table-sm mb-0">
+                    <thead style="background:#4A90E2;color:#000;font-weight:700;font-size:0.85rem;">
                         <tr>
                             <th>ID</th>
                             <th>Razão Social</th>
@@ -21,43 +27,66 @@
                             <th>CNPJ</th>
                             <th>Telefone</th>
                             <th>Município</th>
-                            <th>Ações</th>
+                            <th class="text-center">Ações</th>
                         </tr>
                     </thead>
-                    <tbody>
-                        {% for fornecedor in fornecedores %}
-                        <tr>
-                            <td>{{ fornecedor.id }}</td>
-                            <td>{{ fornecedor.razao_social }}</td>
-                            <td>{{ fornecedor.nome_fantasia or '-' }}</td>
-                            <td>{{ fornecedor.cnpj or '-' }}</td>
-                            <td>{{ fornecedor.telefone or '-' }}</td>
-                            <td>{{ fornecedor.municipio or '-' }}</td>
-                            <td>
-                                <a href="{{ url_for('fornecedores.editar', id=fornecedor.id) }}" 
-                                   class="btn btn-sm btn-warning">
-                                    <i class="bi bi-pencil"></i> Editar
-                                </a>
-                                {% if current_user.is_admin() %}
-                                <form method="POST" action="{{ url_for('fornecedores.excluir', id=fornecedor.id) }}" 
-                                      style="display: inline;"
-                                      onsubmit="return confirm('Deseja realmente excluir este fornecedor?')">
-                                    <button type="submit" class="btn btn-sm btn-danger">
-                                        <i class="bi bi-trash"></i> Excluir
-                                    </button>
-                                </form>
-                                {% endif %}
-                            </td>
-                        </tr>
+                    <tbody style="font-size: 0.85rem;">
+                        {% if fornecedores %}
+                            {% for fornecedor in fornecedores %}
+                            <tr>
+                                <td><strong>{{ fornecedor.id }}</strong></td>
+                                <td>{{ fornecedor.razao_social }}</td>
+                                <td>{{ fornecedor.nome_fantasia or '-' }}</td>
+                                <td>{{ fornecedor.cnpj or '-' }}</td>
+                                <td>{{ fornecedor.telefone or '-' }}</td>
+                                <td>{{ fornecedor.municipio or '-' }}</td>
+                                <td class="text-center">
+                                    <a href="{{ url_for('fornecedores.editar', id=fornecedor.id) }}" class="btn btn-sm btn-warning" title="Editar" style="padding: 0.2rem 0.4rem;">
+                                        <i class="bi bi-pencil"></i>
+                                    </a>
+                                    {% if current_user.is_admin() %}
+                                    <form method="POST" action="{{ url_for('fornecedores.excluir', id=fornecedor.id) }}" style="display:inline;" onsubmit="return confirm('Deseja realmente excluir este fornecedor?');">
+                                        <button type="submit" class="btn btn-sm btn-danger" title="Excluir" style="padding: 0.2rem 0.4rem;">
+                                            <i class="bi bi-trash"></i>
+                                        </button>
+                                    </form>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% endfor %}
                         {% else %}
-                        <tr>
-                            <td colspan="7" class="text-center">Nenhum fornecedor cadastrado</td>
-                        </tr>
-                        {% endfor %}
+                            <tr>
+                                <td colspan="7" class="text-center text-muted py-3" style="font-size: 0.9rem;">
+                                    <i class="bi bi-inbox" style="font-size:1.5rem;"></i><br>
+                                    Nenhum fornecedor cadastrado
+                                </td>
+                            </tr>
+                        {% endif %}
                     </tbody>
                 </table>
             </div>
         </div>
     </div>
 </div>
+
+<style>
+    .table-sm th, .table-sm td {
+        padding: 0.4rem;
+    }
+    
+    .btn-sm {
+        font-size: 0.8rem;
+        padding: 0.3rem 0.6rem;
+    }
+    
+    @media (max-width: 768px) {
+        h2 {
+            font-size: 1.2rem !important;
+        }
+        .table-sm th, .table-sm td {
+            font-size: 0.75rem !important;
+            padding: 0.3rem !important;
+        }
+    }
+</style>
 {% endblock %}
