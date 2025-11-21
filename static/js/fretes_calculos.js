@@ -20,16 +20,26 @@ function formatarBrasileiro(numero) {
 
 // Função para extrair quantidade corretamente
 function obterQuantidade() {
-    const selectQtd = document.querySelector('#quantidade_id');
-    if (!selectQtd || !selectQtd.selectedOptions[0]) return 0;
+    // Verificar qual modo está ativo
+    const tipoQuantidade = document.querySelector('#quantidade_tipo');
     
-    let dataLitros = selectQtd.selectedOptions[0].getAttribute('data-litros');
-    
-    // CORREÇÃO: Verificar se dataLitros existe antes de fazer replace
-    if (!dataLitros) return 0;
-    
-    const quantidade = parseInt(dataLitros.replace(/[^0-9]/g, '')) || 0;
-    return quantidade;
+    if (tipoQuantidade && tipoQuantidade.value === 'personalizada') {
+        // Modo personalizado - pegar do input manual
+        const quantidadeManual = document.querySelector('#quantidade_manual');
+        return parseInt(quantidadeManual.value) || 0;
+    } else {
+        // Modo padrão - pegar do select
+        const selectQtd = document.querySelector('#quantidade_id');
+        if (!selectQtd || !selectQtd.selectedOptions[0]) return 0;
+        
+        let dataLitros = selectQtd.selectedOptions[0].getAttribute('data-litros');
+        
+        // CORREÇÃO: Verificar se dataLitros existe antes de fazer replace
+        if (!dataLitros) return 0;
+        
+        const quantidade = parseInt(dataLitros.replace(/[^0-9]/g, '')) || 0;
+        return quantidade;
+    }
 }
 
 // Função para obter dados do cliente selecionado
@@ -65,7 +75,6 @@ function obterDadosMotorista() {
         pagaComissao: pagaComissaoRaw === '1' || pagaComissaoRaw === 'True' || pagaComissaoRaw === 'true' || pagaComissaoRaw === true
     };
 }
-
 
 // Função para obter valor por litro da rota (origem + destino)
 function obterValorPorLitroRota() {
@@ -104,13 +113,12 @@ function calcularFrete() {
         const total_nf_compra = quantidade * preco_unitario;
         const valor_total_frete = quantidade * preco_por_litro;
         
-// ===== COMISSÃO MOTORISTA =====
-// Verifica se Cliente paga comissão E se Motorista recebe comissão
-let comissao_motorista = 0;
-if (dadosCliente.pagaComissao && dadosMotorista.pagaComissao) {
-    comissao_motorista = quantidade * 0.01; // ✅ CORRETO - R$ 0,01 por litro
-}
-
+        // ===== COMISSÃO MOTORISTA =====
+        // Verifica se Cliente paga comissão E se Motorista recebe comissão
+        let comissao_motorista = 0;
+        if (dadosCliente.pagaComissao && dadosMotorista.pagaComissao) {
+            comissao_motorista = quantidade * 0.01; // ✅ CORRETO - R$ 0,01 por litro
+        }
         
         // ===== VALOR CTe =====
         // SE cte_integral = True → Valor CTe = Valor Total Frete
@@ -148,12 +156,13 @@ document.addEventListener('DOMContentLoaded', function() {
     // Campos que disparam o cálculo
     const camposCalculo = [
         'quantidade_id', 
+        'quantidade_manual',     // ✅ Quantidade personalizada
         'preco_produto_unitario', 
         'preco_por_litro',
-        'clientes_id',      // Cliente afeta comissões e CTe
-        'motoristas_id',    // Motorista afeta comissão
-        'origem_id',        // Origem afeta valor CTe
-        'destino_id'        // Destino afeta valor CTe
+        'clientes_id',
+        'motoristas_id',
+        'origem_id',
+        'destino_id'
     ];
     
     camposCalculo.forEach(campo => {
