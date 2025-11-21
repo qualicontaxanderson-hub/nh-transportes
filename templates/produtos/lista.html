@@ -1,66 +1,96 @@
-{% extends 'base.html' %}
-{% block title %}Produtos - {{ app_name }}{% endblock %}
+{% extends "base.html" %}
+
+{% block title %}Produtos - NH Transportes{% endblock %}
+
 {% block content %}
 <div class="container-fluid">
-    <nav aria-label="breadcrumb" class="mt-2 mb-3">
-        <ol class="breadcrumb" style="font-size: 0.85rem;">
-            <li class="breadcrumb-item"><a href="{{ url_for('index') }}">Dashboard</a></li>
-            <li class="breadcrumb-item active" aria-current="page">Produtos</li>
-        </ol>
-    </nav>
-
     <div class="d-flex justify-content-between align-items-center mb-3">
-        <h2 class="mb-0" style="color:#1D63A5; font-size: 1.3rem;">
-            <i class="bi bi-cube"></i> Produtos
-        </h2>
-        <a href="{{ url_for('produtos.novo') }}" class="btn btn-success btn-sm">
-            <i class="bi bi-plus-circle"></i> Novo Produto
-        </a>
+        <h2 style="font-size: 1.5rem;"><i class="bi bi-fuel-pump"></i> Produtos</h2>
+        <div>
+            <a href="{{ url_for('produtos.novo') }}" class="btn btn-primary btn-sm">
+                <i class="bi bi-plus-circle"></i> Novo Produto
+            </a>
+        </div>
     </div>
 
-    <div class="card shadow-sm">
-        <div class="card-body" style="padding: 1rem;">
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            {% for category, message in messages %}
+                <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert" style="font-size: 0.85rem;">
+                    {{ message }}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                </div>
+            {% endfor %}
+        {% endif %}
+    {% endwith %}
+
+    <div class="card">
+        <div class="card-header" style="background:#1D63A5;color:white;font-size:0.9rem;font-weight:600;">
+            <i class="bi bi-list"></i> Lista de Produtos
+        </div>
+        <div class="card-body" style="padding: 0.5rem;">
             <div class="table-responsive">
-                <table class="table table-sm table-bordered align-middle">
-                    <thead class="table-light">
+                <table class="table table-hover table-striped table-sm mb-0">
+                    <thead style="background:#4A90E2;color:#000;font-weight:700;font-size:0.85rem;">
                         <tr>
-                            <th style="font-size: 0.85rem;">ID</th>
-                            <th style="font-size: 0.85rem;">Nome</th>
-                            <th style="font-size: 0.85rem;">Descrição</th>
-                            <th style="font-size: 0.85rem;">Ações</th>
+                            <th>ID</th>
+                            <th>Nome</th>
+                            <th class="text-center">Ações</th>
                         </tr>
                     </thead>
-                    <tbody>
-                        {% for produto in produtos %}
-                        <tr>
-                            <td>{{ produto.id }}</td>
-                            <td>{{ produto.nome }}</td>
-                            <td>{{ produto.descricao or '' }}</td>
-                            <td>
-                                <a href="{{ url_for('produtos.editar', id=produto.id) }}" class="btn btn-warning btn-sm" title="Editar">
-                                    <i class="bi bi-pencil"></i>
-                                </a>
-                                <a href="{{ url_for('produtos.excluir', id=produto.id) }}" class="btn btn-danger btn-sm" title="Excluir"
-                                   onclick="return confirm('Tem certeza que deseja excluir este produto? Esta ação não poderá ser desfeita.');">
-                                    <i class="bi bi-trash"></i>
-                                </a>
-                            </td>
-                        </tr>
+                    <tbody style="font-size: 0.85rem;">
+                        {% if produtos %}
+                            {% for produto in produtos %}
+                            <tr>
+                                <td><strong>{{ produto.id }}</strong></td>
+                                <td>{{ produto.nome }}</td>
+                                <td class="text-center">
+                                    <a href="{{ url_for('produtos.editar', id=produto.id) }}" class="btn btn-sm btn-warning" title="Editar" style="padding: 0.2rem 0.4rem;">
+                                        <i class="bi bi-pencil"></i>
+                                    </a>
+                                    <a href="{{ url_for('produtos.excluir', id=produto.id) }}" 
+                                       class="btn btn-sm btn-danger" 
+                                       title="Excluir"
+                                       style="padding: 0.2rem 0.4rem;"
+                                       onclick="return confirm('Deseja realmente excluir este produto?')">
+                                        <i class="bi bi-trash"></i>
+                                    </a>
+                                </td>
+                            </tr>
+                            {% endfor %}
                         {% else %}
-                        <tr>
-                            <td colspan="4" class="text-center">Nenhum produto cadastrado.</td>
-                        </tr>
-                        {% endfor %}
+                            <tr>
+                                <td colspan="3" class="text-center text-muted py-3" style="font-size: 0.9rem;">
+                                    <i class="bi bi-inbox" style="font-size:1.5rem;"></i><br>
+                                    Nenhum produto cadastrado
+                                </td>
+                            </tr>
+                        {% endif %}
                     </tbody>
                 </table>
             </div>
         </div>
     </div>
 </div>
+
 <style>
+    .table-sm th, .table-sm td {
+        padding: 0.4rem;
+    }
+    
     .btn-sm {
-        font-size: 0.85rem;
-        padding: 0.4rem 0.8rem;
+        font-size: 0.8rem;
+        padding: 0.3rem 0.6rem;
+    }
+    
+    @media (max-width: 768px) {
+        h2 {
+            font-size: 1.2rem !important;
+        }
+        .table-sm th, .table-sm td {
+            font-size: 0.75rem !important;
+            padding: 0.3rem !important;
+        }
     }
 </style>
 {% endblock %}
