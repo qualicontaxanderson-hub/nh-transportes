@@ -1,89 +1,71 @@
-/**
- * Funções de cálculo para formulário de fretes
- * Versão corrigida com regras de negócio do sistema
- */
+// ==========================================
+// FUNÇÕES AUXILIARES
+// ==========================================
 
-// Função para converter formato brasileiro (1.234,56) para número (1234.56)
-function converterBrasileiro(valor) {
-    if (!valor || valor === '') return 0;
-    return parseFloat(valor.replace(/\./g, '').replace(',', '.')) || 0;
+function formatarMoeda(valor) {
+    return parseFloat(valor).toFixed(2).replace('.', ',');
 }
 
-// Função para formatar número para formato brasileiro
-function formatarBrasileiro(numero) {
-    if (isNaN(numero)) return '0,00';
-    return numero.toLocaleString('pt-BR', { 
-        minimumFractionDigits: 2, 
-        maximumFractionDigits: 2 
-    });
+function desformatarMoeda(valor) {
+    if (!valor) return 0;
+    return parseFloat(valor.toString().replace(/\./g, '').replace(',', '.')) || 0;
 }
 
-// Função para extrair quantidade corretamente
 function obterQuantidade() {
-    // Verificar qual modo está ativo
-    const tipoQuantidade = document.querySelector('#quantidade_tipo');
+    const tipoQuantidade = document.getElementById('quantidade_tipo');
     
     if (tipoQuantidade && tipoQuantidade.value === 'personalizada') {
-        // Modo personalizado - pegar do input manual
-        const quantidadeManual = document.querySelector('#quantidade_manual');
-        return parseInt(quantidadeManual.value) || 0;
+        const quantidadeManual = document.getElementById('quantidade_manual').value;
+        if (!quantidadeManual) return 0;
+        return parseFloat(quantidadeManual.replace(/\./g, '').replace(',', '.')) || 0;
     } else {
-        // Modo padrão - pegar do select
-        const selectQtd = document.querySelector('#quantidade_id');
-        if (!selectQtd || !selectQtd.selectedOptions[0]) return 0;
+        const quantidadeSelect = document.getElementById('quantidade_id');
+        const selectedOption = quantidadeSelect.options[quantidadeSelect.selectedIndex];
+        const dataLitros = selectedOption ? selectedOption.getAttribute('data-litros') : null;
         
-        let dataLitros = selectQtd.selectedOptions[0].getAttribute('data-litros');
-        
-        // CORREÇÃO: Verificar se dataLitros existe antes de fazer replace
         if (!dataLitros) return 0;
         
-        const quantidade = parseInt(dataLitros.replace(/[^0-9]/g, '')) || 0;
-        return quantidade;
+        return parseFloat(dataLitros.replace(/\./g, '').replace(',', '.')) || 0;
     }
 }
 
-// Função para obter dados do cliente selecionado
 function obterDadosCliente() {
-    const selectCliente = document.querySelector('#clientes_id');
-    if (!selectCliente || !selectCliente.selectedOptions[0]) {
+    const clienteSelect = document.getElementById('clientes_id');
+    const selectedOption = clienteSelect.options[clienteSelect.selectedIndex];
+    
+    if (!selectedOption || !selectedOption.value) {
         return { pagaComissao: false, cteIntegral: false };
     }
     
-    const option = selectCliente.selectedOptions[0];
-    const pagaComissaoRaw = option.getAttribute('data-paga-comissao');
-    const cteIntegralRaw = option.getAttribute('data-cte-integral');
+    const pagaComissaoRaw = selectedOption.getAttribute('data-paga-comissao');
+    const cteIntegralRaw = selectedOption.getAttribute('data-cte-integral');
     
-    return {
-        // ✅ Aceita: 1, "1", True, "True", true, "true"
-        pagaComissao: pagaComissaoRaw === '1' || pagaComissaoRaw === 'True' || pagaComissaoRaw === 'true' || pagaComissaoRaw === true,
-        cteIntegral: cteIntegralRaw === '1' || cteIntegralRaw === 'True' || cteIntegralRaw === 'true' || cteIntegralRaw === true
-    };
+    const pagaComissao = (pagaComissaoRaw === '1' || pagaComissaoRaw === 'True' || pagaComissaoRaw === 'true' || pagaComissaoRaw === true);
+    const cteIntegral = (cteIntegralRaw === '1' || cteIntegralRaw === 'True' || cteIntegralRaw === 'true' || cteIntegralRaw === true);
+    
+    return { pagaComissao, cteIntegral };
 }
 
-// Função para obter dados do motorista selecionado
 function obterDadosMotorista() {
-    const selectMotorista = document.querySelector('#motoristas_id');
-    if (!selectMotorista || !selectMotorista.selectedOptions[0]) {
+    const motoristaSelect = document.getElementById('motoristas_id');
+    const selectedOption = motoristaSelect.options[motoristaSelect.selectedIndex];
+    
+    if (!selectedOption || !selectedOption.value) {
         return { pagaComissao: false };
     }
     
-    const option = selectMotorista.selectedOptions[0];
-    const pagaComissaoRaw = option.getAttribute('data-paga-comissao');
+    const pagaComissaoRaw = selectedOption.getAttribute('data-paga-comissao');
+    const pagaComissao = (pagaComissaoRaw === '1' || pagaComissaoRaw === 'True' || pagaComissaoRaw === 'true' || pagaComissaoRaw === true);
     
-    return {
-        // ✅ Aceita: 1, "1", True, "True", true, "true"
-        pagaComissao: pagaComissaoRaw === '1' || pagaComissaoRaw === 'True' || pagaComissaoRaw === 'true' || pagaComissaoRaw === true
-    };
+    return { pagaComissao };
 }
 
-// Função para obter valor por litro da rota (origem + destino)
 function obterValorPorLitroRota() {
-    const origemId = document.querySelector('#origem_id').value;
-    const destinoId = document.querySelector('#destino_id').value;
+    const origemId = document.getElementById('origem_id').value;
+    const destinoId = document.getElementById('destino_id').value;
     
     if (!origemId || !destinoId) return 0;
     
-    // Buscar no dicionário ROTAS passado pelo backend
     const chave = `${origemId}_${destinoId}`;
     
     if (typeof ROTAS !== 'undefined' && ROTAS[chave]) {
@@ -93,86 +75,135 @@ function obterValorPorLitroRota() {
     return 0;
 }
 
-// Função principal de cálculo
-function calcularFrete() {
-    try {
-        // Obter valores dos campos
-        const quantidade = obterQuantidade();
-        const preco_unitario = converterBrasileiro(
-            document.querySelector('#preco_produto_unitario').value
-        );
-        const preco_por_litro = converterBrasileiro(
-            document.querySelector('#preco_por_litro').value
-        );
-        
-        // Obter dados do cliente e motorista
-        const dadosCliente = obterDadosCliente();
-        const dadosMotorista = obterDadosMotorista();
-        
-        // ===== CÁLCULOS BÁSICOS =====
-        const total_nf_compra = quantidade * preco_unitario;
-        const valor_total_frete = quantidade * preco_por_litro;
-        
-        // ===== COMISSÃO MOTORISTA =====
-        // Verifica se Cliente paga comissão E se Motorista recebe comissão
-        let comissao_motorista = 0;
-        if (dadosCliente.pagaComissao && dadosMotorista.pagaComissao) {
-            comissao_motorista = quantidade * 0.01; // ✅ CORRETO - R$ 0,01 por litro
-        }
-        
-        // ===== VALOR CTe =====
-        // SE cte_integral = True → Valor CTe = Valor Total Frete
-        // SE cte_integral = False → Valor CTe = Quantidade × Valor Por Litro da Rota
-        let valor_cte = 0;
-        if (dadosCliente.cteIntegral) {
-            valor_cte = valor_total_frete;
-        } else {
-            const valorPorLitroRota = obterValorPorLitroRota();
-            valor_cte = quantidade * valorPorLitroRota;
-        }
-        
-        // ===== COMISSÃO CTe =====
-        // SEMPRE 8% do Valor CTe
-        const comissao_cte = valor_cte * 0.08;
-        
-        // ===== LUCRO =====
-        const lucro = valor_total_frete - comissao_motorista - comissao_cte;
-        
-        // ===== ATUALIZAR CAMPOS =====
-        document.querySelector('#total_nf_compra').value = formatarBrasileiro(total_nf_compra);
-        document.querySelector('#valor_total_frete').value = formatarBrasileiro(valor_total_frete);
-        document.querySelector('#comissao_motorista').value = formatarBrasileiro(comissao_motorista);
-        document.querySelector('#valor_cte').value = formatarBrasileiro(valor_cte);
-        document.querySelector('#comissao_cte').value = formatarBrasileiro(comissao_cte);
-        document.querySelector('#lucro').value = formatarBrasileiro(lucro);
-        
-    } catch (err) {
-        console.error('Erro ao calcular frete:', err);
-    }
+// ==========================================
+// CÁLCULOS PRINCIPAIS
+// ==========================================
+
+function calcularTotalNFCompra() {
+    const quantidade = obterQuantidade();
+    const precoUnitario = desformatarMoeda(document.getElementById('preco_produto_unitario').value);
+    const total = quantidade * precoUnitario;
+    document.getElementById('total_nf_compra').value = formatarMoeda(total);
 }
 
-// Inicializar quando o DOM estiver pronto
+function calcularValorTotalFrete() {
+    const quantidade = obterQuantidade();
+    const precoPorLitro = desformatarMoeda(document.getElementById('preco_por_litro').value);
+    const valorTotal = quantidade * precoPorLitro;
+    document.getElementById('valor_total_frete').value = formatarMoeda(valorTotal);
+}
+
+function calcularComissaoMotorista() {
+    const dadosCliente = obterDadosCliente();
+    const dadosMotorista = obterDadosMotorista();
+    
+    const clientePagaComissao = dadosCliente.pagaComissao;
+    const motoristaPagaComissao = dadosMotorista.pagaComissao;
+    
+    if (!clientePagaComissao || !motoristaPagaComissao) {
+        document.getElementById('comissao_motorista').value = formatarMoeda(0);
+        return;
+    }
+    
+    const quantidade = obterQuantidade();
+    const comissao = quantidade * 0.01;
+    
+    document.getElementById('comissao_motorista').value = formatarMoeda(comissao);
+}
+
+function calcularValorCte() {
+    const dadosCliente = obterDadosCliente();
+    const cteIntegral = dadosCliente.cteIntegral;
+    
+    let valorCte = 0;
+    
+    if (cteIntegral) {
+        const valorTotalFrete = desformatarMoeda(document.getElementById('valor_total_frete').value);
+        valorCte = valorTotalFrete;
+    } else {
+        const quantidade = obterQuantidade();
+        const valorPorLitroRota = obterValorPorLitroRota();
+        valorCte = quantidade * valorPorLitroRota;
+    }
+    
+    document.getElementById('valor_cte').value = formatarMoeda(valorCte);
+}
+
+function calcularComissaoCte() {
+    const valorCte = desformatarMoeda(document.getElementById('valor_cte').value);
+    const comissao = valorCte * 0.08;
+    document.getElementById('comissao_cte').value = formatarMoeda(comissao);
+}
+
+function calcularLucro() {
+    const dadosCliente = obterDadosCliente();
+    const clientePagaComissao = dadosCliente.pagaComissao;
+    
+    // ✅ NOVO: Se cliente NÃO paga comissão, lucro = 0
+    if (!clientePagaComissao) {
+        document.getElementById('lucro').value = formatarMoeda(0);
+        return;
+    }
+    
+    const valorTotalFrete = desformatarMoeda(document.getElementById('valor_total_frete').value);
+    const comissaoMotorista = desformatarMoeda(document.getElementById('comissao_motorista').value);
+    const comissaoCte = desformatarMoeda(document.getElementById('comissao_cte').value);
+    
+    const lucro = valorTotalFrete - comissaoMotorista - comissaoCte;
+    
+    document.getElementById('lucro').value = formatarMoeda(lucro);
+}
+
+function calcularTudo() {
+    // ✅ NOVO: Verificar se cliente paga comissão
+    const dadosCliente = obterDadosCliente();
+    const clientePagaComissao = dadosCliente.pagaComissao;
+    
+    const precoPorLitroInput = document.getElementById('preco_por_litro');
+    
+    // Se cliente NÃO paga comissão, bloquear preço por litro
+    if (!clientePagaComissao) {
+        precoPorLitroInput.value = formatarMoeda(0);
+        precoPorLitroInput.readOnly = true;
+        precoPorLitroInput.style.backgroundColor = '#e9ecef';
+    } else {
+        precoPorLitroInput.readOnly = false;
+        precoPorLitroInput.style.backgroundColor = '#ffffff';
+    }
+    
+    calcularTotalNFCompra();
+    calcularValorTotalFrete();
+    calcularComissaoMotorista();
+    calcularValorCte();
+    calcularComissaoCte();
+    calcularLucro();
+}
+
+// ==========================================
+// EVENT LISTENERS
+// ==========================================
+
 document.addEventListener('DOMContentLoaded', function() {
-    // Campos que disparam o cálculo
-    const camposCalculo = [
-        'quantidade_id', 
-        'quantidade_manual',     // ✅ Quantidade personalizada
-        'preco_produto_unitario', 
-        'preco_por_litro',
+    const campos = [
         'clientes_id',
         'motoristas_id',
+        'quantidade_id',
+        'quantidade_manual',
+        'quantidade_tipo',
         'origem_id',
-        'destino_id'
+        'destino_id',
+        'preco_produto_unitario',
+        'preco_por_litro'
     ];
     
-    camposCalculo.forEach(campo => {
-        const elemento = document.querySelector('#' + campo);
-        if (elemento) {
-            elemento.addEventListener('change', calcularFrete);
-            elemento.addEventListener('input', calcularFrete);
+    campos.forEach(function(campoId) {
+        const campo = document.getElementById(campoId);
+        if (campo) {
+            campo.addEventListener('change', calcularTudo);
+            campo.addEventListener('input', calcularTudo);
         }
     });
     
-    // Executar cálculo ao carregar a página (para modo edição)
-    calcularFrete();
+    // ✅ NOVO: Calcular ao carregar a página (para formulário de edição)
+    calcularTudo();
 });
