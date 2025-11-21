@@ -2,59 +2,61 @@
 {% block title %}Novo Veículo - {{ app_name }}{% endblock %}
 {% block content %}
 <div class="container-fluid">
-    <!-- Breadcrumb -->
-    <nav aria-label="breadcrumb">
-        <ol class="breadcrumb">
+    <nav aria-label="breadcrumb" class="mt-2 mb-3">
+        <ol class="breadcrumb" style="font-size: 0.85rem;">
             <li class="breadcrumb-item"><a href="{{ url_for('index') }}">Dashboard</a></li>
             <li class="breadcrumb-item"><a href="{{ url_for('veiculos.lista') }}">Veículos</a></li>
             <li class="breadcrumb-item active" aria-current="page">Novo Veículo</li>
         </ol>
     </nav>
     
-    <h2 class="mb-4" style="color:#1D63A5;"><i class="bi bi-plus-circle"></i> Novo Veículo</h2>
+    <h2 class="mb-3" style="color:#1D63A5; font-size: 1.3rem;"><i class="bi bi-truck-front-fill"></i> Novo Veículo</h2>
     
-    <div class="card">
-        <div class="card-header" style="background:#ff9800;color:white;">
-            <h5 class="mb-0">Cadastrar Veículo</h5>
+    <div class="card shadow-sm">
+        <div class="card-header" style="background:#ff9800;color:white; font-size: 0.95rem; padding: 0.6rem 1rem;">
+            <h5 class="mb-0" style="font-size: 1rem;">Cadastrar Veículo</h5>
         </div>
-        <div class="card-body">
+        <div class="card-body" style="padding: 1rem;">
             <form method="POST">
                 <div class="row">
-                    <div class="col-md-6 mb-3">
-                        <label class="form-label">Caminhão *</label>
-                        <input type="text" id="caminhao" name="caminhao" 
-                               class="form-control"
-                               placeholder="Ex: Mercedes, Scania, Volvo" 
-                               maxlength="20" required>
+                    <div class="col-md-6 mb-2">
+                        <label class="form-label" style="font-size: 0.85rem;">Caminhão *</label>
+                        <input type="text" id="caminhao" name="caminhao" class="form-control form-control-sm" placeholder="Ex: Mercedes, Scania, Volvo" maxlength="20" required>
                     </div>
-                    
-                    <div class="col-md-6 mb-3">
-                        <label class="form-label">Placa *</label>
-                        <input type="text" id="placa" name="placa" 
-                               class="form-control"
-                               placeholder="Ex: ABC-1234" 
-                               maxlength="10" required>
+                    <div class="col-md-6 mb-2">
+                        <label class="form-label" style="font-size: 0.85rem;">Placa *</label>
+                        <input type="text" id="placa" name="placa" class="form-control form-control-sm" placeholder="Ex: ABC-1234 ou ABC1D23" maxlength="10" required>
                     </div>
                 </div>
                 
-                <div class="mb-3">
-                    <label class="form-label">Modelo</label>
-                    <input type="text" id="modelo" name="modelo" 
-                           class="form-control"
-                           placeholder="Ex: Actros 2651, R450" 
-                           maxlength="30">
+                <div class="row">
+                    <div class="col-md-12 mb-2">
+                        <label class="form-label" style="font-size: 0.85rem;">Modelo</label>
+                        <input type="text" id="modelo" name="modelo" class="form-control form-control-sm" placeholder="Ex: Actros 2651, R450, FH 540" maxlength="30">
+                    </div>
                 </div>
                 
-                <div class="mt-4">
-                    <button type="submit" class="btn btn-primary" style="background:#1D63A5;border:none;">
+                <!-- Botões -->
+                <div class="d-flex justify-content-between mt-3">
+                    <a href="{{ url_for('veiculos.lista') }}" class="btn btn-secondary btn-sm">
+                        <i class="bi bi-arrow-left"></i> Voltar
+                    </a>
+                    <button type="submit" class="btn btn-success btn-sm">
                         <i class="bi bi-check-circle"></i> Salvar
                     </button>
-                    <a href="{{ url_for('veiculos.lista') }}" class="btn btn-secondary">
-                        <i class="bi bi-x-circle"></i> Cancelar
-                    </a>
                 </div>
             </form>
         </div>
     </div>
 </div>
+
+<style>
+    .form-control-sm {
+        font-size: 0.85rem;
+    }
+    .btn-sm {
+        font-size: 0.85rem;
+        padding: 0.4rem 0.8rem;
+    }
+</style>
 {% endblock %}
