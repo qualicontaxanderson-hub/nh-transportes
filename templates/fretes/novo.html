@@ -98,14 +98,34 @@
                             {% endfor %}
                         </select>
                     </div>
+                    
+                    <!-- Tipo de Quantidade: Padrão ou Personalizada -->
                     <div class="col-md-6 mb-2">
+                        <label for="quantidade_tipo" class="form-label" style="font-size: 0.85rem;">Tipo de Quantidade *</label>
+                        <select class="form-select form-select-sm" id="quantidade_tipo" name="quantidade_tipo" required>
+                            <option value="padrao">Quantidade Padrão (Listbox)</option>
+                            <option value="personalizada">Quantidade Personalizada (Manual)</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="row">
+                    <!-- Quantidade Padrão (Listbox) -->
+                    <div class="col-md-6 mb-2" id="div_quantidade_padrao">
                         <label for="quantidade_id" class="form-label" style="font-size: 0.85rem;">Quantidade (Litros) *</label>
-                        <select class="form-select form-select-sm" id="quantidade_id" name="quantidade_id" required>
+                        <select class="form-select form-select-sm" id="quantidade_id" name="quantidade_id">
                             <option value="">Selecione a quantidade</option>
                             {% for quantidade in quantidades %}
                             <option value="{{ quantidade.id }}" data-litros="{{ quantidade.descricao }}">{{ quantidade.descricao }}</option>
                             {% endfor %}
                         </select>
+                    </div>
+
+                    <!-- Quantidade Personalizada (Input Manual) -->
+                    <div class="col-md-6 mb-2" id="div_quantidade_personalizada" style="display: none;">
+                        <label for="quantidade_manual" class="form-label" style="font-size: 0.85rem;">Quantidade Manual (Litros) *</label>
+                        <input type="number" class="form-control form-control-sm" id="quantidade_manual" name="quantidade_manual" placeholder="Ex: 9975" min="0" step="1">
+                        <small class="text-muted" style="font-size: 0.75rem;">Use para quantidades não padronizadas (ex: fornecedor "picado")</small>
                     </div>
                 </div>
 
@@ -197,7 +217,7 @@
         font-size: 0.85rem;
         padding: 0.4rem 0.8rem;
     }
-        @media (max-width: 768px) {
+    @media (max-width: 768px) {
         .card-body {
             padding: 0.5rem !important;
         }
@@ -214,4 +234,3 @@ const ROTAS = {{ rotas_dict|tojson|safe }};
 </script>
 <script src="{{ url_for('static', filename='js/fretes_calculos.js') }}"></script>
 {% endblock %}
-
