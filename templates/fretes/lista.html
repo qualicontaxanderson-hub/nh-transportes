@@ -9,17 +9,6 @@
         </a>
     </div>
     
-    {% with messages = get_flashed_messages(with_categories=true) %}
-        {% if messages %}
-            {% for category, message in messages %}
-                <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert" style="font-size: 0.85rem;">
-                    {{ message }}
-                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-                </div>
-            {% endfor %}
-        {% endif %}
-    {% endwith %}
-    
     <!-- Filtros -->
     <div class="card mb-3">
         <div class="card-header" style="background:#4A90E2;color:#000;font-weight:600;font-size:0.9rem;">
