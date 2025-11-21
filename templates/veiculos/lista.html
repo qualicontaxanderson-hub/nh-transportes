@@ -1,84 +1,86 @@
-{% extends 'base.html' %}
-{% block title %}Veículos - {{ app_name }}{% endblock %}
+{% extends "base.html" %}
+
+{% block title %}Veículos - NH Transportes{% endblock %}
+
 {% block content %}
 <div class="container-fluid">
-    <!-- Breadcrumb -->
-    <nav aria-label="breadcrumb">
-        <ol class="breadcrumb">
-            <li class="breadcrumb-item"><a href="{{ url_for('index') }}">Dashboard</a></li>
-            <li class="breadcrumb-item active" aria-current="page">Veículos</li>
-        </ol>
-    </nav>
-    
-    <div class="d-flex justify-content-between align-items-center mb-4">
-        <h2 style="color:#1D63A5;"><i class="bi bi-truck"></i> Veículos</h2>
-        <a href="{{ url_for('veiculos.novo') }}" class="btn btn-primary" style="background:#ff9800;border:none;">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h2 style="font-size: 1.5rem;"><i class="bi bi-truck"></i> Veículos</h2>
+        <a href="{{ url_for('veiculos.novo') }}" class="btn btn-primary btn-sm">
             <i class="bi bi-plus-circle"></i> Novo Veículo
         </a>
     </div>
-    
-    {% with messages = get_flashed_messages(with_categories=true) %}
-        {% if messages %}
-            {% for category, message in messages %}
-                <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
-                    {{ message }}
-                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-                </div>
-            {% endfor %}
-        {% endif %}
-    {% endwith %}
-    
+
+    <!-- Tabela de Veículos -->
     <div class="card">
-        <div class="card-header" style="background:#151515;color:white;">
-            <h5 class="mb-0"><i class="bi bi-list"></i> Lista de Veículos</h5>
+        <div class="card-header" style="background:#1D63A5;color:white;font-size:0.9rem;font-weight:600;">
+            <i class="bi bi-list"></i> Lista de Veículos
         </div>
-        <div class="card-body">
+        <div class="card-body" style="padding: 0.5rem;">
             <div class="table-responsive">
-                <table class="table table-hover">
-                    <thead style="background:#1D63A5;color:white;">
+                <table class="table table-hover table-striped table-sm mb-0">
+                    <thead style="background:#4A90E2;color:#000;font-weight:700;font-size:0.85rem;">
                         <tr>
                             <th>ID</th>
                             <th>Caminhão</th>
                             <th>Placa</th>
                             <th>Modelo</th>
-                            <th>Ações</th>
+                            <th class="text-center">Ações</th>
                         </tr>
                     </thead>
-                    <tbody>
-                        {% for veiculo in veiculos %}
-                        <tr>
-                            <td>{{ veiculo.id }}</td>
-                            <td>{{ veiculo.caminhao }}</td>
-                            <td>{{ veiculo.placa }}</td>
-                            <td>{{ veiculo.modelo or '-' }}</td>
-                            <td>
-                                <a href="{{ url_for('veiculos.editar', id=veiculo.id) }}" 
-                                   class="btn btn-sm btn-warning">
-                                    <i class="bi bi-pencil"></i> Editar
-                                </a>
-                                
-                                <form method="POST" 
-                                      action="{{ url_for('veiculos.excluir', id=veiculo.id) }}"
-                                      onsubmit="return confirm('Tem certeza que deseja excluir este veículo?')"
-                                      style="display: inline;">
-                                    <button type="submit" class="btn btn-sm btn-danger">
-                                        <i class="bi bi-trash"></i> Excluir
-                                    </button>
-                                </form>
-                            </td>
-                        </tr>
+                    <tbody style="font-size: 0.85rem;">
+                        {% if veiculos %}
+                            {% for veiculo in veiculos %}
+                            <tr>
+                                <td><strong>{{ veiculo.id }}</strong></td>
+                                <td>{{ veiculo.caminhao }}</td>
+                                <td>{{ veiculo.placa }}</td>
+                                <td>{{ veiculo.modelo or '-' }}</td>
+                                <td class="text-center">
+                                    <a href="{{ url_for('veiculos.editar', id=veiculo.id) }}" class="btn btn-sm btn-warning" title="Editar" style="padding: 0.2rem 0.4rem;">
+                                        <i class="bi bi-pencil"></i>
+                                    </a>
+                                    <form action="{{ url_for('veiculos.excluir', id=veiculo.id) }}" method="POST" style="display:inline;" onsubmit="return confirm('Deseja realmente excluir este veículo?');">
+                                        <button type="submit" class="btn btn-sm btn-danger" title="Excluir" style="padding: 0.2rem 0.4rem;">
+                                            <i class="bi bi-trash"></i>
+                                        </button>
+                                    </form>
+                                </td>
+                            </tr>
+                            {% endfor %}
                         {% else %}
-                        <tr>
-                            <td colspan="5" class="text-center text-muted py-4">
-                                <i class="bi bi-inbox" style="font-size:2rem;"></i><br>
-                                Nenhum veículo cadastrado
-                            </td>
-                        </tr>
-                        {% endfor %}
+                            <tr>
+                                <td colspan="5" class="text-center text-muted py-3" style="font-size: 0.9rem;">
+                                    <i class="bi bi-inbox" style="font-size:1.5rem;"></i><br>
+                                    Nenhum veículo cadastrado
+                                </td>
+                            </tr>
+                        {% endif %}
                     </tbody>
                 </table>
             </div>
         </div>
     </div>
 </div>
+
+<style>
+    .table-sm th, .table-sm td {
+        padding: 0.4rem;
+    }
+    
+    .btn-sm {
+        font-size: 0.8rem;
+        padding: 0.3rem 0.6rem;
+    }
+    
+    @media (max-width: 768px) {
+        h2 {
+            font-size: 1.2rem !important;
+        }
+        .table-sm th, .table-sm td {
+            font-size: 0.75rem !important;
+            padding: 0.3rem !important;
+        }
+    }
+</style>
 {% endblock %}
