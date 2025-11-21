@@ -126,8 +126,6 @@
 
                 </div>
 
-                <!-- ROTA: ORIGEM E DESTINO (CAMPOS OBRIGATÓRIOS) -->
-
                 <div class="row">
 
                     <div class="col-md-6 mb-2">
@@ -188,8 +186,6 @@
 
                     </div>
 
-                    <!-- ✅ NOVO: TIPO DE QUANTIDADE -->
-
                     <div class="col-md-6 mb-2">
 
                         <label for="quantidade_tipo" class="form-label" style="font-size: 0.85rem;">Tipo de Quantidade *</label>
@@ -206,11 +202,7 @@
 
                 </div>
 
-                <!-- ✅ MODIFICADO: QUANTIDADE COM DUAS OPÇÕES -->
-
                 <div class="row">
-
-                    <!-- Quantidade Padrão (Listbox) -->
 
                     <div class="col-md-12 mb-2" id="div_quantidade_padrao">
 
@@ -231,8 +223,6 @@
                         </select>
 
                     </div>
-
-                    <!-- Quantidade Personalizada (Manual) -->
 
                     <div class="col-md-12 mb-2" id="div_quantidade_personalizada" style="display: none;">
 
@@ -364,7 +354,6 @@
 
                             <option value="Em Trânsito" {% if frete.status == 'Em Trânsito' %}selected{% endif %}>Em Trânsito</option>
 
-                            <option value="Concluído" {% if frete.status == 'Concluído' %}selected{% endif
                             <option value="Concluído" {% if frete.status == 'Concluído' %}selected{% endif %}>Concluído</option>
 
                             <option value="Cancelado" {% if frete.status == 'Cancelado' %}selected{% endif %}>Cancelado</option>
@@ -379,7 +368,7 @@
 
                     <div class="col-md-12 mb-3">
 
-                        <label for="observacoes" class="form-label" style="font-size: 0.85rem;">Observações</label>
+                                                <label for="observacoes" class="form-label" style="font-size: 0.85rem;">Observações</label>
 
                         <textarea class="form-control form-control-sm" id="observacoes" name="observacoes" rows="2"
 
@@ -455,8 +444,6 @@
 
 </style>
 
-<!-- ✅ NOVO: JAVASCRIPT DE ALTERNÂNCIA -->
-
 <script>
 
 document.addEventListener('DOMContentLoaded', function() {
@@ -493,7 +480,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     tipoSelect.addEventListener('change', alternarQuantidade);
 
-    alternarQuantidade(); // Executa ao carregar
+    alternarQuantidade();
 
 });
 
@@ -508,3 +495,4 @@ const ROTAS = {{ rotas_dict|tojson|safe }};
 <script src="{{ url_for('static', filename='js/fretes_calculos.js') }}"></script>
 
 {% endblock %}
+
