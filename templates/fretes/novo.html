@@ -232,5 +232,36 @@
 <script>
 const ROTAS = {{ rotas_dict|tojson|safe }};
 </script>
+
+<!-- Script para alternar entre quantidade padrão e personalizada -->
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const tipoSelect = document.querySelector('#quantidade_tipo');
+    const divPadrao = document.querySelector('#div_quantidade_padrao');
+    const divPersonalizada = document.querySelector('#div_quantidade_personalizada');
+    const quantidadePadraoSelect = document.querySelector('#quantidade_id');
+    const quantidadeManualInput = document.querySelector('#quantidade_manual');
+    
+    tipoSelect.addEventListener('change', function() {
+        if (this.value === 'personalizada') {
+            // Mostrar campo manual, esconder select
+            divPadrao.style.display = 'none';
+            divPersonalizada.style.display = 'block';
+            quantidadePadraoSelect.removeAttribute('required');
+            quantidadeManualInput.setAttribute('required', 'required');
+            quantidadePadraoSelect.value = ''; // Limpar seleção
+        } else {
+            // Mostrar select, esconder campo manual
+            divPadrao.style.display = 'block';
+            divPersonalizada.style.display = 'none';
+            quantidadePadraoSelect.setAttribute('required', 'required');
+            quantidadeManualInput.removeAttribute('required');
+            quantidadeManualInput.value = ''; // Limpar valor
+        }
+    });
+});
+</script>
+
 <script src="{{ url_for('static', filename='js/fretes_calculos.js') }}"></script>
 {% endblock %}
+
