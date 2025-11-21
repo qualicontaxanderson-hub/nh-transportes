@@ -87,10 +87,10 @@
                             </td>
                             <td>
                                 <span class="badge 
-                                  {% if frete.status == 'pago' %}bg-success
-                                  {% elif frete.status == 'em_transito' %}bg-warning text-dark
-                                  {% elif frete.status == 'entregue' %}bg-info text-dark
-                                  {% elif frete.status == 'cancelado' %}bg-danger
+                                  {% if frete.status == 'Concluído' %}bg-success
+                                  {% elif frete.status == 'Em Trânsito' %}bg-warning text-dark
+                                  {% elif frete.status == 'Pendente' %}bg-info text-dark
+                                  {% elif frete.status == 'Cancelado' %}bg-danger
                                   {% else %}bg-secondary{% endif %}" style="font-size: 0.7rem;">
                                     {{ frete.status or 'N/A' }}
                                 </span>
