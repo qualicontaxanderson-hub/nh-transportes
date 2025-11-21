@@ -19,6 +19,15 @@ def novo():
                 # Remove pontos de milhar e substitui vírgula por ponto
                 return float(str(valor).replace('.', '').replace(',', '.'))
             
+            # DETERMINAR QUANTIDADE (Padrão ou Personalizada)
+            quantidade_tipo = request.form.get('quantidade_tipo')
+            if quantidade_tipo == 'personalizada':
+                # Quantidade manual - salvar NULL no quantidade_id
+                quantidade_id_para_salvar = None
+            else:
+                # Quantidade padrão - salvar o ID da quantidade
+                quantidade_id_para_salvar = request.form.get('quantidade_id')
+            
             # Converter os valores antes de inserir
             preco_produto_unitario = converter_para_decimal(request.form.get('preco_produto_unitario'))
             total_nf_compra = converter_para_decimal(request.form.get('total_nf_compra'))
@@ -40,7 +49,7 @@ def novo():
                     request.form.get('fornecedores_id'),
                     request.form.get('motoristas_id'),
                     request.form.get('veiculos_id'),
-                    request.form.get('quantidade_id'),
+                    quantidade_id_para_salvar,  # ✅ USA A VARIÁVEL
                     request.form.get('origem_id'),
                     request.form.get('destino_id'),
                     preco_produto_unitario,
@@ -384,7 +393,6 @@ def editar(id):
             """
         )
         origens = cursor.fetchall()
-        
         cursor.execute(
             """
             SELECT id, nome 
