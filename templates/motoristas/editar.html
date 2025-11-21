@@ -2,64 +2,84 @@
 {% block title %}Editar Motorista - {{ app_name }}{% endblock %}
 {% block content %}
 <div class="container-fluid">
-    <h2 class="mb-4"><i class="bi bi-pencil"></i> Editar Motorista</h2>
-
-    <div class="card">
-        <div class="card-body">
+    <nav aria-label="breadcrumb" class="mt-2 mb-3">
+        <ol class="breadcrumb" style="font-size: 0.85rem;">
+            <li class="breadcrumb-item"><a href="{{ url_for('index') }}">Dashboard</a></li>
+            <li class="breadcrumb-item"><a href="{{ url_for('motoristas.lista') }}">Motoristas</a></li>
+            <li class="breadcrumb-item active" aria-current="page">Editar Motorista</li>
+        </ol>
+    </nav>
+    
+    <h2 class="mb-3" style="color:#1D63A5; font-size: 1.3rem;"><i class="bi bi-pencil"></i> Editar Motorista #{{ motorista.id }}</h2>
+    
+    <div class="card shadow-sm">
+        <div class="card-header bg-warning text-dark" style="font-size: 0.95rem; padding: 0.6rem 1rem;">
+            <h5 class="mb-0" style="font-size: 1rem;">Editar Dados do Motorista</h5>
+        </div>
+        <div class="card-body" style="padding: 1rem;">
             <form method="POST">
+                <!-- Dados Principais -->
                 <div class="row">
-                    <div class="col-md-6 mb-3">
-                        <label class="form-label">Nome *</label>
-                        <input type="text" name="nome" class="form-control" 
-                               value="{{ motorista.nome or '' }}" required>
+                    <div class="col-md-6 mb-2">
+                        <label class="form-label" style="font-size: 0.85rem;">Nome *</label>
+                        <input type="text" name="nome" class="form-control form-control-sm" value="{{ motorista.nome or '' }}" placeholder="Nome completo do motorista" required>
                     </div>
-                    <div class="col-md-6 mb-3">
-                        <label class="form-label">CPF</label>
-                        <input type="text" name="cpf" class="form-control" 
-                               value="{{ motorista.cpf or '' }}">
+                    <div class="col-md-6 mb-2">
+                        <label class="form-label" style="font-size: 0.85rem;">CPF</label>
+                        <input type="text" name="cpf" class="form-control form-control-sm" value="{{ motorista.cpf or '' }}" placeholder="000.000.000-00">
                     </div>
                 </div>
-
+                
+                <!-- Documentos e Contato -->
                 <div class="row">
-                    <div class="col-md-4 mb-3">
-                        <label class="form-label">CNH</label>
-                        <input type="text" name="cnh" class="form-control" 
-                               value="{{ motorista.cnh or '' }}">
+                    <div class="col-md-4 mb-2">
+                        <label class="form-label" style="font-size: 0.85rem;">CNH</label>
+                        <input type="text" name="cnh" class="form-control form-control-sm" value="{{ motorista.cnh or '' }}" placeholder="Número da CNH">
                     </div>
-                    <div class="col-md-4 mb-3">
-                        <label class="form-label">Telefone</label>
-                        <input type="text" name="telefone" class="form-control" 
-                               value="{{ motorista.telefone or '' }}">
+                    <div class="col-md-4 mb-2">
+                        <label class="form-label" style="font-size: 0.85rem;">Telefone</label>
+                        <input type="text" name="telefone" class="form-control form-control-sm" value="{{ motorista.telefone or '' }}" placeholder="(00) 00000-0000">
                     </div>
-                    <div class="col-md-4 mb-3">
-                        <label class="form-label">Paga Comissão?</label>
-                        <div class="form-check form-switch">
-                            <input class="form-check-input" type="checkbox" name="paga_comissao" id="paga_comissao" value="1"
-                                   {% if motorista.paga_comissao %}checked{% endif %}>
-                            <label class="form-check-label" for="paga_comissao">
-                                Sim, este motorista recebe comissão
+                    <div class="col-md-4 mb-2">
+                        <label class="form-label" style="font-size: 0.85rem;">Paga Comissão?</label>
+                        <div class="form-check form-switch" style="padding-top: 0.4rem;">
+                            <input class="form-check-input" type="checkbox" name="paga_comissao" id="paga_comissao" value="1" {% if motorista.paga_comissao %}checked{% endif %}>
+                            <label class="form-check-label" for="paga_comissao" style="font-size: 0.85rem;">
+                                <strong>Sim</strong>, recebe comissão por frete
                             </label>
                         </div>
                     </div>
                 </div>
-
+                
+                <!-- Observações -->
                 <div class="row">
-                    <div class="col-12 mb-3">
-                        <label class="form-label">Observações</label>
-                        <textarea name="observacoes" class="form-control" rows="3">{{ motorista.observacoes or '' }}</textarea>
+                    <div class="col-12 mb-2">
+                        <label class="form-label" style="font-size: 0.85rem;">Observações</label>
+                        <textarea name="observacoes" class="form-control form-control-sm" rows="2" placeholder="Informações adicionais...">{{ motorista.observacoes or '' }}</textarea>
                     </div>
                 </div>
-
-                <div class="mt-3">
-                    <button type="submit" class="btn btn-primary">
-                        <i class="bi bi-check-circle"></i> Salvar
-                    </button>
-                    <a href="{{ url_for('motoristas.lista') }}" class="btn btn-secondary">
-                        <i class="bi bi-x-circle"></i> Cancelar
+                
+                <!-- Botões -->
+                <div class="d-flex justify-content-between mt-3">
+                    <a href="{{ url_for('motoristas.lista') }}" class="btn btn-secondary btn-sm">
+                        <i class="bi bi-arrow-left"></i> Voltar
                     </a>
+                    <button type="submit" class="btn btn-warning btn-sm">
+                        <i class="bi bi-pencil"></i> Atualizar
+                    </button>
                 </div>
             </form>
         </div>
     </div>
 </div>
+
+<style>
+    .form-control-sm, .form-select-sm {
+        font-size: 0.85rem;
+    }
+    .btn-sm {
+        font-size: 0.85rem;
+        padding: 0.4rem 0.8rem;
+    }
+</style>
 {% endblock %}
