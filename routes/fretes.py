@@ -380,11 +380,6 @@ def editar(id):
             """
             SELECT id, caminhao, placa 
             FROM veiculos 
-            ORDER BY
-        cursor.execute(
-            """
-            SELECT id, caminhao, placa 
-            FROM veiculos 
             ORDER BY placa
             """
         )
