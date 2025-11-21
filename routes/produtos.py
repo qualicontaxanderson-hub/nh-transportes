@@ -30,13 +30,12 @@ def lista():
 def novo():
     if request.method == 'POST':
         nome = request.form.get('nome')
-        descricao = request.form.get('descricao')
         try:
             conn = get_db()
             cursor = conn.cursor()
             cursor.execute(
-                "INSERT INTO produto (nome, descricao) VALUES (%s, %s)",
-                (nome, descricao)
+                "INSERT INTO produto (nome) VALUES (%s)",
+                (nome,)
             )
             conn.commit()
             cursor.close()
@@ -53,15 +52,17 @@ def novo():
 def editar(id):
     conn = get_db()
     cursor = conn.cursor(dictionary=True)
+    
     if request.method == 'POST':
         nome = request.form.get('nome')
-        descricao = request.form.get('descricao')
         try:
             cursor.execute(
-                "UPDATE produto SET nome=%s, descricao=%s WHERE id=%s",
-                (nome, descricao, id)
+                "UPDATE produto SET nome=%s WHERE id=%s",
+                (nome, id)
             )
             conn.commit()
+            cursor.close()
+            conn.close()
             flash('Produto atualizado com sucesso!', 'success')
             return redirect(url_for('produtos.lista'))
         except Exception as e:
