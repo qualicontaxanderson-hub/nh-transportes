@@ -32,13 +32,12 @@ function obterQuantidade() {
 function obterDadosCliente() {
     const selectCliente = document.querySelector('#clientes_id');
     if (!selectCliente || !selectCliente.selectedOptions[0]) {
-        return { pagaComissao: false, percentualCte: 0, cteIntegral: false };
+        return { pagaComissao: false, cteIntegral: false };
     }
     
     const option = selectCliente.selectedOptions[0];
     return {
         pagaComissao: option.getAttribute('data-paga-comissao') === 'True',
-        percentualCte: parseFloat(option.getAttribute('data-percentual-cte')) || 0,
         cteIntegral: option.getAttribute('data-cte-integral') === 'True'
     };
 }
@@ -54,6 +53,23 @@ function obterDadosMotorista() {
     return {
         pagaComissao: option.getAttribute('data-paga-comissao') === 'True'
     };
+}
+
+// Função para obter valor por litro da rota (origem + destino)
+function obterValorPorLitroRota() {
+    const origemId = document.querySelector('#origem_id').value;
+    const destinoId = document.querySelector('#destino_id').value;
+    
+    if (!origemId || !destinoId) return 0;
+    
+    // Buscar no dicionário ROTAS passado pelo backend
+    const chave = `${origemId}_${destinoId}`;
+    
+    if (typeof ROTAS !== 'undefined' && ROTAS[chave]) {
+        return parseFloat(ROTAS[chave]);
+    }
+    
+    return 0;
 }
 
 // Função principal de cálculo
@@ -84,18 +100,18 @@ function calcularFrete() {
         }
         
         // ===== VALOR CTe =====
-        // Regra: depende de Cliente + Origem + Destino
-        // Se cteIntegral = True, valor CTe = valor do frete
-        // Se cteIntegral = False, valor CTe = valor do frete * percentualCte
+        // SE cte_integral = True → Valor CTe = Valor Total Frete
+        // SE cte_integral = False → Valor CTe = Quantidade × Valor Por Litro da Rota
         let valor_cte = 0;
         if (dadosCliente.cteIntegral) {
             valor_cte = valor_total_frete;
         } else {
-            valor_cte = valor_total_frete * (dadosCliente.percentualCte / 100);
+            const valorPorLitroRota = obterValorPorLitroRota();
+            valor_cte = quantidade * valorPorLitroRota;
         }
         
         // ===== COMISSÃO CTe =====
-        // 8% do Valor CTe
+        // SEMPRE 8% do Valor CTe
         const comissao_cte = valor_cte * 0.08;
         
         // ===== LUCRO =====
@@ -121,8 +137,10 @@ document.addEventListener('DOMContentLoaded', function() {
         'quantidade_id', 
         'preco_produto_unitario', 
         'preco_por_litro',
-        'clientes_id',      // Cliente afeta comissões
-        'motoristas_id'     // Motorista afeta comissão
+        'clientes_id',      // Cliente afeta comissões e CTe
+        'motoristas_id',    // Motorista afeta comissão
+        'origem_id',        // Origem afeta valor CTe
+        'destino_id'        // Destino afeta valor CTe
     ];
     
     camposCalculo.forEach(campo => {
@@ -133,6 +151,6 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
     
-    // Executar cálculo ao carregar a página
+    // Executar cálculo ao carregar a página (para modo edição)
     calcularFrete();
 });
