@@ -1,58 +1,98 @@
-{% extends 'base.html' %}
-{% block title %}Motoristas - {{ app_name }}{% endblock %}
+{% extends "base.html" %}
+
+{% block title %}Motoristas - NH Transportes{% endblock %}
+
 {% block content %}
 <div class="container-fluid">
-    <div class="d-flex justify-content-between align-items-center mb-4">
-        <h2><i class="bi bi-person-badge"></i> Motoristas</h2>
-        <a href="{{ url_for('motoristas.novo') }}" class="btn btn-primary">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h2 style="font-size: 1.5rem;"><i class="bi bi-person-badge"></i> Motoristas</h2>
+        <a href="{{ url_for('motoristas.novo') }}" class="btn btn-primary btn-sm">
             <i class="bi bi-plus-circle"></i> Novo Motorista
         </a>
     </div>
-    
+
+    <!-- Tabela de Motoristas -->
     <div class="card">
-        <div class="card-body">
+        <div class="card-header" style="background:#1D63A5;color:white;font-size:0.9rem;font-weight:600;">
+            <i class="bi bi-list"></i> Lista de Motoristas
+        </div>
+        <div class="card-body" style="padding: 0.5rem;">
             <div class="table-responsive">
-                <table class="table table-hover">
-                    <thead>
+                <table class="table table-hover table-striped table-sm mb-0">
+                    <thead style="background:#4A90E2;color:#000;font-weight:700;font-size:0.85rem;">
                         <tr>
                             <th>ID</th>
                             <th>Nome</th>
+                            <th>CPF</th>
+                            <th>CNH</th>
+                            <th>Telefone</th>
                             <th>Paga Comissão</th>
-                            <th>Ações</th>
+                            <th class="text-center">Ações</th>
                         </tr>
                     </thead>
-                    <tbody>
-                        {% for motorista in motoristas %}
-                        <tr>
-                            <td>{{ motorista.id }}</td>
-                            <td>{{ motorista.nome }}</td>
-                            <td>
-                                {% if motorista.paga_comissao %}
-                                    <span class="badge bg-success">Sim</span>
-                                {% else %}
-                                    <span class="badge bg-danger">Não</span>
-                                {% endif %}
-                            </td>
-                            <td>
-                                {% if current_user.is_admin() %}
-                                    <a href="{{ url_for('motoristas.editar', id=motorista.id) }}" class="btn btn-sm btn-warning">
+                    <tbody style="font-size: 0.85rem;">
+                        {% if motoristas %}
+                            {% for motorista in motoristas %}
+                            <tr>
+                                <td><strong>{{ motorista.id }}</strong></td>
+                                <td>{{ motorista.nome }}</td>
+                                <td>{{ motorista.cpf or '-' }}</td>
+                                <td>{{ motorista.cnh or '-' }}</td>
+                                <td>{{ motorista.telefone or '-' }}</td>
+                                <td>
+                                    {% if motorista.paga_comissao %}
+                                        <span class="badge bg-success" style="font-size: 0.75rem;">Sim</span>
+                                    {% else %}
+                                        <span class="badge bg-danger" style="font-size: 0.75rem;">Não</span>
+                                    {% endif %}
+                                </td>
+                                <td class="text-center">
+                                    {% if current_user.is_admin() %}
+                                    <a href="{{ url_for('motoristas.editar', id=motorista.id) }}" class="btn btn-sm btn-warning" title="Editar" style="padding: 0.2rem 0.4rem;">
                                         <i class="bi bi-pencil"></i>
                                     </a>
-
-                                    <form action="{{ url_for('motoristas.excluir', id=motorista.id) }}" method="POST" style="display:inline;">
-                                        <button type="submit" class="btn btn-sm btn-danger" 
-                                            onclick="return confirm('Deseja realmente excluir?');">
+                                    <form action="{{ url_for('motoristas.excluir', id=motorista.id) }}" method="POST" style="display:inline;" onsubmit="return confirm('Deseja realmente excluir este motorista?');">
+                                        <button type="submit" class="btn btn-sm btn-danger" title="Excluir" style="padding: 0.2rem 0.4rem;">
                                             <i class="bi bi-trash"></i>
                                         </button>
                                     </form>
-                                {% endif %}
-                            </td>
-                        </tr>
-                        {% endfor %}
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        {% else %}
+                            <tr>
+                                <td colspan="7" class="text-center text-muted py-3" style="font-size: 0.9rem;">
+                                    <i class="bi bi-inbox" style="font-size:1.5rem;"></i><br>
+                                    Nenhum motorista cadastrado
+                                </td>
+                            </tr>
+                        {% endif %}
                     </tbody>
                 </table>
             </div>
         </div>
     </div>
 </div>
+
+<style>
+    .table-sm th, .table-sm td {
+        padding: 0.4rem;
+    }
+    
+    .btn-sm {
+        font-size: 0.8rem;
+        padding: 0.3rem 0.6rem;
+    }
+    
+    @media (max-width: 768px) {
+        h2 {
+            font-size: 1.2rem !important;
+        }
+        .table-sm th, .table-sm td {
+            font-size: 0.75rem !important;
+            padding: 0.3rem !important;
+        }
+    }
+</style>
 {% endblock %}
