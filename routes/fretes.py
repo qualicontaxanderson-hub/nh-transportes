@@ -216,7 +216,7 @@ def lista():
             LEFT JOIN origens o ON f.origem_id = o.id
             LEFT JOIN destinos d ON f.destino_id = d.id
             LEFT JOIN produto p ON f.produto_id = p.id
-            ORDER BY f.id DESC
+            ORDER BY f.data_frete DESC, f.id DESC
             """
         )
         fretes = cursor.fetchall()
