@@ -43,29 +43,6 @@
         </div>
     </div>
     
-    <!-- Resumos: Clientes e Caminhão -->
-    {% if clientes_atendidos %}
-      <div class="alert alert-info py-2 px-3 mb-2">
-        <b>Clientes atendidos:</b>
-        <ul style="margin-bottom:0;">
-        {% for cliente in clientes_atendidos %}
-          <li>{{ cliente.razao_social }} ({{ cliente.qtd_fretes }} fretes)</li>
-        {% endfor %}
-        </ul>
-      </div>
-    {% endif %}
-    {% if quantidade_por_caminhao %}
-      <div class="alert alert-warning py-2 px-3 mb-3">
-        <b>Quantidade transportada por caminhão:</b>
-        <ul style="margin-bottom:0;">
-        {% for reg in quantidade_por_caminhao %}
-          <li>{{ reg.placa }}: {{ reg.total_quantidade|default(0, true) }}</li>
-        {% endfor %}
-        </ul>
-      </div>
-    {% endif %}
-    <!-- /Resumos -->
-
     <!-- Tabela de Fretes -->
     <div class="card">
         <div class="card-header" style="background:#1D63A5;color:white;font-size:0.9rem;font-weight:600;">
@@ -147,6 +124,29 @@
             </div>
         </div>
     </div>
+
+    <!-- Resumos FINAL do relatório -->
+    {% if clientes_atendidos %}
+      <div class="alert alert-info py-2 px-3 mt-4">
+        <b>Clientes atendidos:</b>
+        <ul style="margin-bottom:0;">
+        {% for cliente in clientes_atendidos %}
+          <li>{{ cliente.razao_social }} ({{ cliente.qtd_fretes }} fretes)</li>
+        {% endfor %}
+        </ul>
+      </div>
+    {% endif %}
+    {% if quantidade_por_caminhao %}
+      <div class="alert alert-warning py-2 px-3 mt-3">
+        <b>Quantidade transportada por caminhão:</b>
+        <ul style="margin-bottom:0;">
+        {% for reg in quantidade_por_caminhao %}
+          <li>{{ reg.placa }}: {{ reg.total_quantidade|default(0, true) }}</li>
+        {% endfor %}
+        </ul>
+      </div>
+    {% endif %}
+    <!-- /Resumos final -->
 </div>
 
 <style>
