@@ -28,6 +28,11 @@
                     <label class="form-label" style="font-size: 0.85rem;">Cliente</label>
                     <select name="cliente_id" class="form-select form-select-sm">
                         <option value="">Todos</option>
+                        {% for cliente in lista_clientes %}
+                          <option value="{{ cliente.id }}" {% if cliente_id and (cliente_id|string)==(cliente.id|string) %}selected{% endif %}>
+                            {{ cliente.razao_social }}
+                          </option>
+                        {% endfor %}
                     </select>
                 </div>
                 <div class="col-md-2 d-flex align-items-end">
@@ -38,6 +43,29 @@
         </div>
     </div>
     
+    <!-- Resumos: Clientes e Caminhão -->
+    {% if clientes_atendidos %}
+      <div class="alert alert-info py-2 px-3 mb-2">
+        <b>Clientes atendidos:</b>
+        <ul style="margin-bottom:0;">
+        {% for cliente in clientes_atendidos %}
+          <li>{{ cliente.razao_social }} ({{ cliente.qtd_fretes }} fretes)</li>
+        {% endfor %}
+        </ul>
+      </div>
+    {% endif %}
+    {% if quantidade_por_caminhao %}
+      <div class="alert alert-warning py-2 px-3 mb-3">
+        <b>Quantidade transportada por caminhão:</b>
+        <ul style="margin-bottom:0;">
+        {% for reg in quantidade_por_caminhao %}
+          <li>{{ reg.placa }}: {{ reg.total_quantidade|default(0, true) }}</li>
+        {% endfor %}
+        </ul>
+      </div>
+    {% endif %}
+    <!-- /Resumos -->
+
     <!-- Tabela de Fretes -->
     <div class="card">
         <div class="card-header" style="background:#1D63A5;color:white;font-size:0.9rem;font-weight:600;">
@@ -125,12 +153,10 @@
     .table-sm th, .table-sm td {
         padding: 0.4rem;
     }
-    
     .btn-sm {
         font-size: 0.8rem;
         padding: 0.3rem 0.6rem;
     }
-    
     @media (max-width: 768px) {
         h2 {
             font-size: 1.2rem !important;
