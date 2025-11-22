@@ -11,24 +11,16 @@ def novo():
         try:
             conn = get_db_connection()
             cursor = conn.cursor()
-            
             # FUNÇÃO PARA CONVERTER VALORES
             def converter_para_decimal(valor):
                 if not valor:
                     return 0
-                # Remove pontos de milhar e substitui vírgula por ponto
                 return float(str(valor).replace('.', '').replace(',', '.'))
-            
-            # DETERMINAR QUANTIDADE (Padrão ou Personalizada)
             quantidade_tipo = request.form.get('quantidade_tipo')
             if quantidade_tipo == 'personalizada':
-                # Quantidade manual - salvar NULL no quantidade_id
                 quantidade_id_para_salvar = None
             else:
-                # Quantidade padrão - salvar o ID da quantidade
                 quantidade_id_para_salvar = request.form.get('quantidade_id')
-            
-            # Converter os valores antes de inserir
             preco_produto_unitario = converter_para_decimal(request.form.get('preco_produto_unitario'))
             total_nf_compra = converter_para_decimal(request.form.get('total_nf_compra'))
             preco_por_litro = converter_para_decimal(request.form.get('preco_por_litro'))
@@ -37,7 +29,6 @@ def novo():
             valor_cte = converter_para_decimal(request.form.get('valor_cte'))
             comissao_cte = converter_para_decimal(request.form.get('comissao_cte'))
             lucro = converter_para_decimal(request.form.get('lucro'))
-            
             cursor.execute(
                 """
                 INSERT INTO fretes (clientes_id, produto_id, fornecedores_id, motoristas_id, veiculos_id, quantidade_id, origem_id, destino_id, preco_produto_unitario, total_nf_compra, preco_por_litro, valor_total_frete, comissao_motorista, valor_cte, comissao_cte, lucro, data_frete, status, observacoes)
@@ -74,12 +65,9 @@ def novo():
             print(f'Erro ao cadastrar frete: {e}')
             flash(f'Erro ao cadastrar frete: {str(e)}', 'danger')
             return redirect(url_for('fretes.novo'))
-    
-    # GET - Carrega dados para formulário
     try:
         conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)
-        
         cursor.execute(
             """
             SELECT id, razao_social, paga_comissao, percentual_cte, cte_integral
@@ -88,7 +76,6 @@ def novo():
             """
         )
         clientes = cursor.fetchall()
-        
         cursor.execute(
             """
             SELECT id, nome 
@@ -97,7 +84,6 @@ def novo():
             """
         )
         produtos = cursor.fetchall()
-        
         cursor.execute(
             """
             SELECT id, razao_social 
@@ -106,7 +92,6 @@ def novo():
             """
         )
         fornecedores = cursor.fetchall()
-        
         cursor.execute(
             """
             SELECT id, nome, paga_comissao 
@@ -115,7 +100,6 @@ def novo():
             """
         )
         motoristas = cursor.fetchall()
-        
         cursor.execute(
             """
             SELECT id, caminhao, placa 
@@ -124,7 +108,6 @@ def novo():
             """
         )
         veiculos = cursor.fetchall()
-        
         cursor.execute(
             """
             SELECT id, valor, descricao 
@@ -133,7 +116,6 @@ def novo():
             """
         )
         quantidades = cursor.fetchall()
-        
         cursor.execute(
             """
             SELECT id, nome 
@@ -142,7 +124,6 @@ def novo():
             """
         )
         origens = cursor.fetchall()
-        
         cursor.execute(
             """
             SELECT id, nome 
@@ -151,7 +132,6 @@ def novo():
             """
         )
         destinos = cursor.fetchall()
-        
         cursor.execute(
             """
             SELECT id, origem_id, destino_id, valor_por_litro 
@@ -160,16 +140,12 @@ def novo():
             """
         )
         rotas = cursor.fetchall()
-        
-        # Criar dicionário de rotas para JavaScript
         rotas_dict = {}
         for rota in rotas:
             chave = f"{rota['origem_id']}_{rota['destino_id']}"
             rotas_dict[chave] = rota['valor_por_litro']
-        
         cursor.close()
         conn.close()
-        
         return render_template(
             'fretes/novo.html',
             clientes=clientes,
@@ -183,7 +159,6 @@ def novo():
             rotas=rotas,
             rotas_dict=rotas_dict
         )
-    
     except Exception as e:
         print(f'Erro ao carregar formulário: {e}')
         flash(f'Erro ao carregar formulário: {str(e)}', 'danger')
@@ -195,9 +170,10 @@ def lista():
     try:
         conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)
-        
-        cursor.execute(
-            """
+        data_inicio = request.args.get('data_inicio')
+        data_fim = request.args.get('data_fim')
+        cliente_id = request.args.get('cliente_id')
+        base_sql = """
             SELECT f.*, 
                    c.razao_social AS cliente_nome, 
                    fo.razao_social AS fornecedor_nome, 
@@ -216,15 +192,59 @@ def lista():
             LEFT JOIN origens o ON f.origem_id = o.id
             LEFT JOIN destinos d ON f.destino_id = d.id
             LEFT JOIN produto p ON f.produto_id = p.id
-            ORDER BY f.data_frete DESC, f.id DESC
-            """
-        )
+        """
+        filtros = []
+        parametros = []
+        if data_inicio:
+            filtros.append("f.data_frete >= %s")
+            parametros.append(data_inicio)
+        if data_fim:
+            filtros.append("f.data_frete <= %s")
+            parametros.append(data_fim)
+        if cliente_id:
+            filtros.append("f.clientes_id = %s")
+            parametros.append(cliente_id)
+        if filtros:
+            base_sql += " WHERE " + " AND ".join(filtros)
+        base_sql += " ORDER BY f.data_frete DESC, f.id DESC"
+        cursor.execute(base_sql, tuple(parametros))
         fretes = cursor.fetchall()
-        
+
+        # Clientes atendidos
+        sql_clientes = """
+            SELECT c.id, c.razao_social, COUNT(f.id) AS qtd_fretes
+            FROM fretes f
+            JOIN clientes c ON f.clientes_id = c.id
+        """
+        if filtros:
+            sql_clientes += " WHERE " + " AND ".join(filtros)
+        sql_clientes += " GROUP BY c.id, c.razao_social ORDER BY c.razao_social"
+        cursor.execute(sql_clientes, tuple(parametros))
+        clientes_atendidos = cursor.fetchall()
+
+        # Quantidade transportada por caminhão
+        sql_caminhao = """
+            SELECT v.id, v.placa, SUM(f.quantidade_manual) AS total_quantidade
+            FROM fretes f
+            JOIN veiculos v ON f.veiculos_id = v.id
+        """
+        if filtros:
+            sql_caminhao += " WHERE " + " AND ".join(filtros)
+        sql_caminhao += " GROUP BY v.id, v.placa ORDER BY v.placa"
+        cursor.execute(sql_caminhao, tuple(parametros))
+        quantidade_por_caminhao = cursor.fetchall()
+
         cursor.close()
         conn.close()
-        
-        return render_template('fretes/lista.html', fretes=fretes)
+        return render_template(
+            'fretes/lista.html',
+            fretes=fretes,
+            data_inicio=data_inicio,
+            data_fim=data_fim,
+            cliente_id=cliente_id,
+            clientes_atendidos=clientes_atendidos,
+            quantidade_por_caminhao=quantidade_por_caminhao
+        )
     except Exception as e:
         print(f'Erro ao carregar lista de fretes: {e}')
         flash(f'Erro ao carregar lista de fretes: {str(e)}', 'danger')
@@ -243,7 +263,6 @@ def deletar(id):
         flash('Frete excluído com sucesso!', 'success')
     except Exception as e:
         flash(f'Erro ao excluir frete: {str(e)}', 'danger')
-    
     return redirect(url_for('fretes.lista'))
 
 @bp.route('/editar/<int:id>', methods=['GET', 'POST'])
@@ -252,9 +271,7 @@ def editar(id):
     try:
         conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)
-        
         if request.method == 'POST':
-            # ===== DEBUG: VERIFICAR DADOS RECEBIDOS =====
             print("=" * 80)
             print("DEBUG - DADOS RECEBIDOS DO FORMULARIO:")
             print(f"  origem_id: {request.form.get('origem_id')}")
@@ -262,32 +279,21 @@ def editar(id):
             print(f"  produto_id: {request.form.get('produto_id')}")
             print(f"  clientes_id: {request.form.get('clientes_id')}")
             print("=" * 80)
-            
-            # Validar campos obrigatórios
             origem_id = request.form.get('origem_id')
             destino_id = request.form.get('destino_id')
-            
             if not destino_id or destino_id == '':
                 flash('ERRO: Destino é obrigatório!', 'danger')
                 print("ERRO: destino_id está vazio ou None")
                 return redirect(url_for('fretes.editar', id=id))
-            
-            # FUNÇÃO PARA CONVERTER VALORES
             def converter_para_decimal(valor):
                 if not valor:
                     return 0
                 return float(str(valor).replace('.', '').replace(',', '.'))
-            
-            # ✅ DETERMINAR QUANTIDADE (Padrão ou Personalizada)
             quantidade_tipo = request.form.get('quantidade_tipo', 'padrao')
             if quantidade_tipo == 'personalizada':
-                # Quantidade manual - salvar NULL no quantidade_id
                 quantidade_id_para_salvar = None
             else:
-                # Quantidade padrão - salvar o ID da quantidade
                 quantidade_id_para_salvar = request.form.get('quantidade_id')
-            
-            # Converter os valores antes de atualizar
             preco_produto_unitario = converter_para_decimal(request.form.get('preco_produto_unitario'))
             total_nf_compra = converter_para_decimal(request.form.get('total_nf_compra'))
             preco_por_litro = converter_para_decimal(request.form.get('preco_por_litro'))
@@ -296,7 +302,6 @@ def editar(id):
             valor_cte = converter_para_decimal(request.form.get('valor_cte'))
             comissao_cte = converter_para_decimal(request.form.get('comissao_cte'))
             lucro = converter_para_decimal(request.form.get('lucro'))
-            
             cursor.execute(
                 """
                 UPDATE fretes 
@@ -335,11 +340,8 @@ def editar(id):
             conn.close()
             flash('Frete atualizado com sucesso!', 'success')
             return redirect(url_for('fretes.lista'))
-        
-        # GET - Carrega dados para edição
         cursor.execute("SELECT * FROM fretes WHERE id = %s", (id,))
         frete = cursor.fetchone()
-        
         cursor.execute(
             """
             SELECT id, razao_social, paga_comissao, percentual_cte, cte_integral
@@ -348,7 +350,6 @@ def editar(id):
             """
         )
         clientes = cursor.fetchall()
-        
         cursor.execute(
             """
             SELECT id, nome 
@@ -357,7 +358,6 @@ def editar(id):
             """
         )
         produtos = cursor.fetchall()
-        
         cursor.execute(
             """
             SELECT id, razao_social 
@@ -366,7 +366,6 @@ def editar(id):
             """
         )
         fornecedores = cursor.fetchall()
-        
         cursor.execute(
             """
             SELECT id, nome, paga_comissao 
@@ -375,7 +374,6 @@ def editar(id):
             """
         )
         motoristas = cursor.fetchall()
-        
         cursor.execute(
             """
             SELECT id, caminhao, placa 
@@ -384,7 +382,6 @@ def editar(id):
             """
         )
         veiculos = cursor.fetchall()
-        
         cursor.execute(
             """
             SELECT id, valor, descricao 
@@ -393,7 +390,6 @@ def editar(id):
             """
         )
         quantidades = cursor.fetchall()
-        
         cursor.execute(
             """
             SELECT id, nome 
@@ -402,7 +398,6 @@ def editar(id):
             """
         )
         origens = cursor.fetchall()
-        
         cursor.execute(
             """
             SELECT id, nome 
@@ -411,7 +406,6 @@ def editar(id):
             """
         )
         destinos = cursor.fetchall()
-        
         cursor.execute(
             """
             SELECT id, origem_id, destino_id, valor_por_litro 
@@ -420,16 +414,12 @@ def editar(id):
             """
         )
         rotas = cursor.fetchall()
-        
-        # Criar dicionário de rotas para JavaScript
         rotas_dict = {}
         for rota in rotas:
             chave = f"{rota['origem_id']}_{rota['destino_id']}"
             rotas_dict[chave] = rota['valor_por_litro']
-        
         cursor.close()
         conn.close()
-        
         return render_template(
             'fretes/editar.html',
             frete=frete,
@@ -444,7 +434,6 @@ def editar(id):
             rotas=rotas,
             rotas_dict=rotas_dict
         )
-    
     except Exception as e:
         print(f'Erro ao editar frete: {e}')
         flash(f'Erro ao editar frete: {str(e)}', 'danger')
