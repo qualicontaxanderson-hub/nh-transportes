@@ -11,7 +11,6 @@ def novo():
         try:
             conn = get_db_connection()
             cursor = conn.cursor()
-            # FUNÇÃO PARA CONVERTER VALORES
             def converter_para_decimal(valor):
                 if not valor:
                     return 0
@@ -222,17 +221,22 @@ def lista():
         cursor.execute(sql_clientes, tuple(parametros))
         clientes_atendidos = cursor.fetchall()
 
-        # Quantidade transportada por caminhão
+        # Quantidade transportada por caminhão (corrigido: soma o campo correto da tabela quantidades)
         sql_caminhao = """
-            SELECT v.id, v.placa, SUM(f.quantidade_manual) AS total_quantidade
+            SELECT v.id, v.placa, SUM(q.valor) AS total_quantidade
             FROM fretes f
             JOIN veiculos v ON f.veiculos_id = v.id
+            JOIN quantidades q ON f.quantidade_id = q.id
         """
         if filtros:
             sql_caminhao += " WHERE " + " AND ".join(filtros)
         sql_caminhao += " GROUP BY v.id, v.placa ORDER BY v.placa"
         cursor.execute(sql_caminhao, tuple(parametros))
         quantidade_por_caminhao = cursor.fetchall()
+
+        # Para o filtro de clientes
+        cursor.execute("SELECT id, razao_social FROM clientes ORDER BY razao_social")
+        lista_clientes = cursor.fetchall()
 
         cursor.close()
         conn.close()
@@ -243,7 +247,8 @@ def lista():
             data_fim=data_fim,
             cliente_id=cliente_id,
             clientes_atendidos=clientes_atendidos,
-            quantidade_por_caminhao=quantidade_por_caminhao
+            quantidade_por_caminhao=quantidade_por_caminhao,
+            lista_clientes=lista_clientes
         )
     except Exception as e:
         print(f'Erro ao carregar lista de fretes: {e}')
