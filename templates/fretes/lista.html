@@ -141,7 +141,7 @@
         <b>Quantidade transportada por caminhão:</b>
         <ul style="margin-bottom:0;">
         {% for reg in quantidade_por_caminhao %}
-          <li>{{ reg.placa }}: {{ reg.total_quantidade|default(0, true) }}</li>
+          <li>{{ reg.placa }}: {{ "{:,.0f}".format(reg.total_quantidade|float).replace(",",".") }}</li>
         {% endfor %}
         </ul>
       </div>
