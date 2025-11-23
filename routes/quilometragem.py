@@ -33,7 +33,7 @@ def lista():
     data_inicio = request.args.get('data_inicio', '')
     data_fim = request.args.get('data_fim', '')
     
-    # Query base com joins
+    # Query principal: lista de registros
     query = """
         SELECT 
             q.id,
@@ -52,7 +52,6 @@ def lista():
         LEFT JOIN motoristas m ON q.motoristas_id = m.id
         WHERE 1=1
     """
-    
     params = []
     if veiculos_id:
         query += " AND q.veiculos_id = %s"
@@ -67,7 +66,7 @@ def lista():
         query += " AND q.data <= %s"
         params.append(data_fim)
     query += " ORDER BY q.data DESC, q.id DESC"
-    
+
     cursor.execute(query, params)
     quilometragens = cursor.fetchall()
     
@@ -76,20 +75,53 @@ def lista():
     veiculos = cursor.fetchall()
     cursor.execute("SELECT id, nome FROM motoristas ORDER BY nome")
     motoristas = cursor.fetchall()
+
+    # BLOCO DO RESUMO POR VEÍCULO:
+    resumo_query = """
+        SELECT 
+            v.placa,
+            v.modelo,
+            SUM(q.litros_abastecidos) as total_litros,
+            SUM(q.km_rodados) as total_km
+        FROM quilometragem q
+        LEFT JOIN veiculos v ON q.veiculos_id = v.id
+        WHERE 1=1
+    """
+    resumo_params = []
+    if veiculos_id:
+        resumo_query += " AND q.veiculos_id = %s"
+        resumo_params.append(veiculos_id)
+    if motoristas_id:
+        resumo_query += " AND q.motoristas_id = %s"
+        resumo_params.append(motoristas_id)
+    if data_inicio:
+        resumo_query += " AND q.data >= %s"
+        resumo_params.append(data_inicio)
+    if data_fim:
+        resumo_query += " AND q.data <= %s"
+        resumo_params.append(data_fim)
+    resumo_query += " GROUP BY v.placa, v.modelo ORDER BY v.placa"
+    cursor.execute(resumo_query, resumo_params)
+    resumo_veiculos = cursor.fetchall()
     
+    print('DEBUG resumo_veiculos', resumo_veiculos)  # <-- Debug temporário
+
     cursor.close()
     conn.close()
     
-    return render_template('quilometragem/lista.html', 
-                         quilometragens=quilometragens,
-                         veiculos=veiculos,
-                         motoristas=motoristas,
-                         filtros={
-                             'veiculos_id': veiculos_id,
-                             'motoristas_id': motoristas_id,
-                             'data_inicio': data_inicio,
-                             'data_fim': data_fim
-                         })
+    return render_template(
+        'quilometragem/lista.html',
+        quilometragens=quilometragens,
+        veiculos=veiculos,
+        motoristas=motoristas,
+        filtros={
+            'veiculos_id': veiculos_id,
+            'motoristas_id': motoristas_id,
+            'data_inicio': data_inicio,
+            'data_fim': data_fim
+        },
+        resumo_veiculos=resumo_veiculos
+    )
 
 @bp.route('/novo', methods=['GET', 'POST'])
 @login_required
@@ -230,5 +262,4 @@ def excluir(id):
     except Exception as e:
         flash(f'Erro ao excluir quilometragem: {str(e)}', 'danger')
     
-    return redirect(url_for('quilometragem.lista')
-)
+    return redirect(url_for('quilometragem.lista'))
