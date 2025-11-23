@@ -21,10 +21,10 @@
                 <div class="row g-3">
                     <div class="col-md-3">
                         <label class="form-label">Veículo</label>
-                        <select name="veiculo_id" class="form-select">
+                        <select name="veiculos_id" class="form-select">
                             <option value="">Todos</option>
                             {% for veiculo in veiculos %}
-                            <option value="{{ veiculo.id }}" {% if filtros.veiculo_id == veiculo.id|string %}selected{% endif %}>
+                            <option value="{{ veiculo.id }}" {% if filtros.veiculos_id == veiculo.id|string %}selected{% endif %}>
                                 {{ veiculo.placa }} - {{ veiculo.modelo }}
                             </option>
                             {% endfor %}
@@ -33,10 +33,10 @@
                     
                     <div class="col-md-3">
                         <label class="form-label">Motorista</label>
-                        <select name="motorista_id" class="form-select">
+                        <select name="motoristas_id" class="form-select">
                             <option value="">Todos</option>
                             {% for motorista in motoristas %}
-                            <option value="{{ motorista.id }}" {% if filtros.motorista_id == motorista.id|string %}selected{% endif %}>
+                            <option value="{{ motorista.id }}" {% if filtros.motoristas_id == motorista.id|string %}selected{% endif %}>
                                 {{ motorista.nome }}
                             </option>
                             {% endfor %}
@@ -91,15 +91,15 @@
                                     <strong>{{ q.placa }}</strong><br>
                                     <small class="text-muted">{{ q.modelo }}</small>
                                 </td>
-                                <td>{{ q.motorista_nome }}</td>
-                                <td>{{ "{:,.0f}".format(q.km_inicial).replace(',', '.') }}</td>
-                                <td>{{ "{:,.0f}".format(q.km_final).replace(',', '.') }}</td>
-                                <td><strong>{{ "{:,.0f}".format(q.km_rodados).replace(',', '.') }}</strong></td>
-                                <td>{{ "{:,.2f}".format(q.litros_abastecidos).replace(',', 'X').replace('.', ',').replace('X', '.') }}</td>
-                                <td>R$ {{ "{:,.2f}".format(q.valor_combustivel).replace(',', 'X').replace('.', ',').replace('X', '.') }}</td>
+                                <td>{{ q.motorista_nome if q.motorista_nome else '-' }}</td>
+                                <td>{{ "{:,.0f}".format(q.km_inicial or 0).replace(',', '.') }}</td>
+                                <td>{{ "{:,.0f}".format(q.km_final or 0).replace(',', '.') }}</td>
+                                <td><strong>{{ "{:,.0f}".format(q.km_rodados or 0).replace(',', '.') }}</strong></td>
+                                <td>{{ "{:,.2f}".format(q.litros_abastecidos or 0).replace(',', 'X').replace('.', ',').replace('X', '.') }}</td>
+                                <td>R$ {{ "{:,.2f}".format(q.valor_combustivel or 0).replace(',', 'X').replace('.', ',').replace('X', '.') }}</td>
                                 <td>
-                                    {% if q.litros_abastecidos > 0 %}
-                                        <span class="badge bg-info">{{ "{:.2f}".format(q.km_rodados / q.litros_abastecidos).replace('.', ',') }} km/l</span>
+                                    {% if q.litros_abastecidos and q.litros_abastecidos > 0 and q.km_rodados is not none %}
+                                        <span class="badge bg-info">{{ "{:.2f}".format((q.km_rodados or 0) / q.litros_abastecidos).replace('.', ',') }} km/l</span>
                                     {% else %}
                                         -
                                     {% endif %}
@@ -136,11 +136,9 @@
         font-size: 0.9rem;
         vertical-align: middle;
     }
-    
     .badge {
         font-size: 0.85rem;
     }
-    
     @media (max-width: 768px) {
         .table th, .table td {
             font-size: 0.8rem;
