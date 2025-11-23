@@ -1,99 +1,64 @@
-@bp.route('/')
-@login_required
-def lista():
-    conn = get_db()
-    cursor = conn.cursor(dictionary=True)
-    
-    # Filtros
-    veiculos_id = request.args.get('veiculos_id', '')
-    motoristas_id = request.args.get('motoristas_id', '')
-    data_inicio = request.args.get('data_inicio', '')
-    data_fim = request.args.get('data_fim', '')
-    
-    # Query principal: lista de registros
-    query = """
-        SELECT 
-            q.id,
-            q.data,
-            q.km_inicial,
-            q.km_final,
-            q.km_rodados,
-            q.valor_combustivel,
-            q.litros_abastecidos,
-            q.observacoes,
-            v.placa,
-            v.modelo,
-            m.nome as motorista_nome
-        FROM quilometragem q
-        LEFT JOIN veiculos v ON q.veiculos_id = v.id
-        LEFT JOIN motoristas m ON q.motoristas_id = m.id
-        WHERE 1=1
-    """
-    params = []
-    if veiculos_id:
-        query += " AND q.veiculos_id = %s"
-        params.append(veiculos_id)
-    if motoristas_id:
-        query += " AND q.motoristas_id = %s"
-        params.append(motoristas_id)
-    if data_inicio:
-        query += " AND q.data >= %s"
-        params.append(data_inicio)
-    if data_fim:
-        query += " AND q.data <= %s"
-        params.append(data_fim)
-    query += " ORDER BY q.data DESC, q.id DESC"
-
-    cursor.execute(query, params)
-    quilometragens = cursor.fetchall()
-    
-    # Buscar veículos e motoristas para os filtros
-    cursor.execute("SELECT id, placa, modelo FROM veiculos WHERE ativo = 1 ORDER BY placa")
-    veiculos = cursor.fetchall()
-    cursor.execute("SELECT id, nome FROM motoristas ORDER BY nome")
-    motoristas = cursor.fetchall()
-
-    # BLOCO DO RESUMO POR VEÍCULO:
-    resumo_query = """
-        SELECT 
-            v.placa,
-            v.modelo,
-            SUM(q.litros_abastecidos) as total_litros,
-            SUM(q.km_rodados) as total_km
-        FROM quilometragem q
-        LEFT JOIN veiculos v ON q.veiculos_id = v.id
-        WHERE 1=1
-    """
-    resumo_params = []
-    if veiculos_id:
-        resumo_query += " AND q.veiculos_id = %s"
-        resumo_params.append(veiculos_id)
-    if motoristas_id:
-        resumo_query += " AND q.motoristas_id = %s"
-        resumo_params.append(motoristas_id)
-    if data_inicio:
-        resumo_query += " AND q.data >= %s"
-        resumo_params.append(data_inicio)
-    if data_fim:
-        resumo_query += " AND q.data <= %s"
-        resumo_params.append(data_fim)
-    resumo_query += " GROUP BY v.placa, v.modelo ORDER BY v.placa"
-    cursor.execute(resumo_query, resumo_params)
-    resumo_veiculos = cursor.fetchall()
-
-    cursor.close()
-    conn.close()
-    
-    return render_template(
-        'quilometragem/lista.html',
-        quilometragens=quilometragens,
-        veiculos=veiculos,
-        motoristas=motoristas,
-        filtros={
-            'veiculos_id': veiculos_id,
-            'motoristas_id': motoristas_id,
-            'data_inicio': data_inicio,
-            'data_fim': data_fim
-        },
-        resumo_veiculos=resumo_veiculos     # <==== ESSENCIAL!
-    )
+{% extends 'base.html' %}
+{% block title %}Lançamentos - Quilometragem{% endblock %}
+{% block content %}
+<h2>Lançamentos de Quilometragem</h2>
+<table class="table table-sm">
+    <thead>
+        <tr>
+            <th>ID</th>
+            <th>Data</th>
+            <th>Placa</th>
+            <th>Modelo</th>
+            <th>Motorista</th>
+            <th>KM Inicial</th>
+            <th>KM Final</th>
+            <th>KM Rodados</th>
+            <th>Litros</th>
+            <th>Valor Combustível</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for reg in quilometragens %}
+        <tr>
+            <td>{{ reg.id }}</td>
+            <td>{{ reg.data }}</td>
+            <td>{{ reg.placa }}</td>
+            <td>{{ reg.modelo }}</td>
+            <td>{{ reg.motorista_nome }}</td>
+            <td>{{ reg.km_inicial }}</td>
+            <td>{{ reg.km_final }}</td>
+            <td>{{ reg.km_rodados }}</td>
+            <td>{{ reg.litros_abastecidos }}</td>
+            <td>{{ reg.valor_combustivel }}</td>
+        </tr>
+        {% else %}
+        <tr>
+            <td colspan="10" class="text-center">Nenhum lançamento!</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% if resumo_veiculos %}
+  <h4>Resumo por caminhão</h4>
+  <table class="table table-sm">
+    <thead>
+      <tr>
+        <th>Placa</th>
+        <th>Modelo</th>
+        <th>Total Litros</th>
+        <th>Total KM Rodado</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for reg in resumo_veiculos %}
+      <tr>
+        <td>{{ reg.placa }}</td>
+        <td>{{ reg.modelo }}</td>
+        <td>{{ reg.total_litros }}</td>
+        <td>{{ reg.total_km }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+{% endif %}
+{% endblock %}
