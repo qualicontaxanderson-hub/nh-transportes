@@ -71,10 +71,10 @@ def lista():
     cursor.execute(query, params)
     quilometragens = cursor.fetchall()
     
-    # Buscar veículos e motoristas para os filtros
+    # Buscar veículos e motoristas para os filtros (ATENÇÃO AQUI)
     cursor.execute("SELECT id, placa, modelo FROM veiculos WHERE ativo = 1 ORDER BY placa")
     veiculos = cursor.fetchall()
-    cursor.execute("SELECT id, nome FROM motoristas WHERE ativo = 1 ORDER BY nome")
+    cursor.execute("SELECT id, nome FROM motoristas ORDER BY nome")  # REMOVA ativo!
     motoristas = cursor.fetchall()
     
     cursor.close()
@@ -131,7 +131,7 @@ def novo():
     cursor = conn.cursor(dictionary=True)
     cursor.execute("SELECT id, placa, modelo FROM veiculos WHERE ativo = 1 ORDER BY placa")
     veiculos = cursor.fetchall()
-    cursor.execute("SELECT id, nome FROM motoristas WHERE ativo = 1 ORDER BY nome")
+    cursor.execute("SELECT id, nome FROM motoristas ORDER BY nome")  # REMOVA ativo!
     motoristas = cursor.fetchall()
     cursor.close()
     conn.close()
@@ -187,7 +187,7 @@ def editar(id):
     
     cursor.execute("SELECT id, placa, modelo FROM veiculos WHERE ativo = 1 ORDER BY placa")
     veiculos = cursor.fetchall()
-    cursor.execute("SELECT id, nome FROM motoristas WHERE ativo = 1 ORDER BY nome")
+    cursor.execute("SELECT id, nome FROM motoristas ORDER BY nome")  # REMOVA ativo!
     motoristas = cursor.fetchall()
     cursor.close()
     conn.close()
