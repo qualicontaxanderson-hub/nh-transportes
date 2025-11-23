@@ -5,7 +5,7 @@
 {% block content %}
 <div class="container-fluid">
     <nav aria-label="breadcrumb" class="mt-2 mb-3">
-        <ol class="breadcrumb" style="font-size: 0.85rem;">
+        <ol class="breadcrumb" style="font-size: 0.8rem;">
             <li class="breadcrumb-item"><a href="{{ url_for('index') }}">Início</a></li>
             <li class="breadcrumb-item"><a href="{{ url_for('fretes.lista') }}">Fretes</a></li>
             <li class="breadcrumb-item active" aria-current="page">Novo Frete</li>
@@ -17,10 +17,10 @@
         </div>
         <div class="card-body" style="padding: 1rem;">
             <form method="POST" action="{{ url_for('fretes.novo') }}">
-
+                <!-- Cliente e Produto -->
                 <div class="row">
                     <div class="col-md-6 mb-2">
-                        <label for="clientes_id" class="form-label" style="font-size: 0.85rem;">Cliente *</label>
+                        <label for="clientes_id" class="form-label">Cliente *</label>
                         <select class="form-select form-select-sm" id="clientes_id" name="clientes_id" required>
                             <option value="">Selecione um cliente</option>
                             {% for cliente in clientes %}
@@ -34,7 +34,7 @@
                         </select>
                     </div>
                     <div class="col-md-6 mb-2">
-                        <label for="produto_id" class="form-label" style="font-size: 0.85rem;">Produto *</label>
+                        <label for="produto_id" class="form-label">Produto *</label>
                         <select class="form-select form-select-sm" id="produto_id" name="produto_id" required>
                             <option value="">Selecione o produto</option>
                             {% for produto in produtos %}
@@ -44,9 +44,10 @@
                     </div>
                 </div>
 
+                <!-- Fornecedor e Motorista -->
                 <div class="row">
                     <div class="col-md-6 mb-2">
-                        <label for="fornecedores_id" class="form-label" style="font-size: 0.85rem;">Fornecedor *</label>
+                        <label for="fornecedores_id" class="form-label">Fornecedor *</label>
                         <select class="form-select form-select-sm" id="fornecedores_id" name="fornecedores_id" required>
                             <option value="">Selecione um fornecedor</option>
                             {% for fornecedor in fornecedores %}
@@ -55,7 +56,7 @@
                         </select>
                     </div>
                     <div class="col-md-6 mb-2">
-                        <label for="motoristas_id" class="form-label" style="font-size: 0.85rem;">Motorista *</label>
+                        <label for="motoristas_id" class="form-label">Motorista *</label>
                         <select class="form-select form-select-sm" id="motoristas_id" name="motoristas_id" required>
                             <option value="">Selecione um motorista</option>
                             {% for motorista in motoristas %}
@@ -65,9 +66,10 @@
                     </div>
                 </div>
 
+                <!-- Origem e Destino -->
                 <div class="row">
                     <div class="col-md-6 mb-2">
-                        <label for="origem_id" class="form-label" style="font-size: 0.85rem;">Origem *</label>
+                        <label for="origem_id" class="form-label">Origem *</label>
                         <select class="form-select form-select-sm" id="origem_id" name="origem_id" required>
                             <option value="">Selecione a origem</option>
                             {% for origem in origens %}
@@ -76,7 +78,7 @@
                         </select>
                     </div>
                     <div class="col-md-6 mb-2">
-                        <label for="destino_id" class="form-label" style="font-size: 0.85rem;">Destino *</label>
+                        <label for="destino_id" class="form-label">Destino *</label>
                         <select class="form-select form-select-sm" id="destino_id" name="destino_id" required>
                             <option value="">Selecione o destino</option>
                             {% for destino in destinos %}
@@ -86,9 +88,10 @@
                     </div>
                 </div>
 
+                <!-- Veículo e Quantidade Tipo -->
                 <div class="row">
                     <div class="col-md-6 mb-2">
-                        <label for="veiculos_id" class="form-label" style="font-size: 0.85rem;">Veículo *</label>
+                        <label for="veiculos_id" class="form-label">Veículo *</label>
                         <select class="form-select form-select-sm" id="veiculos_id" name="veiculos_id" required>
                             <option value="">Selecione um veículo</option>
                             {% for veiculo in veiculos %}
@@ -97,7 +100,7 @@
                         </select>
                     </div>
                     <div class="col-md-6 mb-2">
-                        <label for="quantidade_tipo" class="form-label" style="font-size: 0.85rem;">Tipo de Quantidade *</label>
+                        <label for="quantidade_tipo" class="form-label">Tipo de Quantidade *</label>
                         <select class="form-select form-select-sm" id="quantidade_tipo" name="quantidade_tipo" required>
                             <option value="padrao">Quantidade Padrão (Listbox)</option>
                             <option value="personalizada">Quantidade Personalizada (Manual)</option>
@@ -105,10 +108,10 @@
                     </div>
                 </div>
 
+                <!-- Quantidade padrão/personalizada -->
                 <div class="row">
-                    <!-- Quantidade Padrão (Listbox) -->
                     <div class="col-md-6 mb-2" id="div_quantidade_padrao">
-                        <label for="quantidade_id" class="form-label" style="font-size: 0.85rem;">Quantidade (Litros) *</label>
+                        <label for="quantidade_id" class="form-label">Quantidade (Litros) *</label>
                         <select class="form-select form-select-sm" id="quantidade_id" name="quantidade_id">
                             <option value="">Selecione a quantidade</option>
                             {% for quantidade in quantidades %}
@@ -116,62 +119,59 @@
                             {% endfor %}
                         </select>
                     </div>
-                    <!-- Quantidade Manual NÃO é lista suspensa! -->
                     <div class="col-md-6 mb-2" id="div_quantidade_personalizada" style="display: none;">
-                        <label for="quantidade_manual" class="form-label" style="font-size: 0.85rem;">Quantidade Manual (Litros) *</label>
+                        <label for="quantidade_manual" class="form-label">Quantidade Manual (Litros) *</label>
                         <input type="number" class="form-control form-control-sm" id="quantidade_manual" name="quantidade_manual" placeholder="Ex: 9975" min="0" step="1">
-                        <small class="text-muted" style="font-size: 0.75rem;">Use para quantidades não padronizadas (ex: fornecedor "picado")</small>
+                        <small class="text-muted" style="font-size: 0.7rem;">Use para quantidades não padronizadas (ex: fornecedor "picado")</small>
                     </div>
                 </div>
 
+                <!-- Valores -->
                 <div class="row">
                     <div class="col-md-4 mb-2">
-                        <label for="preco_produto_unitario" class="form-label" style="font-size: 0.85rem;">Preço Produto Unitário (R$) *</label>
+                        <label for="preco_produto_unitario" class="form-label">Preço Produto Unitário (R$) *</label>
                         <input type="text" class="form-control form-control-sm" id="preco_produto_unitario" name="preco_produto_unitario" value="0,00" required>
                     </div>
                     <div class="col-md-4 mb-2">
-                        <label for="total_nf_compra" class="form-label" style="font-size: 0.85rem;">Total NF Compra (R$)</label>
+                        <label for="total_nf_compra" class="form-label">Total NF Compra (R$)</label>
                         <input type="text" class="form-control form-control-sm bg-warning" id="total_nf_compra" name="total_nf_compra" value="0,00" readonly>
                     </div>
                     <div class="col-md-4 mb-2">
-                        <label for="preco_por_litro" class="form-label" style="font-size: 0.85rem;">Preço por Litro (R$) *</label>
+                        <label for="preco_por_litro" class="form-label">Preço por Litro (R$) *</label>
                         <input type="text" class="form-control form-control-sm" id="preco_por_litro" name="preco_por_litro" value="0,00" required>
                     </div>
                 </div>
-
                 <div class="row">
                     <div class="col-md-4 mb-2">
-                        <label for="valor_total_frete" class="form-label" style="font-size: 0.85rem;">Valor Total Frete (R$)</label>
+                        <label for="valor_total_frete" class="form-label">Valor Total Frete (R$)</label>
                         <input type="text" class="form-control form-control-sm bg-warning" id="valor_total_frete" name="valor_total_frete" value="0,00" readonly>
                     </div>
                     <div class="col-md-4 mb-2">
-                        <label for="comissao_motorista" class="form-label" style="font-size: 0.85rem;">Comissão Motorista (R$)</label>
+                        <label for="comissao_motorista" class="form-label">Comissão Motorista (R$)</label>
                         <input type="text" class="form-control form-control-sm bg-warning" id="comissao_motorista" name="comissao_motorista" value="0,00" readonly>
                     </div>
                     <div class="col-md-4 mb-2">
-                        <label for="valor_cte" class="form-label" style="font-size: 0.85rem;">Valor CTe (R$)</label>
+                        <label for="valor_cte" class="form-label">Valor CTe (R$)</label>
                         <input type="text" class="form-control form-control-sm bg-warning" id="valor_cte" name="valor_cte" value="0,00" readonly>
                     </div>
                 </div>
-
                 <div class="row">
                     <div class="col-md-4 mb-2">
-                        <label for="comissao_cte" class="form-label" style="font-size: 0.85rem;">Comissão CTe (R$)</label>
+                        <label for="comissao_cte" class="form-label">Comissão CTe (R$)</label>
                         <input type="text" class="form-control form-control-sm bg-warning" id="comissao_cte" name="comissao_cte" value="0,00" readonly>
                     </div>
                     <div class="col-md-4 mb-2">
-                        <label for="lucro" class="form-label" style="font-size: 0.85rem;">Lucro (R$)</label>
+                        <label for="lucro" class="form-label">Lucro (R$)</label>
                         <input type="text" class="form-control form-control-sm bg-warning" id="lucro" name="lucro" value="0,00" readonly>
                     </div>
                     <div class="col-md-4 mb-2">
-                        <label for="data_frete" class="form-label" style="font-size: 0.85rem;">Data do Frete *</label>
+                        <label for="data_frete" class="form-label">Data do Frete *</label>
                         <input type="date" class="form-control form-control-sm" id="data_frete" name="data_frete" required>
                     </div>
                 </div>
-
                 <div class="row">
                     <div class="col-md-12 mb-2">
-                        <label for="status" class="form-label" style="font-size: 0.85rem;">Status *</label>
+                        <label for="status" class="form-label">Status *</label>
                         <select class="form-select form-select-sm" id="status" name="status" required>
                             <option value="Pendente">Pendente</option>
                             <option value="Em Trânsito">Em Trânsito</option>
@@ -180,14 +180,12 @@
                         </select>
                     </div>
                 </div>
-
                 <div class="row">
                     <div class="col-md-12 mb-3">
-                        <label for="observacoes" class="form-label" style="font-size: 0.85rem;">Observações</label>
-                        <textarea class="form-control form-control-sm" id="observacoes" name="observacoes" rows="2" placeholder="Digite observações adicionais..."></textarea>
+                        <label for="observacoes" class="form-label">Observações</label>
+                        <textarea class="form-control form-control-sm" id="observacoes" name="observacoes" rows="2" style="font-size:0.8rem" placeholder="Digite observações adicionais..."></textarea>
                     </div>
                 </div>
-
                 <div class="d-flex justify-content-between">
                     <a href="{{ url_for('fretes.lista') }}" class="btn btn-secondary btn-sm">
                         <i class="bi bi-arrow-left"></i> Voltar
@@ -203,12 +201,21 @@
 
 <style>
     .bg-warning { background-color: #FFD580 !important; }
-    .form-control-sm, .form-select-sm { font-size: 0.85rem; }
-    .btn-sm { font-size: 0.85rem; padding: 0.4rem 0.8rem; }
+    .form-control-sm, .form-select-sm,
+    .select2-container .select2-selection--single, 
+    .select2-container--default .select2-selection--single .select2-selection__rendered, 
+    .select2-dropdown, .select2-results__option {
+        font-size: 0.8rem !important;
+    }
+    .btn-sm { font-size: 0.8rem; padding: 0.3rem 0.7rem; }
     @media (max-width: 768px) {
         .card-body { padding: 0.5rem !important; }
-        .form-label { font-size: 0.8rem !important; }
-        .form-control-sm, .form-select-sm { font-size: 0.8rem !important; }
+        .form-label { font-size: 0.7rem !important; }
+        .form-control-sm, .form-select-sm,
+        .select2-container .select2-selection--single,
+        .select2-container--default .select2-selection--single .select2-selection__rendered {
+            font-size: 0.7rem !important;
+        }
     }
 </style>
 <script>
@@ -247,7 +254,7 @@ document.addEventListener('DOMContentLoaded', function() {
 <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
 <script>
 $(function(){
-    // Ativa Select2 em todas as listas suspensas do formulário, exceto quantidade_manual
+    // Ativa Select2 em todas as listas suspensas do formulário, exceto quantidade_manual!
     $('#clientes_id, #produto_id, #fornecedores_id, #motoristas_id, #origem_id, #destino_id, #veiculos_id, #quantidade_tipo, #quantidade_id, #status')
       .select2({
         theme: 'bootstrap4',
