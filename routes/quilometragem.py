@@ -28,8 +28,8 @@ def lista():
     cursor = conn.cursor(dictionary=True)
     
     # Filtros
-    veiculo_id = request.args.get('veiculo_id', '')
-    motorista_id = request.args.get('motorista_id', '')
+    veiculos_id = request.args.get('veiculos_id', '')
+    motoristas_id = request.args.get('motoristas_id', '')
     data_inicio = request.args.get('data_inicio', '')
     data_fim = request.args.get('data_fim', '')
     
@@ -48,29 +48,24 @@ def lista():
             v.modelo,
             m.nome as motorista_nome
         FROM quilometragem q
-        LEFT JOIN veiculos v ON q.veiculo_id = v.id
-        LEFT JOIN motoristas m ON q.motorista_id = m.id
+        LEFT JOIN veiculos v ON q.veiculos_id = v.id
+        LEFT JOIN motoristas m ON q.motoristas_id = m.id
         WHERE 1=1
     """
     
     params = []
-    
-    if veiculo_id:
-        query += " AND q.veiculo_id = %s"
-        params.append(veiculo_id)
-    
-    if motorista_id:
-        query += " AND q.motorista_id = %s"
-        params.append(motorista_id)
-    
+    if veiculos_id:
+        query += " AND q.veiculos_id = %s"
+        params.append(veiculos_id)
+    if motoristas_id:
+        query += " AND q.motoristas_id = %s"
+        params.append(motoristas_id)
     if data_inicio:
         query += " AND q.data >= %s"
         params.append(data_inicio)
-    
     if data_fim:
         query += " AND q.data <= %s"
         params.append(data_fim)
-    
     query += " ORDER BY q.data DESC, q.id DESC"
     
     cursor.execute(query, params)
@@ -79,7 +74,6 @@ def lista():
     # Buscar veículos e motoristas para os filtros
     cursor.execute("SELECT id, placa, modelo FROM veiculos WHERE ativo = 1 ORDER BY placa")
     veiculos = cursor.fetchall()
-    
     cursor.execute("SELECT id, nome FROM motoristas WHERE ativo = 1 ORDER BY nome")
     motoristas = cursor.fetchall()
     
@@ -91,8 +85,8 @@ def lista():
                          veiculos=veiculos,
                          motoristas=motoristas,
                          filtros={
-                             'veiculo_id': veiculo_id,
-                             'motorista_id': motorista_id,
+                             'veiculos_id': veiculos_id,
+                             'motoristas_id': motoristas_id,
                              'data_inicio': data_inicio,
                              'data_fim': data_fim
                          })
@@ -102,8 +96,8 @@ def lista():
 def novo():
     if request.method == 'POST':
         try:
-            veiculo_id = request.form.get('veiculo_id')
-            motorista_id = request.form.get('motorista_id')
+            veiculos_id = request.form.get('veiculos_id')
+            motoristas_id = request.form.get('motoristas_id')
             data = request.form.get('data')
             km_inicial = converter_para_decimal(request.form.get('km_inicial'))
             km_final = converter_para_decimal(request.form.get('km_final'))
@@ -116,10 +110,10 @@ def novo():
             cursor = conn.cursor()
             cursor.execute("""
                 INSERT INTO quilometragem 
-                (veiculo_id, motorista_id, data, km_inicial, km_final, km_rodados, 
+                (veiculos_id, motoristas_id, data, km_inicial, km_final, km_rodados, 
                  valor_combustivel, litros_abastecidos, observacoes)
                 VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
-            """, (veiculo_id, motorista_id, data, km_inicial, km_final, km_rodados,
+            """, (veiculos_id, motoristas_id, data, km_inicial, km_final, km_rodados,
                   valor_combustivel, litros_abastecidos, observacoes))
             
             conn.commit()
@@ -137,10 +131,8 @@ def novo():
     cursor = conn.cursor(dictionary=True)
     cursor.execute("SELECT id, placa, modelo FROM veiculos WHERE ativo = 1 ORDER BY placa")
     veiculos = cursor.fetchall()
-    
     cursor.execute("SELECT id, nome FROM motoristas WHERE ativo = 1 ORDER BY nome")
     motoristas = cursor.fetchall()
-    
     cursor.close()
     conn.close()
     
@@ -154,8 +146,8 @@ def editar(id):
     
     if request.method == 'POST':
         try:
-            veiculo_id = request.form.get('veiculo_id')
-            motorista_id = request.form.get('motorista_id')
+            veiculos_id = request.form.get('veiculos_id')
+            motoristas_id = request.form.get('motoristas_id')
             data = request.form.get('data')
             km_inicial = converter_para_decimal(request.form.get('km_inicial'))
             km_final = converter_para_decimal(request.form.get('km_final'))
@@ -166,11 +158,11 @@ def editar(id):
             
             cursor.execute("""
                 UPDATE quilometragem 
-                SET veiculo_id = %s, motorista_id = %s, data = %s, 
+                SET veiculos_id = %s, motoristas_id = %s, data = %s, 
                     km_inicial = %s, km_final = %s, km_rodados = %s,
                     valor_combustivel = %s, litros_abastecidos = %s, observacoes = %s
                 WHERE id = %s
-            """, (veiculo_id, motorista_id, data, km_inicial, km_final, km_rodados,
+            """, (veiculos_id, motoristas_id, data, km_inicial, km_final, km_rodados,
                   valor_combustivel, litros_abastecidos, observacoes, id))
             
             conn.commit()
@@ -195,10 +187,8 @@ def editar(id):
     
     cursor.execute("SELECT id, placa, modelo FROM veiculos WHERE ativo = 1 ORDER BY placa")
     veiculos = cursor.fetchall()
-    
     cursor.execute("SELECT id, nome FROM motoristas WHERE ativo = 1 ORDER BY nome")
     motoristas = cursor.fetchall()
-    
     cursor.close()
     conn.close()
     
