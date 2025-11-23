@@ -1,149 +1,33 @@
-{% extends "base.html" %}
-{% block title %}Quilometragem - NH Transportes{% endblock %}
-
-{% block content %}
-<div class="container-fluid">
-    <div class="d-flex justify-content-between align-items-center mb-3">
-        <h2 style="font-size: 1.5rem;"><i class="bi bi-speedometer2"></i> Quilometragem</h2>
-        <a href="{{ url_for('quilometragem.novo') }}" class="btn btn-primary btn-sm">
-            <i class="bi bi-plus-circle"></i> Nova Quilometragem
-        </a>
-    </div>
-
-    <!-- Filtros -->
-    <div class="card mb-3">
-        <div class="card-header" style="background:#4A90E2;color:#000;font-weight:600;font-size:0.9rem;">
-            <i class="bi bi-funnel"></i> Filtros
-        </div>
-        <div class="card-body" style="padding: 0.75rem;">
-            <form method="GET" class="row g-2">
-                <div class="col-md-3">
-                    <label class="form-label">Veículo</label>
-                    <select name="veiculos_id" class="form-select form-select-sm">
-                        <option value="">Todos</option>
-                        {% for veiculo in veiculos %}
-                        <option value="{{ veiculo.id }}" {% if filtros.veiculos_id == veiculo.id|string %}selected{% endif %}>
-                            {{ veiculo.placa }} - {{ veiculo.modelo }}
-                        </option>
-                        {% endfor %}
-                    </select>
-                </div>
-                <div class="col-md-3">
-                    <label class="form-label">Motorista</label>
-                    <select name="motoristas_id" class="form-select form-select-sm">
-                        <option value="">Todos</option>
-                        {% for motorista in motoristas %}
-                        <option value="{{ motorista.id }}" {% if filtros.motoristas_id == motorista.id|string %}selected{% endif %}>
-                            {{ motorista.nome }}
-                        </option>
-                        {% endfor %}
-                    </select>
-                </div>
-                <div class="col-md-2">
-                    <label class="form-label">Data Início</label>
-                    <input type="date" name="data_inicio" class="form-control form-control-sm" value="{{ filtros.data_inicio }}">
-                </div>
-                <div class="col-md-2">
-                    <label class="form-label">Data Fim</label>
-                    <input type="date" name="data_fim" class="form-control form-control-sm" value="{{ filtros.data_fim }}">
-                </div>
-                <div class="col-md-2 d-flex align-items-end">
-                    <button type="submit" class="btn btn-primary btn-sm w-100">
-                        <i class="bi bi-search"></i> Filtrar
-                    </button>
-                </div>
-            </form>
-        </div>
-    </div>
-
-    <!-- Tabela de Quilometragem -->
-    <div class="card">
-        <div class="card-header" style="background:#1D63A5;color:white;font-size:0.9rem;font-weight:600;">
-            <i class="bi bi-list"></i> Lista de Quilometragem
-        </div>
-        <div class="card-body" style="padding: 0.5rem;">
-            <div class="table-responsive">
-                <table class="table table-hover table-striped table-sm mb-0">
-                    <thead style="background:#4A90E2;color:#000;font-weight:700;font-size:0.85rem;">
-                        <tr>
-                            <th>Data</th>
-                            <th>Veículo</th>
-                            <th>Motorista</th>
-                            <th>KM Inicial</th>
-                            <th>KM Final</th>
-                            <th>KM Rodados</th>
-                            <th>Litros</th>
-                            <th>Valor Combustível</th>
-                            <th>Média (km/l)</th>
-                            <th class="text-center">Ações</th>
-                        </tr>
-                    </thead>
-                    <tbody style="font-size: 0.85rem;">
-                        {% if quilometragens %}
-                            {% for q in quilometragens %}
-                            <tr>
-                                <td>{{ q.data.strftime('%d/%m/%Y') if q.data else '-' }}</td>
-                                <td>
-                                    <strong>{{ q.placa }}</strong><br>
-                                    <small class="text-muted">{{ q.modelo }}</small>
-                                </td>
-                                <td>{{ q.motorista_nome }}</td>
-                                <td>{{ "{:,.0f}".format(q.km_inicial).replace(',', '.') }}</td>
-                                <td>{{ "{:,.0f}".format(q.km_final).replace(',', '.') }}</td>
-                                <td><strong>{{ "{:,.0f}".format(q.km_rodados).replace(',', '.') }}</strong></td>
-                                <td>{{ "{:,.2f}".format(q.litros_abastecidos).replace(',', 'X').replace('.', ',').replace('X', '.') }}</td>
-                                <td>R$ {{ "{:,.2f}".format(q.valor_combustivel).replace(',', 'X').replace('.', ',').replace('X', '.') }}</td>
-                                <td>
-                                    {% if q.litros_abastecidos > 0 %}
-                                        <span class="badge bg-info">{{ "{:.2f}".format(q.km_rodados / q.litros_abastecidos).replace('.', ',') }} km/l</span>
-                                    {% else %}
-                                        -
-                                    {% endif %}
-                                </td>
-                                <td class="text-center">
-                                    <a href="{{ url_for('quilometragem.editar', id=q.id) }}" class="btn btn-sm btn-warning" title="Editar" style="padding: 0.2rem 0.4rem;">
-                                        <i class="bi bi-pencil"></i>
-                                    </a>
-                                    <a href="{{ url_for('quilometragem.excluir', id=q.id) }}" 
-                                       class="btn btn-sm btn-danger" 
-                                       title="Excluir"
-                                       onclick="return confirm('Deseja realmente excluir esta quilometragem?')">
-                                        <i class="bi bi-trash"></i>
-                                    </a>
-                                </td>
-                            </tr>
-                            {% endfor %}
-                        {% else %}
-                            <tr>
-                                <td colspan="10" class="text-center text-muted py-3" style="font-size: 0.9rem;">
-                                    <i class="bi bi-inbox" style="font-size:1.5rem;"></i><br>
-                                    Nenhuma quilometragem cadastrada
-                                </td>
-                            </tr>
-                        {% endif %}
-                    </tbody>
-                </table>
-            </div>
-        </div>
-    </div>
-</div>
-
-<style>
-    .table-sm th, .table-sm td {
-        padding: 0.4rem;
-    }
-    .btn-sm {
-        font-size: 0.8rem;
-        padding: 0.3rem 0.6rem;
-    }
-    @media (max-width: 768px) {
-        h2 {
-            font-size: 1.2rem !important;
-        }
-        .table-sm th, .table-sm td {
-            font-size: 0.75rem !important;
-            padding: 0.3rem !important;
-        }
-    }
-</style>
-{% endblock %}
+{% if resumo_veiculos %}
+  <div class="alert alert-warning py-2 px-3 mt-3">
+    <b>Resumo por caminhão:</b>
+    <table class="table table-bordered table-sm mt-2 mb-0">
+      <thead style="background:#4A90E2;color:#000;font-weight:700;font-size:0.85rem;">
+        <tr>
+          <th>Placa</th>
+          <th>Modelo</th>
+          <th>Total Litros</th>
+          <th>Total KM Rodado</th>
+          <th>Média (km/l)</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for reg in resumo_veiculos %}
+          <tr>
+            <td>{{ reg.placa }}</td>
+            <td>{{ reg.modelo }}</td>
+            <td>{{ "{:,.2f}".format(reg.total_litros|float).replace(',', 'X').replace('.', ',').replace('X', '.') }}</td>
+            <td>{{ "{:,.0f}".format(reg.total_km|float).replace(',', '.') }}</td>
+            <td>
+              {% if reg.total_litros %}
+                {{ "{:.2f}".format((reg.total_km or 0)/(reg.total_litros or 1)).replace('.', ',') }}
+              {% else %}
+                -
+              {% endif %}
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+{% endif %}
