@@ -147,17 +147,20 @@
     {% endif %}
 </div>
 
-<!-- SCRIPTS: Ordem Correta! -->
-<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<!-- Select2 CSS/JS (NÃO repita jQuery!) -->
 <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
 <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
 <script>
-$(document).ready(function() {
-    $('#cliente_id').select2({
-        placeholder: "Digite para buscar o cliente",
-        allowClear: true,
-        width: '100%'
-    });
+$(function() {
+    if (typeof $.fn.select2 === 'function') {
+        $('#cliente_id').select2({
+            placeholder: "Digite para buscar o cliente",
+            allowClear: true,
+            width: '100%'
+        });
+    } else {
+        alert("Select2 NÃO CARREGOU! Verifique a ordem dos scripts!");
+    }
 });
 </script>
 <style>
