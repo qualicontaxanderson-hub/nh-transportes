@@ -71,10 +71,10 @@ def lista():
     cursor.execute(query, params)
     quilometragens = cursor.fetchall()
     
-    # Buscar veículos e motoristas para os filtros (ATENÇÃO AQUI)
+    # Buscar veículos e motoristas para os filtros
     cursor.execute("SELECT id, placa, modelo FROM veiculos WHERE ativo = 1 ORDER BY placa")
     veiculos = cursor.fetchall()
-    cursor.execute("SELECT id, nome FROM motoristas ORDER BY nome")  # REMOVA ativo!
+    cursor.execute("SELECT id, nome FROM motoristas ORDER BY nome")
     motoristas = cursor.fetchall()
     
     cursor.close()
@@ -125,18 +125,37 @@ def novo():
             
         except Exception as e:
             flash(f'Erro ao cadastrar quilometragem: {str(e)}', 'danger')
-    
-    # GET - Carregar dados para o formulário
+
+    # GET - Carrega veículos, motoristas e último km_final do veículo padrão
     conn = get_db()
     cursor = conn.cursor(dictionary=True)
     cursor.execute("SELECT id, placa, modelo FROM veiculos WHERE ativo = 1 ORDER BY placa")
     veiculos = cursor.fetchall()
-    cursor.execute("SELECT id, nome FROM motoristas ORDER BY nome")  # REMOVA ativo!
+    cursor.execute("SELECT id, nome FROM motoristas ORDER BY nome")
     motoristas = cursor.fetchall()
+
+    km_inicial_sugerido = ''
+    if veiculos:
+        veiculo_padrao_id = veiculos[0]['id']
+        cursor.execute("""
+            SELECT km_final 
+            FROM quilometragem
+            WHERE veiculos_id = %s
+            ORDER BY data DESC, id DESC
+            LIMIT 1
+        """, (veiculo_padrao_id,))
+        row = cursor.fetchone()
+        if row:
+            km_inicial_sugerido = row['km_final']
     cursor.close()
     conn.close()
     
-    return render_template('quilometragem/novo.html', veiculos=veiculos, motoristas=motoristas)
+    return render_template(
+        'quilometragem/novo.html',
+        veiculos=veiculos,
+        motoristas=motoristas,
+        km_inicial_sugerido=km_inicial_sugerido
+    )
 
 @bp.route('/editar/<int:id>', methods=['GET', 'POST'])
 @login_required
@@ -187,7 +206,7 @@ def editar(id):
     
     cursor.execute("SELECT id, placa, modelo FROM veiculos WHERE ativo = 1 ORDER BY placa")
     veiculos = cursor.fetchall()
-    cursor.execute("SELECT id, nome FROM motoristas ORDER BY nome")  # REMOVA ativo!
+    cursor.execute("SELECT id, nome FROM motoristas ORDER BY nome")
     motoristas = cursor.fetchall()
     cursor.close()
     conn.close()
@@ -211,4 +230,5 @@ def excluir(id):
     except Exception as e:
         flash(f'Erro ao excluir quilometragem: {str(e)}', 'danger')
     
-    return redirect(url_for('quilometragem.lista'))
+    return redirect(url_for('quilometragem.lista')
+)
