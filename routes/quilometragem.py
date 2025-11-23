@@ -104,8 +104,6 @@ def lista():
     cursor.execute(resumo_query, resumo_params)
     resumo_veiculos = cursor.fetchall()
     
-    print('DEBUG resumo_veiculos', resumo_veiculos)  # <-- Debug temporário
-
     cursor.close()
     conn.close()
     
