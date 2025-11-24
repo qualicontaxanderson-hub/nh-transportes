@@ -1,9 +1,6 @@
 import os
-import sys
-import importlib
 from flask import Flask, render_template, redirect, url_for, request, flash
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user
-from werkzeug.security import generate_password_hash
 from models.usuario import Usuario
 from models.rota import Rota
 from config import Config
@@ -36,7 +33,7 @@ app.register_blueprint(api_bp)
 app.register_blueprint(rotas.bp)
 app.register_blueprint(quilometragem.bp)
 app.register_blueprint(origens_destinos.bp)
-app.register_blueprint(produtos.bp)   # <-- ADICIONADO, garante CRUD produto funcionando
+app.register_blueprint(produtos.bp)
 
 @app.route('/health')
 def health():
@@ -65,6 +62,36 @@ def login():
 def logout():
     logout_user()
     return redirect(url_for('login'))
+
+@app.route('/alterar_senha', methods=['GET', 'POST'])
+@login_required
+def alterar_senha():
+    if request.method == 'POST':
+        senha_atual = request.form.get('senha_atual')
+        senha_nova = request.form.get('senha_nova')
+        if not current_user.check_password(senha_atual):
+            flash('Senha atual incorreta.', 'danger')
+        elif not senha_nova:
+            flash('Informe uma nova senha.', 'danger')
+        else:
+            current_user.alterar_senha(senha_nova)
+            flash('Senha alterada com sucesso!', 'success')
+            return redirect(url_for('index'))
+    return render_template('alterar_senha.html')
+
+@app.route('/cadastro', methods=['GET', 'POST'])
+@login_required
+def cadastro():
+    # Só permita para admins; ajuste conforme método de permissão
+    if request.method == 'POST':
+        username = request.form.get('username')
+        nome_completo = request.form.get('nome_completo')
+        nivel = request.form.get('nivel')
+        senha = request.form.get('senha')
+        Usuario.criar_usuario(username, nome_completo, nivel, senha)
+        flash('Novo usuário administrador criado!', 'success')
+        return redirect(url_for('index'))
+    return render_template('cadastro.html')
 
 if __name__ == '__main__':
     print("🚀 Iniciando NH Transportes...")
