@@ -69,28 +69,71 @@ def alterar_senha():
     if request.method == 'POST':
         senha_atual = request.form.get('senha_atual')
         senha_nova = request.form.get('senha_nova')
+        confirmar_senha = request.form.get('confirmar_senha')
+        
+        # Validações
+        if not senha_atual or not senha_nova or not confirmar_senha:
+            flash('Todos os campos são obrigatórios.', 'danger')
+            return render_template('alterar_senha.html')
+        
         if not current_user.check_password(senha_atual):
             flash('Senha atual incorreta.', 'danger')
-        elif not senha_nova:
-            flash('Informe uma nova senha.', 'danger')
-        else:
+            return render_template('alterar_senha.html')
+        
+        if senha_nova != confirmar_senha:
+            flash('A nova senha e a confirmação não coincidem.', 'danger')
+            return render_template('alterar_senha.html')
+        
+        if len(senha_nova) < 6:
+            flash('A senha deve ter no mínimo 6 caracteres.', 'danger')
+            return render_template('alterar_senha.html')
+        
+        # Alterar senha
+        try:
             current_user.alterar_senha(senha_nova)
             flash('Senha alterada com sucesso!', 'success')
             return redirect(url_for('index'))
+        except Exception as e:
+            flash(f'Erro ao alterar senha: {str(e)}', 'danger')
+    
     return render_template('alterar_senha.html')
 
 @app.route('/cadastro', methods=['GET', 'POST'])
 @login_required
 def cadastro():
-    # Só permita para admins; ajuste conforme método de permissão
+    # Proteção: apenas admins podem criar usuários
+    if current_user.nivel != 'admin':
+        flash('Acesso negado. Apenas administradores podem criar usuários.', 'danger')
+        return redirect(url_for('index'))
+    
     if request.method == 'POST':
         username = request.form.get('username')
         nome_completo = request.form.get('nome_completo')
         nivel = request.form.get('nivel')
         senha = request.form.get('senha')
-        Usuario.criar_usuario(username, nome_completo, nivel, senha)
-        flash('Novo usuário administrador criado!', 'success')
-        return redirect(url_for('index'))
+        confirmar_senha = request.form.get('confirmar_senha')
+        
+        # Validações
+        if not username or not nome_completo or not nivel or not senha or not confirmar_senha:
+            flash('Todos os campos são obrigatórios.', 'danger')
+            return render_template('cadastro.html')
+        
+        if senha != confirmar_senha:
+            flash('As senhas não coincidem.', 'danger')
+            return render_template('cadastro.html')
+        
+        if len(senha) < 6:
+            flash('A senha deve ter no mínimo 6 caracteres.', 'danger')
+            return render_template('cadastro.html')
+        
+        # Criar usuário
+        try:
+            Usuario.criar_usuario(username, nome_completo, nivel, senha)
+            flash(f'Usuário {username} criado com sucesso!', 'success')
+            return redirect(url_for('index'))
+        except Exception as e:
+            flash(f'Erro ao criar usuário: {str(e)}', 'danger')
+    
     return render_template('cadastro.html')
 
 if __name__ == '__main__':
