@@ -130,11 +130,117 @@ def cadastro():
         try:
             Usuario.criar_usuario(username, nome_completo, nivel, senha)
             flash(f'Usuário {username} criado com sucesso!', 'success')
-            return redirect(url_for('index'))
+            return redirect(url_for('listar_usuarios'))
         except Exception as e:
             flash(f'Erro ao criar usuário: {str(e)}', 'danger')
     
     return render_template('cadastro.html')
+
+@app.route('/editar_usuario/<int:user_id>', methods=['GET', 'POST'])
+@login_required
+def editar_usuario(user_id):
+    # Proteção: apenas admins podem editar usuários
+    if current_user.nivel != 'admin':
+        flash('Acesso negado. Apenas administradores podem editar usuários.', 'danger')
+        return redirect(url_for('index'))
+    
+    # Buscar usuário a ser editado
+    from utils.db import get_db_connection
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    cursor.execute("SELECT * FROM usuarios WHERE id = %s", (user_id,))
+    usuario = cursor.fetchone()
+    
+    if not usuario:
+        flash('Usuário não encontrado.', 'danger')
+        cursor.close()
+        conn.close()
+        return redirect(url_for('listar_usuarios'))
+    
+    if request.method == 'POST':
+        username = request.form.get('username')
+        nome_completo = request.form.get('nome_completo')
+        nivel = request.form.get('nivel')
+        senha = request.form.get('senha')
+        confirmar_senha = request.form.get('confirmar_senha')
+        
+        # Validações
+        if not username or not nome_completo or not nivel:
+            flash('Nome de usuário, nome completo e nível são obrigatórios.', 'danger')
+            cursor.close()
+            conn.close()
+            return render_template('alteracao_cadastro.html', usuario=usuario)
+        
+        # Se senha foi informada, validar
+        if senha:
+            if not confirmar_senha:
+                flash('Confirme a nova senha.', 'danger')
+                cursor.close()
+                conn.close()
+                return render_template('alteracao_cadastro.html', usuario=usuario)
+            
+            if senha != confirmar_senha:
+                flash('As senhas não coincidem.', 'danger')
+                cursor.close()
+                conn.close()
+                return render_template('alteracao_cadastro.html', usuario=usuario)
+            
+            if len(senha) < 6:
+                flash('A senha deve ter no mínimo 6 caracteres.', 'danger')
+                cursor.close()
+                conn.close()
+                return render_template('alteracao_cadastro.html', usuario=usuario)
+        
+        # Atualizar usuário
+        try:
+            if senha:
+                # Se senha foi informada, atualizar com nova senha
+                from werkzeug.security import generate_password_hash
+                senha_hash = generate_password_hash(senha)
+                cursor.execute(
+                    "UPDATE usuarios SET username=%s, nome_completo=%s, nivel=%s, password_hash=%s WHERE id=%s",
+                    (username, nome_completo, nivel, senha_hash, user_id)
+                )
+            else:
+                # Se senha não foi informada, atualizar sem alterar senha
+                cursor.execute(
+                    "UPDATE usuarios SET username=%s, nome_completo=%s, nivel=%s WHERE id=%s",
+                    (username, nome_completo, nivel, user_id)
+                )
+            
+            conn.commit()
+            flash(f'Usuário {username} atualizado com sucesso!', 'success')
+            cursor.close()
+            conn.close()
+            return redirect(url_for('listar_usuarios'))
+        except Exception as e:
+            conn.rollback()
+            flash(f'Erro ao atualizar usuário: {str(e)}', 'danger')
+            cursor.close()
+            conn.close()
+    else:
+        cursor.close()
+        conn.close()
+    
+    return render_template('alteracao_cadastro.html', usuario=usuario)
+
+@app.route('/listar_usuarios')
+@login_required
+def listar_usuarios():
+    # Proteção: apenas admins podem listar usuários
+    if current_user.nivel != 'admin':
+        flash('Acesso negado. Apenas administradores podem visualizar usuários.', 'danger')
+        return redirect(url_for('index'))
+    
+    from utils.db import get_db_connection
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    cursor.execute("SELECT id, username, nome_completo, nivel, ativo, data_criacao FROM usuarios ORDER BY username")
+    usuarios = cursor.fetchall()
+    cursor.close()
+    conn.close()
+    
+    return render_template('listar_usuarios.html', usuarios=usuarios)
 
 if __name__ == '__main__':
     print("🚀 Iniciando NH Transportes...")
