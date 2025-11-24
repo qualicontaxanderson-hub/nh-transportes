@@ -2,7 +2,11 @@
     <div class="container-fluid">
         <!-- LOGO + Nome do Sistema -->
         <a class="navbar-brand d-flex align-items-center fw-bold" href="{{ url_for('index') }}" style="font-size: 1.2rem; color: #000;">
-            <img src="{{ url_for('static', filename='logo-nh.png') }}" alt="NH Transportes" height="36" class="me-2" style="filter: brightness(0) invert(1); border-radius: 5px;">
+            <img src="{{ url_for('static', filename='logo-nh.png') }}" 
+                 alt="NH Transportes" 
+                 height="50" 
+                 class="me-2" 
+                 style="border-radius: 5px; background: white; padding: 2px;">
             <span>GRUPO NH</span>
             <i class="bi bi-fuel-pump ms-2"></i>
         </a>
@@ -72,6 +76,12 @@
         font-size: 1.2rem !important; 
         color: #000 !important;
     }
+    .navbar-brand img {
+        transition: transform 0.3s ease;
+    }
+    .navbar-brand:hover img {
+        transform: scale(1.1);
+    }
     .nav-link { font-size: 0.9rem !important; }
     .navbar-text { font-size: 0.85rem !important; }
     .dropdown-menu { background: white; border: 2px solid #4A90E2; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); }
@@ -85,6 +95,7 @@
     .navbar-brand:hover { color: #ff9800 !important; transition: all 0.3s; }
     @media (max-width: 768px) {
         .navbar-brand { font-size: 1rem !important; }
+        .navbar-brand img { height: 35px !important; }
         .nav-link { font-size: 0.85rem !important; padding: 8px 12px !important; }
         .navbar-text { font-size: 0.8rem !important; }
         .dropdown-item { font-size: 0.85rem !important; }
