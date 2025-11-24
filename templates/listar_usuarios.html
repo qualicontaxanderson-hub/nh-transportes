@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+
+{% block title %}Lista de Usuários - NH Transportes{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h2 style="font-size: 1.5rem; color:#1D63A5"><i class="bi bi-people"></i> Usuários do Sistema</h2>
+        <a href="{{ url_for('cadastro') }}" class="btn btn-primary btn-sm">
+            <i class="bi bi-person-plus"></i> Novo Usuário
+        </a>
+    </div>
+
+    <div class="card mb-3">
+        <div class="card-header" style="background:#4A90E2;color:#000;font-weight:600;font-size:0.9rem;">
+            <i class="bi bi-people"></i> Lista de Usuários Cadastrados
+        </div>
+        <div class="card-body" style="padding: 0.75rem;">
+            {% with messages = get_flashed_messages(with_categories=true) %}
+                {% if messages %}
+                    {% for category, message in messages %}
+                        <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
+                            {{ message }}
+                            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                        </div>
+                    {% endfor %}
+                {% endif %}
+            {% endwith %}
+            
+            <div class="table-responsive">
+                <table class="table table-sm table-hover" style="font-size: 0.85rem;">
+                    <thead style="background:#f8f9fa;">
+                        <tr>
+                            <th>ID</th>
+                            <th>Usuário</th>
+                            <th>Nome Completo</th>
+                            <th>Nível</th>
+                            <th>Status</th>
+                            <th>Data Criação</th>
+                            <th>Ações</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for usuario in usuarios %}
+                        <tr>
+                            <td>{{ usuario.id }}</td>
+                            <td><strong>{{ usuario.username }}</strong></td>
+                            <td>{{ usuario.nome_completo }}</td>
+                            <td>
+                                {% if usuario.nivel == 'admin' %}
+                                    <span class="badge bg-danger">Admin</span>
+                                {% elif usuario.nivel == 'usuario' %}
+                                    <span class="badge bg-primary">Usuário</span>
+                                {% else %}
+                                    <span class="badge bg-secondary">{{ usuario.nivel }}</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if usuario.ativo %}
+                                    <span class="badge bg-success">Ativo</span>
+                                {% else %}
+                                    <span class="badge bg-secondary">Inativo</span>
+                                {% endif %}
+                            </td>
+                            <td>{{ usuario.data_criacao.strftime('%d/%m/%Y') if usuario.data_criacao else '-' }}</td>
+                            <td>
+                                <a href="{{ url_for('editar_usuario', user_id=usuario.id) }}" class="btn btn-sm btn-warning" title="Editar">
+                                    <i class="bi bi-pencil"></i>
+                                </a>
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="7" class="text-center text-muted">Nenhum usuário cadastrado</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    .btn-sm { font-size: 0.85rem; padding: 0.25rem 0.5rem; }
+    @media (max-width: 768px) {
+        h2 { font-size: 1.2rem !important; }
+        table { font-size: 0.75rem !important; }
+    }
+</style>
+{% endblock %}
