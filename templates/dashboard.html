@@ -6,6 +6,15 @@
 <div class="row">
     <div class="col-12">
         <h2 class="mb-4">Bem-vindo ao NH Transportes</h2>
+        {% if current_user.is_authenticated %}
+            <p class="text-muted">
+                <i class="bi bi-person-circle"></i> 
+                Logado como: <strong>{{ current_user.nome_completo }}</strong> ({{ current_user.username }})
+                {% if current_user.nivel == 'admin' %}
+                    <span class="badge bg-danger ms-2">Administrador</span>
+                {% endif %}
+            </p>
+        {% endif %}
     </div>
 </div>
 
@@ -87,4 +96,65 @@
         </div>
     </div>
 </div>
+
+<!-- Seção de Gerenciamento de Conta (Para todos os usuários) -->
+<div class="row mt-4">
+    <div class="col-12">
+        <div class="card border-secondary">
+            <div class="card-header bg-secondary text-white">
+                <h5 class="card-title mb-0">
+                    <i class="bi bi-person-gear"></i> Minha Conta
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <a href="{{ url_for('alterar_senha') }}" class="btn btn-outline-secondary w-100">
+                            <i class="bi bi-key"></i> Alterar Minha Senha
+                        </a>
+                    </div>
+                    <div class="col-md-6">
+                        <a href="{{ url_for('logout') }}" class="btn btn-outline-danger w-100">
+                            <i class="bi bi-box-arrow-right"></i> Sair do Sistema
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Seção de Administração (Apenas para Admin) -->
+{% if current_user.nivel == 'admin' %}
+<div class="row mt-4">
+    <div class="col-12">
+        <div class="card border-danger">
+            <div class="card-header bg-danger text-white">
+                <h5 class="card-title mb-0">
+                    <i class="bi bi-shield-lock"></i> Administração do Sistema
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="row g-3">
+                    <div class="col-md-4">
+                        <a href="{{ url_for('listar_usuarios') }}" class="btn btn-outline-danger w-100">
+                            <i class="bi bi-people"></i> Gerenciar Usuários
+                        </a>
+                    </div>
+                    <div class="col-md-4">
+                        <a href="{{ url_for('cadastro') }}" class="btn btn-outline-danger w-100">
+                            <i class="bi bi-person-plus"></i> Criar Novo Usuário
+                        </a>
+                    </div>
+                    <div class="col-md-4">
+                        <a href="{{ url_for('relatorios.index') }}" class="btn btn-outline-danger w-100">
+                            <i class="bi bi-graph-up"></i> Relatórios Gerenciais
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
 {% endblock %}
