@@ -19,7 +19,7 @@ class Usuario(UserMixin):
         user_data = cursor.fetchone()
         cursor.close()
         conn.close()
-        if user_
+        if user_data:
             return Usuario(
                 id=user_data['id'],
                 username=user_data['username'],
