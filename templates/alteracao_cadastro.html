@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+
+{% block title %}Alterar Cadastro - NH Transportes{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h2 style="font-size: 1.5rem; color:#1D63A5"><i class="bi bi-pencil-square"></i> Alterar Administrador</h2>
+    </div>
+
+    <div class="card mb-3">
+        <div class="card-header" style="background:#4A90E2;color:#000;font-weight:600;font-size:0.9rem;">
+            <i class="bi bi-pencil-square"></i> Alteração de Cadastro
+        </div>
+        <div class="card-body" style="padding: 0.75rem;">
+            <form method="POST" class="row g-2">
+                <div class="col-md-6">
+                    <label for="username" class="form-label" style="font-size:0.85rem;">Usuário</label>
+                    <input type="text" name="username" class="form-control form-control-sm" value="{{ admin.username }}" required>
+                </div>
+                <div class="col-md-6">
+                    <label for="nome_completo" class="form-label" style="font-size:0.85rem;">Nome completo</label>
+                    <input type="text" name="nome_completo" class="form-control form-control-sm" value="{{ admin.nome_completo }}" required>
+                </div>
+                <div class="col-md-6">
+                    <label for="nivel" class="form-label" style="font-size:0.85rem;">Nível</label>
+                    <input type="text" name="nivel" class="form-control form-control-sm" value="{{ admin.nivel }}" required>
+                </div>
+                <div class="col-md-6">
+                    <label for="senha" class="form-label" style="font-size:0.85rem;">Senha</label>
+                    <input type="password" name="senha" class="form-control form-control-sm" placeholder="Nova senha (opcional)">
+                </div>
+                <div class="col-12 mt-3">
+                    <button type="submit" class="btn btn-primary btn-sm">
+                        <i class="bi bi-pencil-square"></i> Salvar Alterações
+                    </button>
+                </div>
+            </form>
+            {% with messages = get_flashed_messages(with_categories=true) %}
+                {% if messages %}
+                    {% for category, message in messages %}
+                        <div class="alert alert-{{ category }} mt-2">{{ message }}</div>
+                    {% endfor %}
+                {% endif %}
+            {% endwith %}
+        </div>
+    </div>
+</div>
+<style>
+    .form-label { font-weight: 600; }
+    .btn-sm { font-size: 0.85rem; padding: 0.3rem 0.8rem; }
+    @media (max-width: 768px) {
+        h2 { font-size: 1.2rem !important; }
+        .form-label { font-size: 0.75rem !important; }
+    }
+</style>
+{% endblock %}
