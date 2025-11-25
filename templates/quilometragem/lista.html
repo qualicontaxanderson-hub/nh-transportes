@@ -1,109 +1,273 @@
 {% extends "base.html" %}
 
-{% block title %}Nova Quilometragem - NH Transportes{% endblock %}
+{% block title %}Quilometragem - NH Transportes{% endblock %}
 
 {% block content %}
 <div class="container-fluid">
     <div class="d-flex justify-content-between align-items-center mb-3">
-        <h2 style="font-size: 1.5rem;"><i class="bi bi-speedometer2"></i> Nova Quilometragem</h2>
-        <a href="{{ url_for('quilometragem.lista') }}" class="btn btn-secondary btn-sm">
-            <i class="bi bi-arrow-left"></i> Voltar
-        </a>
+        <h2 style="font-size: 1.5rem;"><i class="bi bi-speedometer2"></i> Controle de Quilometragem</h2>
+        <div>
+            {% if current_user.nivel == 'admin' %}
+            <button type="button" class="btn btn-warning btn-sm me-2" data-bs-toggle="modal" data-bs-target="#modalKmInicial">
+                <i class="bi bi-gear-fill"></i> Configurar KM Inicial
+            </button>
+            {% endif %}
+            <a href="{{ url_for('quilometragem.novo') }}" class="btn btn-primary btn-sm">
+                <i class="bi bi-plus-circle"></i> Novo Registro
+            </a>
+        </div>
     </div>
 
-    <div class="card">
-        <div class="card-header" style="background:#1D63A5;color:white;font-size:0.9rem;font-weight:600;">
-            <i class="bi bi-plus-circle"></i> Cadastro de Quilometragem
+    <!-- Filtros -->
+    <div class="card mb-3">
+        <div class="card-header" style="background:#4A90E2;color:white;font-size:0.9rem;font-weight:600;">
+            <i class="bi bi-funnel"></i> Filtros
         </div>
         <div class="card-body" style="padding: 1rem;">
-            <form method="POST" action="{{ url_for('quilometragem.novo') }}" id="formQuilometragem">
+            <form method="GET" action="{{ url_for('quilometragem.lista') }}">
                 <div class="row g-3">
-                    <div class="col-md-6">
-                        <label class="form-label" style="font-size: 0.9rem;font-weight:600;">
-                            Veículo <span class="text-danger">*</span>
-                        </label>
-                        <select name="veiculos_id" id="veiculos_id" class="form-select form-select-sm" required>
-                            <option value="">Selecione...</option>
+                    <div class="col-md-3">
+                        <label class="form-label" style="font-size:0.9rem;font-weight:600;">Veículo</label>
+                        <select name="veiculo_id" class="form-select form-select-sm">
+                            <option value="">Todos</option>
                             {% for veiculo in veiculos %}
-                            <option value="{{ veiculo.id }}">{{ veiculo.placa }} - {{ veiculo.modelo }}</option>
+                            <option value="{{ veiculo.id }}" {% if request.args.get('veiculo_id') == veiculo.id|string %}selected{% endif %}>
+                                {{ veiculo.placa }} - {{ veiculo.modelo }}
+                            </option>
                             {% endfor %}
                         </select>
                     </div>
-                    <div class="col-md-6">
-                        <label class="form-label" style="font-size: 0.9rem;font-weight:600;">
-                            Motorista <span class="text-danger">*</span>
-                        </label>
-                        <select name="motoristas_id" class="form-select form-select-sm" required>
-                            <option value="">Selecione...</option>
+                    <div class="col-md-3">
+                        <label class="form-label" style="font-size:0.9rem;font-weight:600;">Motorista</label>
+                        <select name="motorista_id" class="form-select form-select-sm">
+                            <option value="">Todos</option>
                             {% for motorista in motoristas %}
-                            <option value="{{ motorista.id }}">{{ motorista.nome }}</option>
+                            <option value="{{ motorista.id }}" {% if request.args.get('motorista_id') == motorista.id|string %}selected{% endif %}>
+                                {{ motorista.nome }}
+                            </option>
                             {% endfor %}
                         </select>
                     </div>
-                </div>
-
-                <div class="row g-3 mt-2">
-                    <div class="col-md-4">
-                        <label class="form-label" style="font-size: 0.9rem;font-weight:600;">
-                            Data <span class="text-danger">*</span>
-                        </label>
-                        <input type="date" name="data" class="form-control form-control-sm" required>
+                    <div class="col-md-2">
+                        <label class="form-label" style="font-size:0.9rem;font-weight:600;">Data Início</label>
+                        <input type="date" name="data_inicio" class="form-control form-control-sm" value="{{ request.args.get('data_inicio', '') }}">
                     </div>
-                    <div class="col-md-4">
-                        <label class="form-label" style="font-size: 0.9rem;font-weight:600;">
-                            KM Inicial (Automático)
-                        </label>
-                        <input type="text" id="km_inicial_display" class="form-control form-control-sm bg-light" readonly>
-                        <small class="text-muted">Carregado automaticamente ao selecionar o veículo</small>
+                    <div class="col-md-2">
+                        <label class="form-label" style="font-size:0.9rem;font-weight:600;">Data Fim</label>
+                        <input type="date" name="data_fim" class="form-control form-control-sm" value="{{ request.args.get('data_fim', '') }}">
                     </div>
-                    <div class="col-md-4">
-                        <label class="form-label" style="font-size: 0.9rem;font-weight:600;">
-                            KM Final <span class="text-danger">*</span>
-                        </label>
-                        <input type="text" name="km_final" id="km_final" class="form-control form-control-sm" required>
+                    <div class="col-md-2 d-flex align-items-end">
+                        <button type="submit" class="btn btn-primary btn-sm me-2">
+                            <i class="bi bi-search"></i> Filtrar
+                        </button>
+                        <a href="{{ url_for('quilometragem.lista') }}" class="btn btn-secondary btn-sm">
+                            <i class="bi bi-x-circle"></i> Limpar
+                        </a>
                     </div>
                 </div>
+            </form>
+        </div>
+    </div>
 
-                <div class="row g-3 mt-2">
-                    <div class="col-md-4">
-                        <label class="form-label" style="font-size: 0.9rem;font-weight:600;">
-                            KM Rodados
-                        </label>
-                        <input type="text" id="km_rodados" class="form-control form-control-sm bg-light" readonly>
-                    </div>
-                    <div class="col-md-4">
-                        <label class="form-label" style="font-size: 0.9rem;font-weight:600;">
-                            Litros Abastecidos <span class="text-danger">*</span>
-                        </label>
-                        <input type="text" name="litros_abastecidos" id="litros_abastecidos" class="form-control form-control-sm" required>
-                    </div>
-                    <div class="col-md-4">
-                        <label class="form-label" style="font-size: 0.9rem;font-weight:600;">
-                            Valor Combustível <span class="text-danger">*</span>
-                        </label>
-                        <input type="text" name="valor_combustivel" id="valor_combustivel" class="form-control form-control-sm" required>
+    <!-- Tabela de Quilometragem -->
+    <div class="card">
+        <div class="card-header" style="background:#1D63A5;color:white;font-size:0.9rem;font-weight:600;">
+            <i class="bi bi-list-ul"></i> Registros de Quilometragem
+        </div>
+        <div class="card-body" style="padding: 0;">
+            <div class="table-responsive">
+                <table class="table table-hover table-sm mb-0" style="font-size: 0.85rem;">
+                    <thead style="background:#f8f9fa;">
+                        <tr>
+                            <th style="padding: 0.6rem;">Data</th>
+                            <th>Veículo</th>
+                            <th>Motorista</th>
+                            <th class="text-end">KM Inicial</th>
+                            <th class="text-end">KM Final</th>
+                            <th class="text-end">KM Rodados</th>
+                            <th class="text-end">Litros</th>
+                            <th class="text-end">Valor</th>
+                            <th class="text-end">Média</th>
+                            <th class="text-center">Ações</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% if registros %}
+                            {% for registro in registros %}
+                            <tr>
+                                <td style="padding: 0.6rem;">{{ registro.data.strftime('%d/%m/%Y') if registro.data else '-' }}</td>
+                                <td>{{ registro.veiculo_placa }} - {{ registro.veiculo_modelo }}</td>
+                                <td>{{ registro.motorista_nome }}</td>
+                                <td class="text-end">{{ "{:,.0f}".format(registro.km_inicial).replace(',', '.') }}</td>
+                                <td class="text-end">{{ "{:,.0f}".format(registro.km_final).replace(',', '.') }}</td>
+                                <td class="text-end">{{ "{:,.0f}".format(registro.km_rodados).replace(',', '.') }}</td>
+                                <td class="text-end">{{ "{:,.2f}".format(registro.litros_abastecidos).replace('.', ',') }}</td>
+                                <td class="text-end">R$ {{ "{:,.2f}".format(registro.valor_combustivel).replace(',', 'X').replace('.', ',').replace('X', '.') }}</td>
+                                <td class="text-end">
+                                    {% if registro.litros_abastecidos > 0 %}
+                                        {{ "{:.2f}".format(registro.km_rodados / registro.litros_abastecidos).replace('.', ',') }} km/l
+                                    {% else %}
+                                        -
+                                    {% endif %}
+                                </td>
+                                <td class="text-center">
+                                    <a href="{{ url_for('quilometragem.editar', id=registro.id) }}" 
+                                       class="btn btn-sm btn-warning" 
+                                       style="padding: 0.2rem 0.4rem; font-size: 0.75rem;"
+                                       title="Editar">
+                                        <i class="bi bi-pencil"></i>
+                                    </a>
+                                    {% if current_user.nivel == 'admin' %}
+                                    <a href="{{ url_for('quilometragem.excluir', id=registro.id) }}" 
+                                       class="btn btn-sm btn-danger" 
+                                       style="padding: 0.2rem 0.4rem; font-size: 0.75rem;"
+                                       onclick="return confirm('Deseja realmente excluir este registro?')"
+                                       title="Excluir">
+                                        <i class="bi bi-trash"></i>
+                                    </a>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        {% else %}
+                            <tr>
+                                <td colspan="10" class="text-center text-muted" style="padding: 2rem;">
+                                    <i class="bi bi-inbox" style="font-size: 2rem;"></i>
+                                    <p class="mb-0 mt-2">Nenhum registro encontrado</p>
+                                </td>
+                            </tr>
+                        {% endif %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Resumo -->
+    {% if registros %}
+    <div class="card mt-3">
+        <div class="card-header" style="background:#4A90E2;color:white;font-size:0.9rem;font-weight:600;">
+            <i class="bi bi-bar-chart"></i> Resumo
+        </div>
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-3">
+                    <div class="text-center p-3" style="background:#f8f9fa;border-radius:8px;">
+                        <h6 style="font-size:0.85rem;color:#666;">Total Registros</h6>
+                        <h4 style="color:#1D63A5;font-weight:700;">{{ registros|length }}</h4>
                     </div>
                 </div>
-
-                <div class="row g-3 mt-2">
-                    <div class="col-md-12">
-                        <label class="form-label" style="font-size: 0.9rem;font-weight:600;">
-                            Observações
-                        </label>
-                        <textarea name="observacoes" class="form-control form-control-sm" rows="3"></textarea>
+                <div class="col-md-3">
+                    <div class="text-center p-3" style="background:#f8f9fa;border-radius:8px;">
+                        <h6 style="font-size:0.85rem;color:#666;">Total KM Rodados</h6>
+                        <h4 style="color:#1D63A5;font-weight:700;">
+                            {{ "{:,.0f}".format(registros|sum(attribute='km_rodados')).replace(',', '.') }}
+                        </h4>
                     </div>
                 </div>
-
-                <div class="alert alert-info mt-3" style="font-size: 0.9rem;">
-                    <strong><i class="bi bi-info-circle"></i> Média de Consumo:</strong>
-                    <span id="media_consumo">-</span>
+                <div class="col-md-3">
+                    <div class="text-center p-3" style="background:#f8f9fa;border-radius:8px;">
+                        <h6 style="font-size:0.85rem;color:#666;">Total Litros</h6>
+                        <h4 style="color:#1D63A5;font-weight:700;">
+                            {{ "{:,.2f}".format(registros|sum(attribute='litros_abastecidos')).replace('.', ',') }}
+                        </h4>
+                    </div>
                 </div>
+                <div class="col-md-3">
+                    <div class="text-center p-3" style="background:#f8f9fa;border-radius:8px;">
+                        <h6 style="font-size:0.85rem;color:#666;">Total Gasto</h6>
+                        <h4 style="color:#1D63A5;font-weight:700;">
+                            R$ {{ "{:,.2f}".format(registros|sum(attribute='valor_combustivel')).replace(',', 'X').replace('.', ',').replace('X', '.') }}
+                        </h4>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</div>
 
-                <div class="d-flex justify-content-between mt-3">
-                    <a href="{{ url_for('quilometragem.lista') }}" class="btn btn-secondary btn-sm">
-                        <i class="bi bi-arrow-left"></i> Voltar
-                    </a>
-                    <button type="submit" class="btn btn-success btn-sm">
+<!-- Modal: Configurar KM Inicial dos Veículos -->
+<div class="modal fade" id="modalKmInicial" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header" style="background:#1D63A5;color:white;">
+                <h5 class="modal-title"><i class="bi bi-gear-fill"></i> Configurar KM Inicial dos Veículos</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p class="text-muted mb-3">
+                    <i class="bi bi-info-circle"></i> Configure o KM inicial de cada veículo. Este valor será usado automaticamente ao criar novos registros de quilometragem.
+                </p>
+                <div class="table-responsive">
+                    <table class="table table-sm table-bordered">
+                        <thead style="background:#f8f9fa;">
+                            <tr>
+                                <th>Veículo</th>
+                                <th>Placa</th>
+                                <th class="text-end">KM Inicial Atual</th>
+                                <th class="text-center">Ação</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for veiculo in veiculos %}
+                            <tr>
+                                <td>{{ veiculo.modelo }}</td>
+                                <td><span class="badge bg-secondary">{{ veiculo.placa }}</span></td>
+                                <td class="text-end">
+                                    <strong>{{ "{:,.0f}".format(veiculo.km_inicial_atual).replace(',', '.') if veiculo.km_inicial_atual else 'Não configurado' }}</strong>
+                                </td>
+                                <td class="text-center">
+                                    <button type="button" 
+                                            class="btn btn-sm btn-primary" 
+                                            onclick="abrirModalVeiculo({{ veiculo.id }}, '{{ veiculo.placa }}', '{{ veiculo.modelo }}', {{ veiculo.km_inicial_atual or 0 }})">
+                                        <i class="bi bi-pencil"></i> Configurar
+                                    </button>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Fechar</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal: Configurar KM Individual -->
+<div class="modal fade" id="modalConfigurarKm" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form method="POST" action="{{ url_for('quilometragem.configurar_km_inicial') }}">
+                <div class="modal-header" style="background:#ff9800;color:white;">
+                    <h5 class="modal-title"><i class="bi bi-speedometer2"></i> Configurar KM Inicial</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <input type="hidden" name="veiculo_id" id="veiculo_id">
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Veículo:</label>
+                        <p id="veiculo_info" class="text-muted"></p>
+                    </div>
+                    <div class="mb-3">
+                                                <label for="km_inicial_input" class="form-label fw-bold">
+                            KM Inicial <span class="text-danger">*</span>
+                        </label>
+                        <input type="number" 
+                               class="form-control" 
+                               name="km_inicial" 
+                               id="km_inicial_input" 
+                               required
+                               placeholder="Digite o KM inicial do veículo">
+                        <small class="text-muted">Este será o KM de partida para os próximos registros</small>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-primary btn-sm">
                         <i class="bi bi-check-circle"></i> Salvar
                     </button>
                 </div>
@@ -113,66 +277,33 @@
 </div>
 
 <script>
-    let kmInicial = 0;
-
-    // Quando selecionar um veículo, buscar o último KM
-    document.getElementById('veiculos_id').addEventListener('change', function() {
-        const veiculoId = this.value;
-        if (veiculoId) {
-            fetch(`/quilometragem/api/get-ultimo-km/${veiculoId}`)
-                .then(response => response.json())
-                .then(data => {
-                    kmInicial = data.ultimo_km || 0;
-                    if (kmInicial > 0) {
-                        document.getElementById('km_inicial_display').value = kmInicial.toLocaleString('pt-BR', {minimumFractionDigits: 0, maximumFractionDigits: 0});
-                    } else {
-                        document.getElementById('km_inicial_display').value = 'KM inicial não configurado';
-                        alert('⚠️ Este veículo não possui KM inicial cadastrado. Configure na lista de quilometragem primeiro.');
-                    }
-                    calcularKmRodados();
-                })
-                .catch(error => {
-                    console.error('Erro ao buscar KM inicial:', error);
-                    alert('Erro ao carregar KM inicial do veículo');
-                });
-        } else {
-            document.getElementById('km_inicial_display').value = '';
-            kmInicial = 0;
+    function abrirModalVeiculo(veiculoId, placa, modelo, kmAtual) {
+        document.getElementById('veiculo_id').value = veiculoId;
+        document.getElementById('veiculo_info').innerHTML = `<strong>${placa}</strong> - ${modelo}`;
+        document.getElementById('km_inicial_input').value = kmAtual > 0 ? kmAtual : '';
+        
+        // Fechar o modal principal
+        const modalPrincipal = bootstrap.Modal.getInstance(document.getElementById('modalKmInicial'));
+        if (modalPrincipal) {
+            modalPrincipal.hide();
         }
+        
+        // Abrir o modal de configuração
+        const modalConfig = new bootstrap.Modal(document.getElementById('modalConfigurarKm'));
+        modalConfig.show();
+    }
+    
+    // Reabrir modal principal quando fechar o modal de configuração
+    document.getElementById('modalConfigurarKm').addEventListener('hidden.bs.modal', function () {
+        const modalPrincipal = new bootstrap.Modal(document.getElementById('modalKmInicial'));
+        modalPrincipal.show();
     });
-
-    function calcularKmRodados() {
-        const kmFinal = parseFloat(document.getElementById('km_final').value.replace(/\./g, '').replace(',', '.')) || 0;
-        const kmRodados = kmFinal - kmInicial;
-        
-        if (kmRodados > 0) {
-            document.getElementById('km_rodados').value = kmRodados.toLocaleString('pt-BR', {minimumFractionDigits: 0, maximumFractionDigits: 0});
-        } else {
-            document.getElementById('km_rodados').value = '';
-        }
-        calcularMedia();
-    }
-    
-    function calcularMedia() {
-        const kmRodados = parseFloat(document.getElementById('km_rodados').value.replace(/\./g, '').replace(',', '.')) || 0;
-        const litros = parseFloat(document.getElementById('litros_abastecidos').value.replace(/\./g, '').replace(',', '.')) || 0;
-        
-        if (kmRodados > 0 && litros > 0) {
-            const media = kmRodados / litros;
-            document.getElementById('media_consumo').innerHTML = `<strong>${media.toFixed(2).replace('.', ',')} km/l</strong>`;
-        } else {
-            document.getElementById('media_consumo').textContent = '-';
-        }
-    }
-    
-    document.getElementById('km_final').addEventListener('input', calcularKmRodados);
-    document.getElementById('litros_abastecidos').addEventListener('input', calcularMedia);
 </script>
 
 <style>
-    .form-label {
+    .table th {
         font-weight: 600;
-        font-size: 0.9rem;
+        font-size: 0.85rem;
     }
     
     .btn-sm {
@@ -184,6 +315,11 @@
         h2 {
             font-size: 1.2rem !important;
         }
+        .table {
+            font-size: 0.75rem !important;
+        }
     }
 </style>
+
 {% endblock %}
+
