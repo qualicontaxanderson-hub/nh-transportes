@@ -19,9 +19,7 @@
             <form method="POST" action="{{ url_for('quilometragem.novo') }}" id="formQuilometragem">
                 <div class="row g-3">
                     <div class="col-md-6">
-                        <label class="form-label" style="font-size: 0.9rem;font-weight:600;">
-                            Veículo <span class="text-danger">*</span>
-                        </label>
+                        <label class="form-label" style="font-size: 0.9rem;font-weight:600;">Veículo <span class="text-danger">*</span></label>
                         <select name="veiculos_id" id="veiculos_id" class="form-select form-select-sm" required>
                             <option value="">Selecione...</option>
                             {% for veiculo in veiculos %}
@@ -30,9 +28,7 @@
                         </select>
                     </div>
                     <div class="col-md-6">
-                        <label class="form-label" style="font-size: 0.9rem;font-weight:600;">
-                            Motorista <span class="text-danger">*</span>
-                        </label>
+                        <label class="form-label" style="font-size: 0.9rem;font-weight:600;">Motorista <span class="text-danger">*</span></label>
                         <select name="motoristas_id" class="form-select form-select-sm" required>
                             <option value="">Selecione...</option>
                             {% for motorista in motoristas %}
@@ -44,53 +40,39 @@
 
                 <div class="row g-3 mt-2">
                     <div class="col-md-4">
-                        <label class="form-label" style="font-size: 0.9rem;font-weight:600;">
-                            Data <span class="text-danger">*</span>
-                        </label>
+                        <label class="form-label" style="font-size: 0.9rem;font-weight:600;">Data <span class="text-danger">*</span></label>
                         <input type="date" name="data" class="form-control form-control-sm" required>
                     </div>
                     <div class="col-md-4">
-                        <label class="form-label" style="font-size: 0.9rem;font-weight:600;">
-                            KM Inicial (Automático)
-                        </label>
+                        <label class="form-label" style="font-size: 0.9rem;font-weight:600;">KM Inicial (Automático)</label>
                         <input type="text" id="km_inicial_display" class="form-control form-control-sm bg-light" readonly>
                         <input type="hidden" name="km_inicial" id="km_inicial">
                         <small class="text-muted">Carregado automaticamente ao selecionar o veículo</small>
                     </div>
                     <div class="col-md-4">
-                        <label class="form-label" style="font-size: 0.9rem;font-weight:600;">
-                            KM Final <span class="text-danger">*</span>
-                        </label>
+                        <label class="form-label" style="font-size: 0.9rem;font-weight:600;">KM Final <span class="text-danger">*</span></label>
                         <input type="text" name="km_final" id="km_final" class="form-control form-control-sm" required>
                     </div>
                 </div>
 
                 <div class="row g-3 mt-2">
                     <div class="col-md-4">
-                        <label class="form-label" style="font-size: 0.9rem;font-weight:600;">
-                            KM Rodados
-                        </label>
+                        <label class="form-label" style="font-size: 0.9rem;font-weight:600;">KM Rodados</label>
                         <input type="text" id="km_rodados" class="form-control form-control-sm bg-light" readonly>
                     </div>
                     <div class="col-md-4">
-                        <label class="form-label" style="font-size: 0.9rem;font-weight:600;">
-                            Litros Abastecidos <span class="text-danger">*</span>
-                        </label>
+                        <label class="form-label" style="font-size: 0.9rem;font-weight:600;">Litros Abastecidos <span class="text-danger">*</span></label>
                         <input type="text" name="litros_abastecidos" id="litros_abastecidos" class="form-control form-control-sm" required>
                     </div>
                     <div class="col-md-4">
-                        <label class="form-label" style="font-size: 0.9rem;font-weight:600;">
-                            Valor Combustível <span class="text-danger">*</span>
-                        </label>
+                        <label class="form-label" style="font-size: 0.9rem;font-weight:600;">Valor Combustível <span class="text-danger">*</span></label>
                         <input type="text" name="valor_combustivel" id="valor_combustivel" class="form-control form-control-sm" required>
                     </div>
                 </div>
 
                 <div class="row g-3 mt-2">
                     <div class="col-md-12">
-                        <label class="form-label" style="font-size: 0.9rem;font-weight:600;">
-                            Observações
-                        </label>
+                        <label class="form-label" style="font-size: 0.9rem;font-weight:600;">Observações</label>
                         <textarea name="observacoes" class="form-control form-control-sm" rows="3"></textarea>
                     </div>
                 </div>
@@ -116,7 +98,6 @@
 <script>
     let kmInicial = 0;
 
-    // Quando selecionar um veículo, buscar o último KM
     document.getElementById('veiculos_id').addEventListener('change', function() {
         const veiculoId = this.value;
         if (veiculoId) {
@@ -148,7 +129,6 @@
     function calcularKmRodados() {
         const kmFinal = parseFloat(document.getElementById('km_final').value.replace(/\./g, '').replace(',', '.')) || 0;
         const kmRodados = kmFinal - kmInicial;
-        
         if (kmRodados > 0) {
             document.getElementById('km_rodados').value = kmRodados.toLocaleString('pt-BR', {minimumFractionDigits: 0, maximumFractionDigits: 0});
         } else {
@@ -160,7 +140,6 @@
     function calcularMedia() {
         const kmRodados = parseFloat(document.getElementById('km_rodados').value.replace(/\./g, '').replace(',', '.')) || 0;
         const litros = parseFloat(document.getElementById('litros_abastecidos').value.replace(/\./g, '').replace(',', '.')) || 0;
-        
         if (kmRodados > 0 && litros > 0) {
             const media = kmRodados / litros;
             document.getElementById('media_consumo').innerHTML = `<strong>${media.toFixed(2).replace('.', ',')} km/l</strong>`;
@@ -178,17 +157,14 @@
         font-weight: 600;
         font-size: 0.9rem;
     }
-    
     .btn-sm {
         font-size: 0.8rem;
         padding: 0.3rem 0.6rem;
     }
-    
     @media (max-width: 768px) {
         h2 {
             font-size: 1.2rem !important;
         }
     }
 </style>
-
 {% endblock %}
