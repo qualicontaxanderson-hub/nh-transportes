@@ -18,6 +18,22 @@
         </div>
     </div>
 
+    <!-- FILTROS DE DATA -->
+    <form method="get" class="row g-2 mb-3">
+        <div class="col-md-3">
+            <label for="data_inicio" class="form-label mb-1">Data Inicial</label>
+            <input type="date" class="form-control" id="data_inicio" name="data_inicio" value="{{ filtros.data_inicio }}">
+        </div>
+        <div class="col-md-3">
+            <label for="data_fim" class="form-label mb-1">Data Final</label>
+            <input type="date" class="form-control" id="data_fim" name="data_fim" value="{{ filtros.data_fim }}">
+        </div>
+        <div class="col-md-3 align-self-end">
+            <button type="submit" class="btn btn-outline-primary">Filtrar</button>
+            <a href="{{ url_for('quilometragem.lista') }}" class="btn btn-outline-secondary">Limpar</a>
+        </div>
+    </form>
+
     <!-- Tabela de Quilometragem -->
     <div class="card">
         <div class="card-header" style="background:#1D63A5;color:white;font-size:0.9rem;font-weight:600;">
@@ -95,6 +111,34 @@
                     </tbody>
                 </table>
             </div>
+        </div>
+    </div>
+
+    <!-- RESUMO AO FINAL -->
+    <div class="card mt-4">
+        <div class="card-header" style="background: #f8f9fa; font-weight: 600;">
+            Resumo dos Abastecimentos
+        </div>
+        <div class="card-body" style="font-size:1rem;">
+            {% set total_litros = 0 %}
+            {% set total_km = 0 %}
+            {% set total_valor = 0 %}
+            {% for resumo in resumo_veiculos %}
+                {% set total_litros = total_litros + (resumo.total_litros or 0) %}
+                {% set total_km = total_km + (resumo.total_km or 0) %}
+                {% set total_valor = total_valor + (resumo.total_valor or 0) %}
+            {% endfor %}
+            <ul style="list-style:none; padding:0;">
+                <li><strong>KMs rodados totais:</strong> {{ "{:,.0f}".format(total_km).replace(',', '.') }} km</li>
+                <li><strong>Valor total abastecido:</strong> R$ {{ "{:,.2f}".format(total_valor).replace(',', 'X').replace('.', ',').replace('X', '.') }}</li>
+                <li><strong>Média km/l:</strong>
+                    {% if total_litros > 0 %}
+                        {{ "{:.2f}".format(total_km / total_litros).replace('.', ',') }} km/l
+                    {% else %}
+                        -
+                    {% endif %}
+                </li>
+            </ul>
         </div>
     </div>
 
