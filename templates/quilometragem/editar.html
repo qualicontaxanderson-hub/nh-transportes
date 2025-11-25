@@ -19,9 +19,7 @@
             <form method="POST" action="{{ url_for('quilometragem.editar', id=quilometragem.id) }}" id="formQuilometragem">
                 <div class="row g-3">
                     <div class="col-md-6">
-                        <label class="form-label" style="font-size: 0.9rem;font-weight:600;">
-                            Veículo <span class="text-danger">*</span>
-                        </label>
+                        <label class="form-label" style="font-size: 0.9rem;font-weight:600;">Veículo <span class="text-danger">*</span></label>
                         <select name="veiculos_id" class="form-select form-select-sm" required>
                             <option value="">Selecione...</option>
                             {% for veiculo in veiculos %}
@@ -32,9 +30,7 @@
                         </select>
                     </div>
                     <div class="col-md-6">
-                        <label class="form-label" style="font-size: 0.9rem;font-weight:600;">
-                            Motorista <span class="text-danger">*</span>
-                        </label>
+                        <label class="form-label" style="font-size: 0.9rem;font-weight:600;">Motorista <span class="text-danger">*</span></label>
                         <select name="motoristas_id" class="form-select form-select-sm" required>
                             <option value="">Selecione...</option>
                             {% for motorista in motoristas %}
@@ -48,51 +44,37 @@
 
                 <div class="row g-3 mt-2">
                     <div class="col-md-4">
-                        <label class="form-label" style="font-size: 0.9rem;font-weight:600;">
-                            Data <span class="text-danger">*</span>
-                        </label>
+                        <label class="form-label" style="font-size: 0.9rem;font-weight:600;">Data <span class="text-danger">*</span></label>
                         <input type="date" name="data" class="form-control form-control-sm" value="{{ quilometragem.data.strftime('%Y-%m-%d') if quilometragem.data else '' }}" required>
                     </div>
                     <div class="col-md-4">
-                        <label class="form-label" style="font-size: 0.9rem;font-weight:600;">
-                            KM Inicial <span class="text-danger">*</span>
-                        </label>
+                        <label class="form-label" style="font-size: 0.9rem;font-weight:600;">KM Inicial <span class="text-danger">*</span></label>
                         <input type="text" name="km_inicial" id="km_inicial" class="form-control form-control-sm" value="{{ '{:,.0f}'.format(quilometragem.km_inicial).replace(',', '.') }}" required>
                     </div>
                     <div class="col-md-4">
-                        <label class="form-label" style="font-size: 0.9rem;font-weight:600;">
-                            KM Final <span class="text-danger">*</span>
-                        </label>
+                        <label class="form-label" style="font-size: 0.9rem;font-weight:600;">KM Final <span class="text-danger">*</span></label>
                         <input type="text" name="km_final" id="km_final" class="form-control form-control-sm" value="{{ '{:,.0f}'.format(quilometragem.km_final).replace(',', '.') }}" required>
                     </div>
                 </div>
 
                 <div class="row g-3 mt-2">
                     <div class="col-md-4">
-                        <label class="form-label" style="font-size: 0.9rem;font-weight:600;">
-                            KM Rodados
-                        </label>
+                        <label class="form-label" style="font-size: 0.9rem;font-weight:600;">KM Rodados</label>
                         <input type="text" id="km_rodados" class="form-control form-control-sm bg-light" value="{{ '{:,.0f}'.format(quilometragem.km_rodados).replace(',', '.') }}" readonly>
                     </div>
                     <div class="col-md-4">
-                        <label class="form-label" style="font-size: 0.9rem;font-weight:600;">
-                            Litros Abastecidos <span class="text-danger">*</span>
-                        </label>
+                        <label class="form-label" style="font-size: 0.9rem;font-weight:600;">Litros Abastecidos <span class="text-danger">*</span></label>
                         <input type="text" name="litros_abastecidos" id="litros_abastecidos" class="form-control form-control-sm" value="{{ '{:,.2f}'.format(quilometragem.litros_abastecidos).replace(',', 'X').replace('.', ',').replace('X', '.') }}" required>
                     </div>
                     <div class="col-md-4">
-                        <label class="form-label" style="font-size: 0.9rem;font-weight:600;">
-                            Valor Combustível <span class="text-danger">*</span>
-                        </label>
+                        <label class="form-label" style="font-size: 0.9rem;font-weight:600;">Valor Combustível <span class="text-danger">*</span></label>
                         <input type="text" name="valor_combustivel" id="valor_combustivel" class="form-control form-control-sm" value="{{ '{:,.2f}'.format(quilometragem.valor_combustivel).replace(',', 'X').replace('.', ',').replace('X', '.') }}" required>
                     </div>
                 </div>
 
                 <div class="row g-3 mt-2">
                     <div class="col-md-12">
-                        <label class="form-label" style="font-size: 0.9rem;font-weight:600;">
-                            Observações
-                        </label>
+                        <label class="form-label" style="font-size: 0.9rem;font-weight:600;">Observações</label>
                         <textarea name="observacoes" class="form-control form-control-sm" rows="3">{{ quilometragem.observacoes }}</textarea>
                     </div>
                 </div>
@@ -155,12 +137,10 @@
         font-weight: 600;
         font-size: 0.9rem;
     }
-    
     .btn-sm {
         font-size: 0.8rem;
         padding: 0.3rem 0.6rem;
     }
-    
     @media (max-width: 768px) {
         h2 {
             font-size: 1.2rem !important;
