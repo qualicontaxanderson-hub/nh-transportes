@@ -98,7 +98,41 @@
         </div>
     </div>
 
-    <!-- Aqui você pode manter ou colocar seus modais de KM Inicial como já tem no projeto -->
+    <!-- MODAL KM INICIAL -->
+    <div class="modal fade" id="modalKmInicial" tabindex="-1" aria-labelledby="modalKmInicialLabel" aria-hidden="true">
+      <div class="modal-dialog">
+        <div class="modal-content">
+          <form method="POST" action="{{ url_for('quilometragem.configurar_km_inicial') }}">
+            <div class="modal-header">
+              <h5 class="modal-title" id="modalKmInicialLabel">Configurar KM Inicial</h5>
+              <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
+            </div>
+            <div class="modal-body">
+              <div class="mb-3">
+                <label for="veiculos_id" class="form-label">Veículo</label>
+                <select class="form-select" id="veiculos_id" name="veiculos_id" required>
+                  {% for veiculo in veiculos %}
+                    <option value="{{ veiculo.id }}">{{ veiculo.placa }} - {{ veiculo.modelo }}</option>
+                  {% endfor %}
+                </select>
+              </div>
+              <div class="mb-3">
+                <label for="km_inicial" class="form-label">KM Inicial</label>
+                <input type="text" class="form-control" id="km_inicial" name="km_inicial" required>
+              </div>
+              <div class="mb-3">
+                <label for="observacoes" class="form-label">Observações</label>
+                <textarea class="form-control" id="observacoes" name="observacoes" rows="2"></textarea>
+              </div>
+            </div>
+            <div class="modal-footer">
+              <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fechar</button>
+              <button type="submit" class="btn btn-primary">Salvar</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
 </div>
 
 <style>
