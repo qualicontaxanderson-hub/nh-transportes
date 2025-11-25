@@ -34,6 +34,7 @@
                                 <td><strong>{{ produto.id }}</strong></td>
                                 <td>{{ produto.nome }}</td>
                                 <td class="text-center">
+                                    {% if current_user.nivel == 'admin' %}
                                     <a href="{{ url_for('produtos.editar', id=produto.id) }}" class="btn btn-sm btn-warning" title="Editar" style="padding: 0.2rem 0.4rem;">
                                         <i class="bi bi-pencil"></i>
                                     </a>
@@ -44,6 +45,11 @@
                                        onclick="return confirm('Deseja realmente excluir este produto?')">
                                         <i class="bi bi-trash"></i>
                                     </a>
+                                    {% else %}
+                                    <span class="text-muted" style="font-size: 0.75rem;">
+                                        <i class="bi bi-lock"></i> Restrito
+                                    </span>
+                                    {% endif %}
                                 </td>
                             </tr>
                             {% endfor %}
