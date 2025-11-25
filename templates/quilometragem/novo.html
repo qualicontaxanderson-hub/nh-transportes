@@ -22,7 +22,7 @@
                         <label class="form-label" style="font-size: 0.9rem;font-weight:600;">
                             Veículo <span class="text-danger">*</span>
                         </label>
-                        <select name="veiculos_id" class="form-select form-select-sm" required>
+                        <select name="veiculos_id" id="veiculos_id" class="form-select form-select-sm" required>
                             <option value="">Selecione...</option>
                             {% for veiculo in veiculos %}
                             <option value="{{ veiculo.id }}">{{ veiculo.placa }} - {{ veiculo.modelo }}</option>
@@ -51,9 +51,11 @@
                     </div>
                     <div class="col-md-4">
                         <label class="form-label" style="font-size: 0.9rem;font-weight:600;">
-                            KM Inicial <span class="text-danger">*</span>
+                            KM Inicial (Automático)
                         </label>
-                        <input type="text" name="km_inicial" id="km_inicial" class="form-control form-control-sm" required value="{{ km_inicial_sugerido }}">
+                        <input type="text" id="km_inicial_display" class="form-control form-control-sm bg-light" readonly>
+                        <input type="hidden" name="km_inicial" id="km_inicial">
+                        <small class="text-muted">Carregado automaticamente ao selecionar o veículo</small>
                     </div>
                     <div class="col-md-4">
                         <label class="form-label" style="font-size: 0.9rem;font-weight:600;">
@@ -112,10 +114,41 @@
 </div>
 
 <script>
+    let kmInicial = 0;
+
+    // Quando selecionar um veículo, buscar o último KM
+    document.getElementById('veiculos_id').addEventListener('change', function() {
+        const veiculoId = this.value;
+        if (veiculoId) {
+            fetch(`/quilometragem/api/get-ultimo-km/${veiculoId}`)
+                .then(response => response.json())
+                .then(data => {
+                    kmInicial = data.ultimo_km || 0;
+                    if (kmInicial > 0) {
+                        document.getElementById('km_inicial_display').value = kmInicial.toLocaleString('pt-BR', {minimumFractionDigits: 0, maximumFractionDigits: 0});
+                        document.getElementById('km_inicial').value = kmInicial;
+                    } else {
+                        document.getElementById('km_inicial_display').value = 'KM inicial não configurado';
+                        document.getElementById('km_inicial').value = '';
+                        alert('⚠️ Este veículo não possui KM inicial cadastrado. Configure na lista de quilometragem primeiro.');
+                    }
+                    calcularKmRodados();
+                })
+                .catch(error => {
+                    console.error('Erro ao buscar KM inicial:', error);
+                    alert('Erro ao carregar KM inicial do veículo');
+                });
+        } else {
+            document.getElementById('km_inicial_display').value = '';
+            document.getElementById('km_inicial').value = '';
+            kmInicial = 0;
+        }
+    });
+
     function calcularKmRodados() {
-        const kmInicial = parseFloat(document.getElementById('km_inicial').value.replace(/\./g, '').replace(',', '.')) || 0;
         const kmFinal = parseFloat(document.getElementById('km_final').value.replace(/\./g, '').replace(',', '.')) || 0;
         const kmRodados = kmFinal - kmInicial;
+        
         if (kmRodados > 0) {
             document.getElementById('km_rodados').value = kmRodados.toLocaleString('pt-BR', {minimumFractionDigits: 0, maximumFractionDigits: 0});
         } else {
@@ -127,6 +160,7 @@
     function calcularMedia() {
         const kmRodados = parseFloat(document.getElementById('km_rodados').value.replace(/\./g, '').replace(',', '.')) || 0;
         const litros = parseFloat(document.getElementById('litros_abastecidos').value.replace(/\./g, '').replace(',', '.')) || 0;
+        
         if (kmRodados > 0 && litros > 0) {
             const media = kmRodados / litros;
             document.getElementById('media_consumo').innerHTML = `<strong>${media.toFixed(2).replace('.', ',')} km/l</strong>`;
@@ -135,7 +169,6 @@
         }
     }
     
-    document.getElementById('km_inicial').addEventListener('input', calcularKmRodados);
     document.getElementById('km_final').addEventListener('input', calcularKmRodados);
     document.getElementById('litros_abastecidos').addEventListener('input', calcularMedia);
 </script>
@@ -157,4 +190,5 @@
         }
     }
 </style>
+
 {% endblock %}
