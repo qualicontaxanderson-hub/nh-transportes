@@ -11,6 +11,53 @@
         </a>
     </div>
 
+    <!-- Filtros -->
+    <div class="card mb-3">
+        <div class="card-header" style="background:#4A90E2;color:#000;font-size:0.9rem;font-weight:600;">
+            <i class="bi bi-funnel"></i> Filtros
+        </div>
+        <div class="card-body" style="padding: 0.75rem;">
+            <form method="GET" class="row g-2">
+                <div class="col-md-3">
+                    <label class="form-label" style="font-size: 0.85rem;">Veículo</label>
+                    <select name="veiculos_id" class="form-select form-select-sm">
+                        <option value="">Todos</option>
+                        {% for veiculo in veiculos %}
+                        <option value="{{ veiculo.id }}" {% if filtros.veiculos_id|string == veiculo.id|string %}selected{% endif %}>
+                            {{ veiculo.placa }} - {{ veiculo.modelo }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label" style="font-size: 0.85rem;">Motorista</label>
+                    <select name="motoristas_id" class="form-select form-select-sm">
+                        <option value="">Todos</option>
+                        {% for motorista in motoristas %}
+                        <option value="{{ motorista.id }}" {% if filtros.motoristas_id|string == motorista.id|string %}selected{% endif %}>
+                            {{ motorista.nome }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label" style="font-size: 0.85rem;">Data Início</label>
+                    <input type="date" name="data_inicio" class="form-control form-control-sm" value="{{ filtros.data_inicio }}">
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label" style="font-size: 0.85rem;">Data Fim</label>
+                    <input type="date" name="data_fim" class="form-control form-control-sm" value="{{ filtros.data_fim }}">
+                </div>
+                <div class="col-md-2 d-flex align-items-end">
+                    <button type="submit" class="btn btn-primary btn-sm me-2">
+                        <i class="bi bi-search"></i> Filtrar
+                    </button>
+                    <a href="{{ url_for('quilometragem.lista') }}" class="btn btn-secondary btn-sm">Limpar</a>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <!-- Tabela Principal -->
     <div class="card mb-3">
         <div class="card-header" style="background:#1D63A5;color:white;font-size:0.9rem;font-weight:600;">
@@ -30,7 +77,8 @@
                             <th>KM Final</th>
                             <th>KM Rodados</th>
                             <th>Litros</th>
-                            <th>Valor Combustível</th>
+                            <th>Valor</th>
+                            <th class="text-center">Ações</th>
                         </tr>
                     </thead>
                     <tbody style="font-size: 0.85rem;">
@@ -38,7 +86,7 @@
                             {% for reg in quilometragens %}
                             <tr>
                                 <td><strong>{{ reg.id }}</strong></td>
-                                <td>{{ reg.data }}</td>
+                                <td>{{ reg.data.strftime('%d/%m/%Y') if reg.data else '-' }}</td>
                                 <td>{{ reg.placa }}</td>
                                 <td>{{ reg.modelo or '-' }}</td>
                                 <td>{{ reg.motorista_nome or '-' }}</td>
@@ -47,11 +95,23 @@
                                 <td>{{ "{:,.0f}".format(reg.km_rodados|float).replace(",", ".") }}</td>
                                 <td>{{ "{:,.2f}".format(reg.litros_abastecidos|float).replace(",", "X").replace(".", ",").replace("X", ".") }}</td>
                                 <td>R$ {{ "{:,.2f}".format(reg.valor_combustivel|float).replace(",", "X").replace(".", ",").replace("X", ".") }}</td>
+                                <td class="text-center">
+                                    <a href="{{ url_for('quilometragem.editar', id=reg.id) }}" class="btn btn-sm btn-warning" title="Editar" style="padding: 0.2rem 0.4rem;">
+                                        <i class="bi bi-pencil"></i>
+                                    </a>
+                                    <a href="{{ url_for('quilometragem.excluir', id=reg.id) }}" 
+                                       class="btn btn-sm btn-danger" 
+                                       title="Excluir"
+                                       style="padding: 0.2rem 0.4rem;"
+                                       onclick="return confirm('Deseja realmente excluir este lançamento?')">
+                                        <i class="bi bi-trash"></i>
+                                    </a>
+                                </td>
                             </tr>
                             {% endfor %}
                         {% else %}
                             <tr>
-                                <td colspan="10" class="text-center text-muted py-3" style="font-size: 0.9rem;">
+                                <td colspan="11" class="text-center text-muted py-3" style="font-size: 0.9rem;">
                                     <i class="bi bi-inbox" style="font-size:1.5rem;"></i><br>
                                     Nenhum lançamento cadastrado
                                 </td>
