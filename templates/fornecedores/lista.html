@@ -44,7 +44,7 @@
                                     <a href="{{ url_for('fornecedores.editar', id=fornecedor.id) }}" class="btn btn-sm btn-warning" title="Editar" style="padding: 0.2rem 0.4rem;">
                                         <i class="bi bi-pencil"></i>
                                     </a>
-                                    {% if current_user.is_admin() %}
+                                    {% if current_user.nivel == 'admin' %}
                                     <form method="POST" action="{{ url_for('fornecedores.excluir', id=fornecedor.id) }}" style="display:inline;" onsubmit="return confirm('Deseja realmente excluir este fornecedor?');">
                                         <button type="submit" class="btn btn-sm btn-danger" title="Excluir" style="padding: 0.2rem 0.4rem;">
                                             <i class="bi bi-trash"></i>
