@@ -20,7 +20,7 @@ def load_user(user_id):
     return Usuario.get_by_id(int(user_id))
 
 # Importar blueprints
-from routes import clientes, fornecedores, veiculos, motoristas, fretes, rotas, origens_destinos, quilometragem
+from routes import clientes, fornecedores, veiculos, motoristas, fretes, rotas, origens_destinos, quilometragem, produtos, relatorios
 
 app.register_blueprint(clientes.bp)
 app.register_blueprint(fornecedores.bp)
@@ -30,6 +30,8 @@ app.register_blueprint(fretes.bp)
 app.register_blueprint(rotas.bp)
 app.register_blueprint(origens_destinos.bp)
 app.register_blueprint(quilometragem.bp)
+app.register_blueprint(produtos.bp)       # ✅ ADICIONADO
+app.register_blueprint(relatorios.bp)     # ✅ ADICIONADO
 
 # Rota principal (Dashboard)
 @app.route('/')
