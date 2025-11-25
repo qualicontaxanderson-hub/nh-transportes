@@ -62,7 +62,7 @@
                                     <a href="{{ url_for('clientes.editar', id=cliente.id) }}" class="btn btn-sm btn-warning" title="Editar" style="padding: 0.2rem 0.4rem;">
                                         <i class="bi bi-pencil"></i>
                                     </a>
-                                    {% if current_user.is_admin() %}
+                                    {% if current_user.nivel == 'admin' %}
                                     <form action="{{ url_for('clientes.excluir', id=cliente.id) }}" method="POST" style="display:inline;" onsubmit="return confirm('Deseja realmente excluir este cliente?');">
                                         <button type="submit" class="btn btn-sm btn-danger" title="Excluir" style="padding: 0.2rem 0.4rem;">
                                             <i class="bi bi-trash"></i>
