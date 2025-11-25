@@ -131,7 +131,7 @@ def lista():
     conn.close()
     return render_template(
         'quilometragem/lista.html',
-        registros=quilometragens,     # Parâmetro correto para o template
+        registros=quilometragens,     
         veiculos=veiculos,
         motoristas=motoristas,
         veiculos_km_inicial=veiculos_km_inicial,
@@ -293,4 +293,4 @@ def excluir(id):
         flash('Quilometragem excluída com sucesso!', 'success')
     except Exception as e:
         flash(f'Erro ao excluir quilometragem: {str(e)}', 'danger')
-    return redirect(url_for('quilometragem.lista')
+    return redirect(url_for('quilometragem.lista'))   # <-- Aqui estava aberto, agora fechou!
