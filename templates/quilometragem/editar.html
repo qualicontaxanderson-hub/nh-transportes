@@ -3,101 +3,124 @@
 {% block title %}Editar Quilometragem - NH Transportes{% endblock %}
 
 {% block content %}
-<div class="container">
-    <div class="row justify-content-center">
-        <div class="col-md-8">
-            <div class="card shadow">
-                <div class="card-header bg-warning text-dark">
-                    <h4 class="mb-0"><i class="bi bi-pencil"></i> Editar Quilometragem</h4>
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h2 style="font-size: 1.5rem;"><i class="bi bi-pencil-square"></i> Editar Quilometragem</h2>
+        <a href="{{ url_for('quilometragem.lista') }}" class="btn btn-secondary btn-sm">
+            <i class="bi bi-arrow-left"></i> Voltar
+        </a>
+    </div>
+
+    <div class="card">
+        <div class="card-header" style="background:#ffc107;color:#000;font-size:0.9rem;font-weight:600;">
+            <i class="bi bi-pencil"></i> Edição de Quilometragem
+        </div>
+        <div class="card-body" style="padding: 1rem;">
+            <form method="POST" action="{{ url_for('quilometragem.editar', id=quilometragem.id) }}" id="formQuilometragem">
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <label class="form-label" style="font-size: 0.9rem;font-weight:600;">
+                            Veículo <span class="text-danger">*</span>
+                        </label>
+                        <select name="veiculos_id" class="form-select form-select-sm" required>
+                            <option value="">Selecione...</option>
+                            {% for veiculo in veiculos %}
+                            <option value="{{ veiculo.id }}" {% if veiculo.id == quilometragem.veiculos_id %}selected{% endif %}>
+                                {{ veiculo.placa }} - {{ veiculo.modelo }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label" style="font-size: 0.9rem;font-weight:600;">
+                            Motorista <span class="text-danger">*</span>
+                        </label>
+                        <select name="motoristas_id" class="form-select form-select-sm" required>
+                            <option value="">Selecione...</option>
+                            {% for motorista in motoristas %}
+                            <option value="{{ motorista.id }}" {% if motorista.id == quilometragem.motoristas_id %}selected{% endif %}>
+                                {{ motorista.nome }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
                 </div>
-                <div class="card-body">
-                    <form method="POST" action="{{ url_for('quilometragem.editar', id=quilometragem.id) }}" id="formQuilometragem">
-                        <div class="row mb-3">
-                            <div class="col-md-6">
-                                <label class="form-label">Veículo <span class="text-danger">*</span></label>
-                                <select name="veiculos_id" class="form-select" required>
-                                    <option value="">Selecione...</option>
-                                    {% for veiculo in veiculos %}
-                                    <option value="{{ veiculo.id }}" {% if veiculo.id == quilometragem.veiculos_id %}selected{% endif %}>
-                                        {{ veiculo.placa }} - {{ veiculo.modelo }}
-                                    </option>
-                                    {% endfor %}
-                                </select>
-                            </div>
-                            <div class="col-md-6">
-                                <label class="form-label">Motorista <span class="text-danger">*</span></label>
-                                <select name="motoristas_id" class="form-select" required>
-                                    <option value="">Selecione...</option>
-                                    {% for motorista in motoristas %}
-                                    <option value="{{ motorista.id }}" {% if motorista.id == quilometragem.motoristas_id %}selected{% endif %}>
-                                        {{ motorista.nome }}
-                                    </option>
-                                    {% endfor %}
-                                </select>
-                            </div>
-                        </div>
 
-                        <div class="row mb-3">
-                            <div class="col-md-4">
-                                <label class="form-label">Data <span class="text-danger">*</span></label>
-                                <input type="date" name="data" class="form-control" value="{{ quilometragem.data.strftime('%Y-%m-%d') if quilometragem.data else '' }}" required>
-                            </div>
-                            <div class="col-md-4">
-                                <label class="form-label">KM Inicial <span class="text-danger">*</span></label>
-                                <input type="text" name="km_inicial" id="km_inicial" class="form-control" value="{{ '{:,.0f}'.format(quilometragem.km_inicial).replace(',', '.') }}" required>
-                            </div>
-                            <div class="col-md-4">
-                                <label class="form-label">KM Final <span class="text-danger">*</span></label>
-                                <input type="text" name="km_final" id="km_final" class="form-control" value="{{ '{:,.0f}'.format(quilometragem.km_final).replace(',', '.') }}" required>
-                            </div>
-                        </div>
-
-                        <div class="row mb-3">
-                            <div class="col-md-4">
-                                <label class="form-label">KM Rodados</label>
-                                <input type="text" id="km_rodados" class="form-control bg-light" value="{{ '{:,.0f}'.format(quilometragem.km_rodados).replace(',', '.') }}" readonly>
-                            </div>
-                            <div class="col-md-4">
-                                <label class="form-label">Litros Abastecidos <span class="text-danger">*</span></label>
-                                <input type="text" name="litros_abastecidos" id="litros_abastecidos" class="form-control" value="{{ '{:,.2f}'.format(quilometragem.litros_abastecidos).replace(',', 'X').replace('.', ',').replace('X', '.') }}" required>
-                            </div>
-                            <div class="col-md-4">
-                                <label class="form-label">Valor Combustível <span class="text-danger">*</span></label>
-                                <input type="text" name="valor_combustivel" id="valor_combustivel" class="form-control" value="{{ '{:,.2f}'.format(quilometragem.valor_combustivel).replace(',', 'X').replace('.', ',').replace('X', '.') }}" required>
-                            </div>
-                        </div>
-
-                        <div class="row mb-3">
-                            <div class="col-md-12">
-                                <label class="form-label">Observações</label>
-                                <textarea name="observacoes" class="form-control" rows="3">{{ quilometragem.observacoes }}</textarea>
-                            </div>
-                        </div>
-
-                        <div class="alert alert-info">
-                            <strong><i class="bi bi-info-circle"></i> Média de Consumo:</strong> 
-                            <span id="media_consumo">
-                                {% if quilometragem.litros_abastecidos > 0 %}
-                                    <strong>{{ '{:.2f}'.format(quilometragem.km_rodados / quilometragem.litros_abastecidos).replace('.', ',') }} km/l</strong>
-                                {% else %}
-                                    -
-                                {% endif %}
-                            </span>
-                        </div>
-                        <div class="d-flex justify-content-between">
-                            <a href="{{ url_for('quilometragem.lista') }}" class="btn btn-secondary">
-                                <i class="bi bi-arrow-left"></i> Voltar
-                            </a>
-                            <button type="submit" class="btn btn-success">
-                                <i class="bi bi-check-circle"></i> Atualizar
-                            </button>
-                        </div>
-                    </form>
+                <div class="row g-3 mt-2">
+                    <div class="col-md-4">
+                        <label class="form-label" style="font-size: 0.9rem;font-weight:600;">
+                            Data <span class="text-danger">*</span>
+                        </label>
+                        <input type="date" name="data" class="form-control form-control-sm" value="{{ quilometragem.data.strftime('%Y-%m-%d') if quilometragem.data else '' }}" required>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label" style="font-size: 0.9rem;font-weight:600;">
+                            KM Inicial <span class="text-danger">*</span>
+                        </label>
+                        <input type="text" name="km_inicial" id="km_inicial" class="form-control form-control-sm" value="{{ '{:,.0f}'.format(quilometragem.km_inicial).replace(',', '.') }}" required>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label" style="font-size: 0.9rem;font-weight:600;">
+                            KM Final <span class="text-danger">*</span>
+                        </label>
+                        <input type="text" name="km_final" id="km_final" class="form-control form-control-sm" value="{{ '{:,.0f}'.format(quilometragem.km_final).replace(',', '.') }}" required>
+                    </div>
                 </div>
-            </div>
+
+                <div class="row g-3 mt-2">
+                    <div class="col-md-4">
+                        <label class="form-label" style="font-size: 0.9rem;font-weight:600;">
+                            KM Rodados
+                        </label>
+                        <input type="text" id="km_rodados" class="form-control form-control-sm bg-light" value="{{ '{:,.0f}'.format(quilometragem.km_rodados).replace(',', '.') }}" readonly>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label" style="font-size: 0.9rem;font-weight:600;">
+                            Litros Abastecidos <span class="text-danger">*</span>
+                        </label>
+                        <input type="text" name="litros_abastecidos" id="litros_abastecidos" class="form-control form-control-sm" value="{{ '{:,.2f}'.format(quilometragem.litros_abastecidos).replace(',', 'X').replace('.', ',').replace('X', '.') }}" required>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label" style="font-size: 0.9rem;font-weight:600;">
+                            Valor Combustível <span class="text-danger">*</span>
+                        </label>
+                        <input type="text" name="valor_combustivel" id="valor_combustivel" class="form-control form-control-sm" value="{{ '{:,.2f}'.format(quilometragem.valor_combustivel).replace(',', 'X').replace('.', ',').replace('X', '.') }}" required>
+                    </div>
+                </div>
+
+                <div class="row g-3 mt-2">
+                    <div class="col-md-12">
+                        <label class="form-label" style="font-size: 0.9rem;font-weight:600;">
+                            Observações
+                        </label>
+                        <textarea name="observacoes" class="form-control form-control-sm" rows="3">{{ quilometragem.observacoes }}</textarea>
+                    </div>
+                </div>
+
+                <div class="alert alert-info mt-3" style="font-size: 0.9rem;">
+                    <strong><i class="bi bi-info-circle"></i> Média de Consumo:</strong> 
+                    <span id="media_consumo">
+                        {% if quilometragem.litros_abastecidos > 0 %}
+                            <strong>{{ '{:.2f}'.format(quilometragem.km_rodados / quilometragem.litros_abastecidos).replace('.', ',') }} km/l</strong>
+                        {% else %}
+                            -
+                        {% endif %}
+                    </span>
+                </div>
+
+                <div class="d-flex justify-content-between mt-3">
+                    <a href="{{ url_for('quilometragem.lista') }}" class="btn btn-secondary btn-sm">
+                        <i class="bi bi-arrow-left"></i> Voltar
+                    </a>
+                    <button type="submit" class="btn btn-warning btn-sm">
+                        <i class="bi bi-check-circle"></i> Atualizar
+                    </button>
+                </div>
+            </form>
         </div>
     </div>
 </div>
+
 <script>
     function calcularKmRodados() {
         const kmInicial = parseFloat(document.getElementById('km_inicial').value.replace(/\./g, '').replace(',', '.')) || 0;
@@ -110,6 +133,7 @@
         }
         calcularMedia();
     }
+    
     function calcularMedia() {
         const kmRodados = parseFloat(document.getElementById('km_rodados').value.replace(/\./g, '').replace(',', '.')) || 0;
         const litros = parseFloat(document.getElementById('litros_abastecidos').value.replace(/\./g, '').replace(',', '.')) || 0;
@@ -120,8 +144,27 @@
             document.getElementById('media_consumo').textContent = '-';
         }
     }
+    
     document.getElementById('km_inicial').addEventListener('input', calcularKmRodados);
     document.getElementById('km_final').addEventListener('input', calcularKmRodados);
     document.getElementById('litros_abastecidos').addEventListener('input', calcularMedia);
 </script>
+
+<style>
+    .form-label {
+        font-weight: 600;
+        font-size: 0.9rem;
+    }
+    
+    .btn-sm {
+        font-size: 0.8rem;
+        padding: 0.3rem 0.6rem;
+    }
+    
+    @media (max-width: 768px) {
+        h2 {
+            font-size: 1.2rem !important;
+        }
+    }
+</style>
 {% endblock %}
