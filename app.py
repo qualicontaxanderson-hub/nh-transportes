@@ -1,248 +1,284 @@
-import os
-from flask import Flask, render_template, redirect, url_for, request, flash
+from flask import Flask, render_template, redirect, url_for, request, flash, session, jsonify
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user
 from models.usuario import Usuario
-from models.rota import Rota
-from config import Config
-from models import db
+import mysql.connector
+import os
+from werkzeug.security import check_password_hash, generate_password_hash
+from utils.decorators import admin_required
 
 app = Flask(__name__)
-app.config.from_object(Config)
-db.init_app(app)
+app.secret_key = os.environ.get('SECRET_KEY', 'sua-chave-secreta-aqui')
 
+# Configuração do Flask-Login
 login_manager = LoginManager()
 login_manager.init_app(app)
 login_manager.login_view = 'login'
+login_manager.login_message = None  # Remove a mensagem automática
+
+# Configuração do banco de dados
+def get_db_connection():
+    return mysql.connector.connect(
+        host=os.environ.get('DB_HOST', 'centerbeam.proxy.rlwy.net'),
+        port=int(os.environ.get('DB_PORT', 56026)),
+        user=os.environ.get('DB_USER', 'root'),
+        password=os.environ.get('DB_PASSWORD', 'sua-senha'),
+        database=os.environ.get('DB_NAME', 'railway')
+    )
 
 @login_manager.user_loader
 def load_user(user_id):
-    return Usuario.get_by_id(user_id)
+    return Usuario.get_by_id(int(user_id))
 
-# Importar blueprints após definir 'app'
-from routes import clientes, fornecedores, fretes, motoristas, veiculos, relatorios, debug_bp, rotas, quilometragem, origens_destinos, produtos
-from routes.api import api_bp
+# Importar blueprints
+from routes import clientes, fornecedores, veiculos, motoristas, fretes, rotas, origens_destinos, quilometragem
 
 app.register_blueprint(clientes.bp)
 app.register_blueprint(fornecedores.bp)
-app.register_blueprint(fretes.bp)
-app.register_blueprint(motoristas.bp)
 app.register_blueprint(veiculos.bp)
-app.register_blueprint(relatorios.bp)
-app.register_blueprint(debug_bp)
-app.register_blueprint(api_bp)
+app.register_blueprint(motoristas.bp)
+app.register_blueprint(fretes.bp)
 app.register_blueprint(rotas.bp)
-app.register_blueprint(quilometragem.bp)
 app.register_blueprint(origens_destinos.bp)
-app.register_blueprint(produtos.bp)
+app.register_blueprint(quilometragem.bp)
 
-@app.route('/health')
-def health():
-    return {'status': 'ok'}, 200
-
+# Rota principal (Dashboard)
 @app.route('/')
 @login_required
 def index():
-    return render_template('dashboard.html')
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    
+    try:
+        # Estatísticas do dashboard
+        cursor.execute("SELECT COUNT(*) as total FROM clientes WHERE ativo = 1")
+        total_clientes = cursor.fetchone()['total']
+        
+        cursor.execute("SELECT COUNT(*) as total FROM fornecedores WHERE ativo = 1")
+        total_fornecedores = cursor.fetchone()['total']
+        
+        cursor.execute("SELECT COUNT(*) as total FROM veiculos WHERE ativo = 1")
+        total_veiculos = cursor.fetchone()['total']
+        
+        cursor.execute("SELECT COUNT(*) as total FROM motoristas WHERE ativo = 1")
+        total_motoristas = cursor.fetchone()['total']
+        
+        return render_template('dashboard.html',
+                             total_clientes=total_clientes,
+                             total_fornecedores=total_fornecedores,
+                             total_veiculos=total_veiculos,
+                             total_motoristas=total_motoristas)
+    finally:
+        cursor.close()
+        conn.close()
 
+# Rotas de autenticação
 @app.route('/login', methods=['GET', 'POST'])
 def login():
+    # Se já está logado, redireciona para dashboard
+    if current_user.is_authenticated:
+        return redirect(url_for('index'))
+    
     if request.method == 'POST':
         username = request.form.get('username')
         password = request.form.get('password')
-        user = Usuario.authenticate(username, password)
-        if user:
+        
+        user = Usuario.get_by_username(username)
+        
+        if user and check_password_hash(user.password, password):
             login_user(user)
             next_page = request.args.get('next')
-            return redirect(next_page or url_for('index'))
-        flash('Usuário ou senha incorretos', 'danger')
+            flash('Login realizado com sucesso!', 'success')
+            return redirect(next_page if next_page else url_for('index'))
+        else:
+            flash('Usuário ou senha inválidos!', 'danger')
+    
     return render_template('login.html')
 
 @app.route('/logout')
 @login_required
 def logout():
     logout_user()
+    flash('Logout realizado com sucesso!', 'success')
     return redirect(url_for('login'))
+
+# Rotas de gerenciamento de usuários (apenas admin)
+@app.route('/cadastro', methods=['GET', 'POST'])
+@login_required
+@admin_required
+def cadastro():
+    if request.method == 'POST':
+        username = request.form.get('username')
+        nome = request.form.get('nome')
+        email = request.form.get('email')
+        nivel = request.form.get('nivel')
+        password = request.form.get('password')
+        confirmar_senha = request.form.get('confirmar_senha')
+        
+        # Validações
+        if password != confirmar_senha:
+            flash('As senhas não coincidem!', 'danger')
+            return redirect(url_for('cadastro'))
+        
+        # Verificar se o username já existe
+        if Usuario.get_by_username(username):
+            flash('Nome de usuário já existe!', 'danger')
+            return redirect(url_for('cadastro'))
+        
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        try:
+            hashed_password = generate_password_hash(password)
+            cursor.execute("""
+                INSERT INTO usuarios (username, nome, email, nivel, password, ativo)
+                VALUES (%s, %s, %s, %s, %s, 1)
+            """, (username, nome, email, nivel, hashed_password))
+            conn.commit()
+            flash('Usuário cadastrado com sucesso!', 'success')
+            return redirect(url_for('listar_usuarios'))
+        except Exception as e:
+            conn.rollback()
+            flash(f'Erro ao cadastrar usuário: {str(e)}', 'danger')
+        finally:
+            cursor.close()
+            conn.close()
+    
+    return render_template('cadastro.html')
+
+@app.route('/listar_usuarios')
+@login_required
+@admin_required
+def listar_usuarios():
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    
+    try:
+        cursor.execute("""
+            SELECT id, username, nome, email, nivel, ativo, created_at
+            FROM usuarios
+            ORDER BY nome
+        """)
+        usuarios = cursor.fetchall()
+        return render_template('listar_usuarios.html', usuarios=usuarios)
+    finally:
+        cursor.close()
+        conn.close()
+
+@app.route('/editar_usuario/<int:id>', methods=['GET', 'POST'])
+@login_required
+@admin_required
+def editar_usuario(id):
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    
+    if request.method == 'POST':
+        nome = request.form.get('nome')
+        email = request.form.get('email')
+        nivel = request.form.get('nivel')
+        ativo = 1 if request.form.get('ativo') else 0
+        nova_senha = request.form.get('nova_senha')
+        confirmar_senha = request.form.get('confirmar_senha')
+        
+        try:
+            if nova_senha:
+                if nova_senha != confirmar_senha:
+                    flash('As senhas não coincidem!', 'danger')
+                    return redirect(url_for('editar_usuario', id=id))
+                
+                hashed_password = generate_password_hash(nova_senha)
+                cursor.execute("""
+                    UPDATE usuarios
+                    SET nome = %s, email = %s, nivel = %s, ativo = %s, password = %s
+                    WHERE id = %s
+                """, (nome, email, nivel, ativo, hashed_password, id))
+            else:
+                cursor.execute("""
+                    UPDATE usuarios
+                    SET nome = %s, email = %s, nivel = %s, ativo = %s
+                    WHERE id = %s
+                """, (nome, email, nivel, ativo, id))
+            
+            conn.commit()
+            flash('Usuário atualizado com sucesso!', 'success')
+            return redirect(url_for('listar_usuarios'))
+        except Exception as e:
+            conn.rollback()
+            flash(f'Erro ao atualizar usuário: {str(e)}', 'danger')
+        finally:
+            cursor.close()
+            conn.close()
+    
+    try:
+        cursor.execute("SELECT * FROM usuarios WHERE id = %s", (id,))
+        usuario = cursor.fetchone()
+        return render_template('alteracao_cadastro.html', usuario=usuario)
+    finally:
+        cursor.close()
+        conn.close()
+
+@app.route('/excluir_usuario/<int:id>')
+@login_required
+@admin_required
+def excluir_usuario(id):
+    # Não permitir excluir a si mesmo
+    if current_user.id == id:
+        flash('Você não pode excluir seu próprio usuário!', 'danger')
+        return redirect(url_for('listar_usuarios'))
+    
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    try:
+        cursor.execute("DELETE FROM usuarios WHERE id = %s", (id,))
+        conn.commit()
+        flash('Usuário excluído com sucesso!', 'success')
+    except Exception as e:
+        conn.rollback()
+        flash(f'Erro ao excluir usuário: {str(e)}', 'danger')
+    finally:
+        cursor.close()
+        conn.close()
+    
+    return redirect(url_for('listar_usuarios'))
 
 @app.route('/alterar_senha', methods=['GET', 'POST'])
 @login_required
 def alterar_senha():
     if request.method == 'POST':
         senha_atual = request.form.get('senha_atual')
-        senha_nova = request.form.get('senha_nova')
+        nova_senha = request.form.get('nova_senha')
         confirmar_senha = request.form.get('confirmar_senha')
         
         # Validações
-        if not senha_atual or not senha_nova or not confirmar_senha:
-            flash('Todos os campos são obrigatórios.', 'danger')
-            return render_template('alterar_senha.html')
+        if not check_password_hash(current_user.password, senha_atual):
+            flash('Senha atual incorreta!', 'danger')
+            return redirect(url_for('alterar_senha'))
         
-        if not current_user.check_password(senha_atual):
-            flash('Senha atual incorreta.', 'danger')
-            return render_template('alterar_senha.html')
+        if nova_senha != confirmar_senha:
+            flash('As senhas não coincidem!', 'danger')
+            return redirect(url_for('alterar_senha'))
         
-        if senha_nova != confirmar_senha:
-            flash('A nova senha e a confirmação não coincidem.', 'danger')
-            return render_template('alterar_senha.html')
+        conn = get_db_connection()
+        cursor = conn.cursor()
         
-        if len(senha_nova) < 6:
-            flash('A senha deve ter no mínimo 6 caracteres.', 'danger')
-            return render_template('alterar_senha.html')
-        
-        # Alterar senha
         try:
-            current_user.alterar_senha(senha_nova)
+            hashed_password = generate_password_hash(nova_senha)
+            cursor.execute("""
+                UPDATE usuarios
+                SET password = %s
+                WHERE id = %s
+            """, (hashed_password, current_user.id))
+            conn.commit()
             flash('Senha alterada com sucesso!', 'success')
             return redirect(url_for('index'))
         except Exception as e:
+            conn.rollback()
             flash(f'Erro ao alterar senha: {str(e)}', 'danger')
+        finally:
+            cursor.close()
+            conn.close()
     
     return render_template('alterar_senha.html')
 
-@app.route('/cadastro', methods=['GET', 'POST'])
-@login_required
-def cadastro():
-    # Proteção: apenas admins podem criar usuários
-    if current_user.nivel != 'admin':
-        flash('Acesso negado. Apenas administradores podem criar usuários.', 'danger')
-        return redirect(url_for('index'))
-    
-    if request.method == 'POST':
-        username = request.form.get('username')
-        nome_completo = request.form.get('nome_completo')
-        nivel = request.form.get('nivel')
-        senha = request.form.get('senha')
-        confirmar_senha = request.form.get('confirmar_senha')
-        
-        # Validações
-        if not username or not nome_completo or not nivel or not senha or not confirmar_senha:
-            flash('Todos os campos são obrigatórios.', 'danger')
-            return render_template('cadastro.html')
-        
-        if senha != confirmar_senha:
-            flash('As senhas não coincidem.', 'danger')
-            return render_template('cadastro.html')
-        
-        if len(senha) < 6:
-            flash('A senha deve ter no mínimo 6 caracteres.', 'danger')
-            return render_template('cadastro.html')
-        
-        # Criar usuário
-        try:
-            Usuario.criar_usuario(username, nome_completo, nivel, senha)
-            flash(f'Usuário {username} criado com sucesso!', 'success')
-            return redirect(url_for('listar_usuarios'))
-        except Exception as e:
-            flash(f'Erro ao criar usuário: {str(e)}', 'danger')
-    
-    return render_template('cadastro.html')
-
-@app.route('/editar_usuario/<int:user_id>', methods=['GET', 'POST'])
-@login_required
-def editar_usuario(user_id):
-    # Proteção: apenas admins podem editar usuários
-    if current_user.nivel != 'admin':
-        flash('Acesso negado. Apenas administradores podem editar usuários.', 'danger')
-        return redirect(url_for('index'))
-    
-    # Buscar usuário a ser editado
-    from utils.db import get_db_connection
-    conn = get_db_connection()
-    cursor = conn.cursor(dictionary=True)
-    cursor.execute("SELECT * FROM usuarios WHERE id = %s", (user_id,))
-    usuario = cursor.fetchone()
-    
-    if not usuario:
-        flash('Usuário não encontrado.', 'danger')
-        cursor.close()
-        conn.close()
-        return redirect(url_for('listar_usuarios'))
-    
-    if request.method == 'POST':
-        username = request.form.get('username')
-        nome_completo = request.form.get('nome_completo')
-        nivel = request.form.get('nivel')
-        senha = request.form.get('senha')
-        confirmar_senha = request.form.get('confirmar_senha')
-        
-        # Validações
-        if not username or not nome_completo or not nivel:
-            flash('Nome de usuário, nome completo e nível são obrigatórios.', 'danger')
-            cursor.close()
-            conn.close()
-            return render_template('alteracao_cadastro.html', usuario=usuario)
-        
-        # Se senha foi informada, validar
-        if senha:
-            if not confirmar_senha:
-                flash('Confirme a nova senha.', 'danger')
-                cursor.close()
-                conn.close()
-                return render_template('alteracao_cadastro.html', usuario=usuario)
-            
-            if senha != confirmar_senha:
-                flash('As senhas não coincidem.', 'danger')
-                cursor.close()
-                conn.close()
-                return render_template('alteracao_cadastro.html', usuario=usuario)
-            
-            if len(senha) < 6:
-                flash('A senha deve ter no mínimo 6 caracteres.', 'danger')
-                cursor.close()
-                conn.close()
-                return render_template('alteracao_cadastro.html', usuario=usuario)
-        
-        # Atualizar usuário
-        try:
-            if senha:
-                # Se senha foi informada, atualizar com nova senha
-                from werkzeug.security import generate_password_hash
-                senha_hash = generate_password_hash(senha)
-                cursor.execute(
-                    "UPDATE usuarios SET username=%s, nome_completo=%s, nivel=%s, password_hash=%s WHERE id=%s",
-                    (username, nome_completo, nivel, senha_hash, user_id)
-                )
-            else:
-                # Se senha não foi informada, atualizar sem alterar senha
-                cursor.execute(
-                    "UPDATE usuarios SET username=%s, nome_completo=%s, nivel=%s WHERE id=%s",
-                    (username, nome_completo, nivel, user_id)
-                )
-            
-            conn.commit()
-            flash(f'Usuário {username} atualizado com sucesso!', 'success')
-            cursor.close()
-            conn.close()
-            return redirect(url_for('listar_usuarios'))
-        except Exception as e:
-            conn.rollback()
-            flash(f'Erro ao atualizar usuário: {str(e)}', 'danger')
-            cursor.close()
-            conn.close()
-    else:
-        cursor.close()
-        conn.close()
-    
-    return render_template('alteracao_cadastro.html', usuario=usuario)
-
-@app.route('/listar_usuarios')
-@login_required
-def listar_usuarios():
-    # Proteção: apenas admins podem listar usuários
-    if current_user.nivel != 'admin':
-        flash('Acesso negado. Apenas administradores podem visualizar usuários.', 'danger')
-        return redirect(url_for('index'))
-    
-    from utils.db import get_db_connection
-    conn = get_db_connection()
-    cursor = conn.cursor(dictionary=True)
-    cursor.execute("SELECT id, username, nome_completo, nivel, ativo, data_criacao FROM usuarios ORDER BY username")
-    usuarios = cursor.fetchall()
-    cursor.close()
-    conn.close()
-    
-    return render_template('listar_usuarios.html', usuarios=usuarios)
-
 if __name__ == '__main__':
-    print("🚀 Iniciando NH Transportes...")
-    print("🌐 Sistema online!")
-    app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 10000)), debug=False)
+    app.run(debug=True)
