@@ -7,15 +7,38 @@ class Usuario(UserMixin):
         self.id = id
         self.username = username
         self.nome_completo = nome_completo
+        self.nome = nome_completo  # Alias para compatibilidade
         self.nivel = nivel
         self.ativo = ativo
         self.senha_hash = senha_hash
+        self.password = senha_hash  # Alias para compatibilidade
+        self.email = ''  # Campo vazio para compatibilidade
 
     @staticmethod
     def get_by_id(user_id):
         conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)
         cursor.execute("SELECT * FROM usuarios WHERE id = %s AND ativo = TRUE", (user_id,))
+        user_data = cursor.fetchone()
+        cursor.close()
+        conn.close()
+        if user_data:
+            return Usuario(
+                id=user_data['id'],
+                username=user_data['username'],
+                nome_completo=user_data['nome_completo'],
+                nivel=user_data['nivel'],
+                ativo=user_data['ativo'],
+                senha_hash=user_data['password_hash']
+            )
+        return None
+
+    @staticmethod
+    def get_by_username(username):
+        """Método adicionado para compatibilidade com app.py"""
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute("SELECT * FROM usuarios WHERE username = %s AND ativo = TRUE", (username,))
         user_data = cursor.fetchone()
         cursor.close()
         conn.close()
@@ -60,6 +83,8 @@ class Usuario(UserMixin):
         conn.commit()
         cursor.close()
         conn.close()
+        self.senha_hash = novo_hash
+        self.password = novo_hash
 
     @staticmethod
     def criar_usuario(username, nome_completo, nivel, senha):
