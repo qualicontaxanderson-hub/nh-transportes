@@ -47,7 +47,7 @@
                                     {% endif %}
                                 </td>
                                 <td class="text-center">
-                                    {% if current_user.is_admin() %}
+                                    {% if current_user.nivel == 'admin' %}
                                     <a href="{{ url_for('motoristas.editar', id=motorista.id) }}" class="btn btn-sm btn-warning" title="Editar" style="padding: 0.2rem 0.4rem;">
                                         <i class="bi bi-pencil"></i>
                                     </a>
