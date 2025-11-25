@@ -4,23 +4,26 @@
 
 {% block content %}
 <div class="container-fluid">
-    <div class="d-flex justify-content-between align-items-center mb-4">
-        <h2><i class="bi bi-geo-alt"></i> Origens</h2>
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h2 style="font-size: 1.5rem;"><i class="bi bi-geo-alt"></i> Origens</h2>
         <div>
-            <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#modalNovaOrigem">
+            <button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#modalNovaOrigem">
                 <i class="bi bi-plus-circle"></i> Nova Origem
             </button>
-            <a href="{{ url_for('rotas.lista') }}" class="btn btn-secondary">
+            <a href="{{ url_for('rotas.lista') }}" class="btn btn-secondary btn-sm">
                 <i class="bi bi-arrow-left"></i> Voltar para Rotas
             </a>
         </div>
     </div>
 
     <div class="card">
-        <div class="card-body">
+        <div class="card-header" style="background:#1D63A5;color:white;font-size:0.9rem;font-weight:600;">
+            <i class="bi bi-list"></i> Lista de Origens
+        </div>
+        <div class="card-body" style="padding: 0.5rem;">
             <div class="table-responsive">
-                <table class="table table-hover table-striped">
-                    <thead class="table-dark">
+                <table class="table table-hover table-striped table-sm mb-0">
+                    <thead style="background:#4A90E2;color:#000;font-weight:700;font-size:0.85rem;">
                         <tr>
                             <th>ID</th>
                             <th>Cidade</th>
@@ -28,19 +31,21 @@
                             <th class="text-center">Ações</th>
                         </tr>
                     </thead>
-                    <tbody>
+                    <tbody style="font-size: 0.85rem;">
                         {% if origens %}
                             {% for origem in origens %}
                             <tr>
-                                <td>{{ origem.id }}</td>
-                                <td><strong>{{ origem.nome }}</strong></td>
+                                <td><strong>{{ origem.id }}</strong></td>
+                                <td>{{ origem.nome }}</td>
                                 <td>{{ origem.estado }}</td>
                                 <td class="text-center">
-                                    <button class="btn btn-sm btn-warning" data-bs-toggle="modal" data-bs-target="#modalEditarOrigem{{ origem.id }}">
+                                    <button class="btn btn-sm btn-warning" data-bs-toggle="modal" data-bs-target="#modalEditarOrigem{{ origem.id }}" title="Editar" style="padding: 0.2rem 0.4rem;">
                                         <i class="bi bi-pencil"></i>
                                     </button>
                                     <a href="{{ url_for('origens_destinos.excluir_origem', id=origem.id) }}" 
                                        class="btn btn-sm btn-danger"
+                                       title="Excluir"
+                                       style="padding: 0.2rem 0.4rem;"
                                        onclick="return confirm('Deseja realmente excluir esta origem?')">
                                         <i class="bi bi-trash"></i>
                                     </a>
@@ -51,24 +56,32 @@
                             <div class="modal fade" id="modalEditarOrigem{{ origem.id }}" tabindex="-1">
                                 <div class="modal-dialog">
                                     <div class="modal-content">
-                                        <div class="modal-header bg-warning">
-                                            <h5 class="modal-title">Editar Origem</h5>
+                                        <div class="modal-header" style="background:#ffc107;color:#000;">
+                                            <h5 class="modal-title" style="font-size: 1rem;font-weight:600;">
+                                                <i class="bi bi-pencil"></i> Editar Origem
+                                            </h5>
                                             <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                                         </div>
                                         <form method="POST" action="{{ url_for('origens_destinos.editar_origem', id=origem.id) }}">
                                             <div class="modal-body">
                                                 <div class="mb-3">
-                                                    <label class="form-label">Cidade <span class="text-danger">*</span></label>
-                                                    <input type="text" name="nome" class="form-control" value="{{ origem.nome }}" required>
+                                                    <label class="form-label" style="font-size: 0.9rem;font-weight:600;">
+                                                        Cidade <span class="text-danger">*</span>
+                                                    </label>
+                                                    <input type="text" name="nome" class="form-control form-control-sm" value="{{ origem.nome }}" required>
                                                 </div>
                                                 <div class="mb-3">
-                                                    <label class="form-label">Estado <span class="text-danger">*</span></label>
-                                                    <input type="text" name="estado" class="form-control" value="{{ origem.estado }}" maxlength="2" required>
+                                                    <label class="form-label" style="font-size: 0.9rem;font-weight:600;">
+                                                        Estado <span class="text-danger">*</span>
+                                                    </label>
+                                                    <input type="text" name="estado" class="form-control form-control-sm" value="{{ origem.estado }}" maxlength="2" required>
                                                 </div>
                                             </div>
                                             <div class="modal-footer">
-                                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-                                                <button type="submit" class="btn btn-warning">Atualizar</button>
+                                                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
+                                                <button type="submit" class="btn btn-warning btn-sm">
+                                                    <i class="bi bi-check-circle"></i> Atualizar
+                                                </button>
                                             </div>
                                         </form>
                                     </div>
@@ -77,8 +90,9 @@
                             {% endfor %}
                         {% else %}
                             <tr>
-                                <td colspan="4" class="text-center text-muted">
-                                    <i class="bi bi-inbox"></i> Nenhuma origem cadastrada
+                                <td colspan="4" class="text-center text-muted py-3" style="font-size: 0.9rem;">
+                                    <i class="bi bi-inbox" style="font-size:1.5rem;"></i><br>
+                                    Nenhuma origem cadastrada
                                 </td>
                             </tr>
                         {% endif %}
@@ -93,27 +107,56 @@
 <div class="modal fade" id="modalNovaOrigem" tabindex="-1">
     <div class="modal-dialog">
         <div class="modal-content">
-            <div class="modal-header bg-primary text-white">
-                <h5 class="modal-title">Nova Origem</h5>
+            <div class="modal-header" style="background:#4A90E2;color:#000;">
+                <h5 class="modal-title" style="font-size: 1rem;font-weight:600;">
+                    <i class="bi bi-plus-circle"></i> Nova Origem
+                </h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <form method="POST" action="{{ url_for('origens_destinos.nova_origem') }}">
                 <div class="modal-body">
                     <div class="mb-3">
-                        <label class="form-label">Cidade <span class="text-danger">*</span></label>
-                        <input type="text" name="nome" class="form-control" placeholder="Ex: SÃO PAULO" required>
+                        <label class="form-label" style="font-size: 0.9rem;font-weight:600;">
+                            Cidade <span class="text-danger">*</span>
+                        </label>
+                        <input type="text" name="nome" class="form-control form-control-sm" placeholder="Ex: SÃO PAULO" required>
                     </div>
                     <div class="mb-3">
-                        <label class="form-label">Estado <span class="text-danger">*</span></label>
-                        <input type="text" name="estado" class="form-control" placeholder="Ex: SP" maxlength="2" required>
+                        <label class="form-label" style="font-size: 0.9rem;font-weight:600;">
+                            Estado <span class="text-danger">*</span>
+                        </label>
+                        <input type="text" name="estado" class="form-control form-control-sm" placeholder="Ex: SP" maxlength="2" required>
                     </div>
                 </div>
                 <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-                    <button type="submit" class="btn btn-primary">Cadastrar</button>
+                    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-primary btn-sm">
+                        <i class="bi bi-check-circle"></i> Cadastrar
+                    </button>
                 </div>
             </form>
         </div>
     </div>
 </div>
+
+<style>
+    .table-sm th, .table-sm td {
+        padding: 0.4rem;
+    }
+    
+    .btn-sm {
+        font-size: 0.8rem;
+        padding: 0.3rem 0.6rem;
+    }
+    
+    @media (max-width: 768px) {
+        h2 {
+            font-size: 1.2rem !important;
+        }
+        .table-sm th, .table-sm td {
+            font-size: 0.75rem !important;
+            padding: 0.3rem !important;
+        }
+    }
+</style>
 {% endblock %}
