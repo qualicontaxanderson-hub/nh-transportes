@@ -133,7 +133,7 @@
                 </div>
                 <div class="col-md-2">
                     <label class="form-label">Preço Unit. (R$)</label>
-                    <input type="text" class="form-control input-preco" name="preco_unitario[]" placeholder="0,00" oninput="calcularTotalItem(this)">
+                    <input type="text" class="form-control input-preco" name="preco_unitario[]" placeholder="0,000" oninput="calcularTotalItem(this)">
                 </div>
                 <div class="col-md-2">
                     <label class="form-label">Total NF (R$)</label>
@@ -234,26 +234,35 @@ function calcularTotalItem(elemento) {
     const total = quantidade * preco;
     
     if (total > 0) {
-        inputTotalNf.value = formatarMoeda(total);
+        inputTotalNf.value = formatarMoeda2(total);
     } else {
         inputTotalNf.value = '';
     }
 }
 
-function formatarMoeda(valor) {
+// Formatar com 3 casas decimais (para preço unitário)
+function formatarMoeda3(valor) {
+    return valor.toLocaleString('pt-BR', {
+        minimumFractionDigits: 3,
+        maximumFractionDigits: 3
+    });
+}
+
+// Formatar com 2 casas decimais (para total)
+function formatarMoeda2(valor) {
     return valor.toLocaleString('pt-BR', {
         minimumFractionDigits: 2,
         maximumFractionDigits: 2
     });
 }
 
-// Formatar input de preço como moeda
+// Formatar input de preço com 3 casas decimais
 document.addEventListener('input', function(e) {
     if (e.target.classList.contains('input-preco')) {
         let value = e.target.value.replace(/\D/g, '');
         if (value) {
-            value = (parseInt(value) / 100).toFixed(2);
-            e.target.value = formatarMoeda(parseFloat(value));
+            value = (parseInt(value) / 1000).toFixed(3);
+            e.target.value = formatarMoeda3(parseFloat(value));
         }
     }
 });
