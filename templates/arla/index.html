@@ -26,16 +26,21 @@
 
     <!-- SALDO INICIAL -->
     <div class="card mb-3">
-        <div class="card-header" style="background:#92a7be;font-weight:600;">
-            Saldo Inicial
+        <div class="card-header d-flex justify-content-between align-items-center" style="background:#92a7be;font-weight:600;">
+            <span>Saldo Inicial</span>
+            {% if saldo %}
+            <a href="{{ url_for('arla.editar_saldo_inicial', id=saldo.id) }}" class="btn btn-sm btn-warning" title="Editar">
+                <i class="bi bi-pencil"></i> Editar
+            </a>
+            {% endif %}
         </div>
         <div class="card-body">
             {% if saldo %}
                 <ul style="margin-bottom:0;">
                     <li><strong>Data:</strong> {{ saldo.data.strftime('%d/%m/%Y') if saldo.data else '-' }}</li>
-                    <li><strong>Volume:</strong> {{ saldo.volume_inicial }} litros</li>
-                    <li><strong>Preço Médio Compra:</strong> R$ {{ saldo.preco_medio_compra }}</li>
-                    <li><strong>Encerrante Inicial:</strong> {{ saldo.encerrante_inicial }}</li>
+                    <li><strong>Volume:</strong> {{ "{:,.2f}".format(saldo.volume_inicial).replace(',', 'X').replace('.', ',').replace('X', '.') }} litros</li>
+                    <li><strong>Preço Médio Compra:</strong> R$ {{ "{:,.2f}".format(saldo.preco_medio_compra).replace(',', 'X').replace('.', ',').replace('X', '.') }}</li>
+                    <li><strong>Encerrante Inicial:</strong> {{ "{:,.2f}".format(saldo.encerrante_inicial).replace(',', 'X').replace('.', ',').replace('X', '.') }}</li>
                 </ul>
             {% else %}
                 <span class="text-muted"><i class="bi bi-info-circle"></i> Não há saldo inicial cadastrado.</span>
@@ -54,7 +59,9 @@
                     <tr>
                         <th>Data</th>
                         <th>Quantidade (litros)</th>
-                        <th>Preço compra</th>
+                        <th>Preço Compra</th>
+                        <th>Valor Total</th>
+                        <th class="text-center">Ações</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -62,13 +69,19 @@
                         {% for compra in compras %}
                         <tr>
                             <td>{{ compra.data.strftime('%d/%m/%Y') if compra.data else '-' }}</td>
-                            <td>{{ compra.quantidade }}</td>
-                            <td>R$ {{ compra.preco_compra }}</td>
+                            <td>{{ "{:,.2f}".format(compra.quantidade).replace(',', 'X').replace('.', ',').replace('X', '.') }}</td>
+                            <td>R$ {{ "{:,.2f}".format(compra.preco_compra).replace(',', 'X').replace('.', ',').replace('X', '.') }}</td>
+                            <td>R$ {{ "{:,.2f}".format(compra.quantidade * compra.preco_compra).replace(',', 'X').replace('.', ',').replace('X', '.') }}</td>
+                            <td class="text-center">
+                                <a href="{{ url_for('arla.editar_compra', id=compra.id) }}" class="btn btn-sm btn-warning" title="Editar">
+                                    <i class="bi bi-pencil"></i>
+                                </a>
+                            </td>
                         </tr>
                         {% endfor %}
                     {% else %}
                         <tr>
-                            <td colspan="3" class="text-center text-muted" style="padding: 1rem;">
+                            <td colspan="5" class="text-center text-muted" style="padding: 1rem;">
                                 <i class="bi bi-inbox"></i> Nenhuma compra registrada.
                             </td>
                         </tr>
@@ -91,6 +104,8 @@
                         <th>Encerrante Final</th>
                         <th>Quantidade Vendida</th>
                         <th>Preço Venda Aplicado</th>
+                        <th>Valor Total</th>
+                        <th class="text-center">Ações</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -98,14 +113,20 @@
                         {% for lanc in lancamentos %}
                         <tr>
                             <td>{{ lanc.data.strftime('%d/%m/%Y') if lanc.data else '-' }}</td>
-                            <td>{{ lanc.encerrante_final }}</td>
-                            <td>{{ lanc.quantidade_vendida }}</td>
-                            <td>R$ {{ lanc.preco_venda_aplicado }}</td>
+                            <td>{{ "{:,.2f}".format(lanc.encerrante_final).replace(',', 'X').replace('.', ',').replace('X', '.') }}</td>
+                            <td>{{ "{:,.2f}".format(lanc.quantidade_vendida).replace(',', 'X').replace('.', ',').replace('X', '.') }}</td>
+                            <td>R$ {{ "{:,.2f}".format(lanc.preco_venda_aplicado).replace(',', 'X').replace('.', ',').replace('X', '.') }}</td>
+                            <td>R$ {{ "{:,.2f}".format(lanc.quantidade_vendida * lanc.preco_venda_aplicado).replace(',', 'X').replace('.', ',').replace('X', '.') }}</td>
+                            <td class="text-center">
+                                <a href="{{ url_for('arla.editar_lancamento', id=lanc.id) }}" class="btn btn-sm btn-warning" title="Editar">
+                                    <i class="bi bi-pencil"></i>
+                                </a>
+                            </td>
                         </tr>
                         {% endfor %}
                     {% else %}
                         <tr>
-                            <td colspan="4" class="text-center text-muted" style="padding: 1rem;">
+                            <td colspan="6" class="text-center text-muted" style="padding: 1rem;">
                                 <i class="bi bi-inbox"></i> Nenhum lançamento registrado.
                             </td>
                         </tr>
@@ -123,7 +144,7 @@
         <div class="card-body">
             {% if preco %}
                <ul style="margin-bottom:0;">
-                   <li><strong>Valor:</strong> <span style="color:#17963c;">R$ {{ preco.preco_venda }}</span></li>
+                   <li><strong>Valor:</strong> <span style="color:#17963c;">R$ {{ "{:,.2f}".format(preco.preco_venda).replace(',', 'X').replace('.', ',').replace('X', '.') }}</span></li>
                    <li><strong>Desde:</strong> {{ preco.data_inicio.strftime('%d/%m/%Y') if preco.data_inicio else '-' }}</li>
                </ul>
             {% else %}
