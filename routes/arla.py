@@ -186,12 +186,13 @@ def editar_compra(id):
 @bp.route('/preco-venda', methods=['GET', 'POST'])
 @login_required
 def preco_venda():
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True)
+
     if request.method == 'POST':
         data_inicio = request.form['data_inicio']
         preco_venda = request.form['preco_venda']
 
-        conn = get_db()
-        cursor = conn.cursor()
         cursor.execute("""
             INSERT INTO arla_precos_venda (data_inicio, preco_venda)
             VALUES (%s, %s)
@@ -203,7 +204,15 @@ def preco_venda():
         flash('Preço de venda alterado com sucesso!', 'success')
         return redirect(url_for('arla.index'))
 
-    return render_template('arla/preco_venda.html')
+    # Busca preço vigente atual
+    cursor.execute("""
+        SELECT * FROM arla_precos_venda ORDER BY data_inicio DESC LIMIT 1
+    """)
+    preco_atual = cursor.fetchone()
+    cursor.close()
+    conn.close()
+
+    return render_template('arla/preco_venda.html', preco_atual=preco_atual)
 
 # =============================================
 # LANÇAMENTO DIÁRIO - CRIAR
