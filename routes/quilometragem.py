@@ -101,12 +101,14 @@ def lista():
         ORDER BY v.placa
     """)
     veiculos_km_inicial = cursor.fetchall()
+    # RESUMO ajustado:
     resumo_query = """
         SELECT 
             v.placa,
             v.modelo,
             SUM(q.litros_abastecidos) as total_litros,
-            SUM(q.km_rodados) as total_km
+            SUM(q.km_rodados) as total_km,
+            SUM(q.valor_combustivel) as total_valor
         FROM quilometragem q
         LEFT JOIN veiculos v ON q.veiculos_id = v.id
         WHERE 1=1
@@ -293,4 +295,5 @@ def excluir(id):
         flash('Quilometragem excluída com sucesso!', 'success')
     except Exception as e:
         flash(f'Erro ao excluir quilometragem: {str(e)}', 'danger')
-    return redirect(url_for('quilometragem.lista'))   # <-- Aqui estava aberto, agora fechou!
+    return redirect(url_for('quilometragem.lista'))
+
