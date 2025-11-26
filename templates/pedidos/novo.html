@@ -30,7 +30,16 @@
                         <label class="form-label">Data do Pedido *</label>
                         <input type="date" class="form-control" name="data_pedido" value="{{ hoje or '' }}" required>
                     </div>
-                    <div class="col-md-8">
+                    <div class="col-md-3">
+                        <label class="form-label">Motorista</label>
+                        <select class="form-select" name="motorista_id">
+                            <option value="">Selecione o Motorista</option>
+                            {% for m in motoristas %}
+                            <option value="{{ m.id }}">{{ m.nome }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-5">
                         <label class="form-label">Observações</label>
                         <input type="text" class="form-control" name="observacoes" placeholder="Observações gerais do pedido">
                     </div>
@@ -47,7 +56,6 @@
             </div>
             <div class="card-body">
                 <div id="itensContainer">
-                    <!-- Itens serão adicionados aqui -->
                 </div>
             </div>
         </div>
@@ -145,13 +153,13 @@
 </template>
 
 <script>
-let itemCount = 0;
+var itemCount = 0;
 
 function adicionarItem() {
     itemCount++;
-    const container = document.getElementById('itensContainer');
-    const template = document.getElementById('templateItem');
-    const clone = template.content.cloneNode(true);
+    var container = document.getElementById('itensContainer');
+    var template = document.getElementById('templateItem');
+    var clone = template.content.cloneNode(true);
     
     clone.querySelector('.item-numero').textContent = 'Item #' + itemCount;
     
@@ -160,7 +168,7 @@ function adicionarItem() {
 }
 
 function removerItem(btn) {
-    const itens = document.querySelectorAll('.item-pedido');
+    var itens = document.querySelectorAll('.item-pedido');
     if (itens.length > 1) {
         btn.closest('.item-pedido').remove();
         atualizarNumerosItens();
@@ -170,19 +178,19 @@ function removerItem(btn) {
 }
 
 function atualizarNumerosItens() {
-    const itens = document.querySelectorAll('.item-pedido');
-    itens.forEach((item, index) => {
-        item.querySelector('.item-numero').textContent = 'Item #' + (index + 1);
-    });
+    var itens = document.querySelectorAll('.item-pedido');
+    for (var i = 0; i < itens.length; i++) {
+        itens[i].querySelector('.item-numero').textContent = 'Item #' + (i + 1);
+    }
 }
 
 function toggleQuantidade(select) {
-    const item = select.closest('.item-pedido');
-    const divLista = item.querySelector('.div-quantidade-lista');
-    const divManual = item.querySelector('.div-quantidade-manual');
-    const selectQtd = item.querySelector('.select-quantidade');
-    const inputManual = item.querySelector('.input-quantidade-manual');
-    const inputFinal = item.querySelector('.input-quantidade-final');
+    var item = select.closest('.item-pedido');
+    var divLista = item.querySelector('.div-quantidade-lista');
+    var divManual = item.querySelector('.div-quantidade-manual');
+    var selectQtd = item.querySelector('.select-quantidade');
+    var inputManual = item.querySelector('.input-quantidade-manual');
+    var inputFinal = item.querySelector('.input-quantidade-final');
     
     if (select.value === 'manual') {
         divLista.style.display = 'none';
@@ -199,7 +207,7 @@ function toggleQuantidade(select) {
         divManual.style.display = 'none';
         inputManual.value = '';
         if (selectQtd.value) {
-            const option = selectQtd.options[selectQtd.selectedIndex];
+            var option = selectQtd.options[selectQtd.selectedIndex];
             inputFinal.value = option.dataset.valor || '';
         } else {
             inputFinal.value = '';
@@ -209,9 +217,9 @@ function toggleQuantidade(select) {
 }
 
 function selecionarQuantidade(select) {
-    const item = select.closest('.item-pedido');
-    const inputFinal = item.querySelector('.input-quantidade-final');
-    const option = select.options[select.selectedIndex];
+    var item = select.closest('.item-pedido');
+    var inputFinal = item.querySelector('.input-quantidade-final');
+    var option = select.options[select.selectedIndex];
     
     if (option && option.dataset.valor) {
         inputFinal.value = option.dataset.valor;
@@ -221,27 +229,20 @@ function selecionarQuantidade(select) {
     calcularTotalItem(item);
 }
 
-// Converte string formato brasileiro para número
-// "10.000" -> 10000
-// "3,605" -> 3.605
 function converterParaNumero(valor) {
     if (!valor) return 0;
-    // Remove pontos de milhar e troca vírgula por ponto decimal
     return parseFloat(valor.toString().replace(/\./g, '').replace(',', '.')) || 0;
 }
 
 function calcularTotalItem(item) {
-    const inputFinal = item.querySelector('.input-quantidade-final');
-    const inputPreco = item.querySelector('.input-preco');
-    const inputTotalNf = item.querySelector('.input-total-nf');
+    var inputFinal = item.querySelector('.input-quantidade-final');
+    var inputPreco = item.querySelector('.input-preco');
+    var inputTotalNf = item.querySelector('.input-total-nf');
     
-    // Quantidade vem como número puro do data-valor (ex: 10000)
-    const quantidade = parseFloat(inputFinal.value) || 0;
+    var quantidade = parseFloat(inputFinal.value) || 0;
+    var preco = converterParaNumero(inputPreco.value);
     
-    // Preço vem formatado em brasileiro (ex: 3,605)
-    const preco = converterParaNumero(inputPreco.value);
-    
-    const total = quantidade * preco;
+    var total = quantidade * preco;
     
     if (total > 0) {
         inputTotalNf.value = formatarMoeda2(total);
@@ -250,7 +251,6 @@ function calcularTotalItem(item) {
     }
 }
 
-// Formatar com 3 casas decimais (para preço unitário)
 function formatarMoeda3(valor) {
     return valor.toLocaleString('pt-BR', {
         minimumFractionDigits: 3,
@@ -258,7 +258,6 @@ function formatarMoeda3(valor) {
     });
 }
 
-// Formatar com 2 casas decimais (para total)
 function formatarMoeda2(valor) {
     return valor.toLocaleString('pt-BR', {
         minimumFractionDigits: 2,
@@ -266,33 +265,31 @@ function formatarMoeda2(valor) {
     });
 }
 
-// Formatar input de preço com 3 casas decimais
 document.addEventListener('input', function(e) {
     if (e.target.classList.contains('input-preco')) {
-        let value = e.target.value.replace(/\D/g, '');
+        var value = e.target.value.replace(/\D/g, '');
         if (value) {
             value = (parseInt(value) / 1000).toFixed(3);
             e.target.value = formatarMoeda3(parseFloat(value));
         }
-        // Recalcular o total
-        const item = e.target.closest('.item-pedido');
+        var item = e.target.closest('.item-pedido');
         if (item) {
             calcularTotalItem(item);
         }
     }
 });
 
-// Validação antes de enviar
 document.getElementById('formPedido').addEventListener('submit', function(e) {
-    const itens = document.querySelectorAll('.item-pedido');
-    let valido = true;
+    var itens = document.querySelectorAll('.item-pedido');
+    var valido = true;
     
-    itens.forEach(item => {
-        const quantidade = item.querySelector('.input-quantidade-final').value;
+    for (var i = 0; i < itens.length; i++) {
+        var quantidade = itens[i].querySelector('.input-quantidade-final').value;
         if (!quantidade || parseFloat(quantidade) <= 0) {
             valido = false;
+            break;
         }
-    });
+    }
     
     if (!valido) {
         e.preventDefault();
@@ -300,15 +297,14 @@ document.getElementById('formPedido').addEventListener('submit', function(e) {
         return false;
     }
     
-    // Converter valores de moeda para formato numérico antes de enviar
-    document.querySelectorAll('.input-preco, .input-total-nf').forEach(input => {
-        if (input.value) {
-            input.value = input.value.replace(/\./g, '').replace(',', '.');
+    var inputs = document.querySelectorAll('.input-preco, .input-total-nf');
+    for (var j = 0; j < inputs.length; j++) {
+        if (inputs[j].value) {
+            inputs[j].value = inputs[j].value.replace(/\./g, '').replace(',', '.');
         }
-    });
+    }
 });
 
-// Adicionar primeiro item automaticamente
 document.addEventListener('DOMContentLoaded', function() {
     adicionarItem();
 });
