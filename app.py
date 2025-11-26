@@ -117,7 +117,7 @@ def listar_usuarios():
     cursor = conn.cursor(dictionary=True)
     try:
         cursor.execute("""
-            SELECT id, username, nome_completo as nome, nivel, ativo, data_criacao as created_at
+            SELECT id, username, nome_completo, nivel, ativo, data_criacao
             FROM usuarios
             ORDER BY nome_completo
         """)
@@ -131,9 +131,9 @@ def listar_usuarios():
 @login_required
 @admin_required
 def editar_usuario(id):
-    conn = get_db_connection()
-    cursor = conn.cursor(dictionary=True)
     if request.method == 'POST':
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
         nome_completo = request.form.get('nome')
         nivel = request.form.get('nivel')
         ativo = 1 if request.form.get('ativo') else 0
@@ -162,11 +162,16 @@ def editar_usuario(id):
         except Exception as e:
             conn.rollback()
             flash(f'Erro ao atualizar usuário: {str(e)}', 'danger')
+            return redirect(url_for('editar_usuario', id=id))
         finally:
             cursor.close()
             conn.close()
+
+    # GET: Busca usuário para exibir no formulário
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
     try:
-        cursor.execute("SELECT id, username, nome_completo as nome, nivel, ativo FROM usuarios WHERE id = %s", (id,))
+        cursor.execute("SELECT id, username, nome_completo, nivel, ativo FROM usuarios WHERE id = %s", (id,))
         usuario = cursor.fetchone()
         return render_template('alteracao_cadastro.html', usuario=usuario)
     finally:
