@@ -17,6 +17,44 @@
             <h4 class="mb-0" style="font-size: 1.1rem;">Novo Frete</h4>
         </div>
         <div class="card-body" style="padding: 1rem;">
+        
+            <!-- IMPORTAR DO PEDIDO -->
+            <div class="card mb-3 border-info">
+                <div class="card-header bg-info text-white" style="font-size: 0.9rem; padding: 0.5rem 1rem;">
+                    <i class="bi bi-cart"></i> Importar do Pedido
+                </div>
+                <div class="card-body" style="padding: 0.75rem;">
+                    <div class="row align-items-end">
+                        <div class="col-md-8 mb-2">
+                            <label for="pedido_importar" class="form-label" style="font-size: 0.85rem;">Selecione um Pedido para importar dados</label>
+                            <select class="form-select form-select-sm" id="pedido_importar">
+                                <option value="">-- Não importar (preencher manualmente) --</option>
+                                {% for pedido in pedidos %}
+                                <option value="{{ pedido.id }}" 
+                                        data-motorista="{{ pedido.motorista_id or '' }}">
+                                    {{ pedido.numero }} - {{ pedido.data_pedido.strftime('%d/%m/%Y') if pedido.data_pedido else '' }} 
+                                    {% if pedido.motorista_nome %}({{ pedido.motorista_nome }}){% endif %}
+                                    - {{ pedido.status }}
+                                </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-4 mb-2">
+                            <button type="button" class="btn btn-info btn-sm w-100" onclick="importarPedido()">
+                                <i class="bi bi-download"></i> Importar Dados
+                            </button>
+                        </div>
+                    </div>
+                    <div id="itens_pedido_container" style="display: none;">
+                        <hr class="my-2">
+                        <label class="form-label" style="font-size: 0.85rem;">Selecione o item do pedido:</label>
+                        <select class="form-select form-select-sm" id="item_pedido_select">
+                            <option value="">Selecione um item</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+            
             <form method="POST" action="{{ url_for('fretes.novo') }}">
 
                 <div class="row">
@@ -116,7 +154,7 @@
                         <select class="form-select form-select-sm" id="quantidade_id" name="quantidade_id">
                             <option value="">Selecione a quantidade</option>
                             {% for quantidade in quantidades %}
-                            <option value="{{ quantidade.id }}" data-litros="{{ quantidade.descricao }}">{{ quantidade.descricao }}</option>
+                            <option value="{{ quantidade.id }}" data-litros="{{ quantidade.descricao }}" data-valor="{{ quantidade.valor }}">{{ quantidade.descricao }}</option>
                             {% endfor %}
                         </select>
                     </div>
@@ -174,7 +212,7 @@
                     </div>
                 </div>
 
-                <div class="row">
+                                <div class="row">
                     <div class="col-md-12 mb-2">
                         <label for="status" class="form-label" style="font-size: 0.85rem;">Status *</label>
                         <select class="form-select form-select-sm" id="status" name="status" required>
@@ -229,16 +267,126 @@
         }
     }
 </style>
+
 <script>
 const ROTAS = {{ rotas_dict|tojson|safe }};
 </script>
+
 <script>
+var itensPedidoCarregados = [];
+
+function importarPedido() {
+    var pedidoSelect = document.getElementById('pedido_importar');
+    var pedidoId = pedidoSelect.value;
+    
+    if (!pedidoId) {
+        alert('Selecione um pedido para importar.');
+        return;
+    }
+    
+    var motoristaIdPedido = pedidoSelect.options[pedidoSelect.selectedIndex].dataset.motorista;
+    
+    fetch('/pedidos/api/buscar/' + pedidoId)
+        .then(function(response) {
+            return response.json();
+        })
+        .then(function(itens) {
+            if (itens.length === 0) {
+                alert('Este pedido não possui itens.');
+                return;
+            }
+            
+            itensPedidoCarregados = itens;
+            
+            if (motoristaIdPedido) {
+                document.getElementById('motoristas_id').value = motoristaIdPedido;
+            }
+            
+            var container = document.getElementById('itens_pedido_container');
+            var selectItens = document.getElementById('item_pedido_select');
+            
+            selectItens.innerHTML = '<option value="">Selecione um item</option>';
+            
+            for (var i = 0; i < itens.length; i++) {
+                var item = itens[i];
+                var option = document.createElement('option');
+                option.value = i;
+                option.textContent = item.cliente_razao + ' - ' + item.produto_nome + ' - ' + formatarNumero(item.quantidade) + ' L';
+                selectItens.appendChild(option);
+            }
+            
+            container.style.display = 'block';
+            
+            if (itens.length === 1) {
+                selectItens.value = '0';
+                preencherDadosItem(0);
+            }
+            
+            alert('Pedido carregado! Selecione o item para preencher os dados do frete.');
+        })
+        .catch(function(error) {
+            alert('Erro ao buscar pedido: ' + error);
+        });
+}
+
+function preencherDadosItem(index) {
+    var item = itensPedidoCarregados[index];
+    
+    if (!item) return;
+    
+    document.getElementById('clientes_id').value = item.cliente_id;
+    document.getElementById('produto_id').value = item.produto_id;
+    document.getElementById('fornecedores_id').value = item.fornecedor_id;
+    document.getElementById('origem_id').value = item.origem_id;
+    
+    if (item.quantidade_id) {
+        document.getElementById('quantidade_tipo').value = 'padrao';
+        document.getElementById('div_quantidade_padrao').style.display = 'block';
+        document.getElementById('div_quantidade_personalizada').style.display = 'none';
+        document.getElementById('quantidade_id').value = item.quantidade_id;
+    } else {
+        document.getElementById('quantidade_tipo').value = 'personalizada';
+        document.getElementById('div_quantidade_padrao').style.display = 'none';
+        document.getElementById('div_quantidade_personalizada').style.display = 'block';
+        document.getElementById('quantidade_manual').value = item.quantidade;
+    }
+    
+    var precoFormatado = formatarMoeda3(item.preco_unitario);
+    document.getElementById('preco_produto_unitario').value = precoFormatado;
+    
+    if (typeof calcularTudo === 'function') {
+        calcularTudo();
+    }
+}
+
+function formatarNumero(valor) {
+    return valor.toLocaleString('pt-BR', {
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 2
+    });
+}
+
+function formatarMoeda3(valor) {
+    return valor.toLocaleString('pt-BR', {
+        minimumFractionDigits: 3,
+        maximumFractionDigits: 3
+    });
+}
+
 document.addEventListener('DOMContentLoaded', function() {
-    const tipoSelect = document.querySelector('#quantidade_tipo');
-    const divPadrao = document.querySelector('#div_quantidade_padrao');
-    const divPersonalizada = document.querySelector('#div_quantidade_personalizada');
-    const quantidadePadraoSelect = document.querySelector('#quantidade_id');
-    const quantidadeManualInput = document.querySelector('#quantidade_manual');
+    var itemSelect = document.getElementById('item_pedido_select');
+    itemSelect.addEventListener('change', function() {
+        if (this.value !== '') {
+            preencherDadosItem(parseInt(this.value));
+        }
+    });
+    
+    var tipoSelect = document.querySelector('#quantidade_tipo');
+    var divPadrao = document.querySelector('#div_quantidade_padrao');
+    var divPersonalizada = document.querySelector('#div_quantidade_personalizada');
+    var quantidadePadraoSelect = document.querySelector('#quantidade_id');
+    var quantidadeManualInput = document.querySelector('#quantidade_manual');
+    
     tipoSelect.addEventListener('change', function() {
         if (this.value === 'personalizada') {
             divPadrao.style.display = 'none';
@@ -256,5 +404,6 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 });
 </script>
+
 <script src="{{ url_for('static', filename='js/fretes_calculos.js') }}"></script>
-{% endblock %}
+{% endblock %}
