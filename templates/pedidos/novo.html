@@ -27,7 +27,7 @@
                     </div>
                     <div class="col-md-3">
                         <label class="form-label">Data do Pedido *</label>
-                        <input type="date" class="form-control" name="data_pedido" required value="{{ today if today else '' }}">
+                        <input type="date" class="form-control" name="data_pedido" required>
                     </div>
                     <div class="col-md-6">
                         <label class="form-label">Observações</label>
@@ -62,7 +62,6 @@
                             </tr>
                         </thead>
                         <tbody id="itensBody">
-                            <!-- Itens serão adicionados via JavaScript -->
                         </tbody>
                         <tfoot style="background:#e9ecef;">
                             <tr>
@@ -100,7 +99,6 @@
 
 {% block scripts %}
 <script>
-    // Dados para os selects
     const clientes = {{ clientes | tojson }};
     const produtos = {{ produtos | tojson }};
     const fornecedores = {{ fornecedores | tojson }};
@@ -115,74 +113,44 @@
         let clienteOptions = '<option value="">Selecione</option>';
         clientes.forEach(c => {
             const nome = c.nome_fantasia || c.razao_social;
-            clienteOptions += `<option value="${c.id}">${nome}</option>`;
+            clienteOptions += '<option value="' + c.id + '">' + nome + '</option>';
         });
 
         let produtoOptions = '<option value="">Selecione</option>';
         produtos.forEach(p => {
-            produtoOptions += `<option value="${p.id}">${p.nome}</option>`;
+            produtoOptions += '<option value="' + p.id + '">' + p.nome + '</option>';
         });
 
         let fornecedorOptions = '<option value="">Selecione</option>';
         fornecedores.forEach(f => {
             const nome = f.nome_fantasia || f.razao_social;
-            fornecedorOptions += `<option value="${f.id}">${nome}</option>`;
+            fornecedorOptions += '<option value="' + f.id + '">' + nome + '</option>';
         });
 
         let origemOptions = '<option value="">Selecione</option>';
         origens.forEach(o => {
-            origemOptions += `<option value="${o.id}">${o.nome}</option>`;
+            origemOptions += '<option value="' + o.id + '">' + o.nome + '</option>';
         });
 
         const tr = document.createElement('tr');
-        tr.id = `item_${itemCount}`;
-        tr.innerHTML = `
-            <td>
-                <select class="form-select form-select-sm" name="cliente_id[]" required>
-                    ${clienteOptions}
-                </select>
-            </td>
-            <td>
-                <select class="form-select form-select-sm" name="produto_id[]" required>
-                    ${produtoOptions}
-                </select>
-            </td>
-            <td>
-                <select class="form-select form-select-sm" name="fornecedor_id[]" required>
-                    ${fornecedorOptions}
-                </select>
-            </td>
-            <td>
-                <select class="form-select form-select-sm" name="origem_id[]" required>
-                    ${origemOptions}
-                </select>
-            </td>
-            <td>
-                <input type="number" class="form-control form-control-sm" name="quantidade[]" step="0.01" min="0" required onchange="calcularTotais()">
-            </td>
-            <td>
-                <select class="form-select form-select-sm" name="tipo_quantidade[]">
-                    <option value="metros">Metros</option>
-                    <option value="litros">Litros</option>
-                </select>
-            </td>
-            <td>
-                <input type="number" class="form-control form-control-sm" name="preco_unitario[]" step="0.001" min="0" placeholder="0,000" onchange="calcularTotais()">
-            </td>
-            <td>
-                <input type="number" class="form-control form-control-sm" name="total_nf[]" step="0.01" min="0" required placeholder="0,00" onchange="calcularTotais()">
-            </td>
-            <td class="text-center">
-                <button type="button" class="btn btn-sm btn-danger" onclick="removerItem(${itemCount})">
-                    <i class="bi bi-trash"></i>
-                </button>
-            </td>
-        `;
+        tr.id = 'item_' + itemCount;
+        
+        let html = '<td><select class="form-select form-select-sm" name="cliente_id[]" required>' + clienteOptions + '</select></td>';
+        html += '<td><select class="form-select form-select-sm" name="produto_id[]" required>' + produtoOptions + '</select></td>';
+        html += '<td><select class="form-select form-select-sm" name="fornecedor_id[]" required>' + fornecedorOptions + '</select></td>';
+        html += '<td><select class="form-select form-select-sm" name="origem_id[]" required>' + origemOptions + '</select></td>';
+        html += '<td><input type="number" class="form-control form-control-sm" name="quantidade[]" step="0.01" min="0" required onchange="calcularTotais()"></td>';
+        html += '<td><select class="form-select form-select-sm" name="tipo_quantidade[]"><option value="metros">Metros</option><option value="litros">Litros</option></select></td>';
+        html += '<td><input type="number" class="form-control form-control-sm" name="preco_unitario[]" step="0.001" min="0" placeholder="0,000" onchange="calcularTotais()"></td>';
+        html += '<td><input type="number" class="form-control form-control-sm" name="total_nf[]" step="0.01" min="0" required placeholder="0,00" onchange="calcularTotais()"></td>';
+        html += '<td class="text-center"><button type="button" class="btn btn-sm btn-danger" onclick="removerItem(' + itemCount + ')"><i class="bi bi-trash"></i></button></td>';
+        
+        tr.innerHTML = html;
         tbody.appendChild(tr);
     }
 
     function removerItem(id) {
-        const tr = document.getElementById(`item_${id}`);
+        const tr = document.getElementById('item_' + id);
         if (tr) {
             tr.remove();
             calcularTotais();
@@ -193,11 +161,11 @@
         let totalQtd = 0;
         let totalNF = 0;
 
-        document.querySelectorAll('input[name="quantidade[]"]').forEach(input => {
+        document.querySelectorAll('input[name="quantidade[]"]').forEach(function(input) {
             totalQtd += parseFloat(input.value) || 0;
         });
 
-        document.querySelectorAll('input[name="total_nf[]"]').forEach(input => {
+        document.querySelectorAll('input[name="total_nf[]"]').forEach(function(input) {
             totalNF += parseFloat(input.value) || 0;
         });
 
@@ -205,11 +173,9 @@
         document.getElementById('totalNF').textContent = 'R$ ' + totalNF.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2});
     }
 
-    // Adicionar primeiro item automaticamente
     document.addEventListener('DOMContentLoaded', function() {
         adicionarItem();
         
-        // Setar data de hoje
         const hoje = new Date().toISOString().split('T')[0];
         document.querySelector('input[name="data_pedido"]').value = hoje;
     });
