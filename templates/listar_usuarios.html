@@ -64,7 +64,7 @@
                             </td>
                             <td>{{ usuario.data_criacao.strftime('%d/%m/%Y') if usuario.data_criacao else '-' }}</td>
                             <td>
-                                <a href="{{ url_for('editar_usuario', user_id=usuario.id) }}" class="btn btn-sm btn-warning" title="Editar">
+                                <a href="{{ url_for('editar_usuario', id=usuario.id) }}" class="btn btn-sm btn-warning" title="Editar">
                                     <i class="bi bi-pencil"></i>
                                 </a>
                             </td>
