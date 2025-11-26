@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}ARLA - Saldo Inicial{% endblock %}
+{% block title %}Saldo Inicial - ARLA{% endblock %}
 
 {% block content %}
 <div class="container-fluid">
@@ -9,40 +9,55 @@
             <i class="bi bi-droplet"></i> Controle de ARLA - Saldo Inicial
         </h2>
         <div>
-            <a href="{{ url_for('arla.compras') }}" class="btn btn-primary btn-sm">
-                <i class="bi bi-plus-circle"></i> Nova Compra ARLA
+            <a href="{{ url_for('arla.index') }}" class="btn btn-secondary btn-sm">
+                <i class="bi bi-arrow-left"></i> Voltar
             </a>
         </div>
     </div>
 
     <div class="card" style="margin-bottom:20px;">
-        <div class="card-header" style="background:#1D63A5;color:white;font-size:0.9rem;font-weight:600;">
-            <i class="bi bi-droplet-half"></i> Lançamento de Saldo Inicial
+        <div class="card-header d-flex justify-content-between align-items-center" style="background:#1D63A5;color:white;font-size:0.9rem;font-weight:600;">
+            <span><i class="bi bi-droplet-half"></i> Saldo Inicial Cadastrado</span>
+            {% if saldo %}
+            <a href="{{ url_for('arla.editar_saldo_inicial', id=saldo.id) }}" class="btn btn-sm btn-warning">
+                <i class="bi bi-pencil"></i> Editar
+            </a>
+            {% endif %}
         </div>
         <div class="card-body">
-            <form method="post" class="row g-3">
-                <div class="col-md-3">
-                    <label for="data" class="form-label">Data do Saldo Inicial</label>
-                    <input type="date" class="form-control" id="data" name="data" required>
-                </div>
-                <div class="col-md-3">
-                    <label for="volume_inicial" class="form-label">Volume Inicial (litros)</label>
-                    <input type="number" min="0" step="0.01" class="form-control" id="volume_inicial" name="volume_inicial" required>
-                </div>
-                <div class="col-md-3">
-                    <label for="preco_medio_compra" class="form-label">Preço Médio Compra (por litro)</label>
-                    <input type="number" min="0" step="0.01" class="form-control" id="preco_medio_compra" name="preco_medio_compra" required>
-                </div>
-                <div class="col-md-3">
-                    <label for="encerrante_inicial" class="form-label">Encerrante Inicial</label>
-                    <input type="number" min="0" step="0.01" class="form-control" id="encerrante_inicial" name="encerrante_inicial" required>
-                </div>
-                <div class="col-12 mt-2">
-                    <button type="submit" class="btn btn-primary">
-                        <i class="bi bi-save"></i> Salvar Saldo Inicial
-                    </button>
-                </div>
-            </form>
+            {% if saldo %}
+                <ul style="margin-bottom:0; list-style:none; padding:0;">
+                    <li><strong>Data:</strong> {{ saldo.data.strftime('%d/%m/%Y') if saldo.data else '-' }}</li>
+                    <li><strong>Volume Inicial:</strong> {{ "{:,.2f}".format(saldo.volume_inicial).replace(',', 'X').replace('.', ',').replace('X', '.') }} litros</li>
+                    <li><strong>Preço Médio Compra:</strong> R$ {{ "{:,.2f}".format(saldo.preco_medio_compra).replace(',', 'X').replace('.', ',').replace('X', '.') }}</li>
+                    <li><strong>Encerrante Inicial:</strong> {{ "{:,.2f}".format(saldo.encerrante_inicial).replace(',', 'X').replace('.', ',').replace('X', '.') }}</li>
+                </ul>
+            {% else %}
+                <!-- Formulário só aparece se NÃO existe saldo cadastrado -->
+                <form method="post" class="row g-3">
+                    <div class="col-md-3">
+                        <label for="data" class="form-label">Data do Saldo Inicial</label>
+                        <input type="date" class="form-control" id="data" name="data" required>
+                    </div>
+                    <div class="col-md-3">
+                        <label for="volume_inicial" class="form-label">Volume Inicial (litros)</label>
+                        <input type="number" min="0" step="0.01" class="form-control" id="volume_inicial" name="volume_inicial" required>
+                    </div>
+                    <div class="col-md-3">
+                        <label for="preco_medio_compra" class="form-label">Preço Médio Compra (por litro)</label>
+                        <input type="number" min="0" step="0.01" class="form-control" id="preco_medio_compra" name="preco_medio_compra" required>
+                    </div>
+                    <div class="col-md-3">
+                        <label for="encerrante_inicial" class="form-label">Encerrante Inicial</label>
+                        <input type="number" min="0" step="0.01" class="form-control" id="encerrante_inicial" name="encerrante_inicial" required>
+                    </div>
+                    <div class="col-12 mt-2">
+                        <button type="submit" class="btn btn-primary">
+                            <i class="bi bi-save"></i> Salvar Saldo Inicial
+                        </button>
+                    </div>
+                </form>
+            {% endif %}
         </div>
     </div>
 </div>
