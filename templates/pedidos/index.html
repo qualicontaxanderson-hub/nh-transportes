@@ -1,0 +1,125 @@
+{% extends "base.html" %}
+
+{% block title %}Pedidos - NH Transportes{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h2 style="font-size: 1.5rem;">
+            <i class="bi bi-cart-check"></i> Pedidos
+        </h2>
+        <a href="{{ url_for('pedidos.novo') }}" class="btn btn-success btn-sm">
+            <i class="bi bi-plus-circle"></i> Novo Pedido
+        </a>
+    </div>
+
+    <!-- FILTROS -->
+    <div class="card mb-3">
+        <div class="card-header" style="background:#e9ecef;font-weight:600;">
+            <i class="bi bi-funnel"></i> Filtrar
+        </div>
+        <div class="card-body">
+            <form method="GET" action="{{ url_for('pedidos.index') }}" class="row g-2 align-items-end">
+                <div class="col-md-3">
+                    <label for="data_inicio" class="form-label" style="font-size:0.9rem;">Data Inicial</label>
+                    <input type="date" class="form-control form-control-sm" id="data_inicio" name="data_inicio" value="{{ filtros.data_inicio }}">
+                </div>
+                <div class="col-md-3">
+                    <label for="data_fim" class="form-label" style="font-size:0.9rem;">Data Final</label>
+                    <input type="date" class="form-control form-control-sm" id="data_fim" name="data_fim" value="{{ filtros.data_fim }}">
+                </div>
+                <div class="col-md-3">
+                    <label for="status" class="form-label" style="font-size:0.9rem;">Status</label>
+                    <select class="form-select form-select-sm" id="status" name="status">
+                        <option value="">Todos</option>
+                        <option value="Pendente" {% if filtros.status == 'Pendente' %}selected{% endif %}>Pendente</option>
+                        <option value="Confirmado" {% if filtros.status == 'Confirmado' %}selected{% endif %}>Confirmado</option>
+                        <option value="Faturado" {% if filtros.status == 'Faturado' %}selected{% endif %}>Faturado</option>
+                        <option value="Cancelado" {% if filtros.status == 'Cancelado' %}selected{% endif %}>Cancelado</option>
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <button type="submit" class="btn btn-primary btn-sm me-2">
+                        <i class="bi bi-search"></i> Filtrar
+                    </button>
+                    <a href="{{ url_for('pedidos.index') }}" class="btn btn-secondary btn-sm">
+                        <i class="bi bi-x-circle"></i> Limpar
+                    </a>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- TABELA DE PEDIDOS -->
+    <div class="card">
+        <div class="card-header" style="background:#4A90E2;color:#fff;font-weight:600;">
+            <i class="bi bi-list-ul"></i> Lista de Pedidos
+        </div>
+        <div class="card-body table-responsive p-0">
+            <table class="table table-hover table-sm mb-0">
+                <thead style="background:#f1f1f1;">
+                    <tr>
+                        <th>Número</th>
+                        <th>Data</th>
+                        <th class="text-center">Itens</th>
+                        <th class="text-end">Qtd Total</th>
+                        <th class="text-end">Valor Total</th>
+                        <th class="text-center">Status</th>
+                        <th class="text-center">Ações</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% if pedidos %}
+                        {% for pedido in pedidos %}
+                        <tr>
+                            <td><strong>{{ pedido.numero }}</strong></td>
+                            <td>{{ pedido.data_pedido.strftime('%d/%m/%Y') if pedido.data_pedido else '-' }}</td>
+                            <td class="text-center">{{ pedido.total_itens or 0 }}</td>
+                            <td class="text-end">{{ "{:,.2f}".format(pedido.total_quantidade or 0).replace(',', 'X').replace('.', ',').replace('X', '.') }} m³</td>
+                            <td class="text-end">R$ {{ "{:,.2f}".format(pedido.total_valor or 0).replace(',', 'X').replace('.', ',').replace('X', '.') }}</td>
+                            <td class="text-center">
+                                {% if pedido.status == 'Pendente' %}
+                                    <span class="badge bg-warning text-dark">Pendente</span>
+                                {% elif pedido.status == 'Confirmado' %}
+                                    <span class="badge bg-success">Confirmado</span>
+                                {% elif pedido.status == 'Faturado' %}
+                                    <span class="badge bg-primary">Faturado</span>
+                                {% elif pedido.status == 'Cancelado' %}
+                                    <span class="badge bg-danger">Cancelado</span>
+                                {% else %}
+                                    <span class="badge bg-secondary">{{ pedido.status }}</span>
+                                {% endif %}
+                            </td>
+                            <td class="text-center">
+                                <a href="{{ url_for('pedidos.visualizar', id=pedido.id) }}" class="btn btn-sm btn-info" title="Visualizar">
+                                    <i class="bi bi-eye"></i>
+                                </a>
+                                <a href="{{ url_for('pedidos.editar', id=pedido.id) }}" class="btn btn-sm btn-warning" title="Editar">
+                                    <i class="bi bi-pencil"></i>
+                                </a>
+                                <a href="{{ url_for('pedidos.excluir', id=pedido.id) }}" class="btn btn-sm btn-danger" title="Excluir" onclick="return confirm('Deseja realmente excluir este pedido?')">
+                                    <i class="bi bi-trash"></i>
+                                </a>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    {% else %}
+                        <tr>
+                            <td colspan="7" class="text-center text-muted" style="padding: 2rem;">
+                                <i class="bi bi-inbox" style="font-size:2rem;"></i><br>
+                                Nenhum pedido encontrado.
+                            </td>
+                        </tr>
+                    {% endif %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<style>
+    .table th { font-weight:600; font-size:0.9rem; }
+    .table td { font-size:0.88rem; vertical-align: middle; }
+    .btn-sm { font-size: 0.78rem; padding:0.28rem 0.6rem;}
+</style>
+{% endblock %}
