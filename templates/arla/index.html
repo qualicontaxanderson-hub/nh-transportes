@@ -1,12 +1,42 @@
-/nh-transportes
-    /routes
-        /arla
-            arla.py      # rotas/arla backend
-    /templates
-        /arla
-            index.html   # <-- salve aqui!
-            saldo_inicial.html
-            compras.html
-            lancamento.html
-            preco_venda.html
-        base.html
+{% extends "base.html" %}
+{% block content %}
+    <h1>Painel ARLA</h1>
+
+    <h2>Saldo Inicial</h2>
+    {% if saldo %}
+        <p>Volume: {{ saldo.volume_inicial }}</p>
+        <p>Preço Médio Compra: {{ saldo.preco_medio_compra }}</p>
+        <p>Encerrante Inicial: {{ saldo.encerrante_inicial }}</p>
+    {% else %}
+        <p>Não há saldo inicial cadastrado.</p>
+    {% endif %}
+
+    <h2>Compras</h2>
+    {% if compras %}
+        <ul>
+        {% for compra in compras %}
+            <li>{{ compra.data }} - {{ compra.quantidade }} litros a R$ {{ compra.preco_compra }}</li>
+        {% endfor %}
+        </ul>
+    {% else %}
+        <p>Nenhuma compra registrada.</p>
+    {% endif %}
+
+    <h2>Lançamentos</h2>
+    {% if lancamentos %}
+        <ul>
+        {% for lanc in lancamentos %}
+            <li>{{ lanc.data }} - {{ lanc.quantidade_vendida }} litros a R$ {{ lanc.preco_venda_aplicado }}</li>
+        {% endfor %}
+        </ul>
+    {% else %}
+        <p>Nenhum lançamento registrado.</p>
+    {% endif %}
+
+    <h2>Preço Atual</h2>
+    {% if preco %}
+        <p>R$ {{ preco.preco_venda }} (desde {{ preco.data_inicio }})</p>
+    {% else %}
+        <p>Sem preço vigente cadastrado.</p>
+    {% endif %}
+{% endblock %}
