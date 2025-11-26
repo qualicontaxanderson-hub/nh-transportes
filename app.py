@@ -20,8 +20,7 @@ def load_user(user_id):
     return Usuario.get_by_id(int(user_id))
 
 # Importar blueprints
-from routes import clientes, fornecedores, veiculos, motoristas, fretes, rotas, origens_destinos, quilometragem, produtos, relatorios
-from routes.arla import arla   # <-- IMPORTANTE: adiciona o módulo ARLA
+from routes import clientes, fornecedores, veiculos, motoristas, fretes, rotas, origens_destinos, quilometragem, produtos, relatorios, arla
 
 # Registrar blueprints
 app.register_blueprint(clientes.bp)
@@ -34,7 +33,7 @@ app.register_blueprint(origens_destinos.bp)
 app.register_blueprint(quilometragem.bp)
 app.register_blueprint(produtos.bp)
 app.register_blueprint(relatorios.bp)
-app.register_blueprint(arla.bp)   # <-- REGISTRA O MODULO ARLA
+app.register_blueprint(arla.bp)
 
 # Rota principal (Dashboard)
 @app.route('/')
