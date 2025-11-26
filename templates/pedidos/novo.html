@@ -1,0 +1,165 @@
+{% extends "base.html" %}
+
+{% block title %}Novo Pedido - NH Transportes{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h2 style="font-size: 1.5rem;">
+            <i class="bi bi-cart-plus"></i> Novo Pedido
+        </h2>
+        <a href="{{ url_for('pedidos.index') }}" class="btn btn-secondary btn-sm">
+            <i class="bi bi-arrow-left"></i> Voltar
+        </a>
+    </div>
+
+    <form method="POST" action="{{ url_for('pedidos.novo') }}" id="formPedido">
+        <!-- CABEÇALHO DO PEDIDO -->
+        <div class="card mb-3">
+            <div class="card-header" style="background:#4A90E2;color:#fff;font-weight:600;">
+                <i class="bi bi-info-circle"></i> Dados do Pedido
+            </div>
+            <div class="card-body">
+                <div class="row g-3">
+                    <div class="col-md-3">
+                        <label class="form-label">Número</label>
+                        <input type="text" class="form-control" value="{{ numero_sugerido }}" readonly style="background:#e9ecef;">
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">Data do Pedido *</label>
+                        <input type="date" class="form-control" name="data_pedido" required value="{{ today if today else '' }}">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Observações</label>
+                        <input type="text" class="form-control" name="observacoes" placeholder="Observações gerais do pedido">
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ITENS DO PEDIDO -->
+        <div class="card mb-3">
+            <div class="card-header d-flex justify-content-between align-items-center" style="background:#28a745;color:#fff;font-weight:600;">
+                <span><i class="bi bi-list-check"></i> Itens do Pedido</span>
+                <button type="button" class="btn btn-light btn-sm" onclick="adicionarItem()">
+                    <i class="bi bi-plus-circle"></i> Adicionar Item
+                </button>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-sm mb-0" id="tabelaItens">
+                        <thead style="background:#f1f1f1;">
+                            <tr>
+                                <th style="width:20%;">Cliente *</th>
+                                <th style="width:10%;">Produto *</th>
+                                <th style="width:15%;">Fornecedor *</th>
+                                <th style="width:12%;">Origem *</th>
+                                <th style="width:8%;">Qtd *</th>
+                                <th style="width:8%;">Tipo</th>
+                                <th style="width:10%;">Preço Unit.</th>
+                                <th style="width:12%;">Total NF *</th>
+                                <th style="width:5%;"></th>
+                            </tr>
+                        </thead>
+                        <tbody id="itensBody">
+                            <!-- Itens serão adicionados via JavaScript -->
+                        </tbody>
+                        <tfoot style="background:#e9ecef;">
+                            <tr>
+                                <td colspan="4" class="text-end"><strong>TOTAIS:</strong></td>
+                                <td class="text-end"><strong id="totalQtd">0,00</strong></td>
+                                <td></td>
+                                <td></td>
+                                <td class="text-end"><strong id="totalNF">R$ 0,00</strong></td>
+                                <td></td>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <div class="d-flex justify-content-end gap-2">
+            <a href="{{ url_for('pedidos.index') }}" class="btn btn-secondary">
+                <i class="bi bi-x-circle"></i> Cancelar
+            </a>
+            <button type="submit" class="btn btn-success">
+                <i class="bi bi-check-circle"></i> Salvar Pedido
+            </button>
+        </div>
+    </form>
+</div>
+
+<style>
+    .table th { font-weight:600; font-size:0.8rem; }
+    .table td { font-size:0.85rem; vertical-align: middle; padding: 0.4rem; }
+    .form-select-sm, .form-control-sm { font-size: 0.8rem; }
+</style>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // Dados para os selects
+    const clientes = {{ clientes | tojson }};
+    const produtos = {{ produtos | tojson }};
+    const fornecedores = {{ fornecedores | tojson }};
+    const origens = {{ origens | tojson }};
+
+    let itemCount = 0;
+
+    function adicionarItem() {
+        itemCount++;
+        const tbody = document.getElementById('itensBody');
+        
+        let clienteOptions = '<option value="">Selecione</option>';
+        clientes.forEach(c => {
+            const nome = c.nome_fantasia || c.razao_social;
+            clienteOptions += `<option value="${c.id}">${nome}</option>`;
+        });
+
+        let produtoOptions = '<option value="">Selecione</option>';
+        produtos.forEach(p => {
+            produtoOptions += `<option value="${p.id}">${p.nome}</option>`;
+        });
+
+        let fornecedorOptions = '<option value="">Selecione</option>';
+        fornecedores.forEach(f => {
+            const nome = f.nome_fantasia || f.razao_social;
+            fornecedorOptions += `<option value="${f.id}">${nome}</option>`;
+        });
+
+        let origemOptions = '<option value="">Selecione</option>';
+        origens.forEach(o => {
+            origemOptions += `<option value="${o.id}">${o.nome}</option>`;
+        });
+
+        const tr = document.createElement('tr');
+        tr.id = `item_${itemCount}`;
+        tr.innerHTML = `
+            <td>
+                <select class="form-select form-select-sm" name="cliente_id[]" required>
+                    ${clienteOptions}
+                </select>
+            </td>
+            <td>
+                <select class="form-select form-select-sm" name="produto_id[]" required>
+                    ${produtoOptions}
+                </select>
+            </td>
+            <td>
+                <select class="form-select form-select-sm" name="fornecedor_id[]" required>
+                    ${fornecedorOptions}
+                </select>
+            </td>
+            <td>
+                <select class="form-select form-select-sm" name="origem_id[]" required>
+                    ${origemOptions}
+                </select>
+            </td>
+            <td>
+                <input type="number" class="form-control form-control-sm" name="quantidade[]" step="0.01" min="0" required onchange="calcularTotais()">
+            </td>
+            <td>
+                <select class="form-select form-select-sm" name="tipo_quantidade[]">
+                    <option value="metros">Metros
