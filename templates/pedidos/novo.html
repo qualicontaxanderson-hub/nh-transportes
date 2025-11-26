@@ -163,3 +163,58 @@
             <td>
                 <select class="form-select form-select-sm" name="tipo_quantidade[]">
                     <option value="metros">Metros
+                                    <select class="form-select form-select-sm" name="tipo_quantidade[]">
+                    <option value="metros">Metros</option>
+                    <option value="litros">Litros</option>
+                </select>
+            </td>
+            <td>
+                <input type="number" class="form-control form-control-sm" name="preco_unitario[]" step="0.001" min="0" placeholder="0,000" onchange="calcularTotais()">
+            </td>
+            <td>
+                <input type="number" class="form-control form-control-sm" name="total_nf[]" step="0.01" min="0" required placeholder="0,00" onchange="calcularTotais()">
+            </td>
+            <td class="text-center">
+                <button type="button" class="btn btn-sm btn-danger" onclick="removerItem(${itemCount})">
+                    <i class="bi bi-trash"></i>
+                </button>
+            </td>
+        `;
+        tbody.appendChild(tr);
+    }
+
+    function removerItem(id) {
+        const tr = document.getElementById(`item_${id}`);
+        if (tr) {
+            tr.remove();
+            calcularTotais();
+        }
+    }
+
+    function calcularTotais() {
+        let totalQtd = 0;
+        let totalNF = 0;
+
+        document.querySelectorAll('input[name="quantidade[]"]').forEach(input => {
+            totalQtd += parseFloat(input.value) || 0;
+        });
+
+        document.querySelectorAll('input[name="total_nf[]"]').forEach(input => {
+            totalNF += parseFloat(input.value) || 0;
+        });
+
+        document.getElementById('totalQtd').textContent = totalQtd.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+        document.getElementById('totalNF').textContent = 'R$ ' + totalNF.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+    }
+
+    // Adicionar primeiro item automaticamente
+    document.addEventListener('DOMContentLoaded', function() {
+        adicionarItem();
+        
+        // Setar data de hoje
+        const hoje = new Date().toISOString().split('T');
+        document.querySelector('input[name="data_pedido"]').value = hoje;
+    });
+</script>
+{% endblock %}
+
