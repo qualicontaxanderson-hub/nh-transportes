@@ -6,11 +6,11 @@
 <div class="container-fluid">
     <div class="d-flex justify-content-between align-items-center mb-3">
         <h2 style="font-size: 1.5rem;">
-            <i class="bi bi-droplet"></i> Controle de ARLA - Compras
+            <i class="bi bi-droplet"></i> Controle de ARLA - Nova Compra
         </h2>
         <div>
-            <a href="{{ url_for('arla.saldo_inicial') }}" class="btn btn-primary btn-sm">
-                <i class="bi bi-arrow-left"></i> Voltar ao Saldo Inicial
+            <a href="{{ url_for('arla.index') }}" class="btn btn-secondary btn-sm">
+                <i class="bi bi-arrow-left"></i> Voltar
             </a>
         </div>
     </div>
@@ -21,28 +21,39 @@
         </div>
         <div class="card-body">
             <form method="post" class="row g-3">
-                <div class="col-md-4">
+                <div class="col-md-3">
                     <label for="data" class="form-label">Data da Compra</label>
                     <input type="date" class="form-control" id="data" name="data" required>
                 </div>
-                <div class="col-md-4">
+                <div class="col-md-3">
                     <label for="quantidade" class="form-label">Quantidade (litros)</label>
                     <input type="number" min="0" step="0.01" class="form-control" id="quantidade" name="quantidade" required>
                 </div>
-                <div class="col-md-4">
+                <div class="col-md-3">
                     <label for="preco_compra" class="form-label">Preço de Compra (por litro)</label>
                     <input type="number" min="0" step="0.01" class="form-control" id="preco_compra" name="preco_compra" required>
                 </div>
-                <div class="col-12 mt-2">
+                <div class="col-md-3">
+                    <label for="valor_total" class="form-label">Valor Total da Nota (R$)</label>
+                    <input type="text" class="form-control bg-warning" id="valor_total" name="valor_total" value="0,00" readonly>
+                </div>
+                <div class="col-12 mt-3">
                     <button type="submit" class="btn btn-primary">
                         <i class="bi bi-save"></i> Salvar Compra
                     </button>
+                    <a href="{{ url_for('arla.index') }}" class="btn btn-secondary">
+                        <i class="bi bi-x-circle"></i> Cancelar
+                    </a>
                 </div>
             </form>
         </div>
     </div>
 </div>
+
 <style>
+    .bg-warning {
+        background-color: #FFD580 !important;
+    }
     .table th { font-weight: 600; font-size: 0.85rem; }
     .btn-sm { font-size: 0.8rem; padding: 0.3rem 0.6rem; }
     @media (max-width: 768px) {
@@ -50,4 +61,28 @@
         .table { font-size: 0.75rem !important; }
     }
 </style>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const quantidadeInput = document.getElementById('quantidade');
+    const precoCompraInput = document.getElementById('preco_compra');
+    const valorTotalInput = document.getElementById('valor_total');
+
+    function calcularTotal() {
+        const quantidade = parseFloat(quantidadeInput.value) || 0;
+        const precoCompra = parseFloat(precoCompraInput.value) || 0;
+        const total = quantidade * precoCompra;
+        
+        // Formata para o padrão brasileiro (1.234,56)
+        valorTotalInput.value = total.toLocaleString('pt-BR', {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2
+        });
+    }
+
+    // Calcula quando o usuário digita nos campos
+    quantidadeInput.addEventListener('input', calcularTotal);
+    precoCompraInput.addEventListener('input', calcularTotal);
+});
+</script>
 {% endblock %}
