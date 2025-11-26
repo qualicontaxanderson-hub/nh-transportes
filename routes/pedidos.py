@@ -44,10 +44,12 @@ def index():
     
     sql = """
         SELECT p.*, 
+               m.nome as motorista_nome,
                COUNT(pi.id) as total_itens,
                SUM(pi.quantidade) as total_quantidade,
                SUM(pi.total_nf) as total_valor
         FROM pedidos p
+        LEFT JOIN motoristas m ON p.motorista_id = m.id
         LEFT JOIN pedidos_itens pi ON p.id = pi.pedido_id
         WHERE 1=1
     """
@@ -84,13 +86,14 @@ def novo():
     
     if request.method == 'POST':
         data_pedido = request.form['data_pedido']
+        motorista_id = request.form.get('motorista_id') or None
         observacoes = request.form.get('observacoes', '')
         numero = gerar_numero_pedido()
         
         cursor.execute("""
-            INSERT INTO pedidos (numero, data_pedido, status, observacoes)
-            VALUES (%s, %s, 'Pendente', %s)
-        """, (numero, data_pedido, observacoes))
+            INSERT INTO pedidos (numero, data_pedido, motorista_id, status, observacoes)
+            VALUES (%s, %s, %s, 'Pendente', %s)
+        """, (numero, data_pedido, motorista_id, observacoes))
         pedido_id = cursor.lastrowid
         
         clientes = request.form.getlist('cliente_id[]')
@@ -105,7 +108,6 @@ def novo():
         
         for i in range(len(clientes)):
             if clientes[i] and produtos[i] and fornecedores[i]:
-                # Pegar quantidade do listbox ou manual
                 qtd_id = quantidade_ids[i] if quantidade_ids[i] else None
                 qtd_valor = quantidades[i] if quantidades[i] else 0
                 
@@ -139,6 +141,9 @@ def novo():
     cursor.execute("SELECT id, valor, descricao FROM quantidades ORDER BY valor")
     quantidades = cursor.fetchall()
     
+    cursor.execute("SELECT id, nome FROM motoristas ORDER BY nome")
+    motoristas = cursor.fetchall()
+    
     cursor.close()
     conn.close()
     
@@ -150,6 +155,7 @@ def novo():
                            fornecedores=fornecedores,
                            origens=origens,
                            quantidades=quantidades,
+                           motoristas=motoristas,
                            numero_sugerido=numero_sugerido)
 
 # =============================================
@@ -161,7 +167,12 @@ def visualizar(id):
     conn = get_db()
     cursor = conn.cursor(dictionary=True)
     
-    cursor.execute("SELECT * FROM pedidos WHERE id = %s", (id,))
+    cursor.execute("""
+        SELECT p.*, m.nome as motorista_nome
+        FROM pedidos p
+        LEFT JOIN motoristas m ON p.motorista_id = m.id
+        WHERE p.id = %s
+    """, (id,))
     pedido = cursor.fetchone()
     
     if not pedido:
@@ -217,13 +228,14 @@ def editar(id):
     
     if request.method == 'POST':
         data_pedido = request.form['data_pedido']
+        motorista_id = request.form.get('motorista_id') or None
         status = request.form['status']
         observacoes = request.form.get('observacoes', '')
         
         cursor.execute("""
-            UPDATE pedidos SET data_pedido = %s, status = %s, observacoes = %s
+            UPDATE pedidos SET data_pedido = %s, motorista_id = %s, status = %s, observacoes = %s
             WHERE id = %s
-        """, (data_pedido, status, observacoes, id))
+        """, (data_pedido, motorista_id, status, observacoes, id))
         
         cursor.execute("DELETE FROM pedidos_itens WHERE pedido_id = %s", (id,))
         
@@ -278,6 +290,9 @@ def editar(id):
     cursor.execute("SELECT id, valor, descricao FROM quantidades ORDER BY valor")
     quantidades = cursor.fetchall()
     
+    cursor.execute("SELECT id, nome FROM motoristas ORDER BY nome")
+    motoristas = cursor.fetchall()
+    
     cursor.close()
     conn.close()
     
@@ -288,7 +303,8 @@ def editar(id):
                            produtos=produtos,
                            fornecedores=fornecedores,
                            origens=origens,
-                           quantidades=quantidades)
+                           quantidades=quantidades,
+                           motoristas=motoristas)
 
 # =============================================
 # ALTERAR STATUS
@@ -314,6 +330,7 @@ def alterar_status(id, status):
 def excluir(id):
     conn = get_db()
     cursor = conn.cursor()
+    cursor.execute("DELETE FROM pedidos_itens WHERE pedido_id = %s", (id,))
     cursor.execute("DELETE FROM pedidos WHERE id = %s", (id,))
     conn.commit()
     cursor.close()
@@ -355,3 +372,4 @@ def api_buscar(id):
         item['total_nf'] = float(item['total_nf'])
     
     return jsonify(itens)
+
