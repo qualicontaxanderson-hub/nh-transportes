@@ -133,7 +133,7 @@
                 </div>
                 <div class="col-md-2">
                     <label class="form-label">Preço Unit. (R$)</label>
-                    <input type="text" class="form-control input-preco" name="preco_unitario[]" placeholder="0,000" oninput="calcularTotalItem(this)">
+                    <input type="text" class="form-control input-preco" name="preco_unitario[]" placeholder="0,000">
                 </div>
                 <div class="col-md-2">
                     <label class="form-label">Total NF (R$)</label>
@@ -192,7 +192,7 @@ function toggleQuantidade(select) {
         
         inputManual.oninput = function() {
             inputFinal.value = this.value;
-            calcularTotalItem(this);
+            calcularTotalItem(item);
         };
     } else {
         divLista.style.display = 'block';
@@ -205,7 +205,7 @@ function toggleQuantidade(select) {
             inputFinal.value = '';
         }
     }
-    calcularTotalItem(select);
+    calcularTotalItem(item);
 }
 
 function selecionarQuantidade(select) {
@@ -218,18 +218,28 @@ function selecionarQuantidade(select) {
     } else {
         inputFinal.value = '';
     }
-    calcularTotalItem(select);
+    calcularTotalItem(item);
 }
 
-function calcularTotalItem(elemento) {
-    const item = elemento.closest('.item-pedido');
+// Converte string formato brasileiro para número
+// "10.000" -> 10000
+// "3,605" -> 3.605
+function converterParaNumero(valor) {
+    if (!valor) return 0;
+    // Remove pontos de milhar e troca vírgula por ponto decimal
+    return parseFloat(valor.toString().replace(/\./g, '').replace(',', '.')) || 0;
+}
+
+function calcularTotalItem(item) {
     const inputFinal = item.querySelector('.input-quantidade-final');
     const inputPreco = item.querySelector('.input-preco');
     const inputTotalNf = item.querySelector('.input-total-nf');
     
+    // Quantidade vem como número puro do data-valor (ex: 10000)
     const quantidade = parseFloat(inputFinal.value) || 0;
-    const precoStr = inputPreco.value.replace(/\./g, '').replace(',', '.');
-    const preco = parseFloat(precoStr) || 0;
+    
+    // Preço vem formatado em brasileiro (ex: 3,605)
+    const preco = converterParaNumero(inputPreco.value);
     
     const total = quantidade * preco;
     
@@ -263,6 +273,11 @@ document.addEventListener('input', function(e) {
         if (value) {
             value = (parseInt(value) / 1000).toFixed(3);
             e.target.value = formatarMoeda3(parseFloat(value));
+        }
+        // Recalcular o total
+        const item = e.target.closest('.item-pedido');
+        if (item) {
+            calcularTotalItem(item);
         }
     }
 });
