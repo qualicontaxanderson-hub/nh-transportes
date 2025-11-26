@@ -3,31 +3,37 @@
 {% block title %}Novo Pedido - NH Transportes{% endblock %}
 
 {% block content %}
-<div class="container-fluid">
-    <div class="d-flex justify-content-between align-items-center mb-3">
-        <h2 style="font-size: 1.5rem;">
-            <i class="bi bi-cart-plus"></i> Novo Pedido
-        </h2>
-        <a href="{{ url_for('pedidos.index') }}" class="btn btn-secondary btn-sm">
-            <i class="bi bi-arrow-left"></i> Voltar
-        </a>
+<div class="container-fluid mt-4">
+    <div class="row mb-3">
+        <div class="col">
+            <h2><i class="bi bi-cart-plus"></i> Novo Pedido</h2>
+        </div>
+        <div class="col-auto">
+            <a href="{{ url_for('pedidos.index') }}" class="btn btn-secondary">
+                <i class="bi bi-arrow-left"></i> Voltar
+            </a>
+        </div>
     </div>
 
-    <form method="POST" action="{{ url_for('pedidos.novo') }}" id="formPedido">
-        <!-- CABEÇALHO DO PEDIDO -->
-        <div class="card mb-3">
-            <div class="card-header" style="background:#4A90E2;color:#fff;font-weight:600;">
-                <i class="bi bi-info-circle"></i> Dados do Pedido
+    <form method="POST" id="formPedido">
+        <div class="card mb-4">
+            <div class="card-header bg-primary text-white">
+                <i class="bi bi-info-circle"></i> Informações do Pedido
             </div>
             <div class="card-body">
-                <div class="row g-3">
+                <div class="row">
                     <div class="col-md-3">
-                        <label class="form-label">Número</label>
-                        <input type="text" class="form-control" value="{{ numero_sugerido }}" readonly style="background:#e9ecef;">
+                        <label class="form-label">Data do Pedido</label>
+                        <input type="date" class="form-control" name="data_pedido" value="{{ hoje }}" required>
                     </div>
                     <div class="col-md-3">
-                        <label class="form-label">Data do Pedido *</label>
-                        <input type="date" class="form-control" name="data_pedido" required>
+                        <label class="form-label">Status</label>
+                        <select class="form-select" name="status">
+                            <option value="Pendente" selected>Pendente</option>
+                            <option value="Confirmado">Confirmado</option>
+                            <option value="Faturado">Faturado</option>
+                            <option value="Cancelado">Cancelado</option>
+                        </select>
                     </div>
                     <div class="col-md-6">
                         <label class="form-label">Observações</label>
@@ -37,169 +43,255 @@
             </div>
         </div>
 
-        <!-- ITENS DO PEDIDO -->
-        <div class="card mb-3">
-            <div class="card-header d-flex justify-content-between align-items-center" style="background:#28a745;color:#fff;font-weight:600;">
-                <span><i class="bi bi-list-check"></i> Itens do Pedido</span>
+        <div class="card mb-4">
+            <div class="card-header bg-success text-white d-flex justify-content-between align-items-center">
+                <span><i class="bi bi-list-ul"></i> Itens do Pedido</span>
                 <button type="button" class="btn btn-light btn-sm" onclick="adicionarItem()">
                     <i class="bi bi-plus-circle"></i> Adicionar Item
                 </button>
             </div>
-            <div class="card-body p-0">
-                <div class="table-responsive">
-                    <table class="table table-sm mb-0" id="tabelaItens">
-                        <thead style="background:#f1f1f1;">
-                            <tr>
-                                <th style="width:18%;">Cliente *</th>
-                                <th style="width:10%;">Produto *</th>
-                                <th style="width:13%;">Fornecedor *</th>
-                                <th style="width:10%;">Origem *</th>
-                                <th style="width:12%;">Quantidade *</th>
-                                <th style="width:8%;">Qtd Manual</th>
-                                <th style="width:10%;">Preço Unit.</th>
-                                <th style="width:12%;">Total NF *</th>
-                                <th style="width:5%;"></th>
-                            </tr>
-                        </thead>
-                        <tbody id="itensBody">
-                        </tbody>
-                        <tfoot style="background:#e9ecef;">
-                            <tr>
-                                <td colspan="5" class="text-end"><strong>TOTAIS:</strong></td>
-                                <td class="text-end"><strong id="totalQtd">0,00</strong></td>
-                                <td></td>
-                                <td class="text-end"><strong id="totalNF">R$ 0,00</strong></td>
-                                <td></td>
-                            </tr>
-                        </tfoot>
-                    </table>
+            <div class="card-body">
+                <div id="itensContainer">
+                    <!-- Itens serão adicionados aqui -->
                 </div>
             </div>
         </div>
 
-        <div class="d-flex justify-content-end gap-2">
+        <div class="d-flex justify-content-end gap-2 mb-4">
             <a href="{{ url_for('pedidos.index') }}" class="btn btn-secondary">
                 <i class="bi bi-x-circle"></i> Cancelar
             </a>
-            <button type="submit" class="btn btn-success">
+            <button type="submit" class="btn btn-primary">
                 <i class="bi bi-check-circle"></i> Salvar Pedido
             </button>
         </div>
     </form>
 </div>
 
-<style>
-    .table th { font-weight:600; font-size:0.75rem; }
-    .table td { font-size:0.8rem; vertical-align: middle; padding: 0.3rem; }
-    .form-select-sm, .form-control-sm { font-size: 0.75rem; }
-</style>
+<template id="templateItem">
+    <div class="item-pedido card mb-3">
+        <div class="card-header bg-light d-flex justify-content-between align-items-center">
+            <span class="item-numero">Item #1</span>
+            <button type="button" class="btn btn-danger btn-sm" onclick="removerItem(this)">
+                <i class="bi bi-trash"></i> Remover
+            </button>
+        </div>
+        <div class="card-body">
+            <div class="row g-3">
+                <div class="col-md-4">
+                    <label class="form-label">Cliente *</label>
+                    <select class="form-select" name="cliente_id[]" required>
+                        <option value="">Selecione o Cliente</option>
+                        {% for c in clientes %}
+                        <option value="{{ c.id }}">{{ c.nome }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label">Produto *</label>
+                    <select class="form-select" name="produto_id[]" required>
+                        <option value="">Selecione o Produto</option>
+                        {% for p in produtos %}
+                        <option value="{{ p.id }}">{{ p.nome }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label">Fornecedor *</label>
+                    <select class="form-select" name="fornecedor_id[]" required>
+                        <option value="">Selecione o Fornecedor</option>
+                        {% for f in fornecedores %}
+                        <option value="{{ f.id }}">{{ f.nome }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label">Origem</label>
+                    <select class="form-select" name="origem_id[]">
+                        <option value="">Selecione a Origem</option>
+                        {% for o in origens %}
+                        <option value="{{ o.id }}">{{ o.nome }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label">Tipo Quantidade</label>
+                    <select class="form-select select-tipo-qtd" name="tipo_quantidade[]" onchange="toggleQuantidade(this)">
+                        <option value="lista">Lista Padrão</option>
+                        <option value="manual">Entrada Manual</option>
+                    </select>
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label">Quantidade *</label>
+                    <div class="div-quantidade-lista">
+                        <select class="form-select select-quantidade" name="quantidade_id[]" onchange="selecionarQuantidade(this)">
+                            <option value="">Selecione</option>
+                            {% for q in quantidades %}
+                            <option value="{{ q.id }}" data-valor="{{ q.quantidade }}">{{ q.descricao }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="div-quantidade-manual" style="display:none;">
+                        <input type="number" class="form-control input-quantidade-manual" placeholder="Digite a quantidade" step="0.01" min="0">
+                    </div>
+                    <input type="hidden" class="input-quantidade-final" name="quantidade[]" value="">
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label">Preço Unitário (R$)</label>
+                    <input type="text" class="form-control input-preco" name="preco_unitario[]" placeholder="0,00" oninput="calcularTotalItem(this)">
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label">Valor Total NF (R$)</label>
+                    <input type="text" class="form-control input-total-nf" name="total_nf[]" placeholder="0,00" readonly style="background-color: #e9ecef;">
+                </div>
+            </div>
+        </div>
+    </div>
+</template>
 
-{% endblock %}
-
-{% block scripts %}
 <script>
-    const clientes = {{ clientes | tojson }};
-    const produtos = {{ produtos | tojson }};
-    const fornecedores = {{ fornecedores | tojson }};
-    const origens = {{ origens | tojson }};
-    const quantidades = {{ quantidades | tojson }};
+let itemCount = 0;
 
-    let itemCount = 0;
+function adicionarItem() {
+    itemCount++;
+    const container = document.getElementById('itensContainer');
+    const template = document.getElementById('templateItem');
+    const clone = template.content.cloneNode(true);
+    
+    clone.querySelector('.item-numero').textContent = 'Item #' + itemCount;
+    
+    container.appendChild(clone);
+    atualizarNumerosItens();
+}
 
-    function adicionarItem() {
-        itemCount++;
-        const tbody = document.getElementById('itensBody');
-        
-        let clienteOptions = '<option value="">Selecione</option>';
-        clientes.forEach(c => {
-            const nome = c.nome_fantasia || c.razao_social;
-            clienteOptions += '<option value="' + c.id + '">' + nome + '</option>';
-        });
-
-        let produtoOptions = '<option value="">Selecione</option>';
-        produtos.forEach(p => {
-            produtoOptions += '<option value="' + p.id + '">' + p.nome + '</option>';
-        });
-
-        let fornecedorOptions = '<option value="">Selecione</option>';
-        fornecedores.forEach(f => {
-            const nome = f.nome_fantasia || f.razao_social;
-            fornecedorOptions += '<option value="' + f.id + '">' + nome + '</option>';
-        });
-
-        let origemOptions = '<option value="">Selecione</option>';
-        origens.forEach(o => {
-            origemOptions += '<option value="' + o.id + '">' + o.nome + '</option>';
-        });
-
-        let quantidadeOptions = '<option value="">Manual</option>';
-        quantidades.forEach(q => {
-            quantidadeOptions += '<option value="' + q.id + '" data-valor="' + q.valor + '">' + q.descricao + '</option>';
-        });
-
-        const tr = document.createElement('tr');
-        tr.id = 'item_' + itemCount;
-        
-        let html = '<td><select class="form-select form-select-sm" name="cliente_id[]" required>' + clienteOptions + '</select></td>';
-        html += '<td><select class="form-select form-select-sm" name="produto_id[]" required>' + produtoOptions + '</select></td>';
-        html += '<td><select class="form-select form-select-sm" name="fornecedor_id[]" required>' + fornecedorOptions + '</select></td>';
-        html += '<td><select class="form-select form-select-sm" name="origem_id[]" required>' + origemOptions + '</select></td>';
-        html += '<td><select class="form-select form-select-sm" name="quantidade_id[]" onchange="selecionarQuantidade(this, ' + itemCount + ')">' + quantidadeOptions + '</select><input type="hidden" name="tipo_quantidade[]" value="metros"></td>';
-        html += '<td><input type="number" class="form-control form-control-sm" id="qtd_manual_' + itemCount + '" name="quantidade[]" step="0.01" min="0" placeholder="0" onchange="calcularTotais()"></td>';
-        html += '<td><input type="number" class="form-control form-control-sm" name="preco_unitario[]" step="0.001" min="0" placeholder="0,000" onchange="calcularTotais()"></td>';
-        html += '<td><input type="number" class="form-control form-control-sm" name="total_nf[]" step="0.01" min="0" required placeholder="0,00" onchange="calcularTotais()"></td>';
-        html += '<td class="text-center"><button type="button" class="btn btn-sm btn-danger" onclick="removerItem(' + itemCount + ')"><i class="bi bi-trash"></i></button></td>';
-        
-        tr.innerHTML = html;
-        tbody.appendChild(tr);
+function removerItem(btn) {
+    const itens = document.querySelectorAll('.item-pedido');
+    if (itens.length > 1) {
+        btn.closest('.item-pedido').remove();
+        atualizarNumerosItens();
+    } else {
+        alert('O pedido deve ter pelo menos um item.');
     }
+}
 
-    function selecionarQuantidade(select, itemId) {
-        const option = select.options[select.selectedIndex];
-        const valor = option.getAttribute('data-valor');
-        const inputManual = document.getElementById('qtd_manual_' + itemId);
-        
-        if (valor) {
-            inputManual.value = valor;
-            inputManual.readOnly = true;
-            inputManual.style.backgroundColor = '#e9ecef';
-        } else {
-            inputManual.value = '';
-            inputManual.readOnly = false;
-            inputManual.style.backgroundColor = '';
-        }
-        calcularTotais();
-    }
-
-    function removerItem(id) {
-        const tr = document.getElementById('item_' + id);
-        if (tr) {
-            tr.remove();
-            calcularTotais();
-        }
-    }
-
-    function calcularTotais() {
-        let totalQtd = 0;
-        let totalNF = 0;
-
-        document.querySelectorAll('input[name="quantidade[]"]').forEach(function(input) {
-            totalQtd += parseFloat(input.value) || 0;
-        });
-
-        document.querySelectorAll('input[name="total_nf[]"]').forEach(function(input) {
-            totalNF += parseFloat(input.value) || 0;
-        });
-
-        document.getElementById('totalQtd').textContent = totalQtd.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2});
-        document.getElementById('totalNF').textContent = 'R$ ' + totalNF.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2});
-    }
-
-    document.addEventListener('DOMContentLoaded', function() {
-        adicionarItem();
-        
-        const hoje = new Date().toISOString().split('T')[0];
-        document.querySelector('input[name="data_pedido"]').value = hoje;
+function atualizarNumerosItens() {
+    const itens = document.querySelectorAll('.item-pedido');
+    itens.forEach((item, index) => {
+        item.querySelector('.item-numero').textContent = 'Item #' + (index + 1);
     });
+}
+
+function toggleQuantidade(select) {
+    const item = select.closest('.item-pedido');
+    const divLista = item.querySelector('.div-quantidade-lista');
+    const divManual = item.querySelector('.div-quantidade-manual');
+    const selectQtd = item.querySelector('.select-quantidade');
+    const inputManual = item.querySelector('.input-quantidade-manual');
+    const inputFinal = item.querySelector('.input-quantidade-final');
+    
+    if (select.value === 'manual') {
+        divLista.style.display = 'none';
+        divManual.style.display = 'block';
+        selectQtd.value = '';
+        inputFinal.value = inputManual.value || '';
+        
+        inputManual.oninput = function() {
+            inputFinal.value = this.value;
+            calcularTotalItem(this);
+        };
+    } else {
+        divLista.style.display = 'block';
+        divManual.style.display = 'none';
+        inputManual.value = '';
+        if (selectQtd.value) {
+            const option = selectQtd.options[selectQtd.selectedIndex];
+            inputFinal.value = option.dataset.valor || '';
+        } else {
+            inputFinal.value = '';
+        }
+    }
+    calcularTotalItem(select);
+}
+
+function selecionarQuantidade(select) {
+    const item = select.closest('.item-pedido');
+    const inputFinal = item.querySelector('.input-quantidade-final');
+    const option = select.options[select.selectedIndex];
+    
+    if (option && option.dataset.valor) {
+        inputFinal.value = option.dataset.valor;
+    } else {
+        inputFinal.value = '';
+    }
+    calcularTotalItem(select);
+}
+
+function calcularTotalItem(elemento) {
+    const item = elemento.closest('.item-pedido');
+    const inputFinal = item.querySelector('.input-quantidade-final');
+    const inputPreco = item.querySelector('.input-preco');
+    const inputTotalNf = item.querySelector('.input-total-nf');
+    
+    const quantidade = parseFloat(inputFinal.value) || 0;
+    const precoStr = inputPreco.value.replace(/\./g, '').replace(',', '.');
+    const preco = parseFloat(precoStr) || 0;
+    
+    const total = quantidade * preco;
+    
+    if (total > 0) {
+        inputTotalNf.value = formatarMoeda(total);
+    } else {
+        inputTotalNf.value = '';
+    }
+}
+
+function formatarMoeda(valor) {
+    return valor.toLocaleString('pt-BR', {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+    });
+}
+
+// Formatar input de preço como moeda
+document.addEventListener('input', function(e) {
+    if (e.target.classList.contains('input-preco')) {
+        let value = e.target.value.replace(/\D/g, '');
+        if (value) {
+            value = (parseInt(value) / 100).toFixed(2);
+            e.target.value = formatarMoeda(parseFloat(value));
+        }
+    }
+});
+
+// Validação antes de enviar
+document.getElementById('formPedido').addEventListener('submit', function(e) {
+    const itens = document.querySelectorAll('.item-pedido');
+    let valido = true;
+    
+    itens.forEach(item => {
+        const quantidade = item.querySelector('.input-quantidade-final').value;
+        if (!quantidade || parseFloat(quantidade) <= 0) {
+            valido = false;
+        }
+    });
+    
+    if (!valido) {
+        e.preventDefault();
+        alert('Por favor, preencha a quantidade de todos os itens.');
+        return false;
+    }
+    
+    // Converter valores de moeda para formato numérico antes de enviar
+    document.querySelectorAll('.input-preco, .input-total-nf').forEach(input => {
+        if (input.value) {
+            input.value = input.value.replace(/\./g, '').replace(',', '.');
+        }
+    });
+});
+
+// Adicionar primeiro item automaticamente
+document.addEventListener('DOMContentLoaded', function() {
+    adicionarItem();
+});
 </script>
 {% endblock %}
