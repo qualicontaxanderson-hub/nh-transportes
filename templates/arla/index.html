@@ -24,143 +24,198 @@
         </div>
     </div>
 
-    <!-- SALDO INICIAL -->
-    <div class="card mb-3">
-        <div class="card-header d-flex justify-content-between align-items-center" style="background:#92a7be;font-weight:600;">
-            <span>Saldo Inicial</span>
-            {% if saldo %}
-            <a href="{{ url_for('arla.editar_saldo_inicial', id=saldo.id) }}" class="btn btn-sm btn-warning" title="Editar">
-                <i class="bi bi-pencil"></i> Editar
-            </a>
-            {% endif %}
+    <!-- RESUMO: SALDO INICIAL + PREÇO ATUAL + ESTOQUE -->
+    <div class="row mb-3">
+        <!-- SALDO INICIAL -->
+        <div class="col-md-4 mb-2">
+            <div class="card h-100">
+                <div class="card-header d-flex justify-content-between align-items-center" style="background:#92a7be;font-weight:600;">
+                    <span>Saldo Inicial</span>
+                    {% if saldo %}
+                    <a href="{{ url_for('arla.editar_saldo_inicial', id=saldo.id) }}" class="btn btn-sm btn-light" title="Editar">
+                        <i class="bi bi-pencil"></i>
+                    </a>
+                    {% endif %}
+                </div>
+                <div class="card-body">
+                    {% if saldo %}
+                        <ul style="margin-bottom:0; list-style: none; padding-left: 0;">
+                            <li><strong>Data:</strong> {{ saldo.data.strftime('%d/%m/%Y') if saldo.data else '-' }}</li>
+                            <li><strong>Volume:</strong> {{ "{:,.2f}".format(saldo.volume_inicial).replace(',', 'X').replace('.', ',').replace('X', '.') }} L</li>
+                            <li><strong>Preço Médio:</strong> R$ {{ "{:,.2f}".format(saldo.preco_medio_compra).replace(',', 'X').replace('.', ',').replace('X', '.') }}</li>
+                            <li><strong>Encerrante:</strong> {{ "{:,.2f}".format(saldo.encerrante_inicial).replace(',', 'X').replace('.', ',').replace('X', '.') }}</li>
+                        </ul>
+                    {% else %}
+                        <span class="text-muted"><i class="bi bi-info-circle"></i> Não cadastrado.</span>
+                    {% endif %}
+                </div>
+            </div>
         </div>
-        <div class="card-body">
-            {% if saldo %}
-                <ul style="margin-bottom:0;">
-                    <li><strong>Data:</strong> {{ saldo.data.strftime('%d/%m/%Y') if saldo.data else '-' }}</li>
-                    <li><strong>Volume:</strong> {{ "{:,.2f}".format(saldo.volume_inicial).replace(',', 'X').replace('.', ',').replace('X', '.') }} litros</li>
-                    <li><strong>Preço Médio Compra:</strong> R$ {{ "{:,.2f}".format(saldo.preco_medio_compra).replace(',', 'X').replace('.', ',').replace('X', '.') }}</li>
-                    <li><strong>Encerrante Inicial:</strong> {{ "{:,.2f}".format(saldo.encerrante_inicial).replace(',', 'X').replace('.', ',').replace('X', '.') }}</li>
-                </ul>
-            {% else %}
-                <span class="text-muted"><i class="bi bi-info-circle"></i> Não há saldo inicial cadastrado.</span>
-            {% endif %}
+
+        <!-- PREÇO ATUAL -->
+        <div class="col-md-4 mb-2">
+            <div class="card h-100">
+                <div class="card-header" style="background:#85e6e6;font-weight:600;">
+                    Preço de Venda Atual
+                </div>
+                <div class="card-body text-center">
+                    {% if preco %}
+                        <h3 style="color:#17963c; margin-bottom: 0.5rem;">R$ {{ "{:,.2f}".format(preco.preco_venda).replace(',', 'X').replace('.', ',').replace('X', '.') }}</h3>
+                        <small class="text-muted">Desde {{ preco.data_inicio.strftime('%d/%m/%Y') if preco.data_inicio else '-' }}</small>
+                    {% else %}
+                        <span class="text-muted"><i class="bi bi-info-circle"></i> Não cadastrado.</span>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- ESTOQUE ATUAL -->
+        <div class="col-md-4 mb-2">
+            <div class="card h-100">
+                <div class="card-header" style="background:#f8b500;font-weight:600;">
+                    Estoque Atual
+                </div>
+                <div class="card-body text-center">
+                    <h3 style="color:#333; margin-bottom: 0;">{{ "{:,.2f}".format(estoque_atual).replace(',', 'X').replace('.', ',').replace('X', '.') }} L</h3>
+                    <small class="text-muted">Litros disponíveis</small>
+                </div>
+            </div>
         </div>
     </div>
 
-    <!-- COMPRAS -->
+    <!-- FILTRO POR DATA -->
     <div class="card mb-3">
-        <div class="card-header" style="background:#a4d7ac;font-weight:600;">
-            Compras
+        <div class="card-header" style="background:#e9ecef;font-weight:600;">
+            <i class="bi bi-funnel"></i> Filtrar por Período
         </div>
-        <div class="card-body table-responsive">
+        <div class="card-body">
+            <form method="GET" action="{{ url_for('arla.index') }}" class="row g-2 align-items-end">
+                <div class="col-md-4">
+                    <label for="data_inicio" class="form-label" style="font-size:0.9rem;">Data Inicial</label>
+                    <input type="date" class="form-control form-control-sm" id="data_inicio" name="data_inicio" value="{{ filtros.data_inicio }}">
+                </div>
+                <div class="col-md-4">
+                    <label for="data_fim" class="form-label" style="font-size:0.9rem;">Data Final</label>
+                    <input type="date" class="form-control form-control-sm" id="data_fim" name="data_fim" value="{{ filtros.data_fim }}">
+                </div>
+                <div class="col-md-4">
+                    <button type="submit" class="btn btn-primary btn-sm me-2">
+                        <i class="bi bi-search"></i> Filtrar
+                    </button>
+                    <a href="{{ url_for('arla.index') }}" class="btn btn-secondary btn-sm">
+                        <i class="bi bi-x-circle"></i> Limpar
+                    </a>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- TABELA DE MOVIMENTAÇÕES UNIFICADA -->
+    <div class="card mb-3">
+        <div class="card-header" style="background:#6c757d;color:#fff;font-weight:600;">
+            <i class="bi bi-arrow-left-right"></i> Movimentações
+            {% if filtros.data_inicio and filtros.data_fim %}
+                <small>({{ filtros.data_inicio }} a {{ filtros.data_fim }})</small>
+            {% endif %}
+        </div>
+        <div class="card-body table-responsive p-0">
             <table class="table table-hover table-sm mb-0">
-                <thead>
+                <thead style="background:#f1f1f1;">
                     <tr>
                         <th>Data</th>
-                        <th>Quantidade (litros)</th>
-                        <th>Preço Compra</th>
-                        <th>Valor Total</th>
+                        <th>Tipo</th>
+                        <th class="text-end">Quantidade (L)</th>
+                        <th class="text-end">Preço Unit.</th>
+                        <th class="text-end">Valor Total</th>
+                        <th class="text-end">Encerrante</th>
                         <th class="text-center">Ações</th>
                     </tr>
                 </thead>
                 <tbody>
-                    {% if compras %}
-                        {% for compra in compras %}
+                    {% if movimentacoes %}
+                        {% for mov in movimentacoes %}
                         <tr>
-                            <td>{{ compra.data.strftime('%d/%m/%Y') if compra.data else '-' }}</td>
-                            <td>{{ "{:,.2f}".format(compra.quantidade).replace(',', 'X').replace('.', ',').replace('X', '.') }}</td>
-                            <td>R$ {{ "{:,.2f}".format(compra.preco_compra).replace(',', 'X').replace('.', ',').replace('X', '.') }}</td>
-                            <td>R$ {{ "{:,.2f}".format(compra.quantidade * compra.preco_compra).replace(',', 'X').replace('.', ',').replace('X', '.') }}</td>
+                            <td>{{ mov.data.strftime('%d/%m/%Y') if mov.data else '-' }}</td>
+                            <td>
+                                {% if mov.tipo == 'COMPRA' %}
+                                    <span class="badge bg-success"><i class="bi bi-arrow-down-circle"></i> COMPRA</span>
+                                {% else %}
+                                    <span class="badge bg-danger"><i class="bi bi-arrow-up-circle"></i> VENDA</span>
+                                {% endif %}
+                            </td>
+                            <td class="text-end">{{ "{:,.2f}".format(mov.quantidade).replace(',', 'X').replace('.', ',').replace('X', '.') }}</td>
+                            <td class="text-end">R$ {{ "{:,.2f}".format(mov.preco).replace(',', 'X').replace('.', ',').replace('X', '.') }}</td>
+                            <td class="text-end">R$ {{ "{:,.2f}".format(mov.valor_total).replace(',', 'X').replace('.', ',').replace('X', '.') }}</td>
+                            <td class="text-end">
+                                {% if mov.encerrante %}
+                                    {{ "{:,.2f}".format(mov.encerrante).replace(',', 'X').replace('.', ',').replace('X', '.') }}
+                                {% else %}
+                                    -
+                                {% endif %}
+                            </td>
                             <td class="text-center">
-                                <a href="{{ url_for('arla.editar_compra', id=compra.id) }}" class="btn btn-sm btn-warning" title="Editar">
-                                    <i class="bi bi-pencil"></i>
-                                </a>
+                                {% if mov.tipo == 'COMPRA' %}
+                                    <a href="{{ url_for('arla.editar_compra', id=mov.id) }}" class="btn btn-sm btn-warning" title="Editar">
+                                        <i class="bi bi-pencil"></i>
+                                    </a>
+                                {% else %}
+                                    <a href="{{ url_for('arla.editar_lancamento', id=mov.id) }}" class="btn btn-sm btn-warning" title="Editar">
+                                        <i class="bi bi-pencil"></i>
+                                    </a>
+                                {% endif %}
                             </td>
                         </tr>
                         {% endfor %}
                     {% else %}
                         <tr>
-                            <td colspan="5" class="text-center text-muted" style="padding: 1rem;">
-                                <i class="bi bi-inbox"></i> Nenhuma compra registrada.
+                            <td colspan="7" class="text-center text-muted" style="padding: 2rem;">
+                                <i class="bi bi-inbox" style="font-size:2rem;"></i><br>
+                                Nenhuma movimentação encontrada.
                             </td>
                         </tr>
                     {% endif %}
                 </tbody>
-            </table>
-        </div>
-    </div>
-
-    <!-- LANÇAMENTOS -->
-    <div class="card mb-3">
-        <div class="card-header" style="background:#ffe29a;font-weight:600;">
-            Lançamentos
-        </div>
-        <div class="card-body table-responsive">
-            <table class="table table-hover table-sm mb-0">
-                <thead>
+                {% if movimentacoes %}
+                <tfoot style="background:#e9ecef; font-weight:600;">
                     <tr>
-                        <th>Data</th>
-                        <th>Encerrante Final</th>
-                        <th>Quantidade Vendida</th>
-                        <th>Preço Venda Aplicado</th>
-                        <th>Valor Total</th>
-                        <th class="text-center">Ações</th>
+                        <td colspan="7" style="padding: 0.5rem;"><strong>Totais do Período:</strong></td>
                     </tr>
-                </thead>
-                <tbody>
-                    {% if lancamentos %}
-                        {% for lanc in lancamentos %}
-                        <tr>
-                            <td>{{ lanc.data.strftime('%d/%m/%Y') if lanc.data else '-' }}</td>
-                            <td>{{ "{:,.2f}".format(lanc.encerrante_final).replace(',', 'X').replace('.', ',').replace('X', '.') }}</td>
-                            <td>{{ "{:,.2f}".format(lanc.quantidade_vendida).replace(',', 'X').replace('.', ',').replace('X', '.') }}</td>
-                            <td>R$ {{ "{:,.2f}".format(lanc.preco_venda_aplicado).replace(',', 'X').replace('.', ',').replace('X', '.') }}</td>
-                            <td>R$ {{ "{:,.2f}".format(lanc.quantidade_vendida * lanc.preco_venda_aplicado).replace(',', 'X').replace('.', ',').replace('X', '.') }}</td>
-                            <td class="text-center">
-                                <a href="{{ url_for('arla.editar_lancamento', id=lanc.id) }}" class="btn btn-sm btn-warning" title="Editar">
-                                    <i class="bi bi-pencil"></i>
-                                </a>
-                            </td>
-                        </tr>
-                        {% endfor %}
-                    {% else %}
-                        <tr>
-                            <td colspan="6" class="text-center text-muted" style="padding: 1rem;">
-                                <i class="bi bi-inbox"></i> Nenhum lançamento registrado.
-                            </td>
-                        </tr>
-                    {% endif %}
-                </tbody>
+                    <tr style="background:#d4edda;">
+                        <td><strong>COMPRAS</strong></td>
+                        <td><span class="badge bg-success">COMPRA</span></td>
+                        <td class="text-end">{{ "{:,.2f}".format(total_qtd_compras).replace(',', 'X').replace('.', ',').replace('X', '.') }}</td>
+                        <td class="text-end">-</td>
+                        <td class="text-end">R$ {{ "{:,.2f}".format(total_valor_compras).replace(',', 'X').replace('.', ',').replace('X', '.') }}</td>
+                        <td class="text-end">-</td>
+                        <td></td>
+                    </tr>
+                    <tr style="background:#f8d7da;">
+                        <td><strong>VENDAS</strong></td>
+                        <td><span class="badge bg-danger">VENDA</span></td>
+                        <td class="text-end">{{ "{:,.2f}".format(total_qtd_vendas).replace(',', 'X').replace('.', ',').replace('X', '.') }}</td>
+                        <td class="text-end">-</td>
+                        <td class="text-end">R$ {{ "{:,.2f}".format(total_valor_vendas).replace(',', 'X').replace('.', ',').replace('X', '.') }}</td>
+                        <td class="text-end">-</td>
+                        <td></td>
+                    </tr>
+                </tfoot>
+                {% endif %}
             </table>
         </div>
     </div>
 
-    <!-- PREÇO VIGENTE -->
-    <div class="card mb-3">
-        <div class="card-header" style="background:#85e6e6;font-weight:600;">
-            Preço Atual
-        </div>
-        <div class="card-body">
-            {% if preco %}
-               <ul style="margin-bottom:0;">
-                   <li><strong>Valor:</strong> <span style="color:#17963c;">R$ {{ "{:,.2f}".format(preco.preco_venda).replace(',', 'X').replace('.', ',').replace('X', '.') }}</span></li>
-                   <li><strong>Desde:</strong> {{ preco.data_inicio.strftime('%d/%m/%Y') if preco.data_inicio else '-' }}</li>
-               </ul>
-            {% else %}
-                <span class="text-muted"><i class="bi bi-info-circle"></i> Sem preço vigente cadastrado.</span>
-            {% endif %}
-        </div>
-    </div>
 </div>
 
 <style>
-    .table th { font-weight:600; font-size:0.95rem; }
-    .table td { font-size:0.92rem; }
-    .btn-sm { font-size: 0.8rem; padding:0.32rem 0.7rem;}
+    .table th { font-weight:600; font-size:0.9rem; }
+    .table td { font-size:0.88rem; vertical-align: middle; }
+    .btn-sm { font-size: 0.78rem; padding:0.28rem 0.6rem;}
+    .card-header { padding: 0.6rem 1rem; }
+    .badge { font-size: 0.75rem; }
     @media (max-width: 768px) {
-        h2 { font-size: 1.2rem !important; }
-        .table { font-size: 0.8rem !important; }
+        h2 { font-size: 1.1rem !important; }
+        .table { font-size: 0.75rem !important; }
+        .d-flex.justify-content-between { flex-direction: column; gap: 0.5rem; }
     }
 </style>
 {% endblock %}
