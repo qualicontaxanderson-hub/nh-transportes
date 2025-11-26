@@ -114,30 +114,27 @@
         </div>
     </div>
 
-    <!-- RESUMO AO FINAL -->
+    <!-- RESUMO POR VEÍCULO AO FINAL -->
     <div class="card mt-4">
         <div class="card-header" style="background: #f8f9fa; font-weight: 600;">
             Resumo dos Abastecimentos
         </div>
         <div class="card-body" style="font-size:1rem;">
-            {% set total_litros = 0 %}
-            {% set total_km = 0 %}
-            {% set total_valor = 0 %}
-            {% for resumo in resumo_veiculos %}
-                {% set total_litros = total_litros + (resumo.total_litros or 0) %}
-                {% set total_km = total_km + (resumo.total_km or 0) %}
-                {% set total_valor = total_valor + (resumo.total_valor or 0) %}
-            {% endfor %}
             <ul style="list-style:none; padding:0;">
-                <li><strong>KMs rodados totais:</strong> {{ "{:,.0f}".format(total_km).replace(',', '.') }} km</li>
-                <li><strong>Valor total abastecido:</strong> R$ {{ "{:,.2f}".format(total_valor).replace(',', 'X').replace('.', ',').replace('X', '.') }}</li>
-                <li><strong>Média km/l:</strong>
-                    {% if total_litros > 0 %}
-                        {{ "{:.2f}".format(total_km / total_litros).replace('.', ',') }} km/l
+            {% for resumo in resumo_veiculos %}
+                <li>
+                    <strong>{{ resumo.placa }} - {{ resumo.modelo }}</strong><br>
+                    KMs rodados totais: {{ "{:,.0f}".format(resumo.total_km).replace(',', '.') }} km<br>
+                    Valor total abastecido: R$ {{ "{:,.2f}".format(resumo.total_valor).replace(',', 'X').replace('.', ',').replace('X', '.') }}<br>
+                    Média km/l:
+                    {% if resumo.total_litros > 0 %}
+                        {{ "{:.2f}".format(resumo.total_km / resumo.total_litros).replace('.', ',') }} km/l
                     {% else %}
                         -
                     {% endif %}
+                    <br><br>
                 </li>
+            {% endfor %}
             </ul>
         </div>
     </div>
