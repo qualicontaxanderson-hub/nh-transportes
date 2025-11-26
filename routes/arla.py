@@ -1,6 +1,7 @@
 from flask import Blueprint, render_template, request, redirect, url_for, flash
 from flask_login import login_required
 import mysql.connector
+from datetime import datetime, date
 
 bp = Blueprint('arla', __name__, url_prefix='/arla')
 
@@ -22,25 +23,98 @@ def index():
     conn = get_db()
     cursor = conn.cursor(dictionary=True)
     
+    # Filtros de data
+    data_inicio = request.args.get('data_inicio', '')
+    data_fim = request.args.get('data_fim', '')
+    
+    # Busca saldo inicial
     cursor.execute("""
         SELECT * FROM arla_saldo_inicial ORDER BY data DESC LIMIT 1
     """)
     saldo = cursor.fetchone()
     
-    cursor.execute("""
-        SELECT * FROM arla_lancamentos ORDER BY data DESC
-    """)
-    lancamentos = cursor.fetchall()
-    
-    cursor.execute("""
-        SELECT * FROM arla_compras ORDER BY data DESC
-    """)
-    compras = cursor.fetchall()
-    
+    # Busca preço vigente
     cursor.execute("""
         SELECT * FROM arla_precos_venda ORDER BY data_inicio DESC LIMIT 1
     """)
     preco = cursor.fetchone()
+    
+    # Busca compras (com ou sem filtro)
+    if data_inicio and data_fim:
+        cursor.execute("""
+            SELECT id, data, quantidade, preco_compra, 'COMPRA' as tipo
+            FROM arla_compras
+            WHERE data BETWEEN %s AND %s
+            ORDER BY data DESC
+        """, (data_inicio, data_fim))
+    else:
+        cursor.execute("""
+            SELECT id, data, quantidade, preco_compra, 'COMPRA' as tipo
+            FROM arla_compras
+            ORDER BY data DESC
+        """)
+    compras = cursor.fetchall()
+    
+    # Busca lançamentos/vendas (com ou sem filtro)
+    if data_inicio and data_fim:
+        cursor.execute("""
+            SELECT id, data, quantidade_vendida, preco_venda_aplicado, encerrante_final, 'VENDA' as tipo
+            FROM arla_lancamentos
+            WHERE data BETWEEN %s AND %s
+            ORDER BY data DESC
+        """, (data_inicio, data_fim))
+    else:
+        cursor.execute("""
+            SELECT id, data, quantidade_vendida, preco_venda_aplicado, encerrante_final, 'VENDA' as tipo
+            FROM arla_lancamentos
+            ORDER BY data DESC
+        """)
+    lancamentos = cursor.fetchall()
+    
+    # Calcula totais de TODAS as compras e vendas (sem filtro) para o estoque
+    cursor.execute("SELECT COALESCE(SUM(quantidade), 0) as total FROM arla_compras")
+    total_compras = float(cursor.fetchone()['total'])
+    
+    cursor.execute("SELECT COALESCE(SUM(quantidade_vendida), 0) as total FROM arla_lancamentos")
+    total_vendas = float(cursor.fetchone()['total'])
+    
+    # Estoque atual = Saldo inicial + Compras - Vendas
+    volume_inicial = float(saldo['volume_inicial']) if saldo else 0
+    estoque_atual = volume_inicial + total_compras - total_vendas
+    
+    # Unifica movimentações para a tabela
+    movimentacoes = []
+    
+    for compra in compras:
+        movimentacoes.append({
+            'id': compra['id'],
+            'data': compra['data'],
+            'tipo': 'COMPRA',
+            'quantidade': float(compra['quantidade']),
+            'preco': float(compra['preco_compra']),
+            'valor_total': float(compra['quantidade']) * float(compra['preco_compra']),
+            'encerrante': None
+        })
+    
+    for lanc in lancamentos:
+        movimentacoes.append({
+            'id': lanc['id'],
+            'data': lanc['data'],
+            'tipo': 'VENDA',
+            'quantidade': float(lanc['quantidade_vendida']),
+            'preco': float(lanc['preco_venda_aplicado']),
+            'valor_total': float(lanc['quantidade_vendida']) * float(lanc['preco_venda_aplicado']),
+            'encerrante': float(lanc['encerrante_final'])
+        })
+    
+    # Ordena por data (mais recente primeiro)
+    movimentacoes.sort(key=lambda x: x['data'], reverse=True)
+    
+    # Calcula totais do período filtrado
+    total_qtd_compras = sum(m['quantidade'] for m in movimentacoes if m['tipo'] == 'COMPRA')
+    total_valor_compras = sum(m['valor_total'] for m in movimentacoes if m['tipo'] == 'COMPRA')
+    total_qtd_vendas = sum(m['quantidade'] for m in movimentacoes if m['tipo'] == 'VENDA')
+    total_valor_vendas = sum(m['valor_total'] for m in movimentacoes if m['tipo'] == 'VENDA')
     
     cursor.close()
     conn.close()
@@ -48,9 +122,14 @@ def index():
     return render_template(
         'arla/index.html',
         saldo=saldo,
-        lancamentos=lancamentos,
-        compras=compras,
-        preco=preco
+        preco=preco,
+        movimentacoes=movimentacoes,
+        estoque_atual=estoque_atual,
+        total_qtd_compras=total_qtd_compras,
+        total_valor_compras=total_valor_compras,
+        total_qtd_vendas=total_qtd_vendas,
+        total_valor_vendas=total_valor_vendas,
+        filtros={'data_inicio': data_inicio, 'data_fim': data_fim}
     )
 
 # =============================================
@@ -79,7 +158,6 @@ def saldo_inicial():
         flash('Saldo inicial cadastrado com sucesso!', 'success')
         return redirect(url_for('arla.index'))
 
-    # Busca saldo existente
     cursor.execute("SELECT * FROM arla_saldo_inicial ORDER BY data DESC LIMIT 1")
     saldo = cursor.fetchone()
     cursor.close()
@@ -204,7 +282,6 @@ def preco_venda():
         flash('Preço de venda alterado com sucesso!', 'success')
         return redirect(url_for('arla.index'))
 
-    # Busca preço vigente atual
     cursor.execute("""
         SELECT * FROM arla_precos_venda ORDER BY data_inicio DESC LIMIT 1
     """)
@@ -227,7 +304,6 @@ def lancamento():
         data = request.form['data']
         encerrante_final = float(request.form['encerrante_final'])
 
-        # Verifica se já existe lançamento para esta data
         cursor.execute("SELECT id FROM arla_lancamentos WHERE data = %s", (data,))
         existe = cursor.fetchone()
         if existe:
@@ -236,7 +312,6 @@ def lancamento():
             conn.close()
             return redirect(url_for('arla.lancamento'))
 
-        # Busca o encerrante anterior
         cursor.execute("""
             SELECT encerrante_final FROM arla_lancamentos
             WHERE data < %s
@@ -256,7 +331,6 @@ def lancamento():
 
         quantidade_vendida = encerrante_final - float(encerrante_anterior)
 
-        # Busca o preço vigente
         cursor.execute("""
             SELECT preco_venda FROM arla_precos_venda WHERE data_inicio <= %s
             ORDER BY data_inicio DESC LIMIT 1
@@ -276,15 +350,12 @@ def lancamento():
         flash('Lançamento registrado com sucesso!', 'success')
         return redirect(url_for('arla.index'))
 
-    # GET: Busca dados para exibir no formulário
-    
-    # Último lançamento
+    # GET - Busca dados para exibir no formulário
     cursor.execute("""
         SELECT * FROM arla_lancamentos ORDER BY data DESC LIMIT 1
     """)
     ultimo_lancamento = cursor.fetchone()
 
-    # Encerrante anterior (para cálculo no JS)
     if ultimo_lancamento:
         encerrante_anterior = float(ultimo_lancamento['encerrante_final'])
     else:
@@ -294,7 +365,6 @@ def lancamento():
         saldo_ini = cursor.fetchone()
         encerrante_anterior = float(saldo_ini['encerrante_inicial']) if saldo_ini else 0
 
-    # Preço de venda vigente
     cursor.execute("""
         SELECT preco_venda FROM arla_precos_venda ORDER BY data_inicio DESC LIMIT 1
     """)
@@ -310,6 +380,7 @@ def lancamento():
         encerrante_anterior=encerrante_anterior,
         preco_venda=preco_venda
     )
+
 
 # =============================================
 # LANÇAMENTO DIÁRIO - EDITAR
@@ -368,3 +439,4 @@ def editar_lancamento(id):
     conn.close()
 
     return render_template('arla/editar_lancamento.html', lancamento=lancamento)
+
