@@ -143,6 +143,19 @@ def novo():
         for rota in rotas:
             chave = f"{rota['origem_id']}_{rota['destino_id']}"
             rotas_dict[chave] = rota['valor_por_litro']
+        
+        # Buscar pedidos para importação
+        cursor.execute(
+            """
+            SELECT p.id, p.numero, p.data_pedido, p.status, p.motorista_id, m.nome as motorista_nome
+            FROM pedidos p
+            LEFT JOIN motoristas m ON p.motorista_id = m.id
+            WHERE p.status IN ('Pendente', 'Confirmado')
+            ORDER BY p.data_pedido DESC
+            """
+        )
+        pedidos = cursor.fetchall()
+        
         cursor.close()
         conn.close()
         return render_template(
@@ -156,7 +169,8 @@ def novo():
             origens=origens,
             destinos=destinos,
             rotas=rotas,
-            rotas_dict=rotas_dict
+            rotas_dict=rotas_dict,
+            pedidos=pedidos
         )
     except Exception as e:
         print(f'Erro ao carregar formulário: {e}')
@@ -209,7 +223,6 @@ def lista():
         cursor.execute(base_sql, tuple(parametros))
         fretes = cursor.fetchall()
 
-        # Clientes atendidos
         sql_clientes = """
             SELECT c.id, c.razao_social, COUNT(f.id) AS qtd_fretes
             FROM fretes f
@@ -221,7 +234,6 @@ def lista():
         cursor.execute(sql_clientes, tuple(parametros))
         clientes_atendidos = cursor.fetchall()
 
-        # Quantidade transportada por caminhão (corrigido: soma o campo correto da tabela quantidades)
         sql_caminhao = """
             SELECT v.id, v.placa, SUM(q.valor) AS total_quantidade
             FROM fretes f
@@ -234,7 +246,6 @@ def lista():
         cursor.execute(sql_caminhao, tuple(parametros))
         quantidade_por_caminhao = cursor.fetchall()
 
-        # Para o filtro de clientes
         cursor.execute("SELECT id, razao_social FROM clientes ORDER BY razao_social")
         lista_clientes = cursor.fetchall()
 
@@ -277,18 +288,10 @@ def editar(id):
         conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)
         if request.method == 'POST':
-            print("=" * 80)
-            print("DEBUG - DADOS RECEBIDOS DO FORMULARIO:")
-            print(f"  origem_id: {request.form.get('origem_id')}")
-            print(f"  destino_id: {request.form.get('destino_id')}")
-            print(f"  produto_id: {request.form.get('produto_id')}")
-            print(f"  clientes_id: {request.form.get('clientes_id')}")
-            print("=" * 80)
             origem_id = request.form.get('origem_id')
             destino_id = request.form.get('destino_id')
             if not destino_id or destino_id == '':
                 flash('ERRO: Destino é obrigatório!', 'danger')
-                print("ERRO: destino_id está vazio ou None")
                 return redirect(url_for('fretes.editar', id=id))
             def converter_para_decimal(valor):
                 if not valor:
@@ -338,7 +341,7 @@ def editar(id):
                     request.form.get('status'),
                     request.form.get('observacoes'),
                     id
-                )
+                                    )
             )
             conn.commit()
             cursor.close()
@@ -443,3 +446,4 @@ def editar(id):
         print(f'Erro ao editar frete: {e}')
         flash(f'Erro ao editar frete: {str(e)}', 'danger')
         return redirect(url_for('fretes.lista'))
+
