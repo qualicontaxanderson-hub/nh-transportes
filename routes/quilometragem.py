@@ -101,7 +101,7 @@ def lista():
         ORDER BY v.placa
     """)
     veiculos_km_inicial = cursor.fetchall()
-    # RESUMO ajustado:
+    # RESUMO agrupado por veículo!
     resumo_query = """
         SELECT 
             v.placa,
@@ -133,7 +133,7 @@ def lista():
     conn.close()
     return render_template(
         'quilometragem/lista.html',
-        registros=quilometragens,     
+        registros=quilometragens,
         veiculos=veiculos,
         motoristas=motoristas,
         veiculos_km_inicial=veiculos_km_inicial,
@@ -296,4 +296,3 @@ def excluir(id):
     except Exception as e:
         flash(f'Erro ao excluir quilometragem: {str(e)}', 'danger')
     return redirect(url_for('quilometragem.lista'))
-
