@@ -211,13 +211,23 @@ def preco_venda():
 @bp.route('/lancamento', methods=['GET', 'POST'])
 @login_required
 def lancamento():
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True)
+
     if request.method == 'POST':
         data = request.form['data']
         encerrante_final = float(request.form['encerrante_final'])
 
-        conn = get_db()
-        cursor = conn.cursor(dictionary=True)
-        
+        # Verifica se já existe lançamento para esta data
+        cursor.execute("SELECT id FROM arla_lancamentos WHERE data = %s", (data,))
+        existe = cursor.fetchone()
+        if existe:
+            flash('Já existe um lançamento para esta data!', 'danger')
+            cursor.close()
+            conn.close()
+            return redirect(url_for('arla.lancamento'))
+
+        # Busca o encerrante anterior
         cursor.execute("""
             SELECT encerrante_final FROM arla_lancamentos
             WHERE data < %s
@@ -237,6 +247,7 @@ def lancamento():
 
         quantidade_vendida = encerrante_final - float(encerrante_anterior)
 
+        # Busca o preço vigente
         cursor.execute("""
             SELECT preco_venda FROM arla_precos_venda WHERE data_inicio <= %s
             ORDER BY data_inicio DESC LIMIT 1
@@ -256,7 +267,40 @@ def lancamento():
         flash('Lançamento registrado com sucesso!', 'success')
         return redirect(url_for('arla.index'))
 
-    return render_template('arla/lancamento.html')
+    # GET: Busca dados para exibir no formulário
+    
+    # Último lançamento
+    cursor.execute("""
+        SELECT * FROM arla_lancamentos ORDER BY data DESC LIMIT 1
+    """)
+    ultimo_lancamento = cursor.fetchone()
+
+    # Encerrante anterior (para cálculo no JS)
+    if ultimo_lancamento:
+        encerrante_anterior = float(ultimo_lancamento['encerrante_final'])
+    else:
+        cursor.execute("""
+            SELECT encerrante_inicial FROM arla_saldo_inicial ORDER BY data DESC LIMIT 1
+        """)
+        saldo_ini = cursor.fetchone()
+        encerrante_anterior = float(saldo_ini['encerrante_inicial']) if saldo_ini else 0
+
+    # Preço de venda vigente
+    cursor.execute("""
+        SELECT preco_venda FROM arla_precos_venda ORDER BY data_inicio DESC LIMIT 1
+    """)
+    preco_row = cursor.fetchone()
+    preco_venda = float(preco_row['preco_venda']) if preco_row else 0
+
+    cursor.close()
+    conn.close()
+
+    return render_template(
+        'arla/lancamento.html',
+        ultimo_lancamento=ultimo_lancamento,
+        encerrante_anterior=encerrante_anterior,
+        preco_venda=preco_venda
+    )
 
 # =============================================
 # LANÇAMENTO DIÁRIO - EDITAR
