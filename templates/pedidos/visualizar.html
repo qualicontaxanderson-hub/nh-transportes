@@ -34,10 +34,13 @@
                 <div class="col-md-2">
                     <strong>Data:</strong> {{ pedido.data_pedido.strftime('%d/%m/%Y') if pedido.data_pedido else '' }}
                 </div>
-                <div class="col-md-4">
+                <div class="col-md-2">
+                    <strong>Motorista:</strong> {{ pedido.motorista_nome or 'Não definido' }}
+                </div>
+                <div class="col-md-3">
                     <strong>Total Quantidade:</strong> {{ "{:,.2f}".format(total_quantidade).replace(',', 'X').replace('.', ',').replace('X', '.') }} m³
                 </div>
-                <div class="col-md-4">
+                <div class="col-md-3">
                     <strong>Total Valor:</strong> R$ {{ "{:,.2f}".format(total_valor).replace(',', 'X').replace('.', ',').replace('X', '.') }}
                 </div>
             </div>
@@ -191,10 +194,11 @@
 </div>
 
 <script>
-const pedidoNumero = "{{ pedido.numero }}";
-const pedidoData = "{{ pedido.data_pedido.strftime('%d/%m/%Y') if pedido.data_pedido else '' }}";
+var pedidoNumero = "{{ pedido.numero }}";
+var pedidoData = "{{ pedido.data_pedido.strftime('%d/%m/%Y') if pedido.data_pedido else '' }}";
+var pedidoMotorista = "{{ pedido.motorista_nome or 'Não definido' }}";
 
-const itens = [
+var itens = [
     {% for item in itens %}
     {
         cliente: "{{ item.cliente_fantasia or item.cliente_razao }}",
@@ -209,7 +213,7 @@ const itens = [
     {% endfor %}
 ];
 
-const itensPorFornecedor = {
+var itensPorFornecedor = {
     {% for fornecedor, itens_forn in itens_por_fornecedor.items() %}
     "{{ fornecedor }}": [
         {% for item in itens_forn %}
@@ -227,7 +231,8 @@ const itensPorFornecedor = {
     {% endfor %}
 };
 
-function formatarNumero(valor, casas = 2) {
+function formatarNumero(valor, casas) {
+    casas = casas || 2;
     return valor.toLocaleString('pt-BR', {
         minimumFractionDigits: casas,
         maximumFractionDigits: casas
@@ -250,7 +255,8 @@ function copiarTexto(texto) {
 
 function copiarTudo() {
     var texto = '*PEDIDO ' + pedidoNumero + '*\n';
-    texto += 'Data: ' + pedidoData + '\n\n';
+    texto += 'Data: ' + pedidoData + '\n';
+    texto += 'Motorista: ' + pedidoMotorista + '\n\n';
     
     for (var fornecedor in itensPorFornecedor) {
         var itensF = itensPorFornecedor[fornecedor];
@@ -277,7 +283,7 @@ function copiarTudo() {
         texto += 'Qtd: ' + formatarNumero(subtotalQtd) + ' | Valor: R$ ' + formatarNumero(subtotalValor) + '\n\n';
     }
     
-    var totalQtd = 0;
+        var totalQtd = 0;
     var totalValor = 0;
     for (var j = 0; j < itens.length; j++) {
         totalQtd += itens[j].quantidade;
@@ -294,7 +300,8 @@ function copiarTudo() {
 
 function copiarPorFornecedor() {
     var texto = '*PEDIDO ' + pedidoNumero + '*\n';
-    texto += 'Data: ' + pedidoData + '\n\n';
+    texto += 'Data: ' + pedidoData + '\n';
+    texto += 'Motorista: ' + pedidoMotorista + '\n\n';
     texto += '*RESUMO POR FORNECEDOR:*\n\n';
     
     for (var fornecedor in itensPorFornecedor) {
@@ -329,7 +336,8 @@ function copiarPorFornecedor() {
 
 function copiarCliente(cliente, cnpj, produto, fornecedor, origem, quantidade, preco, total) {
     var texto = '*PEDIDO ' + pedidoNumero + '*\n';
-    texto += 'Data: ' + pedidoData + '\n\n';
+    texto += 'Data: ' + pedidoData + '\n';
+    texto += 'Motorista: ' + pedidoMotorista + '\n\n';
     texto += '📍 *' + cliente + '*\n';
     texto += 'CNPJ: ' + cnpj + '\n';
     texto += 'Produto: ' + produto + '\n';
@@ -343,3 +351,4 @@ function copiarCliente(cliente, cnpj, produto, fornecedor, origem, quantidade, p
 }
 </script>
 {% endblock %}
+
