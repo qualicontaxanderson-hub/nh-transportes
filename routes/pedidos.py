@@ -15,7 +15,6 @@ def get_db():
     )
 
 def gerar_numero_pedido():
-    """Gera o próximo número de pedido no formato PED-00001"""
     conn = get_db()
     cursor = conn.cursor(dictionary=True)
     cursor.execute("SELECT numero FROM pedidos ORDER BY id DESC LIMIT 1")
@@ -39,7 +38,6 @@ def index():
     conn = get_db()
     cursor = conn.cursor(dictionary=True)
     
-    # Filtros
     data_inicio = request.args.get('data_inicio', '')
     data_fim = request.args.get('data_fim', '')
     status = request.args.get('status', '')
@@ -89,32 +87,35 @@ def novo():
         observacoes = request.form.get('observacoes', '')
         numero = gerar_numero_pedido()
         
-        # Inserir cabeçalho do pedido
         cursor.execute("""
             INSERT INTO pedidos (numero, data_pedido, status, observacoes)
             VALUES (%s, %s, 'Pendente', %s)
         """, (numero, data_pedido, observacoes))
         pedido_id = cursor.lastrowid
         
-        # Inserir itens do pedido
         clientes = request.form.getlist('cliente_id[]')
         produtos = request.form.getlist('produto_id[]')
         fornecedores = request.form.getlist('fornecedor_id[]')
         origens = request.form.getlist('origem_id[]')
         quantidades = request.form.getlist('quantidade[]')
+        quantidade_ids = request.form.getlist('quantidade_id[]')
         tipos_qtd = request.form.getlist('tipo_quantidade[]')
         precos = request.form.getlist('preco_unitario[]')
         totais_nf = request.form.getlist('total_nf[]')
         
         for i in range(len(clientes)):
             if clientes[i] and produtos[i] and fornecedores[i]:
+                # Pegar quantidade do listbox ou manual
+                qtd_id = quantidade_ids[i] if quantidade_ids[i] else None
+                qtd_valor = quantidades[i] if quantidades[i] else 0
+                
                 cursor.execute("""
                     INSERT INTO pedidos_itens 
                     (pedido_id, cliente_id, produto_id, fornecedor_id, origem_id, 
-                     quantidade, tipo_quantidade, preco_unitario, total_nf)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                     quantidade, quantidade_id, tipo_quantidade, preco_unitario, total_nf)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 """, (pedido_id, clientes[i], produtos[i], fornecedores[i], origens[i],
-                      quantidades[i], tipos_qtd[i], precos[i], totais_nf[i]))
+                      qtd_valor, qtd_id, tipos_qtd[i], precos[i], totais_nf[i]))
         
         conn.commit()
         cursor.close()
@@ -123,7 +124,6 @@ def novo():
         flash(f'Pedido {numero} criado com sucesso!', 'success')
         return redirect(url_for('pedidos.visualizar', id=pedido_id))
     
-    # GET - Carregar dados para os selects
     cursor.execute("SELECT id, razao_social, nome_fantasia, cnpj FROM clientes ORDER BY razao_social")
     clientes = cursor.fetchall()
     
@@ -136,6 +136,9 @@ def novo():
     cursor.execute("SELECT id, nome FROM origens ORDER BY nome")
     origens = cursor.fetchall()
     
+    cursor.execute("SELECT id, valor, descricao FROM quantidades ORDER BY valor")
+    quantidades = cursor.fetchall()
+    
     cursor.close()
     conn.close()
     
@@ -146,6 +149,7 @@ def novo():
                            produtos=produtos,
                            fornecedores=fornecedores,
                            origens=origens,
+                           quantidades=quantidades,
                            numero_sugerido=numero_sugerido)
 
 # =============================================
@@ -157,7 +161,6 @@ def visualizar(id):
     conn = get_db()
     cursor = conn.cursor(dictionary=True)
     
-    # Buscar pedido
     cursor.execute("SELECT * FROM pedidos WHERE id = %s", (id,))
     pedido = cursor.fetchone()
     
@@ -165,28 +168,27 @@ def visualizar(id):
         flash('Pedido não encontrado!', 'danger')
         return redirect(url_for('pedidos.index'))
     
-    # Buscar itens com detalhes
     cursor.execute("""
         SELECT pi.*, 
                c.razao_social as cliente_razao, c.nome_fantasia as cliente_fantasia, c.cnpj as cliente_cnpj,
                p.nome as produto_nome,
                f.razao_social as fornecedor_razao, f.nome_fantasia as fornecedor_fantasia,
-               o.nome as origem_nome
+               o.nome as origem_nome,
+               q.descricao as quantidade_descricao
         FROM pedidos_itens pi
         JOIN clientes c ON pi.cliente_id = c.id
         JOIN produto p ON pi.produto_id = p.id
         JOIN fornecedores f ON pi.fornecedor_id = f.id
         JOIN origens o ON pi.origem_id = o.id
+        LEFT JOIN quantidades q ON pi.quantidade_id = q.id
         WHERE pi.pedido_id = %s
         ORDER BY f.nome_fantasia, c.razao_social
     """, (id,))
     itens = cursor.fetchall()
     
-    # Calcular totais
     total_quantidade = sum(float(item['quantidade']) for item in itens)
     total_valor = sum(float(item['total_nf']) for item in itens)
     
-    # Agrupar por fornecedor para mensagem WhatsApp
     itens_por_fornecedor = {}
     for item in itens:
         forn = item['fornecedor_fantasia'] or item['fornecedor_razao']
@@ -218,34 +220,35 @@ def editar(id):
         status = request.form['status']
         observacoes = request.form.get('observacoes', '')
         
-        # Atualizar cabeçalho
         cursor.execute("""
             UPDATE pedidos SET data_pedido = %s, status = %s, observacoes = %s
             WHERE id = %s
         """, (data_pedido, status, observacoes, id))
         
-        # Deletar itens antigos
         cursor.execute("DELETE FROM pedidos_itens WHERE pedido_id = %s", (id,))
         
-        # Inserir novos itens
         clientes = request.form.getlist('cliente_id[]')
         produtos = request.form.getlist('produto_id[]')
         fornecedores = request.form.getlist('fornecedor_id[]')
         origens = request.form.getlist('origem_id[]')
         quantidades = request.form.getlist('quantidade[]')
+        quantidade_ids = request.form.getlist('quantidade_id[]')
         tipos_qtd = request.form.getlist('tipo_quantidade[]')
         precos = request.form.getlist('preco_unitario[]')
         totais_nf = request.form.getlist('total_nf[]')
         
         for i in range(len(clientes)):
             if clientes[i] and produtos[i] and fornecedores[i]:
+                qtd_id = quantidade_ids[i] if quantidade_ids[i] else None
+                qtd_valor = quantidades[i] if quantidades[i] else 0
+                
                 cursor.execute("""
                     INSERT INTO pedidos_itens 
                     (pedido_id, cliente_id, produto_id, fornecedor_id, origem_id, 
-                     quantidade, tipo_quantidade, preco_unitario, total_nf)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                     quantidade, quantidade_id, tipo_quantidade, preco_unitario, total_nf)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 """, (id, clientes[i], produtos[i], fornecedores[i], origens[i],
-                      quantidades[i], tipos_qtd[i], precos[i], totais_nf[i]))
+                      qtd_valor, qtd_id, tipos_qtd[i], precos[i], totais_nf[i]))
         
         conn.commit()
         cursor.close()
@@ -254,16 +257,12 @@ def editar(id):
         flash('Pedido atualizado com sucesso!', 'success')
         return redirect(url_for('pedidos.visualizar', id=id))
     
-    # GET - Carregar pedido
     cursor.execute("SELECT * FROM pedidos WHERE id = %s", (id,))
     pedido = cursor.fetchone()
     
-    cursor.execute("""
-        SELECT * FROM pedidos_itens WHERE pedido_id = %s
-    """, (id,))
+    cursor.execute("SELECT * FROM pedidos_itens WHERE pedido_id = %s", (id,))
     itens = cursor.fetchall()
     
-    # Carregar dados para selects
     cursor.execute("SELECT id, razao_social, nome_fantasia, cnpj FROM clientes ORDER BY razao_social")
     clientes = cursor.fetchall()
     
@@ -276,6 +275,9 @@ def editar(id):
     cursor.execute("SELECT id, nome FROM origens ORDER BY nome")
     origens = cursor.fetchall()
     
+    cursor.execute("SELECT id, valor, descricao FROM quantidades ORDER BY valor")
+    quantidades = cursor.fetchall()
+    
     cursor.close()
     conn.close()
     
@@ -285,7 +287,8 @@ def editar(id):
                            clientes=clientes,
                            produtos=produtos,
                            fornecedores=fornecedores,
-                           origens=origens)
+                           origens=origens,
+                           quantidades=quantidades)
 
 # =============================================
 # ALTERAR STATUS
@@ -346,7 +349,6 @@ def api_buscar(id):
     cursor.close()
     conn.close()
     
-    # Converter Decimal para float para JSON
     for item in itens:
         item['quantidade'] = float(item['quantidade'])
         item['preco_unitario'] = float(item['preco_unitario'])
