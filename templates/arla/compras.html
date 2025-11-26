@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+
+{% block title %}Cadastro de Compra de ARLA{% endblock %}
+
+{% block content %}
+<div class="container">
+    <h2>Cadastro de Compra de ARLA</h2>
+    <form method="post">
+        <div class="mb-3">
+            <label for="data" class="form-label">Data da Compra</label>
+            <input type="date" class="form-control" id="data" name="data" required>
+        </div>
+        <div class="mb-3">
+            <label for="quantidade" class="form-label">Quantidade (litros)</label>
+            <input type="number" step="0.01" class="form-control" id="quantidade" name="quantidade" required>
+        </div>
+        <div class="mb-3">
+            <label for="preco_compra" class="form-label">Preço de Compra (por litro)</label>
+            <input type="number" step="0.01" class="form-control" id="preco_compra" name="preco_compra" required>
+        </div>
+        <button type="submit" class="btn btn-primary">Salvar Compra</button>
+    </form>
+</div>
+{% endblock %}
