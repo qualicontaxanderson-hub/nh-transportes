@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+
+{% block title %}Cadastro de Saldo Inicial - ARLA{% endblock %}
+
+{% block content %}
+<div class="container">
+    <h2>Cadastro de Saldo Inicial do ARLA</h2>
+    <form method="post">
+        <div class="mb-3">
+            <label for="data" class="form-label">Data do Saldo Inicial</label>
+            <input type="date" class="form-control" id="data" name="data" required>
+        </div>
+        <div class="mb-3">
+            <label for="volume_inicial" class="form-label">Volume Inicial (litros)</label>
+            <input type="number" step="0.01" class="form-control" id="volume_inicial" name="volume_inicial" required>
+        </div>
+        <div class="mb-3">
+            <label for="preco_medio_compra" class="form-label">Preço Médio de Compra (por litro)</label>
+            <input type="number" step="0.01" class="form-control" id="preco_medio_compra" name="preco_medio_compra" required>
+        </div>
+        <div class="mb-3">
+            <label for="encerrante_inicial" class="form-label">Encerrante Inicial</label>
+            <input type="number" step="0.01" class="form-control" id="encerrante_inicial" name="encerrante_inicial" required>
+        </div>
+        <button type="submit" class="btn btn-primary">Salvar Saldo Inicial</button>
+    </form>
+</div>
+{% endblock %}
