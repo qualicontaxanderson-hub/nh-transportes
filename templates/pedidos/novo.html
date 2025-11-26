@@ -162,8 +162,6 @@
             </td>
             <td>
                 <select class="form-select form-select-sm" name="tipo_quantidade[]">
-                    <option value="metros">Metros
-                                    <select class="form-select form-select-sm" name="tipo_quantidade[]">
                     <option value="metros">Metros</option>
                     <option value="litros">Litros</option>
                 </select>
@@ -212,9 +210,8 @@
         adicionarItem();
         
         // Setar data de hoje
-        const hoje = new Date().toISOString().split('T');
+        const hoje = new Date().toISOString().split('T')[0];
         document.querySelector('input[name="data_pedido"]').value = hoje;
     });
 </script>
 {% endblock %}
-
