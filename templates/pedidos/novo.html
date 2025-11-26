@@ -22,20 +22,15 @@
             </div>
             <div class="card-body">
                 <div class="row">
-                    <div class="col-md-3">
-                        <label class="form-label">Data do Pedido</label>
-                        <input type="date" class="form-control" name="data_pedido" value="{{ hoje }}" required>
+                    <div class="col-md-2">
+                        <label class="form-label">Número</label>
+                        <input type="text" class="form-control" value="{{ numero_sugerido }}" readonly style="background-color: #e9ecef;">
                     </div>
-                    <div class="col-md-3">
-                        <label class="form-label">Status</label>
-                        <select class="form-select" name="status">
-                            <option value="Pendente" selected>Pendente</option>
-                            <option value="Confirmado">Confirmado</option>
-                            <option value="Faturado">Faturado</option>
-                            <option value="Cancelado">Cancelado</option>
-                        </select>
+                    <div class="col-md-2">
+                        <label class="form-label">Data do Pedido *</label>
+                        <input type="date" class="form-control" name="data_pedido" value="{{ hoje or '' }}" required>
                     </div>
-                    <div class="col-md-6">
+                    <div class="col-md-8">
                         <label class="form-label">Observações</label>
                         <input type="text" class="form-control" name="observacoes" placeholder="Observações gerais do pedido">
                     </div>
@@ -83,7 +78,7 @@
                     <select class="form-select" name="cliente_id[]" required>
                         <option value="">Selecione o Cliente</option>
                         {% for c in clientes %}
-                        <option value="{{ c.id }}">{{ c.nome }}</option>
+                        <option value="{{ c.id }}">{{ c.nome_fantasia or c.razao_social }}{% if c.cnpj %} - {{ c.cnpj }}{% endif %}</option>
                         {% endfor %}
                     </select>
                 </div>
@@ -101,33 +96,33 @@
                     <select class="form-select" name="fornecedor_id[]" required>
                         <option value="">Selecione o Fornecedor</option>
                         {% for f in fornecedores %}
-                        <option value="{{ f.id }}">{{ f.nome }}</option>
+                        <option value="{{ f.id }}">{{ f.nome_fantasia or f.razao_social }}</option>
                         {% endfor %}
                     </select>
                 </div>
-                <div class="col-md-4">
-                    <label class="form-label">Origem</label>
-                    <select class="form-select" name="origem_id[]">
+                <div class="col-md-3">
+                    <label class="form-label">Origem *</label>
+                    <select class="form-select" name="origem_id[]" required>
                         <option value="">Selecione a Origem</option>
                         {% for o in origens %}
                         <option value="{{ o.id }}">{{ o.nome }}</option>
                         {% endfor %}
                     </select>
                 </div>
-                <div class="col-md-4">
-                    <label class="form-label">Tipo Quantidade</label>
+                <div class="col-md-2">
+                    <label class="form-label">Tipo Qtd</label>
                     <select class="form-select select-tipo-qtd" name="tipo_quantidade[]" onchange="toggleQuantidade(this)">
-                        <option value="lista">Lista Padrão</option>
-                        <option value="manual">Entrada Manual</option>
+                        <option value="lista">Lista</option>
+                        <option value="manual">Manual</option>
                     </select>
                 </div>
-                <div class="col-md-4">
+                <div class="col-md-3">
                     <label class="form-label">Quantidade *</label>
                     <div class="div-quantidade-lista">
                         <select class="form-select select-quantidade" name="quantidade_id[]" onchange="selecionarQuantidade(this)">
                             <option value="">Selecione</option>
                             {% for q in quantidades %}
-                            <option value="{{ q.id }}" data-valor="{{ q.quantidade }}">{{ q.descricao }}</option>
+                            <option value="{{ q.id }}" data-valor="{{ q.valor }}">{{ q.descricao }}</option>
                             {% endfor %}
                         </select>
                     </div>
@@ -136,12 +131,12 @@
                     </div>
                     <input type="hidden" class="input-quantidade-final" name="quantidade[]" value="">
                 </div>
-                <div class="col-md-4">
-                    <label class="form-label">Preço Unitário (R$)</label>
+                <div class="col-md-2">
+                    <label class="form-label">Preço Unit. (R$)</label>
                     <input type="text" class="form-control input-preco" name="preco_unitario[]" placeholder="0,00" oninput="calcularTotalItem(this)">
                 </div>
-                <div class="col-md-4">
-                    <label class="form-label">Valor Total NF (R$)</label>
+                <div class="col-md-2">
+                    <label class="form-label">Total NF (R$)</label>
                     <input type="text" class="form-control input-total-nf" name="total_nf[]" placeholder="0,00" readonly style="background-color: #e9ecef;">
                 </div>
             </div>
