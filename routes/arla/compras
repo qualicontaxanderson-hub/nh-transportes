@@ -1,0 +1,22 @@
+@bp.route('/compras', methods=['GET', 'POST'])
+@login_required
+def compras():
+    if request.method == 'POST':
+        data = request.form['data']
+        quantidade = request.form['quantidade']
+        preco_compra = request.form['preco_compra']
+
+        conn = get_db()
+        cursor = conn.cursor()
+        cursor.execute("""
+            INSERT INTO arla_compras (data, quantidade, preco_compra)
+            VALUES (%s, %s, %s)
+        """, (data, quantidade, preco_compra))
+        conn.commit()
+        cursor.close()
+        conn.close()
+
+        flash('Compra registrada com sucesso!', 'success')
+        return redirect(url_for('arla.compras'))
+
+    return render_template('arla/compras.html')
