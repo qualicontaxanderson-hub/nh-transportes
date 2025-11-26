@@ -188,7 +188,6 @@
     function copiarTudo() {
         let texto = `*${formatarData(pedido.data_pedido)} - Pedido ${pedido.numero}*\n\n`;
         
-        // Agrupar por fornecedor
         for (const [fornecedor, itensF] of Object.entries(itensPorFornecedor)) {
             const preco = itensF[0].preco_unitario;
             const produto = itensF[0].produto_nome;
@@ -223,29 +222,21 @@
 
     function copiarPorFornecedor() {
         let texto = `*${formatarData(pedido.data_pedido)}*\n\n`;
-    function copiarPorFornecedor() {
-        let texto = `*${formatarData(pedido.data_pedido)}*
-
-`;
         
         for (const [fornecedor, itensF] of Object.entries(itensPorFornecedor)) {
-            const preco = itensF.preco_unitario;
-            texto += `*${fornecedor} - ${preco.toFixed(3).replace('.', ',')}*
-`;
+            const preco = itensF[0].preco_unitario;
+            texto += `*${fornecedor} - ${preco.toFixed(3).replace('.', ',')}*\n`;
             
             let subtotalQtd = 0;
             
             itensF.forEach(item => {
                 const cliente = item.cliente_fantasia || item.cliente_razao;
                 const qtd = parseFloat(item.quantidade);
-                texto += `- ${cliente}: ${qtd.toFixed(0)}m³
-`;
+                texto += `- ${cliente}: ${qtd.toFixed(0)}m³\n`;
                 subtotalQtd += qtd;
             });
             
-            texto += `Total ${fornecedor}: ${subtotalQtd.toFixed(0)}m³
-
-`;
+            texto += `Total ${fornecedor}: ${subtotalQtd.toFixed(0)}m³\n\n`;
         }
         
         copiarParaClipboard(texto);
@@ -261,17 +252,13 @@
         const nf = parseFloat(item.total_nf);
         const fornecedor = item.fornecedor_fantasia || item.fornecedor_razao;
         
-        let texto = `*${formatarData(pedido.data_pedido)}*
-
-`;
-        texto += `*${fornecedor} - ${item.produto_nome} ${item.preco_unitario.toFixed(3).replace('.', ',')}*
-
-`;
-        texto += `*CNPJ ${cnpj} ${cliente}*
-`;
+        let texto = `*${formatarData(pedido.data_pedido)}*\n\n`;
+        texto += `*${fornecedor} - ${item.produto_nome} ${item.preco_unitario.toFixed(3).replace('.', ',')}*\n\n`;
+        texto += `*CNPJ ${cnpj} ${cliente}*\n`;
         texto += `${qtd.toFixed(0)} ${item.tipo_quantidade} - NF R$ ${nf.toLocaleString('pt-BR', {minimumFractionDigits: 2})}`;
         
         copiarParaClipboard(texto);
     }
 </script>
 {% endblock %}
+
