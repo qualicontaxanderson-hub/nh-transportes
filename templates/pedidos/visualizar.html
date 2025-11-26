@@ -1,0 +1,277 @@
+{% extends "base.html" %}
+
+{% block title %}Pedido {{ pedido.numero }} - NH Transportes{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h2 style="font-size: 1.5rem;">
+            <i class="bi bi-cart-check"></i> Pedido {{ pedido.numero }}
+        </h2>
+        <div>
+            <a href="{{ url_for('pedidos.editar', id=pedido.id) }}" class="btn btn-warning btn-sm me-2">
+                <i class="bi bi-pencil"></i> Editar
+            </a>
+            <a href="{{ url_for('pedidos.index') }}" class="btn btn-secondary btn-sm">
+                <i class="bi bi-arrow-left"></i> Voltar
+            </a>
+        </div>
+    </div>
+
+    <!-- CABEÇALHO DO PEDIDO -->
+    <div class="card mb-3">
+        <div class="card-header d-flex justify-content-between align-items-center" style="background:#4A90E2;color:#fff;font-weight:600;">
+            <span><i class="bi bi-info-circle"></i> Dados do Pedido</span>
+            <div>
+                {% if pedido.status == 'Pendente' %}
+                    <span class="badge bg-warning text-dark" style="font-size:0.9rem;">Pendente</span>
+                {% elif pedido.status == 'Confirmado' %}
+                    <span class="badge bg-success" style="font-size:0.9rem;">Confirmado</span>
+                {% elif pedido.status == 'Faturado' %}
+                    <span class="badge bg-primary" style="font-size:0.9rem;">Faturado</span>
+                {% elif pedido.status == 'Cancelado' %}
+                    <span class="badge bg-danger" style="font-size:0.9rem;">Cancelado</span>
+                {% endif %}
+            </div>
+        </div>
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-3">
+                    <strong>Número:</strong> {{ pedido.numero }}
+                </div>
+                <div class="col-md-3">
+                    <strong>Data:</strong> {{ pedido.data_pedido.strftime('%d/%m/%Y') if pedido.data_pedido else '-' }}
+                </div>
+                <div class="col-md-3">
+                    <strong>Total Quantidade:</strong> {{ "{:,.2f}".format(total_quantidade).replace(',', 'X').replace('.', ',').replace('X', '.') }} m³
+                </div>
+                <div class="col-md-3">
+                    <strong>Total Valor:</strong> R$ {{ "{:,.2f}".format(total_valor).replace(',', 'X').replace('.', ',').replace('X', '.') }}
+                </div>
+            </div>
+            {% if pedido.observacoes %}
+            <div class="row mt-2">
+                <div class="col-12">
+                    <strong>Observações:</strong> {{ pedido.observacoes }}
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- ALTERAR STATUS -->
+    <div class="card mb-3">
+        <div class="card-header" style="background:#e9ecef;font-weight:600;">
+            <i class="bi bi-arrow-repeat"></i> Alterar Status
+        </div>
+        <div class="card-body">
+            <div class="d-flex gap-2 flex-wrap">
+                <a href="{{ url_for('pedidos.alterar_status', id=pedido.id, status='Pendente') }}" class="btn btn-warning btn-sm {% if pedido.status == 'Pendente' %}disabled{% endif %}">
+                    <i class="bi bi-clock"></i> Pendente
+                </a>
+                <a href="{{ url_for('pedidos.alterar_status', id=pedido.id, status='Confirmado') }}" class="btn btn-success btn-sm {% if pedido.status == 'Confirmado' %}disabled{% endif %}">
+                    <i class="bi bi-check-circle"></i> Confirmado
+                </a>
+                <a href="{{ url_for('pedidos.alterar_status', id=pedido.id, status='Faturado') }}" class="btn btn-primary btn-sm {% if pedido.status == 'Faturado' %}disabled{% endif %}">
+                    <i class="bi bi-receipt"></i> Faturado
+                </a>
+                <a href="{{ url_for('pedidos.alterar_status', id=pedido.id, status='Cancelado') }}" class="btn btn-danger btn-sm {% if pedido.status == 'Cancelado' %}disabled{% endif %}">
+                    <i class="bi bi-x-circle"></i> Cancelado
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- BOTÕES WHATSAPP -->
+    <div class="card mb-3">
+        <div class="card-header" style="background:#25D366;color:#fff;font-weight:600;">
+            <i class="bi bi-whatsapp"></i> Copiar para WhatsApp
+        </div>
+        <div class="card-body">
+            <div class="d-flex gap-2 flex-wrap">
+                <button type="button" class="btn btn-success" onclick="copiarTudo()">
+                    <i class="bi bi-clipboard"></i> Copiar Tudo
+                </button>
+                <button type="button" class="btn btn-outline-success" onclick="copiarPorFornecedor()">
+                    <i class="bi bi-building"></i> Copiar por Fornecedor
+                </button>
+            </div>
+            <div class="mt-3">
+                <label class="form-label"><strong>Copiar clientes individuais:</strong></label>
+                <div class="d-flex gap-2 flex-wrap">
+                    {% for item in itens %}
+                    <button type="button" class="btn btn-outline-secondary btn-sm" onclick="copiarCliente({{ item.id }})">
+                        {{ item.cliente_fantasia or item.cliente_razao }}
+                    </button>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ITENS DO PEDIDO -->
+    <div class="card mb-3">
+        <div class="card-header" style="background:#6c757d;color:#fff;font-weight:600;">
+            <i class="bi bi-list-ul"></i> Itens do Pedido
+        </div>
+        <div class="card-body table-responsive p-0">
+            <table class="table table-hover table-sm mb-0">
+                <thead style="background:#f1f1f1;">
+                    <tr>
+                        <th>Cliente</th>
+                        <th>CNPJ</th>
+                        <th>Produto</th>
+                        <th>Fornecedor</th>
+                        <th>Origem</th>
+                        <th class="text-end">Qtd</th>
+                        <th class="text-end">Preço</th>
+                        <th class="text-end">Total NF</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in itens %}
+                    <tr>
+                        <td>{{ item.cliente_fantasia or item.cliente_razao }}</td>
+                        <td>{{ item.cliente_cnpj or '-' }}</td>
+                        <td>{{ item.produto_nome }}</td>
+                        <td>{{ item.fornecedor_fantasia or item.fornecedor_razao }}</td>
+                        <td>{{ item.origem_nome }}</td>
+                        <td class="text-end">{{ "{:,.2f}".format(item.quantidade).replace(',', 'X').replace('.', ',').replace('X', '.') }} {{ item.tipo_quantidade }}</td>
+                        <td class="text-end">R$ {{ "{:,.3f}".format(item.preco_unitario).replace(',', 'X').replace('.', ',').replace('X', '.') }}</td>
+                        <td class="text-end">R$ {{ "{:,.2f}".format(item.total_nf).replace(',', 'X').replace('.', ',').replace('X', '.') }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+                <tfoot style="background:#e9ecef;">
+                    <tr>
+                        <td colspan="5" class="text-end"><strong>TOTAIS:</strong></td>
+                        <td class="text-end"><strong>{{ "{:,.2f}".format(total_quantidade).replace(',', 'X').replace('.', ',').replace('X', '.') }}</strong></td>
+                        <td></td>
+                        <td class="text-end"><strong>R$ {{ "{:,.2f}".format(total_valor).replace(',', 'X').replace('.', ',').replace('X', '.') }}</strong></td>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+    </div>
+
+    <!-- TEXTAREA OCULTO PARA COPIAR -->
+    <textarea id="textoWhatsapp" style="position:absolute;left:-9999px;"></textarea>
+</div>
+
+<style>
+    .table th { font-weight:600; font-size:0.85rem; }
+    .table td { font-size:0.85rem; vertical-align: middle; }
+</style>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+    const pedido = {{ pedido | tojson }};
+    const itens = {{ itens | tojson }};
+    const itensPorFornecedor = {{ itens_por_fornecedor | tojson }};
+
+    function formatarData(dataStr) {
+        if (!dataStr) return '';
+        const data = new Date(dataStr);
+        return data.toLocaleDateString('pt-BR');
+    }
+
+    function copiarParaClipboard(texto) {
+        const textarea = document.getElementById('textoWhatsapp');
+        textarea.value = texto;
+        textarea.select();
+        document.execCommand('copy');
+        alert('Texto copiado para a área de transferência!');
+    }
+
+    function copiarTudo() {
+        let texto = `*${formatarData(pedido.data_pedido)} - Pedido ${pedido.numero}*\n\n`;
+        
+        // Agrupar por fornecedor
+        for (const [fornecedor, itensF] of Object.entries(itensPorFornecedor)) {
+            const preco = itensF[0].preco_unitario;
+            const produto = itensF[0].produto_nome;
+            texto += `*${fornecedor} - ${produto} ${preco.toFixed(3).replace('.', ',')}*\n\n`;
+            
+            let subtotalQtd = 0;
+            let subtotalNF = 0;
+            
+            itensF.forEach(item => {
+                const cnpj = item.cliente_cnpj || 'S/CNPJ';
+                const cliente = item.cliente_fantasia || item.cliente_razao;
+                const qtd = parseFloat(item.quantidade);
+                const nf = parseFloat(item.total_nf);
+                
+                texto += `*CNPJ ${cnpj} ${cliente}*\n`;
+                texto += `${qtd.toFixed(0)} ${item.tipo_quantidade} - NF R$ ${nf.toLocaleString('pt-BR', {minimumFractionDigits: 2})}\n\n`;
+                
+                subtotalQtd += qtd;
+                subtotalNF += nf;
+            });
+            
+            texto += `*Subtotal ${fornecedor}: ${subtotalQtd.toFixed(0)}m³ - R$ ${subtotalNF.toLocaleString('pt-BR', {minimumFractionDigits: 2})}*\n\n`;
+            texto += `---\n\n`;
+        }
+        
+        const totalQtd = itens.reduce((sum, i) => sum + parseFloat(i.quantidade), 0);
+        const totalNF = itens.reduce((sum, i) => sum + parseFloat(i.total_nf), 0);
+        texto += `*TOTAL GERAL: ${totalQtd.toFixed(0)}m³ - R$ ${totalNF.toLocaleString('pt-BR', {minimumFractionDigits: 2})}*`;
+        
+        copiarParaClipboard(texto);
+    }
+
+    function copiarPorFornecedor() {
+        let texto = `*${formatarData(pedido.data_pedido)}*\n\n`;
+    function copiarPorFornecedor() {
+        let texto = `*${formatarData(pedido.data_pedido)}*
+
+`;
+        
+        for (const [fornecedor, itensF] of Object.entries(itensPorFornecedor)) {
+            const preco = itensF.preco_unitario;
+            texto += `*${fornecedor} - ${preco.toFixed(3).replace('.', ',')}*
+`;
+            
+            let subtotalQtd = 0;
+            
+            itensF.forEach(item => {
+                const cliente = item.cliente_fantasia || item.cliente_razao;
+                const qtd = parseFloat(item.quantidade);
+                texto += `- ${cliente}: ${qtd.toFixed(0)}m³
+`;
+                subtotalQtd += qtd;
+            });
+            
+            texto += `Total ${fornecedor}: ${subtotalQtd.toFixed(0)}m³
+
+`;
+        }
+        
+        copiarParaClipboard(texto);
+    }
+
+    function copiarCliente(itemId) {
+        const item = itens.find(i => i.id === itemId);
+        if (!item) return;
+        
+        const cnpj = item.cliente_cnpj || 'S/CNPJ';
+        const cliente = item.cliente_fantasia || item.cliente_razao;
+        const qtd = parseFloat(item.quantidade);
+        const nf = parseFloat(item.total_nf);
+        const fornecedor = item.fornecedor_fantasia || item.fornecedor_razao;
+        
+        let texto = `*${formatarData(pedido.data_pedido)}*
+
+`;
+        texto += `*${fornecedor} - ${item.produto_nome} ${item.preco_unitario.toFixed(3).replace('.', ',')}*
+
+`;
+        texto += `*CNPJ ${cnpj} ${cliente}*
+`;
+        texto += `${qtd.toFixed(0)} ${item.tipo_quantidade} - NF R$ ${nf.toLocaleString('pt-BR', {minimumFractionDigits: 2})}`;
+        
+        copiarParaClipboard(texto);
+    }
+</script>
+{% endblock %}
