@@ -134,10 +134,10 @@ def editar_usuario(id):
     if request.method == 'POST':
         conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)
-        nome_completo = request.form.get('nome')
+        nome_completo = request.form.get('nome_completo')
         nivel = request.form.get('nivel')
         ativo = 1 if request.form.get('ativo') else 0
-        nova_senha = request.form.get('nova_senha')
+        nova_senha = request.form.get('senha')
         confirmar_senha = request.form.get('confirmar_senha')
         try:
             if nova_senha:
