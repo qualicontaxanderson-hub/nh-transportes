@@ -54,19 +54,20 @@ def index():
     )
 
 # =============================================
-# SALDO INICIAL - CRIAR
+# SALDO INICIAL - CRIAR / VISUALIZAR
 # =============================================
 @bp.route('/saldo-inicial', methods=['GET', 'POST'])
 @login_required
 def saldo_inicial():
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True)
+
     if request.method == 'POST':
         data = request.form['data']
         volume_inicial = request.form['volume_inicial']
         preco_medio_compra = request.form['preco_medio_compra']
         encerrante_inicial = request.form['encerrante_inicial']
 
-        conn = get_db()
-        cursor = conn.cursor()
         cursor.execute("""
             INSERT INTO arla_saldo_inicial (data, volume_inicial, preco_medio_compra, encerrante_inicial)
             VALUES (%s, %s, %s, %s)
@@ -78,7 +79,13 @@ def saldo_inicial():
         flash('Saldo inicial cadastrado com sucesso!', 'success')
         return redirect(url_for('arla.index'))
 
-    return render_template('arla/saldo_inicial.html')
+    # Busca saldo existente
+    cursor.execute("SELECT * FROM arla_saldo_inicial ORDER BY data DESC LIMIT 1")
+    saldo = cursor.fetchone()
+    cursor.close()
+    conn.close()
+
+    return render_template('arla/saldo_inicial.html', saldo=saldo)
 
 # =============================================
 # SALDO INICIAL - EDITAR
@@ -264,7 +271,6 @@ def editar_lancamento(id):
         data = request.form['data']
         encerrante_final = float(request.form['encerrante_final'])
 
-        # Recalcula quantidade vendida baseada no encerrante anterior
         cursor.execute("""
             SELECT encerrante_final FROM arla_lancamentos
             WHERE data < %s AND id != %s
@@ -284,7 +290,6 @@ def editar_lancamento(id):
 
         quantidade_vendida = encerrante_final - float(encerrante_anterior)
 
-        # Busca o preço vigente naquele dia
         cursor.execute("""
             SELECT preco_venda FROM arla_precos_venda WHERE data_inicio <= %s
             ORDER BY data_inicio DESC LIMIT 1
