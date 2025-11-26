@@ -26,8 +26,8 @@
             
             <form method="POST" class="row g-2">
                 <div class="col-md-6">
-                    <label for="username" class="form-label" style="font-size:0.85rem;">Usuário *</label>
-                    <input type="text" name="username" id="username" class="form-control form-control-sm" value="{{ usuario.username }}" required>
+                    <label for="username" class="form-label" style="font-size:0.85rem;">Usuário</label>
+                    <input type="text" name="username" id="username" class="form-control form-control-sm" value="{{ usuario.username }}" readonly>
                 </div>
                 <div class="col-md-6">
                     <label for="nome_completo" class="form-label" style="font-size:0.85rem;">Nome Completo *</label>
@@ -40,6 +40,19 @@
                         <option value="usuario" {% if usuario.nivel == 'usuario' %}selected{% endif %}>Usuário</option>
                         <option value="operador" {% if usuario.nivel == 'operador' %}selected{% endif %}>Operador</option>
                     </select>
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label" style="font-size:0.85rem;">Status do Usuário</label>
+                    <div class="form-check form-switch mt-1">
+                        <input class="form-check-input" type="checkbox" name="ativo" id="ativo" {% if usuario.ativo %}checked{% endif %}>
+                        <label class="form-check-label" for="ativo" id="label_ativo">
+                            {% if usuario.ativo %}
+                                <span class="badge bg-success">Ativo</span>
+                            {% else %}
+                                <span class="badge bg-secondary">Inativo</span>
+                            {% endif %}
+                        </label>
+                    </div>
                 </div>
                 <div class="col-12 mt-3">
                     <hr>
@@ -71,9 +84,28 @@
 <style>
     .form-label { font-weight: 600; }
     .btn-sm { font-size: 0.85rem; padding: 0.3rem 0.8rem; }
+    .form-check-input:checked {
+        background-color: #28a745;
+        border-color: #28a745;
+    }
     @media (max-width: 768px) {
         h2 { font-size: 1.2rem !important; }
         .form-label { font-size: 0.75rem !important; }
     }
 </style>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const checkbox = document.getElementById('ativo');
+    const label = document.getElementById('label_ativo');
+    
+    checkbox.addEventListener('change', function() {
+        if (this.checked) {
+            label.innerHTML = '<span class="badge bg-success">Ativo</span>';
+        } else {
+            label.innerHTML = '<span class="badge bg-secondary">Inativo</span>';
+        }
+    });
+});
+</script>
 {% endblock %}
