@@ -1,6 +1,5 @@
 from datetime import datetime
-
-from utils.db import db  # ajuste o caminho se o seu projeto usar outro módulo para o db
+from . import db  # importa o db do pacote models
 
 
 class Fornecedor(db.Model):
@@ -26,7 +25,6 @@ class Fornecedor(db.Model):
         default=datetime.utcnow,
     )
 
-    # campos novos que criamos no banco
     dados_bancarios = db.Column(db.Text, nullable=True)
     chave_pix = db.Column(db.String(100), nullable=True)
     tipo_pagamento_padrao = db.Column(db.String(20), nullable=True)
