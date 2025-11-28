@@ -89,14 +89,13 @@ def novo():
     if request.method == 'POST':
         data_pedido = request.form['data_pedido']
         motorista_id = request.form.get('motorista_id') or None
-        forma_pagamento_fornecedor = request.form.get('forma_pagamento_fornecedor') or None
         observacoes = request.form.get('observacoes', '')
         numero = gerar_numero_pedido()
         
         cursor.execute("""
-            INSERT INTO pedidos (numero, data_pedido, motorista_id, status, observacoes, forma_pagamento_fornecedor)
-            VALUES (%s, %s, %s, 'Pendente', %s, %s)
-        """, (numero, data_pedido, motorista_id, observacoes, forma_pagamento_fornecedor))
+            INSERT INTO pedidos (numero, data_pedido, motorista_id, status, observacoes)
+            VALUES (%s, %s, %s, 'Pendente', %s)
+        """, (numero, data_pedido, motorista_id, observacoes))
         pedido_id = cursor.lastrowid
         
         clientes = request.form.getlist('cliente_id[]')
@@ -137,7 +136,11 @@ def novo():
     cursor.execute("SELECT id, nome FROM produto ORDER BY nome")
     produtos = cursor.fetchall()
     
-    cursor.execute("SELECT id, razao_social, nome_fantasia FROM fornecedores ORDER BY razao_social")
+    cursor.execute("""
+        SELECT id, razao_social, nome_fantasia, chave_pix, dados_bancarios, tipo_pagamento_padrao
+        FROM fornecedores
+        ORDER BY razao_social
+    """)
     fornecedores = cursor.fetchall()
     
     cursor.execute("SELECT id, nome FROM origens ORDER BY nome")
@@ -246,14 +249,12 @@ def editar(id):
         motorista_id = request.form.get('motorista_id') or None
         status = request.form['status']
         observacoes = request.form.get('observacoes', '')
-        forma_pagamento_fornecedor = request.form.get('forma_pagamento_fornecedor') or None
         
         cursor.execute("""
             UPDATE pedidos 
-               SET data_pedido = %s, motorista_id = %s, status = %s, observacoes = %s,
-                   forma_pagamento_fornecedor = %s
+               SET data_pedido = %s, motorista_id = %s, status = %s, observacoes = %s
              WHERE id = %s
-        """, (data_pedido, motorista_id, status, observacoes, forma_pagamento_fornecedor, id))
+        """, (data_pedido, motorista_id, status, observacoes, id))
         
         cursor.execute("DELETE FROM pedidos_itens WHERE pedido_id = %s", (id,))
         
@@ -301,7 +302,11 @@ def editar(id):
     cursor.execute("SELECT id, nome FROM produto ORDER BY nome")
     produtos = cursor.fetchall()
     
-    cursor.execute("SELECT id, razao_social, nome_fantasia FROM fornecedores ORDER BY razao_social")
+    cursor.execute("""
+        SELECT id, razao_social, nome_fantasia, chave_pix, dados_bancarios, tipo_pagamento_padrao
+        FROM fornecedores
+        ORDER BY razao_social
+    """)
     fornecedores = cursor.fetchall()
     
     cursor.execute("SELECT id, nome FROM origens ORDER BY nome")
