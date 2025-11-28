@@ -97,7 +97,7 @@
                 <div class="mt-2">
                     {% for item in itens %}
                     <button type="button" class="btn btn-outline-secondary btn-sm mb-1" 
-                            onclick="copiarCliente('{{ item.cliente_fantasia or item.cliente_razao }}', '{{ item.cliente_cnpj }}', '{{ item.produto_nome }}', '{{ item.fornecedor_fantasia or item.fornecedor_razao }}', '{{ item.origem_nome }}', {{ item.quantidade }}, {{ item.preco_unitario }}, {{ item.total_nf }})">
+                            onclick="copiarCliente('{{ item.cliente_fantasia or item.cliente_razao }}', '{{ item.cliente_cnpj }}', '{{ item.produto_nome }}', '{{ item.fornecedor_fantasia or item.fornecedor_razao }}', '{{ item.origem_nome }}', '{{ item.base_nome or '' }}', {{ item.quantidade }}, {{ item.preco_unitario }}, {{ item.total_nf }})">
                         {{ item.cliente_fantasia or item.cliente_razao }}
                     </button>
                     {% endfor %}
@@ -121,6 +121,7 @@
                             <th>Produto</th>
                             <th>Fornecedor</th>
                             <th>Origem</th>
+                            <th>Base</th>
                             <th class="text-end">Qtd</th>
                             <th class="text-end">Preço</th>
                             <th class="text-end">Total NF</th>
@@ -134,6 +135,7 @@
                             <td>{{ item.produto_nome }}</td>
                             <td>{{ item.fornecedor_fantasia or item.fornecedor_razao }}</td>
                             <td>{{ item.origem_nome }}</td>
+                            <td>{{ item.base_nome or '-' }}</td>
                             <td class="text-end">{{ "{:,.2f}".format(item.quantidade).replace(',', 'X').replace('.', ',').replace('X', '.') }}</td>
                             <td class="text-end">R$ {{ "{:,.3f}".format(item.preco_unitario).replace(',', 'X').replace('.', ',').replace('X', '.') }}</td>
                             <td class="text-end">R$ {{ "{:,.2f}".format(item.total_nf).replace(',', 'X').replace('.', ',').replace('X', '.') }}</td>
@@ -142,7 +144,7 @@
                     </tbody>
                     <tfoot class="table-secondary">
                         <tr>
-                            <th colspan="5" class="text-end">TOTAIS:</th>
+                            <th colspan="6" class="text-end">TOTAIS:</th>
                             <th class="text-end">{{ "{:,.2f}".format(total_quantidade).replace(',', 'X').replace('.', ',').replace('X', '.') }}</th>
                             <th></th>
                             <th class="text-end">R$ {{ "{:,.2f}".format(total_valor).replace(',', 'X').replace('.', ',').replace('X', '.') }}</th>
@@ -168,6 +170,7 @@
                             <th>CNPJ</th>
                             <th>Produto</th>
                             <th>Origem</th>
+                            <th>Base</th>
                             <th class="text-end">Qtd</th>
                             <th class="text-end">Preço</th>
                             <th class="text-end">Total</th>
@@ -180,6 +183,7 @@
                             <td>{{ item.cliente_cnpj }}</td>
                             <td>{{ item.produto_nome }}</td>
                             <td>{{ item.origem_nome }}</td>
+                            <td>{{ item.base_nome or '-' }}</td>
                             <td class="text-end">{{ "{:,.2f}".format(item.quantidade).replace(',', 'X').replace('.', ',').replace('X', '.') }}</td>
                             <td class="text-end">R$ {{ "{:,.3f}".format(item.preco_unitario).replace(',', 'X').replace('.', ',').replace('X', '.') }}</td>
                             <td class="text-end">R$ {{ "{:,.2f}".format(item.total_nf).replace(',', 'X').replace('.', ',').replace('X', '.') }}</td>
@@ -206,6 +210,7 @@ var itens = [
         produto: "{{ item.produto_nome }}",
         fornecedor: "{{ item.fornecedor_fantasia or item.fornecedor_razao }}",
         origem: "{{ item.origem_nome }}",
+        base: "{{ item.base_nome or '' }}",
         quantidade: {{ item.quantidade }},
         preco: {{ item.preco_unitario }},
         total: {{ item.total_nf }}
@@ -222,6 +227,7 @@ var itensPorFornecedor = {
             cnpj: "{{ item.cliente_cnpj }}",
             produto: "{{ item.produto_nome }}",
             origem: "{{ item.origem_nome }}",
+            base: "{{ item.base_nome or '' }}",
             quantidade: {{ item.quantidade }},
             preco: {{ item.preco_unitario }},
             total: {{ item.total_nf }}
@@ -272,6 +278,9 @@ function copiarTudo() {
             texto += '   CNPJ: ' + item.cnpj + '\n';
             texto += '   Produto: ' + item.produto + '\n';
             texto += '   Origem: ' + item.origem + '\n';
+            if (item.base) {
+                texto += '   Base: ' + item.base + '\n';
+            }
             texto += '   Qtd: ' + formatarNumero(item.quantidade) + ' | R$ ' + formatarNumero(item.preco, 3) + '\n';
             texto += '   Total: R$ ' + formatarNumero(item.total) + '\n\n';
             
@@ -283,7 +292,7 @@ function copiarTudo() {
         texto += 'Qtd: ' + formatarNumero(subtotalQtd) + ' | Valor: R$ ' + formatarNumero(subtotalValor) + '\n\n';
     }
     
-        var totalQtd = 0;
+    var totalQtd = 0;
     var totalValor = 0;
     for (var j = 0; j < itens.length; j++) {
         totalQtd += itens[j].quantidade;
@@ -334,7 +343,7 @@ function copiarPorFornecedor() {
     copiarTexto(texto);
 }
 
-function copiarCliente(cliente, cnpj, produto, fornecedor, origem, quantidade, preco, total) {
+function copiarCliente(cliente, cnpj, produto, fornecedor, origem, base, quantidade, preco, total) {
     var texto = '*PEDIDO ' + pedidoNumero + '*\n';
     texto += 'Data: ' + pedidoData + '\n';
     texto += 'Motorista: ' + pedidoMotorista + '\n\n';
@@ -343,6 +352,9 @@ function copiarCliente(cliente, cnpj, produto, fornecedor, origem, quantidade, p
     texto += 'Produto: ' + produto + '\n';
     texto += 'Fornecedor: ' + fornecedor + '\n';
     texto += 'Origem: ' + origem + '\n';
+    if (base) {
+        texto += 'Base: ' + base + '\n';
+    }
     texto += 'Quantidade: ' + formatarNumero(quantidade) + ' m³\n';
     texto += 'Preço: R$ ' + formatarNumero(preco, 3) + '\n';
     texto += 'Total NF: R$ ' + formatarNumero(total);
@@ -351,4 +363,3 @@ function copiarCliente(cliente, cnpj, produto, fornecedor, origem, quantidade, p
 }
 </script>
 {% endblock %}
-
