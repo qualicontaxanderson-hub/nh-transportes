@@ -31,42 +31,47 @@ def novo():
             valor_cte = converter_para_decimal(request.form.get('valor_cte'))
             comissao_cte = converter_para_decimal(request.form.get('comissao_cte'))
             lucro = converter_para_decimal(request.form.get('lucro'))
-            cursor.execute(
-                """
-                INSERT INTO fretes (clientes_id, produto_id, fornecedores_id, motoristas_id, veiculos_id, quantidade_id, origem_id, destino_id, preco_produto_unitario, total_nf_compra, preco_por_litro, valor_total_frete, comissao_motorista, valor_cte, comissao_cte, lucro, data_frete, status, observacoes)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-                """,
-                (
-                    request.form.get('clientes_id'),
-                    request.form.get('produto_id'),
-                    request.form.get('fornecedores_id'),
-                    request.form.get('motoristas_id'),
-                    request.form.get('veiculos_id'),
-                    quantidade_id_para_salvar,
-                    request.form.get('origem_id'),
-                    request.form.get('destino_id'),
-                    preco_produto_unitario,
-                    total_nf_compra,
-                    preco_por_litro,
-                    valor_total_frete,
-                    comissao_motorista,
-                    valor_cte,
-                    comissao_cte,
-                    lucro,
-                    request.form.get('data_frete'),
-                    request.form.get('status'),
-                    request.form.get('observacoes')
-                )
-            )
-            conn.commit()
-            cursor.close()
-            conn.close()
-            flash('Frete cadastrado com sucesso!', 'success')
-            return redirect(url_for('fretes.lista'))
-        except Exception as e:
-            print(f'Erro ao cadastrar frete: {e}')
-            flash(f'Erro ao cadastrar frete: {str(e)}', 'danger')
-            return redirect(url_for('fretes.novo'))
+cursor.execute(
+    """
+    INSERT INTO fretes (clientes_id, produto_id, fornecedores_id, motoristas_id, veiculos_id, quantidade_id, origem_id, destino_id, preco_produto_unitario, total_nf_compra, preco_por_litro, valor_total_frete, comissao_motorista, valor_cte, comissao_cte, lucro, data_frete, status, observacoes)
+    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+    """,
+    (
+        request.form.get('clientes_id'),
+        request.form.get('produto_id'),
+        request.form.get('fornecedores_id'),
+        request.form.get('motoristas_id'),
+        request.form.get('veiculos_id'),
+        quantidade_id_para_salvar,
+        request.form.get('origem_id'),
+        request.form.get('destino_id'),
+        preco_produto_unitario,
+        total_nf_compra,
+        preco_por_litro,
+        valor_total_frete,
+        comissao_motorista,
+        valor_cte,
+        comissao_cte,
+        lucro,
+        request.form.get('data_frete'),
+        request.form.get('status'),
+        request.form.get('observacoes')
+    )
+)
+
+# NOVO: se o frete veio de um pedido, marcar o pedido como Faturado
+pedido_id_form = request.form.get('pedido_id')
+if pedido_id_form:
+    cursor.execute(
+        "UPDATE pedidos SET status = 'Faturado' WHERE id = %s",
+        (pedido_id_form,)
+    )
+
+conn.commit()
+cursor.close()
+conn.close()
+flash('Frete cadastrado com sucesso!', 'success')
+return redirect(url_for('fretes.lista'))
     try:
         conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)
