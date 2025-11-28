@@ -126,7 +126,7 @@
                         {% endfor %}
                     </select>
                 </div>
-                <div class="col-md-3">
+                <div class="col-md-3 div-base" style="display:none;">
                     <label class="form-label">Base</label>
                     <select class="form-select select-base" name="base_id[]">
                         <option value="">Selecione a Base</option>
@@ -226,6 +226,9 @@ function adicionarItem(dados) {
         
         itemAdicionado.querySelector('.input-preco').value = formatarMoeda3(dados.preco_unitario);
         itemAdicionado.querySelector('.input-total-nf').value = formatarMoeda2(dados.total_nf);
+
+        // Atualizar visibilidade da Base conforme a origem do item carregado
+        atualizarBasePorOrigem(itemAdicionado.querySelector('.select-origem'));
     }
     
     atualizarNumerosItens();
@@ -329,6 +332,22 @@ function formatarMoeda2(valor) {
     });
 }
 
+function atualizarBasePorOrigem(selectOrigem) {
+    var item = selectOrigem.closest('.item-pedido');
+    var divBase = item.querySelector('.div-base');
+    var selectBase = item.querySelector('.select-base');
+    var textoOrigem = selectOrigem.options[selectOrigem.selectedIndex].text || '';
+
+    if (textoOrigem.toUpperCase().includes('SENADOR CANEDO')) {
+        divBase.style.display = 'block';
+    } else {
+        divBase.style.display = 'none';
+        if (selectBase) {
+            selectBase.value = '';
+        }
+    }
+}
+
 document.addEventListener('input', function(e) {
     if (e.target.classList.contains('input-preco')) {
         var value = e.target.value.replace(/\D/g, '');
@@ -340,6 +359,12 @@ document.addEventListener('input', function(e) {
         if (item) {
             calcularTotalItem(item);
         }
+    }
+});
+
+document.addEventListener('change', function(e) {
+    if (e.target.classList.contains('select-origem')) {
+        atualizarBasePorOrigem(e.target);
     }
 });
 
