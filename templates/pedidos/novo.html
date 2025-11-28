@@ -1,428 +1,416 @@
-{% extends "base.html" %}
+{% extends 'base.html' %}
 
 {% block title %}Novo Pedido - NH Transportes{% endblock %}
 
 {% block content %}
 <div class="container-fluid mt-4">
-    <div class="row mb-3">
-        <div class="col">
-            <h2><i class="bi bi-cart-plus"></i> Novo Pedido</h2>
+  <div class="row mb-3">
+    <div class="col">
+      <h2><i class="bi bi-cart-plus"></i> Novo Pedido</h2>
+    </div>
+    <div class="col-auto">
+      <a href="{{ url_for('pedidos.index') }}" class="btn btn-secondary">
+        <i class="bi bi-arrow-left"></i> Voltar
+      </a>
+    </div>
+  </div>
+
+  <form method="POST" id="formPedido">
+    <div class="card mb-4">
+      <div class="card-header bg-primary text-white">
+        <i class="bi bi-info-circle"></i> Informações do Pedido
+      </div>
+      <div class="card-body">
+        <div class="row">
+          <div class="col-md-2">
+            <label class="form-label">Número</label>
+            <input type="text" class="form-control" value="{{ numero_sugerido }}" readonly style="background-color: #e9ecef;">
+          </div>
+          <div class="col-md-2">
+            <label class="form-label">Data do Pedido</label>
+            <input type="date" class="form-control" name="data_pedido" value="{{ hoje or '' }}" required>
+          </div>
+          <div class="col-md-3">
+            <label class="form-label">Motorista</label>
+            <select class="form-select" name="motorista_id">
+              <option value="">Selecione o Motorista</option>
+              {% for m in motoristas %}
+                <option value="{{ m.id }}">{{ m.nome }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-md-3">
+            <label class="form-label">Veículo</label>
+            <select class="form-select" name="veiculo_id">
+              <option value="">Selecione o Veículo</option>
+              {% for v in veiculos %}
+                <option value="{{ v.id }}">{{ v.caminhao }} - {{ v.placa }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-md-2 mt-3 mt-md-0">
+            <label class="form-label">Observações</label>
+            <input type="text" class="form-control" name="observacoes" placeholder="Observações gerais do pedido">
+          </div>
         </div>
-        <div class="col-auto">
-            <a href="{{ url_for('pedidos.index') }}" class="btn btn-secondary">
-                <i class="bi bi-arrow-left"></i> Voltar
-            </a>
-        </div>
+      </div>
     </div>
 
-    <form method="POST" id="formPedido">
-        <div class="card mb-4">
-            <div class="card-header bg-primary text-white">
-                <i class="bi bi-info-circle"></i> Informações do Pedido
-            </div>
-            <div class="card-body">
-                <div class="row">
-                    <div class="col-md-2">
-                        <label class="form-label">Número</label>
-                        <input type="text" class="form-control" value="{{ numero_sugerido }}" readonly style="background-color: #e9ecef;">
-                    </div>
-                    <div class="col-md-2">
-                        <label class="form-label">Data do Pedido *</label>
-                        <input type="date" class="form-control" name="data_pedido" value="{{ hoje or '' }}" required>
-                    </div>
-                    <div class="col-md-3">
-                        <label class="form-label">Motorista</label>
-                        <select class="form-select" name="motorista_id">
-                            <option value="">Selecione o Motorista</option>
-                            {% for m in motoristas %}
-                            <option value="{{ m.id }}">{{ m.nome }}</option>
-                            {% endfor %}
-                        </select>
-                    </div>
-                    <div class="col-md-5 mt-3 mt-md-0">
-                        <label class="form-label">Observações</label>
-                        <input type="text" class="form-control" name="observacoes" placeholder="Observações gerais do pedido">
-                    </div>
-                </div>
-            </div>
-        </div>
+    <div class="card mb-4">
+      <div class="card-header bg-success text-white d-flex justify-content-between align-items-center">
+        <span><i class="bi bi-list-ul"></i> Itens do Pedido</span>
+        <button type="button" class="btn btn-light btn-sm" onclick="adicionarItem()">
+          <i class="bi bi-plus-circle"></i> Adicionar Item
+        </button>
+      </div>
+      <div class="card-body">
+        <div id="itensContainer"></div>
+      </div>
+    </div>
 
-        <div class="card mb-4">
-            <div class="card-header bg-success text-white d-flex justify-content-between align-items-center">
-                <span><i class="bi bi-list-ul"></i> Itens do Pedido</span>
-                <button type="button" class="btn btn-light btn-sm" onclick="adicionarItem()">
-                    <i class="bi bi-plus-circle"></i> Adicionar Item
-                </button>
-            </div>
-            <div class="card-body">
-                <div id="itensContainer">
-                </div>
-            </div>
-        </div>
-
-        <div class="d-flex justify-content-end gap-2 mb-4">
-            <a href="{{ url_for('pedidos.index') }}" class="btn btn-secondary">
-                <i class="bi bi-x-circle"></i> Cancelar
-            </a>
-            <button type="submit" class="btn btn-primary">
-                <i class="bi bi-check-circle"></i> Salvar Pedido
-            </button>
-        </div>
-    </form>
+    <div class="d-flex justify-content-end gap-2 mb-4">
+      <a href="{{ url_for('pedidos.index') }}" class="btn btn-secondary">
+        <i class="bi bi-x-circle"></i> Cancelar
+      </a>
+      <button type="submit" class="btn btn-primary">
+        <i class="bi bi-check-circle"></i> Salvar Pedido
+      </button>
+    </div>
+  </form>
 </div>
 
 <template id="templateItem">
-    <div class="item-pedido card mb-3">
-        <div class="card-header bg-light d-flex justify-content-between align-items-center">
-            <span class="item-numero">Item #1</span>
-            <button type="button" class="btn btn-danger btn-sm" onclick="removerItem(this)">
-                <i class="bi bi-trash"></i> Remover
-            </button>
-        </div>
-        <div class="card-body">
-            <div class="row g-3">
-                <div class="col-md-4">
-                    <label class="form-label">Cliente *</label>
-                    <select class="form-select" name="cliente_id[]" required>
-                        <option value="">Selecione o Cliente</option>
-                        {% for c in clientes %}
-                        <option value="{{ c.id }}">{{ c.nome_fantasia or c.razao_social }}{% if c.cnpj %} - {{ c.cnpj }}{% endif %}</option>
-                        {% endfor %}
-                    </select>
-                </div>
-                <div class="col-md-4">
-                    <label class="form-label">Produto *</label>
-                    <select class="form-select" name="produto_id[]" required>
-                        <option value="">Selecione o Produto</option>
-                        {% for p in produtos %}
-                        <option value="{{ p.id }}">{{ p.nome }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
-                <div class="col-md-4">
-                    <label class="form-label">Fornecedor *</label>
-                    <select class="form-select select-fornecedor" name="fornecedor_id[]" required>
-                        <option value="">Selecione o Fornecedor</option>
-                        {% for f in fornecedores %}
-                        <option value="{{ f.id }}"
-                                data-pix="{{ f.chave_pix or '' }}"
-                                data-banco="{{ f.dados_bancarios or '' }}"
-                                data-tipo="{{ f.tipo_pagamento_padrao or '' }}">
-                            {{ f.nome_fantasia or f.razao_social }}
-                        </option>
-                        {% endfor %}
-                    </select>
-                </div>
-
-                <div class="col-md-3">
-                    <label class="form-label">Origem *</label>
-                    <select class="form-select select-origem" name="origem_id[]" required>
-                        <option value="">Selecione a Origem</option>
-                        {% for o in origens %}
-                        <option value="{{ o.id }}">{{ o.nome }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
-                <div class="col-md-3 div-base" style="display:none;">
-                    <label class="form-label">Base</label>
-                    <select class="form-select select-base" name="base_id[]">
-                        <option value="">Selecione a Base</option>
-                        {% for b in bases %}
-                        <option value="{{ b.id }}">{{ b.nome }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
-
-                <div class="col-md-3">
-                    <label class="form-label">Forma Pagto Fornecedor</label>
-                    <select class="form-select select-forma-pagto" name="forma_pagamento_fornecedor_item[]">
-                        <option value="">Selecione</option>
-                        <option value="pix_fixa">Pix chave fixa</option>
-                        <option value="pix_aleatoria">Pix chave aleatória</option>
-                        <option value="boleto">Boleto</option>
-                        <option value="transferencia">Transferência</option>
-                    </select>
-                </div>
-
-                <div class="col-md-6 div-pagto-extra" style="display:none;">
-                    <label class="form-label lbl-pagto-extra"></label>
-                    <div class="div-pix-fixa" style="display:none;">
-                        <input type="text" class="form-control input-pix-fixa" readonly>
-                    </div>
-                    <div class="div-pix-aleatoria" style="display:none;">
-                        <textarea class="form-control input-pix-aleatoria" name="pix_aleatoria[]"
-                                  rows="2" placeholder="Cole aqui o Pix copia e cola"></textarea>
-                    </div>
-                    <div class="div-transferencia" style="display:none;">
-                        <textarea class="form-control input-transferencia" name="dados_transferencia_item[]"
-                                  rows="2" placeholder="Dados de transferência"></textarea>
-                    </div>
-                </div>
-
-                <div class="col-md-2">
-                    <label class="form-label">Tipo Qtd</label>
-                    <select class="form-select select-tipo-qtd" name="tipo_quantidade[]" onchange="toggleQuantidade(this)">
-                        <option value="lista">Lista</option>
-                        <option value="manual">Manual</option>
-                    </select>
-                </div>
-                <div class="col-md-3">
-                    <label class="form-label">Quantidade *</label>
-                    <div class="div-quantidade-lista">
-                        <select class="form-select select-quantidade" name="quantidade_id[]" onchange="selecionarQuantidade(this)">
-                            <option value="">Selecione</option>
-                            {% for q in quantidades %}
-                            <option value="{{ q.id }}" data-valor="{{ q.valor }}">{{ q.descricao }}</option>
-                            {% endfor %}
-                        </select>
-                    </div>
-                    <div class="div-quantidade-manual" style="display:none;">
-                        <input type="number" class="form-control input-quantidade-manual" placeholder="Digite a quantidade" step="0.01" min="0">
-                    </div>
-                    <input type="hidden" class="input-quantidade-final" name="quantidade[]" value="">
-                </div>
-                <div class="col-md-2">
-                    <label class="form-label">Preço Unit. (R$)</label>
-                    <input type="text" class="form-control input-preco" name="preco_unitario[]" placeholder="0,000">
-                </div>
-                <div class="col-md-2">
-                    <label class="form-label">Total NF (R$)</label>
-                    <input type="text" class="form-control input-total-nf" name="total_nf[]" placeholder="0,00" readonly style="background-color: #e9ecef;">
-                </div>
-            </div>
-        </div>
+  <div class="item-pedido card mb-3">
+    <div class="card-header bg-light d-flex justify-content-between align-items-center">
+      <span class="item-numero">Item 1</span>
+      <button type="button" class="btn btn-danger btn-sm" onclick="removerItem(this)">
+        <i class="bi bi-trash"></i> Remover
+      </button>
     </div>
+    <div class="card-body">
+      <div class="row g-3">
+        <div class="col-md-4">
+          <label class="form-label">Cliente</label>
+          <select class="form-select" name="cliente_id" required>
+            <option value="">Selecione o Cliente</option>
+            {% for c in clientes %}
+              <option value="{{ c.id }}">{{ c.nome_fantasia or c.razao_social }}{% if c.cnpj %} - {{ c.cnpj }}{% endif %}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">Produto</label>
+          <select class="form-select" name="produto_id" required>
+            <option value="">Selecione o Produto</option>
+            {% for p in produtos %}
+              <option value="{{ p.id }}">{{ p.nome }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">Fornecedor</label>
+          <select class="form-select select-fornecedor" name="fornecedor_id" required>
+            <option value="">Selecione o Fornecedor</option>
+            {% for f in fornecedores %}
+              <option value="{{ f.id }}" 
+                      data-pix="{{ f.chave_pix or '' }}" 
+                      data-banco="{{ f.dados_bancarios or '' }}" 
+                      data-tipo="{{ f.tipo_pagamento_padrao or '' }}">
+                {{ f.nome_fantasia or f.razao_social }}
+              </option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div class="col-md-3">
+          <label class="form-label">Origem</label>
+          <select class="form-select select-origem" name="origem_id" required>
+            <option value="">Selecione a Origem</option>
+            {% for o in origens %}
+              <option value="{{ o.id }}">{{ o.nome }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-md-3 div-base" style="display:none;">
+          <label class="form-label">Base</label>
+          <select class="form-select select-base" name="base_id">
+            <option value="">Selecione a Base</option>
+            {% for b in bases %}
+              <option value="{{ b.id }}">{{ b.nome }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">Forma Pagto Fornecedor</label>
+          <select class="form-select select-forma-pagto" name="forma_pagamento_fornecedor_item">
+            <option value="">Selecione</option>
+            <option value="pixfixa">Pix chave fixa</option>
+            <option value="pixaleatoria">Pix chave aleatória</option>
+            <option value="boleto">Boleto</option>
+            <option value="transferencia">Transferência</option>
+          </select>
+        </div>
+
+        <div class="col-md-6 div-pagto-extra" style="display:none;">
+          <label class="form-label lbl-pagto-extra"></label>
+          <div class="div-pix-fixa" style="display:none;">
+            <input type="text" class="form-control input-pix-fixa" readonly>
+          </div>
+          <div class="div-pix-aleatoria" style="display:none;">
+            <textarea class="form-control input-pix-aleatoria" name="pix_aleatoria" rows="2" placeholder="Cole aqui o Pix copia e cola"></textarea>
+          </div>
+          <div class="div-transferencia" style="display:none;">
+            <textarea class="form-control input-transferencia" name="dados_transferencia_item" rows="2" placeholder="Dados de transferência"></textarea>
+          </div>
+        </div>
+
+        <div class="col-md-2">
+          <label class="form-label">Tipo Qtd</label>
+          <select class="form-select select-tipo-qtd" name="tipo_quantidade" onchange="toggleQuantidade(this)">
+            <option value="lista">Lista</option>
+            <option value="manual">Manual</option>
+          </select>
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">Quantidade</label>
+          <div class="div-quantidade-lista">
+            <select class="form-select select-quantidade" name="quantidade_id" onchange="selecionarQuantidade(this)">
+              <option value="">Selecione</option>
+              {% for q in quantidades %}
+                <option value="{{ q.id }}" data-valor="{{ q.valor }}">{{ q.descricao }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="div-quantidade-manual" style="display:none;">
+            <input type="number" class="form-control input-quantidade-manual" placeholder="Digite a quantidade" step="0.01" min="0">
+          </div>
+          <input type="hidden" class="input-quantidade-final" name="quantidade" value="">
+        </div>
+        <div class="col-md-2">
+          <label class="form-label">Preço Unit. R$</label>
+          <input type="text" class="form-control input-preco" name="preco_unitario" placeholder="0,000">
+        </div>
+        <div class="col-md-2">
+          <label class="form-label">Total NF R$</label>
+          <input type="text" class="form-control input-total-nf" name="total_nf" placeholder="0,00" readonly style="background-color: #e9ecef;">
+        </div>
+      </div>
+    </div>
+  </div>
 </template>
 
 <script>
 var itemCount = 0;
 
 function adicionarItem() {
-    itemCount++;
-    var container = document.getElementById('itensContainer');
-    var template = document.getElementById('templateItem');
-    var clone = template.content.cloneNode(true);
-    
-    clone.querySelector('.item-numero').textContent = 'Item #' + itemCount;
-    
-    // Insere o novo item no topo
-    container.prepend(clone);
-
-    atualizarNumerosItens();
+  itemCount++;
+  var container = document.getElementById('itensContainer');
+  var template = document.getElementById('templateItem');
+  var clone = template.content.cloneNode(true);
+  clone.querySelector('.item-numero').textContent = 'Item ' + itemCount;
+  container.prepend(clone);
+  atualizarNumerosItens();
 }
 
 function removerItem(btn) {
-    var itens = document.querySelectorAll('.item-pedido');
-    if (itens.length > 1) {
-        btn.closest('.item-pedido').remove();
-        atualizarNumerosItens();
-    } else {
-        alert('O pedido deve ter pelo menos um item.');
-    }
+  var itens = document.querySelectorAll('.item-pedido');
+  if (itens.length > 1) {
+    btn.closest('.item-pedido').remove();
+    atualizarNumerosItens();
+  } else {
+    alert('O pedido deve ter pelo menos um item.');
+  }
 }
 
 function atualizarNumerosItens() {
-    var itens = document.querySelectorAll('.item-pedido');
-    for (var i = 0; i < itens.length; i++) {
-        itens[i].querySelector('.item-numero').textContent = 'Item #' + (i + 1);
-    }
+  var itens = document.querySelectorAll('.item-pedido');
+  for (var i = 0; i < itens.length; i++) {
+    itens[i].querySelector('.item-numero').textContent = 'Item ' + (i + 1);
+  }
 }
 
 function toggleQuantidade(select) {
-    var item = select.closest('.item-pedido');
-    var divLista = item.querySelector('.div-quantidade-lista');
-    var divManual = item.querySelector('.div-quantidade-manual');
-    var selectQtd = item.querySelector('.select-quantidade');
-    var inputManual = item.querySelector('.input-quantidade-manual');
-    var inputFinal = item.querySelector('.input-quantidade-final');
-    
-    if (select.value === 'manual') {
-        divLista.style.display = 'none';
-        divManual.style.display = 'block';
-        selectQtd.value = '';
-        inputFinal.value = inputManual.value || '';
-        
-        inputManual.oninput = function() {
-            inputFinal.value = this.value;
-            calcularTotalItem(item);
-        };
+  var item = select.closest('.item-pedido');
+  var divLista = item.querySelector('.div-quantidade-lista');
+  var divManual = item.querySelector('.div-quantidade-manual');
+  var selectQtd = item.querySelector('.select-quantidade');
+  var inputManual = item.querySelector('.input-quantidade-manual');
+  var inputFinal = item.querySelector('.input-quantidade-final');
+
+  if (select.value == 'manual') {
+    divLista.style.display = 'none';
+    divManual.style.display = 'block';
+    selectQtd.value = '';
+    inputFinal.value = inputManual.value;
+    inputManual.oninput = function() {
+      inputFinal.value = this.value;
+      calcularTotal(item);
+    };
+  } else {
+    divLista.style.display = 'block';
+    divManual.style.display = 'none';
+    inputManual.value = '';
+    if (selectQtd.value) {
+      var option = selectQtd.options[selectQtd.selectedIndex];
+      inputFinal.value = option.dataset.valor;
     } else {
-        divLista.style.display = 'block';
-        divManual.style.display = 'none';
-        inputManual.value = '';
-        if (selectQtd.value) {
-            var option = selectQtd.options[selectQtd.selectedIndex];
-            inputFinal.value = option.dataset.valor || '';
-        } else {
-            inputFinal.value = '';
-        }
+      inputFinal.value = '';
     }
-    calcularTotalItem(item);
+    calcularTotal(item);
+  }
 }
 
 function selecionarQuantidade(select) {
-    var item = select.closest('.item-pedido');
-    var inputFinal = item.querySelector('.input-quantidade-final');
-    var option = select.options[select.selectedIndex];
-    
-    if (option && option.dataset.valor) {
-        inputFinal.value = option.dataset.valor;
-    } else {
-        inputFinal.value = '';
-    }
-    calcularTotalItem(item);
+  var item = select.closest('.item-pedido');
+  var inputFinal = item.querySelector('.input-quantidade-final');
+  var option = select.options[select.selectedIndex];
+  if (option && option.dataset.valor) {
+    inputFinal.value = option.dataset.valor;
+  } else {
+    inputFinal.value = '';
+  }
+  calcularTotal(item);
 }
 
 function converterParaNumero(valor) {
-    if (!valor) return 0;
-    return parseFloat(valor.toString().replace(/\./g, '').replace(',', '.')) || 0;
+  if (!valor) return 0;
+  return parseFloat(valor.toString().replace(/\./g, '').replace(',', '.')) || 0;
 }
 
-function calcularTotalItem(item) {
-    var inputFinal = item.querySelector('.input-quantidade-final');
-    var inputPreco = item.querySelector('.input-preco');
-    var inputTotalNf = item.querySelector('.input-total-nf');
-    
-    var quantidade = parseFloat(inputFinal.value) || 0;
-    var preco = converterParaNumero(inputPreco.value);
-    
-    var total = quantidade * preco;
-    
-    if (total > 0) {
-        inputTotalNf.value = formatarMoeda2(total);
-    } else {
-        inputTotalNf.value = '';
-    }
+function calcularTotal(item) {
+  var inputFinal = item.querySelector('.input-quantidade-final');
+  var inputPreco = item.querySelector('.input-preco');
+  var inputTotalNf = item.querySelector('.input-total-nf');
+
+  var quantidade = parseFloat(inputFinal.value) || 0;
+  var preco = converterParaNumero(inputPreco.value);
+  var total = quantidade * preco;
+
+  if (total > 0) {
+    inputTotalNf.value = formatarMoeda2(total);
+  } else {
+    inputTotalNf.value = '';
+  }
 }
 
 function formatarMoeda3(valor) {
-    return valor.toLocaleString('pt-BR', {
-        minimumFractionDigits: 3,
-        maximumFractionDigits: 3
-    });
+  return valor.toLocaleString('pt-BR', { minimumFractionDigits: 3, maximumFractionDigits: 3 });
 }
 
 function formatarMoeda2(valor) {
-    return valor.toLocaleString('pt-BR', {
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2
-    });
+  return valor.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
 function atualizarBasePorOrigem(selectOrigem) {
-    var item = selectOrigem.closest('.item-pedido');
-    var divBase = item.querySelector('.div-base');
-    var selectBase = item.querySelector('.select-base');
-    var textoOrigem = selectOrigem.options[selectOrigem.selectedIndex].text || '';
+  var item = selectOrigem.closest('.item-pedido');
+  var divBase = item.querySelector('.div-base');
+  var selectBase = item.querySelector('.select-base');
+  var textoOrigem = selectOrigem.options[selectOrigem.selectedIndex].text;
 
-    if (textoOrigem.toUpperCase().includes('SENADOR CANEDO')) {
-        divBase.style.display = 'block';
-    } else {
-        divBase.style.display = 'none';
-        if (selectBase) {
-            selectBase.value = '';
-        }
-    }
+  if (textoOrigem.toUpperCase().includes('SENADOR CANEDO')) {
+    divBase.style.display = 'block';
+  } else {
+    divBase.style.display = 'none';
+    if (selectBase) selectBase.value = '';
+  }
 }
 
 function atualizarPagamentoFornecedor(selectForma) {
-    var item = selectForma.closest('.item-pedido');
-    var selectFornecedor = item.querySelector('.select-fornecedor');
-    var divExtra = item.querySelector('.div-pagto-extra');
-    var lblExtra = item.querySelector('.lbl-pagto-extra');
-    var divPixFixa = item.querySelector('.div-pix-fixa');
-    var divPixAleatoria = item.querySelector('.div-pix-aleatoria');
-    var divTransf = item.querySelector('.div-transferencia');
-    var inputPixFixa = item.querySelector('.input-pix-fixa');
-    var inputPixAleatoria = item.querySelector('.input-pix-aleatoria');
-    var inputTransf = item.querySelector('.input-transferencia');
+  var item = selectForma.closest('.item-pedido');
+  var selectFornecedor = item.querySelector('.select-fornecedor');
+  var divExtra = item.querySelector('.div-pagto-extra');
+  var lblExtra = item.querySelector('.lbl-pagto-extra');
+  var divPixFixa = item.querySelector('.div-pix-fixa');
+  var divPixAleatoria = item.querySelector('.div-pix-aleatoria');
+  var divTransf = item.querySelector('.div-transferencia');
+  var inputPixFixa = item.querySelector('.input-pix-fixa');
+  var inputPixAleatoria = item.querySelector('.input-pix-aleatoria');
+  var inputTransf = item.querySelector('.input-transferencia');
 
-    var opcaoFornecedor = selectFornecedor.options[selectFornecedor.selectedIndex];
-    var chavePix = opcaoFornecedor ? opcaoFornecedor.getAttribute('data-pix') || '' : '';
-    var dadosBanco = opcaoFornecedor ? opcaoFornecedor.getAttribute('data-banco') || '' : '';
-    var tipo = selectForma.value;
+  var opcaoFornecedor = selectFornecedor.options[selectFornecedor.selectedIndex];
+  var chavePix = opcaoFornecedor ? opcaoFornecedor.getAttribute('data-pix') : '';
+  var dadosBanco = opcaoFornecedor ? opcaoFornecedor.getAttribute('data-banco') : '';
+  var tipo = selectForma.value;
 
-    // Limpa tudo
-    divExtra.style.display = 'none';
-    divPixFixa.style.display = 'none';
-    divPixAleatoria.style.display = 'none';
-    divTransf.style.display = 'none';
-    lblExtra.textContent = '';
-    if (!tipo) {
-        return;
+  // Limpa tudo
+  divExtra.style.display = 'none';
+  divPixFixa.style.display = 'none';
+  divPixAleatoria.style.display = 'none';
+  divTransf.style.display = 'none';
+  lblExtra.textContent = '';
+
+  if (!tipo) return;
+
+  if (tipo == 'pixfixa') {
+    divExtra.style.display = 'block';
+    divPixFixa.style.display = 'block';
+    lblExtra.textContent = 'Pix chave fixa';
+    inputPixFixa.value = chavePix;
+  } else if (tipo == 'pixaleatoria') {
+    divExtra.style.display = 'block';
+    divPixAleatoria.style.display = 'block';
+    lblExtra.textContent = 'Pix chave aleatória (copia e cola)';
+  } else if (tipo == 'transferencia') {
+    divExtra.style.display = 'block';
+    divTransf.style.display = 'block';
+    lblExtra.textContent = 'Dados para transferência';
+    if (dadosBanco && !inputTransf.value) {
+      inputTransf.value = dadosBanco;
     }
-
-    if (tipo === 'pix_fixa') {
-        divExtra.style.display = 'block';
-        divPixFixa.style.display = 'block';
-        lblExtra.textContent = 'Pix chave fixa';
-        inputPixFixa.value = chavePix;
-    } else if (tipo === 'pix_aleatoria') {
-        divExtra.style.display = 'block';
-        divPixAleatoria.style.display = 'block';
-        lblExtra.textContent = 'Pix chave aleatória (copia e cola)';
-    } else if (tipo === 'transferencia') {
-        divExtra.style.display = 'block';
-        divTransf.style.display = 'block';
-        lblExtra.textContent = 'Dados para transferência';
-        if (dadosBanco && !inputTransf.value) {
-            inputTransf.value = dadosBanco;
-        }
-    }
-    // boleto: não mostra nada extra
+  }
+  // boleto não mostra nada extra
 }
 
 document.addEventListener('input', function(e) {
-    if (e.target.classList.contains('input-preco')) {
-        var value = e.target.value.replace(/\D/g, '');
-        if (value) {
-            value = (parseInt(value) / 1000).toFixed(3);
-            e.target.value = formatarMoeda3(parseFloat(value));
-        }
-        var item = e.target.closest('.item-pedido');
-        if (item) {
-            calcularTotalItem(item);
-        }
+  if (e.target.classList.contains('input-preco')) {
+    var value = e.target.value.replace(/\D/g, '');
+    if (value) {
+      value = (parseInt(value) / 1000).toFixed(3);
+      e.target.value = formatarMoeda3(parseFloat(value));
     }
+    var item = e.target.closest('.item-pedido');
+    if (item) calcularTotal(item);
+  }
 });
 
 document.addEventListener('change', function(e) {
-    if (e.target.classList.contains('select-origem')) {
-        atualizarBasePorOrigem(e.target);
-    }
-    if (e.target.classList.contains('select-forma-pagto')) {
-        atualizarPagamentoFornecedor(e.target);
-    }
+  if (e.target.classList.contains('select-origem')) {
+    atualizarBasePorOrigem(e.target);
+  }
+  if (e.target.classList.contains('select-forma-pagto')) {
+    atualizarPagamentoFornecedor(e.target);
+  }
 });
 
 document.getElementById('formPedido').addEventListener('submit', function(e) {
-    var itens = document.querySelectorAll('.item-pedido');
-    var valido = true;
-    
-    for (var i = 0; i < itens.length; i++) {
-        var quantidade = itens[i].querySelector('.input-quantidade-final').value;
-        if (!quantidade || parseFloat(quantidade) <= 0) {
-            valido = false;
-            break;
-        }
+  var itens = document.querySelectorAll('.item-pedido');
+  var valido = true;
+
+  for (var i = 0; i < itens.length; i++) {
+    var quantidade = itens[i].querySelector('.input-quantidade-final').value;
+    if (!quantidade || parseFloat(quantidade) <= 0) {
+      valido = false;
+      break;
     }
-    
-    if (!valido) {
-        e.preventDefault();
-        alert('Por favor, preencha a quantidade de todos os itens.');
-        return false;
+  }
+
+  if (!valido) {
+    e.preventDefault();
+    alert('Por favor, preencha a quantidade de todos os itens.');
+    return false;
+  }
+
+  // Converter preços formatados para decimal antes de enviar
+  var inputs = document.querySelectorAll('.input-preco, .input-total-nf');
+  for (var j = 0; j < inputs.length; j++) {
+    if (inputs[j].value) {
+      inputs[j].value = inputs[j].value.replace(/\./g, '').replace(',', '.');
     }
-    
-    var inputs = document.querySelectorAll('.input-preco, .input-total-nf');
-    for (var j = 0; j < inputs.length; j++) {
-        if (inputs[j].value) {
-            inputs[j].value = inputs[j].value.replace(/\./g, '').replace(',', '.');
-        }
-    }
+  }
 });
 
 document.addEventListener('DOMContentLoaded', function() {
-    adicionarItem();
+  adicionarItem();
 });
 </script>
 {% endblock %}
