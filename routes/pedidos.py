@@ -43,7 +43,7 @@ def index():
     status = request.args.get('status', '')
     
     sql = """
-        SELECT p.*, 
+        SELECT p., 
                m.nome as motorista_nome,
                COUNT(pi.id) as total_itens,
                SUM(pi.quantidade) as total_quantidade,
@@ -71,9 +71,11 @@ def index():
     cursor.close()
     conn.close()
     
-    return render_template('pedidos/index.html', 
-                           pedidos=pedidos,
-                           filtros={'data_inicio': data_inicio, 'data_fim': data_fim, 'status': status})
+    return render_template(
+        'pedidos/index.html',
+        pedidos=pedidos,
+        filtros={'data_inicio': data_inicio, 'data_fim': data_fim, 'status': status}
+    )
 
 # =============================================
 # NOVO PEDIDO
@@ -87,19 +89,21 @@ def novo():
     if request.method == 'POST':
         data_pedido = request.form['data_pedido']
         motorista_id = request.form.get('motorista_id') or None
+        forma_pagamento_fornecedor = request.form.get('forma_pagamento_fornecedor') or None
         observacoes = request.form.get('observacoes', '')
         numero = gerar_numero_pedido()
         
         cursor.execute("""
-            INSERT INTO pedidos (numero, data_pedido, motorista_id, status, observacoes)
-            VALUES (%s, %s, %s, 'Pendente', %s)
-        """, (numero, data_pedido, motorista_id, observacoes))
+            INSERT INTO pedidos (numero, data_pedido, motorista_id, status, observacoes, forma_pagamento_fornecedor)
+            VALUES (%s, %s, %s, 'Pendente', %s, %s)
+        """, (numero, data_pedido, motorista_id, observacoes, forma_pagamento_fornecedor))
         pedido_id = cursor.lastrowid
         
         clientes = request.form.getlist('cliente_id[]')
         produtos = request.form.getlist('produto_id[]')
         fornecedores = request.form.getlist('fornecedor_id[]')
         origens = request.form.getlist('origem_id[]')
+        bases = request.form.getlist('base_id[]')
         quantidades = request.form.getlist('quantidade[]')
         quantidade_ids = request.form.getlist('quantidade_id[]')
         tipos_qtd = request.form.getlist('tipo_quantidade[]')
@@ -110,14 +114,15 @@ def novo():
             if clientes[i] and produtos[i] and fornecedores[i]:
                 qtd_id = quantidade_ids[i] if quantidade_ids[i] else None
                 qtd_valor = quantidades[i] if quantidades[i] else 0
+                base_id = bases[i] if bases[i] else None
                 
                 cursor.execute("""
                     INSERT INTO pedidos_itens 
-                    (pedido_id, cliente_id, produto_id, fornecedor_id, origem_id, 
+                    (pedido_id, cliente_id, produto_id, fornecedor_id, origem_id, base_id,
                      quantidade, quantidade_id, tipo_quantidade, preco_unitario, total_nf)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 """, (pedido_id, clientes[i], produtos[i], fornecedores[i], origens[i],
-                      qtd_valor, qtd_id, tipos_qtd[i], precos[i], totais_nf[i]))
+                      base_id, qtd_valor, qtd_id, tipos_qtd[i], precos[i], totais_nf[i]))
         
         conn.commit()
         cursor.close()
@@ -149,14 +154,16 @@ def novo():
     
     numero_sugerido = gerar_numero_pedido()
     
-    return render_template('pedidos/novo.html',
-                           clientes=clientes,
-                           produtos=produtos,
-                           fornecedores=fornecedores,
-                           origens=origens,
-                           quantidades=quantidades,
-                           motoristas=motoristas,
-                           numero_sugerido=numero_sugerido)
+    return render_template(
+        'pedidos/novo.html',
+        clientes=clientes,
+        produtos=produtos,
+        fornecedores=fornecedores,
+        origens=origens,
+        quantidades=quantidades,
+        motoristas=motoristas,
+        numero_sugerido=numero_sugerido
+    )
 
 # =============================================
 # VISUALIZAR PEDIDO
@@ -168,7 +175,7 @@ def visualizar(id):
     cursor = conn.cursor(dictionary=True)
     
     cursor.execute("""
-        SELECT p.*, m.nome as motorista_nome
+        SELECT p., m.nome as motorista_nome
         FROM pedidos p
         LEFT JOIN motoristas m ON p.motorista_id = m.id
         WHERE p.id = %s
@@ -180,7 +187,7 @@ def visualizar(id):
         return redirect(url_for('pedidos.index'))
     
     cursor.execute("""
-        SELECT pi.*, 
+        SELECT pi., 
                c.razao_social as cliente_razao, c.nome_fantasia as cliente_fantasia, c.cnpj as cliente_cnpj,
                p.nome as produto_nome,
                f.razao_social as fornecedor_razao, f.nome_fantasia as fornecedor_fantasia,
@@ -210,12 +217,14 @@ def visualizar(id):
     cursor.close()
     conn.close()
     
-    return render_template('pedidos/visualizar.html',
-                           pedido=pedido,
-                           itens=itens,
-                           itens_por_fornecedor=itens_por_fornecedor,
-                           total_quantidade=total_quantidade,
-                           total_valor=total_valor)
+    return render_template(
+        'pedidos/visualizar.html',
+        pedido=pedido,
+        itens=itens,
+        itens_por_fornecedor=itens_por_fornecedor,
+        total_quantidade=total_quantidade,
+        total_valor=total_valor
+    )
 
 # =============================================
 # EDITAR PEDIDO
@@ -231,11 +240,14 @@ def editar(id):
         motorista_id = request.form.get('motorista_id') or None
         status = request.form['status']
         observacoes = request.form.get('observacoes', '')
+        forma_pagamento_fornecedor = request.form.get('forma_pagamento_fornecedor') or None
         
         cursor.execute("""
-            UPDATE pedidos SET data_pedido = %s, motorista_id = %s, status = %s, observacoes = %s
-            WHERE id = %s
-        """, (data_pedido, motorista_id, status, observacoes, id))
+            UPDATE pedidos 
+               SET data_pedido = %s, motorista_id = %s, status = %s, observacoes = %s,
+                   forma_pagamento_fornecedor = %s
+             WHERE id = %s
+        """, (data_pedido, motorista_id, status, observacoes, forma_pagamento_fornecedor, id))
         
         cursor.execute("DELETE FROM pedidos_itens WHERE pedido_id = %s", (id,))
         
@@ -243,6 +255,7 @@ def editar(id):
         produtos = request.form.getlist('produto_id[]')
         fornecedores = request.form.getlist('fornecedor_id[]')
         origens = request.form.getlist('origem_id[]')
+        bases = request.form.getlist('base_id[]')
         quantidades = request.form.getlist('quantidade[]')
         quantidade_ids = request.form.getlist('quantidade_id[]')
         tipos_qtd = request.form.getlist('tipo_quantidade[]')
@@ -253,14 +266,15 @@ def editar(id):
             if clientes[i] and produtos[i] and fornecedores[i]:
                 qtd_id = quantidade_ids[i] if quantidade_ids[i] else None
                 qtd_valor = quantidades[i] if quantidades[i] else 0
+                base_id = bases[i] if bases[i] else None
                 
                 cursor.execute("""
                     INSERT INTO pedidos_itens 
-                    (pedido_id, cliente_id, produto_id, fornecedor_id, origem_id, 
+                    (pedido_id, cliente_id, produto_id, fornecedor_id, origem_id, base_id,
                      quantidade, quantidade_id, tipo_quantidade, preco_unitario, total_nf)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 """, (id, clientes[i], produtos[i], fornecedores[i], origens[i],
-                      qtd_valor, qtd_id, tipos_qtd[i], precos[i], totais_nf[i]))
+                      base_id, qtd_valor, qtd_id, tipos_qtd[i], precos[i], totais_nf[i]))
         
         conn.commit()
         cursor.close()
@@ -269,10 +283,10 @@ def editar(id):
         flash('Pedido atualizado com sucesso!', 'success')
         return redirect(url_for('pedidos.visualizar', id=id))
     
-    cursor.execute("SELECT * FROM pedidos WHERE id = %s", (id,))
+    cursor.execute("SELECT  FROM pedidos WHERE id = %s", (id,))
     pedido = cursor.fetchone()
     
-    cursor.execute("SELECT * FROM pedidos_itens WHERE pedido_id = %s", (id,))
+    cursor.execute("SELECT  FROM pedidos_itens WHERE pedido_id = %s", (id,))
     itens = cursor.fetchall()
     
     cursor.execute("SELECT id, razao_social, nome_fantasia, cnpj FROM clientes ORDER BY razao_social")
@@ -296,15 +310,17 @@ def editar(id):
     cursor.close()
     conn.close()
     
-    return render_template('pedidos/editar.html',
-                           pedido=pedido,
-                           itens=itens,
-                           clientes=clientes,
-                           produtos=produtos,
-                           fornecedores=fornecedores,
-                           origens=origens,
-                           quantidades=quantidades,
-                           motoristas=motoristas)
+    return render_template(
+        'pedidos/editar.html',
+        pedido=pedido,
+        itens=itens,
+        clientes=clientes,
+        produtos=produtos,
+        fornecedores=fornecedores,
+        origens=origens,
+        quantidades=quantidades,
+        motoristas=motoristas
+    )
 
 # =============================================
 # ALTERAR STATUS
@@ -349,7 +365,7 @@ def api_buscar(id):
     cursor = conn.cursor(dictionary=True)
     
     cursor.execute("""
-        SELECT pi.*, 
+        SELECT pi., 
                c.razao_social as cliente_razao,
                p.nome as produto_nome,
                f.razao_social as fornecedor_razao,
@@ -372,4 +388,3 @@ def api_buscar(id):
         item['total_nf'] = float(item['total_nf'])
     
     return jsonify(itens)
-
