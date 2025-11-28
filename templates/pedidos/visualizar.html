@@ -8,15 +8,18 @@
         <div class="col">
             <h2><i class="bi bi-cart"></i> Pedido {{ pedido.numero }}</h2>
         </div>
-        <div class="col-auto">
-            <a href="{{ url_for('pedidos.editar', id=pedido.id) }}" class="btn btn-warning">
-                <i class="bi bi-pencil"></i> Editar
-            </a>
-            <a href="{{ url_for('pedidos.index') }}" class="btn btn-secondary">
-                <i class="bi bi-arrow-left"></i> Voltar
-            </a>
-        </div>
-    </div>
+       <div class="col-auto">
+    <a href="{{ url_for('fretes.novo', pedido_id=pedido.id) }}" class="btn btn-primary">
+        <i class="bi bi-truck"></i> Novo Frete
+    </a>
+    <a href="{{ url_for('pedidos.editar', id=pedido.id) }}" class="btn btn-warning">
+        <i class="bi bi-pencil"></i> Editar
+    </a>
+    <a href="{{ url_for('pedidos.index') }}" class="btn btn-secondary">
+        <i class="bi bi-arrow-left"></i> Voltar
+    </a>
+</div>
+
 
     <!-- Dados do Pedido -->
     <div class="card mb-4">
