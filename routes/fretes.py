@@ -296,7 +296,7 @@ def novo():
         conn.close()
         
         return render_template(
-            'fretes/novo.html',
+            'template-frete-novo.html',
             clientes=clientes,
             produtos=produtos,
             fornecedores=fornecedores,
@@ -555,7 +555,7 @@ def editar(id):
         conn.close()
         
         return render_template(
-            'fretes/editar.html',
+            'template-frete-editar.html',
             frete=frete,
             clientes=clientes,
             produtos=produtos,
