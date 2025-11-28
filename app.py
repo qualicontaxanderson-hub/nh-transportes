@@ -3,7 +3,7 @@ from flask import Flask, render_template, redirect, url_for, request, flash, ses
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user
 from models.usuario import Usuario
 from utils.db import get_db_connection
-from werkzeug.security import check_password_hash, generate_password_hash
+from werkzeug.security import generate_password_hash
 from utils.decorators import admin_required
 
 app = Flask(__name__)
@@ -33,7 +33,7 @@ from routes import (
     relatorios,
     arla,
     pedidos,
-    bases,              # <-- novo
+    bases,  # novo
 )
 
 # Registrar blueprints
@@ -49,8 +49,7 @@ app.register_blueprint(produtos.bp)
 app.register_blueprint(relatorios.bp)
 app.register_blueprint(arla.bp)
 app.register_blueprint(pedidos.bp)
-app.register_blueprint(bases.bp)   # <-- novo
-
+app.register_blueprint(bases.bp)  # novo
 
 # Rota principal (Dashboard)
 @app.route('/')
@@ -67,11 +66,13 @@ def index():
         total_veiculos = cursor.fetchone()['total']
         cursor.execute("SELECT COUNT(*) as total FROM motoristas")
         total_motoristas = cursor.fetchone()['total']
-        return render_template('dashboard.html',
-                             total_clientes=total_clientes,
-                             total_fornecedores=total_fornecedores,
-                             total_veiculos=total_veiculos,
-                             total_motoristas=total_motoristas)
+        return render_template(
+            'dashboard.html',
+            total_clientes=total_clientes,
+            total_fornecedores=total_fornecedores,
+            total_veiculos=total_veiculos,
+            total_motoristas=total_motoristas
+        )
     finally:
         cursor.close()
         conn.close()
@@ -97,7 +98,7 @@ def login():
 @login_required
 def logout():
     logout_user()
-    flash('Logout realizado com sucesso!', 'success')
+    # flash('Logout realizado com sucesso!', 'success')
     return redirect(url_for('login'))
 
 # Rotas de gerenciamento de usuários
@@ -173,7 +174,7 @@ def editar_usuario(id):
                     WHERE id = %s
                 """, (nome_completo, nivel, ativo, id))
             conn.commit()
-           return redirect(url_for('listar_usuarios'))
+            return redirect(url_for('listar_usuarios'))
         except Exception as e:
             conn.rollback()
             flash(f'Erro ao atualizar usuário: {str(e)}', 'danger')
@@ -186,7 +187,10 @@ def editar_usuario(id):
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
     try:
-        cursor.execute("SELECT id, username, nome_completo, nivel, ativo FROM usuarios WHERE id = %s", (id,))
+        cursor.execute(
+            "SELECT id, username, nome_completo, nivel, ativo FROM usuarios WHERE id = %s",
+            (id,)
+        )
         usuario = cursor.fetchone()
         return render_template('alteracao_cadastro.html', usuario=usuario)
     finally:
