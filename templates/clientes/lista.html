@@ -57,7 +57,13 @@
                                 <td>{{ cliente.razao_social }}</td>
                                 <td>{{ cliente.cnpj or '-' }}</td>
                                 <td>{{ cliente.telefone or '-' }}</td>
-                                <td>{{ cliente.municipio or '-' }}</td>
+                                <td>
+                                    {% if cliente.destino_nome %}
+                                        {{ cliente.destino_nome }} - {{ cliente.destino_estado }}
+                                    {% else %}
+                                        -
+                                    {% endif %}
+                                </td>
                                 <td class="text-center">
                                     <a href="{{ url_for('clientes.editar', id=cliente.id) }}" class="btn btn-sm btn-warning" title="Editar" style="padding: 0.2rem 0.4rem;">
                                         <i class="bi bi-pencil"></i>
