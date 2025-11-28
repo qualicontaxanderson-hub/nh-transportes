@@ -39,7 +39,16 @@
                             {% endfor %}
                         </select>
                     </div>
-                    <div class="col-md-5">
+                    <div class="col-md-3">
+                        <label class="form-label">Forma Pagamento Fornecedor</label>
+                        <select class="form-select" name="forma_pagamento_fornecedor">
+                            <option value="">Selecione</option>
+                            <option value="Boleto Bancário">Boleto Bancário</option>
+                            <option value="Pix">Pix</option>
+                            <option value="Conta Bancária">Conta Bancária</option>
+                        </select>
+                    </div>
+                    <div class="col-md-4 mt-3">
                         <label class="form-label">Observações</label>
                         <input type="text" class="form-control" name="observacoes" placeholder="Observações gerais do pedido">
                     </div>
@@ -112,6 +121,15 @@
                     <label class="form-label">Origem *</label>
                     <select class="form-select" name="origem_id[]" required>
                         <option value="">Selecione a Origem</option>
+                        {% for o in origens %}
+                        <option value="{{ o.id }}">{{ o.nome }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Base</label>
+                    <select class="form-select" name="base_id[]">
+                        <option value="">Selecione a Base</option>
                         {% for o in origens %}
                         <option value="{{ o.id }}">{{ o.nome }}</option>
                         {% endfor %}
