@@ -13,7 +13,14 @@ def lista():
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
 
-    cursor.execute("SELECT * FROM clientes ORDER BY razao_social")
+    cursor.execute("""
+        SELECT c.*,
+               d.nome AS destino_nome,
+               d.estado AS destino_estado
+        FROM clientes c
+        LEFT JOIN destinos d ON d.id = c.destino_id
+        ORDER BY c.razao_social
+    """)
     clientes = cursor.fetchall()
 
     cursor.close()
