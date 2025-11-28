@@ -404,11 +404,12 @@ def api_buscar(id):
     cursor = conn.cursor(dictionary=True)
     
     cursor.execute("""
-        SELECT pi*, 
-               c.razao_social as cliente_razao,
-               p.nome as produto_nome,
-               f.razao_social as fornecedor_razao,
-               o.nome as origem_nome
+        SELECT 
+            pi.*,
+            c.razao_social AS cliente_razao,
+            p.nome AS produto_nome,
+            f.razao_social AS fornecedor_razao,
+            o.nome AS origem_nome
         FROM pedidos_itens pi
         JOIN clientes c ON pi.cliente_id = c.id
         JOIN produto p ON pi.produto_id = p.id
@@ -427,3 +428,4 @@ def api_buscar(id):
         item['total_nf'] = float(item['total_nf'])
     
     return jsonify(itens)
+
