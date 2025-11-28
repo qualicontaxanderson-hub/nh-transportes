@@ -39,7 +39,7 @@
                       data-paga-comissao="{{ cliente.paga_comissao }}"
                       data-percentual-cte="{{ cliente.percentual_cte }}"
                       data-cte-integral="{{ cliente.cte_integral }}"
-                      data-destino-id="{{ cliente.destino_id or '' }}"
+                      data-municipio-id="{{ cliente.municipio_id or '' }}"
                       {% if cliente.id == frete.clientes_id %}selected{% endif %}>
                 {{ cliente.razao_social }}
               </option>
@@ -300,10 +300,10 @@ document.addEventListener('DOMContentLoaded', function() {
   
   clienteSelect.addEventListener('change', function() {
     var option = this.options[this.selectedIndex];
-    var destinoId = option.getAttribute('data-destino-id');
+    var municipioId = option.getAttribute('data-municipio-id');
     
-    if (destinoId) {
-      destinoSelect.value = destinoId;
+    if (municipioId) {
+      destinoSelect.value = municipioId;
     }
   });
 });
