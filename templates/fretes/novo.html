@@ -57,10 +57,13 @@
                 </div>
             </div>
             
-            <form method="POST" action="{{ url_for('fretes.novo') }}">
+        <form method="POST" action="{{ url_for('fretes.novo') }}">
 
-                <div class="row">
-                    <div class="col-md-6 mb-2">
+    <input type="hidden" name="pedido_id" id="pedido_id_hidden" value="{{ pedido_selecionado_id or '' }}">
+
+    <div class="row">
+        <div class="col-md-6 mb-2">
+
                         <label for="clientes_id" class="form-label" style="font-size: 0.85rem;">Cliente *</label>
                         <select class="form-select form-select-sm" id="clientes_id" name="clientes_id" required>
                             <option value="">Selecione um cliente</option>
