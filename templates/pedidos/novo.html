@@ -39,16 +39,7 @@
                             {% endfor %}
                         </select>
                     </div>
-                    <div class="col-md-3">
-                        <label class="form-label">Forma Pagamento Fornecedor</label>
-                        <select class="form-select" name="forma_pagamento_fornecedor">
-                            <option value="">Selecione</option>
-                            <option value="Boleto Bancário">Boleto Bancário</option>
-                            <option value="Pix">Pix</option>
-                            <option value="Conta Bancária">Conta Bancária</option>
-                        </select>
-                    </div>
-                    <div class="col-md-4 mt-3">
+                    <div class="col-md-5 mt-3 mt-md-0">
                         <label class="form-label">Observações</label>
                         <input type="text" class="form-control" name="observacoes" placeholder="Observações gerais do pedido">
                     </div>
@@ -110,13 +101,19 @@
                 </div>
                 <div class="col-md-4">
                     <label class="form-label">Fornecedor *</label>
-                    <select class="form-select" name="fornecedor_id[]" required>
+                    <select class="form-select select-fornecedor" name="fornecedor_id[]" required>
                         <option value="">Selecione o Fornecedor</option>
                         {% for f in fornecedores %}
-                        <option value="{{ f.id }}">{{ f.nome_fantasia or f.razao_social }}</option>
+                        <option value="{{ f.id }}"
+                                data-pix="{{ f.chave_pix or '' }}"
+                                data-banco="{{ f.dados_bancarios or '' }}"
+                                data-tipo="{{ f.tipo_pagamento_padrao or '' }}">
+                            {{ f.nome_fantasia or f.razao_social }}
+                        </option>
                         {% endfor %}
                     </select>
                 </div>
+
                 <div class="col-md-3">
                     <label class="form-label">Origem *</label>
                     <select class="form-select select-origem" name="origem_id[]" required>
@@ -135,6 +132,33 @@
                         {% endfor %}
                     </select>
                 </div>
+
+                <div class="col-md-3">
+                    <label class="form-label">Forma Pagto Fornecedor</label>
+                    <select class="form-select select-forma-pagto" name="forma_pagamento_fornecedor_item[]">
+                        <option value="">Selecione</option>
+                        <option value="pix_fixa">Pix chave fixa</option>
+                        <option value="pix_aleatoria">Pix chave aleatória</option>
+                        <option value="boleto">Boleto</option>
+                        <option value="transferencia">Transferência</option>
+                    </select>
+                </div>
+
+                <div class="col-md-6 div-pagto-extra" style="display:none;">
+                    <label class="form-label lbl-pagto-extra"></label>
+                    <div class="div-pix-fixa" style="display:none;">
+                        <input type="text" class="form-control input-pix-fixa" readonly>
+                    </div>
+                    <div class="div-pix-aleatoria" style="display:none;">
+                        <textarea class="form-control input-pix-aleatoria" name="pix_aleatoria[]"
+                                  rows="2" placeholder="Cole aqui o Pix copia e cola"></textarea>
+                    </div>
+                    <div class="div-transferencia" style="display:none;">
+                        <textarea class="form-control input-transferencia" name="dados_transferencia_item[]"
+                                  rows="2" placeholder="Dados de transferência"></textarea>
+                    </div>
+                </div>
+
                 <div class="col-md-2">
                     <label class="form-label">Tipo Qtd</label>
                     <select class="form-select select-tipo-qtd" name="tipo_quantidade[]" onchange="toggleQuantidade(this)">
@@ -299,6 +323,53 @@ function atualizarBasePorOrigem(selectOrigem) {
     }
 }
 
+function atualizarPagamentoFornecedor(selectForma) {
+    var item = selectForma.closest('.item-pedido');
+    var selectFornecedor = item.querySelector('.select-fornecedor');
+    var divExtra = item.querySelector('.div-pagto-extra');
+    var lblExtra = item.querySelector('.lbl-pagto-extra');
+    var divPixFixa = item.querySelector('.div-pix-fixa');
+    var divPixAleatoria = item.querySelector('.div-pix-aleatoria');
+    var divTransf = item.querySelector('.div-transferencia');
+    var inputPixFixa = item.querySelector('.input-pix-fixa');
+    var inputPixAleatoria = item.querySelector('.input-pix-aleatoria');
+    var inputTransf = item.querySelector('.input-transferencia');
+
+    var opcaoFornecedor = selectFornecedor.options[selectFornecedor.selectedIndex];
+    var chavePix = opcaoFornecedor ? opcaoFornecedor.getAttribute('data-pix') || '' : '';
+    var dadosBanco = opcaoFornecedor ? opcaoFornecedor.getAttribute('data-banco') || '' : '';
+    var tipo = selectForma.value;
+
+    // Limpa tudo
+    divExtra.style.display = 'none';
+    divPixFixa.style.display = 'none';
+    divPixAleatoria.style.display = 'none';
+    divTransf.style.display = 'none';
+    lblExtra.textContent = '';
+    if (!tipo) {
+        return;
+    }
+
+    if (tipo === 'pix_fixa') {
+        divExtra.style.display = 'block';
+        divPixFixa.style.display = 'block';
+        lblExtra.textContent = 'Pix chave fixa';
+        inputPixFixa.value = chavePix;
+    } else if (tipo === 'pix_aleatoria') {
+        divExtra.style.display = 'block';
+        divPixAleatoria.style.display = 'block';
+        lblExtra.textContent = 'Pix chave aleatória (copia e cola)';
+    } else if (tipo === 'transferencia') {
+        divExtra.style.display = 'block';
+        divTransf.style.display = 'block';
+        lblExtra.textContent = 'Dados para transferência';
+        if (dadosBanco && !inputTransf.value) {
+            inputTransf.value = dadosBanco;
+        }
+    }
+    // boleto: não mostra nada extra
+}
+
 document.addEventListener('input', function(e) {
     if (e.target.classList.contains('input-preco')) {
         var value = e.target.value.replace(/\D/g, '');
@@ -316,6 +387,9 @@ document.addEventListener('input', function(e) {
 document.addEventListener('change', function(e) {
     if (e.target.classList.contains('select-origem')) {
         atualizarBasePorOrigem(e.target);
+    }
+    if (e.target.classList.contains('select-forma-pagto')) {
+        atualizarPagamentoFornecedor(e.target);
     }
 });
 
