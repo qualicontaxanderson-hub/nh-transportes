@@ -37,15 +37,15 @@ def novo():
         paga_comissao = 1 if paga_comissao_raw in ['on', '1', 1, True] else 0
         cte_integral = 1 if cte_integral_raw in ['on', '1', 1, True] else 0
 
-        # Novo: rota_id
-        rota_id_raw = request.form.get('rota_id')
-        rota_id = int(rota_id_raw) if rota_id_raw else None
+        # Pegar destino_id (município)
+        destino_id_raw = request.form.get('destino_id')
+        destino_id = int(destino_id_raw) if destino_id_raw else None
 
         cursor.execute("""
             INSERT INTO clientes (
                 razao_social, nome_fantasia, cnpj, ie, contato,
                 endereco, numero, complemento, bairro, municipio, uf, cep,
-                telefone, email, paga_comissao, cte_integral, rota_id
+                telefone, email, paga_comissao, cte_integral, destino_id
             )
             VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         """, (
@@ -65,7 +65,7 @@ def novo():
             request.form.get('email') or None,
             paga_comissao,
             cte_integral,
-            rota_id
+            destino_id
         ))
 
         conn.commit()
@@ -75,25 +75,19 @@ def novo():
         flash('Cliente cadastrado com sucesso!', 'success')
         return redirect(url_for('clientes.lista'))
 
-    # GET: carregar rotas para o select
+    # GET: carregar destinos (municípios) para o select
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
     cursor.execute("""
-        SELECT r.id,
-               o.nome AS origem,
-               d.nome AS destino,
-               r.valor_por_litro
-        FROM rotas r
-        JOIN origens o ON o.id = r.origem_id
-        JOIN destinos d ON d.id = r.destino_id
-        WHERE r.ativo = 1
-        ORDER BY o.nome, d.nome
+        SELECT id, nome, cidade, estado
+        FROM destinos
+        ORDER BY nome
     """)
-    rotas = cursor.fetchall()
+    destinos = cursor.fetchall()
     cursor.close()
     conn.close()
 
-    return render_template('clientes/novo.html', rotas=rotas)
+    return render_template('clientes/novo.html', destinos=destinos)
 
 
 @bp.route('/editar/<int:id>', methods=['GET', 'POST'])
@@ -126,14 +120,14 @@ def editar(id):
         print(f"DEBUG - cte_integral PROCESSADO: {cte_integral}")
         print("=" * 50 + "\n")
 
-        # Novo: rota_id
-        rota_id_raw = request.form.get('rota_id')
-        rota_id = int(rota_id_raw) if rota_id_raw else None
+        # Pegar destino_id (município)
+        destino_id_raw = request.form.get('destino_id')
+        destino_id = int(destino_id_raw) if destino_id_raw else None
 
         cursor.execute("""
             UPDATE clientes SET razao_social=%s, nome_fantasia=%s, cnpj=%s, ie=%s, contato=%s,
                 endereco=%s, numero=%s, complemento=%s, bairro=%s, municipio=%s, uf=%s, cep=%s,
-                telefone=%s, email=%s, paga_comissao=%s, cte_integral=%s, rota_id=%s
+                telefone=%s, email=%s, paga_comissao=%s, cte_integral=%s, destino_id=%s
             WHERE id=%s
         """, (
             request.form.get('razao_social'),
@@ -152,7 +146,7 @@ def editar(id):
             request.form.get('email') or None,
             paga_comissao,
             cte_integral,
-            rota_id,
+            destino_id,
             id
         ))
 
@@ -172,25 +166,19 @@ def editar(id):
     cursor.close()
     conn.close()
 
-    # GET: buscar rotas
+    # GET: buscar destinos (municípios)
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
     cursor.execute("""
-        SELECT r.id,
-               o.nome AS origem,
-               d.nome AS destino,
-               r.valor_por_litro
-        FROM rotas r
-        JOIN origens o ON o.id = r.origem_id
-        JOIN destinos d ON d.id = r.destino_id
-        WHERE r.ativo = 1
-        ORDER BY o.nome, d.nome
+        SELECT id, nome, cidade, estado
+        FROM destinos
+        ORDER BY nome
     """)
-    rotas = cursor.fetchall()
+    destinos = cursor.fetchall()
     cursor.close()
     conn.close()
 
-    return render_template('clientes/editar.html', cliente=cliente, rotas=rotas)
+    return render_template('clientes/editar.html', cliente=cliente, destinos=destinos)
 
 
 @bp.route('/excluir/<int:id>', methods=['POST'])
