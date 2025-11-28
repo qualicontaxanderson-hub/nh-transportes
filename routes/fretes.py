@@ -164,7 +164,7 @@ return redirect(url_for('fretes.lista'))
         )
         pedidos = cursor.fetchall()
         
-        cursor.close()
+                cursor.close()
         conn.close()
         return render_template(
             'fretes/novo.html',
@@ -178,7 +178,8 @@ return redirect(url_for('fretes.lista'))
             destinos=destinos,
             rotas=rotas,
             rotas_dict=rotas_dict,
-            pedidos=pedidos
+            pedidos=pedidos,
+            pedido_selecionado_id=pedido_id
         )
     except Exception as e:
         print(f'Erro ao carregar formulário: {e}')
