@@ -72,7 +72,6 @@ def login():
         if user:
             login_user(user)
             next_page = request.args.get('next')
-            flash('Login realizado com sucesso!', 'success')
             return redirect(next_page if next_page else url_for('index'))
         else:
             flash('Usuário ou senha inválidos!', 'danger')
@@ -158,8 +157,7 @@ def editar_usuario(id):
                     WHERE id = %s
                 """, (nome_completo, nivel, ativo, id))
             conn.commit()
-            flash('Usuário atualizado com sucesso!', 'success')
-            return redirect(url_for('listar_usuarios'))
+           return redirect(url_for('listar_usuarios'))
         except Exception as e:
             conn.rollback()
             flash(f'Erro ao atualizar usuário: {str(e)}', 'danger')
