@@ -63,7 +63,7 @@ def importar_pedido(pedido_id):
         conn.close()
         
         return render_template(
-            'fretes/importar-pedido.html',
+            'template-frete-importar-pedido.html',
             pedido=pedido,
             itens=itens
         )
