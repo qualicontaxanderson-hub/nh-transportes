@@ -7,6 +7,9 @@ bp = Blueprint('fretes', __name__, url_prefix='/fretes')
 @bp.route('/novo', methods=['GET', 'POST'])
 @login_required
 def novo():
+    # pedido que originou o frete (se vier da tela de Pedido)
+    pedido_id = request.args.get('pedido_id', type=int)
+
     if request.method == 'POST':
         try:
             conn = get_db_connection()
