@@ -68,7 +68,7 @@
                       data-paga-comissao="{{ cliente.paga_comissao }}"
                       data-percentual-cte="{{ cliente.percentual_cte }}"
                       data-cte-integral="{{ cliente.cte_integral }}"
-                      data-destino-id="{{ cliente.destino_id or '' }}">
+                      data-municipio-id="{{ cliente.municipio_id or '' }}">
                 {{ cliente.razao_social }}
               </option>
               {% endfor %}
@@ -326,10 +326,10 @@ document.addEventListener('DOMContentLoaded', function() {
   
   clienteSelect.addEventListener('change', function() {
     var option = this.options[this.selectedIndex];
-    var destinoId = option.getAttribute('data-destino-id');
+    var municipioId = option.getAttribute('data-municipio-id');
     
-    if (destinoId) {
-      destinoSelect.value = destinoId;
+    if (municipioId) {
+      destinoSelect.value = municipioId;
     }
   });
 });
@@ -338,3 +338,4 @@ document.addEventListener('DOMContentLoaded', function() {
 <script src="{{ url_for('static', filename='js/fretes_calculos.js') }}"></script>
 
 {% endblock %}
+
