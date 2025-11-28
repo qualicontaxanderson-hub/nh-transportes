@@ -404,6 +404,12 @@ document.addEventListener('DOMContentLoaded', function() {
             quantidadeManualInput.value = '';
         }
     });
+
+    // NOVO: se já tiver um pedido pré-selecionado, importar automaticamente
+    var pedidoSelect = document.getElementById('pedido_importar');
+    if (pedidoSelect.value) {
+        importarPedido();
+    }
 });
 </script>
 
