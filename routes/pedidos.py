@@ -43,7 +43,7 @@ def index():
     status = request.args.get('status', '')
     
     sql = """
-        SELECT p., 
+        SELECT p.*, 
                m.nome as motorista_nome,
                COUNT(pi.id) as total_itens,
                SUM(pi.quantidade) as total_quantidade,
