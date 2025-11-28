@@ -130,8 +130,8 @@
                     <label class="form-label">Base</label>
                     <select class="form-select" name="base_id[]">
                         <option value="">Selecione a Base</option>
-                        {% for o in origens %}
-                        <option value="{{ o.id }}">{{ o.nome }}</option>
+                        {% for b in bases %}
+                        <option value="{{ b.id }}">{{ b.nome }}</option>
                         {% endfor %}
                     </select>
                 </div>
