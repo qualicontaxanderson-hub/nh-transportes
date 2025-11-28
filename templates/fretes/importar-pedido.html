@@ -23,7 +23,7 @@
     <div class="card-body" style="padding: 1rem; background:#d4edda;">
       <p class="mb-0" style="font-size: 0.9rem;">
         <strong>Modo de Importação:</strong> Todos os itens do pedido serão exibidos abaixo. 
-        Preencha apenas o <strong>Preço por Litro</strong> e <strong>Status</strong> de cada item. 
+        Preencha apenas o <strong>Preço por Litro</strong> e <strong>Status</strong> de cada item (quando aplicável). 
         Os demais campos serão preenchidos automaticamente.
       </p>
     </div>
@@ -67,7 +67,7 @@
     <!-- Cabeçalho dos Itens -->
     <div class="card shadow-sm mb-2">
       <div class="card-header" style="background:#007bff;color:white; font-size: 0.9rem; padding: 0.5rem 1rem;">
-        <strong><i class="bi bi-list-ul"></i> Itens do Pedido (preencher Preço por Litro e Status)</strong>
+        <strong><i class="bi bi-list-ul"></i> Itens do Pedido</strong>
         <span class="float-end badge bg-light text-dark">{{ itens|length }} item(s)</span>
       </div>
     </div>
@@ -94,6 +94,10 @@
         <input type="hidden" class="cliente-paga-comissao" value="{{ item.cliente_paga_comissao }}">
         <input type="hidden" class="cliente-percentual-cte" value="{{ item.cliente_percentual_cte }}">
         <input type="hidden" class="cliente-cte-integral" value="{{ item.cliente_cte_integral }}">
+        
+        <!-- Hidden inputs para origem e destino (para buscar rota) -->
+        <input type="hidden" class="item-origem-id" value="{{ item.origem_id }}">
+        <input type="hidden" class="item-destino-id" value="{{ item.cliente_destino_id }}">
 
         <!-- Linha 1: Dados do Item (readonly/amarelo) -->
         <div class="row mb-2">
@@ -143,7 +147,7 @@
             <input type="text" class="form-control form-control-sm campo-total-nf" name="total_nf"
                    value="0,00" style="background:#FFD580;" readonly>
           </div>
-          <div class="col-md-2">
+          <div class="col-md-2 campo-preco-litro-container">
             <label class="form-label" style="font-size: 0.8rem;"><strong>Preço p/ Litro R$ *</strong></label>
             <input type="text" class="form-control form-control-sm campo-preco-litro" name="preco_por_litro"
                    value="0,00" required>
@@ -190,6 +194,7 @@
       </div>
     </div>
     {% endfor %}
+
     <!-- Botões de Ação -->
     <div class="d-flex justify-content-between mt-4 mb-4">
       <a href="{{ url_for('fretes.novo') }}" class="btn btn-secondary btn-sm">
@@ -202,7 +207,6 @@
 
   </form>
 </div>
-
 <style>
   .bg-warning {
     background-color: #FFD580 !important;
@@ -231,66 +235,102 @@
 </style>
 
 <script>
-// Função para converter string formatada BR para decimal
-function converterParaDecimal(valor) {
-  if (typeof valor === 'string') {
-    return parseFloat(valor.replace(/\./g, '').replace(',', '.')) || 0;
-  }
-  return parseFloat(valor) || 0;
+// Definir ROTAS do backend
+const ROTAS = {{ rotas_dict|tojson|safe }};
+
+// NOVA FUNÇÃO: Formata moeda pt-BR (ponto milhar, vírgula decimal)
+function formatarMoeda(valor) {
+  let numero = parseFloat(valor).toFixed(2);
+  let partes = numero.split('.');
+  let inteiro = partes[0];
+  let decimal = partes[1];
+  inteiro = inteiro.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+  return inteiro + ',' + decimal;
 }
 
-// Função para formatar número para padrão brasileiro
-function formatarParaBR(valor) {
-  return valor.toFixed(2).replace('.', ',');
+function desformatarMoeda(valor) {
+  if (!valor) return 0;
+  return parseFloat(valor.toString().replace(/\./g, '').replace(',', '.')) || 0;
 }
 
 // Função para calcular valores de um item específico
 function calcularItem(itemDiv) {
   // Obter quantidade
   var quantidadeInput = itemDiv.querySelector('input[name="quantidade"]');
-  var quantidade = converterParaDecimal(quantidadeInput.value);
+  var quantidade = parseFloat(quantidadeInput.value) || 0;
 
   // Obter preço unitário
   var precoUnitarioDisplay = itemDiv.querySelector('.campo-preco-unitario');
-  var precoUnitario = converterParaDecimal(precoUnitarioDisplay.value);
+  var precoUnitario = desformatarMoeda(precoUnitarioDisplay.value);
 
   // Obter preço por litro (campo editável)
   var precoLitroInput = itemDiv.querySelector('.campo-preco-litro');
-  var precoLitro = converterParaDecimal(precoLitroInput.value);
+  var precoLitro = desformatarMoeda(precoLitroInput.value);
 
   // Obter dados do cliente
   var clientePagaComissao = parseInt(itemDiv.querySelector('.cliente-paga-comissao').value) || 0;
   var clientePercentualCte = parseFloat(itemDiv.querySelector('.cliente-percentual-cte').value) || 0;
   var clienteCteIntegral = parseInt(itemDiv.querySelector('.cliente-cte-integral').value) || 0;
 
-  // CÁLCULOS
+  // Obter origem e destino para buscar na rota
+  var origemId = itemDiv.querySelector('.item-origem-id').value;
+  var destinoId = itemDiv.querySelector('.item-destino-id').value;
+
+  // CÁLCULOS (usando suas fórmulas originais)
   var totalNF = quantidade * precoUnitario;
   var valorTotalFrete = quantidade * precoLitro;
   
   // Comissão Motorista: R$ 0,01 por litro se cliente paga comissão
   var comissaoMotorista = clientePagaComissao ? (quantidade * 0.01) : 0;
   
-  // Valor CTe: integral ou percentual
+  // Valor CTe: integral ou baseado em rota
   var valorCte = 0;
   if (clienteCteIntegral == 1) {
+    // CTe Integral = Valor Total do Frete
     valorCte = valorTotalFrete;
   } else {
-    valorCte = valorTotalFrete * (clientePercentualCte / 100);
+    // CTe baseado na ROTA (origem + destino)
+    var chave = origemId + '-' + destinoId;
+    var valorPorLitroRota = 0;
+    
+    if (typeof ROTAS !== 'undefined' && ROTAS[chave]) {
+      valorPorLitroRota = parseFloat(ROTAS[chave]);
+    }
+    
+    valorCte = quantidade * valorPorLitroRota;
   }
   
-  // Comissão CTe: 8% do valor CTe (conforme sua fórmula)
+  // Comissão CTe: 8% do valor CTe
   var comissaoCte = valorCte * 0.08;
   
   // Lucro: Valor Total Frete - Comissão Motorista - Comissão CTe
   var lucro = valorTotalFrete - comissaoMotorista - comissaoCte;
 
   // ATUALIZAR CAMPOS
-  itemDiv.querySelector('.campo-total-nf').value = formatarParaBR(totalNF);
-  itemDiv.querySelector('.campo-valor-frete').value = formatarParaBR(valorTotalFrete);
-  itemDiv.querySelector('.campo-comissao-motorista').value = formatarParaBR(comissaoMotorista);
-  itemDiv.querySelector('.campo-valor-cte').value = formatarParaBR(valorCte);
-  itemDiv.querySelector('.campo-comissao-cte').value = formatarParaBR(comissaoCte);
-  itemDiv.querySelector('.campo-lucro').value = formatarParaBR(lucro);
+  itemDiv.querySelector('.campo-total-nf').value = formatarMoeda(totalNF);
+  itemDiv.querySelector('.campo-valor-frete').value = formatarMoeda(valorTotalFrete);
+  itemDiv.querySelector('.campo-comissao-motorista').value = formatarMoeda(comissaoMotorista);
+  itemDiv.querySelector('.campo-valor-cte').value = formatarMoeda(valorCte);
+  itemDiv.querySelector('.campo-comissao-cte').value = formatarMoeda(comissaoCte);
+  itemDiv.querySelector('.campo-lucro').value = formatarMoeda(lucro);
+  
+  // CONTROLAR VISIBILIDADE DO PREÇO POR LITRO
+  var precoLitroContainer = itemDiv.querySelector('.campo-preco-litro-container');
+  
+  if (!clientePagaComissao) {
+    // Cliente NÃO paga frete - esconder campo
+    precoLitroInput.value = formatarMoeda(0);
+    precoLitroInput.readOnly = true;
+    precoLitroInput.removeAttribute('required');
+    precoLitroInput.style.backgroundColor = '#e9ecef';
+    precoLitroContainer.style.display = 'none';
+  } else {
+    // Cliente paga frete - mostrar campo
+    precoLitroInput.readOnly = false;
+    precoLitroInput.setAttribute('required', 'required');
+    precoLitroInput.style.backgroundColor = '#ffffff';
+    precoLitroContainer.style.display = 'block';
+  }
 }
 
 // Adicionar listeners aos campos de preço por litro
@@ -313,7 +353,7 @@ document.addEventListener('DOMContentLoaded', function() {
       calcularItem(itemDiv);
     });
 
-    // Calcular inicial
+    // Calcular inicial (ao carregar a página)
     calcularItem(itemDiv);
   });
 });
@@ -324,18 +364,22 @@ document.getElementById('formImportacao').addEventListener('submit', function(e)
   var todosPreenchidos = true;
   
   precosCampos.forEach(function(campo) {
-    var valor = converterParaDecimal(campo.value);
-    if (valor <= 0) {
-      todosPreenchidos = false;
-      campo.style.border = '2px solid red';
-    } else {
-      campo.style.border = '';
+    // Verificar se o campo está visível (cliente paga frete)
+    var container = campo.closest('.campo-preco-litro-container');
+    if (container && container.style.display !== 'none') {
+      var valor = desformatarMoeda(campo.value);
+      if (valor <= 0) {
+        todosPreenchidos = false;
+        campo.style.border = '2px solid red';
+      } else {
+        campo.style.border = '';
+      }
     }
   });
   
   if (!todosPreenchidos) {
     e.preventDefault();
-    alert('Por favor, preencha o Preço por Litro de todos os itens!');
+    alert('Por favor, preencha o Preço por Litro de todos os itens que pagam frete!');
     return false;
   }
 });
