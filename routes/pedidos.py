@@ -108,20 +108,32 @@ def novo():
         tipos_qtd = request.form.getlist('tipo_quantidade[]')
         precos = request.form.getlist('preco_unitario[]')
         totais_nf = request.form.getlist('total_nf[]')
+        formas_pagto = request.form.getlist('forma_pagamento_fornecedor_item[]')
+        pix_aleatorias = request.form.getlist('pix_aleatoria[]')
+        dados_transf_itens = request.form.getlist('dados_transferencia_item[]')
         
         for i in range(len(clientes)):
             if clientes[i] and produtos[i] and fornecedores[i]:
                 qtd_id = quantidade_ids[i] if quantidade_ids[i] else None
                 qtd_valor = quantidades[i] if quantidades[i] else 0
                 base_id = bases[i] if bases[i] else None
+                forma_pagto = formas_pagto[i] if i < len(formas_pagto) else None
+                pix_aleatoria = pix_aleatorias[i] if i < len(pix_aleatorias) else None
+                dados_transf = dados_transf_itens[i] if i < len(dados_transf_itens) else None
                 
                 cursor.execute("""
                     INSERT INTO pedidos_itens 
                     (pedido_id, cliente_id, produto_id, fornecedor_id, origem_id, base_id,
-                     quantidade, quantidade_id, tipo_quantidade, preco_unitario, total_nf)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-                """, (pedido_id, clientes[i], produtos[i], fornecedores[i], origens[i],
-                      base_id, qtd_valor, qtd_id, tipos_qtd[i], precos[i], totais_nf[i]))
+                     quantidade, quantidade_id, tipo_quantidade,
+                     forma_pagamento_fornecedor_item, pix_aleatoria, dados_transferencia_item,
+                     preco_unitario, total_nf)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                """, (
+                    pedido_id, clientes[i], produtos[i], fornecedores[i], origens[i],
+                    base_id, qtd_valor, qtd_id, tipos_qtd[i],
+                    forma_pagto, pix_aleatoria, dados_transf,
+                    precos[i], totais_nf[i]
+                ))
         
         conn.commit()
         cursor.close()
@@ -268,20 +280,32 @@ def editar(id):
         tipos_qtd = request.form.getlist('tipo_quantidade[]')
         precos = request.form.getlist('preco_unitario[]')
         totais_nf = request.form.getlist('total_nf[]')
+        formas_pagto = request.form.getlist('forma_pagamento_fornecedor_item[]')
+        pix_aleatorias = request.form.getlist('pix_aleatoria[]')
+        dados_transf_itens = request.form.getlist('dados_transferencia_item[]')
         
         for i in range(len(clientes)):
             if clientes[i] and produtos[i] and fornecedores[i]:
                 qtd_id = quantidade_ids[i] if quantidade_ids[i] else None
                 qtd_valor = quantidades[i] if quantidades[i] else 0
                 base_id = bases[i] if bases[i] else None
+                forma_pagto = formas_pagto[i] if i < len(formas_pagto) else None
+                pix_aleatoria = pix_aleatorias[i] if i < len(pix_aleatorias) else None
+                dados_transf = dados_transf_itens[i] if i < len(dados_transf_itens) else None
                 
                 cursor.execute("""
                     INSERT INTO pedidos_itens 
                     (pedido_id, cliente_id, produto_id, fornecedor_id, origem_id, base_id,
-                     quantidade, quantidade_id, tipo_quantidade, preco_unitario, total_nf)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-                """, (id, clientes[i], produtos[i], fornecedores[i], origens[i],
-                      base_id, qtd_valor, qtd_id, tipos_qtd[i], precos[i], totais_nf[i]))
+                     quantidade, quantidade_id, tipo_quantidade,
+                     forma_pagamento_fornecedor_item, pix_aleatoria, dados_transferencia_item,
+                     preco_unitario, total_nf)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                """, (
+                    id, clientes[i], produtos[i], fornecedores[i], origens[i],
+                    base_id, qtd_valor, qtd_id, tipos_qtd[i],
+                    forma_pagto, pix_aleatoria, dados_transf,
+                    precos[i], totais_nf[i]
+                ))
         
         conn.commit()
         cursor.close()
@@ -380,7 +404,7 @@ def api_buscar(id):
     cursor = conn.cursor(dictionary=True)
     
     cursor.execute("""
-        SELECT pi.*, 
+        SELECT pi*, 
                c.razao_social as cliente_razao,
                p.nome as produto_nome,
                f.razao_social as fornecedor_razao,
