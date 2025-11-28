@@ -59,13 +59,23 @@ def importar_pedido(pedido_id):
             flash('Este pedido não possui itens!', 'warning')
             return redirect(url_for('fretes.novo'))
         
+        # ADICIONAR: Buscar rotas para os cálculos de CTe
+        cursor.execute("SELECT id, origem_id, destino_id, valor_por_litro FROM rotas WHERE ativo = 1")
+        rotas = cursor.fetchall()
+        
+        rotas_dict = {}
+        for rota in rotas:
+            chave = f"{rota['origem_id']}-{rota['destino_id']}"
+            rotas_dict[chave] = rota['valor_por_litro']
+        
         cursor.close()
         conn.close()
         
         return render_template(
             'fretes/importar-pedido.html',
             pedido=pedido,
-            itens=itens
+            itens=itens,
+            rotas_dict=rotas_dict  # ← PASSAR AS ROTAS PARA O TEMPLATE
         )
         
     except Exception as e:
@@ -573,3 +583,4 @@ def editar(id):
         print(f"Erro ao editar frete: {e}")
         flash(f'Erro ao editar frete: {str(e)}', 'danger')
         return redirect(url_for('fretes.lista'))
+
