@@ -43,7 +43,7 @@ def index():
     status = request.args.get('status', '')
     
     sql = """
-        SELECT p.*, 
+        SELECT p.*,
                m.nome as motorista_nome,
                COUNT(pi.id) as total_itens,
                SUM(pi.quantidade) as total_quantidade,
@@ -148,6 +148,9 @@ def novo():
     
     cursor.execute("SELECT id, nome FROM motoristas ORDER BY nome")
     motoristas = cursor.fetchall()
+
+    cursor.execute("SELECT id, nome FROM bases WHERE ativo = 1 ORDER BY nome")
+    bases = cursor.fetchall()
     
     cursor.close()
     conn.close()
@@ -162,6 +165,7 @@ def novo():
         origens=origens,
         quantidades=quantidades,
         motoristas=motoristas,
+        bases=bases,
         numero_sugerido=numero_sugerido
     )
 
@@ -175,7 +179,7 @@ def visualizar(id):
     cursor = conn.cursor(dictionary=True)
     
     cursor.execute("""
-        SELECT p., m.nome as motorista_nome
+        SELECT p.*, m.nome as motorista_nome
         FROM pedidos p
         LEFT JOIN motoristas m ON p.motorista_id = m.id
         WHERE p.id = %s
@@ -187,18 +191,20 @@ def visualizar(id):
         return redirect(url_for('pedidos.index'))
     
     cursor.execute("""
-        SELECT pi., 
+        SELECT pi.*, 
                c.razao_social as cliente_razao, c.nome_fantasia as cliente_fantasia, c.cnpj as cliente_cnpj,
                p.nome as produto_nome,
                f.razao_social as fornecedor_razao, f.nome_fantasia as fornecedor_fantasia,
                o.nome as origem_nome,
-               q.descricao as quantidade_descricao
+               q.descricao as quantidade_descricao,
+               b.nome as base_nome
         FROM pedidos_itens pi
         JOIN clientes c ON pi.cliente_id = c.id
         JOIN produto p ON pi.produto_id = p.id
         JOIN fornecedores f ON pi.fornecedor_id = f.id
         JOIN origens o ON pi.origem_id = o.id
         LEFT JOIN quantidades q ON pi.quantidade_id = q.id
+        LEFT JOIN bases b ON pi.base_id = b.id
         WHERE pi.pedido_id = %s
         ORDER BY f.nome_fantasia, c.razao_social
     """, (id,))
@@ -283,10 +289,10 @@ def editar(id):
         flash('Pedido atualizado com sucesso!', 'success')
         return redirect(url_for('pedidos.visualizar', id=id))
     
-    cursor.execute("SELECT  FROM pedidos WHERE id = %s", (id,))
+    cursor.execute("SELECT * FROM pedidos WHERE id = %s", (id,))
     pedido = cursor.fetchone()
     
-    cursor.execute("SELECT  FROM pedidos_itens WHERE pedido_id = %s", (id,))
+    cursor.execute("SELECT * FROM pedidos_itens WHERE pedido_id = %s", (id,))
     itens = cursor.fetchall()
     
     cursor.execute("SELECT id, razao_social, nome_fantasia, cnpj FROM clientes ORDER BY razao_social")
@@ -306,6 +312,9 @@ def editar(id):
     
     cursor.execute("SELECT id, nome FROM motoristas ORDER BY nome")
     motoristas = cursor.fetchall()
+
+    cursor.execute("SELECT id, nome FROM bases WHERE ativo = 1 ORDER BY nome")
+    bases = cursor.fetchall()
     
     cursor.close()
     conn.close()
@@ -319,7 +328,8 @@ def editar(id):
         fornecedores=fornecedores,
         origens=origens,
         quantidades=quantidades,
-        motoristas=motoristas
+        motoristas=motoristas,
+        bases=bases
     )
 
 # =============================================
@@ -365,7 +375,7 @@ def api_buscar(id):
     cursor = conn.cursor(dictionary=True)
     
     cursor.execute("""
-        SELECT pi., 
+        SELECT pi.*, 
                c.razao_social as cliente_razao,
                p.nome as produto_nome,
                f.razao_social as fornecedor_razao,
