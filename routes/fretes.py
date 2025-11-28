@@ -14,15 +14,18 @@ def novo():
         try:
             conn = get_db_connection()
             cursor = conn.cursor()
+
             def converter_para_decimal(valor):
                 if not valor:
                     return 0
                 return float(str(valor).replace('.', '').replace(',', '.'))
+
             quantidade_tipo = request.form.get('quantidade_tipo')
             if quantidade_tipo == 'personalizada':
                 quantidade_id_para_salvar = None
             else:
                 quantidade_id_para_salvar = request.form.get('quantidade_id')
+
             preco_produto_unitario = converter_para_decimal(request.form.get('preco_produto_unitario'))
             total_nf_compra = converter_para_decimal(request.form.get('total_nf_compra'))
             preco_por_litro = converter_para_decimal(request.form.get('preco_por_litro'))
@@ -31,50 +34,65 @@ def novo():
             valor_cte = converter_para_decimal(request.form.get('valor_cte'))
             comissao_cte = converter_para_decimal(request.form.get('comissao_cte'))
             lucro = converter_para_decimal(request.form.get('lucro'))
-cursor.execute(
-    """
-    INSERT INTO fretes (clientes_id, produto_id, fornecedores_id, motoristas_id, veiculos_id, quantidade_id, origem_id, destino_id, preco_produto_unitario, total_nf_compra, preco_por_litro, valor_total_frete, comissao_motorista, valor_cte, comissao_cte, lucro, data_frete, status, observacoes)
-    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-    """,
-    (
-        request.form.get('clientes_id'),
-        request.form.get('produto_id'),
-        request.form.get('fornecedores_id'),
-        request.form.get('motoristas_id'),
-        request.form.get('veiculos_id'),
-        quantidade_id_para_salvar,
-        request.form.get('origem_id'),
-        request.form.get('destino_id'),
-        preco_produto_unitario,
-        total_nf_compra,
-        preco_por_litro,
-        valor_total_frete,
-        comissao_motorista,
-        valor_cte,
-        comissao_cte,
-        lucro,
-        request.form.get('data_frete'),
-        request.form.get('status'),
-        request.form.get('observacoes')
-    )
-)
 
-# NOVO: se o frete veio de um pedido, marcar o pedido como Faturado
-pedido_id_form = request.form.get('pedido_id')
-if pedido_id_form:
-    cursor.execute(
-        "UPDATE pedidos SET status = 'Faturado' WHERE id = %s",
-        (pedido_id_form,)
-    )
+            cursor.execute(
+                """
+                INSERT INTO fretes (
+                    clientes_id, produto_id, fornecedores_id, motoristas_id, veiculos_id,
+                    quantidade_id, origem_id, destino_id,
+                    preco_produto_unitario, total_nf_compra, preco_por_litro,
+                    valor_total_frete, comissao_motorista, valor_cte, comissao_cte, lucro,
+                    data_frete, status, observacoes
+                )
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                """,
+                (
+                    request.form.get('clientes_id'),
+                    request.form.get('produto_id'),
+                    request.form.get('fornecedores_id'),
+                    request.form.get('motoristas_id'),
+                    request.form.get('veiculos_id'),
+                    quantidade_id_para_salvar,
+                    request.form.get('origem_id'),
+                    request.form.get('destino_id'),
+                    preco_produto_unitario,
+                    total_nf_compra,
+                    preco_por_litro,
+                    valor_total_frete,
+                    comissao_motorista,
+                    valor_cte,
+                    comissao_cte,
+                    lucro,
+                    request.form.get('data_frete'),
+                    request.form.get('status'),
+                    request.form.get('observacoes')
+                )
+            )
 
-conn.commit()
-cursor.close()
-conn.close()
-flash('Frete cadastrado com sucesso!', 'success')
-return redirect(url_for('fretes.lista'))
+            # NOVO: se o frete veio de um pedido, marcar o pedido como Faturado
+            pedido_id_form = request.form.get('pedido_id')
+            if pedido_id_form:
+                cursor.execute(
+                    "UPDATE pedidos SET status = 'Faturado' WHERE id = %s",
+                    (pedido_id_form,)
+                )
+
+            conn.commit()
+            cursor.close()
+            conn.close()
+            flash('Frete cadastrado com sucesso!', 'success')
+            return redirect(url_for('fretes.lista'))
+
+        except Exception as e:
+            print(f'Erro ao cadastrar frete: {e}')
+            flash(f'Erro ao cadastrar frete: {str(e)}', 'danger')
+            return redirect(url_for('fretes.novo'))
+
+    # GET - carregar formulário
     try:
         conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)
+
         cursor.execute(
             """
             SELECT id, razao_social, paga_comissao, percentual_cte, cte_integral
@@ -83,6 +101,7 @@ return redirect(url_for('fretes.lista'))
             """
         )
         clientes = cursor.fetchall()
+
         cursor.execute(
             """
             SELECT id, nome 
@@ -91,6 +110,7 @@ return redirect(url_for('fretes.lista'))
             """
         )
         produtos = cursor.fetchall()
+
         cursor.execute(
             """
             SELECT id, razao_social 
@@ -99,6 +119,7 @@ return redirect(url_for('fretes.lista'))
             """
         )
         fornecedores = cursor.fetchall()
+
         cursor.execute(
             """
             SELECT id, nome, paga_comissao 
@@ -107,6 +128,7 @@ return redirect(url_for('fretes.lista'))
             """
         )
         motoristas = cursor.fetchall()
+
         cursor.execute(
             """
             SELECT id, caminhao, placa 
@@ -115,6 +137,7 @@ return redirect(url_for('fretes.lista'))
             """
         )
         veiculos = cursor.fetchall()
+
         cursor.execute(
             """
             SELECT id, valor, descricao 
@@ -123,6 +146,7 @@ return redirect(url_for('fretes.lista'))
             """
         )
         quantidades = cursor.fetchall()
+
         cursor.execute(
             """
             SELECT id, nome 
@@ -131,6 +155,7 @@ return redirect(url_for('fretes.lista'))
             """
         )
         origens = cursor.fetchall()
+
         cursor.execute(
             """
             SELECT id, nome 
@@ -139,6 +164,7 @@ return redirect(url_for('fretes.lista'))
             """
         )
         destinos = cursor.fetchall()
+
         cursor.execute(
             """
             SELECT id, origem_id, destino_id, valor_por_litro 
@@ -147,11 +173,12 @@ return redirect(url_for('fretes.lista'))
             """
         )
         rotas = cursor.fetchall()
+
         rotas_dict = {}
         for rota in rotas:
             chave = f"{rota['origem_id']}_{rota['destino_id']}"
             rotas_dict[chave] = rota['valor_por_litro']
-        
+
         # Buscar pedidos para importação
         cursor.execute(
             """
@@ -163,9 +190,10 @@ return redirect(url_for('fretes.lista'))
             """
         )
         pedidos = cursor.fetchall()
-        
-                cursor.close()
+
+        cursor.close()
         conn.close()
+
         return render_template(
             'fretes/novo.html',
             clientes=clientes,
