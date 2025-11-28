@@ -29,14 +29,16 @@
                             <label for="pedido_importar" class="form-label" style="font-size: 0.85rem;">Selecione um Pedido para importar dados</label>
                             <select class="form-select form-select-sm" id="pedido_importar">
                                 <option value="">-- Não importar (preencher manualmente) --</option>
-                                {% for pedido in pedidos %}
-                                <option value="{{ pedido.id }}" 
-                                        data-motorista="{{ pedido.motorista_id or '' }}">
-                                    {{ pedido.numero }} - {{ pedido.data_pedido.strftime('%d/%m/%Y') if pedido.data_pedido else '' }} 
-                                    {% if pedido.motorista_nome %}({{ pedido.motorista_nome }}){% endif %}
-                                    - {{ pedido.status }}
-                                </option>
-                                {% endfor %}
+{% for pedido in pedidos %}
+<option value="{{ pedido.id }}" 
+        data-motorista="{{ pedido.motorista_id or '' }}"
+        {% if pedido_selecionado_id and pedido.id == pedido_selecionado_id %}selected{% endif %}>
+    {{ pedido.numero }} - {{ pedido.data_pedido.strftime('%d/%m/%Y') if pedido.data_pedido else '' }} 
+    {% if pedido.motorista_nome %}({{ pedido.motorista_nome }}){% endif %}
+    - {{ pedido.status }}
+</option>
+{% endfor %}
+
                             </select>
                         </div>
                         <div class="col-md-4 mb-2">
