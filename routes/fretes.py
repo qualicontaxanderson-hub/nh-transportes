@@ -63,7 +63,7 @@ def importar_pedido(pedido_id):
         conn.close()
         
         return render_template(
-            'template-frete-importar-pedido.html',
+            'fretes/importar-pedido.html',
             pedido=pedido,
             itens=itens
         )
@@ -296,7 +296,7 @@ def novo():
         conn.close()
         
         return render_template(
-            'template-frete-novo.html',
+            'fretes/novo.html',
             clientes=clientes,
             produtos=produtos,
             fornecedores=fornecedores,
@@ -555,7 +555,7 @@ def editar(id):
         conn.close()
         
         return render_template(
-            'template-frete-editar.html',
+            'fretes/editar.html',
             frete=frete,
             clientes=clientes,
             produtos=produtos,
