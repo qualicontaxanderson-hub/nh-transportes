@@ -205,7 +205,9 @@ function adicionarItem() {
     
     clone.querySelector('.item-numero').textContent = 'Item #' + itemCount;
     
-    container.appendChild(clone);
+    // Insere o novo item no topo
+    container.prepend(clone);
+
     atualizarNumerosItens();
 }
 
