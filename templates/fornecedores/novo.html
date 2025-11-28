@@ -120,6 +120,33 @@
                         </select>
                     </div>
                 </div>
+
+                <!-- Pagamento -->
+                <hr style="margin: 1rem 0;">
+                <h6 style="font-size: 0.9rem; color: #1D63A5; margin-bottom: 0.75rem;">Pagamento ao Fornecedor</h6>
+
+                <div class="row">
+                    <div class="col-md-4 mb-2">
+                        <label class="form-label" style="font-size: 0.85rem;">Forma Pagamento Padrão</label>
+                        <select name="tipo_pagamento_padrao" class="form-select form-select-sm">
+                            <option value="">Selecione...</option>
+                            <option value="pix_fixa">Pix chave fixa</option>
+                            <option value="pix_aleatoria">Pix chave aleatória</option>
+                            <option value="boleto">Boleto</option>
+                            <option value="transferencia">Transferência</option>
+                        </select>
+                    </div>
+                    <div class="col-md-4 mb-2">
+                        <label class="form-label" style="font-size: 0.85rem;">Chave Pix fixa</label>
+                        <input type="text" name="chave_pix" class="form-control form-control-sm"
+                               placeholder="CNPJ, CPF, e-mail ou telefone">
+                    </div>
+                    <div class="col-md-4 mb-2">
+                        <label class="form-label" style="font-size: 0.85rem;">Dados bancários / Transferência</label>
+                        <textarea name="dados_bancarios" class="form-control form-control-sm" rows="2"
+                                  placeholder="Banco, agência, conta, tipo de conta"></textarea>
+                    </div>
+                </div>
                 
                 <!-- Botões -->
                 <div class="d-flex justify-content-between mt-3">
