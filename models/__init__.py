@@ -11,6 +11,7 @@ from models.pedido_item import PedidoItem
 from models.cliente import Cliente
 from models.veiculo import Veiculo
 from models.frete import Frete
+from models.base import Base  # <-- novo
 
 __all__ = [
     'Usuario',
@@ -22,5 +23,6 @@ __all__ = [
     'Cliente',
     'Veiculo',
     'Frete',
+    'Base',   # <-- novo
     'db',
 ]
