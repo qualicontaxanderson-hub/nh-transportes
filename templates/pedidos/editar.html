@@ -1,407 +1,401 @@
-{% extends "base.html" %}
+{% extends 'base.html' %}
 
 {% block title %}Editar Pedido {{ pedido.numero }} - NH Transportes{% endblock %}
 
 {% block content %}
 <div class="container-fluid mt-4">
-    <div class="row mb-3">
-        <div class="col">
-            <h2><i class="bi bi-pencil"></i> Editar Pedido {{ pedido.numero }}</h2>
+  <div class="row mb-3">
+    <div class="col">
+      <h2><i class="bi bi-pencil"></i> Editar Pedido {{ pedido.numero }}</h2>
+    </div>
+    <div class="col-auto">
+      <a href="{{ url_for('pedidos.visualizar', id=pedido.id) }}" class="btn btn-secondary">
+        <i class="bi bi-arrow-left"></i> Voltar
+      </a>
+    </div>
+  </div>
+
+  <form method="POST" id="formPedido">
+    <div class="card mb-4">
+      <div class="card-header bg-primary text-white">
+        <i class="bi bi-info-circle"></i> Informações do Pedido
+      </div>
+      <div class="card-body">
+        <div class="row">
+          <div class="col-md-2">
+            <label class="form-label">Número</label>
+            <input type="text" class="form-control" value="{{ pedido.numero }}" readonly style="background-color: #e9ecef;">
+          </div>
+          <div class="col-md-2">
+            <label class="form-label">Data do Pedido</label>
+            <input type="date" class="form-control" name="data_pedido" value="{{ pedido.data_pedido.strftime('%Y-%m-%d') if pedido.data_pedido else '' }}" required>
+          </div>
+          <div class="col-md-2">
+            <label class="form-label">Motorista</label>
+            <select class="form-select" name="motorista_id">
+              <option value="">Selecione o Motorista</option>
+              {% for m in motoristas %}
+                <option value="{{ m.id }}" {% if pedido.motorista_id == m.id %}selected{% endif %}>{{ m.nome }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-md-2">
+            <label class="form-label">Veículo</label>
+            <select class="form-select" name="veiculo_id">
+              <option value="">Selecione o Veículo</option>
+              {% for v in veiculos %}
+                <option value="{{ v.id }}" {% if pedido.veiculo_id == v.id %}selected{% endif %}>{{ v.caminhao }} - {{ v.placa }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-md-2">
+            <label class="form-label">Status</label>
+            <select class="form-select" name="status">
+              <option value="Pendente" {% if pedido.status == 'Pendente' %}selected{% endif %}>Pendente</option>
+              <option value="Confirmado" {% if pedido.status == 'Confirmado' %}selected{% endif %}>Confirmado</option>
+              <option value="Faturado" {% if pedido.status == 'Faturado' %}selected{% endif %}>Faturado</option>
+              <option value="Cancelado" {% if pedido.status == 'Cancelado' %}selected{% endif %}>Cancelado</option>
+            </select>
+          </div>
+          <div class="col-md-2">
+            <label class="form-label">Observações</label>
+            <input type="text" class="form-control" name="observacoes" value="{{ pedido.observacoes or '' }}" placeholder="Observações gerais do pedido">
+          </div>
         </div>
-        <div class="col-auto">
-            <a href="{{ url_for('pedidos.visualizar', id=pedido.id) }}" class="btn btn-secondary">
-                <i class="bi bi-arrow-left"></i> Voltar
-            </a>
-        </div>
+      </div>
     </div>
 
-    <form method="POST" id="formPedido">
-        <div class="card mb-4">
-            <div class="card-header bg-primary text-white">
-                <i class="bi bi-info-circle"></i> Informações do Pedido
-            </div>
-            <div class="card-body">
-                <div class="row">
-                    <div class="col-md-2">
-                        <label class="form-label">Número</label>
-                        <input type="text" class="form-control" value="{{ pedido.numero }}" readonly style="background-color: #e9ecef;">
-                    </div>
-                    <div class="col-md-2">
-                        <label class="form-label">Data do Pedido *</label>
-                        <input type="date" class="form-control" name="data_pedido" value="{{ pedido.data_pedido.strftime('%Y-%m-%d') if pedido.data_pedido else '' }}" required>
-                    </div>
-                    <div class="col-md-2">
-                        <label class="form-label">Motorista</label>
-                        <select class="form-select" name="motorista_id">
-                            <option value="">Selecione o Motorista</option>
-                            {% for m in motoristas %}
-                            <option value="{{ m.id }}" {% if pedido.motorista_id == m.id %}selected{% endif %}>{{ m.nome }}</option>
-                            {% endfor %}
-                        </select>
-                    </div>
-                    <div class="col-md-2">
-                        <label class="form-label">Status</label>
-                        <select class="form-select" name="status">
-                            <option value="Pendente" {% if pedido.status == 'Pendente' %}selected{% endif %}>Pendente</option>
-                            <option value="Confirmado" {% if pedido.status == 'Confirmado' %}selected{% endif %}>Confirmado</option>
-                            <option value="Faturado" {% if pedido.status == 'Faturado' %}selected{% endif %}>Faturado</option>
-                            <option value="Cancelado" {% if pedido.status == 'Cancelado' %}selected{% endif %}>Cancelado</option>
-                        </select>
-                    </div>
-                    <div class="col-md-4">
-                        <label class="form-label">Observações</label>
-                        <input type="text" class="form-control" name="observacoes" value="{{ pedido.observacoes or '' }}" placeholder="Observações gerais do pedido">
-                    </div>
-                </div>
-            </div>
-        </div>
+    <div class="card mb-4">
+      <div class="card-header bg-success text-white d-flex justify-content-between align-items-center">
+        <span><i class="bi bi-list-ul"></i> Itens do Pedido</span>
+        <button type="button" class="btn btn-light btn-sm" onclick="adicionarItem()">
+          <i class="bi bi-plus-circle"></i> Adicionar Item
+        </button>
+      </div>
+      <div class="card-body">
+        <div id="itensContainer"></div>
+      </div>
+    </div>
 
-        <div class="card mb-4">
-            <div class="card-header bg-success text-white d-flex justify-content-between align-items-center">
-                <span><i class="bi bi-list-ul"></i> Itens do Pedido</span>
-                <button type="button" class="btn btn-light btn-sm" onclick="adicionarItem()">
-                    <i class="bi bi-plus-circle"></i> Adicionar Item
-                </button>
-            </div>
-            <div class="card-body">
-                <div id="itensContainer">
-                </div>
-            </div>
-        </div>
-
-        <div class="d-flex justify-content-end gap-2 mb-4">
-            <a href="{{ url_for('pedidos.visualizar', id=pedido.id) }}" class="btn btn-secondary">
-                <i class="bi bi-x-circle"></i> Cancelar
-            </a>
-            <button type="submit" class="btn btn-primary">
-                <i class="bi bi-check-circle"></i> Salvar Alterações
-            </button>
-        </div>
-    </form>
+    <div class="d-flex justify-content-end gap-2 mb-4">
+      <a href="{{ url_for('pedidos.visualizar', id=pedido.id) }}" class="btn btn-secondary">
+        <i class="bi bi-x-circle"></i> Cancelar
+      </a>
+      <button type="submit" class="btn btn-primary">
+        <i class="bi bi-check-circle"></i> Salvar Alterações
+      </button>
+    </div>
+  </form>
 </div>
 
 <template id="templateItem">
-    <div class="item-pedido card mb-3">
-        <div class="card-header bg-light d-flex justify-content-between align-items-center">
-            <span class="item-numero">Item #1</span>
-            <button type="button" class="btn btn-danger btn-sm" onclick="removerItem(this)">
-                <i class="bi bi-trash"></i> Remover
-            </button>
-        </div>
-        <div class="card-body">
-            <div class="row g-3">
-                <div class="col-md-4">
-                    <label class="form-label">Cliente *</label>
-                    <select class="form-select select-cliente" name="cliente_id[]" required>
-                        <option value="">Selecione o Cliente</option>
-                        {% for c in clientes %}
-                        <option value="{{ c.id }}">{{ c.nome_fantasia or c.razao_social }}{% if c.cnpj %} - {{ c.cnpj }}{% endif %}</option>
-                        {% endfor %}
-                    </select>
-                </div>
-                <div class="col-md-4">
-                    <label class="form-label">Produto *</label>
-                    <select class="form-select select-produto" name="produto_id[]" required>
-                        <option value="">Selecione o Produto</option>
-                        {% for p in produtos %}
-                        <option value="{{ p.id }}">{{ p.nome }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
-                <div class="col-md-4">
-                    <label class="form-label">Fornecedor *</label>
-                    <select class="form-select select-fornecedor" name="fornecedor_id[]" required>
-                        <option value="">Selecione o Fornecedor</option>
-                        {% for f in fornecedores %}
-                        <option value="{{ f.id }}">{{ f.nome_fantasia or f.razao_social }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
-                <div class="col-md-3">
-                    <label class="form-label">Origem *</label>
-                    <select class="form-select select-origem" name="origem_id[]" required>
-                        <option value="">Selecione a Origem</option>
-                        {% for o in origens %}
-                        <option value="{{ o.id }}">{{ o.nome }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
-                <div class="col-md-3 div-base" style="display:none;">
-                    <label class="form-label">Base</label>
-                    <select class="form-select select-base" name="base_id[]">
-                        <option value="">Selecione a Base</option>
-                        {% for b in bases %}
-                        <option value="{{ b.id }}">{{ b.nome }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
-                <div class="col-md-2">
-                    <label class="form-label">Tipo Qtd</label>
-                    <select class="form-select select-tipo-qtd" name="tipo_quantidade[]" onchange="toggleQuantidade(this)">
-                        <option value="lista">Lista</option>
-                        <option value="manual">Manual</option>
-                    </select>
-                </div>
-                <div class="col-md-3">
-                    <label class="form-label">Quantidade *</label>
-                    <div class="div-quantidade-lista">
-                        <select class="form-select select-quantidade" name="quantidade_id[]" onchange="selecionarQuantidade(this)">
-                            <option value="">Selecione</option>
-                            {% for q in quantidades %}
-                            <option value="{{ q.id }}" data-valor="{{ q.valor }}">{{ q.descricao }}</option>
-                            {% endfor %}
-                        </select>
-                    </div>
-                    <div class="div-quantidade-manual" style="display:none;">
-                        <input type="number" class="form-control input-quantidade-manual" placeholder="Digite a quantidade" step="0.01" min="0">
-                    </div>
-                    <input type="hidden" class="input-quantidade-final" name="quantidade[]" value="">
-                </div>
-                <div class="col-md-2">
-                    <label class="form-label">Preço Unit. (R$)</label>
-                    <input type="text" class="form-control input-preco" name="preco_unitario[]" placeholder="0,000">
-                </div>
-                <div class="col-md-2">
-                    <label class="form-label">Total NF (R$)</label>
-                    <input type="text" class="form-control input-total-nf" name="total_nf[]" placeholder="0,00" readonly style="background-color: #e9ecef;">
-                </div>
-            </div>
-        </div>
+  <div class="item-pedido card mb-3">
+    <div class="card-header bg-light d-flex justify-content-between align-items-center">
+      <span class="item-numero">Item 1</span>
+      <button type="button" class="btn btn-danger btn-sm" onclick="removerItem(this)">
+        <i class="bi bi-trash"></i> Remover
+      </button>
     </div>
+    <div class="card-body">
+      <div class="row g-3">
+        <div class="col-md-4">
+          <label class="form-label">Cliente</label>
+          <select class="form-select select-cliente" name="cliente_id" required>
+            <option value="">Selecione o Cliente</option>
+            {% for c in clientes %}
+              <option value="{{ c.id }}">{{ c.nome_fantasia or c.razao_social }}{% if c.cnpj %} - {{ c.cnpj }}{% endif %}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">Produto</label>
+          <select class="form-select select-produto" name="produto_id" required>
+            <option value="">Selecione o Produto</option>
+            {% for p in produtos %}
+              <option value="{{ p.id }}">{{ p.nome }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">Fornecedor</label>
+          <select class="form-select select-fornecedor" name="fornecedor_id" required>
+            <option value="">Selecione o Fornecedor</option>
+            {% for f in fornecedores %}
+              <option value="{{ f.id }}">{{ f.nome_fantasia or f.razao_social }}</option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div class="col-md-3">
+          <label class="form-label">Origem</label>
+          <select class="form-select select-origem" name="origem_id" required>
+            <option value="">Selecione a Origem</option>
+            {% for o in origens %}
+              <option value="{{ o.id }}">{{ o.nome }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-md-3 div-base" style="display:none;">
+          <label class="form-label">Base</label>
+          <select class="form-select select-base" name="base_id">
+            <option value="">Selecione a Base</option>
+            {% for b in bases %}
+              <option value="{{ b.id }}">{{ b.nome }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-md-2">
+          <label class="form-label">Tipo Qtd</label>
+          <select class="form-select select-tipo-qtd" name="tipo_quantidade" onchange="toggleQuantidade(this)">
+            <option value="lista">Lista</option>
+            <option value="manual">Manual</option>
+          </select>
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">Quantidade</label>
+          <div class="div-quantidade-lista">
+            <select class="form-select select-quantidade" name="quantidade_id" onchange="selecionarQuantidade(this)">
+              <option value="">Selecione</option>
+              {% for q in quantidades %}
+                <option value="{{ q.id }}" data-valor="{{ q.valor }}">{{ q.descricao }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="div-quantidade-manual" style="display:none;">
+            <input type="number" class="form-control input-quantidade-manual" placeholder="Digite a quantidade" step="0.01" min="0">
+          </div>
+          <input type="hidden" class="input-quantidade-final" name="quantidade" value="">
+        </div>
+        <div class="col-md-2">
+          <label class="form-label">Preço Unit. R$</label>
+          <input type="text" class="form-control input-preco" name="preco_unitario" placeholder="0,000">
+        </div>
+        <div class="col-md-2">
+          <label class="form-label">Total NF R$</label>
+          <input type="text" class="form-control input-total-nf" name="total_nf" placeholder="0,00" readonly style="background-color: #e9ecef;">
+        </div>
+      </div>
+    </div>
+  </div>
 </template>
 
 <script>
 var itemCount = 0;
 
 var itensExistentes = [
-    {% for item in itens %}
-    {
-        cliente_id: {{ item.cliente_id }},
-        produto_id: {{ item.produto_id }},
-        fornecedor_id: {{ item.fornecedor_id }},
-        origem_id: {{ item.origem_id }},
-        base_id: {{ item.base_id or 'null' }},
-        quantidade: {{ item.quantidade }},
-        quantidade_id: {{ item.quantidade_id or 'null' }},
-        tipo_quantidade: "{{ item.tipo_quantidade or 'lista' }}",
-        preco_unitario: {{ item.preco_unitario }},
-        total_nf: {{ item.total_nf }}
-    }{% if not loop.last %},{% endif %}
-    {% endfor %}
+  {% for item in itens %}
+  {
+    cliente_id: {{ item.cliente_id }},
+    produto_id: {{ item.produto_id }},
+    fornecedor_id: {{ item.fornecedor_id }},
+    origem_id: {{ item.origem_id }},
+    base_id: {{ item.base_id or 'null' }},
+    quantidade: {{ item.quantidade }},
+    quantidade_id: {{ item.quantidade_id or 'null' }},
+    tipo_quantidade: "{{ item.tipo_quantidade or 'lista' }}",
+    preco_unitario: {{ item.preco_unitario }},
+    total_nf: {{ item.total_nf }}
+  }{% if not loop.last %},{% endif %}
+  {% endfor %}
 ];
 
 function adicionarItem(dados) {
-    itemCount++;
-    var container = document.getElementById('itensContainer');
-    var template = document.getElementById('templateItem');
-    var clone = template.content.cloneNode(true);
-    
-    clone.querySelector('.item-numero').textContent = 'Item #' + itemCount;
-    
-    container.appendChild(clone);
-    
-    var itemAdicionado = container.lastElementChild;
-    
-    if (dados) {
-        itemAdicionado.querySelector('.select-cliente').value = dados.cliente_id;
-        itemAdicionado.querySelector('.select-produto').value = dados.produto_id;
-        itemAdicionado.querySelector('.select-fornecedor').value = dados.fornecedor_id;
-        itemAdicionado.querySelector('.select-origem').value = dados.origem_id;
+  itemCount++;
+  var container = document.getElementById('itensContainer');
+  var template = document.getElementById('templateItem');
+  var clone = template.content.cloneNode(true);
+  clone.querySelector('.item-numero').textContent = 'Item ' + itemCount;
+  container.appendChild(clone);
 
-        if (dados.base_id) {
-            itemAdicionado.querySelector('.select-base').value = dados.base_id;
-        }
+  var itemAdicionado = container.lastElementChild;
 
-        itemAdicionado.querySelector('.input-quantidade-final').value = dados.quantidade;
-        
-        if (dados.tipo_quantidade === 'manual' || !dados.quantidade_id) {
-            itemAdicionado.querySelector('.select-tipo-qtd').value = 'manual';
-            itemAdicionado.querySelector('.div-quantidade-lista').style.display = 'none';
-            itemAdicionado.querySelector('.div-quantidade-manual').style.display = 'block';
-            itemAdicionado.querySelector('.input-quantidade-manual').value = dados.quantidade;
-        } else {
-            itemAdicionado.querySelector('.select-tipo-qtd').value = 'lista';
-            itemAdicionado.querySelector('.select-quantidade').value = dados.quantidade_id;
-        }
-        
-        itemAdicionado.querySelector('.input-preco').value = formatarMoeda3(dados.preco_unitario);
-        itemAdicionado.querySelector('.input-total-nf').value = formatarMoeda2(dados.total_nf);
-
-        // Atualizar visibilidade da Base conforme a origem do item carregado
-        atualizarBasePorOrigem(itemAdicionado.querySelector('.select-origem'));
+  if (dados) {
+    itemAdicionado.querySelector('.select-cliente').value = dados.cliente_id;
+    itemAdicionado.querySelector('.select-produto').value = dados.produto_id;
+    itemAdicionado.querySelector('.select-fornecedor').value = dados.fornecedor_id;
+    itemAdicionado.querySelector('.select-origem').value = dados.origem_id;
+    if (dados.base_id) {
+      itemAdicionado.querySelector('.select-base').value = dados.base_id;
     }
-    
-    atualizarNumerosItens();
+    itemAdicionado.querySelector('.input-quantidade-final').value = dados.quantidade;
+
+    if (dados.tipo_quantidade == 'manual' || !dados.quantidade_id) {
+      itemAdicionado.querySelector('.select-tipo-qtd').value = 'manual';
+      itemAdicionado.querySelector('.div-quantidade-lista').style.display = 'none';
+      itemAdicionado.querySelector('.div-quantidade-manual').style.display = 'block';
+      itemAdicionado.querySelector('.input-quantidade-manual').value = dados.quantidade;
+    } else {
+      itemAdicionado.querySelector('.select-tipo-qtd').value = 'lista';
+      itemAdicionado.querySelector('.select-quantidade').value = dados.quantidade_id;
+    }
+
+    itemAdicionado.querySelector('.input-preco').value = formatarMoeda3(dados.preco_unitario);
+    itemAdicionado.querySelector('.input-total-nf').value = formatarMoeda2(dados.total_nf);
+
+    // Atualizar visibilidade da Base conforme a origem do item carregado
+    atualizarBasePorOrigem(itemAdicionado.querySelector('.select-origem'));
+  }
+
+  atualizarNumerosItens();
 }
 
 function removerItem(btn) {
-    var itens = document.querySelectorAll('.item-pedido');
-    if (itens.length > 1) {
-        btn.closest('.item-pedido').remove();
-        atualizarNumerosItens();
-    } else {
-        alert('O pedido deve ter pelo menos um item.');
-    }
+  var itens = document.querySelectorAll('.item-pedido');
+  if (itens.length > 1) {
+    btn.closest('.item-pedido').remove();
+    atualizarNumerosItens();
+  } else {
+    alert('O pedido deve ter pelo menos um item.');
+  }
 }
 
 function atualizarNumerosItens() {
-    var itens = document.querySelectorAll('.item-pedido');
-    for (var i = 0; i < itens.length; i++) {
-        itens[i].querySelector('.item-numero').textContent = 'Item #' + (i + 1);
-    }
+  var itens = document.querySelectorAll('.item-pedido');
+  for (var i = 0; i < itens.length; i++) {
+    itens[i].querySelector('.item-numero').textContent = 'Item ' + (i + 1);
+  }
 }
 
 function toggleQuantidade(select) {
-    var item = select.closest('.item-pedido');
-    var divLista = item.querySelector('.div-quantidade-lista');
-    var divManual = item.querySelector('.div-quantidade-manual');
-    var selectQtd = item.querySelector('.select-quantidade');
-    var inputManual = item.querySelector('.input-quantidade-manual');
-    var inputFinal = item.querySelector('.input-quantidade-final');
-    
-    if (select.value === 'manual') {
-        divLista.style.display = 'none';
-        divManual.style.display = 'block';
-        selectQtd.value = '';
-        inputFinal.value = inputManual.value || '';
-        
-        inputManual.oninput = function() {
-            inputFinal.value = this.value;
-            calcularTotalItem(item);
-        };
+  var item = select.closest('.item-pedido');
+  var divLista = item.querySelector('.div-quantidade-lista');
+  var divManual = item.querySelector('.div-quantidade-manual');
+  var selectQtd = item.querySelector('.select-quantidade');
+  var inputManual = item.querySelector('.input-quantidade-manual');
+  var inputFinal = item.querySelector('.input-quantidade-final');
+
+  if (select.value == 'manual') {
+    divLista.style.display = 'none';
+    divManual.style.display = 'block';
+    selectQtd.value = '';
+    inputFinal.value = inputManual.value;
+    inputManual.oninput = function() {
+      inputFinal.value = this.value;
+      calcularTotal(item);
+    };
+  } else {
+    divLista.style.display = 'block';
+    divManual.style.display = 'none';
+    inputManual.value = '';
+    if (selectQtd.value) {
+      var option = selectQtd.options[selectQtd.selectedIndex];
+      inputFinal.value = option.dataset.valor;
     } else {
-        divLista.style.display = 'block';
-        divManual.style.display = 'none';
-        inputManual.value = '';
-        if (selectQtd.value) {
-            var option = selectQtd.options[selectQtd.selectedIndex];
-            inputFinal.value = option.dataset.valor || '';
-        } else {
-            inputFinal.value = '';
-        }
+      inputFinal.value = '';
     }
-    calcularTotalItem(item);
+    calcularTotal(item);
+  }
 }
 
 function selecionarQuantidade(select) {
-    var item = select.closest('.item-pedido');
-    var inputFinal = item.querySelector('.input-quantidade-final');
-    var option = select.options[select.selectedIndex];
-    
-    if (option && option.dataset.valor) {
-        inputFinal.value = option.dataset.valor;
-    } else {
-        inputFinal.value = '';
-    }
-    calcularTotalItem(item);
+  var item = select.closest('.item-pedido');
+  var inputFinal = item.querySelector('.input-quantidade-final');
+  var option = select.options[select.selectedIndex];
+  if (option && option.dataset.valor) {
+    inputFinal.value = option.dataset.valor;
+  } else {
+    inputFinal.value = '';
+  }
+  calcularTotal(item);
 }
 
 function converterParaNumero(valor) {
-    if (!valor) return 0;
-    return parseFloat(valor.toString().replace(/\./g, '').replace(',', '.')) || 0;
+  if (!valor) return 0;
+  return parseFloat(valor.toString().replace(/\./g, '').replace(',', '.')) || 0;
 }
 
-function calcularTotalItem(item) {
-    var inputFinal = item.querySelector('.input-quantidade-final');
-    var inputPreco = item.querySelector('.input-preco');
-    var inputTotalNf = item.querySelector('.input-total-nf');
-    
-    var quantidade = parseFloat(inputFinal.value) || 0;
-    var preco = converterParaNumero(inputPreco.value);
-    
-    var total = quantidade * preco;
-    
-    if (total > 0) {
-        inputTotalNf.value = formatarMoeda2(total);
-    } else {
-        inputTotalNf.value = '';
-    }
+function calcularTotal(item) {
+  var inputFinal = item.querySelector('.input-quantidade-final');
+  var inputPreco = item.querySelector('.input-preco');
+  var inputTotalNf = item.querySelector('.input-total-nf');
+
+  var quantidade = parseFloat(inputFinal.value) || 0;
+   var preco = converterParaNumero(inputPreco.value);
+  var total = quantidade * preco;
+
+  if (total > 0) {
+    inputTotalNf.value = formatarMoeda2(total);
+  } else {
+    inputTotalNf.value = '';
+  }
 }
 
 function formatarMoeda3(valor) {
-    return valor.toLocaleString('pt-BR', {
-        minimumFractionDigits: 3,
-        maximumFractionDigits: 3
-    });
+  return valor.toLocaleString('pt-BR', { minimumFractionDigits: 3, maximumFractionDigits: 3 });
 }
 
 function formatarMoeda2(valor) {
-    return valor.toLocaleString('pt-BR', {
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2
-    });
+  return valor.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
 function atualizarBasePorOrigem(selectOrigem) {
-    var item = selectOrigem.closest('.item-pedido');
-    var divBase = item.querySelector('.div-base');
-    var selectBase = item.querySelector('.select-base');
-    var textoOrigem = selectOrigem.options[selectOrigem.selectedIndex].text || '';
+  var item = selectOrigem.closest('.item-pedido');
+  var divBase = item.querySelector('.div-base');
+  var selectBase = item.querySelector('.select-base');
+  var textoOrigem = selectOrigem.options[selectOrigem.selectedIndex].text;
 
-    if (textoOrigem.toUpperCase().includes('SENADOR CANEDO')) {
-        divBase.style.display = 'block';
-    } else {
-        divBase.style.display = 'none';
-        if (selectBase) {
-            selectBase.value = '';
-        }
-    }
+  if (textoOrigem.toUpperCase().includes('SENADOR CANEDO')) {
+    divBase.style.display = 'block';
+  } else {
+    divBase.style.display = 'none';
+    if (selectBase) selectBase.value = '';
+  }
 }
 
 document.addEventListener('input', function(e) {
-    if (e.target.classList.contains('input-preco')) {
-        var value = e.target.value.replace(/\D/g, '');
-        if (value) {
-            value = (parseInt(value) / 1000).toFixed(3);
-            e.target.value = formatarMoeda3(parseFloat(value));
-        }
-        var item = e.target.closest('.item-pedido');
-        if (item) {
-            calcularTotalItem(item);
-        }
+  if (e.target.classList.contains('input-preco')) {
+    var value = e.target.value.replace(/\D/g, '');
+    if (value) {
+      value = (parseInt(value) / 1000).toFixed(3);
+      e.target.value = formatarMoeda3(parseFloat(value));
     }
+    var item = e.target.closest('.item-pedido');
+    if (item) calcularTotal(item);
+  }
 });
 
 document.addEventListener('change', function(e) {
-    if (e.target.classList.contains('select-origem')) {
-        atualizarBasePorOrigem(e.target);
-    }
+  if (e.target.classList.contains('select-origem')) {
+    atualizarBasePorOrigem(e.target);
+  }
 });
 
 document.getElementById('formPedido').addEventListener('submit', function(e) {
-    var itens = document.querySelectorAll('.item-pedido');
-    var valido = true;
-    
-    for (var i = 0; i < itens.length; i++) {
-        var quantidade = itens[i].querySelector('.input-quantidade-final').value;
-        if (!quantidade || parseFloat(quantidade) <= 0) {
-            valido = false;
-            break;
-        }
+  var itens = document.querySelectorAll('.item-pedido');
+  var valido = true;
+
+  for (var i = 0; i < itens.length; i++) {
+    var quantidade = itens[i].querySelector('.input-quantidade-final').value;
+    if (!quantidade || parseFloat(quantidade) <= 0) {
+      valido = false;
+      break;
     }
-    
-    if (!valido) {
-        e.preventDefault();
-        alert('Por favor, preencha a quantidade de todos os itens.');
-        return false;
+  }
+
+  if (!valido) {
+    e.preventDefault();
+    alert('Por favor, preencha a quantidade de todos os itens.');
+    return false;
+  }
+
+  // Converter preços formatados para decimal antes de enviar
+  var inputs = document.querySelectorAll('.input-preco, .input-total-nf');
+  for (var j = 0; j < inputs.length; j++) {
+    if (inputs[j].value) {
+      inputs[j].value = inputs[j].value.replace(/\./g, '').replace(',', '.');
     }
-    
-    var inputs = document.querySelectorAll('.input-preco, .input-total-nf');
-    for (var j = 0; j < inputs.length; j++) {
-        if (inputs[j].value) {
-            inputs[j].value = inputs[j].value.replace(/\./g, '').replace(',', '.');
-        }
-    }
+  }
 });
 
 document.addEventListener('DOMContentLoaded', function() {
-    if (itensExistentes.length > 0) {
-        for (var i = 0; i < itensExistentes.length; i++) {
-            adicionarItem(itensExistentes[i]);
-        }
-    } else {
-        adicionarItem();
+  if (itensExistentes.length > 0) {
+    for (var i = 0; i < itensExistentes.length; i++) {
+      adicionarItem(itensExistentes[i]);
     }
+  } else {
+    adicionarItem();
+  }
 });
 </script>
 {% endblock %}
+
