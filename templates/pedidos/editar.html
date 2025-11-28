@@ -126,6 +126,15 @@
                         {% endfor %}
                     </select>
                 </div>
+                <div class="col-md-3">
+                    <label class="form-label">Base</label>
+                    <select class="form-select select-base" name="base_id[]">
+                        <option value="">Selecione a Base</option>
+                        {% for b in bases %}
+                        <option value="{{ b.id }}">{{ b.nome }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
                 <div class="col-md-2">
                     <label class="form-label">Tipo Qtd</label>
                     <select class="form-select select-tipo-qtd" name="tipo_quantidade[]" onchange="toggleQuantidade(this)">
@@ -171,6 +180,7 @@ var itensExistentes = [
         produto_id: {{ item.produto_id }},
         fornecedor_id: {{ item.fornecedor_id }},
         origem_id: {{ item.origem_id }},
+        base_id: {{ item.base_id or 'null' }},
         quantidade: {{ item.quantidade }},
         quantidade_id: {{ item.quantidade_id or 'null' }},
         tipo_quantidade: "{{ item.tipo_quantidade or 'lista' }}",
@@ -197,6 +207,11 @@ function adicionarItem(dados) {
         itemAdicionado.querySelector('.select-produto').value = dados.produto_id;
         itemAdicionado.querySelector('.select-fornecedor').value = dados.fornecedor_id;
         itemAdicionado.querySelector('.select-origem').value = dados.origem_id;
+
+        if (dados.base_id) {
+            itemAdicionado.querySelector('.select-base').value = dados.base_id;
+        }
+
         itemAdicionado.querySelector('.input-quantidade-final').value = dados.quantidade;
         
         if (dados.tipo_quantidade === 'manual' || !dados.quantidade_id) {
@@ -365,4 +380,3 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 </script>
 {% endblock %}
-
