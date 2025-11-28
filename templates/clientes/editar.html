@@ -3,126 +3,161 @@
 {% block title %}Editar Cliente - {{ app_name }}{% endblock %}
 
 {% block content %}
-<div class="container mt-4">
-  <h2>Editar Cliente</h2>
+<div class="container-fluid">
+  <nav aria-label="breadcrumb" class="mt-2 mb-3">
+    <ol class="breadcrumb" style="font-size: 0.85rem;">
+      <li class="breadcrumb-item"><a href="{{ url_for('index') }}">Dashboard</a></li>
+      <li class="breadcrumb-item"><a href="{{ url_for('clientes.lista') }}">Clientes</a></li>
+      <li class="breadcrumb-item active" aria-current="page">Editar Cliente</li>
+    </ol>
+  </nav>
 
-  <form method="POST" action="{{ url_for('clientes.editar', id=cliente.id) }}">
-    <div class="form-row">
-      <div class="form-group col-md-6">
-        <label for="razao_social">Razão Social*</label>
-        <input type="text" class="form-control" id="razao_social" name="razao_social"
-               value="{{ cliente.razao_social }}" required>
-      </div>
-      <div class="form-group col-md-6">
-        <label for="nome_fantasia">Nome Fantasia</label>
-        <input type="text" class="form-control" id="nome_fantasia" name="nome_fantasia"
-               value="{{ cliente.nome_fantasia or '' }}">
-      </div>
+  <h2 class="mb-3" style="color:#1D63A5; font-size: 1.3rem;"><i class="bi bi-pencil"></i> Editar Cliente</h2>
+
+  <div class="card shadow-sm">
+    <div class="card-header bg-warning text-dark" style="font-size: 0.95rem; padding: 0.6rem 1rem;">
+      <h5 class="mb-0" style="font-size: 1rem;">Editar Cliente</h5>
     </div>
+    <div class="card-body" style="padding: 1rem;">
+      <form method="POST">
 
-    <div class="form-row">
-      <div class="form-group col-md-4">
-        <label for="cnpj">CNPJ</label>
-        <input type="text" class="form-control" id="cnpj" name="cnpj"
-               value="{{ cliente.cnpj or '' }}">
-      </div>
-      <div class="form-group col-md-4">
-        <label for="ie">IE</label>
-        <input type="text" class="form-control" id="ie" name="ie"
-               value="{{ cliente.ie or '' }}">
-      </div>
-      <div class="form-group col-md-4">
-        <label for="contato">Contato</label>
-        <input type="text" class="form-control" id="contato" name="contato"
-               value="{{ cliente.contato or '' }}">
-      </div>
-    </div>
-
-    <div class="form-group">
-      <label for="endereco">Endereço</label>
-      <input type="text" class="form-control" id="endereco" name="endereco"
-             value="{{ cliente.endereco or '' }}">
-    </div>
-
-    <div class="form-row">
-      <div class="form-group col-md-2">
-        <label for="numero">Número</label>
-        <input type="text" class="form-control" id="numero" name="numero"
-               value="{{ cliente.numero or '' }}">
-      </div>
-      <div class="form-group col-md-4">
-        <label for="complemento">Complemento</label>
-        <input type="text" class="form-control" id="complemento" name="complemento"
-               value="{{ cliente.complemento or '' }}">
-      </div>
-      <div class="form-group col-md-6">
-        <label for="bairro">Bairro</label>
-        <input type="text" class="form-control" id="bairro" name="bairro"
-               value="{{ cliente.bairro or '' }}">
-      </div>
-    </div>
-
-    <div class="form-row">
-      <div class="form-group col-md-4">
-        <label for="municipio">Município</label>
-        <input type="text" class="form-control" id="municipio" name="municipio"
-               value="{{ cliente.municipio or '' }}">
-      </div>
-      <div class="form-group col-md-2">
-        <label for="uf">UF</label>
-        <input type="text" class="form-control" id="uf" name="uf" maxlength="2"
-               value="{{ cliente.uf or '' }}">
-      </div>
-      <div class="form-group col-md-3">
-        <label for="cep">CEP</label>
-        <input type="text" class="form-control" id="cep" name="cep"
-               value="{{ cliente.cep or '' }}">
-      </div>
-      <div class="form-group col-md-3">
-        <label for="telefone">Telefone</label>
-        <input type="text" class="form-control" id="telefone" name="telefone"
-               value="{{ cliente.telefone or '' }}">
-      </div>
-    </div>
-
-    <div class="form-group">
-      <label for="email">E-mail</label>
-      <input type="email" class="form-control" id="email" name="email"
-             value="{{ cliente.email or '' }}">
-    </div>
-
-    <!-- NOVO: Rota padrão -->
-    <div class="form-group">
-      <label for="rota_id">Rota padrão</label>
-      <select name="rota_id" id="rota_id" class="form-control">
-        <option value="">Selecione uma rota</option>
-        {% for rota in rotas %}
-          <option value="{{ rota.id }}" {% if cliente.rota_id == rota.id %}selected{% endif %}>
-            {{ rota.origem }} → {{ rota.destino }} (R$ {{ rota.valor_por_litro }})
-          </option>
-        {% endfor %}
-      </select>
-    </div>
-
-    <div class="form-row">
-      <div class="form-group col-md-3">
-        <div class="form-check">
-          <input class="form-check-input" type="checkbox" id="paga_comissao" name="paga_comissao"
-                 {% if cliente.paga_comissao %}checked{% endif %}>
-          <label class="form-check-label" for="paga_comissao">Paga comissão</label>
+        <!-- Dados Principais -->
+        <div class="row">
+          <div class="col-md-6 mb-2">
+            <label class="form-label" style="font-size: 0.85rem;">Razão Social</label>
+            <input type="text" name="razao_social" class="form-control form-control-sm" value="{{ cliente.razao_social }}" required>
+          </div>
+          <div class="col-md-6 mb-2">
+            <label class="form-label" style="font-size: 0.85rem;">Nome Fantasia</label>
+            <input type="text" name="nome_fantasia" class="form-control form-control-sm" value="{{ cliente.nome_fantasia or '' }}">
+          </div>
         </div>
-      </div>
-      <div class="form-group col-md-3">
-        <div class="form-check">
-          <input class="form-check-input" type="checkbox" id="cte_integral" name="cte_integral"
-                 {% if cliente.cte_integral %}checked{% endif %}>
-          <label class="form-check-label" for="cte_integral">CT-e integral</label>
-        </div>
-      </div>
-    </div>
 
-    <button type="submit" class="btn btn-primary">Salvar</button>
-    <a href="{{ url_for('clientes.lista') }}" class="btn btn-secondary">Cancelar</a>
-  </form>
+        <!-- Documentos -->
+        <div class="row">
+          <div class="col-md-4 mb-2">
+            <label class="form-label" style="font-size: 0.85rem;">CNPJ</label>
+            <input type="text" name="cnpj" class="form-control form-control-sm" value="{{ cliente.cnpj or '' }}" placeholder="00.000.000/0000-00">
+          </div>
+          <div class="col-md-4 mb-2">
+            <label class="form-label" style="font-size: 0.85rem;">IE</label>
+            <input type="text" name="ie" class="form-control form-control-sm" value="{{ cliente.ie or '' }}">
+          </div>
+          <div class="col-md-4 mb-2">
+            <label class="form-label" style="font-size: 0.85rem;">Telefone</label>
+            <input type="text" name="telefone" class="form-control form-control-sm" value="{{ cliente.telefone or '' }}" placeholder="(00) 0000-0000">
+          </div>
+        </div>
+
+        <!-- Contato -->
+        <div class="row">
+          <div class="col-md-6 mb-2">
+            <label class="form-label" style="font-size: 0.85rem;">Contato</label>
+            <input type="text" name="contato" class="form-control form-control-sm" value="{{ cliente.contato or '' }}" placeholder="Nome do responsável">
+          </div>
+          <div class="col-md-6 mb-2">
+            <label class="form-label" style="font-size: 0.85rem;">E-mail</label>
+            <input type="email" name="email" class="form-control form-control-sm" value="{{ cliente.email or '' }}" placeholder="email@exemplo.com">
+          </div>
+        </div>
+
+        <!-- Configurações de Comissão -->
+        <hr style="margin: 1rem 0;">
+        <h6 style="font-size: 0.9rem; color: #1D63A5; margin-bottom: 0.75rem;">Configurações de Frete</h6>
+        <div class="row">
+          <div class="col-md-6 mb-2">
+            <div class="form-check form-switch">
+              <input class="form-check-input" type="checkbox" name="paga_comissao" id="paga_comissao" {% if cliente.paga_comissao %}checked{% endif %}>
+              <label class="form-check-label" for="paga_comissao" style="font-size: 0.85rem;">
+                <strong>Paga Comissão ao Motorista</strong>
+                <small class="text-muted d-block">R$ 0,01 por litro transportado</small>
+              </label>
+            </div>
+          </div>
+          <div class="col-md-6 mb-2">
+            <div class="form-check form-switch">
+              <input class="form-check-input" type="checkbox" id="cte_integral" name="cte_integral" value="1" {% if cliente.cte_integral %}checked{% endif %}>
+              <label class="form-check-label" for="cte_integral" style="font-size: 0.85rem;">
+                <strong>CTE Integral</strong>
+                <small class="text-muted d-block">Valor do CTE = Valor total do frete</small>
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <!-- Endereço -->
+        <hr style="margin: 1rem 0;">
+        <h6 style="font-size: 0.9rem; color: #1D63A5; margin-bottom: 0.75rem;">Endereço</h6>
+        <div class="row">
+          <div class="col-md-8 mb-2">
+            <label class="form-label" style="font-size: 0.85rem;">Endereço</label>
+            <input type="text" name="endereco" class="form-control form-control-sm" value="{{ cliente.endereco or '' }}" placeholder="Rua, Avenida...">
+          </div>
+          <div class="col-md-2 mb-2">
+            <label class="form-label" style="font-size: 0.85rem;">Número</label>
+            <input type="text" name="numero" class="form-control form-control-sm" value="{{ cliente.numero or '' }}">
+          </div>
+          <div class="col-md-2 mb-2">
+            <label class="form-label" style="font-size: 0.85rem;">CEP</label>
+            <input type="text" name="cep" class="form-control form-control-sm" value="{{ cliente.cep or '' }}" placeholder="00000-000">
+          </div>
+        </div>
+
+        <div class="row">
+          <div class="col-md-6 mb-2">
+            <label class="form-label" style="font-size: 0.85rem;">Complemento</label>
+            <input type="text" name="complemento" class="form-control form-control-sm" value="{{ cliente.complemento or '' }}" placeholder="Apto, Sala, Bloco...">
+          </div>
+          <div class="col-md-6 mb-2">
+            <label class="form-label" style="font-size: 0.85rem;">Bairro</label>
+            <input type="text" name="bairro" class="form-control form-control-sm" value="{{ cliente.bairro or '' }}">
+          </div>
+        </div>
+
+        <div class="row">
+          <div class="col-md-10 mb-2">
+            <label class="form-label" style="font-size: 0.85rem;">Município</label>
+            <select name="destino_id" class="form-select form-select-sm">
+              <option value="">Selecione o município</option>
+              {% for destino in destinos %}
+                <option value="{{ destino.id }}" {% if cliente.destino_id == destino.id %}selected{% endif %}>
+                  {{ destino.nome }} - {{ destino.estado }}
+                </option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-md-2 mb-2">
+            <label class="form-label" style="font-size: 0.85rem;">UF</label>
+            <input type="text" name="uf" class="form-control form-control-sm" value="{{ cliente.uf or '' }}" maxlength="2" placeholder="SP">
+          </div>
+        </div>
+
+        <!-- Botões -->
+        <div class="d-flex justify-content-between mt-3">
+          <a href="{{ url_for('clientes.lista') }}" class="btn btn-secondary btn-sm">
+            <i class="bi bi-arrow-left"></i> Voltar
+          </a>
+          <button type="submit" class="btn btn-warning btn-sm">
+            <i class="bi bi-pencil"></i> Atualizar
+          </button>
+        </div>
+
+      </form>
+    </div>
+  </div>
 </div>
+
+<style>
+  .form-control-sm, .form-select-sm {
+    font-size: 0.85rem;
+  }
+  .btn-sm {
+    font-size: 0.85rem;
+    padding: 0.4rem 0.8rem;
+  }
+  hr {
+    border-top: 1px solid #dee2e6;
+  }
+</style>
+
 {% endblock %}
