@@ -1,0 +1,344 @@
+{% extends 'base.html' %}
+
+{% block titulo %}Importar Pedido - Fretes{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+  <nav aria-label="breadcrumb" class="mt-2 mb-3">
+    <ol class="breadcrumb" style="font-size: 0.85rem;">
+      <li class="breadcrumb-item"><a href="{{ url_for('index') }}">Início</a></li>
+      <li class="breadcrumb-item"><a href="{{ url_for('fretes.lista') }}">Fretes</a></li>
+      <li class="breadcrumb-item"><a href="{{ url_for('fretes.novo') }}">Novo Frete</a></li>
+      <li class="breadcrumb-item active" aria-current="page">Importar Pedido #{{ pedido.id }}</li>
+    </ol>
+  </nav>
+
+  <!-- Cabeçalho Verde -->
+  <div class="card shadow-sm mb-3">
+    <div class="card-header" style="background:#28a745;color:white; font-size: 0.95rem; padding: 0.6rem 1rem;">
+      <h4 class="mb-0" style="font-size: 1.1rem;">
+        <i class="bi bi-download"></i> Importação de Pedido #{{ pedido.numero }}
+      </h4>
+    </div>
+    <div class="card-body" style="padding: 1rem; background:#d4edda;">
+      <p class="mb-0" style="font-size: 0.9rem;">
+        <strong>Modo de Importação:</strong> Todos os itens do pedido serão exibidos abaixo. 
+        Preencha apenas o <strong>Preço por Litro</strong> e <strong>Status</strong> de cada item. 
+        Os demais campos serão preenchidos automaticamente.
+      </p>
+    </div>
+  </div>
+
+  <form method="POST" action="{{ url_for('fretes.salvar_importados') }}" id="formImportacao">
+    <input type="hidden" name="pedido_id" value="{{ pedido.id }}">
+    
+    <!-- Seção de Dados Comuns (Topo) -->
+    <div class="card shadow-sm mb-3">
+      <div class="card-header" style="background:#17a2b8;color:white; font-size: 0.9rem; padding: 0.5rem 1rem;">
+        <strong>Dados Comuns do Frete</strong>
+      </div>
+      <div class="card-body" style="padding: 1rem;">
+        <div class="row">
+          <div class="col-md-4 mb-2">
+            <label for="data_frete" class="form-label" style="font-size: 0.85rem;">Data do Frete *</label>
+            <input type="date" class="form-control form-control-sm" id="data_frete" name="data_frete" 
+                   value="{{ pedido.data_pedido.strftime('%Y-%m-%d') if pedido.data_pedido else '' }}" required>
+          </div>
+
+          <div class="col-md-4 mb-2">
+            <label class="form-label" style="font-size: 0.85rem;">Motorista</label>
+            <input type="text" class="form-control form-control-sm" 
+                   value="{{ pedido.motorista_nome or 'Não informado' }}" 
+                   style="background:#FFD580;" readonly>
+            <input type="hidden" name="motorista_id" value="{{ pedido.motorista_id }}">
+          </div>
+
+          <div class="col-md-4 mb-2">
+            <label class="form-label" style="font-size: 0.85rem;">Veículo</label>
+            <input type="text" class="form-control form-control-sm" 
+                   value="{{ pedido.veiculo_nome or 'N/A' }} - {{ pedido.veiculo_placa or 'N/A' }}" 
+                   style="background:#FFD580;" readonly>
+            <input type="hidden" name="veiculo_id" value="{{ pedido.veiculo_id }}">
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Cabeçalho dos Itens -->
+    <div class="card shadow-sm mb-2">
+      <div class="card-header" style="background:#007bff;color:white; font-size: 0.9rem; padding: 0.5rem 1rem;">
+        <strong><i class="bi bi-list-ul"></i> Itens do Pedido (preencher Preço por Litro e Status)</strong>
+        <span class="float-end badge bg-light text-dark">{{ itens|length }} item(s)</span>
+      </div>
+    </div>
+
+    <!-- Lista de Itens -->
+    {% for item in itens %}
+    <div class="card shadow-sm mb-3 item-card">
+      <div class="card-header" style="background:#e9ecef; font-size: 0.9rem; padding: 0.5rem 1rem;">
+        <strong>Item #{{ loop.index }}</strong> - {{ item.cliente_razao }}
+      </div>
+      <div class="card-body" style="padding: 0.75rem;">
+        
+        <!-- Hidden inputs para dados do item -->
+        <input type="hidden" name="cliente_id" value="{{ item.cliente_id }}">
+        <input type="hidden" name="produto_id" value="{{ item.produto_id }}">
+        <input type="hidden" name="fornecedor_id" value="{{ item.fornecedor_id }}">
+        <input type="hidden" name="origem_id" value="{{ item.origem_id }}">
+        <input type="hidden" name="destino_id" value="{{ item.cliente_destino_id }}">
+        <input type="hidden" name="quantidade_id" value="{{ item.quantidade_id or '' }}">
+        <input type="hidden" name="quantidade" value="{{ item.quantidade or 0 }}">
+        <input type="hidden" name="preco_unitario" value="{{ '{:.2f}'.format(item.preco_unitario).replace('.', ',') if item.preco_unitario else '0,00' }}">
+        
+        <!-- Dados de comissão e CTe (hidden) -->
+        <input type="hidden" class="cliente-paga-comissao" value="{{ item.cliente_paga_comissao }}">
+        <input type="hidden" class="cliente-percentual-cte" value="{{ item.cliente_percentual_cte }}">
+        <input type="hidden" class="cliente-cte-integral" value="{{ item.cliente_cte_integral }}">
+
+        <!-- Linha 1: Dados do Item (readonly/amarelo) -->
+        <div class="row mb-2">
+          <div class="col-md-2">
+            <label class="form-label" style="font-size: 0.8rem;">Cliente</label>
+            <input type="text" class="form-control form-control-sm" value="{{ item.cliente_razao }}" 
+                   style="background:#FFD580;" readonly>
+          </div>
+          <div class="col-md-2">
+            <label class="form-label" style="font-size: 0.8rem;">Produto</label>
+            <input type="text" class="form-control form-control-sm" value="{{ item.produto_nome }}" 
+                   style="background:#FFD580;" readonly>
+          </div>
+          <div class="col-md-2">
+            <label class="form-label" style="font-size: 0.8rem;">Fornecedor</label>
+            <input type="text" class="form-control form-control-sm" value="{{ item.fornecedor_razao }}" 
+                   style="background:#FFD580;" readonly>
+          </div>
+          <div class="col-md-2">
+            <label class="form-label" style="font-size: 0.8rem;">Origem</label>
+            <input type="text" class="form-control form-control-sm" value="{{ item.origem_nome }}" 
+                   style="background:#FFD580;" readonly>
+          </div>
+          <div class="col-md-2">
+            <label class="form-label" style="font-size: 0.8rem;">Destino</label>
+            <input type="text" class="form-control form-control-sm" value="{{ item.destino_nome or 'N/A' }}" 
+                   style="background:#FFD580;" readonly>
+          </div>
+          <div class="col-md-2">
+            <label class="form-label" style="font-size: 0.8rem;">Quantidade (L)</label>
+            <input type="text" class="form-control form-control-sm" 
+                   value="{{ '{:,.0f}'.format(item.quantidade).replace(',', '.') if item.quantidade else '0' }}" 
+                   style="background:#FFD580;" readonly>
+          </div>
+        </div>
+
+        <!-- Linha 2: Preços e Valores -->
+        <div class="row mb-2">
+          <div class="col-md-2">
+            <label class="form-label" style="font-size: 0.8rem;">Preço Unit. R$</label>
+            <input type="text" class="form-control form-control-sm campo-preco-unitario" 
+                   value="{{ '{:.2f}'.format(item.preco_unitario).replace('.', ',') if item.preco_unitario else '0,00' }}" 
+                   style="background:#FFD580;" readonly>
+          </div>
+          <div class="col-md-2">
+            <label class="form-label" style="font-size: 0.8rem;">Total NF R$</label>
+            <input type="text" class="form-control form-control-sm campo-total-nf" name="total_nf"
+                   value="0,00" style="background:#FFD580;" readonly>
+          </div>
+          <div class="col-md-2">
+            <label class="form-label" style="font-size: 0.8rem;"><strong>Preço p/ Litro R$ *</strong></label>
+            <input type="text" class="form-control form-control-sm campo-preco-litro" name="preco_por_litro"
+                   value="0,00" required>
+          </div>
+          <div class="col-md-2">
+            <label class="form-label" style="font-size: 0.8rem;">Valor Total Frete R$</label>
+            <input type="text" class="form-control form-control-sm campo-valor-frete" name="valor_total_frete"
+                   value="0,00" style="background:#FFD580;" readonly>
+          </div>
+          <div class="col-md-2">
+            <label class="form-label" style="font-size: 0.8rem;"><strong>Status *</strong></label>
+            <select class="form-select form-select-sm" name="status" required>
+              <option value="Pendente">Pendente</option>
+              <option value="Em Trânsito">Em Trânsito</option>
+              <option value="Concluído">Concluído</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Linha 3: Comissões e Lucro (calculados) -->
+        <div class="row">
+          <div class="col-md-3">
+            <label class="form-label" style="font-size: 0.8rem;">Comissão Motorista R$</label>
+            <input type="text" class="form-control form-control-sm campo-comissao-motorista" name="comissao_motorista"
+                   value="0,00" style="background:#FFD580;" readonly>
+          </div>
+          <div class="col-md-3">
+            <label class="form-label" style="font-size: 0.8rem;">Valor CTe R$</label>
+            <input type="text" class="form-control form-control-sm campo-valor-cte" name="valor_cte"
+                   value="0,00" style="background:#FFD580;" readonly>
+          </div>
+          <div class="col-md-3">
+            <label class="form-label" style="font-size: 0.8rem;">Comissão CTe R$</label>
+            <input type="text" class="form-control form-control-sm campo-comissao-cte" name="comissao_cte"
+                   value="0,00" style="background:#FFD580;" readonly>
+          </div>
+          <div class="col-md-3">
+            <label class="form-label" style="font-size: 0.8rem;">Lucro R$</label>
+            <input type="text" class="form-control form-control-sm campo-lucro" name="lucro"
+                   value="0,00" style="background:#FFD580;" readonly>
+          </div>
+        </div>
+
+      </div>
+    </div>
+    {% endfor %}
+    <!-- Botões de Ação -->
+    <div class="d-flex justify-content-between mt-4 mb-4">
+      <a href="{{ url_for('fretes.novo') }}" class="btn btn-secondary btn-sm">
+        <i class="bi bi-arrow-left"></i> Voltar
+      </a>
+      <button type="submit" class="btn btn-success btn-sm">
+        <i class="bi bi-check-circle"></i> Salvar Todos os Fretes
+      </button>
+    </div>
+
+  </form>
+</div>
+
+<style>
+  .bg-warning {
+    background-color: #FFD580 !important;
+  }
+  .form-control-sm, .form-select-sm {
+    font-size: 0.85rem;
+  }
+  .btn-sm {
+    font-size: 0.85rem;
+    padding: 0.4rem 0.8rem;
+  }
+  .item-card {
+    border-left: 4px solid #007bff;
+  }
+  @media (max-width: 768px) {
+    .card-body {
+      padding: 0.5rem !important;
+    }
+    .form-label {
+      font-size: 0.75rem !important;
+    }
+    .form-control-sm, .form-select-sm {
+      font-size: 0.75rem !important;
+    }
+  }
+</style>
+
+<script>
+// Função para converter string formatada BR para decimal
+function converterParaDecimal(valor) {
+  if (typeof valor === 'string') {
+    return parseFloat(valor.replace(/\./g, '').replace(',', '.')) || 0;
+  }
+  return parseFloat(valor) || 0;
+}
+
+// Função para formatar número para padrão brasileiro
+function formatarParaBR(valor) {
+  return valor.toFixed(2).replace('.', ',');
+}
+
+// Função para calcular valores de um item específico
+function calcularItem(itemDiv) {
+  // Obter quantidade
+  var quantidadeInput = itemDiv.querySelector('input[name="quantidade"]');
+  var quantidade = converterParaDecimal(quantidadeInput.value);
+
+  // Obter preço unitário
+  var precoUnitarioDisplay = itemDiv.querySelector('.campo-preco-unitario');
+  var precoUnitario = converterParaDecimal(precoUnitarioDisplay.value);
+
+  // Obter preço por litro (campo editável)
+  var precoLitroInput = itemDiv.querySelector('.campo-preco-litro');
+  var precoLitro = converterParaDecimal(precoLitroInput.value);
+
+  // Obter dados do cliente
+  var clientePagaComissao = parseInt(itemDiv.querySelector('.cliente-paga-comissao').value) || 0;
+  var clientePercentualCte = parseFloat(itemDiv.querySelector('.cliente-percentual-cte').value) || 0;
+  var clienteCteIntegral = parseInt(itemDiv.querySelector('.cliente-cte-integral').value) || 0;
+
+  // CÁLCULOS
+  var totalNF = quantidade * precoUnitario;
+  var valorTotalFrete = quantidade * precoLitro;
+  
+  // Comissão Motorista: R$ 0,01 por litro se cliente paga comissão
+  var comissaoMotorista = clientePagaComissao ? (quantidade * 0.01) : 0;
+  
+  // Valor CTe: integral ou percentual
+  var valorCte = 0;
+  if (clienteCteIntegral == 1) {
+    valorCte = valorTotalFrete;
+  } else {
+    valorCte = valorTotalFrete * (clientePercentualCte / 100);
+  }
+  
+  // Comissão CTe: 8% do valor CTe (conforme sua fórmula)
+  var comissaoCte = valorCte * 0.08;
+  
+  // Lucro: Valor Total Frete - Comissão Motorista - Comissão CTe
+  var lucro = valorTotalFrete - comissaoMotorista - comissaoCte;
+
+  // ATUALIZAR CAMPOS
+  itemDiv.querySelector('.campo-total-nf').value = formatarParaBR(totalNF);
+  itemDiv.querySelector('.campo-valor-frete').value = formatarParaBR(valorTotalFrete);
+  itemDiv.querySelector('.campo-comissao-motorista').value = formatarParaBR(comissaoMotorista);
+  itemDiv.querySelector('.campo-valor-cte').value = formatarParaBR(valorCte);
+  itemDiv.querySelector('.campo-comissao-cte').value = formatarParaBR(comissaoCte);
+  itemDiv.querySelector('.campo-lucro').value = formatarParaBR(lucro);
+}
+
+// Adicionar listeners aos campos de preço por litro
+document.addEventListener('DOMContentLoaded', function() {
+  var itemCards = document.querySelectorAll('.item-card');
+  
+  itemCards.forEach(function(itemDiv) {
+    var precoLitroInput = itemDiv.querySelector('.campo-preco-litro');
+    
+    // Calcular quando o usuário digita no preço por litro
+    precoLitroInput.addEventListener('input', function() {
+      calcularItem(itemDiv);
+    });
+    
+    precoLitroInput.addEventListener('change', function() {
+      calcularItem(itemDiv);
+    });
+    
+    precoLitroInput.addEventListener('keyup', function() {
+      calcularItem(itemDiv);
+    });
+
+    // Calcular inicial
+    calcularItem(itemDiv);
+  });
+});
+
+// Validação antes de enviar
+document.getElementById('formImportacao').addEventListener('submit', function(e) {
+  var precosCampos = document.querySelectorAll('.campo-preco-litro');
+  var todosPreenchidos = true;
+  
+  precosCampos.forEach(function(campo) {
+    var valor = converterParaDecimal(campo.value);
+    if (valor <= 0) {
+      todosPreenchidos = false;
+      campo.style.border = '2px solid red';
+    } else {
+      campo.style.border = '';
+    }
+  });
+  
+  if (!todosPreenchidos) {
+    e.preventDefault();
+    alert('Por favor, preencha o Preço por Litro de todos os itens!');
+    return false;
+  }
+});
+</script>
+
+{% endblock %}
