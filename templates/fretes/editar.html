@@ -1,5 +1,4 @@
 {% extends "base.html" %}
-
 {% block titulo %}Editar Frete{% endblock %}
 
 {% block content %}
@@ -18,8 +17,8 @@
         </div>
         <div class="card-body" style="padding: 1rem;">
             <form method="POST" action="{{ url_for('fretes.editar', id=frete.id) }}">
-
-                <!-- DATA DO FRETE (movido para o topo) -->
+                
+                <!-- DATA DO FRETE movido para o topo -->
                 <div class="row mb-3">
                     <div class="col-md-12">
                         <label for="data_frete" class="form-label" style="font-size: 0.85rem;">Data do Frete</label>
@@ -35,8 +34,8 @@
                             <option value="">Selecione um cliente</option>
                             {% for cliente in clientes %}
                             <option value="{{ cliente.id }}" 
-                                    data-paga-comissao="{{ cliente.paga_comissao | default(1) }}"
-                                    data-cte-integral="{{ cliente.cte_integral | default(0) }}"
+                                    data-paga-comissao="{{ cliente.paga_comissao|default(1) }}"
+                                    data-cte-integral="{{ cliente.cte_integral|default(0) }}"
                                     data-destino-id="{{ cliente.destino_id }}"
                                     {% if cliente.id == frete.clientes_id %}selected{% endif %}>
                                 {{ cliente.razao_social }}
@@ -44,7 +43,6 @@
                             {% endfor %}
                         </select>
                     </div>
-
                     <div class="col-md-6 mb-2">
                         <label for="produto_id" class="form-label" style="font-size: 0.85rem;">Produto</label>
                         <select class="form-select form-select-sm" id="produto_id" name="produto_id" required>
@@ -70,7 +68,6 @@
                             {% endfor %}
                         </select>
                     </div>
-
                     <div class="col-md-6 mb-2">
                         <label for="motoristas_id" class="form-label" style="font-size: 0.85rem;">Motorista</label>
                         <select class="form-select form-select-sm" id="motoristas_id" name="motoristas_id" required>
@@ -99,7 +96,6 @@
                             {% endfor %}
                         </select>
                     </div>
-
                     <div class="col-md-6 mb-2">
                         <label for="destino_id" class="form-label" style="font-size: 0.85rem;">Destino</label>
                         <select class="form-select form-select-sm" id="destino_id" name="destino_id" required>
@@ -125,11 +121,12 @@
                             {% endfor %}
                         </select>
                     </div>
-
+                    
                     <!-- Tipo de Quantidade: Padrão ou Personalizada -->
                     <div class="col-md-6 mb-2">
                         <label for="quantidade_tipo" class="form-label" style="font-size: 0.85rem;">Tipo de Quantidade</label>
                         <select class="form-select form-select-sm" id="quantidade_tipo" name="quantidade_tipo">
+                            <option
                             <option value="padrao" {% if frete.quantidade_id %}selected{% endif %}>Quantidade Padrão (Listbox)</option>
                             <option value="personalizada" {% if not frete.quantidade_id %}selected{% endif %}>Quantidade Personalizada (Manual)</option>
                         </select>
@@ -154,9 +151,9 @@
 
                     <!-- Quantidade Personalizada (Input Manual) -->
                     <div class="col-md-12 mb-2" id="div_quantidade_personalizada" style="display: none;">
-                        <label for="quantidade_manual" class="form-label" style="font-size: 0.85rem;">Quantidade (Litros) - Manual</label>
+                        <label for="quantidade_manual" class="form-label" style="font-size: 0.85rem;">Quantidade Litros - Manual</label>
                         <input type="text" class="form-control form-control-sm" id="quantidade_manual" name="quantidade_manual" 
-                               value="{% if not frete.quantidade_id and frete.quantidade_manual %}{{ '{:,.0f}'.format(frete.quantidade_manual).replace(',', '.') }}{% endif %}" 
+                               value="{% if not frete.quantidade_id and frete.quantidade_manual %}{{ '{:,.0f}'.format(frete.quantidade_manual).replace(',', '.') }}{% endif %}"
                                placeholder="Ex: 9.975">
                         <small class="text-muted">Use ponto como separador de milhar (ex: 9.975)</small>
                     </div>
@@ -168,13 +165,11 @@
                         <input type="text" class="form-control form-control-sm" id="preco_produto_unitario" name="preco_produto_unitario" 
                                value="{{ '{:.2f}'.format(frete.preco_produto_unitario).replace('.', ',') if frete.preco_produto_unitario else '0,00' }}" required>
                     </div>
-
                     <div class="col-md-4 mb-2">
                         <label for="total_nf_compra" class="form-label" style="font-size: 0.85rem;">Total NF Compra (R$)</label>
                         <input type="text" class="form-control form-control-sm bg-warning" id="total_nf_compra" name="total_nf_compra" 
                                value="{{ '{:.2f}'.format(frete.total_nf_compra).replace('.', ',') if frete.total_nf_compra else '0,00' }}" readonly>
                     </div>
-
                     <div class="col-md-4 mb-2">
                         <label for="preco_por_litro" class="form-label" style="font-size: 0.85rem;">Preço por Litro (R$)</label>
                         <input type="text" class="form-control form-control-sm" id="preco_por_litro" name="preco_por_litro" 
@@ -188,13 +183,11 @@
                         <input type="text" class="form-control form-control-sm bg-warning" id="valor_total_frete" name="valor_total_frete" 
                                value="{{ '{:.2f}'.format(frete.valor_total_frete).replace('.', ',') if frete.valor_total_frete else '0,00' }}" readonly>
                     </div>
-
                     <div class="col-md-4 mb-2">
                         <label for="comissao_motorista" class="form-label" style="font-size: 0.85rem;">Comissão Motorista (R$)</label>
                         <input type="text" class="form-control form-control-sm bg-warning" id="comissao_motorista" name="comissao_motorista" 
                                value="{{ '{:.2f}'.format(frete.comissao_motorista).replace('.', ',') if frete.comissao_motorista else '0,00' }}" readonly>
                     </div>
-
                     <div class="col-md-4 mb-2">
                         <label for="valor_cte" class="form-label" style="font-size: 0.85rem;">Valor CTe (R$)</label>
                         <input type="text" class="form-control form-control-sm bg-warning" id="valor_cte" name="valor_cte" 
@@ -208,13 +201,11 @@
                         <input type="text" class="form-control form-control-sm bg-warning" id="comissao_cte" name="comissao_cte" 
                                value="{{ '{:.2f}'.format(frete.comissao_cte).replace('.', ',') if frete.comissao_cte else '0,00' }}" readonly>
                     </div>
-
                     <div class="col-md-4 mb-2">
                         <label for="lucro" class="form-label" style="font-size: 0.85rem;">Lucro (R$)</label>
                         <input type="text" class="form-control form-control-sm bg-warning" id="lucro" name="lucro" 
                                value="{{ '{:.2f}'.format(frete.lucro).replace('.', ',') if frete.lucro else '0,00' }}" readonly>
                     </div>
-
                     <div class="col-md-4 mb-2">
                         <label for="status" class="form-label" style="font-size: 0.85rem;">Status</label>
                         <select class="form-select form-select-sm" id="status" name="status" required>
@@ -248,70 +239,70 @@
 </div>
 
 <style>
-    .bg-warning {
-        background-color: #FFD580 !important;
+.bg-warning {
+    background-color: #FFD580 !important;
+}
+.form-control-sm, .form-select-sm {
+    font-size: 0.85rem;
+}
+.btn-sm {
+    font-size: 0.85rem;
+    padding: 0.4rem 0.8rem;
+}
+@media (max-width: 768px) {
+    .card-body {
+        padding: 0.5rem !important;
+    }
+    .form-label {
+        font-size: 0.8rem !important;
     }
     .form-control-sm, .form-select-sm {
-        font-size: 0.85rem;
+        font-size: 0.8rem !important;
     }
-    .btn-sm {
-        font-size: 0.85rem;
-        padding: 0.4rem 0.8rem;
-    }
-    @media (max-width: 768px) {
-        .card-body {
-            padding: 0.5rem !important;
-        }
-        .form-label {
-            font-size: 0.8rem !important;
-        }
-        .form-control-sm, .form-select-sm {
-            font-size: 0.8rem !important;
-        }
-    }
+}
 </style>
 
 <script>
-    document.addEventListener('DOMContentLoaded', function() {
-        // ========== TOGGLE QUANTIDADE PADRÃO / PERSONALIZADA ==========
-        const tipoSelect = document.getElementById('quantidade_tipo');
-        const divPadrao = document.getElementById('div_quantidade_padrao');
-        const divPersonalizada = document.getElementById('div_quantidade_personalizada');
+document.addEventListener('DOMContentLoaded', function() {
+    // TOGGLE QUANTIDADE PADRÃO/PERSONALIZADA
+    const tipoSelect = document.getElementById('quantidade_tipo');
+    const divPadrao = document.getElementById('div_quantidade_padrao');
+    const divPersonalizada = document.getElementById('div_quantidade_personalizada');
 
-        function alternarQuantidade() {
-            const tipo = tipoSelect.value;
-            if (tipo === 'personalizada') {
-                divPadrao.style.display = 'none';
-                divPersonalizada.style.display = 'block';
-            } else {
-                divPadrao.style.display = 'block';
-                divPersonalizada.style.display = 'none';
-            }
+    function alternarQuantidade() {
+        const tipo = tipoSelect.value;
+        if (tipo === 'personalizada') {
+            divPadrao.style.display = 'none';
+            divPersonalizada.style.display = 'block';
+        } else {
+            divPadrao.style.display = 'block';
+            divPersonalizada.style.display = 'none';
         }
+    }
 
-        tipoSelect.addEventListener('change', alternarQuantidade);
-        alternarQuantidade(); // Executar ao carregar
+    tipoSelect.addEventListener('change', alternarQuantidade);
+    alternarQuantidade(); // Executar ao carregar
 
-        // ========== AUTO-PREENCHIMENTO DO DESTINO ==========
-        const clienteSelect = document.getElementById('clientes_id');
-        const destinoSelect = document.getElementById('destino_id');
+    // AUTO-PREENCHIMENTO DO DESTINO
+    const clienteSelect = document.getElementById('clientes_id');
+    const destinoSelect = document.getElementById('destino_id');
 
-        clienteSelect.addEventListener('change', function() {
-            const selectedOption = this.options[this.selectedIndex];
-            const destinoId = selectedOption.getAttribute('data-destino-id');
-            
-            if (destinoId) {
-                destinoSelect.value = destinoId;
-                console.log('✅ Destino auto-preenchido:', destinoId);
-            }
-        });
+    clienteSelect.addEventListener('change', function() {
+        const selectedOption = this.options[this.selectedIndex];
+        const destinoId = selectedOption.getAttribute('data-destino-id');
+        
+        if (destinoId) {
+            destinoSelect.value = destinoId;
+            console.log('Destino auto-preenchido:', destinoId);
+        }
     });
+});
 </script>
 
 <script>
-    const ROTAS = {{ rotas_dict|tojson|safe }};
+// ✅ CORREÇÃO: Carregar ROTAS do backend com PIPE (|)
+const ROTAS = {{ rotas_dict|tojson|safe }};
 </script>
 
 <script src="{{ url_for('static', filename='js/fretes_calculos.js') }}"></script>
-
 {% endblock %}
