@@ -273,6 +273,7 @@
 
 <script>
     document.addEventListener('DOMContentLoaded', function() {
+        // ========== TOGGLE QUANTIDADE PADRÃO / PERSONALIZADA ==========
         const tipoSelect = document.getElementById('quantidade_tipo');
         const divPadrao = document.getElementById('div_quantidade_padrao');
         const divPersonalizada = document.getElementById('div_quantidade_personalizada');
@@ -290,6 +291,20 @@
 
         tipoSelect.addEventListener('change', alternarQuantidade);
         alternarQuantidade(); // Executar ao carregar
+
+        // ========== AUTO-PREENCHIMENTO DO DESTINO ==========
+        const clienteSelect = document.getElementById('clientes_id');
+        const destinoSelect = document.getElementById('destino_id');
+
+        clienteSelect.addEventListener('change', function() {
+            const selectedOption = this.options[this.selectedIndex];
+            const destinoId = selectedOption.getAttribute('data-destino-id');
+            
+            if (destinoId) {
+                destinoSelect.value = destinoId;
+                console.log('✅ Destino auto-preenchido:', destinoId);
+            }
+        });
     });
 </script>
 
