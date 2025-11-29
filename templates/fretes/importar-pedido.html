@@ -276,36 +276,54 @@ function calcularItem(itemDiv) {
   var origemId = itemDiv.querySelector('.item-origem-id').value;
   var destinoId = itemDiv.querySelector('.item-destino-id').value;
 
-  // CÁLCULOS (usando suas fórmulas originais)
-  var totalNF = quantidade * precoUnitario;
-  var valorTotalFrete = quantidade * precoLitro;
-  
-  // Comissão Motorista: R$ 0,01 por litro se cliente paga comissão
-  var comissaoMotorista = clientePagaComissao ? (quantidade * 0.01) : 0;
-  
-  // Valor CTe: integral ou baseado em rota
-  var valorCte = 0;
-  if (clienteCteIntegral == 1) {
-    // CTe Integral = Valor Total do Frete
+// CÁLCULOS (REGRAS DEFINITIVAS)
+var totalNF = quantidade * precoUnitario;
+
+// 1. VALOR TOTAL FRETE
+var valorTotalFrete = 0;
+if (clientePagaComissao) {
+  valorTotalFrete = quantidade * precoLitro;
+} else {
+  valorTotalFrete = 0;
+}
+
+// 2. COMISSÃO MOTORISTA
+var comissaoMotorista = 0;
+if (clientePagaComissao) {
+  comissaoMotorista = quantidade * 0.01; // R$ 0,01 por litro
+} else {
+  comissaoMotorista = 0;
+}
+
+// 3. VALOR CTe (INDEPENDENTE DO CLIENTE)
+var valorCte = 0;
+if (clienteCteIntegral == 1) {
+  // CTe Integral
+  if (clientePagaComissao) {
     valorCte = valorTotalFrete;
   } else {
-// CTe baseado na ROTA (origem + destino)
-var chave = origemId + '|' + destinoId;
-var valorPorLitroRota = 0;
-
-    
-    if (typeof ROTAS !== 'undefined' && ROTAS[chave]) {
-      valorPorLitroRota = parseFloat(ROTAS[chave]);
-    }
-    
-    valorCte = quantidade * valorPorLitroRota;
+    valorCte = 0; // Se não paga frete, CTe integral também é 0
   }
-  
-  // Comissão CTe: 8% do valor CTe
-  var comissaoCte = valorCte * 0.08;
-  
-  // Lucro: Valor Total Frete - Comissão Motorista - Comissão CTe
-  var lucro = valorTotalFrete - comissaoMotorista - comissaoCte;
+} else {
+  // CTe baseado na ROTA (SEMPRE CALCULA)
+  var chave = origemId + '|' + destinoId;
+  var valorPorLitroRota = 0;
+  if (typeof ROTAS !== 'undefined' && ROTAS[chave]) {
+    valorPorLitroRota = parseFloat(ROTAS[chave]);
+  }
+  valorCte = quantidade * valorPorLitroRota;
+}
+
+// 4. COMISSÃO CTe (SEMPRE 8% DO CTe)
+var comissaoCte = valorCte * 0.08;
+
+// 5. LUCRO
+var lucro = 0;
+if (clientePagaComissao) {
+  lucro = valorTotalFrete - comissaoMotorista - comissaoCte;
+} else {
+  lucro = 0;
+}
 
   // ATUALIZAR CAMPOS
   itemDiv.querySelector('.campo-total-nf').value = formatarMoeda(totalNF);
