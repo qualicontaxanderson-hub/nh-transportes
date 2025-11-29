@@ -315,6 +315,26 @@
     });
 </script>
 
+<script>
+    // Auto-preencher destino quando selecionar cliente
+    document.addEventListener('DOMContentLoaded', function() {
+        const clienteSelect = document.getElementById('clientes_id');
+        const destinoSelect = document.getElementById('destino_id');
+        
+        if (clienteSelect && destinoSelect) {
+            clienteSelect.addEventListener('change', function() {
+                const selectedOption = this.options[this.selectedIndex];
+                const destinoId = selectedOption.getAttribute('data-destino-id');
+                
+                if (destinoId) {
+                    destinoSelect.value = destinoId;
+                    console.log('✅ Destino auto-preenchido:', destinoId);
+                }
+            });
+        }
+    });
+</script>
+
 <script src="{{ url_for('static', filename='js/fretes_calculos.js') }}"></script>
 
 {% endblock %}
