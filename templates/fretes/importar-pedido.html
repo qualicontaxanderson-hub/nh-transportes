@@ -289,9 +289,10 @@ function calcularItem(itemDiv) {
     // CTe Integral = Valor Total do Frete
     valorCte = valorTotalFrete;
   } else {
-    // CTe baseado na ROTA (origem + destino)
-    var chave = origemId + '-' + destinoId;
-    var valorPorLitroRota = 0;
+// CTe baseado na ROTA (origem + destino)
+var chave = origemId + '|' + destinoId;
+var valorPorLitroRota = 0;
+
     
     if (typeof ROTAS !== 'undefined' && ROTAS[chave]) {
       valorPorLitroRota = parseFloat(ROTAS[chave]);
