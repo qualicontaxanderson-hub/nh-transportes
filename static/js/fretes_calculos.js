@@ -1,364 +1,256 @@
-// ============================================================================
-// FRETES_CALCULOS.JS - VERSÃO CORRIGIDA
-// Sistema de cálculos automáticos para fretes
-// ============================================================================
+// ===========================
+// FUNÇÕES AUXILIARES
+// ===========================
 
-// Objeto global que armazena as rotas (preenchido pelo template)
-// Formato: ROTAS["origem_id|destino_id"] = valor_por_litro
-// Usar o objeto ROTAS já declarado pelo template
-if (typeof ROTAS === 'undefined') {
-    var ROTAS = {};
-}
-
-// ============================================================================
-// FUNÇÕES DE FORMATAÇÃO
-// ============================================================================
-
+/**
+ * Formata número para moeda brasileira
+ */
 function formatarMoeda(valor) {
-    if (valor === null || valor === undefined || valor === '') return '0,00';
-    valor = parseFloat(valor);
-    if (isNaN(valor)) return '0,00';
-    return valor.toFixed(2).replace('.', ',');
+    return parseFloat(valor).toFixed(2).replace('.', ',');
 }
 
-// ... resto do arquivo permanece IGUAL
-
-function desformatarMoeda(valor) {
-    if (typeof valor === 'number') return valor;
-    if (!valor) return 0;
-    valor = valor.toString().replace(/\./g, '').replace(',', '.');
-    return parseFloat(valor) || 0;
+/**
+ * Desformata string de moeda para número
+ */
+function desformatarMoeda(valorStr) {
+    if (!valorStr) return 0;
+    return parseFloat(valorStr.toString().replace(',', '.')) || 0;
 }
 
-// ============================================================================
-// OBTER DADOS DO CLIENTE SELECIONADO
-// ============================================================================
+// ===========================
+// FUNÇÕES DE LEITURA DE DADOS
+// ===========================
 
+/**
+ * Obtém dados do cliente selecionado
+ * @returns {Object} { pagaComissao, cteIntegral, destinoId }
+ */
 function obterDadosCliente() {
-    const clienteSelect = document.getElementById('clientes_id');
-    if (!clienteSelect || !clienteSelect.value) {
+    const selectCliente = document.getElementById('clientes_id');
+    if (!selectCliente || !selectCliente.value) {
         return {
             pagaComissao: true,
             cteIntegral: false,
             destinoId: null
         };
     }
-    
-    const selectedOption = clienteSelect.options[clienteSelect.selectedIndex];
-    
-    // Ler os atributos data-* do option selecionado
-    const pagaComissao = selectedOption.getAttribute('data-paga-comissao') === '1';
-    const cteIntegral = selectedOption.getAttribute('data-cte-integral') === '1';
-    const destinoId = selectedOption.getAttribute('data-destino-id');
-    
-    console.log('📊 Dados do cliente:', {
-        clienteId: clienteSelect.value,
-        pagaComissao: pagaComissao,
-        cteIntegral: cteIntegral,
-        destinoId: destinoId
-    });
+
+    const optionSelecionada = selectCliente.options[selectCliente.selectedIndex];
     
     return {
-        pagaComissao: pagaComissao,
-        cteIntegral: cteIntegral,
-        destinoId: destinoId ? parseInt(destinoId) : null
+        pagaComissao: optionSelecionada.getAttribute('data-paga-comissao') !== '0',
+        cteIntegral: optionSelecionada.getAttribute('data-cte-integral') === '1',
+        destinoId: optionSelecionada.getAttribute('data-destino-id')
     };
 }
 
-// ============================================================================
-// OBTER VALOR POR LITRO DA ROTA
-// ============================================================================
-
+/**
+ * Obtém o valor por litro da rota (origem → destino do cliente)
+ * @returns {number} Valor por litro da rota
+ */
 function obterValorPorLitroRota() {
-    const origemSelect = document.getElementById('origem_id');
-    const clienteSelect = document.getElementById('clientes_id');
-    
-    if (!origemSelect || !origemSelect.value || !clienteSelect || !clienteSelect.value) {
-        console.log('⚠️ Origem ou Cliente não selecionado');
-        return 0;
-    }
-    
-    const origemId = parseInt(origemSelect.value);
+    const selectOrigem = document.getElementById('origem_id');
+    if (!selectOrigem || !selectOrigem.value) return 0;
+
+    const origemId = selectOrigem.value;
     const dadosCliente = obterDadosCliente();
     const destinoId = dadosCliente.destinoId;
-    
-    if (!destinoId) {
-        console.log('⚠️ Cliente não tem destino_id definido');
-        return 0;
-    }
-    
-    // Montar a chave para buscar na tabela de rotas
+
+    if (!destinoId) return 0;
+
     const chaveRota = `${origemId}|${destinoId}`;
-    const valorPorLitro = ROTAS[chaveRota] || 0;
-    
-    console.log('🛣️ Busca de rota:', {
-        origem: origemId,
-        destino: destinoId,
-        chave: chaveRota,
-        valorEncontrado: valorPorLitro
-    });
-    
-    return parseFloat(valorPorLitro) || 0;
+    return ROTAS[chaveRota] || 0;
 }
 
-// ============================================================================
-// CALCULAR QUANTIDADE TOTAL
-// ============================================================================
+// ===========================
+// FUNÇÕES DE CÁLCULO
+// ===========================
 
+/**
+ * Calcula a quantidade em litros
+ * Regra: se tipo = KG, multiplica por 1.2 para converter em litros
+ */
 function calcularQuantidade() {
-    const quantidadeId = document.getElementById('quantidade_id');
-    const quantidadeManual = document.getElementById('quantidade_manual');
-    const quantidadeTipo = document.getElementById('quantidade_tipo');
-    
+    const selectQuantidade = document.getElementById('quantidade_id');
+    const inputQuantidadeManual = document.getElementById('quantidade_manual');
+    const selectTipo = document.getElementById('quantidade_tipo');
+
     let quantidade = 0;
-    
-    // Verificar se tem quantidade cadastrada selecionada
-    if (quantidadeId && quantidadeId.value) {
-        const selectedOption = quantidadeId.options[quantidadeId.selectedIndex];
-        const qtdCadastrada = parseFloat(selectedOption.getAttribute('data-quantidade') || 0);
-        quantidade = qtdCadastrada;
+
+    // Prioridade: quantidade cadastrada > manual
+    if (selectQuantidade && selectQuantidade.value) {
+        const optionSelecionada = selectQuantidade.options[selectQuantidade.selectedIndex];
+        quantidade = parseFloat(optionSelecionada.getAttribute('data-quantidade')) || 0;
     }
-    
-    // Se tem quantidade manual, usar ela
-    if (quantidadeManual && quantidadeManual.value) {
-        const qtdManual = desformatarMoeda(quantidadeManual.value);
-        if (qtdManual > 0) {
-            quantidade = qtdManual;
-        }
+
+    // Se existe quantidade manual preenchida, substitui
+    if (inputQuantidadeManual && inputQuantidadeManual.value) {
+        quantidade = desformatarMoeda(inputQuantidadeManual.value);
     }
-    
-    // Converter para litros se for em KG
-    if (quantidadeTipo && quantidadeTipo.value === 'KG' && quantidade > 0) {
-        quantidade = quantidade * 1.2; // 1 KG = 1.2 L
+
+    // Converter KG para litros (1 KG = 1.2 L)
+    if (selectTipo && selectTipo.value === 'KG') {
+        quantidade = quantidade * 1.2;
     }
-    
-    console.log('📦 Quantidade calculada:', quantidade, 'litros');
+
     return quantidade;
 }
 
-// ============================================================================
-// CALCULAR VALOR TOTAL DO FRETE
-// ============================================================================
-
+/**
+ * Calcula o valor total do frete
+ * Regra: se cliente não paga comissão, retorna 0
+ */
 function calcularValorTotalFrete() {
     const dadosCliente = obterDadosCliente();
     
-    // Se cliente não paga comissão, valor total frete = 0
+    // Se cliente não paga comissão, valor do frete é zero
     if (!dadosCliente.pagaComissao) {
-        console.log('💰 Cliente não paga comissão → Valor Total Frete = 0,00');
         return 0;
     }
-    
-    const precoPorLitroInput = document.getElementById('preco_por_litro');
-    if (!precoPorLitroInput) return 0;
-    
-    const precoPorLitro = desformatarMoeda(precoPorLitroInput.value);
+
+    const inputPrecoPorLitro = document.getElementById('preco_por_litro');
+    if (!inputPrecoPorLitro) return 0;
+
+    const precoPorLitro = desformatarMoeda(inputPrecoPorLitro.value);
     const quantidade = calcularQuantidade();
-    
-    const valorTotal = precoPorLitro * quantidade;
-    
-    console.log('💰 Valor Total Frete:', {
-        precoPorLitro: precoPorLitro,
-        quantidade: quantidade,
-        total: valorTotal
-    });
-    
-    return valorTotal;
+
+    return precoPorLitro * quantidade;
 }
 
-// ============================================================================
-// CALCULAR COMISSÃO DO MOTORISTA
-// ============================================================================
-
+/**
+ * Calcula a comissão do motorista
+ * Regra: percentual do motorista × valor total do frete
+ */
 function calcularComissaoMotorista() {
     const dadosCliente = obterDadosCliente();
     
-    // Se cliente não paga comissão, comissão motorista = 0
+    // Se cliente não paga comissão, comissão do motorista é zero
     if (!dadosCliente.pagaComissao) {
-        console.log('🚚 Cliente não paga → Comissão Motorista = 0,00');
         return 0;
     }
-    
-    const motoristaSelect = document.getElementById('motoristas_id');
-    if (!motoristaSelect || !motoristaSelect.value) return 0;
-    
-    const selectedOption = motoristaSelect.options[motoristaSelect.selectedIndex];
-    const percentual = parseFloat(selectedOption.getAttribute('data-percentual') || 0) / 100;
-    
+
+    const selectMotorista = document.getElementById('motoristas_id');
+    if (!selectMotorista || !selectMotorista.value) return 0;
+
+    const optionSelecionada = selectMotorista.options[selectMotorista.selectedIndex];
+    const percentual = parseFloat(optionSelecionada.getAttribute('data-percentual')) || 0;
     const valorTotalFrete = calcularValorTotalFrete();
-    const comissao = valorTotalFrete * percentual;
-    
-    console.log('🚚 Comissão Motorista:', {
-        percentual: percentual * 100 + '%',
-        valorTotalFrete: valorTotalFrete,
-        comissao: comissao
-    });
-    
-    return comissao;
+
+    return valorTotalFrete * (percentual / 100);
 }
-
-// ============================================================================
-// CALCULAR VALOR CTE
-// ============================================================================
-
+/**
+ * Calcula o valor do CTE
+ * Regra: 
+ * - Se CTE integral: usa valor total do frete
+ * - Se CTE não integral: usa valor por litro da rota × quantidade
+ */
 function calcularValorCte() {
     const dadosCliente = obterDadosCliente();
-    let valorCte = 0;
-    
-    // Se CTE INTEGRAL está ativo, usar Valor Total Frete
+    const quantidade = calcularQuantidade();
+
     if (dadosCliente.cteIntegral) {
-        valorCte = calcularValorTotalFrete();
-        console.log('📋 CTE Integral = SIM → Valor CTE = Valor Total Frete:', valorCte);
+        // CTE Integral: usa o valor total do frete
+        return calcularValorTotalFrete();
     } else {
-        // Caso contrário, calcular pela rota
+        // CTE Normal: valor por litro da rota × quantidade
         const valorPorLitroRota = obterValorPorLitroRota();
-        const quantidade = calcularQuantidade();
-        valorCte = valorPorLitroRota * quantidade;
-        console.log('📋 CTE Integral = NÃO → Calcular pela rota:', {
-            valorPorLitro: valorPorLitroRota,
-            quantidade: quantidade,
-            valorCte: valorCte
-        });
+        return valorPorLitroRota * quantidade;
     }
-    
-    return valorCte;
 }
 
-// ============================================================================
-// CALCULAR COMISSÃO CTE (8%)
-// ============================================================================
-
+/**
+ * Calcula a comissão do CTE (8% do valor do CTE)
+ */
 function calcularComissaoCte() {
     const valorCte = calcularValorCte();
-    const comissaoCte = valorCte * 0.08; // Sempre 8% do Valor CTE
-    
-    console.log('📋 Comissão CTE (8%):', comissaoCte);
-    return comissaoCte;
+    return valorCte * 0.08;
 }
 
-// ============================================================================
-// CALCULAR LUCRO
-// ============================================================================
-
+/**
+ * Calcula o lucro
+ * Regra: Valor Total Frete - Comissão Motorista - Comissão CTE
+ */
 function calcularLucro() {
     const dadosCliente = obterDadosCliente();
     
-    // REGRA CRÍTICA: Se cliente não paga comissão, lucro = 0,00
+    // Se cliente não paga comissão, lucro é zero
     if (!dadosCliente.pagaComissao) {
-        console.log('💵 Cliente não paga → Lucro = 0,00');
         return 0;
     }
-    
+
     const valorTotalFrete = calcularValorTotalFrete();
     const comissaoMotorista = calcularComissaoMotorista();
     const comissaoCte = calcularComissaoCte();
-    
-    const lucro = valorTotalFrete - comissaoMotorista - comissaoCte;
-    
-    console.log('💵 Lucro:', {
-        valorTotalFrete: valorTotalFrete,
-        comissaoMotorista: comissaoMotorista,
-        comissaoCte: comissaoCte,
-        lucro: lucro
-    });
-    
-    return lucro;
+
+    return valorTotalFrete - comissaoMotorista - comissaoCte;
 }
 
-// ============================================================================
-// ATUALIZAR CAMPO DE PREÇO POR LITRO (BLOQUEAR SE CLIENTE NÃO PAGA)
-// ============================================================================
+// ===========================
+// CONTROLE DE CAMPOS
+// ===========================
 
+/**
+ * Atualiza o estado do campo "preço por litro"
+ * Bloqueia se cliente não paga comissão
+ */
 function atualizarCampoPrecoPorLitro() {
-    const precoPorLitroInput = document.getElementById('preco_por_litro');
-    if (!precoPorLitroInput) return;
-    
+    const inputPrecoPorLitro = document.getElementById('preco_por_litro');
+    if (!inputPrecoPorLitro) return;
+
     const dadosCliente = obterDadosCliente();
-    
+
     if (!dadosCliente.pagaComissao) {
-        // Cliente NÃO paga → bloquear campo e zerar valor
-        precoPorLitroInput.value = '0,00';
-        precoPorLitroInput.readOnly = true;
-        precoPorLitroInput.style.backgroundColor = '#e9ecef';
-        precoPorLitroInput.style.cursor = 'not-allowed';
-        console.log('🔒 Campo Preço por Litro BLOQUEADO (cliente não paga)');
+        // Cliente não paga comissão: bloqueia campo e zera
+        inputPrecoPorLitro.value = '0,00';
+        inputPrecoPorLitro.readOnly = true;
+        inputPrecoPorLitro.style.backgroundColor = '#e9ecef';
+        inputPrecoPorLitro.style.cursor = 'not-allowed';
     } else {
-        // Cliente PAGA → desbloquear campo
-        precoPorLitroInput.readOnly = false;
-        precoPorLitroInput.style.backgroundColor = '#ffffff';
-        precoPorLitroInput.style.cursor = 'text';
-        console.log('🔓 Campo Preço por Litro DESBLOQUEADO (cliente paga)');
+        // Cliente paga comissão: libera campo
+        inputPrecoPorLitro.readOnly = false;
+        inputPrecoPorLitro.style.backgroundColor = '#ffffff';
+        inputPrecoPorLitro.style.cursor = 'text';
     }
 }
 
-// ============================================================================
-// FUNÇÃO PRINCIPAL: CALCULAR TUDO
-// ============================================================================
+// ===========================
+// FUNÇÃO PRINCIPAL
+// ===========================
 
+/**
+ * Executa todos os cálculos e atualiza os campos
+ */
 function calcularTudo() {
-    console.log('🔄 ========== INICIANDO CÁLCULOS ==========');
-    
-    try {
-        // 1. Atualizar estado do campo preço por litro
-        atualizarCampoPrecoPorLitro();
-        
-        // 2. Calcular Valor Total Frete
-        const valorTotalFrete = calcularValorTotalFrete();
-        const valorTotalFreteInput = document.getElementById('valor_total_frete');
-        if (valorTotalFreteInput) {
-            valorTotalFreteInput.value = formatarMoeda(valorTotalFrete);
-        }
-        
-        // 3. Calcular Comissão Motorista
-        const comissaoMotorista = calcularComissaoMotorista();
-        const comissaoMotoristaInput = document.getElementById('comissao_motorista');
-        if (comissaoMotoristaInput) {
-            comissaoMotoristaInput.value = formatarMoeda(comissaoMotorista);
-        }
-        
-        // 4. Calcular Valor CTE
-        const valorCte = calcularValorCte();
-        const valorCteInput = document.getElementById('valor_cte');
-        if (valorCteInput) {
-            valorCteInput.value = formatarMoeda(valorCte);
-        }
-        
-        // 5. Calcular Comissão CTE
-        const comissaoCte = calcularComissaoCte();
-        const comissaoCteInput = document.getElementById('comissao_cte');
-        if (comissaoCteInput) {
-            comissaoCteInput.value = formatarMoeda(comissaoCte);
-        }
-        
-        // 6. Calcular Lucro
-        const lucro = calcularLucro();
-        const lucroInput = document.getElementById('lucro');
-        if (lucroInput) {
-            lucroInput.value = formatarMoeda(lucro);
-        }
-        
-        console.log('✅ ========== CÁLCULOS FINALIZADOS ==========');
-        console.log('📊 RESUMO:', {
-            valorTotalFrete: formatarMoeda(valorTotalFrete),
-            comissaoMotorista: formatarMoeda(comissaoMotorista),
-            valorCte: formatarMoeda(valorCte),
-            comissaoCte: formatarMoeda(comissaoCte),
-            lucro: formatarMoeda(lucro)
-        });
-        
-    } catch (error) {
-        console.error('❌ Erro durante os cálculos:', error);
-    }
+    // Atualiza estado do campo preço por litro
+    atualizarCampoPrecoPorLitro();
+
+    // Calcula e preenche todos os campos
+    const valorTotalFrete = calcularValorTotalFrete();
+    const comissaoMotorista = calcularComissaoMotorista();
+    const valorCte = calcularValorCte();
+    const comissaoCte = calcularComissaoCte();
+    const lucro = calcularLucro();
+
+    // Atualiza os campos no formulário
+    const campoValorTotalFrete = document.getElementById('valor_total_frete');
+    const campoComissaoMotorista = document.getElementById('comissao_motorista');
+    const campoValorCte = document.getElementById('valor_cte');
+    const campoComissaoCte = document.getElementById('comissao_cte');
+    const campoLucro = document.getElementById('lucro');
+
+    if (campoValorTotalFrete) campoValorTotalFrete.value = formatarMoeda(valorTotalFrete);
+    if (campoComissaoMotorista) campoComissaoMotorista.value = formatarMoeda(comissaoMotorista);
+    if (campoValorCte) campoValorCte.value = formatarMoeda(valorCte);
+    if (campoComissaoCte) campoComissaoCte.value = formatarMoeda(comissaoCte);
+    if (campoLucro) campoLucro.value = formatarMoeda(lucro);
 }
 
-// ============================================================================
-// INICIALIZAÇÃO: ADICIONAR EVENT LISTENERS
-// ============================================================================
+// ===========================
+// INICIALIZAÇÃO
+// ===========================
 
 document.addEventListener('DOMContentLoaded', function() {
-    console.log('🚀 Inicializando sistema de cálculos de fretes...');
-    
-    // Lista de campos que devem triggerar recálculo
+    // Lista de campos que disparam o recálculo
     const camposParaMonitorar = [
         'clientes_id',
         'motoristas_id',
@@ -369,50 +261,29 @@ document.addEventListener('DOMContentLoaded', function() {
         'preco_produto_unitario',
         'preco_por_litro'
     ];
-    
-    // Adicionar event listeners
-    camposParaMonitorar.forEach(campoId => {
+
+    // Adiciona listeners em todos os campos
+    camposParaMonitorar.forEach(function(campoId) {
         const campo = document.getElementById(campoId);
         if (campo) {
-            // Usar 'change' para selects e 'input' para text inputs
             const evento = campo.tagName === 'SELECT' ? 'change' : 'input';
-            campo.addEventListener(evento, function() {
-                console.log(`🔄 Campo alterado: ${campoId}`);
-                calcularTudo();
-            });
-            console.log(`✅ Listener adicionado: ${campoId} (${evento})`);
-        } else {
-            console.log(`⚠️ Campo não encontrado: ${campoId}`);
+            campo.addEventListener(evento, calcularTudo);
         }
     });
-    
-    // Executar cálculo inicial
-    console.log('🔄 Executando cálculo inicial...');
+
+    // Executa cálculo inicial
     calcularTudo();
-    
-    console.log('✅ Sistema de cálculos inicializado com sucesso!');
+
+    // ===========================
+    // FUNÇÕES DE DEBUG (console)
+    // ===========================
+    window.debugRotas = function() {
+        console.log('Rotas carregadas:', ROTAS);
+    };
+
+    window.debugCliente = function() {
+        console.log('Dados do cliente:', obterDadosCliente());
+    };
+
+    window.calcularTudo = calcularTudo;
 });
-
-// ============================================================================
-// FUNÇÕES AUXILIARES PARA DEPURAÇÃO
-// ============================================================================
-
-// Função para debugar rotas carregadas
-function debugRotas() {
-    console.log('🛣️ ROTAS CARREGADAS:', ROTAS);
-    console.log('📊 Total de rotas:', Object.keys(ROTAS).length);
-}
-
-// Função para debugar dados do cliente atual
-function debugCliente() {
-    const dados = obterDadosCliente();
-    console.log('👤 DADOS DO CLIENTE SELECIONADO:', dados);
-}
-
-// Tornar funções de debug disponíveis globalmente
-window.debugRotas = debugRotas;
-window.debugCliente = debugCliente;
-window.calcularTudo = calcularTudo;
-
-console.log('✅ fretes_calculos.js carregado com sucesso!');
-console.log('💡 Dica: Use debugRotas() ou debugCliente() no console para depurar');
