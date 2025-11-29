@@ -134,38 +134,52 @@
           </div>
         </div>
 
-        <!-- Linha 2: Preços e Valores -->
-        <div class="row mb-2">
-          <div class="col-md-2">
-            <label class="form-label" style="font-size: 0.8rem;">Preço Unit. R$</label>
-            <input type="text" class="form-control form-control-sm campo-preco-unitario" 
-                   value="{{ '{:.2f}'.format(item.preco_unitario).replace('.', ',') if item.preco_unitario else '0,00' }}" 
-                   style="background:#FFD580;" readonly>
-          </div>
-          <div class="col-md-2">
-            <label class="form-label" style="font-size: 0.8rem;">Total NF R$</label>
-            <input type="text" class="form-control form-control-sm campo-total-nf" name="total_nf"
-                   value="0,00" style="background:#FFD580;" readonly>
-          </div>
-          <div class="col-md-2 campo-preco-litro-container">
-            <label class="form-label" style="font-size: 0.8rem;"><strong>Preço p/ Litro R$ *</strong></label>
-            <input type="text" class="form-control form-control-sm campo-preco-litro" name="preco_por_litro"
-                   value="0,00" required>
-          </div>
-          <div class="col-md-2">
-            <label class="form-label" style="font-size: 0.8rem;">Valor Total Frete R$</label>
-            <input type="text" class="form-control form-control-sm campo-valor-frete" name="valor_total_frete"
-                   value="0,00" style="background:#FFD580;" readonly>
-          </div>
-          <div class="col-md-2">
-            <label class="form-label" style="font-size: 0.8rem;"><strong>Status *</strong></label>
-            <select class="form-select form-select-sm" name="status" required>
-              <option value="Pendente">Pendente</option>
-              <option value="Em Trânsito">Em Trânsito</option>
-              <option value="Concluído">Concluído</option>
-            </select>
-          </div>
-        </div>
+<!-- Linha 2: Preços e Valores -->
+<div class="row mb-2">
+  <div class="col-md-2">
+    <label class="form-label" style="font-size: 0.8rem;">Preço Unit. R$</label>
+    <input type="text" class="form-control form-control-sm campo-preco-unitario" 
+           value="{{ '{:.2f}'.format(item.preco_unitario).replace('.', ',') if item.preco_unitario else '0,00' }}" 
+           style="background:#FFD580;" readonly>
+  </div>
+  <div class="col-md-2">
+    <label class="form-label" style="font-size: 0.8rem;">Total NF R$</label>
+    <input type="text" class="form-control form-control-sm campo-total-nf" name="total_nf"
+           value="0,00" style="background:#FFD580;" readonly>
+  </div>
+  <div class="col-md-2 campo-preco-litro-container">
+    <label class="form-label" style="font-size: 0.8rem;"><strong>Preço p/ Litro R$ *</strong></label>
+    <input type="text" class="form-control form-control-sm campo-preco-litro" name="preco_por_litro"
+           value="0,00" required>
+  </div>
+  <div class="col-md-2">
+    <label class="form-label" style="font-size: 0.8rem;">Valor Total Frete R$</label>
+    <input type="text" class="form-control form-control-sm campo-valor-frete" name="valor_total_frete"
+           value="0,00" style="background:#FFD580;" readonly>
+  </div>
+  <div class="col-md-4">
+    <label class="form-label" style="font-size: 0.8rem;"><strong>Status *</strong></label>
+    <div class="btn-group btn-group-sm w-100" role="group" aria-label="Status do frete">
+      <input type="radio" class="btn-check" name="status" id="status_pendente_{{ loop.index }}" 
+             value="Pendente" checked required>
+      <label class="btn btn-outline-warning" for="status_pendente_{{ loop.index }}" style="font-size: 0.75rem;">
+        Pendente
+      </label>
+
+      <input type="radio" class="btn-check" name="status" id="status_transito_{{ loop.index }}" 
+             value="Em Trânsito">
+      <label class="btn btn-outline-primary" for="status_transito_{{ loop.index }}" style="font-size: 0.75rem;">
+        Em Trânsito
+      </label>
+
+      <input type="radio" class="btn-check" name="status" id="status_concluido_{{ loop.index }}" 
+             value="Concluído">
+      <label class="btn btn-outline-success" for="status_concluido_{{ loop.index }}" style="font-size: 0.75rem;">
+        Concluído
+      </label>
+    </div>
+  </div>
+</div>
 
         <!-- Linha 3: Comissões e Lucro (calculados) -->
         <div class="row">
