@@ -2,7 +2,6 @@
 // FUNÇÕES AUXILIARES
 // ====================================
 
-// NOVA FUNÇÃO: Formata moeda pt-BR (ponto milhar, vírgula decimal)
 function formatarMoeda(valor) {
     let numero = parseFloat(valor).toFixed(2);
     let partes = numero.split('.');
@@ -63,19 +62,16 @@ function obterDadosMotorista() {
     return { pagaComissao };
 }
 
-// ====================================
-// FUNÇÃO CORRIGIDA - ALTERAÇÃO PRINCIPAL
-// ====================================
 function obterValorPorLitroRota() {
     const origemId = document.getElementById('origem_id').value;
     
-    // NOVA LÓGICA: Pegar o município do cliente selecionado
+    // Pegar o município do cliente selecionado
     const clienteSelect = document.getElementById('clientes_id');
     const selectedOption = clienteSelect.options[clienteSelect.selectedIndex];
     
     if (!selectedOption || !selectedOption.value) return 0;
     
-    // Buscar o destino_id do data-attribute do cliente (município)
+    // Buscar o município_id do cliente
     const destinoId = selectedOption.getAttribute('data-municipio-id');
     
     if (!origemId || !destinoId) return 0;
@@ -99,6 +95,15 @@ function calcularTotalNFCompra() {
 }
 
 function calcularValorTotalFrete() {
+    const dadosCliente = obterDadosCliente();
+    const clientePagaComissao = dadosCliente.pagaComissao;
+    
+    // SE CLIENTE NÃO PAGA FRETE → VALOR TOTAL FRETE = 0
+    if (!clientePagaComissao) {
+        document.getElementById('valor_total_frete').value = formatarMoeda(0);
+        return;
+    }
+    
     const quantidade = obterQuantidade();
     const precoPorLitro = desformatarMoeda(document.getElementById('preco_por_litro').value);
     const valorTotal = quantidade * precoPorLitro;
@@ -124,12 +129,16 @@ function calcularComissaoMotorista() {
 function calcularValorCte() {
     const dadosCliente = obterDadosCliente();
     const cteIntegral = dadosCliente.cteIntegral;
+    
     let valorCte = 0;
     
+    // Verifica se o botão CTE INTEGRAL está ativado
     if (cteIntegral) {
+        // Se CTE Integral = SIM → usa o Valor Total Frete
         const valorTotalFrete = desformatarMoeda(document.getElementById('valor_total_frete').value);
         valorCte = valorTotalFrete;
     } else {
+        // Se CTE Integral = NÃO → calcula pela rota
         const quantidade = obterQuantidade();
         const valorPorLitroRota = obterValorPorLitroRota();
         valorCte = quantidade * valorPorLitroRota;
@@ -148,6 +157,7 @@ function calcularLucro() {
     const dadosCliente = obterDadosCliente();
     const clientePagaComissao = dadosCliente.pagaComissao;
     
+    // SE CLIENTE NÃO PAGA FRETE → LUCRO = 0
     if (!clientePagaComissao) {
         document.getElementById('lucro').value = formatarMoeda(0);
         return;
@@ -166,6 +176,7 @@ function calcularTudo() {
     const clientePagaComissao = dadosCliente.pagaComissao;
     const precoPorLitroInput = document.getElementById('preco_por_litro');
     
+    // SE CLIENTE NÃO PAGA FRETE → Bloqueia campo "Preço por Litro"
     if (!clientePagaComissao) {
         precoPorLitroInput.value = formatarMoeda(0);
         precoPorLitroInput.readOnly = true;
