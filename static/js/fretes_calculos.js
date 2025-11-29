@@ -157,7 +157,7 @@ function calcularLucro() {
     const dadosCliente = obterDadosCliente();
     const clientePagaComissao = dadosCliente.pagaComissao;
     
-    // SE CLIENTE NÃO PAGA FRETE → LUCRO = 0
+    // SE CLIENTE NÃO PAGA FRETE → LUCRO = 0 (NÃO FICA NEGATIVO)
     if (!clientePagaComissao) {
         document.getElementById('lucro').value = formatarMoeda(0);
         return;
