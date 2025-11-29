@@ -100,6 +100,19 @@ function calcularQuantidade() {
  * Calcula o valor total do frete
  * Regra: se cliente não paga comissão, retorna 0
  */
+/**
+ * Calcula o total da NF de compra
+ * Regra: Quantidade × Preço Produto Unitário
+ */
+function calcularTotalNFCompra() {
+    const inputPrecoUnitario = document.getElementById('preco_produto_unitario');
+    if (!inputPrecoUnitario) return 0;
+
+    const precoUnitario = desformatarMoeda(inputPrecoUnitario.value);
+    const quantidade = calcularQuantidade();
+
+    return precoUnitario * quantidade;
+}
 function calcularValorTotalFrete() {
     const dadosCliente = obterDadosCliente();
     
@@ -119,7 +132,7 @@ function calcularValorTotalFrete() {
 
 /**
  * Calcula a comissão do motorista
- * Regra: percentual do motorista × valor total do frete
+ * Regra: R$ 0,01 por litro (se cliente paga comissão)
  */
 function calcularComissaoMotorista() {
     const dadosCliente = obterDadosCliente();
@@ -129,15 +142,10 @@ function calcularComissaoMotorista() {
         return 0;
     }
 
-    const selectMotorista = document.getElementById('motoristas_id');
-    if (!selectMotorista || !selectMotorista.value) return 0;
-
-    const optionSelecionada = selectMotorista.options[selectMotorista.selectedIndex];
-    const percentual = parseFloat(optionSelecionada.getAttribute('data-percentual')) || 0;
-    const valorTotalFrete = calcularValorTotalFrete();
-
-    return valorTotalFrete * (percentual / 100);
+    const quantidade = calcularQuantidade();
+    return quantidade * 0.01; // R$ 0,01 por litro
 }
+
 /**
  * Calcula o valor do CTE
  * Regra: 
@@ -225,6 +233,7 @@ function calcularTudo() {
     atualizarCampoPrecoPorLitro();
 
     // Calcula e preenche todos os campos
+    const totalNFCompra = calcularTotalNFCompra();  // ← ADICIONAR
     const valorTotalFrete = calcularValorTotalFrete();
     const comissaoMotorista = calcularComissaoMotorista();
     const valorCte = calcularValorCte();
@@ -232,12 +241,14 @@ function calcularTudo() {
     const lucro = calcularLucro();
 
     // Atualiza os campos no formulário
+    const campoTotalNFCompra = document.getElementById('total_nf_compra');  // ← ADICIONAR
     const campoValorTotalFrete = document.getElementById('valor_total_frete');
     const campoComissaoMotorista = document.getElementById('comissao_motorista');
     const campoValorCte = document.getElementById('valor_cte');
     const campoComissaoCte = document.getElementById('comissao_cte');
     const campoLucro = document.getElementById('lucro');
 
+    if (campoTotalNFCompra) campoTotalNFCompra.value = formatarMoeda(totalNFCompra);  // ← ADICIONAR
     if (campoValorTotalFrete) campoValorTotalFrete.value = formatarMoeda(valorTotalFrete);
     if (campoComissaoMotorista) campoComissaoMotorista.value = formatarMoeda(comissaoMotorista);
     if (campoValorCte) campoValorCte.value = formatarMoeda(valorCte);
