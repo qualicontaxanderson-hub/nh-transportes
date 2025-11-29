@@ -5,7 +5,10 @@
 
 // Objeto global que armazena as rotas (preenchido pelo template)
 // Formato: ROTAS["origem_id|destino_id"] = valor_por_litro
-let ROTAS = window.ROTAS || {};
+// Usar o objeto ROTAS já declarado pelo template
+if (typeof ROTAS === 'undefined') {
+    var ROTAS = {};
+}
 
 // ============================================================================
 // FUNÇÕES DE FORMATAÇÃO
@@ -17,6 +20,8 @@ function formatarMoeda(valor) {
     if (isNaN(valor)) return '0,00';
     return valor.toFixed(2).replace('.', ',');
 }
+
+// ... resto do arquivo permanece IGUAL
 
 function desformatarMoeda(valor) {
     if (typeof valor === 'number') return valor;
