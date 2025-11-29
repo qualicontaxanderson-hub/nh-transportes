@@ -1,5 +1,4 @@
 {% extends "base.html" %}
-
 {% block titulo %}Novo Frete{% endblock %}
 
 {% block content %}
@@ -17,7 +16,7 @@
             <h4 class="mb-0" style="font-size: 1.1rem;">Novo Frete</h4>
         </div>
         <div class="card-body" style="padding: 1rem;">
-
+            
             <!-- IMPORTAR DO PEDIDO -->
             <div class="card mb-3 border-info">
                 <div class="card-header bg-info text-white" style="font-size: 0.9rem; padding: 0.5rem 1rem;">
@@ -34,8 +33,7 @@
                                         data-motorista="{{ pedido.motorista_id or '' }}"
                                         {% if pedido_selecionado_id and pedido.id == pedido_selecionado_id %}selected{% endif %}>
                                     {{ pedido.numero }} - {{ pedido.data_pedido.strftime('%d/%m/%Y') if pedido.data_pedido else '' }}
-                                    {% if pedido.motorista_nome %} - {{ pedido.motorista_nome }}{% endif %}
-                                    - {{ pedido.status }}
+                                    {% if pedido.motorista_nome %} - {{ pedido.motorista_nome }}{% endif %} - {{ pedido.status }}
                                 </option>
                                 {% endfor %}
                             </select>
@@ -52,7 +50,7 @@
             <form method="POST" action="{{ url_for('fretes.novo') }}">
                 <input type="hidden" name="pedido_id" id="pedido_id_hidden" value="{{ pedido_selecionado_id or '' }}">
 
-                <!-- DATA DO FRETE (movido para o topo) -->
+                <!-- DATA DO FRETE movido para o topo -->
                 <div class="row mb-3">
                     <div class="col-md-12">
                         <label for="data_frete" class="form-label" style="font-size: 0.85rem;">Data do Frete</label>
@@ -67,8 +65,8 @@
                             <option value="">Selecione um cliente</option>
                             {% for cliente in clientes %}
                             <option value="{{ cliente.id }}" 
-                                    data-paga-comissao="{{ cliente.paga_comissao | default(1) }}"
-                                    data-cte-integral="{{ cliente.cte_integral | default(0) }}"
+                                    data-paga-comissao="{{ cliente.paga_comissao|default(1) }}"
+                                    data-cte-integral="{{ cliente.cte_integral|default(0) }}"
                                     data-destino-id="{{ cliente.destino_id }}">
                                 {{ cliente.razao_social }}
                             </option>
@@ -97,19 +95,20 @@
                             {% endfor %}
                         </select>
                     </div>
-
                     <div class="col-md-6 mb-2">
                         <label for="motoristas_id" class="form-label" style="font-size: 0.85rem;">Motorista</label>
                         <select class="form-select form-select-sm" id="motoristas_id" name="motoristas_id" required>
                             <option value="">Selecione um motorista</option>
                             {% for motorista in motoristas %}
-                            <option value="{{ motorista.id }}" data-percentual="{{ motorista.percentual_comissao }}">{{ motorista.nome }}</option>
+                            <option value="{{ motorista.id }}" data-percentual="{{ motorista.percentual_comissao }}">
+                                {{ motorista.nome }}
+                            </option>
                             {% endfor %}
                         </select>
                     </div>
                 </div>
 
-                <!-- ROTA: ORIGEM E DESTINO (CAMPOS OBRIGATÓRIOS) -->
+                <!-- ROTA: ORIGEM E DESTINO - CAMPOS OBRIGATÓRIOS -->
                 <div class="row">
                     <div class="col-md-6 mb-2">
                         <label for="origem_id" class="form-label" style="font-size: 0.85rem;">Origem</label>
@@ -120,7 +119,6 @@
                             {% endfor %}
                         </select>
                     </div>
-
                     <div class="col-md-6 mb-2">
                         <label for="destino_id" class="form-label" style="font-size: 0.85rem;">Destino</label>
                         <select class="form-select form-select-sm" id="destino_id" name="destino_id" required>
@@ -160,7 +158,9 @@
                         <select class="form-select form-select-sm" id="quantidade_id" name="quantidade_id">
                             <option value="">Selecione a quantidade</option>
                             {% for quantidade in quantidades %}
-                            <option value="{{ quantidade.id }}" data-quantidade="{{ quantidade.valor }}">{{ quantidade.descricao }}</option>
+                            <option value="{{ quantidade.id }}" data-quantidade="{{ quantidade.valor }}">
+                                {{ quantidade.descricao }}
+                            </option>
                             {% endfor %}
                         </select>
                     </div>
@@ -179,29 +179,24 @@
                         <label for="preco_produto_unitario" class="form-label" style="font-size: 0.85rem;">Preço Produto Unitário (R$)</label>
                         <input type="text" class="form-control form-control-sm" id="preco_produto_unitario" name="preco_produto_unitario" value="0,00" required>
                     </div>
-
                     <div class="col-md-4 mb-2">
                         <label for="total_nf_compra" class="form-label" style="font-size: 0.85rem;">Total NF Compra (R$)</label>
                         <input type="text" class="form-control form-control-sm bg-warning" id="total_nf_compra" name="total_nf_compra" value="0,00" readonly>
                     </div>
-
                     <div class="col-md-4 mb-2">
                         <label for="preco_por_litro" class="form-label" style="font-size: 0.85rem;">Preço por Litro (R$)</label>
                         <input type="text" class="form-control form-control-sm" id="preco_por_litro" name="preco_por_litro" value="0,00" required>
                     </div>
                 </div>
-
                 <div class="row">
                     <div class="col-md-4 mb-2">
                         <label for="valor_total_frete" class="form-label" style="font-size: 0.85rem;">Valor Total Frete (R$)</label>
                         <input type="text" class="form-control form-control-sm bg-warning" id="valor_total_frete" name="valor_total_frete" value="0,00" readonly>
                     </div>
-
                     <div class="col-md-4 mb-2">
                         <label for="comissao_motorista" class="form-label" style="font-size: 0.85rem;">Comissão Motorista (R$)</label>
                         <input type="text" class="form-control form-control-sm bg-warning" id="comissao_motorista" name="comissao_motorista" value="0,00" readonly>
                     </div>
-
                     <div class="col-md-4 mb-2">
                         <label for="valor_cte" class="form-label" style="font-size: 0.85rem;">Valor CTe (R$)</label>
                         <input type="text" class="form-control form-control-sm bg-warning" id="valor_cte" name="valor_cte" value="0,00" readonly>
@@ -213,7 +208,6 @@
                         <label for="comissao_cte" class="form-label" style="font-size: 0.85rem;">Comissão CTe (R$)</label>
                         <input type="text" class="form-control form-control-sm bg-warning" id="comissao_cte" name="comissao_cte" value="0,00" readonly>
                     </div>
-
                     <div class="col-md-4 mb-2">
                         <label for="lucro" class="form-label" style="font-size: 0.85rem;">Lucro (R$)</label>
                         <input type="text" class="form-control form-control-sm bg-warning" id="lucro" name="lucro" value="0,00" readonly>
@@ -233,7 +227,8 @@
                 <div class="row">
                     <div class="col-md-12 mb-3">
                         <label for="observacoes" class="form-label" style="font-size: 0.85rem;">Observações</label>
-                        <textarea class="form-control form-control-sm" id="observacoes" name="observacoes" rows="2" placeholder="Digite observações adicionais..."></textarea>
+                        <textarea class="form-control form-control-sm" id="observacoes" name="observacoes" rows="2" 
+                                  placeholder="Digite observações adicionais..."></textarea>
                     </div>
                 </div>
 
@@ -251,90 +246,92 @@
 </div>
 
 <style>
-    .bg-warning {
-        background-color: #FFD580 !important;
+.bg-warning {
+    background-color: #FFD580 !important;
+}
+.form-control-sm, .form-select-sm {
+    font-size: 0.85rem;
+}
+.btn-sm {
+    font-size: 0.85rem;
+    padding: 0.4rem 0.8rem;
+}
+@media (max-width: 768px) {
+    .card-body {
+        padding: 0.5rem !important;
+    }
+    .form-label {
+        font-size: 0.8rem !important;
     }
     .form-control-sm, .form-select-sm {
-        font-size: 0.85rem;
+        font-size: 0.8rem !important;
     }
-    .btn-sm {
-        font-size: 0.85rem;
-        padding: 0.4rem 0.8rem;
-    }
-    @media (max-width: 768px) {
-        .card-body {
-            padding: 0.5rem !important;
-        }
-        .form-label {
-            font-size: 0.8rem !important;
-        }
-        .form-control-sm, .form-select-sm {
-            font-size: 0.8rem !important;
-        }
-    }
+}
 </style>
 
 <script>
-    const ROTAS = {{ rotas_dict|tojson|safe }};
+// ✅ CORREÇÃO: Carregar ROTAS do backend com PIPE (|)
+const ROTAS = {{ rotas_dict|tojson|safe }};
 
-    // Função para redirecionar para importação de pedido
-    function irParaImportacao() {
-        var pedidoSelect = document.getElementById('pedido_importar');
-        var pedidoId = pedidoSelect.value;
-        if (!pedidoId) {
-            alert('Selecione um pedido para importar.');
-            return;
-        }
-        // Redirecionar para tela de importação
-        window.location.href = `/fretes/importar/${pedidoId}`;
+// Função para redirecionar para importação de pedido
+function irParaImportacao() {
+    var pedidoSelect = document.getElementById('pedido_importar');
+    var pedidoId = pedidoSelect.value;
+    
+    if (!pedidoId) {
+        alert('Selecione um pedido para importar.');
+        return;
     }
+    
+    // Redirecionar para tela de importação
+    window.location.href = `/fretes/importar/${pedidoId}`;
+}
 
-    // Toggle tipo de quantidade
-    document.addEventListener('DOMContentLoaded', function() {
-        var tipoSelect = document.querySelector('#quantidade_tipo');
-        var divPadrao = document.querySelector('#div_quantidade_padrao');
-        var divPersonalizada = document.querySelector('#div_quantidade_personalizada');
-        var quantidadePadraoSelect = document.querySelector('#quantidade_id');
-        var quantidadeManualInput = document.querySelector('#quantidade_manual');
+// Toggle tipo de quantidade
+document.addEventListener('DOMContentLoaded', function() {
+    var tipoSelect = document.querySelector('#quantidade_tipo');
+    var divPadrao = document.querySelector('#div_quantidade_padrao');
+    var divPersonalizada = document.querySelector('#div_quantidade_personalizada');
+    var quantidadePadraoSelect = document.querySelector('#quantidade_id');
+    var quantidadeManualInput = document.querySelector('#quantidade_manual');
 
-        tipoSelect.addEventListener('change', function() {
-            if (this.value === 'personalizada') {
-                divPadrao.style.display = 'none';
-                divPersonalizada.style.display = 'block';
-                quantidadePadraoSelect.removeAttribute('required');
-                quantidadeManualInput.setAttribute('required', 'required');
-                quantidadePadraoSelect.value = '';
-            } else {
-                divPadrao.style.display = 'block';
-                divPersonalizada.style.display = 'none';
-                quantidadePadraoSelect.setAttribute('required', 'required');
-                quantidadeManualInput.removeAttribute('required');
-                quantidadeManualInput.value = '';
-            }
-        });
+    tipoSelect.addEventListener('change', function() {
+        if (this.value === 'personalizada') {
+            divPadrao.style.display = 'none';
+            divPersonalizada.style.display = 'block';
+            quantidadePadraoSelect.removeAttribute('required');
+            quantidadeManualInput.setAttribute('required', 'required');
+            quantidadePadraoSelect.value = '';
+        } else {
+            divPadrao.style.display = 'block';
+            divPersonalizada.style.display = 'none';
+            quantidadePadraoSelect.setAttribute('required', 'required');
+            quantidadeManualInput.removeAttribute('required');
+            quantidadeManualInput.value = '';
+        }
     });
+});
 </script>
 
 <script>
-    // Auto-preencher destino quando selecionar cliente
-    document.addEventListener('DOMContentLoaded', function() {
-        const clienteSelect = document.getElementById('clientes_id');
-        const destinoSelect = document.getElementById('destino_id');
-        
-        if (clienteSelect && destinoSelect) {
-            clienteSelect.addEventListener('change', function() {
-                const selectedOption = this.options[this.selectedIndex];
-                const destinoId = selectedOption.getAttribute('data-destino-id');
-                
-                if (destinoId) {
-                    destinoSelect.value = destinoId;
-                    console.log('✅ Destino auto-preenchido:', destinoId);
-                }
-            });
-        }
-    });
+// Auto-preencher destino quando selecionar cliente
+document.addEventListener('DOMContentLoaded', function() {
+    const clienteSelect = document.getElementById('clientes_id');
+    const destinoSelect = document.getElementById('destino_id');
+    
+    if (clienteSelect && destinoSelect) {
+        clienteSelect.addEventListener('change', function() {
+            const selectedOption = this.options[this.selectedIndex];
+            const destinoId = selectedOption.getAttribute('data-destino-id');
+            
+            if (destinoId) {
+                destinoSelect.value = destinoId;
+                console.log('Destino auto-preenchido:', destinoId);
+            }
+        });
+    }
+});
 </script>
 
 <script src="{{ url_for('static', filename='js/fretes_calculos.js') }}"></script>
-
 {% endblock %}
