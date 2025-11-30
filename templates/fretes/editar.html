@@ -237,54 +237,92 @@
 </div>
 
 <style>
-.bg-warning {
-    background-color: #FFD580 !important;
-}
-.form-control-sm, .form-select-sm {
-    font-size: 0.85rem;
-}
-.btn-sm {
-    font-size: 0.85rem;
-    padding: 0.4rem 0.8rem;
-}
-@media (max-width: 768px) {
-    .card-body {
-        padding: 0.5rem !important;
-    }
-    .form-label {
-        font-size: 0.8rem !important;
+    .bg-warning {
+        background-color: #FFD580 !important;
     }
     .form-control-sm, .form-select-sm {
-        font-size: 0.8rem !important;
+        font-size: 0.85rem;
     }
-}
+    .btn-sm {
+        font-size: 0.85rem;
+        padding: 0.4rem 0.8rem;
+    }
+    @media (max-width: 768px) {
+        .card-body {
+            padding: 0.5rem !important;
+        }
+        .form-label {
+            font-size: 0.8rem !important;
+        }
+        .form-control-sm, .form-select-sm {
+            font-size: 0.8rem !important;
+        }
+    }
 </style>
 
 <script>
-// ✅ CORREÇÃO: Carregar ROTAS do backend com PIPE (|)
-const ROTAS = {{ rotas_dict|tojson|safe }};
-
-document.addEventListener('DOMContentLoaded', function() {
-    // TOGGLE QUANTIDADE PADRÃO/PERSONALIZADA
-    const tipoSelect = document.getElementById('quantidade_tipo');
-    const divPadrao = document.getElementById('div_quantidade_padrao');
-    const divPersonalizada = document.getElementById('div_quantidade_personalizada');
-
-    function alternarQuantidade() {
-        const tipo = tipoSelect.value;
-        if (tipo === 'personalizada') {
-            divPadrao.style.display = 'none';
-            divPersonalizada.style.display = 'block';
-        } else {
-            divPadrao.style.display = 'block';
-            divPersonalizada.style.display = 'none';
+    // CORREÇÃO: Carregar ROTAS do backend com PIPE
+    const ROTAS = {{ rotas_dict|tojson|safe }};
+    
+    // ============================================
+    // FLAG DE MODO EDIÇÃO - IMPEDE RECÁLCULO AUTOMÁTICO
+    // ============================================
+    window.MODO_EDICAO = true;
+    
+    document.addEventListener('DOMContentLoaded', function() {
+        // TOGGLE QUANTIDADE PADRÃO/PERSONALIZADA
+        const tipoSelect = document.getElementById('quantidade_tipo');
+        const divPadrao = document.getElementById('div_quantidade_padrao');
+        const divPersonalizada = document.getElementById('div_quantidade_personalizada');
+        
+        function alternarQuantidade() {
+            const tipo = tipoSelect.value;
+            if (tipo === 'personalizada') {
+                divPadrao.style.display = 'none';
+                divPersonalizada.style.display = 'block';
+            } else {
+                divPadrao.style.display = 'block';
+                divPersonalizada.style.display = 'none';
+            }
         }
-    }
-
-    tipoSelect.addEventListener('change', alternarQuantidade);
-    alternarQuantidade(); // Executar ao carregar
-});
+        
+        tipoSelect.addEventListener('change', alternarQuantidade);
+        alternarQuantidade(); // Executar ao carregar
+        
+        // ============================================
+        // PRESERVAR VALORES ORIGINAIS DO BANCO
+        // ============================================
+        const valoresOriginais = {
+            valor_cte: document.getElementById('valor_cte')?.value || 'R$ 0,00',
+            comissao_cte: document.getElementById('comissao_cte')?.value || 'R$ 0,00',
+            lucro: document.getElementById('lucro')?.value || 'R$ 0,00',
+            valor_total_frete: document.getElementById('valor_total_frete')?.value || 'R$ 0,00',
+            comissao_motorista: document.getElementById('comissao_motorista')?.value || 'R$ 0,00',
+            total_nf_compra: document.getElementById('total_nf_compra')?.value || 'R$ 0,00'
+        };
+        
+        console.log('💾 Valores originais preservados:', valoresOriginais);
+        
+        // ============================================
+        // AGUARDAR fretes_calculos.js CARREGAR
+        // ============================================
+        setTimeout(function() {
+            // Restaurar valores originais após o calcularTudo() inicial
+            Object.keys(valoresOriginais).forEach(function(campoId) {
+                const campo = document.getElementById(campoId);
+                if (campo && valoresOriginais[campoId] !== 'R$ 0,00') {
+                    campo.value = valoresOriginais[campoId];
+                    console.log(`✅ Restaurado ${campoId}: ${valoresOriginais[campoId]}`);
+                }
+            });
+            
+            // Desativar modo edição após preservar valores
+            window.MODO_EDICAO = false;
+            console.log('✅ Modo edição desativado - valores preservados!');
+        }, 100); // Aguardar 100ms para fretes_calculos.js executar
+    });
 </script>
 
 <script src="{{ url_for('static', filename='js/fretes_calculos.js') }}"></script>
+
 {% endblock %}
