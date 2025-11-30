@@ -3,94 +3,125 @@
 {% block title %}Dashboard - NH Transportes{% endblock %}
 
 {% block content %}
-<div class="row">
-    <div class="col-12">
-        <h2 class="mb-4">Bem-vindo ao NH Transportes</h2>
-        {% if current_user.is_authenticated %}
-            <p class="text-muted">
-                <i class="bi bi-person-circle"></i> 
-                Logado como: <strong>{{ current_user.nome_completo }}</strong> ({{ current_user.username }})
-                {% if current_user.nivel == 'admin' %}
-                    <span class="badge bg-danger ms-2">Administrador</span>
-                {% endif %}
-            </p>
-        {% endif %}
+
+<div class="row mb-3">
+    <div class="col-12 d-flex flex-wrap justify-content-between align-items-center gap-2">
+        <div>
+            <h2 class="mb-1">Bem-vindo ao NH Transportes</h2>
+            {% if current_user.is_authenticated %}
+                <p class="text-muted mb-0">
+                    <i class="bi bi-person-circle"></i>
+                    Logado como: <strong>{{ current_user.nome_completo }}</strong> ({{ current_user.username }})
+                    {% if current_user.nivel == 'admin' %}
+                        <span class="badge bg-danger ms-2">Administrador</span>
+                    {% endif %}
+                </p>
+            {% endif %}
+        </div>
+
+        <!-- Ações rápidas prioritárias -->
+        <div class="d-flex flex-wrap gap-2">
+            <a href="{{ url_for('fretes.novo') }}" class="btn btn-warning">
+                <i class="bi bi-box-seam"></i> Novo Frete
+            </a>
+            <a href="{{ url_for('pedidos.novo') }}" class="btn btn-success">
+                <i class="bi bi-bag-plus"></i> Novo Pedido
+            </a>
+            <a href="{{ url_for('clientes.novo') }}" class="btn btn-primary">
+                <i class="bi bi-person-plus"></i> Novo Cliente
+            </a>
+            <a href="{{ url_for('fornecedores.novo') }}" class="btn btn-outline-secondary">
+                <i class="bi bi-truck"></i> Novo Fornecedor
+            </a>
+        </div>
     </div>
 </div>
 
+<!-- Cards principais -->
 <div class="row g-4">
     <div class="col-md-6 col-lg-3">
-        <div class="card text-bg-primary">
-            <div class="card-body">
-                <h5 class="card-title">
-                    <i class="bi bi-people"></i> Clientes
-                </h5>
-                <p class="card-text fs-3 fw-bold">-</p>
-                <a href="{{ url_for('clientes.lista') }}" class="btn btn-light btn-sm">Ver todos</a>
+        <div class="card text-bg-primary shadow-sm border-0">
+            <div class="card-body d-flex align-items-center justify-content-between">
+                <div>
+                    <h6 class="text-uppercase mb-1 small">Clientes</h6>
+                    <p class="fs-3 fw-bold mb-1">{{ total_clientes }}</p>
+                    <a href="{{ url_for('clientes.lista') }}" class="btn btn-light btn-sm">
+                        Ver todos
+                    </a>
+                </div>
+                <div class="ms-3 text-white-50">
+                    <i class="bi bi-people fs-1"></i>
+                </div>
             </div>
         </div>
     </div>
 
     <div class="col-md-6 col-lg-3">
-        <div class="card text-bg-success">
-            <div class="card-body">
-                <h5 class="card-title">
-                    <i class="bi bi-truck"></i> Fornecedores
-                </h5>
-                <p class="card-text fs-3 fw-bold">-</p>
-                <a href="{{ url_for('fornecedores.lista') }}" class="btn btn-light btn-sm">Ver todos</a>
+        <div class="card text-bg-success shadow-sm border-0">
+            <div class="card-body d-flex align-items-center justify-content-between">
+                <div>
+                    <h6 class="text-uppercase mb-1 small">Fornecedores</h6>
+                    <p class="fs-3 fw-bold mb-1">{{ total_fornecedores }}</p>
+                    <a href="{{ url_for('fornecedores.lista') }}" class="btn btn-light btn-sm">
+                        Ver todos
+                    </a>
+                </div>
+                <div class="ms-3 text-white-50">
+                    <i class="bi bi-truck fs-1"></i>
+                </div>
             </div>
         </div>
     </div>
 
     <div class="col-md-6 col-lg-3">
-        <div class="card text-bg-warning">
-            <div class="card-body">
-                <h5 class="card-title">
-                    <i class="bi bi-person-badge"></i> Motoristas
-                </h5>
-                <p class="card-text fs-3 fw-bold">-</p>
-                <a href="{{ url_for('motoristas.lista') }}" class="btn btn-light btn-sm">Ver todos</a>
+        <div class="card text-bg-warning shadow-sm border-0">
+            <div class="card-body d-flex align-items-center justify-content-between">
+                <div>
+                    <h6 class="text-uppercase mb-1 small">Motoristas</h6>
+                    <p class="fs-3 fw-bold mb-1">{{ total_motoristas }}</p>
+                    <a href="{{ url_for('motoristas.lista') }}" class="btn btn-light btn-sm">
+                        Ver todos
+                    </a>
+                </div>
+                <div class="ms-3 text-dark-50">
+                    <i class="bi bi-person-badge fs-1"></i>
+                </div>
             </div>
         </div>
     </div>
 
     <div class="col-md-6 col-lg-3">
-        <div class="card text-bg-info">
-            <div class="card-body">
-                <h5 class="card-title">
-                    <i class="bi bi-box-seam"></i> Fretes
-                </h5>
-                <p class="card-text fs-3 fw-bold">-</p>
-                <a href="{{ url_for('fretes.lista') }}" class="btn btn-light btn-sm">Ver todos</a>
+        <div class="card text-bg-info shadow-sm border-0">
+            <div class="card-body d-flex align-items-center justify-content-between">
+                <div>
+                    <h6 class="text-uppercase mb-1 small">Fretes</h6>
+                    <p class="fs-3 fw-bold mb-1">{{ total_fretes }}</p>
+                    <a href="{{ url_for('fretes.lista') }}" class="btn btn-light btn-sm">
+                        Ver todos
+                    </a>
+                </div>
+                <div class="ms-3 text-white-50">
+                    <i class="bi bi-box-seam fs-1"></i>
+                </div>
             </div>
         </div>
     </div>
 </div>
 
-<div class="row mt-4">
-    <div class="col-12">
-        <div class="card">
-            <div class="card-header">
-                <h5 class="card-title mb-0">Acesso Rápido</h5>
-            </div>
-            <div class="card-body">
-                <div class="row g-3">
-                    <div class="col-md-4">
-                        <a href="{{ url_for('clientes.novo') }}" class="btn btn-outline-primary w-100">
-                            <i class="bi bi-plus-circle"></i> Novo Cliente
-                        </a>
-                    </div>
-                    <div class="col-md-4">
-                        <a href="{{ url_for('fretes.novo') }}" class="btn btn-outline-success w-100">
-                            <i class="bi bi-plus-circle"></i> Novo Frete
-                        </a>
-                    </div>
-                    <div class="col-md-4">
-                        <a href="{{ url_for('relatorios.index') }}" class="btn btn-outline-info w-100">
-                            <i class="bi bi-file-earmark-text"></i> Relatórios
-                        </a>
-                    </div>
+<!-- Linha extra com pedidos (se quiser destacar) -->
+<div class="row g-4 mt-2">
+    <div class="col-md-6 col-lg-3">
+        <div class="card shadow-sm border-0">
+            <div class="card-body d-flex align-items-center justify-content-between">
+                <div>
+                    <h6 class="text-uppercase mb-1 small">Pedidos</h6>
+                    <p class="fs-3 fw-bold mb-1">{{ total_pedidos }}</p>
+                    <a href="{{ url_for('pedidos.index') }}" class="btn btn-outline-success btn-sm">
+                        Ver pedidos
+                    </a>
+                </div>
+                <div class="ms-3 text-muted">
+                    <i class="bi bi-bag fs-1"></i>
                 </div>
             </div>
         </div>
@@ -100,7 +131,7 @@
 <!-- Seção de Gerenciamento de Conta (Para todos os usuários) -->
 <div class="row mt-4">
     <div class="col-12">
-        <div class="card border-secondary">
+        <div class="card border-secondary shadow-sm">
             <div class="card-header bg-secondary text-white">
                 <h5 class="card-title mb-0">
                     <i class="bi bi-person-gear"></i> Minha Conta
@@ -128,7 +159,7 @@
 {% if current_user.nivel == 'admin' %}
 <div class="row mt-4">
     <div class="col-12">
-        <div class="card border-danger">
+        <div class="card border-danger shadow-sm">
             <div class="card-header bg-danger text-white">
                 <h5 class="card-title mb-0">
                     <i class="bi bi-shield-lock"></i> Administração do Sistema
@@ -157,4 +188,5 @@
     </div>
 </div>
 {% endif %}
+
 {% endblock %}
