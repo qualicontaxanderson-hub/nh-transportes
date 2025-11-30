@@ -1,3 +1,58 @@
+// ========================================
+// FUNÇÕES DE FORMATAÇÃO DE MOEDA
+// ========================================
+
+/**
+ * Formata número para exibição com R$ e separadores
+ * Exemplo: 10830.50 → "R$ 10.830,50"
+ */
+function formatarMoedaDisplay(valor) {
+    if (valor === null || valor === undefined || valor === '') {
+        return 'R$ 0,00';
+    }
+    
+    const numero = typeof valor === 'string' ? parseFloat(valor.replace(',', '.')) : valor;
+    
+    if (isNaN(numero)) {
+        return 'R$ 0,00';
+    }
+    
+    return 'R$ ' + numero.toLocaleString('pt-BR', {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+    });
+}
+
+/**
+ * Remove formatação de moeda para obter valor numérico
+ * Exemplo: "R$ 10.830,50" → 10830.50
+ */
+function limparMoeda(valor) {
+    if (!valor) return 0;
+    return parseFloat(valor.toString().replace(/[R$\s.]/g, '').replace(',', '.')) || 0;
+}
+
+/**
+ * Formata input de moeda enquanto usuário digita
+ */
+function aplicarMascaraMoeda(input) {
+    let valor = input.value.replace(/\D/g, ''); // Remove tudo que não é dígito
+    
+    if (valor === '') {
+        input.value = 'R$ 0,00';
+        return;
+    }
+    
+    // Converte para centavos
+    valor = parseInt(valor);
+    
+    // Formata
+    const reais = Math.floor(valor / 100);
+    const centavos = valor % 100;
+    
+    input.value = 'R$ ' + reais.toLocaleString('pt-BR') + ',' + centavos.toString().padStart(2, '0');
+}
+
 // ===========================
 // FUNÇÕES AUXILIARES
 // ===========================
@@ -6,15 +61,14 @@
  * Formata número para moeda brasileira
  */
 function formatarMoeda(valor) {
-    return parseFloat(valor).toFixed(2).replace('.', ',');
+    return formatarMoedaDisplay(valor);
 }
 
 /**
  * Desformata string de moeda para número
  */
 function desformatarMoeda(valorStr) {
-    if (!valorStr) return 0;
-    return parseFloat(valorStr.toString().replace(',', '.')) || 0;
+    return limparMoeda(valorStr);
 }
 
 // ===========================
@@ -97,10 +151,6 @@ function calcularQuantidade() {
 }
 
 /**
- * Calcula o valor total do frete
- * Regra: se cliente não paga comissão, retorna 0
- */
-/**
  * Calcula o total da NF de compra
  * Regra: Quantidade × Preço Produto Unitário
  */
@@ -113,6 +163,11 @@ function calcularTotalNFCompra() {
 
     return precoUnitario * quantidade;
 }
+
+/**
+ * Calcula o valor total do frete
+ * Regra: se cliente não paga comissão, retorna 0
+ */
 function calcularValorTotalFrete() {
     const dadosCliente = obterDadosCliente();
     
@@ -145,7 +200,6 @@ function calcularComissaoMotorista() {
     const quantidade = calcularQuantidade();
     return quantidade * 0.01; // R$ 0,01 por litro
 }
-
 /**
  * Calcula o valor do CTE
  * Regra: 
@@ -209,7 +263,7 @@ function atualizarCampoPrecoPorLitro() {
 
     if (!dadosCliente.pagaComissao) {
         // Cliente não paga comissão: bloqueia campo e zera
-        inputPrecoPorLitro.value = '0,00';
+        inputPrecoPorLitro.value = 'R$ 0,00';
         inputPrecoPorLitro.readOnly = true;
         inputPrecoPorLitro.style.backgroundColor = '#e9ecef';
         inputPrecoPorLitro.style.cursor = 'not-allowed';
@@ -233,7 +287,7 @@ function calcularTudo() {
     atualizarCampoPrecoPorLitro();
 
     // Calcula e preenche todos os campos
-    const totalNFCompra = calcularTotalNFCompra();  // ← ADICIONAR
+    const totalNFCompra = calcularTotalNFCompra();
     const valorTotalFrete = calcularValorTotalFrete();
     const comissaoMotorista = calcularComissaoMotorista();
     const valorCte = calcularValorCte();
@@ -241,14 +295,14 @@ function calcularTudo() {
     const lucro = calcularLucro();
 
     // Atualiza os campos no formulário
-    const campoTotalNFCompra = document.getElementById('total_nf_compra');  // ← ADICIONAR
+    const campoTotalNFCompra = document.getElementById('total_nf_compra');
     const campoValorTotalFrete = document.getElementById('valor_total_frete');
     const campoComissaoMotorista = document.getElementById('comissao_motorista');
     const campoValorCte = document.getElementById('valor_cte');
     const campoComissaoCte = document.getElementById('comissao_cte');
     const campoLucro = document.getElementById('lucro');
 
-    if (campoTotalNFCompra) campoTotalNFCompra.value = formatarMoeda(totalNFCompra);  // ← ADICIONAR
+    if (campoTotalNFCompra) campoTotalNFCompra.value = formatarMoeda(totalNFCompra);
     if (campoValorTotalFrete) campoValorTotalFrete.value = formatarMoeda(valorTotalFrete);
     if (campoComissaoMotorista) campoComissaoMotorista.value = formatarMoeda(comissaoMotorista);
     if (campoValorCte) campoValorCte.value = formatarMoeda(valorCte);
@@ -256,35 +310,113 @@ function calcularTudo() {
     if (campoLucro) campoLucro.value = formatarMoeda(lucro);
 }
 
-// ===========================
-// INICIALIZAÇÃO
-// ===========================
+// ========================================
+// INICIALIZAÇÃO E EVENTOS
+// ========================================
 
 document.addEventListener('DOMContentLoaded', function() {
-    // Lista de campos que disparam o recálculo
-    const camposParaMonitorar = [
+    console.log('✅ fretes_calculos.js carregado');
+    
+    // Aplicar máscara de moeda nos campos editáveis
+    const camposMoeda = ['preco_produto_unitario', 'preco_por_litro'];
+    
+    camposMoeda.forEach(function(campoId) {
+        const campo = document.getElementById(campoId);
+        if (campo) {
+            // Formatar valor inicial
+            if (campo.value && campo.value !== '0,00') {
+                const valorLimpo = limparMoeda(campo.value);
+                campo.value = formatarMoedaDisplay(valorLimpo);
+            } else {
+                campo.value = 'R$ 0,00';
+            }
+            
+            // Aplicar máscara ao digitar
+            campo.addEventListener('input', function() {
+                aplicarMascaraMoeda(this);
+            });
+            
+            // Recalcular ao sair do campo
+            campo.addEventListener('blur', function() {
+                calcularTudo();
+            });
+        }
+    });
+    
+    // AUTO-BLOQUEIO DO DESTINO quando selecionado via Cliente
+    const clienteSelect = document.getElementById('clientes_id');
+    const destinoSelect = document.getElementById('destino_id');
+    
+    if (clienteSelect && destinoSelect) {
+        clienteSelect.addEventListener('change', function() {
+            const selectedOption = this.options[this.selectedIndex];
+            const destinoId = selectedOption.getAttribute('data-destino-id');
+            
+            if (destinoId) {
+                destinoSelect.value = destinoId;
+                destinoSelect.setAttribute('readonly', 'readonly');
+                destinoSelect.style.backgroundColor = '#e9ecef';
+                destinoSelect.style.cursor = 'not-allowed';
+                
+                // Adicionar badge informativo
+                let badge = destinoSelect.parentElement.querySelector('.destino-auto-badge');
+                if (!badge) {
+                    badge = document.createElement('small');
+                    badge.className = 'destino-auto-badge text-muted d-block mt-1';
+                    badge.innerHTML = '<i class="bi bi-info-circle"></i> Destino preenchido automaticamente do cadastro do cliente';
+                    destinoSelect.parentElement.appendChild(badge);
+                }
+                
+                console.log('✅ Destino bloqueado (auto-preenchido do cliente):', destinoId);
+                
+                // Recalcular valores
+                calcularTudo();
+            }
+        });
+        
+        // Permitir desbloquear clicando 2x no campo destino
+        destinoSelect.addEventListener('dblclick', function() {
+            if (this.hasAttribute('readonly')) {
+                this.removeAttribute('readonly');
+                this.style.backgroundColor = '';
+                this.style.cursor = '';
+                
+                const badge = this.parentElement.querySelector('.destino-auto-badge');
+                if (badge) {
+                    badge.innerHTML = '<i class="bi bi-unlock"></i> Destino desbloqueado para edição manual';
+                    badge.classList.remove('text-muted');
+                    badge.classList.add('text-warning');
+                }
+                
+                console.log('⚠️ Destino desbloqueado manualmente');
+            }
+        });
+    }
+    
+    // Configurar eventos nos campos que disparam recálculo
+    const camposRecalculo = [
         'clientes_id',
         'motoristas_id',
         'quantidade_id',
         'quantidade_manual',
         'quantidade_tipo',
         'origem_id',
+        'destino_id',
         'preco_produto_unitario',
         'preco_por_litro'
     ];
-
-    // Adiciona listeners em todos os campos
-    camposParaMonitorar.forEach(function(campoId) {
+    
+    camposRecalculo.forEach(function(campoId) {
         const campo = document.getElementById(campoId);
         if (campo) {
             const evento = campo.tagName === 'SELECT' ? 'change' : 'input';
             campo.addEventListener(evento, calcularTudo);
         }
     });
-
-    // Executa cálculo inicial
+    
+    // Executar cálculo inicial
     calcularTudo();
-
+    
     // ===========================
     // FUNÇÕES DE DEBUG (console)
     // ===========================
