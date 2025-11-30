@@ -177,40 +177,40 @@
                 <div class="row">
                     <div class="col-md-4 mb-2">
                         <label for="preco_produto_unitario" class="form-label" style="font-size: 0.85rem;">Preço Produto Unitário (R$)</label>
-                        <input type="text" class="form-control form-control-sm" id="preco_produto_unitario" name="preco_produto_unitario" value="0,00" required>
+                        <input type="text" class="form-control form-control-sm" id="preco_produto_unitario" name="preco_produto_unitario" value="R$ 0,00" required>
                     </div>
                     <div class="col-md-4 mb-2">
                         <label for="total_nf_compra" class="form-label" style="font-size: 0.85rem;">Total NF Compra (R$)</label>
-                        <input type="text" class="form-control form-control-sm bg-warning" id="total_nf_compra" name="total_nf_compra" value="0,00" readonly>
+                        <input type="text" class="form-control form-control-sm bg-warning" id="total_nf_compra" name="total_nf_compra" value="R$ 0,00" readonly>
                     </div>
                     <div class="col-md-4 mb-2">
                         <label for="preco_por_litro" class="form-label" style="font-size: 0.85rem;">Preço por Litro (R$)</label>
-                        <input type="text" class="form-control form-control-sm" id="preco_por_litro" name="preco_por_litro" value="0,00" required>
+                        <input type="text" class="form-control form-control-sm" id="preco_por_litro" name="preco_por_litro" value="R$ 0,00" required>
                     </div>
                 </div>
                 <div class="row">
                     <div class="col-md-4 mb-2">
                         <label for="valor_total_frete" class="form-label" style="font-size: 0.85rem;">Valor Total Frete (R$)</label>
-                        <input type="text" class="form-control form-control-sm bg-warning" id="valor_total_frete" name="valor_total_frete" value="0,00" readonly>
+                        <input type="text" class="form-control form-control-sm bg-warning" id="valor_total_frete" name="valor_total_frete" value="R$ 0,00" readonly>
                     </div>
                     <div class="col-md-4 mb-2">
                         <label for="comissao_motorista" class="form-label" style="font-size: 0.85rem;">Comissão Motorista (R$)</label>
-                        <input type="text" class="form-control form-control-sm bg-warning" id="comissao_motorista" name="comissao_motorista" value="0,00" readonly>
+                        <input type="text" class="form-control form-control-sm bg-warning" id="comissao_motorista" name="comissao_motorista" value="R$ 0,00" readonly>
                     </div>
                     <div class="col-md-4 mb-2">
                         <label for="valor_cte" class="form-label" style="font-size: 0.85rem;">Valor CTe (R$)</label>
-                        <input type="text" class="form-control form-control-sm bg-warning" id="valor_cte" name="valor_cte" value="0,00" readonly>
+                        <input type="text" class="form-control form-control-sm bg-warning" id="valor_cte" name="valor_cte" value="R$ 0,00" readonly>
                     </div>
                 </div>
 
                 <div class="row">
                     <div class="col-md-4 mb-2">
                         <label for="comissao_cte" class="form-label" style="font-size: 0.85rem;">Comissão CTe (R$)</label>
-                        <input type="text" class="form-control form-control-sm bg-warning" id="comissao_cte" name="comissao_cte" value="0,00" readonly>
+                        <input type="text" class="form-control form-control-sm bg-warning" id="comissao_cte" name="comissao_cte" value="R$ 0,00" readonly>
                     </div>
                     <div class="col-md-4 mb-2">
                         <label for="lucro" class="form-label" style="font-size: 0.85rem;">Lucro (R$)</label>
-                        <input type="text" class="form-control form-control-sm bg-warning" id="lucro" name="lucro" value="0,00" readonly>
+                        <input type="text" class="form-control form-control-sm bg-warning" id="lucro" name="lucro" value="R$ 0,00" readonly>
                     </div>
 
                     <div class="col-md-4 mb-2">
@@ -310,26 +310,6 @@ document.addEventListener('DOMContentLoaded', function() {
             quantidadeManualInput.value = '';
         }
     });
-});
-</script>
-
-<script>
-// Auto-preencher destino quando selecionar cliente
-document.addEventListener('DOMContentLoaded', function() {
-    const clienteSelect = document.getElementById('clientes_id');
-    const destinoSelect = document.getElementById('destino_id');
-    
-    if (clienteSelect && destinoSelect) {
-        clienteSelect.addEventListener('change', function() {
-            const selectedOption = this.options[this.selectedIndex];
-            const destinoId = selectedOption.getAttribute('data-destino-id');
-            
-            if (destinoId) {
-                destinoSelect.value = destinoId;
-                console.log('Destino auto-preenchido:', destinoId);
-            }
-        });
-    }
 });
 </script>
 
