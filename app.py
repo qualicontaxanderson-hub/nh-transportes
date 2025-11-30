@@ -96,10 +96,6 @@ def index():
 # Rotas de autenticação
 @app.route('/login', methods=['GET', 'POST'])
 def login():
-    if current
-# Rotas de autenticação
-@app.route('/login', methods=['GET', 'POST'])
-def login():
     if current_user.is_authenticated:
         return redirect(url_for('index'))
 
@@ -116,6 +112,7 @@ def login():
             flash('Usuário ou senha inválidos!', 'danger')
 
     return render_template('login.html')
+
 
 @app.route('/logout')
 @login_required
