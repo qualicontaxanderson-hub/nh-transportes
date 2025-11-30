@@ -126,7 +126,6 @@
                     <div class="col-md-6 mb-2">
                         <label for="quantidade_tipo" class="form-label" style="font-size: 0.85rem;">Tipo de Quantidade</label>
                         <select class="form-select form-select-sm" id="quantidade_tipo" name="quantidade_tipo">
-                            <option
                             <option value="padrao" {% if frete.quantidade_id %}selected{% endif %}>Quantidade Padrão (Listbox)</option>
                             <option value="personalizada" {% if not frete.quantidade_id %}selected{% endif %}>Quantidade Personalizada (Manual)</option>
                         </select>
@@ -163,35 +162,34 @@
                     <div class="col-md-4 mb-2">
                         <label for="preco_produto_unitario" class="form-label" style="font-size: 0.85rem;">Preço Produto Unitário (R$)</label>
                         <input type="text" class="form-control form-control-sm" id="preco_produto_unitario" name="preco_produto_unitario" 
-                               value="{{ '{:.2f}'.format(frete.preco_produto_unitario).replace('.', ',') if frete.preco_produto_unitario else '0,00' }}" required>
+                               value="R$ {{ '{:.2f}'.format(frete.preco_produto_unitario).replace('.', ',') if frete.preco_produto_unitario else '0,00' }}" required>
                     </div>
                     <div class="col-md-4 mb-2">
                         <label for="total_nf_compra" class="form-label" style="font-size: 0.85rem;">Total NF Compra (R$)</label>
                         <input type="text" class="form-control form-control-sm bg-warning" id="total_nf_compra" name="total_nf_compra" 
-                               value="{{ '{:.2f}'.format(frete.total_nf_compra).replace('.', ',') if frete.total_nf_compra else '0,00' }}" readonly>
+                               value="R$ {{ '{:.2f}'.format(frete.total_nf_compra).replace('.', ',') if frete.total_nf_compra else '0,00' }}" readonly>
                     </div>
                     <div class="col-md-4 mb-2">
                         <label for="preco_por_litro" class="form-label" style="font-size: 0.85rem;">Preço por Litro (R$)</label>
                         <input type="text" class="form-control form-control-sm" id="preco_por_litro" name="preco_por_litro" 
-                               value="{{ '{:.2f}'.format(frete.preco_por_litro).replace('.', ',') if frete.preco_por_litro else '0,00' }}" required>
+                               value="R$ {{ '{:.2f}'.format(frete.preco_por_litro).replace('.', ',') if frete.preco_por_litro else '0,00' }}" required>
                     </div>
                 </div>
-
                 <div class="row">
                     <div class="col-md-4 mb-2">
                         <label for="valor_total_frete" class="form-label" style="font-size: 0.85rem;">Valor Total Frete (R$)</label>
                         <input type="text" class="form-control form-control-sm bg-warning" id="valor_total_frete" name="valor_total_frete" 
-                               value="{{ '{:.2f}'.format(frete.valor_total_frete).replace('.', ',') if frete.valor_total_frete else '0,00' }}" readonly>
+                               value="R$ {{ '{:.2f}'.format(frete.valor_total_frete).replace('.', ',') if frete.valor_total_frete else '0,00' }}" readonly>
                     </div>
                     <div class="col-md-4 mb-2">
                         <label for="comissao_motorista" class="form-label" style="font-size: 0.85rem;">Comissão Motorista (R$)</label>
                         <input type="text" class="form-control form-control-sm bg-warning" id="comissao_motorista" name="comissao_motorista" 
-                               value="{{ '{:.2f}'.format(frete.comissao_motorista).replace('.', ',') if frete.comissao_motorista else '0,00' }}" readonly>
+                               value="R$ {{ '{:.2f}'.format(frete.comissao_motorista).replace('.', ',') if frete.comissao_motorista else '0,00' }}" readonly>
                     </div>
                     <div class="col-md-4 mb-2">
                         <label for="valor_cte" class="form-label" style="font-size: 0.85rem;">Valor CTe (R$)</label>
                         <input type="text" class="form-control form-control-sm bg-warning" id="valor_cte" name="valor_cte" 
-                               value="{{ '{:.2f}'.format(frete.valor_cte).replace('.', ',') if frete.valor_cte else '0,00' }}" readonly>
+                               value="R$ {{ '{:.2f}'.format(frete.valor_cte).replace('.', ',') if frete.valor_cte else '0,00' }}" readonly>
                     </div>
                 </div>
 
@@ -199,12 +197,12 @@
                     <div class="col-md-4 mb-2">
                         <label for="comissao_cte" class="form-label" style="font-size: 0.85rem;">Comissão CTe (R$)</label>
                         <input type="text" class="form-control form-control-sm bg-warning" id="comissao_cte" name="comissao_cte" 
-                               value="{{ '{:.2f}'.format(frete.comissao_cte).replace('.', ',') if frete.comissao_cte else '0,00' }}" readonly>
+                               value="R$ {{ '{:.2f}'.format(frete.comissao_cte).replace('.', ',') if frete.comissao_cte else '0,00' }}" readonly>
                     </div>
                     <div class="col-md-4 mb-2">
                         <label for="lucro" class="form-label" style="font-size: 0.85rem;">Lucro (R$)</label>
                         <input type="text" class="form-control form-control-sm bg-warning" id="lucro" name="lucro" 
-                               value="{{ '{:.2f}'.format(frete.lucro).replace('.', ',') if frete.lucro else '0,00' }}" readonly>
+                               value="R$ {{ '{:.2f}'.format(frete.lucro).replace('.', ',') if frete.lucro else '0,00' }}" readonly>
                     </div>
                     <div class="col-md-4 mb-2">
                         <label for="status" class="form-label" style="font-size: 0.85rem;">Status</label>
@@ -263,6 +261,9 @@
 </style>
 
 <script>
+// ✅ CORREÇÃO: Carregar ROTAS do backend com PIPE (|)
+const ROTAS = {{ rotas_dict|tojson|safe }};
+
 document.addEventListener('DOMContentLoaded', function() {
     // TOGGLE QUANTIDADE PADRÃO/PERSONALIZADA
     const tipoSelect = document.getElementById('quantidade_tipo');
@@ -282,26 +283,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     tipoSelect.addEventListener('change', alternarQuantidade);
     alternarQuantidade(); // Executar ao carregar
-
-    // AUTO-PREENCHIMENTO DO DESTINO
-    const clienteSelect = document.getElementById('clientes_id');
-    const destinoSelect = document.getElementById('destino_id');
-
-    clienteSelect.addEventListener('change', function() {
-        const selectedOption = this.options[this.selectedIndex];
-        const destinoId = selectedOption.getAttribute('data-destino-id');
-        
-        if (destinoId) {
-            destinoSelect.value = destinoId;
-            console.log('Destino auto-preenchido:', destinoId);
-        }
-    });
 });
-</script>
-
-<script>
-// ✅ CORREÇÃO: Carregar ROTAS do backend com PIPE (|)
-const ROTAS = {{ rotas_dict|tojson|safe }};
 </script>
 
 <script src="{{ url_for('static', filename='js/fretes_calculos.js') }}"></script>
