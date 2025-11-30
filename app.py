@@ -57,56 +57,6 @@ app.register_blueprint(bases.bp)  # novo
 def index():
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
-    try:
-        cursor.execute("SELECT COUNT(*) as total FROM clientes")
-        total_clientes = cursor.fetchone()['total']
-        cursor.execute("SELECT COUNT(*) as total FROM fornecedores")
-        total_fornecedores = cursor.fetchone()['total']
-        cursor.execute("SELECT COUNT(*) as total FROM veiculos")
-        total_veiculos = cursor.fetchone()['total']
-        cursor.execute("SELECT COUNT(*) as total FROM motoristas")
-        total_motoristas = cursor.fetchone()['total']
-        return render_template(
-            'dashboard.html',
-            total_clientes=total_clientes,
-            total_fornecedores=total_fornecedores,
-            total_veiculos=total_veiculos,
-            total_motoristas=total_motoristas
-        )
-    finally:
-        cursor.close()
-        conn.close()
-
-# Rotas de autenticação
-@app.route('/login', methods=['GET', 'POST'])
-def login():
-    if current_user.is_authenticated:
-        return redirect(url_for('index'))
-    if request.method == 'POST':
-        username = request.form.get('username')
-        password = request.form.get('password')
-        user = Usuario.authenticate(username, password)
-        if user:
-            login_user(user)
-            next_page = request.args.get('next')
-            return redirect(next_page if next_page else url_for('index'))
-        else:
-            flash('Usuário ou senha inválidos!', 'danger')
-    return render_template('login.html')
-
-@app.route('/logout')
-@login_required
-def logout():
-    logout_user()
-    # flash('Logout realizado com sucesso!', 'success')
-    return redirect(url_for('login'))
-
-# Rotas de gerenciamento de usuários
-@app.route('/')
-@login_required
-def index():
-    conn = get_db_connection()
-    cursor = conn.cursor(dictionary=True)
 
     try:
         # Contadores principais
@@ -122,7 +72,7 @@ def index():
         cursor.execute("SELECT COUNT(*) as total FROM motoristas")
         total_motoristas = cursor.fetchone()['total']
 
-        # Opcional: contadores de fretes e pedidos (se já existirem as tabelas)
+        # Contadores de fretes e pedidos
         cursor.execute("SELECT COUNT(*) as total FROM fretes")
         total_fretes = cursor.fetchone()['total']
 
@@ -143,6 +93,69 @@ def index():
         cursor.close()
         conn.close()
 
+# Rotas de autenticação
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    if current
+# Rotas de autenticação
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    if current_user.is_authenticated:
+        return redirect(url_for('index'))
+
+    if request.method == 'POST':
+        username = request.form.get('username')
+        password = request.form.get('password')
+
+        user = Usuario.authenticate(username, password)
+        if user:
+            login_user(user)
+            next_page = request.args.get('next')
+            return redirect(next_page if next_page else url_for('index'))
+        else:
+            flash('Usuário ou senha inválidos!', 'danger')
+
+    return render_template('login.html')
+
+
+@app.route('/logout')
+@login_required
+def logout():
+    logout_user()
+    # flash('Logout realizado com sucesso!', 'success')
+    return redirect(url_for('login'))
+
+
+# Rotas de gerenciamento de usuários
+@app.route('/cadastro', methods=['GET', 'POST'])
+@login_required
+@admin_required
+def cadastro():
+    if request.method == 'POST':
+        username = request.form.get('username')
+        nome_completo = request.form.get('nome')
+        nivel = request.form.get('nivel')
+        password = request.form.get('password')
+        confirmar_senha = request.form.get('confirmar_senha')
+
+        if password != confirmar_senha:
+            flash('As senhas não coincidem!', 'danger')
+            return redirect(url_for('cadastro'))
+
+        if Usuario.get_by_username(username):
+            flash('Nome de usuário já existe!', 'danger')
+            return redirect(url_for('cadastro'))
+
+        try:
+            Usuario.criar_usuario(username, nome_completo, nivel, password)
+            flash('Usuário cadastrado com sucesso!', 'success')
+            return redirect(url_for('listar_usuarios'))
+        except Exception as e:
+            flash(f'Erro ao cadastrar usuário: {str(e)}', 'danger')
+
+    return render_template('cadastro.html')
+
+
 @app.route('/listar_usuarios')
 @login_required
 @admin_required
@@ -161,6 +174,7 @@ def listar_usuarios():
         cursor.close()
         conn.close()
 
+
 @app.route('/editar_usuario/<int:id>', methods=['GET', 'POST'])
 @login_required
 @admin_required
@@ -168,16 +182,19 @@ def editar_usuario(id):
     if request.method == 'POST':
         conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)
+
         nome_completo = request.form.get('nome_completo')
         nivel = request.form.get('nivel')
         ativo = 1 if request.form.get('ativo') else 0
         nova_senha = request.form.get('senha')
         confirmar_senha = request.form.get('confirmar_senha')
+
         try:
             if nova_senha:
                 if nova_senha != confirmar_senha:
                     flash('As senhas não coincidem!', 'danger')
                     return redirect(url_for('editar_usuario', id=id))
+
                 hashed_password = generate_password_hash(nova_senha)
                 cursor.execute("""
                     UPDATE usuarios
@@ -190,6 +207,7 @@ def editar_usuario(id):
                     SET nome_completo = %s, nivel = %s, ativo = %s
                     WHERE id = %s
                 """, (nome_completo, nivel, ativo, id))
+
             conn.commit()
             return redirect(url_for('listar_usuarios'))
         except Exception as e:
@@ -214,6 +232,7 @@ def editar_usuario(id):
         cursor.close()
         conn.close()
 
+
 @app.route('/excluir_usuario/<int:id>')
 @login_required
 @admin_required
@@ -221,6 +240,7 @@ def excluir_usuario(id):
     if current_user.id == id:
         flash('Você não pode excluir seu próprio usuário!', 'danger')
         return redirect(url_for('listar_usuarios'))
+
     conn = get_db_connection()
     cursor = conn.cursor()
     try:
@@ -233,7 +253,9 @@ def excluir_usuario(id):
     finally:
         cursor.close()
         conn.close()
+
     return redirect(url_for('listar_usuarios'))
+
 
 @app.route('/alterar_senha', methods=['GET', 'POST'])
 @login_required
@@ -242,19 +264,25 @@ def alterar_senha():
         senha_atual = request.form.get('senha_atual')
         nova_senha = request.form.get('nova_senha')
         confirmar_senha = request.form.get('confirmar_senha')
+
         if not current_user.check_password(senha_atual):
             flash('Senha atual incorreta!', 'danger')
             return redirect(url_for('alterar_senha'))
+
         if nova_senha != confirmar_senha:
             flash('As senhas não coincidem!', 'danger')
             return redirect(url_for('alterar_senha'))
+
         try:
             current_user.alterar_senha(nova_senha)
             flash('Senha alterada com sucesso!', 'success')
             return redirect(url_for('index'))
         except Exception as e:
             flash(f'Erro ao alterar senha: {str(e)}', 'danger')
+
     return render_template('alterar_senha.html')
+
 
 if __name__ == '__main__':
     app.run(debug=True)
+
