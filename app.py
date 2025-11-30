@@ -102,29 +102,46 @@ def logout():
     return redirect(url_for('login'))
 
 # Rotas de gerenciamento de usuários
-@app.route('/cadastro', methods=['GET', 'POST'])
+@app.route('/')
 @login_required
-@admin_required
-def cadastro():
-    if request.method == 'POST':
-        username = request.form.get('username')
-        nome_completo = request.form.get('nome')
-        nivel = request.form.get('nivel')
-        password = request.form.get('password')
-        confirmar_senha = request.form.get('confirmar_senha')
-        if password != confirmar_senha:
-            flash('As senhas não coincidem!', 'danger')
-            return redirect(url_for('cadastro'))
-        if Usuario.get_by_username(username):
-            flash('Nome de usuário já existe!', 'danger')
-            return redirect(url_for('cadastro'))
-        try:
-            Usuario.criar_usuario(username, nome_completo, nivel, password)
-            flash('Usuário cadastrado com sucesso!', 'success')
-            return redirect(url_for('listar_usuarios'))
-        except Exception as e:
-            flash(f'Erro ao cadastrar usuário: {str(e)}', 'danger')
-    return render_template('cadastro.html')
+def index():
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+
+    try:
+        # Contadores principais
+        cursor.execute("SELECT COUNT(*) as total FROM clientes")
+        total_clientes = cursor.fetchone()['total']
+
+        cursor.execute("SELECT COUNT(*) as total FROM fornecedores")
+        total_fornecedores = cursor.fetchone()['total']
+
+        cursor.execute("SELECT COUNT(*) as total FROM veiculos")
+        total_veiculos = cursor.fetchone()['total']
+
+        cursor.execute("SELECT COUNT(*) as total FROM motoristas")
+        total_motoristas = cursor.fetchone()['total']
+
+        # Opcional: contadores de fretes e pedidos (se já existirem as tabelas)
+        cursor.execute("SELECT COUNT(*) as total FROM fretes")
+        total_fretes = cursor.fetchone()['total']
+
+        cursor.execute("SELECT COUNT(*) as total FROM pedidos")
+        total_pedidos = cursor.fetchone()['total']
+
+        return render_template(
+            'dashboard.html',
+            total_clientes=total_clientes,
+            total_fornecedores=total_fornecedores,
+            total_veiculos=total_veiculos,
+            total_motoristas=total_motoristas,
+            total_fretes=total_fretes,
+            total_pedidos=total_pedidos,
+        )
+
+    finally:
+        cursor.close()
+        conn.close()
 
 @app.route('/listar_usuarios')
 @login_required
