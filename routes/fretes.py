@@ -515,44 +515,47 @@ def editar(id):
             return redirect(url_for('fretes.lista'))
         
         # TITLE: GET - carregar dados do frete
+        # PARA (versão correta com rotas_dict)
+        # TITLE: GET - carregar dados do frete
         cursor.execute("SELECT * FROM fretes WHERE id = %s", (id,))
         frete = cursor.fetchone()
-        
+
         cursor.execute("SELECT id, razao_social, paga_comissao, percentual_cte, cte_integral FROM clientes ORDER BY razao_social")
         clientes = cursor.fetchall()
-        
+
         cursor.execute("SELECT id, nome FROM produto ORDER BY nome")
         produtos = cursor.fetchall()
-        
+
         cursor.execute("SELECT id, razao_social FROM fornecedores ORDER BY razao_social")
         fornecedores = cursor.fetchall()
-        
+
         cursor.execute("SELECT id, nome, paga_comissao FROM motoristas ORDER BY nome")
         motoristas = cursor.fetchall()
-        
+
         cursor.execute("SELECT id, caminhao, placa FROM veiculos ORDER BY placa")
         veiculos = cursor.fetchall()
-        
+
         cursor.execute("SELECT id, valor, descricao FROM quantidades ORDER BY valor")
         quantidades = cursor.fetchall()
-        
+
         cursor.execute("SELECT id, nome FROM origens ORDER BY nome")
         origens = cursor.fetchall()
-        
+
         cursor.execute("SELECT id, nome FROM destinos ORDER BY nome")
         destinos = cursor.fetchall()
-        
-        # TITLE: CORREÇÃO - Buscar rotas com PIPE
+
+        # NOVO: rotas e rotas_dict (PIPE)
         cursor.execute("SELECT id, origem_id, destino_id, valor_por_litro FROM rotas WHERE ativo = 1")
         rotas = cursor.fetchall()
+
         rotas_dict = {}
         for rota in rotas:
             chave = f"{rota['origem_id']}|{rota['destino_id']}"  # PIPE
             rotas_dict[chave] = rota['valor_por_litro']
-        
+
         cursor.close()
         conn.close()
-        
+
         return render_template(
             'fretes/editar.html',
             frete=frete,
@@ -571,3 +574,4 @@ def editar(id):
         print(f"Erro ao editar frete: {e}")
         flash(f'Erro ao editar frete: {str(e)}', 'danger')
         return redirect(url_for('fretes.lista'))
+
