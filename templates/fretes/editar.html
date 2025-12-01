@@ -268,24 +268,29 @@
     window.MODOEDICAO = false;
 
     document.addEventListener('DOMContentLoaded', function() {
+        // ================================
         // TOGGLE QUANTIDADE PADRÃO/PERSONALIZADA
+        // ================================
         const tipoSelect = document.getElementById('quantidade_tipo');
         const divPadrao = document.getElementById('div_quantidade_padrao');
         const divPersonalizada = document.getElementById('div_quantidade_personalizada');
 
         function alternarQuantidade() {
+            if (!tipoSelect) return;
             const tipo = tipoSelect.value;
             if (tipo === 'personalizada') {
-                divPadrao.style.display = 'none';
-                divPersonalizada.style.display = 'block';
+                if (divPadrao) divPadrao.style.display = 'none';
+                if (divPersonalizada) divPersonalizada.style.display = 'block';
             } else {
-                divPadrao.style.display = 'block';
-                divPersonalizada.style.display = 'none';
+                if (divPadrao) divPadrao.style.display = 'block';
+                if (divPersonalizada) divPersonalizada.style.display = 'none';
             }
         }
 
-        tipoSelect.addEventListener('change', alternarQuantidade);
-        alternarQuantidade(); // Executar ao carregar
+        if (tipoSelect) {
+            tipoSelect.addEventListener('change', alternarQuantidade);
+            alternarQuantidade(); // Executar ao carregar
+        }
 
         // ============================================
         // AUTO-BLOQUEIO DO DESTINO quando cliente tem município
@@ -297,14 +302,14 @@
             clienteSelect.addEventListener('change', function() {
                 const selectedOption = this.options[this.selectedIndex];
                 const destinoId = selectedOption.getAttribute('data-destino-id');
-                
+
                 if (destinoId) {
                     // Cliente tem município: bloqueia e preenche
                     destinoSelect.value = destinoId;
                     destinoSelect.setAttribute('readonly', 'readonly');
                     destinoSelect.style.backgroundColor = '#e9ecef';
                     destinoSelect.style.cursor = 'not-allowed';
-                    
+
                     // Adicionar badge informativo
                     let badge = destinoSelect.parentElement.querySelector('.destino-auto-badge');
                     if (!badge) {
@@ -313,44 +318,53 @@
                         badge.innerHTML = '<i class="bi bi-info-circle"></i> Destino preenchido automaticamente do cadastro do cliente';
                         destinoSelect.parentElement.appendChild(badge);
                     }
-                    
-                    console.log('🔒 Destino bloqueado (município do cliente):', destinoId);
-                    
+
+                    console.log('Destino bloqueado (município do cliente):', destinoId);
+
                     // Recalcular valores
-                    calcularTudo();
+                    if (typeof window.calcularTudo === 'function') {
+                        window.calcularTudo();
+                    }
                 } else {
                     // Cliente sem município: libera campo
                     destinoSelect.removeAttribute('readonly');
                     destinoSelect.style.backgroundColor = '';
                     destinoSelect.style.cursor = '';
-                    
+
                     // Remover badge
                     const badge = destinoSelect.parentElement.querySelector('.destino-auto-badge');
                     if (badge) {
                         badge.remove();
                     }
-                    
-                    console.log('🔓 Destino liberado (cliente sem município)');
+
+                    console.log('Destino liberado (cliente sem município)');
                 }
             });
-            
+
             // Permitir desbloquear com duplo clique
             destinoSelect.addEventListener('dblclick', function() {
                 if (this.hasAttribute('readonly')) {
                     this.removeAttribute('readonly');
                     this.style.backgroundColor = '';
                     this.style.cursor = '';
-                    
+
                     const badge = this.parentElement.querySelector('.destino-auto-badge');
                     if (badge) {
                         badge.innerHTML = '<i class="bi bi-unlock"></i> Destino desbloqueado para edição manual';
                         badge.classList.remove('text-muted');
                         badge.classList.add('text-warning');
                     }
-                    
-                    console.log('🔓 Destino desbloqueado manualmente');
+
+                    console.log('Destino desbloqueado manualmente');
                 }
             });
+        }
+
+        // ============================================
+        // NOVO: forçar recálculo completo ao abrir o EDITAR
+        // ============================================
+        if (typeof window.calcularTudo === 'function') {
+            window.calcularTudo();
         }
     });
 </script>
