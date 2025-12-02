@@ -85,9 +85,30 @@
                     </div>
                 </div>
 
+                <!-- MOTORISTA (importante) -->
+                <div class="row">
+                    <div class="col-md-6 mb-2">
+                        <label for="motoristas_id" class="form-label" style="font-size: 0.85rem;">Motorista</label>
+                        <select id="motoristas_id" name="motoristas_id" class="form-select form-select-sm" required>
+                            <option value="">Selecione um motorista</option>
+                            {% for motorista in motoristas %}
+                            <option value="{{ motorista.id }}" data-percentual="{{ motorista.percentual_comissao }}" {% if motorista.id == frete.motoristas_id %}selected{% endif %}>{{ motorista.nome }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+
                 <!-- QUANTIDADE / PREÇOS -->
                 <div class="row">
                     <div class="col-md-6 mb-2">
+                        <label for="quantidade_tipo" class="form-label" style="font-size: 0.85rem;">Tipo de Quantidade</label>
+                        <select id="quantidade_tipo" name="quantidade_tipo" class="form-select form-select-sm">
+                            <option value="padrao" {% if frete.quantidade_id %}selected{% endif %}>Quantidade Padrão (Listbox)</option>
+                            <option value="personalizada" {% if not frete.quantidade_id %}selected{% endif %}>Quantidade Personalizada (Manual)</option>
+                        </select>
+                    </div>
+
+                    <div id="div_quantidade_padrao" class="col-md-6 mb-2">
                         <label for="quantidade_id" class="form-label" style="font-size: 0.85rem;">Quantidade (Litros)</label>
                         <select class="form-select form-select-sm" id="quantidade_id" name="quantidade_id">
                             <option value="">Selecione a quantidade</option>
@@ -100,10 +121,10 @@
                         </select>
                     </div>
 
-                    <div class="col-md-6 mb-2">
+                    <div id="div_quantidade_personalizada" style="display:none" class="col-md-6 mb-2">
                         <label for="quantidade_manual" class="form-label" style="font-size: 0.85rem;">Quantidade Manual</label>
                         <input type="text" id="quantidade_manual" name="quantidade_manual" class="form-control form-control-sm"
-                               value="{% if not frete.quantidade_id and frete.quantidade_manual %}{{ '{:,.0f}'.format(frete.quantidade_manual).replace(',', '.') }}{% endif %}" placeholder="Ex: 9.975">
+                               value="{% if not frete.quantidade_id and frete.quantidade_manual %}{{ frete.quantidade_manual }}{% endif %}" placeholder="Ex: 9.975">
                     </div>
                 </div>
 
