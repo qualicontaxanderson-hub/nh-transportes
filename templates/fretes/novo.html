@@ -1,86 +1,201 @@
+```html
 {% extends "base.html" %}
 {% block titulo %}Novo Frete{% endblock %}
 
 {% block content %}
 <div class="container-fluid">
-  <div class="card shadow-sm">
-    <div class="card-header bg-warning text-dark">
-      <h4 class="mb-0">Novo Frete</h4>
+    <nav aria-label="breadcrumb" class="mt-2 mb-3">
+        <ol class="breadcrumb" style="font-size: 0.85rem;">
+            <li class="breadcrumb-item"><a href="{{ url_for('index') }}">Início</a></li>
+            <li class="breadcrumb-item"><a href="{{ url_for('fretes.lista') }}">Fretes</a></li>
+            <li class="breadcrumb-item active" aria-current="page">Novo Frete</li>
+        </ol>
+    </nav>
+
+    <div class="card shadow-sm">
+        <div class="card-header bg-warning text-dark" style="padding: 0.6rem 1rem;">
+            <h4 class="mb-0">Novo Frete</h4>
+        </div>
+
+        <div class="card-body" style="padding: 1rem;">
+            <form method="POST" action="{{ url_for('fretes.novo') }}" enctype="multipart/form-data">
+                <div class="row">
+                    <div class="col-md-6 mb-2">
+                        <label for="clientes_id" class="form-label">Cliente</label>
+                        <select id="clientes_id" name="clientes_id" class="form-select form-select-sm" required>
+                            <option value="">Selecione um cliente</option>
+                            {% for cliente in clientes %}
+                            <option value="{{ cliente.id }}"
+                                    data-paga-comissao="{{ cliente.paga_comissao|default(1) }}"
+                                    data-cte-integral="{{ cliente.cte_integral|default(0) }}"
+                                    data-destino-id="{{ cliente.destino_id }}">
+                                {{ cliente.razao_social }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <div class="col-md-6 mb-2">
+                        <label for="origem_id" class="form-label">Origem</label>
+                        <select id="origem_id" name="origem_id" class="form-select form-select-sm" required>
+                            <option value="">Selecione a origem</option>
+                            {% for origem in origens %}
+                            <option value="{{ origem.id }}">{{ origem.nome }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+
+                <!-- DESTINO: sempre disabled + hidden para envio -->
+                <div class="row">
+                    <div class="col-md-6 mb-2">
+                        <label for="destino_id" class="form-label">Destino</label>
+                        <select id="destino_id" name="destino_id" class="form-select form-select-sm" disabled>
+                            <option value="">Selecione o destino</option>
+                            {% for destino in destinos %}
+                            <option value="{{ destino.id }}">{{ destino.nome }}</option>
+                            {% endfor %}
+                        </select>
+                        <input type="hidden" id="destino_id_hidden" name="destino_id" value="">
+                        <small class="text-muted destino-auto-badge d-block mt-1"><i class="bi bi-info-circle"></i> Destino preenchido a partir do cadastro do cliente</small>
+                    </div>
+
+                    <div class="col-md-6 mb-2">
+                        <label for="veiculos_id" class="form-label">Veículo</label>
+                        <select id="veiculos_id" name="veiculos_id" class="form-select form-select-sm">
+                            <option value="">Selecione um veículo</option>
+                            {% for veiculo in veiculos %}
+                            <option value="{{ veiculo.id }}">{{ veiculo.caminhao }} - {{ veiculo.placa }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+
+                <!-- QUANTIDADES -->
+                <div class="row">
+                    <div class="col-md-6 mb-2">
+                        <label for="quantidade_tipo" class="form-label">Tipo de Quantidade</label>
+                        <select id="quantidade_tipo" name="quantidade_tipo" class="form-select form-select-sm">
+                            <option value="padrao" selected>Quantidade Padrão (Listbox)</option>
+                            <option value="personalizada">Quantidade Personalizada (Manual)</option>
+                        </select>
+                    </div>
+
+                    <div class="col-md-6 mb-2">
+                        <label for="quantidade_id" class="form-label">Quantidade (Litros)</label>
+                        <select id="quantidade_id" name="quantidade_id" class="form-select form-select-sm">
+                            <option value="">Selecione a quantidade</option>
+                            {% for quantidade in quantidades %}
+                            <option value="{{ quantidade.id }}" data-quantidade="{{ quantidade.valor }}">{{ quantidade.descricao }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+
+                <div id="div_quantidade_personalizada" style="display:none">
+                    <div class="row">
+                        <div class="col-md-12 mb-2">
+                            <label for="quantidade_manual" class="form-label">Quantidade Manual</label>
+                            <input type="text" id="quantidade_manual" name="quantidade_manual" class="form-control form-control-sm" placeholder="Ex: 9.975">
+                            <small class="text-muted">Use ponto como separador de milhar (ex: 9.975)</small>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- PREÇOS -->
+                <div class="row mt-2">
+                    <div class="col-md-4 mb-2">
+                        <label for="preco_produto_unitario" class="form-label">Preço Produto Unitário (R$)</label>
+                        <input type="text" id="preco_produto_unitario" name="preco_produto_unitario" class="form-control form-control-sm" value="R$ 0,000" required>
+                        <input type="hidden" id="preco_produto_unitario_raw" name="preco_produto_unitario_raw" value="0">
+                    </div>
+
+                    <div class="col-md-4 mb-2">
+                        <label for="total_nf_compra" class="form-label">Total NF Compra (R$)</label>
+                        <input type="text" id="total_nf_compra" name="total_nf_compra" class="form-control form-control-sm bg-warning" readonly value="R$ 0,00">
+                    </div>
+
+                    <div class="col-md-4 mb-2">
+                        <label for="preco_por_litro" class="form-label">Preço por Litro (R$)</label>
+                        <input type="text" id="preco_por_litro" name="preco_por_litro" class="form-control form-control-sm" value="R$ 0,00" required>
+                    </div>
+                </div>
+
+                <!-- RESULTADOS -->
+                <div class="row mt-2">
+                    <div class="col-md-4 mb-2">
+                        <label for="valor_total_frete" class="form-label">Valor Total Frete (R$)</label>
+                        <input type="text" id="valor_total_frete" name="valor_total_frete" class="form-control form-control-sm bg-warning" readonly value="R$ 0,00">
+                    </div>
+
+                    <div class="col-md-4 mb-2">
+                        <label for="comissao_motorista" class="form-label">Comissão Motorista (R$)</label>
+                        <input type="text" id="comissao_motorista" name="comissao_motorista" class="form-control form-control-sm bg-warning" readonly value="R$ 0,00">
+                    </div>
+
+                    <div class="col-md-4 mb-2">
+                        <label for="valor_cte" class="form-label">Valor CTe (R$)</label>
+                        <input type="text" id="valor_cte" name="valor_cte" class="form-control form-control-sm bg-warning" readonly value="R$ 0,00">
+                    </div>
+                </div>
+
+                <div class="row mt-2">
+                    <div class="col-md-4 mb-2">
+                        <label for="comissao_cte" class="form-label">Comissão CTe (R$)</label>
+                        <input type="text" id="comissao_cte" name="comissao_cte" class="form-control form-control-sm bg-warning" readonly value="R$ 0,00">
+                    </div>
+
+                    <div class="col-md-4 mb-2">
+                        <label for="lucro" class="form-label">Lucro (R$)</label>
+                        <input type="text" id="lucro" name="lucro" class="form-control form-control-sm bg-warning" readonly value="R$ 0,00">
+                    </div>
+
+                    <div class="col-md-4 mb-2">
+                        <label for="status" class="form-label">Status</label>
+                        <select id="status" name="status" class="form-select form-select-sm">
+                            <option value="Pendente">Pendente</option>
+                            <option value="Em Trânsito">Em Trânsito</option>
+                            <option value="Concluído">Concluído</option>
+                            <option value="Cancelado">Cancelado</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Importar Pedido (botão) -->
+                <div class="row mt-3">
+                    <div class="col-md-8">
+                        <!-- Se havia um componente de importação de pedido, adapte o atributo 'onclick' para chamar a sua função existente -->
+                        <button type="button" class="btn btn-outline-secondary btn-sm" id="btn_importar_pedido" onclick="window.abrirImportacaoPedido && window.abrirImportacaoPedido()">
+                            <i class="bi bi-upload"></i> Importar Pedido
+                        </button>
+                        <small class="text-muted ms-2">Importe um pedido para preencher os campos automaticamente.</small>
+                    </div>
+                </div>
+
+                <!-- Observações e ações -->
+                <div class="row mt-3">
+                    <div class="col-md-12">
+                        <label for="observacoes" class="form-label">Observações</label>
+                        <textarea id="observacoes" name="observacoes" class="form-control form-control-sm" rows="2"></textarea>
+                    </div>
+                </div>
+
+                <div class="mt-3 d-flex justify-content-end">
+                    <button type="submit" class="btn btn-warning btn-sm">Salvar</button>
+                </div>
+            </form>
+        </div>
     </div>
-    <div class="card-body">
-      <form method="POST" action="{{ url_for('fretes.novo') }}">
-        <div class="row">
-          <div class="col-md-6 mb-2">
-            <label for="clientes_id" class="form-label">Cliente</label>
-            <select id="clientes_id" name="clientes_id" class="form-select form-select-sm" required>
-              <option value="">Selecione um cliente</option>
-              {% for cliente in clientes %}
-              <option value="{{ cliente.id }}"
-                      data-paga-comissao="{{ cliente.paga_comissao|default(1) }}"
-                      data-cte-integral="{{ cliente.cte_integral|default(0) }}"
-                      data-destino-id="{{ cliente.destino_id }}">
-                {{ cliente.razao_social }}
-              </option>
-              {% endfor %}
-            </select>
-          </div>
-
-          <div class="col-md-6 mb-2">
-            <label for="origem_id" class="form-label">Origem</label>
-            <select id="origem_id" name="origem_id" class="form-select form-select-sm" required>
-              <option value="">Selecione a origem</option>
-              {% for origem in origens %}
-              <option value="{{ origem.id }}">{{ origem.nome }}</option>
-              {% endfor %}
-            </select>
-          </div>
-        </div>
-
-        <div class="row">
-          <div class="col-md-6 mb-2">
-            <label for="destino_id" class="form-label">Destino</label>
-            <!-- sempre disabled -->
-            <select id="destino_id" name="destino_id" class="form-select form-select-sm" disabled>
-              <option value="">Selecione o destino</option>
-              {% for destino in destinos %}
-              <option value="{{ destino.id }}">{{ destino.nome }}</option>
-              {% endfor %}
-            </select>
-            <!-- hidden criado pelo JS garante envio -->
-            <input type="hidden" id="destino_id_hidden" name="destino_id" value="">
-          </div>
-        </div>
-
-        <div class="row mt-3">
-          <div class="col-md-4 mb-2">
-            <label for="preco_produto_unitario" class="form-label">Preço Produto Unitário (R$)</label>
-            <input type="text" id="preco_produto_unitario" name="preco_produto_unitario" class="form-control form-control-sm" value="R$ 0,000" required>
-            <input type="hidden" id="preco_produto_unitario_raw" name="preco_produto_unitario_raw" value="0">
-          </div>
-          <div class="col-md-4 mb-2">
-            <label for="total_nf_compra" class="form-label">Total NF Compra (R$)</label>
-            <input type="text" id="total_nf_compra" name="total_nf_compra" class="form-control form-control-sm bg-warning" readonly value="R$ 0,00">
-          </div>
-          <div class="col-md-4 mb-2">
-            <label for="preco_por_litro" class="form-label">Preço por Litro (R$)</label>
-            <input type="text" id="preco_por_litro" name="preco_por_litro" class="form-control form-control-sm" value="R$ 0,00" required>
-          </div>
-        </div>
-
-        <div class="mt-3 d-flex justify-content-end">
-          <button type="submit" class="btn btn-warning btn-sm">Salvar</button>
-        </div>
-      </form>
-    </div>
-  </div>
 </div>
 {% endblock %}
+
 {% block scripts %}
 <script>
-  const ROTAS = {{ rotas_dict|tojson|safe }};
-  window.MODOEDICAO = false;
+    const ROTAS = {{ rotas_dict|tojson|safe }};
+    window.MODOEDICAO = false;
 </script>
 
 <script src="{{ url_for('static', filename='js/app.js') }}"></script>
 <script src="{{ url_for('static', filename='js/fretes_calculos.js') }}?v={{ config.APP_VERSION or '1' }}"></script>
 {% endblock %}
+```
