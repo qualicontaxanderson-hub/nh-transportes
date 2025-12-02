@@ -108,7 +108,11 @@ function obterValorPorLitroRota() {
 
     const origemId = selectOrigem.value;
     const dadosCliente = obterDadosCliente();
-    const destinoId = dadosCliente.destinoId;
+
+    // Preferir o valor atual do select destino (quando houver).
+    // Se não existir/estiver vazio, usar o destino associado ao cliente (dadosCliente.destinoId).
+    const destinoSelect = document.getElementById('destino_id');
+    const destinoId = (destinoSelect && destinoSelect.value) ? destinoSelect.value : dadosCliente.destinoId;
 
     if (!destinoId) return 0;
 
@@ -139,7 +143,11 @@ function calcularQuantidade() {
 
     // Se existe quantidade manual preenchida, substitui
     if (inputQuantidadeManual && inputQuantidadeManual.value) {
-        quantidade = desformatarMoeda(inputQuantidadeManual.value);
+        // aceitar formatos como "R$ 1.234,56" ou "1234.56" ou "9.975"
+        const raw = inputQuantidadeManual.value.toString().trim();
+        // remover pontos de milhar e trocar vírgula por ponto
+        const normalized = raw.replace(/\./g, '').replace(',', '.').replace(/[^\d.]/g, '');
+        quantidade = parseFloat(normalized) || quantidade;
     }
 
     // Converter KG para litros (1 KG = 1.2 L)
@@ -314,6 +322,32 @@ function calcularTudo() {
 // INICIALIZAÇÃO E EVENTOS
 // ========================================
 
+/**
+ * Aplica bloqueio/auto-preenchimento do campo destino (reaproveita UX já existente)
+ */
+function aplicarBloqueioDestino(destinoId) {
+    const destinoSelect = document.getElementById('destino_id');
+    if (!destinoSelect || !destinoId) return;
+
+    destinoSelect.value = destinoId;
+    destinoSelect.setAttribute('readonly', 'readonly');
+    destinoSelect.style.backgroundColor = '#e9ecef';
+    destinoSelect.style.cursor = 'not-allowed';
+
+    // Adicionar ou atualizar badge informativo
+    let badge = destinoSelect.parentElement.querySelector('.destino-auto-badge');
+    if (!badge) {
+        badge = document.createElement('small');
+        badge.className = 'destino-auto-badge text-muted d-block mt-1';
+        destinoSelect.parentElement.appendChild(badge);
+    }
+    badge.innerHTML = '<i class="bi bi-info-circle"></i> Destino preenchido automaticamente do cadastro do cliente';
+    badge.classList.remove('text-warning');
+    badge.classList.add('text-muted');
+
+    console.log('✅ Destino bloqueado (auto-preenchido do cliente):', destinoId);
+}
+
 document.addEventListener('DOMContentLoaded', function() {
     console.log('✅ fretes_calculos.js carregado');
     
@@ -324,7 +358,7 @@ document.addEventListener('DOMContentLoaded', function() {
         const campo = document.getElementById(campoId);
         if (campo) {
             // Formatar valor inicial
-            if (campo.value && campo.value !== '0,00') {
+            if (campo.value && campo.value !== '0,00' && campo.value !== 'R$ 0,00') {
                 const valorLimpo = limparMoeda(campo.value);
                 campo.value = formatarMoedaDisplay(valorLimpo);
             } else {
@@ -371,6 +405,19 @@ document.addEventListener('DOMContentLoaded', function() {
                 
                 // Recalcular valores
                 calcularTudo();
+            } else {
+                // Cliente sem município: libera campo
+                destinoSelect.removeAttribute('readonly');
+                destinoSelect.style.backgroundColor = '';
+                destinoSelect.style.cursor = '';
+                
+                // Remover badge
+                const badge = destinoSelect.parentElement.querySelector('.destino-auto-badge');
+                if (badge) {
+                    badge.remove();
+                }
+                
+                console.log('⚠️ Destino liberado (cliente sem município)');
             }
         });
         
@@ -391,6 +438,15 @@ document.addEventListener('DOMContentLoaded', function() {
                 console.log('⚠️ Destino desbloqueado manualmente');
             }
         });
+
+        // --- NOVO: aplicar bloqueio inicial caso o cliente já venha selecionado (edição) ---
+        const optionInicial = clienteSelect.options[clienteSelect.selectedIndex];
+        if (optionInicial) {
+            const destinoInicial = optionInicial.getAttribute('data-destino-id');
+            if (destinoInicial) {
+                aplicarBloqueioDestino(destinoInicial);
+            }
+        }
     }
     
     // Configurar eventos nos campos que disparam recálculo
