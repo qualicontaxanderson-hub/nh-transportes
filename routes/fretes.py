@@ -1,12 +1,14 @@
+# url=https://github.com/qualicontaxanderson-hub/nh-transportes/blob/main/routes/fretes.py
 from flask import Blueprint, render_template, request, redirect, url_for, flash
 from flask_login import login_required
 from utils.db import get_db_connection
+import re
 
 bp = Blueprint('fretes', __name__, url_prefix='/fretes')
 
 
 # ============================================
-# FUNÇÃO DE LIMPEZA DE MOEDA - ADICIONAR AQUI
+# FUNÇÃO DE LIMPEZA DE MOEDA
 # ============================================
 def limpar_moeda(valor_str):
     """
@@ -117,7 +119,7 @@ def salvar_importados():
         motorista_id = request.form.get('motorista_id')
         veiculo_id = request.form.get('veiculo_id')
         
-        # TITLE: Listas de dados dos itens
+        # --- Tenta ler formato plano (cliente_id, produto_id, ...) ---
         clientes_ids = request.form.getlist('cliente_id')
         produtos_ids = request.form.getlist('produto_id')
         fornecedores_ids = request.form.getlist('fornecedor_id')
@@ -135,11 +137,55 @@ def salvar_importados():
         lucros = request.form.getlist('lucro')
         status_list = request.form.getlist('status')
         
+        # --- Se veio no formato aninhado itens[0][campo], reconstruir arrays ---
+        if not clientes_ids:
+            pattern = re.compile(r'^itens\[(\d+)\]\[(.+)\]$')
+            # coletar todas as chaves do form que batam
+            data = {}
+            for k, v in request.form.items():
+                m = pattern.match(k)
+                if m:
+                    idx = int(m.group(1))
+                    campo = m.group(2)
+                    data.setdefault(idx, {})[campo] = v
+            if data:
+                # ordenar por índice e construir listas
+                max_idx = max(data.keys())
+                clientes_ids, produtos_ids, fornecedores_ids, origens_ids, destinos_ids = [], [], [], [], []
+                quantidades, quantidades_ids, precos_unitarios, totais_nf = [], [], [], []
+                precos_por_litro, valores_totais_frete, comissoes_motorista = [], [], []
+                valores_cte, comissoes_cte, lucros, status_list = [], [], [], []
+                for i in sorted(data.keys()):
+                    row = data[i]
+                    clientes_ids.append(row.get('cliente_id', ''))
+                    produtos_ids.append(row.get('produto_id', ''))
+                    fornecedores_ids.append(row.get('fornecedor_id', ''))
+                    origens_ids.append(row.get('origem_id', ''))
+                    destinos_ids.append(row.get('destino_id', ''))
+                    quantidades.append(row.get('quantidade', '0'))
+                    quantidades_ids.append(row.get('quantidade_id', '') or '')
+                    precos_unitarios.append(row.get('preco_unitario', '0'))
+                    totais_nf.append(row.get('total_nf', '0'))
+                    precos_por_litro.append(row.get('preco_por_litro', '0'))
+                    valores_totais_frete.append(row.get('valor_total_frete', '0'))
+                    comissoes_motorista.append(row.get('comissao_motorista', '0'))
+                    valores_cte.append(row.get('valor_cte', '0'))
+                    comissoes_cte.append(row.get('comissao_cte', '0'))
+                    lucros.append(row.get('lucro', '0'))
+                    status_list.append(row.get('status', 'Pendente'))
+        
         fretes_criados = 0
         for i in range(len(clientes_ids)):
-            qtd_id = quantidades_ids[i] if quantidades_ids[i] else None
-            
-            # ✅ CORREÇÃO: Usar limpar_moeda() em todos os campos monetários
+            # proteger índices curtos
+            try:
+                cliente_i = clientes_ids[i]
+            except IndexError:
+                cliente_i = ''
+            if not cliente_i:
+                # pular linhas vazias (caso houve mismatch)
+                continue
+            qtd_id = quantidades_ids[i] if i < len(quantidades_ids) and quantidades_ids[i] else None
+            # usar limpar_moeda para todos campos monetários
             cursor.execute("""
                 INSERT INTO fretes (
                     clientes_id, produto_id, fornecedores_id, motoristas_id, veiculos_id,
@@ -149,429 +195,38 @@ def salvar_importados():
                 ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             """, (
                 clientes_ids[i],
-                produtos_ids[i],
-                fornecedores_ids[i],
+                produtos_ids[i] if i < len(produtos_ids) else None,
+                fornecedores_ids[i] if i < len(fornecedores_ids) else None,
                 motorista_id,
                 veiculo_id,
                 qtd_id,
-                limpar_moeda(quantidades[i]) if not qtd_id else None,
-                origens_ids[i],
-                destinos_ids[i],
-                limpar_moeda(precos_unitarios[i]),      # ✅ CORRIGIDO
-                limpar_moeda(totais_nf[i]),             # ✅ CORRIGIDO
-                limpar_moeda(precos_por_litro[i]),      # ✅ CORRIGIDO
-                limpar_moeda(valores_totais_frete[i]),  # ✅ CORRIGIDO
-                limpar_moeda(comissoes_motorista[i]),   # ✅ CORRIGIDO
-                limpar_moeda(valores_cte[i]),           # ✅ CORRIGIDO
-                limpar_moeda(comissoes_cte[i]),         # ✅ CORRIGIDO
-                limpar_moeda(lucros[i]),                # ✅ CORRIGIDO
+                limpar_moeda(quantidades[i]) if not qtd_id and i < len(quantidades) else None,
+                origens_ids[i] if i < len(origens_ids) else None,
+                destinos_ids[i] if i < len(destinos_ids) else None,
+                limpar_moeda(precos_unitarios[i]) if i < len(precos_unitarios) else 0.0,
+                limpar_moeda(totais_nf[i]) if i < len(totais_nf) else 0.0,
+                limpar_moeda(precos_por_litro[i]) if i < len(precos_por_litro) else 0.0,
+                limpar_moeda(valores_totais_frete[i]) if i < len(valores_totais_frete) else 0.0,
+                limpar_moeda(comissoes_motorista[i]) if i < len(comissoes_motorista) else 0.0,
+                limpar_moeda(valores_cte[i]) if i < len(valores_cte) else 0.0,
+                limpar_moeda(comissoes_cte[i]) if i < len(comissoes_cte) else 0.0,
+                limpar_moeda(lucros[i]) if i < len(lucros) else 0.0,
                 data_frete,
-                status_list[i]
+                status_list[i] if i < len(status_list) else 'Pendente'
             ))
             fretes_criados += 1
         
-        # TITLE: Atualizar status do pedido para "Faturado"
-        cursor.execute("UPDATE pedidos SET status = 'Faturado' WHERE id = %s", (pedido_id,))
+        # Atualizar status do pedido para "Faturado" SOMENTE se criamos fretes
+        if fretes_criados > 0 and pedido_id:
+            cursor.execute("UPDATE pedidos SET status = 'Faturado' WHERE id = %s", (pedido_id,))
         
         conn.commit()
         cursor.close()
         conn.close()
         
-        flash(f'{fretes_criados} fretes criados com sucesso! Pedido marcado como "Faturado".', 'success')
+        flash(f'{fretes_criados} fretes criados com sucesso!{"" if fretes_criados>0 else " Nenhum frete criado."}', 'success' if fretes_criados>0 else 'warning')
         return redirect(url_for('fretes.lista'))
     except Exception as e:
         print(f"Erro ao salvar fretes importados: {e}")
         flash(f'Erro ao salvar fretes: {str(e)}', 'danger')
         return redirect(url_for('fretes.novo'))
-
-
-@bp.route('/novo', methods=['GET', 'POST'])
-@login_required
-def novo():
-    pedido_id = request.args.get('pedido_id', type=int)
-    
-    if request.method == 'POST':
-        try:
-            conn = get_db_connection()
-            cursor = conn.cursor()
-            
-            # TITLE: Tipo de quantidade (personalizada ou padrão)
-            quantidade_tipo = request.form.get('quantidade_tipo')
-            if quantidade_tipo == 'personalizada':
-                quantidade_id_para_salvar = None
-            else:
-                quantidade_id_para_salvar = request.form.get('quantidade_id')
-            
-            # ✅ CORREÇÃO: Usar limpar_moeda() em todos os campos monetários
-            preco_produto_unitario = limpar_moeda(request.form.get('preco_produto_unitario'))
-            total_nf_compra = limpar_moeda(request.form.get('total_nf_compra'))
-            preco_por_litro = limpar_moeda(request.form.get('preco_por_litro'))
-            valor_total_frete = limpar_moeda(request.form.get('valor_total_frete'))
-            comissao_motorista = limpar_moeda(request.form.get('comissao_motorista'))
-            valor_cte = limpar_moeda(request.form.get('valor_cte'))
-            comissao_cte = limpar_moeda(request.form.get('comissao_cte'))
-            lucro = limpar_moeda(request.form.get('lucro'))
-            
-            cursor.execute("""
-                INSERT INTO fretes (
-                    clientes_id, produto_id, fornecedores_id, motoristas_id, veiculos_id,
-                    quantidade_id, origem_id, destino_id,
-                    preco_produto_unitario, total_nf_compra, preco_por_litro, valor_total_frete,
-                    comissao_motorista, valor_cte, comissao_cte, lucro, data_frete, status, observacoes
-                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-            """, (
-                request.form.get('clientes_id'),
-                request.form.get('produto_id'),
-                request.form.get('fornecedores_id'),
-                request.form.get('motoristas_id'),
-                request.form.get('veiculos_id'),
-                quantidade_id_para_salvar,
-                request.form.get('origem_id'),
-                request.form.get('destino_id'),
-                preco_produto_unitario,
-                total_nf_compra,
-                preco_por_litro,
-                valor_total_frete,
-                comissao_motorista,
-                valor_cte,
-                comissao_cte,
-                lucro,
-                request.form.get('data_frete'),
-                request.form.get('status'),
-                request.form.get('observacoes')
-            ))
-            
-            # TITLE: Se veio de um pedido, marcar como "Faturado"
-            pedido_id_form = request.form.get('pedido_id')
-            if pedido_id_form:
-                cursor.execute("UPDATE pedidos SET status = 'Faturado' WHERE id = %s", (pedido_id_form,))
-            
-            conn.commit()
-            cursor.close()
-            conn.close()
-            
-            flash('Frete cadastrado com sucesso!', 'success')
-            return redirect(url_for('fretes.lista'))
-        except Exception as e:
-            print(f"Erro ao cadastrar frete: {e}")
-            flash(f'Erro ao cadastrar frete: {str(e)}', 'danger')
-            return redirect(url_for('fretes.novo'))
-    # TITLE: GET - carregar formulário
-    try:
-        conn = get_db_connection()
-        cursor = conn.cursor(dictionary=True)
-        
-        cursor.execute("SELECT id, razao_social, paga_comissao, percentual_cte, cte_integral, destino_id FROM clientes ORDER BY razao_social")
-        clientes = cursor.fetchall()
-        
-        cursor.execute("SELECT id, nome FROM produto ORDER BY nome")
-        produtos = cursor.fetchall()
-        
-        cursor.execute("SELECT id, razao_social FROM fornecedores ORDER BY razao_social")
-        fornecedores = cursor.fetchall()
-        
-        cursor.execute("SELECT id, nome, paga_comissao FROM motoristas ORDER BY nome")
-        motoristas = cursor.fetchall()
-        
-        cursor.execute("SELECT id, caminhao, placa FROM veiculos ORDER BY placa")
-        veiculos = cursor.fetchall()
-        
-        cursor.execute("SELECT id, valor, descricao FROM quantidades ORDER BY valor")
-        quantidades = cursor.fetchall()
-        
-        cursor.execute("SELECT id, nome FROM origens ORDER BY nome")
-        origens = cursor.fetchall()
-        
-        cursor.execute("SELECT id, nome FROM destinos ORDER BY nome")
-        destinos = cursor.fetchall()
-        
-        # TITLE: CORREÇÃO - Buscar rotas com PIPE
-        cursor.execute("SELECT id, origem_id, destino_id, valor_por_litro FROM rotas WHERE ativo = 1")
-        rotas = cursor.fetchall()
-        rotas_dict = {}
-        for rota in rotas:
-            chave = f"{rota['origem_id']}|{rota['destino_id']}"  # PIPE
-            rotas_dict[chave] = rota['valor_por_litro']
-        
-        cursor.execute("""
-            SELECT p.id, p.numero, p.data_pedido, p.status, p.motorista_id, m.nome as motorista_nome
-            FROM pedidos p
-            LEFT JOIN motoristas m ON p.motorista_id = m.id
-            WHERE p.status IN ('Pendente', 'Confirmado')
-            ORDER BY p.data_pedido DESC
-        """)
-        pedidos = cursor.fetchall()
-        
-        cursor.close()
-        conn.close()
-        
-        return render_template(
-            'fretes/novo.html',
-            clientes=clientes,
-            produtos=produtos,
-            fornecedores=fornecedores,
-            motoristas=motoristas,
-            veiculos=veiculos,
-            quantidades=quantidades,
-            origens=origens,
-            destinos=destinos,
-            rotas=rotas,
-            rotas_dict=rotas_dict,
-            pedidos=pedidos,
-            pedido_selecionado_id=pedido_id
-        )
-    except Exception as e:
-        print(f"Erro ao carregar formulário: {e}")
-        flash(f'Erro ao carregar formulário: {str(e)}', 'danger')
-        return redirect(url_for('index'))
-
-
-@bp.route('/lista')
-@login_required
-def lista():
-    try:
-        conn = get_db_connection()
-        cursor = conn.cursor(dictionary=True)
-        
-        data_inicio = request.args.get('data_inicio')
-        data_fim = request.args.get('data_fim')
-        cliente_id = request.args.get('cliente_id')
-        
-        base_sql = """
-            SELECT f.*,
-                   c.razao_social AS cliente_nome,
-                   fo.razao_social AS fornecedor_nome,
-                   m.nome AS motorista_nome,
-                   v.placa AS veiculo_placa,
-                   q.valor AS quantidade_valor,
-                   o.nome AS origem_nome,
-                   d.nome AS destino_nome,
-                   p.nome AS produto_nome
-            FROM fretes f
-            LEFT JOIN clientes c ON f.clientes_id = c.id
-            LEFT JOIN fornecedores fo ON f.fornecedores_id = fo.id
-            LEFT JOIN motoristas m ON f.motoristas_id = m.id
-            LEFT JOIN veiculos v ON f.veiculos_id = v.id
-            LEFT JOIN quantidades q ON f.quantidade_id = q.id
-            LEFT JOIN origens o ON f.origem_id = o.id
-            LEFT JOIN destinos d ON f.destino_id = d.id
-            LEFT JOIN produto p ON f.produto_id = p.id
-        """
-        
-        filtros = []
-        parametros = []
-        
-        if data_inicio:
-            filtros.append("f.data_frete >= %s")
-            parametros.append(data_inicio)
-        
-        if data_fim:
-            filtros.append("f.data_frete <= %s")
-            parametros.append(data_fim)
-        
-        if cliente_id:
-            filtros.append("f.clientes_id = %s")
-            parametros.append(cliente_id)
-        
-        if filtros:
-            base_sql += " WHERE " + " AND ".join(filtros)
-        
-        base_sql += " ORDER BY f.data_frete DESC, f.id DESC"
-        
-        cursor.execute(base_sql, tuple(parametros))
-        fretes = cursor.fetchall()
-        
-        # TITLE: Clientes atendidos
-        sql_clientes = """
-            SELECT c.id, c.razao_social, COUNT(f.id) AS qtd_fretes
-            FROM fretes f
-            JOIN clientes c ON f.clientes_id = c.id
-        """
-        if filtros:
-            sql_clientes += " WHERE " + " AND ".join(filtros)
-        sql_clientes += " GROUP BY c.id, c.razao_social ORDER BY c.razao_social"
-        cursor.execute(sql_clientes, tuple(parametros))
-        clientes_atendidos = cursor.fetchall()
-        
-        # TITLE: Quantidade por caminhão
-        sql_caminhao = """
-            SELECT v.id, v.placa, SUM(q.valor) AS total_quantidade
-            FROM fretes f
-            JOIN veiculos v ON f.veiculos_id = v.id
-            JOIN quantidades q ON f.quantidade_id = q.id
-        """
-        if filtros:
-            sql_caminhao += " WHERE " + " AND ".join(filtros)
-        sql_caminhao += " GROUP BY v.id, v.placa ORDER BY v.placa"
-        cursor.execute(sql_caminhao, tuple(parametros))
-        quantidade_por_caminhao = cursor.fetchall()
-        
-        cursor.execute("SELECT id, razao_social FROM clientes ORDER BY razao_social")
-        lista_clientes = cursor.fetchall()
-        
-        cursor.close()
-        conn.close()
-        
-        return render_template(
-            'fretes/lista.html',
-            fretes=fretes,
-            data_inicio=data_inicio,
-            data_fim=data_fim,
-            cliente_id=cliente_id,
-            clientes_atendidos=clientes_atendidos,
-            quantidade_por_caminhao=quantidade_por_caminhao,
-            lista_clientes=lista_clientes
-        )
-    except Exception as e:
-        print(f"Erro ao carregar lista de fretes: {e}")
-        flash(f'Erro ao carregar lista de fretes: {str(e)}', 'danger')
-        return redirect(url_for('index'))
-
-
-@bp.route('/deletar/<int:id>', methods=['POST', 'GET'])
-@login_required
-def deletar(id):
-    try:
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        cursor.execute("DELETE FROM fretes WHERE id = %s", (id,))
-        conn.commit()
-        cursor.close()
-        conn.close()
-        flash('Frete excluído com sucesso!', 'success')
-    except Exception as e:
-        flash(f'Erro ao excluir frete: {str(e)}', 'danger')
-    return redirect(url_for('fretes.lista'))
-
-
-@bp.route('/editar/<int:id>', methods=['GET', 'POST'])
-@login_required
-def editar(id):
-    try:
-        conn = get_db_connection()
-        cursor = conn.cursor(dictionary=True)
-        
-        if request.method == 'POST':
-            origem_id = request.form.get('origem_id')
-            destino_id = request.form.get('destino_id')
-            
-            if not destino_id or destino_id == '':
-                flash('ERRO: Destino é obrigatório!', 'danger')
-                return redirect(url_for('fretes.editar', id=id))
-            
-            # TITLE: Tipo de quantidade (personalizada ou padrão)
-            quantidade_tipo = request.form.get('quantidade_tipo', 'padrao')
-            if quantidade_tipo == 'personalizada':
-                quantidade_id_para_salvar = None
-            else:
-                quantidade_id_para_salvar = request.form.get('quantidade_id')
-            
-            # ✅ CORREÇÃO: Usar limpar_moeda() em todos os campos monetários
-            preco_produto_unitario = limpar_moeda(request.form.get('preco_produto_unitario'))
-            total_nf_compra = limpar_moeda(request.form.get('total_nf_compra'))
-            preco_por_litro = limpar_moeda(request.form.get('preco_por_litro'))
-            valor_total_frete = limpar_moeda(request.form.get('valor_total_frete'))
-            comissao_motorista = limpar_moeda(request.form.get('comissao_motorista'))
-            valor_cte = limpar_moeda(request.form.get('valor_cte'))
-            comissao_cte = limpar_moeda(request.form.get('comissao_cte'))
-            lucro = limpar_moeda(request.form.get('lucro'))
-            
-            cursor.execute("""
-                UPDATE fretes SET
-                    clientes_id=%s, produto_id=%s, fornecedores_id=%s, motoristas_id=%s, veiculos_id=%s,
-                    quantidade_id=%s, origem_id=%s, destino_id=%s,
-                    preco_produto_unitario=%s, total_nf_compra=%s, preco_por_litro=%s, valor_total_frete=%s,
-                    comissao_motorista=%s, valor_cte=%s, comissao_cte=%s, lucro=%s,
-                    data_frete=%s, status=%s, observacoes=%s
-                WHERE id=%s
-            """, (
-                request.form.get('clientes_id'),
-                request.form.get('produto_id'),
-                request.form.get('fornecedores_id'),
-                request.form.get('motoristas_id'),
-                request.form.get('veiculos_id'),
-                quantidade_id_para_salvar,
-                origem_id if origem_id else None,
-                destino_id,
-                preco_produto_unitario,
-                total_nf_compra,
-                preco_por_litro,
-                valor_total_frete,
-                comissao_motorista,
-                valor_cte,
-                comissao_cte,
-                lucro,
-                request.form.get('data_frete'),
-                request.form.get('status'),
-                request.form.get('observacoes'),
-                id
-            ))
-            
-            conn.commit()
-            cursor.close()
-            conn.close()
-            
-            flash('Frete atualizado com sucesso!', 'success')
-            return redirect(url_for('fretes.lista'))
-        
-        # TITLE: GET - carregar dados do frete
-        # PARA (versão correta com rotas_dict)
-        # TITLE: GET - carregar dados do frete
-        cursor.execute("SELECT * FROM fretes WHERE id = %s", (id,))
-        frete = cursor.fetchone()
-
-        cursor.execute("SELECT id, razao_social, paga_comissao, percentual_cte, cte_integral, destino_id FROM clientes ORDER BY razao_social")
-        clientes = cursor.fetchall()
-
-        cursor.execute("SELECT id, nome FROM produto ORDER BY nome")
-        produtos = cursor.fetchall()
-
-        cursor.execute("SELECT id, razao_social FROM fornecedores ORDER BY razao_social")
-        fornecedores = cursor.fetchall()
-
-        cursor.execute("SELECT id, nome, paga_comissao FROM motoristas ORDER BY nome")
-        motoristas = cursor.fetchall()
-
-        cursor.execute("SELECT id, caminhao, placa FROM veiculos ORDER BY placa")
-        veiculos = cursor.fetchall()
-
-        cursor.execute("SELECT id, valor, descricao FROM quantidades ORDER BY valor")
-        quantidades = cursor.fetchall()
-
-        cursor.execute("SELECT id, nome FROM origens ORDER BY nome")
-        origens = cursor.fetchall()
-
-        cursor.execute("SELECT id, nome FROM destinos ORDER BY nome")
-        destinos = cursor.fetchall()
-
-        # NOVO: rotas e rotas_dict (PIPE)
-        cursor.execute("SELECT id, origem_id, destino_id, valor_por_litro FROM rotas WHERE ativo = 1")
-        rotas = cursor.fetchall()
-
-        rotas_dict = {}
-        for rota in rotas:
-            chave = f"{rota['origem_id']}|{rota['destino_id']}"  # PIPE
-            rotas_dict[chave] = rota['valor_por_litro']
-
-        cursor.close()
-        conn.close()
-
-        return render_template(
-            'fretes/editar.html',
-            frete=frete,
-            clientes=clientes,
-            produtos=produtos,
-            fornecedores=fornecedores,
-            motoristas=motoristas,
-            veiculos=veiculos,
-            quantidades=quantidades,
-            origens=origens,
-            destinos=destinos,
-            rotas=rotas,
-            rotas_dict=rotas_dict
-        )
-    except Exception as e:
-        print(f"Erro ao editar frete: {e}")
-        flash(f'Erro ao editar frete: {str(e)}', 'danger')
-        return redirect(url_for('fretes.lista'))
-
