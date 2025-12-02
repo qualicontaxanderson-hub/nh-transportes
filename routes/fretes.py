@@ -520,7 +520,7 @@ def editar(id):
         cursor.execute("SELECT * FROM fretes WHERE id = %s", (id,))
         frete = cursor.fetchone()
 
-        cursor.execute("SELECT id, razao_social, paga_comissao, percentual_cte, cte_integral FROM clientes ORDER BY razao_social")
+        cursor.execute("SELECT id, razao_social, paga_comissao, percentual_cte, cte_integral, destino_id FROM clientes ORDER BY razao_social")
         clientes = cursor.fetchall()
 
         cursor.execute("SELECT id, nome FROM produto ORDER BY nome")
