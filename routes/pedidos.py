@@ -86,7 +86,7 @@ def novo():
     if request.method == 'POST':
         data_pedido = request.form['data_pedido']
         motorista_id = request.form.get('motorista_id') or None
-        veiculo_id = request.form.get('veiculo_id') or None  # NOVO
+        veiculo_id = request.form.get('veiculo_id') or None
         observacoes = request.form.get('observacoes', '')
         numero = gerar_numero_pedido()
         
@@ -163,7 +163,7 @@ def novo():
     cursor.execute("SELECT id, nome FROM motoristas ORDER BY nome")
     motoristas = cursor.fetchall()
     
-    cursor.execute("SELECT id, caminhao, placa FROM veiculos WHERE ativo = 1 ORDER BY caminhao")  # NOVO
+    cursor.execute("SELECT id, caminhao, placa FROM veiculos WHERE ativo = 1 ORDER BY caminhao")
     veiculos = cursor.fetchall()
     
     cursor.execute("SELECT id, nome FROM bases WHERE ativo = 1 ORDER BY nome")
@@ -182,7 +182,7 @@ def novo():
         origens=origens,
         quantidades=quantidades,
         motoristas=motoristas,
-        veiculos=veiculos,  # NOVO
+        veiculos=veiculos,
         bases=bases,
         numero_sugerido=numero_sugerido
     )
@@ -233,8 +233,8 @@ def visualizar(id):
     """, (id,))
     itens = cursor.fetchall()
     
-    total_quantidade = sum(float(item['quantidade']) for item in itens)
-    total_valor = sum(float(item['total_nf']) for item in itens)
+    total_quantidade = sum(float(item['quantidade']) for item in itens) if itens else 0
+    total_valor = sum(float(item['total_nf']) for item in itens) if itens else 0
     
     itens_por_fornecedor = {}
     for item in itens:
@@ -265,7 +265,7 @@ def editar(id):
     if request.method == 'POST':
         data_pedido = request.form['data_pedido']
         motorista_id = request.form.get('motorista_id') or None
-        veiculo_id = request.form.get('veiculo_id') or None  # NOVO
+        veiculo_id = request.form.get('veiculo_id') or None
         status = request.form['status']
         observacoes = request.form.get('observacoes', '')
         
@@ -321,7 +321,7 @@ def editar(id):
         flash('Pedido atualizado com sucesso!', 'success')
         return redirect(url_for('pedidos.visualizar', id=id))
     
-      # GET
+    # GET
     cursor.execute("SELECT * FROM pedidos WHERE id = %s", (id,))
     pedido = cursor.fetchone()
     
@@ -349,7 +349,7 @@ def editar(id):
     cursor.execute("SELECT id, nome FROM motoristas ORDER BY nome")
     motoristas = cursor.fetchall()
     
-    cursor.execute("SELECT id, caminhao, placa FROM veiculos WHERE ativo = 1 ORDER BY caminhao")  # NOVO
+    cursor.execute("SELECT id, caminhao, placa FROM veiculos WHERE ativo = 1 ORDER BY caminhao")
     veiculos = cursor.fetchall()
     
     cursor.execute("SELECT id, nome FROM bases WHERE ativo = 1 ORDER BY nome")
@@ -368,7 +368,7 @@ def editar(id):
         origens=origens,
         quantidades=quantidades,
         motoristas=motoristas,
-        veiculos=veiculos,  # NOVO
+        veiculos=veiculos,
         bases=bases
     )
 
@@ -438,3 +438,102 @@ def api_buscar(id):
     
     return jsonify(itens)
 
+
+# -----------------------------
+# Rotas novas para Importação
+# -----------------------------
+@bp.route('/importar')
+@login_required
+def importar_lista():
+    """
+    Lista pedidos pendentes para o fluxo de importação.
+    Pode ser carregada em modal via fetch ou aberta em nova aba.
+    """
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True)
+
+    # Buscar pedidos pendentes (ajuste condição se quiser outros status)
+    cursor.execute("""
+        SELECT p.id, p.numero, p.data_pedido, p.status,
+               m.nome as motorista_nome,
+               v.caminhao as veiculo_nome,
+               COUNT(pi.id) as total_itens,
+               COALESCE(SUM(pi.quantidade), 0) as total_quantidade
+        FROM pedidos p
+        LEFT JOIN motoristas m ON p.motorista_id = m.id
+        LEFT JOIN veiculos v ON p.veiculo_id = v.id
+        LEFT JOIN pedidos_itens pi ON p.id = pi.pedido_id
+        WHERE p.status = 'Pendente'
+        GROUP BY p.id
+        ORDER BY p.data_pedido DESC, p.id DESC
+    """)
+    pedidos = cursor.fetchall()
+
+    cursor.close()
+    conn.close()
+
+    return render_template('pedidos/importar_lista.html', pedidos=pedidos)
+
+
+@bp.route('/importar/<int:id>')
+@login_required
+def importar_pedido(id):
+    """
+    Renderiza o template de detalhe do pedido para importação.
+    Usado como detalhe ao escolher um pedido da lista.
+    """
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True)
+
+    # Pedido + motorista/veiculo
+    cursor.execute("""
+        SELECT p.*,
+               m.nome as motorista_nome,
+               v.caminhao as veiculo_nome,
+               v.placa as veiculo_placa
+        FROM pedidos p
+        LEFT JOIN motoristas m ON p.motorista_id = m.id
+        LEFT JOIN veiculos v ON p.veiculo_id = v.id
+        WHERE p.id = %s
+    """, (id,))
+    pedido = cursor.fetchone()
+    if not pedido:
+        cursor.close()
+        conn.close()
+        flash('Pedido não encontrado!', 'danger')
+        return redirect(url_for('pedidos.importar_lista'))
+
+    # Itens do pedido com joins para exibição
+    cursor.execute("""
+        SELECT pi.*,
+               c.razao_social as cliente_razao,
+               c.nome_fantasia as cliente_fantasia,
+               p.nome as produto_nome,
+               f.razao_social as fornecedor_razao,
+               o.nome as origem_nome,
+               q.descricao as quantidade_descricao
+        FROM pedidos_itens pi
+        JOIN clientes c ON pi.cliente_id = c.id
+        JOIN produto p ON pi.produto_id = p.id
+        JOIN fornecedores f ON pi.fornecedor_id = f.id
+        JOIN origens o ON pi.origem_id = o.id
+        LEFT JOIN quantidades q ON pi.quantidade_id = q.id
+        WHERE pi.pedido_id = %s
+        ORDER BY f.nome_fantasia, c.razao_social
+    """, (id,))
+    itens = cursor.fetchall()
+
+    # normalizar tipos para o template
+    for item in itens:
+        item['quantidade'] = float(item['quantidade'])
+        item['preco_unitario'] = float(item['preco_unitario']) if item.get('preco_unitario') else 0.0
+        item['total_nf'] = float(item['total_nf']) if item.get('total_nf') else 0.0
+        item['cliente_paga_comissao'] = item.get('cliente_paga_comissao', 1)
+        item['cliente_percentual_cte'] = item.get('cliente_percentual_cte', 0)
+        item['cliente_cte_integral'] = item.get('cliente_cte_integral', 0)
+
+    cursor.close()
+    conn.close()
+
+    # Renderiza o template de importação (detalhe)
+    return render_template('fretes/importar-pedido.html', pedido=pedido, itens=itens, rotas_dict={})
