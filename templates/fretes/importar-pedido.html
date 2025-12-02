@@ -7,8 +7,8 @@
   <nav aria-label="breadcrumb" class="mt-2 mb-3">
     <ol class="breadcrumb" style="font-size: 0.85rem;">
       <li class="breadcrumb-item"><a href="{{ url_for('index') }}">Início</a></li>
-      <li class="breadcrumb-item"><a href="{{ url_for('fretes.lista') }}">Fretes</a></li>
-      <li class="breadcrumb-item"><a href="{{ url_for('fretes.novo') }}">Novo Frete</a></li>
+      <li class="breadcrumb-item"><a href="{{ url_for('pedidos.index') }}">Pedidos</a></li>
+      <li class="breadcrumb-item"><a href="{{ url_for('pedidos.novo') }}">Novo Pedido</a></li>
       <li class="breadcrumb-item active" aria-current="page">Importar Pedido #{{ pedido.id }}</li>
     </ol>
   </nav>
@@ -81,14 +81,14 @@
       <div class="card-body" style="padding: 0.75rem;">
         
         <!-- Hidden inputs para dados do item -->
-        <input type="hidden" name="cliente_id" value="{{ item.cliente_id }}">
-        <input type="hidden" name="produto_id" value="{{ item.produto_id }}">
-        <input type="hidden" name="fornecedor_id" value="{{ item.fornecedor_id }}">
-        <input type="hidden" name="origem_id" value="{{ item.origem_id }}">
-        <input type="hidden" name="destino_id" value="{{ item.cliente_destino_id }}">
-        <input type="hidden" name="quantidade_id" value="{{ item.quantidade_id or '' }}">
-        <input type="hidden" name="quantidade" value="{{ item.quantidade or 0 }}">
-        <input type="hidden" name="preco_unitario" value="{{ '{:.2f}'.format(item.preco_unitario).replace('.', ',') if item.preco_unitario else '0,00' }}">
+        <input type="hidden" name="itens[{{ loop.index0 }}][cliente_id]" value="{{ item.cliente_id }}">
+        <input type="hidden" name="itens[{{ loop.index0 }}][produto_id]" value="{{ item.produto_id }}">
+        <input type="hidden" name="itens[{{ loop.index0 }}][fornecedor_id]" value="{{ item.fornecedor_id }}">
+        <input type="hidden" name="itens[{{ loop.index0 }}][origem_id]" value="{{ item.origem_id }}">
+        <input type="hidden" name="itens[{{ loop.index0 }}][destino_id]" value="{{ item.cliente_destino_id }}">
+        <input type="hidden" name="itens[{{ loop.index0 }}][quantidade_id]" value="{{ item.quantidade_id or '' }}">
+        <input type="hidden" name="itens[{{ loop.index0 }}][quantidade]" value="{{ item.quantidade or 0 }}">
+        <input type="hidden" name="itens[{{ loop.index0 }}][preco_unitario]" value="{{ '{:.2f}'.format(item.preco_unitario).replace('.', ',') if item.preco_unitario else '0,00' }}">
         
         <!-- Dados de comissão e CTe (hidden) -->
         <input type="hidden" class="cliente-paga-comissao" value="{{ item.cliente_paga_comissao }}">
@@ -144,22 +144,22 @@
           </div>
           <div class="col-md-2">
             <label class="form-label" style="font-size: 0.8rem;">Total NF R$</label>
-            <input type="text" class="form-control form-control-sm campo-total-nf" name="total_nf"
+            <input type="text" class="form-control form-control-sm campo-total-nf" name="itens[{{ loop.index0 }}][total_nf]"
                    value="0,00" style="background:#FFD580;" readonly>
           </div>
           <div class="col-md-2 campo-preco-litro-container">
             <label class="form-label" style="font-size: 0.8rem;"><strong>Preço p/ Litro R$ *</strong></label>
-            <input type="text" class="form-control form-control-sm campo-preco-litro" name="preco_por_litro"
+            <input type="text" class="form-control form-control-sm campo-preco-litro" name="itens[{{ loop.index0 }}][preco_por_litro]"
                    value="0,00" required>
           </div>
           <div class="col-md-2">
             <label class="form-label" style="font-size: 0.8rem;">Valor Total Frete R$</label>
-            <input type="text" class="form-control form-control-sm campo-valor-frete" name="valor_total_frete"
+            <input type="text" class="form-control form-control-sm campo-valor-frete" name="itens[{{ loop.index0 }}][valor_total_frete]"
                    value="0,00" style="background:#FFD580;" readonly>
           </div>
           <div class="col-md-2">
             <label class="form-label" style="font-size: 0.8rem;"><strong>Status *</strong></label>
-            <select class="form-select form-select-sm" name="status" required>
+            <select class="form-select form-select-sm" name="itens[{{ loop.index0 }}][status]" required>
               <option value="Pendente" selected>Pendente</option>
               <option value="Em Trânsito">Em Trânsito</option>
               <option value="Concluído">Concluído</option>
@@ -171,22 +171,22 @@
         <div class="row">
           <div class="col-md-3">
             <label class="form-label" style="font-size: 0.8rem;">Comissão Motorista R$</label>
-            <input type="text" class="form-control form-control-sm campo-comissao-motorista" name="comissao_motorista"
+            <input type="text" class="form-control form-control-sm campo-comissao-motorista" name="itens[{{ loop.index0 }}][comissao_motorista]"
                    value="0,00" style="background:#FFD580;" readonly>
           </div>
           <div class="col-md-3">
             <label class="form-label" style="font-size: 0.8rem;">Valor CTe R$</label>
-            <input type="text" class="form-control form-control-sm campo-valor-cte" name="valor_cte"
+            <input type="text" class="form-control form-control-sm campo-valor-cte" name="itens[{{ loop.index0 }}][valor_cte]"
                    value="0,00" style="background:#FFD580;" readonly>
           </div>
           <div class="col-md-3">
             <label class="form-label" style="font-size: 0.8rem;">Comissão CTe R$</label>
-            <input type="text" class="form-control form-control-sm campo-comissao-cte" name="comissao_cte"
+            <input type="text" class="form-control form-control-sm campo-comissao-cte" name="itens[{{ loop.index0 }}][comissao_cte]"
                    value="0,00" style="background:#FFD580;" readonly>
           </div>
           <div class="col-md-3">
             <label class="form-label" style="font-size: 0.8rem;">Lucro R$</label>
-            <input type="text" class="form-control form-control-sm campo-lucro" name="lucro"
+            <input type="text" class="form-control form-control-sm campo-lucro" name="itens[{{ loop.index0 }}][lucro]"
                    value="0,00" style="background:#FFD580;" readonly>
           </div>
         </div>
@@ -197,7 +197,7 @@
 
     <!-- Botões de Ação -->
     <div class="d-flex justify-content-between mt-4 mb-4">
-      <a href="{{ url_for('fretes.novo') }}" class="btn btn-secondary btn-sm">
+      <a href="{{ url_for('pedidos.novo') }}" class="btn btn-secondary btn-sm">
         <i class="bi bi-arrow-left"></i> Voltar
       </a>
       <button type="submit" class="btn btn-success btn-sm">
@@ -239,8 +239,9 @@
 // Definir ROTAS do backend
 const ROTAS = {{ rotas_dict|tojson|safe }};
 
-// NOVA FUNÇÃO: Formata moeda pt-BR (ponto milhar, vírgula decimal)
+// Funções de formatação/parsing (simples)
 function formatarMoeda(valor) {
+  if (valor === null || valor === undefined) return '0,00';
   let numero = parseFloat(valor).toFixed(2);
   let partes = numero.split('.');
   let inteiro = partes[0];
@@ -254,155 +255,94 @@ function desformatarMoeda(valor) {
   return parseFloat(valor.toString().replace(/\./g, '').replace(',', '.')) || 0;
 }
 
-// Função para calcular valores de um item específico
+// Calcular valores do item
 function calcularItem(itemDiv) {
-  // Obter quantidade
-  var quantidadeInput = itemDiv.querySelector('input[name="quantidade"]');
-  var quantidade = parseFloat(quantidadeInput.value) || 0;
+  try {
+    const quantidade = parseFloat(itemDiv.querySelector('input[name$="[quantidade]"]').value) || 0;
+    const precoUnitario = desformatarMoeda(itemDiv.querySelector('.campo-preco-unitario').value);
+    const precoLitroInput = itemDiv.querySelector('.campo-preco-litro');
+    const precoPorLitro = desformatarMoeda(precoLitroInput.value);
 
-  // Obter preço unitário
-  var precoUnitarioDisplay = itemDiv.querySelector('.campo-preco-unitario');
-  var precoUnitario = desformatarMoeda(precoUnitarioDisplay.value);
+    const clientePagaComissao = parseInt(itemDiv.querySelector('.cliente-paga-comissao').value) || 0;
+    const clienteCteIntegral = parseInt(itemDiv.querySelector('.cliente-cte-integral').value) || 0;
 
-  // Obter preço por litro (campo editável)
-  var precoLitroInput = itemDiv.querySelector('.campo-preco-litro');
-  var precoLitro = desformatarMoeda(precoLitroInput.value);
-
-  // Obter dados do cliente
-  var clientePagaComissao = parseInt(itemDiv.querySelector('.cliente-paga-comissao').value) || 0;
-  var clientePercentualCte = parseFloat(itemDiv.querySelector('.cliente-percentual-cte').value) || 0;
-  var clienteCteIntegral = parseInt(itemDiv.querySelector('.cliente-cte-integral').value) || 0;
-
-  // Obter origem e destino para buscar na rota
-  var origemId = itemDiv.querySelector('.item-origem-id').value;
-  var destinoId = itemDiv.querySelector('.item-destino-id').value;
-
-  // CÁLCULOS (REGRAS DEFINITIVAS)
-  var totalNF = quantidade * precoUnitario;
-
-  // 1. VALOR TOTAL FRETE
-  var valorTotalFrete = 0;
-  if (clientePagaComissao) {
-    valorTotalFrete = quantidade * precoLitro;
-  } else {
-    valorTotalFrete = 0;
-  }
-
-  // 2. COMISSÃO MOTORISTA
-  var comissaoMotorista = 0;
-  if (clientePagaComissao) {
-    comissaoMotorista = quantidade * 0.01; // R$ 0,01 por litro
-  } else {
-    comissaoMotorista = 0;
-  }
-
-  // 3. VALOR CTe (INDEPENDENTE DO CLIENTE)
-  var valorCte = 0;
-  if (clienteCteIntegral == 1) {
-    // CTe Integral
+    const totalNF = quantidade * precoUnitario;
+    let valorTotalFrete = 0;
+    let comissaoMotorista = 0;
     if (clientePagaComissao) {
-      valorCte = valorTotalFrete;
+      valorTotalFrete = quantidade * precoPorLitro;
+      comissaoMotorista = quantidade * 0.01;
+    }
+
+    // CTe
+    let valorCte = 0;
+    if (clienteCteIntegral === 1) {
+      valorCte = clientePagaComissao ? valorTotalFrete : 0;
     } else {
-      valorCte = 0; // Se não paga frete, CTe integral também é 0
+      const origemId = itemDiv.querySelector('.item-origem-id').value;
+      const destinoId = itemDiv.querySelector('.item-destino-id').value;
+      const chave = origemId + '|' + destinoId;
+      const valorPorLitroRota = (typeof ROTAS !== 'undefined' && ROTAS[chave]) ? parseFloat(ROTAS[chave]) : 0;
+      valorCte = quantidade * valorPorLitroRota;
     }
-  } else {
-    // CTe baseado na ROTA (SEMPRE CALCULA)
-    var chave = origemId + '|' + destinoId;
-    var valorPorLitroRota = 0;
-    if (typeof ROTAS !== 'undefined' && ROTAS[chave]) {
-      valorPorLitroRota = parseFloat(ROTAS[chave]);
+
+    const comissaoCte = valorCte * 0.08;
+    const lucro = clientePagaComissao ? (valorTotalFrete - comissaoMotorista - comissaoCte) : 0;
+
+    // atualizar campos
+    itemDiv.querySelector('.campo-total-nf').value = formatarMoeda(totalNF);
+    itemDiv.querySelector('.campo-valor-frete').value = formatarMoeda(valorTotalFrete);
+    itemDiv.querySelector('.campo-comissao-motorista').value = formatarMoeda(comissaoMotorista);
+    itemDiv.querySelector('.campo-valor-cte').value = formatarMoeda(valorCte);
+    itemDiv.querySelector('.campo-comissao-cte').value = formatarMoeda(comissaoCte);
+    itemDiv.querySelector('.campo-lucro').value = formatarMoeda(lucro);
+
+    // controlar visibilidade/campo preco por litro
+    const precoLitroContainer = itemDiv.querySelector('.campo-preco-litro-container');
+    if (!clientePagaComissao) {
+      precoLitroInput.value = '0,00';
+      precoLitroInput.readOnly = true;
+      precoLitroContainer.style.display = 'none';
+    } else {
+      precoLitroInput.readOnly = false;
+      precoLitroContainer.style.display = 'block';
     }
-    valorCte = quantidade * valorPorLitroRota;
-  }
-
-  // 4. COMISSÃO CTe (SEMPRE 8% DO CTe)
-  var comissaoCte = valorCte * 0.08;
-
-  // 5. LUCRO
-  var lucro = 0;
-  if (clientePagaComissao) {
-    lucro = valorTotalFrete - comissaoMotorista - comissaoCte;
-  } else {
-    lucro = 0;
-  }
-
-  // ATUALIZAR CAMPOS
-  itemDiv.querySelector('.campo-total-nf').value = formatarMoeda(totalNF);
-  itemDiv.querySelector('.campo-valor-frete').value = formatarMoeda(valorTotalFrete);
-  itemDiv.querySelector('.campo-comissao-motorista').value = formatarMoeda(comissaoMotorista);
-  itemDiv.querySelector('.campo-valor-cte').value = formatarMoeda(valorCte);
-  itemDiv.querySelector('.campo-comissao-cte').value = formatarMoeda(comissaoCte);
-  itemDiv.querySelector('.campo-lucro').value = formatarMoeda(lucro);
-  
-  // CONTROLAR VISIBILIDADE DO PREÇO POR LITRO
-  var precoLitroContainer = itemDiv.querySelector('.campo-preco-litro-container');
-  
-  if (!clientePagaComissao) {
-    // Cliente NÃO paga frete - esconder campo
-    precoLitroInput.value = formatarMoeda(0);
-    precoLitroInput.readOnly = true;
-    precoLitroInput.removeAttribute('required');
-    precoLitroInput.style.backgroundColor = '#e9ecef';
-    precoLitroContainer.style.display = 'none';
-  } else {
-    // Cliente paga frete - mostrar campo
-    precoLitroInput.readOnly = false;
-    precoLitroInput.setAttribute('required', 'required');
-    precoLitroInput.style.backgroundColor = '#ffffff';
-    precoLitroContainer.style.display = 'block';
+  } catch (err) {
+    console.error('Erro calcularItem:', err);
   }
 }
 
-// Adicionar listeners aos campos de preço por litro
 document.addEventListener('DOMContentLoaded', function() {
-  var itemCards = document.querySelectorAll('.item-card');
-  
+  const itemCards = document.querySelectorAll('.item-card');
   itemCards.forEach(function(itemDiv) {
-    var precoLitroInput = itemDiv.querySelector('.campo-preco-litro');
-    
-    // Calcular quando o usuário digita no preço por litro
-    precoLitroInput.addEventListener('input', function() {
-      calcularItem(itemDiv);
-    });
-    
-    precoLitroInput.addEventListener('change', function() {
-      calcularItem(itemDiv);
-    });
-    
-    precoLitroInput.addEventListener('keyup', function() {
-      calcularItem(itemDiv);
-    });
-
-    // Calcular inicial (ao carregar a página)
+    const inputPrecoLitro = itemDiv.querySelector('.campo-preco-litro');
+    if (!inputPrecoLitro) return;
+    ['input','change','keyup','blur'].forEach(ev => inputPrecoLitro.addEventListener(ev, () => calcularItem(itemDiv)));
+    // calcular inicialmente
     calcularItem(itemDiv);
   });
-});
 
-// Validação antes de enviar
-document.getElementById('formImportacao').addEventListener('submit', function(e) {
-  var precosCampos = document.querySelectorAll('.campo-preco-litro');
-  var todosPreenchidos = true;
-  
-  precosCampos.forEach(function(campo) {
-    // Verificar se o campo está visível (cliente paga frete)
-    var container = campo.closest('.campo-preco-litro-container');
-    if (container && container.style.display !== 'none') {
-      var valor = desformatarMoeda(campo.value);
-      if (valor <= 0) {
-        todosPreenchidos = false;
-        campo.style.border = '2px solid red';
-      } else {
-        campo.style.border = '';
+  // validação submit
+  const form = document.getElementById('formImportacao');
+  if (form) {
+    form.addEventListener('submit', function(e) {
+      let todosOk = true;
+      form.querySelectorAll('.campo-preco-litro').forEach(function(campo) {
+        const container = campo.closest('.campo-preco-litro-container');
+        if (container && container.style.display !== 'none') {
+          if (desformatarMoeda(campo.value) <= 0) {
+            todosOk = false;
+            campo.style.border = '2px solid red';
+          } else {
+            campo.style.border = '';
+          }
+        }
+      });
+      if (!todosOk) {
+        e.preventDefault();
+        alert('Por favor, preencha o Preço por Litro de todos os itens que pagam frete!');
       }
-    }
-  });
-  
-  if (!todosPreenchidos) {
-    e.preventDefault();
-    alert('Por favor, preencha o Preço por Litro de todos os itens que pagam frete!');
-    return false;
+    });
   }
 });
 </script>
-
-{% endblock %}
