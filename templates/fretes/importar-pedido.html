@@ -1,4 +1,3 @@
-<!-- Substitua templates/fretes/importar-pedido.html por este arquivo (fragmento modal) -->
 {% extends 'base.html' %}
 
 {% block titulo %}Importar Pedido - Fretes{% endblock %}
@@ -47,17 +46,20 @@
                 <strong>Item #{{ loop.index }}</strong> - {{ item.cliente_razao }}
               </div>
               <div class="card-body">
-                <!-- Hidden inputs do item (manter nomes esperados no POST) -->
-                <input type="hidden" name="cliente_id" value="{{ item.cliente_id }}">
-                <input type="hidden" name="produto_id" value="{{ item.produto_id }}">
-                <input type="hidden" name="fornecedor_id" value="{{ item.fornecedor_id }}">
-                <input type="hidden" name="origem_id" value="{{ item.origem_id }}">
-                <input type="hidden" name="destino_id" value="{{ item.cliente_destino_id or '' }}">
-                <input type="hidden" name="quantidade_id" value="{{ item.quantidade_id or '' }}">
-                <input type="hidden" name="quantidade" value="{{ item.quantidade or 0 }}">
-                <input type="hidden" name="preco_unitario" value="{{ '{:.2f}'.format(item.preco_unitario).replace('.', ',') if item.preco_unitario else '0,00' }}">
-                
-                <!-- Hidden para JS: origem/destino por item -->
+                <!-- Hidden inputs do item (NOMES no formato itens[index][campo]) -->
+                <input type="hidden" name="itens[{{ loop.index0 }}][cliente_id]" value="{{ item.cliente_id }}">
+                <input type="hidden" name="itens[{{ loop.index0 }}][produto_id]" value="{{ item.produto_id }}">
+                <input type="hidden" name="itens[{{ loop.index0 }}][fornecedor_id]" value="{{ item.fornecedor_id }}">
+                <input type="hidden" name="itens[{{ loop.index0 }}][origem_id]" value="{{ item.origem_id }}">
+                <input type="hidden" name="itens[{{ loop.index0 }}][destino_id]" value="{{ item.cliente_destino_id or '' }}">
+                <input type="hidden" name="itens[{{ loop.index0 }}][quantidade_id]" value="{{ item.quantidade_id or '' }}">
+                <input type="hidden" name="itens[{{ loop.index0 }}][quantidade]" value="{{ item.quantidade or 0 }}">
+                <input type="hidden" name="itens[{{ loop.index0 }}][preco_unitario]" value="{{ '{:.2f}'.format(item.preco_unitario).replace('.', ',') if item.preco_unitario else '0,00' }}">
+
+                <!-- Hidden para JS: flags do cliente e origem/destino do item -->
+                <input type="hidden" class="cliente-paga-comissao" value="{{ item.cliente_paga_comissao }}">
+                <input type="hidden" class="cliente-percentual-cte" value="{{ item.cliente_percentual_cte }}">
+                <input type="hidden" class="cliente-cte-integral" value="{{ item.cliente_cte_integral }}">
                 <input type="hidden" class="item-origem-id" value="{{ item.origem_id }}">
                 <input type="hidden" class="item-destino-id" value="{{ item.cliente_destino_id or '' }}">
 
@@ -73,18 +75,24 @@
 
                 <div class="row mb-2">
                   <div class="col-md-2"><label>Preço Unit. R$</label><input type="text" class="form-control form-control-sm campo-preco-unitario" value="{{ '{:.2f}'.format(item.preco_unitario).replace('.', ',') if item.preco_unitario else '0,00' }}" readonly style="background:#FFD580;"></div>
-                  <div class="col-md-2"><label>Total NF R$</label><input type="text" class="form-control form-control-sm campo-total-nf" name="total_nf" value="0,00" readonly style="background:#FFD580;"></div>
-                  <div class="col-md-2 campo-preco-litro-container"><label><strong>Preço p/ Litro R$ *</strong></label><input type="text" class="form-control form-control-sm campo-preco-litro" name="preco_por_litro" value="0,00" required></div>
-                  <div class="col-md-2"><label>Valor Total Frete R$</label><input type="text" class="form-control form-control-sm campo-valor-frete" name="valor_total_frete" value="0,00" readonly style="background:#FFD580;"></div>
-                  <div class="col-md-2"><label>Status *</label><select class="form-select form-select-sm" name="status" required><option value="Pendente" selected>Pendente</option><option value="Em Trânsito">Em Trânsito</option><option value="Concluído">Concluído</option></select></div>
+                  <div class="col-md-2"><label>Total NF R$</label><input type="text" class="form-control form-control-sm campo-total-nf" name="itens[{{ loop.index0 }}][total_nf]" value="0,00" readonly style="background:#FFD580;"></div>
+                  <div class="col-md-2 campo-preco-litro-container"><label><strong>Preço p/ Litro R$ *</strong></label><input type="text" class="form-control form-control-sm campo-preco-litro" name="itens[{{ loop.index0 }}][preco_por_litro]" value="0,00" required></div>
+                  <div class="col-md-2"><label>Valor Total Frete R$</label><input type="text" class="form-control form-control-sm campo-valor-frete" name="itens[{{ loop.index0 }}][valor_total_frete]" value="0,00" readonly style="background:#FFD580;"></div>
+                  <div class="col-md-2"><label>Status *</label>
+                    <select class="form-select form-select-sm" name="itens[{{ loop.index0 }}][status]" required>
+                      <option value="Pendente" selected>Pendente</option>
+                      <option value="Em Trânsito">Em Trânsito</option>
+                      <option value="Concluído">Concluído</option>
+                    </select>
+                  </div>
                   <div class="col-md-2"><label>&nbsp;</label><div></div></div>
                 </div>
 
                 <div class="row">
-                  <div class="col-md-3"><label>Comissão Motorista R$</label><input type="text" class="form-control form-control-sm campo-comissao-motorista" name="comissao_motorista" value="0,00" readonly style="background:#FFD580;"></div>
-                  <div class="col-md-3"><label>Valor CTe R$</label><input type="text" class="form-control form-control-sm campo-valor-cte" name="valor_cte" value="0,00" readonly style="background:#FFD580;"></div>
-                  <div class="col-md-3"><label>Comissão CTe R$</label><input type="text" class="form-control form-control-sm campo-comissao-cte" name="comissao_cte" value="0,00" readonly style="background:#FFD580;"></div>
-                  <div class="col-md-3"><label>Lucro R$</label><input type="text" class="form-control form-control-sm campo-lucro" name="lucro" value="0,00" readonly style="background:#FFD580;"></div>
+                  <div class="col-md-3"><label>Comissão Motorista R$</label><input type="text" class="form-control form-control-sm campo-comissao-motorista" name="itens[{{ loop.index0 }}][comissao_motorista]" value="0,00" readonly style="background:#FFD580;"></div>
+                  <div class="col-md-3"><label>Valor CTe R$</label><input type="text" class="form-control form-control-sm campo-valor-cte" name="itens[{{ loop.index0 }}][valor_cte]" value="0,00" readonly style="background:#FFD580;"></div>
+                  <div class="col-md-3"><label>Comissão CTe R$</label><input type="text" class="form-control form-control-sm campo-comissao-cte" name="itens[{{ loop.index0 }}][comissao_cte]" value="0,00" readonly style="background:#FFD580;"></div>
+                  <div class="col-md-3"><label>Lucro R$</label><input type="text" class="form-control form-control-sm campo-lucro" name="itens[{{ loop.index0 }}][lucro]" value="0,00" readonly style="background:#FFD580;"></div>
                 </div>
 
               </div>
@@ -109,7 +117,6 @@
 // Recebe rotas do backend
 const ROTAS = {{ rotas_dict|tojson|safe }};
 
-// Função tolerante para obter valor por litro pela rota (origem|destino)
 function obterValorPorLitroRota(origemId, destinoId) {
   try {
     origemId = origemId == null ? '' : String(origemId).trim();
@@ -142,7 +149,22 @@ function obterValorPorLitroRota(origemId, destinoId) {
   }
 }
 
-// Função calcularItem (usa origem/destino do item)
+function desformatarMoeda(valor) {
+  if (!valor) return 0;
+  return parseFloat(valor.toString().replace(/\./g, '').replace(',', '.')) || 0;
+}
+
+function formatarMoeda(valor) {
+  if (valor === null || valor === undefined) return '0,00';
+  let numero = parseFloat(valor).toFixed(2);
+  let partes = numero.split('.');
+  let inteiro = partes[0];
+  let decimal = partes[1];
+  inteiro = inteiro.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+  return inteiro + ',' + decimal;
+}
+
+// calcularItem do modal (usa nomes itens[index][...])
 function calcularItem(itemDiv) {
   try {
     const quantidade = parseFloat(itemDiv.querySelector('input[name$="[quantidade]"]').value) || 0;
@@ -165,13 +187,8 @@ function calcularItem(itemDiv) {
     if (clienteCteIntegral === 1) {
       valorCte = clientePagaComissao ? valorTotalFrete : 0;
     } else {
-      const origemHidden = itemDiv.querySelector('.item-origem-id');
-      const destinoHidden = itemDiv.querySelector('.item-destino-id');
-      let origemId = origemHidden ? origemHidden.value : null;
-      let destinoId = destinoHidden ? destinoHidden.value : null;
-      if ((!destinoId || destinoId === '') && document.getElementById('destino_id_hidden')) {
-        destinoId = document.getElementById('destino_id_hidden').value || destinoId;
-      }
+      const origemId = itemDiv.querySelector('.item-origem-id').value;
+      const destinoId = itemDiv.querySelector('.item-destino-id').value;
       const valorPorLitroRota = obterValorPorLitroRota(origemId, destinoId);
       valorCte = quantidade * valorPorLitroRota;
     }
@@ -200,12 +217,21 @@ function calcularItem(itemDiv) {
   }
 }
 
-// abrir modal automaticamente quando HTML for injetado
+// Quando o modal é injetado, ligar os listeners e calcular inicialmente
 document.addEventListener('DOMContentLoaded', function() {
   const modalEl = document.getElementById('modalImportarPedido');
   if (modalEl && window.bootstrap && bootstrap.Modal) {
     try { new bootstrap.Modal(modalEl, {backdrop:'static'}).show(); } catch(e){ console.error(e); }
   }
+
+  // ligar events para cada item
+  document.querySelectorAll('.item-card').forEach(function(itemDiv) {
+    const inputPrecoLitro = itemDiv.querySelector('.campo-preco-litro');
+    if (!inputPrecoLitro) return;
+    ['input','change','keyup','blur'].forEach(ev => inputPrecoLitro.addEventListener(ev, () => calcularItem(itemDiv)));
+    // calcular inicialmente
+    calcularItem(itemDiv);
+  });
 });
 </script>
 {% endblock %}
