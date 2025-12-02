@@ -503,17 +503,23 @@ def importar_pedido(id):
         flash('Pedido não encontrado!', 'danger')
         return redirect(url_for('pedidos.importar_lista'))
 
-    # Itens do pedido com joins para exibição
+    # Itens do pedido com joins para exibição (incluindo dados de comissão e destino do cliente)
     cursor.execute("""
         SELECT pi.*,
                c.razao_social as cliente_razao,
                c.nome_fantasia as cliente_fantasia,
+               c.paga_comissao as cliente_paga_comissao,
+               c.percentual_cte as cliente_percentual_cte,
+               c.cte_integral as cliente_cte_integral,
+               c.destino_id as cliente_destino_id,
+               d.nome as destino_nome,
                p.nome as produto_nome,
                f.razao_social as fornecedor_razao,
                o.nome as origem_nome,
                q.descricao as quantidade_descricao
         FROM pedidos_itens pi
         JOIN clientes c ON pi.cliente_id = c.id
+        LEFT JOIN destinos d ON c.destino_id = d.id
         JOIN produto p ON pi.produto_id = p.id
         JOIN fornecedores f ON pi.fornecedor_id = f.id
         JOIN origens o ON pi.origem_id = o.id
@@ -532,8 +538,16 @@ def importar_pedido(id):
         item['cliente_percentual_cte'] = item.get('cliente_percentual_cte', 0)
         item['cliente_cte_integral'] = item.get('cliente_cte_integral', 0)
 
+    # Buscar rotas para calcular Valor CTe e Comissão CTe
+    cursor.execute("SELECT id, origem_id, destino_id, valor_por_litro FROM rotas WHERE ativo = 1")
+    rotas = cursor.fetchall()
+    rotas_dict = {}
+    for rota in rotas:
+        chave = f"{rota['origem_id']}|{rota['destino_id']}"
+        rotas_dict[chave] = rota['valor_por_litro']
+
     cursor.close()
     conn.close()
 
     # Renderiza o template de importação (detalhe)
-    return render_template('fretes/importar-pedido.html', pedido=pedido, itens=itens, rotas_dict={})
+    return render_template('fretes/importar-pedido.html', pedido=pedido, itens=itens, rotas_dict=rotas_dict)
