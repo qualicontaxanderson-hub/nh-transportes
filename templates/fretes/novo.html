@@ -20,8 +20,8 @@
     <div class="card-body" style="padding: 1rem;">
       <form method="POST" action="{{ url_for('fretes.novo') }}" enctype="multipart/form-data">
 
-        <!-- DATA -->
-        <div class="row mb-2">
+        <!-- DATA / STATUS / BOTÃO IMPORTAR -->
+        <div class="row mb-2 align-items-end">
           <div class="col-md-3">
             <label for="data_frete" class="form-label">Data</label>
             <input type="date" id="data_frete" name="data_frete" class="form-control form-control-sm" value="{{ now().strftime('%Y-%m-%d') if now else '' }}" required>
@@ -36,11 +36,17 @@
               <option value="Cancelado">Cancelado</option>
             </select>
           </div>
+
+          <div class="col-md-6 text-end">
+            <button type="button" class="btn btn-outline-secondary btn-sm" id="btn_importar_pedido" title="Importar pedido">
+              <i class="bi bi-upload"></i> Importar Pedido
+            </button>
+          </div>
         </div>
 
-        <!-- CLIENTE / STATUS já acima - FORNECEDOR / PRODUTO -->
+        <!-- CLIENTE / OBSERVAÇÕES -->
         <div class="row">
-          <div class="col-md-6 mb-2">
+          <div class="col-md-8 mb-2">
             <label for="clientes_id" class="form-label">Cliente</label>
             <select id="clientes_id" name="clientes_id" class="form-select form-select-sm" required>
               <option value="">Selecione um cliente</option>
@@ -55,6 +61,14 @@
             </select>
           </div>
 
+          <div class="col-md-4 mb-2">
+            <label for="observacoes" class="form-label">Observações</label>
+            <input type="text" id="observacoes" name="observacoes" class="form-control form-control-sm" value="">
+          </div>
+        </div>
+
+        <!-- FORNECEDOR / PRODUTO -->
+        <div class="row">
           <div class="col-md-6 mb-2">
             <label for="fornecedores_id" class="form-label">Fornecedor</label>
             <select id="fornecedores_id" name="fornecedores_id" class="form-select form-select-sm" required>
@@ -64,9 +78,7 @@
               {% endfor %}
             </select>
           </div>
-        </div>
 
-        <div class="row">
           <div class="col-md-6 mb-2">
             <label for="produto_id" class="form-label">Produto</label>
             <select id="produto_id" name="produto_id" class="form-select form-select-sm" required>
@@ -75,9 +87,6 @@
               <option value="{{ produto.id }}">{{ produto.nome }}</option>
               {% endfor %}
             </select>
-          </div>
-          <div class="col-md-6 mb-2">
-            <!-- Espaço reservado caso queira outro campo à direita -->
           </div>
         </div>
 
@@ -106,7 +115,7 @@
           </div>
         </div>
 
-        <!-- MOTORISTA / VEICULO -->
+        <!-- MOTORISTA / VEÍCULO -->
         <div class="row">
           <div class="col-md-6 mb-2">
             <label for="motoristas_id" class="form-label">Motorista</label>
@@ -200,18 +209,8 @@
           </div>
 
           <div class="col-md-4 mb-2">
-            <label for="observacoes" class="form-label">Observações</label>
-            <input type="text" id="observacoes" name="observacoes" class="form-control form-control-sm" value="">
-          </div>
-        </div>
-
-        <!-- Importar Pedido (restaurado) -->
-        <div class="row mt-3">
-          <div class="col-md-12">
-            <button type="button" class="btn btn-outline-secondary btn-sm" id="btn_importar_pedido" onclick="window.abrirImportacaoPedido && window.abrirImportacaoPedido()">
-              <i class="bi bi-upload"></i> Importar Pedido
-            </button>
-            <small class="text-muted ms-2">Importe um pedido para preencher os campos automaticamente.</small>
+            <label for="lucro" class="form-label">Lucro</label>
+            <input type="text" id="lucro" name="lucro" class="form-control form-control-sm bg-warning" readonly value="R$ 0,00">
           </div>
         </div>
 
