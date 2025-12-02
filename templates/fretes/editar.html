@@ -30,7 +30,7 @@
                 <div class="row">
                     <div class="col-md-6 mb-2">
                         <label for="clientesid" class="form-label" style="font-size: 0.85rem;">Cliente</label>
-                        <select class="form-select form-select-sm" id="clientesid" name="clientesid" required>
+                        <select class="form-select form-select-sm" id="clientes_id" name="clientesid" required>
                             <option value="">Selecione um cliente</option>
                             {% for cliente in clientes %}
                             <option value="{{ cliente.id }}" 
@@ -45,7 +45,7 @@
                     </div>
                     <div class="col-md-6 mb-2">
                         <label for="produtoid" class="form-label" style="font-size: 0.85rem;">Produto</label>
-                        <select class="form-select form-select-sm" id="produtoid" name="produtoid" required>
+                        <select class="form-select form-select-sm" id="clientes_id="produto_id"id" name="produtoid" required>
                             <option value="">Selecione o produto</option>
                             {% for produto in produtos %}
                             <option value="{{ produto.id }}" {% if produto.id == frete.produto_id %}selected{% endif %}>
@@ -87,7 +87,7 @@
                 <div class="row">
                     <div class="col-md-6 mb-2">
                         <label for="origemid" class="form-label" style="font-size: 0.85rem;">Origem</label>
-                        <select class="form-select form-select-sm" id="origemid" name="origemid" required>
+                        <select class="form-select form-select-sm" id="origem_id" name="origemid" required>
                             <option value="">Selecione a origem</option>
                             {% for origem in origens %}
                             <option value="{{ origem.id }}" {% if origem.id == frete.origem_id %}selected{% endif %}>
@@ -98,7 +98,7 @@
                     </div>
                     <div class="col-md-6 mb-2">
                         <label for="destinoid" class="form-label" style="font-size: 0.85rem;">Destino</label>
-                        <select class="form-select form-select-sm" id="destinoid" name="destinoid" required>
+                        <select class="form-select form-select-sm" id="destino_id" name="destinoid" required>
                             <option value="">Selecione o destino</option>
                             {% for destino in destinos %}
                             <option value="{{ destino.id }}" {% if destino.id == frete.destino_id %}selected{% endif %}>
@@ -136,7 +136,7 @@
                     <!-- Quantidade Padrão (Listbox) -->
                     <div class="col-md-12 mb-2" id="divquantidadepadrao">
                         <label for="quantidadeid" class="form-label" style="font-size: 0.85rem;">Quantidade (Litros)</label>
-                        <select class="form-select form-select-sm" id="quantidadeid" name="quantidadeid">
+                        <select class="form-select form-select-sm" id="quantidade_id" name="quantidadeid">
                             <option value="">Selecione a quantidade</option>
                             {% for quantidade in quantidades %}
                             <option value="{{ quantidade.id }}" 
@@ -188,7 +188,7 @@
                     </div>
                     <div class="col-md-4 mb-2">
                         <label for="valorcte" class="form-label" style="font-size: 0.85rem;">Valor CTe (R$)</label>
-                        <input type="text" class="form-control form-control-sm bg-warning" id="valorcte" name="valorcte" 
+                        <input type="text" class="form-control form-control-sm bg-warning" id="valor_cte" name="valorcte" 
                                value="R$ {{ '{:.2f}'.format(frete.valor_cte).replace('.', ',') if frete.valor_cte else '0,00' }}" readonly>
                     </div>
                 </div>
@@ -196,7 +196,7 @@
                 <div class="row">
                     <div class="col-md-4 mb-2">
                         <label for="comissaocte" class="form-label" style="font-size: 0.85rem;">Comissão CTe (R$)</label>
-                        <input type="text" class="form-control form-control-sm bg-warning" id="comissaocte" name="comissaocte" 
+                        <input type="text" class="form-control form-control-sm bg-warning" id="comissao_cte" name="comissaocte" 
                                value="R$ {{ '{:.2f}'.format(frete.comissao_cte).replace('.', ',') if frete.comissao_cte else '0,00' }}" readonly>
                     </div>
                     <div class="col-md-4 mb-2">
