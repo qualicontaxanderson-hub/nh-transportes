@@ -18,7 +18,6 @@
         </div>
         <div class="card-body" style="padding: 1rem;">
             <form method="POST" action="{{ url_for('fretes.editar', id=frete.id) }}">
-
                 <!-- DATA DO FRETE -->
                 <div class="row mb-3">
                     <div class="col-md-12">
@@ -28,6 +27,7 @@
                     </div>
                 </div>
 
+                <!-- CLIENTE / PRODUTO -->
                 <div class="row">
                     <div class="col-md-6 mb-2">
                         <label for="clientes_id" class="form-label" style="font-size: 0.85rem;">Cliente</label>
@@ -57,7 +57,7 @@
                     </div>
                 </div>
 
-                <!-- ROTA: ORIGEM E DESTINO -->
+                <!-- ORIGEM / DESTINO (DESTINO sempre disabled; hidden envia o valor) -->
                 <div class="row">
                     <div class="col-md-6 mb-2">
                         <label for="origem_id" class="form-label" style="font-size: 0.85rem;">Origem</label>
@@ -70,9 +70,9 @@
                             {% endfor %}
                         </select>
                     </div>
+
                     <div class="col-md-6 mb-2">
                         <label for="destino_id" class="form-label" style="font-size: 0.85rem;">Destino</label>
-                        <!-- select fica DISABLED aqui para garantir que o usuário não possa alterar -->
                         <select class="form-select form-select-sm" id="destino_id" name="destino_id" disabled>
                             <option value="">Selecione o destino</option>
                             {% for destino in destinos %}
@@ -81,12 +81,32 @@
                             </option>
                             {% endfor %}
                         </select>
-                        <!-- input hidden garante que o destino seja enviado no POST -->
                         <input type="hidden" id="destino_id_hidden" name="destino_id" value="{{ frete.destino_id or '' }}">
                     </div>
                 </div>
 
-                <!-- Preço produto unitário com 3 casas + hidden numeric para backend -->
+                <!-- QUANTIDADE / PREÇOS -->
+                <div class="row">
+                    <div class="col-md-6 mb-2">
+                        <label for="quantidade_id" class="form-label" style="font-size: 0.85rem;">Quantidade (Litros)</label>
+                        <select class="form-select form-select-sm" id="quantidade_id" name="quantidade_id">
+                            <option value="">Selecione a quantidade</option>
+                            {% for quantidade in quantidades %}
+                            <option value="{{ quantidade.id }}" data-quantidade="{{ quantidade.valor }}"
+                                    {% if quantidade.id == frete.quantidade_id %}selected{% endif %}>
+                                {{ quantidade.descricao }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <div class="col-md-6 mb-2">
+                        <label for="quantidade_manual" class="form-label" style="font-size: 0.85rem;">Quantidade Manual</label>
+                        <input type="text" id="quantidade_manual" name="quantidade_manual" class="form-control form-control-sm"
+                               value="{% if not frete.quantidade_id and frete.quantidade_manual %}{{ '{:,.0f}'.format(frete.quantidade_manual).replace(',', '.') }}{% endif %}" placeholder="Ex: 9.975">
+                    </div>
+                </div>
+
                 <div class="row">
                     <div class="col-md-4 mb-2">
                         <label for="preco_produto_unitario" class="form-label" style="font-size: 0.85rem;">Preço Produto Unitário (R$)</label>
@@ -94,3 +114,80 @@
                                value="R$ {{ '{:.3f}'.format(frete.preco_produto_unitario).replace('.', ',') if frete.preco_produto_unitario else '0,000' }}" required>
                         <input type="hidden" id="preco_produto_unitario_raw" name="preco_produto_unitario_raw" value="{{ frete.preco_produto_unitario if frete.preco_produto_unitario else 0 }}">
                     </div>
+
+                    <div class="col-md-4 mb-2">
+                        <label for="total_nf_compra" class="form-label" style="font-size: 0.85rem;">Total NF Compra (R$)</label>
+                        <input type="text" class="form-control form-control-sm bg-warning" id="total_nf_compra" name="total_nf_compra"
+                               value="R$ {{ '{:.2f}'.format(frete.total_nf_compra).replace('.', ',') if frete.total_nf_compra else '0,00' }}" readonly>
+                    </div>
+
+                    <div class="col-md-4 mb-2">
+                        <label for="preco_por_litro" class="form-label" style="font-size: 0.85rem;">Preço por Litro (R$)</label>
+                        <input type="text" class="form-control form-control-sm" id="preco_por_litro" name="preco_por_litro"
+                               value="R$ {{ '{:.2f}'.format(frete.preco_por_litro).replace('.', ',') if frete.preco_por_litro else '0,00' }}" required>
+                    </div>
+                </div>
+
+                <!-- RESULTADOS -->
+                <div class="row">
+                    <div class="col-md-4 mb-2">
+                        <label for="valor_total_frete" class="form-label">Valor Total Frete (R$)</label>
+                        <input type="text" id="valor_total_frete" name="valor_total_frete" class="form-control form-control-sm bg-warning" readonly value="R$ 0,00">
+                    </div>
+                    <div class="col-md-4 mb-2">
+                        <label for="comissao_motorista" class="form-label">Comissão Motorista (R$)</label>
+                        <input type="text" id="comissao_motorista" name="comissao_motorista" class="form-control form-control-sm bg-warning" readonly value="R$ 0,00">
+                    </div>
+                    <div class="col-md-4 mb-2">
+                        <label for="valor_cte" class="form-label">Valor CTe (R$)</label>
+                        <input type="text" id="valor_cte" name="valor_cte" class="form-control form-control-sm bg-warning" readonly value="R$ 0,00">
+                    </div>
+                </div>
+
+                <div class="row">
+                    <div class="col-md-4 mb-2">
+                        <label for="comissao_cte" class="form-label">Comissão CTe (R$)</label>
+                        <input type="text" id="comissao_cte" name="comissao_cte" class="form-control form-control-sm bg-warning" readonly value="R$ 0,00">
+                    </div>
+                    <div class="col-md-4 mb-2">
+                        <label for="lucro" class="form-label">Lucro (R$)</label>
+                        <input type="text" id="lucro" name="lucro" class="form-control form-control-sm bg-warning" readonly value="R$ 0,00">
+                    </div>
+                    <div class="col-md-4 mb-2">
+                        <label for="status" class="form-label">Status</label>
+                        <select id="status" name="status" class="form-select form-select-sm">
+                            <option value="Pendente" {% if frete.status == 'Pendente' %}selected{% endif %}>Pendente</option>
+                            <option value="Em Trânsito" {% if frete.status == 'Em Trânsito' %}selected{% endif %}>Em Trânsito</option>
+                            <option value="Concluído" {% if frete.status == 'Concluído' %}selected{% endif %}>Concluído</option>
+                            <option value="Cancelado" {% if frete.status == 'Cancelado' %}selected{% endif %}>Cancelado</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Observações e botões -->
+                <div class="row mt-3">
+                    <div class="col-md-12 mb-3">
+                        <label for="observacoes" class="form-label">Observações</label>
+                        <textarea id="observacoes" name="observacoes" class="form-control form-control-sm" rows="2">{{ frete.observacoes or '' }}</textarea>
+                    </div>
+                </div>
+
+                <div class="d-flex justify-content-between">
+                    <a href="{{ url_for('fretes.lista') }}" class="btn btn-secondary btn-sm">Voltar</a>
+                    <button type="submit" class="btn btn-warning btn-sm">Atualizar Frete</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    const ROTAS = {{ rotas_dict|tojson|safe }};
+    window.MODOEDICAO = false;
+</script>
+
+<script src="{{ url_for('static', filename='js/app.js') }}"></script>
+<script src="{{ url_for('static', filename='js/fretes_calculos.js') }}?v={{ config.APP_VERSION or '1' }}"></script>
+{% endblock %}
