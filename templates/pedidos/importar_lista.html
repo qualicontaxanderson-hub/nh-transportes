@@ -2,84 +2,87 @@
 {% block titulo %}Importar Pedido - Lista{% endblock %}
 
 {% block content %}
-<div class="container-fluid">
-  <div class="card shadow-sm mb-3">
-    <div class="card-header" style="background:#17a2b8;color:white;">
-      <strong>Pedidos Pendentes para Importação</strong>
-    </div>
-    <div class="card-body">
-      {% if not pedidos %}
-        <p>Nenhum pedido pendente para importação.</p>
-      {% else %}
-        <div class="table-responsive">
-          <table class="table table-sm">
-            <thead>
-              <tr>
-                <th>#</th>
-                <th>Número</th>
-                <th>Data</th>
-                <th>Motorista</th>
-                <th>Veículo</th>
-                <th>Itens</th>
-                <th>Quantidade total</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              {% for p in pedidos %}
-              <tr>
-                <td>{{ p.id }}</td>
-                <td>{{ p.numero }}</td>
-                <td>{{ p.data_pedido.strftime('%d/%m/%Y') if p.data_pedido else '' }}</td>
-                <td>{{ p.motorista_nome or '-' }}</td>
-                <td>{{ p.veiculo_nome or '-' }}</td>
-                <td>{{ p.total_itens or 0 }}</td>
-                <td>{{ '{:,.0f}'.format(p.total_quantidade).replace(',', '.') if p.total_quantidade else '0' }}</td>
-                <td class="text-end">
-                  <!-- Link para abrir o detalhe do pedido (importar-pedido) -->
-                  <a href="{{ url_for('pedidos.importar_pedido', id=p.id) }}" class="btn btn-sm btn-primary btn-importar" data-id="{{ p.id }}">Abrir</a>
-                </td>
-              </tr>
-              {% endfor %}
-            </tbody>
-          </table>
-        </div>
-      {% endif %}
+<!-- Modal wrapper: quando este HTML for injetado, o JS abrirá este modal -->
+<div class="modal fade" id="modalImportarLista" tabindex="-1" aria-labelledby="modalImportarListaLabel" aria-hidden="true">
+  <div class="modal-dialog modal-xl modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header" style="background:#17a2b8;color:white;">
+        <h5 class="modal-title" id="modalImportarListaLabel">Pedidos Pendentes para Importação</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Fechar"></button>
+      </div>
+      <div class="modal-body">
+        {% if not pedidos %}
+          <p>Nenhum pedido pendente para importação.</p>
+        {% else %}
+          <div class="table-responsive">
+            <table class="table table-sm table-hover">
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>Número</th>
+                  <th>Data</th>
+                  <th>Motorista</th>
+                  <th>Veículo</th>
+                  <th>Itens</th>
+                  <th>Quantidade total</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for p in pedidos %}
+                <tr>
+                  <td>{{ p.id }}</td>
+                  <td>{{ p.numero }}</td>
+                  <td>{{ p.data_pedido.strftime('%d/%m/%Y') if p.data_pedido else '' }}</td>
+                  <td>{{ p.motorista_nome or '-' }}</td>
+                  <td>{{ p.veiculo_nome or '-' }}</td>
+                  <td>{{ p.total_itens or 0 }}</td>
+                  <td>{{ '{:,.0f}'.format(p.total_quantidade).replace(',', '.') if p.total_quantidade else '0' }}</td>
+                  <td class="text-end">
+                    <a href="{{ url_for('pedidos.importar_pedido', id=p.id) }}" class="btn btn-sm btn-primary btn-importar" data-id="{{ p.id }}">Abrir</a>
+                  </td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        {% endif %}
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Fechar</button>
+      </div>
     </div>
   </div>
 </div>
 
+<!-- Script: quando carregado via fetch e injetado, esse código intercepta o clique "Abrir" e faz fetch do detalhe -->
 <script>
-/*
-  Script que permite, quando este template for carregado via fetch (no modal container),
-  interceptar cliques em links "Abrir" e carregar o detalhe do pedido (importar-pedido) no mesmo container.
-*/
 document.addEventListener('DOMContentLoaded', function () {
   document.querySelectorAll('.btn-importar').forEach(function(btn) {
     btn.addEventListener('click', function(e) {
       e.preventDefault();
       const href = this.getAttribute('href');
-      // Se existe container modalImportacaoContainer, carregar via fetch nele
       const container = document.getElementById('modalImportacaoContainer');
       if (container) {
         fetch(href, {credentials: 'same-origin'}).then(r => {
           if (!r.ok) throw new Error('Erro ao carregar pedido: ' + r.status);
           return r.text();
         }).then(html => {
+          // substitui o conteúdo do container pelo detalhe do pedido (importar-pedido.html)
           container.innerHTML = html;
-          // executar scripts inline caso existam (simplificado)
+          // executar scripts inline se houver
           const scripts = container.querySelectorAll('script');
           scripts.forEach(s => {
             if (!s.src) {
-              try { (0, eval)(s.innerText); } catch (err) { console.error('Erro ao executar script inline do importador:', err); }
+              try { (0, eval)(s.innerText); } catch (err) { console.error('Erro script inline do importador:', err); }
             } else {
               const script = document.createElement('script');
               script.src = s.src;
               document.head.appendChild(script);
             }
           });
-          // tentar abrir modal se houver #modalImportarPedido
-          const modalEl = container.querySelector('#modalImportarPedido');
+          // se o HTML injetado trouxer um modal, mostre-o; caso contrário, role até o conteúdo
+          const modalEl = container.querySelector('#modalImportarPedido') || container.querySelector('.modal');
           if (modalEl && window.bootstrap && bootstrap.Modal) {
             new bootstrap.Modal(modalEl, {backdrop: 'static'}).show();
           } else if (modalEl && window.jQuery) {
@@ -97,6 +100,14 @@ document.addEventListener('DOMContentLoaded', function () {
       }
     });
   });
+
+  // abrir modal se o wrapper já estiver presente (quando injetado pelo importar_modal.js)
+  const modal = document.getElementById('modalImportarLista');
+  if (modal && window.bootstrap && bootstrap.Modal) {
+    try { new bootstrap.Modal(modal, {backdrop:'static'}).show(); } catch(e){}
+  } else if (modal && window.jQuery) {
+    try { jQuery(modal).modal('show'); } catch(e){}
+  }
 });
 </script>
 {% endblock %}
