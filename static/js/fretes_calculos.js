@@ -106,7 +106,11 @@ function obterValorPorLitroRota() {
     if (!destinoId) return 0;
 
     const chaveRota = `${origemId}|${destinoId}`;
-    return (typeof ROTAS !== 'undefined' && ROTAS[chaveRota]) ? ROTAS[chaveRota] : 0;
+    if (typeof ROTAS === 'undefined') {
+        console.warn('ROTAS não definido no template — obterValorPorLitroRota retornará 0');
+        return 0;
+    }
+    return Number(ROTAS[chaveRota] || 0);
 }
 
 // ===========================
@@ -115,13 +119,13 @@ function obterValorPorLitroRota() {
 function calcularQuantidade() {
     const selectQuantidade = document.getElementById('quantidade_id');
     const inputQuantidadeManual = document.getElementById('quantidade_manual');
-    const selectTipo = document.getElementById('quantidade_tipo');
 
     let quantidade = 0;
 
     if (selectQuantidade && selectQuantidade.value) {
         const optionSelecionada = selectQuantidade.options[selectQuantidade.selectedIndex];
         const raw = optionSelecionada.getAttribute('data-quantidade') || '0';
+        // normaliza ponto de milhar e vírgula decimal
         quantidade = parseFloat(String(raw).toString().replace(/\./g, '').replace(',', '.')) || 0;
     }
 
@@ -131,10 +135,7 @@ function calcularQuantidade() {
         quantidade = parseFloat(normalized) || quantidade;
     }
 
-    if (selectTipo && selectTipo.value === 'KG') {
-        quantidade = quantidade * 1.2;
-    }
-
+    // trabalhamos diretamente em litros — sem conversão KG -> L
     return quantidade;
 }
 
