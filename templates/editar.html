@@ -1,0 +1,71 @@
+<!doctype html>
+{% extends "base.html" %}
+{% block titulo %}Editar Frete{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <nav aria-label="breadcrumb" class="mt-2 mb-3">
+        <ol class="breadcrumb" style="font-size: 0.85rem;">
+            <li class="breadcrumb-item"><a href="{{ url_for('index') }}">Início</a></li>
+            <li class="breadcrumb-item"><a href="{{ url_for('fretes.lista') }}">Fretes</a></li>
+            <li class="breadcrumb-item active" aria-current="page">Editar Frete</li>
+        </ol>
+    </nav>
+
+    <div class="card shadow-sm">
+        <div class="card-header bg-warning text-dark" style="font-size: 0.95rem; padding: 0.6rem 1rem;">
+            <h4 class="mb-0" style="font-size: 1.1rem;">Editar Frete #{{ frete.id }}</h4>
+        </div>
+        <div class="card-body" style="padding: 1rem;">
+            <form method="POST" action="{{ url_for('fretes.editar', id=frete.id) }}">
+                
+                <!-- DATA DO FRETE -->
+                <div class="row mb-3">
+                    <div class="col-md-12">
+                        <label for="data_frete" class="form-label" style="font-size: 0.85rem;">Data do Frete</label>
+                        <input type="date" class="form-control form-control-sm" id="data_frete" name="data_frete" 
+                               value="{{ frete.data_frete.strftime('%Y-%m-%d') if frete.data_frete else '' }}" required>
+                    </div>
+                </div>
+
+                <div class="row">
+                    <div class="col-md-6 mb-2">
+                        <label for="clientes_id" class="form-label" style="font-size: 0.85rem;">Cliente</label>
+                        <select class="form-select form-select-sm" id="clientes_id" name="clientes_id" required>
+                            <option value="">Selecione um cliente</option>
+                            {% for cliente in clientes %}
+                            <option value="{{ cliente.id }}" 
+                                    data-paga-comissao="{{ cliente.paga_comissao|default(1) }}"
+                                    data-cte-integral="{{ cliente.cte_integral|default(0) }}"
+                                    data-destino-id="{{ cliente.destino_id }}"
+                                    {% if cliente.id == frete.clientes_id %}selected{% endif %}>
+                                {{ cliente.razao_social }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-6 mb-2">
+                        <label for="produto_id" class="form-label" style="font-size: 0.85rem;">Produto</label>
+                        <select class="form-select form-select-sm" id="produto_id" name="produto_id" required>
+                            <option value="">Selecione o produto</option>
+                            {% for produto in produtos %}
+                            <option value="{{ produto.id }}" {% if produto.id == frete.produto_id %}selected{% endif %}>
+                                {{ produto.nome }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+
+                <div class="row">
+                    <div class="col-md-6 mb-2">
+                        <label for="fornecedores_id" class="form-label" style="font-size: 0.85rem;">Fornecedor</label>
+                        <select class="form-select form-select-sm" id="fornecedores_id" name="fornecedores_id" required>
+                            <option value="">Selecione um fornecedor</option>
+                            {% for fornecedor in fornecedores %}
+                            <option value="{{ fornecedor.id }}" {% if fornecedor.id == frete.fornecedores_id %}selected{% endif %}>
+                                {{ fornecedor.razao_social }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
