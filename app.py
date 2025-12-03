@@ -1,43 +1,40 @@
 import os
 import logging
 from logging.handlers import RotatingFileHandler
+import pkgutil
+import importlib
 
 from flask import Flask, render_template, redirect, url_for
 from flask_login import LoginManager
 
-def _import_fretes_bp(app):
-    candidates = ['fretes', 'routes.fretes']
-    for modname in candidates:
-        try:
-            module = __import__(modname, fromlist=['bp'])
-            bp = getattr(module, 'bp', None)
-            if bp is not None:
-                app.logger.info('Imported fretes blueprint from %s', modname)
-                return bp
-        except Exception as e:
-            app.logger.debug('Import %s failed: %s', modname, e, exc_info=True)
-    app.logger.warning('Could not import fretes blueprint from any candidate: %s', candidates)
-    return None
+def register_blueprints_from_routes(app):
+    """
+    Varre o pacote `routes` e tenta importar cada módulo.
+    Se o módulo expuser `bp` (Blueprint) ele é registrado automaticamente.
+    Exceções de import são logadas para diagnóstico (não interrompem o registro).
+    """
+    try:
+        import routes  # pacote que contém os módulos de rota (routes/*.py)
+    except Exception:
+        app.logger.warning("Pacote 'routes' não encontrado; nenhum blueprint será registrado automaticamente.")
+        return
 
-def _import_and_register(app, candidates, label):
-    """
-    Tenta importar um blueprint de uma lista de módulos candidatos e registrá-lo.
-    Retorna True se algum blueprint foi registrado, False caso contrário.
-    """
-    for modname in candidates:
+    for finder, name, ispkg in pkgutil.iter_modules(routes.__path__):
+        modname = f"{routes.__name__}.{name}"
         try:
-            module = __import__(modname, fromlist=['bp'])
-            bp = getattr(module, 'bp', None)
-            if bp is None:
-                app.logger.debug('Módulo %s não expõe "bp"', modname)
-                continue
-            app.register_blueprint(bp)
-            app.logger.info('Blueprint %s registrado a partir de %s', label, modname)
-            return True
-        except Exception as e:
-            app.logger.debug('Falha ao importar/registrar %s de %s: %s', label, modname, e, exc_info=True)
-    app.logger.warning('Não foi possível registrar blueprint %s a partir dos candidatos: %s', label, candidates)
-    return False
+            module = importlib.import_module(modname)
+            bp = getattr(module, "bp", None)
+            if bp is not None:
+                try:
+                    app.register_blueprint(bp)
+                    app.logger.info("Blueprint '%s' registrado a partir de %s", getattr(bp, "name", str(bp)), modname)
+                except Exception:
+                    app.logger.exception("Falha ao registrar blueprint vindo de %s", modname)
+            else:
+                app.logger.debug("Módulo %s não expõe 'bp'; ignorando.", modname)
+        except Exception:
+            app.logger.exception("Falha ao importar módulo de rotas %s", modname)
+
 
 def create_app():
     app = Flask(__name__, static_folder='static', template_folder='templates')
@@ -64,53 +61,32 @@ def create_app():
     # user_loader: usar models.usuario.Usuario.get_by_id (se existir)
     @login_manager.user_loader
     def load_user(user_id):
-        """
-        Carrega usuário pelo ID usando models.usuario.Usuario.get_by_id.
-        Retorna None se o model não existir ou se o usuário não for encontrado.
-        """
         try:
             from models.usuario import Usuario
-            # user_id pode vir como string; ensure int where appropriate
             try:
                 uid = int(user_id)
             except Exception:
                 uid = user_id
             if hasattr(Usuario, 'get_by_id'):
                 return Usuario.get_by_id(uid)
-            # fallbacks (incomum aqui, mas seguro)
             if hasattr(Usuario, 'get'):
                 return Usuario.get(uid)
             return None
         except Exception:
-            # não deve levantar exceção — retornamos None e deixamos o login flow cuidar
             app.logger.debug('load_user: models.usuario.Usuario não disponível ou falha ao carregar', exc_info=True)
             return None
 
-    # Registrar blueprint 'fretes' (com tentativa de múltiplos caminhos)
-    try:
-        fretes_bp = _import_fretes_bp(app)
-        if fretes_bp:
-            app.register_blueprint(fretes_bp)
-            app.logger.info('Blueprint fretes registrado.')
-        else:
-            app.logger.warning('Blueprint fretes nao registrado; verifique se o módulo existe e expõe "bp".')
-    except Exception as e:
-        app.logger.exception('Erro ao registrar blueprint fretes: %s', e)
-        fretes_bp = None
+    # Registrar automaticamente todos os blueprints dentro de routes/
+    register_blueprints_from_routes(app)
 
-    # Registrar blueprint 'clientes' (corrige o BuildError de url_for('clientes.lista'))
-    # Tenta candidates onde o módulo pode estar: 'clientes' ou 'routes.clientes'
-    try:
-        registered_clientes = _import_and_register(app, ['clientes', 'routes.clientes'], 'clientes')
-        if not registered_clientes:
-            app.logger.warning('Blueprint clientes não registrado; links no navbar que usam clientes.* podem falhar.')
-    except Exception:
-        app.logger.exception('Erro ao tentar registrar blueprint clientes')
-
-    # Rota index simples
+    # Rota index simples: tenta redirecionar para fretes.lista se existir
     @app.route('/')
     def index():
-        return redirect(url_for('fretes.lista')) if fretes_bp is not None else "App funcionando - sem blueprint 'fretes' registrado."
+        # se existir 'fretes.lista' redireciona, senão mostra mensagem padrão
+        try:
+            return redirect(url_for('fretes.lista'))
+        except Exception:
+            return "App funcionando - sem blueprint 'fretes' registrado."
 
     # Error handlers
     @app.errorhandler(404)
