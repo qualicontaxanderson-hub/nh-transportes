@@ -1,5 +1,6 @@
 // ========================================
 // fretes_calculos.js - versão completa e defensiva
+// Atualização: respeita flag paga_comissao do motorista
 // ========================================
 
 /* ---------- Helpers de formatação / parsing ---------- */
@@ -74,6 +75,23 @@ function obterDadosCliente() {
     } catch (err) {
         console.error('obterDadosCliente error', err);
         return { pagaComissao: true, cteIntegral: false, destinoId: null };
+    }
+}
+
+function obterDadosMotorista() {
+    try {
+        const selectMotorista = document.getElementById('motoristas_id');
+        if (!selectMotorista || !selectMotorista.value) {
+            return { pagaComissao: true, percentual: 0 };
+        }
+        const option = selectMotorista.options[selectMotorista.selectedIndex];
+        return {
+            pagaComissao: option.getAttribute('data-paga-comissao') !== '0',
+            percentual: parseFloat(option.getAttribute('data-percentual')) || 0
+        };
+    } catch (err) {
+        console.error('obterDadosMotorista error', err);
+        return { pagaComissao: true, percentual: 0 };
     }
 }
 
@@ -185,8 +203,11 @@ function calcularValorTotalFrete() {
 function calcularComissaoMotorista() {
     try {
         const dadosCliente = obterDadosCliente();
-        if (!dadosCliente.pagaComissao) return 0;
+        const dadosMotorista = obterDadosMotorista();
+        // somente paga comissão ao motorista se o cliente paga E o motorista estiver configurado para receber
+        if (!dadosCliente.pagaComissao || !dadosMotorista.pagaComissao) return 0;
         const quantidade = calcularQuantidade();
+        // regra atual: R$ 0,01 por litro (mantive a regra original)
         return quantidade * 0.01;
     } catch (err) {
         console.error('calcularComissaoMotorista error', err);
@@ -417,5 +438,6 @@ document.addEventListener('DOMContentLoaded', function() {
     // expose debug helpers
     window.debugRotas = function(){ console.log('ROTAS:', (typeof ROTAS==='undefined'?null:ROTAS)); };
     window.debugCliente = function(){ console.log('Cliente:', obterDadosCliente()); };
+    window.debugMotorista = function(){ console.log('Motorista:', obterDadosMotorista()); };
     window.calcularTudo = calcularTudo;
 });
