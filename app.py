@@ -1,7 +1,9 @@
 import os
+import difflib
 from flask import Flask, render_template, redirect, url_for, request, flash, current_app, jsonify
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user
 from werkzeug.security import generate_password_hash
+from werkzeug.routing import BuildError
 
 # Try to import project-specific modules; if missing, keep None to avoid crash on import
 try:
@@ -77,6 +79,39 @@ for name, mod in registered_modules.items():
         app.logger.exception(f"Error registering blueprint routes.{name}: {e}")
 
 
+# ---- Robust url_for wrapper to avoid BuildError in templates ----
+# We import the real flask url_for under a different name so we can call it here.
+from flask import url_for as flask_url_for
+
+def robust_url_for(endpoint, **values):
+    """
+    Try normal url_for(endpoint, **values). If it raises BuildError,
+    try to find a close endpoint name among registered endpoints and use it.
+    If nothing works, return '#' (so templates don't raise 500).
+    """
+    try:
+        return flask_url_for(endpoint, **values)
+    except BuildError:
+        # collect available endpoints
+        try:
+            endpoints = sorted({r.endpoint for r in current_app.url_map.iter_rules()})
+        except Exception:
+            endpoints = []
+        # try to find close matches
+        matches = difflib.get_close_matches(endpoint, endpoints, n=1, cutoff=0.6)
+        if matches:
+            try:
+                return flask_url_for(matches[0], **values)
+            except Exception:
+                pass
+        # as a last fallback, return '#' so link is inert instead of crashing
+        return "#"
+
+# override Jinja's url_for global so templates calling url_for(...) use robust_url_for
+app.jinja_env.globals['url_for'] = robust_url_for
+# -----------------------------------------------------------------
+
+
 # Context processor: list registered blueprints
 @app.context_processor
 def inject_registered_blueprints():
@@ -88,7 +123,6 @@ def inject_registered_blueprints():
 
 
 # Context processor: safe_url_for to try multiple endpoints/param names in templates
-from flask import url_for as flask_url_for
 @app.context_processor
 def inject_helpers():
     def safe_url_for(candidates, **kwargs):
@@ -119,66 +153,6 @@ def inject_helpers():
             pass
         return "#"
     return dict(safe_url_for=safe_url_for)
-
-
-# --- ADDED: alias route to avoid BuildError from templates calling url_for('alterar_senha') ---
-@app.route('/alterar-senha', endpoint='alterar_senha')
-@login_required
-def alterar_senha_alias():
-    """
-    Minimal alias so templates that call url_for('alterar_senha') won't raise BuildError.
-    Tries common candidate endpoints and falls back to logout.
-    """
-    # Try the most likely endpoint names in order
-    candidates = [
-        'usuarios.alterar_senha',
-        'auth.alterar_senha',
-        'usuarios.alterarSenha',
-        'alterar_senha'
-    ]
-    for ep in candidates:
-        try:
-            # If endpoint exists, redirect to it (no args expected here)
-            # This will raise a BuildError if ep doesn't exist; catch and continue.
-            return redirect(url_for(ep))
-        except Exception:
-            continue
-    # Final fallback: logout (should exist in this app)
-    try:
-        return redirect(url_for('logout'))
-    except Exception:
-        # As a last resort, render a simple page to avoid raising another exception
-        return render_template("404.html"), 404
-# --------------------------------------------------------------------
-
-
-# --- ADDED: alias route to avoid BuildError from templates calling url_for('listar_usuarios') ---
-@app.route('/listar-usuarios', endpoint='listar_usuarios')
-@login_required
-def listar_usuarios_alias():
-    """
-    Minimal alias so templates that call url_for('listar_usuarios') won't raise BuildError.
-    Tries several likely endpoint names and falls back to a safe page.
-    """
-    candidates = [
-        'usuarios.listar',
-        'usuarios.listar_usuarios',
-        'admin.listar_usuarios',
-        'listar_usuarios',
-        'usuarios.index',
-        'usuarios.index_listar'
-    ]
-    for ep in candidates:
-        try:
-            return redirect(url_for(ep))
-        except Exception:
-            continue
-    # Final fallback: if logout exists, redirect there; otherwise show 404 template
-    try:
-        return redirect(url_for('logout'))
-    except Exception:
-        return render_template("404.html"), 404
-# --------------------------------------------------------------------
 
 
 # Health check
