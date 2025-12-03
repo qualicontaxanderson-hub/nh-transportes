@@ -4,7 +4,7 @@ from logging.handlers import RotatingFileHandler
 import pkgutil
 import importlib
 
-from flask import Flask, render_template, redirect, url_for
+from flask import Flask, render_template, redirect, url_for, current_app
 from flask_login import LoginManager
 
 def register_blueprints_from_routes(app):
@@ -36,6 +36,35 @@ def register_blueprints_from_routes(app):
             app.logger.exception("Falha ao importar módulo de rotas %s", modname)
 
 
+def formatar_moeda(valor):
+    """
+    Formata um número para representação de moeda BRL (ex.: R$ 1.234,56).
+    Retorna '-' para valores None/invalidos.
+    """
+    try:
+        if valor is None or valor == '':
+            return '-'
+        # tenta converter strings tolerantly
+        if isinstance(valor, str):
+            s = valor.strip().replace('R$', '').replace('r$', '').replace(' ', '')
+            # caso pt-BR com milhar e decimal
+            if '.' in s and ',' in s:
+                s = s.replace('.', '').replace(',', '.')
+            else:
+                s = s.replace(',', '.')
+            num = float(s)
+        else:
+            num = float(valor)
+    except Exception:
+        return '-'
+
+    inteiro = int(abs(num))
+    centavos = int(round((abs(num) - inteiro) * 100))
+    inteiro_str = f"{inteiro:,}".replace(',', '.')
+    sinal = '-' if num < 0 else ''
+    return f"{sinal}R$ {inteiro_str},{centavos:02d}"
+
+
 def create_app():
     app = Flask(__name__, static_folder='static', template_folder='templates')
     app.config.from_mapping(
@@ -55,6 +84,7 @@ def create_app():
 
     # Flask-Login
     login_manager = LoginManager()
+    # aponta para o endpoint de login que existe no blueprint 'auth' (auth.login)
     login_manager.login_view = 'auth.login'
     login_manager.init_app(app)
 
@@ -78,6 +108,25 @@ def create_app():
 
     # Registrar automaticamente todos os blueprints dentro de routes/
     register_blueprints_from_routes(app)
+
+    # Registrar filtro e helpers de template
+    app.jinja_env.filters['formatar_moeda'] = formatar_moeda
+
+    @app.context_processor
+    def inject_helpers():
+        """
+        Injetar variáveis úteis nos templates:
+         - registered_blueprints: conjunto de nomes de blueprints registrados
+         - formatar_moeda: função disponível diretamente se templates chamarem sem filtro
+        """
+        try:
+            registered = set(app.blueprints.keys())
+        except Exception:
+            registered = set()
+        return {
+            'registered_blueprints': registered,
+            'formatar_moeda': formatar_moeda
+        }
 
     # Rota index simples: tenta redirecionar para fretes.lista se existir
     @app.route('/')
@@ -105,6 +154,7 @@ def create_app():
             return "500 - Erro interno do servidor", 500
 
     return app
+
 
 # Expor a app no nível do módulo para compatibilidade com gunicorn app:app
 app = create_app()
