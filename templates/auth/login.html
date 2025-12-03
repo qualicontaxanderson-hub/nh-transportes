@@ -5,161 +5,125 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Login - GRUPO NH</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='bootstrap.min.css') }}">
-  <link rel="stylesheet" href="{{ url_for('static', filename='bootstrap-icons.css') }}">
   <style>
-    /* Estilo inspirado no layout original: card central, header com gradiente, corpo branco */
-    body {
-      min-height: 100vh;
-      margin: 0;
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial;
-      background: linear-gradient(135deg, #4A90E2 0%, #A5B9D1 30%, #F2994A 100%);
-      display: flex;
-      align-items: center;
-      justify-content: center;
+    /* Visual alinhado ao layout original que você mostrou */
+    :root{
+      --grad-start: #4A90E2;
+      --grad-mid: #8FAEDC;
+      --grad-end: #F2994A;
+      --card-width: 420px;
+    }
+    html,body{height:100%;margin:0;font-family: -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial;}
+    body{
+      background: linear-gradient(135deg, var(--grad-start) 0%, var(--grad-mid) 40%, var(--grad-end) 100%);
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      min-height:100vh;
     }
 
-    .login-card {
-      width: 420px;
-      border-radius: 10px;
-      overflow: hidden;
+    .card-login{
+      width:var(--card-width);
+      border-radius:10px;
+      overflow:hidden;
       box-shadow: 0 18px 40px rgba(0,0,0,0.25);
-      background: white;
+      background:#fff;
     }
 
-    .login-header {
-      padding: 30px 20px;
-      text-align: center;
-      color: #fff;
+    .card-header{
+      padding:28px 20px;
+      text-align:center;
+      color:#fff;
       background: linear-gradient(135deg, rgba(74,144,226,0.95), rgba(242,153,74,0.95));
     }
 
-    .login-header img {
-      height: 76px;
-      width: 76px;
-      object-fit: contain;
-      background: #fff;
-      padding: 6px;
-      border-radius: 6px;
-      display: inline-block;
-      margin-bottom: 12px;
+    .card-header .logo{
+      width:84px;
+      height:84px;
+      display:inline-block;
+      background:#fff;
+      padding:8px;
+      border-radius:6px;
+      object-fit:contain;
+      margin-bottom:12px;
     }
 
-    .login-header h1 {
-      margin: 6px 0 2px;
-      font-size: 1.25rem;
-      letter-spacing: 1px;
-      font-weight: 700;
+    .card-header h2{
+      margin:6px 0 2px;
+      font-size:1.15rem;
+      letter-spacing:1px;
+      font-weight:700;
+    }
+    .card-header p{margin:0;font-size:0.88rem;opacity:0.95;}
+
+    .card-body{padding:18px 20px;}
+
+    .form-label{font-weight:600;font-size:0.95rem;margin-bottom:6px;display:block;color:#333;}
+    .form-control{height:38px;border-radius:3px;}
+    .btn-entrar{background:#1f6fb6;border-color:#1f6fb6;color:#fff;padding:10px 12px;border-radius:6px;}
+    .btn-entrar:hover{background:#14588f;border-color:#14588f;color:#fff;}
+
+    .small-note{font-size:0.85rem;color:#777;text-align:center;margin-top:12px;}
+
+    /* copyright bottom-right, discreto */
+    .copyright{
+      position:fixed;
+      right:18px;
+      bottom:14px;
+      color:rgba(255,255,255,0.9);
+      font-size:0.88rem;
     }
 
-    .login-header p {
-      margin: 0;
-      font-size: 0.9rem;
-      opacity: 0.95;
-    }
-
-    .login-body {
-      padding: 20px;
-    }
-
-    .input-icon {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }
-
-    .input-group-text {
-      background: #fff;
-      border-right: 0;
-    }
-
-    .form-control {
-      border-left: 0;
-    }
-
-    .btn-enter {
-      background: #1f6fb6;
-      border-color: #1f6fb6;
-      color: #fff;
-    }
-
-    .btn-enter:hover {
-      background: #14588f;
-      border-color: #14588f;
-    }
-
-    .footer-small {
-      text-align: center;
-      margin-top: 12px;
-      color: rgba(0,0,0,0.55);
-      font-size: 0.85rem;
-    }
-
-    .copyright {
-      margin-top: 18px;
-      text-align: center;
-      color: rgba(255,255,255,0.95);
-      font-size: 0.9rem;
-      position: absolute;
-      bottom: 18px;
-      right: 18px;
-    }
-
-    @media (max-width: 480px){
-      .login-card { width: 92%; }
-      .copyright { display: none; }
+    @media (max-width:480px){
+      .card-login{width:92%;}
+      .copyright{display:none;}
     }
   </style>
 </head>
 <body>
-  <div class="login-card" role="main" aria-label="Login">
-    <div class="login-header">
-      <!-- logo com fallback -->
-      <img src="{{ url_for('static', filename='logo-nh.png') }}" alt="NH" onerror="this.onerror=null;this.src='https://via.placeholder.com/76/ffffff/000000?text=NH';" />
-      <h1>GRUPO NH</h1>
-      <p>Sistema de Gerenciamento de Transportes</p>
-    </div>
+  <main>
+    <div class="card-login" role="main" aria-label="Login">
+      <header class="card-header">
+        <img src="{{ url_for('static', filename='logo-nh.png') }}" alt="NH" class="logo"
+             onerror="this.onerror=null;this.src='https://via.placeholder.com/84/ffffff/000000?text=NH';">
+        <h2>GRUPO NH</h2>
+        <p>Sistema de Gerenciamento de Transportes</p>
+      </header>
 
-    <div class="login-body">
-      <form method="post" action="{{ url_for('auth.login') }}" autocomplete="on">
-        {% with messages = get_flashed_messages(with_categories=true) %}
-          {% if messages %}
-            {% for category, msg in messages %}
-              <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
-                {{ msg }}
-                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-              </div>
-            {% endfor %}
-          {% endif %}
-        {% endwith %}
+      <div class="card-body">
+        <form method="post" action="{{ url_for('auth.login') }}">
+          {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+              {% for category, msg in messages %}
+                <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
+                  {{ msg }}
+                  <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Fechar"></button>
+                </div>
+              {% endfor %}
+            {% endif %}
+          {% endwith %}
 
-        <div class="mb-3">
-          <label class="form-label">Usuário ou Email</label>
-          <div class="input-group">
-            <span class="input-group-text"><i class="bi bi-envelope"></i></span>
+          <div class="mb-3">
+            <label class="form-label">Usuário ou Email</label>
+            <!-- NOTE: tipo TEXT para aceitar 'ANDERSON' sem validação de e-mail no cliente -->
             <input class="form-control" type="text" name="username" placeholder="Usuário ou e-mail" required value="{{ request.form.username or '' }}">
           </div>
-        </div>
 
-        <div class="mb-3">
-          <label class="form-label">Senha</label>
-          <div class="input-group">
-            <span class="input-group-text"><i class="bi bi-lock"></i></span>
+          <div class="mb-3">
+            <label class="form-label">Senha</label>
             <input class="form-control" type="password" name="password" placeholder="Senha" required>
           </div>
-        </div>
 
-        <div class="d-grid mb-2">
-          <button class="btn btn-enter btn-enter-lg" type="submit">
-            <i class="bi bi-box-arrow-in-right me-1"></i> Entrar no Sistema
-          </button>
-        </div>
+          <div class="d-grid">
+            <button class="btn btn-entrar" type="submit">Entrar no Sistema</button>
+          </div>
 
-        <div class="footer-small">Acesso restrito a usuários autorizados</div>
-      </form>
+          <div class="small-note">Acesso restrito a usuários autorizados</div>
+        </form>
+      </div>
     </div>
-  </div>
+  </main>
 
-  <!-- rodapé discreto no canto (mantém layout parecido com original) -->
   <div class="copyright">© 2025 Grupo NH - Todos os direitos reservados</div>
 
   <script src="{{ url_for('static', filename='bootstrap.bundle.min.js') }}"></script>
