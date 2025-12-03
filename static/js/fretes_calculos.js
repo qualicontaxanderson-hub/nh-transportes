@@ -1,6 +1,5 @@
 // ========================================
-// fretes_calculos.js - versão completa e defensiva
-// Atualização: respeita flag paga_comissao do motorista
+// fretes_calculos.js - versão defensiva com waiter
 // ========================================
 
 /* ---------- Helpers de formatação / parsing ---------- */
@@ -47,6 +46,7 @@ function desformatarMoeda(valorStr) {
 }
 
 function aplicarMascaraMoeda(input, decimals = 2) {
+    if (!input) return;
     let valor = input.value.replace(/\D/g, '');
     if (valor === '') {
         input.value = decimals === 3 ? 'R$ 0,000' : 'R$ 0,00';
@@ -137,7 +137,6 @@ function calcularQuantidade() {
         let quantidade = 0;
 
         if (tipo === 'padrao') {
-            // Usa apenas a quantidade da listbox
             if (selectQuantidade && selectQuantidade.value) {
                 const option = selectQuantidade.options[selectQuantidade.selectedIndex];
                 const raw = option ? (option.getAttribute('data-quantidade') || '0') : '0';
@@ -146,14 +145,12 @@ function calcularQuantidade() {
                 quantidade = 0;
             }
         } else if (tipo === 'personalizada') {
-            // Usa apenas a quantidade manual
             if (inputQuantidadeManual && inputQuantidadeManual.value) {
                 quantidade = parseNumberFromString(inputQuantidadeManual.value, 0) || 0;
             } else {
                 quantidade = 0;
             }
         } else {
-            // fallback defensivo: tenta manual depois select
             if (inputQuantidadeManual && inputQuantidadeManual.value) {
                 quantidade = parseNumberFromString(inputQuantidadeManual.value, 0) || 0;
             } else if (selectQuantidade && selectQuantidade.value) {
@@ -204,10 +201,8 @@ function calcularComissaoMotorista() {
     try {
         const dadosCliente = obterDadosCliente();
         const dadosMotorista = obterDadosMotorista();
-        // somente paga comissão ao motorista se o cliente paga E o motorista estiver configurado para receber
         if (!dadosCliente.pagaComissao || !dadosMotorista.pagaComissao) return 0;
         const quantidade = calcularQuantidade();
-        // regra atual: R$ 0,01 por litro (mantive a regra original)
         return quantidade * 0.01;
     } catch (err) {
         console.error('calcularComissaoMotorista error', err);
@@ -313,6 +308,29 @@ function aplicarBloqueioDestino(destinoId) {
     badge.classList.add('text-muted');
 }
 
+/* ---------- defender waiter para DOM dinâmico ---------- */
+function waitForElements(ids, callback, opts) {
+    opts = opts || {};
+    const interval = opts.interval || 150;
+    const timeout = opts.timeout || 5000;
+    const start = Date.now();
+    const check = function() {
+        const all = ids.every(id => !!document.getElementById(id));
+        if (all) {
+            callback();
+            return;
+        }
+        if (Date.now() - start > timeout) {
+            // timeout: ainda chama callback (inicializa defensivamente)
+            console.warn('waitForElements: timeout reached for ids', ids);
+            callback();
+            return;
+        }
+        setTimeout(check, interval);
+    };
+    check();
+}
+
 /* ---------- calcularTudo (defensivo) ---------- */
 function calcularTudo() {
     try {
@@ -346,11 +364,10 @@ function calcularTudo() {
     }
 }
 
-/* ---------- Inicialização ---------- */
-document.addEventListener('DOMContentLoaded', function() {
-    console.debug('✅ fretes_calculos.js carregado (defensivo)');
+/* ---------- Inicialização robusta ---------- */
+function initFretesCalculations() {
+    console.debug('✅ Inicializando fretes_calculos.js (initFretesCalculations)');
 
-    // aplicar máscara e events
     try {
         const camposMoeda = ['preco_produto_unitario','preco_por_litro'];
         camposMoeda.forEach(function(campoId) {
@@ -378,14 +395,13 @@ document.addEventListener('DOMContentLoaded', function() {
                     calcularTudo();
                 } catch (e) { console.error('cliente change handler error', e); }
             });
-            // inicializar baseado no cliente atual
             try {
                 const optInit = clienteSelect.options[clienteSelect.selectedIndex];
                 const destinoInit = optInit ? optInit.getAttribute('data-destino-id') : null;
                 aplicarBloqueioDestino(destinoInit);
             } catch (e) { console.error('init aplicarBloqueioDestino error', e); }
         } else {
-            console.warn('clientes_id não encontrado no DOM');
+            console.warn('clientes_id não encontrado no DOM durante init');
         }
 
         // listeners de recalculo
@@ -429,7 +445,7 @@ document.addEventListener('DOMContentLoaded', function() {
         }
 
     } catch (err) {
-        console.error('Erro durante inicialização do fretes_calculos.js:', err);
+        console.error('Erro durante inicialização do fretes_calculos.js (init):', err);
     }
 
     // executar cálculo inicial
@@ -440,4 +456,12 @@ document.addEventListener('DOMContentLoaded', function() {
     window.debugCliente = function(){ console.log('Cliente:', obterDadosCliente()); };
     window.debugMotorista = function(){ console.log('Motorista:', obterDadosMotorista()); };
     window.calcularTudo = calcularTudo;
-});
+}
+
+/* ---------- start: aguarda elementos críticos ou inicializa após timeout ---------- */
+(function boot() {
+    // aguarda até que pelo menos um dos campos de preço exista no DOM (ou timeout)
+    waitForElements(['preco_produto_unitario','preco_por_litro'], function() {
+        initFretesCalculations();
+    }, { timeout: 5000, interval: 150 });
+})();
