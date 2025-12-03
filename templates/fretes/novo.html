@@ -22,7 +22,9 @@
     </div>
 
     <div class="card-body" style="padding: 1rem;">
-      <form method="POST" action="{{ url_for('fretes.novo') }}" enctype="multipart/form-data">
+      <form method="POST"
+            action="{% if frete %}{{ url_for('fretes.editar', id=frete.id) }}{% else %}{{ url_for('fretes.novo') }}{% endif %}"
+            enctype="multipart/form-data">
 
         <!-- DATA / STATUS / BOTÃO IMPORTAR (VERDE) -->
         <div class="row mb-2 align-items-end">
@@ -46,7 +48,7 @@
 
           <div class="col-md-6 text-end">
             {% if not frete %}
-              <button type="button" class="btn btn-success btn-sm" id="btn_importar_pedido" title="Importar pedido">
+              <button type="button" class="btn btn-success btn-sm" id="btn_importar_pedido" title="Importar pedido" onclick="abrirImportacaoPedido()">
                 <i class="bi bi-upload"></i> Importar Pedido
               </button>
             {% endif %}
@@ -64,6 +66,7 @@
                       data-paga-comissao="{{ cliente.paga_comissao|default(1) }}"
                       data-cte-integral="{{ cliente.cte_integral|default(0) }}"
                       data-destino-id="{{ cliente.destino_id }}"
+                      data-destino-nome="{{ cliente.destino_nome|default('') }}"
                       {% if cliente.id == (frete.clientes_id if frete else None) %}selected{% endif %}>
                 {{ cliente.razao_social }}
               </option>
@@ -209,6 +212,7 @@
             <label for="preco_por_litro" class="form-label">Preço por Litro (R$)</label>
             <input type="text" id="preco_por_litro" name="preco_por_litro" class="form-control form-control-sm"
                    value="{{ 'R$ {:.2f}'.format(frete.preco_por_litro).replace('.', ',') if frete and frete.preco_por_litro else 'R$ 0,00' }}" required>
+            <input type="hidden" id="preco_por_litro_raw" name="preco_por_litro_raw" value="{{ frete.preco_por_litro if frete and frete.preco_por_litro else 0 }}">
           </div>
         </div>
 
