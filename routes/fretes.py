@@ -249,3 +249,22 @@ def editar(id):
         quantidades=quantidades,
         rotas_dict=rotas_dict,
     )
+
+
+@bp.route('/deletar/<int:id>', methods=['POST'])
+@login_required
+def deletar(id):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute("DELETE FROM fretes WHERE id = %s", (id,))
+        conn.commit()
+        flash('Frete excluído com sucesso!', 'success')
+    except Exception as e:
+        conn.rollback()
+        flash(f'Erro ao excluir frete: {e}', 'danger')
+    finally:
+        cursor.close()
+        conn.close()
+
+    return redirect(url_for('fretes.lista'))
