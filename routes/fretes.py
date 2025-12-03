@@ -1,3 +1,11 @@
+from flask import Blueprint, render_template
+from flask_login import login_required
+
+from utils.db import get_db_connection
+
+bp = Blueprint('fretes', __name__, url_prefix='/fretes')
+
+
 @bp.route('/', methods=['GET'])
 @login_required
 def lista():
@@ -9,9 +17,15 @@ def lista():
     cursor = conn.cursor(dictionary=True)
     try:
         cursor.execute("""
-            SELECT f.id, f.data_frete, f.status, f.valor_total_frete, f.lucro,
-                   c.razao_social AS cliente, fo.razao_social AS fornecedor,
-                   m.nome AS motorista, v.caminhao AS veiculo
+            SELECT f.id,
+                   f.data_frete,
+                   f.status,
+                   f.valor_total_frete,
+                   f.lucro,
+                   c.razao_social AS cliente,
+                   fo.razao_social AS fornecedor,
+                   m.nome AS motorista,
+                   v.caminhao AS veiculo
             FROM fretes f
             LEFT JOIN clientes c ON f.clientes_id = c.id
             LEFT JOIN fornecedores fo ON f.fornecedores_id = fo.id
