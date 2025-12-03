@@ -1,467 +1,491 @@
-// ========================================
-// fretes_calculos.js - versão defensiva com waiter
-// ========================================
+<!doctype html>
+{% extends "base.html" %}
+{% block titulo %}{% if frete %}Editar Frete{% else %}Novo Frete{% endif %}{% endblock %}
 
-/* ---------- Helpers de formatação / parsing ---------- */
-function formatarMoedaDisplay(valor, decimals = 2) {
-    if (valor === null || valor === undefined || valor === '') {
-        return decimals === 3 ? 'R$ 0,000' : 'R$ 0,00';
-    }
-    const numero = typeof valor === 'string' ? parseFloat(valor.replace(',', '.')) : valor;
-    if (isNaN(numero)) return decimals === 3 ? 'R$ 0,000' : 'R$ 0,00';
-    return 'R$ ' + numero.toLocaleString('pt-BR', {
-        minimumFractionDigits: decimals,
-        maximumFractionDigits: decimals
-    });
-}
+{% block content %}
+<div class="container-fluid">
+  <nav aria-label="breadcrumb" class="mt-2 mb-3">
+    <ol class="breadcrumb" style="font-size: 0.85rem;">
+      <li class="breadcrumb-item"><a href="{{ url_for('index') }}">Início</a></li>
+      <li class="breadcrumb-item"><a href="{{ url_for('fretes.lista') }}">Fretes</a></li>
+      <li class="breadcrumb-item active" aria-current="page">
+        {% if frete %}Editar Frete{% else %}Novo Frete{% endif %}
+      </li>
+    </ol>
+  </nav>
 
-function parseNumberFromString(s, decimalsHint) {
-    if (s === null || s === undefined) return 0;
-    s = String(s).trim();
-    s = s.replace(/[R$\u00A0\s]/g, '');
-    if (s === '') return 0;
-    const hasDot = s.indexOf('.') !== -1;
-    const hasComma = s.indexOf(',') !== -1;
-    if (hasDot && hasComma) {
-        return parseFloat(s.replace(/\./g, '').replace(',', '.')) || 0;
-    }
-    if (!hasDot && hasComma) {
-        return parseFloat(s.replace(',', '.')) || 0;
-    }
-    if (hasDot && !hasComma) {
-        const parts = s.split('.');
-        const last = parts[parts.length - 1];
-        if (decimalsHint && last.length === decimalsHint) return parseFloat(s) || 0;
-        if (last.length <= 2) return parseFloat(s) || 0;
-        return parseFloat(s.replace(/\./g, '')) || 0;
-    }
-    return parseFloat(s) || 0;
-}
+  <div class="card shadow-sm">
+    <div class="card-header bg-warning text-dark" style="padding: 0.6rem 1rem;">
+      <h4 class="mb-0">
+        {% if frete %}Editar Frete{% else %}Novo Frete{% endif %}
+      </h4>
+    </div>
 
-function limparMoeda(valor, decimalsHint) {
-    return parseNumberFromString(valor, decimalsHint);
-}
-function desformatarMoeda(valorStr) {
-    return limparMoeda(valorStr);
-}
+    <div class="card-body" style="padding: 1rem;">
+      <form method="POST" action="{{ url_for('fretes.novo') }}" enctype="multipart/form-data">
 
-function aplicarMascaraMoeda(input, decimals = 2) {
-    if (!input) return;
-    let valor = input.value.replace(/\D/g, '');
-    if (valor === '') {
-        input.value = decimals === 3 ? 'R$ 0,000' : 'R$ 0,00';
-        return;
-    }
-    valor = parseInt(valor, 10);
-    const fator = Math.pow(10, decimals);
-    const reais = Math.floor(valor / fator);
-    const casas = valor % fator;
-    input.value = 'R$ ' + reais.toLocaleString('pt-BR') + ',' + casas.toString().padStart(decimals, '0');
-}
+        <!-- DATA / STATUS / BOTÃO IMPORTAR (VERDE) -->
+        <div class="row mb-2 align-items-end">
+          <div class="col-md-3">
+            <label for="data_frete" class="form-label">Data</label>
+            <input type="date" id="data_frete" name="data_frete"
+                   class="form-control form-control-sm"
+                   value="{{ frete.data_frete.strftime('%Y-%m-%d') if frete and frete.data_frete else (now().strftime('%Y-%m-%d') if now else '') }}"
+                   required>
+          </div>
 
-/* ---------- Regras / leitura ---------- */
-function obterDadosCliente() {
-    try {
-        const selectCliente = document.getElementById('clientes_id');
-        if (!selectCliente || !selectCliente.value) {
-            return { pagaComissao: true, cteIntegral: false, destinoId: null };
-        }
-        const option = selectCliente.options[selectCliente.selectedIndex];
-        return {
-            pagaComissao: option.getAttribute('data-paga-comissao') !== '0',
-            cteIntegral: option.getAttribute('data-cte-integral') === '1',
-            destinoId: option.getAttribute('data-destino-id')
-        };
-    } catch (err) {
-        console.error('obterDadosCliente error', err);
-        return { pagaComissao: true, cteIntegral: false, destinoId: null };
-    }
-}
+          <div class="col-md-3">
+            <label for="status" class="form-label">Status</label>
+            <select id="status" name="status" class="form-select form-select-sm">
+              <option value="Pendente" {% if frete and frete.status == 'Pendente' %}selected{% endif %}>Pendente</option>
+              <option value="Em Trânsito" {% if frete and frete.status == 'Em Trânsito' %}selected{% endif %}>Em Trânsito</option>
+              <option value="Concluído" {% if frete and frete.status == 'Concluído' %}selected{% endif %}>Concluído</option>
+              <option value="Cancelado" {% if frete and frete.status == 'Cancelado' %}selected{% endif %}>Cancelado</option>
+            </select>
+          </div>
 
-function obterDadosMotorista() {
-    try {
-        const selectMotorista = document.getElementById('motoristas_id');
-        if (!selectMotorista || !selectMotorista.value) {
-            return { pagaComissao: true, percentual: 0 };
-        }
-        const option = selectMotorista.options[selectMotorista.selectedIndex];
-        return {
-            pagaComissao: option.getAttribute('data-paga-comissao') !== '0',
-            percentual: parseFloat(option.getAttribute('data-percentual')) || 0
-        };
-    } catch (err) {
-        console.error('obterDadosMotorista error', err);
-        return { pagaComissao: true, percentual: 0 };
-    }
-}
+          <div class="col-md-6 text-end">
+            {% if not frete %}
+              <button type="button" class="btn btn-success btn-sm" id="btn_importar_pedido" title="Importar pedido">
+                <i class="bi bi-upload"></i> Importar Pedido
+              </button>
+            {% endif %}
+          </div>
+        </div>
 
-function obterValorPorLitroRota() {
-    try {
-        const selectOrigem = document.getElementById('origem_id');
-        if (!selectOrigem || !selectOrigem.value) return 0;
-        const origemId = selectOrigem.value;
-        const dadosCliente = obterDadosCliente();
-        const destinoHidden = document.getElementById('destino_id_hidden');
-        const destinoSelect = document.getElementById('destino_id');
-        const destinoId = (destinoHidden && destinoHidden.value) ? destinoHidden.value
-                          : (destinoSelect && destinoSelect.value) ? destinoSelect.value
-                          : dadosCliente.destinoId;
-        if (!destinoId) return 0;
-        const chaveRota = `${origemId}|${destinoId}`;
-        if (typeof ROTAS === 'undefined') {
-            console.warn('ROTAS não definido — obterValorPorLitroRota retorna 0');
-            return 0;
-        }
-        return Number(ROTAS[chaveRota] || 0);
-    } catch (err) {
-        console.error('obterValorPorLitroRota error', err);
-        return 0;
-    }
-}
+        <!-- CLIENTE / OBSERVAÇÕES -->
+        <div class="row">
+          <div class="col-md-8 mb-2">
+            <label for="clientes_id" class="form-label">Cliente</label>
+            <select id="clientes_id" name="clientes_id" class="form-select form-select-sm" required>
+              <option value="">Selecione um cliente</option>
+              {% for cliente in clientes %}
+              <option value="{{ cliente.id }}"
+                      data-paga-comissao="{{ cliente.paga_comissao|default(1) }}"
+                      data-cte-integral="{{ cliente.cte_integral|default(0) }}"
+                      data-destino-id="{{ cliente.destino_id }}"
+                      {% if cliente.id == (frete.clientes_id if frete else None) %}selected{% endif %}>
+                {{ cliente.razao_social }}
+              </option>
+              {% endfor %}
+            </select>
+          </div>
 
-/* ---------- utilidades de moeda/parse ---------- */
-function desformatarMoeda(valor) {
-    if (!valor) return 0;
-    return parseFloat(valor.toString().replace(/\./g, '').replace(',', '.')) || 0;
-}
+          <div class="col-md-4 mb-2">
+            <label for="observacoes" class="form-label">Observações</label>
+            <input type="text" id="observacoes" name="observacoes"
+                   class="form-control form-control-sm"
+                   value="{{ frete.observacoes if frete else '' }}">
+          </div>
+        </div>
 
-/* ---------- Cálculos ---------- */
-function calcularQuantidade() {
-    try {
-        const tipoSelect = document.getElementById('quantidade_tipo');
-        const tipo = tipoSelect ? String(tipoSelect.value).trim() : 'padrao';
+        <!-- FORNECEDOR / PRODUTO -->
+        <div class="row">
+          <div class="col-md-6 mb-2">
+            <label for="fornecedores_id" class="form-label">Fornecedor</label>
+            <select id="fornecedores_id" name="fornecedores_id" class="form-select form-select-sm" required>
+              <option value="">Selecione um fornecedor</option>
+              {% for fornecedor in fornecedores %}
+              <option value="{{ fornecedor.id }}" {% if frete and fornecedor.id == frete.fornecedores_id %}selected{% endif %}>
+                {{ fornecedor.razao_social }}
+              </option>
+              {% endfor %}
+            </select>
+          </div>
 
-        const selectQuantidade = document.getElementById('quantidade_id');
-        const inputQuantidadeManual = document.getElementById('quantidade_manual');
+          <div class="col-md-6 mb-2">
+            <label for="produto_id" class="form-label">Produto</label>
+            <select id="produto_id" name="produto_id" class="form-select form-select-sm" required>
+              <option value="">Selecione o produto</option>
+              {% for produto in produtos %}
+              <option value="{{ produto.id }}" {% if frete and produto.id == frete.produto_id %}selected{% endif %}>
+                {{ produto.nome }}
+              </option>
+              {% endfor %}
+            </select>
+          </div>
+        </div>
 
-        let quantidade = 0;
+        <!-- ORIGEM / DESTINO -->
+        <div class="row">
+          <div class="col-md-6 mb-2">
+            <label for="origem_id" class="form-label">Origem</label>
+            <select id="origem_id" name="origem_id" class="form-select form-select-sm" required>
+              <option value="">Selecione a origem</option>
+              {% for origem in origens %}
+              <option value="{{ origem.id }}" {% if frete and origem.id == frete.origem_id %}selected{% endif %}>
+                {{ origem.nome }}
+              </option>
+              {% endfor %}
+            </select>
+          </div>
 
-        if (tipo === 'padrao') {
-            if (selectQuantidade && selectQuantidade.value) {
-                const option = selectQuantidade.options[selectQuantidade.selectedIndex];
-                const raw = option ? (option.getAttribute('data-quantidade') || '0') : '0';
-                quantidade = parseNumberFromString(raw, 0) || 0;
-            } else {
-                quantidade = 0;
-            }
-        } else if (tipo === 'personalizada') {
-            if (inputQuantidadeManual && inputQuantidadeManual.value) {
-                quantidade = parseNumberFromString(inputQuantidadeManual.value, 0) || 0;
-            } else {
-                quantidade = 0;
-            }
-        } else {
-            if (inputQuantidadeManual && inputQuantidadeManual.value) {
-                quantidade = parseNumberFromString(inputQuantidadeManual.value, 0) || 0;
-            } else if (selectQuantidade && selectQuantidade.value) {
-                const option = selectQuantidade.options[selectQuantidade.selectedIndex];
-                const raw = option ? (option.getAttribute('data-quantidade') || '0') : '0';
-                quantidade = parseNumberFromString(raw, 0) || 0;
-            } else {
-                quantidade = 0;
-            }
-        }
+          <div class="col-md-6 mb-2">
+            <label for="destino_id" class="form-label">Destino</label>
+            <select id="destino_id" name="destino_id" class="form-select form-select-sm" disabled>
+              <option value="">Selecione o destino</option>
+              {% for destino in destinos %}
+              <option value="{{ destino.id }}" {% if frete and destino.id == frete.destino_id %}selected{% endif %}>
+                {{ destino.nome }}
+              </option>
+              {% endfor %}
+            </select>
+            <input type="hidden" id="destino_id_hidden" name="destino_id" value="{{ frete.destino_id if frete else '' }}">
+            <small class="text-muted destino-auto-badge d-block mt-1">
+              <i class="bi bi-info-circle"></i> Destino preenchido a partir do cadastro do cliente
+            </small>
+          </div>
+        </div>
 
-        return quantidade;
-    } catch (err) {
-        console.error('calcularQuantidade error', err);
-        return 0;
-    }
-}
+        <!-- MOTORISTA / VEÍCULO -->
+        <div class="row">
+          <div class="col-md-6 mb-2">
+            <label for="motoristas_id" class="form-label">Motorista</label>
+            <select id="motoristas_id" name="motoristas_id" class="form-select form-select-sm" required>
+              <option value="">Selecione um motorista</option>
+              {% for motorista in motoristas %}
+              <option value="{{ motorista.id }}"
+                      data-percentual="{{ motorista.percentual_comissao }}"
+                      data-paga-comissao="{{ motorista.paga_comissao|default(1) }}"
+                      {% if frete and motorista.id == frete.motoristas_id %}selected{% endif %}>
+                {{ motorista.nome }}
+              </option>
+              {% endfor %}
+            </select>
+          </div>
 
-function calcularTotalNFCompra() {
-    try {
-        const inputPrecoUnitario = document.getElementById('preco_produto_unitario');
-        if (!inputPrecoUnitario) return 0;
-        const precoUnitario = limparMoeda(inputPrecoUnitario.value, 3);
-        const quantidade = calcularQuantidade();
-        return precoUnitario * quantidade;
-    } catch (err) {
-        console.error('calcularTotalNFCompra error', err);
-        return 0;
-    }
-}
+          <div class="col-md-6 mb-2">
+            <label for="veiculos_id" class="form-label">Veículo</label>
+            <select id="veiculos_id" name="veiculos_id" class="form-select form-select-sm" required>
+              <option value="">Selecione um veículo</option>
+              {% for veiculo in veiculos %}
+              <option value="{{ veiculo.id }}" {% if frete and veiculo.id == frete.veiculos_id %}selected{% endif %}>
+                {{ veiculo.caminhao }} - {{ veiculo.placa }}
+              </option>
+              {% endfor %}
+            </select>
+          </div>
+        </div>
 
-function calcularValorTotalFrete() {
-    try {
-        const dadosCliente = obterDadosCliente();
-        if (!dadosCliente.pagaComissao) return 0;
-        const inputPrecoPorLitro = document.getElementById('preco_por_litro');
-        if (!inputPrecoPorLitro) return 0;
-        const precoPorLitro = limparMoeda(inputPrecoPorLitro.value, 2);
-        const quantidade = calcularQuantidade();
-        return precoPorLitro * quantidade;
-    } catch (err) {
-        console.error('calcularValorTotalFrete error', err);
-        return 0;
-    }
-}
+        <!-- TIPO DE QUANTIDADE / QUANTIDADE -->
+        <div class="row">
+          <div class="col-md-6 mb-2">
+            <label for="quantidade_tipo" class="form-label">Tipo de Quantidade</label>
+            <select id="quantidade_tipo" name="quantidade_tipo" class="form-select form-select-sm">
+              <option value="padrao" {% if frete and frete.quantidade_id %}selected{% endif %}>Quantidade Padrão (Listbox)</option>
+              <option value="personalizada" {% if frete and not frete.quantidade_id %}selected{% endif %}>Quantidade Personalizada (Manual)</option>
+            </select>
+          </div>
 
-function calcularComissaoMotorista() {
-    try {
-        const dadosCliente = obterDadosCliente();
-        const dadosMotorista = obterDadosMotorista();
-        if (!dadosCliente.pagaComissao || !dadosMotorista.pagaComissao) return 0;
-        const quantidade = calcularQuantidade();
-        return quantidade * 0.01;
-    } catch (err) {
-        console.error('calcularComissaoMotorista error', err);
-        return 0;
-    }
-}
+          <div id="div_quantidade_padrao" class="col-md-6 mb-2">
+            <label for="quantidade_id" class="form-label">Quantidade (Litros)</label>
+            <select id="quantidade_id" name="quantidade_id" class="form-select form-select-sm">
+              <option value="">Selecione a quantidade</option>
+              {% for quantidade in quantidades %}
+              <option value="{{ quantidade.id }}" data-quantidade="{{ quantidade.valor }}" {% if frete and quantidade.id == frete.quantidade_id %}selected{% endif %}>
+                {{ quantidade.descricao }}
+              </option>
+              {% endfor %}
+            </select>
+          </div>
 
-function calcularValorCte() {
-    try {
-        const dadosCliente = obterDadosCliente();
-        const quantidade = calcularQuantidade();
-        if (dadosCliente.cteIntegral) {
-            return calcularValorTotalFrete();
-        } else {
-            const valorPorLitroRota = obterValorPorLitroRota();
-            return valorPorLitroRota * quantidade;
-        }
-    } catch (err) {
-        console.error('calcularValorCte error', err);
-        return 0;
-    }
-}
+          <div id="div_quantidade_personalizada" style="display:none" class="col-md-6 mb-2">
+            <label for="quantidade_manual" class="form-label">Quantidade Manual</label>
+            <input type="text" id="quantidade_manual" name="quantidade_manual" class="form-control form-control-sm" placeholder="Ex: 9.975" value="{{ frete.quantidade_manual if frete and not frete.quantidade_id else '' }}">
+            <small class="text-muted">Use ponto como separador de milhar (ex: 9.975)</small>
+          </div>
+        </div>
 
-function calcularComissaoCte() {
-    try {
-        const valorCte = calcularValorCte();
-        return valorCte * 0.08;
-    } catch (err) {
-        console.error('calcularComissaoCte error', err);
-        return 0;
-    }
-}
+        <!-- PREÇOS -->
+        <div class="row mt-2">
+          <div class="col-md-6 mb-2">
+            <label for="preco_produto_unitario" class="form-label">Preço Produto Unitário (R$)</label>
+            <input type="text" id="preco_produto_unitario" name="preco_produto_unitario" class="form-control form-control-sm"
+                   value="{{ 'R$ {:.3f}'.format(frete.preco_produto_unitario).replace('.', ',') if frete and frete.preco_produto_unitario else 'R$ 0,000' }}" required>
+            <input type="hidden" id="preco_produto_unitario_raw" name="preco_produto_unitario_raw" value="{{ frete.preco_produto_unitario if frete and frete.preco_produto_unitario else 0 }}">
+          </div>
 
-function calcularLucro() {
-    try {
-        const dadosCliente = obterDadosCliente();
-        if (!dadosCliente.pagaComissao) return 0;
-        const valorTotalFrete = calcularValorTotalFrete();
-        const comissaoMotorista = calcularComissaoMotorista();
-        const comissaoCte = calcularComissaoCte();
-        return valorTotalFrete - comissaoMotorista - comissaoCte;
-    } catch (err) {
-        console.error('calcularLucro error', err);
-        return 0;
-    }
-}
+          <div class="col-md-6 mb-2">
+            <label for="preco_por_litro" class="form-label">Preço por Litro (R$)</label>
+            <input type="text" id="preco_por_litro" name="preco_por_litro" class="form-control form-control-sm"
+                   value="{{ 'R$ {:.2f}'.format(frete.preco_por_litro).replace('.', ',') if frete and frete.preco_por_litro else 'R$ 0,00' }}" required>
+          </div>
+        </div>
 
-/* ---------- UI helpers ---------- */
-function alternarQuantidadeExibicao() {
-    const tipo = (document.getElementById('quantidade_tipo') || {}).value;
-    const divManual = document.getElementById('div_quantidade_personalizada');
-    const selectPadrao = document.getElementById('div_quantidade_padrao');
-    if (!divManual || !selectPadrao) return;
-    if (tipo === 'personalizada') {
-        selectPadrao.style.display = 'none';
-        divManual.style.display = 'block';
-    } else {
-        selectPadrao.style.display = 'block';
-        divManual.style.display = 'none';
-    }
-}
+        <!-- RESULTADOS -->
+        <div class="row mt-2">
+          <div class="col-md-4 mb-2">
+            <label for="total_nf_compra" class="form-label">Total NF Compra (R$)</label>
+            <input type="text" id="total_nf_compra" name="total_nf_compra" class="form-control form-control-sm bg-warning" readonly value="{{ 'R$ {:.2f}'.format(frete.total_nf_compra).replace('.', ',') if frete and frete.total_nf_compra else 'R$ 0,00' }}">
+          </div>
 
-function atualizarCampoPrecoPorLitro() {
-    const inputPrecoPorLitro = document.getElementById('preco_por_litro');
-    if (!inputPrecoPorLitro) return;
-    const dadosCliente = obterDadosCliente();
-    if (!dadosCliente.pagaComissao) {
-        inputPrecoPorLitro.value = 'R$ 0,00';
-        inputPrecoPorLitro.readOnly = true;
-        inputPrecoPorLitro.style.backgroundColor = '#e9ecef';
-        inputPrecoPorLitro.style.cursor = 'not-allowed';
-    } else {
-        inputPrecoPorLitro.readOnly = false;
-        inputPrecoPorLitro.style.backgroundColor = '';
-        inputPrecoPorLitro.style.cursor = '';
-    }
-}
+          <div class="col-md-4 mb-2">
+            <label for="valor_total_frete" class="form-label">Valor Total Frete (R$)</label>
+            <input type="text" id="valor_total_frete" name="valor_total_frete" class="form-control form-control-sm bg-warning" readonly value="{{ 'R$ {:.2f}'.format(frete.valor_total_frete).replace('.', ',') if frete and frete.valor_total_frete else 'R$ 0,00' }}">
+          </div>
 
-function aplicarBloqueioDestino(destinoId) {
-    const destinoSelect = document.getElementById('destino_id');
-    if (!destinoSelect) return;
-    destinoSelect.value = destinoId || '';
-    destinoSelect.disabled = true;
-    destinoSelect.style.backgroundColor = '#e9ecef';
-    destinoSelect.style.cursor = 'not-allowed';
-    let hidden = document.getElementById('destino_id_hidden');
-    if (!hidden) {
-        hidden = document.createElement('input');
-        hidden.type = 'hidden';
-        hidden.id = 'destino_id_hidden';
-        hidden.name = 'destino_id';
-        destinoSelect.parentElement.appendChild(hidden);
-    }
-    hidden.value = destinoId || '';
-    let badge = destinoSelect.parentElement.querySelector('.destino-auto-badge');
-    if (!badge) {
-        badge = document.createElement('small');
-        badge.className = 'destino-auto-badge text-muted d-block mt-1';
-        destinoSelect.parentElement.appendChild(badge);
-    }
-    badge.innerHTML = '<i class="bi bi-info-circle"></i> Destino preenchido a partir do cadastro do cliente';
-    badge.classList.remove('text-warning');
-    badge.classList.add('text-muted');
-}
+          <div class="col-md-4 mb-2">
+            <label for="comissao_motorista" class="form-label">Comissão Motorista (R$)</label>
+            <input type="text" id="comissao_motorista" name="comissao_motorista" class="form-control form-control-sm bg-warning" readonly value="{{ 'R$ {:.2f}'.format(frete.comissao_motorista).replace('.', ',') if frete and frete.comissao_motorista else 'R$ 0,00' }}">
+          </div>
+        </div>
 
-/* ---------- defender waiter para DOM dinâmico ---------- */
-function waitForElements(ids, callback, opts) {
-    opts = opts || {};
-    const interval = opts.interval || 150;
-    const timeout = opts.timeout || 5000;
-    const start = Date.now();
-    const check = function() {
-        const all = ids.every(id => !!document.getElementById(id));
-        if (all) {
-            callback();
-            return;
-        }
-        if (Date.now() - start > timeout) {
-            // timeout: ainda chama callback (inicializa defensivamente)
-            console.warn('waitForElements: timeout reached for ids', ids);
-            callback();
-            return;
-        }
-        setTimeout(check, interval);
-    };
-    check();
-}
+        <div class="row mt-2">
+          <div class="col-md-4 mb-2">
+            <label for="valor_cte" class="form-label">Valor CTe (R$)</label>
+            <input type="text" id="valor_cte" name="valor_cte" class="form-control form-control-sm bg-warning" readonly value="{{ 'R$ {:.2f}'.format(frete.valor_cte).replace('.', ',') if frete and frete.valor_cte else 'R$ 0,00' }}">
+          </div>
 
-/* ---------- calcularTudo (defensivo) ---------- */
-function calcularTudo() {
-    try {
-        atualizarCampoPrecoPorLitro();
-        const totalNFCompra = calcularTotalNFCompra();
-        const valorTotalFrete = calcularValorTotalFrete();
-        const comissaoMotorista = calcularComissaoMotorista();
-        const valorCte = calcularValorCte();
-        const comissaoCte = calcularComissaoCte();
-        const lucro = calcularLucro();
+          <div class="col-md-4 mb-2">
+            <label for="comissao_cte" class="form-label">Comissão CTe (R$)</label>
+            <input type="text" id="comissao_cte" name="comissao_cte" class="form-control form-control-sm bg-warning" readonly value="{{ 'R$ {:.2f}'.format(frete.comissao_cte).replace('.', ',') if frete and frete.comissao_cte else 'R$ 0,00' }}">
+          </div>
 
-        // sincroniza hidden numeric
-        const hiddenPrecoUnitario = document.getElementById('preco_produto_unitario_raw'); const inputPrecoUnitario = document.getElementById('preco_produto_unitario');
-        if (hiddenPrecoUnitario && inputPrecoUnitario) hiddenPrecoUnitario.value = limparMoeda(inputPrecoUnitario.value, 3);
+          <div class="col-md-4 mb-2">
+            <label for="lucro" class="form-label">Lucro</label>
+            <input type="text" id="lucro" name="lucro" class="form-control form-control-sm bg-warning" readonly value="{{ 'R$ {:.2f}'.format(frete.lucro).replace('.', ',') if frete and frete.lucro else 'R$ 0,00' }}">
+          </div>
+        </div>
 
-        const campoTotalNFCompra = document.getElementById('total_nf_compra');
-        const campoValorTotalFrete = document.getElementById('valor_total_frete');
-        const campoComissaoMotorista = document.getElementById('comissao_motorista');
-        const campoValorCte = document.getElementById('valor_cte');
-        const campoComissaoCte = document.getElementById('comissao_cte');
-        const campoLucro = document.getElementById('lucro');
+        <div class="mt-3 d-flex justify-content-end">
+          <button type="submit" class="btn btn-warning btn-sm">Salvar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}
 
-        if (campoTotalNFCompra) campoTotalNFCompra.value = formatarMoedaDisplay(totalNFCompra, 2);
-        if (campoValorTotalFrete) campoValorTotalFrete.value = formatarMoedaDisplay(valorTotalFrete, 2);
-        if (campoComissaoMotorista) campoComissaoMotorista.value = formatarMoedaDisplay(comissaoMotorista, 2);
-        if (campoValorCte) campoValorCte.value = formatarMoedaDisplay(valorCte, 2);
-        if (campoComissaoCte) campoComissaoCte.value = formatarMoedaDisplay(comissaoCte, 2);
-        if (campoLucro) campoLucro.value = formatarMoedaDisplay(lucro, 2);
-    } catch (err) {
-        console.error('Erro em calcularTudo():', err);
-    }
-}
+{% block scripts %}
+<script>
+  const ROTAS = {{ rotas_dict|tojson|safe }};
+  window.MODOEDICAO = {{ 'true' if frete else 'false' }};
+</script>
 
-/* ---------- Inicialização robusta ---------- */
-function initFretesCalculations() {
-    console.debug('✅ Inicializando fretes_calculos.js (initFretesCalculations)');
+<script src="{{ url_for('static', filename='js/app.js') }}"></script>
+<script src="{{ url_for('static', filename='js/importar_modal.js') }}"></script>
+<script src="{{ url_for('static', filename='js/fretes_calculos.js') }}?v={{ config.APP_VERSION or '1' }}"></script>
+{% endblock %}
+```
 
-    try {
-        const camposMoeda = ['preco_produto_unitario','preco_por_litro'];
-        camposMoeda.forEach(function(campoId) {
-            const campo = document.getElementById(campoId); if (!campo) return;
-            const decimals = campoId === 'preco_produto_unitario' ? 3 : 2;
-            if (campo.value && campo.value !== (decimals === 3 ? 'R$ 0,000' : 'R$ 0,00')) {
-                const v = limparMoeda(campo.value, decimals); campo.value = formatarMoedaDisplay(v, decimals);
-            } else { campo.value = decimals === 3 ? 'R$ 0,000' : 'R$ 0,00'; }
-            campo.addEventListener('input', function(){ aplicarMascaraMoeda(this, decimals); });
-            campo.addEventListener('blur', calcularTudo);
-        });
 
-        const tipoSelect = document.getElementById('quantidade_tipo');
-        if (tipoSelect) { tipoSelect.addEventListener('change', alternarQuantidadeExibicao); alternarQuantidadeExibicao(); }
+````html name=fretes_editar.html
+<!doctype html>
+{% extends "base.html" %}
+{% block titulo %}Editar Frete{% endblock %}
 
-        // cliente -> aplicar destino + recalcular
-        const clienteSelect = document.getElementById('clientes_id');
-        const destinoSelect = document.getElementById('destino_id');
-        if (clienteSelect) {
-            clienteSelect.addEventListener('change', function() {
-                try {
-                    const option = this.options[this.selectedIndex];
-                    const destinoId = option ? option.getAttribute('data-destino-id') : null;
-                    aplicarBloqueioDestino(destinoId);
-                    calcularTudo();
-                } catch (e) { console.error('cliente change handler error', e); }
-            });
-            try {
-                const optInit = clienteSelect.options[clienteSelect.selectedIndex];
-                const destinoInit = optInit ? optInit.getAttribute('data-destino-id') : null;
-                aplicarBloqueioDestino(destinoInit);
-            } catch (e) { console.error('init aplicarBloqueioDestino error', e); }
-        } else {
-            console.warn('clientes_id não encontrado no DOM durante init');
-        }
+{% block content %}
+<div class="container-fluid">
+  <nav aria-label="breadcrumb" class="mt-2 mb-3">
+    <ol class="breadcrumb" style="font-size: 0.85rem;">
+      <li class="breadcrumb-item"><a href="{{ url_for('index') }}">Início</a></li>
+      <li class="breadcrumb-item"><a href="{{ url_for('fretes.lista') }}">Fretes</a></li>
+      <li class="breadcrumb-item active" aria-current="page">Editar Frete</li>
+    </ol>
+  </nav>
 
-        // listeners de recalculo
-        const camposRecalculo = ['clientes_id','motoristas_id','fornecedores_id','quantidade_id','quantidade_manual','quantidade_tipo','origem_id','preco_produto_unitario','preco_por_litro'];
-        camposRecalculo.forEach(function(id) {
-            const el = document.getElementById(id);
-            if (!el) return;
-            const ev = el.tagName === 'SELECT' ? 'change' : 'input';
-            el.addEventListener(ev, calcularTudo);
-        });
+  <div class="card shadow-sm">
+    <div class="card-header bg-warning text-dark" style="padding: 0.6rem 1rem;">
+      <h4 class="mb-0">Editar Frete #{{ frete.id }}</h4>
+    </div>
 
-        // Importar Pedido handler (dispatch event + call)
-        const btnImport = document.getElementById('btn_importar_pedido');
-        if (btnImport) {
-            btnImport.addEventListener('click', function() {
-                console.debug('btn_importar_pedido clicked');
-                try {
-                    const ev = new CustomEvent('abrirImportacaoPedido', { bubbles: true, cancelable: true });
-                    window.dispatchEvent(ev);
-                } catch (e) {
-                    const ev2 = document.createEvent('Event');
-                    ev2.initEvent('abrirImportacaoPedido', true, true);
-                    window.dispatchEvent(ev2);
-                }
-                if (typeof window.abrirImportacaoPedido === 'function') {
-                    try { window.abrirImportacaoPedido(); } catch (err) { console.error('Erro abrirImportacaoPedido():', err); }
-                }
-            });
-        } else {
-            console.warn('btn_importar_pedido não encontrado');
-        }
+    <div class="card-body" style="padding:1rem;">
+      <form method="POST" action="{{ url_for('fretes.editar', id=frete.id) }}">
+        <!-- DATA -->
+        <div class="row mb-2">
+          <div class="col-md-3">
+            <label for="data_frete" class="form-label">Data</label>
+            <input type="date" id="data_frete" name="data_frete" class="form-control form-control-sm" value="{{ frete.data_frete.strftime('%Y-%m-%d') if frete.data_frete else '' }}" required>
+          </div>
 
-        // submit sync preco raw
-        const form = document.querySelector('form');
-        if (form) {
-            form.addEventListener('submit', function() {
-                const hidden = document.getElementById('preco_produto_unitario_raw');
-                const input = document.getElementById('preco_produto_unitario');
-                if (hidden && input) hidden.value = limparMoeda(input.value, 3);
-            });
-        }
+          <div class="col-md-3">
+            <label for="status" class="form-label">Status</label>
+            <select id="status" name="status" class="form-select form-select-sm">
+              <option value="Pendente" {% if frete.status == 'Pendente' %}selected{% endif %}>Pendente</option>
+              <option value="Em Trânsito" {% if frete.status == 'Em Trânsito' %}selected{% endif %}>Em Trânsito</option>
+              <option value="Concluído" {% if frete.status == 'Concluído' %}selected{% endif %}>Concluído</option>
+              <option value="Cancelado" {% if frete.status == 'Cancelado' %}selected{% endif %}>Cancelado</option>
+            </select>
+          </div>
+        </div>
 
-    } catch (err) {
-        console.error('Erro durante inicialização do fretes_calculos.js (init):', err);
-    }
+        <!-- CLIENTE / FORNECEDOR -->
+        <div class="row">
+          <div class="col-md-6 mb-2">
+            <label for="clientes_id" class="form-label">Cliente</label>
+            <select id="clientes_id" name="clientes_id" class="form-select form-select-sm" required>
+              <option value="">Selecione um cliente</option>
+              {% for cliente in clientes %}
+              <option value="{{ cliente.id }}"
+                      data-paga-comissao="{{ cliente.paga_comissao|default(1) }}"
+                      data-cte-integral="{{ cliente.cte_integral|default(0) }}"
+                      data-destino-id="{{ cliente.destino_id }}"
+                      {% if cliente.id == frete.clientes_id %}selected{% endif %}>
+                {{ cliente.razao_social }}
+              </option>
+              {% endfor %}
+            </select>
+          </div>
 
-    // executar cálculo inicial
-    try { calcularTudo(); } catch (e) { console.error('Erro calcularTudo inicial', e); }
+          <div class="col-md-6 mb-2">
+            <label for="fornecedores_id" class="form-label">Fornecedor</label>
+            <select id="fornecedores_id" name="fornecedores_id" class="form-select form-select-sm" required>
+              <option value="">Selecione um fornecedor</option>
+              {% for fornecedor in fornecedores %}
+              <option value="{{ fornecedor.id }}" {% if fornecedor.id == frete.fornecedores_id %}selected{% endif %}>{{ fornecedor.razao_social }}</option>
+              {% endfor %}
+            </select>
+          </div>
+        </div>
 
-    // expose debug helpers
-    window.debugRotas = function(){ console.log('ROTAS:', (typeof ROTAS==='undefined'?null:ROTAS)); };
-    window.debugCliente = function(){ console.log('Cliente:', obterDadosCliente()); };
-    window.debugMotorista = function(){ console.log('Motorista:', obterDadosMotorista()); };
-    window.calcularTudo = calcularTudo;
-}
+        <!-- PRODUTO / ORIGEM/DESTINO -->
+        <div class="row">
+          <div class="col-md-6 mb-2">
+            <label for="produto_id" class="form-label">Produto</label>
+            <select id="produto_id" name="produto_id" class="form-select form-select-sm" required>
+              <option value="">Selecione o produto</option>
+              {% for produto in produtos %}
+              <option value="{{ produto.id }}" {% if produto.id == frete.produto_id %}selected{% endif %}>{{ produto.nome }}</option>
+              {% endfor %}
+            </select>
+          </div>
 
-/* ---------- start: aguarda elementos críticos ou inicializa após timeout ---------- */
-(function boot() {
-    // aguarda até que pelo menos um dos campos de preço exista no DOM (ou timeout)
-    waitForElements(['preco_produto_unitario','preco_por_litro'], function() {
-        initFretesCalculations();
-    }, { timeout: 5000, interval: 150 });
-})();
+          <div class="col-md-6 mb-2">
+            <label for="origem_id" class="form-label">Origem / Destino</label>
+            <div class="d-flex gap-2">
+              <select id="origem_id" name="origem_id" class="form-select form-select-sm">
+                <option value="">Selecione a origem</option>
+                {% for origem in origens %}
+                <option value="{{ origem.id }}" {% if origem.id == frete.origem_id %}selected{% endif %}>{{ origem.nome }}</option>
+                {% endfor %}
+              </select>
+
+              <select id="destino_id" name="destino_id" class="form-select form-select-sm" disabled>
+                <option value="">Selecione o destino</option>
+                {% for destino in destinos %}
+                <option value="{{ destino.id }}" {% if destino.id == frete.destino_id %}selected{% endif %}>{{ destino.nome }}</option>
+                {% endfor %}
+              </select>
+              <input type="hidden" id="destino_id_hidden" name="destino_id" value="{{ frete.destino_id or '' }}">
+            </div>
+            <small class="text-muted d-block mt-1"><i class="bi bi-info-circle"></i> Destino preenchido a partir do cadastro do cliente</small>
+          </div>
+        </div>
+
+        <!-- MOTORISTA / VEICULO -->
+        <div class="row">
+          <div class="col-md-6 mb-2">
+            <label for="motoristas_id" class="form-label">Motorista</label>
+            <select id="motoristas_id" name="motoristas_id" class="form-select form-select-sm" required>
+              <option value="">Selecione um motorista</option>
+              {% for motorista in motoristas %}
+              <option value="{{ motorista.id }}" data-percentual="{{ motorista.percentual_comissao }}" data-paga-comissao="{{ motorista.paga_comissao|default(1) }}" {% if motorista.id == frete.motoristas_id %}selected{% endif %}>{{ motorista.nome }}</option>
+              {% endfor %}
+            </select>
+          </div>
+
+          <div class="col-md-6 mb-2">
+            <label for="veiculos_id" class="form-label">Veículo</label>
+            <select id="veiculos_id" name="veiculos_id" class="form-select form-select-sm" required>
+              <option value="">Selecione um veículo</option>
+              {% for veiculo in veiculos %}
+              <option value="{{ veiculo.id }}" {% if veiculo.id == frete.veiculos_id %}selected{% endif %}>{{ veiculo.caminhao }} - {{ veiculo.placa }}</option>
+              {% endfor %}
+            </select>
+          </div>
+        </div>
+
+        <!-- TIPO DE QUANTIDADE / QUANTIDADE -->
+        <div class="row">
+          <div class="col-md-6 mb-2">
+            <label for="quantidade_tipo" class="form-label">Tipo de Quantidade</label>
+            <select id="quantidade_tipo" name="quantidade_tipo" class="form-select form-select-sm">
+              <option value="padrao" {% if frete.quantidade_id %}selected{% endif %}>Quantidade Padrão (Listbox)</option>
+              <option value="personalizada" {% if not frete.quantidade_id %}selected{% endif %}>Quantidade Personalizada (Manual)</option>
+            </select>
+          </div>
+
+          <div id="div_quantidade_padrao" class="col-md-6 mb-2">
+            <label for="quantidade_id" class="form-label">Quantidade (Litros)</label>
+            <select id="quantidade_id" name="quantidade_id" class="form-select form-select-sm">
+              <option value="">Selecione a quantidade</option>
+              {% for quantidade in quantidades %}
+              <option value="{{ quantidade.id }}" data-quantidade="{{ quantidade.valor }}" {% if quantidade.id == frete.quantidade_id %}selected{% endif %}>{{ quantidade.descricao }}</option>
+              {% endfor %}
+            </select>
+          </div>
+
+          <div id="div_quantidade_personalizada" style="display:none" class="col-md-6 mb-2">
+            <label for="quantidade_manual" class="form-label">Quantidade Manual</label>
+            <input type="text" id="quantidade_manual" name="quantidade_manual" class="form-control form-control-sm" value="{% if not frete.quantidade_id and frete.quantidade_manual %}{{ frete.quantidade_manual }}{% endif %}" placeholder="Ex: 9.975">
+            <small class="text-muted">Use ponto como separador de milhar (ex: 9.975)</small>
+          </div>
+        </div>
+
+        <!-- PREÇOS -->
+        <div class="row mt-2">
+          <div class="col-md-6 mb-2">
+            <label for="preco_produto_unitario" class="form-label">Preço Produto Unitário (R$)</label>
+            <input type="text" id="preco_produto_unitario" name="preco_produto_unitario" class="form-control form-control-sm" value="R$ {{ '{:.3f}'.format(frete.preco_produto_unitario).replace('.', ',') if frete.preco_produto_unitario else '0,000' }}" required>
+            <input type="hidden" id="preco_produto_unitario_raw" name="preco_produto_unitario_raw" value="{{ frete.preco_produto_unitario if frete.preco_produto_unitario else 0 }}">
+          </div>
+
+          <div class="col-md-6 mb-2">
+            <label for="preco_por_litro" class="form-label">Preço por Litro (R$)</label>
+            <input type="text" id="preco_por_litro" name="preco_por_litro" class="form-control form-control-sm" value="R$ {{ '{:.2f}'.format(frete.preco_por_litro).replace('.', ',') if frete.preco_por_litro else '0,00' }}" required>
+          </div>
+        </div>
+
+        <!-- RESULTADOS -->
+        <div class="row mt-2">
+          <div class="col-md-4 mb-2">
+            <label for="total_nf_compra" class="form-label">Total NF Compra (R$)</label>
+            <input type="text" id="total_nf_compra" name="total_nf_compra" class="form-control form-control-sm bg-warning" readonly value="R$ {{ '{:.2f}'.format(frete.total_nf_compra).replace('.', ',') if frete.total_nf_compra else '0,00' }}">
+          </div>
+
+          <div class="col-md-4 mb-2">
+            <label for="valor_total_frete" class="form-label">Valor Total Frete (R$)</label>
+            <input type="text" id="valor_total_frete" name="valor_total_frete" class="form-control form-control-sm bg-warning" readonly value="R$ {{ '{:.2f}'.format(frete.valor_total_frete).replace('.', ',') if frete.valor_total_frete else '0,00' }}">
+          </div>
+
+          <div class="col-md-4 mb-2">
+            <label for="comissao_motorista" class="form-label">Comissão Motorista (R$)</label>
+            <input type="text" id="comissao_motorista" name="comissao_motorista" class="form-control form-control-sm bg-warning" readonly value="R$ {{ '{:.2f}'.format(frete.comissao_motorista).replace('.', ',') if frete.comissao_motorista else '0,00' }}">
+          </div>
+        </div>
+
+        <div class="row mt-2">
+          <div class="col-md-4 mb-2">
+            <label for="valor_cte" class="form-label">Valor CTe (R$)</label>
+            <input type="text" id="valor_cte" name="valor_cte" class="form-control form-control-sm bg-warning" readonly value="R$ {{ '{:.2f}'.format(frete.valor_cte).replace('.', ',') if frete.valor_cte else '0,00' }}">
+          </div>
+
+          <div class="col-md-4 mb-2">
+            <label for="comissao_cte" class="form-label">Comissão CTe (R$)</label>
+            <input type="text" id="comissao_cte" name="comissao_cte" class="form-control form-control-sm bg-warning" readonly value="R$ {{ '{:.2f}'.format(frete.comissao_cte).replace('.', ',') if frete.comissao_cte else '0,00' }}">
+          </div>
+
+          <div class="col-md-4 mb-2">
+            <label for="lucro" class="form-label">Lucro</label>
+            <input type="text" id="lucro" name="lucro" class="form-control form-control-sm bg-warning" readonly value="R$ {{ '{:.2f}'.format(frete.lucro).replace('.', ',') if frete.lucro else '0,00' }}">
+          </div>
+        </div>
+
+        <div class="mt-3 d-flex justify-content-end">
+          <button type="submit" class="btn btn-warning btn-sm">Salvar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  const ROTAS = {{ rotas_dict|tojson|safe }};
+  window.MODOEDICAO = true;
+</script>
+
+<script src="{{ url_for('static', filename='js/app.js') }}"></script>
+<script src="{{ url_for('static', filename='js/fretes_calculos.js') }}?v={{ config.APP_VERSION or '1' }}"></script>
+{% endblock %}
