@@ -1,5 +1,3 @@
-<!-- Substitua o arquivo fretes_novo.html completo pelo seu conteúdo atual com esta alteração:
-     adicione data-paga-comissao nas <option> de motoristas -->
 <!doctype html>
 {% extends "base.html" %}
 {% block titulo %}{% if frete %}Editar Frete{% else %}Novo Frete{% endif %}{% endblock %}
@@ -48,7 +46,6 @@
 
           <div class="col-md-6 text-end">
             {% if not frete %}
-              <!-- botão IMPORTAR em VERDE (apenas no NOVO) -->
               <button type="button" class="btn btn-success btn-sm" id="btn_importar_pedido" title="Importar pedido">
                 <i class="bi bi-upload"></i> Importar Pedido
               </button>
@@ -133,8 +130,7 @@
               </option>
               {% endfor %}
             </select>
-            <input type="hidden" id="destino_id_hidden" name="destino_id"
-                   value="{{ frete.destino_id if frete else '' }}">
+            <input type="hidden" id="destino_id_hidden" name="destino_id" value="{{ frete.destino_id if frete else '' }}">
             <small class="text-muted destino-auto-badge d-block mt-1">
               <i class="bi bi-info-circle"></i> Destino preenchido a partir do cadastro do cliente
             </small>
@@ -171,8 +167,89 @@
           </div>
         </div>
 
-        <!-- ... resto do template permanece idêntico ... -->
+        <!-- TIPO DE QUANTIDADE / QUANTIDADE -->
+        <div class="row">
+          <div class="col-md-6 mb-2">
+            <label for="quantidade_tipo" class="form-label">Tipo de Quantidade</label>
+            <select id="quantidade_tipo" name="quantidade_tipo" class="form-select form-select-sm">
+              <option value="padrao" {% if frete and frete.quantidade_id %}selected{% endif %}>Quantidade Padrão (Listbox)</option>
+              <option value="personalizada" {% if frete and not frete.quantidade_id %}selected{% endif %}>Quantidade Personalizada (Manual)</option>
+            </select>
+          </div>
 
+          <div id="div_quantidade_padrao" class="col-md-6 mb-2">
+            <label for="quantidade_id" class="form-label">Quantidade (Litros)</label>
+            <select id="quantidade_id" name="quantidade_id" class="form-select form-select-sm">
+              <option value="">Selecione a quantidade</option>
+              {% for quantidade in quantidades %}
+              <option value="{{ quantidade.id }}" data-quantidade="{{ quantidade.valor }}" {% if frete and quantidade.id == frete.quantidade_id %}selected{% endif %}>
+                {{ quantidade.descricao }}
+              </option>
+              {% endfor %}
+            </select>
+          </div>
+
+          <div id="div_quantidade_personalizada" style="display:none" class="col-md-6 mb-2">
+            <label for="quantidade_manual" class="form-label">Quantidade Manual</label>
+            <input type="text" id="quantidade_manual" name="quantidade_manual" class="form-control form-control-sm" placeholder="Ex: 9.975" value="{{ frete.quantidade_manual if frete and not frete.quantidade_id else '' }}">
+            <small class="text-muted">Use ponto como separador de milhar (ex: 9.975)</small>
+          </div>
+        </div>
+
+        <!-- PREÇOS -->
+        <div class="row mt-2">
+          <div class="col-md-6 mb-2">
+            <label for="preco_produto_unitario" class="form-label">Preço Produto Unitário (R$)</label>
+            <input type="text" id="preco_produto_unitario" name="preco_produto_unitario" class="form-control form-control-sm"
+                   value="{{ 'R$ {:.3f}'.format(frete.preco_produto_unitario).replace('.', ',') if frete and frete.preco_produto_unitario else 'R$ 0,000' }}" required>
+            <input type="hidden" id="preco_produto_unitario_raw" name="preco_produto_unitario_raw" value="{{ frete.preco_produto_unitario if frete and frete.preco_produto_unitario else 0 }}">
+          </div>
+
+          <div class="col-md-6 mb-2">
+            <label for="preco_por_litro" class="form-label">Preço por Litro (R$)</label>
+            <input type="text" id="preco_por_litro" name="preco_por_litro" class="form-control form-control-sm"
+                   value="{{ 'R$ {:.2f}'.format(frete.preco_por_litro).replace('.', ',') if frete and frete.preco_por_litro else 'R$ 0,00' }}" required>
+          </div>
+        </div>
+
+        <!-- RESULTADOS -->
+        <div class="row mt-2">
+          <div class="col-md-4 mb-2">
+            <label for="total_nf_compra" class="form-label">Total NF Compra (R$)</label>
+            <input type="text" id="total_nf_compra" name="total_nf_compra" class="form-control form-control-sm bg-warning" readonly value="{{ 'R$ {:.2f}'.format(frete.total_nf_compra).replace('.', ',') if frete and frete.total_nf_compra else 'R$ 0,00' }}">
+          </div>
+
+          <div class="col-md-4 mb-2">
+            <label for="valor_total_frete" class="form-label">Valor Total Frete (R$)</label>
+            <input type="text" id="valor_total_frete" name="valor_total_frete" class="form-control form-control-sm bg-warning" readonly value="{{ 'R$ {:.2f}'.format(frete.valor_total_frete).replace('.', ',') if frete and frete.valor_total_frete else 'R$ 0,00' }}">
+          </div>
+
+          <div class="col-md-4 mb-2">
+            <label for="comissao_motorista" class="form-label">Comissão Motorista (R$)</label>
+            <input type="text" id="comissao_motorista" name="comissao_motorista" class="form-control form-control-sm bg-warning" readonly value="{{ 'R$ {:.2f}'.format(frete.comissao_motorista).replace('.', ',') if frete and frete.comissao_motorista else 'R$ 0,00' }}">
+          </div>
+        </div>
+
+        <div class="row mt-2">
+          <div class="col-md-4 mb-2">
+            <label for="valor_cte" class="form-label">Valor CTe (R$)</label>
+            <input type="text" id="valor_cte" name="valor_cte" class="form-control form-control-sm bg-warning" readonly value="{{ 'R$ {:.2f}'.format(frete.valor_cte).replace('.', ',') if frete and frete.valor_cte else 'R$ 0,00' }}">
+          </div>
+
+          <div class="col-md-4 mb-2">
+            <label for="comissao_cte" class="form-label">Comissão CTe (R$)</label>
+            <input type="text" id="comissao_cte" name="comissao_cte" class="form-control form-control-sm bg-warning" readonly value="{{ 'R$ {:.2f}'.format(frete.comissao_cte).replace('.', ',') if frete and frete.comissao_cte else 'R$ 0,00' }}">
+          </div>
+
+          <div class="col-md-4 mb-2">
+            <label for="lucro" class="form-label">Lucro</label>
+            <input type="text" id="lucro" name="lucro" class="form-control form-control-sm bg-warning" readonly value="{{ 'R$ {:.2f}'.format(frete.lucro).replace('.', ',') if frete and frete.lucro else 'R$ 0,00' }}">
+          </div>
+        </div>
+
+        <div class="mt-3 d-flex justify-content-end">
+          <button type="submit" class="btn btn-warning btn-sm">Salvar</button>
+        </div>
       </form>
     </div>
   </div>
