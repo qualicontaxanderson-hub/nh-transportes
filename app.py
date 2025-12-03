@@ -1,5 +1,6 @@
 import os
 import difflib
+
 from flask import Flask, render_template, redirect, url_for, request, flash, current_app, jsonify
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user
 from werkzeug.security import generate_password_hash
@@ -16,9 +17,19 @@ try:
 except Exception:
     Usuario = None
 
+# >>> IMPORTAR formatar_moeda <<<
+try:
+    from utils.formatadores import formatar_moeda
+except Exception:
+    formatar_moeda = None
+
 # Create app early so decorators/context processors can reference it
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "change-me-in-prod")
+
+# Se a função existir, registra no Jinja
+if formatar_moeda is not None:
+    app.jinja_env.globals['formatar_moeda'] = formatar_moeda
 
 # Flask-Login setup
 login_manager = LoginManager()
@@ -37,7 +48,6 @@ else:
     @login_manager.user_loader
     def load_user(user_id):
         return None
-
 
 # Defensive import of blueprints: try to import modules under routes and register bp if present.
 # This avoids app failing to start if a single routes module has an import-time error.
@@ -58,6 +68,7 @@ blueprints_to_try = [
 ]
 
 import importlib
+
 registered_modules = {}
 for name in blueprints_to_try:
     try:
@@ -77,7 +88,6 @@ for name, mod in registered_modules.items():
             app.logger.debug(f"Blueprint routes.{name} not registered (module missing or no attribute 'bp').")
     except Exception as e:
         app.logger.exception(f"Error registering blueprint routes.{name}: {e}")
-
 
 # ---- Robust url_for wrapper to avoid BuildError in templates ----
 # We import the real flask url_for under a different name so we can call it here.
@@ -109,8 +119,8 @@ def robust_url_for(endpoint, **values):
 
 # override Jinja's url_for global so templates calling url_for(...) use robust_url_for
 app.jinja_env.globals['url_for'] = robust_url_for
-# -----------------------------------------------------------------
 
+# -----------------------------------------------------------------
 
 # Context processor: list registered blueprints
 @app.context_processor
@@ -120,7 +130,6 @@ def inject_registered_blueprints():
     except Exception:
         keys = []
     return dict(registered_blueprints=keys)
-
 
 # Context processor: safe_url_for to try multiple endpoints/param names in templates
 @app.context_processor
@@ -152,14 +161,13 @@ def inject_helpers():
         except Exception:
             pass
         return "#"
-    return dict(safe_url_for=safe_url_for)
 
+    return dict(safe_url_for=safe_url_for)
 
 # Health check
 @app.route("/health")
 def health():
     return jsonify(status="ok")
-
 
 # Dashboard / index
 @app.route("/")
@@ -189,20 +197,23 @@ def index():
                     conn.close()
             except Exception:
                 pass
-    return render_template("dashboard.html", stats=stats)
 
+    return render_template("dashboard.html", stats=stats)
 
 # Auth routes (safe if Usuario missing)
 @app.route("/login", methods=["GET", "POST"])
 def login():
     if current_user.is_authenticated:
         return redirect(url_for("index"))
+
     if request.method == "POST":
         username = request.form.get("username")
         password = request.form.get("password")
+
         if Usuario is None:
             flash("Módulo de usuário não disponível. Consulte os logs.", "danger")
             return render_template("login.html")
+
         try:
             user = Usuario.authenticate(username, password)
             if user:
@@ -214,8 +225,8 @@ def login():
         except Exception as e:
             app.logger.exception("Erro no login: %s", e)
             flash("Erro ao autenticar. Veja os logs.", "danger")
-    return render_template("login.html")
 
+    return render_template("login.html")
 
 @app.route("/logout")
 @login_required
@@ -223,19 +234,20 @@ def logout():
     logout_user()
     return redirect(url_for("login"))
 
-
 # Minimal error handlers
 @app.errorhandler(404)
 def not_found(e):
     return render_template("404.html"), 404
-
 
 @app.errorhandler(500)
 def server_error(e):
     app.logger.exception("Internal server error: %s", e)
     return render_template("500.html"), 500
 
-
 if __name__ == "__main__":
     # Only for local development
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)), debug=os.environ.get("FLASK_DEBUG", "0") == "1")
+    app.run(
+        host="0.0.0.0",
+        port=int(os.environ.get("PORT", 5000)),
+        debug=os.environ.get("FLASK_DEBUG", "0") == "1",
+    )
