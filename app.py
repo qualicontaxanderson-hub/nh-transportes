@@ -2,25 +2,13 @@ import os
 import logging
 from logging.handlers import RotatingFileHandler
 
-from flask import Flask, render_template, redirect, url_for, request, flash, jsonify
+from flask import Flask, render_template, redirect, url_for
 from flask_login import LoginManager
-
-# Tente importar módulos do projeto; se não existirem, mantenha None para evitar ImportError no startup.
-try:
-    from fretes import bp as fretes_bp
-except Exception:
-    fretes_bp = None
-
-try:
-    from utils.db import get_db_connection
-except Exception:
-    get_db_connection = None
 
 def create_app():
     app = Flask(__name__, static_folder='static', template_folder='templates')
     app.config.from_mapping(
         SECRET_KEY=os.environ.get('SECRET_KEY', 'dev-key'),
-        # adicione outras configs que seu projeto precise
     )
 
     # Logging básico (arquivo rotativo)
@@ -36,15 +24,18 @@ def create_app():
 
     # Flask-Login
     login_manager = LoginManager()
-    login_manager.login_view = 'auth.login'  # ajuste se tiver blueprint auth
+    login_manager.login_view = 'auth.login'
     login_manager.init_app(app)
 
-    # Registrar blueprints (se existirem)
-    if fretes_bp is not None:
+    # Tentar importar e registrar blueprint 'fretes' aqui, com logging detalhado
+    try:
+        from fretes import bp as fretes_bp
         app.register_blueprint(fretes_bp)
         app.logger.info('Blueprint fretes registrado.')
-    else:
-        app.logger.warning('Blueprint fretes nao encontrado; verifique imports.')
+    except Exception as e:
+        # registra stacktrace completo para debugar o motivo do import/registro falhar
+        app.logger.exception('Falha ao importar/registrar blueprint "fretes": %s', e)
+        fretes_bp = None
 
     # Rota index simples
     @app.route('/')
@@ -57,12 +48,10 @@ def create_app():
         try:
             return render_template('404.html'), 404
         except Exception:
-            # fallback mínimo se template faltar
             return "404 - Página não encontrada", 404
 
     @app.errorhandler(500)
     def internal_error(error):
-        # registrar exceção completa
         app.logger.exception('Erro interno do servidor: %s', error)
         try:
             return render_template('500.html'), 500
@@ -75,5 +64,4 @@ def create_app():
 app = create_app()
 
 if __name__ == '__main__':
-    # modo dev
     app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)), debug=os.environ.get('FLASK_DEBUG', '1') == '1')
