@@ -28,17 +28,22 @@ body {
 
 /* Fonte menor apenas na Lista de Fretes */
 .page-fretes-lista .table {
-    font-size: 0.85rem;
+    font-size: 0.8rem;
 }
 
 .page-fretes-lista th,
 .page-fretes-lista td {
-    padding-top: 0.4rem;
-    padding-bottom: 0.4rem;
+    padding-top: 0.25rem;
+    padding-bottom: 0.25rem;
 }
 
 .page-fretes-lista h3 {
-    font-size: 1.25rem;
+    font-size: 1.1rem;
+    margin-bottom: 0.25rem;
+}
+
+.page-fretes-lista .card {
+    margin-bottom: 10px;
 }
 
 .badge {
