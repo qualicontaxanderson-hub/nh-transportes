@@ -117,7 +117,34 @@ def novo():
     cursor.execute("SELECT * FROM quantidades ORDER BY valor")
     quantidades = cursor.fetchall()
 
-    rotas_dict = {}  # pode preencher depois com suas rotas
+    # montar dict de rotas para o template JS (chave "origem|destino" -> valor_por_litro)
+    rotas_dict = {}
+    try:
+        cursor.execute("SELECT origem_id, destino_id, valor_por_litro FROM rotas WHERE ativo = 1")
+        rotas_rows = cursor.fetchall()
+        for r in rotas_rows:
+            try:
+                origem_id = r.get('origem_id') if isinstance(r, dict) else r[0]
+                destino_id = r.get('destino_id') if isinstance(r, dict) else r[1]
+                valor = r.get('valor_por_litro') if isinstance(r, dict) else r[2]
+                key = f"{int(origem_id)}|{int(destino_id)}"
+                rotas_dict[key] = float(valor or 0)
+            except Exception:
+                # fallback tolerante
+                try:
+                    key = f"{r.get('origem_id')}|{r.get('destino_id')}"
+                    rotas_dict[key] = float(r.get('valor_por_litro') or 0)
+                except Exception:
+                    # última tentativa genérica
+                    try:
+                        parts = list(r)
+                        key = f"{int(parts[0])}|{int(parts[1])}"
+                        rotas_dict[key] = float(parts[2] or 0)
+                    except Exception:
+                        pass
+    except Exception:
+        # se der erro, mantemos rotas_dict vazio (JS trata ROTAS indefinido/{} com fallback)
+        rotas_dict = {}
 
     cursor.close()
     conn.close()
@@ -230,11 +257,36 @@ def editar(id):
 
         cursor.execute("SELECT * FROM quantidades ORDER BY valor")
         quantidades = cursor.fetchall()
+
+        # montar rotas_dict também para a página de edição
+        rotas_dict = {}
+        try:
+            cursor.execute("SELECT origem_id, destino_id, valor_por_litro FROM rotas WHERE ativo = 1")
+            rotas_rows = cursor.fetchall()
+            for r in rotas_rows:
+                try:
+                    origem_id = r.get('origem_id') if isinstance(r, dict) else r[0]
+                    destino_id = r.get('destino_id') if isinstance(r, dict) else r[1]
+                    valor = r.get('valor_por_litro') if isinstance(r, dict) else r[2]
+                    key = f"{int(origem_id)}|{int(destino_id)}"
+                    rotas_dict[key] = float(valor or 0)
+                except Exception:
+                    try:
+                        key = f"{r.get('origem_id')}|{r.get('destino_id')}"
+                        rotas_dict[key] = float(r.get('valor_por_litro') or 0)
+                    except Exception:
+                        try:
+                            parts = list(r)
+                            key = f"{int(parts[0])}|{int(parts[1])}"
+                            rotas_dict[key] = float(parts[2] or 0)
+                        except Exception:
+                            pass
+        except Exception:
+            rotas_dict = {}
+
     finally:
         cursor.close()
         conn.close()
-
-    rotas_dict = {}
 
     return render_template(
         'fretes/novo.html',
