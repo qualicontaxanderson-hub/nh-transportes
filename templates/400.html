@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+
+{% block titulo %}400 — Requisição Inválida{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+  <div class="card border-danger">
+    <div class="card-header bg-danger text-white">
+      <h4 class="mb-0">400 — Requisição Inválida</h4>
+    </div>
+    <div class="card-body">
+      <p class="lead">Houve um erro na requisição — os dados enviados estão inválidos ou incompletos.</p>
+      <p class="text-muted">Verifique o formulário e tente novamente. Se o erro persistir, consulte os logs do servidor.</p>
+      <div class="mt-3">
+        <a href="{{ url_for('index') }}" class="btn btn-sm btn-primary">Voltar ao início</a>
+        <a href="javascript:history.back()" class="btn btn-sm btn-secondary">Voltar</a>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
