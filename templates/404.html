@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+
+{% block titulo %}404 — Página não encontrada{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+  <div class="card border-warning">
+    <div class="card-header bg-warning text-dark">
+      <h4 class="mb-0">404 — Página não encontrada</h4>
+    </div>
+    <div class="card-body">
+      <p class="lead">A página solicitada não foi encontrada.</p>
+      <p class="text-muted">Verifique o endereço ou retorne à página inicial.</p>
+      <div class="mt-3">
+        <a href="{{ url_for('index') }}" class="btn btn-sm btn-primary">Voltar ao início</a>
+        <a href="javascript:history.back()" class="btn btn-sm btn-secondary">Voltar</a>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
