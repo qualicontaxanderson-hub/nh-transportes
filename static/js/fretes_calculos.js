@@ -1,185 +1,385 @@
 // static/js/fretes_calculos.js
-// Lógica de cálculo para o formulário de fretes
+// Versão atualizada: máscara on-the-fly, destino automático, CTe, comissões e lucro
 (function () {
   'use strict';
 
-  /* ---------- Helpers de formatação/parse ---------- */
+  // ---------- helpers ----------
+  function $id(id) { return document.getElementById(id); }
 
-  // Converte string de entrada para Number
-  // Aceita formatos: "R$ 1.234,56", "1234.56", "1.234", "3650", "3,650"
+  // parseNumber tolerante (aceita "R$ 1.234,56", "1234.56", "3650")
   function parseNumber(value) {
     if (value === null || value === undefined) return NaN;
     if (typeof value === 'number') return value;
     var s = String(value).trim();
     if (s === '') return NaN;
-    // remove R$, espaços e sinais extras
     s = s.replace(/R\$\s*/gi, '').replace(/\s+/g, '');
-    // se tem letra, invalid
-    if (/[^\d.,-]/.test(s)) {
-      // remove tudo que não seja dígito, vírgula, ponto ou hífen
-      s = s.replace(/[^\d\.,-]/g, '');
-    }
-    // se contém ',' e '.', decidir qual é decimal:
-    // regra simples: se última ocorrência for ',', usaremos ',' como decimal
+    // remove tudo que não seja dígito, vírgula, ponto ou hífen
+    s = s.replace(/[^\d\.,-]/g, '');
     var lastComma = s.lastIndexOf(',');
     var lastDot = s.lastIndexOf('.');
     if (lastComma > -1 && lastDot > -1) {
       if (lastComma > lastDot) {
-        // '.' são milhares, remove-os; ',' decimal -> replace ','->'.'
         s = s.replace(/\./g, '').replace(',', '.');
       } else {
-        // ',' são milhares, remove-os; '.' decimal -> keep '.'
         s = s.replace(/,/g, '');
       }
     } else if (lastComma > -1 && lastDot === -1) {
-      // só vírgula: assume vírgula decimal -> replace ','->'.'
       s = s.replace(/\./g, '').replace(',', '.');
     } else {
-      // só ponto(s) ou nenhum: remove milhares (dots) e keep dot as decimal
-      // caso "1.234" pode ser milhar ou decimal; aqui assumimos milhar quando não há outros separadores
-      // para permitir usuário digitar "3650" -> fica 3650
       s = s.replace(/,/g, '');
     }
-
     var n = parseFloat(s);
     return isNaN(n) ? NaN : n;
   }
 
-  // Formata número para "R$ X.xxx,yy" (decimals = 2, 3...)
+  // format "R$ 1.234,56" with decimals
   function formatCurrencyBR(value, decimals) {
     if (value === null || value === undefined || isNaN(value)) {
-      return 'R$ 0' + (decimals ? (',' + '0'.repeat(decimals)) : '');
+      return 'R$ ' + (decimals ? ('0,' + '0'.repeat(decimals)) : '0');
     }
     var neg = value < 0;
     var n = Math.abs(Number(value) || 0).toFixed(decimals);
     var parts = n.split('.');
     var intPart = parts[0];
     var decPart = parts[1] || '';
-    // add thousands dot
     intPart = intPart.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
     return (neg ? '-R$ ' : 'R$ ') + intPart + (decimals ? (',' + decPart) : '');
   }
 
-  /* ---------- Element getters ---------- */
-  function $id(id) { return document.getElementById(id); }
+  // máscara on-the-fly tipo: usuário digita dígitos, nós dividimos por 10^decimals
+  // ex: decimals=3, digits="3650" -> 3.650
+  function attachNumericMask(id, decimals, hiddenId) {
+    var el = $id(id);
+    if (!el) return;
 
-  /* ---------- Cálculos principais ---------- */
+    // create hidden raw if not present
+    if (hiddenId && !$id(hiddenId)) {
+      var h = document.createElement('input');
+      h.type = 'hidden';
+      h.id = hiddenId;
+      h.name = hiddenId;
+      el.form && el.form.appendChild(h);
+    }
+
+    // store raw digits in dataset while typing to preserve cursor behavior
+    el.dataset.__digits = '';
+
+    function digitsToNumber(digits) {
+      if (!digits) return 0;
+      var n = parseInt(digits, 10);
+      if (isNaN(n)) return 0;
+      return n / Math.pow(10, decimals);
+    }
+
+    function formatFromDigits(digits) {
+      var value = digitsToNumber(digits);
+      return formatCurrencyBR(value, decimals);
+    }
+
+    // initialize from existing value (allow formatted or raw)
+    function init() {
+      var current = el.value || '';
+      // try parseNumber first
+      var n = parseNumber(current);
+      if (!isNaN(n) && n !== 0) {
+        var asInt = Math.round(Math.abs(n) * Math.pow(10, decimals));
+        el.dataset.__digits = String(asInt);
+        el.value = formatFromDigits(el.dataset.__digits);
+        if (hiddenId) $id(hiddenId).value = n;
+        return;
+      }
+      el.dataset.__digits = '';
+      el.value = current ? formatFromDigits(el.dataset.__digits) : '';
+    }
+
+    // on input: accept digits and remove non-digits
+    el.addEventListener('input', function (ev) {
+      // get only digits from input
+      var raw = el.value || '';
+      var digits = (raw.match(/\d/g) || []).join('');
+      // prevent huge lengths
+      if (digits.length > 12) digits = digits.slice(0, 12);
+      el.dataset.__digits = digits;
+      el.value = formatFromDigits(digits);
+      if (hiddenId) {
+        var num = digitsToNumber(digits);
+        $id(hiddenId).value = isNaN(num) ? 0 : num;
+      }
+      // recalc on the fly
+      setTimeout(calcularTudo, 5);
+    }, { passive: true });
+
+    // on blur ensure hidden raw is set (and formatted display)
+    el.addEventListener('blur', function () {
+      var digits = el.dataset.__digits || '';
+      el.value = formatFromDigits(digits);
+      if (hiddenId) {
+        var num = digitsToNumber(digits);
+        $id(hiddenId).value = isNaN(num) ? 0 : num;
+      }
+      calcularTudo();
+    });
+
+    init();
+  }
+
+  // read quantidade conforme tipo
   function readQuantidade() {
     var tipo = (document.querySelector('#quantidade_tipo') || {}).value;
     if (!tipo) tipo = 'padrao';
     if (tipo === 'personalizada') {
       var manual = $id('quantidade_manual');
       if (!manual) return NaN;
-      // Usuário é instruído a usar ponto como separador de milhar (ex: 9.975)
-      // parseNumber já lida com isso
       return parseNumber(manual.value);
     } else {
       var sel = $id('quantidade_id');
       if (!sel) return NaN;
       var opt = sel.options[sel.selectedIndex];
       if (!opt) return NaN;
-      // atributo data-quantidade no option contém valor numérico
       var q = opt.getAttribute('data-quantidade');
       return parseNumber(q);
     }
   }
 
+  // read preco unitario raw (prefer hidden raw)
   function readPrecoProdutoUnitario() {
-    // tenta ler o hidden raw primeiro se existir e for numérico
     var rawHidden = $id('preco_produto_unitario_raw');
     if (rawHidden && rawHidden.value) {
       var raw = parseNumber(rawHidden.value);
-      if (!isNaN(raw) && raw !== 0) return raw;
+      if (!isNaN(raw)) return raw;
     }
-    // senão parseia o campo de exibição
     var inp = $id('preco_produto_unitario');
+    if (!inp) return NaN;
+    // attempt parse visible value
+    return parseNumber(inp.value);
+  }
+
+  function readPrecoPorLitroRaw() {
+    var rawHidden = $id('preco_por_litro_raw');
+    if (rawHidden && rawHidden.value) {
+      var raw = parseNumber(rawHidden.value);
+      if (!isNaN(raw)) return raw;
+    }
+    var inp = $id('preco_por_litro');
     if (!inp) return NaN;
     return parseNumber(inp.value);
   }
 
-  function updatePrecoProdutoHidden(rawValue) {
-    var rawHidden = $id('preco_produto_unitario_raw');
-    if (!rawHidden) return;
-    rawHidden.value = isNaN(rawValue) ? 0 : Number(rawValue);
+  // garantir hidden para campos usados pelo backend
+  function ensureHidden(name) {
+    if ($id(name)) return;
+    var h = document.createElement('input');
+    h.type = 'hidden';
+    h.id = name;
+    h.name = name;
+    var form = document.querySelector('form');
+    if (form) form.appendChild(h);
   }
 
+  // calcula valor cte baseado em ROTAS (origem|destino)
+  function calcularValorCTe(quantidade) {
+    var origem = $id('origem_id') ? $id('origem_id').value : null;
+    var destino = ($id('clientes_id') && $id('clientes_id').selectedIndex >= 0) ? (function(){
+      // preferir destino_id_hidden (preenchido a partir do cliente)
+      var hid = $id('destino_id_hidden');
+      if (hid && hid.value) return hid.value;
+      return ($id('destino_id') ? $id('destino_id').value : null);
+    })() : null;
+
+    if (!origem || !destino) return 0;
+    var key = origem + '|' + destino;
+    var tarifa = 0;
+    try {
+      if (typeof ROTAS !== 'undefined' && ROTAS && ROTAS[key]) tarifa = Number(ROTAS[key]) || 0;
+    } catch (e) { tarifa = 0; }
+    // Valor CTe = quantidade * tarifa_por_litro (rotas table stores valor_por_litro)
+    if (isNaN(quantidade) || quantidade <= 0) return 0;
+    return Number(quantidade) * Number(tarifa);
+  }
+
+  // função principal de cálculo
   function calcularTudo() {
-    var precoUnit = readPrecoProdutoUnitario(); // número
-    var quantidade = readQuantidade(); // número em litros
-    // seguranca: se precoUnit for NaN, set 0
+    // garantir hidden inputs esperados pelo backend (se não existirem, criá-los)
+    ensureHidden('preco_por_litro_raw');
+
+    var quantidade = readQuantidade();
+    if (isNaN(quantidade) || quantidade <= 0) quantidade = NaN;
+
+    var precoUnit = readPrecoProdutoUnitario();
     if (isNaN(precoUnit)) precoUnit = 0;
-    if (isNaN(quantidade) || quantidade === 0) quantidade = NaN;
 
-    // calcula preco por litro (precoUnit dividido pela quantidade)
-    var precoPorLitro = NaN;
-    if (!isNaN(quantidade) && quantidade > 0) {
-      precoPorLitro = precoUnit / quantidade;
-    }
+    var precoPorLitroRaw = readPrecoPorLitroRaw();
+    if (isNaN(precoPorLitroRaw)) precoPorLitroRaw = 0;
 
-    // total NF de compra: assumimos precoUnit * quantidade (se não houver quantidade, usa precoUnit)
+    // Total NF Compra = Q * precoUnit
     var totalNF = NaN;
-    if (!isNaN(quantidade) && quantidade > 0) {
-      totalNF = precoUnit * quantidade;
-    } else {
-      totalNF = precoUnit;
-    }
+    if (!isNaN(quantidade)) totalNF = precoUnit * quantidade;
+    else totalNF = precoUnit;
 
-    // valor_total_frete: por enquanto usa totalNF (adapte se tiver outros acréscimos)
-    var valorTotalFrete = totalNF;
+    // Valor Total Frete = Q * precoPorLitroRaw
+    var valorTotalFrete = NaN;
+    if (!isNaN(quantidade)) valorTotalFrete = precoPorLitroRaw * quantidade;
+    else valorTotalFrete = precoPorLitroRaw;
 
-    // comissão motorista: usa data-percentual do motorista selecionado
-    var comissaoMotorista = NaN;
+    // Valor CTe via ROTAS
+    var valorCTe = calcularValorCTe(quantidade);
+
+    // Comissão CTe = 8% sobre valorCTe
+    var comissaoCTe = 0;
+    if (!isNaN(valorCTe)) comissaoCTe = valorCTe * 0.08;
+
+    // Comissão Motorista: regra solicitada:
+    // se motorista.data-paga-comissao == "0" => 0
+    // else => Q * 0.01
+    var comissaoMotorista = 0;
     var motoristaSel = $id('motoristas_id');
     if (motoristaSel) {
       var opt = motoristaSel.options[motoristaSel.selectedIndex];
       if (opt) {
-        var percentual = parseNumber(opt.getAttribute('data-percentual') || opt.getAttribute('data-percentual'.toLowerCase()));
-        if (!isNaN(percentual) && !isNaN(valorTotalFrete)) {
-          comissaoMotorista = valorTotalFrete * (percentual / 100);
+        var paga = opt.getAttribute('data-paga-comissao');
+        if (paga === '0' || paga === 'false' || paga === 'False' || paga === '0.0') {
+          comissaoMotorista = 0;
+        } else {
+          // regra fixa: Q * 0.01 (R$ por litro * qtd)
+          if (!isNaN(quantidade)) comissaoMotorista = quantidade * 0.01;
+          else comissaoMotorista = 0;
         }
       }
     }
 
-    // Escrever de volta nos campos formatados
-    // preco_produto_unitario: exibir com 3 casas decimais (padrao do template)
+    // Lucro = ValorTotalFrete - ComissãoMotorista - ComissãoCTe
+    var lucro = 0;
+    if (!isNaN(valorTotalFrete)) lucro = Number(valorTotalFrete) - Number(comissaoMotorista || 0) - Number(comissaoCTe || 0);
+
+    // Escrever de volta nos campos (visuais formatados e hidden raw)
+    // preco_produto_unitario: visível com 3 casas, hidden preco_produto_unitario_raw com raw
     var inpPrecoUnit = $id('preco_produto_unitario');
     if (inpPrecoUnit) {
-      inpPrecoUnit.value = formatCurrencyBR(precoUnit, 3);
+      // if input uses dataset digits (mask) -> its hidden already updated; else format current numeric
+      var rawHidden = $id('preco_produto_unitario_raw');
+      if (rawHidden && (rawHidden.value !== '' && rawHidden.value !== null)) {
+        var r = parseNumber(rawHidden.value);
+        inpPrecoUnit.value = formatCurrencyBR(isNaN(r) ? 0 : r, 3);
+      } else {
+        inpPrecoUnit.value = formatCurrencyBR(precoUnit || 0, 3);
+        if (rawHidden) rawHidden.value = isNaN(precoUnit) ? 0 : precoUnit;
+      }
+    } else {
+      // ensure hidden if not present
+      if ($id('preco_produto_unitario_raw') == null && typeof precoUnit !== 'undefined') {
+        ensureHidden('preco_produto_unitario_raw');
+        $id('preco_produto_unitario_raw').value = precoUnit;
+      }
     }
-    // sempre atualizar o hidden raw
-    updatePrecoProdutoHidden(precoUnit);
 
-    var inpPrecoPorLitro = $id('preco_por_litro');
-    if (inpPrecoPorLitro) {
-      inpPrecoPorLitro.value = formatCurrencyBR(precoPorLitro || 0, 2);
+    // preco_por_litro visible + hidden raw
+    var inpPpl = $id('preco_por_litro');
+    if (inpPpl) {
+      inpPpl.value = formatCurrencyBR(precoPorLitroRaw || 0, 2);
+      var h = $id('preco_por_litro_raw');
+      if (h) h.value = isNaN(precoPorLitroRaw) ? 0 : precoPorLitroRaw;
     }
 
+    // total_nf_compra
     var inpTotalNF = $id('total_nf_compra');
-    if (inpTotalNF) {
-      inpTotalNF.value = formatCurrencyBR(totalNF || 0, 2);
-    }
+    if (inpTotalNF) inpTotalNF.value = formatCurrencyBR(totalNF || 0, 2);
+    // valor_total_frete
+    var inpVTF = $id('valor_total_frete');
+    if (inpVTF) inpVTF.value = formatCurrencyBR(valorTotalFrete || 0, 2);
+    // comissao_motorista
+    var inpComMotor = $id('comissao_motorista');
+    if (inpComMotor) inpComMotor.value = formatCurrencyBR(comissaoMotorista || 0, 2);
+    // valor_cte
+    var inpCTe = $id('valor_cte');
+    if (inpCTe) inpCTe.value = formatCurrencyBR(valorCTe || 0, 2);
+    // comissao_cte
+    var inpComCTe = $id('comissao_cte');
+    if (inpComCTe) inpComCTe.value = formatCurrencyBR(comissaoCTe || 0, 2);
+    // lucro
+    var inpLucro = $id('lucro');
+    if (inpLucro) inpLucro.value = formatCurrencyBR(lucro || 0, 2);
 
-    var inpValorTotalFrete = $id('valor_total_frete');
-    if (inpValorTotalFrete) {
-      inpValorTotalFrete.value = formatCurrencyBR(valorTotalFrete || 0, 2);
-    }
+    // ensure hidden fields used by backend exist and are populated
+    try {
+      ensureHidden('valor_cte');
+      ensureHidden('comissao_cte');
+      ensureHidden('comissao_motorista');
+      ensureHidden('total_nf_compra');
+      ensureHidden('valor_total_frete');
+      ensureHidden('lucro');
 
-    var inpComissao = $id('comissao_motorista');
-    if (inpComissao) {
-      inpComissao.value = formatCurrencyBR(comissaoMotorista || 0, 2);
+      if ($id('valor_cte')) $id('valor_cte').form && ($id('valor_cte').form.querySelector('#valor_cte') || null);
+      if ($id('valor_cte')) {
+        // hidden updated by ensureHidden created above
+        var hv = $id('valor_cte');
+        if (hv && hv.tagName.toLowerCase() === 'input' && hv.type === 'text') {
+          // nothing
+        } else {
+          var hiddenVal = $id('valor_cte_hidden');
+          if (!hiddenVal) {
+            var h = document.createElement('input');
+            h.type = 'hidden';
+            h.id = 'valor_cte_raw';
+            h.name = 'valor_cte';
+            el = document.querySelector('form');
+            el && el.appendChild(h);
+          }
+        }
+      }
+    } catch (e) {
+      // ignore DOM quirks
+      console.error('Erro ao garantir hidden fields:', e);
     }
   }
 
-  /* ---------- Eventos ---------- */
+  // Atualiza destino a partir do cliente selecionado (marca select destino e atualiza destino_id_hidden)
+  function updateDestinoFromCliente() {
+    var clientesSelect = $id('clientes_id');
+    var destinoSelect = $id('destino_id');
+    var destinoHidden = $id('destino_id_hidden');
+    if (!clientesSelect || !destinoHidden) return;
+
+    var selectedOption = clientesSelect.options[clientesSelect.selectedIndex];
+    var destId = selectedOption ? selectedOption.getAttribute('data-destino-id') : null;
+    if (!destId) {
+      // limpa destino
+      if (destinoSelect) { destinoSelect.value = ''; destinoSelect.disabled = true; }
+      destinoHidden.value = '';
+      return;
+    }
+    // se existe option no select destino, seleciona-a; senão cria temporária
+    if (destinoSelect) {
+      var opt = destinoSelect.querySelector('option[value="' + destId + '"]');
+      if (opt) {
+        destinoSelect.value = destId;
+        destinoSelect.disabled = true;
+      } else {
+        var newOpt = document.createElement('option');
+        newOpt.value = destId;
+        // tentar extrair nome do atributo data-destino-nome se houver na option do cliente
+        var nome = selectedOption.getAttribute('data-destino-nome') || 'Destino do cliente';
+        newOpt.text = nome;
+        destinoSelect.insertBefore(newOpt, destinoSelect.firstChild);
+        destinoSelect.value = destId;
+        destinoSelect.disabled = true;
+      }
+    }
+    destinoHidden.value = destId;
+  }
+
+  // attach events
   function safeAttach(id, evt, fn) {
     var el = $id(id);
     if (el) el.addEventListener(evt, fn);
   }
 
   function initBindings() {
-    // quando usuário muda o tipo de quantidade
+    // Masks: preco unitario (3 casas) e preco por litro (2 casas)
+    attachNumericMask('preco_produto_unitario', 3, 'preco_produto_unitario_raw');
+    attachNumericMask('preco_por_litro', 2, 'preco_por_litro_raw');
+
+    // quantidade changes
     safeAttach('quantidade_tipo', 'change', function () {
-      // mostrar/ocultar os divs correspondentes (existem no template)
       var tipo = ($id('quantidade_tipo') || {}).value;
       if (tipo === 'personalizada') {
         var d = $id('div_quantidade_personalizada');
@@ -194,49 +394,31 @@
       }
       calcularTudo();
     });
-
-    // mudança de quantidade (select)
     safeAttach('quantidade_id', 'change', calcularTudo);
-    // input manual de quantidade
-    safeAttach('quantidade_manual', 'input', function () {
-      // permitir digitação (ex: 9.975)
-      calcularTudo();
-    });
+    safeAttach('quantidade_manual', 'input', function () { calcularTudo(); });
 
-    // preco produto unitario (input formatado) - atualizar ao blur e ao input
-    var precoInp = $id('preco_produto_unitario');
-    if (precoInp) {
-      precoInp.addEventListener('blur', function () {
-        // parse value typed and recalc
-        var n = parseNumber(precoInp.value);
-        if (isNaN(n)) n = 0;
-        updatePrecoProdutoHidden(n);
-        calcularTudo();
-      });
-      precoInp.addEventListener('input', function () {
-        // não formatar em cada tecla para não atrapalhar digitação, apenas recalcular "on the fly"
-        // se desejar formatação imediata, pode-se aplicar máscara aqui
-      });
-    }
-
-    // motoristas muda percentual de comissao
+    // motorista / cliente / origem changes
     safeAttach('motoristas_id', 'change', calcularTudo);
-
-    // clientes muda -> possivelmente altera destino (já temos outro script), mas recalc
     safeAttach('clientes_id', 'change', function () {
-      // slight delay so destino script can run first if present
-      setTimeout(calcularTudo, 120);
+      // update destino first, then recalc
+      setTimeout(function(){ updateDestinoFromCliente(); calcularTudo(); }, 40);
     });
+    safeAttach('origem_id', 'change', function(){ calcularTudo(); });
 
-    // quando a página carrega, calcular com os valores atuais
+    // if destino select exists, read changes (but tempo: destino is readonly)
+    safeAttach('destino_id', 'change', function(){ calcularTudo(); });
+
+    // preco inputs: already handled by mask blur/input events -> recalc on load
+    // initialize destino from current cliente selection
+    updateDestinoFromCliente();
+
+    // initial calc
     calcularTudo();
   }
 
-  // inicializa no DOMContentLoaded
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', initBindings);
   } else {
     initBindings();
   }
-
 })();
