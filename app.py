@@ -6,13 +6,6 @@ from flask import Flask, render_template, redirect, url_for
 from flask_login import LoginManager
 
 def _import_fretes_bp(app):
-    """
-    Tenta importar o blueprint 'fretes' de possíveis localizações:
-    - fretes
-    - routes.fretes
-    Registra o stacktrace completo em app.logger se falhar.
-    Retorna o objeto bp ou None.
-    """
     candidates = ['fretes', 'routes.fretes']
     for modname in candidates:
         try:
@@ -48,7 +41,32 @@ def create_app():
     login_manager.login_view = 'auth.login'
     login_manager.init_app(app)
 
-    # Importar e registrar blueprint 'fretes' tentando múltiplos caminhos
+    # user_loader: usar models.usuario.Usuario.get_by_id (se existir)
+    @login_manager.user_loader
+    def load_user(user_id):
+        """
+        Carrega usuário pelo ID usando models.usuario.Usuario.get_by_id.
+        Retorna None se o model não existir ou se o usuário não for encontrado.
+        """
+        try:
+            from models.usuario import Usuario
+            # user_id pode vir como string; ensure int where appropriate
+            try:
+                uid = int(user_id)
+            except Exception:
+                uid = user_id
+            if hasattr(Usuario, 'get_by_id'):
+                return Usuario.get_by_id(uid)
+            # fallbacks (incomum aqui, mas seguro)
+            if hasattr(Usuario, 'get'):
+                return Usuario.get(uid)
+            return None
+        except Exception:
+            # não deve levantar exceção — retornamos None e deixamos o login flow cuidar
+            app.logger.debug('load_user: models.usuario.Usuario não disponível ou falha ao carregar', exc_info=True)
+            return None
+
+    # Importar e registrar blueprint 'fretes'
     try:
         fretes_bp = _import_fretes_bp(app)
         if fretes_bp:
