@@ -1,0 +1,281 @@
+{% extends 'base.html' %}
+
+{% block title %}Nova Cobrança - NH Transportes{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-12">
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb">
+                <li class="breadcrumb-item"><a href="{{ url_for('cobrancas.lista') }}">Cobranças</a></li>
+                <li class="breadcrumb-item active">Nova Cobrança</li>
+            </ol>
+        </nav>
+        <h2><i class="bi bi-plus-circle"></i> Nova Cobrança</h2>
+    </div>
+</div>
+
+{% if not config_existe %}
+<div class="alert alert-warning">
+    <i class="bi bi-exclamation-triangle"></i>
+    <strong>Atenção!</strong> A API EFI ainda não está configurada.
+    <a href="{{ url_for('cobrancas.configuracao') }}" class="alert-link">Configure agora</a> para criar cobranças.
+</div>
+{% endif %}
+
+<form method="POST" class="needs-validation" novalidate>
+    <div class="row">
+        <!-- Coluna Esquerda -->
+        <div class="col-lg-6">
+            <!-- Tipo de Cobrança -->
+            <div class="card mb-4">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="mb-0"><i class="bi bi-credit-card"></i> Tipo de Cobrança</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-6">
+                            <div class="form-check form-check-inline">
+                                <input class="form-check-input" type="radio" name="tipo" 
+                                       id="tipoPix" value="pix" checked>
+                                <label class="form-check-label" for="tipoPix">
+                                    <i class="bi bi-qr-code text-success"></i> PIX
+                                </label>
+                            </div>
+                        </div>
+                        <div class="col-6">
+                            <div class="form-check form-check-inline">
+                                <input class="form-check-input" type="radio" name="tipo" 
+                                       id="tipoBoleto" value="boleto">
+                                <label class="form-check-label" for="tipoBoleto">
+                                    <i class="bi bi-file-text text-primary"></i> Boleto
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <hr>
+
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label for="valor" class="form-label">Valor (R$) *</label>
+                            <input type="text" class="form-control" id="valor" name="valor" 
+                                   placeholder="0,00" required>
+                        </div>
+                        <div class="col-md-6 campo-boleto" style="display: none;">
+                            <label for="data_vencimento" class="form-label">Vencimento *</label>
+                            <input type="date" class="form-control" id="data_vencimento" name="data_vencimento">
+                        </div>
+                    </div>
+
+                    <div class="mt-3">
+                        <label for="descricao" class="form-label">Descrição *</label>
+                        <input type="text" class="form-control" id="descricao" name="descricao" 
+                               maxlength="140" placeholder="Descrição da cobrança" required>
+                        <small class="text-muted">Máximo 140 caracteres</small>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Vincular a Cliente/Frete -->
+            <div class="card mb-4">
+                <div class="card-header bg-secondary text-white">
+                    <h5 class="mb-0"><i class="bi bi-link-45deg"></i> Vincular (Opcional)</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label for="cliente_id" class="form-label">Cliente</label>
+                            <select class="form-select" id="cliente_id" name="cliente_id">
+                                <option value="">Selecione...</option>
+                                {% for c in clientes %}
+                                <option value="{{ c.id }}" 
+                                        data-nome="{{ c.razao_social }}"
+                                        data-cpf="{{ c.cnpj or '' }}"
+                                        data-tel="{{ c.telefone or '' }}"
+                                        data-email="{{ c.email or '' }}"
+                                        data-end="{{ c.endereco or '' }}"
+                                        data-cidade="{{ c.municipio or '' }}"
+                                        data-uf="{{ c.uf or '' }}"
+                                        data-cep="{{ c.cep or '' }}">
+                                    {{ c.razao_social }}
+                                </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label for="frete_id" class="form-label">Frete</label>
+                            <select class="form-select" id="frete_id" name="frete_id">
+                                <option value="">Selecione...</option>
+                                {% for f in fretes %}
+                                <option value="{{ f.id }}" data-valor="{{ f.valor_total_frete }}">
+                                    Frete #{{ f.id }} - R$ {{ "%.2f"|format(f.valor_total_frete or 0) }}
+                                </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                    </div>
+                    <div class="mt-2">
+                        <button type="button" class="btn btn-sm btn-outline-primary" id="btnPreencherCliente">
+                            <i class="bi bi-arrow-down"></i> Preencher dados do cliente selecionado
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Coluna Direita -->
+        <div class="col-lg-6">
+            <!-- Dados do Pagador -->
+            <div class="card mb-4">
+                <div class="card-header bg-success text-white">
+                    <h5 class="mb-0"><i class="bi bi-person"></i> Dados do Pagador</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row g-3">
+                        <div class="col-md-8">
+                            <label for="pagador_nome" class="form-label">Nome/Razão Social *</label>
+                            <input type="text" class="form-control" id="pagador_nome" name="pagador_nome" required>
+                        </div>
+                        <div class="col-md-4">
+                            <label for="pagador_cpf_cnpj" class="form-label">CPF/CNPJ *</label>
+                            <input type="text" class="form-control" id="pagador_cpf_cnpj" name="pagador_cpf_cnpj" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label for="pagador_email" class="form-label">E-mail</label>
+                            <input type="email" class="form-control" id="pagador_email" name="pagador_email">
+                        </div>
+                        <div class="col-md-6">
+                            <label for="pagador_telefone" class="form-label">Telefone</label>
+                            <input type="text" class="form-control" id="pagador_telefone" name="pagador_telefone">
+                        </div>
+                    </div>
+
+                    <!-- Campos de endereço (obrigatório para boleto) -->
+                    <div class="campos-endereco mt-3">
+                        <hr>
+                        <h6 class="text-muted">Endereço <span class="campo-boleto">(obrigatório para boleto)</span></h6>
+                        <div class="row g-3">
+                            <div class="col-md-8">
+                                <label for="pagador_endereco" class="form-label">Endereço</label>
+                                <input type="text" class="form-control" id="pagador_endereco" name="pagador_endereco">
+                            </div>
+                            <div class="col-md-4">
+                                <label for="pagador_cep" class="form-label">CEP</label>
+                                <input type="text" class="form-control" id="pagador_cep" name="pagador_cep">
+                            </div>
+                            <div class="col-md-8">
+                                <label for="pagador_cidade" class="form-label">Cidade</label>
+                                <input type="text" class="form-control" id="pagador_cidade" name="pagador_cidade">
+                            </div>
+                            <div class="col-md-4">
+                                <label for="pagador_uf" class="form-label">UF</label>
+                                <select class="form-select" id="pagador_uf" name="pagador_uf">
+                                    <option value="">--</option>
+                                    <option value="AC">AC</option>
+                                    <option value="AL">AL</option>
+                                    <option value="AP">AP</option>
+                                    <option value="AM">AM</option>
+                                    <option value="BA">BA</option>
+                                    <option value="CE">CE</option>
+                                    <option value="DF">DF</option>
+                                    <option value="ES">ES</option>
+                                    <option value="GO">GO</option>
+                                    <option value="MA">MA</option>
+                                    <option value="MT">MT</option>
+                                    <option value="MS">MS</option>
+                                    <option value="MG">MG</option>
+                                    <option value="PA">PA</option>
+                                    <option value="PB">PB</option>
+                                    <option value="PR">PR</option>
+                                    <option value="PE">PE</option>
+                                    <option value="PI">PI</option>
+                                    <option value="RJ">RJ</option>
+                                    <option value="RN">RN</option>
+                                    <option value="RS">RS</option>
+                                    <option value="RO">RO</option>
+                                    <option value="RR">RR</option>
+                                    <option value="SC">SC</option>
+                                    <option value="SP">SP</option>
+                                    <option value="SE">SE</option>
+                                    <option value="TO">TO</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Botões -->
+    <div class="row">
+        <div class="col-12">
+            <div class="d-flex gap-2 justify-content-end">
+                <a href="{{ url_for('cobrancas.lista') }}" class="btn btn-secondary">
+                    <i class="bi bi-arrow-left"></i> Cancelar
+                </a>
+                <button type="submit" class="btn btn-success" {% if not config_existe %}disabled{% endif %}>
+                    <i class="bi bi-check-lg"></i> Criar Cobrança
+                </button>
+            </div>
+        </div>
+    </div>
+</form>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Toggle campos de boleto
+document.querySelectorAll('input[name="tipo"]').forEach(radio => {
+    radio.addEventListener('change', function() {
+        const isBoleto = this.value === 'boleto';
+        document.querySelectorAll('.campo-boleto').forEach(el => {
+            el.style.display = isBoleto ? 'block' : 'none';
+        });
+        
+        // Define vencimento padrão (3 dias)
+        if (isBoleto) {
+            const hoje = new Date();
+            hoje.setDate(hoje.getDate() + 3);
+            document.getElementById('data_vencimento').value = hoje.toISOString().split('T')[0];
+        }
+    });
+});
+
+// Preencher dados do cliente
+document.getElementById('btnPreencherCliente').addEventListener('click', function() {
+    const select = document.getElementById('cliente_id');
+    const option = select.options[select.selectedIndex];
+    
+    if (!option.value) {
+        alert('Selecione um cliente primeiro');
+        return;
+    }
+    
+    document.getElementById('pagador_nome').value = option.dataset.nome || '';
+    document.getElementById('pagador_cpf_cnpj').value = option.dataset.cpf || '';
+    document.getElementById('pagador_telefone').value = option.dataset.tel || '';
+    document.getElementById('pagador_email').value = option.dataset.email || '';
+    document.getElementById('pagador_endereco').value = option.dataset.end || '';
+    document.getElementById('pagador_cidade').value = option.dataset.cidade || '';
+    document.getElementById('pagador_uf').value = option.dataset.uf || '';
+    document.getElementById('pagador_cep').value = option.dataset.cep || '';
+});
+
+// Preencher valor do frete
+document.getElementById('frete_id').addEventListener('change', function() {
+    const option = this.options[this.selectedIndex];
+    if (option.dataset.valor) {
+        document.getElementById('valor').value = parseFloat(option.dataset.valor).toFixed(2).replace('.', ',');
+    }
+});
+
+// Máscara para valor
+document.getElementById('valor').addEventListener('input', function(e) {
+    let value = e.target.value.replace(/\D/g, '');
+    value = (parseInt(value) / 100).toFixed(2);
+    e.target.value = value.replace('.', ',');
+});
+</script>
+{% endblock %}

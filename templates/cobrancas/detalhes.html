@@ -1,0 +1,315 @@
+{% extends 'base.html' %}
+
+{% block title %}Cobrança #{{ cobranca.id }} - NH Transportes{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-12">
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb">
+                <li class="breadcrumb-item"><a href="{{ url_for('cobrancas.lista') }}">Cobranças</a></li>
+                <li class="breadcrumb-item active">Cobrança #{{ cobranca.id }}</li>
+            </ol>
+        </nav>
+        <div class="d-flex justify-content-between align-items-center">
+            <h2>
+                <i class="bi bi-credit-card"></i> Cobrança #{{ cobranca.id }}
+                {% if cobranca.tipo == 'pix' %}
+                <span class="badge bg-success ms-2">PIX</span>
+                {% else %}
+                <span class="badge bg-primary ms-2">Boleto</span>
+                {% endif %}
+            </h2>
+            <div class="d-flex gap-2">
+                {% if cobranca.status in ['pendente', 'aguardando'] %}
+                <button type="button" class="btn btn-info" id="btnAtualizar">
+                    <i class="bi bi-arrow-clockwise"></i> Atualizar Status
+                </button>
+                <form action="{{ url_for('cobrancas.cancelar', id=cobranca.id) }}" 
+                      method="POST" class="d-inline"
+                      onsubmit="return confirm('Deseja realmente cancelar esta cobrança?');">
+                    <button type="submit" class="btn btn-danger">
+                        <i class="bi bi-x-lg"></i> Cancelar
+                    </button>
+                </form>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <!-- Coluna Principal -->
+    <div class="col-lg-8">
+        <!-- Status -->
+        <div class="card mb-4">
+            <div class="card-body text-center py-4">
+                {% if cobranca.status == 'pago' %}
+                <i class="bi bi-check-circle-fill text-success" style="font-size: 4rem;"></i>
+                <h3 class="text-success mt-2">PAGO</h3>
+                {% if cobranca.data_pagamento %}
+                <p class="text-muted">
+                    Pagamento recebido em {{ cobranca.data_pagamento.strftime('%d/%m/%Y às %H:%M') }}
+                </p>
+                {% endif %}
+                {% if cobranca.valor_pago %}
+                <p class="fs-4">Valor pago: <strong class="text-success">R$ {{ "%.2f"|format(cobranca.valor_pago) }}</strong></p>
+                {% endif %}
+                {% elif cobranca.status == 'aguardando' %}
+                <i class="bi bi-hourglass-split text-warning" style="font-size: 4rem;"></i>
+                <h3 class="text-warning mt-2">AGUARDANDO PAGAMENTO</h3>
+                <p class="text-muted">A cobrança foi gerada e está aguardando o pagamento do cliente.</p>
+                {% elif cobranca.status == 'cancelado' %}
+                <i class="bi bi-x-circle-fill text-danger" style="font-size: 4rem;"></i>
+                <h3 class="text-danger mt-2">CANCELADO</h3>
+                {% elif cobranca.status == 'expirado' %}
+                <i class="bi bi-clock-fill text-dark" style="font-size: 4rem;"></i>
+                <h3 class="text-dark mt-2">EXPIRADO</h3>
+                {% else %}
+                <i class="bi bi-dash-circle text-secondary" style="font-size: 4rem;"></i>
+                <h3 class="text-secondary mt-2">{{ cobranca.status|upper }}</h3>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Dados da Cobrança -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-info-circle"></i> Dados da Cobrança</h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <table class="table table-borderless">
+                            <tr>
+                                <th width="40%">Valor:</th>
+                                <td><strong class="fs-5">R$ {{ "%.2f"|format(cobranca.valor) }}</strong></td>
+                            </tr>
+                            <tr>
+                                <th>Descrição:</th>
+                                <td>{{ cobranca.descricao }}</td>
+                            </tr>
+                            <tr>
+                                <th>Tipo:</th>
+                                <td>{{ cobranca.tipo|upper }}</td>
+                            </tr>
+                            {% if cobranca.data_vencimento %}
+                            <tr>
+                                <th>Vencimento:</th>
+                                <td>{{ cobranca.data_vencimento.strftime('%d/%m/%Y') }}</td>
+                            </tr>
+                            {% endif %}
+                        </table>
+                    </div>
+                    <div class="col-md-6">
+                        <table class="table table-borderless">
+                            {% if cobranca.cliente_nome %}
+                            <tr>
+                                <th width="40%">Cliente:</th>
+                                <td>{{ cobranca.cliente_nome }}</td>
+                            </tr>
+                            {% endif %}
+                            {% if cobranca.frete_numero %}
+                            <tr>
+                                <th>Frete:</th>
+                                <td>#{{ cobranca.frete_numero }}</td>
+                            </tr>
+                            {% endif %}
+                            <tr>
+                                <th>Criado em:</th>
+                                <td>{{ cobranca.created_at.strftime('%d/%m/%Y %H:%M') if cobranca.created_at else '-' }}</td>
+                            </tr>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Dados do Pagador -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-person"></i> Dados do Pagador</h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <p><strong>Nome:</strong> {{ cobranca.pagador_nome }}</p>
+                        <p><strong>CPF/CNPJ:</strong> {{ cobranca.pagador_cpf_cnpj }}</p>
+                        {% if cobranca.pagador_email %}
+                        <p><strong>E-mail:</strong> {{ cobranca.pagador_email }}</p>
+                        {% endif %}
+                        {% if cobranca.pagador_telefone %}
+                        <p><strong>Telefone:</strong> {{ cobranca.pagador_telefone }}</p>
+                        {% endif %}
+                    </div>
+                    <div class="col-md-6">
+                        {% if cobranca.pagador_endereco %}
+                        <p><strong>Endereço:</strong> {{ cobranca.pagador_endereco }}</p>
+                        {% endif %}
+                        {% if cobranca.pagador_cidade %}
+                        <p><strong>Cidade:</strong> {{ cobranca.pagador_cidade }} - {{ cobranca.pagador_uf }}</p>
+                        {% endif %}
+                        {% if cobranca.pagador_cep %}
+                        <p><strong>CEP:</strong> {{ cobranca.pagador_cep }}</p>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Coluna Lateral - QR Code / Boleto -->
+    <div class="col-lg-4">
+        {% if cobranca.tipo == 'pix' and cobranca.status in ['aguardando', 'pendente'] %}
+        <!-- QR Code PIX -->
+        <div class="card mb-4">
+            <div class="card-header bg-success text-white">
+                <h5 class="mb-0"><i class="bi bi-qr-code"></i> QR Code PIX</h5>
+            </div>
+            <div class="card-body text-center">
+                {% if cobranca.qrcode_base64 %}
+                <img src="data:image/png;base64,{{ cobranca.qrcode_base64 }}" 
+                     alt="QR Code PIX" class="img-fluid mb-3" style="max-width: 250px;">
+                {% else %}
+                <div class="bg-light p-4 mb-3">
+                    <i class="bi bi-qr-code text-muted" style="font-size: 5rem;"></i>
+                    <p class="text-muted">QR Code não disponível</p>
+                </div>
+                {% endif %}
+
+                {% if cobranca.pix_copia_cola %}
+                <div class="mt-3">
+                    <label class="form-label"><strong>PIX Copia e Cola:</strong></label>
+                    <div class="input-group">
+                        <input type="text" class="form-control form-control-sm" 
+                               id="pixCopiaCola" value="{{ cobranca.pix_copia_cola }}" readonly>
+                        <button class="btn btn-outline-secondary btn-sm" type="button" 
+                                onclick="copiarPix()">
+                            <i class="bi bi-clipboard"></i>
+                        </button>
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+
+        {% if cobranca.tipo == 'boleto' %}
+        <!-- Dados do Boleto -->
+        <div class="card mb-4">
+            <div class="card-header bg-primary text-white">
+                <h5 class="mb-0"><i class="bi bi-file-text"></i> Boleto Bancário</h5>
+            </div>
+            <div class="card-body">
+                {% if cobranca.linha_digitavel %}
+                <div class="mb-3">
+                    <label class="form-label"><strong>Linha Digitável:</strong></label>
+                    <div class="input-group">
+                        <input type="text" class="form-control form-control-sm" 
+                               id="linhaDigitavel" value="{{ cobranca.linha_digitavel }}" readonly>
+                        <button class="btn btn-outline-secondary btn-sm" type="button" 
+                                onclick="copiarLinha()">
+                            <i class="bi bi-clipboard"></i>
+                        </button>
+                    </div>
+                </div>
+                {% endif %}
+
+                {% if cobranca.codigo_barras %}
+                <div class="mb-3">
+                    <label class="form-label"><strong>Código de Barras:</strong></label>
+                    <p class="small font-monospace">{{ cobranca.codigo_barras }}</p>
+                </div>
+                {% endif %}
+
+                {% if cobranca.link_boleto %}
+                <div class="d-grid">
+                    <a href="{{ cobranca.link_boleto }}" target="_blank" class="btn btn-primary">
+                        <i class="bi bi-file-pdf"></i> Abrir Boleto PDF
+                    </a>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Informações Técnicas -->
+        <div class="card">
+            <div class="card-header">
+                <h6 class="mb-0"><i class="bi bi-gear"></i> Informações Técnicas</h6>
+            </div>
+            <div class="card-body small">
+                {% if cobranca.txid %}
+                <p><strong>TXID:</strong> <code>{{ cobranca.txid }}</code></p>
+                {% endif %}
+                {% if cobranca.location %}
+                <p><strong>Location:</strong> <code class="text-truncate d-inline-block" style="max-width: 200px;">{{ cobranca.location }}</code></p>
+                {% endif %}
+                {% if cobranca.nosso_numero %}
+                <p><strong>Nosso Número:</strong> {{ cobranca.nosso_numero }}</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mt-4">
+    <div class="col-12">
+        <a href="{{ url_for('cobrancas.lista') }}" class="btn btn-secondary">
+            <i class="bi bi-arrow-left"></i> Voltar para lista
+        </a>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function copiarPix() {
+    const input = document.getElementById('pixCopiaCola');
+    input.select();
+    document.execCommand('copy');
+    alert('PIX copiado para a área de transferência!');
+}
+
+function copiarLinha() {
+    const input = document.getElementById('linhaDigitavel');
+    input.select();
+    document.execCommand('copy');
+    alert('Linha digitável copiada!');
+}
+
+// Atualizar status
+document.getElementById('btnAtualizar')?.addEventListener('click', async function() {
+    const btn = this;
+    btn.disabled = true;
+    btn.innerHTML = '<i class="bi bi-arrow-clockwise spin"></i> Atualizando...';
+    
+    try {
+        const resp = await fetch('{{ url_for("cobrancas.atualizar_status", id=cobranca.id) }}', { method: 'POST' });
+        const data = await resp.json();
+        
+        if (data.sucesso) {
+            location.reload();
+        } else {
+            alert('Erro: ' + data.erro);
+            btn.disabled = false;
+            btn.innerHTML = '<i class="bi bi-arrow-clockwise"></i> Atualizar Status';
+        }
+    } catch (e) {
+        alert('Erro ao atualizar: ' + e.message);
+        btn.disabled = false;
+        btn.innerHTML = '<i class="bi bi-arrow-clockwise"></i> Atualizar Status';
+    }
+});
+</script>
+<style>
+@keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+.spin {
+    animation: spin 1s linear infinite;
+    display: inline-block;
+}
+</style>
+{% endblock %}
