@@ -1,34 +1,21 @@
-{% extends 'base.html' %}
+<!doctype html>
+{% extends "base.html" %}
+{% block titulo %}Lista de Fretes{% endblock %}
 
 {% block content %}
-<div class="container page-fretes-lista">
-  <div class="d-flex justify-content-between align-items-center mb-3">
-    <h3 class="mb-0">Lista de Fretes</h3>
-
-    <div class="btn-group">
-      <!-- Novo Frete (formulário em branco) -->
-      <a class="btn btn-warning btn-sm"
-         href="{{ url_for('fretes.novo') }}">
-        Novo Frete
-      </a>
-
-      <!-- Novo Pedido (verde) -->
-      <a class="btn btn-success btn-sm"
-         href="{{ url_for('pedidos.novo') }}">
-        Novo Pedido
-      </a>
-
-      <!-- Importar Pedido (azul) - usa fluxo de pedidos -->
-      <a class="btn btn-primary btn-sm"
-         href="{{ url_for('pedidos.importar_lista') }}">
-        Importar Pedido
-      </a>
-    </div>
-  </div>
-
+<div class="container-fluid">
   <div class="card mb-3">
     <div class="card-body">
-      <form method="get" action="{{ url_for('fretes.lista') }}" class="row g-2">
+      <div class="d-flex justify-content-between align-items-center mb-3">
+        <h3 class="mb-0">Lista de Fretes</h3>
+        <div class="btn-group">
+          <a class="btn btn-warning btn-sm" href="{{ url_for('fretes.novo') }}">Novo Frete</a>
+          <a class="btn btn-success btn-sm" href="{{ url_for('pedidos.novo') }}">Novo Pedido</a>
+          <a class="btn btn-primary btn-sm" href="{{ url_for('pedidos.importar_lista') }}">Importar Pedido</a>
+        </div>
+      </div>
+
+      <form method="get" action="{{ url_for('fretes.lista') }}" class="row g-2 mb-3">
         <div class="col-md-3">
           <input type="text" name="data_inicio" class="form-control" placeholder="Data Início (dd/mm/aaaa)" value="{{ data_inicio or '' }}">
         </div>
@@ -39,9 +26,7 @@
           <select name="cliente_id" class="form-select">
             <option value="">Todos os clientes</option>
             {% for cliente in clientes %}
-            <option value="{{ cliente.id }}" {% if cliente_id == cliente.id %}selected{% endif %}>
-              {{ cliente.razao_social }}
-            </option>
+            <option value="{{ cliente.id }}" {% if cliente_id == cliente.id %}selected{% endif %}>{{ cliente.razao_social }}</option>
             {% endfor %}
           </select>
         </div>
@@ -74,54 +59,28 @@
           {% for frete in fretes %}
           <tr>
             <td>{{ frete.id }}</td>
-            <td>
-              {% if frete.data_frete %}
-                {{ frete.data_frete.strftime('%d/%m/%Y') }}
-              {% else %}
-                -
-              {% endif %}
-            </td>
-            <td>{{ frete.cliente or '-' }}</td>
-            <td>{{ frete.fornecedor or '-' }}</td>
-            <td>{{ frete.motorista or '-' }}</td>
-            <td>{{ frete.veiculo or '-' }}</td>
-            <td class="text-end">
-              {% if frete.valor_total_frete is not none %}
-                {{ formatar_moeda(frete.valor_total_frete) }}
-              {% else %}
-                -
-              {% endif %}
-            </td>
-            <td class="text-end">
-              {% if frete.lucro is not none %}
-                {{ formatar_moeda(frete.lucro) }}
-              {% else %}
-                -
-              {% endif %}
-            </td>
+            <td>{{ frete.data_frete }}</td>
+            <td>{{ frete.cliente }}</td>
+            <td>{{ frete.fornecedor }}</td>
+            <td>{{ frete.motorista }}</td>
+            <td>{{ frete.veiculo }}</td>
+            <td class="text-end">{{ formatar_moeda(frete.valor_total_frete) }}</td>
+            <td class="text-end">{{ formatar_moeda(frete.lucro) }}</td>
             <td>{{ frete.status }}</td>
-            <td class="text-end">
-              <div class="btn-group btn-group-sm" role="group">
-                <!-- Editar frete -->
-                <a class="btn btn-warning"
-                   href="{{ url_for('fretes.editar', id=frete.id) }}"
-                   title="Editar">
-                  <i class="bi bi-pencil"></i>
-                </a>
+            <td>
+              <a href="{{ url_for('fretes.editar', id=frete.id) }}" class="btn btn-sm btn-primary">Editar</a>
 
-                <!-- Excluir frete -->
-                <a class="btn btn-danger"
-                   href="{{ url_for('fretes.deletar', id=frete.id) }}"
-                   onclick="return confirm('Tem certeza que deseja excluir este frete?');"
-                   title="Excluir">
-                  <i class="bi bi-trash"></i>
-                </a>
-              </div>
+              <form method="post"
+                    action="{{ url_for('fretes.deletar', id=frete.id) }}"
+                    style="display:inline;"
+                    onsubmit="return confirm('Confirma exclusão do frete #{{ frete.id }}?');">
+                <button type="submit" class="btn btn-sm btn-danger">Excluir</button>
+              </form>
             </td>
           </tr>
           {% else %}
           <tr>
-            <td colspan="10" class="text-center py-3">Nenhum frete encontrado.</td>
+            <td colspan="10" class="text-center">Nenhum frete encontrado.</td>
           </tr>
           {% endfor %}
         </tbody>
