@@ -49,10 +49,14 @@
                     </ul>
                 </li>
                 <!-- FINANCEIRO -->
-                <li class="nav-item">
-                    <a class="nav-link" href="#" style="color: #000; font-weight: 600; font-size: 0.9rem;">
+                <li class="nav-item dropdown">
+                    <a class="nav-link dropdown-toggle" href="#" id="financeiroDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false" style="color: #000; font-weight: 600; font-size: 0.9rem;">
                         <i class="bi bi-cash-coin"></i> Financeiro
                     </a>
+                    <ul class="dropdown-menu" aria-labelledby="financeiroDropdown">
+                        <li><a class="dropdown-item" href="{{ url_for('cobrancas.lista') }}"><i class="bi bi-credit-card"></i> Cobranças PIX/Boleto</a></li>
+                        <li><a class="dropdown-item" href="{{ url_for('cobrancas.configuracao') }}"><i class="bi bi-gear"></i> Configurar EFI</a></li>
+                    </ul>
                 </li>
                 <!-- RELATÓRIOS -->
                 <li class="nav-item">

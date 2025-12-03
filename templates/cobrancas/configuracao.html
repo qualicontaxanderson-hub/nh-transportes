@@ -1,0 +1,198 @@
+{% extends 'base.html' %}
+
+{% block title %}Configuração EFI - NH Transportes{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-12">
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb">
+                <li class="breadcrumb-item"><a href="{{ url_for('cobrancas.lista') }}">Cobranças</a></li>
+                <li class="breadcrumb-item active">Configuração EFI</li>
+            </ol>
+        </nav>
+        <h2><i class="bi bi-gear"></i> Configuração API EFI Bank</h2>
+        <p class="text-muted">Configure as credenciais da API EFI para gerar cobranças PIX e Boleto.</p>
+    </div>
+</div>
+
+<!-- Instruções -->
+<div class="alert alert-info">
+    <h5><i class="bi bi-info-circle"></i> Como obter as credenciais EFI:</h5>
+    <ol class="mb-0">
+        <li>Acesse o portal EFI: <a href="https://app.gerencianet.com.br/" target="_blank">app.gerencianet.com.br</a></li>
+        <li>Vá em <strong>API &gt; Aplicações</strong></li>
+        <li>Crie uma nova aplicação ou use uma existente</li>
+        <li>Copie o <strong>Client ID</strong> e <strong>Client Secret</strong></li>
+        <li>Para PIX: Baixe o certificado .pem e cadastre uma chave PIX</li>
+        <li>Configure o webhook para receber notificações automáticas</li>
+    </ol>
+</div>
+
+<form method="POST" enctype="multipart/form-data">
+    <div class="row">
+        <div class="col-lg-6">
+            <!-- Credenciais -->
+            <div class="card mb-4">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="mb-0"><i class="bi bi-key"></i> Credenciais</h5>
+                </div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        <label for="client_id" class="form-label">Client ID *</label>
+                        <input type="text" class="form-control" id="client_id" name="client_id" 
+                               value="{{ config.client_id if config else '' }}" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="client_secret" class="form-label">Client Secret *</label>
+                        <input type="password" class="form-control" id="client_secret" name="client_secret" 
+                               value="{{ config.client_secret if config else '' }}" required>
+                        <small class="text-muted">O secret é armazenado de forma segura</small>
+                    </div>
+                    <div class="mb-3">
+                        <label for="ambiente" class="form-label">Ambiente *</label>
+                        <select class="form-select" id="ambiente" name="ambiente" required>
+                            <option value="sandbox" {% if not config or config.ambiente == 'sandbox' %}selected{% endif %}>
+                                Sandbox (Testes)
+                            </option>
+                            <option value="producao" {% if config and config.ambiente == 'producao' %}selected{% endif %}>
+                                Produção
+                            </option>
+                        </select>
+                        <small class="text-muted">Use Sandbox para testes, Produção para cobranças reais</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-6">
+            <!-- Configurações PIX -->
+            <div class="card mb-4">
+                <div class="card-header bg-success text-white">
+                    <h5 class="mb-0"><i class="bi bi-qr-code"></i> Configurações PIX</h5>
+                </div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        <label for="chave_pix" class="form-label">Chave PIX</label>
+                        <input type="text" class="form-control" id="chave_pix" name="chave_pix" 
+                               value="{{ config.chave_pix if config else '' }}"
+                               placeholder="CPF, CNPJ, E-mail, Telefone ou Chave Aleatória">
+                        <small class="text-muted">Chave cadastrada na sua conta EFI</small>
+                    </div>
+                    <div class="mb-3">
+                        <label for="certificado_file" class="form-label">Certificado .pem</label>
+                        <input type="file" class="form-control" id="certificado_file" name="certificado_file" 
+                               accept=".pem">
+                        {% if config and config.certificado_pem %}
+                        <small class="text-success"><i class="bi bi-check-circle"></i> Certificado já configurado</small>
+                        {% else %}
+                        <small class="text-muted">Faça upload do certificado .pem da EFI (obrigatório para PIX)</small>
+                        {% endif %}
+                    </div>
+                    <div class="mb-3">
+                        <label for="webhook_url" class="form-label">URL do Webhook</label>
+                        <input type="url" class="form-control" id="webhook_url" name="webhook_url" 
+                               value="{{ config.webhook_url if config else '' }}"
+                               placeholder="https://seu-dominio.com/cobrancas/webhook">
+                        <small class="text-muted">URL para receber notificações de pagamento</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Status Atual -->
+    {% if config %}
+    <div class="card mb-4">
+        <div class="card-header">
+            <h5 class="mb-0"><i class="bi bi-check-circle"></i> Status da Configuração</h5>
+        </div>
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-3">
+                    <p><strong>Ambiente:</strong> 
+                        {% if config.ambiente == 'producao' %}
+                        <span class="badge bg-danger">Produção</span>
+                        {% else %}
+                        <span class="badge bg-warning text-dark">Sandbox</span>
+                        {% endif %}
+                    </p>
+                </div>
+                <div class="col-md-3">
+                    <p><strong>Certificado:</strong>
+                        {% if config.certificado_pem %}
+                        <span class="badge bg-success">Configurado</span>
+                        {% else %}
+                        <span class="badge bg-secondary">Não configurado</span>
+                        {% endif %}
+                    </p>
+                </div>
+                <div class="col-md-3">
+                    <p><strong>Chave PIX:</strong>
+                        {% if config.chave_pix %}
+                        <span class="badge bg-success">Configurada</span>
+                        {% else %}
+                        <span class="badge bg-secondary">Não configurada</span>
+                        {% endif %}
+                    </p>
+                </div>
+                <div class="col-md-3">
+                    <p><strong>Última atualização:</strong>
+                        {{ config.updated_at.strftime('%d/%m/%Y %H:%M') if config.updated_at else '-' }}
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Botões -->
+    <div class="d-flex gap-2 justify-content-end">
+        <a href="{{ url_for('cobrancas.lista') }}" class="btn btn-secondary">
+            <i class="bi bi-arrow-left"></i> Voltar
+        </a>
+        <button type="submit" class="btn btn-primary">
+            <i class="bi bi-save"></i> Salvar Configuração
+        </button>
+    </div>
+</form>
+
+<!-- Informações sobre GitHub Secrets -->
+<div class="card mt-4 border-warning">
+    <div class="card-header bg-warning text-dark">
+        <h5 class="mb-0"><i class="bi bi-shield-lock"></i> Segurança: GitHub Secrets</h5>
+    </div>
+    <div class="card-body">
+        <p>Para maior segurança, você pode configurar as credenciais como variáveis de ambiente no GitHub:</p>
+        <ol>
+            <li>Acesse seu repositório no GitHub</li>
+            <li>Vá em <strong>Settings &gt; Secrets and variables &gt; Actions</strong></li>
+            <li>Adicione os seguintes secrets:
+                <ul>
+                    <li><code>EFI_CLIENT_ID</code> - Client ID da aplicação</li>
+                    <li><code>EFI_CLIENT_SECRET</code> - Client Secret da aplicação</li>
+                    <li><code>EFI_CERTIFICADO_PEM</code> - Conteúdo do certificado em Base64</li>
+                    <li><code>EFI_CHAVE_PIX</code> - Sua chave PIX</li>
+                    <li><code>EFI_AMBIENTE</code> - "sandbox" ou "producao"</li>
+                </ul>
+            </li>
+            <li>Configure essas variáveis no Railway também</li>
+        </ol>
+        <p class="mb-0 text-muted">
+            <i class="bi bi-info-circle"></i> Ao usar variáveis de ambiente, elas têm prioridade sobre o banco de dados.
+        </p>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Toggle password visibility
+document.querySelector('#client_secret').addEventListener('focus', function() {
+    this.type = 'text';
+});
+document.querySelector('#client_secret').addEventListener('blur', function() {
+    this.type = 'password';
+});
+</script>
+{% endblock %}

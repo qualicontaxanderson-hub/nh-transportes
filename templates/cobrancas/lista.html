@@ -1,0 +1,205 @@
+{% extends 'base.html' %}
+
+{% block title %}Cobranças - NH Transportes{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-12 d-flex flex-wrap justify-content-between align-items-center gap-2">
+        <h2><i class="bi bi-credit-card"></i> Cobranças</h2>
+        <div class="d-flex gap-2">
+            <a href="{{ url_for('cobrancas.nova') }}" class="btn btn-success">
+                <i class="bi bi-plus-lg"></i> Nova Cobrança
+            </a>
+            <a href="{{ url_for('cobrancas.configuracao') }}" class="btn btn-outline-secondary">
+                <i class="bi bi-gear"></i> Configuração
+            </a>
+        </div>
+    </div>
+</div>
+
+<!-- Filtros -->
+<div class="card mb-4">
+    <div class="card-body">
+        <form method="GET" class="row g-3">
+            <div class="col-md-3">
+                <label class="form-label">Status</label>
+                <select name="status" class="form-select">
+                    <option value="">Todos</option>
+                    <option value="pendente" {% if filtro_status == 'pendente' %}selected{% endif %}>Pendente</option>
+                    <option value="aguardando" {% if filtro_status == 'aguardando' %}selected{% endif %}>Aguardando</option>
+                    <option value="pago" {% if filtro_status == 'pago' %}selected{% endif %}>Pago</option>
+                    <option value="cancelado" {% if filtro_status == 'cancelado' %}selected{% endif %}>Cancelado</option>
+                    <option value="expirado" {% if filtro_status == 'expirado' %}selected{% endif %}>Expirado</option>
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label">Tipo</label>
+                <select name="tipo" class="form-select">
+                    <option value="">Todos</option>
+                    <option value="pix" {% if filtro_tipo == 'pix' %}selected{% endif %}>PIX</option>
+                    <option value="boleto" {% if filtro_tipo == 'boleto' %}selected{% endif %}>Boleto</option>
+                </select>
+            </div>
+            <div class="col-md-4">
+                <label class="form-label">Cliente</label>
+                <select name="cliente_id" class="form-select">
+                    <option value="">Todos</option>
+                    {% for cliente in clientes %}
+                    <option value="{{ cliente.id }}" {% if filtro_cliente == cliente.id|string %}selected{% endif %}>
+                        {{ cliente.razao_social }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-3 d-flex align-items-end gap-2">
+                <button type="submit" class="btn btn-primary">
+                    <i class="bi bi-search"></i> Filtrar
+                </button>
+                <a href="{{ url_for('cobrancas.lista') }}" class="btn btn-outline-secondary">
+                    <i class="bi bi-x-lg"></i> Limpar
+                </a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Tabela de Cobranças -->
+<div class="card">
+    <div class="card-body">
+        {% if cobrancas %}
+        <div class="table-responsive">
+            <table class="table table-hover">
+                <thead class="table-light">
+                    <tr>
+                        <th>#</th>
+                        <th>Tipo</th>
+                        <th>Pagador</th>
+                        <th>Valor</th>
+                        <th>Status</th>
+                        <th>Vencimento</th>
+                        <th>Criado em</th>
+                        <th>Ações</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for cob in cobrancas %}
+                    <tr>
+                        <td>{{ cob.id }}</td>
+                        <td>
+                            {% if cob.tipo == 'pix' %}
+                            <span class="badge bg-success"><i class="bi bi-qr-code"></i> PIX</span>
+                            {% else %}
+                            <span class="badge bg-primary"><i class="bi bi-file-text"></i> Boleto</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <strong>{{ cob.pagador_nome }}</strong>
+                            {% if cob.cliente_nome %}
+                            <br><small class="text-muted">{{ cob.cliente_nome }}</small>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <strong>R$ {{ "%.2f"|format(cob.valor) }}</strong>
+                            {% if cob.valor_pago %}
+                            <br><small class="text-success">Pago: R$ {{ "%.2f"|format(cob.valor_pago) }}</small>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if cob.status == 'pago' %}
+                            <span class="badge bg-success">Pago</span>
+                            {% elif cob.status == 'aguardando' %}
+                            <span class="badge bg-warning text-dark">Aguardando</span>
+                            {% elif cob.status == 'pendente' %}
+                            <span class="badge bg-secondary">Pendente</span>
+                            {% elif cob.status == 'cancelado' %}
+                            <span class="badge bg-danger">Cancelado</span>
+                            {% elif cob.status == 'expirado' %}
+                            <span class="badge bg-dark">Expirado</span>
+                            {% else %}
+                            <span class="badge bg-info">{{ cob.status }}</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if cob.data_vencimento %}
+                            {{ cob.data_vencimento.strftime('%d/%m/%Y') if cob.data_vencimento else '-' }}
+                            {% else %}
+                            -
+                            {% endif %}
+                        </td>
+                        <td>
+                            {{ cob.created_at.strftime('%d/%m/%Y %H:%M') if cob.created_at else '-' }}
+                        </td>
+                        <td>
+                            <div class="btn-group btn-group-sm">
+                                <a href="{{ url_for('cobrancas.detalhes', id=cob.id) }}" 
+                                   class="btn btn-outline-primary" title="Ver detalhes">
+                                    <i class="bi bi-eye"></i>
+                                </a>
+                                {% if cob.status in ['pendente', 'aguardando'] %}
+                                <button type="button" class="btn btn-outline-info btn-atualizar" 
+                                        data-id="{{ cob.id }}" title="Atualizar status">
+                                    <i class="bi bi-arrow-clockwise"></i>
+                                </button>
+                                <form action="{{ url_for('cobrancas.cancelar', id=cob.id) }}" 
+                                      method="POST" class="d-inline"
+                                      onsubmit="return confirm('Deseja realmente cancelar esta cobrança?');">
+                                    <button type="submit" class="btn btn-outline-danger" title="Cancelar">
+                                        <i class="bi bi-x-lg"></i>
+                                    </button>
+                                </form>
+                                {% endif %}
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="text-center py-5">
+            <i class="bi bi-inbox fs-1 text-muted"></i>
+            <p class="text-muted mt-2">Nenhuma cobrança encontrada.</p>
+            <a href="{{ url_for('cobrancas.nova') }}" class="btn btn-success">
+                <i class="bi bi-plus-lg"></i> Criar primeira cobrança
+            </a>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.querySelectorAll('.btn-atualizar').forEach(btn => {
+    btn.addEventListener('click', async function() {
+        const id = this.dataset.id;
+        const icon = this.querySelector('i');
+        icon.classList.add('spin');
+        
+        try {
+            const resp = await fetch(`/cobrancas/${id}/atualizar-status`, { method: 'POST' });
+            const data = await resp.json();
+            
+            if (data.sucesso) {
+                location.reload();
+            } else {
+                alert('Erro: ' + data.erro);
+            }
+        } catch (e) {
+            alert('Erro ao atualizar: ' + e.message);
+        } finally {
+            icon.classList.remove('spin');
+        }
+    });
+});
+</script>
+<style>
+@keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+.spin {
+    animation: spin 1s linear infinite;
+}
+</style>
+{% endblock %}

@@ -65,6 +65,7 @@ blueprints_to_try = [
     "arla",
     "pedidos",
     "bases",
+    "cobrancas",
 ]
 
 import importlib
