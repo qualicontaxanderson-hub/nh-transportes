@@ -1,0 +1,25 @@
+def formatar_moeda(valor):
+    """
+    Formata um número (float/int/str) para moeda BRL (ex.: R$ 1.234,56).
+    Entrada: None -> retorna '-'
+    Aceita strings já formatadas (tenta converter).
+    """
+    try:
+        if valor is None or valor == '':
+            return '-'
+        # tenta converter para float de forma tolerante
+        if isinstance(valor, str):
+            s = valor.strip().replace('R$', '').replace('r$', '').replace(' ', '')
+            s = s.replace('.', '').replace(',', '.') if ('.' in s and ',' in s) else s.replace(',', '.')
+            num = float(s)
+        else:
+            num = float(valor)
+    except Exception:
+        return '-'
+
+    # formata com separador de milhar e vírgula decimal
+    inteiro = int(abs(num))
+    centavos = int(round((abs(num) - inteiro) * 100))
+    inteiro_str = f"{inteiro:,}".replace(',', '.')
+    sinal = '-' if num < 0 else ''
+    return f"{sinal}R$ {inteiro_str},{centavos:02d}"
