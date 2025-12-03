@@ -29,6 +29,9 @@
                     <label>Motorista</label>
                     <input type="text" class="form-control form-control-sm" value="{{ pedido.motorista_nome or 'Não informado' }}" readonly style="background:#FFD580;">
                     <input type="hidden" name="motorista_id" value="{{ pedido.motorista_id }}">
+                    {# Novos campos: expor flags do motorista para o modal JS #}
+                    <input type="hidden" id="import_motorista_paga_comissao" value="{{ pedido.motorista_paga_comissao|default(1) }}">
+                    <input type="hidden" id="import_motorista_percentual" value="{{ pedido.motorista_percentual|default(0) }}">
                   </div>
                   <div class="col-md-4">
                     <label>Veículo</label>
@@ -175,12 +178,25 @@ function calcularItem(itemDiv) {
     const clientePagaComissao = parseInt(itemDiv.querySelector('.cliente-paga-comissao') ? itemDiv.querySelector('.cliente-paga-comissao').value : 1) || 0;
     const clienteCteIntegral = parseInt(itemDiv.querySelector('.cliente-cte-integral') ? itemDiv.querySelector('.cliente-cte-integral').value : 0) || 0;
 
+    // Novas leituras: flags do motorista (globais no modal)
+    const motoristaPagaComissao = parseInt(document.getElementById('import_motorista_paga_comissao') ? document.getElementById('import_motorista_paga_comissao').value : 1) || 0;
+    const motoristaPercentual = parseFloat(document.getElementById('import_motorista_percentual') ? document.getElementById('import_motorista_percentual').value : 0) || 0;
+
     const totalNF = quantidade * precoUnitario;
     let valorTotalFrete = 0;
     let comissaoMotorista = 0;
     if (clientePagaComissao) {
       valorTotalFrete = quantidade * precoPorLitro;
-      comissaoMotorista = quantidade * 0.01;
+
+      if (motoristaPagaComissao) {
+        comissaoMotorista = quantidade * 0.01;
+        // futuro: comissaoMotorista = (motoristaPercentual > 0) ? (valorTotalFrete * (motoristaPercentual/100)) : (quantidade * 0.01);
+      } else {
+        comissaoMotorista = 0;
+      }
+    } else {
+      valorTotalFrete = 0;
+      comissaoMotorista = 0;
     }
 
     let valorCte = 0;
