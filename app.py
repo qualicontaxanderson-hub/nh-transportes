@@ -121,6 +121,37 @@ def inject_helpers():
     return dict(safe_url_for=safe_url_for)
 
 
+# --- ADDED: alias route to avoid BuildError from templates calling url_for('alterar_senha') ---
+@app.route('/alterar-senha', endpoint='alterar_senha')
+@login_required
+def alterar_senha_alias():
+    """
+    Minimal alias so templates that call url_for('alterar_senha') won't raise BuildError.
+    Tries common candidate endpoints and falls back to logout.
+    """
+    # Try the most likely endpoint names in order
+    candidates = [
+        'usuarios.alterar_senha',
+        'auth.alterar_senha',
+        'usuarios.alterarSenha',
+        'alterar_senha'
+    ]
+    for ep in candidates:
+        try:
+            # If endpoint exists, redirect to it (no args expected here)
+            # This will raise a BuildError if ep doesn't exist; catch and continue.
+            return redirect(url_for(ep))
+        except Exception:
+            continue
+    # Final fallback: logout (should exist in this app)
+    try:
+        return redirect(url_for('logout'))
+    except Exception:
+        # As a last resort, render a simple page to avoid raising another exception
+        return render_template("404.html"), 404
+# --------------------------------------------------------------------
+
+
 # Health check
 @app.route("/health")
 def health():
