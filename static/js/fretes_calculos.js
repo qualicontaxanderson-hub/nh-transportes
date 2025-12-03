@@ -1,491 +1,242 @@
-<!doctype html>
-{% extends "base.html" %}
-{% block titulo %}{% if frete %}Editar Frete{% else %}Novo Frete{% endif %}{% endblock %}
+// static/js/fretes_calculos.js
+// Lógica de cálculo para o formulário de fretes
+(function () {
+  'use strict';
 
-{% block content %}
-<div class="container-fluid">
-  <nav aria-label="breadcrumb" class="mt-2 mb-3">
-    <ol class="breadcrumb" style="font-size: 0.85rem;">
-      <li class="breadcrumb-item"><a href="{{ url_for('index') }}">Início</a></li>
-      <li class="breadcrumb-item"><a href="{{ url_for('fretes.lista') }}">Fretes</a></li>
-      <li class="breadcrumb-item active" aria-current="page">
-        {% if frete %}Editar Frete{% else %}Novo Frete{% endif %}
-      </li>
-    </ol>
-  </nav>
+  /* ---------- Helpers de formatação/parse ---------- */
 
-  <div class="card shadow-sm">
-    <div class="card-header bg-warning text-dark" style="padding: 0.6rem 1rem;">
-      <h4 class="mb-0">
-        {% if frete %}Editar Frete{% else %}Novo Frete{% endif %}
-      </h4>
-    </div>
+  // Converte string de entrada para Number
+  // Aceita formatos: "R$ 1.234,56", "1234.56", "1.234", "3650", "3,650"
+  function parseNumber(value) {
+    if (value === null || value === undefined) return NaN;
+    if (typeof value === 'number') return value;
+    var s = String(value).trim();
+    if (s === '') return NaN;
+    // remove R$, espaços e sinais extras
+    s = s.replace(/R\$\s*/gi, '').replace(/\s+/g, '');
+    // se tem letra, invalid
+    if (/[^\d.,-]/.test(s)) {
+      // remove tudo que não seja dígito, vírgula, ponto ou hífen
+      s = s.replace(/[^\d\.,-]/g, '');
+    }
+    // se contém ',' e '.', decidir qual é decimal:
+    // regra simples: se última ocorrência for ',', usaremos ',' como decimal
+    var lastComma = s.lastIndexOf(',');
+    var lastDot = s.lastIndexOf('.');
+    if (lastComma > -1 && lastDot > -1) {
+      if (lastComma > lastDot) {
+        // '.' são milhares, remove-os; ',' decimal -> replace ','->'.'
+        s = s.replace(/\./g, '').replace(',', '.');
+      } else {
+        // ',' são milhares, remove-os; '.' decimal -> keep '.'
+        s = s.replace(/,/g, '');
+      }
+    } else if (lastComma > -1 && lastDot === -1) {
+      // só vírgula: assume vírgula decimal -> replace ','->'.'
+      s = s.replace(/\./g, '').replace(',', '.');
+    } else {
+      // só ponto(s) ou nenhum: remove milhares (dots) e keep dot as decimal
+      // caso "1.234" pode ser milhar ou decimal; aqui assumimos milhar quando não há outros separadores
+      // para permitir usuário digitar "3650" -> fica 3650
+      s = s.replace(/,/g, '');
+    }
 
-    <div class="card-body" style="padding: 1rem;">
-      <form method="POST" action="{{ url_for('fretes.novo') }}" enctype="multipart/form-data">
+    var n = parseFloat(s);
+    return isNaN(n) ? NaN : n;
+  }
 
-        <!-- DATA / STATUS / BOTÃO IMPORTAR (VERDE) -->
-        <div class="row mb-2 align-items-end">
-          <div class="col-md-3">
-            <label for="data_frete" class="form-label">Data</label>
-            <input type="date" id="data_frete" name="data_frete"
-                   class="form-control form-control-sm"
-                   value="{{ frete.data_frete.strftime('%Y-%m-%d') if frete and frete.data_frete else (now().strftime('%Y-%m-%d') if now else '') }}"
-                   required>
-          </div>
+  // Formata número para "R$ X.xxx,yy" (decimals = 2, 3...)
+  function formatCurrencyBR(value, decimals) {
+    if (value === null || value === undefined || isNaN(value)) {
+      return 'R$ 0' + (decimals ? (',' + '0'.repeat(decimals)) : '');
+    }
+    var neg = value < 0;
+    var n = Math.abs(Number(value) || 0).toFixed(decimals);
+    var parts = n.split('.');
+    var intPart = parts[0];
+    var decPart = parts[1] || '';
+    // add thousands dot
+    intPart = intPart.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+    return (neg ? '-R$ ' : 'R$ ') + intPart + (decimals ? (',' + decPart) : '');
+  }
 
-          <div class="col-md-3">
-            <label for="status" class="form-label">Status</label>
-            <select id="status" name="status" class="form-select form-select-sm">
-              <option value="Pendente" {% if frete and frete.status == 'Pendente' %}selected{% endif %}>Pendente</option>
-              <option value="Em Trânsito" {% if frete and frete.status == 'Em Trânsito' %}selected{% endif %}>Em Trânsito</option>
-              <option value="Concluído" {% if frete and frete.status == 'Concluído' %}selected{% endif %}>Concluído</option>
-              <option value="Cancelado" {% if frete and frete.status == 'Cancelado' %}selected{% endif %}>Cancelado</option>
-            </select>
-          </div>
+  /* ---------- Element getters ---------- */
+  function $id(id) { return document.getElementById(id); }
 
-          <div class="col-md-6 text-end">
-            {% if not frete %}
-              <button type="button" class="btn btn-success btn-sm" id="btn_importar_pedido" title="Importar pedido">
-                <i class="bi bi-upload"></i> Importar Pedido
-              </button>
-            {% endif %}
-          </div>
-        </div>
+  /* ---------- Cálculos principais ---------- */
+  function readQuantidade() {
+    var tipo = (document.querySelector('#quantidade_tipo') || {}).value;
+    if (!tipo) tipo = 'padrao';
+    if (tipo === 'personalizada') {
+      var manual = $id('quantidade_manual');
+      if (!manual) return NaN;
+      // Usuário é instruído a usar ponto como separador de milhar (ex: 9.975)
+      // parseNumber já lida com isso
+      return parseNumber(manual.value);
+    } else {
+      var sel = $id('quantidade_id');
+      if (!sel) return NaN;
+      var opt = sel.options[sel.selectedIndex];
+      if (!opt) return NaN;
+      // atributo data-quantidade no option contém valor numérico
+      var q = opt.getAttribute('data-quantidade');
+      return parseNumber(q);
+    }
+  }
 
-        <!-- CLIENTE / OBSERVAÇÕES -->
-        <div class="row">
-          <div class="col-md-8 mb-2">
-            <label for="clientes_id" class="form-label">Cliente</label>
-            <select id="clientes_id" name="clientes_id" class="form-select form-select-sm" required>
-              <option value="">Selecione um cliente</option>
-              {% for cliente in clientes %}
-              <option value="{{ cliente.id }}"
-                      data-paga-comissao="{{ cliente.paga_comissao|default(1) }}"
-                      data-cte-integral="{{ cliente.cte_integral|default(0) }}"
-                      data-destino-id="{{ cliente.destino_id }}"
-                      {% if cliente.id == (frete.clientes_id if frete else None) %}selected{% endif %}>
-                {{ cliente.razao_social }}
-              </option>
-              {% endfor %}
-            </select>
-          </div>
+  function readPrecoProdutoUnitario() {
+    // tenta ler o hidden raw primeiro se existir e for numérico
+    var rawHidden = $id('preco_produto_unitario_raw');
+    if (rawHidden && rawHidden.value) {
+      var raw = parseNumber(rawHidden.value);
+      if (!isNaN(raw) && raw !== 0) return raw;
+    }
+    // senão parseia o campo de exibição
+    var inp = $id('preco_produto_unitario');
+    if (!inp) return NaN;
+    return parseNumber(inp.value);
+  }
 
-          <div class="col-md-4 mb-2">
-            <label for="observacoes" class="form-label">Observações</label>
-            <input type="text" id="observacoes" name="observacoes"
-                   class="form-control form-control-sm"
-                   value="{{ frete.observacoes if frete else '' }}">
-          </div>
-        </div>
+  function updatePrecoProdutoHidden(rawValue) {
+    var rawHidden = $id('preco_produto_unitario_raw');
+    if (!rawHidden) return;
+    rawHidden.value = isNaN(rawValue) ? 0 : Number(rawValue);
+  }
 
-        <!-- FORNECEDOR / PRODUTO -->
-        <div class="row">
-          <div class="col-md-6 mb-2">
-            <label for="fornecedores_id" class="form-label">Fornecedor</label>
-            <select id="fornecedores_id" name="fornecedores_id" class="form-select form-select-sm" required>
-              <option value="">Selecione um fornecedor</option>
-              {% for fornecedor in fornecedores %}
-              <option value="{{ fornecedor.id }}" {% if frete and fornecedor.id == frete.fornecedores_id %}selected{% endif %}>
-                {{ fornecedor.razao_social }}
-              </option>
-              {% endfor %}
-            </select>
-          </div>
+  function calcularTudo() {
+    var precoUnit = readPrecoProdutoUnitario(); // número
+    var quantidade = readQuantidade(); // número em litros
+    // seguranca: se precoUnit for NaN, set 0
+    if (isNaN(precoUnit)) precoUnit = 0;
+    if (isNaN(quantidade) || quantidade === 0) quantidade = NaN;
 
-          <div class="col-md-6 mb-2">
-            <label for="produto_id" class="form-label">Produto</label>
-            <select id="produto_id" name="produto_id" class="form-select form-select-sm" required>
-              <option value="">Selecione o produto</option>
-              {% for produto in produtos %}
-              <option value="{{ produto.id }}" {% if frete and produto.id == frete.produto_id %}selected{% endif %}>
-                {{ produto.nome }}
-              </option>
-              {% endfor %}
-            </select>
-          </div>
-        </div>
+    // calcula preco por litro (precoUnit dividido pela quantidade)
+    var precoPorLitro = NaN;
+    if (!isNaN(quantidade) && quantidade > 0) {
+      precoPorLitro = precoUnit / quantidade;
+    }
 
-        <!-- ORIGEM / DESTINO -->
-        <div class="row">
-          <div class="col-md-6 mb-2">
-            <label for="origem_id" class="form-label">Origem</label>
-            <select id="origem_id" name="origem_id" class="form-select form-select-sm" required>
-              <option value="">Selecione a origem</option>
-              {% for origem in origens %}
-              <option value="{{ origem.id }}" {% if frete and origem.id == frete.origem_id %}selected{% endif %}>
-                {{ origem.nome }}
-              </option>
-              {% endfor %}
-            </select>
-          </div>
+    // total NF de compra: assumimos precoUnit * quantidade (se não houver quantidade, usa precoUnit)
+    var totalNF = NaN;
+    if (!isNaN(quantidade) && quantidade > 0) {
+      totalNF = precoUnit * quantidade;
+    } else {
+      totalNF = precoUnit;
+    }
 
-          <div class="col-md-6 mb-2">
-            <label for="destino_id" class="form-label">Destino</label>
-            <select id="destino_id" name="destino_id" class="form-select form-select-sm" disabled>
-              <option value="">Selecione o destino</option>
-              {% for destino in destinos %}
-              <option value="{{ destino.id }}" {% if frete and destino.id == frete.destino_id %}selected{% endif %}>
-                {{ destino.nome }}
-              </option>
-              {% endfor %}
-            </select>
-            <input type="hidden" id="destino_id_hidden" name="destino_id" value="{{ frete.destino_id if frete else '' }}">
-            <small class="text-muted destino-auto-badge d-block mt-1">
-              <i class="bi bi-info-circle"></i> Destino preenchido a partir do cadastro do cliente
-            </small>
-          </div>
-        </div>
+    // valor_total_frete: por enquanto usa totalNF (adapte se tiver outros acréscimos)
+    var valorTotalFrete = totalNF;
 
-        <!-- MOTORISTA / VEÍCULO -->
-        <div class="row">
-          <div class="col-md-6 mb-2">
-            <label for="motoristas_id" class="form-label">Motorista</label>
-            <select id="motoristas_id" name="motoristas_id" class="form-select form-select-sm" required>
-              <option value="">Selecione um motorista</option>
-              {% for motorista in motoristas %}
-              <option value="{{ motorista.id }}"
-                      data-percentual="{{ motorista.percentual_comissao }}"
-                      data-paga-comissao="{{ motorista.paga_comissao|default(1) }}"
-                      {% if frete and motorista.id == frete.motoristas_id %}selected{% endif %}>
-                {{ motorista.nome }}
-              </option>
-              {% endfor %}
-            </select>
-          </div>
+    // comissão motorista: usa data-percentual do motorista selecionado
+    var comissaoMotorista = NaN;
+    var motoristaSel = $id('motoristas_id');
+    if (motoristaSel) {
+      var opt = motoristaSel.options[motoristaSel.selectedIndex];
+      if (opt) {
+        var percentual = parseNumber(opt.getAttribute('data-percentual') || opt.getAttribute('data-percentual'.toLowerCase()));
+        if (!isNaN(percentual) && !isNaN(valorTotalFrete)) {
+          comissaoMotorista = valorTotalFrete * (percentual / 100);
+        }
+      }
+    }
 
-          <div class="col-md-6 mb-2">
-            <label for="veiculos_id" class="form-label">Veículo</label>
-            <select id="veiculos_id" name="veiculos_id" class="form-select form-select-sm" required>
-              <option value="">Selecione um veículo</option>
-              {% for veiculo in veiculos %}
-              <option value="{{ veiculo.id }}" {% if frete and veiculo.id == frete.veiculos_id %}selected{% endif %}>
-                {{ veiculo.caminhao }} - {{ veiculo.placa }}
-              </option>
-              {% endfor %}
-            </select>
-          </div>
-        </div>
+    // Escrever de volta nos campos formatados
+    // preco_produto_unitario: exibir com 3 casas decimais (padrao do template)
+    var inpPrecoUnit = $id('preco_produto_unitario');
+    if (inpPrecoUnit) {
+      inpPrecoUnit.value = formatCurrencyBR(precoUnit, 3);
+    }
+    // sempre atualizar o hidden raw
+    updatePrecoProdutoHidden(precoUnit);
 
-        <!-- TIPO DE QUANTIDADE / QUANTIDADE -->
-        <div class="row">
-          <div class="col-md-6 mb-2">
-            <label for="quantidade_tipo" class="form-label">Tipo de Quantidade</label>
-            <select id="quantidade_tipo" name="quantidade_tipo" class="form-select form-select-sm">
-              <option value="padrao" {% if frete and frete.quantidade_id %}selected{% endif %}>Quantidade Padrão (Listbox)</option>
-              <option value="personalizada" {% if frete and not frete.quantidade_id %}selected{% endif %}>Quantidade Personalizada (Manual)</option>
-            </select>
-          </div>
+    var inpPrecoPorLitro = $id('preco_por_litro');
+    if (inpPrecoPorLitro) {
+      inpPrecoPorLitro.value = formatCurrencyBR(precoPorLitro || 0, 2);
+    }
 
-          <div id="div_quantidade_padrao" class="col-md-6 mb-2">
-            <label for="quantidade_id" class="form-label">Quantidade (Litros)</label>
-            <select id="quantidade_id" name="quantidade_id" class="form-select form-select-sm">
-              <option value="">Selecione a quantidade</option>
-              {% for quantidade in quantidades %}
-              <option value="{{ quantidade.id }}" data-quantidade="{{ quantidade.valor }}" {% if frete and quantidade.id == frete.quantidade_id %}selected{% endif %}>
-                {{ quantidade.descricao }}
-              </option>
-              {% endfor %}
-            </select>
-          </div>
+    var inpTotalNF = $id('total_nf_compra');
+    if (inpTotalNF) {
+      inpTotalNF.value = formatCurrencyBR(totalNF || 0, 2);
+    }
 
-          <div id="div_quantidade_personalizada" style="display:none" class="col-md-6 mb-2">
-            <label for="quantidade_manual" class="form-label">Quantidade Manual</label>
-            <input type="text" id="quantidade_manual" name="quantidade_manual" class="form-control form-control-sm" placeholder="Ex: 9.975" value="{{ frete.quantidade_manual if frete and not frete.quantidade_id else '' }}">
-            <small class="text-muted">Use ponto como separador de milhar (ex: 9.975)</small>
-          </div>
-        </div>
+    var inpValorTotalFrete = $id('valor_total_frete');
+    if (inpValorTotalFrete) {
+      inpValorTotalFrete.value = formatCurrencyBR(valorTotalFrete || 0, 2);
+    }
 
-        <!-- PREÇOS -->
-        <div class="row mt-2">
-          <div class="col-md-6 mb-2">
-            <label for="preco_produto_unitario" class="form-label">Preço Produto Unitário (R$)</label>
-            <input type="text" id="preco_produto_unitario" name="preco_produto_unitario" class="form-control form-control-sm"
-                   value="{{ 'R$ {:.3f}'.format(frete.preco_produto_unitario).replace('.', ',') if frete and frete.preco_produto_unitario else 'R$ 0,000' }}" required>
-            <input type="hidden" id="preco_produto_unitario_raw" name="preco_produto_unitario_raw" value="{{ frete.preco_produto_unitario if frete and frete.preco_produto_unitario else 0 }}">
-          </div>
+    var inpComissao = $id('comissao_motorista');
+    if (inpComissao) {
+      inpComissao.value = formatCurrencyBR(comissaoMotorista || 0, 2);
+    }
+  }
 
-          <div class="col-md-6 mb-2">
-            <label for="preco_por_litro" class="form-label">Preço por Litro (R$)</label>
-            <input type="text" id="preco_por_litro" name="preco_por_litro" class="form-control form-control-sm"
-                   value="{{ 'R$ {:.2f}'.format(frete.preco_por_litro).replace('.', ',') if frete and frete.preco_por_litro else 'R$ 0,00' }}" required>
-          </div>
-        </div>
+  /* ---------- Eventos ---------- */
+  function safeAttach(id, evt, fn) {
+    var el = $id(id);
+    if (el) el.addEventListener(evt, fn);
+  }
 
-        <!-- RESULTADOS -->
-        <div class="row mt-2">
-          <div class="col-md-4 mb-2">
-            <label for="total_nf_compra" class="form-label">Total NF Compra (R$)</label>
-            <input type="text" id="total_nf_compra" name="total_nf_compra" class="form-control form-control-sm bg-warning" readonly value="{{ 'R$ {:.2f}'.format(frete.total_nf_compra).replace('.', ',') if frete and frete.total_nf_compra else 'R$ 0,00' }}">
-          </div>
+  function initBindings() {
+    // quando usuário muda o tipo de quantidade
+    safeAttach('quantidade_tipo', 'change', function () {
+      // mostrar/ocultar os divs correspondentes (existem no template)
+      var tipo = ($id('quantidade_tipo') || {}).value;
+      if (tipo === 'personalizada') {
+        var d = $id('div_quantidade_personalizada');
+        if (d) d.style.display = '';
+        var dpad = $id('div_quantidade_padrao');
+        if (dpad) dpad.style.display = 'none';
+      } else {
+        var d = $id('div_quantidade_personalizada');
+        if (d) d.style.display = 'none';
+        var dpad = $id('div_quantidade_padrao');
+        if (dpad) dpad.style.display = '';
+      }
+      calcularTudo();
+    });
 
-          <div class="col-md-4 mb-2">
-            <label for="valor_total_frete" class="form-label">Valor Total Frete (R$)</label>
-            <input type="text" id="valor_total_frete" name="valor_total_frete" class="form-control form-control-sm bg-warning" readonly value="{{ 'R$ {:.2f}'.format(frete.valor_total_frete).replace('.', ',') if frete and frete.valor_total_frete else 'R$ 0,00' }}">
-          </div>
+    // mudança de quantidade (select)
+    safeAttach('quantidade_id', 'change', calcularTudo);
+    // input manual de quantidade
+    safeAttach('quantidade_manual', 'input', function () {
+      // permitir digitação (ex: 9.975)
+      calcularTudo();
+    });
 
-          <div class="col-md-4 mb-2">
-            <label for="comissao_motorista" class="form-label">Comissão Motorista (R$)</label>
-            <input type="text" id="comissao_motorista" name="comissao_motorista" class="form-control form-control-sm bg-warning" readonly value="{{ 'R$ {:.2f}'.format(frete.comissao_motorista).replace('.', ',') if frete and frete.comissao_motorista else 'R$ 0,00' }}">
-          </div>
-        </div>
+    // preco produto unitario (input formatado) - atualizar ao blur e ao input
+    var precoInp = $id('preco_produto_unitario');
+    if (precoInp) {
+      precoInp.addEventListener('blur', function () {
+        // parse value typed and recalc
+        var n = parseNumber(precoInp.value);
+        if (isNaN(n)) n = 0;
+        updatePrecoProdutoHidden(n);
+        calcularTudo();
+      });
+      precoInp.addEventListener('input', function () {
+        // não formatar em cada tecla para não atrapalhar digitação, apenas recalcular "on the fly"
+        // se desejar formatação imediata, pode-se aplicar máscara aqui
+      });
+    }
 
-        <div class="row mt-2">
-          <div class="col-md-4 mb-2">
-            <label for="valor_cte" class="form-label">Valor CTe (R$)</label>
-            <input type="text" id="valor_cte" name="valor_cte" class="form-control form-control-sm bg-warning" readonly value="{{ 'R$ {:.2f}'.format(frete.valor_cte).replace('.', ',') if frete and frete.valor_cte else 'R$ 0,00' }}">
-          </div>
+    // motoristas muda percentual de comissao
+    safeAttach('motoristas_id', 'change', calcularTudo);
 
-          <div class="col-md-4 mb-2">
-            <label for="comissao_cte" class="form-label">Comissão CTe (R$)</label>
-            <input type="text" id="comissao_cte" name="comissao_cte" class="form-control form-control-sm bg-warning" readonly value="{{ 'R$ {:.2f}'.format(frete.comissao_cte).replace('.', ',') if frete and frete.comissao_cte else 'R$ 0,00' }}">
-          </div>
+    // clientes muda -> possivelmente altera destino (já temos outro script), mas recalc
+    safeAttach('clientes_id', 'change', function () {
+      // slight delay so destino script can run first if present
+      setTimeout(calcularTudo, 120);
+    });
 
-          <div class="col-md-4 mb-2">
-            <label for="lucro" class="form-label">Lucro</label>
-            <input type="text" id="lucro" name="lucro" class="form-control form-control-sm bg-warning" readonly value="{{ 'R$ {:.2f}'.format(frete.lucro).replace('.', ',') if frete and frete.lucro else 'R$ 0,00' }}">
-          </div>
-        </div>
+    // quando a página carrega, calcular com os valores atuais
+    calcularTudo();
+  }
 
-        <div class="mt-3 d-flex justify-content-end">
-          <button type="submit" class="btn btn-warning btn-sm">Salvar</button>
-        </div>
-      </form>
-    </div>
-  </div>
-</div>
-{% endblock %}
+  // inicializa no DOMContentLoaded
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initBindings);
+  } else {
+    initBindings();
+  }
 
-{% block scripts %}
-<script>
-  const ROTAS = {{ rotas_dict|tojson|safe }};
-  window.MODOEDICAO = {{ 'true' if frete else 'false' }};
-</script>
-
-<script src="{{ url_for('static', filename='js/app.js') }}"></script>
-<script src="{{ url_for('static', filename='js/importar_modal.js') }}"></script>
-<script src="{{ url_for('static', filename='js/fretes_calculos.js') }}?v={{ config.APP_VERSION or '1' }}"></script>
-{% endblock %}
-```
-
-
-````html name=fretes_editar.html
-<!doctype html>
-{% extends "base.html" %}
-{% block titulo %}Editar Frete{% endblock %}
-
-{% block content %}
-<div class="container-fluid">
-  <nav aria-label="breadcrumb" class="mt-2 mb-3">
-    <ol class="breadcrumb" style="font-size: 0.85rem;">
-      <li class="breadcrumb-item"><a href="{{ url_for('index') }}">Início</a></li>
-      <li class="breadcrumb-item"><a href="{{ url_for('fretes.lista') }}">Fretes</a></li>
-      <li class="breadcrumb-item active" aria-current="page">Editar Frete</li>
-    </ol>
-  </nav>
-
-  <div class="card shadow-sm">
-    <div class="card-header bg-warning text-dark" style="padding: 0.6rem 1rem;">
-      <h4 class="mb-0">Editar Frete #{{ frete.id }}</h4>
-    </div>
-
-    <div class="card-body" style="padding:1rem;">
-      <form method="POST" action="{{ url_for('fretes.editar', id=frete.id) }}">
-        <!-- DATA -->
-        <div class="row mb-2">
-          <div class="col-md-3">
-            <label for="data_frete" class="form-label">Data</label>
-            <input type="date" id="data_frete" name="data_frete" class="form-control form-control-sm" value="{{ frete.data_frete.strftime('%Y-%m-%d') if frete.data_frete else '' }}" required>
-          </div>
-
-          <div class="col-md-3">
-            <label for="status" class="form-label">Status</label>
-            <select id="status" name="status" class="form-select form-select-sm">
-              <option value="Pendente" {% if frete.status == 'Pendente' %}selected{% endif %}>Pendente</option>
-              <option value="Em Trânsito" {% if frete.status == 'Em Trânsito' %}selected{% endif %}>Em Trânsito</option>
-              <option value="Concluído" {% if frete.status == 'Concluído' %}selected{% endif %}>Concluído</option>
-              <option value="Cancelado" {% if frete.status == 'Cancelado' %}selected{% endif %}>Cancelado</option>
-            </select>
-          </div>
-        </div>
-
-        <!-- CLIENTE / FORNECEDOR -->
-        <div class="row">
-          <div class="col-md-6 mb-2">
-            <label for="clientes_id" class="form-label">Cliente</label>
-            <select id="clientes_id" name="clientes_id" class="form-select form-select-sm" required>
-              <option value="">Selecione um cliente</option>
-              {% for cliente in clientes %}
-              <option value="{{ cliente.id }}"
-                      data-paga-comissao="{{ cliente.paga_comissao|default(1) }}"
-                      data-cte-integral="{{ cliente.cte_integral|default(0) }}"
-                      data-destino-id="{{ cliente.destino_id }}"
-                      {% if cliente.id == frete.clientes_id %}selected{% endif %}>
-                {{ cliente.razao_social }}
-              </option>
-              {% endfor %}
-            </select>
-          </div>
-
-          <div class="col-md-6 mb-2">
-            <label for="fornecedores_id" class="form-label">Fornecedor</label>
-            <select id="fornecedores_id" name="fornecedores_id" class="form-select form-select-sm" required>
-              <option value="">Selecione um fornecedor</option>
-              {% for fornecedor in fornecedores %}
-              <option value="{{ fornecedor.id }}" {% if fornecedor.id == frete.fornecedores_id %}selected{% endif %}>{{ fornecedor.razao_social }}</option>
-              {% endfor %}
-            </select>
-          </div>
-        </div>
-
-        <!-- PRODUTO / ORIGEM/DESTINO -->
-        <div class="row">
-          <div class="col-md-6 mb-2">
-            <label for="produto_id" class="form-label">Produto</label>
-            <select id="produto_id" name="produto_id" class="form-select form-select-sm" required>
-              <option value="">Selecione o produto</option>
-              {% for produto in produtos %}
-              <option value="{{ produto.id }}" {% if produto.id == frete.produto_id %}selected{% endif %}>{{ produto.nome }}</option>
-              {% endfor %}
-            </select>
-          </div>
-
-          <div class="col-md-6 mb-2">
-            <label for="origem_id" class="form-label">Origem / Destino</label>
-            <div class="d-flex gap-2">
-              <select id="origem_id" name="origem_id" class="form-select form-select-sm">
-                <option value="">Selecione a origem</option>
-                {% for origem in origens %}
-                <option value="{{ origem.id }}" {% if origem.id == frete.origem_id %}selected{% endif %}>{{ origem.nome }}</option>
-                {% endfor %}
-              </select>
-
-              <select id="destino_id" name="destino_id" class="form-select form-select-sm" disabled>
-                <option value="">Selecione o destino</option>
-                {% for destino in destinos %}
-                <option value="{{ destino.id }}" {% if destino.id == frete.destino_id %}selected{% endif %}>{{ destino.nome }}</option>
-                {% endfor %}
-              </select>
-              <input type="hidden" id="destino_id_hidden" name="destino_id" value="{{ frete.destino_id or '' }}">
-            </div>
-            <small class="text-muted d-block mt-1"><i class="bi bi-info-circle"></i> Destino preenchido a partir do cadastro do cliente</small>
-          </div>
-        </div>
-
-        <!-- MOTORISTA / VEICULO -->
-        <div class="row">
-          <div class="col-md-6 mb-2">
-            <label for="motoristas_id" class="form-label">Motorista</label>
-            <select id="motoristas_id" name="motoristas_id" class="form-select form-select-sm" required>
-              <option value="">Selecione um motorista</option>
-              {% for motorista in motoristas %}
-              <option value="{{ motorista.id }}" data-percentual="{{ motorista.percentual_comissao }}" data-paga-comissao="{{ motorista.paga_comissao|default(1) }}" {% if motorista.id == frete.motoristas_id %}selected{% endif %}>{{ motorista.nome }}</option>
-              {% endfor %}
-            </select>
-          </div>
-
-          <div class="col-md-6 mb-2">
-            <label for="veiculos_id" class="form-label">Veículo</label>
-            <select id="veiculos_id" name="veiculos_id" class="form-select form-select-sm" required>
-              <option value="">Selecione um veículo</option>
-              {% for veiculo in veiculos %}
-              <option value="{{ veiculo.id }}" {% if veiculo.id == frete.veiculos_id %}selected{% endif %}>{{ veiculo.caminhao }} - {{ veiculo.placa }}</option>
-              {% endfor %}
-            </select>
-          </div>
-        </div>
-
-        <!-- TIPO DE QUANTIDADE / QUANTIDADE -->
-        <div class="row">
-          <div class="col-md-6 mb-2">
-            <label for="quantidade_tipo" class="form-label">Tipo de Quantidade</label>
-            <select id="quantidade_tipo" name="quantidade_tipo" class="form-select form-select-sm">
-              <option value="padrao" {% if frete.quantidade_id %}selected{% endif %}>Quantidade Padrão (Listbox)</option>
-              <option value="personalizada" {% if not frete.quantidade_id %}selected{% endif %}>Quantidade Personalizada (Manual)</option>
-            </select>
-          </div>
-
-          <div id="div_quantidade_padrao" class="col-md-6 mb-2">
-            <label for="quantidade_id" class="form-label">Quantidade (Litros)</label>
-            <select id="quantidade_id" name="quantidade_id" class="form-select form-select-sm">
-              <option value="">Selecione a quantidade</option>
-              {% for quantidade in quantidades %}
-              <option value="{{ quantidade.id }}" data-quantidade="{{ quantidade.valor }}" {% if quantidade.id == frete.quantidade_id %}selected{% endif %}>{{ quantidade.descricao }}</option>
-              {% endfor %}
-            </select>
-          </div>
-
-          <div id="div_quantidade_personalizada" style="display:none" class="col-md-6 mb-2">
-            <label for="quantidade_manual" class="form-label">Quantidade Manual</label>
-            <input type="text" id="quantidade_manual" name="quantidade_manual" class="form-control form-control-sm" value="{% if not frete.quantidade_id and frete.quantidade_manual %}{{ frete.quantidade_manual }}{% endif %}" placeholder="Ex: 9.975">
-            <small class="text-muted">Use ponto como separador de milhar (ex: 9.975)</small>
-          </div>
-        </div>
-
-        <!-- PREÇOS -->
-        <div class="row mt-2">
-          <div class="col-md-6 mb-2">
-            <label for="preco_produto_unitario" class="form-label">Preço Produto Unitário (R$)</label>
-            <input type="text" id="preco_produto_unitario" name="preco_produto_unitario" class="form-control form-control-sm" value="R$ {{ '{:.3f}'.format(frete.preco_produto_unitario).replace('.', ',') if frete.preco_produto_unitario else '0,000' }}" required>
-            <input type="hidden" id="preco_produto_unitario_raw" name="preco_produto_unitario_raw" value="{{ frete.preco_produto_unitario if frete.preco_produto_unitario else 0 }}">
-          </div>
-
-          <div class="col-md-6 mb-2">
-            <label for="preco_por_litro" class="form-label">Preço por Litro (R$)</label>
-            <input type="text" id="preco_por_litro" name="preco_por_litro" class="form-control form-control-sm" value="R$ {{ '{:.2f}'.format(frete.preco_por_litro).replace('.', ',') if frete.preco_por_litro else '0,00' }}" required>
-          </div>
-        </div>
-
-        <!-- RESULTADOS -->
-        <div class="row mt-2">
-          <div class="col-md-4 mb-2">
-            <label for="total_nf_compra" class="form-label">Total NF Compra (R$)</label>
-            <input type="text" id="total_nf_compra" name="total_nf_compra" class="form-control form-control-sm bg-warning" readonly value="R$ {{ '{:.2f}'.format(frete.total_nf_compra).replace('.', ',') if frete.total_nf_compra else '0,00' }}">
-          </div>
-
-          <div class="col-md-4 mb-2">
-            <label for="valor_total_frete" class="form-label">Valor Total Frete (R$)</label>
-            <input type="text" id="valor_total_frete" name="valor_total_frete" class="form-control form-control-sm bg-warning" readonly value="R$ {{ '{:.2f}'.format(frete.valor_total_frete).replace('.', ',') if frete.valor_total_frete else '0,00' }}">
-          </div>
-
-          <div class="col-md-4 mb-2">
-            <label for="comissao_motorista" class="form-label">Comissão Motorista (R$)</label>
-            <input type="text" id="comissao_motorista" name="comissao_motorista" class="form-control form-control-sm bg-warning" readonly value="R$ {{ '{:.2f}'.format(frete.comissao_motorista).replace('.', ',') if frete.comissao_motorista else '0,00' }}">
-          </div>
-        </div>
-
-        <div class="row mt-2">
-          <div class="col-md-4 mb-2">
-            <label for="valor_cte" class="form-label">Valor CTe (R$)</label>
-            <input type="text" id="valor_cte" name="valor_cte" class="form-control form-control-sm bg-warning" readonly value="R$ {{ '{:.2f}'.format(frete.valor_cte).replace('.', ',') if frete.valor_cte else '0,00' }}">
-          </div>
-
-          <div class="col-md-4 mb-2">
-            <label for="comissao_cte" class="form-label">Comissão CTe (R$)</label>
-            <input type="text" id="comissao_cte" name="comissao_cte" class="form-control form-control-sm bg-warning" readonly value="R$ {{ '{:.2f}'.format(frete.comissao_cte).replace('.', ',') if frete.comissao_cte else '0,00' }}">
-          </div>
-
-          <div class="col-md-4 mb-2">
-            <label for="lucro" class="form-label">Lucro</label>
-            <input type="text" id="lucro" name="lucro" class="form-control form-control-sm bg-warning" readonly value="R$ {{ '{:.2f}'.format(frete.lucro).replace('.', ',') if frete.lucro else '0,00' }}">
-          </div>
-        </div>
-
-        <div class="mt-3 d-flex justify-content-end">
-          <button type="submit" class="btn btn-warning btn-sm">Salvar</button>
-        </div>
-      </form>
-    </div>
-  </div>
-</div>
-{% endblock %}
-
-{% block scripts %}
-<script>
-  const ROTAS = {{ rotas_dict|tojson|safe }};
-  window.MODOEDICAO = true;
-</script>
-
-<script src="{{ url_for('static', filename='js/app.js') }}"></script>
-<script src="{{ url_for('static', filename='js/fretes_calculos.js') }}?v={{ config.APP_VERSION or '1' }}"></script>
-{% endblock %}
+})();
