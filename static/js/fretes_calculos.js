@@ -228,8 +228,8 @@
     var comissaoCTe = 0;
     if (!isNaN(valorCTe)) comissaoCTe = valorCTe * 0.08;
 
-    // Comissão Motorista: regra solicitada:
-    // se motorista.data-paga-comissao == "0" => 0
+    // Comissão Motorista: rule:
+    // if motorista.data-paga-comissao == "0" => 0
     // else => Q * 0.01
     var comissaoMotorista = 0;
     var motoristaSel = $id('motoristas_id');
@@ -240,7 +240,6 @@
         if (paga === '0' || paga === 'false' || paga === 'False' || paga === '0.0') {
           comissaoMotorista = 0;
         } else {
-          // regra fixa: Q * 0.01 (R$ por litro * qtd)
           if (!isNaN(quantidade)) comissaoMotorista = quantidade * 0.01;
           else comissaoMotorista = 0;
         }
@@ -252,12 +251,10 @@
     if (!isNaN(valorTotalFrete)) lucro = Number(valorTotalFrete) - Number(comissaoMotorista || 0) - Number(comissaoCTe || 0);
 
     // Escrever de volta nos campos (visuais formatados e hidden raw)
-    // preco_produto_unitario: visível com 3 casas, hidden preco_produto_unitario_raw com raw
     var inpPrecoUnit = $id('preco_produto_unitario');
     if (inpPrecoUnit) {
-      // if input uses dataset digits (mask) -> its hidden already updated; else format current numeric
       var rawHidden = $id('preco_produto_unitario_raw');
-      if (rawHidden && (rawHidden.value !== '' && rawHidden.value !== null)) {
+      if (rawHidden && (rawHidden.value !== '' && rawHidden.value !== null && !isNaN(parseNumber(rawHidden.value)))) {
         var r = parseNumber(rawHidden.value);
         inpPrecoUnit.value = formatCurrencyBR(isNaN(r) ? 0 : r, 3);
       } else {
@@ -265,14 +262,12 @@
         if (rawHidden) rawHidden.value = isNaN(precoUnit) ? 0 : precoUnit;
       }
     } else {
-      // ensure hidden if not present
       if ($id('preco_produto_unitario_raw') == null && typeof precoUnit !== 'undefined') {
         ensureHidden('preco_produto_unitario_raw');
         $id('preco_produto_unitario_raw').value = precoUnit;
       }
     }
 
-    // preco_por_litro visible + hidden raw
     var inpPpl = $id('preco_por_litro');
     if (inpPpl) {
       inpPpl.value = formatCurrencyBR(precoPorLitroRaw || 0, 2);
@@ -280,22 +275,21 @@
       if (h) h.value = isNaN(precoPorLitroRaw) ? 0 : precoPorLitroRaw;
     }
 
-    // total_nf_compra
     var inpTotalNF = $id('total_nf_compra');
     if (inpTotalNF) inpTotalNF.value = formatCurrencyBR(totalNF || 0, 2);
-    // valor_total_frete
+
     var inpVTF = $id('valor_total_frete');
     if (inpVTF) inpVTF.value = formatCurrencyBR(valorTotalFrete || 0, 2);
-    // comissao_motorista
+
     var inpComMotor = $id('comissao_motorista');
     if (inpComMotor) inpComMotor.value = formatCurrencyBR(comissaoMotorista || 0, 2);
-    // valor_cte
+
     var inpCTe = $id('valor_cte');
     if (inpCTe) inpCTe.value = formatCurrencyBR(valorCTe || 0, 2);
-    // comissao_cte
+
     var inpComCTe = $id('comissao_cte');
     if (inpComCTe) inpComCTe.value = formatCurrencyBR(comissaoCTe || 0, 2);
-    // lucro
+
     var inpLucro = $id('lucro');
     if (inpLucro) inpLucro.value = formatCurrencyBR(lucro || 0, 2);
 
@@ -308,26 +302,20 @@
       ensureHidden('valor_total_frete');
       ensureHidden('lucro');
 
-      if ($id('valor_cte')) $id('valor_cte').form && ($id('valor_cte').form.querySelector('#valor_cte') || null);
       if ($id('valor_cte')) {
-        // hidden updated by ensureHidden created above
         var hv = $id('valor_cte');
         if (hv && hv.tagName.toLowerCase() === 'input' && hv.type === 'text') {
           // nothing
         } else {
-          var hiddenVal = $id('valor_cte_hidden');
-          if (!hiddenVal) {
-            var h = document.createElement('input');
-            h.type = 'hidden';
-            h.id = 'valor_cte_raw';
-            h.name = 'valor_cte';
-            el = document.querySelector('form');
-            el && el.appendChild(h);
-          }
+          var h = document.createElement('input');
+          h.type = 'hidden';
+          h.id = 'valor_cte_raw';
+          h.name = 'valor_cte';
+          var frm = document.querySelector('form');
+          frm && frm.appendChild(h);
         }
       }
     } catch (e) {
-      // ignore DOM quirks
       console.error('Erro ao garantir hidden fields:', e);
     }
   }
@@ -342,12 +330,10 @@
     var selectedOption = clientesSelect.options[clientesSelect.selectedIndex];
     var destId = selectedOption ? selectedOption.getAttribute('data-destino-id') : null;
     if (!destId) {
-      // limpa destino
       if (destinoSelect) { destinoSelect.value = ''; destinoSelect.disabled = true; }
       destinoHidden.value = '';
       return;
     }
-    // se existe option no select destino, seleciona-a; senão cria temporária
     if (destinoSelect) {
       var opt = destinoSelect.querySelector('option[value="' + destId + '"]');
       if (opt) {
@@ -356,7 +342,6 @@
       } else {
         var newOpt = document.createElement('option');
         newOpt.value = destId;
-        // tentar extrair nome do atributo data-destino-nome se houver na option do cliente
         var nome = selectedOption.getAttribute('data-destino-nome') || 'Destino do cliente';
         newOpt.text = nome;
         destinoSelect.insertBefore(newOpt, destinoSelect.firstChild);
@@ -374,7 +359,7 @@
   }
 
   function initBindings() {
-    // Masks: preco unitario (3 casas) e preco por litro (2 casas)
+    // Masks: preco unitario (3 casas) and preco por litro (2 casas)
     attachNumericMask('preco_produto_unitario', 3, 'preco_produto_unitario_raw');
     attachNumericMask('preco_por_litro', 2, 'preco_por_litro_raw');
 
@@ -400,15 +385,12 @@
     // motorista / cliente / origem changes
     safeAttach('motoristas_id', 'change', calcularTudo);
     safeAttach('clientes_id', 'change', function () {
-      // update destino first, then recalc
       setTimeout(function(){ updateDestinoFromCliente(); calcularTudo(); }, 40);
     });
     safeAttach('origem_id', 'change', function(){ calcularTudo(); });
 
-    // if destino select exists, read changes (but tempo: destino is readonly)
     safeAttach('destino_id', 'change', function(){ calcularTudo(); });
 
-    // preco inputs: already handled by mask blur/input events -> recalc on load
     // initialize destino from current cliente selection
     updateDestinoFromCliente();
 
