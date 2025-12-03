@@ -19,6 +19,26 @@ def _import_fretes_bp(app):
     app.logger.warning('Could not import fretes blueprint from any candidate: %s', candidates)
     return None
 
+def _import_and_register(app, candidates, label):
+    """
+    Tenta importar um blueprint de uma lista de módulos candidatos e registrá-lo.
+    Retorna True se algum blueprint foi registrado, False caso contrário.
+    """
+    for modname in candidates:
+        try:
+            module = __import__(modname, fromlist=['bp'])
+            bp = getattr(module, 'bp', None)
+            if bp is None:
+                app.logger.debug('Módulo %s não expõe "bp"', modname)
+                continue
+            app.register_blueprint(bp)
+            app.logger.info('Blueprint %s registrado a partir de %s', label, modname)
+            return True
+        except Exception as e:
+            app.logger.debug('Falha ao importar/registrar %s de %s: %s', label, modname, e, exc_info=True)
+    app.logger.warning('Não foi possível registrar blueprint %s a partir dos candidatos: %s', label, candidates)
+    return False
+
 def create_app():
     app = Flask(__name__, static_folder='static', template_folder='templates')
     app.config.from_mapping(
@@ -66,7 +86,7 @@ def create_app():
             app.logger.debug('load_user: models.usuario.Usuario não disponível ou falha ao carregar', exc_info=True)
             return None
 
-    # Importar e registrar blueprint 'fretes'
+    # Registrar blueprint 'fretes' (com tentativa de múltiplos caminhos)
     try:
         fretes_bp = _import_fretes_bp(app)
         if fretes_bp:
@@ -77,6 +97,15 @@ def create_app():
     except Exception as e:
         app.logger.exception('Erro ao registrar blueprint fretes: %s', e)
         fretes_bp = None
+
+    # Registrar blueprint 'clientes' (corrige o BuildError de url_for('clientes.lista'))
+    # Tenta candidates onde o módulo pode estar: 'clientes' ou 'routes.clientes'
+    try:
+        registered_clientes = _import_and_register(app, ['clientes', 'routes.clientes'], 'clientes')
+        if not registered_clientes:
+            app.logger.warning('Blueprint clientes não registrado; links no navbar que usam clientes.* podem falhar.')
+    except Exception:
+        app.logger.exception('Erro ao tentar registrar blueprint clientes')
 
     # Rota index simples
     @app.route('/')
