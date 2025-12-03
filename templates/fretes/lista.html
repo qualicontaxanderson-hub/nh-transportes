@@ -4,11 +4,16 @@
 <div class="container">
   <div class="d-flex justify-content-between align-items-center mb-3">
     <h3 class="mb-0">Lista de Fretes</h3>
-    <!-- Alterado: aponta para pedidos.importar_pedido (endpoint existente) -->
-    <a class="btn btn-warning" href="{{ url_for('pedidos.importar_pedido', pedido_id=0) }}">Novo Frete</a>
+
+    {% if 'pedidos' in registered_blueprints %}
+      <a class="btn btn-warning" href="{{ url_for('pedidos.importar_pedido', id=0) }}">Novo Frete</a>
+    {% elif 'fretes' in registered_blueprints %}
+      <a class="btn btn-warning" href="{{ url_for('fretes.importar_pedido', pedido_id=0) }}">Novo Frete</a>
+    {% else %}
+      <a class="btn btn-warning" href="#">Novo Frete</a>
+    {% endif %}
   </div>
 
-  <!-- Filtros (copie/adapte os filtros reais se necessário) -->
   <div class="card mb-3">
     <div class="card-body">
       <form method="get" action="{{ url_for('fretes.lista') }}" class="row g-2">
@@ -73,9 +78,20 @@
             </td>
             <td>{{ frete.status }}</td>
             <td>
-              <a class="btn btn-sm btn-outline-primary" href="{{ url_for('fretes.importar_pedido', pedido_id=frete.id) if 'fretes' in registered_blueprints else '#' }}" title="Editar">
-                <i class="bi bi-pencil"></i>
-              </a>
+              {% if 'fretes' in registered_blueprints %}
+                <a class="btn btn-sm btn-outline-primary" href="{{ url_for('fretes.importar_pedido', pedido_id=frete.id) }}" title="Editar">
+                  <i class="bi bi-pencil"></i>
+                </a>
+              {% elif 'pedidos' in registered_blueprints %}
+                <a class="btn btn-sm btn-outline-primary" href="{{ url_for('pedidos.importar_pedido', id=frete.id) }}" title="Editar">
+                  <i class="bi bi-pencil"></i>
+                </a>
+              {% else %}
+                <a class="btn btn-sm btn-outline-primary" href="#" title="Editar">
+                  <i class="bi bi-pencil"></i>
+                </a>
+              {% endif %}
+
               <a class="btn btn-sm btn-outline-danger" href="#" title="Excluir">
                 <i class="bi bi-trash"></i>
               </a>
