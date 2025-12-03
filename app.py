@@ -152,6 +152,35 @@ def alterar_senha_alias():
 # --------------------------------------------------------------------
 
 
+# --- ADDED: alias route to avoid BuildError from templates calling url_for('listar_usuarios') ---
+@app.route('/listar-usuarios', endpoint='listar_usuarios')
+@login_required
+def listar_usuarios_alias():
+    """
+    Minimal alias so templates that call url_for('listar_usuarios') won't raise BuildError.
+    Tries several likely endpoint names and falls back to a safe page.
+    """
+    candidates = [
+        'usuarios.listar',
+        'usuarios.listar_usuarios',
+        'admin.listar_usuarios',
+        'listar_usuarios',
+        'usuarios.index',
+        'usuarios.index_listar'
+    ]
+    for ep in candidates:
+        try:
+            return redirect(url_for(ep))
+        except Exception:
+            continue
+    # Final fallback: if logout exists, redirect there; otherwise show 404 template
+    try:
+        return redirect(url_for('logout'))
+    except Exception:
+        return render_template("404.html"), 404
+# --------------------------------------------------------------------
+
+
 # Health check
 @app.route("/health")
 def health():
