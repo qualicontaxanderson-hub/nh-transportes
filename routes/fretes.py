@@ -6,6 +6,38 @@ from utils.db import get_db_connection
 bp = Blueprint('fretes', __name__, url_prefix='/fretes')
 
 
+def parse_moeda(valor):
+    """
+    Converte uma string de moeda em float (pt-BR ou en).
+    Exemplos:
+      'R$ 1.234,56' -> 1234.56
+      '1.234,56'     -> 1234.56
+      '1234.56'      -> 1234.56
+      '0,10'         -> 0.10
+      None/''/inválido -> 0.0
+    """
+    try:
+        if valor is None:
+            return 0.0
+        if isinstance(valor, (int, float)):
+            return float(valor)
+        s = str(valor).strip()
+        if s == '':
+            return 0.0
+        # remove "R$" e espaços
+        s = s.replace('R$', '').replace('r$', '').replace('R','').replace(' ', '')
+        # se tiver tanto ponto quanto vírgula, assumimos pt-BR: ponto = milhar, vírgula = decimal
+        if '.' in s and ',' in s:
+            s = s.replace('.', '')
+            s = s.replace(',', '.')
+        else:
+            # troca vírgula por ponto (caso venha '10,5' ou '0,10')
+            s = s.replace(',', '.')
+        return float(s)
+    except Exception:
+        return 0.0
+
+
 @bp.route('/', methods=['GET'])
 @login_required
 def lista():
@@ -45,6 +77,38 @@ def novo():
         conn = get_db_connection()
         cursor = conn.cursor()
         try:
+            # Preferir campos "raw" enviados pelo formulário (se existirem),
+            # caso contrário limpar os campos formatados via parse_moeda.
+            preco_produto_unitario_raw = request.form.get('preco_produto_unitario_raw')
+            if preco_produto_unitario_raw is None or preco_produto_unitario_raw == '':
+                preco_produto_unitario_raw = parse_moeda(request.form.get('preco_produto_unitario'))
+            else:
+                preco_produto_unitario_raw = parse_moeda(preco_produto_unitario_raw)
+
+            preco_por_litro = request.form.get('preco_por_litro_raw')
+            if preco_por_litro is None or preco_por_litro == '':
+                preco_por_litro = parse_moeda(request.form.get('preco_por_litro'))
+            else:
+                preco_por_litro = parse_moeda(preco_por_litro)
+
+            total_nf_compra = request.form.get('total_nf_compra')
+            total_nf_compra = parse_moeda(total_nf_compra)
+
+            valor_total_frete = request.form.get('valor_total_frete')
+            valor_total_frete = parse_moeda(valor_total_frete)
+
+            comissao_motorista = request.form.get('comissao_motorista')
+            comissao_motorista = parse_moeda(comissao_motorista)
+
+            valor_cte = request.form.get('valor_cte')
+            valor_cte = parse_moeda(valor_cte)
+
+            comissao_cte = request.form.get('comissao_cte')
+            comissao_cte = parse_moeda(comissao_cte)
+
+            lucro = request.form.get('lucro')
+            lucro = parse_moeda(lucro)
+
             cursor.execute("""
                 INSERT INTO fretes (
                     data_frete, status, observacoes,
@@ -70,14 +134,14 @@ def novo():
                 request.form.get('veiculos_id'),
                 request.form.get('quantidade_id') or None,
                 request.form.get('quantidade_manual') or None,
-                request.form.get('preco_produto_unitario_raw') or 0,
-                request.form.get('preco_por_litro') or 0,
-                request.form.get('total_nf_compra') or 0,
-                request.form.get('valor_total_frete') or 0,
-                request.form.get('comissao_motorista') or 0,
-                request.form.get('valor_cte') or 0,
-                request.form.get('comissao_cte') or 0,
-                request.form.get('lucro') or 0,
+                preco_produto_unitario_raw or 0,
+                preco_por_litro or 0,
+                total_nf_compra or 0,
+                valor_total_frete or 0,
+                comissao_motorista or 0,
+                valor_cte or 0,
+                comissao_cte or 0,
+                lucro or 0,
             ))
             conn.commit()
             flash('Frete criado com sucesso!', 'success')
@@ -172,6 +236,26 @@ def editar(id):
 
     if request.method == 'POST':
         try:
+            # Normalizar valores monetários antes do update
+            preco_produto_unitario_raw = request.form.get('preco_produto_unitario_raw')
+            if preco_produto_unitario_raw is None or preco_produto_unitario_raw == '':
+                preco_produto_unitario_raw = parse_moeda(request.form.get('preco_produto_unitario'))
+            else:
+                preco_produto_unitario_raw = parse_moeda(preco_produto_unitario_raw)
+
+            preco_por_litro = request.form.get('preco_por_litro_raw')
+            if preco_por_litro is None or preco_por_litro == '':
+                preco_por_litro = parse_moeda(request.form.get('preco_por_litro'))
+            else:
+                preco_por_litro = parse_moeda(preco_por_litro)
+
+            total_nf_compra = parse_moeda(request.form.get('total_nf_compra'))
+            valor_total_frete = parse_moeda(request.form.get('valor_total_frete'))
+            comissao_motorista = parse_moeda(request.form.get('comissao_motorista'))
+            valor_cte = parse_moeda(request.form.get('valor_cte'))
+            comissao_cte = parse_moeda(request.form.get('comissao_cte'))
+            lucro = parse_moeda(request.form.get('lucro'))
+
             cursor.execute("""
                 UPDATE fretes SET
                     data_frete=%s,
@@ -208,14 +292,14 @@ def editar(id):
                 request.form.get('veiculos_id'),
                 request.form.get('quantidade_id') or None,
                 request.form.get('quantidade_manual') or None,
-                request.form.get('preco_produto_unitario_raw') or 0,
-                request.form.get('preco_por_litro') or 0,
-                request.form.get('total_nf_compra') or 0,
-                request.form.get('valor_total_frete') or 0,
-                request.form.get('comissao_motorista') or 0,
-                request.form.get('valor_cte') or 0,
-                request.form.get('comissao_cte') or 0,
-                request.form.get('lucro') or 0,
+                preco_produto_unitario_raw or 0,
+                preco_por_litro or 0,
+                total_nf_compra or 0,
+                valor_total_frete or 0,
+                comissao_motorista or 0,
+                valor_cte or 0,
+                comissao_cte or 0,
+                lucro or 0,
                 id,
             ))
             conn.commit()
