@@ -70,7 +70,8 @@
                     </span>
                 </li>
                 <li class="nav-item">
-                    <a class="nav-link btn-sair" href="{{ url_for('logout') }}"
+                    <!-- ALTERADO para usar auth.logout (blueprint 'auth') -->
+                    <a class="nav-link btn-sair" href="{{ url_for('auth.logout') }}"
                        style="color: #000; font-weight: 600; font-size: 0.85rem; border: 2px solid #ff9800; border-radius: 6px; padding: 6px 14px; background: #ff9800;">
                         <i class="bi bi-box-arrow-right"></i> Sair
                     </a>
