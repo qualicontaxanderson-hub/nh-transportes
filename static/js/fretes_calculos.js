@@ -101,20 +101,52 @@ function obterValorPorLitroRota() {
     }
 }
 
+/* ---------- utilidades de moeda/parse ---------- */
+function desformatarMoeda(valor) {
+    if (!valor) return 0;
+    return parseFloat(valor.toString().replace(/\./g, '').replace(',', '.')) || 0;
+}
+
 /* ---------- Cálculos ---------- */
 function calcularQuantidade() {
     try {
+        const tipoSelect = document.getElementById('quantidade_tipo');
+        const tipo = tipoSelect ? String(tipoSelect.value).trim() : 'padrao';
+
         const selectQuantidade = document.getElementById('quantidade_id');
         const inputQuantidadeManual = document.getElementById('quantidade_manual');
+
         let quantidade = 0;
-        if (selectQuantidade && selectQuantidade.value) {
-            const option = selectQuantidade.options[selectQuantidade.selectedIndex];
-            const raw = option.getAttribute('data-quantidade') || '0';
-            quantidade = parseNumberFromString(raw, 0) || 0;
+
+        if (tipo === 'padrao') {
+            // Usa apenas a quantidade da listbox
+            if (selectQuantidade && selectQuantidade.value) {
+                const option = selectQuantidade.options[selectQuantidade.selectedIndex];
+                const raw = option ? (option.getAttribute('data-quantidade') || '0') : '0';
+                quantidade = parseNumberFromString(raw, 0) || 0;
+            } else {
+                quantidade = 0;
+            }
+        } else if (tipo === 'personalizada') {
+            // Usa apenas a quantidade manual
+            if (inputQuantidadeManual && inputQuantidadeManual.value) {
+                quantidade = parseNumberFromString(inputQuantidadeManual.value, 0) || 0;
+            } else {
+                quantidade = 0;
+            }
+        } else {
+            // fallback defensivo: tenta manual depois select
+            if (inputQuantidadeManual && inputQuantidadeManual.value) {
+                quantidade = parseNumberFromString(inputQuantidadeManual.value, 0) || 0;
+            } else if (selectQuantidade && selectQuantidade.value) {
+                const option = selectQuantidade.options[selectQuantidade.selectedIndex];
+                const raw = option ? (option.getAttribute('data-quantidade') || '0') : '0';
+                quantidade = parseNumberFromString(raw, 0) || 0;
+            } else {
+                quantidade = 0;
+            }
         }
-        if (inputQuantidadeManual && inputQuantidadeManual.value) {
-            quantidade = parseNumberFromString(inputQuantidadeManual.value, 0) || quantidade;
-        }
+
         return quantidade;
     } catch (err) {
         console.error('calcularQuantidade error', err);
