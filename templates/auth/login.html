@@ -1,125 +1,167 @@
-```html
 <!doctype html>
 <html lang="pt-BR">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Login - GRUPO NH</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='bootstrap.min.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='bootstrap-icons.css') }}">
   <style>
-    /* Mantém o gradiente de fundo e centraliza coluna com card + footer */
+    /* Estilo inspirado no layout original: card central, header com gradiente, corpo branco */
     body {
-      background: linear-gradient(135deg, #4A90E2 0%, #5BA3F5 40%, #F2994A 100%);
       min-height: 100vh;
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+      background: linear-gradient(135deg, #4A90E2 0%, #A5B9D1 30%, #F2994A 100%);
       display: flex;
       align-items: center;
       justify-content: center;
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial;
     }
-    .login-wrapper {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 18px;
-      width: 100%;
-      max-width: 420px;
-      padding: 20px;
-      box-sizing: border-box;
-    }
-    .card-login {
-      width: 100%;
-      border-radius: 12px;
+
+    .login-card {
+      width: 420px;
+      border-radius: 10px;
       overflow: hidden;
-      box-shadow: 0 12px 40px rgba(0,0,0,0.25);
+      box-shadow: 0 18px 40px rgba(0,0,0,0.25);
+      background: white;
     }
-    .card-header-gradient {
-      padding: 28px 20px;
+
+    .login-header {
+      padding: 30px 20px;
       text-align: center;
       color: #fff;
       background: linear-gradient(135deg, rgba(74,144,226,0.95), rgba(242,153,74,0.95));
     }
-    .card-header-gradient img {
-      height: 80px;
-      background: white;
+
+    .login-header img {
+      height: 76px;
+      width: 76px;
+      object-fit: contain;
+      background: #fff;
       padding: 6px;
       border-radius: 6px;
       display: inline-block;
       margin-bottom: 12px;
     }
-    .card-body {
-      background: #fff;
-      padding: 22px;
+
+    .login-header h1 {
+      margin: 6px 0 2px;
+      font-size: 1.25rem;
+      letter-spacing: 1px;
+      font-weight: 700;
     }
-    .footer-login {
-      color: rgba(255,255,255,0.95);
+
+    .login-header p {
+      margin: 0;
       font-size: 0.9rem;
-      text-align: center;
-      margin-top: 6px;
-      width: 100%;
+      opacity: 0.95;
     }
-    .copyright {
-      color: rgba(255,255,255,0.9);
+
+    .login-body {
+      padding: 20px;
+    }
+
+    .input-icon {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .input-group-text {
+      background: #fff;
+      border-right: 0;
+    }
+
+    .form-control {
+      border-left: 0;
+    }
+
+    .btn-enter {
+      background: #1f6fb6;
+      border-color: #1f6fb6;
+      color: #fff;
+    }
+
+    .btn-enter:hover {
+      background: #14588f;
+      border-color: #14588f;
+    }
+
+    .footer-small {
+      text-align: center;
+      margin-top: 12px;
+      color: rgba(0,0,0,0.55);
       font-size: 0.85rem;
     }
 
-    @media (max-width: 768px) {
-      .login-wrapper { padding: 12px; max-width: 360px; }
-      .card-header-gradient img { height: 60px; }
+    .copyright {
+      margin-top: 18px;
+      text-align: center;
+      color: rgba(255,255,255,0.95);
+      font-size: 0.9rem;
+      position: absolute;
+      bottom: 18px;
+      right: 18px;
+    }
+
+    @media (max-width: 480px){
+      .login-card { width: 92%; }
+      .copyright { display: none; }
     }
   </style>
 </head>
 <body>
-  <div class="login-wrapper">
-    <div class="card card-login">
-      <div class="card-header-gradient">
-        <!-- fallback para placeholder se a logo não estiver presente -->
-        <img src="{{ url_for('static', filename='logo-nh.png') }}" alt="logo"
-             onerror="this.onerror=null;this.src='https://via.placeholder.com/80/ffffff/000000?text=NH';">
-        <h3 class="mt-2" style="letter-spacing:1px; font-weight:700;">GRUPO NH</h3>
-        <p style="margin:4px 0 0; color:rgba(255,255,255,0.95)">Sistema de Gerenciamento de Transportes</p>
-      </div>
+  <div class="login-card" role="main" aria-label="Login">
+    <div class="login-header">
+      <!-- logo com fallback -->
+      <img src="{{ url_for('static', filename='logo-nh.png') }}" alt="NH" onerror="this.onerror=null;this.src='https://via.placeholder.com/76/ffffff/000000?text=NH';" />
+      <h1>GRUPO NH</h1>
+      <p>Sistema de Gerenciamento de Transportes</p>
+    </div>
 
-      <div class="card-body">
-        <form method="post" action="{{ url_for('auth.login') }}">
-          {% with messages = get_flashed_messages(with_categories=true) %}
-            {% if messages %}
-              {% for category, msg in messages %}
-                <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
-                  {{ msg }}
-                  <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-                </div>
-              {% endfor %}
-            {% endif %}
-          {% endwith %}
+    <div class="login-body">
+      <form method="post" action="{{ url_for('auth.login') }}" autocomplete="on">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+          {% if messages %}
+            {% for category, msg in messages %}
+              <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
+                {{ msg }}
+                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+              </div>
+            {% endfor %}
+          {% endif %}
+        {% endwith %}
 
-          <div class="mb-3">
-            <label class="form-label">Usuário ou Email</label>
+        <div class="mb-3">
+          <label class="form-label">Usuário ou Email</label>
+          <div class="input-group">
+            <span class="input-group-text"><i class="bi bi-envelope"></i></span>
             <input class="form-control" type="text" name="username" placeholder="Usuário ou e-mail" required value="{{ request.form.username or '' }}">
           </div>
+        </div>
 
-          <div class="mb-3">
-            <label class="form-label">Senha</label>
+        <div class="mb-3">
+          <label class="form-label">Senha</label>
+          <div class="input-group">
+            <span class="input-group-text"><i class="bi bi-lock"></i></span>
             <input class="form-control" type="password" name="password" placeholder="Senha" required>
           </div>
+        </div>
 
-          <div class="d-grid gap-2">
-            <button class="btn btn-primary" type="submit">Entrar no Sistema</button>
-          </div>
+        <div class="d-grid mb-2">
+          <button class="btn btn-enter btn-enter-lg" type="submit">
+            <i class="bi bi-box-arrow-in-right me-1"></i> Entrar no Sistema
+          </button>
+        </div>
 
-          <div class="text-center mt-3 text-muted small">
-            Acesso restrito a usuários autorizados
-          </div>
-        </form>
-      </div>
-    </div>
-
-    <!-- RODAPÉ CENTRALIZADO ABAIXO DO CARD -->
-    <div class="footer-login">
-      <div class="copyright">© 2025 Grupo NH - Todos os direitos reservados</div>
+        <div class="footer-small">Acesso restrito a usuários autorizados</div>
+      </form>
     </div>
   </div>
+
+  <!-- rodapé discreto no canto (mantém layout parecido com original) -->
+  <div class="copyright">© 2025 Grupo NH - Todos os direitos reservados</div>
 
   <script src="{{ url_for('static', filename='bootstrap.bundle.min.js') }}"></script>
 </body>
 </html>
-```
