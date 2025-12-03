@@ -99,7 +99,7 @@ def novo():
     cursor.execute("SELECT * FROM fornecedores ORDER BY razao_social")
     fornecedores = cursor.fetchall()
 
-    cursor.execute("SELECT * FROM produtos ORDER BY nome")
+    cursor.execute("SELECT * FROM produto ORDER BY nome")
     produtos = cursor.fetchall()
 
     cursor.execute("SELECT * FROM origens ORDER BY nome")
@@ -213,7 +213,7 @@ def editar(id):
         cursor.execute("SELECT * FROM fornecedores ORDER BY razao_social")
         fornecedores = cursor.fetchall()
 
-        cursor.execute("SELECT * FROM produtos ORDER BY nome")
+        cursor.execute("SELECT * FROM produto ORDER BY nome")
         produtos = cursor.fetchall()
 
         cursor.execute("SELECT * FROM origens ORDER BY nome")
