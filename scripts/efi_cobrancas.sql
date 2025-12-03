@@ -75,6 +75,7 @@ CREATE TABLE IF NOT EXISTS cobrancas (
     INDEX idx_status (status),
     INDEX idx_tipo (tipo),
     INDEX idx_data_vencimento (data_vencimento),
+    INDEX idx_status_tipo_vencimento (status, tipo, data_vencimento),
     
     CONSTRAINT fk_cobranca_frete 
         FOREIGN KEY (frete_id) REFERENCES fretes(id) 

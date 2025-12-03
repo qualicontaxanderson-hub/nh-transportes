@@ -6,7 +6,7 @@ NH Transportes - Sistema de Gestão de Fretes
 import json
 import base64
 from datetime import datetime, timedelta
-from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify
+from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, current_app
 from flask_login import login_required, current_user
 from utils.db import get_db_connection
 from utils.efi_api import get_efi_api, get_efi_config, EfiAPI
@@ -182,7 +182,8 @@ def nova():
     cursor = conn.cursor(dictionary=True)
 
     try:
-        cursor.execute("SELECT id, razao_social, cpf_cnpj, telefone, email, endereco, municipio, uf, cep FROM clientes ORDER BY razao_social")
+        # Limita a 500 clientes mais recentes para evitar problemas de performance
+        cursor.execute("SELECT id, razao_social, cnpj, telefone, email, endereco, municipio, uf, cep FROM clientes ORDER BY razao_social LIMIT 500")
         clientes = cursor.fetchall()
 
         cursor.execute("SELECT id, data_frete, valor_total_frete, clientes_id FROM fretes WHERE status != 'pago' ORDER BY id DESC LIMIT 100")
@@ -458,7 +459,6 @@ def webhook():
             return jsonify({'status': 'erro', 'mensagem': 'Dados inválidos'}), 400
 
         # Log do webhook
-        current_app = request.environ.get('flask.app') or __import__('flask').current_app
         current_app.logger.info(f"Webhook EFI recebido: {json.dumps(data)}")
 
         # Processa notificação de PIX

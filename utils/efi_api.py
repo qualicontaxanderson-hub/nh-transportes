@@ -73,13 +73,22 @@ class EfiAPI:
         except Exception:
             cert_content = self.certificado_pem
 
-        # Cria arquivo temporário
-        fd, path = tempfile.mkstemp(suffix='.pem')
-        with os.fdopen(fd, 'w') as f:
-            f.write(cert_content)
-
-        self._cert_file = path
-        return path
+        # Cria arquivo temporário com tratamento de erro
+        fd = None
+        try:
+            fd, path = tempfile.mkstemp(suffix='.pem')
+            with os.fdopen(fd, 'w') as f:
+                f.write(cert_content)
+            fd = None  # Marca como fechado
+            self._cert_file = path
+            return path
+        except Exception:
+            if fd is not None:
+                try:
+                    os.close(fd)
+                except Exception:
+                    pass
+            raise
 
     def _cleanup_cert(self):
         """Remove arquivo temporário do certificado."""
@@ -173,10 +182,12 @@ class EfiAPI:
                 "original": f"{valor:.2f}"
             },
             "chave": self.chave_pix,
-            "solicitacaoPagador": descricao[:140]  # Limite de 140 caracteres
+            # Limite de 140 caracteres imposto pela API EFI para campo solicitacaoPagador
+            "solicitacaoPagador": descricao[:140]
         }
 
         # Adiciona dados do devedor se fornecidos
+        # CPF: 11 dígitos, CNPJ: 14 dígitos
         if pagador_cpf and pagador_nome:
             cpf_limpo = ''.join(filter(str.isdigit, pagador_cpf))
             if len(cpf_limpo) == 11:
