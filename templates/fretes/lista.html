@@ -18,9 +18,9 @@
         Novo Pedido
       </a>
 
-      <!-- Importar Pedido (azul) -->
+      <!-- Importar Pedido (azul) - usa fluxo de pedidos -->
       <a class="btn btn-primary btn-sm"
-         href="{{ url_for('fretes.importar_pedido') }}">
+         href="{{ url_for('pedidos.importar_pedido') }}">
         Importar Pedido
       </a>
     </div>
@@ -109,7 +109,7 @@
                   <i class="bi bi-pencil"></i>
                 </a>
 
-                <!-- Excluir frete (POST é o ideal, mas mantendo GET conforme seu fluxo atual) -->
+                <!-- Excluir frete -->
                 <a class="btn btn-danger"
                    href="{{ url_for('fretes.deletar', id=frete.id) }}"
                    onclick="return confirm('Tem certeza que deseja excluir este frete?');"
