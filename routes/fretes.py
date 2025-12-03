@@ -1,6 +1,5 @@
 from flask import Blueprint, render_template, request, redirect, url_for, flash
 from flask_login import login_required
-
 from utils.db import get_db_connection
 
 bp = Blueprint('fretes', __name__, url_prefix='/fretes')
@@ -9,9 +8,6 @@ bp = Blueprint('fretes', __name__, url_prefix='/fretes')
 @bp.route('/', methods=['GET'])
 @login_required
 def lista():
-    """
-    Lista simples de fretes — usada pelo menu (endpoint 'fretes.lista').
-    """
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
     try:
@@ -44,33 +40,44 @@ def lista():
 @bp.route('/novo', methods=['GET', 'POST'])
 @login_required
 def novo():
-    """
-    Formulário/ação para criar um novo frete — usado em url_for('fretes.novo').
-    Ajuste a lógica conforme sua tabela e template.
-    """
     if request.method == 'POST':
-        # Exemplo: aqui você insere na tabela fretes usando os dados do form.
-        # Preencha os campos reais da sua tabela.
         conn = get_db_connection()
         cursor = conn.cursor()
         try:
-            cursor.execute(
-                """
-                INSERT INTO fretes (data_frete, status, valor_total_frete, lucro,
-                                    clientes_id, fornecedores_id, motoristas_id, veiculos_id)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-                """,
-                (
-                    request.form.get('data_frete'),
-                    request.form.get('status'),
-                    request.form.get('valor_total_frete'),
-                    request.form.get('lucro'),
-                    request.form.get('clientes_id'),
-                    request.form.get('fornecedores_id'),
-                    request.form.get('motoristas_id'),
-                    request.form.get('veiculos_id'),
-                ),
-            )
+            cursor.execute("""
+                INSERT INTO fretes (
+                    data_frete, status, observacoes,
+                    clientes_id, fornecedores_id, produto_id,
+                    origem_id, destino_id,
+                    motoristas_id, veiculos_id,
+                    quantidade_id, quantidade_manual,
+                    preco_produto_unitario, preco_por_litro,
+                    total_nf_compra, valor_total_frete,
+                    comissao_motorista, valor_cte, comissao_cte, lucro
+                )
+                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+            """, (
+                request.form.get('data_frete'),
+                request.form.get('status'),
+                request.form.get('observacoes'),
+                request.form.get('clientes_id'),
+                request.form.get('fornecedores_id'),
+                request.form.get('produto_id'),
+                request.form.get('origem_id'),
+                request.form.get('destino_id'),
+                request.form.get('motoristas_id'),
+                request.form.get('veiculos_id'),
+                request.form.get('quantidade_id') or None,
+                request.form.get('quantidade_manual') or None,
+                request.form.get('preco_produto_unitario_raw') or 0,
+                request.form.get('preco_por_litro') or 0,
+                request.form.get('total_nf_compra') or 0,
+                request.form.get('valor_total_frete') or 0,
+                request.form.get('comissao_motorista') or 0,
+                request.form.get('valor_cte') or 0,
+                request.form.get('comissao_cte') or 0,
+                request.form.get('lucro') or 0,
+            ))
             conn.commit()
             flash('Frete criado com sucesso!', 'success')
             return redirect(url_for('fretes.lista'))
@@ -81,5 +88,50 @@ def novo():
             cursor.close()
             conn.close()
 
-    # GET: exibe o formulário
-    return render_template('fretes/novo.html')
+    # GET: carregar dados para o formulário
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+
+    cursor.execute("SELECT * FROM clientes ORDER BY razao_social")
+    clientes = cursor.fetchall()
+
+    cursor.execute("SELECT * FROM fornecedores ORDER BY razao_social")
+    fornecedores = cursor.fetchall()
+
+    cursor.execute("SELECT * FROM produtos ORDER BY nome")
+    produtos = cursor.fetchall()
+
+    cursor.execute("SELECT * FROM origens ORDER BY nome")
+    origens = cursor.fetchall()
+
+    cursor.execute("SELECT * FROM destinos ORDER BY nome")
+    destinos = cursor.fetchall()
+
+    cursor.execute("SELECT * FROM motoristas ORDER BY nome")
+    motoristas = cursor.fetchall()
+
+    cursor.execute("SELECT * FROM veiculos ORDER BY caminhao")
+    veiculos = cursor.fetchall()
+
+    cursor.execute("SELECT * FROM quantidades ORDER BY valor")
+    quantidades = cursor.fetchall()
+
+    # se ainda não tiver rotas montadas, pode usar um dict vazio
+    rotas_dict = {}
+
+    cursor.close()
+    conn.close()
+
+    return render_template(
+        'fretes/novo.html',
+        clientes=clientes,
+        fornecedores=fornecedores,
+        produtos=produtos,
+        origens=origens,
+        destinos=destinos,
+        motoristas=motoristas,
+        veiculos=veiculos,
+        quantidades=quantidades,
+        frete=None,
+        rotas_dict=rotas_dict,
+    )
