@@ -4,128 +4,170 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Login - GRUPO NH</title>
+
+  <!-- CDN bootstrap como fallback para garantir estilos se o static não carregar -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" integrity="" crossorigin="anonymous">
+
+  <!-- seu bootstrap local (se existir) -->
   <link rel="stylesheet" href="{{ url_for('static', filename='bootstrap.min.css') }}">
+
   <style>
-    /* Visual alinhado ao layout original que você mostrou */
-    :root{
+    :root {
       --grad-start: #4A90E2;
-      --grad-mid: #8FAEDC;
       --grad-end: #F2994A;
-      --card-width: 420px;
+      --card-w: 460px;
+      --logo-size: 96px;
+      --accent: #1f6fb6;
     }
-    html,body{height:100%;margin:0;font-family: -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial;}
-    body{
-      background: linear-gradient(135deg, var(--grad-start) 0%, var(--grad-mid) 40%, var(--grad-end) 100%);
+
+    html,body { height:100%; margin:0; font-family: -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial; }
+
+    body {
       display:flex;
       align-items:center;
       justify-content:center;
       min-height:100vh;
+      background: linear-gradient(135deg, var(--grad-start) 0%, #9fb8d6 38%, var(--grad-end) 100%);
+      -webkit-font-smoothing:antialiased;
     }
 
-    .card-login{
-      width:var(--card-width);
-      border-radius:10px;
-      overflow:hidden;
-      box-shadow: 0 18px 40px rgba(0,0,0,0.25);
-      background:#fff;
+    .card-login {
+      width: var(--card-w);
+      border-radius: 10px;
+      overflow: hidden;
+      box-shadow: 0 20px 50px rgba(0,0,0,0.25);
+      background: #fff;
     }
 
-    .card-header{
-      padding:28px 20px;
-      text-align:center;
-      color:#fff;
+    .card-header-gradient {
+      padding: 28px 22px;
+      text-align: center;
+      color: #fff;
       background: linear-gradient(135deg, rgba(74,144,226,0.95), rgba(242,153,74,0.95));
     }
 
-    .card-header .logo{
-      width:84px;
-      height:84px;
+    .logo-box {
+      width: var(--logo-size);
+      height: var(--logo-size);
       display:inline-block;
       background:#fff;
       padding:8px;
-      border-radius:6px;
-      object-fit:contain;
-      margin-bottom:12px;
+      border-radius:8px;
+      margin-bottom: 10px;
+      box-shadow: 0 6px 18px rgba(0,0,0,0.12);
     }
+    .logo-box img { width:100%; height:100%; object-fit:contain; display:block; }
 
-    .card-header h2{
-      margin:6px 0 2px;
-      font-size:1.15rem;
+    .brand-title {
+      margin:6px 0 0;
+      font-weight:800;
       letter-spacing:1px;
-      font-weight:700;
+      font-size:1.15rem;
     }
-    .card-header p{margin:0;font-size:0.88rem;opacity:0.95;}
+    .brand-sub { margin:4px 0 0; font-size:0.88rem; opacity:0.95; }
 
-    .card-body{padding:18px 20px;}
+    .card-body {
+      padding:20px 22px 26px;
+    }
 
-    .form-label{font-weight:600;font-size:0.95rem;margin-bottom:6px;display:block;color:#333;}
-    .form-control{height:38px;border-radius:3px;}
-    .btn-entrar{background:#1f6fb6;border-color:#1f6fb6;color:#fff;padding:10px 12px;border-radius:6px;}
-    .btn-entrar:hover{background:#14588f;border-color:#14588f;color:#fff;}
+    /* Inputs: usar aparência mais moderna e consistente */
+    .form-control {
+      height:44px;
+      padding:0.625rem 0.75rem;
+      border-radius:6px;
+      border:1px solid #d0d7de;
+      box-shadow:none;
+      transition:box-shadow .15s ease, border-color .15s ease;
+    }
+    .form-control:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 0.15rem rgba(31,111,182,0.12);
+      outline: none;
+    }
+    label.form-label { font-weight:600; margin-bottom:6px; color:#333; }
 
-    .small-note{font-size:0.85rem;color:#777;text-align:center;margin-top:12px;}
+    .btn-entrar {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #fff;
+      border-radius:8px;
+      padding: 10px 14px;
+    }
+    .btn-entrar:hover, .btn-entrar:focus {
+      background:#14588f;
+      border-color:#14588f;
+      color:#fff;
+      box-shadow: none;
+    }
 
-    /* copyright bottom-right, discreto */
-    .copyright{
-      position:fixed;
-      right:18px;
-      bottom:14px;
-      color:rgba(255,255,255,0.9);
+    .note {
+      text-align:center;
+      margin-top:12px;
+      color:#7a7a7a;
+      font-size:0.9rem;
+    }
+
+    .copyright {
+      position: fixed;
+      right: 18px;
+      bottom: 14px;
+      color: rgba(255,255,255,0.92);
       font-size:0.88rem;
     }
 
-    @media (max-width:480px){
-      .card-login{width:92%;}
-      .copyright{display:none;}
+    @media (max-width: 600px){
+      :root { --card-w: 92%; --logo-size:72px; }
+      .copyright { display:none; }
     }
   </style>
 </head>
 <body>
-  <main>
-    <div class="card-login" role="main" aria-label="Login">
-      <header class="card-header">
-        <img src="{{ url_for('static', filename='logo-nh.png') }}" alt="NH" class="logo"
-             onerror="this.onerror=null;this.src='https://via.placeholder.com/84/ffffff/000000?text=NH';">
-        <h2>GRUPO NH</h2>
-        <p>Sistema de Gerenciamento de Transportes</p>
-      </header>
-
-      <div class="card-body">
-        <form method="post" action="{{ url_for('auth.login') }}">
-          {% with messages = get_flashed_messages(with_categories=true) %}
-            {% if messages %}
-              {% for category, msg in messages %}
-                <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
-                  {{ msg }}
-                  <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Fechar"></button>
-                </div>
-              {% endfor %}
-            {% endif %}
-          {% endwith %}
-
-          <div class="mb-3">
-            <label class="form-label">Usuário ou Email</label>
-            <!-- NOTE: tipo TEXT para aceitar 'ANDERSON' sem validação de e-mail no cliente -->
-            <input class="form-control" type="text" name="username" placeholder="Usuário ou e-mail" required value="{{ request.form.username or '' }}">
-          </div>
-
-          <div class="mb-3">
-            <label class="form-label">Senha</label>
-            <input class="form-control" type="password" name="password" placeholder="Senha" required>
-          </div>
-
-          <div class="d-grid">
-            <button class="btn btn-entrar" type="submit">Entrar no Sistema</button>
-          </div>
-
-          <div class="small-note">Acesso restrito a usuários autorizados</div>
-        </form>
+  <div class="card-login" role="main" aria-label="Login">
+    <div class="card-header-gradient">
+      <div class="logo-box">
+        <img src="{{ url_for('static', filename='logo-nh.png') }}" alt="NH" 
+             onerror="this.onerror=null;this.src='https://via.placeholder.com/96/ffffff/000000?text=NH';">
       </div>
+      <div class="brand-title">GRUPO NH</div>
+      <div class="brand-sub">Sistema de Gerenciamento de Transportes</div>
     </div>
-  </main>
+
+    <div class="card-body">
+      <form method="post" action="{{ url_for('auth.login') }}">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+          {% if messages %}
+            {% for category, msg in messages %}
+              <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
+                {{ msg }}
+                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Fechar"></button>
+              </div>
+            {% endfor %}
+          {% endif %}
+        {% endwith %}
+
+        <div class="mb-3">
+          <label class="form-label">Usuário ou Email</label>
+          <input class="form-control" type="text" name="username" placeholder="Usuário ou e-mail" required value="{{ request.form.username or '' }}">
+        </div>
+
+        <div class="mb-3">
+          <label class="form-label">Senha</label>
+          <input class="form-control" type="password" name="password" placeholder="Senha" required>
+        </div>
+
+        <div class="d-grid">
+          <button class="btn btn-entrar" type="submit">Entrar no Sistema</button>
+        </div>
+
+        <div class="note">Acesso restrito a usuários autorizados</div>
+      </form>
+    </div>
+  </div>
 
   <div class="copyright">© 2025 Grupo NH - Todos os direitos reservados</div>
 
+  <!-- fallback para bootstrap bundle -->
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js" integrity="" crossorigin="anonymous"></script>
   <script src="{{ url_for('static', filename='bootstrap.bundle.min.js') }}"></script>
 </body>
 </html>
