@@ -5,6 +5,27 @@ from logging.handlers import RotatingFileHandler
 from flask import Flask, render_template, redirect, url_for
 from flask_login import LoginManager
 
+def _import_fretes_bp(app):
+    """
+    Tenta importar o blueprint 'fretes' de possíveis localizações:
+    - fretes
+    - routes.fretes
+    Registra o stacktrace completo em app.logger se falhar.
+    Retorna o objeto bp ou None.
+    """
+    candidates = ['fretes', 'routes.fretes']
+    for modname in candidates:
+        try:
+            module = __import__(modname, fromlist=['bp'])
+            bp = getattr(module, 'bp', None)
+            if bp is not None:
+                app.logger.info('Imported fretes blueprint from %s', modname)
+                return bp
+        except Exception as e:
+            app.logger.debug('Import %s failed: %s', modname, e, exc_info=True)
+    app.logger.warning('Could not import fretes blueprint from any candidate: %s', candidates)
+    return None
+
 def create_app():
     app = Flask(__name__, static_folder='static', template_folder='templates')
     app.config.from_mapping(
@@ -27,14 +48,16 @@ def create_app():
     login_manager.login_view = 'auth.login'
     login_manager.init_app(app)
 
-    # Tentar importar e registrar blueprint 'fretes' aqui, com logging detalhado
+    # Importar e registrar blueprint 'fretes' tentando múltiplos caminhos
     try:
-        from fretes import bp as fretes_bp
-        app.register_blueprint(fretes_bp)
-        app.logger.info('Blueprint fretes registrado.')
+        fretes_bp = _import_fretes_bp(app)
+        if fretes_bp:
+            app.register_blueprint(fretes_bp)
+            app.logger.info('Blueprint fretes registrado.')
+        else:
+            app.logger.warning('Blueprint fretes nao registrado; verifique se o módulo existe e expõe "bp".')
     except Exception as e:
-        # registra stacktrace completo para debugar o motivo do import/registro falhar
-        app.logger.exception('Falha ao importar/registrar blueprint "fretes": %s', e)
+        app.logger.exception('Erro ao registrar blueprint fretes: %s', e)
         fretes_bp = None
 
     # Rota index simples
