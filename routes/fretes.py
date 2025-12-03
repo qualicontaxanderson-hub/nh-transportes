@@ -1,61 +1,35 @@
-from flask import Blueprint, render_template, request, redirect, url_for, flash
-from flask_login import login_required
-from utils.db import get_db_connection
-
-bp = Blueprint('fretes', __name__, url_prefix='/fretes')
-
-
-@bp.route('/', methods=['GET'])
+@bp.route('/editar/<int:id>', methods=['GET', 'POST'])
 @login_required
-def lista():
+def editar(id):
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
-    try:
-        cursor.execute("""
-            SELECT f.id,
-                   f.data_frete,
-                   f.status,
-                   f.valor_total_frete,
-                   f.lucro,
-                   c.razao_social AS cliente,
-                   fo.razao_social AS fornecedor,
-                   m.nome AS motorista,
-                   v.caminhao AS veiculo
-            FROM fretes f
-            LEFT JOIN clientes c ON f.clientes_id = c.id
-            LEFT JOIN fornecedores fo ON f.fornecedores_id = fo.id
-            LEFT JOIN motoristas m ON f.motoristas_id = m.id
-            LEFT JOIN veiculos v ON f.veiculos_id = v.id
-            ORDER BY f.data_frete DESC, f.id DESC
-            LIMIT 200
-        """)
-        fretes = cursor.fetchall()
-    finally:
-        cursor.close()
-        conn.close()
 
-    return render_template('fretes/lista.html', fretes=fretes)
-
-
-@bp.route('/novo', methods=['GET', 'POST'])
-@login_required
-def novo():
     if request.method == 'POST':
-        conn = get_db_connection()
-        cursor = conn.cursor()
+        # Atualizar registro
         try:
             cursor.execute("""
-                INSERT INTO fretes (
-                    data_frete, status, observacoes,
-                    clientes_id, fornecedores_id, produto_id,
-                    origem_id, destino_id,
-                    motoristas_id, veiculos_id,
-                    quantidade_id, quantidade_manual,
-                    preco_produto_unitario, preco_por_litro,
-                    total_nf_compra, valor_total_frete,
-                    comissao_motorista, valor_cte, comissao_cte, lucro
-                )
-                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                UPDATE fretes SET
+                    data_frete=%s,
+                    status=%s,
+                    observacoes=%s,
+                    clientes_id=%s,
+                    fornecedores_id=%s,
+                    produto_id=%s,
+                    origem_id=%s,
+                    destino_id=%s,
+                    motoristas_id=%s,
+                    veiculos_id=%s,
+                    quantidade_id=%s,
+                    quantidade_manual=%s,
+                    preco_produto_unitario=%s,
+                    preco_por_litro=%s,
+                    total_nf_compra=%s,
+                    valor_total_frete=%s,
+                    comissao_motorista=%s,
+                    valor_cte=%s,
+                    comissao_cte=%s,
+                    lucro=%s
+                WHERE id=%s
             """, (
                 request.form.get('data_frete'),
                 request.form.get('status'),
@@ -77,53 +51,55 @@ def novo():
                 request.form.get('valor_cte') or 0,
                 request.form.get('comissao_cte') or 0,
                 request.form.get('lucro') or 0,
+                id,
             ))
             conn.commit()
-            flash('Frete criado com sucesso!', 'success')
+            flash('Frete atualizado com sucesso!', 'success')
             return redirect(url_for('fretes.lista'))
         except Exception as e:
             conn.rollback()
-            flash(f'Erro ao criar frete: {e}', 'danger')
+            flash(f'Erro ao atualizar frete: {e}', 'danger')
         finally:
             cursor.close()
             conn.close()
 
-    # GET: carregar dados para o formulário
-    conn = get_db_connection()
-    cursor = conn.cursor(dictionary=True)
+    # GET: carregar frete + dados de apoio para o formulário
+    try:
+        cursor.execute("SELECT * FROM fretes WHERE id = %s", (id,))
+        frete = cursor.fetchone()
 
-    cursor.execute("SELECT * FROM clientes ORDER BY razao_social")
-    clientes = cursor.fetchall()
+        cursor.execute("SELECT * FROM clientes ORDER BY razao_social")
+        clientes = cursor.fetchall()
 
-    cursor.execute("SELECT * FROM fornecedores ORDER BY razao_social")
-    fornecedores = cursor.fetchall()
+        cursor.execute("SELECT * FROM fornecedores ORDER BY razao_social")
+        fornecedores = cursor.fetchall()
 
-    cursor.execute("SELECT * FROM produtos ORDER BY nome")
-    produtos = cursor.fetchall()
+        cursor.execute("SELECT * FROM produtos ORDER BY nome")
+        produtos = cursor.fetchall()
 
-    cursor.execute("SELECT * FROM origens ORDER BY nome")
-    origens = cursor.fetchall()
+        cursor.execute("SELECT * FROM origens ORDER BY nome")
+        origens = cursor.fetchall()
 
-    cursor.execute("SELECT * FROM destinos ORDER BY nome")
-    destinos = cursor.fetchall()
+        cursor.execute("SELECT * FROM destinos ORDER BY nome")
+        destinos = cursor.fetchall()
 
-    cursor.execute("SELECT * FROM motoristas ORDER BY nome")
-    motoristas = cursor.fetchall()
+        cursor.execute("SELECT * FROM motoristas ORDER BY nome")
+        motoristas = cursor.fetchall()
 
-    cursor.execute("SELECT * FROM veiculos ORDER BY caminhao")
-    veiculos = cursor.fetchall()
+        cursor.execute("SELECT * FROM veiculos ORDER BY caminhao")
+        veiculos = cursor.fetchall()
 
-    cursor.execute("SELECT * FROM quantidades ORDER BY valor")
-    quantidades = cursor.fetchall()
+        cursor.execute("SELECT * FROM quantidades ORDER BY valor")
+        quantidades = cursor.fetchall()
+    finally:
+        cursor.close()
+        conn.close()
 
-    # se ainda não tiver rotas montadas, pode usar um dict vazio
     rotas_dict = {}
-
-    cursor.close()
-    conn.close()
 
     return render_template(
         'fretes/novo.html',
+        frete=frete,
         clientes=clientes,
         fornecedores=fornecedores,
         produtos=produtos,
@@ -132,6 +108,5 @@ def novo():
         motoristas=motoristas,
         veiculos=veiculos,
         quantidades=quantidades,
-        frete=None,
         rotas_dict=rotas_dict,
     )
