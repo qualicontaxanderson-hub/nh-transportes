@@ -81,6 +81,22 @@ def _load_select_list(table_name):
     return []
 
 
+def _ensure_date_defaults_on_params(params):
+    """
+    Garante que params (dict) tenha data_inicio/data_fim preenchidos.
+    Usa 1º dia do mês até hoje como padrão.
+    """
+    hoje = date.today()
+    primeiro_dia = hoje.replace(day=1)
+    data_inicio_default = primeiro_dia.strftime('%Y-%m-%d')
+    data_fim_default = hoje.strftime('%Y-%m-%d')
+    if not params.get('data_inicio'):
+        params['data_inicio'] = data_inicio_default
+    if not params.get('data_fim'):
+        params['data_fim'] = data_fim_default
+    return params
+
+
 @bp.route('/', methods=['GET'])
 @login_required
 def index():
@@ -91,7 +107,10 @@ def index():
 @bp.route('/fretes_comissao_cte', methods=['GET'])
 @login_required
 def fretes_comissao_cte():
-    params = request.args
+    # usar dict para poder injetar defaults se necessário
+    params = dict(request.args)
+    params = _ensure_date_defaults_on_params(params)
+
     where_sql, args = _build_filters(params)
 
     conn = get_db_connection()
@@ -169,7 +188,9 @@ def fretes_comissao_cte():
 @bp.route('/fretes_comissao_motorista', methods=['GET'])
 @login_required
 def fretes_comissao_motorista():
-    params = request.args
+    params = dict(request.args)
+    params = _ensure_date_defaults_on_params(params)
+
     where_sql, args = _build_filters(params)
 
     # Para lidar com quantidades: usar COALESCE(f.quantidade_manual, q.valor)
@@ -250,7 +271,9 @@ def fretes_comissao_motorista():
 @bp.route('/fretes_lucro', methods=['GET'])
 @login_required
 def fretes_lucro():
-    params = request.args
+    params = dict(request.args)
+    params = _ensure_date_defaults_on_params(params)
+
     where_sql, args = _build_filters(params)
 
     conn = get_db_connection()
@@ -389,8 +412,7 @@ def fretes_produtos():
             cursor.execute(q_resumo, resumo_args)
             resumo_por_produto = cursor.fetchall()
         else:
-            # quando não há cliente selecionado, construir um resumo por produto apenas para o período
-            # (isso já é coberto abaixo — manteremos a lógica geral que sempre popula resumo_por_produto_geral)
+            # quando não há cliente selecionado, construir um resumo geral por produto
             pass
 
         # --- Construir resumo_por_produto_geral respeitando apenas o período (ignora filtros cliente/fornecedor/produto)
