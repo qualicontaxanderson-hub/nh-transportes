@@ -104,15 +104,27 @@
             </div>
         </div>
 
+        <!-- Alterado: Produtos Diferentes agora mostra lista quando resumo_por_produto_geral estiver presente -->
         <div class="col-md-4">
             <div class="card h-100">
                 <div class="card-header" style="background:#1D63A5;color:white;">
                     <h6 class="mb-0"><i class="bi bi-box-seam"></i> Produtos Diferentes</h6>
                 </div>
                 <div class="card-body">
-                    <h4 class="mb-0">
-                        {{ qtd_produtos_diferentes or 0 }}
-                    </h4>
+                    {% if resumo_por_produto_geral %}
+                        <ul class="mb-0" style="list-style:none; padding-left:0; font-size:0.9rem;">
+                            {% for item in resumo_por_produto_geral %}
+                                <li>
+                                    <strong>{{ item.produto_nome }}</strong> -
+                                    {{ "{:,.2f}".format(item.quantidade_total or 0).replace(",", "X").replace(".", ",").replace("X", ".") }} L
+                                </li>
+                            {% endfor %}
+                        </ul>
+                    {% else %}
+                        <h4 class="mb-0">
+                            {{ qtd_produtos_diferentes or 0 }}
+                        </h4>
+                    {% endif %}
                 </div>
             </div>
         </div>
