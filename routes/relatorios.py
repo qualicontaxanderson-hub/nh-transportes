@@ -1,4 +1,4 @@
-from flask import Blueprint, render_template, request
+from flask import Blueprint, render_template, request, redirect, url_for
 from flask_login import login_required
 from utils.db import get_db_connection
 from datetime import datetime
@@ -79,6 +79,13 @@ def _load_select_list(table_name):
         cursor.close()
         conn.close()
     return []
+
+
+@bp.route('/', methods=['GET'])
+@login_required
+def index():
+    # Redireciona para um relatório padrão (Comissão CTE)
+    return redirect(url_for('relatorios.fretes_comissao_cte'))
 
 
 @bp.route('/fretes_comissao_cte', methods=['GET'])
@@ -165,15 +172,17 @@ def fretes_comissao_motorista():
     params = request.args
     where_sql, args = _build_filters(params)
 
+    # Para lidar com quantidades: usar COALESCE(f.quantidade_manual, q.valor)
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
     try:
         q_totals = f"""
             SELECT
               COALESCE(SUM(f.comissao_motorista),0) AS total_comissao_motorista,
-              COALESCE(SUM(f.quantidade),0) AS total_quantidade,
+              COALESCE(SUM(COALESCE(f.quantidade_manual, q.valor, 0)),0) AS total_quantidade,
               COALESCE(SUM(f.valor_total_frete),0) AS total_valor_frete
             FROM fretes f
+            LEFT JOIN quantidades q ON f.quantidade_id = q.id
             WHERE 1=1 {where_sql}
         """
         cursor.execute(q_totals, args)
@@ -187,10 +196,11 @@ def fretes_comissao_motorista():
               m.id AS motorista_id,
               m.nome AS motorista_nome,
               COUNT(f.id) AS qtd_fretes,
-              COALESCE(SUM(f.quantidade),0) AS quantidade_total,
+              COALESCE(SUM(COALESCE(f.quantidade_manual, q.valor, 0)),0) AS quantidade_total,
               COALESCE(SUM(f.comissao_motorista),0) AS comissao_total
             FROM fretes f
             LEFT JOIN motoristas m ON f.motoristas_id = m.id
+            LEFT JOIN quantidades q ON f.quantidade_id = q.id
             WHERE 1=1 {where_sql}
             GROUP BY m.id
             ORDER BY comissao_total DESC
@@ -199,14 +209,17 @@ def fretes_comissao_motorista():
         resumo_motoristas = cursor.fetchall()
 
         q_det = f"""
-            SELECT f.data_frete, COALESCE(c.razao_social,'') AS cliente_nome,
+            SELECT f.data_frete,
+                   COALESCE(c.razao_social,'') AS cliente_nome,
                    COALESCE(p.nome,'') AS produto_nome,
                    COALESCE(m.nome,'') AS motorista_nome,
-                   f.quantidade, f.valor_total_frete, f.comissao_motorista
+                   COALESCE(f.quantidade_manual, q.valor, 0) AS quantidade,
+                   f.valor_total_frete, f.comissao_motorista
             FROM fretes f
             LEFT JOIN clientes c ON f.clientes_id = c.id
             LEFT JOIN produto p ON f.produto_id = p.id
             LEFT JOIN motoristas m ON f.motoristas_id = m.id
+            LEFT JOIN quantidades q ON f.quantidade_id = q.id
             WHERE 1=1 {where_sql}
             ORDER BY f.data_frete DESC
         """
@@ -260,14 +273,17 @@ def fretes_lucro():
         total_lucro = totals.get('total_lucro', 0)
 
         q_det = f"""
-            SELECT f.data_frete, COALESCE(c.razao_social,'') AS cliente_nome,
+            SELECT f.data_frete,
+                   COALESCE(c.razao_social,'') AS cliente_nome,
                    COALESCE(p.nome,'') AS produto_nome,
                    COALESCE(m.nome,'') AS motorista_nome,
-                   f.quantidade, f.valor_total_frete, f.comissao_cte, f.comissao_motorista, f.lucro
+                   COALESCE(f.quantidade_manual, q.valor, 0) AS quantidade,
+                   f.valor_total_frete, f.comissao_cte, f.comissao_motorista, f.lucro
             FROM fretes f
             LEFT JOIN clientes c ON f.clientes_id = c.id
             LEFT JOIN produto p ON f.produto_id = p.id
             LEFT JOIN motoristas m ON f.motoristas_id = m.id
+            LEFT JOIN quantidades q ON f.quantidade_id = q.id
             WHERE 1=1 {where_sql}
             ORDER BY f.data_frete DESC
         """
@@ -306,10 +322,11 @@ def fretes_produtos():
     try:
         q_totals = f"""
             SELECT
-              COALESCE(SUM(f.quantidade),0) AS total_quantidade,
+              COALESCE(SUM(COALESCE(f.quantidade_manual, q.valor, 0)),0) AS total_quantidade,
               COALESCE(SUM(f.total_nf_compra),0) AS total_nf,
               COUNT(DISTINCT f.produto_id) AS qtd_produtos_diferentes
             FROM fretes f
+            LEFT JOIN quantidades q ON f.quantidade_id = q.id
             WHERE 1=1 {where_sql}
         """
         cursor.execute(q_totals, args)
@@ -322,11 +339,13 @@ def fretes_produtos():
             SELECT f.data_frete, COALESCE(c.razao_social,'') AS cliente_nome,
                    COALESCE(fo.razao_social,'') AS fornecedor_nome,
                    COALESCE(p.nome,'') AS produto_nome,
-                   f.quantidade, f.preco_produto_unitario, f.total_nf_compra
+                   COALESCE(f.quantidade_manual, q.valor, 0) AS quantidade,
+                   f.preco_produto_unitario, f.total_nf_compra
             FROM fretes f
             LEFT JOIN clientes c ON f.clientes_id = c.id
             LEFT JOIN fornecedores fo ON f.fornecedores_id = fo.id
             LEFT JOIN produto p ON f.produto_id = p.id
+            LEFT JOIN quantidades q ON f.quantidade_id = q.id
             WHERE 1=1 {where_sql}
             ORDER BY f.data_frete DESC
         """
@@ -338,10 +357,11 @@ def fretes_produtos():
         if cliente_id:
             q_resumo = f"""
                 SELECT p.id AS produto_id, p.nome AS produto_nome,
-                       COALESCE(SUM(f.quantidade),0) AS quantidade_total,
+                       COALESCE(SUM(COALESCE(f.quantidade_manual, q.valor, 0)),0) AS quantidade_total,
                        COALESCE(SUM(f.total_nf_compra),0) AS valor_nf_total
                 FROM fretes f
                 LEFT JOIN produto p ON f.produto_id = p.id
+                LEFT JOIN quantidades q ON f.quantidade_id = q.id
                 WHERE f.clientes_id = %s
                 {('AND f.data_frete BETWEEN %s AND %s' if params.get('data_inicio') and params.get('data_fim') else '')}
                 GROUP BY p.id
