@@ -1,0 +1,215 @@
+{% extends 'base.html' %}
+{% block title %}Relatórios de Fretes - Lucro{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+
+    <!-- Breadcrumb -->
+    <nav aria-label="breadcrumb">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="{{ url_for('index') }}">Dashboard</a></li>
+            <li class="breadcrumb-item">Relatórios</li>
+            <li class="breadcrumb-item">Fretes</li>
+            <li class="breadcrumb-item active" aria-current="page">Lucro</li>
+        </ol>
+    </nav>
+
+    <h2 class="mb-4" style="color:#1D63A5;">
+        <i class="bi bi-truck"></i> Relatório de Lucro de Fretes
+    </h2>
+    <p class="text-muted">Categoria: Fretes</p>
+
+    <!-- Filtros -->
+    <form method="get" class="mb-4 row row-cols-lg-auto g-3 align-items-end">
+        <div class="col-12">
+            <label class="form-label">Data Inicial</label>
+            <input type="date" name="data_inicio" value="{{ data_inicio or '' }}" class="form-control">
+        </div>
+        <div class="col-12">
+            <label class="form-label">Data Final</label>
+            <input type="date" name="data_fim" value="{{ data_fim or '' }}" class="form-control">
+        </div>
+
+        <div class="col-12">
+            <label class="form-label">Cliente</label>
+            <select name="cliente_id" class="form-select">
+                <option value="">Todos</option>
+                {% for c in clientes %}
+                    <option value="{{ c.id }}" {% if cliente_id == c.id %}selected{% endif %}>
+                        {{ c.nome_fantasia or c.razao_social }}
+                    </option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <div class="col-12">
+            <label class="form-label">Motorista</label>
+            <select name="motorista_id" class="form-select">
+                <option value="">Todos</option>
+                {% for m in motoristas %}
+                    <option value="{{ m.id }}" {% if motorista_id == m.id %}selected{% endif %}>
+                        {{ m.nome }}
+                    </option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <div class="col-12">
+            <label class="form-label">Produto</label>
+            <select name="produto_id" class="form-select">
+                <option value="">Todos</option>
+                {% for p in produtos %}
+                    <option value="{{ p.id }}" {% if produto_id == p.id %}selected{% endif %}>
+                        {{ p.nome }}
+                    </option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <div class="col-12">
+            <button type="submit" class="btn btn-primary">
+                <i class="bi bi-search"></i> Filtrar
+            </button>
+            <a href="{{ url_for('relatorios.fretes_lucro') }}" class="btn btn-secondary">
+                Limpar
+            </a>
+        </div>
+    </form>
+
+    <!-- Cards de resumo -->
+    <div class="row g-4 mb-4">
+        <div class="col-md-3">
+            <div class="card h-100">
+                <div class="card-header" style="background:#4A90E2;color:white;">
+                    <h6 class="mb-0"><i class="bi bi-cash-stack"></i> Total Fretes</h6>
+                </div>
+                <div class="card-body">
+                    <h4 class="mb-0">
+                        {{ "R$ {:,.2f}".format(total_valor_frete|float if total_valor_frete else 0).replace(",", "X").replace(".", ",").replace("X", ".") }}
+                    </h4>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-3">
+            <div class="card h-100">
+                <div class="card-header" style="background:#FF9800;color:white;">
+                    <h6 class="mb-0"><i class="bi bi-receipt"></i> Comissão CTE</h6>
+                </div>
+                <div class="card-body">
+                    <h4 class="mb-0">
+                        {{ "R$ {:,.2f}".format(total_comissao_cte|float if total_comissao_cte else 0).replace(",", "X").replace(".", ",").replace("X", ".") }}
+                    </h4>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-3">
+            <div class="card h-100">
+                <div class="card-header" style="background:#1D63A5;color:white;">
+                    <h6 class="mb-0"><i class="bi bi-person-badge"></i> Comissão Motorista</h6>
+                </div>
+                <div class="card-body">
+                    <h4 class="mb-0">
+                        {{ "R$ {:,.2f}".format(total_comissao_motorista|float if total_comissao_motorista else 0).replace(",", "X").replace(".", ",").replace("X", ".") }}
+                    </h4>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-3">
+            <div class="card h-100">
+                <div class="card-header" style="background:#2E7D32;color:white;">
+                    <h6 class="mb-0"><i class="bi bi-graph-up-arrow"></i> Lucro Total</h6>
+                </div>
+                <div class="card-body">
+                    <h4 class="mb-0">
+                        {{ "R$ {:,.2f}".format(total_lucro|float if total_lucro else 0).replace(",", "X").replace(".", ",").replace("X", ".") }}
+                    </h4>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tabela de fretes -->
+    <div class="row g-4 mb-4">
+        <div class="col-md-12">
+            <div class="card">
+                <div class="card-header" style="background:#151515;color:white;">
+                    <h5 class="mb-0"><i class="bi bi-table"></i> Detalhamento de Fretes e Lucro</h5>
+                </div>
+                <div class="card-body">
+                    {% if fretes %}
+                    <div class="table-responsive">
+                        <table class="table table-sm table-hover">
+                            <thead style="background:#E8E8E8;">
+                                <tr>
+                                    <th>Data</th>
+                                    <th>Cliente</th>
+                                    <th>Produto</th>
+                                    <th>Motorista</th>
+                                    <th style="text-align:right;">Quantidade</th>
+                                    <th style="text-align:right;">Valor Frete (R$)</th>
+                                    <th style="text-align:right;">Comissão CTE (R$)</th>
+                                    <th style="text-align:right;">Comissão Motorista (R$)</th>
+                                    <th style="text-align:right;">Lucro (R$)</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for item in fretes %}
+                                <tr>
+                                    <td>
+                                        {{ item.data_frete.strftime('%d/%m/%Y') if item.data_frete }}
+                                    </td>
+                                    <td>{{ item.cliente_nome or '-' }}</td>
+                                    <td>{{ item.produto_nome or '-' }}</td>
+                                    <td>{{ item.motorista_nome or '-' }}</td>
+                                    <td style="text-align:right;">
+                                        {{ "{:,.2f}".format(item.quantidade or 0).replace(",", "X").replace(".", ",").replace("X", ".") }}
+                                    </td>
+                                    <td style="text-align:right;">
+                                        {{ "R$ {:,.2f}".format(item.valor_total_frete|float if item.valor_total_frete else 0).replace(",", "X").replace(".", ",").replace("X", ".") }}
+                                    </td>
+                                    <td style="text-align:right;">
+                                        {{ "R$ {:,.2f}".format(item.comissao_cte|float if item.comissao_cte else 0).replace(",", "X").replace(".", ",").replace("X", ".") }}
+                                    </td>
+                                    <td style="text-align:right;">
+                                        {{ "R$ {:,.2f}".format(item.comissao_motorista|float if item.comissao_motorista else 0).replace(",", "X").replace(".", ",").replace("X", ".") }}
+                                    </td>
+                                    <td style="text-align:right;">
+                                        {{ "R$ {:,.2f}".format(item.lucro|float if item.lucro else 0).replace(",", "X").replace(".", ",").replace("X", ".") }}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                                <!-- Linha de totais -->
+                                <tr style="background:#F5F5F5; font-weight:bold;">
+                                    <td colspan="4">TOTAL</td>
+                                    <td style="text-align:right;">
+                                        {{ "{:,.2f}".format(total_quantidade or 0).replace(",", "X").replace(".", ",").replace("X", ".") }}
+                                    </td>
+                                    <td style="text-align:right;">
+                                        {{ "R$ {:,.2f}".format(total_valor_frete|float if total_valor_frete else 0).replace(",", "X").replace(".", ",").replace("X", ".") }}
+                                    </td>
+                                    <td style="text-align:right;">
+                                        {{ "R$ {:,.2f}".format(total_comissao_cte|float if total_comissao_cte else 0).replace(",", "X").replace(".", ",").replace("X", ".") }}
+                                    </td>
+                                    <td style="text-align:right;">
+                                        {{ "R$ {:,.2f}".format(total_comissao_motorista|float if total_comissao_motorista else 0).replace(",", "X").replace(".", ",").replace("X", ".") }}
+                                    </td>
+                                    <td style="text-align:right;">
+                                        {{ "R$ {:,.2f}".format(total_lucro|float if total_lucro else 0).replace(",", "X").replace(".", ",").replace("X", ".") }}
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                        <span class="text-muted">Sem dados para os filtros escolhidos.</span>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+</div>
+{% endblock %}
