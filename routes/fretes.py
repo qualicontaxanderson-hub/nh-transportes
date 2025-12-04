@@ -523,5 +523,91 @@ def editar(id):
     # carregar dados auxiliares
     try:
         cursor.execute("SELECT * FROM clientes ORDER BY razao_social")
-    static/js/fretes_calculos.js
-Language: 
+        clientes = cursor.fetchall()
+
+        cursor.execute("SELECT * FROM fornecedores ORDER BY razao_social")
+        fornecedores = cursor.fetchall()
+
+        cursor.execute("SELECT * FROM produto ORDER BY nome")
+        produtos = cursor.fetchall()
+
+        cursor.execute("SELECT * FROM origens ORDER BY nome")
+        origens = cursor.fetchall()
+
+        cursor.execute("SELECT * FROM destinos ORDER BY nome")
+        destinos = cursor.fetchall()
+
+        cursor.execute("SELECT * FROM motoristas ORDER BY nome")
+        motoristas = cursor.fetchall()
+
+        cursor.execute("SELECT * FROM veiculos ORDER BY caminhao")
+        veiculos = cursor.fetchall()
+
+        cursor.execute("SELECT * FROM quantidades ORDER BY valor")
+        quantidades = cursor.fetchall()
+
+        # montar rotas_dict também para a página de edição
+        rotas_dict = {}
+        try:
+            cursor.execute("SELECT origem_id, destino_id, valor_por_litro FROM rotas WHERE ativo = 1")
+            for r in cursor.fetchall():
+                try:
+                    origem_id = r.get('origem_id') if isinstance(r, dict) else r[0]
+                    destino_id = r.get('destino_id') if isinstance(r, dict) else r[1]
+                    valor = r.get('valor_por_litro') if isinstance(r, dict) else r[2]
+                    key = f"{int(origem_id)}|{int(destino_id)}"
+                    rotas_dict[key] = float(valor or 0)
+                except Exception:
+                    continue
+        except Exception:
+            rotas_dict = {}
+    finally:
+        cursor.close()
+        conn.close()
+
+    # Normalizar campos para o template/JS
+    if frete is None:
+        frete = {}
+    frete.setdefault('preco_produto_unitario', frete.get('preco_produto_unitario') or 0)
+    frete.setdefault('preco_por_litro', frete.get('preco_por_litro') or 0)
+    frete.setdefault('total_nf_compra', frete.get('total_nf_compra') or 0)
+    frete.setdefault('valor_total_frete', frete.get('valor_total_frete') or 0)
+    frete.setdefault('comissao_motorista', frete.get('comissao_motorista') or 0)
+    frete.setdefault('valor_cte', frete.get('valor_cte') or 0)
+    frete.setdefault('comissao_cte', frete.get('comissao_cte') or 0)
+    frete.setdefault('lucro', frete.get('lucro') or 0)
+    frete.setdefault('quantidade_manual', frete.get('quantidade_manual') or '')
+    frete.setdefault('quantidade_id', frete.get('quantidade_id') or None)
+
+    return render_template(
+        'fretes/novo.html',
+        frete=frete,
+        clientes=clientes,
+        fornecedores=fornecedores,
+        produtos=produtos,
+        origens=origens,
+        destinos=destinos,
+        motoristas=motoristas,
+        veiculos=veiculos,
+        quantidades=quantidades,
+        rotas_dict=rotas_dict,
+    )
+
+
+@bp.route('/deletar/<int:id>', methods=['POST'])
+@login_required
+def deletar(id):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute("DELETE FROM fretes WHERE id = %s", (id,))
+        conn.commit()
+        flash('Frete excluído com sucesso!', 'success')
+    except Exception as e:
+        conn.rollback()
+        flash(f'Erro ao excluir frete: {e}', 'danger')
+    finally:
+        cursor.close()
+        conn.close()
+
+    return redirect(url_for('fretes.lista'))
