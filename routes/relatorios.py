@@ -1,130 +1,377 @@
-# routes/relatorios.py - COMPLETO E CORRIGIDO
 from flask import Blueprint, render_template, request
+from flask_login import login_required
 from utils.db import get_db_connection
 from datetime import datetime
 
 bp = Blueprint('relatorios', __name__, url_prefix='/relatorios')
 
-@bp.route('/')
-def index():
+
+def _parse_date_safe(s):
     try:
-        # Pegar filtros da URL
-        data_inicio = request.args.get('data_inicio', '')
-        data_fim = request.args.get('data_fim', '')
-        ano_mes = request.args.get('ano_mes', '')  # Formato: YYYY-MM
+        return datetime.strptime(s, '%Y-%m-%d').date()
+    except Exception:
+        return None
 
-        conn = get_db_connection()
-        cursor = conn.cursor(dictionary=True)
 
-        # Construir filtro WHERE dinamicamente
-        filtro = "WHERE 1=1"
-        params = []
+def _build_filters(params):
+    """
+    Construir WHERE dinâmico e lista de parâmetros (para usar em cursor.execute).
+    Retorna (where_sql, args_list).
+    """
+    where = []
+    args = []
 
-        if data_inicio:
-            filtro += " AND f.data_frete >= %s"
-            params.append(data_inicio)
+    di = params.get('data_inicio')
+    df = params.get('data_fim')
+    if di and df:
+        dstart = _parse_date_safe(di)
+        dend = _parse_date_safe(df)
+        if dstart and dend:
+            where.append("f.data_frete BETWEEN %s AND %s")
+            args.extend([dstart, dend])
 
-        if data_fim:
-            filtro += " AND f.data_frete <= %s"
-            params.append(data_fim)
+    cliente_id = params.get('cliente_id')
+    if cliente_id:
+        where.append("f.clientes_id = %s")
+        args.append(cliente_id)
 
-        if ano_mes:
-            # Formato YYYY-MM
-            filtro += " AND DATE_FORMAT(f.data_frete, '%Y-%m') = %s"
-            params.append(ano_mes)
+    motorista_id = params.get('motorista_id')
+    if motorista_id:
+        where.append("f.motoristas_id = %s")
+        args.append(motorista_id)
 
-        # TOP 10 CLIENTES - Agrupado por cliente (um frete = um registro de cada cliente)
-        query_clientes = f"""
-            SELECT c.razao_social AS cliente, 
-                   COUNT(DISTINCT f.id) AS fretes,
-                   SUM(q.valor) AS litros_transportados,
-                   SUM(f.valor_total_frete) AS total_frete,
-                   SUM(f.comissao_cte) AS total_comissao_cte,
-                   SUM(f.lucro) AS lucro
+    produto_id = params.get('produto_id')
+    if produto_id:
+        where.append("f.produto_id = %s")
+        args.append(produto_id)
+
+    fornecedor_id = params.get('fornecedor_id')
+    if fornecedor_id:
+        where.append("f.fornecedores_id = %s")
+        args.append(fornecedor_id)
+
+    where_sql = (" AND " + " AND ".join(where)) if where else ""
+    return where_sql, args
+
+
+def _load_select_list(table_name):
+    """
+    Carrega lista para selects usados nos filtros.
+    table_name: 'clientes' | 'motoristas' | 'produto' | 'fornecedores'
+    Retorna lista de dicts (cada dict depende do select).
+    """
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        if table_name == 'clientes':
+            cursor.execute("SELECT id, razao_social, nome_fantasia FROM clientes ORDER BY razao_social")
+            return cursor.fetchall()
+        if table_name == 'motoristas':
+            cursor.execute("SELECT id, nome FROM motoristas ORDER BY nome")
+            return cursor.fetchall()
+        if table_name == 'produto':
+            cursor.execute("SELECT id, nome FROM produto ORDER BY nome")
+            return cursor.fetchall()
+        if table_name == 'fornecedores':
+            cursor.execute("SELECT id, razao_social, nome_fantasia FROM fornecedores ORDER BY razao_social")
+            return cursor.fetchall()
+    finally:
+        cursor.close()
+        conn.close()
+    return []
+
+
+@bp.route('/fretes_comissao_cte', methods=['GET'])
+@login_required
+def fretes_comissao_cte():
+    params = request.args
+    where_sql, args = _build_filters(params)
+
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        # Totais
+        q_totals = f"""
+            SELECT
+              COALESCE(SUM(f.valor_cte), 0) AS total_valor_cte,
+              COALESCE(SUM(f.comissao_cte), 0) AS total_comissao_cte,
+              COALESCE(SUM(f.valor_total_frete), 0) AS total_valor_frete
+            FROM fretes f
+            WHERE 1=1 {where_sql}
+        """
+        cursor.execute(q_totals, args)
+        totals = cursor.fetchone() or {}
+        total_valor_cte = totals.get('total_valor_cte', 0)
+        total_comissao_cte = totals.get('total_comissao_cte', 0)
+        total_valor_frete = totals.get('total_valor_frete', 0)
+
+        # Resumo por cliente
+        q_resumo = f"""
+            SELECT
+              c.id AS cliente_id,
+              COALESCE(c.nome_fantasia, c.razao_social) AS cliente_nome,
+              COUNT(f.id) AS qtd_fretes,
+              COALESCE(SUM(f.valor_cte),0) AS valor_cte_total,
+              COALESCE(SUM(f.comissao_cte),0) AS comissao_total
             FROM fretes f
             LEFT JOIN clientes c ON f.clientes_id = c.id
-            LEFT JOIN quantidades q ON f.quantidade_id = q.id
-            {filtro}
-            GROUP BY f.clientes_id
-            ORDER BY total_frete DESC
-            LIMIT 10
+            WHERE 1=1 {where_sql}
+            GROUP BY c.id
+            ORDER BY valor_cte_total DESC
         """
-        cursor.execute(query_clientes, params)
-        por_cliente = cursor.fetchall()
+        cursor.execute(q_resumo, args)
+        resumo_clientes = cursor.fetchall()
 
-        # Calcular totais para clientes
-        total_fretes = sum(item['fretes'] for item in por_cliente) if por_cliente else 0
-        total_litros = sum(item['litros_transportados'] for item in por_cliente) if por_cliente else 0
-        total_frete_clientes = sum(item['total_frete'] for item in por_cliente) if por_cliente else 0
-        total_comissao_cte_clientes = sum(item['total_comissao_cte'] for item in por_cliente) if por_cliente else 0
-        total_lucro_clientes = sum(item['lucro'] for item in por_cliente) if por_cliente else 0
-
-        # COMISSÕES DE MOTORISTAS - Com quantidade de fretes e litros
-        query_motoristas = f"""
-            SELECT m.nome AS motorista, 
-                   COUNT(f.id) AS fretes,
-                   SUM(q.valor) AS litros_entregues,
-                   SUM(f.comissao_motorista) AS total_comissao
+        # Detalhe de fretes
+        q_det = f"""
+            SELECT f.data_frete, COALESCE(c.razao_social,'') AS cliente_nome,
+                   COALESCE(p.nome,'') AS produto_nome,
+                   COALESCE(m.nome,'') AS motorista_nome,
+                   f.valor_cte, f.comissao_cte, f.valor_total_frete
             FROM fretes f
+            LEFT JOIN clientes c ON f.clientes_id = c.id
+            LEFT JOIN produto p ON f.produto_id = p.id
             LEFT JOIN motoristas m ON f.motoristas_id = m.id
-            LEFT JOIN quantidades q ON f.quantidade_id = q.id
-            {filtro}
-            GROUP BY f.motoristas_id
-            ORDER BY total_comissao DESC
+            WHERE 1=1 {where_sql}
+            ORDER BY f.data_frete DESC
         """
-        cursor.execute(query_motoristas, params)
-        por_motorista = cursor.fetchall()
-
-        # Calcular totais para motoristas
-        total_fretes_mot = sum(item['fretes'] for item in por_motorista) if por_motorista else 0
-        total_litros_mot = sum(item['litros_entregues'] for item in por_motorista) if por_motorista else 0
-        total_comissao_mot = sum(item['total_comissao'] for item in por_motorista) if por_motorista else 0
-
-        # SITUAÇÃO FINANCEIRA
-        query_situacao = f"""
-            SELECT f.status AS status, 
-                   COUNT(f.id) AS quantidade, 
-                   SUM(f.valor_total_frete) AS valor_total
-            FROM fretes f
-            {filtro}
-            GROUP BY f.status
-        """
-        cursor.execute(query_situacao, params)
-        por_situacao = cursor.fetchall()
-
+        cursor.execute(q_det, args)
+        fretes = cursor.fetchall()
+    finally:
         cursor.close()
         conn.close()
 
-        return render_template('relatorios/index.html',
-                               por_cliente=por_cliente,
-                               total_fretes=total_fretes,
-                               total_litros=total_litros,
-                               total_frete_clientes=total_frete_clientes,
-                               total_comissao_cte_clientes=total_comissao_cte_clientes,
-                               total_lucro_clientes=total_lucro_clientes,
-                               por_motorista=por_motorista,
-                               total_fretes_mot=total_fretes_mot,
-                               total_litros_mot=total_litros_mot,
-                               total_comissao_mot=total_comissao_mot,
-                               por_situacao=por_situacao,
-                               data_inicio=data_inicio,
-                               data_fim=data_fim,
-                               ano_mes=ano_mes)
+    return render_template(
+        'relatorios/fretes_comissao_cte.html',
+        data_inicio=params.get('data_inicio'),
+        data_fim=params.get('data_fim'),
+        cliente_id=int(params.get('cliente_id')) if params.get('cliente_id') else None,
+        motorista_id=int(params.get('motorista_id')) if params.get('motorista_id') else None,
+        produto_id=int(params.get('produto_id')) if params.get('produto_id') else None,
+        clientes=_load_select_list('clientes'),
+        motoristas=_load_select_list('motoristas'),
+        produtos=_load_select_list('produto'),
+        total_valor_cte=total_valor_cte,
+        total_comissao_cte=total_comissao_cte,
+        total_valor_frete=total_valor_frete,
+        resumo_clientes=resumo_clientes,
+        fretes=fretes
+    )
 
-    except Exception as e:
-        print(f"Erro ao carregar relatórios: {e}")
-        return render_template('relatorios/index.html',
-                               por_cliente=[],
-                               total_fretes=0,
-                               total_litros=0,
-                               total_frete_clientes=0,
-                               total_comissao_cte_clientes=0,
-                               total_lucro_clientes=0,
-                               por_motorista=[],
-                               total_fretes_mot=0,
-                               total_litros_mot=0,
-                               total_comissao_mot=0,
-                               por_situacao=[],
-                               data_inicio='',
-                               data_fim='',
-                               ano_mes='')
+
+@bp.route('/fretes_comissao_motorista', methods=['GET'])
+@login_required
+def fretes_comissao_motorista():
+    params = request.args
+    where_sql, args = _build_filters(params)
+
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        q_totals = f"""
+            SELECT
+              COALESCE(SUM(f.comissao_motorista),0) AS total_comissao_motorista,
+              COALESCE(SUM(f.quantidade),0) AS total_quantidade,
+              COALESCE(SUM(f.valor_total_frete),0) AS total_valor_frete
+            FROM fretes f
+            WHERE 1=1 {where_sql}
+        """
+        cursor.execute(q_totals, args)
+        totals = cursor.fetchone() or {}
+        total_comissao_motorista = totals.get('total_comissao_motorista', 0)
+        total_quantidade = totals.get('total_quantidade', 0)
+        total_valor_frete = totals.get('total_valor_frete', 0)
+
+        q_resumo = f"""
+            SELECT
+              m.id AS motorista_id,
+              m.nome AS motorista_nome,
+              COUNT(f.id) AS qtd_fretes,
+              COALESCE(SUM(f.quantidade),0) AS quantidade_total,
+              COALESCE(SUM(f.comissao_motorista),0) AS comissao_total
+            FROM fretes f
+            LEFT JOIN motoristas m ON f.motoristas_id = m.id
+            WHERE 1=1 {where_sql}
+            GROUP BY m.id
+            ORDER BY comissao_total DESC
+        """
+        cursor.execute(q_resumo, args)
+        resumo_motoristas = cursor.fetchall()
+
+        q_det = f"""
+            SELECT f.data_frete, COALESCE(c.razao_social,'') AS cliente_nome,
+                   COALESCE(p.nome,'') AS produto_nome,
+                   COALESCE(m.nome,'') AS motorista_nome,
+                   f.quantidade, f.valor_total_frete, f.comissao_motorista
+            FROM fretes f
+            LEFT JOIN clientes c ON f.clientes_id = c.id
+            LEFT JOIN produto p ON f.produto_id = p.id
+            LEFT JOIN motoristas m ON f.motoristas_id = m.id
+            WHERE 1=1 {where_sql}
+            ORDER BY f.data_frete DESC
+        """
+        cursor.execute(q_det, args)
+        fretes = cursor.fetchall()
+    finally:
+        cursor.close()
+        conn.close()
+
+    return render_template(
+        'relatorios/fretes_comissao_motorista.html',
+        data_inicio=params.get('data_inicio'),
+        data_fim=params.get('data_fim'),
+        cliente_id=int(params.get('cliente_id')) if params.get('cliente_id') else None,
+        motorista_id=int(params.get('motorista_id')) if params.get('motorista_id') else None,
+        produto_id=int(params.get('produto_id')) if params.get('produto_id') else None,
+        clientes=_load_select_list('clientes'),
+        motoristas=_load_select_list('motoristas'),
+        produtos=_load_select_list('produto'),
+        total_comissao_motorista=total_comissao_motorista,
+        total_quantidade=total_quantidade,
+        total_valor_frete=total_valor_frete,
+        resumo_motoristas=resumo_motoristas,
+        fretes=fretes
+    )
+
+
+@bp.route('/fretes_lucro', methods=['GET'])
+@login_required
+def fretes_lucro():
+    params = request.args
+    where_sql, args = _build_filters(params)
+
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        q_totals = f"""
+            SELECT
+              COALESCE(SUM(f.valor_total_frete),0) AS total_valor_frete,
+              COALESCE(SUM(f.comissao_cte),0) AS total_comissao_cte,
+              COALESCE(SUM(f.comissao_motorista),0) AS total_comissao_motorista,
+              COALESCE(SUM(f.lucro),0) AS total_lucro
+            FROM fretes f
+            WHERE 1=1 {where_sql}
+        """
+        cursor.execute(q_totals, args)
+        totals = cursor.fetchone() or {}
+        total_valor_frete = totals.get('total_valor_frete', 0)
+        total_comissao_cte = totals.get('total_comissao_cte', 0)
+        total_comissao_motorista = totals.get('total_comissao_motorista', 0)
+        total_lucro = totals.get('total_lucro', 0)
+
+        q_det = f"""
+            SELECT f.data_frete, COALESCE(c.razao_social,'') AS cliente_nome,
+                   COALESCE(p.nome,'') AS produto_nome,
+                   COALESCE(m.nome,'') AS motorista_nome,
+                   f.quantidade, f.valor_total_frete, f.comissao_cte, f.comissao_motorista, f.lucro
+            FROM fretes f
+            LEFT JOIN clientes c ON f.clientes_id = c.id
+            LEFT JOIN produto p ON f.produto_id = p.id
+            LEFT JOIN motoristas m ON f.motoristas_id = m.id
+            WHERE 1=1 {where_sql}
+            ORDER BY f.data_frete DESC
+        """
+        cursor.execute(q_det, args)
+        fretes = cursor.fetchall()
+    finally:
+        cursor.close()
+        conn.close()
+
+    return render_template(
+        'relatorios/fretes_lucro.html',
+        data_inicio=params.get('data_inicio'),
+        data_fim=params.get('data_fim'),
+        cliente_id=int(params.get('cliente_id')) if params.get('cliente_id') else None,
+        motorista_id=int(params.get('motorista_id')) if params.get('motorista_id') else None,
+        produto_id=int(params.get('produto_id')) if params.get('produto_id') else None,
+        clientes=_load_select_list('clientes'),
+        motoristas=_load_select_list('motoristas'),
+        produtos=_load_select_list('produto'),
+        total_valor_frete=total_valor_frete,
+        total_comissao_cte=total_comissao_cte,
+        total_comissao_motorista=total_comissao_motorista,
+        total_lucro=total_lucro,
+        fretes=fretes
+    )
+
+
+@bp.route('/fretes_produtos', methods=['GET'])
+@login_required
+def fretes_produtos():
+    params = request.args
+    where_sql, args = _build_filters(params)
+
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        q_totals = f"""
+            SELECT
+              COALESCE(SUM(f.quantidade),0) AS total_quantidade,
+              COALESCE(SUM(f.total_nf_compra),0) AS total_nf,
+              COUNT(DISTINCT f.produto_id) AS qtd_produtos_diferentes
+            FROM fretes f
+            WHERE 1=1 {where_sql}
+        """
+        cursor.execute(q_totals, args)
+        totals = cursor.fetchone() or {}
+        total_quantidade = totals.get('total_quantidade', 0)
+        total_nf = totals.get('total_nf', 0)
+        qtd_produtos_diferentes = totals.get('qtd_produtos_diferentes', 0)
+
+        q_det = f"""
+            SELECT f.data_frete, COALESCE(c.razao_social,'') AS cliente_nome,
+                   COALESCE(fo.razao_social,'') AS fornecedor_nome,
+                   COALESCE(p.nome,'') AS produto_nome,
+                   f.quantidade, f.preco_produto_unitario, f.total_nf_compra
+            FROM fretes f
+            LEFT JOIN clientes c ON f.clientes_id = c.id
+            LEFT JOIN fornecedores fo ON f.fornecedores_id = fo.id
+            LEFT JOIN produto p ON f.produto_id = p.id
+            WHERE 1=1 {where_sql}
+            ORDER BY f.data_frete DESC
+        """
+        cursor.execute(q_det, args)
+        fretes = cursor.fetchall()
+
+        resumo_por_produto = []
+        cliente_id = params.get('cliente_id')
+        if cliente_id:
+            q_resumo = f"""
+                SELECT p.id AS produto_id, p.nome AS produto_nome,
+                       COALESCE(SUM(f.quantidade),0) AS quantidade_total,
+                       COALESCE(SUM(f.total_nf_compra),0) AS valor_nf_total
+                FROM fretes f
+                LEFT JOIN produto p ON f.produto_id = p.id
+                WHERE f.clientes_id = %s
+                {('AND f.data_frete BETWEEN %s AND %s' if params.get('data_inicio') and params.get('data_fim') else '')}
+                GROUP BY p.id
+                ORDER BY quantidade_total DESC
+            """
+            resumo_args = [cliente_id]
+            if params.get('data_inicio') and params.get('data_fim'):
+                di = _parse_date_safe(params.get('data_inicio'))
+                df = _parse_date_safe(params.get('data_fim'))
+                if di and df:
+                    resumo_args.extend([di, df])
+            cursor.execute(q_resumo, resumo_args)
+            resumo_por_produto = cursor.fetchall()
+    finally:
+        cursor.close()
+        conn.close()
+
+    return render_template(
+        'relatorios/fretes_produtos.html',
+        data_inicio=params.get('data_inicio'),
+        data_fim=params.get('data_fim'),
+        cliente_id=int(params.get('cliente_id')) if params.get('cliente_id') else None,
+        fornecedor_id=int(params.get('fornecedor_id')) if params.get('fornecedor_id') else None,
+        produto_id=int(params.get('produto_id')) if params.get('produto_id') else None,
+        clientes=_load_select_list('clientes'),
+        fornecedores=_load_select_list('fornecedores'),
+        produtos=_load_select_list('produto'),
+        total_quantidade=total_quantidade,
+        total_nf=total_nf,
+        qtd_produtos_diferentes=qtd_produtos_diferentes,
+        fretes=fretes,
+        resumo_por_produto=resumo_por_produto
+    )
