@@ -389,20 +389,37 @@ def fretes_produtos():
             cursor.execute(q_resumo, resumo_args)
             resumo_por_produto = cursor.fetchall()
         else:
-            # quando não há cliente selecionado, construir um resumo geral por produto
-            q_geral = f"""
-                SELECT p.id AS produto_id, p.nome AS produto_nome,
-                       COALESCE(SUM(COALESCE(f.quantidade_manual, q.valor, 0)),0) AS quantidade_total
-                FROM fretes f
-                LEFT JOIN produto p ON f.produto_id = p.id
-                LEFT JOIN quantidades q ON f.quantidade_id = q.id
-                WHERE 1=1 {where_sql}
-                GROUP BY p.id
-                ORDER BY quantidade_total DESC
-                LIMIT 200
-            """
-            cursor.execute(q_geral, args)
-            resumo_por_produto_geral = cursor.fetchall()
+            # quando não há cliente selecionado, construir um resumo por produto apenas para o período
+            # (isso já é coberto abaixo — manteremos a lógica geral que sempre popula resumo_por_produto_geral)
+            pass
+
+        # --- Construir resumo_por_produto_geral respeitando apenas o período (ignora filtros cliente/fornecedor/produto)
+        di_raw = params.get('data_inicio')
+        df_raw = params.get('data_fim')
+        resumo_args = []
+        where_period = ""
+        if di_raw and df_raw:
+            di = _parse_date_safe(di_raw)
+            df = _parse_date_safe(df_raw)
+            if di and df:
+                where_period = " AND f.data_frete BETWEEN %s AND %s"
+                resumo_args.extend([di, df])
+
+        q_geral = f"""
+            SELECT p.id AS produto_id, p.nome AS produto_nome,
+                   COALESCE(SUM(COALESCE(f.quantidade_manual, q.valor, 0)),0) AS quantidade_total
+            FROM fretes f
+            LEFT JOIN produto p ON f.produto_id = p.id
+            LEFT JOIN quantidades q ON f.quantidade_id = q.id
+            WHERE 1=1 {where_period}
+            GROUP BY p.id
+            ORDER BY quantidade_total DESC
+            LIMIT 500
+        """
+        cursor.execute(q_geral, resumo_args)
+        resumo_por_produto_geral = cursor.fetchall()
+        # --- fim resumo_por_produto_geral
+
     finally:
         cursor.close()
         conn.close()
