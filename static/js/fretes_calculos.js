@@ -1,5 +1,6 @@
 // static/js/fretes_calculos.js
-// Atualizado: aplica regra "cliente não paga frete" na página Novo/Editar
+// Atualizado: preenche destino a partir do cliente, trata formatos de entrada (inteiros -> decimais),
+// esconde somente a coluna do preço por litro e garante cálculo completo (CTe, comissões, lucro).
 (function () {
   'use strict';
 
@@ -10,7 +11,9 @@
     if (typeof value === 'number') return value;
     var s = String(value).trim();
     if (s === '') return NaN;
+    // remove R$ e espaços
     s = s.replace(/R\$\s*/gi, '').replace(/\s+/g, '');
+    // se for apenas dígitos (ex: '3650' ou '10'), retornamos NaN aqui e trataremos fora
     s = s.replace(/[^\d\.,-]/g, '');
     var lastComma = s.lastIndexOf(',');
     var lastDot = s.lastIndexOf('.');
@@ -42,56 +45,107 @@
     return (neg ? '-R$ ' : 'R$ ') + intPart + (decimals ? (',' + decPart) : '');
   }
 
-  // helper to read whether client pays freight
+  // Detecta se o cliente paga frete/comissão, usando atributo data-paga-comissao na option
   function clientePagaFrete() {
     var sel = $id('clientes_id');
-    if (!sel) return true; // default: pays
+    if (!sel) return true;
     var opt = sel.options[sel.selectedIndex];
     if (!opt) return true;
-    var paga = opt.getAttribute('data-paga-comissao'); // attribute used in templates
+    var paga = opt.getAttribute('data-paga-comissao');
     if (paga === null || paga === undefined) return true;
-    // consider '0','false','False' as false
-    return !(paga === '0' || paga.toLowerCase && paga.toLowerCase() === 'false');
+    return !(paga === '0' || (paga.toLowerCase && paga.toLowerCase() === 'false'));
   }
 
-  // read quantidade
+  // Preenche destino a partir do cliente (usa data-destino-id do option)
+  function updateDestinoFromCliente() {
+    try {
+      var sel = $id('clientes_id');
+      if (!sel) return;
+      var opt = sel.options[sel.selectedIndex];
+      if (!opt) return;
+      var destinoId = opt.getAttribute('data-destino-id');
+      var destinoHidden = $id('destino_id_hidden');
+      var destinoSelect = $id('destino_id');
+      if (destinoHidden) destinoHidden.value = destinoId || '';
+      if (destinoSelect && destinoId) {
+        // tentar selecionar a opção correspondente (caso exista)
+        for (var i = 0; i < destinoSelect.options.length; i++) {
+          if (String(destinoSelect.options[i].value) === String(destinoId)) {
+            destinoSelect.selectedIndex = i;
+            break;
+          }
+        }
+      }
+    } catch (e) {
+      // não interromper o fluxo se der problema
+      console.warn('updateDestinoFromCliente error:', e);
+    }
+  }
+
+  // Lê quantidade (padrao ou manual)
   function readQuantidade() {
-    var tipo = ($id('quantidade_tipo') || {}).value;
-    if (!tipo) tipo = 'padrao';
+    var tipoEl = $id('quantidade_tipo');
+    var tipo = tipoEl ? tipoEl.value : 'padrao';
     if (tipo === 'personalizada') {
       var manual = $id('quantidade_manual');
       if (!manual) return NaN;
-      return parseNumber(manual.value);
+      return parseNumber(manual.value) || NaN;
     } else {
       var sel = $id('quantidade_id');
       if (!sel) return NaN;
       var opt = sel.options[sel.selectedIndex];
       if (!opt) return NaN;
       var q = opt.getAttribute('data-quantidade');
-      return parseNumber(q);
+      return parseNumber(q) || NaN;
     }
   }
 
+  // Leitura com heurística: aceita entradas sem separador
   function readPrecoProdutoUnitario() {
+    // raw hidden tem precedência
     var rawHidden = $id('preco_produto_unitario_raw');
     if (rawHidden && rawHidden.value) {
-      var raw = parseNumber(rawHidden.value);
-      if (!isNaN(raw)) return raw;
+      var v = parseNumber(rawHidden.value);
+      if (!isNaN(v)) return v;
     }
     var inp = $id('preco_produto_unitario');
     if (!inp) return NaN;
-    return parseNumber(inp.value);
+    var txt = String(inp.value || '').trim();
+    if (/^\d+$/.test(txt)) {
+      // se somente dígitos -> interpretar como valor com 3 casas decimais
+      return parseInt(txt, 10) / 1000.0;
+    }
+    return parseNumber(txt);
   }
 
   function readPrecoPorLitroRaw() {
     var rawHidden = $id('preco_por_litro_raw');
     if (rawHidden && rawHidden.value) {
-      var raw = parseNumber(rawHidden.value);
-      if (!isNaN(raw)) return raw;
+      var v = parseNumber(rawHidden.value);
+      if (!isNaN(v)) return v;
     }
     var inp = $id('preco_por_litro');
     if (!inp) return NaN;
-    return parseNumber(inp.value);
+    var txt = String(inp.value || '').trim();
+    if (/^\d+$/.test(txt)) {
+      // se somente dígitos -> interpretar como valor com 2 casas decimais
+      return parseInt(txt, 10) / 100.0;
+    }
+    return parseNumber(txt);
+  }
+
+  // calcula CTe a partir do map ROTAS (origem|destino)
+  function calcularValorCTe(quantidade) {
+    var origem = $id('origem_id') ? $id('origem_id').value : null;
+    var destino = ($id('destino_id_hidden') && $id('destino_id_hidden').value) ? $id('destino_id_hidden').value : ($id('destino_id') ? $id('destino_id').value : null);
+    if (!origem || !destino) return 0;
+    var key = origem + '|' + destino;
+    var tarifa = 0;
+    try {
+      if (typeof ROTAS !== 'undefined' && ROTAS && ROTAS[key]) tarifa = Number(ROTAS[key]) || 0;
+    } catch (e) { tarifa = 0; }
+    if (isNaN(quantidade) || quantidade <= 0) return 0;
+    return Number(quantidade) * Number(tarifa);
   }
 
   function ensureHidden(name) {
@@ -104,24 +158,8 @@
     if (form) form.appendChild(h);
   }
 
-  function calcularValorCTe(quantidade) {
-    var origem = $id('origem_id') ? $id('origem_id').value : null;
-    var destino = ($id('clientes_id') && $id('clientes_id').selectedIndex >= 0) ? (function(){
-      var hid = $id('destino_id_hidden');
-      if (hid && hid.value) return hid.value;
-      return ($id('destino_id') ? $id('destino_id').value : null);
-    })() : null;
-    if (!origem || !destino) return 0;
-    var key = origem + '|' + destino;
-    var tarifa = 0;
-    try {
-      if (typeof ROTAS !== 'undefined' && ROTAS && ROTAS[key]) tarifa = Number(ROTAS[key]) || 0;
-    } catch (e) { tarifa = 0; }
-    if (isNaN(quantidade) || quantidade <= 0) return 0;
-    return Number(quantidade) * Number(tarifa);
-  }
-
   function calcularTudo() {
+    // garantir hidden onde necessário
     ensureHidden('preco_por_litro_raw');
 
     var quantidade = readQuantidade();
@@ -156,9 +194,9 @@
 
     // Comissão CTe = 8% sobre valorCTe
     var comissaoCTe = 0;
-    if (!isNaN(valorCTe)) comissaoCTe = valorCTe * 0.08;
+    if (!isNaN(valorCTe)) comissaoCTe = Number(valorCTe) * 0.08;
 
-    // Comissão Motorista: se motorista não paga comissão => 0, else Q * 0.01
+    // Comissão Motorista: se motorista não paga comissão => 0, else Q * 0.01 (somente se cliente paga frete)
     var comissaoMotorista = 0;
     var motoristaSel = $id('motoristas_id');
     if (motoristaSel) {
@@ -177,28 +215,29 @@
     // Lucro = ValorTotalFrete - ComissãoMotorista - ComissãoCTe
     var lucro = 0;
     if (!isNaN(valorTotalFrete)) lucro = Number(valorTotalFrete) - Number(comissaoMotorista || 0) - Number(comissaoCTe || 0);
-    else lucro = 0;
+    else lucro = 0 - Number(comissaoMotorista || 0) - Number(comissaoCTe || 0);
 
-    // Escrever de volta
+    // Escrever de volta (formatados)
     var inpPrecoUnit = $id('preco_produto_unitario');
     if (inpPrecoUnit) {
       var rawHidden = $id('preco_produto_unitario_raw');
-      if (rawHidden && (rawHidden.value !== '' && rawHidden.value !== null && !isNaN(parseNumber(rawHidden.value)))) {
+      if (rawHidden && rawHidden.value !== '' && !isNaN(parseNumber(rawHidden.value))) {
         var r = parseNumber(rawHidden.value);
-        inpPrecoUnit.value = formatCurrencyBR(isNaN(r) ? 0 : r, 3);
+        inpPrecoUnit.value = (isNaN(r) ? formatCurrencyBR(0,3) : formatCurrencyBR(r,3)).replace('R$ ','');
       } else {
-        inpPrecoUnit.value = formatCurrencyBR(precoUnit || 0, 3);
+        inpPrecoUnit.value = formatCurrencyBR(precoUnit || 0, 3).replace('R$ ','');
         if (rawHidden) rawHidden.value = isNaN(precoUnit) ? 0 : precoUnit;
       }
     }
 
     var inpPpl = $id('preco_por_litro');
     if (inpPpl) {
-      inpPpl.value = formatCurrencyBR(precoPorLitroRaw || 0, 2);
+      // preencher visível sem o prefixo R$
+      inpPpl.value = formatCurrencyBR(precoPorLitroRaw || 0, 2).replace('R$ ','');
       var h = $id('preco_por_litro_raw');
       if (h) h.value = isNaN(precoPorLitroRaw) ? 0 : precoPorLitroRaw;
-      // esconder/desabilitar se cliente não paga
-      var container = inpPpl.closest('.row') || inpPpl.parentElement;
+      // esconder/desabilitar apenas a coluna do preço por litro
+      var container = inpPpl.closest('[class*="col-"]') || inpPpl.parentElement;
       if (!clientePaga) {
         inpPpl.readOnly = true;
         if (container) container.style.display = 'none';
@@ -234,16 +273,6 @@
       ensureHidden('total_nf_compra');
       ensureHidden('valor_total_frete');
       ensureHidden('lucro');
-
-      var hcte = $id('valor_cte_raw');
-      if (!hcte) {
-        var h = document.createElement('input');
-        h.type = 'hidden';
-        h.id = 'valor_cte_raw';
-        h.name = 'valor_cte';
-        var frm = document.querySelector('form');
-        frm && frm.appendChild(h);
-      }
     } catch (e) {
       console.error('Erro ao garantir hidden fields:', e);
     }
@@ -256,19 +285,25 @@
   }
 
   function initBindings() {
-    // attach masks if present
-    // (you might still want the attachNumericMask function from the prior version;
-    // for brevity, this file assumes simple formatted inputs)
+    // Bind updateDestinoFromCliente before calcularTudo so destino já esteja setado
+    safeAttach('clientes_id', 'change', function () {
+      setTimeout(function () {
+        updateDestinoFromCliente();
+        calcularTudo();
+      }, 60);
+    });
+
     safeAttach('quantidade_tipo', 'change', calcularTudo);
     safeAttach('quantidade_id', 'change', calcularTudo);
     safeAttach('quantidade_manual', 'input', calcularTudo);
     safeAttach('motoristas_id', 'change', calcularTudo);
-    safeAttach('clientes_id', 'change', function () {
-      // small delay to let updateDestinoFromCliente run if exists elsewhere
-      setTimeout(calcularTudo, 50);
+    safeAttach('origem_id', 'change', function () {
+      setTimeout(calcularTudo, 10);
     });
-    safeAttach('origem_id', 'change', calcularTudo);
     safeAttach('destino_id', 'change', calcularTudo);
+
+    // initial populate destino (on page load)
+    updateDestinoFromCliente();
 
     // initial calc
     calcularTudo();
