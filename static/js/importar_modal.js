@@ -32,6 +32,15 @@
       container.innerHTML = html;
       executeInlineScripts(container);
 
+      // Tentativa extra: se a função de inicialização do modal foi exposta pelo script injetado, chamá-la agora
+      if (window.initImportModal && typeof window.initImportModal === 'function') {
+        try {
+          window.initImportModal();
+        } catch (err) {
+          console.error('Erro ao chamar initImportModal:', err);
+        }
+      }
+
       // tentar abrir modal (se presente)
       const modalEl = container.querySelector('#modalImportarLista') || container.querySelector('.modal');
       if (modalEl) {
