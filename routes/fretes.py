@@ -434,7 +434,35 @@ def salvar_importados():
             else:
                 lucro = round(float(valor_total_frete) - float(comissao_motorista) - float(comissao_cte), 2)
 
-            cursor.execute("""INSERT INTO fretes (data_frete, status, observacoes, clientes_id, fornecedores_id, produto_id, origem_id, destino_id, motoristas_id, veiculos_id, quantidade_id, quan[...]
+            cursor.execute("""
+                INSERT INTO fretes (
+                    data_frete, status, observacoes, clientes_id, fornecedores_id, produto_id,
+                    origem_id, destino_id, motoristas_id, veiculos_id, quantidade_id, quantidade_manual,
+                    preco_produto_unitario, preco_por_litro, total_nf_compra, valor_total_frete,
+                    comissao_motorista, valor_cte, comissao_cte, lucro
+                ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+            """, (
+                data_frete,
+                status_item,
+                request.form.get(f'{prefix}[observacoes]') or '',
+                clientes_id,
+                fornecedores_id,
+                produto_id,
+                origem_id,
+                destino_id,
+                motorista_id,
+                veiculo_id,
+                request.form.get(f'{prefix}[quantidade_id]') or None,
+                request.form.get(f'{prefix}[quantidade]') or None,
+                round(preco_unit or 0, 3),
+                round(preco_por_litro or 0, 4),
+                round(total_nf or 0, 2),
+                round(valor_total_frete or 0, 2),
+                round(comissao_motorista or 0, 2),
+                round(valor_cte or 0, 2),
+                round(comissao_cte or 0, 2),
+                round(lucro or 0, 2),
+            ))
         conn.commit()
 
         if pedido_id:
@@ -647,22 +675,3 @@ def editar(id):
         quantidades=quantidades,
         rotas_dict=rotas_dict,
     )
-
-
-@bp.route('/deletar/<int:id>', methods=['POST'])
-@login_required
-def deletar(id):
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    try:
-        cursor.execute("DELETE FROM fretes WHERE id = %s", (id,))
-        conn.commit()
-        flash('Frete excluído com sucesso!', 'success')
-    except Exception as e:
-        conn.rollback()
-        flash(f'Erro ao excluir frete: {e}', 'danger')
-    finally:
-        cursor.close()
-        conn.close()
-
-    return redirect(url_for('fretes.lista'))
