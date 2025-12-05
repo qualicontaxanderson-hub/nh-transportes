@@ -172,8 +172,23 @@ function calcularItem(itemDiv) {
   try {
     const quantidade = parseFloat(itemDiv.querySelector('input[name$="[quantidade]"]').value) || 0;
     const precoUnitario = desformatarMoeda(itemDiv.querySelector('.campo-preco-unitario').value);
+
+    // --- Substituição: normaliza entrada do Preço por Litro para interpretar "10" como 0,10 ---
     const precoLitroInput = itemDiv.querySelector('.campo-preco-litro');
-    const precoPorLitro = desformatarMoeda(precoLitroInput.value);
+    let precoPorLitro = 0;
+    if (precoLitroInput) {
+      const raw = String(precoLitroInput.value || '').trim();
+      if (/^\d+$/.test(raw)) {
+        // se o usuário digitou apenas dígitos como "10", interpretar como 0.10 (dividir por 100)
+        precoPorLitro = parseInt(raw, 10) / 100.0;
+        // atualizar a exibição para o formato BR (0,10)
+        precoLitroInput.value = formatarMoeda(precoPorLitro);
+      } else {
+        // caso normal (já cadastrado com vírgula/ponto)
+        precoPorLitro = desformatarMoeda(raw);
+      }
+    }
+    // --- fim substituição ---
 
     const clientePagaComissao = parseInt(itemDiv.querySelector('.cliente-paga-comissao') ? itemDiv.querySelector('.cliente-paga-comissao').value : 1) || 0;
     const clienteCteIntegral = parseInt(itemDiv.querySelector('.cliente-cte-integral') ? itemDiv.querySelector('.cliente-cte-integral').value : 0) || 0;
