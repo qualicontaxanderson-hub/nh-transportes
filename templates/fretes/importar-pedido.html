@@ -248,57 +248,66 @@ function calcularItem(itemDiv) {
 }
 
 // Quando o modal é injetado, ligar os listeners e calcular inicialmente
-document.addEventListener('DOMContentLoaded', function() {
-  const modalEl = document.getElementById('modalImportarPedido');
-  if (modalEl && window.bootstrap && bootstrap.Modal) {
-    try { new bootstrap.Modal(modalEl, {backdrop:'static'}).show(); } catch(e){ console.error(e); }
-  }
+(function initImportModal() {
+  function doInit() {
+    const modalEl = document.getElementById('modalImportarPedido');
+    if (modalEl && window.bootstrap && bootstrap.Modal) {
+      try { new bootstrap.Modal(modalEl, {backdrop:'static'}).show(); } catch(e){ console.error(e); }
+    }
 
-  // ligar events para cada item
-  document.querySelectorAll('.item-card').forEach(function(itemDiv) {
-    const inputPrecoLitro = itemDiv.querySelector('.campo-preco-litro');
-    if (!inputPrecoLitro) return;
+    // ligar events para cada item
+    document.querySelectorAll('.item-card').forEach(function(itemDiv) {
+      const inputPrecoLitro = itemDiv.querySelector('.campo-preco-litro');
+      if (!inputPrecoLitro) return;
 
-    // enquanto digita: apenas recalcula (não formata)
-    ['input','change','keyup'].forEach(ev => inputPrecoLitro.addEventListener(ev, function(){
-      calcularItem(itemDiv);
-    }));
+      // enquanto digita: apenas recalcula (não formata)
+      ['input','change','keyup'].forEach(ev => inputPrecoLitro.addEventListener(ev, function(){
+        calcularItem(itemDiv);
+      }));
 
-    // ao sair do campo: aplicar regra "somente dígitos -> centavos" e formatar
-    inputPrecoLitro.addEventListener('blur', function() {
-      try {
-        const raw = String(inputPrecoLitro.value || '').trim();
-        const onlyDigits = raw.replace(/\D/g, '');
-        const hasSeparator = raw.indexOf(',') >= 0 || raw.indexOf('.') >= 0;
-        let valueToUse = 0;
-        if (onlyDigits && !hasSeparator) {
-          valueToUse = parseInt(onlyDigits, 10) / 100.0;
-        } else {
-          valueToUse = desformatarMoeda(raw);
-        }
-        // formatar para exibição BR
-        inputPrecoLitro.value = formatarMoeda(valueToUse);
-
-        // se houver campo hidden correspondente (itens[i][preco_por_litro_raw]), atualiza-lo
+      // ao sair do campo: aplicar regra "somente dígitos -> centavos" e formatar
+      inputPrecoLitro.addEventListener('blur', function() {
         try {
-          const name = inputPrecoLitro.getAttribute('name') || '';
-          const rawName = name.replace(/\[preco_por_litro\]/, '[preco_por_litro_raw]');
-          if (rawName && rawName !== name) {
-            const hidden = document.querySelector('input[name="'+rawName+'"]');
-            if (hidden) hidden.value = String(valueToUse).replace(',', '.');
+          const raw = String(inputPrecoLitro.value || '').trim();
+          const onlyDigits = raw.replace(/\D/g, '');
+          const hasSeparator = raw.indexOf(',') >= 0 || raw.indexOf('.') >= 0;
+          let valueToUse = 0;
+          if (onlyDigits && !hasSeparator) {
+            valueToUse = parseInt(onlyDigits, 10) / 100.0;
+          } else {
+            valueToUse = desformatarMoeda(raw);
           }
-        } catch(e) {
-          // silencioso
+          // formatar para exibição BR
+          inputPrecoLitro.value = formatarMoeda(valueToUse);
+
+          // se houver campo hidden correspondente (itens[i][preco_por_litro_raw]), atualiza-lo
+          try {
+            const name = inputPrecoLitro.getAttribute('name') || '';
+            const rawName = name.replace(/\[preco_por_litro\]/, '[preco_por_litro_raw]');
+            if (rawName && rawName !== name) {
+              const hidden = document.querySelector('input[name="'+rawName+'"]');
+              if (hidden) hidden.value = String(valueToUse).replace(',', '.');
+            }
+          } catch(e) {
+            // silencioso
+          }
+        } catch (e) {
+          console.error('Erro ao formatar preco por litro no blur:', e);
         }
-      } catch (e) {
-        console.error('Erro ao formatar preco por litro no blur:', e);
-      }
+        calcularItem(itemDiv);
+      });
+
+      // calcular inicialmente
       calcularItem(itemDiv);
     });
+  }
 
-    // calcular inicialmente
-    calcularItem(itemDiv);
-  });
-});
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', doInit);
+  } else {
+    // já carregado — inicializa imediatamente (import modal injetado via fetch)
+    doInit();
+  }
+})();
 </script>
 {% endblock %}
