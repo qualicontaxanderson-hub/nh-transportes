@@ -302,6 +302,9 @@ function calcularItem(itemDiv) {
     });
   }
 
+  // expõe a função para ser chamada externamente (importar_modal.js)
+  window.initImportModal = doInit;
+
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', doInit);
   } else {
