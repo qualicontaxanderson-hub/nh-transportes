@@ -173,22 +173,21 @@ function calcularItem(itemDiv) {
     const quantidade = parseFloat(itemDiv.querySelector('input[name$="[quantidade]"]').value) || 0;
     const precoUnitario = desformatarMoeda(itemDiv.querySelector('.campo-preco-unitario').value);
 
-    // --- Substituição: normaliza entrada do Preço por Litro para interpretar "10" como 0,10 ---
+    // --- Ajuste: apenas ler entrada do Preço por Litro (não reescrever o campo aqui) ---
     const precoLitroInput = itemDiv.querySelector('.campo-preco-litro');
     let precoPorLitro = 0;
     if (precoLitroInput) {
       const raw = String(precoLitroInput.value || '').trim();
-      if (/^\d+$/.test(raw)) {
-        // se o usuário digitou apenas dígitos como "10", interpretar como 0.10 (dividir por 100)
-        precoPorLitro = parseInt(raw, 10) / 100.0;
-        // atualizar a exibição para o formato BR (0,10)
-        precoLitroInput.value = formatarMoeda(precoPorLitro);
+      // se for apenas dígitos sem separador, interpretar como centavos (ex: "10" -> 0.10)
+      const onlyDigits = raw.replace(/\D/g, '');
+      const hasSeparator = raw.indexOf(',') >= 0 || raw.indexOf('.') >= 0;
+      if (onlyDigits && !hasSeparator) {
+        precoPorLitro = parseInt(onlyDigits, 10) / 100.0;
       } else {
-        // caso normal (já cadastrado com vírgula/ponto)
         precoPorLitro = desformatarMoeda(raw);
       }
     }
-    // --- fim substituição ---
+    // --- fim ajuste ---
 
     const clientePagaComissao = parseInt(itemDiv.querySelector('.cliente-paga-comissao') ? itemDiv.querySelector('.cliente-paga-comissao').value : 1) || 0;
     const clienteCteIntegral = parseInt(itemDiv.querySelector('.cliente-cte-integral') ? itemDiv.querySelector('.cliente-cte-integral').value : 0) || 0;
@@ -236,11 +235,11 @@ function calcularItem(itemDiv) {
 
     const precoLitroContainer = itemDiv.querySelector('.campo-preco-litro-container');
     if (!clientePagaComissao) {
-      precoLitroInput.value = '0,00';
-      precoLitroInput.readOnly = true;
+      if (precoLitroInput) precoLitroInput.value = '0,00';
+      if (precoLitroInput) precoLitroInput.readOnly = true;
       if (precoLitroContainer) precoLitroContainer.style.display = 'none';
     } else {
-      precoLitroInput.readOnly = false;
+      if (precoLitroInput) precoLitroInput.readOnly = false;
       if (precoLitroContainer) precoLitroContainer.style.display = 'block';
     }
   } catch (err) {
@@ -259,7 +258,44 @@ document.addEventListener('DOMContentLoaded', function() {
   document.querySelectorAll('.item-card').forEach(function(itemDiv) {
     const inputPrecoLitro = itemDiv.querySelector('.campo-preco-litro');
     if (!inputPrecoLitro) return;
-    ['input','change','keyup','blur'].forEach(ev => inputPrecoLitro.addEventListener(ev, () => calcularItem(itemDiv)));
+
+    // enquanto digita: apenas recalcula (não formata)
+    ['input','change','keyup'].forEach(ev => inputPrecoLitro.addEventListener(ev, function(){
+      calcularItem(itemDiv);
+    }));
+
+    // ao sair do campo: aplicar regra "somente dígitos -> centavos" e formatar
+    inputPrecoLitro.addEventListener('blur', function() {
+      try {
+        const raw = String(inputPrecoLitro.value || '').trim();
+        const onlyDigits = raw.replace(/\D/g, '');
+        const hasSeparator = raw.indexOf(',') >= 0 || raw.indexOf('.') >= 0;
+        let valueToUse = 0;
+        if (onlyDigits && !hasSeparator) {
+          valueToUse = parseInt(onlyDigits, 10) / 100.0;
+        } else {
+          valueToUse = desformatarMoeda(raw);
+        }
+        // formatar para exibição BR
+        inputPrecoLitro.value = formatarMoeda(valueToUse);
+
+        // se houver campo hidden correspondente (itens[i][preco_por_litro_raw]), atualiza-lo
+        try {
+          const name = inputPrecoLitro.getAttribute('name') || '';
+          const rawName = name.replace(/\[preco_por_litro\]/, '[preco_por_litro_raw]');
+          if (rawName && rawName !== name) {
+            const hidden = document.querySelector('input[name="'+rawName+'"]');
+            if (hidden) hidden.value = String(valueToUse).replace(',', '.');
+          }
+        } catch(e) {
+          // silencioso
+        }
+      } catch (e) {
+        console.error('Erro ao formatar preco por litro no blur:', e);
+      }
+      calcularItem(itemDiv);
+    });
+
     // calcular inicialmente
     calcularItem(itemDiv);
   });
