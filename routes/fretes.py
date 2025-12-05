@@ -105,7 +105,8 @@ def novo():
             quantidade_id = request.form.get('quantidade_id')
             if quantidade_manual and quantidade_manual.strip() != '':
                 try:
-                    quantidade = float(str(quantidade_manual).replace('.', '').replace(',', '.'))
+                    # usar parse_moeda para interpretar vírgula/ponto corretamente
+                    quantidade = parse_moeda(quantidade_manual)
                 except Exception:
                     quantidade = 0.0
             elif quantidade_id:
@@ -364,7 +365,8 @@ def salvar_importados():
             destino_id = request.form.get(f'{prefix}[destino_id]') or request.form.get(f'{prefix}[cliente_destino_id]') or None
             quantidade_raw = request.form.get(f'{prefix}[quantidade]') or '0'
             try:
-                quantidade = float(str(quantidade_raw).replace('.', '').replace(',', '.'))
+                # usar parse_moeda para interpretar corretamente ponto/vírgula
+                quantidade = parse_moeda(quantidade_raw)
             except Exception:
                 quantidade = 0.0
             quantidade_id = request.form.get(f'{prefix}[quantidade_id]') or None
@@ -432,4 +434,235 @@ def salvar_importados():
             else:
                 lucro = round(float(valor_total_frete) - float(comissao_motorista) - float(comissao_cte), 2)
 
-            cursor.execute("""INSERT INTO fretes (data_frete, status, observacoes, clientes_id, fornecedores_id, produto_id, origem_id, destino_id, motoristas_id, veiculos_id, quantidade_id, quantidade_manual, preco_produto_unitario, preco_por_litro, total_nf_compra, valor_total_frete, comissao_motorista, valor_cte, comissao_cte, lucro) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""", (data_frete, status_item, request.form.get('observacoes') or '', clientes_id, fornecedores_id, produto_id, origem_id, destino_id, motorista_id, veiculo_id, quantidade_id or None, (request.form.get(f'{prefix}[quantidade]') or None), round(preco_unit or 0, 3), round(preco_por_litro or 0, 4), round(total_nf or 0, 2), round(valor_total_frete or 0, 2), round(comissao_motorista or 0, 2), round(valor_cte or 0, 2), round(comissao_cte or 0, 2), round(lucro or 0, 2),))\n        conn.commit()\n\n        if pedido_id:\n            try:\n                c2 = conn.cursor()\n                c2.execute(\"UPDATE pedidos SET status = %s WHERE id = %s\", ('Faturado', pedido_id))\n                conn.commit()\n                c2.close()\n            except Exception:\n                conn.rollback()\n\n        flash('Importação salva: fretes criados com sucesso.', 'success')\n        if pedido_id:\n            return redirect(url_for('pedidos.visualizar', id=pedido_id))\n        return redirect(url_for('fretes.lista'))\n\n    except Exception as e:\n        conn.rollback()\n        flash(f'Erro ao salvar importados: {e}', 'danger')\n        return redirect(url_for('pedidos.importar_lista'))\n    finally:\n        cursor.close()\n        conn.close()\n\n\n@bp.route('/editar/<int:id>', methods=['GET', 'POST'])\n@login_required\ndef editar(id):\n    conn = get_db_connection()\n    cursor = conn.cursor(dictionary=True)\n\n    if request.method == 'POST':\n        try:\n            preco_produto_unitario_raw = request.form.get('preco_produto_unitario_raw')\n            if preco_produto_unitario_raw is None or preco_produto_unitario_raw == '':\n                preco_produto_unitario = parse_moeda(request.form.get('preco_produto_unitario'))\n            else:\n                preco_produto_unitario = parse_moeda(preco_produto_unitario_raw)\n\n            preco_por_litro_raw = request.form.get('preco_por_litro_raw')\n            if preco_por_litro_raw is None or preco_por_litro_raw == '':\n                preco_por_litro = parse_moeda(request.form.get('preco_por_litro'))\n            else:\n                preco_por_litro = parse_moeda(preco_por_litro_raw)\n\n            total_nf_compra = parse_moeda(request.form.get('total_nf_compra'))\n            valor_total_frete = parse_moeda(request.form.get('valor_total_frete'))\n            comissao_motorista = parse_moeda(request.form.get('comissao_motorista'))\n            valor_cte = parse_moeda(request.form.get('valor_cte'))\n            comissao_cte = parse_moeda(request.form.get('comissao_cte'))\n            lucro = parse_moeda(request.form.get('lucro'))\n\n            clientes_id = request.form.get('clientes_id')\n\n            cliente_paga_frete = True\n            try:\n                if clientes_id:\n                    cchk = conn.cursor(dictionary=True)\n                    cchk.execute(\"SELECT paga_frete, paga_comissao FROM clientes WHERE id = %s LIMIT 1\", (clientes_id,))\n                    crow = cchk.fetchone()\n                    cchk.close()\n                    if crow:\n                        if crow.get('paga_frete') is not None:\n                            cliente_paga_frete = bool(crow.get('paga_frete'))\n                        elif crow.get('paga_comissao') is not None:\n                            cliente_paga_frete = bool(crow.get('paga_comissao'))\n            except Exception:\n                cliente_paga_frete = True\n\n            if not cliente_paga_frete:\n                preco_por_litro = 0\n                valor_total_frete = 0\n                comissao_motorista = 0\n                comissao_cte = 0\n                lucro = round(0 - float(comissao_cte or 0) - float(comissao_motorista or 0), 2)\n\n            cursor.execute(\"\"\"\n                UPDATE fretes SET\n                    data_frete=%s,\n                    status=%s,\n                    observacoes=%s,\n                    clientes_id=%s,\n                    fornecedores_id=%s,\n                    produto_id=%s,\n                    origem_id=%s,\n                    destino_id=%s,\n                    motoristas_id=%s,\n                    veiculos_id=%s,\n                    quantidade_id=%s,\n                    quantidade_manual=%s,\n                    preco_produto_unitario=%s,\n                    preco_por_litro=%s,\n                    total_nf_compra=%s,\n                    valor_total_frete=%s,\n                    comissao_motorista=%s,\n                    valor_cte=%s,\n                    comissao_cte=%s,\n                    lucro=%s\n                WHERE id=%s\n            \"\"\", (\n                request.form.get('data_frete'),\n                request.form.get('status'),\n                request.form.get('observacoes'),\n                clientes_id,\n                request.form.get('fornecedores_id'),\n                request.form.get('produto_id'),\n                request.form.get('origem_id'),\n                request.form.get('destino_id'),\n                request.form.get('motoristas_id'),\n                request.form.get('veiculos_id'),\n                request.form.get('quantidade_id') or None,\n                request.form.get('quantidade_manual') or None,\n                preco_produto_unitario or 0,\n                preco_por_litro or 0,\n                total_nf_compra or 0,\n                valor_total_frete or 0,\n                comissao_motorista or 0,\n                valor_cte or 0,\n                comissao_cte or 0,\n                lucro or 0,\n                id,\n            ))\n            conn.commit()\n            flash('Frete atualizado com sucesso!', 'success')\n            return redirect(url_for('fretes.lista'))\n        except Exception as e:\n            conn.rollback()\n            flash(f'Erro ao atualizar frete: {e}', 'danger')\n            return redirect(url_for('fretes.editar', id=id))\n        finally:\n            cursor.close()\n            conn.close()\n\n    # GET: carregar frete + dados de apoio\n    try:\n        cursor.execute(\"SELECT * FROM fretes WHERE id = %s\", (id,))\n        frete = cursor.fetchone()\n    except Exception:\n        frete = None\n\n    # carregar dados auxiliares\n    try:\n        cursor.execute(\"SELECT * FROM clientes ORDER BY razao_social\")\n        clientes = cursor.fetchall()\n\n        cursor.execute(\"SELECT * FROM fornecedores ORDER BY razao_social\")\n        fornecedores = cursor.fetchall()\n\n        cursor.execute(\"SELECT * FROM produto ORDER BY nome\")\n        produtos = cursor.fetchall()\n\n        cursor.execute(\"SELECT * FROM origens ORDER BY nome\")\n        origens = cursor.fetchall()\n\n        cursor.execute(\"SELECT * FROM destinos ORDER BY nome\")\n        destinos = cursor.fetchall()\n\n        cursor.execute(\"SELECT * FROM motoristas ORDER BY nome\")\n        motoristas = cursor.fetchall()\n\n        cursor.execute(\"SELECT * FROM veiculos ORDER BY caminhao\")\n        veiculos = cursor.fetchall()\n\n        cursor.execute(\"SELECT * FROM quantidades ORDER BY valor\")\n        quantidades = cursor.fetchall()\n\n        # montar rotas_dict também para a página de edição\n        rotas_dict = {}\n        try:\n            cursor.execute(\"SELECT origem_id, destino_id, valor_por_litro FROM rotas WHERE ativo = 1\")\n            for r in cursor.fetchall():\n                try:\n                    origem_id = r.get('origem_id') if isinstance(r, dict) else r[0]\n                    destino_id = r.get('destino_id') if isinstance(r, dict) else r[1]\n                    valor = r.get('valor_por_litro') if isinstance(r, dict) else r[2]\n                    key = f\"{int(origem_id)}|{int(destino_id)}\"\n                    rotas_dict[key] = float(valor or 0)\n                except Exception:\n                    continue\n        except Exception:\n            rotas_dict = {}\n    finally:\n        cursor.close()\n        conn.close()\n\n    # Normalizar campos para o template/JS\n    if frete is None:\n        frete = {}\n    frete.setdefault('preco_produto_unitario', frete.get('preco_produto_unitario') or 0)\n    frete.setdefault('preco_por_litro', frete.get('preco_por_litro') or 0)\n    frete.setdefault('total_nf_compra', frete.get('total_nf_compra') or 0)\n    frete.setdefault('valor_total_frete', frete.get('valor_total_frete') or 0)\n    frete.setdefault('comissao_motorista', frete.get('comissao_motorista') or 0)\n    frete.setdefault('valor_cte', frete.get('valor_cte') or 0)\n    frete.setdefault('comissao_cte', frete.get('comissao_cte') or 0)\n    frete.setdefault('lucro', frete.get('lucro') or 0)\n    frete.setdefault('quantidade_manual', frete.get('quantidade_manual') or '')\n    frete.setdefault('quantidade_id', frete.get('quantidade_id') or None)\n\n    return render_template(\n        'fretes/novo.html',\n        frete=frete,\n        clientes=clientes,\n        fornecedores=fornecedores,\n        produtos=produtos,\n        origens=origens,\n        destinos=destinos,\n        motoristas=motoristas,\n        veiculos=veiculos,\n        quantidades=quantidades,\n        rotas_dict=rotas_dict,\n    )\n\n\n@bp.route('/deletar/<int:id>', methods=['POST'])\n@login_required\ndef deletar(id):\n    conn = get_db_connection()\n    cursor = conn.cursor()\n    try:\n        cursor.execute(\"DELETE FROM fretes WHERE id = %s\", (id,))\n        conn.commit()\n        flash('Frete excluído com sucesso!', 'success')\n    except Exception as e:\n        conn.rollback()\n        flash(f'Erro ao excluir frete: {e}', 'danger')\n    finally:\n        cursor.close()\n        conn.close()\n\n    return redirect(url_for('fretes.lista'))\n--- static/js/fretes_calculos.js contents end ---"}
+            cursor.execute("""INSERT INTO fretes (data_frete, status, observacoes, clientes_id, fornecedores_id, produto_id, origem_id, destino_id, motoristas_id, veiculos_id, quantidade_id, quan[...]
+        conn.commit()
+
+        if pedido_id:
+            try:
+                c2 = conn.cursor()
+                c2.execute("UPDATE pedidos SET status = %s WHERE id = %s", ('Faturado', pedido_id))
+                conn.commit()
+                c2.close()
+            except Exception:
+                conn.rollback()
+
+        flash('Importação salva: fretes criados com sucesso.', 'success')
+        if pedido_id:
+            return redirect(url_for('pedidos.visualizar', id=pedido_id))
+        return redirect(url_for('fretes.lista'))
+
+    except Exception as e:
+        conn.rollback()
+        flash(f'Erro ao salvar importados: {e}', 'danger')
+        return redirect(url_for('pedidos.importar_lista'))
+    finally:
+        cursor.close()
+        conn.close()
+
+
+@bp.route('/editar/<int:id>', methods=['GET', 'POST'])
+@login_required
+def editar(id):
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+
+    if request.method == 'POST':
+        try:
+            preco_produto_unitario_raw = request.form.get('preco_produto_unitario_raw')
+            if preco_produto_unitario_raw is None or preco_produto_unitario_raw == '':
+                preco_produto_unitario = parse_moeda(request.form.get('preco_produto_unitario'))
+            else:
+                preco_produto_unitario = parse_moeda(preco_produto_unitario_raw)
+
+            preco_por_litro_raw = request.form.get('preco_por_litro_raw')
+            if preco_por_litro_raw is None or preco_por_litro_raw == '':
+                preco_por_litro = parse_moeda(request.form.get('preco_por_litro'))
+            else:
+                preco_por_litro = parse_moeda(preco_por_litro_raw)
+
+            total_nf_compra = parse_moeda(request.form.get('total_nf_compra'))
+            valor_total_frete = parse_moeda(request.form.get('valor_total_frete'))
+            comissao_motorista = parse_moeda(request.form.get('comissao_motorista'))
+            valor_cte = parse_moeda(request.form.get('valor_cte'))
+            comissao_cte = parse_moeda(request.form.get('comissao_cte'))
+            lucro = parse_moeda(request.form.get('lucro'))
+
+            clientes_id = request.form.get('clientes_id')
+
+            cliente_paga_frete = True
+            try:
+                if clientes_id:
+                    cchk = conn.cursor(dictionary=True)
+                    cchk.execute("SELECT paga_frete, paga_comissao FROM clientes WHERE id = %s LIMIT 1", (clientes_id,))
+                    crow = cchk.fetchone()
+                    cchk.close()
+                    if crow:
+                        if crow.get('paga_frete') is not None:
+                            cliente_paga_frete = bool(crow.get('paga_frete'))
+                        elif crow.get('paga_comissao') is not None:
+                            cliente_paga_frete = bool(crow.get('paga_comissao'))
+            except Exception:
+                cliente_paga_frete = True
+
+            if not cliente_paga_frete:
+                preco_por_litro = 0
+                valor_total_frete = 0
+                comissao_motorista = 0
+                comissao_cte = 0
+                lucro = round(0 - float(comissao_cte or 0) - float(comissao_motorista or 0), 2)
+
+            cursor.execute("""
+                UPDATE fretes SET
+                    data_frete=%s,
+                    status=%s,
+                    observacoes=%s,
+                    clientes_id=%s,
+                    fornecedores_id=%s,
+                    produto_id=%s,
+                    origem_id=%s,
+                    destino_id=%s,
+                    motoristas_id=%s,
+                    veiculos_id=%s,
+                    quantidade_id=%s,
+                    quantidade_manual=%s,
+                    preco_produto_unitario=%s,
+                    preco_por_litro=%s,
+                    total_nf_compra=%s,
+                    valor_total_frete=%s,
+                    comissao_motorista=%s,
+                    valor_cte=%s,
+                    comissao_cte=%s,
+                    lucro=%s
+                WHERE id=%s
+            """, (
+                request.form.get('data_frete'),
+                request.form.get('status'),
+                request.form.get('observacoes'),
+                clientes_id,
+                request.form.get('fornecedores_id'),
+                request.form.get('produto_id'),
+                request.form.get('origem_id'),
+                request.form.get('destino_id'),
+                request.form.get('motoristas_id'),
+                request.form.get('veiculos_id'),
+                request.form.get('quantidade_id') or None,
+                request.form.get('quantidade_manual') or None,
+                preco_produto_unitario or 0,
+                preco_por_litro or 0,
+                total_nf_compra or 0,
+                valor_total_frete or 0,
+                comissao_motorista or 0,
+                valor_cte or 0,
+                comissao_cte or 0,
+                lucro or 0,
+                id,
+            ))
+            conn.commit()
+            flash('Frete atualizado com sucesso!', 'success')
+            return redirect(url_for('fretes.lista'))
+        except Exception as e:
+            conn.rollback()
+            flash(f'Erro ao atualizar frete: {e}', 'danger')
+            return redirect(url_for('fretes.editar', id=id))
+        finally:
+            cursor.close()
+            conn.close()
+
+    # GET: carregar frete + dados de apoio
+    try:
+        cursor.execute("SELECT * FROM fretes WHERE id = %s", (id,))
+        frete = cursor.fetchone()
+    except Exception:
+        frete = None
+
+    # carregar dados auxiliares
+    try:
+        cursor.execute("SELECT * FROM clientes ORDER BY razao_social")
+        clientes = cursor.fetchall()
+
+        cursor.execute("SELECT * FROM fornecedores ORDER BY razao_social")
+        fornecedores = cursor.fetchall()
+
+        cursor.execute("SELECT * FROM produto ORDER BY nome")
+        produtos = cursor.fetchall()
+
+        cursor.execute("SELECT * FROM origens ORDER BY nome")
+        origens = cursor.fetchall()
+
+        cursor.execute("SELECT * FROM destinos ORDER BY nome")
+        destinos = cursor.fetchall()
+
+        cursor.execute("SELECT * FROM motoristas ORDER BY nome")
+        motoristas = cursor.fetchall()
+
+        cursor.execute("SELECT * FROM veiculos ORDER BY caminhao")
+        veiculos = cursor.fetchall()
+
+        cursor.execute("SELECT * FROM quantidades ORDER BY valor")
+        quantidades = cursor.fetchall()
+
+        # montar rotas_dict também para a página de edição
+        rotas_dict = {}
+        try:
+            cursor.execute("SELECT origem_id, destino_id, valor_por_litro FROM rotas WHERE ativo = 1")
+            for r in cursor.fetchall():
+                try:
+                    origem_id = r.get('origem_id') if isinstance(r, dict) else r[0]
+                    destino_id = r.get('destino_id') if isinstance(r, dict) else r[1]
+                    valor = r.get('valor_por_litro') if isinstance(r, dict) else r[2]
+                    key = f"{int(origem_id)}|{int(destino_id)}"
+                    rotas_dict[key] = float(valor or 0)
+                except Exception:
+                    continue
+        except Exception:
+            rotas_dict = {}
+    finally:
+        cursor.close()
+        conn.close()
+
+    # Normalizar campos para o template/JS
+    if frete is None:
+        frete = {}
+    frete.setdefault('preco_produto_unitario', frete.get('preco_produto_unitario') or 0)
+    frete.setdefault('preco_por_litro', frete.get('preco_por_litro') or 0)
+    frete.setdefault('total_nf_compra', frete.get('total_nf_compra') or 0)
+    frete.setdefault('valor_total_frete', frete.get('valor_total_frete') or 0)
+    frete.setdefault('comissao_motorista', frete.get('comissao_motorista') or 0)
+    frete.setdefault('valor_cte', frete.get('valor_cte') or 0)
+    frete.setdefault('comissao_cte', frete.get('comissao_cte') or 0)
+    frete.setdefault('lucro', frete.get('lucro') or 0)
+    frete.setdefault('quantidade_manual', frete.get('quantidade_manual') or '')
+    frete.setdefault('quantidade_id', frete.get('quantidade_id') or None)
+
+    return render_template(
+        'fretes/novo.html',
+        frete=frete,
+        clientes=clientes,
+        fornecedores=fornecedores,
+        produtos=produtos,
+        origens=origens,
+        destinos=destinos,
+        motoristas=motoristas,
+        veiculos=veiculos,
+        quantidades=quantidades,
+        rotas_dict=rotas_dict,
+    )
+
+
+@bp.route('/deletar/<int:id>', methods=['POST'])
+@login_required
+def deletar(id):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute("DELETE FROM fretes WHERE id = %s", (id,))
+        conn.commit()
+        flash('Frete excluído com sucesso!', 'success')
+    except Exception as e:
+        conn.rollback()
+        flash(f'Erro ao excluir frete: {e}', 'danger')
+    finally:
+        cursor.close()
+        conn.close()
+
+    return redirect(url_for('fretes.lista'))
