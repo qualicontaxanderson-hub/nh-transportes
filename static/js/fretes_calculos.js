@@ -91,6 +91,27 @@
     }
   }
 
+  // --- ADD: toggle UI para quantidade personalizada/padrão ---
+  function toggleQuantidadeInputs() {
+    try {
+      var tipoEl = $id('quantidade_tipo');
+      var divPadrao = $id('div_quantidade_padrao');
+      var divPersonalizada = $id('div_quantidade_personalizada');
+      if (!tipoEl) return;
+      var tipo = tipoEl.value || 'padrao';
+      if (tipo === 'personalizada') {
+        if (divPadrao) divPadrao.style.display = 'none';
+        if (divPersonalizada) divPersonalizada.style.display = '';
+      } else {
+        if (divPadrao) divPadrao.style.display = '';
+        if (divPersonalizada) divPersonalizada.style.display = 'none';
+      }
+    } catch (e) {
+      console.warn('toggleQuantidadeInputs error', e);
+    }
+  }
+  // --- END ADD ---
+
   function readQuantidade() {
     var tipoEl = $id('quantidade_tipo');
     var tipo = tipoEl ? tipoEl.value : 'padrao';
@@ -297,7 +318,8 @@
       }, 60);
     });
 
-    safeAttach('quantidade_tipo', 'change', calcularTudo);
+    // bind quantidade_tipo to toggle UI and recalc
+    safeAttach('quantidade_tipo', 'change', function() { toggleQuantidadeInputs(); calcularTudo(); });
     safeAttach('quantidade_id', 'change', calcularTudo);
     safeAttach('quantidade_manual', 'input', calcularTudo);
     safeAttach('motoristas_id', 'change', calcularTudo);
@@ -305,6 +327,7 @@
     safeAttach('destino_id', 'change', calcularTudo);
 
     updateDestinoFromCliente();
+    toggleQuantidadeInputs(); // ensure correct initial visibility
     calcularTudo();
   }
 
