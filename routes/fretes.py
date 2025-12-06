@@ -1,7 +1,7 @@
 from flask import Blueprint, render_template, request, redirect, url_for, flash
 from flask_login import login_required
 
-# Import helpers (adicionados para resolver NameError)
+# Import helpers
 from utils.db import get_db_connection
 from utils.helpers import parse_moeda
 
@@ -47,6 +47,91 @@ def lista():
         data_inicio=data_inicio,
         data_fim=data_fim,
         cliente_id=cliente_id
+    )
+
+@bp.route('/novo', methods=['GET', 'POST'])
+@login_required
+def novo():
+    """
+    Rota mínima para 'fretes.novo' — abre o formulário de novo frete.
+    Aceita opcionalmente ?pedido_id=123 para o fluxo de importação.
+    """
+    # GET: carregar dados auxiliares para o formulário
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        cursor.execute("SELECT id, razao_social FROM clientes ORDER BY razao_social")
+        clientes = cursor.fetchall()
+
+        cursor.execute("SELECT id, razao_social FROM fornecedores ORDER BY razao_social")
+        fornecedores = cursor.fetchall()
+
+        cursor.execute("SELECT id, nome FROM produto ORDER BY nome")
+        produtos = cursor.fetchall()
+
+        cursor.execute("SELECT id, nome FROM origens ORDER BY nome")
+        origens = cursor.fetchall()
+
+        cursor.execute("SELECT id, nome FROM destinos ORDER BY nome")
+        destinos = cursor.fetchall()
+
+        cursor.execute("SELECT id, nome FROM motoristas ORDER BY nome")
+        motoristas = cursor.fetchall()
+
+        cursor.execute("SELECT id, caminhao, placa FROM veiculos WHERE ativo = 1 ORDER BY caminhao")
+        veiculos = cursor.fetchall()
+
+        cursor.execute("SELECT id, valor, descricao FROM quantidades ORDER BY valor")
+        quantidades = cursor.fetchall()
+
+        # montar rotas_dict
+        rotas_dict = {}
+        try:
+            cursor.execute("SELECT origem_id, destino_id, valor_por_litro FROM rotas WHERE ativo = 1")
+            for r in cursor.fetchall():
+                try:
+                    origem_id = r.get('origem_id') if isinstance(r, dict) else r[0]
+                    destino_id = r.get('destino_id') if isinstance(r, dict) else r[1]
+                    valor = r.get('valor_por_litro') if isinstance(r, dict) else r[2]
+                    key = f"{int(origem_id)}|{int(destino_id)}"
+                    rotas_dict[key] = float(valor or 0)
+                except Exception:
+                    continue
+        except Exception:
+            rotas_dict = {}
+    finally:
+        cursor.close()
+        conn.close()
+
+    # frete vazio (normalizar campos esperados pelo template)
+    frete = {
+        'preco_produto_unitario': 0,
+        'preco_por_litro': 0,
+        'total_nf_compra': 0,
+        'valor_total_frete': 0,
+        'comissao_motorista': 0,
+        'valor_cte': 0,
+        'comissao_cte': 0,
+        'lucro': 0,
+        'quantidade_manual': '',
+        'quantidade_id': None,
+    }
+
+    pedido_id = request.args.get('pedido_id')
+
+    return render_template(
+        'fretes/novo.html',
+        frete=frete,
+        clientes=clientes,
+        fornecedores=fornecedores,
+        produtos=produtos,
+        origens=origens,
+        destinos=destinos,
+        motoristas=motoristas,
+        veiculos=veiculos,
+        quantidades=quantidades,
+        rotas_dict=rotas_dict,
+        pedido_id=pedido_id
     )
 
 @bp.route('/editar/<int:id>', methods=['GET', 'POST'])
