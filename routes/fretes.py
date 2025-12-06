@@ -1,11 +1,12 @@
 from flask import Blueprint, render_template, request, redirect, url_for, flash
 from flask_login import login_required
 
+# Import helpers (adicionados para resolver NameError)
+from utils.db import get_db_connection
+from utils.helpers import parse_moeda
+
 # Atenção: get_db_connection e parse_moeda devem estar definidos em outro módulo do projeto.
-# Ajuste os imports abaixo conforme a estrutura do seu repositório se necessário.
-# Exemplo (descomente/ajuste se aplicável):
-# from utils.db import get_db_connection
-# from utils.helpers import parse_moeda
+# Ajuste os imports acima conforme a estrutura do seu repositório se necessário.
 
 bp = Blueprint('fretes', __name__, url_prefix='/fretes')
 
