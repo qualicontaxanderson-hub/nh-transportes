@@ -27,8 +27,10 @@ def parse_moeda(valor):
             return 0.0
         s = s.replace('R$', '').replace('r$', '').replace('R', '').replace(' ', '')
         if '.' in s and ',' in s:
+            # formato "1.234,56"
             s = s.replace('.', '').replace(',', '.')
         else:
+            # formato "1234.56" ou "1234,56"
             s = s.replace(',', '.')
         return float(s)
     except Exception:
@@ -164,7 +166,10 @@ def novo():
             else:
                 try:
                     rc = conn.cursor(dictionary=True)
-                    rc.execute("SELECT valor_por_litro FROM rotas WHERE origem_id=%s AND destino_id=%s LIMIT 1", (request.form.get('origem_id'), request.form.get('destino_id')))
+                    rc.execute(
+                        "SELECT valor_por_litro FROM rotas WHERE origem_id=%s AND destino_id=%s LIMIT 1",
+                        (request.form.get('origem_id'), request.form.get('destino_id'))
+                    )
                     rrow = rc.fetchone()
                     rc.close()
                     tarifa = float(rrow.get('valor_por_litro')) if (rrow and rrow.get('valor_por_litro') is not None) else 0.0
@@ -202,7 +207,8 @@ def novo():
             else:
                 lucro = round((valor_total_frete or 0) - (comissao_motorista or 0) - (comissao_cte or 0), 2)
 
-            cursor.execute("""
+            cursor.execute(
+                """
                 INSERT INTO fretes (
                     data_frete, status, observacoes,
                     clientes_id, fornecedores_id, produto_id,
@@ -213,28 +219,30 @@ def novo():
                     total_nf_compra, valor_total_frete,
                     comissao_motorista, valor_cte, comissao_cte, lucro
                 ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
-            """, (
-                request.form.get('data_frete'),
-                request.form.get('status'),
-                request.form.get('observacoes'),
-                clientes_id,
-                request.form.get('fornecedores_id'),
-                request.form.get('produto_id'),
-                request.form.get('origem_id'),
-                request.form.get('destino_id'),
-                request.form.get('motoristas_id'),
-                request.form.get('veiculos_id'),
-                request.form.get('quantidade_id') or None,
-                request.form.get('quantidade_manual') or None,
-                round(preco_produto_unitario or 0, 3),
-                round(preco_por_litro or 0, 4),
-                round(total_nf_compra or 0, 2),
-                round(valor_total_frete or 0, 2),
-                round(comissao_motorista or 0, 2),
-                round(valor_cte or 0, 2),
-                round(comissao_cte or 0, 2),
-                round(lucro or 0, 2),
-            ))
+                """,
+                (
+                    request.form.get('data_frete'),
+                    request.form.get('status'),
+                    request.form.get('observacoes'),
+                    clientes_id,
+                    request.form.get('fornecedores_id'),
+                    request.form.get('produto_id'),
+                    request.form.get('origem_id'),
+                    request.form.get('destino_id'),
+                    request.form.get('motoristas_id'),
+                    request.form.get('veiculos_id'),
+                    request.form.get('quantidade_id') or None,
+                    request.form.get('quantidade_manual') or None,
+                    round(preco_produto_unitario or 0, 3),
+                    round(preco_por_litro or 0, 4),
+                    round(total_nf_compra or 0, 2),
+                    round(valor_total_frete or 0, 2),
+                    round(comissao_motorista or 0, 2),
+                    round(valor_cte or 0, 2),
+                    round(comissao_cte or 0, 2),
+                    round(lucro or 0, 2),
+                )
+            )
             conn.commit()
             flash('Frete criado com sucesso!', 'success')
             return redirect(url_for('fretes.lista'))
@@ -272,8 +280,8 @@ def novo():
         veiculos = cursor.fetchall()
 
         cursor.execute("SELECT * FROM quantidades ORDER BY valor")
-        quantidades = cursor.fetchall()
-
+        quants = cursor.fetchall()
+        quantidades = quants
         # montar rotas_dict para o JS
         rotas_dict = {}
         try:
@@ -434,35 +442,38 @@ def salvar_importados():
             else:
                 lucro = round(float(valor_total_frete) - float(comissao_motorista) - float(comissao_cte), 2)
 
-            cursor.execute("""
+            cursor.execute(
+                """
                 INSERT INTO fretes (
                     data_frete, status, observacoes, clientes_id, fornecedores_id, produto_id,
                     origem_id, destino_id, motoristas_id, veiculos_id, quantidade_id, quantidade_manual,
                     preco_produto_unitario, preco_por_litro, total_nf_compra, valor_total_frete,
                     comissao_motorista, valor_cte, comissao_cte, lucro
                 ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
-            """, (
-                data_frete,
-                status_item,
-                request.form.get(f'{prefix}[observacoes]') or '',
-                clientes_id,
-                fornecedores_id,
-                produto_id,
-                origem_id,
-                destino_id,
-                motorista_id,
-                veiculo_id,
-                request.form.get(f'{prefix}[quantidade_id]') or None,
-                request.form.get(f'{prefix}[quantidade]') or None,
-                round(preco_unit or 0, 3),
-                round(preco_por_litro or 0, 4),
-                round(total_nf or 0, 2),
-                round(valor_total_frete or 0, 2),
-                round(comissao_motorista or 0, 2),
-                round(valor_cte or 0, 2),
-                round(comissao_cte or 0, 2),
-                round(lucro or 0, 2),
-            ))
+                """,
+                (
+                    data_frete,
+                    status_item,
+                    request.form.get(f'{prefix}[observacoes]') or '',
+                    clientes_id,
+                    fornecedores_id,
+                    produto_id,
+                    origem_id,
+                    destino_id,
+                    motorista_id,
+                    veiculo_id,
+                    request.form.get(f'{prefix}[quantidade_id]') or None,
+                    request.form.get(f'{prefix}[quantidade]') or None,
+                    round(preco_unit or 0, 3),
+                    round(preco_por_litro or 0, 4),
+                    round(total_nf or 0, 2),
+                    round(valor_total_frete or 0, 2),
+                    round(comissao_motorista or 0, 2),
+                    round(valor_cte or 0, 2),
+                    round(comissao_cte or 0, 2),
+                    round(lucro or 0, 2),
+                )
+            )
         conn.commit()
 
         if pedido_id:
@@ -531,101 +542,3 @@ def editar(id):
                             cliente_paga_frete = bool(crow.get('paga_comissao'))
             except Exception:
                 cliente_paga_frete = True
-
-    # GET: carregar frete + dados de apoio
-    try:
-        cursor.execute("SELECT * FROM fretes WHERE id = %s", (id,))
-        frete = cursor.fetchone()
-    except Exception:
-        frete = None
-
-    # carregar dados auxiliares
-    try:
-        cursor.execute("SELECT * FROM clientes ORDER BY razao_social")
-        clientes = cursor.fetchall()
-
-        cursor.execute("SELECT * FROM fornecedores ORDER BY razao_social")
-        fornecedores = cursor.fetchall()
-
-        cursor.execute("SELECT * FROM produto ORDER BY nome")
-        produtos = cursor.fetchall()
-
-        cursor.execute("SELECT * FROM origens ORDER BY nome")
-        origens = cursor.fetchall()
-
-        cursor.execute("SELECT * FROM destinos ORDER BY nome")
-        destinos = cursor.fetchall()
-
-        cursor.execute("SELECT * FROM motoristas ORDER BY nome")
-        motoristas = cursor.fetchall()
-
-        cursor.execute("SELECT * FROM veiculos ORDER BY caminhao")
-        veiculos = cursor.fetchall()
-
-        cursor.execute("SELECT * FROM quantidades ORDER BY valor")
-        quantidades = cursor.fetchall()
-
-        # montar rotas_dict também para a página de edição
-        rotas_dict = {}
-        try:
-            cursor.execute("SELECT origem_id, destino_id, valor_por_litro FROM rotas WHERE ativo = 1")
-            for r in cursor.fetchall():
-                try:
-                    origem_id = r.get('origem_id') if isinstance(r, dict) else r[0]
-                    destino_id = r.get('destino_id') if isinstance(r, dict) else r[1]
-                    valor = r.get('valor_por_litro') if isinstance(r, dict) else r[2]
-                    key = f"{int(origem_id)}|{int(destino_id)}"
-                    rotas_dict[key] = float(valor or 0)
-                except Exception:
-                    continue
-        except Exception:
-            rotas_dict = {}
-    finally:
-        cursor.close()
-        conn.close()
-
-    # Normalizar campos para o template/JS
-    if frete is None:
-        frete = {}
-    frete.setdefault('preco_produto_unitario', frete.get('preco_produto_unitario') or 0)
-    frete.setdefault('preco_por_litro', frete.get('preco_por_litro') or 0)
-    frete.setdefault('total_nf_compra', frete.get('total_nf_compra') or 0)
-    frete.setdefault('valor_total_frete', frete.get('valor_total_frete') or 0)
-    frete.setdefault('comissao_motorista', frete.get('comissao_motorista') or 0)
-    frete.setdefault('valor_cte', frete.get('valor_cte') or 0)
-    frete.setdefault('comissao_cte', frete.get('comissao_cte') or 0)
-    frete.setdefault('lucro', frete.get('lucro') or 0)
-    frete.setdefault('quantidade_manual', frete.get('quantidade_manual') or '')
-    frete.setdefault('quantidade_id', frete.get('quantidade_id') or None)
-
-    return render_template(
-        'fretes/novo.html',
-        frete=frete,
-        clientes=clientes,
-        fornecedores=fornecedores,
-        produtos=produtos,
-        origens=origens,
-        destinos=destinos,
-        motoristas=motoristas,
-        veiculos=veiculos,
-        quantidades=quantidades,
-        rotas_dict=rotas_dict,
-    )
-
-
-@bp.route('/deletar/<int:id>', methods=['POST'])
-@login_required
-def deletar(id):
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    try:
-        cursor.execute("DELETE FROM fretes WHERE id = %s", (id,))
-        conn.commit()
-        flash('Frete excluído com sucesso!', 'success')
-    except Exception as e:
-        conn.rollback()
-        flash(f'Erro ao excluir frete: {e}', 'danger')
-    finally:
-        cursor.close()
-        conn.close()
-    return redirect(url_for('fretes.lista'))
