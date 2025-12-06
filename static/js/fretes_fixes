@@ -1,0 +1,110 @@
+(function(){
+  'use strict';
+
+  function desformatarMoeda(valor) {
+    if (valor === null || valor === undefined) return 0;
+    var s = String(valor).trim();
+    if (s === '') return 0;
+    s = s.replace(/R\$|\s/g, '');
+    if (s.indexOf('.') >= 0 && s.indexOf(',') >= 0) {
+      s = s.replace(/\./g, '').replace(',', '.');
+    } else {
+      s = s.replace(',', '.');
+    }
+    var n = parseFloat(s);
+    return isNaN(n) ? 0 : n;
+  }
+
+  function formatarMoedaBR(valor, casas) {
+    casas = (typeof casas === 'number') ? casas : 2;
+    if (valor === null || valor === undefined) valor = 0;
+    var n = Number(valor) || 0;
+    var neg = n < 0;
+    n = Math.abs(n);
+    var inteiro = parseInt(n.toFixed(casas), 10) + '';
+    var dec = (n.toFixed(casas) + '').split('.')[1] || '';
+    inteiro = inteiro.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+    var s = inteiro + (casas ? ',' + (dec) : '');
+    return (neg ? '-' : '') + s;
+  }
+
+  function interpretarEntrada(raw, casas) {
+    var r = String(raw || '').trim();
+    var only = r.replace(/\D/g, '');
+    var hasSep = r.indexOf(',') >= 0 || r.indexOf('.') >= 0;
+    if (only && !hasSep) {
+      return parseInt(only,10) / Math.pow(10, casas);
+    }
+    return desformatarMoeda(r);
+  }
+
+  function $(sel, ctx){ return (ctx || document).querySelector(sel); }
+
+  function initFretesFixes() {
+    var inputPrecoUnitario = $('[name="preco_produto_unitario"]') || $('[name="preco_produto_unitario_raw"]');
+    var inputPrecoPorLitro = $('[name="preco_por_litro"]') || $('[name="preco_por_litro_raw"]') || document.querySelector('.campo-preco-litro');
+    var inputQuantidade = $('[name="quantidade_manual"]') || $('[name="quantidade"]') || document.querySelector('.campo-quantidade');
+    var inputTotalNF = $('[name="total_nf_compra"]') || document.querySelector('.campo-total-nf') || $('[name="total_nf"]');
+    var inputValorTotalFrete = $('[name="valor_total_frete"]') || document.querySelector('.campo-valor-frete') || $('[name="valor_total_frete"]');
+
+    function safeVal(el){ return el ? el.value : ''; }
+    function safeSet(el, v){ if(!el) return; el.value = v; }
+
+    function calcularTotalNF() {
+      if (!inputTotalNF) return;
+      var q = desformatarMoeda(safeVal(inputQuantidade)) || 0;
+      var pu = interpretarEntrada(safeVal(inputPrecoUnitario), 3) || 0;
+      var total = q * pu;
+      safeSet(inputTotalNF, formatarMoedaBR(total, 2));
+    }
+
+    function calcularValorTotalFrete() {
+      if (!inputValorTotalFrete) return;
+      var q = desformatarMoeda(safeVal(inputQuantidade)) || 0;
+      var pl = interpretarEntrada(safeVal(inputPrecoPorLitro), 2) || 0;
+      var total = q * pl;
+      safeSet(inputValorTotalFrete, formatarMoedaBR(total, 2));
+    }
+
+    function bindFormatInput(el, casas) {
+      if (!el) return;
+      el.addEventListener('blur', function(){
+        try {
+          var raw = el.value || '';
+          var v = interpretarEntrada(raw, casas);
+          el.value = formatarMoedaBR(v, casas);
+        } catch(e) { console.error(e); }
+      });
+    }
+
+    function bindLiveCalc(el) {
+      if (!el) return;
+      ['input','change','keyup'].forEach(function(ev){
+        el.addEventListener(ev, function(){
+          calcularTotalNF();
+          calcularValorTotalFrete();
+        });
+      });
+    }
+
+    bindFormatInput(inputPrecoUnitario, 3);
+    bindFormatInput(inputPrecoPorLitro, 2);
+
+    bindLiveCalc(inputPrecoUnitario);
+    bindLiveCalc(inputPrecoPorLitro);
+    bindLiveCalc(inputQuantidade);
+
+    setTimeout(function(){
+      calcularTotalNF();
+      calcularValorTotalFrete();
+    }, 50);
+  }
+
+  window.initFretesFixes = initFretesFixes;
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initFretesFixes);
+  } else {
+    initFretesFixes();
+  }
+})();
