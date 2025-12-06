@@ -3,19 +3,14 @@ from flask_login import login_required
 from utils.db import get_db_connection
 from datetime import datetime
 
-# Blueprint - DECLARE ANTES DE USAR @bp.route
+# Blueprint
 bp = Blueprint('fretes', __name__, url_prefix='/fretes')
 
 
 def parse_moeda(valor):
     """
     Converte uma string de moeda em float (pt-BR ou en).
-    Exemplos:
-      'R$ 1.234,56' -> 1234.56
-      '1.234,56'     -> 1234.56
-      '1234.56'      -> 1234.56
-      '0,10'         -> 0.10
-      None/''/inválido -> 0.0
+    Retorna 0.0 em caso de erro.
     """
     try:
         if valor is None:
@@ -26,10 +21,11 @@ def parse_moeda(valor):
         if s == '':
             return 0.0
         s = s.replace('R$', '').replace('r$', '').replace('R', '').replace(' ', '')
-        # Trata formatos com milhar (pt-BR) e en
         if '.' in s and ',' in s:
+            # ex: "1.234,56"
             s = s.replace('.', '').replace(',', '.')
         else:
+            # ex: "1234.56" ou "1234,56"
             s = s.replace(',', '.')
         return float(s)
     except Exception:
@@ -67,7 +63,6 @@ def lista():
     finally:
         cursor.close()
         conn.close()
-
     return render_template('fretes/lista.html', fretes=fretes)
 
 
@@ -78,29 +73,26 @@ def novo():
         conn = get_db_connection()
         cursor = conn.cursor()
         try:
-            # Normalizar valores recebidos (produto unitário e preco por litro podem vir raw)
-            preco_produto_unitario_raw = request.form.get('preco_produto_unitario_raw')
-            if preco_produto_unitario_raw is None or preco_produto_unitario_raw == '':
-                preco_produto_unitario = parse_moeda(request.form.get('preco_produto_unitario'))
-            else:
-                preco_produto_unitario = parse_moeda(preco_produto_unitario_raw)
+            # Helper para ler moedas (considera raw)
+            def _read_moeda(form_key, raw_key=None, default='0'):
+                if raw_key:
+                    raw = request.form.get(raw_key)
+                    if raw is not None and raw != '':
+                        return parse_moeda(raw)
+                return parse_moeda(request.form.get(form_key) or default)
 
-            preco_por_litro_raw = request.form.get('preco_por_litro_raw')
-            if preco_por_litro_raw is None or preco_por_litro_raw == '':
-                preco_por_litro = parse_moeda(request.form.get('preco_por_litro'))
-            else:
-                preco_por_litro = parse_moeda(preco_por_litro_raw)
-
-            total_nf_compra = parse_moeda(request.form.get('total_nf_compra'))
-            valor_total_frete = parse_moeda(request.form.get('valor_total_frete'))
-            comissao_motorista = parse_moeda(request.form.get('comissao_motorista'))
-            valor_cte = parse_moeda(request.form.get('valor_cte'))
-            comissao_cte = parse_moeda(request.form.get('comissao_cte'))
-            lucro = parse_moeda(request.form.get('lucro'))
+            preco_produto_unitario = _read_moeda('preco_produto_unitario', 'preco_produto_unitario_raw')
+            preco_por_litro = _read_moeda('preco_por_litro', 'preco_por_litro_raw')
+            total_nf_compra = parse_moeda(request.form.get('total_nf_compra') or '0')
+            valor_total_frete = parse_moeda(request.form.get('valor_total_frete') or '0')
+            comissao_motorista = parse_moeda(request.form.get('comissao_motorista') or '0')
+            valor_cte = parse_moeda(request.form.get('valor_cte') or '0')
+            comissao_cte = parse_moeda(request.form.get('comissao_cte') or '0')
+            lucro = parse_moeda(request.form.get('lucro') or '0')
 
             clientes_id = request.form.get('clientes_id')
 
-            # Determinar quantidade (manual ou via quantidade_id)
+            # quantidade (manual ou por quantidade_id)
             quantidade = 0.0
             quantidade_manual = request.form.get('quantidade_manual')
             quantidade_id = request.form.get('quantidade_id')
@@ -120,19 +112,15 @@ def novo():
                 except Exception:
                     quantidade = 0.0
 
-            # total_nf_compra fallback
+            # fallbacks
             if (not total_nf_compra or total_nf_compra == 0) and quantidade > 0 and preco_produto_unitario > 0:
                 total_nf_compra = round(preco_produto_unitario * quantidade, 2)
-
-            # preco_por_litro fallback (a partir de total_nf_compra)
             if (not preco_por_litro or preco_por_litro == 0) and quantidade > 0 and total_nf_compra > 0:
                 preco_por_litro = round(total_nf_compra / quantidade, 4)
-
-            # valor_total_frete fallback
             if (not valor_total_frete or valor_total_frete == 0) and quantidade > 0 and preco_por_litro > 0:
                 valor_total_frete = round(preco_por_litro * quantidade, 2)
 
-            # Verificar flags do cliente (se não paga frete) e cte_integral
+            # flags do cliente
             cliente_paga_frete = True
             cliente_cte_integral = False
             if clientes_id:
@@ -150,7 +138,6 @@ def novo():
                 except Exception:
                     cliente_paga_frete = True
 
-            # Se cliente não paga frete -> forçar zeros
             if not cliente_paga_frete:
                 preco_por_litro = 0.0
                 valor_total_frete = 0.0
@@ -158,7 +145,7 @@ def novo():
                 comissao_cte = 0.0
                 lucro = 0.0
 
-            # Calcular valor_cte: CTe integral ou tarifa por rota
+            # calcular valor_cte (rota) se necessário
             if cliente_cte_integral:
                 valor_cte = round(valor_total_frete if cliente_paga_frete else 0.0, 2)
             else:
@@ -177,7 +164,7 @@ def novo():
 
             comissao_cte = round(valor_cte * 0.08, 2)
 
-            # Comissão motorista (somente se cliente paga e motorista recebe comissão)
+            # comissão motorista
             motorista_id = request.form.get('motoristas_id')
             comissao_motorista = 0.0
             if cliente_paga_frete:
@@ -199,12 +186,13 @@ def novo():
             else:
                 comissao_motorista = 0.0
 
-            # Lucro
+            # lucro
             if not cliente_paga_frete:
                 lucro = 0.0
             else:
                 lucro = round((valor_total_frete or 0) - (comissao_motorista or 0) - (comissao_cte or 0), 2)
 
+            # inserir no banco
             cursor.execute(
                 """
                 INSERT INTO fretes (
@@ -258,29 +246,22 @@ def novo():
     try:
         cursor.execute("SELECT * FROM clientes ORDER BY razao_social")
         clientes = cursor.fetchall()
-
         cursor.execute("SELECT * FROM fornecedores ORDER BY razao_social")
         fornecedores = cursor.fetchall()
-
         cursor.execute("SELECT * FROM produto ORDER BY nome")
         produtos = cursor.fetchall()
-
         cursor.execute("SELECT * FROM origens ORDER BY nome")
         origens = cursor.fetchall()
-
         cursor.execute("SELECT * FROM destinos ORDER BY nome")
         destinos = cursor.fetchall()
-
         cursor.execute("SELECT * FROM motoristas ORDER BY nome")
         motoristas = cursor.fetchall()
-
         cursor.execute("SELECT * FROM veiculos ORDER BY caminhao")
         veiculos = cursor.fetchall()
-
         cursor.execute("SELECT * FROM quantidades ORDER BY valor")
         quantidades = cursor.fetchall()
 
-        # montar rotas_dict para o JS
+        # rotas para JS
         rotas_dict = {}
         try:
             cursor.execute("SELECT origem_id, destino_id, valor_por_litro FROM rotas WHERE ativo = 1")
@@ -317,19 +298,15 @@ def novo():
 @bp.route('/salvar_importados', methods=['POST'])
 @login_required
 def salvar_importados():
-    """
-    Recebe o form de importação (itens[...] inputs) e persiste cada item como um frete.
-    Versão robusta: verifica flag do cliente para 'não paga frete' e força zeros.
-    """
     conn = get_db_connection()
     cursor = conn.cursor()
     try:
-        pedido_id = request.form.get('pedido_id')  # hidden do modal
+        pedido_id = request.form.get('pedido_id')
         data_frete = request.form.get('data_frete') or None
         motorista_id = request.form.get('motorista_id') or None
         veiculo_id = request.form.get('veiculo_id') or None
 
-        # descobrir quais índices de itens vieram no form:
+        # coletar índices
         indices = set()
         for key in request.form.keys():
             if key.startswith('itens['):
@@ -340,6 +317,7 @@ def salvar_importados():
                     indices.add(idx)
                 except Exception:
                     continue
+
         if not indices:
             flash('Nenhum item encontrado no formulário de importação.', 'warning')
             return redirect(url_for('pedidos.importar_lista'))
@@ -369,13 +347,14 @@ def salvar_importados():
             fornecedores_id = request.form.get(f'{prefix}[fornecedor_id]') or None
             origem_id = request.form.get(f'{prefix}[origem_id]') or None
             destino_id = request.form.get(f'{prefix}[destino_id]') or request.form.get(f'{prefix}[cliente_destino_id]') or None
+
             quantidade_raw = request.form.get(f'{prefix}[quantidade]') or '0'
             try:
                 quantidade = parse_moeda(quantidade_raw)
             except Exception:
                 quantidade = 0.0
-            quantidade_id = request.form.get(f'{prefix}[quantidade_id]') or None
 
+            quantidade_id = request.form.get(f'{prefix}[quantidade_id]') or None
             status_item = (request.form.get(f'{prefix}[status]') or 'Pendente').strip()
 
             preco_unit = parse_moeda(request.form.get(f'{prefix}[preco_unitario]') or request.form.get(f'{prefix}[preco_unitario_raw]') or '0')
@@ -391,7 +370,6 @@ def salvar_importados():
             if (not valor_total_frete or valor_total_frete == 0) and quantidade > 0 and preco_por_litro > 0:
                 valor_total_frete = round(quantidade * preco_por_litro, 2)
 
-            # calcular valor_cte considerando cte_integral do cliente
             valor_cte = parse_moeda(request.form.get(f'{prefix}[valor_cte]') or '0')
             cliente_cte_integral = False
             cliente_paga_frete = True
@@ -418,7 +396,6 @@ def salvar_importados():
 
             comissao_cte = round(valor_cte * 0.08, 2)
 
-            # comissão motorista
             if not cliente_paga_frete:
                 comissao_motorista = 0.0
             else:
@@ -471,7 +448,7 @@ def salvar_importados():
                     round(lucro or 0, 2),
                 )
             )
-        # fim loop for idx
+        # fim loop
         conn.commit()
 
         if pedido_id:
@@ -487,7 +464,6 @@ def salvar_importados():
         if pedido_id:
             return redirect(url_for('pedidos.visualizar', id=pedido_id))
         return redirect(url_for('fretes.lista'))
-
     except Exception as e:
         conn.rollback()
         flash(f'Erro ao salvar importados: {e}', 'danger')
@@ -501,10 +477,9 @@ def salvar_importados():
 @login_required
 def editar(id):
     conn = get_db_connection()
-    cursor = conn.cursor(dictionary=True)
-
-    if request.method == 'POST':
-        try:
+    cursor = conn.cursor()
+    try:
+        if request.method == 'POST':
             preco_produto_unitario_raw = request.form.get('preco_produto_unitario_raw')
             if preco_produto_unitario_raw is None or preco_produto_unitario_raw == '':
                 preco_produto_unitario = parse_moeda(request.form.get('preco_produto_unitario'))
@@ -541,40 +516,29 @@ def editar(id):
             except Exception:
                 cliente_paga_frete = True
 
-    # GET: carregar frete + dados de apoio
-    try:
-        cursor.execute("SELECT * FROM fretes WHERE id = %s", (id,))
-        frete = cursor.fetchone()
-    except Exception:
-        frete = None
+        try:
+            cursor.execute("SELECT * FROM fretes WHERE id = %s", (id,))
+            frete = cursor.fetchone()
+        except Exception:
+            frete = None
 
-    # carregar dados auxiliares
-    try:
         cursor.execute("SELECT * FROM clientes ORDER BY razao_social")
         clientes = cursor.fetchall()
-
         cursor.execute("SELECT * FROM fornecedores ORDER BY razao_social")
         fornecedores = cursor.fetchall()
-
         cursor.execute("SELECT * FROM produto ORDER BY nome")
         produtos = cursor.fetchall()
-
         cursor.execute("SELECT * FROM origens ORDER BY nome")
         origens = cursor.fetchall()
-
         cursor.execute("SELECT * FROM destinos ORDER BY nome")
         destinos = cursor.fetchall()
-
         cursor.execute("SELECT * FROM motoristas ORDER BY nome")
         motoristas = cursor.fetchall()
-
         cursor.execute("SELECT * FROM veiculos ORDER BY caminhao")
         veiculos = cursor.fetchall()
-
         cursor.execute("SELECT * FROM quantidades ORDER BY valor")
         quantidades = cursor.fetchall()
 
-        # montar rotas_dict também para a página de edição
         rotas_dict = {}
         try:
             cursor.execute("SELECT origem_id, destino_id, valor_por_litro FROM rotas WHERE ativo = 1")
@@ -593,7 +557,6 @@ def editar(id):
         cursor.close()
         conn.close()
 
-    # Normalizar campos para o template/JS
     if frete is None:
         frete = {}
     frete.setdefault('preco_produto_unitario', frete.get('preco_produto_unitario') or 0)
@@ -620,21 +583,3 @@ def editar(id):
         quantidades=quantidades,
         rotas_dict=rotas_dict,
     )
-
-
-@bp.route('/deletar/<int:id>', methods=['POST'])
-@login_required
-def deletar(id):
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    try:
-        cursor.execute("DELETE FROM fretes WHERE id = %s", (id,))
-        conn.commit()
-        flash('Frete excluído com sucesso!', 'success')
-    except Exception as e:
-        conn.rollback()
-        flash(f'Erro ao excluir frete: {e}', 'danger')
-    finally:
-        cursor.close()
-        conn.close()
-    return redirect(url_for('fretes.lista'))
