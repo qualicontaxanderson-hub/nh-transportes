@@ -26,11 +26,10 @@ def parse_moeda(valor):
         if s == '':
             return 0.0
         s = s.replace('R$', '').replace('r$', '').replace('R', '').replace(' ', '')
+        # Trata formatos com milhar (pt-BR) e en
         if '.' in s and ',' in s:
-            # formato "1.234,56"
             s = s.replace('.', '').replace(',', '.')
         else:
-            # formato "1234.56" ou "1234,56"
             s = s.replace(',', '.')
         return float(s)
     except Exception:
@@ -79,7 +78,7 @@ def novo():
         conn = get_db_connection()
         cursor = conn.cursor()
         try:
-            # Normalizar valores recebidos
+            # Normalizar valores recebidos (produto unitário e preco por litro podem vir raw)
             preco_produto_unitario_raw = request.form.get('preco_produto_unitario_raw')
             if preco_produto_unitario_raw is None or preco_produto_unitario_raw == '':
                 preco_produto_unitario = parse_moeda(request.form.get('preco_produto_unitario'))
@@ -107,7 +106,6 @@ def novo():
             quantidade_id = request.form.get('quantidade_id')
             if quantidade_manual and quantidade_manual.strip() != '':
                 try:
-                    # usar parse_moeda para interpretar vírgula/ponto corretamente
                     quantidade = parse_moeda(quantidade_manual)
                 except Exception:
                     quantidade = 0.0
@@ -280,8 +278,8 @@ def novo():
         veiculos = cursor.fetchall()
 
         cursor.execute("SELECT * FROM quantidades ORDER BY valor")
-        quants = cursor.fetchall()
-        quantidades = quants
+        quantidades = cursor.fetchall()
+
         # montar rotas_dict para o JS
         rotas_dict = {}
         try:
@@ -373,7 +371,6 @@ def salvar_importados():
             destino_id = request.form.get(f'{prefix}[destino_id]') or request.form.get(f'{prefix}[cliente_destino_id]') or None
             quantidade_raw = request.form.get(f'{prefix}[quantidade]') or '0'
             try:
-                # usar parse_moeda para interpretar corretamente ponto/vírgula
                 quantidade = parse_moeda(quantidade_raw)
             except Exception:
                 quantidade = 0.0
@@ -474,6 +471,7 @@ def salvar_importados():
                     round(lucro or 0, 2),
                 )
             )
+        # fim loop for idx
         conn.commit()
 
         if pedido_id:
@@ -542,3 +540,101 @@ def editar(id):
                             cliente_paga_frete = bool(crow.get('paga_comissao'))
             except Exception:
                 cliente_paga_frete = True
+
+    # GET: carregar frete + dados de apoio
+    try:
+        cursor.execute("SELECT * FROM fretes WHERE id = %s", (id,))
+        frete = cursor.fetchone()
+    except Exception:
+        frete = None
+
+    # carregar dados auxiliares
+    try:
+        cursor.execute("SELECT * FROM clientes ORDER BY razao_social")
+        clientes = cursor.fetchall()
+
+        cursor.execute("SELECT * FROM fornecedores ORDER BY razao_social")
+        fornecedores = cursor.fetchall()
+
+        cursor.execute("SELECT * FROM produto ORDER BY nome")
+        produtos = cursor.fetchall()
+
+        cursor.execute("SELECT * FROM origens ORDER BY nome")
+        origens = cursor.fetchall()
+
+        cursor.execute("SELECT * FROM destinos ORDER BY nome")
+        destinos = cursor.fetchall()
+
+        cursor.execute("SELECT * FROM motoristas ORDER BY nome")
+        motoristas = cursor.fetchall()
+
+        cursor.execute("SELECT * FROM veiculos ORDER BY caminhao")
+        veiculos = cursor.fetchall()
+
+        cursor.execute("SELECT * FROM quantidades ORDER BY valor")
+        quantidades = cursor.fetchall()
+
+        # montar rotas_dict também para a página de edição
+        rotas_dict = {}
+        try:
+            cursor.execute("SELECT origem_id, destino_id, valor_por_litro FROM rotas WHERE ativo = 1")
+            for r in cursor.fetchall():
+                try:
+                    origem_id = r.get('origem_id') if isinstance(r, dict) else r[0]
+                    destino_id = r.get('destino_id') if isinstance(r, dict) else r[1]
+                    valor = r.get('valor_por_litro') if isinstance(r, dict) else r[2]
+                    key = f"{int(origem_id)}|{int(destino_id)}"
+                    rotas_dict[key] = float(valor or 0)
+                except Exception:
+                    continue
+        except Exception:
+            rotas_dict = {}
+    finally:
+        cursor.close()
+        conn.close()
+
+    # Normalizar campos para o template/JS
+    if frete is None:
+        frete = {}
+    frete.setdefault('preco_produto_unitario', frete.get('preco_produto_unitario') or 0)
+    frete.setdefault('preco_por_litro', frete.get('preco_por_litro') or 0)
+    frete.setdefault('total_nf_compra', frete.get('total_nf_compra') or 0)
+    frete.setdefault('valor_total_frete', frete.get('valor_total_frete') or 0)
+    frete.setdefault('comissao_motorista', frete.get('comissao_motorista') or 0)
+    frete.setdefault('valor_cte', frete.get('valor_cte') or 0)
+    frete.setdefault('comissao_cte', frete.get('comissao_cte') or 0)
+    frete.setdefault('lucro', frete.get('lucro') or 0)
+    frete.setdefault('quantidade_manual', frete.get('quantidade_manual') or '')
+    frete.setdefault('quantidade_id', frete.get('quantidade_id') or None)
+
+    return render_template(
+        'fretes/novo.html',
+        frete=frete,
+        clientes=clientes,
+        fornecedores=fornecedores,
+        produtos=produtos,
+        origens=origens,
+        destinos=destinos,
+        motoristas=motoristas,
+        veiculos=veiculos,
+        quantidades=quantidades,
+        rotas_dict=rotas_dict,
+    )
+
+
+@bp.route('/deletar/<int:id>', methods=['POST'])
+@login_required
+def deletar(id):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute("DELETE FROM fretes WHERE id = %s", (id,))
+        conn.commit()
+        flash('Frete excluído com sucesso!', 'success')
+    except Exception as e:
+        conn.rollback()
+        flash(f'Erro ao excluir frete: {e}', 'danger')
+    finally:
+        cursor.close()
+        conn.close()
+    return redirect(url_for('fretes.lista'))
