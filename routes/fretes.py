@@ -104,7 +104,7 @@ def novo():
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
     try:
-        # SELECT apenas colunas existentes — removi 'paga_frete' que não existe em seu esquema
+        # SELECT apenas colunas existentes — usar paga_comissao (coluna presente) em vez de paga_frete
         cursor.execute("SELECT id, razao_social, destino_id, paga_comissao, percentual_cte, cte_integral FROM clientes ORDER BY razao_social")
         clientes = cursor.fetchall()
 
