@@ -1,273 +1,263 @@
-+<!doctype html>
-+{% extends "base.html" %}
-+{% block title %}{% if frete %}Editar Frete{% else %}Novo Frete{% endif %}{% endblock %}
-+
-+{% block content %}
-+<div class="container-fluid">
-+  <nav aria-label="breadcrumb" class="mt-2 mb-3">
-+    <ol class="breadcrumb" style="font-size: 0.85rem;">
-+      <li class="breadcrumb-item"><a href="{{ url_for('index') }}">Início</a></li>
-+      <li class="breadcrumb-item"><a href="{{ url_for('fretes.lista') }}">Fretes</a></li>
-+      <li class="breadcrumb-item active" aria-current="page">
-+        {% if frete %}Editar Frete{% else %}Novo Frete{% endif %}
-+      </li>
-+    </ol>
-+  </nav>
-+
-+  <div class="card shadow-sm">
-+    <div class="card-header bg-warning text-dark" style="padding: 0.6rem 1rem;">
-+      <h4 class="mb-0">
-+        {% if frete %}Editar Frete{% else %}Novo Frete{% endif %}
-+      </h4>
-+    </div>
-+
-+    <div class="card-body" style="padding: 1rem;">
-+      <form method="POST"
-+            action="{% if frete %}{{ url_for('fretes.editar', id=frete.id) }}{% else %}{{ url_for('fretes.novo') }}{% endif %}"
-+            enctype="multipart/form-data">
-+
-+        <!-- DATA / STATUS / BOTÃO IMPORTAR (VERDE) -->
-+        <div class="row mb-2 align-items-end">
-+          <div class="col-md-3">
-+            <label for="data_frete" class="form-label">Data</label>
-+            <input type="date" id="data_frete" name="data_frete"
-+                   class="form-control form-control-sm"
-+                   value="{{ frete.data_frete.strftime('%Y-%m-%d') if frete and frete.data_frete else (now().strftime('%Y-%m-%d') if now else '') }}"
-+                   required>
-+          </div>
-+
-+          <div class="col-md-3">
-+            <label for="status" class="form-label">Status</label>
-+            <select id="status" name="status" class="form-select form-select-sm">
-+              <option value="Pendente" {% if frete and frete.status == 'Pendente' %}selected{% endif %}>Pendente</option>
-+              <option value="Em Trânsito" {% if frete and frete.status == 'Em Trânsito' %}selected{% endif %}>Em Trânsito</option>
-+              <option value="Concluído" {% if frete and frete.status == 'Concluído' %}selected{% endif %}>Concluído</option>
-+              <option value="Cancelado" {% if frete and frete.status == 'Cancelado' %}selected{% endif %}>Cancelado</option>
-+            </select>
-+          </div>
-+
-+          <div class="col-md-6 text-end">
-+            {% if not frete %}
-+              <button type="button" class="btn btn-success btn-sm" id="btn_importar_pedido" title="Importar pedido" onclick="abrirImportacaoPedido()">
-+                <i class="bi bi-upload"></i> Importar Pedido
-+              </button>
-+            {% endif %}
-+          </div>
-+        </div>
-+
-+        <!-- CLIENTE / OBSERVAÇÕES -->
-+        <div class="row">
-+          <div class="col-md-8 mb-2">
-+            <label for="clientes_id" class="form-label">Cliente</label>
-+            <select id="clientes_id" name="clientes_id" class="form-select form-select-sm" required>
-+              <option value="">Selecione um cliente</option>
-+              {% for cliente in clientes %}
-+              <option value="{{ cliente.id }}"
-+                      data-paga-comissao="{{ cliente.paga_comissao|default(1) }}"
-+                      data-cte-integral="{{ cliente.cte_integral|default(0) }}"
-+                      data-destino-id="{{ cliente.destino_id }}"
-+                      data-destino-nome="{{ cliente.destino_nome|default('') }}"
-+                      {% if cliente.id == (frete.clientes_id if frete else None) %}selected{% endif %}>
-+                {{ cliente.razao_social }}
-+              </option>
-+              {% endfor %}
-+            </select>
-+          </div>
-+
-+          <div class="col-md-4 mb-2">
-+            <label for="observacoes" class="form-label">Observações</label>
-+            <input type="text" id="observacoes" name="observacoes"
-+                   class="form-control form-control-sm"
-+                   value="{{ frete.observacoes if frete else '' }}">
-+          </div>
-+        </div>
-+
-+        <!-- FORNECEDOR / PRODUTO -->
-+        <div class="row">
-+          <div class="col-md-6 mb-2">
-+            <label for="fornecedores_id" class="form-label">Fornecedor</label>
-+            <select id="fornecedores_id" name="fornecedores_id" class="form-select form-select-sm" required>
-+              <option value="">Selecione um fornecedor</option>
-+              {% for fornecedor in fornecedores %}
-+              <option value="{{ fornecedor.id }}" {% if frete and fornecedor.id == frete.fornecedores_id %}selected{% endif %}>
-+                {{ fornecedor.razao_social }}
-+              </option>
-+              {% endfor %}
-+            </select>
-+          </div>
-+
-+          <div class="col-md-6 mb-2">
-+            <label for="produto_id" class="form-label">Produto</label>
-+            <select id="produto_id" name="produto_id" class="form-select form-select-sm" required>
-+              <option value="">Selecione o produto</option>
-+              {% for produto in produtos %}
-+              <option value="{{ produto.id }}" {% if frete and produto.id == frete.produto_id %}selected{% endif %}>
-+                {{ produto.nome }}
-+              </option>
-+              {% endfor %}
-+            </select>
-+          </div>
-+        </div>
-+
-+        <!-- ORIGEM / DESTINO -->
-+        <div class="row">
-+          <div class="col-md-6 mb-2">
-+            <label for="origem_id" class="form-label">Origem</label>
-+            <select id="origem_id" name="origem_id" class="form-select form-select-sm" required>
-+              <option value="">Selecione a origem</option>
-+              {% for origem in origens %}
-+              <option value="{{ origem.id }}" {% if frete and origem.id == frete.origem_id %}selected{% endif %}>
-+                {{ origem.nome }}
-+              </option>
-+              {% endfor %}
-+            </select>
-+          </div>
-+
-+          <div class="col-md-6 mb-2">
-+            <label for="destino_id" class="form-label">Destino</label>
-+            <select id="destino_id" name="destino_id" class="form-select form-select-sm" disabled>
-+              <option value="">Selecione o destino</option>
-+              {% for destino in destinos %}
-+              <option value="{{ destino.id }}" {% if frete and destino.id == frete.destino_id %}selected{% endif %}>
-+                {{ destino.nome }}
-+              </option>
-+              {% endfor %}
-+            </select>
-+            <input type="hidden" id="destino_id_hidden" name="destino_id" value="{{ frete.destino_id if frete else '' }}">
-+            <small class="text-muted destino-auto-badge d-block mt-1">
-+              <i class="bi bi-info-circle"></i> Destino preenchido a partir do cadastro do cliente
-+            </small>
-+          </div>
-+        </div>
-+
-+        <!-- MOTORISTA / VEÍCULO -->
-+        <div class="row">
-+          <div class="col-md-6 mb-2">
-+            <label for="motoristas_id" class="form-label">Motorista</label>
-+            <select id="motoristas_id" name="motoristas_id" class="form-select form-select-sm" required>
-+              <option value="">Selecione um motorista</option>
-+              {% for motorista in motoristas %}
-+              <option value="{{ motorista.id }}"
-+                      data-percentual="{{ motorista.percentual_comissao }}"
-+                      data-paga-comissao="{{ motorista.paga_comissao|default(1) }}"
-+                      {% if frete and motorista.id == frete.motoristas_id %}selected{% endif %}>
-+                {{ motorista.nome }}
-+              </option>
-+              {% endfor %}
-+            </select>
-+          </div>
-+
-+          <div class="col-md-6 mb-2">
-+            <label for="veiculos_id" class="form-label">Veículo</label>
-+            <select id="veiculos_id" name="veiculos_id" class="form-select form-select-sm" required>
-+              <option value="">Selecione um veículo</option>
-+              {% for veiculo in veiculos %}
-+              <option value="{{ veiculo.id }}" {% if frete and veiculo.id == frete.veiculos_id %}selected{% endif %}>
-+                {{ veiculo.caminhao }} - {{ veiculo.placa }}
-+              </option>
-+              {% endfor %}
-+            </select>
-+          </div>
-+        </div>
-+
-+        <!-- TIPO DE QUANTIDADE / QUANTIDADE -->
-+        <div class="row">
-+          <div class="col-md-6 mb-2">
-+            <label for="quantidade_tipo" class="form-label">Tipo de Quantidade</label>
-+            <select id="quantidade_tipo" name="quantidade_tipo" class="form-select form-select-sm">
-+              <option value="padrao" {% if frete and frete.quantidade_id %}selected{% endif %}>Quantidade Padrão (Listbox)</option>
-+              <option value="personalizada" {% if frete and not frete.quantidade_id %}selected{% endif %}>Quantidade Personalizada (Manual)</option>
-+            </select>
-+          </div>
-+
-+          <div id="div_quantidade_padrao" class="col-md-6 mb-2">
-+            <label for="quantidade_id" class="form-label">Quantidade (Litros)</label>
-+            <select id="quantidade_id" name="quantidade_id" class="form-select form-select-sm">
-+              <option value="">Selecione a quantidade</option>
-+              {% for quantidade in quantidades %}
-+              <option value="{{ quantidade.id }}" data-quantidade="{{ quantidade.valor }}" {% if frete and quantidade.id == frete.quantidade_id %}selected{% endif %}>
-+                {{ quantidade.descricao }}
-+              </option>
-+              {% endfor %}
-+            </select>
-+          </div>
-+
-+          <div id="div_quantidade_personalizada" style="display:none" class="col-md-6 mb-2">
-+            <label for="quantidade_manual" class="form-label">Quantidade Manual</label>
-+            <input type="text" id="quantidade_manual" name="quantidade_manual" class="form-control form-control-sm" placeholder="Ex: 9.975" value="{{ frete.quantidade_manual|default('') }}">
-+            <small class="text-muted">Use ponto como separador de milhar (ex: 9.975)</small>
-+          </div>
-+        </div>
-+
-+        <!-- PREÇOS -->
-+        <div class="row mt-2">
-+          <div class="col-md-6 mb-2">
-+            <label for="preco_produto_unitario" class="form-label">Preço Produto Unitário (R$)</label>
-+            <input type="text" id="preco_produto_unitario" name="preco_produto_unitario" class="form-control form-control-sm"
-+                   value="{{ 'R$ {:.3f}'.format(frete.preco_produto_unitario).replace('.', ',') if frete and frete.preco_produto_unitario else 'R$ 0,000' }}" required>
-+            <input type="hidden" id="preco_produto_unitario_raw" name="preco_produto_unitario_raw" value="{{ frete.preco_produto_unitario if frete and frete.preco_produto_unitario else 0 }}">
-+          </div>
-+
-+          <div class="col-md-6 mb-2">
-+            <label for="preco_por_litro" class="form-label">Preço por Litro (R$)</label>
-+            <input type="text" id="preco_por_litro" name="preco_por_litro" class="form-control form-control-sm"
-+                   value="{{ 'R$ {:.2f}'.format(frete.preco_por_litro).replace('.', ',') if frete and frete.preco_por_litro else 'R$ 0,00' }}" required>
-+            <input type="hidden" id="preco_por_litro_raw" name="preco_por_litro_raw" value="{{ frete.preco_por_litro if frete and frete.preco_por_litro else 0 }}">
-+          </div>
-+        </div>
-+
-+        <!-- RESULTADOS -->
-+        <div class="row mt-2">
-+          <div class="col-md-4 mb-2">
-+            <label for="total_nf_compra" class="form-label">Total NF Compra (R$)</label>
-+            <input type="text" id="total_nf_compra" name="total_nf_compra" class="form-control form-control-sm bg-warning" readonly value="{{ 'R$ {:.2f}'.format(frete.total_nf_compra).replace('.', ',') if frete and frete.total_nf_compra else 'R$ 0,00' }}">
-+          </div>
-+
-+          <div class="col-md-4 mb-2">
-+            <label for="valor_total_frete" class="form-label">Valor Total Frete (R$)</label>
-+            <input type="text" id="valor_total_frete" name="valor_total_frete" class="form-control form-control-sm bg-warning" readonly value="{{ 'R$ {:.2f}'.format(frete.valor_total_frete).replace('.', ',') if frete and frete.valor_total_frete else 'R$ 0,00' }}">
-+          </div>
-+
-+          <div class="col-md-4 mb-2">
-+            <label for="comissao_motorista" class="form-label">Comissão Motorista (R$)</label>
-+            <input type="text" id="comissao_motorista" name="comissao_motorista" class="form-control form-control-sm bg-warning" readonly value="{{ 'R$ {:.2f}'.format(frete.comissao_motorista).replace('.', ',') if frete and frete.comissao_motorista else 'R$ 0,00' }}">
-+          </div>
-+        </div>
-+
-+        <div class="row mt-2">
-+          <div class="col-md-4 mb-2">
-+            <label for="valor_cte" class="form-label">Valor CTe (R$)</label>
-+            <input type="text" id="valor_cte" name="valor_cte" class="form-control form-control-sm bg-warning" readonly value="{{ 'R$ {:.2f}'.format(frete.valor_cte).replace('.', ',') if frete and frete.valor_cte else 'R$ 0,00' }}">
-+          </div>
-+
-+          <div class="col-md-4 mb-2">
-+            <label for="comissao_cte" class="form-label">Comissão CTe (R$)</label>
-+            <input type="text" id="comissao_cte" name="comissao_cte" class="form-control form-control-sm bg-warning" readonly value="{{ 'R$ {:.2f}'.format(frete.comissao_cte).replace('.', ',') if frete and frete.comissao_cte else 'R$ 0,00' }}">
-+          </div>
-+
-+          <div class="col-md-4 mb-2">
-+            <label for="lucro" class="form-label">Lucro</label>
-+            <input type="text" id="lucro" name="lucro" class="form-control form-control-sm bg-warning" readonly value="{{ 'R$ {:.2f}'.format(frete.lucro).replace('.', ',') if frete and frete.lucro else 'R$ 0,00' }}">
-+          </div>
-+        </div>
-+
-+        <div class="mt-3 d-flex justify-content-end">
-+          <button type="submit" class="btn btn-warning btn-sm">Salvar</button>
-+        </div>
-+      </form>
-+    </div>
-+  </div>
-+</div>
-+{% endblock %}
-+
-+{% block scripts %}
-+<script>
-+  const ROTAS = {{ rotas_dict|tojson|safe }};
-+  window.MODOEDICAO = {{ 'true' if frete else 'false' }};
-+</script>
-+
-+<script src="{{ url_for('static', filename='js/app.js') }}"></script>
-+<script src="{{ url_for('static', filename='js/importar_modal.js') }}"></script>
-+<script src="{{ url_for('static', filename='js/fretes_calculos.js') }}?v={{ config.APP_VERSION or '1' }}"></script>
-+<script src="{{ url_for('static', filename='js/fretes_fixes.js') }}"></script>
-+{% endblock %}
+<!doctype html>
+{% extends "base.html" %}
+{% block title %}{% if frete %}Editar Frete{% else %}Novo Frete{% endif %}{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+  <nav aria-label="breadcrumb" class="mt-2 mb-3">
+    <ol class="breadcrumb" style="font-size: 0.85rem;">
+      <li class="breadcrumb-item"><a href="{{ url_for('index') }}">Início</a></li>
+      <li class="breadcrumb-item"><a href="{{ url_for('fretes.lista') }}">Fretes</a></li>
+      <li class="breadcrumb-item active" aria-current="page">
+        {% if frete %}Editar Frete{% else %}Novo Frete{% endif %}
+      </li>
+    </ol>
+  </nav>
+
+  <div class="card shadow-sm">
+    <div class="card-header bg-warning text-dark" style="padding: 0.6rem 1rem;">
+      <h4 class="mb-0">
+        {% if frete %}Editar Frete{% else %}Novo Frete{% endif %}
+      </h4>
+    </div>
+
+    <div class="card-body" style="padding: 1rem;">
+      <form method="POST"
+            action="{% if frete %}{{ url_for('fretes.editar', id=frete.id) }}{% else %}{{ url_for('fretes.novo') }}{% endif %}"
+            enctype="multipart/form-data">
+
+        <!-- DATA / STATUS / BOTÃO IMPORTAR (VERDE) -->
+        <div class="row mb-2 align-items-end">
+          <div class="col-md-3">
+            <label for="data_frete" class="form-label">Data</label>
+            <input type="date" id="data_frete" name="data_frete"
+                   class="form-control form-control-sm"
+                   value="{{ frete.data_frete.strftime('%Y-%m-%d') if frete and frete.data_frete else (now().strftime('%Y-%m-%d') if now else '') }}"
+                   required>
+          </div>
+
+          <div class="col-md-3">
+            <label for="status" class="form-label">Status</label>
+            <select id="status" name="status" class="form-select form-select-sm">
+              <option value="Pendente" {% if frete and frete.status == 'Pendente' %}selected{% endif %}>Pendente</option>
+              <option value="Em Trânsito" {% if frete and frete.status == 'Em Trânsito' %}selected{% endif %}>Em Trânsito</option>
+              <option value="Concluído" {% if frete and frete.status == 'Concluído' %}selected{% endif %}>Concluído</option>
+              <option value="Cancelado" {% if frete and frete.status == 'Cancelado' %}selected{% endif %}>Cancelado</option>
+            </select>
+          </div>
+
+          <div class="col-md-6 text-end">
+            {% if not frete %}
+              <button type="button" class="btn btn-success btn-sm" id="btn_importar_pedido" title="Importar pedido" onclick="abrirImportacaoPedido()">
+                <i class="bi bi-upload"></i> Importar Pedido
+              </button>
+            {% endif %}
+          </div>
+        </div>
+
+        <!-- CLIENTE / OBSERVAÇÕES -->
+        <div class="row">
+          <div class="col-md-8 mb-2">
+            <label for="clientes_id" class="form-label">Cliente</label>
+            <select id="clientes_id" name="clientes_id" class="form-select form-select-sm" required>
+              <option value="">Selecione um cliente</option>
+              {% for cliente in clientes %}
+              <option value="{{ cliente.id }}"
+                      data-paga-comissao="{{ cliente.paga_comissao|default(1) }}"
+                      data-cte-integral="{{ cliente.cte_integral|default(0) }}"
+                      data-destino-id="{{ cliente.destino_id }}"
+                      data-destino-nome="{{ cliente.destino_nome|default('') }}"
+                      {% if cliente.id == (frete.clientes_id if frete else None) %}selected{% endif %}>
+                {{ cliente.razao_social }}
+              </option>
+              {% endfor %}
+            </select>
+          </div>
+
+          <div class="col-md-4 mb-2">
+            <label for="observacoes" class="form-label">Observações</label>
+            <input type="text" id="observacoes" name="observacoes"
+                   class="form-control form-control-sm"
+                   value="{{ frete.observacoes if frete else '' }}">
+          </div>
+        </div>
+
+        <!-- FORNECEDOR / PRODUTO -->
+        <div class="row">
+          <div class="col-md-6 mb-2">
+            <label for="fornecedores_id" class="form-label">Fornecedor</label>
+            <select id="fornecedores_id" name="fornecedores_id" class="form-select form-select-sm" required>
+              <option value="">Selecione um fornecedor</option>
+              {% for fornecedor in fornecedores %}
+              <option value="{{ fornecedor.id }}" {% if frete and fornecedor.id == frete.fornecedores_id %}selected{% endif %}>
+                {{ fornecedor.razao_social }}
+              </option>
+              {% endfor %}
+            </select>
+          </div>
+
+          <div class="col-md-6 mb-2">
+            <label for="produto_id" class="form-label">Produto</label>
+            <select id="produto_id" name="produto_id" class="form-select form-select-sm" required>
+              <option value="">Selecione o produto</option>
+              {% for produto in produtos %}
+              <option value="{{ produto.id }}" {% if frete and produto.id == frete.produto_id %}selected{% endif %}>
+                {{ produto.nome }}
+              </option>
+              {% endfor %}
+            </select>
+          </div>
+        </div>
+
+        <!-- ORIGEM / DESTINO -->
+        <div class="row">
+          <div class="col-md-6 mb-2">
+            <label for="origem_id" class="form-label">Origem</label>
+            <select id="origem_id" name="origem_id" class="form-select form-select-sm" required>
+              <option value="">Selecione a origem</option>
+              {% for origem in origens %}
+              <option value="{{ origem.id }}" {% if frete and origem.id == frete.origem_id %}selected{% endif %}>
+                {{ origem.nome }}
+              </option>
+              {% endfor %}
+            </select>
+          </div>
+
+          <div class="col-md-6 mb-2">
+            <label for="destino_id" class="form-label">Destino</label>
+            <select id="destino_id" name="destino_id" class="form-select form-select-sm" disabled>
+              <option value="">Selecione o destino</option>
+              {% for destino in destinos %}
+              <option value="{{ destino.id }}" {% if frete and destino.id == frete.destino_id %}selected{% endif %}>
+                {{ destino.nome }}
+              </option>
+              {% endfor %}
+            </select>
+            <input type="hidden" id="destino_id_hidden" name="destino_id" value="{{ frete.destino_id if frete else '' }}">
+            <small class="text-muted destino-auto-badge d-block mt-1">
+              <i class="bi bi-info-circle"></i> Destino preenchido a partir do cadastro do cliente
+            </small>
+          </div>
+        </div>
+
+        <!-- MOTORISTA / VEÍCULO -->
+        <div class="row">
+          <div class="col-md-6 mb-2">
+            <label for="motoristas_id" class="form-label">Motorista</label>
+            <select id="motoristas_id" name="motoristas_id" class="form-select form-select-sm" required>
+              <option value="">Selecione um motorista</option>
+              {% for motorista in motoristas %}
+              <option value="{{ motorista.id }}"
+                      data-percentual="{{ motorista.percentual_comissao }}"
+                      data-paga-comissao="{{ motorista.paga_comissao|default(1) }}"
+                      {% if frete and motorista.id == frete.motoristas_id %}selected{% endif %}>
+                {{ motorista.nome }}
+              </option>
+              {% endfor %}
+            </select>
+          </div>
+
+          <div class="col-md-6 mb-2">
+            <label for="veiculos_id" class="form-label">Veículo</label>
+            <select id="veiculos_id" name="veiculos_id" class="form-select form-select-sm" required>
+              <option value="">Selecione um veículo</option>
+              {% for veiculo in veiculos %}
+              <option value="{{ veiculo.id }}" {% if frete and veiculo.id == frete.veiculos_id %}selected{% endif %}>
+                {{ veiculo.caminhao }} - {{ veiculo.placa }}
+              </option>
+              {% endfor %}
+            </select>
+          </div>
+        </div>
+
+        <!-- TIPO DE QUANTIDADE / QUANTIDADE -->
+        <div class="row">
+          <div class="col-md-6 mb-2">
+            <label for="quantidade_tipo" class="form-label">Tipo de Quantidade</label>
+            <select id="quantidade_tipo" name="quantidade_tipo" class="form-select form-select-sm">
+              <option value="padrao" {% if frete and frete.quantidade_id %}selected{% endif %}>Quantidade Padrão (Listbox)</option>
+              <option value="personalizada" {% if frete and not frete.quantidade_id %}selected{% endif %}>Quantidade Personalizada (Manual)</option>
+            </select>
+          </div>
+
+          <div id="div_quantidade_padrao" class="col-md-6 mb-2">
+            <label for="quantidade_id" class="form-label">Quantidade (Litros)</label>
+            <select id="quantidade_id" name="quantidade_id" class="form-select form-select-sm">
+              <option value="">Selecione a quantidade</option>
+              {% for quantidade in quantidades %}
+              <option value="{{ quantidade.id }}" data-quantidade="{{ quantidade.valor }}" {% if frete and quantidade.id == frete.quantidade_id %}selected{% endif %}>
+                {{ quantidade.descricao }}
+              </option>
+              {% endfor %}
+            </select>
+          </div>
+
+          <div id="div_quantidade_personalizada" style="display:none" class="col-md-6 mb-2">
+            <label for="quantidade_manual" class="form-label">Quantidade Manual</label>
+            <input type="text" id="quantidade_manual" name="quantidade_manual" class="form-control form-control-sm" placeholder="Ex: 9.975" value="{{ frete.quantidade_manual|default('') }}">
+            <small class="text-muted">Use ponto como separador de milhar (ex: 9.975)</small>
+          </div>
+        </div>
+
+        <!-- PREÇOS -->
+        <div class="row mt-2">
+          <div class="col-md-6 mb-2">
+            <label for="preco_produto_unitario" class="form-label">Preço Produto Unitário (R$)</label>
+            <input type="text" id="preco_produto_unitario" name="preco_produto_unitario" class="form-control form-control-sm"
+                   value="{{ 'R$ {:.3f}'.format(frete.preco_produto_unitario).replace('.', ',') if frete and frete.preco_produto_unitario else 'R$ 0,000' }}" required>
+            <input type="hidden" id="preco_produto_unitario_raw" name="preco_produto_unitario_raw" value="{{ frete.preco_produto_unitario if frete and frete.preco_produto_unitario else 0 }}">
+          </div>
+
+          <div class="col-md-6 mb-2">
+            <label for="preco_por_litro" class="form-label">Preço por Litro (R$)</label>
+            <input type="text" id="preco_por_litro" name="preco_por_litro" class="form-control form-control-sm"
+                   value="{{ 'R$ {:.2f}'.format(frete.preco_por_litro).replace('.', ',') if frete and frete.preco_por_litro else 'R$ 0,00' }}" required>
+            <input type="hidden" id="preco_por_litro_raw" name="preco_por_litro_raw" value="{{ frete.preco_por_litro if frete and frete.preco_por_litro else 0 }}">
+          </div>
+        </div>
+
+        <!-- RESULTADOS -->
+        <div class="row mt-2">
+          <div class="col-md-4 mb-2">
+            <label for="total_nf_compra" class="form-label">Total NF Compra (R$)</label>
+            <input type="text" id="total_nf_compra" name="total_nf_compra" class="form-control form-control-sm bg-warning" readonly value="{{ 'R$ {:.2f}'.format(frete.total_nf_compra).replace('.', ',') if frete and frete.total_nf_compra else 'R$ 0,00' }}">
+          </div>
+
+          <div class="col-md-4 mb-2">
+            <label for="valor_total_frete" class="form-label">Valor Total Frete (R$)</label>
+            <input type="text" id="valor_total_frete" name="valor_total_frete" class="form-control form-control-sm bg-warning" readonly value="{{ 'R$ {:.2f}'.format(frete.valor_total_frete).replace('.', ',') if frete and frete.valor_total_frete else 'R$ 0,00' }}">
+          </div>
+
+          <div class="col-md-4 mb-2">
+            <label for="comissao_motorista" class="form-label">Comissão Motorista (R$)</label>
+            <input type="text" id="comissao_motorista" name="comissao_motorista" class="form-control form-control-sm bg-warning" readonly value="{{ 'R$ {:.2f}'.format(frete.comissao_motorista).replace('.', ',') if frete and frete.comissao_motorista else 'R$ 0,00' }}">
+          </div>
+        </div>
+
+          <div class="col-md-4 mb-2">
+            <label for="valor_cte" class="form-label">Valor CTe (R$)</label>
+            <input type="text" id="valor_cte" name="valor_cte" class="form-control form-control-sm bg-warning" readonly value="{{ 'R$ {:.2f}'.format(frete.valor_cte).replace('.', ',') if frete and frete.valor_cte else 'R$ 0,00' }}">
+          </div>
+
+          <div class="col-md-4 mb-2">
+            <label for="comissao_cte" class="form-label">Comissão CTe (R$)</label>
+            <input type="text" id="comissao_cte" name="comissao_cte" class="form-control form-control-sm bg-warning" readonly value="{{ 'R$ {:.2f}'.format(frete.comissao_cte).replace('.', ',') if frete and frete.comissao_cte else 'R$ 0,00' }}">
+          </div>
+
+          <div class="col-md-4 mb-2">
+            <label for="lucro" class="form-label">Lucro</label>
+            <input type="text" id="lucro" name="lucro" class="form-control form-control-sm bg-warning" readonly value="{{ 'R$ {:.2f}'.format(frete.lucro).replace('.', ',') if frete and frete.lucro else 'R$ 0,00' }}">
+          </div>
+
+        <div class="mt-3 d-flex justify-content-end">
+          <button type="submit" class="btn btn-warning btn-sm">Salvar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<script src="{{ url_for('static', filename='js/app.js') }}"></script>
+<script src="{{ url_for('static', filename='js/importar_modal.js') }}"></script>
+<script src="{{ url_for('static', filename='js/fretes_calculos.js') }}?v={{ config.APP_VERSION or '1' }}"></script>
+<script src="{{ url_for('static', filename='js/fretes_fixes.js') }}"></script>
