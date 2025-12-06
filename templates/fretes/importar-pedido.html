@@ -204,7 +204,6 @@ function calcularItem(itemDiv) {
 
       if (motoristaPagaComissao) {
         comissaoMotorista = quantidade * 0.01;
-        // futuro: comissaoMotorista = (motoristaPercentual > 0) ? (valorTotalFrete * (motoristaPercentual/100)) : (quantidade * 0.01);
       } else {
         comissaoMotorista = 0;
       }
@@ -247,7 +246,7 @@ function calcularItem(itemDiv) {
   }
 }
 
-// Quando o modal é injetado, ligar os listeners e calcular inicialmente
+// Inicialização do modal/handlers (funciona tanto quando o HTML é carregado diretamente quanto quando é injetado via fetch)
 (function initImportModal() {
   function doInit() {
     const modalEl = document.getElementById('modalImportarPedido');
