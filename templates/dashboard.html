@@ -1,6 +1,6 @@
 {% extends 'base.html' %}
 
-{% block title %}Dashboard - NH Transportes{% endblock %}
+{% block titulo %}Dashboard - NH Transportes{% endblock %}
 
 {% block content %}
 
@@ -21,16 +21,16 @@
 
         <!-- Ações rápidas prioritárias -->
         <div class="d-flex flex-wrap gap-2">
-            <a href="{{ url_for('fretes.novo') }}" class="btn btn-warning">
+            <a href="{{ fretes_novo_url }}" class="btn btn-warning">
                 <i class="bi bi-box-seam"></i> Novo Frete
             </a>
-            <a href="{{ url_for('pedidos.novo') }}" class="btn btn-success">
+            <a href="{{ pedidos_novo_url }}" class="btn btn-success">
                 <i class="bi bi-bag-plus"></i> Novo Pedido
             </a>
-            <a href="{{ url_for('clientes.novo') }}" class="btn btn-primary">
+            <a href="{{ clientes_novo_url }}" class="btn btn-primary">
                 <i class="bi bi-person-plus"></i> Novo Cliente
             </a>
-            <a href="{{ url_for('fornecedores.novo') }}" class="btn btn-outline-secondary">
+            <a href="{{ fornecedores_novo_url }}" class="btn btn-outline-secondary">
                 <i class="bi bi-truck"></i> Novo Fornecedor
             </a>
         </div>
@@ -45,7 +45,7 @@
                 <div>
                     <h6 class="text-uppercase mb-1 small">Clientes</h6>
                     <p class="fs-3 fw-bold mb-1">{{ total_clientes }}</p>
-                    <a href="{{ url_for('clientes.lista') }}" class="btn btn-light btn-sm">
+                    <a href="{{ clientes_lista_url }}" class="btn btn-light btn-sm">
                         Ver todos
                     </a>
                 </div>
@@ -62,7 +62,7 @@
                 <div>
                     <h6 class="text-uppercase mb-1 small">Fornecedores</h6>
                     <p class="fs-3 fw-bold mb-1">{{ total_fornecedores }}</p>
-                    <a href="{{ url_for('fornecedores.lista') }}" class="btn btn-light btn-sm">
+                    <a href="{{ fornecedores_lista_url }}" class="btn btn-light btn-sm">
                         Ver todos
                     </a>
                 </div>
@@ -79,7 +79,7 @@
                 <div>
                     <h6 class="text-uppercase mb-1 small">Motoristas</h6>
                     <p class="fs-3 fw-bold mb-1">{{ total_motoristas }}</p>
-                    <a href="{{ url_for('motoristas.lista') }}" class="btn btn-light btn-sm">
+                    <a href="{{ motoristas_lista_url }}" class="btn btn-light btn-sm">
                         Ver todos
                     </a>
                 </div>
@@ -96,7 +96,7 @@
                 <div>
                     <h6 class="text-uppercase mb-1 small">Fretes</h6>
                     <p class="fs-3 fw-bold mb-1">{{ total_fretes }}</p>
-                    <a href="{{ url_for('fretes.lista') }}" class="btn btn-light btn-sm">
+                    <a href="{{ fretes_lista_url }}" class="btn btn-light btn-sm">
                         Ver todos
                     </a>
                 </div>
@@ -116,7 +116,7 @@
                 <div>
                     <h6 class="text-uppercase mb-1 small">Pedidos</h6>
                     <p class="fs-3 fw-bold mb-1">{{ total_pedidos }}</p>
-                    <a href="{{ url_for('pedidos.index') }}" class="btn btn-outline-success btn-sm">
+                    <a href="{{ pedidos_index_url }}" class="btn btn-outline-success btn-sm">
                         Ver pedidos
                     </a>
                 </div>
@@ -140,12 +140,12 @@
             <div class="card-body">
                 <div class="row g-3">
                     <div class="col-md-6">
-                        <a href="{{ url_for('alterar_senha') }}" class="btn btn-outline-secondary w-100">
+                        <a href="{{ alterar_senha_url }}" class="btn btn-outline-secondary w-100">
                             <i class="bi bi-key"></i> Alterar Minha Senha
                         </a>
                     </div>
                     <div class="col-md-6">
-                        <a href="{{ url_for('logout') }}" class="btn btn-outline-danger w-100">
+                        <a href="{{ logout_url }}" class="btn btn-outline-danger w-100">
                             <i class="bi bi-box-arrow-right"></i> Sair do Sistema
                         </a>
                     </div>
@@ -168,17 +168,17 @@
             <div class="card-body">
                 <div class="row g-3">
                     <div class="col-md-4">
-                        <a href="{{ url_for('listar_usuarios') }}" class="btn btn-outline-danger w-100">
+                        <a href="{{ listar_usuarios_url }}" class="btn btn-outline-danger w-100">
                             <i class="bi bi-people"></i> Gerenciar Usuários
                         </a>
                     </div>
                     <div class="col-md-4">
-                        <a href="{{ url_for('cadastro') }}" class="btn btn-outline-danger w-100">
+                        <a href="{{ cadastro_url }}" class="btn btn-outline-danger w-100">
                             <i class="bi bi-person-plus"></i> Criar Novo Usuário
                         </a>
                     </div>
                     <div class="col-md-4">
-                        <a href="{{ url_for('relatorios.index') }}" class="btn btn-outline-danger w-100">
+                        <a href="{{ relatorios_index_url }}" class="btn btn-outline-danger w-100">
                             <i class="bi bi-graph-up"></i> Relatórios Gerenciais
                         </a>
                     </div>
