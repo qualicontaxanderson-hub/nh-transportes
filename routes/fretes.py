@@ -532,70 +532,6 @@ def editar(id):
             except Exception:
                 cliente_paga_frete = True
 
-            if not cliente_paga_frete:
-                preco_por_litro = 0
-                valor_total_frete = 0
-                comissao_motorista = 0
-                comissao_cte = 0
-                lucro = round(0 - float(comissao_cte or 0) - float(comissao_motorista or 0), 2)
-
-            cursor.execute("""
-                UPDATE fretes SET
-                    data_frete=%s,
-                    status=%s,
-                    observacoes=%s,
-                    clientes_id=%s,
-                    fornecedores_id=%s,
-                    produto_id=%s,
-                    origem_id=%s,
-                    destino_id=%s,
-                    motoristas_id=%s,
-                    veiculos_id=%s,
-                    quantidade_id=%s,
-                    quantidade_manual=%s,
-                    preco_produto_unitario=%s,
-                    preco_por_litro=%s,
-                    total_nf_compra=%s,
-                    valor_total_frete=%s,
-                    comissao_motorista=%s,
-                    valor_cte=%s,
-                    comissao_cte=%s,
-                    lucro=%s
-                WHERE id=%s
-            """, (
-                request.form.get('data_frete'),
-                request.form.get('status'),
-                request.form.get('observacoes'),
-                clientes_id,
-                request.form.get('fornecedores_id'),
-                request.form.get('produto_id'),
-                request.form.get('origem_id'),
-                request.form.get('destino_id'),
-                request.form.get('motoristas_id'),
-                request.form.get('veiculos_id'),
-                request.form.get('quantidade_id') or None,
-                request.form.get('quantidade_manual') or None,
-                preco_produto_unitario or 0,
-                preco_por_litro or 0,
-                total_nf_compra or 0,
-                valor_total_frete or 0,
-                comissao_motorista or 0,
-                valor_cte or 0,
-                comissao_cte or 0,
-                lucro or 0,
-                id,
-            ))
-            conn.commit()
-            flash('Frete atualizado com sucesso!', 'success')
-            return redirect(url_for('fretes.lista'))
-        except Exception as e:
-            conn.rollback()
-            flash(f'Erro ao atualizar frete: {e}', 'danger')
-            return redirect(url_for('fretes.editar', id=id))
-        finally:
-            cursor.close()
-            conn.close()
-
     # GET: carregar frete + dados de apoio
     try:
         cursor.execute("SELECT * FROM fretes WHERE id = %s", (id,))
@@ -675,3 +611,21 @@ def editar(id):
         quantidades=quantidades,
         rotas_dict=rotas_dict,
     )
+
+
+@bp.route('/deletar/<int:id>', methods=['POST'])
+@login_required
+def deletar(id):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute("DELETE FROM fretes WHERE id = %s", (id,))
+        conn.commit()
+        flash('Frete excluído com sucesso!', 'success')
+    except Exception as e:
+        conn.rollback()
+        flash(f'Erro ao excluir frete: {e}', 'danger')
+    finally:
+        cursor.close()
+        conn.close()
+    return redirect(url_for('fretes.lista'))
