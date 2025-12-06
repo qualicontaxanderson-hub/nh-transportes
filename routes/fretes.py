@@ -9,6 +9,45 @@ from flask_login import login_required
 
 bp = Blueprint('fretes', __name__, url_prefix='/fretes')
 
+@bp.route('/', methods=['GET'])
+@login_required
+def lista():
+    """
+    Endpoint 'fretes.lista' — serve templates/fretes/lista.html.
+    Implementação mínima: carrega fretes e clientes (usados no filtro) e passa
+    os parâmetros de filtro (data_inicio, data_fim, cliente_id) para o template.
+    """
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+
+    data_inicio = request.args.get('data_inicio', '')
+    data_fim = request.args.get('data_fim', '')
+    cliente_id = request.args.get('cliente_id', '')
+
+    try:
+        # Query simples — ajustar filtros/colunas conforme seu esquema se desejar.
+        cursor.execute("SELECT * FROM fretes ORDER BY data_frete DESC, id DESC")
+        fretes = cursor.fetchall()
+
+        # Carregar lista de clientes para o filtro no template
+        cursor.execute("SELECT id, razao_social FROM clientes ORDER BY razao_social")
+        clientes = cursor.fetchall()
+    except Exception:
+        fretes = []
+        clientes = []
+    finally:
+        cursor.close()
+        conn.close()
+
+    return render_template(
+        'fretes/lista.html',
+        fretes=fretes,
+        clientes=clientes,
+        data_inicio=data_inicio,
+        data_fim=data_fim,
+        cliente_id=cliente_id
+    )
+
 @bp.route('/editar/<int:id>', methods=['GET', 'POST'])
 @login_required
 def editar(id):
