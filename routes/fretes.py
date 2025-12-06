@@ -1,22 +1,18 @@
 from flask import Blueprint, render_template, request, redirect, url_for, flash
 from flask_login import login_required
 
-# Import helpers
 from utils.db import get_db_connection
 from utils.helpers import parse_moeda
 
-# Atenção: get_db_connection e parse_moeda devem estar definidos em outro módulo do projeto.
-# Ajuste os imports acima conforme a estrutura do seu repositório se necessário.
-
 bp = Blueprint('fretes', __name__, url_prefix='/fretes')
+
 
 @bp.route('/', methods=['GET'])
 @login_required
 def lista():
     """
-    Endpoint 'fretes.lista' — serve templates/fretes/lista.html.
-    Implementação mínima: carrega fretes e clientes (usados no filtro) e passa
-    os parâmetros de filtro (data_inicio, data_fim, cliente_id) para o template.
+    Lista de fretes — fornece ao template os campos já com aliases esperados.
+    Query com LEFT JOIN para preencher nome do cliente/fornecedor/motorista/veiculo.
     """
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
@@ -26,19 +22,76 @@ def lista():
     cliente_id = request.args.get('cliente_id', '')
 
     try:
-        # Query simples — ajustar filtros/colunas conforme seu esquema se desejar.
-        cursor.execute("SELECT * FROM fretes ORDER BY data_frete DESC, id DESC")
+        # montar filtros básicos (convertendo datas se necessário pode ser feito aqui)
+        filters = []
+        params = []
+
+        if data_inicio:
+            # espera formato dd/mm/YYYY ou YYYY-MM-DD; tentar aceitar ambos (ajuste se necessário)
+            try:
+                # dd/mm/YYYY -> YYYY-MM-DD
+                from datetime import datetime
+                di = datetime.strptime(data_inicio, '%d/%m/%Y').strftime('%Y-%m-%d')
+            except Exception:
+                di = data_inicio
+            filters.append("f.data_frete >= %s")
+            params.append(di)
+
+        if data_fim:
+            try:
+                from datetime import datetime
+                df = datetime.strptime(data_fim, '%d/%m/%Y').strftime('%Y-%m-%d')
+            except Exception:
+                df = data_fim
+            filters.append("f.data_frete <= %s")
+            params.append(df)
+
+        if cliente_id:
+            filters.append("f.clientes_id = %s")
+            params.append(cliente_id)
+
+        where_clause = ""
+        if filters:
+            where_clause = "WHERE " + " AND ".join(filters)
+
+        query = f"""
+            SELECT
+                f.id,
+                DATE_FORMAT(f.data_frete, '%%d/%%m/%%Y') AS data_frete,
+                COALESCE(c.razao_social, '') AS cliente,
+                COALESCE(ci.razao_social, '') AS cliente_interno,
+                COALESCE(fo.razao_social, '') AS fornecedor,
+                COALESCE(p.nome, '') AS produto,
+                COALESCE(m.nome, '') AS motorista,
+                COALESCE(v.caminhao, '') AS veiculo,
+                COALESCE(f.valor_total_frete, 0) AS valor_total_frete,
+                COALESCE(f.lucro, 0) AS lucro,
+                COALESCE(f.status, '') AS status
+            FROM fretes f
+            LEFT JOIN clientes c ON f.clientes_id = c.id
+            LEFT JOIN clientes ci ON f.clientes_id = ci.id
+            LEFT JOIN fornecedores fo ON f.fornecedores_id = fo.id
+            LEFT JOIN produto p ON f.produto_id = p.id
+            LEFT JOIN motoristas m ON f.motoristas_id = m.id
+            LEFT JOIN veiculos v ON f.veiculos_id = v.id
+            {where_clause}
+            ORDER BY f.data_frete DESC, f.id DESC
+        """
+        cursor.execute(query, tuple(params))
         fretes = cursor.fetchall()
 
-        # Carregar lista de clientes para o filtro no template
+        # carregar lista de clientes para o filtro no template
         cursor.execute("SELECT id, razao_social FROM clientes ORDER BY razao_social")
         clientes = cursor.fetchall()
     except Exception:
         fretes = []
         clientes = []
     finally:
-        cursor.close()
-        conn.close()
+        try:
+            cursor.close()
+            conn.close()
+        except Exception:
+            pass
 
     return render_template(
         'fretes/lista.html',
@@ -49,14 +102,21 @@ def lista():
         cliente_id=cliente_id
     )
 
+
 @bp.route('/novo', methods=['GET', 'POST'])
 @login_required
 def novo():
     """
-    Rota mínima para 'fretes.novo' — abre o formulário de novo frete.
-    Aceita opcionalmente ?pedido_id=123 para o fluxo de importação.
+    Rota para criar novo frete.
+    - GET: renderiza formulário com dados auxiliares.
+    - POST: (mínimo) redireciona para lista; implemente criação real se desejar.
+    Observação: passar frete=None para que o template entenda que é criação (não edição).
     """
-    # GET: carregar dados auxiliares para o formulário
+    if request.method == 'POST':
+        # Implementação mínima: você pode inserir no banco aqui.
+        flash('Funcionalidade de criação de frete não implementada; formulário válido mas não salva.', 'info')
+        return redirect(url_for('fretes.lista'))
+
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
     try:
@@ -100,23 +160,14 @@ def novo():
         except Exception:
             rotas_dict = {}
     finally:
-        cursor.close()
-        conn.close()
+        try:
+            cursor.close()
+            conn.close()
+        except Exception:
+            pass
 
-    # frete vazio (normalizar campos esperados pelo template)
-    frete = {
-        'preco_produto_unitario': 0,
-        'preco_por_litro': 0,
-        'total_nf_compra': 0,
-        'valor_total_frete': 0,
-        'comissao_motorista': 0,
-        'valor_cte': 0,
-        'comissao_cte': 0,
-        'lucro': 0,
-        'quantidade_manual': '',
-        'quantidade_id': None,
-    }
-
+    # frete None -> template entende como criação
+    frete = None
     pedido_id = request.args.get('pedido_id')
 
     return render_template(
@@ -133,6 +184,7 @@ def novo():
         rotas_dict=rotas_dict,
         pedido_id=pedido_id
     )
+
 
 @bp.route('/editar/<int:id>', methods=['GET', 'POST'])
 @login_required
@@ -239,8 +291,11 @@ def editar(id):
             flash(f'Erro ao atualizar frete: {e}', 'danger')
             return redirect(url_for('fretes.editar', id=id))
         finally:
-            cursor.close()
-            conn.close()
+            try:
+                cursor.close()
+                conn.close()
+            except Exception:
+                pass
 
     # GET: carregar frete + dados de apoio
     conn = get_db_connection()
@@ -293,22 +348,27 @@ def editar(id):
         except Exception:
             rotas_dict = {}
     finally:
-        cursor.close()
-        conn.close()
+        try:
+            cursor.close()
+            conn.close()
+        except Exception:
+            pass
 
-    # Normalizar campos para o template/JS
+    # Normalizar campos para o template/JS (quando frete existe)
     if frete is None:
-        frete = {}
-    frete.setdefault('preco_produto_unitario', frete.get('preco_produto_unitario') or 0)
-    frete.setdefault('preco_por_litro', frete.get('preco_por_litro') or 0)
-    frete.setdefault('total_nf_compra', frete.get('total_nf_compra') or 0)
-    frete.setdefault('valor_total_frete', frete.get('valor_total_frete') or 0)
-    frete.setdefault('comissao_motorista', frete.get('comissao_motorista') or 0)
-    frete.setdefault('valor_cte', frete.get('valor_cte') or 0)
-    frete.setdefault('comissao_cte', frete.get('comissao_cte') or 0)
-    frete.setdefault('lucro', frete.get('lucro') or 0)
-    frete.setdefault('quantidade_manual', frete.get('quantidade_manual') or '')
-    frete.setdefault('quantidade_id', frete.get('quantidade_id') or None)
+        # manter None para indicar criação; template deve checar if frete
+        pass
+    else:
+        frete.setdefault('preco_produto_unitario', frete.get('preco_produto_unitario') or 0)
+        frete.setdefault('preco_por_litro', frete.get('preco_por_litro') or 0)
+        frete.setdefault('total_nf_compra', frete.get('total_nf_compra') or 0)
+        frete.setdefault('valor_total_frete', frete.get('valor_total_frete') or 0)
+        frete.setdefault('comissao_motorista', frete.get('comissao_motorista') or 0)
+        frete.setdefault('valor_cte', frete.get('valor_cte') or 0)
+        frete.setdefault('comissao_cte', frete.get('comissao_cte') or 0)
+        frete.setdefault('lucro', frete.get('lucro') or 0)
+        frete.setdefault('quantidade_manual', frete.get('quantidade_manual') or '')
+        frete.setdefault('quantidade_id', frete.get('quantidade_id') or None)
 
     return render_template(
         'fretes/novo.html',
@@ -323,3 +383,30 @@ def editar(id):
         quantidades=quantidades,
         rotas_dict=rotas_dict,
     )
+
+
+@bp.route('/deletar/<int:id>', methods=['POST'])
+@login_required
+def deletar(id):
+    """
+    Exclusão mínima de frete (endpoint 'fretes.deletar') usada pelo template.
+    """
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute("DELETE FROM fretes WHERE id = %s", (id,))
+        conn.commit()
+        flash(f'Frete #{id} excluído.', 'success')
+    except Exception as e:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        flash(f'Erro ao excluir frete: {e}', 'danger')
+    finally:
+        try:
+            cursor.close()
+            conn.close()
+        except Exception:
+            pass
+    return redirect(url_for('fretes.lista'))
