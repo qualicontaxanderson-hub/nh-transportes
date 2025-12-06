@@ -112,15 +112,17 @@ def novo():
                 except Exception:
                     quantidade = 0.0
 
-            # fallbacks
+            # Fallbacks
             if (not total_nf_compra or total_nf_compra == 0) and quantidade > 0 and preco_produto_unitario > 0:
                 total_nf_compra = round(preco_produto_unitario * quantidade, 2)
+
             if (not preco_por_litro or preco_por_litro == 0) and quantidade > 0 and total_nf_compra > 0:
                 preco_por_litro = round(total_nf_compra / quantidade, 4)
+
             if (not valor_total_frete or valor_total_frete == 0) and quantidade > 0 and preco_por_litro > 0:
                 valor_total_frete = round(preco_por_litro * quantidade, 2)
 
-            # flags do cliente
+            # Flags do cliente
             cliente_paga_frete = True
             cliente_cte_integral = False
             if clientes_id:
@@ -145,7 +147,7 @@ def novo():
                 comissao_cte = 0.0
                 lucro = 0.0
 
-            # calcular valor_cte (rota) se necessário
+            # Calcular valor_cte quando necessário
             if cliente_cte_integral:
                 valor_cte = round(valor_total_frete if cliente_paga_frete else 0.0, 2)
             else:
@@ -164,7 +166,7 @@ def novo():
 
             comissao_cte = round(valor_cte * 0.08, 2)
 
-            # comissão motorista
+            # Comissão motorista
             motorista_id = request.form.get('motoristas_id')
             comissao_motorista = 0.0
             if cliente_paga_frete:
@@ -186,13 +188,13 @@ def novo():
             else:
                 comissao_motorista = 0.0
 
-            # lucro
+            # Lucro
             if not cliente_paga_frete:
                 lucro = 0.0
             else:
                 lucro = round((valor_total_frete or 0) - (comissao_motorista or 0) - (comissao_cte or 0), 2)
 
-            # inserir no banco
+            # Inserir
             cursor.execute(
                 """
                 INSERT INTO fretes (
@@ -471,133 +473,3 @@ def salvar_importados():
     finally:
         cursor.close()
         conn.close()
-
-
-@bp.route('/editar/<int:id>', methods=['GET', 'POST'])
-@login_required
-def editar(id):
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    try:
-        if request.method == 'POST':
-            preco_produto_unitario_raw = request.form.get('preco_produto_unitario_raw')
-            if preco_produto_unitario_raw is None or preco_produto_unitario_raw == '':
-                preco_produto_unitario = parse_moeda(request.form.get('preco_produto_unitario'))
-            else:
-                preco_produto_unitario = parse_moeda(preco_produto_unitario_raw)
-
-            preco_por_litro_raw = request.form.get('preco_por_litro_raw')
-            if preco_por_litro_raw is None or preco_por_litro_raw == '':
-                preco_por_litro = parse_moeda(request.form.get('preco_por_litro'))
-            else:
-                preco_por_litro = parse_moeda(preco_por_litro_raw)
-
-            total_nf_compra = parse_moeda(request.form.get('total_nf_compra'))
-            valor_total_frete = parse_moeda(request.form.get('valor_total_frete'))
-            comissao_motorista = parse_moeda(request.form.get('comissao_motorista'))
-            valor_cte = parse_moeda(request.form.get('valor_cte'))
-            comissao_cte = parse_moeda(request.form.get('comissao_cte'))
-            lucro = parse_moeda(request.form.get('lucro'))
-
-            clientes_id = request.form.get('clientes_id')
-
-            cliente_paga_frete = True
-            try:
-                if clientes_id:
-                    cchk = conn.cursor(dictionary=True)
-                    cchk.execute("SELECT paga_frete, paga_comissao FROM clientes WHERE id = %s LIMIT 1", (clientes_id,))
-                    crow = cchk.fetchone()
-                    cchk.close()
-                    if crow:
-                        if crow.get('paga_frete') is not None:
-                            cliente_paga_frete = bool(crow.get('paga_frete'))
-                        elif crow.get('paga_comissao') is not None:
-                            cliente_paga_frete = bool(crow.get('paga_comissao'))
-            except Exception:
-                cliente_paga_frete = True
-
-        try:
-            cursor.execute("SELECT * FROM fretes WHERE id = %s", (id,))
-            frete = cursor.fetchone()
-        except Exception:
-            frete = None
-
-        cursor.execute("SELECT * FROM clientes ORDER BY razao_social")
-        clientes = cursor.fetchall()
-        cursor.execute("SELECT * FROM fornecedores ORDER BY razao_social")
-        fornecedores = cursor.fetchall()
-        cursor.execute("SELECT * FROM produto ORDER BY nome")
-        produtos = cursor.fetchall()
-        cursor.execute("SELECT * FROM origens ORDER BY nome")
-        origens = cursor.fetchall()
-        cursor.execute("SELECT * FROM destinos ORDER BY nome")
-        destinos = cursor.fetchall()
-        cursor.execute("SELECT * FROM motoristas ORDER BY nome")
-        motoristas = cursor.fetchall()
-        cursor.execute("SELECT * FROM veiculos ORDER BY caminhao")
-        veiculos = cursor.fetchall()
-        cursor.execute("SELECT * FROM quantidades ORDER BY valor")
-        quantidades = cursor.fetchall()
-
-        rotas_dict = {}
-        try:
-            cursor.execute("SELECT origem_id, destino_id, valor_por_litro FROM rotas WHERE ativo = 1")
-            for r in cursor.fetchall():
-                try:
-                    origem_id = r.get('origem_id') if isinstance(r, dict) else r[0]
-                    destino_id = r.get('destino_id') if isinstance(r, dict) else r[1]
-                    valor = r.get('valor_por_litro') if isinstance(r, dict) else r[2]
-                    key = f"{int(origem_id)}|{int(destino_id)}"
-                    rotas_dict[key] = float(valor or 0)
-                except Exception:
-                    continue
-        except Exception:
-            rotas_dict = {}
-    finally:
-        cursor.close()
-        conn.close()
-
-    if frete is None:
-        frete = {}
-    frete.setdefault('preco_produto_unitario', frete.get('preco_produto_unitario') or 0)
-    frete.setdefault('preco_por_litro', frete.get('preco_por_litro') or 0)
-    frete.setdefault('total_nf_compra', frete.get('total_nf_compra') or 0)
-    frete.setdefault('valor_total_frete', frete.get('valor_total_frete') or 0)
-    frete.setdefault('comissao_motorista', frete.get('comissao_motorista') or 0)
-    frete.setdefault('valor_cte', frete.get('valor_cte') or 0)
-    frete.setdefault('comissao_cte', frete.get('comissao_cte') or 0)
-    frete.setdefault('lucro', frete.get('lucro') or 0)
-    frete.setdefault('quantidade_manual', frete.get('quantidade_manual') or '')
-    frete.setdefault('quantidade_id', frete.get('quantidade_id') or None)
-
-    return render_template(
-        'fretes/novo.html',
-        frete=frete,
-        clientes=clientes,
-        fornecedores=fornecedores,
-        produtos=produtos,
-        origens=origens,
-        destinos=destinos,
-        motoristas=motoristas,
-        veiculos=veiculos,
-        quantidades=quantidades,
-        rotas_dict=rotas_dict,
-    )
-
-
-@bp.route('/deletar/<int:id>', methods=['POST'])
-@login_required
-def deletar(id):
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    try:
-        cursor.execute("DELETE FROM fretes WHERE id = %s", (id,))
-        conn.commit()
-        flash('Frete excluído com sucesso!', 'success')
-    except Exception as e:
-        conn.rollback()
-        flash(f'Erro ao excluir frete: {e}', 'danger')
-    finally:
-        cursor.close()
-        conn.close()
-    return redirect(url_for('fretes.lista'))
