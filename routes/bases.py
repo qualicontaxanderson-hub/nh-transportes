@@ -1,4 +1,4 @@
-from flask import Blueprint, render_template, current_app, url_for, jsonify
+from flask import Blueprint, render_template, current_app, url_for, jsonify, request, redirect
 from utils.db import get_db_connection
 
 bp = Blueprint('bases', __name__)
@@ -94,6 +94,19 @@ def index():
     context.update(links)
 
     return render_template('dashboard.html', **context)
+
+
+@bp.route('/nova', methods=['GET', 'POST'])
+def nova():
+    """
+    Rota mínima para criação de Base (endpoint 'bases.nova').
+    - GET: renderiza o formulário/templates/bases/nova.html
+    - POST: comportamento mínimo: redireciona para a lista (implemente o salvamento se desejar)
+    """
+    if request.method == 'POST':
+        # implementar criação real aqui se desejar; por enquanto redireciona para a index
+        return redirect(url_for('bases.index'))
+    return render_template('bases/nova.html')
 
 
 @bp.route('/health', methods=['GET'])
