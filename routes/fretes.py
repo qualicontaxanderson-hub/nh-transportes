@@ -1,6 +1,6 @@
-from flask import Blueprint, render_template, request, redirect, url_for, flash
+from flask import Blueprint, render_template, request, redirect, url_for, flash, current_app
 from flask_login import login_required
-
+import re
 from utils.db import get_db_connection
 from utils.helpers import parse_moeda
 
@@ -10,10 +10,6 @@ bp = Blueprint('fretes', __name__, url_prefix='/fretes')
 @bp.route('/', methods=['GET'])
 @login_required
 def lista():
-    """
-    Lista de fretes — fornece ao template os campos já com aliases esperados.
-    Query com LEFT JOIN para preencher nome do cliente/fornecedor/motorista/veiculo.
-    """
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
 
@@ -22,14 +18,12 @@ def lista():
     cliente_id = request.args.get('cliente_id', '')
 
     try:
-        # montar filtros básicos (convertendo datas se necessário pode ser feito aqui)
+        # montar filtros básicos
         filters = []
         params = []
 
         if data_inicio:
-            # espera formato dd/mm/YYYY ou YYYY-MM-DD; tentar aceitar ambos (ajuste se necessário)
             try:
-                # dd/mm/YYYY -> YYYY-MM-DD
                 from datetime import datetime
                 di = datetime.strptime(data_inicio, '%d/%m/%Y').strftime('%Y-%m-%d')
             except Exception:
@@ -54,12 +48,12 @@ def lista():
         if filters:
             where_clause = "WHERE " + " AND ".join(filters)
 
+        # Observe: usar um único % no DATE_FORMAT
         query = f"""
             SELECT
                 f.id,
-                DATE_FORMAT(f.data_frete, '%%d/%%m/%%Y') AS data_frete,
+                DATE_FORMAT(f.data_frete, '%d/%m/%Y') AS data_frete,
                 COALESCE(c.razao_social, '') AS cliente,
-                COALESCE(ci.razao_social, '') AS cliente_interno,
                 COALESCE(fo.razao_social, '') AS fornecedor,
                 COALESCE(p.nome, '') AS produto,
                 COALESCE(m.nome, '') AS motorista,
@@ -69,7 +63,6 @@ def lista():
                 COALESCE(f.status, '') AS status
             FROM fretes f
             LEFT JOIN clientes c ON f.clientes_id = c.id
-            LEFT JOIN clientes ci ON f.clientes_id = ci.id
             LEFT JOIN fornecedores fo ON f.fornecedores_id = fo.id
             LEFT JOIN produto p ON f.produto_id = p.id
             LEFT JOIN motoristas m ON f.motoristas_id = m.id
@@ -80,7 +73,6 @@ def lista():
         cursor.execute(query, tuple(params))
         fretes = cursor.fetchall()
 
-        # carregar lista de clientes para o filtro no template
         cursor.execute("SELECT id, razao_social FROM clientes ORDER BY razao_social")
         clientes = cursor.fetchall()
     except Exception:
@@ -107,20 +99,19 @@ def lista():
 @login_required
 def novo():
     """
-    Rota para criar novo frete.
-    - GET: renderiza formulário com dados auxiliares.
-    - POST: (mínimo) redireciona para lista; implemente criação real se desejar.
-    Observação: passar frete=None para que o template entenda que é criação (não edição).
+    Novo frete:
+    - GET: carrega dados auxiliares e tenta pré-selecionar destino a partir do pedido ou cadastro do cliente.
+    - POST: implementação mínima aqui; gravação real pode ser implementada conforme sua necessidade.
     """
     if request.method == 'POST':
-        # Implementação mínima: você pode inserir no banco aqui.
-        flash('Funcionalidade de criação de frete não implementada; formulário válido mas não salva.', 'info')
+        # Se quiser gravar automaticamente, implemente INSERT aqui.
+        flash('Formulário recebido (salvamento não implementado).', 'info')
         return redirect(url_for('fretes.lista'))
 
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
     try:
-        cursor.execute("SELECT id, razao_social FROM clientes ORDER BY razao_social")
+        cursor.execute("SELECT id, razao_social, destino_id, paga_frete, paga_comissao, percentual_cte, cte_integral FROM clientes ORDER BY razao_social")
         clientes = cursor.fetchall()
 
         cursor.execute("SELECT id, razao_social FROM fornecedores ORDER BY razao_social")
@@ -144,7 +135,7 @@ def novo():
         cursor.execute("SELECT id, valor, descricao FROM quantidades ORDER BY valor")
         quantidades = cursor.fetchall()
 
-        # montar rotas_dict
+        # montar rotas_dict (origem|destino => valor_por_litro)
         rotas_dict = {}
         try:
             cursor.execute("SELECT origem_id, destino_id, valor_por_litro FROM rotas WHERE ativo = 1")
@@ -166,9 +157,40 @@ def novo():
         except Exception:
             pass
 
-    # frete None -> template entende como criação
+    # Tentar pré-selecionar destino: prioridade pedido_id -> cliente_id (query param)
+    selected_destino_id = None
+    pedido_id = request.args.get('pedido_id') or None
+    cliente_id_param = request.args.get('cliente_id') or None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+        if pedido_id:
+            cursor.execute("""
+                SELECT c.destino_id
+                FROM pedidos_itens pi
+                JOIN clientes c ON pi.cliente_id = c.id
+                WHERE pi.pedido_id = %s
+                LIMIT 1
+            """, (pedido_id,))
+            row = cursor.fetchone()
+            if row:
+                selected_destino_id = row.get('destino_id') if isinstance(row, dict) else row[0]
+        if not selected_destino_id and cliente_id_param:
+            cursor.execute("SELECT destino_id FROM clientes WHERE id = %s LIMIT 1", (cliente_id_param,))
+            row = cursor.fetchone()
+            if row:
+                selected_destino_id = row.get('destino_id') if isinstance(row, dict) else row[0]
+    except Exception:
+        selected_destino_id = None
+    finally:
+        try:
+            cursor.close()
+            conn.close()
+        except Exception:
+            pass
+
+    # frete None indica que estamos criando (template tratará)
     frete = None
-    pedido_id = request.args.get('pedido_id')
 
     return render_template(
         'fretes/novo.html',
@@ -182,8 +204,46 @@ def novo():
         veiculos=veiculos,
         quantidades=quantidades,
         rotas_dict=rotas_dict,
-        pedido_id=pedido_id
+        selected_destino_id=selected_destino_id
     )
+
+
+@bp.route('/salvar_importados', methods=['POST'])
+@login_required
+def salvar_importados():
+    """
+    Endpoint mínimo para receber o formulário de importação (templates/fretes/importar-pedido.html).
+    Objetivo inicial: evitar BuildError/500 ao renderizar o modal e permitir testar o POST.
+    - Faz parse dos campos 'itens[index][campo]' do request.form e conta quantos itens chegaram.
+    - NÃO executa insert completo por segurança (pode ser implementado depois).
+    - Logs os itens no logger e informa via flash quantos foram recebidos.
+    """
+    form = request.form or {}
+    pattern = re.compile(r'^itens\[(\d+)\]\[(.+)\]$')
+    items = {}
+    for key in form.keys():
+        m = pattern.match(key)
+        if m:
+            idx = int(m.group(1))
+            field = m.group(2)
+            items.setdefault(idx, {})[field] = form.get(key)
+
+    total_items = len(items)
+    current_app.logger.info(f"[salvar_importados] Itens recebidos: {total_items}")
+    # log some sample
+    for idx, item in sorted(items.items()):
+        current_app.logger.debug(f"[salvar_importados] item[{idx}] keys={list(item.keys())}")
+
+    if total_items == 0:
+        flash('Nenhum item recebido na importação.', 'warning')
+        return redirect(url_for('pedidos.importar_lista'))
+
+    # NOTA: Aqui você pode inserir a lógica real de persistência:
+    # por exemplo, para cada item montar INSERT INTO fretes (...) VALUES (...)
+    # e usar parse_moeda(...) para campos monetários. Por enquanto só informamos.
+
+    flash(f'Importação recebida: {total_items} item(ns). Implementação de gravação não ativada.', 'success')
+    return redirect(url_for('fretes.lista'))
 
 
 @bp.route('/editar/<int:id>', methods=['GET', 'POST'])
@@ -264,7 +324,7 @@ def editar(id):
                 request.form.get('data_frete'),
                 request.form.get('status'),
                 request.form.get('observacoes'),
-                clientes_id,
+                request.form.get('clientes_id'),
                 request.form.get('fornecedores_id'),
                 request.form.get('produto_id'),
                 request.form.get('origem_id'),
@@ -354,9 +414,7 @@ def editar(id):
         except Exception:
             pass
 
-    # Normalizar campos para o template/JS (quando frete existe)
     if frete is None:
-        # manter None para indicar criação; template deve checar if frete
         pass
     else:
         frete.setdefault('preco_produto_unitario', frete.get('preco_produto_unitario') or 0)
@@ -388,9 +446,6 @@ def editar(id):
 @bp.route('/deletar/<int:id>', methods=['POST'])
 @login_required
 def deletar(id):
-    """
-    Exclusão mínima de frete (endpoint 'fretes.deletar') usada pelo template.
-    """
     conn = get_db_connection()
     cursor = conn.cursor()
     try:
