@@ -1,6 +1,5 @@
-<!doctype html>
 {% extends "base.html" %}
-{% block titulo %}{% if frete %}Editar Frete{% else %}Novo Frete{% endif %}{% endblock %}
+{% block title %}{% if frete %}Editar Frete{% else %}Novo Frete{% endif %}{% endblock %}
 
 {% block content %}
 <div class="container-fluid">
@@ -269,6 +268,5 @@
 <script src="{{ url_for('static', filename='js/app.js') }}"></script>
 <script src="{{ url_for('static', filename='js/importar_modal.js') }}"></script>
 <script src="{{ url_for('static', filename='js/fretes_calculos.js') }}?v={{ config.APP_VERSION or '1' }}"></script>
-<!-- Script que aplica formatação e cálculos de fallback (adicionar após fretes_calculos.js) -->
 <script src="{{ url_for('static', filename='js/fretes_fixes.js') }}"></script>
 {% endblock %}
