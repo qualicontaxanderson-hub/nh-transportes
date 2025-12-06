@@ -194,7 +194,7 @@
 
           <div id="div_quantidade_personalizada" style="display:none" class="col-md-6 mb-2">
             <label for="quantidade_manual" class="form-label">Quantidade Manual</label>
-            <input type="text" id="quantidade_manual" name="quantidade_manual" class="form-control form-control-sm" placeholder="Ex: 9.975" value="{{ frete.quantidade_manual if frete and frete.quant[... ] }}">
+            <input type="text" id="quantidade_manual" name="quantidade_manual" class="form-control form-control-sm" placeholder="Ex: 9.975" value="{{ frete.quantidade_manual if frete and frete.quantidade_manual else '' }}">
             <small class="text-muted">Use ponto como separador de milhar (ex: 9.975)</small>
           </div>
         </div>
@@ -220,17 +220,17 @@
         <div class="row mt-2">
           <div class="col-md-4 mb-2">
             <label for="total_nf_compra" class="form-label">Total NF Compra (R$)</label>
-            <input type="text" id="total_nf_compra" name="total_nf_compra" class="form-control form-control-sm bg-warning" readonly value="{{ 'R$ {:.2f}'.format(frete.total_nf_compra).replace('.'... ] }}">
+            <input type="text" id="total_nf_compra" name="total_nf_compra" class="form-control form-control-sm bg-warning" readonly value="{{ 'R$ {:.2f}'.format(frete.total_nf_compra).replace('.', ',') if frete and frete.total_nf_compra else 'R$ 0,00' }}">
           </div>
 
           <div class="col-md-4 mb-2">
             <label for="valor_total_frete" class="form-label">Valor Total Frete (R$)</label>
-            <input type="text" id="valor_total_frete" name="valor_total_frete" class="form-control form-control-sm bg-warning" readonly value="{{ 'R$ {:.2f}'.format(frete.valor_total_frete).replace('.'... ] }}">
+            <input type="text" id="valor_total_frete" name="valor_total_frete" class="form-control form-control-sm bg-warning" readonly value="{{ 'R$ {:.2f}'.format(frete.valor_total_frete).replace('.', ',') if frete and frete.valor_total_frete else 'R$ 0,00' }}">
           </div>
 
           <div class="col-md-4 mb-2">
             <label for="comissao_motorista" class="form-label">Comissão Motorista (R$)</label>
-            <input type="text" id="comissao_motorista" name="comissao_motorista" class="form-control form-control-sm bg-warning" readonly value="{{ 'R$ {:.2f}'.format(frete.comissao_motorista).replace('.'... ] }}">
+            <input type="text" id="comissao_motorista" name="comissao_motorista" class="form-control form-control-sm bg-warning" readonly value="{{ 'R$ {:.2f}'.format(frete.comissao_motorista).replace('.', ',') if frete and frete.comissao_motorista else 'R$ 0,00' }}">
           </div>
         </div>
 
