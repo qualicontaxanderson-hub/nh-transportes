@@ -48,7 +48,6 @@ def lista():
         if filters:
             where_clause = "WHERE " + " AND ".join(filters)
 
-        # Observe: usar um único % no DATE_FORMAT
         query = f"""
             SELECT
                 f.id,
@@ -98,20 +97,15 @@ def lista():
 @bp.route('/novo', methods=['GET', 'POST'])
 @login_required
 def novo():
-    """
-    Novo frete:
-    - GET: carrega dados auxiliares e tenta pré-selecionar destino a partir do pedido ou cadastro do cliente.
-    - POST: implementação mínima aqui; gravação real pode ser implementada conforme sua necessidade.
-    """
     if request.method == 'POST':
-        # Se quiser gravar automaticamente, implemente INSERT aqui.
         flash('Formulário recebido (salvamento não implementado).', 'info')
         return redirect(url_for('fretes.lista'))
 
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
     try:
-        cursor.execute("SELECT id, razao_social, destino_id, paga_frete, paga_comissao, percentual_cte, cte_integral FROM clientes ORDER BY razao_social")
+        # SELECT apenas colunas existentes — removi 'paga_frete' que não existe em seu esquema
+        cursor.execute("SELECT id, razao_social, destino_id, paga_comissao, percentual_cte, cte_integral FROM clientes ORDER BY razao_social")
         clientes = cursor.fetchall()
 
         cursor.execute("SELECT id, razao_social FROM fornecedores ORDER BY razao_social")
@@ -189,7 +183,6 @@ def novo():
         except Exception:
             pass
 
-    # frete None indica que estamos criando (template tratará)
     frete = None
 
     return render_template(
@@ -211,13 +204,6 @@ def novo():
 @bp.route('/salvar_importados', methods=['POST'])
 @login_required
 def salvar_importados():
-    """
-    Endpoint mínimo para receber o formulário de importação (templates/fretes/importar-pedido.html).
-    Objetivo inicial: evitar BuildError/500 ao renderizar o modal e permitir testar o POST.
-    - Faz parse dos campos 'itens[index][campo]' do request.form e conta quantos itens chegaram.
-    - NÃO executa insert completo por segurança (pode ser implementado depois).
-    - Logs os itens no logger e informa via flash quantos foram recebidos.
-    """
     form = request.form or {}
     pattern = re.compile(r'^itens\[(\d+)\]\[(.+)\]$')
     items = {}
@@ -230,17 +216,12 @@ def salvar_importados():
 
     total_items = len(items)
     current_app.logger.info(f"[salvar_importados] Itens recebidos: {total_items}")
-    # log some sample
     for idx, item in sorted(items.items()):
         current_app.logger.debug(f"[salvar_importados] item[{idx}] keys={list(item.keys())}")
 
     if total_items == 0:
         flash('Nenhum item recebido na importação.', 'warning')
         return redirect(url_for('pedidos.importar_lista'))
-
-    # NOTA: Aqui você pode inserir a lógica real de persistência:
-    # por exemplo, para cada item montar INSERT INTO fretes (...) VALUES (...)
-    # e usar parse_moeda(...) para campos monetários. Por enquanto só informamos.
 
     flash(f'Importação recebida: {total_items} item(ns). Implementação de gravação não ativada.', 'success')
     return redirect(url_for('fretes.lista'))
@@ -279,14 +260,12 @@ def editar(id):
             try:
                 if clientes_id:
                     cchk = conn.cursor(dictionary=True)
-                    cchk.execute("SELECT paga_frete, paga_comissao FROM clientes WHERE id = %s LIMIT 1", (clientes_id,))
+                    # checar apenas paga_comissao (coluna existente)
+                    cchk.execute("SELECT paga_comissao FROM clientes WHERE id = %s LIMIT 1", (clientes_id,))
                     crow = cchk.fetchone()
                     cchk.close()
                     if crow:
-                        if crow.get('paga_frete') is not None:
-                            cliente_paga_frete = bool(crow.get('paga_frete'))
-                        elif crow.get('paga_comissao') is not None:
-                            cliente_paga_frete = bool(crow.get('paga_comissao'))
+                        cliente_paga_frete = bool(crow.get('paga_comissao'))
             except Exception:
                 cliente_paga_frete = True
 
