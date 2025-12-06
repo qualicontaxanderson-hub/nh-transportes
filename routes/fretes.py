@@ -97,6 +97,10 @@ def lista():
 @bp.route('/novo', methods=['GET', 'POST'])
 @login_required
 def novo():
+    """
+    GET: carregar dados auxiliares e tentar pré-selecionar destino a partir do pedido/cliente.
+    POST: comportamento mínimo (redireciona) — implementação de INSERT pode ser adicionada.
+    """
     if request.method == 'POST':
         flash('Formulário recebido (salvamento não implementado).', 'info')
         return redirect(url_for('fretes.lista'))
@@ -104,7 +108,7 @@ def novo():
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
     try:
-        # SELECT apenas colunas existentes — usar paga_comissao (coluna presente) em vez de paga_frete
+        # Selecionar apenas colunas existentes (paga_comissao existe; paga_frete não)
         cursor.execute("SELECT id, razao_social, destino_id, paga_comissao, percentual_cte, cte_integral FROM clientes ORDER BY razao_social")
         clientes = cursor.fetchall()
 
@@ -204,6 +208,10 @@ def novo():
 @bp.route('/salvar_importados', methods=['POST'])
 @login_required
 def salvar_importados():
+    """
+    Endpoint mínimo para receber o formulário de importação (templates/fretes/importar-pedido.html).
+    Não persiste ainda — apenas conta e loga os itens recebidos.
+    """
     form = request.form or {}
     pattern = re.compile(r'^itens\[(\d+)\]\[(.+)\]$')
     items = {}
@@ -260,12 +268,36 @@ def editar(id):
             try:
                 if clientes_id:
                     cchk = conn.cursor(dictionary=True)
-                    # checar apenas paga_comissao (coluna existente)
-                    cchk.execute("SELECT paga_comissao FROM clientes WHERE id = %s LIMIT 1", (clientes_id,))
-                    crow = cchk.fetchone()
-                    cchk.close()
-                    if crow:
-                        cliente_paga_frete = bool(crow.get('paga_comissao'))
+                    # Versão robusta: tenta ler paga_frete/paga_comissao, mas não quebra se paga_frete não existir
+                    try:
+                        cchk.execute("SELECT paga_frete, paga_comissao FROM clientes WHERE id = %s LIMIT 1", (clientes_id,))
+                        crow = cchk.fetchone()
+                        if crow:
+                            if isinstance(crow, dict):
+                                if 'paga_frete' in crow and crow.get('paga_frete') is not None:
+                                    cliente_paga_frete = bool(crow.get('paga_frete'))
+                                else:
+                                    cliente_paga_frete = bool(crow.get('paga_comissao'))
+                            else:
+                                # fallback: prefer paga_frete if present, else paga_comissao
+                                try:
+                                    cliente_paga_frete = bool(crow[0])  # may raise
+                                except Exception:
+                                    cliente_paga_frete = bool(crow[1])
+                    except Exception:
+                        # coluna paga_frete pode não existir — usar apenas paga_comissao
+                        try:
+                            cchk.execute("SELECT paga_comissao FROM clientes WHERE id = %s LIMIT 1", (clientes_id,))
+                            crow = cchk.fetchone()
+                            if crow:
+                                cliente_paga_frete = bool(crow.get('paga_comissao') if isinstance(crow, dict) else crow[0])
+                        except Exception:
+                            cliente_paga_frete = True
+                    finally:
+                        try:
+                            cchk.close()
+                        except Exception:
+                            pass
             except Exception:
                 cliente_paga_frete = True
 
