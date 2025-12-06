@@ -220,17 +220,17 @@
         <div class="row mt-2">
           <div class="col-md-4 mb-2">
             <label for="total_nf_compra" class="form-label">Total NF Compra (R$)</label>
-            <input type="text" id="total_nf_compra" name="total_nf_compra" class="form-control form-control-sm bg-warning" readonly value="{{ 'R$ {:.2f}'.format(frete.total_nf_compra).replace('.', ',') if frete and frete.total_nf_compra else 'R$ 0,00' }}">
+            <input type="text" id="total_nf_compra" name="total_nf_compra" class="form-control form-control-sm bg-warning" readonly value="{{ 'R$ {:.2f}'.format(frete.total_nf_compra).replace('.', ',') if frete and frete.total_nf_compra else 'R$ 0,00' }}" and frete.total_nf_compra else 'R$ 0,00' }}">
           </div>
 
           <div class="col-md-4 mb-2">
             <label for="valor_total_frete" class="form-label">Valor Total Frete (R$)</label>
-            <input type="text" id="valor_total_frete" name="valor_total_frete" class="form-control form-control-sm bg-warning" readonly value="{{ 'R$ {:.2f}'.format(frete.valor_total_frete).replace('.', ',') if frete and frete.valor_total_frete else 'R$ 0,00' }}">
+            <input type="text" id="valor_total_frete" name="valor_total_frete" class="form-control form-control-sm bg-warning" readonly value="{{ 'R$ {:.2f}'.format(frete.valor_total_frete).replace('.', ',') if frete and frete.valor_total_frete else 'R$ 0,00' }}".valor_total_frete else 'R$ 0,00' }}">
           </div>
 
           <div class="col-md-4 mb-2">
             <label for="comissao_motorista" class="form-label">Comissão Motorista (R$)</label>
-            <input type="text" id="comissao_motorista" name="comissao_motorista" class="form-control form-control-sm bg-warning" readonly value="{{ 'R$ {:.2f}'.format(frete.comissao_motorista).replace('.', ',') if frete and frete.comissao_motorista else 'R$ 0,00' }}">
+            <input type="text" id="comissao_motorista" name="comissao_motorista" class="form-control form-control-sm bg-warning" readonly value="{{ 'R$ {:.2f}'.format(frete.comissao_motorista).replace('.', ',') if frete and frete.comissao_motorista else 'R$ 0,00' }}".comissao_motorista else 'R$ 0,00' }}">
           </div>
         </div>
 
@@ -242,12 +242,12 @@
 
           <div class="col-md-4 mb-2">
             <label for="comissao_cte" class="form-label">Comissão CTe (R$)</label>
-            <input type="text" id="comissao_cte" name="comissao_cte" class="form-control form-control-sm bg-warning" readonly value="{{ 'R$ {:.2f}'.format(frete.comissao_cte).replace('.', ',') if frete and frete.comissao_cte else 'R$ 0,00' }}">
+            <input type="text" id="comissao_cte" name="comissao_cte" class="form-control form-control-sm bg-warning" readonly value="{{ 'R$ {:.2f}'.format(frete.valor_cte).replace('.', ',') if frete and frete.valor_cte else 'R$ 0,00' }}".comissao_cte else 'R$ 0,00' }}">
           </div>
 
           <div class="col-md-4 mb-2">
             <label for="lucro" class="form-label">Lucro</label>
-            <input type="text" id="lucro" name="lucro" class="form-control form-control-sm bg-warning" readonly value="{{ 'R$ {:.2f}'.format(frete.lucro).replace('.', ',') if frete and frete.lucro else 'R$ 0,00' }}">
+            <input type="text" id="lucro" name="lucro" class="form-control form-control-sm bg-warning" readonly value="{{ 'R$ {:.2f}'.format(frete.lucro).replace('.', ',') if frete and frete.lucro else 'R$ 0,00' }}".lucro else 'R$ 0,00' }}">
           </div>
         </div>
 
