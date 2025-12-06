@@ -1,4 +1,3 @@
-```html
 {% extends "base.html" %}
 {% block title %}Novo Frete - NH Transportes{% endblock %}
 {% block content %}
@@ -19,13 +18,14 @@
         <!-- DATA / STATUS -->
         <div class="col-md-3">
           <label class="form-label">Data</label>
-          <input type="text" name="data_frete" class="form-control form-control-sm" placeholder="dd/mm/aaaa" value="">
+          <input type="text" name="data_frete" id="data_frete" class="form-control form-control-sm" placeholder="dd/mm/aaaa" value="">
         </div>
         <div class="col-md-3">
           <label class="form-label">Status</label>
-          <select name="status" class="form-select form-select-sm">
+          <select name="status" id="status" class="form-select form-select-sm">
             <option value="pendente">Pendente</option>
             <option value="concluido">Concluído</option>
+            <option value="cancelado">Cancelado</option>
           </select>
         </div>
 
@@ -37,7 +37,6 @@
             {% for c in clientes %}
               <option value="{{ c.id }}"
                 data-destino="{{ c.destino_id or '' }}"
-                data-paga-frete="{{ c.paga_frete|default(0) }}"
                 data-paga-comissao="{{ c.paga_comissao|default(0) }}"
                 data-percentual-cte="{{ c.percentual_cte|default(0) }}"
                 data-cte-integral="{{ c.cte_integral|default(0) }}"
@@ -65,7 +64,7 @@
         <!-- FORNECEDOR / PRODUTO / ORIGEM -->
         <div class="col-md-4">
           <label class="form-label">Fornecedor</label>
-          <select name="fornecedores_id" class="form-select form-select-sm">
+          <select name="fornecedores_id" id="fornecedores_id" class="form-select form-select-sm">
             <option value="">Selecione um fornecedor</option>
             {% for f in fornecedores %}
               <option value="{{ f.id }}" {% if frete and frete.fornecedores_id and frete.fornecedores_id == f.id %}selected{% endif %}>{{ f.razao_social }}</option>
@@ -75,7 +74,7 @@
 
         <div class="col-md-4">
           <label class="form-label">Produto</label>
-          <select name="produto_id" class="form-select form-select-sm">
+          <select name="produto_id" id="produto_id" class="form-select form-select-sm">
             <option value="">Selecione o produto</option>
             {% for p in produtos %}
               <option value="{{ p.id }}" {% if frete and frete.produto_id and frete.produto_id == p.id %}selected{% endif %}>{{ p.nome }}</option>
@@ -96,7 +95,7 @@
         <!-- MOTORISTA / VEÍCULO / QUANTIDADE -->
         <div class="col-md-4">
           <label class="form-label">Motorista</label>
-          <select name="motoristas_id" class="form-select form-select-sm">
+          <select name="motoristas_id" id="motoristas_id" class="form-select form-select-sm">
             <option value="">Selecione um motorista</option>
             {% for m in motoristas %}
               <option value="{{ m.id }}" {% if frete and frete.motoristas_id and frete.motoristas_id == m.id %}selected{% endif %}>{{ m.nome }}</option>
@@ -106,7 +105,7 @@
 
         <div class="col-md-4">
           <label class="form-label">Veículo</label>
-          <select name="veiculos_id" class="form-select form-select-sm">
+          <select name="veiculos_id" id="veiculos_id" class="form-select form-select-sm">
             <option value="">Selecione o veículo</option>
             {% for v in veiculos %}
               <option value="{{ v.id }}" {% if frete and frete.veiculos_id and frete.veiculos_id == v.id %}selected{% endif %}>{{ v.caminhao }}{% if v.placa %} - {{ v.placa }}{% endif %}</option>
@@ -131,13 +130,15 @@
         <!-- PREÇOS -->
         <div class="col-md-6">
           <label class="form-label">Preço Produto Unitário (R$)</label>
-          <input type="text" id="preco_produto_unitario" name="preco_produto_unitario" class="form-control form-control-sm" value="{{ 'R$ {:.3f}'.format(frete.preco_produto_unitario).replace('.', ',') if frete and frete.preco_produto_unitario else '' }}">
+          <input type="text" id="preco_produto_unitario" name="preco_produto_unitario" class="form-control form-control-sm"
+                 value="{{ 'R$ {:.3f}'.format(frete.preco_produto_unitario).replace('.', ',') if frete and frete.preco_produto_unitario else '' }}">
           <input type="hidden" id="preco_produto_unitario_raw" name="preco_produto_unitario_raw" value="{{ frete.preco_produto_unitario if frete and frete.preco_produto_unitario else '' }}">
         </div>
 
         <div class="col-md-6">
           <label class="form-label">Preço por Litro (R$)</label>
-          <input type="text" id="preco_por_litro" name="preco_por_litro" class="form-control form-control-sm" value="{{ 'R$ {:.2f}'.format(frete.preco_por_litro).replace('.', ',') if frete and frete.preco_por_litro else '' }}">
+          <input type="text" id="preco_por_litro" name="preco_por_litro" class="form-control form-control-sm"
+                 value="{{ 'R$ {:.2f}'.format(frete.preco_por_litro).replace('.', ',') if frete and frete.preco_por_litro else '' }}">
           <input type="hidden" id="preco_por_litro_raw" name="preco_por_litro_raw" value="{{ frete.preco_por_litro if frete and frete.preco_por_litro else '' }}">
         </div>
 
@@ -172,6 +173,12 @@
           <input type="text" id="lucro" name="lucro" class="form-control form-control-sm bg-warning" readonly value="{{ 'R$ {:.2f}'.format(frete.lucro).replace('.', ',') if frete and frete.lucro else 'R$ 0,00' }}">
         </div>
 
+        <!-- OBSERVAÇÕES -->
+        <div class="col-12">
+          <label class="form-label">Observações</label>
+          <textarea name="observacoes" id="observacoes" class="form-control form-control-sm" rows="3">{{ frete.observacoes if frete and frete.observacoes else '' }}</textarea>
+        </div>
+
         <div class="col-12 mt-3 d-flex justify-content-end">
           <button type="submit" class="btn btn-success btn-sm">Salvar (não implementado)</button>
           <a href="{{ url_for('fretes.lista') }}" class="btn btn-secondary btn-sm ms-2">Voltar</a>
@@ -202,7 +209,6 @@ document.addEventListener('DOMContentLoaded', function() {
   function aplicarRegraCliente(opt) {
     if (!opt) return;
     const destino = opt.getAttribute('data-destino') || '';
-    const pagaFrete = toBool(opt.getAttribute('data-paga-frete'));
     const pagaComissao = toBool(opt.getAttribute('data-paga-comissao'));
     const percentualCte = parseFloat(opt.getAttribute('data-percentual-cte')||0) || 0;
     const cteIntegral = toBool(opt.getAttribute('data-cte-integral'));
@@ -212,7 +218,7 @@ document.addEventListener('DOMContentLoaded', function() {
       destinoSel.dispatchEvent(new Event('change'));
     }
 
-    window.__CLIENTE_PAGA_FRETE = (pagaFrete || pagaComissao);
+    window.__CLIENTE_PAGA_FRETE = (pagaComissao);
     window.__CLIENTE_PERCENTUAL_CTE = percentualCte;
     window.__CLIENTE_CTE_INTEGRAL = cteIntegral ? 1 : 0;
 
