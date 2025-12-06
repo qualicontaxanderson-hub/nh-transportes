@@ -1,110 +1,77 @@
-(function(){
-  'use strict';
-
-  function desformatarMoeda(valor) {
-    if (valor === null || valor === undefined) return 0;
-    var s = String(valor).trim();
-    if (s === '') return 0;
-    s = s.replace(/R\$|\s/g, '');
-    if (s.indexOf('.') >= 0 && s.indexOf(',') >= 0) {
-      s = s.replace(/\./g, '').replace(',', '.');
-    } else {
-      s = s.replace(',', '.');
-    }
-    var n = parseFloat(s);
-    return isNaN(n) ? 0 : n;
+// JS helpers: formatação e bindings mínimos para fretes
+function desformatarMoeda(input) {
+  if (input === null || input === undefined) return 0;
+  var s = String(input).trim();
+  if (s === '') return 0;
+  // remove R$ e espaços
+  s = s.replace(/[Rr]\$\s?/, '').trim();
+  // remove pontos de milhar e troca vírgula por ponto (se ambos presentes)
+  if (s.indexOf('.') >= 0 && s.indexOf(',') >= 0) {
+    s = s.replace(/\./g, '').replace(',', '.');
+  } else if (s.indexOf(',') >= 0) {
+    s = s.replace(',', '.');
   }
+  // remove caracteres não numéricos exceto . e -
+  s = s.replace(/[^0-9\.-]/g, '');
+  var n = parseFloat(s);
+  return isNaN(n) ? 0 : n;
+}
 
-  function formatarMoedaBR(valor, casas) {
-    casas = (typeof casas === 'number') ? casas : 2;
-    if (valor === null || valor === undefined) valor = 0;
-    var n = Number(valor) || 0;
-    var neg = n < 0;
-    n = Math.abs(n);
-    var inteiro = parseInt(n.toFixed(casas), 10) + '';
-    var dec = (n.toFixed(casas) + '').split('.')[1] || '';
-    inteiro = inteiro.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
-    var s = inteiro + (casas ? ',' + (dec) : '');
-    return (neg ? '-' : '') + s;
+function formatarMoedaBR(valor, casas) {
+  casas = (typeof casas === 'number') ? casas : 2;
+  if (valor === null || valor === undefined) valor = 0;
+  var n = Number(valor) || 0;
+  var neg = n < 0;
+  n = Math.abs(n);
+  var inteiro = parseInt(n.toFixed(casas), 10) + '';
+  var dec = (n.toFixed(casas) + '').split('.')[1] || '';
+  inteiro = inteiro.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+  var s = inteiro + (casas ? ',' + (dec) : '');
+  return (neg ? '-' : '') + s;
+}
+
+function interpretarEntrada(raw, casas) {
+  var r = String(raw || '').trim();
+  if (!r) return 0;
+  var only = r.replace(/\D/g, '');
+  var hasSep = r.indexOf(',') >= 0 || r.indexOf('.') >= 0;
+  if (only && !hasSep) {
+    return parseInt(only, 10) / Math.pow(10, casas);
   }
+  return desformatarMoeda(r);
+}
 
-  function interpretarEntrada(raw, casas) {
-    var r = String(raw || '').trim();
-    var only = r.replace(/\D/g, '');
-    var hasSep = r.indexOf(',') >= 0 || r.indexOf('.') >= 0;
-    if (only && !hasSep) {
-      return parseInt(only,10) / Math.pow(10, casas);
+function bindFormatInput(el, casas) {
+  if (!el) return;
+  el.addEventListener('blur', function() {
+    try {
+      var raw = el.value || '';
+      var v = interpretarEntrada(raw, casas);
+      el.value = 'R$ ' + formatarMoedaBR(v, casas);
+      // if there's a corresponding hidden raw input, set it
+      var hid = document.getElementById(el.id + '_raw') || document.getElementById(el.name + '_raw') || null;
+      if (hid) hid.value = String(v).replace(',', '.');
+    } catch (e) {
+      console.error('bindFormatInput error', e);
     }
-    return desformatarMoeda(r);
-  }
+  });
+}
 
-  function $(sel, ctx){ return (ctx || document).querySelector(sel); }
+function initFretesFixes() {
+  // Bind formatting for preco_produto_unitario (3 casas) and preco_por_litro (2 casas)
+  bindFormatInput(document.getElementById('preco_produto_unitario'), 3);
+  bindFormatInput(document.getElementById('preco_por_litro'), 2);
 
-  function initFretesFixes() {
-    var inputPrecoUnitario = $('[name="preco_produto_unitario"]') || $('[name="preco_produto_unitario_raw"]');
-    var inputPrecoPorLitro = $('[name="preco_por_litro"]') || $('[name="preco_por_litro_raw"]') || document.querySelector('.campo-preco-litro');
-    var inputQuantidade = $('[name="quantidade_manual"]') || $('[name="quantidade"]') || document.querySelector('.campo-quantidade');
-    var inputTotalNF = $('[name="total_nf_compra"]') || document.querySelector('.campo-total-nf') || $('[name="total_nf"]');
-    var inputValorTotalFrete = $('[name="valor_total_frete"]') || document.querySelector('.campo-valor-frete') || $('[name="valor_total_frete"]');
+  // Se houver campo quantidade_manual, bind blur para recalcular
+  var qtd = document.getElementById('quantidade_manual');
+  if (qtd) qtd.addEventListener('blur', function(){ try { if (typeof calcularTudo === 'function') calcularTudo(); } catch(e){console.error(e);} });
 
-    function safeVal(el){ return el ? el.value : ''; }
-    function safeSet(el, v){ if(!el) return; el.value = v; }
+  // Também escutar mudanças em selects relevantes
+  var qSel = document.getElementById('quantidade_id');
+  if (qSel) qSel.addEventListener('change', function(){ try { if (typeof calcularTudo === 'function') calcularTudo(); } catch(e){console.error(e);} });
 
-    function calcularTotalNF() {
-      if (!inputTotalNF) return;
-      var q = desformatarMoeda(safeVal(inputQuantidade)) || 0;
-      var pu = interpretarEntrada(safeVal(inputPrecoUnitario), 3) || 0;
-      var total = q * pu;
-      safeSet(inputTotalNF, formatarMoedaBR(total, 2));
-    }
-
-    function calcularValorTotalFrete() {
-      if (!inputValorTotalFrete) return;
-      var q = desformatarMoeda(safeVal(inputQuantidade)) || 0;
-      var pl = interpretarEntrada(safeVal(inputPrecoPorLitro), 2) || 0;
-      var total = q * pl;
-      safeSet(inputValorTotalFrete, formatarMoedaBR(total, 2));
-    }
-
-    function bindFormatInput(el, casas) {
-      if (!el) return;
-      el.addEventListener('blur', function(){
-        try {
-          var raw = el.value || '';
-          var v = interpretarEntrada(raw, casas);
-          el.value = formatarMoedaBR(v, casas);
-        } catch(e) { console.error(e); }
-      });
-    }
-
-    function bindLiveCalc(el) {
-      if (!el) return;
-      ['input','change','keyup'].forEach(function(ev){
-        el.addEventListener(ev, function(){
-          calcularTotalNF();
-          calcularValorTotalFrete();
-        });
-      });
-    }
-
-    bindFormatInput(inputPrecoUnitario, 3);
-    bindFormatInput(inputPrecoPorLitro, 2);
-
-    bindLiveCalc(inputPrecoUnitario);
-    bindLiveCalc(inputPrecoPorLitro);
-    bindLiveCalc(inputQuantidade);
-
-    setTimeout(function(){
-      calcularTotalNF();
-      calcularValorTotalFrete();
-    }, 50);
-  }
-
-  window.initFretesFixes = initFretesFixes;
-
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', initFretesFixes);
-  } else {
-    initFretesFixes();
-  }
-})();
+  var precoUnit = document.getElementById('preco_produto_unitario');
+  var precoLitro = document.getElementById('preco_por_litro');
+  if (precoUnit) precoUnit.addEventListener('blur', function(){ try { if (typeof calcularTudo === 'function') calcularTudo(); } catch(e){console.error(e);} });
+  if (precoLitro) precoLitro.addEventListener('blur', function(){ try { if (typeof calcularTudo === 'function') calcularTudo(); } catch(e){console.error(e);} });
+}
