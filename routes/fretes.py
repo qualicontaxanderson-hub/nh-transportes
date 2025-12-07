@@ -465,10 +465,18 @@ def novo():
 @login_required
 def salvar_importados():
     """
-    Endpoint mínimo para receber o formulário de importação (templates/fretes/importar-pedido.html).
-    Não persiste ainda — apenas conta e loga os itens recebidos.
+    Recebe formulário de importação (templates/fretes/importar-pedido.html).
+    - Por padrão só loga e devolve flash informando quantidade recebida.
+    - Se for enviado save=1 no form, tenta gravar (com logging por item e sem abortar todos em erro).
     """
     form = request.form or {}
+    current_app.logger.info("[salvar_importados] POST recebida - keys: %s", list(form.keys()))
+
+    # dump completo (cuidado com dados sensíveis; útil só para debug)
+    for k in form.keys():
+        current_app.logger.debug("[salvar_importados] form[%s]=%s", k, form.get(k))
+
+    # parse itens do formulário (mesma regex do frontend: itens[0][campo])
     pattern = re.compile(r'^itens\[(\d+)\]\[(.+)\]$')
     items = {}
     for key in form.keys():
@@ -479,15 +487,117 @@ def salvar_importados():
             items.setdefault(idx, {})[field] = form.get(key)
 
     total_items = len(items)
-    current_app.logger.info(f"[salvar_importados] Itens recebidos: {total_items}")
+    current_app.logger.info("[salvar_importados] Itens detectados: %d", total_items)
+
+    # log detalhado dos items (útil para ver estrutura esperada)
     for idx, item in sorted(items.items()):
-        current_app.logger.debug(f"[salvar_importados] item[{idx}] keys={list(item.keys())}")
+        current_app.logger.info("[salvar_importados] item[%d] = %s", idx, item)
 
     if total_items == 0:
         flash('Nenhum item recebido na importação.', 'warning')
         return redirect(url_for('pedidos.importar_lista'))
 
-    flash(f'Importação recebida: {total_items} item(ns). Implementação de gravação não ativada.', 'success')
+    # Se o form veio com save=1 -> tentar gravar (modo debug = tenta inserir; sem save só mostra)
+    do_save = form.get('save') == '1' or form.get('salvar') == '1'
+
+    if not do_save:
+        flash(f'Importação recebida: {total_items} item(ns). Implementação de gravação não ativada.', 'success')
+        return redirect(url_for('fretes.lista'))
+
+    # Modo gravação ativo: tentar inserir cada item (gravação defensiva, por item)
+    conn = get_db_connection()
+    cur = conn.cursor()
+    saved = 0
+    failed = []
+    try:
+        for idx, item in sorted(items.items()):
+            try:
+                # Mapear campos do item para colunas do DB.
+                # Ajuste aqui conforme os nomes que vêm do frontend (ver Network / Payload).
+                data_frete = item.get('data_frete') or request.form.get('data_frete') or None
+                clientes_id = item.get('clientes_id') or request.form.get('clientes_id') or None
+                motoristas_id = item.get('motoristas_id') or request.form.get('motoristas_id') or None
+
+                # Valores monetários — normalizar com parse_moeda quando possível
+                def to_num(v):
+                    try:
+                        return parse_moeda(v)
+                    except Exception:
+                        try:
+                            return float(v)
+                        except Exception:
+                            return 0
+
+                valor_total_frete = to_num(item.get('valor_total_frete') or request.form.get('valor_total_frete') or 0)
+                comissao_motorista = to_num(item.get('comissao_motorista') or request.form.get('comissao_motorista') or 0)
+                valor_cte = to_num(item.get('valor_cte') or request.form.get('valor_cte') or 0)
+                comissao_cte = to_num(item.get('comissao_cte') or request.form.get('comissao_cte') or 0)
+                lucro = None
+                try:
+                    lucro = to_num(item.get('lucro')) if item.get('lucro') is not None else None
+                except Exception:
+                    lucro = None
+                if lucro is None:
+                    lucro = (valor_total_frete or 0) - (comissao_motorista or 0) - (comissao_cte or 0)
+
+                # Exemplo de INSERT — verifique com SHOW COLUMNS FROM fretes; se faltar coluna ajuste aqui.
+                cur.execute("""
+                    INSERT INTO fretes (
+                        data_frete, status, observacoes,
+                        clientes_id, fornecedores_id, produto_id,
+                        origem_id, destino_id, motoristas_id, veiculos_id,
+                        quantidade_id, quantidade_manual,
+                        preco_produto_unitario, preco_por_litro,
+                        total_nf_compra, valor_total_frete, comissao_motorista,
+                        valor_cte, comissao_cte, lucro
+                    ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                """, (
+                    data_frete or None,
+                    item.get('status') or 'Importado',
+                    item.get('observacoes') or '',
+                    clientes_id,
+                    item.get('fornecedores_id'),
+                    item.get('produto_id'),
+                    item.get('origem_id'),
+                    item.get('destino_id'),
+                    motoristas_id,
+                    item.get('veiculos_id'),
+                    item.get('quantidade_id'),
+                    item.get('quantidade_manual'),
+                    to_num(item.get('preco_produto_unitario') or 0),
+                    to_num(item.get('preco_por_litro') or 0),
+                    to_num(item.get('total_nf_compra') or 0),
+                    valor_total_frete or 0,
+                    comissao_motorista or 0,
+                    valor_cte or 0,
+                    comissao_cte or 0,
+                    lucro or 0
+                ))
+                conn.commit()
+                saved += 1
+                current_app.logger.info("[salvar_importados] item[%d] salvo com sucesso (id_tmp=%s)", idx, cur.lastrowid)
+            except Exception as e_item:
+                conn.rollback()
+                current_app.logger.exception("[salvar_importados] erro ao salvar item[%d]: %s", idx, e_item)
+                failed.append({'idx': idx, 'error': str(e_item), 'item': item})
+    finally:
+        try:
+            cur.close()
+        except Exception:
+            pass
+        try:
+            conn.close()
+        except Exception:
+            pass
+
+    summary = f"Importação: {total_items} item(ns). Salvos: {saved}. Falharam: {len(failed)}."
+    current_app.logger.info("[salvar_importados] resumo: %s", summary)
+    if failed:
+        current_app.logger.error("[salvar_importados] detalhes falhas: %s", failed)
+        flash(f"{summary} Veja logs para detalhes.", "warning")
+    else:
+        flash(summary, "success")
+
     return redirect(url_for('fretes.lista'))
 
 
