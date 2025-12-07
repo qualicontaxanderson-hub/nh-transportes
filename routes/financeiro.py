@@ -1,169 +1,62 @@
-from flask import Blueprint, render_template, request, redirect, url_for, flash
+from flask import Blueprint, render_template, request, jsonify, flash, redirect, url_for
 from flask_login import login_required
-from datetime import datetime
-import pymysql
+import mysql.connector
+import os
+from utils.boletos import emitir_boleto_frete
 
-from utils.db import get_db_connection
-# ajuste o caminho abaixo conforme onde você salvar essas funções
-from utils.boletos import emitir_boleto_frete, get_efi_client
+financeiro_bp = Blueprint('financeiro', __name__, url_prefix='/financeiro')
 
-bp = Blueprint('financeiro', __name__, url_prefix='/financeiro')
-
-
-@bp.route('/recebimentos')
-@login_required
-def recebimentos():
-    conn = get_db_connection()
-    cursor = conn.cursor(pymysql.cursors.DictCursor)
-
-    mes = request.args.get('mes')
-    ano = request.args.get('ano')
-    status = request.args.get('status')
-
-    hoje = datetime.today()
-    mes = int(mes) if mes else hoje.month
-    ano = int(ano) if ano else hoje.year
-
-    inicio = datetime(ano, mes, 1).date()
-    if mes == 12:
-        fim = datetime(ano + 1, 1, 1).date()
-    else:
-        fim = datetime(ano, mes + 1, 1).date()
-
-    filtros = [inicio, fim]
-    where_status = ""
-    if status and status != "todos":
-        where_status = " AND c.status = %s "
-        filtros.append(status)
-
-    try:
-        cursor.execute(
-            f"""
-            SELECT
-                c.id,
-                c.id_cliente,
-                cli.razao_social AS cliente_nome,
-                c.valor,
-                c.data_vencimento,
-                c.status,
-                c.charge_id,
-                c.link_boleto,
-                c.pdf_boleto,
-                c.data_emissao
-            FROM cobrancas c
-            JOIN clientes cli ON cli.id = c.id_cliente
-            WHERE c.data_vencimento >= %s
-              AND c.data_vencimento < %s
-            {where_status}
-            ORDER BY c.data_vencimento DESC, c.id DESC
-            """,
-            filtros
-        )
-        cobrancas = cursor.fetchall()
-
-        cursor.execute(
-            """
-            SELECT status, SUM(valor) AS total
-            FROM cobrancas
-            WHERE data_vencimento >= %s
-              AND data_vencimento < %s
-            GROUP BY status
-            """,
-            [inicio, fim]
-        )
-        totais_brutos = cursor.fetchall()
-    except Exception:
-        cobrancas = []
-        totais_brutos = []
-    finally:
-        cursor.close()
-        conn.close()
-
-    totais = {"waiting": 0, "paid": 0, "canceled": 0}
-    for t in totais_brutos:
-        st = t.get("status")
-        if st in totais:
-            totais[st] = t.get("total") or 0
-
-    return render_template(
-        'financeiro/recebimentos.html',
-        cobrancas=cobrancas,
-        totais=totais,
-        mes=mes,
-        ano=ano,
-        status=status or "todos"
+def get_db_connection():
+    return mysql.connector.connect(
+        host=os.getenv('DB_HOST'),
+        user=os.getenv('DB_USER'),
+        password=os.getenv('DB_PASSWORD'),
+        database=os.getenv('DB_DATABASE'),
+        port=int(os.getenv('DB_PORT', 3306))
     )
 
-
-@bp.route('/recebimentos/marcar_pago', methods=['POST'])
+@financeiro_bp.route('/recebimentos/')
 @login_required
-def marcar_pago():
-    cobranca_id = request.form.get('cobranca_id')
-    if not cobranca_id:
-        flash('Cobrança não informada.', 'warning')
-        return redirect(url_for('financeiro.recebimentos'))
-
+def recebimentos():
+    """Lista todos os recebimentos/boletos"""
     conn = get_db_connection()
-    cursor = conn.cursor()
+    cursor = conn.cursor(dictionary=True)
+    
     try:
-        cursor.execute(
-            "UPDATE cobrancas SET status = %s WHERE id = %s",
-            ("paid", cobranca_id)
-        )
-        conn.commit()
-        flash(f'Cobrança #{cobranca_id} marcada como paga.', 'success')
+        cursor.execute("""
+            SELECT 
+                r.*,
+                f.id as frete_numero,
+                c.razaosocial as cliente_nome,
+                c.nomefantasia as cliente_fantasia
+            FROM recebimentos r
+            LEFT JOIN fretes f ON r.frete_id = f.id
+            LEFT JOIN clientes c ON r.cliente_id = c.id
+            ORDER BY r.data_vencimento DESC, r.created_at DESC
+        """)
+        recebimentos_lista = cursor.fetchall()
+        
+        return render_template('financeiro/recebimentos.html', recebimentos=recebimentos_lista)
     except Exception as e:
-        conn.rollback()
-        flash(f'Erro ao marcar cobrança como paga: {e}', 'danger')
+        flash(f'Erro ao carregar recebimentos: {str(e)}', 'danger')
+        return render_template('financeiro/recebimentos.html', recebimentos=[])
     finally:
         cursor.close()
         conn.close()
 
-    return redirect(url_for('financeiro.recebimentos'))
-
-
-@bp.route('/recebimentos/cancelar', methods=['POST'])
+@financeiro_bp.route('/emitir-boleto/<int:frete_id>', methods=['POST'])
 @login_required
-def cancelar_cobranca():
-    cobranca_id = request.form.get('cobranca_id')
-    if not cobranca_id:
-        flash('Cobrança não informada.', 'warning')
-        return redirect(url_for('financeiro.recebimentos'))
-
-    conn = get_db_connection()
-    cursor = conn.cursor()
+def emitir_boleto_route(frete_id):
+    """Emite boleto para um frete específico"""
     try:
-        cursor.execute(
-            "UPDATE cobrancas SET status = %s WHERE id = %s",
-            ("canceled", cobranca_id)
-        )
-        conn.commit()
-        flash(f'Cobrança #{cobranca_id} cancelada.', 'success')
+        resultado = emitir_boleto_frete(frete_id)
+        
+        if resultado.get('success'):
+            flash(f'Boleto emitido com sucesso! Charge ID: {resultado.get("charge_id")}', 'success')
+            return redirect(url_for('financeiro.recebimentos'))
+        else:
+            flash(f'Erro ao emitir boleto: {resultado.get("error")}', 'danger')
+            return redirect(url_for('fretes.lista'))
     except Exception as e:
-        conn.rollback()
-        flash(f'Erro ao cancelar cobrança: {e}', 'danger')
-    finally:
-        cursor.close()
-        conn.close()
-
-    return redirect(url_for('financeiro.recebimentos'))
-
-
-@bp.route('/recebimentos/emitir/<int:frete_id>', methods=['POST'])
-@login_required
-def emitir_boleto_frete_route(frete_id):
-    """
-    Emite boleto para um frete específico e grava na tabela cobrancas.
-    Usa a função emitir_boleto_frete que você já testou com o EFI.
-    """
-    conn = get_db_connection()
-    try:
-        cobranca_id, link_boleto = emitir_boleto_frete(conn, frete_id)
-        flash(f'Boleto emitido para o frete #{frete_id}.', 'success')
-    except Exception as e:
-        flash(f'Erro ao emitir boleto para o frete #{frete_id}: {e}', 'danger')
-    finally:
-        conn.close()
-
-    # pode voltar para fretes ou recebimentos; aqui volta para fretes
-    return redirect(url_for('fretes.lista'))
+        flash(f'Erro ao processar boleto: {str(e)}', 'danger')
+        return redirect(url_for('fretes.lista'))
