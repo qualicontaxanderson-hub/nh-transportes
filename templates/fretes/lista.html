@@ -17,16 +17,20 @@
 
       <form method="get" action="{{ url_for('fretes.lista') }}" class="row g-2 mb-3">
         <div class="col-md-3">
-          <input type="text" name="data_inicio" class="form-control" placeholder="Data Início (dd/mm/aaaa)" value="{{ data_inicio or '' }}">
+          <input type="text" name="data_inicio" class="form-control"
+                 placeholder="Data Início (dd/mm/aaaa)" value="{{ data_inicio or '' }}">
         </div>
         <div class="col-md-3">
-          <input type="text" name="data_fim" class="form-control" placeholder="Data Fim (dd/mm/aaaa)" value="{{ data_fim or '' }}">
+          <input type="text" name="data_fim" class="form-control"
+                 placeholder="Data Fim (dd/mm/aaaa)" value="{{ data_fim or '' }}">
         </div>
         <div class="col-md-3">
           <select name="cliente_id" class="form-select">
             <option value="">Todos os clientes</option>
             {% for cliente in clientes %}
-            <option value="{{ cliente.id }}" {% if cliente_id == cliente.id %}selected{% endif %}>{{ cliente.razao_social }}</option>
+            <option value="{{ cliente.id }}" {% if cliente_id == cliente.id %}selected{% endif %}>
+              {{ cliente.razao_social }}
+            </option>
             {% endfor %}
           </select>
         </div>
@@ -52,7 +56,7 @@
             <th class="text-end">Valor Total</th>
             <th class="text-end">Lucro</th>
             <th>Status</th>
-            <th style="width: 140px;">Ações</th>
+            <th style="width: 220px;">Ações</th>
           </tr>
         </thead>
         <tbody>
@@ -68,7 +72,9 @@
             <td class="text-end">{{ formatar_moeda(frete.lucro) }}</td>
             <td>{{ frete.status }}</td>
             <td>
-              <a href="{{ url_for('fretes.editar', id=frete.id) }}" class="btn btn-sm btn-primary">Editar</a>
+              <a href="{{ url_for('fretes.editar', id=frete.id) }}" class="btn btn-sm btn-primary">
+                Editar
+              </a>
 
               <form method="post"
                     action="{{ url_for('fretes.deletar', id=frete.id) }}"
@@ -76,6 +82,16 @@
                     onsubmit="return confirm('Confirma exclusão do frete #{{ frete.id }}?');">
                 <button type="submit" class="btn btn-sm btn-danger">Excluir</button>
               </form>
+
+              {% if frete.valor_total_frete and frete.valor_total_frete|float > 0 %}
+              <form method="post"
+                    action="{{ url_for('financeiro.emitir_boleto_frete_route', frete_id=frete.id) }}"
+                    style="display:inline;">
+                <button type="submit" class="btn btn-sm btn-outline-primary">
+                  Emitir boleto
+                </button>
+              </form>
+              {% endif %}
             </td>
           </tr>
           {% else %}
