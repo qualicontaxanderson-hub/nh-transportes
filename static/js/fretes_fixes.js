@@ -157,7 +157,11 @@ function initFretesFixes() {
       var cteIntegral = opt.getAttribute('data-cte-integral') || opt.getAttribute('data-cte_integral') || '0';
 
       // definir variáveis usadas nos cálculos
-      window.__CLIENTE_PAGA_FRETE = (typeof pagaComissao !== 'undefined' ? (String(pagaComissao) !== '0' && String(pagaComissao) !== 'false') : true);
+      // NOTE: default seguro = false (não assumir que cliente paga se atributo ausente)
+      window.__CLIENTE_PAGA_FRETE = (typeof pagaComissao !== 'undefined' && pagaComissao !== null)
+        ? (String(pagaComissao).trim() !== '0' && String(pagaComissao).trim().toLowerCase() !== 'false')
+        : false;
+
       window.__CLIENTE_PERCENTUAL_CTE = parseFloat(percentualCte) || 0;
       window.__CLIENTE_CTE_INTEGRAL = (String(cteIntegral) === '1' || String(cteIntegral).toLowerCase() === 'true');
 
@@ -182,7 +186,7 @@ function initFretesFixes() {
   }
 }
 
- // expor no escopo global
+// expor no escopo global
 window.desformatarMoeda = desformatarMoeda;
 window.formatarMoedaBR = formatarMoedaBR;
 window.initFretesFixes = initFretesFixes;
