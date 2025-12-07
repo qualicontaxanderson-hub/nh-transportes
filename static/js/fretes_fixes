@@ -9,13 +9,11 @@ function desformatarMoeda(input) {
   // remover prefixo R$
   s = s.replace(/[Rr]\$\s?/, '').trim();
   // tratar milhares e decimais
-  // se tem '.' e ',' assume formato BR (1.234,56)
   if (s.indexOf('.') >= 0 && s.indexOf(',') >= 0) {
     s = s.replace(/\./g, '').replace(',', '.');
   } else if (s.indexOf(',') >= 0) {
     s = s.replace(',', '.');
   }
-  // remover qualquer caractere que não seja dígito, ponto ou sinal
   s = s.replace(/[^0-9\.-]/g, '');
   var n = parseFloat(s);
   return isNaN(n) ? 0 : n;
@@ -35,12 +33,22 @@ function formatarMoedaBR(valor, casas) {
   return (neg ? '-' : '') + s;
 }
 
-// Aplica formatação ao elemento input passado (R$ X,XXX,XX)
+// Aplica formatação ao elemento input passado (R$ X.xxx,xx)
+// Se usuário digitar apenas dígitos sem separador, interpretamos como inteiro escalado por 'casas'
+// Ex: casas=3, digito "3650" -> 3650 / 1000 = 3.650
 function aplicarFormatacaoMonetaria(el, casas) {
   if (!el) return;
   try {
-    var raw = desformatarMoeda(el.value);
-    el.value = 'R$ ' + formatarMoedaBR(raw, casas);
+    var rawStr = String(el.value || '').trim();
+    var valorNum;
+    if (/^\d+$/.test(rawStr)) {
+      // somente dígitos -> interpretar como inteiro escalado por casas
+      valorNum = parseInt(rawStr, 10) / Math.pow(10, casas);
+    } else {
+      // entrada com separadores/virgula/dot -> parse normal
+      valorNum = desformatarMoeda(rawStr);
+    }
+    el.value = 'R$ ' + formatarMoedaBR(valorNum, casas);
   } catch (e) {
     console.error('aplicarFormatacaoMonetaria error', e);
   }
@@ -48,28 +56,32 @@ function aplicarFormatacaoMonetaria(el, casas) {
 
 // Inicializador que anexa listeners de blur/input nos campos de preço e comissões
 function initFretesFixes() {
-  // campos monetários principais
   var elPrecoProduto = document.getElementById('preco_produto_unitario');
   var elPrecoPorLitro = document.getElementById('preco_por_litro');
   var elComissaoMotorista = document.getElementById('comissao_motorista');
 
   if (elPrecoProduto) {
-    // formatar ao carregar (se já tiver valor) e ao blur
     aplicarFormatacaoMonetaria(elPrecoProduto, 3);
-    elPrecoProduto.addEventListener('blur', function(){ aplicarFormatacaoMonetaria(this, 3); try{ if (typeof calcularTudo==='function') calcularTudo(); }catch(e){} });
-    elPrecoProduto.addEventListener('input', function(){ /* não recalcula a cada tecla para performance */ });
+    elPrecoProduto.addEventListener('blur', function(){
+      aplicarFormatacaoMonetaria(this, 3);
+      try{ if (typeof calcularTudo==='function') calcularTudo(); }catch(e){}
+    });
   }
 
   if (elPrecoPorLitro) {
     aplicarFormatacaoMonetaria(elPrecoPorLitro, 2);
-    elPrecoPorLitro.addEventListener('blur', function(){ aplicarFormatacaoMonetaria(this, 2); try{ if (typeof calcularTudo==='function') calcularTudo(); }catch(e){} });
-    elPrecoPorLitro.addEventListener('input', function(){});
+    elPrecoPorLitro.addEventListener('blur', function(){
+      aplicarFormatacaoMonetaria(this, 2);
+      try{ if (typeof calcularTudo==='function') calcularTudo(); }catch(e){}
+    });
   }
 
   if (elComissaoMotorista) {
-    // comissionista pode ser manual — mas sempre formatar
     aplicarFormatacaoMonetaria(elComissaoMotorista, 2);
-    elComissaoMotorista.addEventListener('blur', function(){ aplicarFormatacaoMonetaria(this, 2); try{ if (typeof calcularTudo==='function') calcularTudo(); }catch(e){} });
+    elComissaoMotorista.addEventListener('blur', function(){
+      aplicarFormatacaoMonetaria(this, 2);
+      try{ if (typeof calcularTudo==='function') calcularTudo(); }catch(e){}
+    });
   }
 
   // quantidade manual/listbox toggle
@@ -91,23 +103,15 @@ function initFretesFixes() {
     aplicarTipo();
   }
 
-  // quando seleção de quantidade ou manual mudar, recalcular
   var selQuantidade = document.getElementById('quantidade_id');
   var qtdManual = document.getElementById('quantidade_manual');
   if (selQuantidade) selQuantidade.addEventListener('change', function(){ try{ if (typeof calcularTudo==='function') calcularTudo(); }catch(e){} });
   if (qtdManual) qtdManual.addEventListener('blur', function(){ try{ if (typeof calcularTudo==='function') calcularTudo(); }catch(e){} });
 
-  // origem/destino changes impactam CTe
   var origemEl = document.getElementById('origem_id');
   var destinoEl = document.getElementById('destino_id');
   if (origemEl) origemEl.addEventListener('change', function(){ try{ if (typeof calcularTudo==='function') calcularTudo(); }catch(e){} });
   if (destinoEl) destinoEl.addEventListener('change', function(){ try{ if (typeof calcularTudo==='function') calcularTudo(); }catch(e){} });
-
-  // cliente change (aplicação de regras já no template chama aplicarRegraCliente, mas aqui garantimos que exista)
-  var clienteSel = document.getElementById('clientes_id');
-  if (clienteSel) {
-    // nada adicional: template aplica regras ao carregar/alterar
-  }
 }
 
 // garantir que funções existam no escopo global para que fretes_calculos.js as consuma
