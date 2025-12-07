@@ -46,7 +46,21 @@ function parseNumberFromField(el) {
 function readQuantidade() {
   var manual = $id('quantidade_manual');
   if (manual && manual.value.trim() !== '') {
-    return parseNumberFromField(manual) || NaN;
+    var s = String(manual.value).trim();
+    // Se usuário usa ponto como separador de milhar: "9.975" => 9975 (sem vírgula)
+    if (s.indexOf('.') >= 0 && s.indexOf(',') === -1) {
+      var cleaned = s.replace(/\./g, '');
+      var v = parseInt(cleaned, 10);
+      return isNaN(v) ? NaN : v;
+    }
+    // Se somente dígitos -> inteiro direto
+    if (/^\d+$/.test(s)) {
+      return parseInt(s, 10);
+    }
+    // Caso com vírgula ou outro formato -> usar desformatarMoeda e arredondar para inteiro
+    var n = desformatarMoeda(s);
+    if (isNaN(n)) return NaN;
+    return Math.round(n);
   }
   var sel = $id('quantidade_id');
   if (!sel) return NaN;
@@ -81,7 +95,7 @@ function calcularValorCTe(quantidade) {
   var key = origem + '|' + destino;
   try {
     if (typeof ROTAS !== 'undefined' && ROTAS && ROTAS[key]) return Number(ROTAS[key]) * Number(quantidade || 0);
-    // tentar conversões de tipo
+    // tentar conversões de tipo (ids numéricos)
     var keys = [origem + '|' + destino, parseInt(origem,10) + '|' + parseInt(destino,10)];
     for (var i=0;i<keys.length;i++){
       if (ROTAS[keys[i]]) return Number(ROTAS[keys[i]]) * Number(quantidade || 0);
@@ -132,14 +146,8 @@ function calcularTudo() {
   // valor CTe via rotas
   var valorCTe = calcularValorCTe(quantidade) || 0;
 
-  // COMISSÃO MOTORISTA
-  // regra: se houver valor manual no campo "comissao_motorista" -> usar.
-  // senão -> calcular como quantidade * 0.01 (1 cent por litro), exceto:
-  // - se cliente não paga frete -> 0
-  // - se motorista configured data-percentual == 0 -> não recebe comissão (0)
-  var comissaoMotoristaField = $id('comissao_motorista');
+  // COMISSÃO MOTORISTA (sempre calculada, sem override manual)
   var comissaoMotorista = 0;
-
   // verificar se motorista recebe comissão (motorista option data-percentual)
   var motoristaSel = $id('motoristas_id');
   var motoristaRecebeComissao = true;
@@ -156,14 +164,10 @@ function calcularTudo() {
   // regra cliente paga frete?
   var clientePaga = !!window.__CLIENTE_PAGA_FRETE;
 
-  if (comissaoMotoristaField && comissaoMotoristaField.value && String(comissaoMotoristaField.value).trim() !== '') {
-    comissaoMotorista = desformatarMoeda(comissaoMotoristaField.value);
+  if (clientePaga && motoristaRecebeComissao && !isNaN(quantidade)) {
+    comissaoMotorista = quantidade * 0.01;
   } else {
-    if (clientePaga && motoristaRecebeComissao && !isNaN(quantidade)) {
-      comissaoMotorista = quantidade * 0.01;
-    } else {
-      comissaoMotorista = 0;
-    }
+    comissaoMotorista = 0;
   }
 
   // comissao CTe: percentual cliente (fallback 8% se não configurado)
@@ -173,18 +177,16 @@ function calcularTudo() {
     comissaoCte = (percentualCte / 100.0) * valorCTe;
   }
 
-  // regra cliente paga frete?
+  // regra cliente paga frete? (quando não paga, frete e comissões zeram)
   if (!clientePaga) {
     precoPorLitro = 0;
     valorTotalFrete = 0;
-    // quando cliente não paga frete, o comissaoMotorista e comissaoCte devem ser zero
     comissaoMotorista = 0;
     comissaoCte = 0;
   }
 
-  // LUCRO: conforme solicitado -> LUCRO = VALOR TOTAL FRETE - COMISSÃO MOTORISTA - COMISSÃO CTE
+  // LUCRO = VALOR TOTAL FRETE - COMISSÃO MOTORISTA - COMISSÃO CTE
   var lucro = valorTotalFrete - comissaoMotorista - comissaoCte;
-  // manter comportamento anterior caso cliente não pague (lucro negativo das comissões)
   if (!clientePaga) {
     lucro = 0 - (comissaoCte + comissaoMotorista);
   }
