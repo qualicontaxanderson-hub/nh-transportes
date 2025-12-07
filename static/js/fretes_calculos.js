@@ -51,7 +51,7 @@ function parseNumberFromField(el) {
 
 function readQuantidade() {
   var manual = $id('quantidade_manual');
-  if (manual && manual.value.trim() !== '') {
+  if (manual && String(manual.value).trim() !== '') {
     var s = String(manual.value).trim();
     // "9.975" => 9975 when no comma present
     if (s.indexOf('.') >= 0 && s.indexOf(',') === -1) {
@@ -70,8 +70,12 @@ function readQuantidade() {
   if (!sel) return NaN;
   var opt = sel.options[sel.selectedIndex];
   if (!opt) return NaN;
-  var q = opt.getAttribute('data-quantidade');
-  return parseFloat(q) || NaN;
+  var q = opt.getAttribute('data-quantidade') || opt.getAttribute('data-quantidade-litros') || opt.getAttribute('data-quantidade_litros');
+  if (q === null || q === undefined) return NaN;
+  // aceitar vírgula como decimal
+  q = String(q).replace(',', '.');
+  var num = parseFloat(q);
+  return isNaN(num) ? NaN : num;
 }
 
 function readPrecoProdutoUnitario() {
@@ -176,15 +180,17 @@ function calcularTudo() {
       var pagaAttr = mOpt.getAttribute('data-paga-comissao');
       if (typeof pagaAttr !== 'undefined' && pagaAttr !== null) {
         var s = String(pagaAttr).trim().toLowerCase();
+        // aceitar variantes: '', '0', 'false', 'nao', 'não', 'no'
         if (s === '' || s === '0' || s === 'false' || s === 'nao' || s === 'não' || s === 'no') {
           motoristaRecebeComissao = false;
         } else {
           motoristaRecebeComissao = true;
         }
       } else {
-        var mPercentAttr = mOpt.getAttribute('data-percentual');
-        if (typeof mPercentAttr !== 'undefined' && mPercentAttr !== null) {
-          var p = parseFloat(mPercentAttr);
+        // fallback para atributos alternativos de percentual
+        var mPercentAttr = mOpt.getAttribute('data-percentual') || mOpt.getAttribute('data-percentual-comissao') || mOpt.getAttribute('data-percentual_comissao');
+        if (typeof mPercentAttr !== 'undefined' && mPercentAttr !== null && String(mPercentAttr).trim() !== '') {
+          var p = parseFloat(String(mPercentAttr).replace(',', '.'));
           if (!isNaN(p) && p <= 0) motoristaRecebeComissao = false;
           else motoristaRecebeComissao = true;
         }
