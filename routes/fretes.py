@@ -99,12 +99,189 @@ def lista():
 def novo():
     """
     GET: carregar dados auxiliares e tentar pré-selecionar destino a partir do pedido/cliente.
-    POST: comportamento mínimo (redireciona) — implementação de INSERT pode ser adicionada.
+    POST: gravar novo frete.
     """
     if request.method == 'POST':
-        flash('Formulário recebido (salvamento não implementado).', 'info')
-        return redirect(url_for('fretes.lista'))
+        # abrir conexão própria para o POST
+        conn = get_db_connection()
+        try:
+            # ler inputs (idem ao editar)
+            preco_produto_unitario_raw = request.form.get('preco_produto_unitario_raw')
+            if preco_produto_unitario_raw is None or preco_produto_unitario_raw == '':
+                preco_produto_unitario = parse_moeda(request.form.get('preco_produto_unitario'))
+            else:
+                preco_produto_unitario = parse_moeda(preco_produto_unitario_raw)
 
+            preco_por_litro_raw = request.form.get('preco_por_litro_raw')
+            if preco_por_litro_raw is None or preco_por_litro_raw == '':
+                preco_por_litro = parse_moeda(request.form.get('preco_por_litro'))
+            else:
+                preco_por_litro = parse_moeda(preco_por_litro_raw)
+
+            # quantidade: prefer manual se informado, senão usar quantidade_id (assume hidden/data-quantidade)
+            quantidade_manual_raw = request.form.get('quantidade_manual')
+            quantidade = None
+            try:
+                if quantidade_manual_raw is not None and quantidade_manual_raw != '':
+                    quantidade = float(quantidade_manual_raw)
+                else:
+                    qtd_id = request.form.get('quantidade_id')
+                    if qtd_id:
+                        # campo enviado provavelmente contém o id; tentar obter data via rotas/quantidades não temos aqui.
+                        # O formulário normalmente envia valor_total_frete e total_nf_compra já calculados; usar esses quando disponíveis.
+                        quantidade = None
+            except Exception:
+                quantidade = None
+
+            # ler valores já calculados pelo cliente (defaults)
+            total_nf_compra = parse_moeda(request.form.get('total_nf_compra')) or ( (preco_produto_unitario or 0) * (quantidade or 0) )
+            valor_total_frete = parse_moeda(request.form.get('valor_total_frete')) or ( (preco_por_litro or 0) * (quantidade or 0) )
+            comissao_motorista = parse_moeda(request.form.get('comissao_motorista')) or 0
+            valor_cte = parse_moeda(request.form.get('valor_cte')) or 0
+            comissao_cte = parse_moeda(request.form.get('comissao_cte')) or 0
+            lucro = parse_moeda(request.form.get('lucro')) or ((valor_total_frete or 0) - (comissao_motorista or 0) - (comissao_cte or 0))
+
+            clientes_id = request.form.get('clientes_id')
+            motoristas_id = request.form.get('motoristas_id')
+
+            # determinar cliente_paga_frete (reusar lógica do editar)
+            cliente_paga_frete = True
+            try:
+                if clientes_id:
+                    cchk = conn.cursor(dictionary=True)
+                    try:
+                        cchk.execute("SELECT paga_frete, paga_comissao FROM clientes WHERE id = %s LIMIT 1", (clientes_id,))
+                        crow = cchk.fetchone()
+                        if crow:
+                            if isinstance(crow, dict):
+                                if 'paga_frete' in crow and crow.get('paga_frete') is not None:
+                                    cliente_paga_frete = bool(crow.get('paga_frete'))
+                                else:
+                                    cliente_paga_frete = bool(crow.get('paga_comissao'))
+                            else:
+                                try:
+                                    cliente_paga_frete = bool(crow[0])
+                                except Exception:
+                                    cliente_paga_frete = bool(crow[1])
+                    except Exception:
+                        try:
+                            cchk.execute("SELECT paga_comissao FROM clientes WHERE id = %s LIMIT 1", (clientes_id,))
+                            crow = cchk.fetchone()
+                            if crow:
+                                cliente_paga_frete = bool(crow.get('paga_comissao') if isinstance(crow, dict) else crow[0])
+                        except Exception:
+                            cliente_paga_frete = True
+                    finally:
+                        try:
+                            cchk.close()
+                        except Exception:
+                            pass
+            except Exception:
+                cliente_paga_frete = True
+
+            # determinar motorista_recebe_comissao (reusar lógica do editar)
+            motorista_recebe_comissao = True
+            try:
+                if motoristas_id:
+                    mch = conn.cursor(dictionary=True)
+                    try:
+                        # tentar ler ambos campos, se existirem no schema
+                        try:
+                            mch.execute("SELECT paga_comissao, percentual_comissao FROM motoristas WHERE id = %s LIMIT 1", (motoristas_id,))
+                        except Exception:
+                            mch.execute("SELECT paga_comissao FROM motoristas WHERE id = %s LIMIT 1", (motoristas_id,))
+                        mrow = mch.fetchone()
+                        if mrow:
+                            if isinstance(mrow, dict):
+                                if 'paga_comissao' in mrow and mrow.get('paga_comissao') is not None:
+                                    motorista_recebe_comissao = bool(mrow.get('paga_comissao'))
+                                else:
+                                    try:
+                                        p = mrow.get('percentual_comissao')
+                                        motorista_recebe_comissao = bool(p is not None and float(p) > 0)
+                                    except Exception:
+                                        motorista_recebe_comissao = True
+                            else:
+                                try:
+                                    motorista_recebe_comissao = bool(mrow[0])
+                                except Exception:
+                                    try:
+                                        motorista_recebe_comissao = bool(mrow[1] and float(mrow[1]) > 0)
+                                    except Exception:
+                                        motorista_recebe_comissao = True
+                    except Exception:
+                        motorista_recebe_comissao = True
+                    finally:
+                        try:
+                            mch.close()
+                        except Exception:
+                            pass
+            except Exception:
+                motorista_recebe_comissao = True
+
+            # aplicar regra: se cliente não paga ou motorista não recebe => zerar comissão_motorista
+            if not cliente_paga_frete or not motorista_recebe_comissao:
+                comissao_motorista = 0
+                lucro = (valor_total_frete or 0) - (comissao_motorista or 0) - (comissao_cte or 0)
+
+            # inserir na tabela fretes
+            cur = conn.cursor()
+            try:
+                cur.execute("""
+                    INSERT INTO fretes (
+                        data_frete, status, observacoes,
+                        clientes_id, fornecedores_id, produto_id,
+                        origem_id, destino_id, motoristas_id, veiculos_id,
+                        quantidade_id, quantidade_manual,
+                        preco_produto_unitario, preco_por_litro,
+                        total_nf_compra, valor_total_frete, comissao_motorista,
+                        valor_cte, comissao_cte, lucro
+                    ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                """, (
+                    request.form.get('data_frete'),
+                    request.form.get('status'),
+                    request.form.get('observacoes'),
+                    clientes_id,
+                    request.form.get('fornecedores_id'),
+                    request.form.get('produto_id'),
+                    request.form.get('origem_id'),
+                    request.form.get('destino_id'),
+                    motoristas_id,
+                    request.form.get('veiculos_id'),
+                    request.form.get('quantidade_id') or None,
+                    request.form.get('quantidade_manual') or None,
+                    preco_produto_unitario or 0,
+                    preco_por_litro or 0,
+                    total_nf_compra or 0,
+                    valor_total_frete or 0,
+                    comissao_motorista or 0,
+                    valor_cte or 0,
+                    comissao_cte or 0,
+                    lucro or 0
+                ))
+                conn.commit()
+            finally:
+                try:
+                    cur.close()
+                except Exception:
+                    pass
+
+            flash('Frete criado com sucesso!', 'success')
+            return redirect(url_for('fretes.lista'))
+        except Exception as e:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+            flash(f'Erro ao salvar frete: {e}', 'danger')
+            return redirect(url_for('fretes.novo'))
+        finally:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+    # GET: carregar dados auxiliares para o formulário
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
     try:
