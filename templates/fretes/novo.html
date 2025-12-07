@@ -146,7 +146,7 @@
             <select id="motoristas_id" name="motoristas_id" class="form-select form-select-sm" required>
               <option value="">Selecione um motorista</option>
               {% for motorista in motoristas %}
-              <option value="{{ motorista.id }}" data-percentual="{{ motorista.percentual_comissao }}"
+              <option value="{{ motorista.id }}" data-percentual="{{ motorista.percentual_comissao }}" data-paga-comissao="{{ motorista.paga_comissao|default(1) }}"
                       {% if frete and motorista.id == frete.motoristas_id %}selected{% endif %}>
                 {{ motorista.nome }}
               </option>
