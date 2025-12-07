@@ -124,7 +124,8 @@ def novo():
         cursor.execute("SELECT id, nome FROM destinos ORDER BY nome")
         destinos = cursor.fetchall()
 
-        cursor.execute("SELECT id, nome FROM motoristas ORDER BY nome")
+        # IMPORTANT: trazer os campos de configuração do motorista para o template
+        cursor.execute("SELECT id, nome, percentual_comissao, paga_comissao FROM motoristas ORDER BY nome")
         motoristas = cursor.fetchall()
 
         cursor.execute("SELECT id, caminhao, placa FROM veiculos WHERE ativo = 1 ORDER BY caminhao")
