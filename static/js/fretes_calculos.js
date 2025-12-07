@@ -3,10 +3,9 @@
 
 function $id(id){ return document.getElementById(id); }
 
-function parseNumberFromField(el, casasDefault) {
+function parseNumberFromField(el) {
   if (!el) return 0;
   var raw = el.value || '';
-  // remove R$ e espaços
   raw = String(raw).replace(/[Rr]\$\s?/g, '').trim();
   return desformatarMoeda(raw);
 }
@@ -26,7 +25,7 @@ function readQuantidade() {
 
 function readPrecoProdutoUnitario() {
   var rawHidden = $id('preco_produto_unitario_raw');
-  if (rawHidden && rawHidden.value) {
+  if (rawHidden && rawHidden.value !== undefined && rawHidden.value !== '') {
     var v = parseFloat(rawHidden.value);
     if (!isNaN(v)) return v;
   }
@@ -35,7 +34,7 @@ function readPrecoProdutoUnitario() {
 
 function readPrecoPorLitroRaw() {
   var rawHidden = $id('preco_por_litro_raw');
-  if (rawHidden && rawHidden.value) {
+  if (rawHidden && rawHidden.value !== undefined && rawHidden.value !== '') {
     var v = parseFloat(rawHidden.value);
     if (!isNaN(v)) return v;
   }
@@ -70,8 +69,16 @@ function ensureHidden(name) {
 
 // Função principal que recalcula todos os resultados e atualiza o DOM
 function calcularTudo() {
+  // garantir hidden raw para preços
   ensureHidden('preco_produto_unitario_raw');
   ensureHidden('preco_por_litro_raw');
+
+  // garantir hidden numerics para totais (envio)
+  ensureHidden('total_nf_compra_raw');
+  ensureHidden('valor_total_frete_raw');
+  ensureHidden('valor_cte_raw');
+  ensureHidden('comissao_cte_raw');
+  ensureHidden('lucro_raw');
 
   var quantidade = readQuantidade();
   if (isNaN(quantidade) || quantidade <= 0) quantidade = NaN;
@@ -97,11 +104,10 @@ function calcularTudo() {
   var comissaoMotorista = 0;
   if (comissaoMotoristaField && comissaoMotoristaField.value) comissaoMotorista = desformatarMoeda(comissaoMotoristaField.value);
 
-  // comissao CTe: se cliente tem percentual global (window.__CLIENTE_PERCENTUAL_CTE), usa sobre valorCTe ou valorTotalFrete conforme regra.
+  // comissao CTe: percentual cliente
   var percentualCte = window.__CLIENTE_PERCENTUAL_CTE || 0;
   var comissaoCte = 0;
   if (percentualCte && percentualCte > 0) {
-    // regra: percentual sobre o valor do CTe ou sobre valorTotalFrete -> escolher acorde ao seu negócio; aqui usamos sobre valorCTe
     comissaoCte = (percentualCte / 100.0) * valorCTe;
   }
 
@@ -116,7 +122,6 @@ function calcularTudo() {
 
   // lucro = valorTotalFrete - totalNF - comissaoMotorista - comissaoCte - valorCTe
   var lucro = valorTotalFrete - totalNF - comissaoMotorista - comissaoCte - valorCTe;
-  // caso cliente não pague, manter regra negativa conforme backend
   if (!clientePaga) {
     lucro = 0 - (comissaoCte + comissaoMotorista);
   }
@@ -136,16 +141,20 @@ function calcularTudo() {
   if (elComissaoCte) elComissaoCte.value = 'R$ ' + formatarMoedaBR(comissaoCte, 2);
   if (elLucro) elLucro.value = 'R$ ' + formatarMoedaBR(lucro, 2);
 
-  // Atualizar hidden raws para envio
+  // Atualizar hidden raws para envio (numeros puros)
   var hPrecoUnit = $id('preco_produto_unitario_raw');
   var hPrecoLitro = $id('preco_por_litro_raw');
-  var hTotalNF = $id('total_nf_compra');
-  var hValorFrete = $id('valor_total_frete');
-  var hValorCTe = $id('valor_cte');
-  var hComissaoCte = $id('comissao_cte');
-  var hLucro = $id('lucro');
+  var hTotalNF = $id('total_nf_compra_raw');
+  var hValorFrete = $id('valor_total_frete_raw');
+  var hValorCTe = $id('valor_cte_raw');
+  var hComissaoCte = $id('comissao_cte_raw');
+  var hLucro = $id('lucro_raw');
 
   if (hPrecoUnit) hPrecoUnit.value = (precoUnit || 0);
   if (hPrecoLitro) hPrecoLitro.value = (precoPorLitro || 0);
-  // note: total_nf_compra and others are visible formatted; if you want hidden numeric fields add them similarly
+  if (hTotalNF) hTotalNF.value = (Math.round((totalNF + Number.EPSILON) * 100) / 100);
+  if (hValorFrete) hValorFrete.value = (Math.round((valorTotalFrete + Number.EPSILON) * 100) / 100);
+  if (hValorCTe) hValorCTe.value = (Math.round((valorCTe + Number.EPSILON) * 100) / 100);
+  if (hComissaoCte) hComissaoCte.value = (Math.round((comissaoCte + Number.EPSILON) * 100) / 100);
+  if (hLucro) hLucro.value = (Math.round((lucro + Number.EPSILON) * 100) / 100);
 }
