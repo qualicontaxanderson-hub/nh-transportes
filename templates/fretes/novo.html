@@ -283,7 +283,12 @@
   window.MODOEDICAO = {{ 'true' if frete else 'false' }};
 </script>
 
-<script src="{{ url_for('static', filename='js/app.js') }}"></script>
-<script src="{{ url_for('static', filename='js/importar_modal.js') }}"></script>
+<script src="{{ url_for('static', filename='js/app.js') }}?v={{ config.APP_VERSION or '1' }}"></script>
+
+<script src="{{ url_for('static', filename='js/fretes_fixes.js') }}?v={{ config.APP_VERSION or '1' }}"></script>
+
+<script src="{{ url_for('static', filename='js/importar_modal.js') }}?v={{ config.APP_VERSION or '1' }}"></script>
+<script src="{{ url_for('static', filename='js/importar_modal_bind.js') }}?v={{ config.APP_VERSION or '1' }}"></script>
+
 <script src="{{ url_for('static', filename='js/fretes_calculos.js') }}?v={{ config.APP_VERSION or '1' }}"></script>
 {% endblock %}
