@@ -1,146 +1,56 @@
-{% extends 'base.html' %}
-{% block title %}Financeiro - Recebimentos{% endblock %}
+{% extends "base.html" %}
 
-{% block content %}
+{% block titulo %}Recebimentos - NH Transportes{% endblock %}
 
-<h2 class="mb-4">Financeiro · Recebimentos</h2>
-
-<form method="get" class="row g-3 mb-4">
-  <div class="col-md-2">
-    <label for="mes" class="form-label">Mês</label>
-    <select id="mes" name="mes" class="form-select">
-      {% for m in range(1, 13) %}
-      <option value="{{ m }}" {% if m == mes %}selected{% endif %}>{{ "%02d"|format(m) }}</option>
-      {% endfor %}
-    </select>
-  </div>
-  <div class="col-md-2">
-    <label for="ano" class="form-label">Ano</label>
-    <input type="number" id="ano" name="ano" class="form-control" value="{{ ano }}">
-  </div>
-  <div class="col-md-3">
-    <label for="status" class="form-label">Status</label>
-    <select id="status" name="status" class="form-select">
-      <option value="todos" {% if status == 'todos' %}selected{% endif %}>Todos</option>
-      <option value="waiting" {% if status == 'waiting' %}selected{% endif %}>Em aberto</option>
-      <option value="paid" {% if status == 'paid' %}selected{% endif %}>Pagos</option>
-      <option value="canceled" {% if status == 'canceled' %}selected{% endif %}>Cancelados</option>
-    </select>
-  </div>
-  <div class="col-md-3 align-self-end">
-    <button type="submit" class="btn btn-primary w-100">
-      Filtrar
-    </button>
-  </div>
-</form>
-
-<div class="row mb-4">
-  <div class="col-md-4">
-    <div class="card shadow-sm border-0">
-      <div class="card-body">
-        <h6 class="card-subtitle text-muted">Em aberto</h6>
-        <h4 class="card-title text-warning mt-2">
-          R$ {{ "{:,.2f}".format((totais.waiting or 0)).replace(",", "X").replace(".", ",").replace("X", ".") }}
-        </h4>
-      </div>
+{% block conteudo %}
+<div class="container-fluid mt-3">
+    <h2 class="mb-3">💰 Recebimentos / Boletos</h2>
+    
+    {% if recebimentos %}
+    <div class="table-responsive">
+        <table class="table table-striped table-hover">
+            <thead class="table-dark">
+                <tr>
+                    <th>ID</th>
+                    <th>Frete</th>
+                    <th>Cliente</th>
+                    <th>Valor</th>
+                    <th>Vencimento</th>
+                    <th>Status</th>
+                    <th>Charge ID</th>
+                    <th>Ações</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for r in recebimentos %}
+                <tr>
+                    <td>{{ r.id }}</td>
+                    <td>#{{ r.frete_numero }}</td>
+                    <td>{{ r.cliente_fantasia or r.cliente_nome }}</td>
+                    <td>R$ {{ "%.2f"|format(r.valor) }}</td>
+                    <td>{{ r.data_vencimento.strftime('%d/%m/%Y') }}</td>
+                    <td>
+                        <span class="badge {% if r.status == 'pago' %}bg-success{% elif r.status == 'pendente' %}bg-warning{% else %}bg-danger{% endif %}">
+                            {{ r.status }}
+                        </span>
+                    </td>
+                    <td><small>{{ r.charge_id or '-' }}</small></td>
+                    <td>
+                        {% if r.boleto_url %}
+                        <a href="{{ r.boleto_url }}" target="_blank" class="btn btn-sm btn-primary">
+                            <i class="bi bi-file-pdf"></i> Ver Boleto
+                        </a>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
     </div>
-  </div>
-  <div class="col-md-4">
-    <div class="card shadow-sm border-0">
-      <div class="card-body">
-        <h6 class="card-subtitle text-muted">Pagos</h6>
-        <h4 class="card-title text-success mt-2">
-          R$ {{ "{:,.2f}".format((totais.paid or 0)).replace(",", "X").replace(".", ",").replace("X", ".") }}
-        </h4>
-      </div>
+    {% else %}
+    <div class="alert alert-info">
+        <i class="bi bi-info-circle"></i> Nenhum recebimento encontrado.
     </div>
-  </div>
-  <div class="col-md-4">
-    <div class="card shadow-sm border-0">
-      <div class="card-body">
-        <h6 class="card-subtitle text-muted">Cancelados</h6>
-        <h4 class="card-title text-danger mt-2">
-          R$ {{ "{:,.2f}".format((totais.canceled or 0)).replace(",", "X").replace(".", ",").replace("X", ".") }}
-        </h4>
-      </div>
-    </div>
-  </div>
+    {% endif %}
 </div>
-
-<div class="table-responsive">
-  <table class="table table-striped align-middle">
-    <thead class="table-light">
-      <tr>
-        <th>#</th>
-        <th>Emissão</th>
-        <th>Vencimento</th>
-        <th>Cliente</th>
-        <th>Valor (R$)</th>
-        <th>Status</th>
-        <th>Charge ID</th>
-        <th class="text-end">Ações</th>
-      </tr>
-    </thead>
-    <tbody>
-      {% if cobrancas %}
-        {% for c in cobrancas %}
-        <tr>
-          <td>{{ c.id }}</td>
-          <td>{{ c.data_emissao.strftime('%d/%m/%Y') if c.data_emissao }}</td>
-          <td>{{ c.data_vencimento.strftime('%d/%m/%Y') if c.data_vencimento }}</td>
-          <td>{{ c.cliente_nome }}</td>
-          <td>
-            {{ "R$ {:,.2f}".format((c.valor or 0)).replace(",", "X").replace(".", ",").replace("X", ".") }}
-          </td>
-          <td>
-            {% if c.status == 'waiting' %}
-              <span class="badge bg-warning text-dark">Em aberto</span>
-            {% elif c.status == 'paid' %}
-              <span class="badge bg-success">Pago</span>
-            {% elif c.status == 'canceled' %}
-              <span class="badge bg-secondary">Cancelado</span>
-            {% else %}
-              <span class="badge bg-light text-dark">{{ c.status }}</span>
-            {% endif %}
-          </td>
-          <td>{{ c.charge_id or '-' }}</td>
-          <td class="text-end">
-            {% if c.link_boleto %}
-            <a href="{{ c.link_boleto }}" target="_blank" class="btn btn-sm btn-outline-primary">
-              Ver boleto
-            </a>
-            {% endif %}
-            {% if c.pdf_boleto %}
-            <a href="{{ c.pdf_boleto }}" target="_blank" class="btn btn-sm btn-outline-secondary">
-              PDF
-            </a>
-            {% endif %}
-            {% if c.status == 'waiting' %}
-            <form action="{{ url_for('financeiro.marcar_pago') }}" method="post" class="d-inline">
-              <input type="hidden" name="cobranca_id" value="{{ c.id }}">
-              <button type="submit" class="btn btn-sm btn-success">
-                Marcar pago
-              </button>
-            </form>
-            <form action="{{ url_for('financeiro.cancelar_cobranca') }}" method="post" class="d-inline">
-              <input type="hidden" name="cobranca_id" value="{{ c.id }}">
-              <button type="submit" class="btn btn-sm btn-outline-danger">
-                Cancelar
-              </button>
-            </form>
-            {% endif %}
-          </td>
-        </tr>
-        {% endfor %}
-      {% else %}
-        <tr>
-          <td colspan="8" class="text-center text-muted">
-            Nenhuma cobrança encontrada para o período selecionado.
-          </td>
-        </tr>
-      {% endif %}
-    </tbody>
-  </table>
-</div>
-
 {% endblock %}
