@@ -110,9 +110,46 @@ function initFretesFixes() {
   var destinoEl = document.getElementById('destino_id');
   if (origemEl) origemEl.addEventListener('change', function(){ try{ if (typeof calcularTudo==='function') calcularTudo(); }catch(e){} });
   if (destinoEl) destinoEl.addEventListener('change', function(){ try{ if (typeof calcularTudo==='function') calcularTudo(); }catch(e){} });
+
+  // --- novo: bind para cliente -> preencher destino e variáveis do cliente
+  var clienteSel = document.getElementById('clientes_id');
+  if (clienteSel) {
+    function aplicarCliente() {
+      var idx = clienteSel.selectedIndex;
+      if (idx < 0) return;
+      var opt = clienteSel.options[idx];
+      var destinoId = opt.getAttribute('data-destino-id') || opt.getAttribute('data-destino') || '';
+      var pagaComissao = opt.getAttribute('data-paga-comissao');
+      var percentualCte = opt.getAttribute('data-percentual-cte') || opt.getAttribute('data-percentual_cte') || '0';
+      var cteIntegral = opt.getAttribute('data-cte-integral') || opt.getAttribute('data-cte_integral') || '0';
+
+      // definir variáveis usadas nos cálculos
+      window.__CLIENTE_PAGA_FRETE = (typeof pagaComissao !== 'undefined' ? (String(pagaComissao) !== '0' && String(pagaComissao) !== 'false') : true);
+      window.__CLIENTE_PERCENTUAL_CTE = parseFloat(percentualCte) || 0;
+      window.__CLIENTE_CTE_INTEGRAL = (String(cteIntegral) === '1' || String(cteIntegral).toLowerCase() === 'true');
+
+      // preencher destino (select e hidden)
+      var destHidden = document.getElementById('destino_id_hidden');
+      var destSel = document.getElementById('destino_id');
+      if (destSel) {
+        try {
+          destSel.value = destinoId || '';
+        } catch (e) { /* ignore */ }
+      }
+      if (destHidden) destHidden.value = destinoId || '';
+
+      // recalcular tudo
+      try { if (typeof calcularTudo === 'function') calcularTudo(); } catch(e){}
+    }
+
+    clienteSel.addEventListener('change', aplicarCliente);
+
+    // disparar uma vez para o valor já selecionado ao carregar
+    try { aplicarCliente(); } catch(e){}
+  }
 }
 
-// expor no escopo global
+ // expor no escopo global
 window.desformatarMoeda = desformatarMoeda;
 window.formatarMoedaBR = formatarMoedaBR;
 window.initFretesFixes = initFretesFixes;
