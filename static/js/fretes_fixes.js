@@ -112,6 +112,18 @@ function initFretesFixes() {
   if (destinoEl) destinoEl.addEventListener('change', function(){ try{ if (typeof calcularTudo==='function') calcularTudo(); }catch(e){} });
 }
 
+// expor no escopo global
 window.desformatarMoeda = desformatarMoeda;
 window.formatarMoedaBR = formatarMoedaBR;
 window.initFretesFixes = initFretesFixes;
+
+// Inicializador automático: aplica máscaras e dispara cálculo inicial quando DOM pronto
+document.addEventListener('DOMContentLoaded', function(){
+  try {
+    if (typeof initFretesFixes === 'function') initFretesFixes();
+  } catch (e) { console.error('initFretesFixes erro', e); }
+
+  try {
+    if (typeof calcularTudo === 'function') calcularTudo();
+  } catch (e) { /* calcularTudo pode estar definido depois se scripts carregarem em ordem inesperada */ }
+});
