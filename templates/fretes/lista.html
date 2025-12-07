@@ -85,7 +85,7 @@
 
               {% if frete.valor_total_frete and frete.valor_total_frete|float > 0 %}
               <form method="post"
-                    action="{{ url_for('financeiro.emitir_boleto_frete_route', frete_id=frete.id) }}"
+                    action="{{ url_for('financeiro.emitir_boleto_route', frete_id=frete.id) }}"
                     style="display:inline;">
                 <button type="submit" class="btn btn-sm btn-outline-primary">
                   Emitir boleto
