@@ -99,12 +99,14 @@ def lista():
 def novo():
     """
     GET: carregar dados auxiliares e tentar pré-selecionar destino a partir do pedido/cliente.
-    POST: gravar novo frete.
+    POST: gravar novo frete ou atualizar se o form enviar id (proteção contra criação duplicada).
     """
     if request.method == 'POST':
         # abrir conexão própria para o POST
         conn = get_db_connection()
         try:
+            # Detectar se o form enviou um id de frete (edição disfarçada como novo)
+            form_id = request.form.get('id') or request.form.get('frete_id') or request.form.get('fretes_id')
             # ler inputs (idem ao editar)
             preco_produto_unitario_raw = request.form.get('preco_produto_unitario_raw')
             if preco_produto_unitario_raw is None or preco_produto_unitario_raw == '':
@@ -229,7 +231,73 @@ def novo():
                     comissao_motorista = 0
                     lucro = (valor_total_frete or 0) - (comissao_motorista or 0) - (comissao_cte or 0)
 
-            # inserir na tabela fretes
+            # Se o form indicou um id -> fazer UPDATE (evita criar duplicata quando template submete para /novo)
+            if form_id:
+                try:
+                    cursor = conn.cursor()
+                    cursor.execute("""
+                        UPDATE fretes SET
+                            data_frete=%s,
+                            status=%s,
+                            observacoes=%s,
+                            clientes_id=%s,
+                            fornecedores_id=%s,
+                            produto_id=%s,
+                            origem_id=%s,
+                            destino_id=%s,
+                            motoristas_id=%s,
+                            veiculos_id=%s,
+                            quantidade_id=%s,
+                            quantidade_manual=%s,
+                            preco_produto_unitario=%s,
+                            preco_por_litro=%s,
+                            total_nf_compra=%s,
+                            valor_total_frete=%s,
+                            comissao_motorista=%s,
+                            valor_cte=%s,
+                            comissao_cte=%s,
+                            lucro=%s
+                        WHERE id=%s
+                    """, (
+                        request.form.get('data_frete'),
+                        request.form.get('status'),
+                        request.form.get('observacoes'),
+                        request.form.get('clientes_id'),
+                        request.form.get('fornecedores_id'),
+                        request.form.get('produto_id'),
+                        request.form.get('origem_id'),
+                        request.form.get('destino_id'),
+                        request.form.get('motoristas_id'),
+                        request.form.get('veiculos_id'),
+                        request.form.get('quantidade_id') or None,
+                        request.form.get('quantidade_manual') or None,
+                        preco_produto_unitario or 0,
+                        preco_por_litro or 0,
+                        total_nf_compra or 0,
+                        valor_total_frete or 0,
+                        comissao_motorista or 0,
+                        valor_cte or 0,
+                        comissao_cte or 0,
+                        lucro or 0,
+                        int(form_id),
+                    ))
+                    conn.commit()
+                    flash('Frete atualizado com sucesso!', 'success')
+                    return redirect(url_for('fretes.lista'))
+                except Exception as e:
+                    try:
+                        conn.rollback()
+                    except Exception:
+                        pass
+                    flash(f'Erro ao atualizar frete: {e}', 'danger')
+                    return redirect(url_for('fretes.novo'))
+                finally:
+                    try:
+                        cursor.close()
+                    except Exception:
+                        pass
+
+            # inserir na tabela fretes (caso form_id não informado)
             cur = conn.cursor()
             try:
                 cur.execute("""
