@@ -35,7 +35,6 @@ function formatarMoedaBR(valor, casas) {
 
 // Aplica formatação ao elemento input passado (R$ X.xxx,xx)
 // Se usuário digitar apenas dígitos sem separador, interpretamos como inteiro escalado por 'casas'
-// Ex: casas=3, digito "3650" -> 3650 / 1000 = 3.650
 function aplicarFormatacaoMonetaria(el, casas) {
   if (!el) return;
   try {
@@ -54,7 +53,6 @@ function aplicarFormatacaoMonetaria(el, casas) {
   }
 }
 
-// Inicializador que anexa listeners de blur/input nos campos de preço e comissões
 function initFretesFixes() {
   var elPrecoProduto = document.getElementById('preco_produto_unitario');
   var elPrecoPorLitro = document.getElementById('preco_por_litro');
@@ -114,7 +112,6 @@ function initFretesFixes() {
   if (destinoEl) destinoEl.addEventListener('change', function(){ try{ if (typeof calcularTudo==='function') calcularTudo(); }catch(e){} });
 }
 
-// garantir que funções existam no escopo global para que fretes_calculos.js as consuma
 window.desformatarMoeda = desformatarMoeda;
 window.formatarMoedaBR = formatarMoedaBR;
 window.initFretesFixes = initFretesFixes;
