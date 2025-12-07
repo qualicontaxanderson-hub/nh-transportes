@@ -301,12 +301,54 @@ def editar(id):
             except Exception:
                 cliente_paga_frete = True
 
+            # --- determinar se motorista recebe comissão (LEITURA DO CADASTRO DO MOTORISTA) --- #
+            motoristas_id = request.form.get('motoristas_id')
+            motorista_recebe_comissao = True
+            try:
+                if motoristas_id:
+                    mch = conn.cursor(dictionary=True)
+                    try:
+                        mch.execute("SELECT paga_comissao, percentual_comissao FROM motoristas WHERE id = %s LIMIT 1", (motoristas_id,))
+                        mrow = mch.fetchone()
+                        if mrow:
+                            if isinstance(mrow, dict):
+                                if 'paga_comissao' in mrow and mrow.get('paga_comissao') is not None:
+                                    motorista_recebe_comissao = bool(mrow.get('paga_comissao'))
+                                else:
+                                    try:
+                                        p = mrow.get('percentual_comissao')
+                                        motorista_recebe_comissao = bool(p is not None and float(p) > 0)
+                                    except Exception:
+                                        motorista_recebe_comissao = True
+                            else:
+                                try:
+                                    motorista_recebe_comissao = bool(mrow[0])
+                                except Exception:
+                                    try:
+                                        motorista_recebe_comissao = bool(mrow[1] and float(mrow[1]) > 0)
+                                    except Exception:
+                                        motorista_recebe_comissao = True
+                    except Exception:
+                        motorista_recebe_comissao = True
+                    finally:
+                        try:
+                            mch.close()
+                        except Exception:
+                            pass
+            except Exception:
+                motorista_recebe_comissao = True
+
             if not cliente_paga_frete:
                 preco_por_litro = 0
                 valor_total_frete = 0
                 comissao_motorista = 0
                 comissao_cte = 0
                 lucro = round(0 - float(comissao_cte or 0) - float(comissao_motorista or 0), 2)
+
+            # se cliente paga mas motorista não recebe, zera a comissao do motorista
+            if cliente_paga_frete and not motorista_recebe_comissao:
+                comissao_motorista = 0
+                lucro = round((valor_total_frete or 0) - float(comissao_motorista or 0) - float(comissao_cte or 0), 2)
 
             cursor.execute("""
                 UPDATE fretes SET
