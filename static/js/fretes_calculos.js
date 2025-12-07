@@ -166,17 +166,32 @@ function calcularTudo() {
 
   // Comissão Motorista (sempre calculada pela regra)
   var comissaoMotorista = 0;
+
+  // verificar se motorista recebe comissão (motorista option data-paga-comissao preferencial, fallback data-percentual)
   var motoristaSel = $id('motoristas_id');
   var motoristaRecebeComissao = true;
   if (motoristaSel) {
     var mOpt = motoristaSel.options[motoristaSel.selectedIndex];
     if (mOpt) {
-      var mPercentAttr = mOpt.getAttribute('data-percentual');
-      if (typeof mPercentAttr !== 'undefined' && (mPercentAttr === '0' || String(mPercentAttr).toLowerCase() === 'false')) {
-        motoristaRecebeComissao = false;
+      var pagaAttr = mOpt.getAttribute('data-paga-comissao');
+      if (typeof pagaAttr !== 'undefined' && pagaAttr !== null) {
+        var s = String(pagaAttr).trim().toLowerCase();
+        if (s === '' || s === '0' || s === 'false' || s === 'nao' || s === 'não' || s === 'no') {
+          motoristaRecebeComissao = false;
+        } else {
+          motoristaRecebeComissao = true;
+        }
+      } else {
+        var mPercentAttr = mOpt.getAttribute('data-percentual');
+        if (typeof mPercentAttr !== 'undefined' && mPercentAttr !== null) {
+          var p = parseFloat(mPercentAttr);
+          if (!isNaN(p) && p <= 0) motoristaRecebeComissao = false;
+          else motoristaRecebeComissao = true;
+        }
       }
     }
   }
+
   if (clientePaga && motoristaRecebeComissao && !isNaN(quantidade)) {
     comissaoMotorista = quantidade * 0.01;
   } else {
