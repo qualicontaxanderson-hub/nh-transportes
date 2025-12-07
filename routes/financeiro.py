@@ -1,25 +1,16 @@
 from flask import Blueprint, render_template, request, jsonify, flash, redirect, url_for
 from flask_login import login_required
-import mysql.connector
 import os
 from utils.boletos import emitir_boleto_frete
+from utils.db import get_db_connection  # USAR A FUNÇÃO CENTRALIZADA
 
 financeiro_bp = Blueprint('financeiro', __name__, url_prefix='/financeiro')
-
-def get_db_connection():
-    return mysql.connector.connect(
-        host=os.getenv('DB_HOST'),
-        user=os.getenv('DB_USER'),
-        password=os.getenv('DB_PASSWORD'),
-        database=os.getenv('DB_DATABASE'),
-        port=int(os.getenv('DB_PORT', 3306))
-    )
 
 @financeiro_bp.route('/recebimentos/')
 @login_required
 def recebimentos():
     """Lista todos os recebimentos/boletos"""
-    conn = get_db_connection()
+    conn = get_db_connection()  # USA A FUNÇÃO DO utils/db.py
     cursor = conn.cursor(dictionary=True)
     
     try:
