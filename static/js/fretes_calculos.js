@@ -1,6 +1,39 @@
 // JS de cálculos para o formulário de frete.
 // Depende de ROTAS (objeto origem|destino -> valor_por_litro) definido no template.
 
+// Fallbacks mínimos caso fretes_fixes.js não carregue
+if (typeof desformatarMoeda !== 'function') {
+  function desformatarMoeda(input) {
+    if (input === null || input === undefined) return 0;
+    var s = String(input).trim();
+    if (s === '') return 0;
+    s = s.replace(/[Rr]\$\s?/, '').trim();
+    if (s.indexOf('.') >= 0 && s.indexOf(',') >= 0) {
+      s = s.replace(/\./g, '').replace(',', '.');
+    } else if (s.indexOf(',') >= 0) {
+      s = s.replace(',', '.');
+    }
+    s = s.replace(/[^0-9\.-]/g, '');
+    var n = parseFloat(s);
+    return isNaN(n) ? 0 : n;
+  }
+}
+
+if (typeof formatarMoedaBR !== 'function') {
+  function formatarMoedaBR(valor, casas) {
+    casas = (typeof casas === 'number') ? casas : 2;
+    if (valor === null || valor === undefined) valor = 0;
+    var n = Number(valor) || 0;
+    var neg = n < 0;
+    n = Math.abs(n);
+    var inteiro = parseInt(n.toFixed(casas), 10) + '';
+    var dec = (n.toFixed(casas) + '').split('.')[1] || '';
+    inteiro = inteiro.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+    var s = inteiro + (casas ? ',' + (dec) : '');
+    return (neg ? '-' : '') + s;
+  }
+}
+
 function $id(id){ return document.getElementById(id); }
 
 function parseNumberFromField(el) {
