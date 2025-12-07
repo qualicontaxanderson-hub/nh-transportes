@@ -24,7 +24,7 @@ def emitir_boleto_frete(frete_id):
         dict: {"success": True/False, "error": str, "charge_id": str, "boleto_url": str, "barcode": str}
     """
     conn = get_db_connection()
-    cursor = conn.cursor(dictionary=True)  # IMPORTANTE: dictionary=True para acessar por nome
+    cursor = conn.cursor(dictionary=True)  # IMPORTANTE: dictionary=True
     
     try:
         # Buscar dados do frete e cliente
@@ -80,7 +80,7 @@ def emitir_boleto_frete(frete_id):
         # Data de vencimento: 7 dias a partir de hoje
         data_vencimento = datetime.now() + timedelta(days=7)
         
-        # Limpar CNPJ/CPF (remover caracteres especiais)
+        # Limpar CNPJ/CPF
         cpf_cnpj = frete['cliente_cnpj'].replace('.', '').replace('-', '').replace('/', '').strip()
         
         # Limpar telefone
@@ -89,7 +89,7 @@ def emitir_boleto_frete(frete_id):
         # Limpar CEP
         cep = (frete.get('cliente_cep') or '').replace('-', '').strip()
         if not cep or len(cep) != 8:
-            cep = '00000000'  # CEP padrão para sandbox
+            cep = '74000000'  # CEP padrão Goiânia
         
         # Nome do cliente
         nome_cliente = frete.get('cliente_fantasia') or frete.get('cliente_nome') or 'Cliente'
@@ -111,7 +111,7 @@ def emitir_boleto_frete(frete_id):
                 'banking_billet': {
                     'expire_at': data_vencimento.strftime('%Y-%m-%d'),
                     'customer': {
-                        'name': nome_cliente[:80],  # Limite de 80 caracteres
+                        'name': nome_cliente[:80],
                         'cpf': cpf_cnpj if len(cpf_cnpj) == 11 else None,
                         'cnpj': cpf_cnpj if len(cpf_cnpj) == 14 else None,
                         'phone_number': telefone[:11],
@@ -121,7 +121,7 @@ def emitir_boleto_frete(frete_id):
                             'number': (frete.get('cliente_numero') or 'SN')[:10],
                             'neighborhood': (frete.get('cliente_bairro') or 'Centro')[:50],
                             'zipcode': cep,
-                            'city': (frete.get('cliente_cidade') or 'Cidade')[:50],
+                            'city': (frete.get('cliente_cidade') or 'Goiania')[:50],
                             'state': (frete.get('cliente_estado') or 'GO')[:2].upper()
                         }
                     }
@@ -146,27 +146,29 @@ def emitir_boleto_frete(frete_id):
         boleto_url = response['data']['payment']['banking_billet']['link']
         barcode = response['data']['payment']['banking_billet']['barcode']
         
-        # Salvar na tabela recebimentos (ou cobrancas)
+        # Salvar na tabela recebimentos
         cursor.execute("""
-            INSERT INTO cobrancas 
-            (id_cliente, valor, data_vencimento, status, charge_id, link_boleto, data_emissao)
-            VALUES (%s, %s, %s, %s, %s, %s, NOW())
+            INSERT INTO recebimentos 
+            (frete_id, cliente_id, valor, data_vencimento, status, charge_id, boleto_url, codigo_barras, created_at)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, NOW())
         """, (
+            frete_id,
             frete['clientes_id'],
             frete['valor_total_frete'],
             data_vencimento.strftime('%Y-%m-%d'),
             'pendente',
             charge_id,
-            boleto_url
+            boleto_url,
+            barcode
         ))
         
-        boleto_id = cursor.lastrowid
+        recebimento_id = cursor.lastrowid
         
         conn.commit()
         
         return {
             "success": True,
-            "boleto_id": boleto_id,
+            "recebimento_id": recebimento_id,
             "charge_id": charge_id,
             "boleto_url": boleto_url,
             "barcode": barcode
