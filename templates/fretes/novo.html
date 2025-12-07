@@ -21,7 +21,14 @@
     </div>
 
     <div class="card-body" style="padding: 1rem;">
-      <form method="POST" action="{{ url_for('fretes.novo') }}" enctype="multipart/form-data">
+      <form method="POST"
+            action="{{ url_for('fretes.editar', id=frete.id) if frete else url_for('fretes.novo') }}"
+            enctype="multipart/form-data">
+
+        {# Garantir envio do id quando estivermos editando para evitar INSERT duplicado #}
+        {% if frete %}
+          <input type="hidden" name="id" value="{{ frete.id }}">
+        {% endif %}
 
         <!-- DATA / STATUS / BOTÃO IMPORTAR (VERDE) -->
         <div class="row mb-2 align-items-end">
