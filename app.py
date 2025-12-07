@@ -10,7 +10,8 @@ from flask_login import LoginManager
 def register_blueprints_from_routes(app):
     """
     Varre o pacote `routes` e tenta importar cada módulo.
-    Se o módulo expuser `bp` (Blueprint) ele é registrado automaticamente.
+    Se o módulo expuser `bp` ou qualquer atributo terminado em '_bp' (Blueprint) 
+    ele é registrado automaticamente.
     Exceções de import são logadas para diagnóstico (não interrompem o registro).
     """
     try:
@@ -23,15 +24,38 @@ def register_blueprints_from_routes(app):
         modname = f"{routes.__name__}.{name}"
         try:
             module = importlib.import_module(modname)
+            
+            # Procurar por 'bp' ou qualquer variável terminada em '_bp'
+            blueprint_found = False
+            
+            # Primeiro tenta 'bp' padrão
             bp = getattr(module, "bp", None)
             if bp is not None:
                 try:
                     app.register_blueprint(bp)
                     app.logger.info("Blueprint '%s' registrado a partir de %s", getattr(bp, "name", str(bp)), modname)
+                    blueprint_found = True
                 except Exception:
                     app.logger.exception("Falha ao registrar blueprint vindo de %s", modname)
-            else:
-                app.logger.debug("Módulo %s não expõe 'bp'; ignorando.", modname)
+            
+            # Se não encontrou 'bp', procura por variáveis terminadas em '_bp'
+            if not blueprint_found:
+                for attr_name in dir(module):
+                    if attr_name.endswith('_bp') and not attr_name.startswith('_'):
+                        bp_candidate = getattr(module, attr_name, None)
+                        if bp_candidate is not None and hasattr(bp_candidate, 'name'):
+                            try:
+                                app.register_blueprint(bp_candidate)
+                                app.logger.info("Blueprint '%s' registrado a partir de %s (variável: %s)", 
+                                              getattr(bp_candidate, "name", str(bp_candidate)), modname, attr_name)
+                                blueprint_found = True
+                                break  # Registra apenas o primeiro blueprint encontrado por módulo
+                            except Exception:
+                                app.logger.exception("Falha ao registrar blueprint '%s' vindo de %s", attr_name, modname)
+            
+            if not blueprint_found:
+                app.logger.debug("Módulo %s não expõe 'bp' ou '*_bp'; ignorando.", modname)
+                
         except Exception:
             app.logger.exception("Falha ao importar módulo de rotas %s", modname)
 
