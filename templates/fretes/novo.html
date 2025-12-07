@@ -63,6 +63,7 @@
               <option value="{{ cliente.id }}"
                       data-paga-comissao="{{ cliente.paga_comissao|default(1) }}"
                       data-cte-integral="{{ cliente.cte_integral|default(0) }}"
+                      data-percentual-cte="{{ cliente.percentual_cte|default(0) }}"
                       data-destino-id="{{ cliente.destino_id }}"
                       {% if cliente.id == (frete.clientes_id if frete else None) %}selected{% endif %}>
                 {{ cliente.razao_social }}
