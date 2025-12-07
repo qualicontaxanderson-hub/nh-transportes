@@ -35,6 +35,7 @@ function formatarMoedaBR(valor, casas) {
 
 // Aplica formatação ao elemento input passado (R$ X.xxx,xx)
 // Se usuário digitar apenas dígitos sem separador, interpretamos como inteiro escalado por 'casas'
+// Agora também sincroniza o hidden raw (ex: preco_produto_unitario_raw / preco_por_litro_raw)
 function aplicarFormatacaoMonetaria(el, casas) {
   if (!el) return;
   try {
@@ -47,7 +48,37 @@ function aplicarFormatacaoMonetaria(el, casas) {
       // entrada com separadores/virgula/dot -> parse normal
       valorNum = desformatarMoeda(rawStr);
     }
+
+    // atualizar valor formatado visível
     el.value = 'R$ ' + formatarMoedaBR(valorNum, casas);
+
+    // sincronizar hidden raw (id + "_raw"), criando se necessário
+    try {
+      var rawId = el.id + '_raw';
+      var rawEl = document.getElementById(rawId);
+      if (!rawEl) {
+        // tentar anexar ao mesmo form
+        var form = el.form || document.querySelector('form');
+        if (form) {
+          rawEl = document.createElement('input');
+          rawEl.type = 'hidden';
+          rawEl.id = rawId;
+          rawEl.name = rawId;
+          form.appendChild(rawEl);
+        }
+      }
+      if (rawEl) {
+        // garante valor numérico puro com ponto decimal
+        rawEl.value = (Math.round((Number(valorNum || 0) + Number.EPSILON) * 1000) / 1000);
+        // para campos com 2 casas, arredondar a 2 casas no raw se preferir:
+        if (casas === 2) {
+          rawEl.value = (Math.round((Number(valorNum || 0) + Number.EPSILON) * 100) / 100);
+        }
+      }
+    } catch (e) {
+      console.error('Erro ao sincronizar hidden raw:', e);
+    }
+
   } catch (e) {
     console.error('aplicarFormatacaoMonetaria error', e);
   }
@@ -64,6 +95,8 @@ function initFretesFixes() {
       aplicarFormatacaoMonetaria(this, 3);
       try{ if (typeof calcularTudo==='function') calcularTudo(); }catch(e){}
     });
+    // também reagir ao input para atualizar raw enquanto digita (opcional)
+    elPrecoProduto.addEventListener('input', function(){ /* nada aqui para não atrapalhar digitação */ });
   }
 
   if (elPrecoPorLitro) {
