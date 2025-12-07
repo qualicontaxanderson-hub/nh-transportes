@@ -127,8 +127,6 @@ def novo():
                 else:
                     qtd_id = request.form.get('quantidade_id')
                     if qtd_id:
-                        # campo enviado provavelmente contém o id; tentar obter data via rotas/quantidades não temos aqui.
-                        # O formulário normalmente envia valor_total_frete e total_nf_compra já calculados; usar esses quando disponíveis.
                         quantidade = None
             except Exception:
                 quantidade = None
@@ -219,10 +217,17 @@ def novo():
             except Exception:
                 motorista_recebe_comissao = True
 
-            # aplicar regra: se cliente não paga ou motorista não recebe => zerar comissão_motorista
-            if not cliente_paga_frete or not motorista_recebe_comissao:
+            # aplicar regra: se cliente não paga => zerar valores faturamento e lucro absoluto 0
+            if not cliente_paga_frete:
+                valor_total_frete = 0
                 comissao_motorista = 0
-                lucro = (valor_total_frete or 0) - (comissao_motorista or 0) - (comissao_cte or 0)
+                # regra de negócio: lucro = 0 (sempre) quando cliente não paga frete
+                lucro = 0
+            else:
+                # se cliente paga mas motorista não recebe, zera a comissao do motorista
+                if not motorista_recebe_comissao:
+                    comissao_motorista = 0
+                    lucro = (valor_total_frete or 0) - (comissao_motorista or 0) - (comissao_cte or 0)
 
             # inserir na tabela fretes
             cur = conn.cursor()
@@ -521,17 +526,19 @@ def editar(id):
             except Exception:
                 motorista_recebe_comissao = True
 
+            # aplicar regra: se cliente não paga => zerar valores faturamento e lucro absoluto 0
             if not cliente_paga_frete:
                 preco_por_litro = 0
                 valor_total_frete = 0
                 comissao_motorista = 0
-                comissao_cte = 0
-                lucro = round(0 - float(comissao_cte or 0) - float(comissao_motorista or 0), 2)
-
-            # se cliente paga mas motorista não recebe, zera a comissao do motorista
-            if cliente_paga_frete and not motorista_recebe_comissao:
-                comissao_motorista = 0
-                lucro = round((valor_total_frete or 0) - float(comissao_motorista or 0) - float(comissao_cte or 0), 2)
+                comissao_cte = comissao_cte or 0
+                # regra de negócio: lucro = 0 (sempre) quando cliente não paga frete
+                lucro = 0
+            else:
+                # se cliente paga mas motorista não recebe, zera a comissao do motorista
+                if cliente_paga_frete and not motorista_recebe_comissao:
+                    comissao_motorista = 0
+                    lucro = round((valor_total_frete or 0) - float(comissao_motorista or 0) - float(comissao_cte or 0), 2)
 
             cursor.execute("""
                 UPDATE fretes SET
