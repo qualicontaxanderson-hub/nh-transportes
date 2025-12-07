@@ -124,9 +124,14 @@ def novo():
         cursor.execute("SELECT id, nome FROM destinos ORDER BY nome")
         destinos = cursor.fetchall()
 
-        # IMPORTANT: trazer os campos de configuração do motorista para o template
-        cursor.execute("SELECT id, nome, percentual_comissao, paga_comissao FROM motoristas ORDER BY nome")
-        motoristas = cursor.fetchall()
+        # IMPORTANT: tentar trazer campos de configuração do motorista, mas com fallback se a coluna não existir
+        try:
+            cursor.execute("SELECT id, nome, percentual_comissao, paga_comissao FROM motoristas ORDER BY nome")
+            motoristas = cursor.fetchall()
+        except Exception:
+            # schema mais antigo: sem campos extras
+            cursor.execute("SELECT id, nome FROM motoristas ORDER BY nome")
+            motoristas = cursor.fetchall()
 
         cursor.execute("SELECT id, caminhao, placa FROM veiculos WHERE ativo = 1 ORDER BY caminhao")
         veiculos = cursor.fetchall()
@@ -437,8 +442,13 @@ def editar(id):
         cursor.execute("SELECT * FROM destinos ORDER BY nome")
         destinos = cursor.fetchall()
 
-        cursor.execute("SELECT * FROM motoristas ORDER BY nome")
-        motoristas = cursor.fetchall()
+        # motoristas: tentar trazer campos extras com fallback para schema antigo
+        try:
+            cursor.execute("SELECT id, nome, percentual_comissao, paga_comissao FROM motoristas ORDER BY nome")
+            motoristas = cursor.fetchall()
+        except Exception:
+            cursor.execute("SELECT id, nome FROM motoristas ORDER BY nome")
+            motoristas = cursor.fetchall()
 
         cursor.execute("SELECT * FROM veiculos ORDER BY caminhao")
         veiculos = cursor.fetchall()
