@@ -1,7 +1,13 @@
 // JS de cálculos para o formulário de frete.
-// Depende de ROTAS (objeto origem|destino -> valor_por_litro) definido no template.
+// Implementa as regras de negócio:
+// - Total NF = qtd * preco unitario
+// - Valor Total Frete = qtd * preco por litro (se cliente paga frete)
+// - Valor CTe = (CTE Integral ? Valor Total Frete : qtd * valor_rota(origem|destino))
+// - Comissão Motorista = qtd * 0.01 (zera se cliente não paga ou motorista não recebe)
+// - Comissão CTe = Valor CTe * 8% (sempre)
+// - Lucro = Valor Total Frete - Comissão Motorista - Comissão CTe
+// Atualiza hidden *_raw para submissão; não altera layout.
 
-// Fallbacks mínimos caso fretes_fixes.js não carregue
 if (typeof desformatarMoeda !== 'function') {
   function desformatarMoeda(input) {
     if (input === null || input === undefined) return 0;
@@ -34,7 +40,7 @@ if (typeof formatarMoedaBR !== 'function') {
   }
 }
 
-function $id(id){ return document.getElementById(id); }
+function $id(id) { return document.getElementById(id); }
 
 function parseNumberFromField(el) {
   if (!el) return 0;
@@ -47,17 +53,15 @@ function readQuantidade() {
   var manual = $id('quantidade_manual');
   if (manual && manual.value.trim() !== '') {
     var s = String(manual.value).trim();
-    // Se usuário usa ponto como separador de milhar: "9.975" => 9975 (sem vírgula)
+    // "9.975" => 9975 when no comma present
     if (s.indexOf('.') >= 0 && s.indexOf(',') === -1) {
       var cleaned = s.replace(/\./g, '');
       var v = parseInt(cleaned, 10);
       return isNaN(v) ? NaN : v;
     }
-    // Se somente dígitos -> inteiro direto
     if (/^\d+$/.test(s)) {
       return parseInt(s, 10);
     }
-    // Caso com vírgula ou outro formato -> usar desformatarMoeda e arredondar para inteiro
     var n = desformatarMoeda(s);
     if (isNaN(n)) return NaN;
     return Math.round(n);
@@ -88,19 +92,19 @@ function readPrecoPorLitroRaw() {
   return parseNumberFromField($id('preco_por_litro')) || 0;
 }
 
-function calcularValorCTe(quantidade) {
+function calcularValorCTeViaRotas(quantidade) {
   var origem = $id('origem_id') ? $id('origem_id').value : null;
   var destino = ($id('destino_id') && $id('destino_id').value) ? $id('destino_id').value : null;
   if (!origem || !destino) return 0;
   var key = origem + '|' + destino;
   try {
     if (typeof ROTAS !== 'undefined' && ROTAS && ROTAS[key]) return Number(ROTAS[key]) * Number(quantidade || 0);
-    // tentar conversões de tipo (ids numéricos)
+    // try numeric-key fallback
     var keys = [origem + '|' + destino, parseInt(origem,10) + '|' + parseInt(destino,10)];
-    for (var i=0;i<keys.length;i++){
+    for (var i = 0; i < keys.length; i++) {
       if (ROTAS[keys[i]]) return Number(ROTAS[keys[i]]) * Number(quantidade || 0);
     }
-  } catch(e){ console.error(e); }
+  } catch (e) { console.error(e); }
   return 0;
 }
 
@@ -114,18 +118,16 @@ function ensureHidden(name) {
   if (form) form.appendChild(h);
 }
 
-// Função principal que recalcula todos os resultados e atualiza o DOM
 function calcularTudo() {
-  // garantir hidden raw para preços
   ensureHidden('preco_produto_unitario_raw');
   ensureHidden('preco_por_litro_raw');
 
-  // garantir hidden numerics para totais (envio)
   ensureHidden('total_nf_compra_raw');
   ensureHidden('valor_total_frete_raw');
   ensureHidden('valor_cte_raw');
   ensureHidden('comissao_cte_raw');
   ensureHidden('lucro_raw');
+  ensureHidden('comissao_motorista_raw');
 
   var quantidade = readQuantidade();
   if (isNaN(quantidade) || quantidade <= 0) quantidade = NaN;
@@ -133,22 +135,37 @@ function calcularTudo() {
   var precoUnit = readPrecoProdutoUnitario();
   var precoPorLitro = readPrecoPorLitroRaw();
 
-  // total NF = quantidade * precoUnit (se existir quantidade), senão apenas precoUnit
+  // Total NF
   var totalNF = 0;
   if (!isNaN(quantidade)) totalNF = precoUnit * quantidade;
   else totalNF = precoUnit;
 
-  // valor total frete = quantidade * precoPorLitro
+  // Valor Total Frete (faturado ao cliente)
   var valorTotalFrete = 0;
   if (!isNaN(quantidade)) valorTotalFrete = precoPorLitro * quantidade;
   else valorTotalFrete = precoPorLitro;
 
-  // valor CTe via rotas
-  var valorCTe = calcularValorCTe(quantidade) || 0;
+  // client flags from fretes_fixes.js
+  var clientePaga = !!window.__CLIENTE_PAGA_FRETE;
+  var cteIntegral = !!window.__CLIENTE_CTE_INTEGRAL;
 
-  // COMISSÃO MOTORISTA (sempre calculada, sem override manual)
+  // if client doesn't pay frete, faturamento é zero
+  if (!clientePaga) {
+    valorTotalFrete = 0;
+  }
+
+  // Valor CTe
+  var valorCTe = 0;
+  if (cteIntegral) {
+    // CTE integral = valorTotalFrete (which may be 0 if client doesn't pay)
+    valorCTe = valorTotalFrete;
+  } else {
+    // rota-based, independent of client pay flag (operational value)
+    valorCTe = calcularValorCTeViaRotas(quantidade) || 0;
+  }
+
+  // Comissão Motorista (sempre calculada pela regra)
   var comissaoMotorista = 0;
-  // verificar se motorista recebe comissão (motorista option data-percentual)
   var motoristaSel = $id('motoristas_id');
   var motoristaRecebeComissao = true;
   if (motoristaSel) {
@@ -160,38 +177,26 @@ function calcularTudo() {
       }
     }
   }
-
-  // regra cliente paga frete?
-  var clientePaga = !!window.__CLIENTE_PAGA_FRETE;
-
   if (clientePaga && motoristaRecebeComissao && !isNaN(quantidade)) {
     comissaoMotorista = quantidade * 0.01;
   } else {
     comissaoMotorista = 0;
   }
 
-  // comissao CTe: percentual cliente (fallback 8% se não configurado)
-  var percentualCte = (typeof window.__CLIENTE_PERCENTUAL_CTE !== 'undefined' && window.__CLIENTE_PERCENTUAL_CTE > 0) ? window.__CLIENTE_PERCENTUAL_CTE : 8;
+  // Comissão CTe = 8% do valorCTe (sempre)
   var comissaoCte = 0;
-  if (percentualCte && percentualCte > 0) {
-    comissaoCte = (percentualCte / 100.0) * valorCTe;
-  }
+  comissaoCte = 0.08 * Number(valorCTe || 0);
 
-  // regra cliente paga frete? (quando não paga, frete e comissões zeram)
+  // Lucro
+  var lucro = 0;
   if (!clientePaga) {
-    precoPorLitro = 0;
-    valorTotalFrete = 0;
-    comissaoMotorista = 0;
-    comissaoCte = 0;
+    // Business rule: when client doesn't pay frete, lucro displayed must be 0.00
+    lucro = 0;
+  } else {
+    lucro = valorTotalFrete - comissaoMotorista - comissaoCte;
   }
 
-  // LUCRO = VALOR TOTAL FRETE - COMISSÃO MOTORISTA - COMISSÃO CTE
-  var lucro = valorTotalFrete - comissaoMotorista - comissaoCte;
-  if (!clientePaga) {
-    lucro = 0 - (comissaoCte + comissaoMotorista);
-  }
-
-  // Atualizar campos visuais (formatados)
+  // Update visual fields
   var elTotalNF = $id('total_nf_compra');
   var elValorFrete = $id('valor_total_frete');
   var elValorCTe = $id('valor_cte');
@@ -206,7 +211,7 @@ function calcularTudo() {
   if (elComissaoCte) elComissaoCte.value = 'R$ ' + formatarMoedaBR(comissaoCte, 2);
   if (elLucro) elLucro.value = 'R$ ' + formatarMoedaBR(lucro, 2);
 
-  // Atualizar hidden raws para envio (numeros puros)
+  // Update hidden raws
   var hPrecoUnit = $id('preco_produto_unitario_raw');
   var hPrecoLitro = $id('preco_por_litro_raw');
   var hTotalNF = $id('total_nf_compra_raw');
@@ -214,6 +219,7 @@ function calcularTudo() {
   var hValorCTe = $id('valor_cte_raw');
   var hComissaoCte = $id('comissao_cte_raw');
   var hLucro = $id('lucro_raw');
+  var hComissaoMotorista = $id('comissao_motorista_raw') || $id('comissao_motorista');
 
   if (hPrecoUnit) hPrecoUnit.value = (precoUnit || 0);
   if (hPrecoLitro) hPrecoLitro.value = (precoPorLitro || 0);
@@ -222,4 +228,5 @@ function calcularTudo() {
   if (hValorCTe) hValorCTe.value = (Math.round((valorCTe + Number.EPSILON) * 100) / 100);
   if (hComissaoCte) hComissaoCte.value = (Math.round((comissaoCte + Number.EPSILON) * 100) / 100);
   if (hLucro) hLucro.value = (Math.round((lucro + Number.EPSILON) * 100) / 100);
+  if (hComissaoMotorista) hComissaoMotorista.value = (Math.round((comissaoMotorista + Number.EPSILON) * 100) / 100);
 }
