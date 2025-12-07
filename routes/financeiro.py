@@ -1,8 +1,7 @@
 from flask import Blueprint, render_template, request, jsonify, flash, redirect, url_for
 from flask_login import login_required
-import os
+from utils.db import get_db_connection
 from utils.boletos import emitir_boleto_frete
-from utils.db import get_db_connection  # USAR A FUNÇÃO CENTRALIZADA
 
 financeiro_bp = Blueprint('financeiro', __name__, url_prefix='/financeiro')
 
@@ -10,7 +9,7 @@ financeiro_bp = Blueprint('financeiro', __name__, url_prefix='/financeiro')
 @login_required
 def recebimentos():
     """Lista todos os recebimentos/boletos"""
-    conn = get_db_connection()  # USA A FUNÇÃO DO utils/db.py
+    conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
     
     try:
