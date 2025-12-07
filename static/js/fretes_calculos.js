@@ -132,29 +132,59 @@ function calcularTudo() {
   // valor CTe via rotas
   var valorCTe = calcularValorCTe(quantidade) || 0;
 
-  // comissao motorista - se houver valor manual, usar; caso contrário usar default 0
+  // COMISSÃO MOTORISTA
+  // regra: se houver valor manual no campo "comissao_motorista" -> usar.
+  // senão -> calcular como quantidade * 0.01 (1 cent por litro), exceto:
+  // - se cliente não paga frete -> 0
+  // - se motorista configured data-percentual == 0 -> não recebe comissão (0)
   var comissaoMotoristaField = $id('comissao_motorista');
   var comissaoMotorista = 0;
-  if (comissaoMotoristaField && comissaoMotoristaField.value) comissaoMotorista = desformatarMoeda(comissaoMotoristaField.value);
 
-  // comissao CTe: percentual cliente
-  var percentualCte = window.__CLIENTE_PERCENTUAL_CTE || 0;
+  // verificar se motorista recebe comissão (motorista option data-percentual)
+  var motoristaSel = $id('motoristas_id');
+  var motoristaRecebeComissao = true;
+  if (motoristaSel) {
+    var mOpt = motoristaSel.options[motoristaSel.selectedIndex];
+    if (mOpt) {
+      var mPercentAttr = mOpt.getAttribute('data-percentual');
+      if (typeof mPercentAttr !== 'undefined' && (mPercentAttr === '0' || String(mPercentAttr).toLowerCase() === 'false')) {
+        motoristaRecebeComissao = false;
+      }
+    }
+  }
+
+  // regra cliente paga frete?
+  var clientePaga = !!window.__CLIENTE_PAGA_FRETE;
+
+  if (comissaoMotoristaField && comissaoMotoristaField.value && String(comissaoMotoristaField.value).trim() !== '') {
+    comissaoMotorista = desformatarMoeda(comissaoMotoristaField.value);
+  } else {
+    if (clientePaga && motoristaRecebeComissao && !isNaN(quantidade)) {
+      comissaoMotorista = quantidade * 0.01;
+    } else {
+      comissaoMotorista = 0;
+    }
+  }
+
+  // comissao CTe: percentual cliente (fallback 8% se não configurado)
+  var percentualCte = (typeof window.__CLIENTE_PERCENTUAL_CTE !== 'undefined' && window.__CLIENTE_PERCENTUAL_CTE > 0) ? window.__CLIENTE_PERCENTUAL_CTE : 8;
   var comissaoCte = 0;
   if (percentualCte && percentualCte > 0) {
     comissaoCte = (percentualCte / 100.0) * valorCTe;
   }
 
   // regra cliente paga frete?
-  var clientePaga = !!window.__CLIENTE_PAGA_FRETE;
   if (!clientePaga) {
     precoPorLitro = 0;
     valorTotalFrete = 0;
+    // quando cliente não paga frete, o comissaoMotorista e comissaoCte devem ser zero
     comissaoMotorista = 0;
     comissaoCte = 0;
   }
 
-  // lucro = valorTotalFrete - totalNF - comissaoMotorista - comissaoCte - valorCTe
-  var lucro = valorTotalFrete - totalNF - comissaoMotorista - comissaoCte - valorCTe;
+  // LUCRO: conforme solicitado -> LUCRO = VALOR TOTAL FRETE - COMISSÃO MOTORISTA - COMISSÃO CTE
+  var lucro = valorTotalFrete - comissaoMotorista - comissaoCte;
+  // manter comportamento anterior caso cliente não pague (lucro negativo das comissões)
   if (!clientePaga) {
     lucro = 0 - (comissaoCte + comissaoMotorista);
   }
