@@ -124,12 +124,12 @@ def novo():
         cursor.execute("SELECT id, nome FROM destinos ORDER BY nome")
         destinos = cursor.fetchall()
 
-        # IMPORTANT: tentar trazer campos de configuração do motorista, mas com fallback se a coluna não existir
+        # Tentar buscar campos extras dos motoristas; se coluna não existir, usar fallback (id,nome)
         try:
             cursor.execute("SELECT id, nome, percentual_comissao, paga_comissao FROM motoristas ORDER BY nome")
             motoristas = cursor.fetchall()
         except Exception:
-            # schema mais antigo: sem campos extras
+            # coluna percentual_comissao/paga_comissao pode não existir no schema atual
             cursor.execute("SELECT id, nome FROM motoristas ORDER BY nome")
             motoristas = cursor.fetchall()
 
