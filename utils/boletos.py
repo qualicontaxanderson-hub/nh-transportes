@@ -1,17 +1,7 @@
 import os
-import mysql.connector
 from datetime import datetime, timedelta
 from efipay import EfiPay
-
-def get_db_connection():
-    """Retorna conexão com o banco de dados MySQL"""
-    return mysql.connector.connect(
-        host=os.getenv('DB_HOST'),
-        user=os.getenv('DB_USER'),
-        password=os.getenv('DB_PASSWORD'),
-        database=os.getenv('DB_DATABASE'),
-        port=int(os.getenv('DB_PORT', 3306))
-    )
+from utils.db import get_db_connection
 
 def emitir_boleto_frete(frete_id):
     """
@@ -24,7 +14,7 @@ def emitir_boleto_frete(frete_id):
         dict: {"success": True/False, "error": str, "charge_id": str, "boleto_url": str, "barcode": str}
     """
     conn = get_db_connection()
-    cursor = conn.cursor(dictionary=True)  # IMPORTANTE: dictionary=True
+    cursor = conn.cursor(dictionary=True)
     
     try:
         # Buscar dados do frete e cliente
