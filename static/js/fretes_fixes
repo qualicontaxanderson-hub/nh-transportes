@@ -1,23 +1,27 @@
-// JS helpers: formatação e bindings mínimos para fretes
+// Utilitários e bindings usados pelo formulário de frete.
+// Deve ser carregado antes de fretes_calculos.js
 
+// Converte string formatada para número (aceita formatos BR: "R$ 1.234,56" ou "1.234,56" ou "1234.56")
 function desformatarMoeda(input) {
   if (input === null || input === undefined) return 0;
   var s = String(input).trim();
   if (s === '') return 0;
-  // remove R$ e espaços
+  // remover prefixo R$
   s = s.replace(/[Rr]\$\s?/, '').trim();
-  // remove pontos de milhar e troca vírgula por ponto (se ambos presentes)
+  // tratar milhares e decimais
+  // se tem '.' e ',' assume formato BR (1.234,56)
   if (s.indexOf('.') >= 0 && s.indexOf(',') >= 0) {
     s = s.replace(/\./g, '').replace(',', '.');
   } else if (s.indexOf(',') >= 0) {
     s = s.replace(',', '.');
   }
-  // remove caracteres não numéricos exceto . e -
+  // remover qualquer caractere que não seja dígito, ponto ou sinal
   s = s.replace(/[^0-9\.-]/g, '');
   var n = parseFloat(s);
   return isNaN(n) ? 0 : n;
 }
 
+// Formata número para string BR (sem prefixo "R$") — ex: 1234.5 -> "1.234,50"
 function formatarMoedaBR(valor, casas) {
   casas = (typeof casas === 'number') ? casas : 2;
   if (valor === null || valor === undefined) valor = 0;
@@ -31,71 +35,82 @@ function formatarMoedaBR(valor, casas) {
   return (neg ? '-' : '') + s;
 }
 
-function interpretarEntrada(raw, casas) {
-  var r = String(raw || '').trim();
-  if (!r) return 0;
-  var only = r.replace(/\D/g, '');
-  var hasSep = r.indexOf(',') >= 0 || r.indexOf('.') >= 0;
-  if (only && !hasSep) {
-    return parseInt(only, 10) / Math.pow(10, casas);
-  }
-  return desformatarMoeda(r);
-}
-
-function bindFormatInput(el, casas) {
+// Aplica formatação ao elemento input passado (R$ X,XXX,XX)
+function aplicarFormatacaoMonetaria(el, casas) {
   if (!el) return;
-  // quando perde o foco, formata e atualiza hidden raw
-  el.addEventListener('blur', function() {
-    try {
-      var raw = el.value || '';
-      var v = interpretarEntrada(raw, casas);
-      el.value = 'R$ ' + formatarMoedaBR(v, casas);
-      var hid = document.getElementById(el.id + '_raw') || document.getElementById(el.name + '_raw') || null;
-      if (hid) hid.value = String(v);
-    } catch (e) {
-      console.error('bindFormatInput error', e);
-    }
-  });
-
-  // também atualizar em tempo real (input) para recalcular sem precisar blur
-  el.addEventListener('input', function() {
-    try {
-      var v = interpretarEntrada(el.value || '', casas);
-      var hid = document.getElementById(el.id + '_raw') || document.getElementById(el.name + '_raw') || null;
-      if (hid) hid.value = String(v);
-      try { if (typeof calcularTudo === 'function') calcularTudo(); } catch(e){/*ignore*/ }
-    } catch (e) {
-      console.error('bindFormatInput input error', e);
-    }
-  });
+  try {
+    var raw = desformatarMoeda(el.value);
+    el.value = 'R$ ' + formatarMoedaBR(raw, casas);
+  } catch (e) {
+    console.error('aplicarFormatacaoMonetaria error', e);
+  }
 }
 
+// Inicializador que anexa listeners de blur/input nos campos de preço e comissões
 function initFretesFixes() {
-  // Bind formatting for preco_produto_unitario (3 casas) and preco_por_litro (2 casas)
-  bindFormatInput(document.getElementById('preco_produto_unitario'), 3);
-  bindFormatInput(document.getElementById('preco_por_litro'), 2);
+  // campos monetários principais
+  var elPrecoProduto = document.getElementById('preco_produto_unitario');
+  var elPrecoPorLitro = document.getElementById('preco_por_litro');
+  var elComissaoMotorista = document.getElementById('comissao_motorista');
 
-  // Se houver campo quantidade_manual, bind eventos para recalcular
-  var qtd = document.getElementById('quantidade_manual');
-  if (qtd) {
-    qtd.addEventListener('blur', function(){ try { if (typeof calcularTudo === 'function') calcularTudo(); } catch(e){console.error(e);} });
-    qtd.addEventListener('input', function(){ try { if (typeof calcularTudo === 'function') calcularTudo(); } catch(e){console.error(e);} });
+  if (elPrecoProduto) {
+    // formatar ao carregar (se já tiver valor) e ao blur
+    aplicarFormatacaoMonetaria(elPrecoProduto, 3);
+    elPrecoProduto.addEventListener('blur', function(){ aplicarFormatacaoMonetaria(this, 3); try{ if (typeof calcularTudo==='function') calcularTudo(); }catch(e){} });
+    elPrecoProduto.addEventListener('input', function(){ /* não recalcula a cada tecla para performance */ });
   }
 
-  // Também escutar mudanças em selects relevantes
-  var qSel = document.getElementById('quantidade_id');
-  if (qSel) qSel.addEventListener('change', function(){ try { if (typeof calcularTudo === 'function') calcularTudo(); } catch(e){console.error(e);} });
+  if (elPrecoPorLitro) {
+    aplicarFormatacaoMonetaria(elPrecoPorLitro, 2);
+    elPrecoPorLitro.addEventListener('blur', function(){ aplicarFormatacaoMonetaria(this, 2); try{ if (typeof calcularTudo==='function') calcularTudo(); }catch(e){} });
+    elPrecoPorLitro.addEventListener('input', function(){});
+  }
 
-  var precoUnit = document.getElementById('preco_produto_unitario');
-  var precoLitro = document.getElementById('preco_por_litro');
-  if (precoUnit) precoUnit.addEventListener('blur', function(){ try { if (typeof calcularTudo === 'function') calcularTudo(); } catch(e){console.error(e);} });
-  if (precoUnit) precoUnit.addEventListener('input', function(){ try { if (typeof calcularTudo === 'function') calcularTudo(); } catch(e){console.error(e);} });
-  if (precoLitro) precoLitro.addEventListener('blur', function(){ try { if (typeof calcularTudo === 'function') calcularTudo(); } catch(e){console.error(e);} });
-  if (precoLitro) precoLitro.addEventListener('input', function(){ try { if (typeof calcularTudo === 'function') calcularTudo(); } catch(e){console.error(e);} });
+  if (elComissaoMotorista) {
+    // comissionista pode ser manual — mas sempre formatar
+    aplicarFormatacaoMonetaria(elComissaoMotorista, 2);
+    elComissaoMotorista.addEventListener('blur', function(){ aplicarFormatacaoMonetaria(this, 2); try{ if (typeof calcularTudo==='function') calcularTudo(); }catch(e){} });
+  }
 
-  // bind origem/destino changes to recalc
-  var origem = document.getElementById('origem_id');
-  var destino = document.getElementById('destino_id');
-  if (origem) origem.addEventListener('change', function(){ try { if (typeof calcularTudo === 'function') calcularTudo(); } catch(e){console.error(e);} });
-  if (destino) destino.addEventListener('change', function(){ try { if (typeof calcularTudo === 'function') calcularTudo(); } catch(e){console.error(e);} });
+  // quantidade manual/listbox toggle
+  var qTipo = document.getElementById('quantidade_tipo');
+  var divPadrao = document.getElementById('div_quantidade_padrao');
+  var divManual = document.getElementById('div_quantidade_personalizada');
+  if (qTipo && divPadrao && divManual) {
+    function aplicarTipo() {
+      if (qTipo.value === 'personalizada') {
+        divPadrao.style.display = 'none';
+        divManual.style.display = '';
+      } else {
+        divPadrao.style.display = '';
+        divManual.style.display = 'none';
+      }
+      try{ if (typeof calcularTudo==='function') calcularTudo(); }catch(e){}
+    }
+    qTipo.addEventListener('change', aplicarTipo);
+    aplicarTipo();
+  }
+
+  // quando seleção de quantidade ou manual mudar, recalcular
+  var selQuantidade = document.getElementById('quantidade_id');
+  var qtdManual = document.getElementById('quantidade_manual');
+  if (selQuantidade) selQuantidade.addEventListener('change', function(){ try{ if (typeof calcularTudo==='function') calcularTudo(); }catch(e){} });
+  if (qtdManual) qtdManual.addEventListener('blur', function(){ try{ if (typeof calcularTudo==='function') calcularTudo(); }catch(e){} });
+
+  // origem/destino changes impactam CTe
+  var origemEl = document.getElementById('origem_id');
+  var destinoEl = document.getElementById('destino_id');
+  if (origemEl) origemEl.addEventListener('change', function(){ try{ if (typeof calcularTudo==='function') calcularTudo(); }catch(e){} });
+  if (destinoEl) destinoEl.addEventListener('change', function(){ try{ if (typeof calcularTudo==='function') calcularTudo(); }catch(e){} });
+
+  // cliente change (aplicação de regras já no template chama aplicarRegraCliente, mas aqui garantimos que exista)
+  var clienteSel = document.getElementById('clientes_id');
+  if (clienteSel) {
+    // nada adicional: template aplica regras ao carregar/alterar
+  }
 }
+
+// garantir que funções existam no escopo global para que fretes_calculos.js as consuma
+window.desformatarMoeda = desformatarMoeda;
+window.formatarMoedaBR = formatarMoedaBR;
+window.initFretesFixes = initFretesFixes;
