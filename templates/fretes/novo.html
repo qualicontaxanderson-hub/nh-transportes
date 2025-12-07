@@ -63,7 +63,7 @@
               <option value="">Selecione um cliente</option>
               {% for cliente in clientes %}
                 <option value="{{ cliente.id }}"
-                        data-paga-frete="{{ cliente.paga_frete|default(0) }}"
+                        data-paga-comissao="{{ cliente.paga_frete|default(0) }}"
                         {% if frete and cliente.id == frete.clientes_id %}selected{% endif %}>
                   {{ cliente.nome }}
                 </option>
@@ -231,7 +231,7 @@
   // Função simples para marcar flag clientePaga ao selecionar cliente (exemplo)
   function onClienteChange(sel) {
     var opt = sel.options[sel.selectedIndex];
-    var paga = opt ? opt.getAttribute('data-paga-frete') : null;
+    var paga = opt ? opt.getAttribute('data-paga-comissao') : null;
     // converte para boolean; default seguro = false
     window.__CLIENTE_PAGA_FRETE = (paga !== null) ? (String(paga).trim() !== '0' && String(paga).trim().toLowerCase() !== 'false') : false;
     // Recalcula valores quando o cliente muda
