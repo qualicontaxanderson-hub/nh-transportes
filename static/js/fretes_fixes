@@ -1,4 +1,5 @@
 // JS helpers: formatação e bindings mínimos para fretes
+
 function desformatarMoeda(input) {
   if (input === null || input === undefined) return 0;
   var s = String(input).trim();
@@ -43,16 +44,28 @@ function interpretarEntrada(raw, casas) {
 
 function bindFormatInput(el, casas) {
   if (!el) return;
+  // quando perde o foco, formata e atualiza hidden raw
   el.addEventListener('blur', function() {
     try {
       var raw = el.value || '';
       var v = interpretarEntrada(raw, casas);
       el.value = 'R$ ' + formatarMoedaBR(v, casas);
-      // if there's a corresponding hidden raw input, set it
       var hid = document.getElementById(el.id + '_raw') || document.getElementById(el.name + '_raw') || null;
-      if (hid) hid.value = String(v).replace(',', '.');
+      if (hid) hid.value = String(v);
     } catch (e) {
       console.error('bindFormatInput error', e);
+    }
+  });
+
+  // também atualizar em tempo real (input) para recalcular sem precisar blur
+  el.addEventListener('input', function() {
+    try {
+      var v = interpretarEntrada(el.value || '', casas);
+      var hid = document.getElementById(el.id + '_raw') || document.getElementById(el.name + '_raw') || null;
+      if (hid) hid.value = String(v);
+      try { if (typeof calcularTudo === 'function') calcularTudo(); } catch(e){/*ignore*/ }
+    } catch (e) {
+      console.error('bindFormatInput input error', e);
     }
   });
 }
@@ -62,9 +75,12 @@ function initFretesFixes() {
   bindFormatInput(document.getElementById('preco_produto_unitario'), 3);
   bindFormatInput(document.getElementById('preco_por_litro'), 2);
 
-  // Se houver campo quantidade_manual, bind blur para recalcular
+  // Se houver campo quantidade_manual, bind eventos para recalcular
   var qtd = document.getElementById('quantidade_manual');
-  if (qtd) qtd.addEventListener('blur', function(){ try { if (typeof calcularTudo === 'function') calcularTudo(); } catch(e){console.error(e);} });
+  if (qtd) {
+    qtd.addEventListener('blur', function(){ try { if (typeof calcularTudo === 'function') calcularTudo(); } catch(e){console.error(e);} });
+    qtd.addEventListener('input', function(){ try { if (typeof calcularTudo === 'function') calcularTudo(); } catch(e){console.error(e);} });
+  }
 
   // Também escutar mudanças em selects relevantes
   var qSel = document.getElementById('quantidade_id');
@@ -73,5 +89,13 @@ function initFretesFixes() {
   var precoUnit = document.getElementById('preco_produto_unitario');
   var precoLitro = document.getElementById('preco_por_litro');
   if (precoUnit) precoUnit.addEventListener('blur', function(){ try { if (typeof calcularTudo === 'function') calcularTudo(); } catch(e){console.error(e);} });
+  if (precoUnit) precoUnit.addEventListener('input', function(){ try { if (typeof calcularTudo === 'function') calcularTudo(); } catch(e){console.error(e);} });
   if (precoLitro) precoLitro.addEventListener('blur', function(){ try { if (typeof calcularTudo === 'function') calcularTudo(); } catch(e){console.error(e);} });
+  if (precoLitro) precoLitro.addEventListener('input', function(){ try { if (typeof calcularTudo === 'function') calcularTudo(); } catch(e){console.error(e);} });
+
+  // bind origem/destino changes to recalc
+  var origem = document.getElementById('origem_id');
+  var destino = document.getElementById('destino_id');
+  if (origem) origem.addEventListener('change', function(){ try { if (typeof calcularTudo === 'function') calcularTudo(); } catch(e){console.error(e);} });
+  if (destino) destino.addEventListener('change', function(){ try { if (typeof calcularTudo === 'function') calcularTudo(); } catch(e){console.error(e);} });
 }
