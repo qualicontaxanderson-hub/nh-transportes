@@ -346,7 +346,6 @@ def novo():
             cursor.execute("SELECT id, nome FROM motoristas ORDER BY nome")
             motoristas = cursor.fetchall()
 
-        cursor.execute("SELECT id, caminhao, placa FROM veiculos WHERE ativo = 1 ORDER BY
         cursor.execute("SELECT id, caminhao, placa FROM veiculos WHERE ativo = 1 ORDER BY caminhao")
         veiculos = cursor.fetchall()
 
