@@ -1,5 +1,6 @@
 import re
 
+
 def formatar_cnpj(cnpj):
     if not cnpj:
         return None
@@ -8,6 +9,7 @@ def formatar_cnpj(cnpj):
         return cnpj
     return f"{cnpj_numeros[0:2]}.{cnpj_numeros[2:5]}.{cnpj_numeros[5:8]}/{cnpj_numeros[8:12]}-{cnpj_numeros[12:14]}"
 
+
 def formatar_ie_goias(ie):
     if not ie:
         return None
@@ -15,6 +17,7 @@ def formatar_ie_goias(ie):
     if len(ie_numeros) != 9:
         return ie
     return f"{ie_numeros[0:2]}.{ie_numeros[2:5]}.{ie_numeros[5:8]}-{ie_numeros[8:9]}"
+
 
 def formatar_telefone(telefone):
     if not telefone:
@@ -26,6 +29,7 @@ def formatar_telefone(telefone):
         return f"({tel_numeros[0:2]}) {tel_numeros[2:6]}-{tel_numeros[6:10]}"
     return telefone
 
+
 def formatar_cep(cep):
     if not cep:
         return None
@@ -34,7 +38,27 @@ def formatar_cep(cep):
         return cep
     return f"{cep_numeros[0:5]}-{cep_numeros[5:8]}"
 
+
 def formatar_moeda(valor):
-    if valor is None:
-        return "R$ 0,00"
-    return f"R$ {float(valor):,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.')
+    """
+    Formata um número (float/int/str) para moeda BRL (ex.: R$ 1.234,56).
+    Entrada: None ou inválida -> retorna '-'.
+    Aceita strings já formatadas (tenta converter).
+    """
+    try:
+        if valor is None or valor == '':
+            return '-'
+        if isinstance(valor, str):
+            s = valor.strip().replace('R$', '').replace('r$', '').replace(' ', '')
+            s = s.replace('.', '').replace(',', '.') if ('.' in s and ',' in s) else s.replace(',', '.')
+            num = float(s)
+        else:
+            num = float(valor)
+    except Exception:
+        return '-'
+
+    inteiro = int(abs(num))
+    centavos = int(round((abs(num) - inteiro) * 100))
+    inteiro_str = f"{inteiro:,}".replace(',', '.')
+    sinal = '-' if num < 0 else ''
+    return f"{sinal}R$ {inteiro_str},{centavos:02d}"
