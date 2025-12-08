@@ -53,8 +53,8 @@ def lista():
                 f.id,
                 f.data_frete,
                 DATE_FORMAT(f.data_frete, '%d/%m/%Y') AS datafrete_formatada,
-                COALESCE(c.razaosocial, '') AS cliente,
-                COALESCE(fo.razaosocial, '') AS fornecedor,
+                COALESCE(c.razao_social, '') AS cliente,
+                COALESCE(fo.razao_social, '') AS fornecedor,
                 COALESCE(p.nome, '') AS produto,
                 COALESCE(m.nome, '') AS motorista,
                 COALESCE(v.caminhao, '') AS veiculo,
@@ -74,7 +74,7 @@ def lista():
         cursor.execute(query, tuple(params))
         fretes = cursor.fetchall()
 
-        cursor.execute("SELECT id, razaosocial FROM clientes ORDER BY razaosocial")
+        cursor.execute("SELECT id, razao_social FROM clientes ORDER BY razao_social")
         clientes = cursor.fetchall()
     except Exception:
         fretes = []
@@ -152,10 +152,10 @@ def novo():
                 if clientes_id:
                     cchk = conn.cursor(dictionary=True)
                     try:
-                        cchk.execute("SELECT pagacomissao FROM clientes WHERE id = %s LIMIT 1", (clientes_id,))
+                        cchk.execute("SELECT paga_comissao FROM clientes WHERE id = %s LIMIT 1", (clientes_id,))
                         crow = cchk.fetchone()
                         if crow:
-                            cliente_paga_frete = bool(crow.get('pagacomissao') if isinstance(crow, dict) else crow[0])
+                            cliente_paga_frete = bool(crow.get('paga_comissao') if isinstance(crow, dict) else crow[0])
                     except Exception:
                         cliente_paga_frete = True
                     finally:
@@ -172,10 +172,10 @@ def novo():
                 if motoristas_id:
                     mch = conn.cursor(dictionary=True)
                     try:
-                        mch.execute("SELECT pagacomissao FROM motoristas WHERE id = %s LIMIT 1", (motoristas_id,))
+                        mch.execute("SELECT paga_comissao FROM motoristas WHERE id = %s LIMIT 1", (motoristas_id,))
                         mrow = mch.fetchone()
                         if mrow:
-                            motorista_recebe_comissao = bool(mrow.get('pagacomissao') if isinstance(mrow, dict) else mrow[0])
+                            motorista_recebe_comissao = bool(mrow.get('paga_comissao') if isinstance(mrow, dict) else mrow[0])
                     except Exception:
                         motorista_recebe_comissao = True
                     finally:
@@ -232,7 +232,7 @@ def novo():
                         request.form.get('fornecedoresid'),
                         request.form.get('produtoid'),
                         request.form.get('origemid'),
-                        request.form.get('destinoid'),
+                        request.form.get('destino_id'),
                         request.form.get('motoristasid'),
                         request.form.get('veiculosid'),
                         request.form.get('quantidadeid') or None,
@@ -284,7 +284,7 @@ def novo():
                     request.form.get('fornecedoresid'),
                     request.form.get('produtoid'),
                     request.form.get('origemid'),
-                    request.form.get('destinoid'),
+                    request.form.get('destino_id'),
                     motoristas_id,
                     request.form.get('veiculosid'),
                     request.form.get('quantidadeid') or None,
@@ -324,11 +324,11 @@ def novo():
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
     try:
-        # destinoid e pagacomissao aqui são campos da tabela clientes no seu banco atual
-        cursor.execute("SELECT id, razaosocial, destinoid, pagacomissao, percentualcte, cteintegral FROM clientes ORDER BY razaosocial")
+        # destino_id e paga_comissao aqui são campos da tabela clientes no seu banco atual
+        cursor.execute("SELECT id, razao_social, destino_id, paga_comissao, percentual_cte, cte_integral FROM clientes ORDER BY razao_social")
         clientes = cursor.fetchall()
 
-        cursor.execute("SELECT id, razaosocial FROM fornecedores ORDER BY razaosocial")
+        cursor.execute("SELECT id, razao_social FROM fornecedores ORDER BY razao_social")
         fornecedores = cursor.fetchall()
 
         cursor.execute("SELECT id, nome FROM produto ORDER BY nome")
@@ -341,7 +341,7 @@ def novo():
         destinos = cursor.fetchall()
 
         try:
-            cursor.execute("SELECT id, nome, pagacomissao FROM motoristas ORDER BY nome")
+            cursor.execute("SELECT id, nome, paga_comissao FROM motoristas ORDER BY nome")
             motoristas = cursor.fetchall()
         except Exception:
             cursor.execute("SELECT id, nome FROM motoristas ORDER BY nome")
@@ -384,7 +384,7 @@ def novo():
         cursor = conn.cursor(dictionary=True)
         if pedido_id:
             cursor.execute("""
-                SELECT c.destinoid
+                SELECT c.destino_id
                 FROM pedidositens pi
                 JOIN clientes c ON pi.clienteid = c.id
                 WHERE pi.pedidoid = %s
@@ -392,12 +392,12 @@ def novo():
             """, (pedido_id,))
             row = cursor.fetchone()
             if row:
-                selected_destino_id = row.get('destinoid') if isinstance(row, dict) else row[0]
+                selected_destino_id = row.get('destino_id') if isinstance(row, dict) else row[0]
         if not selected_destino_id and cliente_id_param:
-            cursor.execute("SELECT destinoid FROM clientes WHERE id = %s LIMIT 1", (cliente_id_param,))
+            cursor.execute("SELECT destino_id FROM clientes WHERE id = %s LIMIT 1", (cliente_id_param,))
             row = cursor.fetchone()
             if row:
-                selected_destino_id = row.get('destinoid') if isinstance(row, dict) else row[0]
+                selected_destino_id = row.get('destino_id') if isinstance(row, dict) else row[0]
     except Exception:
         selected_destino_id = None
     finally:
@@ -514,7 +514,7 @@ def salvar_importados():
                     item.get('fornecedoresid'),
                     item.get('produtoid'),
                     item.get('origemid'),
-                    item.get('destinoid'),
+                    item.get('destino_id'),
                     motoristasid,
                     item.get('veiculosid'),
                     item.get('quantidadeid'),
@@ -590,10 +590,10 @@ def editar(id):
                 if clientes_id:
                     cchk = conn.cursor(dictionary=True)
                     try:
-                        cchk.execute("SELECT pagacomissao FROM clientes WHERE id = %s LIMIT 1", (clientes_id,))
+                        cchk.execute("SELECT paga_comissao FROM clientes WHERE id = %s LIMIT 1", (clientes_id,))
                         crow = cchk.fetchone()
                         if crow:
-                            cliente_paga_frete = bool(crow.get('pagacomissao') if isinstance(crow, dict) else crow[0])
+                            cliente_paga_frete = bool(crow.get('paga_comissao') if isinstance(crow, dict) else crow[0])
                     except Exception:
                         cliente_paga_frete = True
                     finally:
@@ -610,10 +610,10 @@ def editar(id):
                 if motoristas_id:
                     mch = conn.cursor(dictionary=True)
                     try:
-                        mch.execute("SELECT pagacomissao FROM motoristas WHERE id = %s LIMIT 1", (motoristas_id,))
+                        mch.execute("SELECT paga_comissao FROM motoristas WHERE id = %s LIMIT 1", (motoristas_id,))
                         mrow = mch.fetchone()
                         if mrow:
-                            motorista_recebe_comissao = bool(mrow.get('pagacomissao') if isinstance(mrow, dict) else mrow[0])
+                            motorista_recebe_comissao = bool(mrow.get('paga_comissao') if isinstance(mrow, dict) else mrow[0])
                     except Exception:
                         motorista_recebe_comissao = True
                     finally:
@@ -666,7 +666,7 @@ def editar(id):
                 request.form.get('fornecedoresid'),
                 request.form.get('produtoid'),
                 request.form.get('origemid'),
-                request.form.get('destinoid'),
+                request.form.get('destino_id'),
                 request.form.get('motoristasid'),
                 request.form.get('veiculosid'),
                 request.form.get('quantidadeid') or None,
@@ -706,10 +706,10 @@ def editar(id):
 
     # carregar dados auxiliares
     try:
-        cursor.execute("SELECT * FROM clientes ORDER BY razaosocial")
+        cursor.execute("SELECT * FROM clientes ORDER BY razao_social")
         clientes = cursor.fetchall()
 
-        cursor.execute("SELECT * FROM fornecedores ORDER BY razaosocial")
+        cursor.execute("SELECT * FROM fornecedores ORDER BY razao_social")
         fornecedores = cursor.fetchall()
 
         cursor.execute("SELECT * FROM produto ORDER BY nome")
@@ -722,7 +722,7 @@ def editar(id):
         destinos = cursor.fetchall()
 
         try:
-            cursor.execute("SELECT id, nome, pagacomissao FROM motoristas ORDER BY nome")
+            cursor.execute("SELECT id, nome, paga_comissao FROM motoristas ORDER BY nome")
             motoristas = cursor.fetchall()
         except Exception:
             cursor.execute("SELECT id, nome FROM motoristas ORDER BY nome")
