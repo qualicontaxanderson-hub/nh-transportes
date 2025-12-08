@@ -5,13 +5,14 @@ from utils.boletos import emitir_boleto_frete
 
 financeiro_bp = Blueprint('financeiro', __name__, url_prefix='/financeiro')
 
+
 @financeiro_bp.route('/recebimentos/')
 @login_required
 def recebimentos():
     """Lista todos os recebimentos/boletos"""
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
-    
+
     try:
         cursor.execute("""
             SELECT 
@@ -24,14 +25,13 @@ def recebimentos():
             LEFT JOIN clientes c ON r.clienteid = c.id
             ORDER BY r.datavencimento DESC, r.createdat DESC
         """)
-        
         recebimentos_lista = cursor.fetchall()
         return render_template('financeiro/recebimentos.html', recebimentos=recebimentos_lista)
-    
+
     except Exception as e:
         flash(f"Erro ao carregar recebimentos: {str(e)}", "danger")
         return render_template('financeiro/recebimentos.html', recebimentos=[])
-    
+
     finally:
         cursor.close()
         conn.close()
@@ -43,14 +43,17 @@ def emitir_boleto_route(frete_id):
     """Emite boleto para um frete específico"""
     try:
         resultado = emitir_boleto_frete(frete_id)
-        
+
         if resultado.get('success'):
-            flash(f"Boleto emitido com sucesso! Charge ID: {resultado.get('charge_id')}", "success")
+            flash(
+                f"Boleto emitido com sucesso! Charge ID: {resultado.get('charge_id')}",
+                "success",
+            )
             return redirect(url_for('financeiro.recebimentos'))
         else:
             flash(f"Erro ao emitir boleto: {resultado.get('error')}", "danger")
             return redirect(url_for('fretes.lista'))
-    
+
     except Exception as e:
         flash(f"Erro ao processar boleto: {str(e)}", "danger")
         return redirect(url_for('fretes.lista'))
