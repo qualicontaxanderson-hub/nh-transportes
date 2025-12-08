@@ -4,27 +4,36 @@
 
 {% block content %}
 <div class="container-fluid">
-  <div class="card mb-3">
-    <div class="card-body">
-      <div class="d-flex justify-content-between align-items-center mb-3">
-        <h3 class="mb-0">Lista de Fretes</h3>
-        <div class="btn-group">
-          <a class="btn btn-warning btn-sm" href="{{ url_for('fretes.novo') }}">Novo Frete</a>
-          <a class="btn btn-success btn-sm" href="{{ url_for('pedidos.novo') }}">Novo Pedido</a>
-          <a class="btn btn-primary btn-sm" href="{{ url_for('pedidos.importar_lista') }}">Importar Pedido</a>
-        </div>
-      </div>
+  <!-- Breadcrumb -->
+  <nav aria-label="breadcrumb" class="mt-2 mb-3">
+    <ol class="breadcrumb" style="font-size: 0.85rem;">
+      <li class="breadcrumb-item"><a href="{{ url_for('index') }}">Início</a></li>
+      <li class="breadcrumb-item active" aria-current="page">Fretes</li>
+    </ol>
+  </nav>
 
-      <form method="get" action="{{ url_for('fretes.lista') }}" class="row g-2 mb-3">
+  <!-- Título -->
+  <h2 class="mb-3" style="color:#1D63A5">
+    <i class="bi bi-truck"></i> Lista de Fretes
+  </h2>
+
+  <!-- Card de Filtros -->
+  <div class="card mb-4">
+    <div class="card-header" style="background:#151515;color:white">
+      <h6 class="mb-0"><i class="bi bi-funnel"></i> Filtros</h6>
+    </div>
+    <div class="card-body">
+      <form method="get" action="{{ url_for('fretes.lista') }}" class="row g-3 align-items-end">
         <div class="col-md-3">
-          <input type="text" name="data_inicio" class="form-control"
-                 placeholder="Data Início (dd/mm/aaaa)" value="{{ data_inicio or '' }}">
+          <label class="form-label">Data Início</label>
+          <input type="date" name="data_inicio" class="form-control" value="{{ data_inicio or '' }}">
         </div>
         <div class="col-md-3">
-          <input type="text" name="data_fim" class="form-control"
-                 placeholder="Data Fim (dd/mm/aaaa)" value="{{ data_fim or '' }}">
+          <label class="form-label">Data Fim</label>
+          <input type="date" name="data_fim" class="form-control" value="{{ data_fim or '' }}">
         </div>
-        <div class="col-md-3">
+        <div class="col-md-4">
+          <label class="form-label">Cliente</label>
           <select name="cliente_id" class="form-select">
             <option value="">Todos os clientes</option>
             {% for cliente in clientes %}
@@ -34,74 +43,147 @@
             {% endfor %}
           </select>
         </div>
-        <div class="col-md-3 text-end">
-          <button class="btn btn-primary btn-sm">Filtrar</button>
-          <a class="btn btn-secondary btn-sm" href="{{ url_for('fretes.lista') }}">Limpar</a>
+        <div class="col-md-2 text-end">
+          <button type="submit" class="btn btn-primary">
+            <i class="bi bi-search"></i> Filtrar
+          </button>
+          <a class="btn btn-secondary" href="{{ url_for('fretes.lista') }}">Limpar</a>
         </div>
       </form>
     </div>
   </div>
 
+  <!-- Botões de Ações -->
+  <div class="d-flex justify-content-end mb-3 gap-2">
+    <a class="btn btn-warning btn-sm" href="{{ url_for('fretes.novo') }}">
+      <i class="bi bi-plus-circle"></i> Novo Frete
+    </a>
+    <a class="btn btn-success btn-sm" href="{{ url_for('pedidos.novo') }}">
+      <i class="bi bi-cart-plus"></i> Novo Pedido
+    </a>
+    <a class="btn btn-primary btn-sm" href="{{ url_for('pedidos.importar_lista') }}">
+      <i class="bi bi-file-earmark-arrow-down"></i> Importar Pedido
+    </a>
+  </div>
+
+  <!-- Tabela de Fretes -->
   <div class="card">
+    <div class="card-header" style="background:#151515;color:white">
+      <h5 class="mb-0"><i class="bi bi-table"></i> Lista de Fretes</h5>
+    </div>
     <div class="card-body p-0">
-      <table class="table table-striped table-bordered mb-0">
-        <thead class="table-light">
-          <tr>
-            <th>ID</th>
-            <th>Data</th>
-            <th>Cliente</th>
-            <th>Fornecedor</th>
-            <th>Motorista</th>
-            <th>Veículo</th>
-            <th class="text-end">Valor Total</th>
-            <th class="text-end">Lucro</th>
-            <th>Status</th>
-            <th style="width: 220px;">Ações</th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for frete in fretes %}
-          <tr>
-            <td>{{ frete.id }}</td>
-            <td>{{ frete.datafrete }}</td>
-            <td>{{ frete.cliente }}</td>
-            <td>{{ frete.fornecedor }}</td>
-            <td>{{ frete.motorista }}</td>
-            <td>{{ frete.veiculo }}</td>
-            <td class="text-end">{{ formatar_moeda(frete.valortotalfrete) }}</td>
-            <td class="text-end">{{ formatar_moeda(frete.lucro) }}</td>
-            <td>{{ frete.status }}</td>
-            <td>
-              <a href="{{ url_for('fretes.editar', id=frete.id) }}" class="btn btn-sm btn-primary">
-                Editar
-              </a>
+      <div class="table-responsive">
+        <table class="table table-sm table-hover mb-0">
+          <thead style="background:#E8E8E8">
+            <tr>
+              <th>ID</th>
+              <th>Data</th>
+              <th>Cliente</th>
+              <th>Fornecedor</th>
+              <th>Motorista</th>
+              <th>Veículo</th>
+              <th class="text-end">Valor Total</th>
+              <th class="text-end">Lucro</th>
+              <th>Status</th>
+              <th class="text-center" style="width: 120px;">Ações</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for frete in fretes %}
+            <tr>
+              <td>{{ frete.id }}</td>
+              <td>{{ frete.datafrete }}</td>
+              <td>{{ frete.cliente }}</td>
+              <td>{{ frete.fornecedor }}</td>
+              <td>{{ frete.motorista }}</td>
+              <td>{{ frete.veiculo }}</td>
+              <td class="text-end">{{ formatar_moeda(frete.valortotalfrete) }}</td>
+              <td class="text-end">{{ formatar_moeda(frete.lucro) }}</td>
+              <td>
+                <span class="badge bg-{% if frete.status == 'Concluído' %}success{% elif frete.status == 'Pendente' %}warning{% else %}secondary{% endif %}">
+                  {{ frete.status }}
+                </span>
+              </td>
+              <td class="text-center">
+                <div class="btn-group" role="group">
+                  <!-- Botão Editar -->
+                  <a href="{{ url_for('fretes.editar', id=frete.id) }}" 
+                     class="btn btn-sm btn-outline-primary" 
+                     title="Editar">
+                    <i class="bi bi-pencil"></i>
+                  </a>
 
-              <form method="post"
-                    action="{{ url_for('fretes.deletar', id=frete.id) }}"
-                    style="display:inline;"
-                    onsubmit="return confirm('Confirma exclusão do frete #{{ frete.id }}?');">
-                <button type="submit" class="btn btn-sm btn-danger">Excluir</button>
-              </form>
+                  <!-- Botão Excluir -->
+                  <form method="post"
+                        action="{{ url_for('fretes.deletar', id=frete.id) }}"
+                        style="display:inline;"
+                        onsubmit="return confirm('Confirma exclusão do frete #{{ frete.id }}?');">
+                    <button type="submit" 
+                            class="btn btn-sm btn-outline-danger" 
+                            title="Excluir">
+                      <i class="bi bi-trash"></i>
+                    </button>
+                  </form>
 
-              {% if frete.valortotalfrete and frete.valortotalfrete|float > 0 %}
-              <form method="post"
-                    action="{{ url_for('financeiro.emitir_boleto_route', frete_id=frete.id) }}"
-                    style="display:inline;">
-                <button type="submit" class="btn btn-sm btn-outline-primary">
-                  Emitir boleto
-                </button>
-              </form>
-              {% endif %}
-            </td>
-          </tr>
-          {% else %}
-          <tr>
-            <td colspan="10" class="text-center">Nenhum frete encontrado.</td>
-          </tr>
-          {% endfor %}
-        </tbody>
-      </table>
+                  <!-- Botão Emitir Boleto -->
+                  {% if frete.valortotalfrete and frete.valortotalfrete|float > 0 %}
+                  <form method="post"
+                        action="{{ url_for('financeiro.emitir_boleto_route', frete_id=frete.id) }}"
+                        style="display:inline;">
+                    <button type="submit" 
+                            class="btn btn-sm btn-outline-success" 
+                            title="Emitir Boleto">
+                      <i class="bi bi-receipt"></i>
+                    </button>
+                  </form>
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+            {% else %}
+            <tr>
+              <td colspan="10" class="text-center text-muted py-4">
+                <i class="bi bi-inbox" style="font-size: 2rem;"></i>
+                <p class="mt-2">Nenhum frete encontrado.</p>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
     </div>
   </div>
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Definir datas padrão: primeiro dia do mês até hoje
+function setDefaultDates() {
+  var dataInicio = document.querySelector('input[name="data_inicio"]');
+  var dataFim = document.querySelector('input[name="data_fim"]');
+  
+  if (!dataInicio || !dataFim) return;
+  
+  // Se data_inicio estiver vazia, define como primeiro dia do mês
+  if (!dataInicio.value) {
+    var now = new Date();
+    var firstDay = new Date(now.getFullYear(), now.getMonth(), 1);
+    dataInicio.value = firstDay.toISOString().slice(0, 10);
+  }
+  
+  // Se data_fim estiver vazia, define como hoje
+  if (!dataFim.value) {
+    var now = new Date();
+    dataFim.value = now.toISOString().slice(0, 10);
+  }
+}
+
+// Executar quando a página carregar
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', setDefaultDates);
+} else {
+  setDefaultDates();
+}
+</script>
 {% endblock %}
