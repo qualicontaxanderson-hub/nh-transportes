@@ -51,13 +51,14 @@ def lista():
         query = f"""
             SELECT
                 f.id,
-                DATE_FORMAT(f.data_frete, '%d/%m/%Y') AS data_frete,
+                f.data_frete,
+                DATE_FORMAT(f.data_frete, '%d/%m/%Y') AS data_frete_formatada,
                 COALESCE(c.razao_social, '') AS cliente,
                 COALESCE(fo.razao_social, '') AS fornecedor,
                 COALESCE(p.nome, '') AS produto,
                 COALESCE(m.nome, '') AS motorista,
                 COALESCE(v.caminhao, '') AS veiculo,
-                COALESCE(f.valor_total_frete, 0) AS valor_total_frete,
+                f.valor_total_frete,
                 COALESCE(f.lucro, 0) AS lucro,
                 COALESCE(f.status, '') AS status
             FROM fretes f
@@ -65,7 +66,7 @@ def lista():
             LEFT JOIN fornecedores fo ON f.fornecedores_id = fo.id
             LEFT JOIN produto p ON f.produto_id = p.id
             LEFT JOIN motoristas m ON f.motoristas_id = m.id
-            LEFT JOIN veiculos v ON f.veiculos_id = v.id
+            LEFT JOIN veiculos v ON f.veiculosid = v.id
             {where_clause}
             ORDER BY f.data_frete DESC, f.id DESC
         """
