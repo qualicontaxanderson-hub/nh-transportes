@@ -36,9 +36,9 @@ def emitir_boleto_frete(frete_id):
                 o.nome as origem_nome,
                 d.nome as destino_nome
             FROM fretes f
-            INNER JOIN clientes c ON f.clientes_id = c.id
-            LEFT JOIN origens o ON f.origem_id = o.id
-            LEFT JOIN destinos d ON f.destino_id = d.id
+            INNER JOIN clientes c ON f.clientesid = c.id
+            LEFT JOIN origens o ON f.origemid = o.id
+            LEFT JOIN destinos d ON f.destinoid = d.id
             WHERE f.id = %s
         """, (frete_id,))
         
@@ -90,7 +90,7 @@ def emitir_boleto_frete(frete_id):
             descricao_frete += f" - {frete['origem_nome']} para {frete['destino_nome']}"
         
         # Valor total (converter para centavos)
-        valor_total_centavos = int(float(frete['valor_total_frete'] or 0) * 100)
+        valor_total_centavos = int(float(frete['valortotalfrete'] or 0) * 100)
         
         if valor_total_centavos <= 0:
             return {"success": False, "error": "Valor do frete inválido ou zerado"}
@@ -139,12 +139,12 @@ def emitir_boleto_frete(frete_id):
         # Salvar na tabela recebimentos
         cursor.execute("""
             INSERT INTO recebimentos 
-            (frete_id, cliente_id, valor, data_vencimento, status, charge_id, boleto_url, codigo_barras, created_at)
+            (freteid, clienteid, valor, datavencimento, status, chargeid, boletourl, codigobarras, createdat)
             VALUES (%s, %s, %s, %s, %s, %s, %s, %s, NOW())
         """, (
             frete_id,
-            frete['clientes_id'],
-            frete['valor_total_frete'],
+            frete['clientesid'],
+            frete['valortotalfrete'],
             data_vencimento.strftime('%Y-%m-%d'),
             'pendente',
             charge_id,
