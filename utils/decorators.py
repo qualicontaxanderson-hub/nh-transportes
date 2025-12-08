@@ -11,7 +11,7 @@ def admin_required(f):
         # Verifica se o usuário está autenticado
         if not current_user.is_authenticated:
             flash('Você precisa estar logado para acessar esta página.', 'danger')
-            return redirect(url_for('login'))
+            return redirect(url_for('auth.login'))
         
         # Verifica se o usuário tem nível admin
         if not hasattr(current_user, 'nivel') or current_user.nivel != 'admin':
