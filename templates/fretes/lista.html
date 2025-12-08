@@ -37,7 +37,7 @@
           <select name="cliente_id" class="form-select">
             <option value="">Todos os clientes</option>
             {% for cliente in clientes %}
-            <option value="{{ cliente.id }}" {% if cliente_id == cliente.id %}selected{% endif %}>
+            <option value="{{ cliente.id }}" {% if cliente_id == cliente.id|string %}selected{% endif %}>
                 {{ cliente.razaosocial }}
             </option>
             {% endfor %}
@@ -92,17 +92,33 @@
             {% for frete in fretes %}
             <tr>
               <td>{{ frete.id }}</td>
-              <td>{{ frete.datafrete }}</td>
-              <td>{{ frete.cliente }}</td>
-              <td>{{ frete.fornecedor }}</td>
-              <td>{{ frete.motorista }}</td>
-              <td>{{ frete.veiculo }}</td>
-              <td class="text-end">{{ formatar_moeda(frete.valortotalfrete) }}</td>
-              <td class="text-end">{{ formatar_moeda(frete.lucro) }}</td>
+              <td>{{ frete.datafrete_formatada or '-' }}</td>
+              <td>{{ frete.cliente or '-' }}</td>
+              <td>{{ frete.fornecedor or '-' }}</td>
+              <td>{{ frete.motorista or '-' }}</td>
+              <td>{{ frete.veiculo or '-' }}</td>
+              <td class="text-end">
+                {% if frete.valortotalfrete and frete.valortotalfrete > 0 %}
+                  R$ {{ "%.2f"|format(frete.valortotalfrete) }}
+                {% else %}
+                  -
+                {% endif %}
+              </td>
+              <td class="text-end">
+                {% if frete.lucro and frete.lucro != 0 %}
+                  R$ {{ "%.2f"|format(frete.lucro) }}
+                {% else %}
+                  -
+                {% endif %}
+              </td>
               <td>
-                <span class="badge bg-{% if frete.status == 'Concluído' %}success{% elif frete.status == 'Pendente' %}warning{% else %}secondary{% endif %}">
+                {% if frete.status %}
+                <span class="badge bg-{% if frete.status == 'Concluído' or frete.status == 'Concludo' %}success{% elif frete.status == 'Pendente' %}warning{% else %}secondary{% endif %}">
                   {{ frete.status }}
                 </span>
+                {% else %}
+                -
+                {% endif %}
               </td>
               <td class="text-center">
                 <div class="btn-group" role="group">
@@ -126,7 +142,7 @@
                   </form>
 
                   <!-- Botão Emitir Boleto -->
-                  {% if frete.valortotalfrete and frete.valortotalfrete|float > 0 %}
+                  {% if frete.valortotalfrete and frete.valortotalfrete > 0 %}
                   <form method="post"
                         action="{{ url_for('financeiro.emitir_boleto_route', frete_id=frete.id) }}"
                         style="display:inline;">
