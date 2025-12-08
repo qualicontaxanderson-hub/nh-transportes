@@ -20,21 +20,24 @@ def recebimentos():
                 c.razaosocial as cliente_nome,
                 c.nomefantasia as cliente_fantasia
             FROM recebimentos r
-            LEFT JOIN fretes f ON r.frete_id = f.id
-            LEFT JOIN clientes c ON r.cliente_id = c.id
-            ORDER BY r.data_vencimento DESC, r.created_at DESC
+            LEFT JOIN fretes f ON r.freteid = f.id
+            LEFT JOIN clientes c ON r.clienteid = c.id
+            ORDER BY r.datavencimento DESC, r.createdat DESC
         """)
-        recebimentos_lista = cursor.fetchall()
         
+        recebimentos_lista = cursor.fetchall()
         return render_template('financeiro/recebimentos.html', recebimentos=recebimentos_lista)
+    
     except Exception as e:
-        flash(f'Erro ao carregar recebimentos: {str(e)}', 'danger')
+        flash(f"Erro ao carregar recebimentos: {str(e)}", "danger")
         return render_template('financeiro/recebimentos.html', recebimentos=[])
+    
     finally:
         cursor.close()
         conn.close()
 
-@financeiro_bp.route('/emitir-boleto/<int:frete_id>', methods=['POST'])
+
+@financeiro_bp.route('/emitir-boleto/<int:frete_id>/', methods=['POST'])
 @login_required
 def emitir_boleto_route(frete_id):
     """Emite boleto para um frete específico"""
@@ -42,11 +45,12 @@ def emitir_boleto_route(frete_id):
         resultado = emitir_boleto_frete(frete_id)
         
         if resultado.get('success'):
-            flash(f'Boleto emitido com sucesso! Charge ID: {resultado.get("charge_id")}', 'success')
+            flash(f"Boleto emitido com sucesso! Charge ID: {resultado.get('charge_id')}", "success")
             return redirect(url_for('financeiro.recebimentos'))
         else:
-            flash(f'Erro ao emitir boleto: {resultado.get("error")}', 'danger')
+            flash(f"Erro ao emitir boleto: {resultado.get('error')}", "danger")
             return redirect(url_for('fretes.lista'))
+    
     except Exception as e:
-        flash(f'Erro ao processar boleto: {str(e)}', 'danger')
+        flash(f"Erro ao processar boleto: {str(e)}", "danger")
         return redirect(url_for('fretes.lista'))
