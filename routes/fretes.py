@@ -28,7 +28,7 @@ def lista():
                 di = datetime.strptime(data_inicio, '%d/%m/%Y').strftime('%Y-%m-%d')
             except Exception:
                 di = data_inicio
-            filters.append("f.datafrete >= %s")
+            filters.append("f.data_frete >= %s")
             params.append(di)
 
         if data_fim:
@@ -37,11 +37,11 @@ def lista():
                 df = datetime.strptime(data_fim, '%d/%m/%Y').strftime('%Y-%m-%d')
             except Exception:
                 df = data_fim
-            filters.append("f.datafrete <= %s")
+            filters.append("f.data_frete <= %s")
             params.append(df)
 
         if cliente_id:
-            filters.append("f.clientesid = %s")
+            filters.append("f.clientes_id = %s")
             params.append(cliente_id)
 
         where_clause = ""
@@ -51,24 +51,24 @@ def lista():
         query = f"""
             SELECT
                 f.id,
-                f.datafrete,
-                DATE_FORMAT(f.datafrete, '%d/%m/%Y') AS datafrete_formatada,
+                f.data_frete,
+                DATE_FORMAT(f.data_frete, '%d/%m/%Y') AS datafrete_formatada,
                 COALESCE(c.razaosocial, '') AS cliente,
                 COALESCE(fo.razaosocial, '') AS fornecedor,
                 COALESCE(p.nome, '') AS produto,
                 COALESCE(m.nome, '') AS motorista,
                 COALESCE(v.caminhao, '') AS veiculo,
-                f.valortotalfrete,
+                f.valor_total_frete,
                 COALESCE(f.lucro, 0) AS lucro,
                 COALESCE(f.status, '') AS status
             FROM fretes f
-            LEFT JOIN clientes c ON f.clientesid = c.id
-            LEFT JOIN fornecedores fo ON f.fornecedoresid = fo.id
-            LEFT JOIN produto p ON f.produtoid = p.id
-            LEFT JOIN motoristas m ON f.motoristasid = m.id
-            LEFT JOIN veiculos v ON f.veiculosid = v.id
+            LEFT JOIN clientes c ON f.clientes_id = c.id
+            LEFT JOIN fornecedores fo ON f.fornecedores_id = fo.id
+            LEFT JOIN produto p ON f.produto_id = p.id
+            LEFT JOIN motoristas m ON f.motoristas_id = m.id
+            LEFT JOIN veiculos v ON f.veiculos_id = v.id
             {where_clause}
-            ORDER BY f.datafrete DESC, f.id DESC
+            ORDER BY f.data_frete DESC, f.id DESC
         """
 
         cursor.execute(query, tuple(params))
@@ -203,25 +203,25 @@ def novo():
                     cursor = conn.cursor()
                     cursor.execute("""
                         UPDATE fretes SET
-                            datafrete=%s,
+                            data_frete=%s,
                             status=%s,
                             observacoes=%s,
-                            clientesid=%s,
-                            fornecedoresid=%s,
-                            produtoid=%s,
-                            origemid=%s,
-                            destinoid=%s,
-                            motoristasid=%s,
-                            veiculosid=%s,
-                            quantidadeid=%s,
-                            quantidademanual=%s,
-                            precoprodutounitario=%s,
-                            precoporlitro=%s,
-                            totalnfcompra=%s,
-                            valortotalfrete=%s,
-                            comissaomotorista=%s,
-                            valorcte=%s,
-                            comissaocte=%s,
+                            clientes_id=%s,
+                            fornecedores_id=%s,
+                            produto_id=%s,
+                            origem_id=%s,
+                            destino_id=%s,
+                            motoristas_id=%s,
+                            veiculos_id=%s,
+                            quantidade_id=%s,
+                            quantidade_manual=%s,
+                            preco_produto_unitario=%s,
+                            preco_por_litro=%s,
+                            total_nf_compra=%s,
+                            valor_total_frete=%s,
+                            comissao_motorista=%s,
+                            valor_cte=%s,
+                            comissao_cte=%s,
                             lucro=%s
                         WHERE id=%s
                     """, (
@@ -268,13 +268,13 @@ def novo():
             try:
                 cur.execute("""
                     INSERT INTO fretes (
-                        datafrete, status, observacoes,
-                        clientesid, fornecedoresid, produtoid,
-                        origemid, destinoid, motoristasid, veiculosid,
-                        quantidadeid, quantidademanual,
-                        precoprodutounitario, precoporlitro,
-                        totalnfcompra, valortotalfrete, comissaomotorista,
-                        valorcte, comissaocte, lucro
+                        data_frete, status, observacoes,
+                        clientes_id, fornecedores_id, produto_id,
+                        origem_id, destino_id, motoristas_id, veiculos_id,
+                        quantidade_id, quantidade_manual,
+                        preco_produto_unitario, preco_por_litro,
+                        total_nf_compra, valor_total_frete, comissao_motorista,
+                        valor_cte, comissao_cte, lucro
                     ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
                 """, (
                     request.form.get('datafrete'),
@@ -324,6 +324,7 @@ def novo():
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
     try:
+        # destinoid e pagacomissao aqui são campos da tabela clientes no seu banco atual
         cursor.execute("SELECT id, razaosocial, destinoid, pagacomissao, percentualcte, cteintegral FROM clientes ORDER BY razaosocial")
         clientes = cursor.fetchall()
 
@@ -355,11 +356,11 @@ def novo():
         # montar rotas_dict (origem|destino => valor_por_litro)
         rotas_dict = {}
         try:
-            cursor.execute("SELECT origemid, destinoid, valorporlitro FROM rotas WHERE ativo = 1")
+            cursor.execute("SELECT origem_id, destino_id, valorporlitro FROM rotas WHERE ativo = 1")
             for r in cursor.fetchall():
                 try:
-                    origem_id = r.get('origemid') if isinstance(r, dict) else r[0]
-                    destino_id = r.get('destinoid') if isinstance(r, dict) else r[1]
+                    origem_id = r.get('origem_id') if isinstance(r, dict) else r[0]
+                    destino_id = r.get('destino_id') if isinstance(r, dict) else r[1]
                     valor = r.get('valorporlitro') if isinstance(r, dict) else r[2]
                     key = f"{int(origem_id)}|{int(destino_id)}"
                     rotas_dict[key] = float(valor or 0)
@@ -497,13 +498,13 @@ def salvar_importados():
 
                 cur.execute("""
                     INSERT INTO fretes (
-                        datafrete, status, observacoes,
-                        clientesid, fornecedoresid, produtoid,
-                        origemid, destinoid, motoristasid, veiculosid,
-                        quantidadeid, quantidademanual,
-                        precoprodutounitario, precoporlitro,
-                        totalnfcompra, valortotalfrete, comissaomotorista,
-                        valorcte, comissaocte, lucro
+                        data_frete, status, observacoes,
+                        clientes_id, fornecedores_id, produto_id,
+                        origem_id, destino_id, motoristas_id, veiculos_id,
+                        quantidade_id, quantidade_manual,
+                        preco_produto_unitario, preco_por_litro,
+                        total_nf_compra, valor_total_frete, comissao_motorista,
+                        valor_cte, comissao_cte, lucro
                     ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
                 """, (
                     datafrete or None,
@@ -636,25 +637,25 @@ def editar(id):
 
             cursor.execute("""
                 UPDATE fretes SET
-                    datafrete=%s,
+                    data_frete=%s,
                     status=%s,
                     observacoes=%s,
-                    clientesid=%s,
-                    fornecedoresid=%s,
-                    produtoid=%s,
-                    origemid=%s,
-                    destinoid=%s,
-                    motoristasid=%s,
-                    veiculosid=%s,
-                    quantidadeid=%s,
-                    quantidademanual=%s,
-                    precoprodutounitario=%s,
-                    precoporlitro=%s,
-                    totalnfcompra=%s,
-                    valortotalfrete=%s,
-                    comissaomotorista=%s,
-                    valorcte=%s,
-                    comissaocte=%s,
+                    clientes_id=%s,
+                    fornecedores_id=%s,
+                    produto_id=%s,
+                    origem_id=%s,
+                    destino_id=%s,
+                    motoristas_id=%s,
+                    veiculos_id=%s,
+                    quantidade_id=%s,
+                    quantidade_manual=%s,
+                    preco_produto_unitario=%s,
+                    preco_por_litro=%s,
+                    total_nf_compra=%s,
+                    valor_total_frete=%s,
+                    comissao_motorista=%s,
+                    valor_cte=%s,
+                    comissao_cte=%s,
                     lucro=%s
                 WHERE id=%s
             """, (
@@ -736,11 +737,11 @@ def editar(id):
         # montar rotas_dict também para a página de edição
         rotas_dict = {}
         try:
-            cursor.execute("SELECT origemid, destinoid, valorporlitro FROM rotas WHERE ativo = 1")
+            cursor.execute("SELECT origem_id, destino_id, valorporlitro FROM rotas WHERE ativo = 1")
             for r in cursor.fetchall():
                 try:
-                    origem_id = r.get('origemid') if isinstance(r, dict) else r[0]
-                    destino_id = r.get('destinoid') if isinstance(r, dict) else r[1]
+                    origem_id = r.get('origem_id') if isinstance(r, dict) else r[0]
+                    destino_id = r.get('destino_id') if isinstance(r, dict) else r[1]
                     valor = r.get('valorporlitro') if isinstance(r, dict) else r[2]
                     key = f"{int(origem_id)}|{int(destino_id)}"
                     rotas_dict[key] = float(valor or 0)
@@ -758,16 +759,16 @@ def editar(id):
     if frete is None:
         pass
     else:
-        frete.setdefault('precoprodutounitario', frete.get('precoprodutounitario') or 0)
-        frete.setdefault('precoporlitro', frete.get('precoporlitro') or 0)
-        frete.setdefault('totalnfcompra', frete.get('totalnfcompra') or 0)
-        frete.setdefault('valortotalfrete', frete.get('valortotalfrete') or 0)
-        frete.setdefault('comissaomotorista', frete.get('comissaomotorista') or 0)
-        frete.setdefault('valorcte', frete.get('valorcte') or 0)
-        frete.setdefault('comissaocte', frete.get('comissaocte') or 0)
+        frete.setdefault('preco_produto_unitario', frete.get('preco_produto_unitario') or 0)
+        frete.setdefault('preco_por_litro', frete.get('preco_por_litro') or 0)
+        frete.setdefault('total_nf_compra', frete.get('total_nf_compra') or 0)
+        frete.setdefault('valor_total_frete', frete.get('valor_total_frete') or 0)
+        frete.setdefault('comissao_motorista', frete.get('comissao_motorista') or 0)
+        frete.setdefault('valor_cte', frete.get('valor_cte') or 0)
+        frete.setdefault('comissao_cte', frete.get('comissao_cte') or 0)
         frete.setdefault('lucro', frete.get('lucro') or 0)
-        frete.setdefault('quantidademanual', frete.get('quantidademanual') or '')
-        frete.setdefault('quantidadeid', frete.get('quantidadeid') or None)
+        frete.setdefault('quantidade_manual', frete.get('quantidade_manual') or '')
+        frete.setdefault('quantidade_id', frete.get('quantidade_id') or None)
 
     return render_template(
         'fretes/novo.html',
