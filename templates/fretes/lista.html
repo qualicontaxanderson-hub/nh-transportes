@@ -29,7 +29,7 @@
             <option value="">Todos os clientes</option>
             {% for cliente in clientes %}
             <option value="{{ cliente.id }}" {% if cliente_id == cliente.id %}selected{% endif %}>
-              {{ cliente.razao_social }}
+                {{ cliente.razaosocial }}
             </option>
             {% endfor %}
           </select>
@@ -63,12 +63,12 @@
           {% for frete in fretes %}
           <tr>
             <td>{{ frete.id }}</td>
-            <td>{{ frete.data_frete }}</td>
+            <td>{{ frete.datafrete }}</td>
             <td>{{ frete.cliente }}</td>
             <td>{{ frete.fornecedor }}</td>
             <td>{{ frete.motorista }}</td>
             <td>{{ frete.veiculo }}</td>
-            <td class="text-end">{{ formatar_moeda(frete.valor_total_frete) }}</td>
+            <td class="text-end">{{ formatar_moeda(frete.valortotalfrete) }}</td>
             <td class="text-end">{{ formatar_moeda(frete.lucro) }}</td>
             <td>{{ frete.status }}</td>
             <td>
@@ -83,7 +83,7 @@
                 <button type="submit" class="btn btn-sm btn-danger">Excluir</button>
               </form>
 
-              {% if frete.valor_total_frete and frete.valor_total_frete|float > 0 %}
+              {% if frete.valortotalfrete and frete.valortotalfrete|float > 0 %}
               <form method="post"
                     action="{{ url_for('financeiro.emitir_boleto_route', frete_id=frete.id) }}"
                     style="display:inline;">
