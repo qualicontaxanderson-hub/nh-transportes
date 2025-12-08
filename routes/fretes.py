@@ -53,8 +53,8 @@ def lista():
                 f.id,
                 f.data_frete,
                 DATE_FORMAT(f.data_frete, '%d/%m/%Y') AS datafrete_formatada,
-                COALESCE(c.razaosocial, '') AS cliente,
-                COALESCE(fo.razaosocial, '') AS fornecedor,
+                COALESCE(c.razao_social, '') AS cliente,
+                COALESCE(fo.razao_social, '') AS fornecedor,
                 COALESCE(p.nome, '') AS produto,
                 COALESCE(m.nome, '') AS motorista,
                 COALESCE(v.caminhao, '') AS veiculo,
@@ -74,7 +74,7 @@ def lista():
         cursor.execute(query, tuple(params))
         fretes = cursor.fetchall()
 
-        cursor.execute("SELECT id, razaosocial FROM clientes ORDER BY razaosocial")
+        cursor.execute("SELECT id, razao_social FROM clientes ORDER BY razao_social")
         clientes = cursor.fetchall()
     except Exception:
         fretes = []
@@ -110,41 +110,41 @@ def novo():
             # Detectar se o form enviou um id de frete (edição disfarçada como novo)
             form_id = request.form.get('id') or request.form.get('frete_id') or request.form.get('fretes_id')
             # ler inputs (idem ao editar)
-            preco_produto_unitario_raw = request.form.get('precoprodutounitario_raw')
+            preco_produto_unitario_raw = request.form.get('preco_produto_unitario_raw')
             if preco_produto_unitario_raw is None or preco_produto_unitario_raw == '':
-                preco_produto_unitario = parse_moeda(request.form.get('precoprodutounitario'))
+                preco_produto_unitario = parse_moeda(request.form.get('preco_produto_unitario'))
             else:
                 preco_produto_unitario = parse_moeda(preco_produto_unitario_raw)
 
-            preco_por_litro_raw = request.form.get('precoporlitro_raw')
+            preco_por_litro_raw = request.form.get('preco_por_litro_raw')
             if preco_por_litro_raw is None or preco_por_litro_raw == '':
-                preco_por_litro = parse_moeda(request.form.get('precoporlitro'))
+                preco_por_litro = parse_moeda(request.form.get('preco_por_litro'))
             else:
                 preco_por_litro = parse_moeda(preco_por_litro_raw)
 
-            # quantidade: prefer manual se informado, senão usar quantidadeid (assume hidden/data-quantidade)
-            quantidade_manual_raw = request.form.get('quantidademanual')
+            # quantidade: prefer manual se informado, senão usar quantidade_id (assume hidden/data-quantidade)
+            quantidade_manual_raw = request.form.get('quantidade_manual')
             quantidade = None
             try:
                 if quantidade_manual_raw is not None and quantidade_manual_raw != '':
                     quantidade = float(quantidade_manual_raw)
                 else:
-                    qtd_id = request.form.get('quantidadeid')
+                    qtd_id = request.form.get('quantidade_id')
                     if qtd_id:
                         quantidade = None
             except Exception:
                 quantidade = None
 
             # ler valores já calculados pelo cliente (defaults)
-            total_nf_compra = parse_moeda(request.form.get('totalnfcompra')) or ((preco_produto_unitario or 0) * (quantidade or 0))
-            valor_total_frete = parse_moeda(request.form.get('valortotalfrete')) or ((preco_por_litro or 0) * (quantidade or 0))
-            comissao_motorista = parse_moeda(request.form.get('comissaomotorista')) or 0
-            valor_cte = parse_moeda(request.form.get('valorcte')) or 0
-            comissao_cte = parse_moeda(request.form.get('comissaocte')) or 0
+            total_nf_compra = parse_moeda(request.form.get('total_nf_compra')) or ((preco_produto_unitario or 0) * (quantidade or 0))
+            valor_total_frete = parse_moeda(request.form.get('valor_total_frete')) or ((preco_por_litro or 0) * (quantidade or 0))
+            comissao_motorista = parse_moeda(request.form.get('comissao_motorista')) or 0
+            valor_cte = parse_moeda(request.form.get('valor_cte')) or 0
+            comissao_cte = parse_moeda(request.form.get('comissao_cte')) or 0
             lucro = parse_moeda(request.form.get('lucro')) or ((valor_total_frete or 0) - (comissao_motorista or 0) - (comissao_cte or 0))
 
-            clientes_id = request.form.get('clientesid')
-            motoristas_id = request.form.get('motoristasid')
+            clientes_id = request.form.get('clientes_id')
+            motoristas_id = request.form.get('motoristas_id')
 
             # determinar cliente_paga_frete (reusar lógica do editar)
             cliente_paga_frete = True
@@ -152,10 +152,10 @@ def novo():
                 if clientes_id:
                     cchk = conn.cursor(dictionary=True)
                     try:
-                        cchk.execute("SELECT pagacomissao FROM clientes WHERE id = %s LIMIT 1", (clientes_id,))
+                        cchk.execute("SELECT paga_comissao FROM clientes WHERE id = %s LIMIT 1", (clientes_id,))
                         crow = cchk.fetchone()
                         if crow:
-                            cliente_paga_frete = bool(crow.get('pagacomissao') if isinstance(crow, dict) else crow[0])
+                            cliente_paga_frete = bool(crow.get('paga_comissao') if isinstance(crow, dict) else crow[0])
                     except Exception:
                         cliente_paga_frete = True
                     finally:
@@ -172,10 +172,10 @@ def novo():
                 if motoristas_id:
                     mch = conn.cursor(dictionary=True)
                     try:
-                        mch.execute("SELECT pagacomissao FROM motoristas WHERE id = %s LIMIT 1", (motoristas_id,))
+                        mch.execute("SELECT paga_comissao FROM motoristas WHERE id = %s LIMIT 1", (motoristas_id,))
                         mrow = mch.fetchone()
                         if mrow:
-                            motorista_recebe_comissao = bool(mrow.get('pagacomissao') if isinstance(mrow, dict) else mrow[0])
+                            motorista_recebe_comissao = bool(mrow.get('paga_comissao') if isinstance(mrow, dict) else mrow[0])
                     except Exception:
                         motorista_recebe_comissao = True
                     finally:
@@ -225,18 +225,18 @@ def novo():
                             lucro=%s
                         WHERE id=%s
                     """, (
-                        request.form.get('datafrete'),
+                        request.form.get('data_frete'),
                         request.form.get('status'),
                         request.form.get('observacoes'),
-                        request.form.get('clientesid'),
-                        request.form.get('fornecedoresid'),
-                        request.form.get('produtoid'),
-                        request.form.get('origemid'),
-                        request.form.get('destinoid'),
-                        request.form.get('motoristasid'),
-                        request.form.get('veiculosid'),
-                        request.form.get('quantidadeid') or None,
-                        request.form.get('quantidademanual') or None,
+                        request.form.get('clientes_id'),
+                        request.form.get('fornecedores_id'),
+                        request.form.get('produto_id'),
+                        request.form.get('origem_id'),
+                        request.form.get('destino_id'),
+                        request.form.get('motoristas_id'),
+                        request.form.get('veiculos_id'),
+                        request.form.get('quantidade_id') or None,
+                        request.form.get('quantidade_manual') or None,
                         preco_produto_unitario or 0,
                         preco_por_litro or 0,
                         total_nf_compra or 0,
@@ -277,18 +277,18 @@ def novo():
                         valor_cte, comissao_cte, lucro
                     ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
                 """, (
-                    request.form.get('datafrete'),
+                    request.form.get('data_frete'),
                     request.form.get('status'),
                     request.form.get('observacoes'),
                     clientes_id,
-                    request.form.get('fornecedoresid'),
-                    request.form.get('produtoid'),
-                    request.form.get('origemid'),
-                    request.form.get('destinoid'),
+                    request.form.get('fornecedores_id'),
+                    request.form.get('produto_id'),
+                    request.form.get('origem_id'),
+                    request.form.get('destino_id'),
                     motoristas_id,
-                    request.form.get('veiculosid'),
-                    request.form.get('quantidadeid') or None,
-                    request.form.get('quantidademanual') or None,
+                    request.form.get('veiculos_id'),
+                    request.form.get('quantidade_id') or None,
+                    request.form.get('quantidade_manual') or None,
                     preco_produto_unitario or 0,
                     preco_por_litro or 0,
                     total_nf_compra or 0,
@@ -324,11 +324,11 @@ def novo():
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
     try:
-        # destinoid e pagacomissao aqui são campos da tabela clientes no seu banco atual
-        cursor.execute("SELECT id, razaosocial, destinoid, pagacomissao, percentualcte, cteintegral FROM clientes ORDER BY razaosocial")
+        # destino_id e paga_comissao aqui são campos da tabela clientes no seu banco atual
+        cursor.execute("SELECT id, razao_social, destino_id, paga_comissao, percentual_cte, cte_integral FROM clientes ORDER BY razao_social")
         clientes = cursor.fetchall()
 
-        cursor.execute("SELECT id, razaosocial FROM fornecedores ORDER BY razaosocial")
+        cursor.execute("SELECT id, razao_social FROM fornecedores ORDER BY razao_social")
         fornecedores = cursor.fetchall()
 
         cursor.execute("SELECT id, nome FROM produto ORDER BY nome")
@@ -341,7 +341,7 @@ def novo():
         destinos = cursor.fetchall()
 
         try:
-            cursor.execute("SELECT id, nome, pagacomissao FROM motoristas ORDER BY nome")
+            cursor.execute("SELECT id, nome, paga_comissao FROM motoristas ORDER BY nome")
             motoristas = cursor.fetchall()
         except Exception:
             cursor.execute("SELECT id, nome FROM motoristas ORDER BY nome")
@@ -384,7 +384,7 @@ def novo():
         cursor = conn.cursor(dictionary=True)
         if pedido_id:
             cursor.execute("""
-                SELECT c.destinoid
+                SELECT c.destino_id
                 FROM pedidositens pi
                 JOIN clientes c ON pi.clienteid = c.id
                 WHERE pi.pedidoid = %s
@@ -392,12 +392,12 @@ def novo():
             """, (pedido_id,))
             row = cursor.fetchone()
             if row:
-                selected_destino_id = row.get('destinoid') if isinstance(row, dict) else row[0]
+                selected_destino_id = row.get('destino_id') if isinstance(row, dict) else row[0]
         if not selected_destino_id and cliente_id_param:
-            cursor.execute("SELECT destinoid FROM clientes WHERE id = %s LIMIT 1", (cliente_id_param,))
+            cursor.execute("SELECT destino_id FROM clientes WHERE id = %s LIMIT 1", (cliente_id_param,))
             row = cursor.fetchone()
             if row:
-                selected_destino_id = row.get('destinoid') if isinstance(row, dict) else row[0]
+                selected_destino_id = row.get('destino_id') if isinstance(row, dict) else row[0]
     except Exception:
         selected_destino_id = None
     finally:
@@ -471,9 +471,9 @@ def salvar_importados():
     try:
         for idx, item in sorted(items.items()):
             try:
-                datafrete = item.get('datafrete') or request.form.get('datafrete') or None
-                clientesid = item.get('clientesid') or request.form.get('clientesid') or None
-                motoristasid = item.get('motoristasid') or request.form.get('motoristasid') or None
+                data_frete = item.get('data_frete') or request.form.get('data_frete') or None
+                clientes_id = item.get('clientes_id') or request.form.get('clientes_id') or None
+                motoristas_id = item.get('motoristas_id') or request.form.get('motoristas_id') or None
 
                 def to_num(v):
                     try:
@@ -484,17 +484,17 @@ def salvar_importados():
                         except Exception:
                             return 0
 
-                valortotalfrete = to_num(item.get('valortotalfrete') or request.form.get('valortotalfrete') or 0)
-                comissaomotorista = to_num(item.get('comissaomotorista') or request.form.get('comissaomotorista') or 0)
-                valorcte = to_num(item.get('valorcte') or request.form.get('valorcte') or 0)
-                comissaocte = to_num(item.get('comissaocte') or request.form.get('comissaocte') or 0)
+                valor_total_frete = to_num(item.get('valor_total_frete') or request.form.get('valor_total_frete') or 0)
+                comissao_motorista = to_num(item.get('comissao_motorista') or request.form.get('comissao_motorista') or 0)
+                valor_cte = to_num(item.get('valor_cte') or request.form.get('valor_cte') or 0)
+                comissao_cte = to_num(item.get('comissao_cte') or request.form.get('comissao_cte') or 0)
                 lucro = None
                 try:
                     lucro = to_num(item.get('lucro')) if item.get('lucro') is not None else None
                 except Exception:
                     lucro = None
                 if lucro is None:
-                    lucro = (valortotalfrete or 0) - (comissaomotorista or 0) - (comissaocte or 0)
+                    lucro = (valor_total_frete or 0) - (comissao_motorista or 0) - (comissao_cte or 0)
 
                 cur.execute("""
                     INSERT INTO fretes (
@@ -507,25 +507,25 @@ def salvar_importados():
                         valor_cte, comissao_cte, lucro
                     ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
                 """, (
-                    datafrete or None,
+                    data_frete or None,
                     item.get('status') or 'Importado',
                     item.get('observacoes') or '',
-                    clientesid,
-                    item.get('fornecedoresid'),
-                    item.get('produtoid'),
-                    item.get('origemid'),
-                    item.get('destinoid'),
-                    motoristasid,
-                    item.get('veiculosid'),
-                    item.get('quantidadeid'),
-                    item.get('quantidademanual'),
-                    to_num(item.get('precoprodutounitario') or 0),
-                    to_num(item.get('precoporlitro') or 0),
-                    to_num(item.get('totalnfcompra') or 0),
-                    valortotalfrete or 0,
-                    comissaomotorista or 0,
-                    valorcte or 0,
-                    comissaocte or 0,
+                    clientes_id,
+                    item.get('fornecedores_id'),
+                    item.get('produto_id'),
+                    item.get('origem_id'),
+                    item.get('destino_id'),
+                    motoristas_id,
+                    item.get('veiculos_id'),
+                    item.get('quantidade_id'),
+                    item.get('quantidade_manual'),
+                    to_num(item.get('preco_produto_unitario') or 0),
+                    to_num(item.get('preco_por_litro') or 0),
+                    to_num(item.get('total_nf_compra') or 0),
+                    valor_total_frete or 0,
+                    comissao_motorista or 0,
+                    valor_cte or 0,
+                    comissao_cte or 0,
                     lucro or 0
                 ))
                 conn.commit()
@@ -564,36 +564,36 @@ def editar(id):
 
     if request.method == 'POST':
         try:
-            preco_produto_unitario_raw = request.form.get('precoprodutounitario_raw')
+            preco_produto_unitario_raw = request.form.get('preco_produto_unitario_raw')
             if preco_produto_unitario_raw is None or preco_produto_unitario_raw == '':
-                preco_produto_unitario = parse_moeda(request.form.get('precoprodutounitario'))
+                preco_produto_unitario = parse_moeda(request.form.get('preco_produto_unitario'))
             else:
                 preco_produto_unitario = parse_moeda(preco_produto_unitario_raw)
 
-            preco_por_litro_raw = request.form.get('precoporlitro_raw')
+            preco_por_litro_raw = request.form.get('preco_por_litro_raw')
             if preco_por_litro_raw is None or preco_por_litro_raw == '':
-                preco_por_litro = parse_moeda(request.form.get('precoporlitro'))
+                preco_por_litro = parse_moeda(request.form.get('preco_por_litro'))
             else:
                 preco_por_litro = parse_moeda(preco_por_litro_raw)
 
-            total_nf_compra = parse_moeda(request.form.get('totalnfcompra'))
-            valor_total_frete = parse_moeda(request.form.get('valortotalfrete'))
-            comissao_motorista = parse_moeda(request.form.get('comissaomotorista'))
-            valor_cte = parse_moeda(request.form.get('valorcte'))
-            comissao_cte = parse_moeda(request.form.get('comissaocte'))
+            total_nf_compra = parse_moeda(request.form.get('total_nf_compra'))
+            valor_total_frete = parse_moeda(request.form.get('valor_total_frete'))
+            comissao_motorista = parse_moeda(request.form.get('comissao_motorista'))
+            valor_cte = parse_moeda(request.form.get('valor_cte'))
+            comissao_cte = parse_moeda(request.form.get('comissao_cte'))
             lucro = parse_moeda(request.form.get('lucro'))
 
-            clientes_id = request.form.get('clientesid')
+            clientes_id = request.form.get('clientes_id')
 
             cliente_paga_frete = True
             try:
                 if clientes_id:
                     cchk = conn.cursor(dictionary=True)
                     try:
-                        cchk.execute("SELECT pagacomissao FROM clientes WHERE id = %s LIMIT 1", (clientes_id,))
+                        cchk.execute("SELECT paga_comissao FROM clientes WHERE id = %s LIMIT 1", (clientes_id,))
                         crow = cchk.fetchone()
                         if crow:
-                            cliente_paga_frete = bool(crow.get('pagacomissao') if isinstance(crow, dict) else crow[0])
+                            cliente_paga_frete = bool(crow.get('paga_comissao') if isinstance(crow, dict) else crow[0])
                     except Exception:
                         cliente_paga_frete = True
                     finally:
@@ -604,16 +604,16 @@ def editar(id):
             except Exception:
                 cliente_paga_frete = True
 
-            motoristas_id = request.form.get('motoristasid')
+            motoristas_id = request.form.get('motoristas_id')
             motorista_recebe_comissao = True
             try:
                 if motoristas_id:
                     mch = conn.cursor(dictionary=True)
                     try:
-                        mch.execute("SELECT pagacomissao FROM motoristas WHERE id = %s LIMIT 1", (motoristas_id,))
+                        mch.execute("SELECT paga_comissao FROM motoristas WHERE id = %s LIMIT 1", (motoristas_id,))
                         mrow = mch.fetchone()
                         if mrow:
-                            motorista_recebe_comissao = bool(mrow.get('pagacomissao') if isinstance(mrow, dict) else mrow[0])
+                            motorista_recebe_comissao = bool(mrow.get('paga_comissao') if isinstance(mrow, dict) else mrow[0])
                     except Exception:
                         motorista_recebe_comissao = True
                     finally:
@@ -659,18 +659,18 @@ def editar(id):
                     lucro=%s
                 WHERE id=%s
             """, (
-                request.form.get('datafrete'),
+                request.form.get('data_frete'),
                 request.form.get('status'),
                 request.form.get('observacoes'),
-                request.form.get('clientesid'),
-                request.form.get('fornecedoresid'),
-                request.form.get('produtoid'),
-                request.form.get('origemid'),
-                request.form.get('destinoid'),
-                request.form.get('motoristasid'),
-                request.form.get('veiculosid'),
-                request.form.get('quantidadeid') or None,
-                request.form.get('quantidademanual') or None,
+                request.form.get('clientes_id'),
+                request.form.get('fornecedores_id'),
+                request.form.get('produto_id'),
+                request.form.get('origem_id'),
+                request.form.get('destino_id'),
+                request.form.get('motoristas_id'),
+                request.form.get('veiculos_id'),
+                request.form.get('quantidade_id') or None,
+                request.form.get('quantidade_manual') or None,
                 preco_produto_unitario or 0,
                 preco_por_litro or 0,
                 total_nf_compra or 0,
@@ -706,10 +706,10 @@ def editar(id):
 
     # carregar dados auxiliares
     try:
-        cursor.execute("SELECT * FROM clientes ORDER BY razaosocial")
+        cursor.execute("SELECT * FROM clientes ORDER BY razao_social")
         clientes = cursor.fetchall()
 
-        cursor.execute("SELECT * FROM fornecedores ORDER BY razaosocial")
+        cursor.execute("SELECT * FROM fornecedores ORDER BY razao_social")
         fornecedores = cursor.fetchall()
 
         cursor.execute("SELECT * FROM produto ORDER BY nome")
@@ -722,7 +722,7 @@ def editar(id):
         destinos = cursor.fetchall()
 
         try:
-            cursor.execute("SELECT id, nome, pagacomissao FROM motoristas ORDER BY nome")
+            cursor.execute("SELECT id, nome, paga_comissao FROM motoristas ORDER BY nome")
             motoristas = cursor.fetchall()
         except Exception:
             cursor.execute("SELECT id, nome FROM motoristas ORDER BY nome")
