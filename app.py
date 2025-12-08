@@ -6,14 +6,17 @@ import importlib
 
 from flask import Flask, render_template, redirect, url_for, current_app
 from flask_login import LoginManager
+from utils.formatadores import formatar_moeda
+
 
 def register_blueprints_from_routes(app):
     """
     Varre o pacote `routes` e tenta importar cada módulo.
-    Se o módulo expuser `bp` ou qualquer atributo terminado em '_bp' (Blueprint) 
+    Se o módulo expuser `bp` ou qualquer atributo terminado em '_bp' (Blueprint)
     ele é registrado automaticamente.
     Exceções de import são logadas para diagnóstico (não interrompem o registro).
     """
+    ...
     try:
         import routes  # pacote que contém os módulos de rota (routes/*.py)
     except Exception:
