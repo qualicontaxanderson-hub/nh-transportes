@@ -18,6 +18,7 @@ class Cliente(db.Model):
     complemento = db.Column(db.String(100), nullable=True)
     bairro = db.Column(db.String(100), nullable=True)
     municipio = db.Column(db.String(100), nullable=True)
+    destino_id = db.Column(db.Integer, nullable=True)
     uf = db.Column(db.String(2), nullable=True)
     cep = db.Column(db.String(10), nullable=True)
     data_registro = db.Column(db.DateTime, nullable=True, default=datetime.utcnow)
