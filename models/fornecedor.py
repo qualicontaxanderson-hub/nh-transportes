@@ -1,4 +1,5 @@
 from datetime import datetime
+
 from . import db  # importa o db do pacote models
 
 
@@ -16,6 +17,7 @@ class Fornecedor(db.Model):
     bairro = db.Column(db.String(100), nullable=True)
     municipio = db.Column(db.String(100), nullable=True)
     uf = db.Column(db.String(2), nullable=True)
+    cep = db.Column(db.String(10), nullable=True)
     nome_vendedor = db.Column(db.String(100), nullable=True)
     telefone = db.Column(db.String(15), nullable=True)
     email = db.Column(db.String(100), nullable=True)
@@ -24,7 +26,6 @@ class Fornecedor(db.Model):
         nullable=True,
         default=datetime.utcnow,
     )
-
     dados_bancarios = db.Column(db.Text, nullable=True)
     chave_pix = db.Column(db.String(100), nullable=True)
     tipo_pagamento_padrao = db.Column(db.String(20), nullable=True)
