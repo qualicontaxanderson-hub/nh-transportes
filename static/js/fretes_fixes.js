@@ -91,19 +91,51 @@ function initFretesFixes() {
 
   if (elPrecoProduto) {
     aplicarFormatacaoMonetaria(elPrecoProduto, 3);
+    
+    // Auto-select all on focus to allow easy overwrite
+    elPrecoProduto.addEventListener('focus', function(){
+      this.select();
+    });
+    
     elPrecoProduto.addEventListener('blur', function(){
       aplicarFormatacaoMonetaria(this, 3);
       try{ if (typeof calcularTudo==='function') calcularTudo(); }catch(e){}
     });
-    // também reagir ao input para atualizar raw enquanto digita (opcional)
-    elPrecoProduto.addEventListener('input', function(){ /* nada aqui para não atrapalhar digitação */ });
+    
+    // Allow typing digits directly - format will apply on blur
+    elPrecoProduto.addEventListener('keydown', function(e){
+      // If user starts typing a digit, clear the field first (unless already typing)
+      if (/^\d$/.test(e.key) && this.value && this.selectionStart === this.selectionEnd) {
+        // Only if we're at the formatted value (starts with R$)
+        if (this.value.indexOf('R$') === 0) {
+          this.value = '';
+        }
+      }
+    });
   }
 
   if (elPrecoPorLitro) {
     aplicarFormatacaoMonetaria(elPrecoPorLitro, 2);
+    
+    // Auto-select all on focus to allow easy overwrite
+    elPrecoPorLitro.addEventListener('focus', function(){
+      this.select();
+    });
+    
     elPrecoPorLitro.addEventListener('blur', function(){
       aplicarFormatacaoMonetaria(this, 2);
       try{ if (typeof calcularTudo==='function') calcularTudo(); }catch(e){}
+    });
+    
+    // Allow typing digits directly - format will apply on blur
+    elPrecoPorLitro.addEventListener('keydown', function(e){
+      // If user starts typing a digit, clear the field first (unless already typing)
+      if (/^\d$/.test(e.key) && this.value && this.selectionStart === this.selectionEnd) {
+        // Only if we're at the formatted value (starts with R$)
+        if (this.value.indexOf('R$') === 0) {
+          this.value = '';
+        }
+      }
     });
   }
 

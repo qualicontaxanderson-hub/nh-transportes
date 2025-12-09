@@ -120,16 +120,37 @@ function readDestinoId() {
 function calcularValorCTeViaRotas(quantidade) {
   var origem = $id('origem_id') ? $id('origem_id').value : null;
   var destino = readDestinoId();
-  if (!origem || !destino) return 0;
+  
+  console.log('[DEBUG CTe] origem:', origem, 'destino:', destino, 'quantidade:', quantidade);
+  console.log('[DEBUG CTe] ROTAS:', typeof ROTAS !== 'undefined' ? ROTAS : 'undefined');
+  
+  if (!origem || !destino) {
+    console.log('[DEBUG CTe] Missing origem or destino, returning 0');
+    return 0;
+  }
+  
   var key = origem + '|' + destino;
+  console.log('[DEBUG CTe] Key:', key);
+  
   try {
-    if (typeof ROTAS !== 'undefined' && ROTAS && ROTAS[key]) return Number(ROTAS[key]) * Number(quantidade || 0);
+    if (typeof ROTAS !== 'undefined' && ROTAS && ROTAS[key]) {
+      var result = Number(ROTAS[key]) * Number(quantidade || 0);
+      console.log('[DEBUG CTe] Found route in ROTAS[' + key + '] =', ROTAS[key], 'result:', result);
+      return result;
+    }
     // try numeric-key fallback
     var keys = [origem + '|' + destino, parseInt(origem,10) + '|' + parseInt(destino,10)];
     for (var i = 0; i < keys.length; i++) {
-      if (ROTAS[keys[i]]) return Number(ROTAS[keys[i]]) * Number(quantidade || 0);
+      if (ROTAS[keys[i]]) {
+        var result = Number(ROTAS[keys[i]]) * Number(quantidade || 0);
+        console.log('[DEBUG CTe] Found route in ROTAS[' + keys[i] + '] =', ROTAS[keys[i]], 'result:', result);
+        return result;
+      }
     }
-  } catch (e) { console.error(e); }
+    console.log('[DEBUG CTe] No route found in ROTAS for any key variant');
+  } catch (e) { 
+    console.error('[DEBUG CTe] Error:', e); 
+  }
   return 0;
 }
 
@@ -181,12 +202,15 @@ function calcularTudo() {
 
   // Valor CTe
   var valorCTe = 0;
+  console.log('[DEBUG] cteIntegral:', cteIntegral, 'clientePaga:', clientePaga);
   if (cteIntegral) {
     // CTE integral = valorTotalFrete (which may be 0 if client doesn't pay)
     valorCTe = valorTotalFrete;
+    console.log('[DEBUG] CTe Integral mode: valorCTe = valorTotalFrete =', valorCTe);
   } else {
     // rota-based, independent of client pay flag (operational value)
     valorCTe = calcularValorCTeViaRotas(quantidade) || 0;
+    console.log('[DEBUG] CTe Normal mode: valorCTe =', valorCTe);
   }
 
   // Comissão Motorista (sempre calculada pela regra)
@@ -220,6 +244,7 @@ function calcularTudo() {
   // Comissão CTe = 8% do valorCTe (sempre)
   var comissaoCte = 0;
   comissaoCte = 0.08 * Number(valorCTe || 0);
+  console.log('[DEBUG] Comissão CTe = 8% of', valorCTe, '=', comissaoCte);
 
   // Lucro
   var lucro = 0;
