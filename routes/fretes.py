@@ -464,6 +464,9 @@ def salvar_importados():
         flash(f'Importação recebida: {total_items} item(ns). Implementação de gravação não ativada.', 'success')
         return redirect(url_for('fretes.lista'))
 
+    # Capturar pedido_id do formulário
+    pedido_id = form.get('pedido_id')
+    
     conn = get_db_connection()
     cur = conn.cursor()
     saved = 0
@@ -535,6 +538,17 @@ def salvar_importados():
                 conn.rollback()
                 current_app.logger.exception("[salvar_importados] erro ao salvar item[%d]: %s", idx, e_item)
                 failed.append({'idx': idx, 'error': str(e_item), 'item': item})
+        
+        # Se todos os itens foram salvos com sucesso e temos um pedido_id, atualizar status para 'Faturado'
+        if saved > 0 and len(failed) == 0 and pedido_id:
+            try:
+                cur.execute("UPDATE pedidos SET status = %s WHERE id = %s", ('Faturado', pedido_id))
+                conn.commit()
+                current_app.logger.info("[salvar_importados] Pedido #%s atualizado para status 'Faturado'", pedido_id)
+            except Exception as e_status:
+                conn.rollback()
+                current_app.logger.exception("[salvar_importados] erro ao atualizar status do pedido: %s", e_status)
+                flash("Fretes salvos, mas erro ao atualizar status do pedido.", "warning")
     finally:
         try:
             cur.close()
