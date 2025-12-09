@@ -43,7 +43,14 @@ if (typeof formatarMoedaBR !== 'function') {
 function $id(id) { return document.getElementById(id); }
 
 // Constants for boolean value parsing
-var FALSY_VALUES = ['', '0', 'false', 'nao', 'não', 'no', 'none'];
+var FALSY_VALUES = ['', '0', 'false', 'nao', 'não', 'no'];
+
+// Helper to parse boolean-like strings (handles True/False, 1/0, yes/no, etc.)
+function parseBooleanAttr(value) {
+  if (typeof value === 'undefined' || value === null) return false;
+  var s = String(value).trim().toLowerCase();
+  return FALSY_VALUES.indexOf(s) === -1;
+}
 
 function parseNumberFromField(el) {
   if (!el) return 0;
@@ -183,29 +190,20 @@ function calcularTudo() {
   // Comissão Motorista (sempre calculada pela regra)
   var comissaoMotorista = 0;
 
-  // verificar se motorista recebe comissão (motorista option data-paga-comissao preferencial, fallback data-percentual)
+  // verificar se motorista recebe comissão (motorista option data-paga-comissao)
   var motoristaSel = $id('motoristas_id');
   var motoristaRecebeComissao = true;
   if (motoristaSel) {
     var mOpt = motoristaSel.options[motoristaSel.selectedIndex];
     if (mOpt) {
       var pagaAttr = mOpt.getAttribute('data-paga-comissao');
-      if (typeof pagaAttr !== 'undefined' && pagaAttr !== null) {
-        var s = String(pagaAttr).trim().toLowerCase();
-        // Check against list of falsy values
-        if (FALSY_VALUES.indexOf(s) >= 0) {
-          motoristaRecebeComissao = false;
-        } else {
-          // truthy values: '1', 'true', 'yes', 'sim', etc
-          motoristaRecebeComissao = true;
-        }
-      } else {
-        // fallback para atributos alternativos de percentual
+      motoristaRecebeComissao = parseBooleanAttr(pagaAttr);
+      // Fallback: check percentual attribute if paga-comissao not set
+      if (typeof pagaAttr === 'undefined' || pagaAttr === null) {
         var mPercentAttr = mOpt.getAttribute('data-percentual') || mOpt.getAttribute('data-percentual-comissao') || mOpt.getAttribute('data-percentual_comissao');
         if (typeof mPercentAttr !== 'undefined' && mPercentAttr !== null && String(mPercentAttr).trim() !== '') {
           var p = parseFloat(String(mPercentAttr).replace(',', '.'));
-          if (!isNaN(p) && p <= 0) motoristaRecebeComissao = false;
-          else motoristaRecebeComissao = true;
+          motoristaRecebeComissao = !(isNaN(p) || p <= 0);
         }
       }
     }
@@ -265,5 +263,6 @@ function calcularTudo() {
   if (hComissaoMotorista) hComissaoMotorista.value = (Math.round((comissaoMotorista + Number.EPSILON) * 100) / 100);
 }
 
-// Expose calcularTudo globally
+// Expose calcularTudo and utility functions globally
 window.calcularTudo = calcularTudo;
+window.parseBooleanAttr = parseBooleanAttr;

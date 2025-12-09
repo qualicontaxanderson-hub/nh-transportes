@@ -159,10 +159,14 @@ function initFretesFixes() {
       var cteIntegral = opt.getAttribute('data-cte-integral') || opt.getAttribute('data-cte_integral') || '0';
 
       // definir variáveis usadas nos cálculos
-      // Handle both boolean (True/False) and numeric (1/0) representations
-      window.__CLIENTE_PAGA_FRETE = (typeof pagaComissao !== 'undefined' && pagaComissao !== null)
-        ? (String(pagaComissao).trim() !== '0' && String(pagaComissao).trim().toLowerCase() !== 'false' && String(pagaComissao).trim() !== '')
-        : false;
+      // Use parseBooleanAttr if available, otherwise fallback to manual parsing
+      var parseFn = window.parseBooleanAttr || function(val) {
+        if (typeof val === 'undefined' || val === null) return false;
+        var s = String(val).trim().toLowerCase();
+        return s !== '0' && s !== 'false' && s !== '';
+      };
+      
+      window.__CLIENTE_PAGA_FRETE = parseFn(pagaComissao);
 
       window.__CLIENTE_PERCENTUAL_CTE = parseFloat(percentualCte) || 0;
       window.__CLIENTE_CTE_INTEGRAL = (String(cteIntegral) === '1' || String(cteIntegral).toLowerCase() === 'true');
