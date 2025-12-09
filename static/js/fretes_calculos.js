@@ -205,7 +205,7 @@ function calcularTudo() {
         var mPercentAttr = mOpt.getAttribute('data-percentual') || mOpt.getAttribute('data-percentual-comissao') || mOpt.getAttribute('data-percentual_comissao');
         if (typeof mPercentAttr !== 'undefined' && mPercentAttr !== null && String(mPercentAttr).trim() !== '') {
           var p = parseFloat(String(mPercentAttr).replace(',', '.'));
-          motoristaRecebeComissao = !(isNaN(p) || p <= 0);
+          motoristaRecebeComissao = !isNaN(p) && p > 0;
         }
       }
     }
