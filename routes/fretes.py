@@ -464,8 +464,14 @@ def salvar_importados():
         flash(f'Importação recebida: {total_items} item(ns). Implementação de gravação não ativada.', 'success')
         return redirect(url_for('fretes.lista'))
 
-    # Capturar pedido_id do formulário
+    # Capturar pedido_id do formulário e validar
     pedido_id = form.get('pedido_id')
+    if pedido_id:
+        try:
+            pedido_id = int(pedido_id)
+        except (ValueError, TypeError):
+            current_app.logger.warning("[salvar_importados] pedido_id inválido: %s", pedido_id)
+            pedido_id = None
     
     conn = get_db_connection()
     cur = conn.cursor()
