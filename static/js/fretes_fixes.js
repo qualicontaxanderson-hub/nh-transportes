@@ -91,19 +91,51 @@ function initFretesFixes() {
 
   if (elPrecoProduto) {
     aplicarFormatacaoMonetaria(elPrecoProduto, 3);
+    
+    // Auto-select all on focus to allow easy overwrite
+    elPrecoProduto.addEventListener('focus', function(){
+      this.select();
+    });
+    
     elPrecoProduto.addEventListener('blur', function(){
       aplicarFormatacaoMonetaria(this, 3);
       try{ if (typeof calcularTudo==='function') calcularTudo(); }catch(e){}
     });
-    // também reagir ao input para atualizar raw enquanto digita (opcional)
-    elPrecoProduto.addEventListener('input', function(){ /* nada aqui para não atrapalhar digitação */ });
+    
+    // Allow typing digits directly - format will apply on blur
+    elPrecoProduto.addEventListener('keydown', function(e){
+      // If user starts typing a digit, clear the field first (unless already typing)
+      if (/^\d$/.test(e.key) && this.value && this.selectionStart === this.selectionEnd) {
+        // Only if we're at the formatted value (starts with R$)
+        if (this.value.indexOf('R$') === 0) {
+          this.value = '';
+        }
+      }
+    });
   }
 
   if (elPrecoPorLitro) {
     aplicarFormatacaoMonetaria(elPrecoPorLitro, 2);
+    
+    // Auto-select all on focus to allow easy overwrite
+    elPrecoPorLitro.addEventListener('focus', function(){
+      this.select();
+    });
+    
     elPrecoPorLitro.addEventListener('blur', function(){
       aplicarFormatacaoMonetaria(this, 2);
       try{ if (typeof calcularTudo==='function') calcularTudo(); }catch(e){}
+    });
+    
+    // Allow typing digits directly - format will apply on blur
+    elPrecoPorLitro.addEventListener('keydown', function(e){
+      // If user starts typing a digit, clear the field first (unless already typing)
+      if (/^\d$/.test(e.key) && this.value && this.selectionStart === this.selectionEnd) {
+        // Only if we're at the formatted value (starts with R$)
+        if (this.value.indexOf('R$') === 0) {
+          this.value = '';
+        }
+      }
     });
   }
 
@@ -141,8 +173,10 @@ function initFretesFixes() {
 
   var origemEl = document.getElementById('origem_id');
   var destinoEl = document.getElementById('destino_id');
+  var motoristaEl = document.getElementById('motoristas_id');
   if (origemEl) origemEl.addEventListener('change', function(){ try{ if (typeof calcularTudo==='function') calcularTudo(); }catch(e){} });
   if (destinoEl) destinoEl.addEventListener('change', function(){ try{ if (typeof calcularTudo==='function') calcularTudo(); }catch(e){} });
+  if (motoristaEl) motoristaEl.addEventListener('change', function(){ try{ if (typeof calcularTudo==='function') calcularTudo(); }catch(e){} });
 
   // --- novo: bind para cliente -> preencher destino e variáveis do cliente
   var clienteSel = document.getElementById('clientes_id');
@@ -157,10 +191,16 @@ function initFretesFixes() {
       var cteIntegral = opt.getAttribute('data-cte-integral') || opt.getAttribute('data-cte_integral') || '0';
 
       // definir variáveis usadas nos cálculos
-      // NOTE: default seguro = false (não assumir que cliente paga se atributo ausente)
-      window.__CLIENTE_PAGA_FRETE = (typeof pagaComissao !== 'undefined' && pagaComissao !== null)
-        ? (String(pagaComissao).trim() !== '0' && String(pagaComissao).trim().toLowerCase() !== 'false')
-        : false;
+      // Use parseBoolean utility function with consistent FALSY_VALUES
+      var parseFn = window.parseBoolean || function(val) {
+        if (typeof val === 'undefined' || val === null) return false;
+        var s = String(val).trim().toLowerCase();
+        // Matches FALSY_VALUES in fretes_calculos.js
+        var falsyVals = ['', '0', 'false', 'nao', 'não', 'no'];
+        return falsyVals.indexOf(s) === -1;
+      };
+      
+      window.__CLIENTE_PAGA_FRETE = parseFn(pagaComissao);
 
       window.__CLIENTE_PERCENTUAL_CTE = parseFloat(percentualCte) || 0;
       window.__CLIENTE_CTE_INTEGRAL = (String(cteIntegral) === '1' || String(cteIntegral).toLowerCase() === 'true');
@@ -197,7 +237,18 @@ document.addEventListener('DOMContentLoaded', function(){
     if (typeof initFretesFixes === 'function') initFretesFixes();
   } catch (e) { console.error('initFretesFixes erro', e); }
 
-  try {
-    if (typeof calcularTudo === 'function') calcularTudo();
-  } catch (e) { /* calcularTudo pode estar definido depois se scripts carregarem em ordem inesperada */ }
+  // Wait a bit for all scripts to load, then try to call calcularTudo
+  // This ensures fretes_calculos.js has loaded since it's the last script in the template
+  setTimeout(function() {
+    try {
+      if (typeof calcularTudo === 'function') {
+        calcularTudo();
+        console.log('[INIT] calcularTudo called on page load');
+      } else {
+        console.warn('[INIT] calcularTudo not defined yet');
+      }
+    } catch (e) { 
+      console.error('[INIT] Error calling calcularTudo:', e);
+    }
+  }, 100);
 });

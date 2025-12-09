@@ -42,6 +42,18 @@ if (typeof formatarMoedaBR !== 'function') {
 
 function $id(id) { return document.getElementById(id); }
 
+// Constants for boolean value parsing
+// Falsy values: empty, zero, false (English/Portuguese), no (English/Portuguese)
+var FALSY_VALUES = ['', '0', 'false', 'nao', 'não', 'no'];
+
+// Helper to parse boolean-like strings (handles True/False, 1/0, yes/no, sim/não, etc.)
+// Returns true for any value not in FALSY_VALUES list
+function parseBoolean(value) {
+  if (typeof value === 'undefined' || value === null) return false;
+  var s = String(value).trim().toLowerCase();
+  return FALSY_VALUES.indexOf(s) === -1;
+}
+
 function parseNumberFromField(el) {
   if (!el) return 0;
   var raw = el.value || '';
@@ -96,19 +108,61 @@ function readPrecoPorLitroRaw() {
   return parseNumberFromField($id('preco_por_litro')) || 0;
 }
 
+// Helper function to read destino value (prefers hidden field over disabled select)
+function readDestinoId() {
+  var hidden = $id('destino_id_hidden');
+  if (hidden && hidden.value) return hidden.value;
+  var visible = $id('destino_id');
+  if (visible && visible.value) return visible.value;
+  return null;
+}
+
 function calcularValorCTeViaRotas(quantidade) {
   var origem = $id('origem_id') ? $id('origem_id').value : null;
-  var destino = ($id('destino_id') && $id('destino_id').value) ? $id('destino_id').value : null;
-  if (!origem || !destino) return 0;
+  var destino = readDestinoId();
+  
+  // Log the values for debugging
+  if (!origem || !destino) {
+    console.warn('CTe calculation: Missing origem or destino. Origem:', origem, 'Destino:', destino);
+    return 0;
+  }
+  
   var key = origem + '|' + destino;
+  console.log('CTe calculation: Looking for route', key, 'quantidade:', quantidade);
+  
   try {
-    if (typeof ROTAS !== 'undefined' && ROTAS && ROTAS[key]) return Number(ROTAS[key]) * Number(quantidade || 0);
-    // try numeric-key fallback
-    var keys = [origem + '|' + destino, parseInt(origem,10) + '|' + parseInt(destino,10)];
-    for (var i = 0; i < keys.length; i++) {
-      if (ROTAS[keys[i]]) return Number(ROTAS[keys[i]]) * Number(quantidade || 0);
+    // Check if ROTAS is defined and not empty
+    if (typeof ROTAS === 'undefined') {
+      console.error('CTe calculation: ROTAS dictionary is undefined!');
+      return 0;
     }
-  } catch (e) { console.error(e); }
+    
+    if (!ROTAS || Object.keys(ROTAS).length === 0) {
+      console.error('CTe calculation: ROTAS dictionary is empty!');
+      return 0;
+    }
+    
+    console.log('CTe calculation: ROTAS available routes:', Object.keys(ROTAS));
+    
+    // Try exact string match first
+    if (ROTAS[key]) {
+      var result = Number(ROTAS[key]) * Number(quantidade || 0);
+      console.log('CTe calculation: Found route', key, '=', ROTAS[key], 'result:', result);
+      return result;
+    }
+    
+    // Try numeric-key fallback
+    var numericKey = parseInt(origem,10) + '|' + parseInt(destino,10);
+    if (ROTAS[numericKey]) {
+      var result = Number(ROTAS[numericKey]) * Number(quantidade || 0);
+      console.log('CTe calculation: Found route with numeric key', numericKey, '=', ROTAS[numericKey], 'result:', result);
+      return result;
+    }
+    
+    console.warn('CTe calculation: Route not found for', key, 'or', numericKey, 'in ROTAS');
+  } catch (e) { 
+    console.error('CTe calculation error:', e); 
+  }
   return 0;
 }
 
@@ -123,21 +177,25 @@ function ensureHidden(name) {
 }
 
 function calcularTudo() {
-  ensureHidden('preco_produto_unitario_raw');
-  ensureHidden('preco_por_litro_raw');
+  try {
+    console.log('=== calcularTudo called ===');
+    
+    ensureHidden('preco_produto_unitario_raw');
+    ensureHidden('preco_por_litro_raw');
 
-  ensureHidden('total_nf_compra_raw');
-  ensureHidden('valor_total_frete_raw');
-  ensureHidden('valor_cte_raw');
-  ensureHidden('comissao_cte_raw');
-  ensureHidden('lucro_raw');
-  ensureHidden('comissao_motorista_raw');
+    ensureHidden('total_nf_compra_raw');
+    ensureHidden('valor_total_frete_raw');
+    ensureHidden('valor_cte_raw');
+    ensureHidden('comissao_cte_raw');
+    ensureHidden('lucro_raw');
+    ensureHidden('comissao_motorista_raw');
 
-  var quantidade = readQuantidade();
-  if (isNaN(quantidade) || quantidade <= 0) quantidade = NaN;
+    var quantidade = readQuantidade();
+    console.log('Quantidade read:', quantidade);
+    if (isNaN(quantidade) || quantidade <= 0) quantidade = NaN;
 
-  var precoUnit = readPrecoProdutoUnitario();
-  var precoPorLitro = readPrecoPorLitroRaw();
+    var precoUnit = readPrecoProdutoUnitario();
+    var precoPorLitro = readPrecoPorLitroRaw();
 
   // Total NF
   var totalNF = 0;
@@ -160,39 +218,35 @@ function calcularTudo() {
 
   // Valor CTe
   var valorCTe = 0;
+  console.log('Calculating CTe. cteIntegral:', cteIntegral);
   if (cteIntegral) {
     // CTE integral = valorTotalFrete (which may be 0 if client doesn't pay)
     valorCTe = valorTotalFrete;
+    console.log('CTe Integral mode: valorCTe = valorTotalFrete =', valorCTe);
   } else {
     // rota-based, independent of client pay flag (operational value)
+    console.log('CTe Normal mode: calling calcularValorCTeViaRotas');
     valorCTe = calcularValorCTeViaRotas(quantidade) || 0;
+    console.log('CTe Normal mode: valorCTe =', valorCTe);
   }
 
   // Comissão Motorista (sempre calculada pela regra)
   var comissaoMotorista = 0;
 
-  // verificar se motorista recebe comissão (motorista option data-paga-comissao preferencial, fallback data-percentual)
+  // verificar se motorista recebe comissão (motorista option data-paga-comissao)
   var motoristaSel = $id('motoristas_id');
   var motoristaRecebeComissao = true;
   if (motoristaSel) {
     var mOpt = motoristaSel.options[motoristaSel.selectedIndex];
     if (mOpt) {
       var pagaAttr = mOpt.getAttribute('data-paga-comissao');
-      if (typeof pagaAttr !== 'undefined' && pagaAttr !== null) {
-        var s = String(pagaAttr).trim().toLowerCase();
-        // aceitar variantes: '', '0', 'false', 'nao', 'não', 'no'
-        if (s === '' || s === '0' || s === 'false' || s === 'nao' || s === 'não' || s === 'no') {
-          motoristaRecebeComissao = false;
-        } else {
-          motoristaRecebeComissao = true;
-        }
-      } else {
-        // fallback para atributos alternativos de percentual
+      motoristaRecebeComissao = parseBoolean(pagaAttr);
+      // Fallback: check percentual attribute if paga-comissao not set
+      if (typeof pagaAttr === 'undefined' || pagaAttr === null) {
         var mPercentAttr = mOpt.getAttribute('data-percentual') || mOpt.getAttribute('data-percentual-comissao') || mOpt.getAttribute('data-percentual_comissao');
         if (typeof mPercentAttr !== 'undefined' && mPercentAttr !== null && String(mPercentAttr).trim() !== '') {
           var p = parseFloat(String(mPercentAttr).replace(',', '.'));
-          if (!isNaN(p) && p <= 0) motoristaRecebeComissao = false;
-          else motoristaRecebeComissao = true;
+          motoristaRecebeComissao = !isNaN(p) && p > 0;
         }
       }
     }
@@ -250,4 +304,39 @@ function calcularTudo() {
   if (hComissaoCte) hComissaoCte.value = (Math.round((comissaoCte + Number.EPSILON) * 100) / 100);
   if (hLucro) hLucro.value = (Math.round((lucro + Number.EPSILON) * 100) / 100);
   if (hComissaoMotorista) hComissaoMotorista.value = (Math.round((comissaoMotorista + Number.EPSILON) * 100) / 100);
+  } catch (e) {
+    console.error('ERROR at end of calcularTudo:', e);
+    alert('ERRO no final do calcularTudo: ' + e.message);
+    throw e;
+  }
+}
+
+// Expose calcularTudo and utility functions globally
+window.calcularTudo = calcularTudo;
+window.parseBoolean = parseBoolean;
+
+// Log ROTAS content on script load
+console.log('[INIT] ROTAS dictionary loaded:', typeof ROTAS !== 'undefined' ? ROTAS : 'ROTAS is undefined');
+console.log('[INIT] ROTAS keys:', typeof ROTAS !== 'undefined' ? Object.keys(ROTAS) : 'N/A');
+console.log('[INIT] ROTAS count:', typeof ROTAS !== 'undefined' ? Object.keys(ROTAS).length : 0);
+
+// Auto-run calcularTudo when this script loads (it's the last script in the template)
+// This ensures all DOM elements and other scripts are ready
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', function() {
+    console.log('[INIT] fretes_calculos.js: DOMContentLoaded, calling calcularTudo');
+    try {
+      calcularTudo();
+    } catch (e) {
+      console.error('[INIT] Error in initial calcularTudo:', e);
+    }
+  });
+} else {
+  // DOM already loaded, call immediately
+  console.log('[INIT] fretes_calculos.js: DOM already ready, calling calcularTudo');
+  try {
+    calcularTudo();
+  } catch (e) {
+    console.error('[INIT] Error in initial calcularTudo:', e);
+  }
 }
