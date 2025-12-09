@@ -98,7 +98,12 @@ function readPrecoPorLitroRaw() {
 
 function calcularValorCTeViaRotas(quantidade) {
   var origem = $id('origem_id') ? $id('origem_id').value : null;
-  var destino = ($id('destino_id') && $id('destino_id').value) ? $id('destino_id').value : null;
+  // Read from hidden field since the visible select is disabled
+  var destino = $id('destino_id_hidden') ? $id('destino_id_hidden').value : null;
+  // Fallback to visible select if hidden field doesn't exist
+  if (!destino) {
+    destino = ($id('destino_id') && $id('destino_id').value) ? $id('destino_id').value : null;
+  }
   if (!origem || !destino) return 0;
   var key = origem + '|' + destino;
   try {
@@ -180,10 +185,11 @@ function calcularTudo() {
       var pagaAttr = mOpt.getAttribute('data-paga-comissao');
       if (typeof pagaAttr !== 'undefined' && pagaAttr !== null) {
         var s = String(pagaAttr).trim().toLowerCase();
-        // aceitar variantes: '', '0', 'false', 'nao', 'não', 'no'
-        if (s === '' || s === '0' || s === 'false' || s === 'nao' || s === 'não' || s === 'no') {
+        // aceitar variantes de falsy: '', '0', 'false', 'nao', 'não', 'no', 'none'
+        if (s === '' || s === '0' || s === 'false' || s === 'nao' || s === 'não' || s === 'no' || s === 'none') {
           motoristaRecebeComissao = false;
         } else {
+          // truthy values: '1', 'true', 'yes', 'sim', etc
           motoristaRecebeComissao = true;
         }
       } else {
@@ -251,3 +257,6 @@ function calcularTudo() {
   if (hLucro) hLucro.value = (Math.round((lucro + Number.EPSILON) * 100) / 100);
   if (hComissaoMotorista) hComissaoMotorista.value = (Math.round((comissaoMotorista + Number.EPSILON) * 100) / 100);
 }
+
+// Expose calcularTudo globally
+window.calcularTudo = calcularTudo;

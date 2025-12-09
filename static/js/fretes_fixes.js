@@ -141,8 +141,10 @@ function initFretesFixes() {
 
   var origemEl = document.getElementById('origem_id');
   var destinoEl = document.getElementById('destino_id');
+  var motoristaEl = document.getElementById('motoristas_id');
   if (origemEl) origemEl.addEventListener('change', function(){ try{ if (typeof calcularTudo==='function') calcularTudo(); }catch(e){} });
   if (destinoEl) destinoEl.addEventListener('change', function(){ try{ if (typeof calcularTudo==='function') calcularTudo(); }catch(e){} });
+  if (motoristaEl) motoristaEl.addEventListener('change', function(){ try{ if (typeof calcularTudo==='function') calcularTudo(); }catch(e){} });
 
   // --- novo: bind para cliente -> preencher destino e variáveis do cliente
   var clienteSel = document.getElementById('clientes_id');
@@ -157,9 +159,9 @@ function initFretesFixes() {
       var cteIntegral = opt.getAttribute('data-cte-integral') || opt.getAttribute('data-cte_integral') || '0';
 
       // definir variáveis usadas nos cálculos
-      // NOTE: default seguro = false (não assumir que cliente paga se atributo ausente)
+      // Handle both boolean (True/False) and numeric (1/0) representations
       window.__CLIENTE_PAGA_FRETE = (typeof pagaComissao !== 'undefined' && pagaComissao !== null)
-        ? (String(pagaComissao).trim() !== '0' && String(pagaComissao).trim().toLowerCase() !== 'false')
+        ? (String(pagaComissao).trim() !== '0' && String(pagaComissao).trim().toLowerCase() !== 'false' && String(pagaComissao).trim() !== '')
         : false;
 
       window.__CLIENTE_PERCENTUAL_CTE = parseFloat(percentualCte) || 0;
