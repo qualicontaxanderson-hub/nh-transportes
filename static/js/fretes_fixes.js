@@ -159,11 +159,13 @@ function initFretesFixes() {
       var cteIntegral = opt.getAttribute('data-cte-integral') || opt.getAttribute('data-cte_integral') || '0';
 
       // definir variáveis usadas nos cálculos
-      // Use parseBooleanAttr if available, otherwise fallback to manual parsing
-      var parseFn = window.parseBooleanAttr || function(val) {
+      // Use parseBoolean utility function with consistent FALSY_VALUES
+      var parseFn = window.parseBoolean || function(val) {
         if (typeof val === 'undefined' || val === null) return false;
         var s = String(val).trim().toLowerCase();
-        return s !== '0' && s !== 'false' && s !== '';
+        // Matches FALSY_VALUES in fretes_calculos.js
+        var falsyVals = ['', '0', 'false', 'nao', 'não', 'no'];
+        return falsyVals.indexOf(s) === -1;
       };
       
       window.__CLIENTE_PAGA_FRETE = parseFn(pagaComissao);

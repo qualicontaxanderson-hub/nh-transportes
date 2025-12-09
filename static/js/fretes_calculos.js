@@ -43,10 +43,12 @@ if (typeof formatarMoedaBR !== 'function') {
 function $id(id) { return document.getElementById(id); }
 
 // Constants for boolean value parsing
+// Falsy values: empty, zero, false (English/Portuguese), no (English/Portuguese)
 var FALSY_VALUES = ['', '0', 'false', 'nao', 'não', 'no'];
 
-// Helper to parse boolean-like strings (handles True/False, 1/0, yes/no, etc.)
-function parseBooleanAttr(value) {
+// Helper to parse boolean-like strings (handles True/False, 1/0, yes/no, sim/não, etc.)
+// Returns true for any value not in FALSY_VALUES list
+function parseBoolean(value) {
   if (typeof value === 'undefined' || value === null) return false;
   var s = String(value).trim().toLowerCase();
   return FALSY_VALUES.indexOf(s) === -1;
@@ -197,7 +199,7 @@ function calcularTudo() {
     var mOpt = motoristaSel.options[motoristaSel.selectedIndex];
     if (mOpt) {
       var pagaAttr = mOpt.getAttribute('data-paga-comissao');
-      motoristaRecebeComissao = parseBooleanAttr(pagaAttr);
+      motoristaRecebeComissao = parseBoolean(pagaAttr);
       // Fallback: check percentual attribute if paga-comissao not set
       if (typeof pagaAttr === 'undefined' || pagaAttr === null) {
         var mPercentAttr = mOpt.getAttribute('data-percentual') || mOpt.getAttribute('data-percentual-comissao') || mOpt.getAttribute('data-percentual_comissao');
@@ -265,4 +267,4 @@ function calcularTudo() {
 
 // Expose calcularTudo and utility functions globally
 window.calcularTudo = calcularTudo;
-window.parseBooleanAttr = parseBooleanAttr;
+window.parseBoolean = parseBoolean;
