@@ -65,48 +65,28 @@ function readQuantidade() {
   var manual = $id('quantidade_manual');
   if (manual && String(manual.value).trim() !== '') {
     var s = String(manual.value).trim();
-    console.log('[DEBUG Qtd] Manual input:', s);
     // "9.975" => 9975 when no comma present
     if (s.indexOf('.') >= 0 && s.indexOf(',') === -1) {
       var cleaned = s.replace(/\./g, '');
       var v = parseInt(cleaned, 10);
-      var result = isNaN(v) ? NaN : v;
-      console.log('[DEBUG Qtd] Parsed as integer with dots removed:', result);
-      return result;
+      return isNaN(v) ? NaN : v;
     }
     if (/^\d+$/.test(s)) {
-      var result = parseInt(s, 10);
-      console.log('[DEBUG Qtd] Parsed as pure integer:', result);
-      return result;
+      return parseInt(s, 10);
     }
     var n = desformatarMoeda(s);
-    if (isNaN(n)) {
-      console.log('[DEBUG Qtd] Failed to parse, returning NaN');
-      return NaN;
-    }
-    var result = Math.round(n);
-    console.log('[DEBUG Qtd] Parsed via desformatarMoeda:', result);
-    return result;
+    if (isNaN(n)) return NaN;
+    return Math.round(n);
   }
   var sel = $id('quantidade_id');
-  if (!sel) {
-    console.log('[DEBUG Qtd] No quantidade select found, returning NaN');
-    return NaN;
-  }
+  if (!sel) return NaN;
   var opt = sel.options[sel.selectedIndex];
-  if (!opt) {
-    console.log('[DEBUG Qtd] No option selected, returning NaN');
-    return NaN;
-  }
+  if (!opt) return NaN;
   var q = opt.getAttribute('data-quantidade') || opt.getAttribute('data-quantidade-litros') || opt.getAttribute('data-quantidade_litros');
-  if (q === null || q === undefined) {
-    console.log('[DEBUG Qtd] No data-quantidade attribute, returning NaN');
-    return NaN;
-  }
+  if (q === null || q === undefined) return NaN;
   // aceitar vírgula como decimal
   q = String(q).replace(',', '.');
   var num = parseFloat(q);
-  console.log('[DEBUG Qtd] From select option, data-quantidade:', q, 'parsed:', num);
   return isNaN(num) ? NaN : num;
 }
 
@@ -140,36 +120,21 @@ function readDestinoId() {
 function calcularValorCTeViaRotas(quantidade) {
   var origem = $id('origem_id') ? $id('origem_id').value : null;
   var destino = readDestinoId();
-  
-  console.log('[DEBUG CTe] origem:', origem, 'destino:', destino, 'quantidade:', quantidade);
-  console.log('[DEBUG CTe] ROTAS:', typeof ROTAS !== 'undefined' ? ROTAS : 'undefined');
-  
-  if (!origem || !destino) {
-    console.log('[DEBUG CTe] Missing origem or destino, returning 0');
-    return 0;
-  }
-  
+  if (!origem || !destino) return 0;
   var key = origem + '|' + destino;
-  console.log('[DEBUG CTe] Key:', key);
-  
   try {
     if (typeof ROTAS !== 'undefined' && ROTAS && ROTAS[key]) {
-      var result = Number(ROTAS[key]) * Number(quantidade || 0);
-      console.log('[DEBUG CTe] Found route in ROTAS[' + key + '] =', ROTAS[key], 'result:', result);
-      return result;
+      return Number(ROTAS[key]) * Number(quantidade || 0);
     }
     // try numeric-key fallback
     var keys = [origem + '|' + destino, parseInt(origem,10) + '|' + parseInt(destino,10)];
     for (var i = 0; i < keys.length; i++) {
       if (ROTAS[keys[i]]) {
-        var result = Number(ROTAS[keys[i]]) * Number(quantidade || 0);
-        console.log('[DEBUG CTe] Found route in ROTAS[' + keys[i] + '] =', ROTAS[keys[i]], 'result:', result);
-        return result;
+        return Number(ROTAS[keys[i]]) * Number(quantidade || 0);
       }
     }
-    console.log('[DEBUG CTe] No route found in ROTAS for any key variant');
   } catch (e) { 
-    console.error('[DEBUG CTe] Error:', e); 
+    console.error('Error in calcularValorCTeViaRotas:', e); 
   }
   return 0;
 }
@@ -222,15 +187,12 @@ function calcularTudo() {
 
   // Valor CTe
   var valorCTe = 0;
-  console.log('[DEBUG] cteIntegral:', cteIntegral, 'clientePaga:', clientePaga);
   if (cteIntegral) {
     // CTE integral = valorTotalFrete (which may be 0 if client doesn't pay)
     valorCTe = valorTotalFrete;
-    console.log('[DEBUG] CTe Integral mode: valorCTe = valorTotalFrete =', valorCTe);
   } else {
     // rota-based, independent of client pay flag (operational value)
     valorCTe = calcularValorCTeViaRotas(quantidade) || 0;
-    console.log('[DEBUG] CTe Normal mode: valorCTe =', valorCTe);
   }
 
   // Comissão Motorista (sempre calculada pela regra)
@@ -264,7 +226,6 @@ function calcularTudo() {
   // Comissão CTe = 8% do valorCTe (sempre)
   var comissaoCte = 0;
   comissaoCte = 0.08 * Number(valorCTe || 0);
-  console.log('[DEBUG] Comissão CTe = 8% of', valorCTe, '=', comissaoCte);
 
   // Lucro
   var lucro = 0;
@@ -285,19 +246,9 @@ function calcularTudo() {
 
   if (elTotalNF) elTotalNF.value = 'R$ ' + formatarMoedaBR(totalNF, 2);
   if (elValorFrete) elValorFrete.value = 'R$ ' + formatarMoedaBR(valorTotalFrete, 2);
-  if (elValorCTe) {
-    elValorCTe.value = 'R$ ' + formatarMoedaBR(valorCTe, 2);
-    console.log('[DEBUG] Updated elValorCTe display to:', elValorCTe.value);
-  } else {
-    console.log('[DEBUG] elValorCTe element not found!');
-  }
+  if (elValorCTe) elValorCTe.value = 'R$ ' + formatarMoedaBR(valorCTe, 2);
   if (elComissaoMotorista) elComissaoMotorista.value = 'R$ ' + formatarMoedaBR(comissaoMotorista, 2);
-  if (elComissaoCte) {
-    elComissaoCte.value = 'R$ ' + formatarMoedaBR(comissaoCte, 2);
-    console.log('[DEBUG] Updated elComissaoCte display to:', elComissaoCte.value);
-  } else {
-    console.log('[DEBUG] elComissaoCte element not found!');
-  }
+  if (elComissaoCte) elComissaoCte.value = 'R$ ' + formatarMoedaBR(comissaoCte, 2);
   if (elLucro) elLucro.value = 'R$ ' + formatarMoedaBR(lucro, 2);
 
   // Update hidden raws
@@ -323,3 +274,24 @@ function calcularTudo() {
 // Expose calcularTudo and utility functions globally
 window.calcularTudo = calcularTudo;
 window.parseBoolean = parseBoolean;
+
+// Auto-run calcularTudo when this script loads (it's the last script in the template)
+// This ensures all DOM elements and other scripts are ready
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', function() {
+    console.log('[INIT] fretes_calculos.js: DOMContentLoaded, calling calcularTudo');
+    try {
+      calcularTudo();
+    } catch (e) {
+      console.error('[INIT] Error in initial calcularTudo:', e);
+    }
+  });
+} else {
+  // DOM already loaded, call immediately
+  console.log('[INIT] fretes_calculos.js: DOM already ready, calling calcularTudo');
+  try {
+    calcularTudo();
+  } catch (e) {
+    console.error('[INIT] Error in initial calcularTudo:', e);
+  }
+}

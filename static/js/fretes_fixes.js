@@ -237,7 +237,18 @@ document.addEventListener('DOMContentLoaded', function(){
     if (typeof initFretesFixes === 'function') initFretesFixes();
   } catch (e) { console.error('initFretesFixes erro', e); }
 
-  try {
-    if (typeof calcularTudo === 'function') calcularTudo();
-  } catch (e) { /* calcularTudo pode estar definido depois se scripts carregarem em ordem inesperada */ }
+  // Wait a bit for all scripts to load, then try to call calcularTudo
+  // This ensures fretes_calculos.js has loaded since it's the last script in the template
+  setTimeout(function() {
+    try {
+      if (typeof calcularTudo === 'function') {
+        calcularTudo();
+        console.log('[INIT] calcularTudo called on page load');
+      } else {
+        console.warn('[INIT] calcularTudo not defined yet');
+      }
+    } catch (e) { 
+      console.error('[INIT] Error calling calcularTudo:', e);
+    }
+  }, 100);
 });
