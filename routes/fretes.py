@@ -356,12 +356,12 @@ def novo():
         # montar rotas_dict (origem|destino => valor_por_litro)
         rotas_dict = {}
         try:
-            cursor.execute("SELECT origem_id, destino_id, valorporlitro FROM rotas WHERE ativo = 1")
+            cursor.execute("SELECT origem_id, destino_id, valor_por_litro FROM rotas WHERE ativo = 1")
             for r in cursor.fetchall():
                 try:
                     origem_id = r.get('origem_id') if isinstance(r, dict) else r[0]
                     destino_id = r.get('destino_id') if isinstance(r, dict) else r[1]
-                    valor = r.get('valorporlitro') if isinstance(r, dict) else r[2]
+                    valor = r.get('valor_por_litro') if isinstance(r, dict) else r[2]
                     key = f"{int(origem_id)}|{int(destino_id)}"
                     rotas_dict[key] = float(valor or 0)
                 except Exception:
@@ -737,12 +737,12 @@ def editar(id):
         # montar rotas_dict também para a página de edição
         rotas_dict = {}
         try:
-            cursor.execute("SELECT origem_id, destino_id, valorporlitro FROM rotas WHERE ativo = 1")
+            cursor.execute("SELECT origem_id, destino_id, valor_por_litro FROM rotas WHERE ativo = 1")
             for r in cursor.fetchall():
                 try:
                     origem_id = r.get('origem_id') if isinstance(r, dict) else r[0]
                     destino_id = r.get('destino_id') if isinstance(r, dict) else r[1]
-                    valor = r.get('valorporlitro') if isinstance(r, dict) else r[2]
+                    valor = r.get('valor_por_litro') if isinstance(r, dict) else r[2]
                     key = f"{int(origem_id)}|{int(destino_id)}"
                     rotas_dict[key] = float(valor or 0)
                 except Exception:
