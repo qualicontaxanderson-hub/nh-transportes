@@ -177,23 +177,26 @@ function ensureHidden(name) {
 }
 
 function calcularTudo() {
-  console.log('=== calcularTudo called ===');
-  ensureHidden('preco_produto_unitario_raw');
-  ensureHidden('preco_por_litro_raw');
+  try {
+    console.log('=== calcularTudo called ===');
+    alert('calcularTudo foi chamado!'); // Temporary alert to confirm function is called
+    
+    ensureHidden('preco_produto_unitario_raw');
+    ensureHidden('preco_por_litro_raw');
 
-  ensureHidden('total_nf_compra_raw');
-  ensureHidden('valor_total_frete_raw');
-  ensureHidden('valor_cte_raw');
-  ensureHidden('comissao_cte_raw');
-  ensureHidden('lucro_raw');
-  ensureHidden('comissao_motorista_raw');
+    ensureHidden('total_nf_compra_raw');
+    ensureHidden('valor_total_frete_raw');
+    ensureHidden('valor_cte_raw');
+    ensureHidden('comissao_cte_raw');
+    ensureHidden('lucro_raw');
+    ensureHidden('comissao_motorista_raw');
 
-  var quantidade = readQuantidade();
-  console.log('Quantidade read:', quantidade);
-  if (isNaN(quantidade) || quantidade <= 0) quantidade = NaN;
+    var quantidade = readQuantidade();
+    console.log('Quantidade read:', quantidade);
+    if (isNaN(quantidade) || quantidade <= 0) quantidade = NaN;
 
-  var precoUnit = readPrecoProdutoUnitario();
-  var precoPorLitro = readPrecoPorLitroRaw();
+    var precoUnit = readPrecoProdutoUnitario();
+    var precoPorLitro = readPrecoPorLitroRaw();
 
   // Total NF
   var totalNF = 0;
@@ -302,6 +305,11 @@ function calcularTudo() {
   if (hComissaoCte) hComissaoCte.value = (Math.round((comissaoCte + Number.EPSILON) * 100) / 100);
   if (hLucro) hLucro.value = (Math.round((lucro + Number.EPSILON) * 100) / 100);
   if (hComissaoMotorista) hComissaoMotorista.value = (Math.round((comissaoMotorista + Number.EPSILON) * 100) / 100);
+  } catch (e) {
+    console.error('ERROR at end of calcularTudo:', e);
+    alert('ERRO no final do calcularTudo: ' + e.message);
+    throw e;
+  }
 }
 
 // Expose calcularTudo and utility functions globally
