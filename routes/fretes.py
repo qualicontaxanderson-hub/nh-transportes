@@ -466,7 +466,9 @@ def salvar_importados():
 
     # Capturar pedido_id do formulário e validar
     pedido_id_raw = form.get('pedido_id')
-    current_app.logger.info("[salvar_importados] pedido_id recebido: '%s' (tipo: %s)", pedido_id_raw, type(pedido_id_raw).__name__)
+    current_app.logger.info("[salvar_importados] pedido_id recebido (tipo: %s, vazio: %s)", 
+                           type(pedido_id_raw).__name__, 
+                           not bool(pedido_id_raw))
     pedido_id = None
     if pedido_id_raw:
         # Verifica se não é string vazia
@@ -477,7 +479,7 @@ def salvar_importados():
                 pedido_id = int(pedido_id_raw)
                 current_app.logger.info("[salvar_importados] pedido_id convertido para int: %s", pedido_id)
             except (ValueError, TypeError):
-                current_app.logger.warning("[salvar_importados] pedido_id inválido: '%s'", pedido_id_raw)
+                current_app.logger.warning("[salvar_importados] pedido_id inválido (não é número inteiro)")
                 pedido_id = None
         else:
             current_app.logger.warning("[salvar_importados] pedido_id é string vazia")
