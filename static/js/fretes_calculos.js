@@ -42,6 +42,9 @@ if (typeof formatarMoedaBR !== 'function') {
 
 function $id(id) { return document.getElementById(id); }
 
+// Constants for boolean value parsing
+var FALSY_VALUES = ['', '0', 'false', 'nao', 'não', 'no', 'none'];
+
 function parseNumberFromField(el) {
   if (!el) return 0;
   var raw = el.value || '';
@@ -96,14 +99,18 @@ function readPrecoPorLitroRaw() {
   return parseNumberFromField($id('preco_por_litro')) || 0;
 }
 
+// Helper function to read destino value (prefers hidden field over disabled select)
+function readDestinoId() {
+  var hidden = $id('destino_id_hidden');
+  if (hidden && hidden.value) return hidden.value;
+  var visible = $id('destino_id');
+  if (visible && visible.value) return visible.value;
+  return null;
+}
+
 function calcularValorCTeViaRotas(quantidade) {
   var origem = $id('origem_id') ? $id('origem_id').value : null;
-  // Read from hidden field since the visible select is disabled
-  var destino = $id('destino_id_hidden') ? $id('destino_id_hidden').value : null;
-  // Fallback to visible select if hidden field doesn't exist
-  if (!destino) {
-    destino = ($id('destino_id') && $id('destino_id').value) ? $id('destino_id').value : null;
-  }
+  var destino = readDestinoId();
   if (!origem || !destino) return 0;
   var key = origem + '|' + destino;
   try {
@@ -185,8 +192,8 @@ function calcularTudo() {
       var pagaAttr = mOpt.getAttribute('data-paga-comissao');
       if (typeof pagaAttr !== 'undefined' && pagaAttr !== null) {
         var s = String(pagaAttr).trim().toLowerCase();
-        // aceitar variantes de falsy: '', '0', 'false', 'nao', 'não', 'no', 'none'
-        if (s === '' || s === '0' || s === 'false' || s === 'nao' || s === 'não' || s === 'no' || s === 'none') {
+        // Check against list of falsy values
+        if (FALSY_VALUES.indexOf(s) >= 0) {
           motoristaRecebeComissao = false;
         } else {
           // truthy values: '1', 'true', 'yes', 'sim', etc
