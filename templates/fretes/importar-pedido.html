@@ -260,27 +260,26 @@ function calcularItem(itemDiv) {
       const inputPrecoLitro = itemDiv.querySelector('.campo-preco-litro');
       if (!inputPrecoLitro) return;
 
-      // enquanto digita: apenas recalcula (não formata)
-      ['input','change','keyup'].forEach(ev => inputPrecoLitro.addEventListener(ev, function(){
-        calcularItem(itemDiv);
-      }));
-
-      // ao sair do campo: aplicar regra "somente dígitos -> centavos" e formatar
-      inputPrecoLitro.addEventListener('blur', function() {
+      // autocomplete: formatar enquanto digita
+      inputPrecoLitro.addEventListener('input', function(e) {
         try {
           const raw = String(inputPrecoLitro.value || '').trim();
+          // extrair apenas dígitos
           const onlyDigits = raw.replace(/\D/g, '');
-          const hasSeparator = raw.indexOf(',') >= 0 || raw.indexOf('.') >= 0;
-          let valueToUse = 0;
-          if (onlyDigits && !hasSeparator) {
-            valueToUse = parseInt(onlyDigits, 10) / 100.0;
-          } else {
-            valueToUse = desformatarMoeda(raw);
+          
+          if (onlyDigits === '') {
+            inputPrecoLitro.value = '';
+            calcularItem(itemDiv);
+            return;
           }
+          
+          // converter centavos para reais (divide por 100)
+          const valueToUse = parseInt(onlyDigits, 10) / 100.0;
+          
           // formatar para exibição BR
           inputPrecoLitro.value = formatarMoeda(valueToUse);
-
-          // se houver campo hidden correspondente (itens[i][preco_por_litro_raw]), atualiza-lo
+          
+          // atualizar campo hidden se existir
           try {
             const name = inputPrecoLitro.getAttribute('name') || '';
             const rawName = name.replace(/\[preco_por_litro\]/, '[preco_por_litro_raw]');
@@ -291,10 +290,11 @@ function calcularItem(itemDiv) {
           } catch(e) {
             // silencioso
           }
+          
+          calcularItem(itemDiv);
         } catch (e) {
-          console.error('Erro ao formatar preco por litro no blur:', e);
+          console.error('Erro ao formatar preco por litro no input:', e);
         }
-        calcularItem(itemDiv);
       });
 
       // calcular inicialmente
