@@ -179,7 +179,6 @@ function ensureHidden(name) {
 function calcularTudo() {
   try {
     console.log('=== calcularTudo called ===');
-    alert('calcularTudo foi chamado!'); // Temporary alert to confirm function is called
     
     ensureHidden('preco_produto_unitario_raw');
     ensureHidden('preco_por_litro_raw');
@@ -315,6 +314,11 @@ function calcularTudo() {
 // Expose calcularTudo and utility functions globally
 window.calcularTudo = calcularTudo;
 window.parseBoolean = parseBoolean;
+
+// Log ROTAS content on script load
+console.log('[INIT] ROTAS dictionary loaded:', typeof ROTAS !== 'undefined' ? ROTAS : 'ROTAS is undefined');
+console.log('[INIT] ROTAS keys:', typeof ROTAS !== 'undefined' ? Object.keys(ROTAS) : 'N/A');
+console.log('[INIT] ROTAS count:', typeof ROTAS !== 'undefined' ? Object.keys(ROTAS).length : 0);
 
 // Auto-run calcularTudo when this script loads (it's the last script in the template)
 // This ensures all DOM elements and other scripts are ready
