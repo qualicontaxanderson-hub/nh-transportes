@@ -285,9 +285,19 @@ function calcularTudo() {
 
   if (elTotalNF) elTotalNF.value = 'R$ ' + formatarMoedaBR(totalNF, 2);
   if (elValorFrete) elValorFrete.value = 'R$ ' + formatarMoedaBR(valorTotalFrete, 2);
-  if (elValorCTe) elValorCTe.value = 'R$ ' + formatarMoedaBR(valorCTe, 2);
+  if (elValorCTe) {
+    elValorCTe.value = 'R$ ' + formatarMoedaBR(valorCTe, 2);
+    console.log('[DEBUG] Updated elValorCTe display to:', elValorCTe.value);
+  } else {
+    console.log('[DEBUG] elValorCTe element not found!');
+  }
   if (elComissaoMotorista) elComissaoMotorista.value = 'R$ ' + formatarMoedaBR(comissaoMotorista, 2);
-  if (elComissaoCte) elComissaoCte.value = 'R$ ' + formatarMoedaBR(comissaoCte, 2);
+  if (elComissaoCte) {
+    elComissaoCte.value = 'R$ ' + formatarMoedaBR(comissaoCte, 2);
+    console.log('[DEBUG] Updated elComissaoCte display to:', elComissaoCte.value);
+  } else {
+    console.log('[DEBUG] elComissaoCte element not found!');
+  }
   if (elLucro) elLucro.value = 'R$ ' + formatarMoedaBR(lucro, 2);
 
   // Update hidden raws
