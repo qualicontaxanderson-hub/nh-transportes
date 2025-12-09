@@ -260,7 +260,7 @@ function calcularItem(itemDiv) {
       const inputPrecoLitro = itemDiv.querySelector('.campo-preco-litro');
       if (!inputPrecoLitro) return;
 
-      // autocomplete: formatar enquanto digita
+      // autocomplete: formatar enquanto digita (preservando posição do cursor)
       inputPrecoLitro.addEventListener('input', function(e) {
         try {
           const raw = String(inputPrecoLitro.value || '').trim();
@@ -276,8 +276,18 @@ function calcularItem(itemDiv) {
           // converter centavos para reais (divide por 100)
           const valueToUse = parseInt(onlyDigits, 10) / 100.0;
           
+          // salvar posição do cursor antes de formatar
+          const cursorPos = inputPrecoLitro.selectionStart;
+          const oldValue = inputPrecoLitro.value;
+          const oldLen = oldValue.length;
+          
           // formatar para exibição BR
-          inputPrecoLitro.value = formatarMoeda(valueToUse);
+          const newValue = formatarMoeda(valueToUse);
+          inputPrecoLitro.value = newValue;
+          
+          // restaurar cursor no final (melhor UX para entrada de números)
+          const newLen = newValue.length;
+          inputPrecoLitro.setSelectionRange(newLen, newLen);
           
           // atualizar campo hidden se existir
           try {
