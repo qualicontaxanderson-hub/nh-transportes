@@ -466,9 +466,11 @@ def salvar_importados():
 
     # Capturar pedido_id do formulário e validar
     pedido_id = form.get('pedido_id')
+    current_app.logger.info("[salvar_importados] pedido_id recebido: %s (tipo: %s)", pedido_id, type(pedido_id).__name__)
     if pedido_id:
         try:
             pedido_id = int(pedido_id)
+            current_app.logger.info("[salvar_importados] pedido_id convertido para int: %s", pedido_id)
         except (ValueError, TypeError):
             current_app.logger.warning("[salvar_importados] pedido_id inválido: %s", pedido_id)
             pedido_id = None
@@ -546,6 +548,7 @@ def salvar_importados():
                 failed.append({'idx': idx, 'error': str(e_item), 'item': item})
         
         # Se todos os itens foram salvos com sucesso e temos um pedido_id, atualizar status para 'Faturado'
+        current_app.logger.info("[salvar_importados] Verificando condições: saved=%d, failed=%d, pedido_id=%s", saved, len(failed), pedido_id)
         if saved > 0 and len(failed) == 0 and pedido_id:
             try:
                 cur.execute("UPDATE pedidos SET status = %s WHERE id = %s", ('Faturado', pedido_id))
@@ -555,6 +558,8 @@ def salvar_importados():
                 conn.rollback()
                 current_app.logger.exception("[salvar_importados] erro ao atualizar status do pedido: %s", e_status)
                 flash("Fretes salvos, mas erro ao atualizar status do pedido.", "warning")
+        else:
+            current_app.logger.warning("[salvar_importados] Status não atualizado - saved=%d, failed=%d, pedido_id=%s", saved, len(failed), pedido_id)
     finally:
         try:
             cur.close()
