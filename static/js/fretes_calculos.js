@@ -120,21 +120,48 @@ function readDestinoId() {
 function calcularValorCTeViaRotas(quantidade) {
   var origem = $id('origem_id') ? $id('origem_id').value : null;
   var destino = readDestinoId();
-  if (!origem || !destino) return 0;
+  
+  // Log the values for debugging
+  if (!origem || !destino) {
+    console.warn('CTe calculation: Missing origem or destino. Origem:', origem, 'Destino:', destino);
+    return 0;
+  }
+  
   var key = origem + '|' + destino;
+  console.log('CTe calculation: Looking for route', key, 'quantidade:', quantidade);
+  
   try {
-    if (typeof ROTAS !== 'undefined' && ROTAS && ROTAS[key]) {
-      return Number(ROTAS[key]) * Number(quantidade || 0);
+    // Check if ROTAS is defined and not empty
+    if (typeof ROTAS === 'undefined') {
+      console.error('CTe calculation: ROTAS dictionary is undefined!');
+      return 0;
     }
-    // try numeric-key fallback
-    var keys = [origem + '|' + destino, parseInt(origem,10) + '|' + parseInt(destino,10)];
-    for (var i = 0; i < keys.length; i++) {
-      if (ROTAS[keys[i]]) {
-        return Number(ROTAS[keys[i]]) * Number(quantidade || 0);
-      }
+    
+    if (!ROTAS || Object.keys(ROTAS).length === 0) {
+      console.error('CTe calculation: ROTAS dictionary is empty!');
+      return 0;
     }
+    
+    console.log('CTe calculation: ROTAS available routes:', Object.keys(ROTAS));
+    
+    // Try exact string match first
+    if (ROTAS[key]) {
+      var result = Number(ROTAS[key]) * Number(quantidade || 0);
+      console.log('CTe calculation: Found route', key, '=', ROTAS[key], 'result:', result);
+      return result;
+    }
+    
+    // Try numeric-key fallback
+    var numericKey = parseInt(origem,10) + '|' + parseInt(destino,10);
+    if (ROTAS[numericKey]) {
+      var result = Number(ROTAS[numericKey]) * Number(quantidade || 0);
+      console.log('CTe calculation: Found route with numeric key', numericKey, '=', ROTAS[numericKey], 'result:', result);
+      return result;
+    }
+    
+    console.warn('CTe calculation: Route not found for', key, 'or', numericKey, 'in ROTAS');
   } catch (e) { 
-    console.error('Error in calcularValorCTeViaRotas:', e); 
+    console.error('CTe calculation error:', e); 
   }
   return 0;
 }
@@ -150,6 +177,7 @@ function ensureHidden(name) {
 }
 
 function calcularTudo() {
+  console.log('=== calcularTudo called ===');
   ensureHidden('preco_produto_unitario_raw');
   ensureHidden('preco_por_litro_raw');
 
@@ -161,6 +189,7 @@ function calcularTudo() {
   ensureHidden('comissao_motorista_raw');
 
   var quantidade = readQuantidade();
+  console.log('Quantidade read:', quantidade);
   if (isNaN(quantidade) || quantidade <= 0) quantidade = NaN;
 
   var precoUnit = readPrecoProdutoUnitario();
@@ -187,12 +216,16 @@ function calcularTudo() {
 
   // Valor CTe
   var valorCTe = 0;
+  console.log('Calculating CTe. cteIntegral:', cteIntegral);
   if (cteIntegral) {
     // CTE integral = valorTotalFrete (which may be 0 if client doesn't pay)
     valorCTe = valorTotalFrete;
+    console.log('CTe Integral mode: valorCTe = valorTotalFrete =', valorCTe);
   } else {
     // rota-based, independent of client pay flag (operational value)
+    console.log('CTe Normal mode: calling calcularValorCTeViaRotas');
     valorCTe = calcularValorCTeViaRotas(quantidade) || 0;
+    console.log('CTe Normal mode: valorCTe =', valorCTe);
   }
 
   // Comissão Motorista (sempre calculada pela regra)
