@@ -65,28 +65,48 @@ function readQuantidade() {
   var manual = $id('quantidade_manual');
   if (manual && String(manual.value).trim() !== '') {
     var s = String(manual.value).trim();
+    console.log('[DEBUG Qtd] Manual input:', s);
     // "9.975" => 9975 when no comma present
     if (s.indexOf('.') >= 0 && s.indexOf(',') === -1) {
       var cleaned = s.replace(/\./g, '');
       var v = parseInt(cleaned, 10);
-      return isNaN(v) ? NaN : v;
+      var result = isNaN(v) ? NaN : v;
+      console.log('[DEBUG Qtd] Parsed as integer with dots removed:', result);
+      return result;
     }
     if (/^\d+$/.test(s)) {
-      return parseInt(s, 10);
+      var result = parseInt(s, 10);
+      console.log('[DEBUG Qtd] Parsed as pure integer:', result);
+      return result;
     }
     var n = desformatarMoeda(s);
-    if (isNaN(n)) return NaN;
-    return Math.round(n);
+    if (isNaN(n)) {
+      console.log('[DEBUG Qtd] Failed to parse, returning NaN');
+      return NaN;
+    }
+    var result = Math.round(n);
+    console.log('[DEBUG Qtd] Parsed via desformatarMoeda:', result);
+    return result;
   }
   var sel = $id('quantidade_id');
-  if (!sel) return NaN;
+  if (!sel) {
+    console.log('[DEBUG Qtd] No quantidade select found, returning NaN');
+    return NaN;
+  }
   var opt = sel.options[sel.selectedIndex];
-  if (!opt) return NaN;
+  if (!opt) {
+    console.log('[DEBUG Qtd] No option selected, returning NaN');
+    return NaN;
+  }
   var q = opt.getAttribute('data-quantidade') || opt.getAttribute('data-quantidade-litros') || opt.getAttribute('data-quantidade_litros');
-  if (q === null || q === undefined) return NaN;
+  if (q === null || q === undefined) {
+    console.log('[DEBUG Qtd] No data-quantidade attribute, returning NaN');
+    return NaN;
+  }
   // aceitar vírgula como decimal
   q = String(q).replace(',', '.');
   var num = parseFloat(q);
+  console.log('[DEBUG Qtd] From select option, data-quantidade:', q, 'parsed:', num);
   return isNaN(num) ? NaN : num;
 }
 
