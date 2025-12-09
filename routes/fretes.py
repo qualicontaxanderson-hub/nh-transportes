@@ -465,15 +465,24 @@ def salvar_importados():
         return redirect(url_for('fretes.lista'))
 
     # Capturar pedido_id do formulário e validar
-    pedido_id = form.get('pedido_id')
-    current_app.logger.info("[salvar_importados] pedido_id recebido: %s (tipo: %s)", pedido_id, type(pedido_id).__name__)
-    if pedido_id:
-        try:
-            pedido_id = int(pedido_id)
-            current_app.logger.info("[salvar_importados] pedido_id convertido para int: %s", pedido_id)
-        except (ValueError, TypeError):
-            current_app.logger.warning("[salvar_importados] pedido_id inválido: %s", pedido_id)
-            pedido_id = None
+    pedido_id_raw = form.get('pedido_id')
+    current_app.logger.info("[salvar_importados] pedido_id recebido: '%s' (tipo: %s)", pedido_id_raw, type(pedido_id_raw).__name__)
+    pedido_id = None
+    if pedido_id_raw:
+        # Verifica se não é string vazia
+        if isinstance(pedido_id_raw, str):
+            pedido_id_raw = pedido_id_raw.strip()
+        if pedido_id_raw:  # Se ainda tem valor após strip (ou não era string)
+            try:
+                pedido_id = int(pedido_id_raw)
+                current_app.logger.info("[salvar_importados] pedido_id convertido para int: %s", pedido_id)
+            except (ValueError, TypeError):
+                current_app.logger.warning("[salvar_importados] pedido_id inválido: '%s'", pedido_id_raw)
+                pedido_id = None
+        else:
+            current_app.logger.warning("[salvar_importados] pedido_id é string vazia")
+    else:
+        current_app.logger.warning("[salvar_importados] pedido_id não fornecido (None ou vazio)")
     
     conn = get_db_connection()
     cur = conn.cursor()
