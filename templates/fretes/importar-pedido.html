@@ -15,6 +15,7 @@
         <div class="container-fluid">
           <form method="POST" action="{{ url_for('fretes.salvar_importados') }}" id="formImportacaoModal">
             <input type="hidden" name="pedido_id" value="{{ pedido.id }}">
+            <input type="hidden" name="save" value="1">
 
             <!-- Dados Comuns -->
             <div class="card mb-3">
