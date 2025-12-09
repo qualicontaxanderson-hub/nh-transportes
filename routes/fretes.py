@@ -474,6 +474,7 @@ def salvar_importados():
                 data_frete = item.get('data_frete') or request.form.get('data_frete') or None
                 clientes_id = item.get('clientes_id') or request.form.get('clientes_id') or None
                 motoristas_id = item.get('motoristas_id') or request.form.get('motoristas_id') or None
+                veiculos_id = item.get('veiculos_id') or request.form.get('veiculos_id') or None
 
                 def to_num(v):
                     try:
@@ -516,12 +517,12 @@ def salvar_importados():
                     item.get('origem_id'),
                     item.get('destino_id'),
                     motoristas_id,
-                    item.get('veiculos_id'),
+                    veiculos_id,
                     item.get('quantidade_id'),
-                    item.get('quantidade_manual'),
-                    to_num(item.get('preco_produto_unitario') or 0),
+                    to_num(item.get('quantidade') or 0),
+                    to_num(item.get('preco_unitario') or 0),
                     to_num(item.get('preco_por_litro') or 0),
-                    to_num(item.get('total_nf_compra') or 0),
+                    to_num(item.get('total_nf') or 0),
                     valor_total_frete or 0,
                     comissao_motorista or 0,
                     valor_cte or 0,

@@ -29,7 +29,7 @@
                   <div class="col-md-4">
                     <label>Motorista</label>
                     <input type="text" class="form-control form-control-sm" value="{{ pedido.motorista_nome or 'Não informado' }}" readonly style="background:#FFD580;">
-                    <input type="hidden" name="motorista_id" value="{{ pedido.motorista_id }}">
+                    <input type="hidden" name="motoristas_id" value="{{ pedido.motorista_id }}">
                     {# Novos campos: expor flags do motorista para o modal JS #}
                     <input type="hidden" id="import_motorista_paga_comissao" value="{{ pedido.motorista_paga_comissao|default(1) }}">
                     <input type="hidden" id="import_motorista_percentual" value="{{ pedido.motorista_percentual|default(0) }}">
@@ -37,7 +37,7 @@
                   <div class="col-md-4">
                     <label>Veículo</label>
                     <input type="text" class="form-control form-control-sm" value="{{ pedido.veiculo_nome or 'N/A' }} - {{ pedido.veiculo_placa or 'N/A' }}" readonly style="background:#FFD580;">
-                    <input type="hidden" name="veiculo_id" value="{{ pedido.veiculo_id }}">
+                    <input type="hidden" name="veiculos_id" value="{{ pedido.veiculo_id }}">
                   </div>
                 </div>
               </div>
@@ -51,9 +51,9 @@
               </div>
               <div class="card-body">
                 <!-- Hidden inputs do item (NOMES no formato itens[index][campo]) -->
-                <input type="hidden" name="itens[{{ loop.index0 }}][cliente_id]" value="{{ item.cliente_id }}">
+                <input type="hidden" name="itens[{{ loop.index0 }}][clientes_id]" value="{{ item.cliente_id }}">
                 <input type="hidden" name="itens[{{ loop.index0 }}][produto_id]" value="{{ item.produto_id }}">
-                <input type="hidden" name="itens[{{ loop.index0 }}][fornecedor_id]" value="{{ item.fornecedor_id }}">
+                <input type="hidden" name="itens[{{ loop.index0 }}][fornecedores_id]" value="{{ item.fornecedor_id }}">
                 <input type="hidden" name="itens[{{ loop.index0 }}][origem_id]" value="{{ item.origem_id }}">
                 <input type="hidden" name="itens[{{ loop.index0 }}][destino_id]" value="{{ item.cliente_destino_id or '' }}">
                 <input type="hidden" name="itens[{{ loop.index0 }}][quantidade_id]" value="{{ item.quantidade_id or '' }}">
