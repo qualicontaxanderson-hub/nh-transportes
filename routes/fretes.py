@@ -10,12 +10,20 @@ bp = Blueprint('fretes', __name__, url_prefix='/fretes')
 @bp.route('/', methods=['GET'])
 @login_required
 def lista():
+    from datetime import datetime, date
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
 
     data_inicio = request.args.get('data_inicio', '')
     data_fim = request.args.get('data_fim', '')
     cliente_id = request.args.get('cliente_id', '')
+    
+    # Se não houver filtro de data, aplicar filtro do mês atual por padrão
+    if not data_inicio and not data_fim:
+        hoje = date.today()
+        primeiro_dia_mes = date(hoje.year, hoje.month, 1)
+        data_inicio = primeiro_dia_mes.strftime('%Y-%m-%d')
+        data_fim = hoje.strftime('%Y-%m-%d')
 
     try:
         # montar filtros básicos
