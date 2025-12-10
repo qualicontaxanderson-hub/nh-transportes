@@ -45,8 +45,8 @@ def emitir_boleto_frete(frete_id):
                 c.email AS cliente_email
             FROM fretes f
             INNER JOIN clientes c ON f.clientes_id = c.id
-            LEFT JOIN origens o ON f.origens_id = o.id
-            LEFT JOIN destinos d ON f.destinos_id = d.id
+            LEFT JOIN origens o ON f.origem_id = o.id
+            LEFT JOIN destinos d ON f.destino_id = d.id
             WHERE f.id = %s
             """,
             (frete_id,),
@@ -197,7 +197,18 @@ def emitir_boleto_frete(frete_id):
 
     except Exception as e:
         conn.rollback()
-        return {"success": False, "error": str(e)}
+        # Convert exception to string - handles all exception types properly
+        # Use repr() as fallback for complex exception objects
+        try:
+            error_message = str(e)
+        except Exception:
+            # If str() fails, try repr()
+            try:
+                error_message = repr(e)
+            except Exception:
+                # If all else fails, use the exception type name
+                error_message = f"{type(e).__name__}: Erro ao processar boleto"
+        return {"success": False, "error": error_message}
     finally:
         cursor.close()
         conn.close()

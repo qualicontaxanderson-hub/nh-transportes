@@ -1,6 +1,7 @@
 from flask import Blueprint, render_template, request, redirect, url_for, flash, current_app
 from flask_login import login_required
 import re
+from datetime import datetime, date
 from utils.db import get_db_connection
 from utils.helpers import parse_moeda
 
@@ -16,6 +17,13 @@ def lista():
     data_inicio = request.args.get('data_inicio', '')
     data_fim = request.args.get('data_fim', '')
     cliente_id = request.args.get('cliente_id', '')
+    
+    # Se não houver filtro de data, aplicar filtro do mês atual por padrão
+    if not data_inicio and not data_fim:
+        hoje = date.today()
+        primeiro_dia_mes = date(hoje.year, hoje.month, 1)
+        data_inicio = primeiro_dia_mes.strftime('%Y-%m-%d')
+        data_fim = hoje.strftime('%Y-%m-%d')
 
     try:
         # montar filtros básicos
@@ -24,7 +32,6 @@ def lista():
 
         if data_inicio:
             try:
-                from datetime import datetime
                 di = datetime.strptime(data_inicio, '%d/%m/%Y').strftime('%Y-%m-%d')
             except Exception:
                 di = data_inicio
@@ -33,7 +40,6 @@ def lista():
 
         if data_fim:
             try:
-                from datetime import datetime
                 df = datetime.strptime(data_fim, '%d/%m/%Y').strftime('%Y-%m-%d')
             except Exception:
                 df = data_fim
@@ -464,6 +470,28 @@ def salvar_importados():
         flash(f'Importação recebida: {total_items} item(ns). Implementação de gravação não ativada.', 'success')
         return redirect(url_for('fretes.lista'))
 
+    # Capturar pedido_id do formulário e validar
+    pedido_id_raw = form.get('pedido_id')
+    current_app.logger.info("[salvar_importados] pedido_id recebido (tipo: %s, vazio: %s)", 
+                           type(pedido_id_raw).__name__, 
+                           not bool(pedido_id_raw))
+    pedido_id = None
+    if pedido_id_raw:
+        # Verifica se não é string vazia
+        if isinstance(pedido_id_raw, str):
+            pedido_id_raw = pedido_id_raw.strip()
+        if pedido_id_raw:  # Se ainda tem valor após strip (ou não era string)
+            try:
+                pedido_id = int(pedido_id_raw)
+                current_app.logger.info("[salvar_importados] pedido_id convertido para int: %s", pedido_id)
+            except (ValueError, TypeError):
+                current_app.logger.warning("[salvar_importados] pedido_id inválido (não é número inteiro)")
+                pedido_id = None
+        else:
+            current_app.logger.warning("[salvar_importados] pedido_id é string vazia")
+    else:
+        current_app.logger.warning("[salvar_importados] pedido_id não fornecido (None ou vazio)")
+    
     conn = get_db_connection()
     cur = conn.cursor()
     saved = 0
@@ -472,8 +500,8 @@ def salvar_importados():
         for idx, item in sorted(items.items()):
             try:
                 data_frete = item.get('data_frete') or request.form.get('data_frete') or None
-                clientes_id = item.get('clientes_id') or request.form.get('clientes_id') or None
-                motoristas_id = item.get('motoristas_id') or request.form.get('motoristas_id') or None
+                clientes_id = item.get('cliente_id') or None
+                motoristas_id = item.get('motorista_id') or request.form.get('motorista_id') or None
 
                 def to_num(v):
                     try:
@@ -511,17 +539,17 @@ def salvar_importados():
                     item.get('status') or 'Importado',
                     item.get('observacoes') or '',
                     clientes_id,
-                    item.get('fornecedores_id'),
+                    item.get('fornecedor_id'),
                     item.get('produto_id'),
                     item.get('origem_id'),
                     item.get('destino_id'),
                     motoristas_id,
-                    item.get('veiculos_id'),
+                    item.get('veiculo_id') or request.form.get('veiculo_id'),
                     item.get('quantidade_id'),
-                    item.get('quantidade_manual'),
-                    to_num(item.get('preco_produto_unitario') or 0),
+                    item.get('quantidade'),
+                    to_num(item.get('preco_unitario') or 0),
                     to_num(item.get('preco_por_litro') or 0),
-                    to_num(item.get('total_nf_compra') or 0),
+                    to_num(item.get('total_nf') or 0),
                     valor_total_frete or 0,
                     comissao_motorista or 0,
                     valor_cte or 0,
@@ -535,6 +563,20 @@ def salvar_importados():
                 conn.rollback()
                 current_app.logger.exception("[salvar_importados] erro ao salvar item[%d]: %s", idx, e_item)
                 failed.append({'idx': idx, 'error': str(e_item), 'item': item})
+        
+        # Se todos os itens foram salvos com sucesso e temos um pedido_id, atualizar status para 'Faturado'
+        current_app.logger.info("[salvar_importados] Verificando condições: saved=%d, failed=%d, pedido_id=%s", saved, len(failed), pedido_id)
+        if saved > 0 and len(failed) == 0 and pedido_id:
+            try:
+                cur.execute("UPDATE pedidos SET status = %s WHERE id = %s", ('Faturado', pedido_id))
+                conn.commit()
+                current_app.logger.info("[salvar_importados] Pedido #%s atualizado para status 'Faturado'", pedido_id)
+            except Exception as e_status:
+                conn.rollback()
+                current_app.logger.exception("[salvar_importados] erro ao atualizar status do pedido: %s", e_status)
+                flash("Fretes salvos, mas erro ao atualizar status do pedido.", "warning")
+        else:
+            current_app.logger.warning("[salvar_importados] Status não atualizado - saved=%d, failed=%d, pedido_id=%s", saved, len(failed), pedido_id)
     finally:
         try:
             cur.close()

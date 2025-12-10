@@ -25,19 +25,19 @@
                 {% for r in recebimentos %}
                 <tr>
                     <td>{{ r.id }}</td>
-                    <td>#{{ r.frete_numero }}</td>
-                    <td>{{ r.cliente_fantasia or r.cliente_nome }}</td>
-                    <td>R$ {{ "%.2f"|format(r.valor) }}</td>
-                    <td>{{ r.data_vencimento.strftime('%d/%m/%Y') }}</td>
+                    <td>{% if r.frete_numero %}#{{ r.frete_numero }}{% else %}-{% endif %}</td>
+                    <td>{{ r.cliente_fantasia or r.cliente_nome or '-' }}</td>
+                    <td>R$ {{ "%.2f"|format(r.valor|float) if r.valor else '0,00' }}</td>
+                    <td>{{ r.data_vencimento.strftime('%d/%m/%Y') if r.data_vencimento else '-' }}</td>
                     <td>
                         <span class="badge {% if r.status == 'pago' %}bg-success{% elif r.status == 'pendente' %}bg-warning{% else %}bg-danger{% endif %}">
-                            {{ r.status }}
+                            {{ r.status or 'pendente' }}
                         </span>
                     </td>
                     <td><small>{{ r.charge_id or '-' }}</small></td>
                     <td>
-                        {% if r.boleto_url %}
-                        <a href="{{ r.boleto_url }}" target="_blank" class="btn btn-sm btn-primary">
+                        {% if r.link_boleto %}
+                        <a href="{{ r.link_boleto }}" target="_blank" class="btn btn-sm btn-primary">
                             <i class="bi bi-file-pdf"></i> Ver Boleto
                         </a>
                         {% endif %}

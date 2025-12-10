@@ -73,7 +73,7 @@
     </div>
     <div class="card-body p-0">
       <div class="table-responsive">
-        <table class="table table-sm table-hover mb-0">
+        <table class="table table-sm table-hover mb-0" style="font-size: 0.875rem;">
           <thead style="background:#E8E8E8">
             <tr>
               <th>ID</th>
@@ -99,14 +99,14 @@
               <td>{{ frete.veiculo or '-' }}</td>
               <td class="text-end">
               {% if frete.valor_total_frete and frete.valor_total_frete > 0 %}
-                R$ {{ "%.2f"|format(frete.valor_total_frete) }}
+                R$ {{ "%.2f"|format(frete.valor_total_frete)|replace('.', ',') }}
               {% else %}
                 -
               {% endif %}
               </td>
               <td class="text-end">
                 {% if frete.lucro and frete.lucro != 0 %}
-                  R$ {{ "%.2f"|format(frete.lucro) }}
+                  R$ {{ "%.2f"|format(frete.lucro)|replace('.', ',') }}
                 {% else %}
                   -
                 {% endif %}
@@ -170,36 +170,4 @@
     </div>
   </div>
 </div>
-{% endblock %}
-
-{% block scripts %}
-<script>
-// Definir datas padrão: primeiro dia do mês até hoje
-function setDefaultDates() {
-  var dataInicio = document.querySelector('input[name="data_inicio"]');
-  var dataFim = document.querySelector('input[name="data_fim"]');
-  
-  if (!dataInicio || !dataFim) return;
-  
-  // Se data_inicio estiver vazia, define como primeiro dia do mês
-  if (!dataInicio.value) {
-    var now = new Date();
-    var firstDay = new Date(now.getFullYear(), now.getMonth(), 1);
-    dataInicio.value = firstDay.toISOString().slice(0, 10);
-  }
-  
-  // Se data_fim estiver vazia, define como hoje
-  if (!dataFim.value) {
-    var now = new Date();
-    dataFim.value = now.toISOString().slice(0, 10);
-  }
-}
-
-// Executar quando a página carregar
-if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', setDefaultDates);
-} else {
-  setDefaultDates();
-}
-</script>
 {% endblock %}
