@@ -201,10 +201,13 @@ def emitir_boleto_frete(frete_id):
         # Use repr() as fallback for complex exception objects
         try:
             error_message = str(e)
-            if not error_message or "object is not subscriptable" in error_message:
+        except Exception:
+            # If str() fails, try repr()
+            try:
                 error_message = repr(e)
-        except:
-            error_message = f"{type(e).__name__}: Erro ao processar boleto"
+            except Exception:
+                # If all else fails, use the exception type name
+                error_message = f"{type(e).__name__}: Erro ao processar boleto"
         return {"success": False, "error": error_message}
     finally:
         cursor.close()
