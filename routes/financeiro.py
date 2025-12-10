@@ -21,9 +21,9 @@ def recebimentos():
                 c.razao_social as cliente_nome,
                 c.nome_fantasia as cliente_fantasia
             FROM recebimentos r
-            LEFT JOIN fretes f ON r.freteid = f.id
-            LEFT JOIN clientes c ON r.clienteid = c.id
-            ORDER BY r.datavencimento DESC, r.createdat DESC
+            LEFT JOIN fretes f ON r.frete_id = f.id
+            LEFT JOIN clientes c ON r.cliente_id = c.id
+            ORDER BY r.data_vencimento DESC, r.created_at DESC
         """)
         recebimentos_lista = cursor.fetchall()
         return render_template('financeiro/recebimentos.html', recebimentos=recebimentos_lista)

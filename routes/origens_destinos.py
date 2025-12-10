@@ -3,7 +3,7 @@ from flask_login import login_required
 from config import Config
 import mysql.connector
 
-bp = Blueprint('origens_destinos', __name__, url_prefix='/origens-destinos')
+bp = Blueprint('origens_destinos', __name__, url_prefix='/origens_destinos')
 
 def get_db():
     """Retorna conexão com o banco de dados usando Config"""
