@@ -1,6 +1,7 @@
 from flask import Blueprint, render_template, request, redirect, url_for, flash, current_app
 from flask_login import login_required
 import re
+from datetime import datetime, date
 from utils.db import get_db_connection
 from utils.helpers import parse_moeda
 
@@ -10,7 +11,6 @@ bp = Blueprint('fretes', __name__, url_prefix='/fretes')
 @bp.route('/', methods=['GET'])
 @login_required
 def lista():
-    from datetime import datetime, date
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
 
@@ -32,7 +32,6 @@ def lista():
 
         if data_inicio:
             try:
-                from datetime import datetime
                 di = datetime.strptime(data_inicio, '%d/%m/%Y').strftime('%Y-%m-%d')
             except Exception:
                 di = data_inicio
@@ -41,7 +40,6 @@ def lista():
 
         if data_fim:
             try:
-                from datetime import datetime
                 df = datetime.strptime(data_fim, '%d/%m/%Y').strftime('%Y-%m-%d')
             except Exception:
                 df = data_fim
