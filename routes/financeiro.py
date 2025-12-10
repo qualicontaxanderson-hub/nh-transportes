@@ -1,4 +1,4 @@
-from flask import Blueprint, render_template, request, jsonify, flash, redirect, url_for
+from flask import Blueprint, render_template, request, jsonify, flash, redirect, url_for, current_app
 from flask_login import login_required
 from utils.db import get_db_connection
 from utils.boletos import emitir_boleto_frete
@@ -29,13 +29,11 @@ def recebimentos():
         recebimentos_lista = cursor.fetchall()
         
         # Log for debugging
-        from flask import current_app
         current_app.logger.info(f"[recebimentos] Encontrados {len(recebimentos_lista)} recebimentos")
         
         return render_template('financeiro/recebimentos.html', recebimentos=recebimentos_lista)
 
     except Exception as e:
-        from flask import current_app
         current_app.logger.error(f"[recebimentos] Erro: {str(e)}")
         flash(f"Erro ao carregar recebimentos: {str(e)}", "danger")
         return render_template('financeiro/recebimentos.html', recebimentos=[])
