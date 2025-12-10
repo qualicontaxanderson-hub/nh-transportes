@@ -10,37 +10,43 @@ financeiro_bp = Blueprint('financeiro', __name__, url_prefix='/financeiro')
 @login_required
 def recebimentos():
     """Lista todos os recebimentos/boletos"""
-    conn = get_db_connection()
-    cursor = conn.cursor(dictionary=True)
-
     try:
-        # Try to execute the query
-        cursor.execute("""
-            SELECT 
-                r.*,
-                f.id as frete_numero,
-                c.razao_social as cliente_nome,
-                c.nome_fantasia as cliente_fantasia
-            FROM recebimentos r
-            LEFT JOIN fretes f ON r.frete_id = f.id
-            LEFT JOIN clientes c ON r.cliente_id = c.id
-            ORDER BY r.data_vencimento DESC, r.created_at DESC
-        """)
-        recebimentos_lista = cursor.fetchall()
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+
+        try:
+            # Try to execute the query
+            cursor.execute("""
+                SELECT 
+                    r.*,
+                    f.id as frete_numero,
+                    c.razao_social as cliente_nome,
+                    c.nome_fantasia as cliente_fantasia
+                FROM recebimentos r
+                LEFT JOIN fretes f ON r.frete_id = f.id
+                LEFT JOIN clientes c ON r.cliente_id = c.id
+                ORDER BY r.data_vencimento DESC, r.created_at DESC
+            """)
+            recebimentos_lista = cursor.fetchall()
+            
+            # Log for debugging
+            current_app.logger.info(f"[recebimentos] Encontrados {len(recebimentos_lista)} recebimentos")
+            
+        except Exception as e:
+            current_app.logger.error(f"[recebimentos] Erro SQL: {str(e)}")
+            flash(f"Erro ao carregar recebimentos: {str(e)}", "danger")
+            recebimentos_lista = []
         
-        # Log for debugging
-        current_app.logger.info(f"[recebimentos] Encontrados {len(recebimentos_lista)} recebimentos")
+        finally:
+            cursor.close()
+            conn.close()
         
         return render_template('financeiro/recebimentos.html', recebimentos=recebimentos_lista)
-
+            
     except Exception as e:
-        current_app.logger.error(f"[recebimentos] Erro: {str(e)}")
-        flash(f"Erro ao carregar recebimentos: {str(e)}", "danger")
+        current_app.logger.error(f"[recebimentos] Erro geral: {str(e)}")
+        flash(f"Erro ao acessar recebimentos: {str(e)}", "danger")
         return render_template('financeiro/recebimentos.html', recebimentos=[])
-
-    finally:
-        cursor.close()
-        conn.close()
 
 
 @financeiro_bp.route('/emitir-boleto/<int:frete_id>/', methods=['POST'])
@@ -63,7 +69,8 @@ def emitir_boleto_route(frete_id):
             return redirect(url_for('financeiro.recebimentos'))
         else:
             error_msg = resultado.get('error', 'Erro desconhecido')
-            flash(f"Erro ao emitir boleto: {error_msg}", "danger")
+            # Ensure error_msg is always a string
+            flash(f"Erro ao emitir boleto: {str(error_msg)}", "danger")
             return redirect(url_for('fretes.lista'))
 
     except Exception as e:
