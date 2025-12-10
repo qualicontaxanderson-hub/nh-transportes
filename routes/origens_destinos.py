@@ -15,6 +15,14 @@ def get_db():
         port=Config.DB_PORT
     )
 
+# ==================== ROOT / INDEX ====================
+
+@bp.route('/')
+@login_required
+def index():
+    """Redireciona para a página de origens"""
+    return redirect(url_for('origens_destinos.lista_origens'))
+
 # ==================== ORIGENS ====================
 
 @bp.route('/origens')
