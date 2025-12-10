@@ -10,6 +10,9 @@ financeiro_bp = Blueprint('financeiro', __name__, url_prefix='/financeiro')
 @login_required
 def recebimentos():
     """Lista todos os recebimentos/boletos"""
+    conn = None
+    cursor = None
+    
     try:
         conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)
@@ -37,16 +40,19 @@ def recebimentos():
             flash(f"Erro ao carregar recebimentos: {str(e)}", "danger")
             recebimentos_lista = []
         
-        finally:
-            cursor.close()
-            conn.close()
-        
         return render_template('financeiro/recebimentos.html', recebimentos=recebimentos_lista)
             
     except Exception as e:
         current_app.logger.error(f"[recebimentos] Erro geral: {str(e)}")
         flash(f"Erro ao acessar recebimentos: {str(e)}", "danger")
         return render_template('financeiro/recebimentos.html', recebimentos=[])
+    
+    finally:
+        # Always close resources if they were created
+        if cursor:
+            cursor.close()
+        if conn:
+            conn.close()
 
 
 @financeiro_bp.route('/emitir-boleto/<int:frete_id>/', methods=['POST'])
