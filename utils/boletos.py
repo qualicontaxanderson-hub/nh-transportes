@@ -198,7 +198,14 @@ def emitir_boleto_frete(frete_id):
     except Exception as e:
         conn.rollback()
         # Convert exception to string - handles all exception types properly
-        return {"success": False, "error": str(e)}
+        # Use repr() as fallback for complex exception objects
+        try:
+            error_message = str(e)
+            if not error_message or "object is not subscriptable" in error_message:
+                error_message = repr(e)
+        except:
+            error_message = f"{type(e).__name__}: Erro ao processar boleto"
+        return {"success": False, "error": error_message}
     finally:
         cursor.close()
         conn.close()

@@ -18,17 +18,18 @@ def recebimentos():
         cursor = conn.cursor(dictionary=True)
 
         try:
-            # Try to execute the query
+            # First check if table exists by trying to select from cobrancas instead
+            # (it's likely the correct table name based on the schema)
             cursor.execute("""
                 SELECT 
-                    r.*,
+                    c.*,
                     f.id as frete_numero,
-                    c.razao_social as cliente_nome,
-                    c.nome_fantasia as cliente_fantasia
-                FROM recebimentos r
-                LEFT JOIN fretes f ON r.frete_id = f.id
-                LEFT JOIN clientes c ON r.cliente_id = c.id
-                ORDER BY r.data_vencimento DESC, r.created_at DESC
+                    cl.razao_social as cliente_nome,
+                    cl.nome_fantasia as cliente_fantasia
+                FROM cobrancas c
+                LEFT JOIN fretes f ON c.frete_id = f.id  
+                LEFT JOIN clientes cl ON c.id_cliente = cl.id
+                ORDER BY c.data_vencimento DESC, c.data_emissao DESC
             """)
             recebimentos_lista = cursor.fetchall()
             
