@@ -45,8 +45,8 @@ def emitir_boleto_frete(frete_id):
                 c.email AS cliente_email
             FROM fretes f
             INNER JOIN clientes c ON f.clientes_id = c.id
-            LEFT JOIN origens o ON f.origens_id = o.id
-            LEFT JOIN destinos d ON f.destinos_id = d.id
+            LEFT JOIN origens o ON f.origem_id = o.id
+            LEFT JOIN destinos d ON f.destino_id = d.id
             WHERE f.id = %s
             """,
             (frete_id,),

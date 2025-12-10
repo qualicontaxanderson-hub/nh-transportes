@@ -18,8 +18,8 @@ def recebimentos():
             SELECT 
                 r.*,
                 f.id as frete_numero,
-                c.razaosocial as cliente_nome,
-                c.nomefantasia as cliente_fantasia
+                c.razao_social as cliente_nome,
+                c.nome_fantasia as cliente_fantasia
             FROM recebimentos r
             LEFT JOIN fretes f ON r.freteid = f.id
             LEFT JOIN clientes c ON r.clienteid = c.id
