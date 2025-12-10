@@ -1,7 +1,40 @@
 import os
 from datetime import datetime, timedelta
+import logging
 from efipay import EfiPay
 from utils.db import get_db_connection
+
+logger = logging.getLogger(__name__)
+
+
+def _safe_get_charge_fields(response):
+    """
+    Tenta extrair charge_id, boleto_url e barcode de formas comuns na resposta
+    """
+    if not response or not isinstance(response, dict):
+        return None, None, None
+
+    data = response.get('data') or response.get('charge') or {}
+    # resposta pode ter estruturas diferentes dependendo da lib/version
+    # tentativas seguras:
+    charge_id = data.get('charge_id') or data.get('id') or response.get('data', {}).get('id')
+    # payment info
+    payment = data.get('payment') or data.get('payments') or {}
+    banking = {}
+    if isinstance(payment, dict):
+        # banking_billet comum
+        banking = payment.get('banking_billet') or (payment.get('banking_billet', {}))
+    # extrair link e barcode com segurança
+    boleto_url = None
+    barcode = None
+    try:
+        if isinstance(payment, dict):
+            # try nested path
+            boleto_url = payment.get('banking_billet', {}).get('link') or payment.get('link')
+            barcode = payment.get('banking_billet', {}).get('barcode') or payment.get('barcode')
+    except Exception:
+        logger.debug("Falha tentando extrair boleto/payment fields: %r", payment)
+    return charge_id, boleto_url, barcode
 
 
 def emitir_boleto_frete(frete_id):
@@ -18,10 +51,12 @@ def emitir_boleto_frete(frete_id):
           "barcode": str
         }
     """
-    conn = get_db_connection()
-    cursor = conn.cursor(dictionary=True)
-
+    conn = None
+    cursor = None
     try:
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+
         # Buscar dados do frete e cliente (nomes/colunas atualizados)
         cursor.execute(
             """
@@ -106,9 +141,13 @@ def emitir_boleto_frete(frete_id):
         if frete.get("origem_nome") and frete.get("destino_nome"):
             descricao_frete += f" - {frete['origem_nome']} para {frete['destino_nome']}"
 
-        valor_total_centavos = int(
-            float(frete["valor_total_frete"] or 0) * 100
-        )
+        # valor em centavos
+        try:
+            valor_total_centavos = int(float(frete["valor_total_frete"] or 0) * 100)
+        except Exception:
+            logger.exception("valor_total_frete inválido para frete_id=%s: %r", frete_id, frete.get("valor_total_frete"))
+            return {"success": False, "error": "Valor do frete inválido ou zerado"}
+
         if valor_total_centavos <= 0:
             return {
                 "success": False,
@@ -126,18 +165,12 @@ def emitir_boleto_frete(frete_id):
                         "phone_number": telefone[:11],
                         "email": frete["cliente_email"][:50],
                         "address": {
-                            "street": (frete.get("cliente_endereco") or "Rua Exemplo")[
-                                :80
-                            ],
+                            "street": (frete.get("cliente_endereco") or "Rua Exemplo")[:80],
                             "number": (frete.get("cliente_numero") or "SN")[:10],
-                            "neighborhood": (
-                                frete.get("cliente_bairro") or "Centro"
-                            )[:50],
+                            "neighborhood": (frete.get("cliente_bairro") or "Centro")[:50],
                             "zipcode": cep,
                             "city": (frete.get("cliente_cidade") or "Goiania")[:50],
-                            "state": (frete.get("cliente_estado") or "GO")[
-                                :2
-                            ].upper(),
+                            "state": (frete.get("cliente_estado") or "GO")[:2].upper(),
                         },
                     },
                 }
@@ -151,41 +184,56 @@ def emitir_boleto_frete(frete_id):
             ],
             "metadata": {
                 "custom_id": str(frete_id),
-                "notification_url": os.getenv(
-                    "EFI_NOTIFICATION_URL",
-                    "https://nh-transportes.onrender.com/webhooks/efi",
-                ),
+                "notification_url": os.getenv("EFI_NOTIFICATION_URL", "https://nh-transportes.onrender.com/webhooks/efi"),
             },
         }
 
-        response = efi.create_charge(body=body)
+        # Chamada ao provedor
+        try:
+            response = efi.create_charge(body=body)
+        except Exception as ex:
+            logger.exception("Exception ao chamar efi.create_charge for frete_id=%s", frete_id)
+            return {"success": False, "error": str(ex)}
 
-        charge_id = response["data"]["charge_id"]
-        boleto_url = response["data"]["payment"]["banking_billet"]["link"]
-        barcode = response["data"]["payment"]["banking_billet"]["barcode"]
+        # validar formato da resposta
+        if not isinstance(response, dict) or ('data' not in response and 'charge' not in response):
+            logger.error("Resposta inválida ao criar charge: %r", response)
+            return {"success": False, "error": "Resposta inválida do provedor de cobrança"}
+
+        # extrair campos de forma segura
+        charge_id, boleto_url, barcode = _safe_get_charge_fields(response)
+
+        if not charge_id:
+            logger.error("charge_id ausente na resposta: %r", response)
+            return {"success": False, "error": "Charge ID ausente na resposta do provedor"}
 
         # Gravar em COBRANCAS (schema atual)
-        cursor.execute(
-            """
-            INSERT INTO cobrancas
-              (id_cliente, valor, data_vencimento, status,
-               charge_id, link_boleto, pdf_boleto, data_emissao)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-            """,
-            (
-                frete["clientes_id"],
-                frete["valor_total_frete"],
-                data_vencimento.date(),
-                "pendente",
-                charge_id,
-                boleto_url,
-                None,
-                datetime.today().date(),
-            ),
-        )
-        cobranca_id = cursor.lastrowid
-
-        conn.commit()
+        try:
+            cursor.execute(
+                """
+                INSERT INTO cobrancas
+                  (id_cliente, valor, data_vencimento, status,
+                   charge_id, link_boleto, pdf_boleto, data_emissao)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                """,
+                (
+                    frete["clientes_id"],
+                    frete["valor_total_frete"],
+                    data_vencimento.date(),
+                    "pendente",
+                    charge_id,
+                    boleto_url,
+                    None,
+                    datetime.today().date(),
+                ),
+            )
+            # dependendo do driver, lastrowid pode variar; usar cursor.lastrowid
+            cobranca_id = getattr(cursor, 'lastrowid', None)
+            conn.commit()
+        except Exception:
+            logger.exception("Erro ao inserir cobranca para frete_id=%s", frete_id)
+            conn.rollback()
+            return {"success": False, "error": "Erro ao persistir cobrança no banco"}
 
         return {
             "success": True,
@@ -196,19 +244,31 @@ def emitir_boleto_frete(frete_id):
         }
 
     except Exception as e:
-        conn.rollback()
+        # logging detalhado e rollback
+        logger.exception("Erro ao emitir boleto para frete_id=%s", frete_id)
+        try:
+            if conn:
+                conn.rollback()
+        except Exception:
+            logger.exception("Falha ao dar rollback")
+
         # Convert exception to string - handles all exception types properly
-        # Use repr() as fallback for complex exception objects
         try:
             error_message = str(e)
         except Exception:
-            # If str() fails, try repr()
             try:
                 error_message = repr(e)
             except Exception:
-                # If all else fails, use the exception type name
                 error_message = f"{type(e).__name__}: Erro ao processar boleto"
         return {"success": False, "error": error_message}
     finally:
-        cursor.close()
-        conn.close()
+        try:
+            if cursor:
+                cursor.close()
+        except Exception:
+            logger.exception("Erro ao fechar cursor em emitir_boleto_frete")
+        try:
+            if conn:
+                conn.close()
+        except Exception:
+            logger.exception("Erro ao fechar conexao em emitir_boleto_frete")
