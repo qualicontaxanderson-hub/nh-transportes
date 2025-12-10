@@ -197,13 +197,8 @@ def emitir_boleto_frete(frete_id):
 
     except Exception as e:
         conn.rollback()
-        # Handle different types of exceptions
-        error_msg = str(e)
-        if hasattr(e, 'message'):
-            error_msg = e.message
-        elif hasattr(e, 'args') and len(e.args) > 0:
-            error_msg = str(e.args[0])
-        return {"success": False, "error": error_msg}
+        # Convert exception to string - handles all exception types properly
+        return {"success": False, "error": str(e)}
     finally:
         cursor.close()
         conn.close()
