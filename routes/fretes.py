@@ -494,7 +494,7 @@ def salvar_importados():
         for idx, item in sorted(items.items()):
             try:
                 data_frete = item.get('data_frete') or request.form.get('data_frete') or None
-                clientes_id = item.get('cliente_id') or request.form.get('clientes_id') or None
+                clientes_id = item.get('cliente_id') or None
                 motoristas_id = item.get('motorista_id') or request.form.get('motorista_id') or None
 
                 def to_num(v):
