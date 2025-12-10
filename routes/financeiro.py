@@ -14,6 +14,7 @@ def recebimentos():
     cursor = conn.cursor(dictionary=True)
 
     try:
+        # Try to execute the query
         cursor.execute("""
             SELECT 
                 r.*,
@@ -26,9 +27,16 @@ def recebimentos():
             ORDER BY r.data_vencimento DESC, r.created_at DESC
         """)
         recebimentos_lista = cursor.fetchall()
+        
+        # Log for debugging
+        from flask import current_app
+        current_app.logger.info(f"[recebimentos] Encontrados {len(recebimentos_lista)} recebimentos")
+        
         return render_template('financeiro/recebimentos.html', recebimentos=recebimentos_lista)
 
     except Exception as e:
+        from flask import current_app
+        current_app.logger.error(f"[recebimentos] Erro: {str(e)}")
         flash(f"Erro ao carregar recebimentos: {str(e)}", "danger")
         return render_template('financeiro/recebimentos.html', recebimentos=[])
 
@@ -43,6 +51,11 @@ def emitir_boleto_route(frete_id):
     """Emite boleto para um frete específico"""
     try:
         resultado = emitir_boleto_frete(frete_id)
+        
+        # Ensure resultado is always a dict
+        if not isinstance(resultado, dict):
+            flash(f"Erro inesperado ao emitir boleto: resposta inválida", "danger")
+            return redirect(url_for('fretes.lista'))
 
         if resultado.get('success'):
             flash(
@@ -51,7 +64,8 @@ def emitir_boleto_route(frete_id):
             )
             return redirect(url_for('financeiro.recebimentos'))
         else:
-            flash(f"Erro ao emitir boleto: {resultado.get('error')}", "danger")
+            error_msg = resultado.get('error', 'Erro desconhecido')
+            flash(f"Erro ao emitir boleto: {error_msg}", "danger")
             return redirect(url_for('fretes.lista'))
 
     except Exception as e:
