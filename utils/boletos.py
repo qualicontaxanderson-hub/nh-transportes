@@ -20,16 +20,11 @@ def _safe_get_charge_fields(response):
     charge_id = data.get('charge_id') or data.get('id') or response.get('data', {}).get('id')
     # payment info
     payment = data.get('payment') or data.get('payments') or {}
-    banking = {}
-    if isinstance(payment, dict):
-        # banking_billet comum
-        banking = payment.get('banking_billet') or (payment.get('banking_billet', {}))
     # extrair link e barcode com segurança
     boleto_url = None
     barcode = None
     try:
         if isinstance(payment, dict):
-            # try nested path
             boleto_url = payment.get('banking_billet', {}).get('link') or payment.get('link')
             barcode = payment.get('banking_billet', {}).get('barcode') or payment.get('barcode')
     except Exception:
@@ -194,6 +189,15 @@ def emitir_boleto_frete(frete_id):
         except Exception as ex:
             logger.exception("Exception ao chamar efi.create_charge for frete_id=%s", frete_id)
             return {"success": False, "error": str(ex)}
+
+        # Biblioteca pode retornar um objeto de exceção em vez de lançar
+        if isinstance(response, Exception):
+            logger.exception("create_charge retornou um objeto de exceção para frete_id=%s: %r", frete_id, response)
+            try:
+                msg = getattr(response, 'message', None) or str(response)
+            except Exception:
+                msg = repr(response)
+            return {"success": False, "error": f"Erro do provedor: {msg}"}
 
         # validar formato da resposta
         if not isinstance(response, dict) or ('data' not in response and 'charge' not in response):
