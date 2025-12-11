@@ -138,3 +138,49 @@ def emitir_boleto_route(frete_id):
         current_app.logger.exception("[emitir_boleto_route] Erro processando boleto")
         flash(f"Erro ao processar boleto: {str(e)}", "danger")
         return redirect(url_for('fretes.lista'))
+
+
+@financeiro_bp.route('/recebimentos/debug')
+@login_required
+def recebimentos_debug():
+    """
+    Rota de debug: retorna JSON com os recebimentos (usa mesmo SELECT do listagem).
+    Acesse /financeiro/recebimentos/debug para confirmar que o backend retorna dados.
+    """
+    conn = None
+    cursor = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute("""
+            SELECT 
+                c.*,
+                cl.razao_social as cliente_nome,
+                cl.nome_fantasia as cliente_fantasia
+            FROM cobrancas c
+            LEFT JOIN clientes cl ON c.id_cliente = cl.id
+            ORDER BY c.data_vencimento DESC, c.data_emissao DESC
+            LIMIT 200
+        """)
+        rows = cursor.fetchall()
+        # Normalizar data e valor de forma simples para JSON
+        for r in rows:
+            dv = r.get('data_vencimento')
+            if dv is not None and hasattr(dv, 'strftime'):
+                r['data_vencimento'] = dv.strftime('%Y-%m-%d')
+            r['valor'] = float(r['valor']) if r.get('valor') not in (None, '') else 0.0
+        return jsonify({"count": len(rows), "sample": rows})
+    except Exception as e:
+        current_app.logger.exception("[recebimentos_debug] Erro ao buscar recebimentos de debug: %s", e)
+        return jsonify({"error": str(e)}), 500
+    finally:
+        try:
+            if cursor:
+                cursor.close()
+        except Exception:
+            current_app.logger.exception("Erro ao fechar cursor em recebimentos_debug")
+        try:
+            if conn:
+                conn.close()
+        except Exception:
+            current_app.logger.exception("Erro ao fechar conexao em recebimentos_debug")
