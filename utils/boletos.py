@@ -32,9 +32,13 @@ def _safe_get_charge_fields(response):
     return charge_id, boleto_url, barcode
 
 
-def emitir_boleto_frete(frete_id):
+def emitir_boleto_frete(frete_id, vencimento_str=None):
     """
     Emite um boleto via Efí (antiga Gerencianet) para um frete específico.
+
+    Parâmetros:
+      - frete_id: id do frete
+      - vencimento_str: opcional, string 'YYYY-MM-DD' para override do vencimento
 
     Retorna:
         dict: {
@@ -104,7 +108,14 @@ def emitir_boleto_frete(frete_id):
         }
         efi = EfiPay(credentials)
 
-        data_vencimento = datetime.now() + timedelta(days=7)
+        # Se foi informado vencimento_str, parsear; caso contrário, default = hoje + 7 dias
+        if vencimento_str:
+            try:
+                data_vencimento = datetime.strptime(vencimento_str, "%Y-%m-%d")
+            except Exception:
+                return {"success": False, "error": "Formato de vencimento inválido (use YYYY-MM-DD)"}
+        else:
+            data_vencimento = datetime.now() + timedelta(days=7)
 
         # Normalizações
         cpf_cnpj = (
