@@ -1,4 +1,6 @@
 import os
+import json
+import copy
 import logging
 from datetime import datetime, timedelta
 from time import sleep
@@ -34,6 +36,7 @@ def _safe_get_charge_fields(response):
             (p.get("banking_billet") or {}).get("link")
             or p.get("link")
             or (data.get("banking_billet") or {}).get("link")
+            or response.get("link")
         )
         barcode = (
             (p.get("banking_billet") or {}).get("barcode")
@@ -45,11 +48,48 @@ def _safe_get_charge_fields(response):
     return charge_id, boleto_url, barcode
 
 
+def _sanitize_for_log(obj):
+    """
+    Retorna uma cópia do objeto com campos sensíveis mascarados:
+    - cpf, cnpj, phone_number, email
+    Mantém estrutura para análise de schema sem vazar dados.
+    """
+    try:
+        o = copy.deepcopy(obj)
+    except Exception:
+        return "<unserializable>"
+
+    def mask_string(s):
+        if not isinstance(s, str):
+            return s
+        if len(s) <= 4:
+            return "****"
+        return s[:2] + "****" + s[-2:]
+
+    def recurse(x):
+        if isinstance(x, dict):
+            for k in list(x.keys()):
+                lk = k.lower()
+                if lk in ("cpf", "cnpj", "phone_number", "telefone", "email"):
+                    x[k] = mask_string(x[k])
+                else:
+                    recurse(x[k])
+        elif isinstance(x, list):
+            for item in x:
+                recurse(item)
+
+    try:
+        recurse(o)
+        return o
+    except Exception:
+        return "<sanitize-failed>"
+
+
 def _build_bodies(frete, descricao_frete, data_vencimento, valor_total_centavos):
     """
-    Gera variantes do payload e garante que 'items' esteja presente no root
-    (algumas versões do provedor exigem items em nível raiz mesmo quando usam
-    'charge' ou 'charges').
+    Gera variantes do payload cobrindo os schemas comuns.
+    As primeiras variantes priorizam 'items' no root e 'banking_billet' no root,
+    pois o provedor validou que 'items' é obrigatório e rejeitou payment/payments/charge/charges.
     """
     cpf_cnpj = (
         frete["cliente_cnpj"].replace(".", "").replace("-", "").replace("/", "").strip()
@@ -107,32 +147,39 @@ def _build_bodies(frete, descricao_frete, data_vencimento, valor_total_centavos)
 
     bodies = []
 
-    # Variante A: antigo/único "payment"
+    # Variante 1: items root + banking_billet root (prioridade alta)
     bodies.append({
+        "items": items,
+        "banking_billet": banking_billet,
+        "metadata": metadata,
+    })
+
+    # Variante 2: items root + payment root (banking_billet inside payment) - keep items root
+    bodies.append({
+        "items": items,
         "payment": {"banking_billet": banking_billet},
-        "items": items,
         "metadata": metadata,
     })
 
-    # Variante B: plural "payments" (lista)
+    # Variante 3: items root + payments (list) root
     bodies.append({
-        "payments": [{"banking_billet": banking_billet}],
         "items": items,
+        "payments": [{"banking_billet": banking_billet}],
         "metadata": metadata,
     })
 
-    # Variante C: "charge" encapsulando (mantém items dentro de charge)
+    # Variante 4: charge encapsulando + items root (garantia)
     bodies.append({
         "charge": {
             "payment": {"banking_billet": banking_billet},
             "items": items,
             "metadata": metadata,
         },
-        # GARANTIA: adicionar items também no root para evitar erro de schema
         "items": items,
+        "metadata": metadata,
     })
 
-    # Variante D: "charge" com "payments"
+    # Variante 5: charge com payments + items root
     bodies.append({
         "charge": {
             "payments": [{"banking_billet": banking_billet}],
@@ -140,9 +187,10 @@ def _build_bodies(frete, descricao_frete, data_vencimento, valor_total_centavos)
             "metadata": metadata,
         },
         "items": items,
+        "metadata": metadata,
     })
 
-    # Variante E: "charges" array (algumas APIs aceitam lista de charges)
+    # Variante 6: charges array + items root
     bodies.append({
         "charges": [
             {
@@ -151,8 +199,8 @@ def _build_bodies(frete, descricao_frete, data_vencimento, valor_total_centavos)
                 "metadata": metadata,
             }
         ],
-        # também colocar items no root
         "items": items,
+        "metadata": metadata,
     })
 
     return bodies
@@ -256,14 +304,15 @@ def emitir_boleto_frete(frete_id, vencimento_str=None):
                 break
 
             attempted += 1
-            # log temporário — cuidado com dados pessoais. NÃO inclua client_secret.
+
+            # sanitize body for logging (do not leak cpf/cnpj/email)
+            sanitized = _sanitize_for_log(body)
             try:
-                logger.info("Attempt %d - EFI create_charge body keys: %s", attempted, list(body.keys()))
+                logger.info("Attempt %d - EFI create_charge body: %s", attempted, json.dumps(sanitized, ensure_ascii=False))
+                print("EFI create_charge body:", json.dumps(sanitized, ensure_ascii=False))
             except Exception:
                 logger.info("Attempt %d - EFI create_charge body: <unstringifiable>", attempted)
-
-            # print also to ensure appearing in Render logs console
-            print(f"EFI create_charge attempt={attempted} body_keys={list(body.keys())}")
+                print("EFI create_charge body: <unstringifiable>")
 
             try:
                 response = efi.create_charge(body=body)
@@ -272,7 +321,7 @@ def emitir_boleto_frete(frete_id, vencimento_str=None):
             except Exception as ex:
                 logger.exception("Exception ao chamar efi.create_charge attempt=%s frete_id=%s", attempted, frete_id)
                 last_response = ex
-                # if it's a network/timeout, optionally retry a couple times; here we continue to next variant
+                # network/timeout: optionally retry (omitted), continue to next variant
                 continue
 
             last_response = response
@@ -281,19 +330,15 @@ def emitir_boleto_frete(frete_id, vencimento_str=None):
             if isinstance(response, Exception):
                 continue
 
-            # If provider returned explicit validation error about property, try next variant
-            # Many providers return a dict with 'error'/'error_description' keys
+            # provider validation errors: try next variant
             if isinstance(response, dict) and response.get("error") == "validation_error":
-                # log and continue to next variant
                 logger.warning("Provider validation_error on attempt=%d: %r", attempted, response.get("error_description"))
-                # decide to try next variant
                 continue
 
             # If response looks successful (contains data/charge), accept it
             if isinstance(response, dict) and ("data" in response or "charge" in response):
                 charge_id, boleto_url, barcode = _safe_get_charge_fields(response)
                 if not charge_id:
-                    # maybe provider returned data but different structure; try next variant
                     logger.warning("charge_id ausente na resposta no attempt=%d: %r", attempted, response)
                     continue
 
@@ -337,9 +382,7 @@ def emitir_boleto_frete(frete_id, vencimento_str=None):
 
         # se chegou aqui, todas as variantes falharam
         logger.error("Todas variantes testadas (%d) falharam. last_response=%r", attempted, last_response)
-        # formatar mensagem de erro legível para UI
         if isinstance(last_response, dict):
-            # prefer error_description if present
             if last_response.get("error_description"):
                 err_desc = last_response.get("error_description")
                 return {"success": False, "error": f"Resposta inválida do provedor de cobrança: {err_desc}"}
