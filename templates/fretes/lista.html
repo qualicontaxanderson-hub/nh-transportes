@@ -146,6 +146,8 @@
   <form method="post"
     action="{{ url_for('financeiro.emitir_boleto_route', frete_id=frete.id) }}"
     style="display:inline;">
+    <!-- campo opcional de vencimento; preenchemos via JS com hoje + 7 dias (pode ser convertido para input visível se quiser) -->
+    <input type="hidden" name="vencimento" class="vencimento-input" />
     <button type="submit"
       class="btn btn-sm btn-outline-success"
       title="Emitir Boleto">
@@ -170,4 +172,19 @@
     </div>
   </div>
 </div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script>
+// define today + 7 dias no formato YYYY-MM-DD e preenche inputs hidden com classe 'vencimento-input'
+(function() {
+  function pad(n){return n<10?'0'+n:n;}
+  var d = new Date();
+  d.setDate(d.getDate() + 7);
+  var s = d.getFullYear() + '-' + pad(d.getMonth()+1) + '-' + pad(d.getDate());
+  var inputs = document.querySelectorAll('.vencimento-input');
+  inputs.forEach(function(i){ i.value = s; });
+})();
+</script>
 {% endblock %}
