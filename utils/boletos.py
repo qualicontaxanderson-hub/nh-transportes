@@ -8,6 +8,10 @@ from efipay import EfiPay
 from utils.db import get_db_connection
 
 logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO)
+
+# controla logs de payloads completos (True/False via env var)
+DEBUG_PAYLOAD = os.getenv("EFI_DEBUG_PAYLOAD", "false").lower() in ("1", "true", "yes")
 
 
 def _sanitize_for_log(obj):
@@ -22,13 +26,14 @@ def _sanitize_for_log(obj):
             return s
         if len(s) <= 4:
             return "****"
+        # mantemos começo/fim para facilitar debug sem vazar dados inteiros
         return s[:2] + "****" + s[-2:]
 
     def recurse(x):
         if isinstance(x, dict):
             for k in list(x.keys()):
                 lk = k.lower()
-                if lk in ("cpf", "cnpj", "phone_number", "telefone", "email"):
+                if lk in ("cpf", "cnpj", "phone_number", "telefone", "email", "client_secret", "certificate", "token"):
                     try:
                         x[k] = mask_string(x[k])
                     except Exception:
@@ -46,6 +51,40 @@ def _sanitize_for_log(obj):
         return "<sanitize-failed>"
 
 
+def _log_send_attempt(method_name, body, extra_note=None):
+    try:
+        s = json.dumps(_sanitize_for_log(body), ensure_ascii=False)
+    except Exception:
+        s = "<unserializable>"
+    logger.info("SENDING (%s) %s", method_name, extra_note or "")
+    if DEBUG_PAYLOAD:
+        # imprime payload completo (mascarizado)
+        logger.info("SENDING-PAYLOAD (%s): %s", method_name, s)
+    else:
+        logger.debug("SENDING-PAYLOAD (%s): %s", method_name, s)
+
+
+def _log_provider_response(method_name, resp_raw):
+    # resp_raw pode ser dict, object, requests.Response ou string
+    try:
+        if hasattr(resp_raw, "status_code"):
+            # requests.Response
+            code = getattr(resp_raw, "status_code", None)
+            text = getattr(resp_raw, "text", None)
+            logger.info("PROVIDER RESPONSE (%s): status=%s, text_len=%s", method_name, code, len(text) if text else 0)
+            if DEBUG_PAYLOAD:
+                logger.info("PROVIDER RESPONSE (%s) TEXT: %s", method_name, (text or "")[:4000])
+        elif isinstance(resp_raw, dict):
+            logger.info("PROVIDER RESPONSE (%s): dict keys=%s", method_name, list(resp_raw.keys()))
+            if DEBUG_PAYLOAD:
+                logger.info("PROVIDER RESPONSE (%s) BODY: %s", method_name, json.dumps(_sanitize_for_log(resp_raw), ensure_ascii=False)[:4000])
+        else:
+            s = repr(resp_raw)
+            logger.info("PROVIDER RESPONSE (%s): %s", method_name, s[:4000])
+    except Exception:
+        logger.exception("Erro ao logar provider response (%s)", method_name)
+
+
 def _safe_get_charge_fields(response):
     """
     Tenta extrair charge_id, link do boleto e barcode de formas comuns.
@@ -54,16 +93,13 @@ def _safe_get_charge_fields(response):
     if not response or not isinstance(response, dict):
         return None, None, None
 
-    # respostas podem vir em 'data' ou 'charge'
     data = response.get("data") or response.get("charge") or response
 
-    # tentativa de extrair id
     charge_id = data.get("id") or data.get("charge_id") or response.get("data", {}).get("id")
 
     boleto_url = None
     barcode = None
 
-    # payment pode ser dict ou lista em vários níveis
     try:
         if isinstance(data.get("payment"), dict):
             p = data.get("payment")
@@ -73,7 +109,6 @@ def _safe_get_charge_fields(response):
             p = data.get("payments")[0]
             boleto_url = (p.get("banking_billet") or {}).get("link") or p.get("link")
             barcode = (p.get("banking_billet") or {}).get("barcode") or p.get("barcode")
-        # fallback direto em data
         if not boleto_url:
             boleto_url = (data.get("banking_billet") or {}).get("link") or response.get("link")
         if not barcode:
@@ -85,14 +120,6 @@ def _safe_get_charge_fields(response):
 
 
 def _build_body(frete, descricao_frete, data_vencimento, valor_total_centavos):
-    """
-    Constrói o payload canônico (conforme exemplos Efipay):
-    {
-      "items": [...],
-      "payment": { "banking_billet": { ... } },
-      "metadata": { ... }
-    }
-    """
     cpf_cnpj = (frete.get("cliente_cnpj") or "").replace(".", "").replace("-", "").replace("/", "").strip()
     telefone = (frete.get("cliente_telefone") or "").replace("(", "").replace(")", "").replace("-", "").replace(" ", "").strip()
     cep = (frete.get("cliente_cep") or "").replace("-", "").strip()
@@ -143,14 +170,8 @@ def _build_body(frete, descricao_frete, data_vencimento, valor_total_centavos):
 
 
 def _try_sdk_methods(efi, body):
-    """
-    Tenta invocar o SDK Efipay com diferentes nomes de métodos que podem existir
-    na versão instalada. Retorna (success_bool, response, method_tried)
-    """
     tried = []
     response = None
-
-    # lista explícita de candidatos comuns
     candidates = [
         "create_charge",
         "create_one_step_billet",
@@ -161,42 +182,34 @@ def _try_sdk_methods(efi, body):
         "charge",
         "createCharge",
     ]
-
-    # adicionar dinamicamente métodos contendo keywords
     for attr in dir(efi):
         if any(k in attr.lower() for k in ("charge", "billet", "boleto", "create")):
             if attr not in candidates:
                 candidates.append(attr)
 
-    # tentar métodos diretos em efi
     for method in candidates:
         try:
             fn = getattr(efi, method, None)
             if callable(fn):
                 tried.append(method)
-                # tentar chamadas com variações (body kw, body positional)
+                _log_send_attempt(method, body, extra_note="high-level SDK method")
                 try:
                     resp = fn(body=body)
                 except TypeError:
                     try:
                         resp = fn(body)
                     except TypeError:
-                        try:
-                            resp = fn(body, None)
-                        except Exception as ex:
-                            logger.debug("Chamada %s com várias assinaturas falhou: %s", method, ex)
-                            raise
+                        resp = fn(body, None)
+                _log_provider_response(method, resp)
                 return True, resp, method
         except Exception as ex:
             logger.debug("Tentativa SDK método %s falhou: %s", method, ex)
             response = ex
             continue
 
-    # tentar acessar objetos aninhados (e.g., efi.charges.create)
     for attr in dir(efi):
         try:
             sub = getattr(efi, attr)
-            # filtrar objetos plausíveis
             if not hasattr(sub, "__dict__") and not hasattr(sub, "__class__"):
                 continue
             for subm in dir(sub):
@@ -205,10 +218,12 @@ def _try_sdk_methods(efi, body):
                         fn = getattr(sub, subm)
                         if callable(fn):
                             tried.append(f"{attr}.{subm}")
+                            _log_send_attempt(f"{attr}.{subm}", body, extra_note="nested SDK method")
                             try:
                                 resp = fn(body=body)
                             except TypeError:
                                 resp = fn(body)
+                            _log_provider_response(f"{attr}.{subm}", resp)
                             return True, resp, f"{attr}.{subm}"
                     except Exception as ex:
                         logger.debug("Tentativa SDK método %s.%s falhou: %s", attr, subm, ex)
@@ -221,19 +236,12 @@ def _try_sdk_methods(efi, body):
 
 
 def _try_payment_variants(efi, original_body, credentials):
-    """
-    Tenta várias formas alternativas quando a API reclama de '/payment'.
-    Retorna (success_bool, response, method, used_body)
-    """
     variants_payloads = []
-
     base_items = original_body.get("items")
     base_meta = original_body.get("metadata")
 
-    # Se existe 'payment', construir algumas variantes comuns
     if "payment" in original_body:
         p = original_body["payment"]
-        # 1) payment -> payments: [ { banking_billet: ... } ] (mais provável)
         if isinstance(p, dict) and p.get("banking_billet"):
             full = {}
             if base_items is not None:
@@ -243,7 +251,6 @@ def _try_payment_variants(efi, original_body, credentials):
                 full["metadata"] = base_meta
             variants_payloads.append((full, "payments_banking_billet"))
 
-        # 2) payments: [ payment_dict ] (embrulho simples)
         full = {}
         if base_items is not None:
             full["items"] = base_items
@@ -252,7 +259,6 @@ def _try_payment_variants(efi, original_body, credentials):
             full["metadata"] = base_meta
         variants_payloads.append((full, "payments_wrap_simple"))
 
-        # 3) banking_billet no topo (alguns schemas esperam banking_billet como root)
         if isinstance(p, dict) and p.get("banking_billet"):
             full = {}
             if base_items is not None:
@@ -262,7 +268,6 @@ def _try_payment_variants(efi, original_body, credentials):
                 full["metadata"] = base_meta
             variants_payloads.append((full, "banking_billet_top"))
 
-        # 4) payments: [{'payment': payment_dict}] (outras variações)
         full = {}
         if base_items is not None:
             full["items"] = base_items
@@ -271,41 +276,38 @@ def _try_payment_variants(efi, original_body, credentials):
             full["metadata"] = base_meta
         variants_payloads.append((full, "payments_payment_wrapper"))
 
-    # Se não houver payment (pouco provável), não temos variantes úteis
     if not variants_payloads:
         return False, None, None, None
 
-    # Tentar cada variante: primeiro alta-nível, depois low-level send/request
     for alt_body, vname in variants_payloads:
-        try:
-            logger.info("Tentando variante de pagamento '%s': %s", vname, _sanitize_for_log(alt_body))
-        except Exception:
-            logger.info("Tentando variante de pagamento '%s' (não serializável)", vname)
-
-        # try high-level SDK methods
+        _log_send_attempt(f"variant:{vname}", alt_body, extra_note="payment-variant")
         try:
             s2, resp2, m2 = _try_sdk_methods(efi, alt_body)
         except Exception as ex_try:
             s2, resp2, m2 = False, ex_try, None
 
         if s2:
+            _log_provider_response(f"variant:{vname}", resp2)
             return True, resp2, m2, alt_body
 
-        # try low level send/request
         try:
             if hasattr(efi, "send") and callable(getattr(efi, "send")):
                 try:
                     params = {"path": "/one_step_charge", "method": "POST"}
+                    _log_send_attempt(f"send_variant:{vname}", alt_body, extra_note="low-level send")
                     resp2 = efi.send(credentials, params, alt_body, {})
+                    _log_provider_response(f"send_variant:{vname}", resp2)
                     return True, resp2, "send", alt_body
                 except Exception as exs:
                     logger.debug("efi.send com alt_body '%s' falhou: %s", vname, exs)
             if hasattr(efi, "request") and callable(getattr(efi, "request")):
                 try:
+                    _log_send_attempt(f"request_variant:{vname}", alt_body, extra_note="low-level request")
                     try:
                         resp2 = efi.request(credentials, body=alt_body)
                     except TypeError:
                         resp2 = efi.request(body=alt_body)
+                    _log_provider_response(f"request_variant:{vname}", resp2)
                     return True, resp2, "request", alt_body
                 except Exception as exr:
                     logger.debug("efi.request com alt_body '%s' falhou: %s", vname, exr)
@@ -316,9 +318,6 @@ def _try_payment_variants(efi, original_body, credentials):
 
 
 def emitir_boleto_frete(frete_id, vencimento_str=None):
-    """
-    Emite boleto para o frete indicado. Retorna dict com sucesso/erro.
-    """
     conn = None
     cursor = None
     try:
@@ -358,7 +357,6 @@ def emitir_boleto_frete(frete_id, vencimento_str=None):
         if not frete:
             return {"success": False, "error": "Frete não encontrado"}
 
-        # validações
         if not frete.get("cliente_email"):
             return {"success": False, "error": "Cliente sem e-mail cadastrado"}
         if not frete.get("cliente_telefone"):
@@ -366,7 +364,6 @@ def emitir_boleto_frete(frete_id, vencimento_str=None):
         if not frete.get("cliente_cnpj"):
             return {"success": False, "error": "Cliente sem CNPJ cadastrado"}
 
-        # calcular vencimento
         if vencimento_str:
             try:
                 data_vencimento = datetime.strptime(vencimento_str, "%Y-%m-%d")
@@ -375,7 +372,6 @@ def emitir_boleto_frete(frete_id, vencimento_str=None):
         else:
             data_vencimento = datetime.now() + timedelta(days=7)
 
-        # valor em centavos
         try:
             valor_total_centavos = int(float(frete["valor_total_frete"] or 0) * 100)
         except Exception:
@@ -390,7 +386,6 @@ def emitir_boleto_frete(frete_id, vencimento_str=None):
 
         body = _build_body(frete, descricao_frete, data_vencimento, valor_total_centavos)
 
-        # instanciar cliente efipay
         credentials = {
             "client_id": os.getenv("EFI_CLIENT_ID"),
             "client_secret": os.getenv("EFI_CLIENT_SECRET"),
@@ -404,86 +399,67 @@ def emitir_boleto_frete(frete_id, vencimento_str=None):
             logger.exception("Falha ao instanciar EfiPay SDK: %s", ex)
             return {"success": False, "error": "Falha ao inicializar cliente de cobrança"}
 
-        # Tentar autenticar explicitamente quando suportado (corrige o problema detectado)
         try:
             if hasattr(efi, "authenticate") and callable(getattr(efi, "authenticate")):
                 try:
                     efi.authenticate()
                     logger.info("EfiPay.authenticate() executado com sucesso")
                 except Exception as ex_auth:
-                    # não abortar aqui — alguns SDKs aceitam chamadas sem chamar authenticate explicitamente
-                    logger.warning("EfiPay.authenticate() falhou (continuando para tentativas): %s", ex_auth)
+                    logger.warning("EfiPay.authenticate() falhou (continuando): %s", ex_auth)
         except Exception:
             logger.debug("Ignorando erro ao verificar authenticate() no SDK", exc_info=True)
 
-        # log sanitizado do body (temporário)
         try:
-            logger.info("EFI create_charge body: %s", json.dumps(_sanitize_for_log(body), ensure_ascii=False))
+            logger.info("EFI create_charge body (sanitizado): %s", _sanitize_for_log(body))
         except Exception:
             logger.info("EFI create_charge body: <unserializable>")
 
-        # Tentar métodos do SDK que possam existir na versão instalada (alta-nível)
         success, response, method = _try_sdk_methods(efi, body)
 
-        # Se não encontrou um método de alto nível, tentar fallback de baixo nível usando send/request
         if not success:
             try:
-                # tentar efi.send(credentials, params, body, headers_complement) se disponível
                 if hasattr(efi, "send") and callable(getattr(efi, "send")):
                     params = {"path": "/one_step_charge", "method": "POST"}
-                    headers_complement = {}
+                    _log_send_attempt("send", body, extra_note="low-level send")
                     try:
-                        logger.info("Tentando fallback: efi.send(credentials, params, body, headers_complement)")
-                        resp_low = efi.send(credentials, params, body, headers_complement)
+                        resp_low = efi.send(credentials, params, body, {})
+                        _log_provider_response("send", resp_low)
                         success = True
                         response = resp_low
                         method = "send"
                     except TypeError:
-                        # assinatura diferente — tentar request
-                        logger.debug("efi.send aceito, mas com assinatura diferente; tentando efi.request(...)")
-                        try:
-                            if hasattr(efi, "request") and callable(getattr(efi, "request")):
-                                try:
-                                    resp_low = efi.request(credentials, body=body)
-                                except TypeError:
-                                    try:
-                                        resp_low = efi.request(body=body)
-                                    except Exception:
-                                        resp_low = efi.request(credentials, body=body)
-                                success = True
-                                response = resp_low
-                                method = "request"
-                        except Exception as ex_low:
-                            logger.debug("Fallback request via efi.request falhou: %s", ex_low)
+                        logger.debug("efi.send com assinatura TypeError; tentando request")
+                        if hasattr(efi, "request") and callable(getattr(efi, "request")):
+                            _log_send_attempt("request", body, extra_note="low-level request after send TypeError")
+                            try:
+                                resp_low = efi.request(credentials, body=body)
+                            except TypeError:
+                                resp_low = efi.request(body=body)
+                            _log_provider_response("request", resp_low)
+                            success = True
+                            response = resp_low
+                            method = "request"
                     except Exception as ex_send:
                         logger.debug("Tentativa efi.send falhou: %s", ex_send)
                 elif hasattr(efi, "request") and callable(getattr(efi, "request")):
-                    # tentar request se send não existir
+                    _log_send_attempt("request", body, extra_note="low-level request")
                     try:
-                        logger.info("Tentando fallback: efi.request(credentials, body=...)")
-                        try:
-                            resp_low = efi.request(credentials, body=body)
-                        except TypeError:
-                            resp_low = efi.request(body=body)
-                        success = True
-                        response = resp_low
-                        method = "request"
-                    except Exception as ex_req:
-                        logger.debug("Tentativa efi.request falhou: %s", ex_req)
+                        resp_low = efi.request(credentials, body=body)
+                    except TypeError:
+                        resp_low = efi.request(body=body)
+                    _log_provider_response("request", resp_low)
+                    success = True
+                    response = resp_low
+                    method = "request"
             except Exception as ex:
                 logger.debug("Erro ao tentar fallback send/request: %s", ex)
 
-        # Se retorno for exceção, formatar
         if isinstance(response, Exception):
-            logger.exception("SDK método tentou e retornou exceção (método=%r): %r", method, response)
+            logger.exception("SDK método retornou exceção (método=%r): %r", method, response)
 
-        # log da resposta (pode ser dict ou objeto)
         logger.info("EFI create_charge response (method=%r): %r", method, response)
-
-        # interpretar resposta
         last_response = response
 
-        # Se o provedor reclamou especificamente de '/payment', tentar variantes
         try:
             need_retry_payment_variant = False
             if isinstance(last_response, dict):
@@ -495,13 +471,15 @@ def emitir_boleto_frete(frete_id, vencimento_str=None):
             need_retry_payment_variant = False
 
         if need_retry_payment_variant:
-            logger.info("Resposta do provedor indica problema com '/payment' — tentando variantes de payload...")
+            logger.info("Provider reclama de '/payment' — tentando variantes de payload")
             try:
                 s2, resp2, m2, used_body = _try_payment_variants(efi, body, credentials)
             except Exception as ex:
                 logger.debug("Erro executando _try_payment_variants: %s", ex)
                 s2, resp2, m2, used_body = False, None, None, None
 
+            if s2:
+                _log_provider_response("variant-final", resp2)
             if s2 and isinstance(resp2, dict) and ("data" in resp2 or "charge" in resp2):
                 charge_id2, boleto_url2, barcode2 = _safe_get_charge_fields(resp2)
                 if charge_id2:
@@ -546,9 +524,7 @@ def emitir_boleto_frete(frete_id, vencimento_str=None):
             charge_id, boleto_url, barcode = _safe_get_charge_fields(response)
             if not charge_id:
                 logger.warning("charge_id ausente na resposta do provedor: %r", response)
-                # continuar para fallback/persistência de erro
             else:
-                # persistir cobrança
                 try:
                     cursor.execute(
                         """
@@ -583,12 +559,10 @@ def emitir_boleto_frete(frete_id, vencimento_str=None):
                     "barcode": barcode,
                 }
 
-        # tratar casos de validation_error retornados pelo provedor
         if isinstance(last_response, dict) and last_response.get("error") == "validation_error":
             err_desc = last_response.get("error_description") or last_response.get("message") or last_response
             return {"success": False, "error": f"Resposta inválida do provedor de cobrança: {err_desc}"}
 
-        # se chegou aqui, tentar formatar erro legível
         if isinstance(last_response, dict):
             return {"success": False, "error": f"Resposta inválida do provedor de cobrança: {last_response}"}
         if isinstance(last_response, Exception):
