@@ -1,7 +1,7 @@
 # Análise: O Que Falta Para Usar Ícones iOS no Projeto
 
-## Data da Análise
-14 de Dezembro de 2024
+## Análise Atual
+_Última atualização: Dezembro 2024_
 
 ## Status Atual
 
@@ -107,8 +107,8 @@ sudo apt-get install imagemagick
 
 ### Passo 2: Dar Permissão de Execução ao Script
 ```bash
-# Navegue até o diretório do projeto
-cd /path/to/nh-transportes
+# Navegue até o diretório raiz do projeto
+cd [project-root]
 chmod +x scripts/generate_and_zip_icons.sh
 ```
 
