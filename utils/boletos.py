@@ -383,6 +383,96 @@ def emitir_boleto_frete(frete_id, vencimento_str=None):
 
         # interpretar resposta
         last_response = response
+
+        # --- Adição: se o provedor reclamou especificamente de '/payment', tentar uma variante com 'payments' ---
+        try:
+            need_retry_payment_variant = False
+            if isinstance(last_response, dict):
+                prop = last_response.get("property") or ""
+                # mensagem também pode vir em 'message' ou 'error_description'
+                msg = str(last_response.get("message") or last_response.get("error_description") or "")
+                if prop == "/payment" or "/payment" in msg or msg.find("Propriedade desconhecida") != -1 and "/payment" in str(last_response):
+                    need_retry_payment_variant = True
+            if need_retry_payment_variant:
+                logger.info("Resposta do provedor indica problema com '/payment' — tentando alternativa com 'payments'...")
+                # reconstrói alternativa: transforma payment => payments: [ { 'banking_billet': ... } ]
+                alt_body = dict(body)
+                payment_obj = alt_body.pop("payment", None)
+                if payment_obj is not None:
+                    bb = None
+                    if isinstance(payment_obj, dict):
+                        bb = payment_obj.get("banking_billet") or payment_obj
+                    # colocar em payments como lista
+                    alt_body["payments"] = [{"banking_billet": bb} if isinstance(bb, dict) else bb]
+                    # tentar novamente com SDK (alta-nível)
+                    try:
+                        s2, resp2, m2 = _try_sdk_methods(efi, alt_body)
+                    except Exception as ex_try:
+                        logger.debug("Tentativa alta-nível com alt_body falhou: %s", ex_try)
+                        s2, resp2, m2 = False, ex_try, None
+                    # se alta-nível falhar, tentar low-level como antes
+                    if not s2:
+                        try:
+                            if hasattr(efi, "send") and callable(getattr(efi, "send")):
+                                try:
+                                    params = {"path": "/one_step_charge", "method": "POST"}
+                                    resp2 = efi.send(credentials, params, alt_body, {})
+                                    s2 = True
+                                    m2 = "send"
+                                except Exception as exs:
+                                    logger.debug("efi.send com alt_body falhou: %s", exs)
+                            if not s2 and hasattr(efi, "request") and callable(getattr(efi, "request")):
+                                try:
+                                    resp2 = efi.request(credentials, body=alt_body)
+                                    s2 = True
+                                    m2 = "request"
+                                except Exception as exr:
+                                    logger.debug("efi.request com alt_body falhou: %s", exr)
+                        except Exception as ex_low:
+                            logger.debug("Erro ao tentar fallback low-level com alt_body: %s", ex_low)
+                    # se obteve resposta válida, processar e persistir como no fluxo principal
+                    if s2 and isinstance(resp2, dict) and ("data" in resp2 or "charge" in resp2):
+                        charge_id2, boleto_url2, barcode2 = _safe_get_charge_fields(resp2)
+                        if charge_id2:
+                            try:
+                                cursor.execute(
+                                    """
+                                    INSERT INTO cobrancas
+                                      (id_cliente, valor, data_vencimento, status,
+                                       charge_id, link_boleto, pdf_boleto, data_emissao)
+                                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                                    """,
+                                    (
+                                        frete["clientes_id"],
+                                        frete["valor_total_frete"],
+                                        data_vencimento.date(),
+                                        "pendente",
+                                        charge_id2,
+                                        boleto_url2,
+                                        None,
+                                        datetime.today().date(),
+                                    ),
+                                )
+                                cobranca_id = getattr(cursor, "lastrowid", None)
+                                conn.commit()
+                            except Exception:
+                                logger.exception("Erro ao inserir cobranca (alt) para frete_id=%s", frete_id)
+                                conn.rollback()
+                                return {"success": False, "error": "Erro ao persistir cobrança no banco (alt)"}
+
+                            return {
+                                "success": True,
+                                "cobranca_id": cobranca_id,
+                                "charge_id": charge_id2,
+                                "boleto_url": boleto_url2,
+                                "barcode": barcode2,
+                            }
+                        else:
+                            logger.warning("Alt response sem charge_id: %r", resp2)
+        except Exception:
+            logger.debug("Erro durante tentativa de alternativa para /payment", exc_info=True)
+        # --- fim da adição ---
+
         if success and isinstance(response, dict) and ("data" in response or "charge" in response):
             charge_id, boleto_url, barcode = _safe_get_charge_fields(response)
             if not charge_id:
