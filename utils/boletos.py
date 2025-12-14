@@ -1,6 +1,8 @@
 import os
-from datetime import datetime, timedelta
 import logging
+from datetime import datetime, timedelta
+from time import sleep
+
 from efipay import EfiPay
 from utils.db import get_db_connection
 
@@ -9,18 +11,16 @@ logger = logging.getLogger(__name__)
 
 def _safe_get_charge_fields(response):
     """
-    Tenta extrair charge_id, boleto_url e barcode de formas comuns na resposta.
-    Suporta 'payment' como dict ou 'payments' como lista.
+    Extrai charge_id, boleto_url e barcode de formas comuns na resposta.
+    Suporta fontes 'data' | 'charge' e 'payment' (dict) ou 'payments' (list).
     """
     if not response or not isinstance(response, dict):
         return None, None, None
 
-    data = response.get('data') or response.get('charge') or {}
-    # charge id
-    charge_id = data.get('charge_id') or data.get('id') or response.get('data', {}).get('id')
+    data = response.get("data") or response.get("charge") or {}
+    charge_id = data.get("charge_id") or data.get("id") or (response.get("data") or {}).get("id")
 
-    # payment pode ser dict ou list
-    payment = data.get('payment') or data.get('payments') or {}
+    payment = data.get("payment") or data.get("payments") or {}
     boleto_url = None
     barcode = None
     try:
@@ -31,23 +31,143 @@ def _safe_get_charge_fields(response):
         else:
             p = {}
         boleto_url = (
-            (p.get('banking_billet') or {}).get('link')
-            or p.get('link')
-            or (response.get('data') or {}).get('banking_billet', {}).get('link')
+            (p.get("banking_billet") or {}).get("link")
+            or p.get("link")
+            or (data.get("banking_billet") or {}).get("link")
         )
         barcode = (
-            (p.get('banking_billet') or {}).get('barcode')
-            or p.get('barcode')
-            or (response.get('data') or {}).get('banking_billet', {}).get('barcode')
+            (p.get("banking_billet") or {}).get("barcode")
+            or p.get("barcode")
+            or (data.get("banking_billet") or {}).get("barcode")
         )
     except Exception:
         logger.debug("Falha tentando extrair boleto/payment fields: %r", payment)
     return charge_id, boleto_url, barcode
 
 
+def _build_bodies(frete, descricao_frete, data_vencimento, valor_total_centavos):
+    """
+    Gera uma lista de possíveis corpos (bodys) para enviar ao provedor.
+    Tentamos variantes comuns para diferentes versões de SDK/APIs.
+    A ordem é do mais provável ao menos provável.
+    """
+    cpf_cnpj = (
+        frete["cliente_cnpj"].replace(".", "").replace("-", "").replace("/", "").strip()
+        if frete.get("cliente_cnpj")
+        else None
+    )
+    telefone = (
+        frete["cliente_telefone"]
+        .replace("(", "")
+        .replace(")", "")
+        .replace("-", "")
+        .replace(" ", "")
+        .strip()
+        if frete.get("cliente_telefone")
+        else None
+    )
+    cep = (frete.get("cliente_cep") or "").replace("-", "").strip()
+    if not cep or len(cep) != 8:
+        cep = "74000000"
+
+    nome_cliente = (frete.get("cliente_fantasia") or frete.get("cliente_nome") or "Cliente")[:80]
+    customer = {
+        "name": nome_cliente,
+        "cpf": cpf_cnpj if cpf_cnpj and len(cpf_cnpj) == 11 else None,
+        "cnpj": cpf_cnpj if cpf_cnpj and len(cpf_cnpj) == 14 else None,
+        "phone_number": (telefone or "")[:11],
+        "email": (frete.get("cliente_email") or "")[:50],
+        "address": {
+            "street": (frete.get("cliente_endereco") or "Rua Exemplo")[:80],
+            "number": (frete.get("cliente_numero") or "SN")[:10],
+            "neighborhood": (frete.get("cliente_bairro") or "Centro")[:50],
+            "zipcode": cep,
+            "city": (frete.get("cliente_cidade") or "Goiania")[:50],
+            "state": (frete.get("cliente_estado") or "GO")[:2].upper(),
+        },
+    }
+
+    banking_billet = {
+        "expire_at": data_vencimento.strftime("%Y-%m-%d"),
+        "customer": customer,
+    }
+
+    items = [
+        {
+            "name": descricao_frete[:80],
+            "amount": 1,
+            "value": valor_total_centavos,
+        }
+    ]
+
+    metadata = {
+        "custom_id": str(frete["id"]),
+        "notification_url": os.getenv("EFI_NOTIFICATION_URL", "https://nh-transportes.onrender.com/webhooks/efi"),
+    }
+
+    # Variantes para testar
+    bodies = []
+
+    # Variante A: antigo/único "payment"
+    bodies.append(
+        {
+            "payment": {"banking_billet": banking_billet},
+            "items": items,
+            "metadata": metadata,
+        }
+    )
+
+    # Variante B: plural "payments" (lista)
+    bodies.append(
+        {
+            "payments": [{"banking_billet": banking_billet}],
+            "items": items,
+            "metadata": metadata,
+        }
+    )
+
+    # Variante C: "charge" encapsulando
+    bodies.append(
+        {
+            "charge": {
+                "payment": {"banking_billet": banking_billet},
+                "items": items,
+                "metadata": metadata,
+            }
+        }
+    )
+
+    # Variante D: "charge" com "payments"
+    bodies.append(
+        {
+            "charge": {
+                "payments": [{"banking_billet": banking_billet}],
+                "items": items,
+                "metadata": metadata,
+            }
+        }
+    )
+
+    # Variante E: "charges" array (algumas APIs aceitam lista de charges)
+    bodies.append(
+        {
+            "charges": [
+                {
+                    "payments": [{"banking_billet": banking_billet}],
+                    "items": items,
+                    "metadata": metadata,
+                }
+            ]
+        }
+    )
+
+    return bodies
+
+
 def emitir_boleto_frete(frete_id, vencimento_str=None):
     """
-    Emite um boleto via Efí para um frete específico.
+    Função principal para emissão. Tenta várias variantes de body (configurável via EFI_TRY_VARIANTS).
+    Retorna um dict com a mesma estrutura usada pela aplicação.
     """
     conn = None
     cursor = None
@@ -97,6 +217,7 @@ def emitir_boleto_frete(frete_id, vencimento_str=None):
         if not frete.get("cliente_cnpj"):
             return {"success": False, "error": "Cliente sem CNPJ cadastrado"}
 
+        # Credenciais e cliente da lib
         credentials = {
             "client_id": os.getenv("EFI_CLIENT_ID"),
             "client_secret": os.getenv("EFI_CLIENT_SECRET"),
@@ -105,6 +226,7 @@ def emitir_boleto_frete(frete_id, vencimento_str=None):
         }
         efi = EfiPay(credentials)
 
+        # vencimento
         if vencimento_str:
             try:
                 data_vencimento = datetime.strptime(vencimento_str, "%Y-%m-%d")
@@ -113,35 +235,7 @@ def emitir_boleto_frete(frete_id, vencimento_str=None):
         else:
             data_vencimento = datetime.now() + timedelta(days=7)
 
-        cpf_cnpj = (
-            frete["cliente_cnpj"]
-            .replace(".", "")
-            .replace("-", "")
-            .replace("/", "")
-            .strip()
-        )
-        telefone = (
-            frete["cliente_telefone"]
-            .replace("(", "")
-            .replace(")", "")
-            .replace("-", "")
-            .replace(" ", "")
-            .strip()
-        )
-        cep = (frete.get("cliente_cep") or "").replace("-", "").strip()
-        if not cep or len(cep) != 8:
-            cep = "74000000"
-
-        nome_cliente = (
-            frete.get("cliente_fantasia")
-            or frete.get("cliente_nome")
-            or "Cliente"
-        )
-
-        descricao_frete = f"Frete #{frete['id']}"
-        if frete.get("origem_nome") and frete.get("destino_nome"):
-            descricao_frete += f" - {frete['origem_nome']} para {frete['destino_nome']}"
-
+        # calcular valor em centavos
         try:
             valor_total_centavos = int(float(frete["valor_total_frete"] or 0) * 100)
         except Exception:
@@ -151,107 +245,116 @@ def emitir_boleto_frete(frete_id, vencimento_str=None):
         if valor_total_centavos <= 0:
             return {"success": False, "error": "Valor do frete inválido ou zerado"}
 
-        # --> ALTERAÇÃO: usar 'payments' como lista (schema esperado por muitas APIs)
-        body = {
-            "payments": [
-                {
-                    "banking_billet": {
-                        "expire_at": data_vencimento.strftime("%Y-%m-%d"),
-                        "customer": {
-                            "name": nome_cliente[:80],
-                            "cpf": cpf_cnpj if len(cpf_cnpj) == 11 else None,
-                            "cnpj": cpf_cnpj if len(cpf_cnpj) == 14 else None,
-                            "phone_number": telefone[:11],
-                            "email": frete["cliente_email"][:50],
-                            "address": {
-                                "street": (frete.get("cliente_endereco") or "Rua Exemplo")[:80],
-                                "number": (frete.get("cliente_numero") or "SN")[:10],
-                                "neighborhood": (frete.get("cliente_bairro") or "Centro")[:50],
-                                "zipcode": cep,
-                                "city": (frete.get("cliente_cidade") or "Goiania")[:50],
-                                "state": (frete.get("cliente_estado") or "GO")[:2].upper(),
-                            },
-                        },
-                    }
-                }
-            ],
-            "items": [
-                {
-                    "name": descricao_frete[:80],
-                    "amount": 1,
-                    "value": valor_total_centavos,
-                }
-            ],
-            "metadata": {
-                "custom_id": str(frete_id),
-                "notification_url": os.getenv("EFI_NOTIFICATION_URL", "https://nh-transportes.onrender.com/webhooks/efi"),
-            },
-        }
+        descricao_frete = f"Frete #{frete['id']}"
+        if frete.get("origem_nome") and frete.get("destino_nome"):
+            descricao_frete += f" - {frete['origem_nome']} para {frete['destino_nome']}"
 
-        # Logs temporários para depuração (remova após confirmar que funciona)
-        try:
-            logger.debug("EFI create_charge body: %s", body)
-        except Exception:
-            logger.debug("EFI create_charge body: <failed to stringify>")
+        bodies = _build_bodies(frete, descricao_frete, data_vencimento, valor_total_centavos)
 
-        try:
-            response = efi.create_charge(body=body)
-            logger.debug("EFI create_charge response: %r", response)
-        except Exception as ex:
-            logger.exception("Exception ao chamar efi.create_charge for frete_id=%s", frete_id)
-            return {"success": False, "error": str(ex)}
+        try_variants = os.getenv("EFI_TRY_VARIANTS", "true").lower() == "true"
 
-        if isinstance(response, Exception):
-            logger.exception("create_charge retornou um objeto de exceção para frete_id=%s: %r", frete_id, response)
+        last_response = None
+        attempted = 0
+
+        for idx, body in enumerate(bodies):
+            # if try_variants is False, try only the first variant
+            if idx > 0 and not try_variants:
+                break
+
+            attempted += 1
+            # log temporário — cuidado com dados pessoais. NÃO inclua client_secret.
             try:
-                msg = getattr(response, 'message', None) or str(response)
+                logger.info("Attempt %d - EFI create_charge body keys: %s", attempted, list(body.keys()))
             except Exception:
-                msg = repr(response)
-            return {"success": False, "error": f"Erro do provedor: {msg}"}
+                logger.info("Attempt %d - EFI create_charge body: <unstringifiable>", attempted)
 
-        if not isinstance(response, dict) or ('data' not in response and 'charge' not in response):
-            logger.error("Resposta inválida ao criar charge: %r", response)
-            return {"success": False, "error": "Resposta inválida do provedor de cobrança"}
+            # print also to ensure appearing in Render logs console
+            print(f"EFI create_charge attempt={attempted} body_keys={list(body.keys())}")
 
-        charge_id, boleto_url, barcode = _safe_get_charge_fields(response)
+            try:
+                response = efi.create_charge(body=body)
+                logger.info("EFI create_charge response (attempt=%d): %r", attempted, response)
+                print(f"EFI create_charge response (attempt={attempted}): {response}")
+            except Exception as ex:
+                logger.exception("Exception ao chamar efi.create_charge attempt=%s frete_id=%s", attempted, frete_id)
+                last_response = ex
+                # if it's a network/timeout, optionally retry a couple times; here we continue to next variant
+                continue
 
-        if not charge_id:
-            logger.error("charge_id ausente na resposta: %r", response)
-            return {"success": False, "error": "Charge ID ausente na resposta do provedor"}
+            last_response = response
 
-        try:
-            cursor.execute(
-                """
-                INSERT INTO cobrancas
-                  (id_cliente, valor, data_vencimento, status,
-                   charge_id, link_boleto, pdf_boleto, data_emissao)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-                """,
-                (
-                    frete["clientes_id"],
-                    frete["valor_total_frete"],
-                    data_vencimento.date(),
-                    "pendente",
-                    charge_id,
-                    boleto_url,
-                    None,
-                    datetime.today().date(),
-                ),
-            )
-            cobranca_id = getattr(cursor, 'lastrowid', None)
-            conn.commit()
-        except Exception:
-            logger.exception("Erro ao inserir cobranca para frete_id=%s", frete_id)
-            conn.rollback()
-            return {"success": False, "error": "Erro ao persistir cobrança no banco"}
+            # If response is an Exception-like object, treat as error and continue
+            if isinstance(response, Exception):
+                continue
 
-        return {
-            "success": True,
-            "cobranca_id": cobranca_id,
-            "charge_id": charge_id,
-            "boleto_url": boleto_url,
-            "barcode": barcode,
-        }
+            # If provider returned explicit validation error about property, try next variant
+            # Many providers return a dict with 'error'/'error_description' keys
+            if isinstance(response, dict) and response.get("error") == "validation_error":
+                # log and continue to next variant
+                logger.warning("Provider validation_error on attempt=%d: %r", attempted, response.get("error_description"))
+                # decide to try next variant
+                continue
+
+            # If response looks successful (contains data/charge), accept it
+            if isinstance(response, dict) and ("data" in response or "charge" in response):
+                charge_id, boleto_url, barcode = _safe_get_charge_fields(response)
+                if not charge_id:
+                    # maybe provider returned data but different structure; try next variant
+                    logger.warning("charge_id ausente na resposta no attempt=%d: %r", attempted, response)
+                    continue
+
+                # persistir cobrança
+                try:
+                    cursor.execute(
+                        """
+                        INSERT INTO cobrancas
+                          (id_cliente, valor, data_vencimento, status,
+                           charge_id, link_boleto, pdf_boleto, data_emissao)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                        """,
+                        (
+                            frete["clientes_id"],
+                            frete["valor_total_frete"],
+                            data_vencimento.date(),
+                            "pendente",
+                            charge_id,
+                            boleto_url,
+                            None,
+                            datetime.today().date(),
+                        ),
+                    )
+                    cobranca_id = getattr(cursor, "lastrowid", None)
+                    conn.commit()
+                except Exception:
+                    logger.exception("Erro ao inserir cobranca para frete_id=%s", frete_id)
+                    conn.rollback()
+                    return {"success": False, "error": "Erro ao persistir cobrança no banco"}
+
+                return {
+                    "success": True,
+                    "cobranca_id": cobranca_id,
+                    "charge_id": charge_id,
+                    "boleto_url": boleto_url,
+                    "barcode": barcode,
+                }
+
+            # otherwise, try next variant
+            sleep(0.2)
+
+        # se chegou aqui, todas as variantes falharam
+        logger.error("Todas variantes testadas (%d) falharam. last_response=%r", attempted, last_response)
+        # formatar mensagem de erro legível para UI
+        if isinstance(last_response, dict):
+            # prefer error_description if present
+            if last_response.get("error_description"):
+                err_desc = last_response.get("error_description")
+                return {"success": False, "error": f"Resposta inválida do provedor de cobrança: {err_desc}"}
+            return {"success": False, "error": f"Resposta inválida do provedor de cobrança: {last_response}"}
+
+        if isinstance(last_response, Exception):
+            return {"success": False, "error": f"Erro ao chamar provedor: {str(last_response)}"}
+
+        return {"success": False, "error": "Resposta inválida do provedor de cobrança"}
 
     except Exception as e:
         logger.exception("Erro ao emitir boleto para frete_id=%s", frete_id)
