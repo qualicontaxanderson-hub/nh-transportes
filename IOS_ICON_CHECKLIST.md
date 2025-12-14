@@ -62,7 +62,7 @@ Após executar o script, você terá:
 sudo apt-get update && sudo apt-get install imagemagick
 
 # Passo 2: Ir para o diretório do projeto
-cd /home/runner/work/nh-transportes/nh-transportes
+cd /path/to/nh-transportes
 
 # Passo 3: Tornar executável
 chmod +x scripts/generate_and_zip_icons.sh
