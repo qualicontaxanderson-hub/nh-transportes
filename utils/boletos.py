@@ -47,9 +47,9 @@ def _safe_get_charge_fields(response):
 
 def _build_bodies(frete, descricao_frete, data_vencimento, valor_total_centavos):
     """
-    Gera uma lista de possíveis corpos (bodys) para enviar ao provedor.
-    Tentamos variantes comuns para diferentes versões de SDK/APIs.
-    A ordem é do mais provável ao menos provável.
+    Gera variantes do payload e garante que 'items' esteja presente no root
+    (algumas versões do provedor exigem items em nível raiz mesmo quando usam
+    'charge' ou 'charges').
     """
     cpf_cnpj = (
         frete["cliente_cnpj"].replace(".", "").replace("-", "").replace("/", "").strip()
@@ -105,61 +105,55 @@ def _build_bodies(frete, descricao_frete, data_vencimento, valor_total_centavos)
         "notification_url": os.getenv("EFI_NOTIFICATION_URL", "https://nh-transportes.onrender.com/webhooks/efi"),
     }
 
-    # Variantes para testar
     bodies = []
 
     # Variante A: antigo/único "payment"
-    bodies.append(
-        {
+    bodies.append({
+        "payment": {"banking_billet": banking_billet},
+        "items": items,
+        "metadata": metadata,
+    })
+
+    # Variante B: plural "payments" (lista)
+    bodies.append({
+        "payments": [{"banking_billet": banking_billet}],
+        "items": items,
+        "metadata": metadata,
+    })
+
+    # Variante C: "charge" encapsulando (mantém items dentro de charge)
+    bodies.append({
+        "charge": {
             "payment": {"banking_billet": banking_billet},
             "items": items,
             "metadata": metadata,
-        }
-    )
+        },
+        # GARANTIA: adicionar items também no root para evitar erro de schema
+        "items": items,
+    })
 
-    # Variante B: plural "payments" (lista)
-    bodies.append(
-        {
+    # Variante D: "charge" com "payments"
+    bodies.append({
+        "charge": {
             "payments": [{"banking_billet": banking_billet}],
             "items": items,
             "metadata": metadata,
-        }
-    )
+        },
+        "items": items,
+    })
 
-    # Variante C: "charge" encapsulando
-    bodies.append(
-        {
-            "charge": {
-                "payment": {"banking_billet": banking_billet},
-                "items": items,
-                "metadata": metadata,
-            }
-        }
-    )
-
-    # Variante D: "charge" com "payments"
-    bodies.append(
-        {
-            "charge": {
+    # Variante E: "charges" array (algumas APIs aceitam lista de charges)
+    bodies.append({
+        "charges": [
+            {
                 "payments": [{"banking_billet": banking_billet}],
                 "items": items,
                 "metadata": metadata,
             }
-        }
-    )
-
-    # Variante E: "charges" array (algumas APIs aceitam lista de charges)
-    bodies.append(
-        {
-            "charges": [
-                {
-                    "payments": [{"banking_billet": banking_billet}],
-                    "items": items,
-                    "metadata": metadata,
-                }
-            ]
-        }
-    )
+        ],
+        # também colocar items no root
+        "items": items,
+    })
 
     return bodies
 
