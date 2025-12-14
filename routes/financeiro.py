@@ -110,7 +110,10 @@ def recebimentos():
 def emitir_boleto_route(frete_id):
     """Emite boleto para um frete específico"""
     try:
-        resultado = emitir_boleto_frete(frete_id)
+        # Lê campo opcional de vencimento do form: 'YYYY-MM-DD'
+        vencimento = request.form.get('vencimento') or None
+
+        resultado = emitir_boleto_frete(frete_id, vencimento_str=vencimento)
 
         # Log do resultado para facilitar debug
         current_app.logger.info("Resultado emitir_boleto_frete(%s): %r", frete_id, resultado)
