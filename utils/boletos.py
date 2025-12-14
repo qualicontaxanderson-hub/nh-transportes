@@ -303,14 +303,76 @@ def emitir_boleto_frete(frete_id, vencimento_str=None):
             logger.exception("Falha ao instanciar EfiPay SDK: %s", ex)
             return {"success": False, "error": "Falha ao inicializar cliente de cobrança"}
 
+        # Tentar autenticar explicitamente quando suportado (corrige o problema detectado)
+        try:
+            if hasattr(efi, "authenticate") and callable(getattr(efi, "authenticate")):
+                try:
+                    efi.authenticate()
+                    logger.info("EfiPay.authenticate() executado com sucesso")
+                except Exception as ex_auth:
+                    # não abortar aqui — alguns SDKs aceitam chamadas sem chamar authenticate explicitamente
+                    logger.warning("EfiPay.authenticate() falhou (continuando para tentativas): %s", ex_auth)
+        except Exception:
+            logger.debug("Ignorando erro ao verificar authenticate() no SDK", exc_info=True)
+
         # log sanitizado do body (temporário)
         try:
             logger.info("EFI create_charge body: %s", json.dumps(_sanitize_for_log(body), ensure_ascii=False))
         except Exception:
             logger.info("EFI create_charge body: <unserializable>")
 
-        # Tentar métodos do SDK que possam existir na versão instalada
+        # Tentar métodos do SDK que possam existir na versão instalada (alta-nível)
         success, response, method = _try_sdk_methods(efi, body)
+
+        # Se não encontrou um método de alto nível, tentar fallback de baixo nível usando send/request
+        if not success:
+            try:
+                # tentar efi.send(credentials, params, body, headers_complement) se disponível
+                if hasattr(efi, "send") and callable(getattr(efi, "send")):
+                    params = {"path": "/one_step_charge", "method": "POST"}
+                    headers_complement = {}
+                    try:
+                        logger.info("Tentando fallback: efi.send(credentials, params, body, headers_complement)")
+                        resp_low = efi.send(credentials, params, body, headers_complement)
+                        success = True
+                        response = resp_low
+                        method = "send"
+                    except TypeError:
+                        # assinatura diferente — tentar request
+                        logger.debug("efi.send aceito, mas com assinatura diferente; tentando efi.request(...)")
+                        try:
+                            # tentar request usando body=... (alguns SDKs usam request(settings, **kwargs))
+                            if hasattr(efi, "request") and callable(getattr(efi, "request")):
+                                try:
+                                    resp_low = efi.request(credentials, body=body)
+                                except TypeError:
+                                    # alternativa: request(body=body) or request(settings, body)
+                                    try:
+                                        resp_low = efi.request(body=body)
+                                    except Exception:
+                                        resp_low = efi.request(credentials, body=body)
+                                success = True
+                                response = resp_low
+                                method = "request"
+                        except Exception as ex_low:
+                            logger.debug("Fallback request via efi.request falhou: %s", ex_low)
+                    except Exception as ex_send:
+                        logger.debug("Tentativa efi.send falhou: %s", ex_send)
+                elif hasattr(efi, "request") and callable(getattr(efi, "request")):
+                    # tentar request se send não existir
+                    try:
+                        logger.info("Tentando fallback: efi.request(credentials, body=...)")
+                        try:
+                            resp_low = efi.request(credentials, body=body)
+                        except TypeError:
+                            resp_low = efi.request(body=body)
+                        success = True
+                        response = resp_low
+                        method = "request"
+                    except Exception as ex_req:
+                        logger.debug("Tentativa efi.request falhou: %s", ex_req)
+            except Exception as ex:
+                logger.debug("Erro ao tentar fallback send/request: %s", ex)
 
         # Se retorno for exceção, formatar
         if isinstance(response, Exception):
