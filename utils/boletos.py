@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 import os
 import json
 import copy
@@ -298,16 +299,26 @@ def _try_payment_variants(efi, original_body, credentials):
                     resp2 = efi.send(credentials, params, alt_body, {})
                     _log_provider_response(f"send_variant:{vname}", resp2)
                     return True, resp2, "send", alt_body
-                except Exception as exs:
-                    logger.debug("efi.send com alt_body '%s' falhou: %s", vname, exs)
+                except TypeError:
+                    logger.debug("efi.send com assinatura TypeError; tentando request")
+                    if hasattr(efi, "request") and callable(getattr(efi, "request")):
+                        _log_send_attempt("request", alt_body, extra_note="low-level request after send TypeError")
+                        try:
+                            resp2 = efi.request(credentials, body=alt_body)
+                        except TypeError:
+                            resp2 = efi.request(body=alt_body)
+                        _log_provider_response("request", resp2)
+                        return True, resp2, "request", alt_body
+                except Exception as ex_send:
+                    logger.debug("Tentativa efi.send falhou: %s", ex_send)
             if hasattr(efi, "request") and callable(getattr(efi, "request")):
                 try:
-                    _log_send_attempt(f"request_variant:{vname}", alt_body, extra_note="low-level request")
+                    _log_send_attempt("request", alt_body, extra_note="low-level request")
                     try:
                         resp2 = efi.request(credentials, body=alt_body)
                     except TypeError:
                         resp2 = efi.request(body=alt_body)
-                    _log_provider_response(f"request_variant:{vname}", resp2)
+                    _log_provider_response("request", resp2)
                     return True, resp2, "request", alt_body
                 except Exception as exr:
                     logger.debug("efi.request com alt_body '%s' falhou: %s", vname, exr)
@@ -395,6 +406,14 @@ def emitir_boleto_frete(frete_id, vencimento_str=None):
         efi = None
         try:
             efi = EfiPay(credentials)
+            # Workaround: garantir que `self.endpoints` / `self.urls` sejam inicializados
+            # O SDK inicializa isso no __getattr__ quando um endpoint é acessado; sem isso,
+            # chamar authenticate() pode levantar MethodError interno (endpoints não inicializado).
+            try:
+                getattr(efi, "create_charge")
+            except Exception:
+                # ignorar resultado do getattr; serve apenas para inicializar estrutura interna
+                pass
         except Exception as ex:
             logger.exception("Falha ao instanciar EfiPay SDK: %s", ex)
             return {"success": False, "error": "Falha ao inicializar cliente de cobrança"}
