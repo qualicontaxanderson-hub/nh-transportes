@@ -31,4 +31,4 @@ if [ -n "${EFI_CERT_B64:-}" ] || [ -n "${EFI_CERT_B64_1:-}" ] || [ -n "${EFI_CER
 fi
 # ----------------------------------------------------------------------
 
-gunicorn app:app --bind 0.0.0.0:${PORT:-8080} --workers 2 --timeout 120
+exec gunicorn app:app --bind 0.0.0.0:${PORT:-8080} --workers 2 --timeout 120
