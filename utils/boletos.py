@@ -371,6 +371,89 @@ def _direct_pay_charge(credentials, charge_id, body):
     return _direct_post(credentials, f"charge/{charge_id}/pay", body)
 
 
+def fetch_charge(credentials, charge_id):
+    """
+    Busca a charge no provedor (GET /v1/charge/{id}).
+    Retorna o JSON parseado ou None/obj erro.
+    """
+    try:
+        token = _get_bearer_token(credentials) if "client_id" in credentials and "client_secret" in credentials else None
+
+        sandbox = credentials.get("sandbox", True)
+        base = "https://cobrancas-h.api.efipay.com.br" if sandbox else "https://cobrancas.api.efipay.com.br"
+        url = f"{base}/v1/charge/{charge_id}"
+
+        headers = {"Accept": "application/json"}
+        if token:
+            headers["Authorization"] = f"Bearer {token}"
+
+        resp = requests.get(url, headers=headers, timeout=15)
+        try:
+            return resp.json()
+        except Exception:
+            return {"http_status": resp.status_code, "text": resp.text}
+    except Exception:
+        logger.exception("Erro em fetch_charge")
+        return None
+
+
+def fetch_boleto_pdf_stream(credentials, pdf_url):
+    """
+    Realiza GET para a URL do PDF do provedor com Authorization (se necessário)
+    e retorna o objeto requests.Response (stream=True).
+    """
+    try:
+        token = _get_bearer_token(credentials) if "client_id" in credentials and "client_secret" in credentials else None
+
+        headers = {}
+        if token:
+            headers["Authorization"] = f"Bearer {token}"
+        # muitos provedores aceitam o download público; mas passamos header se necessário
+        resp = requests.get(pdf_url, headers=headers, stream=True, timeout=30)
+        return resp
+    except Exception:
+        logger.exception("Erro em fetch_boleto_pdf_stream")
+        return None
+
+
+def update_billet_expire(credentials, charge_id, new_date):
+    """
+    Atualiza expire_at do boleto no provedor: PUT para /v1/charge/{id}/billet
+    Retorna (True, resp_json) em sucesso, (False, erro) em falha.
+    """
+    try:
+        token = _get_bearer_token(credentials) if "client_id" in credentials and "client_secret" in credentials else None
+
+        sandbox = credentials.get("sandbox", True)
+        base = "https://cobrancas-h.api.efipay.com.br" if sandbox else "https://cobrancas.api.efipay.com.br"
+        url = f"{base}/v1/charge/{charge_id}/billet"
+
+        headers = {"Content-Type": "application/json", "Accept": "application/json"}
+        if token:
+            headers["Authorization"] = f"Bearer {token}"
+            resp = requests.put(url, headers=headers, json={"banking_billet": {"expire_at": new_date}}, timeout=15)
+        else:
+            # se não tiver token, tente basic auth com client creds (fallback)
+            client_id = credentials.get("client_id")
+            client_secret = credentials.get("client_secret")
+            if not client_id or not client_secret:
+                return False, "Credenciais ausentes"
+            resp = requests.put(url, headers=headers, json={"banking_billet": {"expire_at": new_date}},
+                                auth=(client_id, client_secret), timeout=15)
+
+        try:
+            j = resp.json()
+            # considerar códigos 200/204 como sucesso
+            if resp.status_code in (200, 204):
+                return True, j
+            return (True, j) if resp.status_code == 200 else (False, j)
+        except Exception:
+            return (resp.status_code == 200 or resp.status_code == 204), {"http_status": resp.status_code, "text": resp.text}
+    except Exception:
+        logger.exception("Erro em update_billet_expire")
+        return False, "Exception ao atualizar vencimento"
+
+
 def emitir_boleto_frete(frete_id, vencimento_str=None):
     conn = None
     cursor = None
