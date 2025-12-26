@@ -85,7 +85,7 @@
               <th class="text-end">Valor Total</th>
               <th class="text-end">Lucro</th>
               <th>Status</th>
-              <th class="text-center" style="width: 120px;">Ações</th>
+              <th class="text-center" style="width: 200px;">Ações</th>
             </tr>
           </thead>
           <tbody>
@@ -121,7 +121,7 @@
                 {% endif %}
               </td>
               <td class="text-center">
-                <div class="btn-group" role="group">
+                <div class="btn-group" role="group" style="align-items:center; gap:8px;">
                   <!-- Botão Editar -->
                   <a href="{{ url_for('fretes.editar', id=frete.id) }}" 
                      class="btn btn-sm btn-outline-primary" 
@@ -141,20 +141,23 @@
                     </button>
                   </form>
 
-                  <!-- Botão Emitir Boleto -->
-{% if frete.valor_total_frete and frete.valor_total_frete > 0 %}
-  <form method="post"
-    action="{{ url_for('financeiro.emitir_boleto_route', frete_id=frete.id) }}"
-    style="display:inline;">
-    <!-- campo opcional de vencimento; preenchemos via JS com hoje + 7 dias (pode ser convertido para input visível se quiser) -->
-    <input type="hidden" name="vencimento" class="vencimento-input" />
-    <button type="submit"
-      class="btn btn-sm btn-outline-success"
-      title="Emitir Boleto">
-      <i class="bi bi-receipt"></i>
-    </button>
-  </form>
-{% endif %}
+                  <!-- Emitir Boleto com escolha de data -->
+                  {% if frete.valor_total_frete and frete.valor_total_frete > 0 %}
+                  <form method="post"
+                        action="{{ url_for('financeiro.emitir_boleto_route', frete_id=frete.id) }}"
+                        style="display:inline-flex; align-items:center; gap:6px;">
+                    <input type="date" name="vencimento" class="form-control form-control-sm"
+                           style="width:150px; padding: .25rem .5rem;"
+                           data-default-offset-days="7" required />
+                    <button type="submit"
+                      class="btn btn-sm btn-outline-success"
+                      title="Emitir Boleto">
+                      <i class="bi bi-receipt"></i>
+                    </button>
+                  </form>
+                  {% endif %}
+
+                  <!-- Se houver integração com Financeiro, botão Ver/Alterar aparecerá na tela de Recebimentos -->
                 </div>
               </td>
             </tr>
@@ -172,19 +175,22 @@
     </div>
   </div>
 </div>
-{% endblock %}
 
-{% block scripts %}
-{{ super() }}
+<!-- Script para preencher automaticamente os campos date com hoje + offset -->
 <script>
-// define today + 7 dias no formato YYYY-MM-DD e preenche inputs hidden com classe 'vencimento-input'
-(function() {
-  function pad(n){return n<10?'0'+n:n;}
-  var d = new Date();
-  d.setDate(d.getDate() + 7);
-  var s = d.getFullYear() + '-' + pad(d.getMonth()+1) + '-' + pad(d.getDate());
-  var inputs = document.querySelectorAll('.vencimento-input');
-  inputs.forEach(function(i){ i.value = s; });
-})();
+document.addEventListener('DOMContentLoaded', function () {
+  document.querySelectorAll('input[type="date"][data-default-offset-days]').forEach(function(inp){
+    if (!inp.value) {
+      var offset = parseInt(inp.getAttribute('data-default-offset-days')||'7',10);
+      var d = new Date();
+      d.setDate(d.getDate() + offset);
+      var yyyy = d.getFullYear();
+      var mm = ('0' + (d.getMonth()+1)).slice(-2);
+      var dd = ('0' + d.getDate()).slice(-2);
+      inp.value = yyyy + '-' + mm + '-' + dd;
+    }
+  });
+});
 </script>
+
 {% endblock %}
