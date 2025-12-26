@@ -6,12 +6,14 @@ utils/boletos.py
 Funções para criar/consultar/Cancelar cobranças via Efipay e persistir
 respostas de cancelamento na tabela `cobrancas`.
 
-Baseado no código que você enviou — já contém:
+Melhorias incluídas:
 - logging e sanitização de payload para logs
 - fallback SDK / HTTP direto
 - cache de token via client_credentials (indexado por client_id+sandbox)
 - persistência _persist_cancel_to_db que usa utils.db.get_db_connection()
-- funções: emitir_boleto_frete, cancel_charge, fetch_charge, fetch_boleto_pdf_stream, update_billet_expire
+- melhorias em cancel_charge: retry-on-401 + fallback invertendo sandbox
+- fetch_boleto_pdf_stream: tenta com Authorization e, se necessário, sem Authorization
+- emitir_boleto_frete: persiste frete_id na tabela cobrancas e tenta baixar e salvar PDF automaticamente
 """
 
 import os
@@ -463,21 +465,53 @@ def fetch_charge(credentials, charge_id):
 
 def fetch_boleto_pdf_stream(credentials, pdf_url):
     """
-    Realiza GET para a URL do PDF do provedor com Authorization (se necessário)
-    e retorna o objeto requests.Response (stream=True).
+    Realiza GET para a URL do PDF do provedor e retorna o objeto requests.Response (stream=True).
+    Estratégia:
+      - se tiver token (via _get_bearer_token) tenta primeiro com Authorization
+      - se a resposta for 401/403 ou o content-type não indicar PDF, tenta novamente sem Authorization
+      - devolve o objeto requests.Response final (ou None se erro)
     """
     try:
         credentials = _ensure_credentials_from_env(credentials)
         token = _get_bearer_token(credentials) if "client_id" in credentials and "client_secret" in credentials else None
 
-        headers = {}
+        # headers base
+        headers = {"Accept": "application/pdf, application/octet-stream, */*"}
+        tried_with_auth = False
+
+        # tentativa 1: com Authorization (se tivermos token)
         if token:
-            headers["Authorization"] = f"Bearer {token}"
-        # muitos provedores aceitam o download público; mas passamos header se necessário
-        logger.info("fetch_boleto_pdf_stream: GET %s (headers auth=%s)", pdf_url, bool(headers.get("Authorization")))
-        resp = requests.get(pdf_url, headers=headers, stream=True, timeout=30)
-        logger.info("fetch_boleto_pdf_stream: status=%s", getattr(resp, "status_code", None))
-        return resp
+            tried_with_auth = True
+            headers_auth = dict(headers)
+            headers_auth["Authorization"] = f"Bearer {token}"
+            logger.info("fetch_boleto_pdf_stream: GET %s (try with auth=%s)", pdf_url, True)
+            try:
+                resp = requests.get(pdf_url, headers=headers_auth, stream=True, timeout=30, allow_redirects=True)
+                logger.info("fetch_boleto_pdf_stream: status=%s (with auth)", getattr(resp, "status_code", None))
+            except Exception:
+                logger.exception("Erro HTTP em fetch_boleto_pdf_stream (with auth)")
+                resp = None
+
+            # se a resposta for OK e content-type parecer PDF, devolve
+            if resp is not None and getattr(resp, "status_code", None) in (200, 204):
+                ct = (resp.headers.get("Content-Type") or "").lower()
+                if "pdf" in ct or "application/octet-stream" in ct or resp.headers.get("Content-Length"):
+                    return resp
+                # caso o provedor retorne 200 mas não seja PDF, vamos tentar sem auth abaixo
+
+            # se 401/403, vamos tentar sem auth
+            if resp is not None and getattr(resp, "status_code", None) in (401, 403):
+                logger.info("fetch_boleto_pdf_stream: auth attempt returned %s, will retry without auth", resp.status_code)
+
+        # tentativa 2: sem Authorization
+        logger.info("fetch_boleto_pdf_stream: GET %s (try with auth=%s)", pdf_url, False)
+        try:
+            resp2 = requests.get(pdf_url, headers=headers, stream=True, timeout=30, allow_redirects=True)
+            logger.info("fetch_boleto_pdf_stream: status=%s (without auth)", getattr(resp2, "status_code", None))
+            return resp2
+        except Exception:
+            logger.exception("Erro HTTP em fetch_boleto_pdf_stream (without auth)")
+            return None
     except Exception:
         logger.exception("Erro em fetch_boleto_pdf_stream")
         return None
@@ -570,12 +604,6 @@ def cancel_charge(credentials, charge_id):
       - tenta PUT /v1/charge/{id}/cancel (conforme documentação Efí)
       - se retornar 404/405 tenta DELETE /v1/charge/{id}
       - se não suportado, retorna erro com body para diagnóstico
-
-    Melhorias implementadas:
-      - coerção/validação do charge_id para inteiro (evita 400 por tipo)
-      - retry-on-401: se receber 401, limpa cache específico e tenta autorizar + PUT novamente (uma retry)
-      - fallback: se ainda 401, tenta uma vez no outro ambiente invertendo sandbox
-      - ao obter sucesso tenta persistir provider response na tabela cobrancas (auditoria)
     """
     try:
         credentials = _ensure_credentials_from_env(credentials)
@@ -771,6 +799,20 @@ def cancel_charge(credentials, charge_id):
     except Exception as e:
         logger.exception("Erro em cancel_charge: %s", e)
         return False, str(e)
+
+
+def _save_pdf_stream_to_path(resp, dest_path):
+    try:
+        os.makedirs(os.path.dirname(dest_path), exist_ok=True)
+        with open(dest_path, "wb") as fh:
+            for chunk in resp.iter_content(1024 * 8):
+                if not chunk:
+                    break
+                fh.write(chunk)
+        return True
+    except Exception:
+        logger.exception("Erro salvando PDF em %s", dest_path)
+        return False
 
 
 def emitir_boleto_frete(frete_id, vencimento_str=None):
@@ -969,22 +1011,82 @@ def emitir_boleto_frete(frete_id, vencimento_str=None):
             charge_id_final, boleto_url, barcode = _safe_get_charge_fields(final_response)
             if not charge_id_final:
                 charge_id_final = charge_id
+
+            # -----------------------------------------------------------------
+            # Tentar obter e salvar o PDF automaticamente (tentativas e fallback)
+            pdf_boleto_path = None
+            pdf_url = None
+            try:
+                data = final_response.get("data") or final_response.get("charge") or final_response
+                if isinstance(data, dict):
+                    pdf_obj = data.get("pdf") or {}
+                    pdf_url = pdf_obj.get("charge") or pdf_obj.get("boleto") or data.get("link") or data.get("billet_link")
+                    if not pdf_url:
+                        # checar nested payment banking_billet
+                        pb = (data.get("payment") or {}).get("banking_billet") or data.get("banking_billet") or {}
+                        if isinstance(pb, dict):
+                            pdf_url = pb.get("pdf") or pb.get("link")
+            except Exception:
+                pdf_url = None
+
+            # se não veio no response, tentar obter via fetch_charge algumas vezes
+            if not pdf_url:
+                tries = 3
+                for i in range(tries):
+                    try:
+                        time.sleep(1 + i)  # backoff 1s,2s,3s
+                        fresh = fetch_charge(credentials, charge_id_final)
+                        if isinstance(fresh, dict):
+                            d = fresh.get("data") or fresh.get("charge") or fresh
+                            if isinstance(d, dict):
+                                pdf_obj = d.get("pdf") or {}
+                                pdf_url = pdf_obj.get("charge") or pdf_obj.get("boleto") or d.get("link") or d.get("billet_link") or (d.get("payment") or {}).get("banking_billet", {}).get("link")
+                        if pdf_url:
+                            break
+                    except Exception:
+                        logger.debug("Tentativa %s fetch_charge para obter pdf falhou", i + 1)
+
+            if pdf_url:
+                try:
+                    resp = fetch_boleto_pdf_stream(credentials, pdf_url)
+                    if resp is not None and getattr(resp, "status_code", None) == 200:
+                        safe_dir = os.getenv("BOLETOS_DIR", "/var/www/boletos")
+                        fname = f"boleto_{charge_id_final}.pdf"
+                        dest = os.path.join(safe_dir, fname)
+                        ok = _save_pdf_stream_to_path(resp, dest)
+                        if ok:
+                            pdf_boleto_path = dest
+                        else:
+                            # fallback: guardar a URL do provedor
+                            pdf_boleto_path = pdf_url
+                    else:
+                        logger.info("fetch_boleto_pdf_stream retornou status não-200 ou resp None: %s", getattr(resp, "status_code", None) if resp else None)
+                        pdf_boleto_path = pdf_url
+                except Exception:
+                    logger.exception("Erro ao tentar baixar pdf do provedor")
+                    pdf_boleto_path = pdf_url
+            else:
+                logger.info("Nenhuma URL de PDF encontrada para charge %s", charge_id_final)
+                pdf_boleto_path = None
+            # -----------------------------------------------------------------
+
             try:
                 cursor.execute(
                     """
                     INSERT INTO cobrancas
-                      (id_cliente, valor, data_vencimento, status,
+                      (frete_id, id_cliente, valor, data_vencimento, status,
                        charge_id, link_boleto, pdf_boleto, data_emissao)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
                     """,
                     (
+                        frete["id"],
                         frete["clientes_id"],
                         frete["valor_total_frete"],
                         data_vencimento.date(),
                         "pendente",
                         charge_id_final,
                         boleto_url,
-                        None,
+                        pdf_boleto_path,
                         datetime.today().date(),
                     ),
                 )
@@ -995,7 +1097,7 @@ def emitir_boleto_frete(frete_id, vencimento_str=None):
                 conn.rollback()
                 return {"success": False, "error": "Erro ao persistir cobrança no banco"}
 
-            return {"success": True, "cobranca_id": cobranca_id, "charge_id": charge_id_final, "boleto_url": boleto_url, "barcode": barcode}
+            return {"success": True, "cobranca_id": cobranca_id, "charge_id": charge_id_final, "boleto_url": boleto_url, "barcode": barcode, "pdf_boleto": pdf_boleto_path}
 
         if isinstance(final_response, dict) and final_response.get("error") == "validation_error":
             err_desc = final_response.get("error_description") or final_response.get("message") or final_response
