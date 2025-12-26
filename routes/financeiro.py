@@ -2,6 +2,7 @@ from flask import Blueprint, render_template, request, jsonify, flash, redirect,
 from flask_login import login_required
 from utils.db import get_db_connection
 from utils.boletos import emitir_boleto_frete, fetch_charge, fetch_boleto_pdf_stream, update_billet_expire, cancel_charge
+from datetime import datetime
 
 financeiro_bp = Blueprint('financeiro', __name__, url_prefix='/financeiro')
 
@@ -15,6 +16,7 @@ def recebimentos():
     try:
         conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)
+
         try:
             cursor.execute("""
                 SELECT 
@@ -48,13 +50,16 @@ def recebimentos():
 def emitir_boleto_route(frete_id):
     """Emite boleto para um frete específico (aceita campo 'vencimento' opcional YYYY-MM-DD)."""
     try:
+        # ler vencimento enviado pelo formulário (opcional)
         vencimento = None
         if request.form:
             vencimento = request.form.get('vencimento') or request.form.get('new_vencimento') or None
+
         resultado = emitir_boleto_frete(frete_id, vencimento_str=vencimento)
         if not isinstance(resultado, dict):
             flash(f"Erro inesperado ao emitir boleto: resposta inválida", "danger")
             return redirect(url_for('fretes.lista'))
+
         if resultado.get('success'):
             flash(f"Boleto emitido com sucesso! Charge ID: {resultado.get('charge_id')}", "success")
             return redirect(url_for('financeiro.recebimentos'))
@@ -68,10 +73,13 @@ def emitir_boleto_route(frete_id):
         return redirect(url_for('fretes.lista'))
 
 
-# visualizar / imprimir (proxy já implementado)
 @financeiro_bp.route('/visualizar-boleto/<int:charge_id>/')
 @login_required
 def visualizar_boleto(charge_id):
+    """
+    Proxy que busca o PDF do provedor e faz stream para o navegador.
+    Isso evita expor tokens no cliente e permite o navegador abrir/imprimir o PDF.
+    """
     try:
         credentials = {
             "client_id": current_app.config.get("EFI_CLIENT_ID") or None,
@@ -106,7 +114,61 @@ def visualizar_boleto(charge_id):
         return redirect(url_for('financeiro.recebimentos'))
 
 
-# marcar como pago (local)
+@financeiro_bp.route('/alterar-vencimento/<int:charge_id>/', methods=['GET', 'POST'])
+@login_required
+def alterar_vencimento(charge_id):
+    """
+    GET: mostra formulário para alterar data de vencimento.
+    POST: chama o provedor para atualizar expire_at e atualiza tabela cobrancas.
+    """
+    conn = None
+    cursor = None
+    try:
+        if request.method == 'GET':
+            conn = get_db_connection()
+            cursor = conn.cursor(dictionary=True)
+            cursor.execute("SELECT * FROM cobrancas WHERE charge_id = %s LIMIT 1", (charge_id,))
+            cobr = cursor.fetchone()
+            return render_template('financeiro/alterar_vencimento.html', cobranca=cobr, charge_id=charge_id)
+
+        new_date = request.form.get('new_vencimento')
+        if not new_date:
+            flash("Informe uma nova data de vencimento (YYYY-MM-DD).", "warning")
+            return redirect(url_for('financeiro.alterar_vencimento', charge_id=charge_id))
+
+        credentials = {
+            "client_id": current_app.config.get("EFI_CLIENT_ID") or None,
+            "client_secret": current_app.config.get("EFI_CLIENT_SECRET") or None,
+            "sandbox": current_app.config.get("EFI_SANDBOX", True),
+        }
+        success, resp = update_billet_expire(credentials, charge_id, new_date)
+        if not success:
+            flash(f"Falha ao atualizar vencimento no provedor: {resp}", "danger")
+            return redirect(url_for('financeiro.recebimentos'))
+
+        conn = conn or get_db_connection()
+        cursor = cursor or conn.cursor(dictionary=True)
+        try:
+            cursor.execute("UPDATE cobrancas SET data_vencimento = %s WHERE charge_id = %s", (new_date, charge_id))
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            current_app.logger.exception("Falha ao atualizar data_vencimento local para charge %s", charge_id)
+
+        flash("Vencimento atualizado com sucesso.", "success")
+        return redirect(url_for('financeiro.recebimentos'))
+
+    except Exception as e:
+        current_app.logger.exception("Erro em alterar_vencimento: %s", e)
+        flash(f"Erro ao alterar vencimento: {str(e)}", "danger")
+        return redirect(url_for('financeiro.recebimentos'))
+    finally:
+        if cursor:
+            cursor.close()
+        if conn:
+            conn.close()
+
+
 @financeiro_bp.route('/marcar-pago/<int:charge_id>/', methods=['POST'])
 @login_required
 def marcar_pago(charge_id):
@@ -119,19 +181,15 @@ def marcar_pago(charge_id):
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
-        # atualiza status; tenta também atualizar data_pagamento se a coluna existir
         try:
             cursor.execute("UPDATE cobrancas SET status = %s WHERE charge_id = %s", ("pago", charge_id))
-            # tenta setar data_pagamento se existir na tabela (não quebra se não existir)
             try:
                 cursor.execute("ALTER TABLE cobrancas ADD COLUMN IF NOT EXISTS data_pagamento DATE;")
             except Exception:
-                # algumas versões do DB não suportam IF NOT EXISTS — ignorar
                 pass
             try:
                 cursor.execute("UPDATE cobrancas SET data_pagamento = %s WHERE charge_id = %s", (datetime.today().date(), charge_id))
             except Exception:
-                # coluna pode não existir; ignorar
                 pass
             conn.commit()
             flash("Cobrança marcada como PAGO (local).", "success")
@@ -150,7 +208,6 @@ def marcar_pago(charge_id):
     return redirect(url_for('financeiro.recebimentos'))
 
 
-# cancelar boleto (tenta provider then local)
 @financeiro_bp.route('/cancelar-boleto/<int:charge_id>/', methods=['POST'])
 @login_required
 def cancelar_boleto(charge_id):
@@ -171,7 +228,6 @@ def cancelar_boleto(charge_id):
             flash(f"Falha ao cancelar no provedor: {resp}", "danger")
             return redirect(url_for('financeiro.recebimentos'))
 
-        # atualizar status local
         conn = get_db_connection()
         cursor = conn.cursor()
         try:
