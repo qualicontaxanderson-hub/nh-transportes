@@ -23,7 +23,7 @@
             </thead>
             <tbody>
                 {% for r in recebimentos %}
-                <tr>
+                <tr id="cobranca-row-{{ r.charge_id or r.id }}">
                     <td>{{ r.id }}</td>
                     <td>{% if r.frete_numero %}#{{ r.frete_numero }}{% else %}-{% endif %}</td>
                     <td>{{ r.cliente_fantasia or r.cliente_nome or '-' }}</td>
@@ -36,27 +36,49 @@
                     </td>
                     <td><small>{{ r.charge_id or '-' }}</small></td>
                     <td>
-                        <div class="btn-group" role="group">
+                        <div class="btn-group" role="group" aria-label="Ações cobranca">
                             {% if r.link_boleto %}
                             <a href="{{ url_for('financeiro.visualizar_boleto', charge_id=r.charge_id) }}" target="_blank" class="btn btn-sm btn-primary" title="Ver/Imprimir Boleto">
-                                <i class="bi bi-file-earmark-pdf"></i> Ver
+                                <i class="bi bi-file-earmark-pdf"></i>
                             </a>
+                            {% else %}
+                            <button class="btn btn-sm btn-secondary" disabled title="Sem link de boleto">
+                                <i class="bi bi-file-earmark-pdf"></i>
+                            </button>
                             {% endif %}
 
                             {% if r.charge_id %}
-                            <!-- marcar pago -->
+                            <!-- Marcar pago -->
                             <form method="post" action="{{ url_for('financeiro.marcar_pago', charge_id=r.charge_id) }}" style="display:inline;">
                                 <button type="submit" class="btn btn-sm btn-success" title="Marcar como Pago" onclick="return confirm('Confirma marcar esta cobrança como PAGO (admin)?');">
-                                    <i class="bi bi-check2-circle"></i> Pagar
+                                    <i class="bi bi-check2-circle"></i>
                                 </button>
                             </form>
 
-                            <!-- cancelar -->
+                            <!-- Cancelar -->
                             <form method="post" action="{{ url_for('financeiro.cancelar_boleto', charge_id=r.charge_id) }}" style="display:inline;">
                                 <button type="submit" class="btn btn-sm btn-outline-danger" title="Cancelar Boleto" onclick="return confirm('Confirma cancelar este boleto no provedor? Isto permitirá reemitir.');">
-                                    <i class="bi bi-x-circle"></i> Cancelar
+                                    <i class="bi bi-x-circle"></i>
                                 </button>
                             </form>
+
+                            <!-- Prorrogar vencimento (JS) -->
+                            <button type="button"
+                                    class="btn btn-sm btn-outline-secondary btn-prorrogar"
+                                    data-charge-id="{{ r.charge_id }}"
+                                    title="Prorrogar vencimento">
+                                <i class="bi bi-calendar-plus"></i>
+                            </button>
+
+                            <!-- Reemitir: habilitado apenas se status == 'cancelado' -->
+                            <button type="button"
+                                    class="btn btn-sm btn-outline-primary btn-reemitir"
+                                    data-charge-id="{{ r.charge_id }}"
+                                    data-frete-id="{{ r.frete_id or '' }}"
+                                    title="Reemitir boleto"
+                                    {% if r.status != 'cancelado' %} disabled {% endif %}>
+                                <i class="bi bi-arrow-clockwise"></i>
+                            </button>
                             {% endif %}
                         </div>
                     </td>
@@ -71,4 +93,69 @@
     </div>
     {% endif %}
 </div>
+
+<!-- Script inline para ações de prorrogar e reemitir -->
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+  function qsa(sel, el=document){ return Array.from(el.querySelectorAll(sel)); }
+
+  // Prorrogar vencimento
+  qsa('.btn-prorrogar').forEach(btn => {
+    btn.addEventListener('click', async function () {
+      const chargeId = this.getAttribute('data-charge-id');
+      if (!chargeId) { alert('Charge ID ausente'); return; }
+      const newDate = prompt("Informe a nova data de vencimento (YYYY-MM-DD):");
+      if (!newDate) return;
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(newDate)) { alert('Formato inválido. Use YYYY-MM-DD'); return; }
+      if (!confirm('Confirma alterar vencimento para ' + newDate + ' ?')) return;
+
+      try {
+        const resp = await fetch(`/financeiro/prorrogar-boleto/${chargeId}/`, {
+          method: 'POST',
+          headers: {'Content-Type':'application/json', 'X-Requested-With':'XMLHttpRequest'},
+          body: JSON.stringify({new_date: newDate})
+        });
+        const j = await resp.json();
+        if (resp.ok && j.success) {
+          alert('Vencimento atualizado com sucesso.');
+          location.reload();
+        } else {
+          alert('Falha ao prorrogar: ' + (j.error || JSON.stringify(j)));
+        }
+      } catch (err) {
+        alert('Erro na requisição: ' + err);
+      }
+    });
+  });
+
+  // Reemitir boleto
+  qsa('.btn-reemitir').forEach(btn => {
+    btn.addEventListener('click', async function () {
+      const chargeId = this.getAttribute('data-charge-id');
+      const freteId = this.getAttribute('data-frete-id') || null;
+      if (!chargeId) { alert('Charge ID ausente'); return; }
+      if (!confirm('Confirma reemitir o boleto? (Só é permitido se estiver cancelado)')) return;
+
+      try {
+        const resp = await fetch(`/financeiro/reemitir-boleto/${chargeId}/`, {
+          method: 'POST',
+          headers: {'Content-Type':'application/json', 'X-Requested-With':'XMLHttpRequest'},
+          body: JSON.stringify({frete_id: freteId})
+        });
+        const j = await resp.json();
+        if (resp.ok && j.success) {
+          alert('Boleto reemitido com sucesso.');
+          location.reload();
+        } else {
+          alert('Falha ao reemitir: ' + (j.error || JSON.stringify(j)));
+        }
+      } catch (err) {
+        alert('Erro na requisição: ' + err);
+      }
+    });
+  });
+
+});
+</script>
+
 {% endblock %}
