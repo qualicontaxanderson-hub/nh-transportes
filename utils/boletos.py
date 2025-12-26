@@ -454,6 +454,72 @@ def update_billet_expire(credentials, charge_id, new_date):
         return False, "Exception ao atualizar vencimento"
 
 
+def cancel_charge(credentials, charge_id):
+    """
+    Tenta cancelar uma charge no provedor.
+    Retorna (True, resp_json_or_text) se conseguiu, (False, resp_or_text) se não.
+    Estratégia:
+      - tenta POST /v1/charge/{id}/cancel (alguns provedores têm esse endpoint)
+      - se retornar 404/405 tenta DELETE /v1/charge/{id}
+      - se não suportado, tenta outras variantes conforme necessário
+    Observação: comportamento do provedor pode variar — trate respostas no frontend.
+    """
+    try:
+        token = _get_bearer_token(credentials) if "client_id" in credentials and "client_secret" in credentials else None
+        sandbox = credentials.get("sandbox", True)
+        base = "https://cobrancas-h.api.efipay.com.br" if sandbox else "https://cobrancas.api.efipay.com.br"
+
+        # 1) tentar /charge/{id}/cancel via POST
+        url_cancel = f"{base}/v1/charge/{charge_id}/cancel"
+        headers = {"Accept": "application/json", "Content-Type": "application/json"}
+        if token:
+            headers["Authorization"] = f"Bearer {token}"
+            try:
+                resp = requests.post(url_cancel, headers=headers, timeout=15)
+                if resp.status_code in (200, 204):
+                    try:
+                        return True, resp.json()
+                    except Exception:
+                        return True, {"http_status": resp.status_code, "text": resp.text}
+                # se retornou com erro, continuar para outras tentativas
+                if resp.status_code not in (404, 405):
+                    try:
+                        return False, resp.json()
+                    except Exception:
+                        return False, {"http_status": resp.status_code, "text": resp.text}
+            except Exception:
+                # continuar para fallback
+                pass
+
+        # 2) tentar DELETE /v1/charge/{id}
+        url = f"{base}/v1/charge/{charge_id}"
+        try:
+            if token:
+                headers = {"Authorization": f"Bearer {token}", "Accept": "application/json"}
+                resp2 = requests.delete(url, headers=headers, timeout=15)
+            else:
+                client_id = credentials.get("client_id")
+                client_secret = credentials.get("client_secret")
+                resp2 = requests.delete(url, auth=(client_id, client_secret), timeout=15)
+            if resp2.status_code in (200, 204):
+                try:
+                    return True, resp2.json()
+                except Exception:
+                    return True, {"http_status": resp2.status_code, "text": resp2.text}
+            else:
+                try:
+                    return False, resp2.json()
+                except Exception:
+                    return False, {"http_status": resp2.status_code, "text": resp2.text}
+        except Exception as e:
+            logger.exception("cancel_charge fallback DELETE falhou: %s", e)
+            return False, str(e)
+
+    except Exception as e:
+        logger.exception("Erro em cancel_charge: %s", e)
+        return False, str(e)
+
+
 def emitir_boleto_frete(frete_id, vencimento_str=None):
     conn = None
     cursor = None
