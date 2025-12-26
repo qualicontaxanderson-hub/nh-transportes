@@ -121,6 +121,29 @@ def _safe_get_charge_fields(response):
     return charge_id, boleto_url, barcode
 
 
+def _extract_charge_id(resp):
+    """
+    Extrai charge_id de uma resposta do provedor cobrindo variantes:
+    - resp.get('data').get('id'), resp.get('data').get('charge_id')
+    - resp.get('charge').get('id') etc.
+    - resp.get('charge_id') ou resp.get('id')
+    Retorna None se não encontrar.
+    """
+    try:
+        if not isinstance(resp, dict):
+            return None
+        # primeiro tente 'data' ou 'charge'
+        data = resp.get("data") or resp.get("charge") or resp
+        if isinstance(data, dict):
+            cid = data.get("id") or data.get("charge_id")
+            if cid:
+                return cid
+        # fallback direto em resp
+        return resp.get("charge_id") or resp.get("id")
+    except Exception:
+        return None
+
+
 def _build_body(frete, descricao_frete, data_vencimento, valor_total_centavos):
     """
     Body compatível com os métodos do SDK (high-level). Usa wrapper 'payment' com 'banking_billet'
@@ -457,7 +480,7 @@ def emitir_boleto_frete(frete_id, vencimento_str=None):
                 _log_send_attempt("create_charge", body_charge, extra_note="SDK create charge")
                 s_ok, create_response, method_create = _try_sdk_methods(efi, body_charge)
                 if s_ok and isinstance(create_response, dict):
-                    charge_id = (create_response.get("data") or create_response).get("id") or create_response.get("id") or create_response.get("charge_id")
+                    charge_id = _extract_charge_id(create_response)
             except Exception as ex:
                 logger.debug("Erro ao criar charge via SDK: %s", ex)
                 create_response = ex
@@ -473,7 +496,7 @@ def emitir_boleto_frete(frete_id, vencimento_str=None):
                         _log_provider_response("send:create_charge", resp_low)
                         create_response = resp_low
                         if isinstance(resp_low, dict):
-                            charge_id = (resp_low.get("data") or resp_low).get("id") or resp_low.get("id") or resp_low.get("charge_id")
+                            charge_id = _extract_charge_id(resp_low)
                     except TypeError:
                         logger.debug("efi.send tipo TypeError; tentando request")
                         if hasattr(efi, "request") and callable(getattr(efi, "request")):
@@ -484,7 +507,7 @@ def emitir_boleto_frete(frete_id, vencimento_str=None):
                             _log_provider_response("request:create_charge", resp_low)
                             create_response = resp_low
                             if isinstance(resp_low, dict):
-                                charge_id = (resp_low.get("data") or resp_low).get("id") or resp_low.get("id") or resp_low.get("charge_id")
+                                charge_id = _extract_charge_id(resp_low)
             except Exception as ex:
                 logger.debug("Erro fallback SDK create charge: %s", ex)
 
@@ -496,7 +519,7 @@ def emitir_boleto_frete(frete_id, vencimento_str=None):
                 _log_provider_response("direct_create_charge", resp_direct)
                 create_response = resp_direct
                 if isinstance(resp_direct, dict):
-                    charge_id = (resp_direct.get("data") or resp_direct).get("id") or resp_direct.get("id") or resp_direct.get("charge_id")
+                    charge_id = _extract_charge_id(resp_direct)
             except Exception as ex_direct:
                 logger.debug("Direct create charge falhou: %s", ex_direct)
                 create_response = ex_direct
