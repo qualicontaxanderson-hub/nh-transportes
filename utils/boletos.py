@@ -1,4 +1,19 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+utils/boletos.py
+
+Funções para criar/consultar/Cancelar cobranças via Efipay e persistir
+respostas de cancelamento na tabela `cobrancas`.
+
+Baseado no código que você enviou — já contém:
+- logging e sanitização de payload para logs
+- fallback SDK / HTTP direto
+- cache de token via client_credentials
+- persistência _persist_cancel_to_db que usa utils.db.get_db_connection()
+- funções: emitir_boleto_frete, cancel_charge, fetch_charge, fetch_boleto_pdf_stream, update_billet_expire
+"""
+
 import os
 import json
 import copy
