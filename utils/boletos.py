@@ -279,12 +279,26 @@ def _sanitize_payment_payload(payload):
 _TOKEN_CACHE = {"access_token": None, "expire_at": 0.0}
 
 
+def _ensure_credentials_from_env(credentials):
+    """Preenche credenciais faltantes a partir das ENV para maior robustez."""
+    if credentials is None:
+        credentials = {}
+    if not credentials.get("client_id"):
+        credentials["client_id"] = os.getenv("EFI_CLIENT_ID")
+    if not credentials.get("client_secret"):
+        credentials["client_secret"] = os.getenv("EFI_CLIENT_SECRET")
+    if "sandbox" not in credentials or credentials.get("sandbox") is None:
+        credentials["sandbox"] = os.getenv("EFI_SANDBOX", "true").lower() == "true"
+    return credentials
+
+
 def _get_bearer_token(credentials):
     """
     Obtém e faz cache de um access_token via client_credentials no endpoint /authorize.
     Retorna o token string ou None em caso de falha.
     """
     try:
+        credentials = _ensure_credentials_from_env(credentials)
         now = time.time()
         token = _TOKEN_CACHE.get("access_token")
         if token and _TOKEN_CACHE.get("expire_at", 0) > now + 5:
@@ -328,6 +342,11 @@ def _direct_post(credentials, path, body):
     Post direto para API cobrancas usando Bearer token (obtido via client_credentials).
     Retorna o JSON parseado do provedor ou um dict com http_status/text quando não-JSON.
     """
+    try:
+        credentials = _ensure_credentials_from_env(credentials)
+    except Exception:
+        pass
+
     # sanitiza o body antes de enviar para evitar 400 por propriedades inesperadas
     try:
         body = _sanitize_payment_payload(body)
@@ -377,6 +396,7 @@ def fetch_charge(credentials, charge_id):
     Retorna o JSON parseado ou None/obj erro.
     """
     try:
+        credentials = _ensure_credentials_from_env(credentials)
         token = _get_bearer_token(credentials) if "client_id" in credentials and "client_secret" in credentials else None
 
         sandbox = credentials.get("sandbox", True)
@@ -387,7 +407,9 @@ def fetch_charge(credentials, charge_id):
         if token:
             headers["Authorization"] = f"Bearer {token}"
 
+        logger.info("fetch_charge: GET %s", url)
         resp = requests.get(url, headers=headers, timeout=15)
+        logger.info("fetch_charge: status=%s len=%s", getattr(resp, "status_code", None), len(getattr(resp, "text", "") or ""))
         try:
             return resp.json()
         except Exception:
@@ -403,13 +425,16 @@ def fetch_boleto_pdf_stream(credentials, pdf_url):
     e retorna o objeto requests.Response (stream=True).
     """
     try:
+        credentials = _ensure_credentials_from_env(credentials)
         token = _get_bearer_token(credentials) if "client_id" in credentials and "client_secret" in credentials else None
 
         headers = {}
         if token:
             headers["Authorization"] = f"Bearer {token}"
         # muitos provedores aceitam o download público; mas passamos header se necessário
+        logger.info("fetch_boleto_pdf_stream: GET %s (headers auth=%s)", pdf_url, bool(headers.get("Authorization")))
         resp = requests.get(pdf_url, headers=headers, stream=True, timeout=30)
+        logger.info("fetch_boleto_pdf_stream: status=%s", getattr(resp, "status_code", None))
         return resp
     except Exception:
         logger.exception("Erro em fetch_boleto_pdf_stream")
@@ -422,6 +447,7 @@ def update_billet_expire(credentials, charge_id, new_date):
     Retorna (True, resp_json) em sucesso, (False, erro) em falha.
     """
     try:
+        credentials = _ensure_credentials_from_env(credentials)
         token = _get_bearer_token(credentials) if "client_id" in credentials and "client_secret" in credentials else None
 
         sandbox = credentials.get("sandbox", True)
@@ -429,6 +455,7 @@ def update_billet_expire(credentials, charge_id, new_date):
         url = f"{base}/v1/charge/{charge_id}/billet"
 
         headers = {"Content-Type": "application/json", "Accept": "application/json"}
+        logger.info("update_billet_expire: PUT %s with new_date=%s (auth=%s)", url, new_date, bool(token))
         if token:
             headers["Authorization"] = f"Bearer {token}"
             resp = requests.put(url, headers=headers, json={"banking_billet": {"expire_at": new_date}}, timeout=15)
@@ -441,6 +468,7 @@ def update_billet_expire(credentials, charge_id, new_date):
             resp = requests.put(url, headers=headers, json={"banking_billet": {"expire_at": new_date}},
                                 auth=(client_id, client_secret), timeout=15)
 
+        logger.info("update_billet_expire: status=%s text_len=%s", getattr(resp, "status_code", None), len(getattr(resp, "text", "") or ""))
         try:
             j = resp.json()
             # considerar códigos 200/204 como sucesso
@@ -459,12 +487,35 @@ def cancel_charge(credentials, charge_id):
     Tenta cancelar uma charge no provedor.
     Retorna (True, resp_json_or_text) se conseguiu, (False, resp_or_text) se não.
     Estratégia:
+      - tenta via SDK (se disponível)
       - tenta POST /v1/charge/{id}/cancel (alguns provedores têm esse endpoint)
       - se retornar 404/405 tenta DELETE /v1/charge/{id}
-      - se não suportado, tenta outras variantes conforme necessário
+      - se não suportado, retorna erro com body para diagnóstico
     Observação: comportamento do provedor pode variar — trate respostas no frontend.
     """
     try:
+        credentials = _ensure_credentials_from_env(credentials)
+
+        # 0) tentativa via SDK (se disponível) — alguns SDKs expõem método de cancelamento
+        try:
+            efi = EfiPay({"client_id": credentials.get("client_id"), "client_secret": credentials.get("client_secret"), "sandbox": credentials.get("sandbox", True)})
+            for m in ("cancel_charge", "cancel", "void_charge", "delete_charge"):
+                fn = getattr(efi, m, None)
+                if callable(fn):
+                    logger.info("cancel_charge: tentando via SDK método %s", m)
+                    try:
+                        # SDKs variam: tentamos passar id direto e também como named param
+                        try:
+                            r = fn(charge_id)
+                        except TypeError:
+                            r = fn(id=charge_id)
+                        logger.info("cancel_charge SDK resposta: %r", r)
+                        return True, r
+                    except Exception as e:
+                        logger.debug("SDK cancel %s falhou: %s", m, e)
+        except Exception:
+            logger.debug("cancel_charge: SDK tentativa falhou / indisponível")
+
         token = _get_bearer_token(credentials) if "client_id" in credentials and "client_secret" in credentials else None
         sandbox = credentials.get("sandbox", True)
         base = "https://cobrancas-h.api.efipay.com.br" if sandbox else "https://cobrancas.api.efipay.com.br"
@@ -474,25 +525,27 @@ def cancel_charge(credentials, charge_id):
         headers = {"Accept": "application/json", "Content-Type": "application/json"}
         if token:
             headers["Authorization"] = f"Bearer {token}"
-            try:
-                resp = requests.post(url_cancel, headers=headers, timeout=15)
-                if resp.status_code in (200, 204):
-                    try:
-                        return True, resp.json()
-                    except Exception:
-                        return True, {"http_status": resp.status_code, "text": resp.text}
-                # se retornou com erro, continuar para outras tentativas
-                if resp.status_code not in (404, 405):
-                    try:
-                        return False, resp.json()
-                    except Exception:
-                        return False, {"http_status": resp.status_code, "text": resp.text}
-            except Exception:
-                # continuar para fallback
-                pass
+        logger.info("cancel_charge: tentando POST %s (auth=%s)", url_cancel, bool(headers.get("Authorization")))
+        try:
+            resp = requests.post(url_cancel, headers=headers, timeout=15)
+            logger.info("cancel_charge: POST %s -> status=%s text=%s", url_cancel, getattr(resp, "status_code", None), (getattr(resp, "text", "") or "")[:2000])
+            if resp.status_code in (200, 204):
+                try:
+                    return True, resp.json()
+                except Exception:
+                    return True, {"http_status": resp.status_code, "text": resp.text}
+            # se 404/405 continua para DELETE, se outro erro, retorna corpo para diagnóstico
+            if resp.status_code not in (404, 405):
+                try:
+                    return False, resp.json()
+                except Exception:
+                    return False, {"http_status": resp.status_code, "text": resp.text}
+        except Exception as e:
+            logger.exception("cancel_charge: POST %s falhou: %s", url_cancel, e)
 
         # 2) tentar DELETE /v1/charge/{id}
         url = f"{base}/v1/charge/{charge_id}"
+        logger.info("cancel_charge: tentando DELETE %s (auth=%s)", url, bool(token))
         try:
             if token:
                 headers = {"Authorization": f"Bearer {token}", "Accept": "application/json"}
@@ -501,6 +554,7 @@ def cancel_charge(credentials, charge_id):
                 client_id = credentials.get("client_id")
                 client_secret = credentials.get("client_secret")
                 resp2 = requests.delete(url, auth=(client_id, client_secret), timeout=15)
+            logger.info("cancel_charge: DELETE %s -> status=%s text=%s", url, getattr(resp2, "status_code", None), (getattr(resp2, "text", "") or "")[:2000])
             if resp2.status_code in (200, 204):
                 try:
                     return True, resp2.json()
