@@ -5,6 +5,7 @@ import copy
 import logging
 from datetime import datetime, timedelta
 
+import requests
 from efipay import EfiPay
 from utils.db import get_db_connection
 
@@ -328,6 +329,36 @@ def _try_payment_variants(efi, original_body, credentials):
     return False, None, None, None
 
 
+def _direct_one_step_request(credentials, body):
+    """
+    Envia diretamente o body para o endpoint /v1/charge/one-step usando requests.
+    Retorna dict (parsed JSON) ou lança exceção.
+    """
+    sandbox = credentials.get("sandbox", True)
+    base = "https://cobrancas-h.api.efipay.com.br" if sandbox else "https://cobrancas.api.efipay.com.br"
+    url = f"{base}/v1/charge/one-step"
+
+    client_id = credentials.get("client_id")
+    client_secret = credentials.get("client_secret")
+    if not client_id or not client_secret:
+        raise ValueError("Credentials incompletas para chamada direta One-Step")
+
+    headers = {"Content-Type": "application/json", "Accept": "application/json"}
+
+    try:
+        resp = requests.post(url, json=body, auth=(client_id, client_secret), headers=headers, timeout=30)
+    except Exception:
+        raise
+
+    try:
+        j = resp.json()
+    except Exception:
+        resp.raise_for_status()
+        raise ValueError("Resposta não-JSON do provedor")
+
+    return j
+
+
 def emitir_boleto_frete(frete_id, vencimento_str=None):
     conn = None
     cursor = None
@@ -472,6 +503,20 @@ def emitir_boleto_frete(frete_id, vencimento_str=None):
                     method = "request"
             except Exception as ex:
                 logger.debug("Erro ao tentar fallback send/request: %s", ex)
+
+        # Fallback direto via HTTP para /v1/charge/one-step caso SDK/fallbacks não tenham sucesso
+        if not success:
+            try:
+                _log_send_attempt("direct_http_one_step", body, extra_note="direct HTTP fallback")
+                resp_direct = _direct_one_step_request(credentials, body)
+                _log_provider_response("direct_http_one_step", resp_direct)
+                if isinstance(resp_direct, dict) and ("data" in resp_direct or "charge" in resp_direct):
+                    success = True
+                    response = resp_direct
+                    method = "direct_http_one_step"
+            except Exception as ex_direct:
+                logger.debug("Tentativa direct HTTP one-step falhou: %s", ex_direct)
+                # prosseguir com o fluxo normal de erro
 
         if isinstance(response, Exception):
             logger.exception("SDK método retornou exceção (método=%r): %r", method, response)
