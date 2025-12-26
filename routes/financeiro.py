@@ -53,9 +53,14 @@ def recebimentos():
 @financeiro_bp.route('/emitir-boleto/<int:frete_id>/', methods=['POST'])
 @login_required
 def emitir_boleto_route(frete_id):
-    """Emite boleto para um frete específico"""
+    """Emite boleto para um frete específico (aceita campo 'vencimento' opcional YYYY-MM-DD)."""
     try:
-        resultado = emitir_boleto_frete(frete_id)
+        # ler vencimento enviado pelo formulário (opcional)
+        vencimento = None
+        if request.form:
+            vencimento = request.form.get('vencimento') or request.form.get('new_vencimento') or None
+
+        resultado = emitir_boleto_frete(frete_id, vencimento_str=vencimento)
         
         if not isinstance(resultado, dict):
             flash(f"Erro inesperado ao emitir boleto: resposta inválida", "danger")
@@ -73,6 +78,7 @@ def emitir_boleto_route(frete_id):
             return redirect(url_for('fretes.lista'))
 
     except Exception as e:
+        current_app.logger.exception("Erro emitir_boleto_route: %s", e)
         flash(f"Erro ao processar boleto: {str(e)}", "danger")
         return redirect(url_for('fretes.lista'))
 
@@ -110,6 +116,7 @@ def visualizar_boleto(charge_id):
         # busca o conteúdo do PDF do provedor e repassa ao cliente
         resp = fetch_boleto_pdf_stream(credentials, pdf_url)
         if not resp or getattr(resp, "status_code", None) != 200:
+            # resp pode ser dict em erro; se for Response, usar resp.text
             text = getattr(resp, "text", "") if isinstance(resp, dict) else (getattr(resp, "text", "") or "")
             flash(f"Falha ao buscar PDF do provedor: {str(text)[:200]}", "danger")
             return redirect(url_for('financeiro.recebimentos'))
