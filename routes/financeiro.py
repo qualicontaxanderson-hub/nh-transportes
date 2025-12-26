@@ -1,12 +1,9 @@
-from flask import Blueprint, render_template, request, jsonify, flash, redirect, url_for, current_app
+from flask import Blueprint, render_template, request, jsonify, flash, redirect, url_for, current_app, Response, stream_with_context
 from flask_login import login_required
 from utils.db import get_db_connection
-from utils.boletos import emitir_boleto_frete
-from datetime import datetime
-import logging
+from utils.boletos import emitir_boleto_frete, fetch_charge, fetch_boleto_pdf_stream, update_billet_expire
 
 financeiro_bp = Blueprint('financeiro', __name__, url_prefix='/financeiro')
-logger = logging.getLogger(__name__)
 
 
 @financeiro_bp.route('/recebimentos/')
@@ -15,13 +12,12 @@ def recebimentos():
     """Lista todos os recebimentos/boletos"""
     conn = None
     cursor = None
-
+    
     try:
         conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)
 
         try:
-            # Query cobrancas table (which doesn't have frete_id column)
             cursor.execute("""
                 SELECT 
                     c.*,
@@ -32,77 +28,26 @@ def recebimentos():
                 ORDER BY c.data_vencimento DESC, c.data_emissao DESC
             """)
             recebimentos_lista = cursor.fetchall()
-
-            # Log for debugging
+            
             current_app.logger.info(f"[recebimentos] Encontrados {len(recebimentos_lista)} recebimentos")
-
-            # Normalizar tipos/formatos para evitar erros no template
-            for row in recebimentos_lista:
-                # normaliza data_vencimento para datetime se vier string
-                dv = row.get('data_vencimento')
-                if dv is not None and not hasattr(dv, 'strftime'):
-                    try:
-                        if isinstance(dv, str):
-                            # tenta ISO 8601 ou YYYY-MM-DD
-                            try:
-                                parsed = datetime.fromisoformat(dv)
-                            except Exception:
-                                parsed = datetime.strptime(dv, '%Y-%m-%d')
-                            row['data_vencimento'] = parsed
-                        else:
-                            # não reconhecido -> set None
-                            current_app.logger.warning(f"[recebimentos] data_vencimento formato inesperado para id={row.get('id')}: {repr(dv)}")
-                            row['data_vencimento'] = None
-                    except Exception:
-                        current_app.logger.exception(f"[recebimentos] falha ao parsear data_vencimento id={row.get('id')}: {repr(dv)}")
-                        row['data_vencimento'] = None
-
-                # garante que valor seja float
-                try:
-                    raw_val = row.get('valor')
-                    if raw_val in (None, ''):
-                        row['valor'] = 0.0
-                    else:
-                        # aceita formatos "1234.56" ou "1.234,56"
-                        if isinstance(raw_val, str):
-                            v = raw_val.replace('.', '').replace(',', '.')
-                            row['valor'] = float(v)
-                        else:
-                            row['valor'] = float(raw_val)
-                except Exception:
-                    current_app.logger.exception(f"[recebimentos] valor inválido para id={row.get('id')}: {repr(row.get('valor'))}")
-                    row['valor'] = 0.0
-
+            
         except Exception as e:
-            current_app.logger.exception(f"[recebimentos] Erro SQL ao buscar recebimentos: {e}")
+            current_app.logger.error(f"[recebimentos] Erro SQL: {str(e)}")
             flash(f"Erro ao carregar recebimentos: {str(e)}", "danger")
             recebimentos_lista = []
-
-        # Renderizar com proteção contra erros no template
-        try:
-            return render_template('financeiro/recebimentos.html', recebimentos=recebimentos_lista)
-        except Exception:
-            current_app.logger.exception("[recebimentos] Erro ao renderizar template de recebimentos")
-            flash("Erro ao exibir recebimentos (ver logs).", "danger")
-            return render_template('financeiro/recebimentos.html', recebimentos=[])
-
+        
+        return render_template('financeiro/recebimentos.html', recebimentos=recebimentos_lista)
+            
     except Exception as e:
-        current_app.logger.exception(f"[recebimentos] Erro geral: {e}")
+        current_app.logger.error(f"[recebimentos] Erro geral: {str(e)}")
         flash(f"Erro ao acessar recebimentos: {str(e)}", "danger")
         return render_template('financeiro/recebimentos.html', recebimentos=[])
-
+    
     finally:
-        # Always close resources if they were created
-        try:
-            if cursor:
-                cursor.close()
-        except Exception:
-            logger.exception("Erro ao fechar cursor em recebimentos")
-        try:
-            if conn:
-                conn.close()
-        except Exception:
-            logger.exception("Erro ao fechar conexão em recebimentos")
+        if cursor:
+            cursor.close()
+        if conn:
+            conn.close()
 
 
 @financeiro_bp.route('/emitir-boleto/<int:frete_id>/', methods=['POST'])
@@ -110,17 +55,9 @@ def recebimentos():
 def emitir_boleto_route(frete_id):
     """Emite boleto para um frete específico"""
     try:
-        # Lê campo opcional de vencimento do form: 'YYYY-MM-DD'
-        vencimento = request.form.get('vencimento') or None
-
-        resultado = emitir_boleto_frete(frete_id, vencimento_str=vencimento)
-
-        # Log do resultado para facilitar debug
-        current_app.logger.info("Resultado emitir_boleto_frete(%s): %r", frete_id, resultado)
-
-        # Ensure resultado is always a dict
+        resultado = emitir_boleto_frete(frete_id)
+        
         if not isinstance(resultado, dict):
-            current_app.logger.error("Resultado inesperado de emitir_boleto_frete: %r", resultado)
             flash(f"Erro inesperado ao emitir boleto: resposta inválida", "danger")
             return redirect(url_for('fretes.lista'))
 
@@ -132,58 +69,117 @@ def emitir_boleto_route(frete_id):
             return redirect(url_for('financeiro.recebimentos'))
         else:
             error_msg = resultado.get('error', 'Erro desconhecido')
-            # Ensure error_msg is always a string
-            current_app.logger.warning("Falha ao emitir boleto para frete %s: %s", frete_id, error_msg)
             flash(f"Erro ao emitir boleto: {str(error_msg)}", "danger")
             return redirect(url_for('fretes.lista'))
 
     except Exception as e:
-        current_app.logger.exception("[emitir_boleto_route] Erro processando boleto")
         flash(f"Erro ao processar boleto: {str(e)}", "danger")
         return redirect(url_for('fretes.lista'))
 
 
-@financeiro_bp.route('/recebimentos/debug')
+# --- NOVAS ROTAS: visualizar/baixar PDF e alterar vencimento ---
+
+@financeiro_bp.route('/visualizar-boleto/<int:charge_id>/')
 @login_required
-def recebimentos_debug():
+def visualizar_boleto(charge_id):
     """
-    Rota de debug: retorna JSON com os recebimentos (usa mesmo SELECT do listagem).
-    Acesse /financeiro/recebimentos/debug para confirmar que o backend retorna dados.
+    Proxy que busca o PDF do provedor e faz stream para o navegador.
+    Isso evita expor tokens no cliente e permite o navegador abrir/imprimir o PDF.
+    """
+    try:
+        # obtém dados da charge no provedor para localizar a URL do PDF
+        credentials = {
+            "client_id": current_app.config.get("EFI_CLIENT_ID") or None,
+            "client_secret": current_app.config.get("EFI_CLIENT_SECRET") or None,
+            "sandbox": current_app.config.get("EFI_SANDBOX", True),
+        }
+        charge = fetch_charge(credentials, charge_id)
+        if not charge or not isinstance(charge, dict):
+            flash("Não foi possível obter dados da cobrança no provedor.", "danger")
+            return redirect(url_for('financeiro.recebimentos'))
+
+        # procurar a URL do PDF em possíveis caminhos do JSON
+        pdf_url = None
+        data = charge.get("data") or charge
+        # campos mais comuns
+        pdf_url = (data.get("pdf") or {}).get("charge") or (data.get("payment") or {}).get("banking_billet", {}).get("link") or data.get("link")
+        if not pdf_url:
+            flash("URL do PDF não encontrada na resposta do provedor.", "danger")
+            return redirect(url_for('financeiro.recebimentos'))
+
+        # busca o conteúdo do PDF do provedor e repassa ao cliente
+        resp = fetch_boleto_pdf_stream(credentials, pdf_url)
+        if not resp or getattr(resp, "status_code", None) != 200:
+            text = getattr(resp, "text", "") if isinstance(resp, dict) else (getattr(resp, "text", "") or "")
+            flash(f"Falha ao buscar PDF do provedor: {str(text)[:200]}", "danger")
+            return redirect(url_for('financeiro.recebimentos'))
+
+        headers = {}
+        content_type = resp.headers.get("Content-Type", "application/pdf")
+        headers['Content-Type'] = content_type
+        # force inline so the browser opens it in a tab
+        headers['Content-Disposition'] = f'inline; filename=boleto_{charge_id}.pdf'
+
+        return Response(stream_with_context(resp.iter_content(chunk_size=8192)), headers=headers)
+    except Exception as e:
+        current_app.logger.exception("Erro em visualizar_boleto: %s", e)
+        flash(f"Erro ao visualizar boleto: {str(e)}", "danger")
+        return redirect(url_for('financeiro.recebimentos'))
+
+
+@financeiro_bp.route('/alterar-vencimento/<int:charge_id>/', methods=['GET', 'POST'])
+@login_required
+def alterar_vencimento(charge_id):
+    """
+    GET: mostra formulário para alterar data de vencimento.
+    POST: chama o provedor para atualizar expire_at e atualiza tabela cobrancas.
     """
     conn = None
     cursor = None
     try:
-        conn = get_db_connection()
-        cursor = conn.cursor(dictionary=True)
-        cursor.execute("""
-            SELECT 
-                c.*,
-                cl.razao_social as cliente_nome,
-                cl.nome_fantasia as cliente_fantasia
-            FROM cobrancas c
-            LEFT JOIN clientes cl ON c.id_cliente = cl.id
-            ORDER BY c.data_vencimento DESC, c.data_emissao DESC
-            LIMIT 200
-        """)
-        rows = cursor.fetchall()
-        # Normalizar data e valor de forma simples para JSON
-        for r in rows:
-            dv = r.get('data_vencimento')
-            if dv is not None and hasattr(dv, 'strftime'):
-                r['data_vencimento'] = dv.strftime('%Y-%m-%d')
-            r['valor'] = float(r['valor']) if r.get('valor') not in (None, '') else 0.0
-        return jsonify({"count": len(rows), "sample": rows})
+        if request.method == 'GET':
+            # busca dados locais para pré-preencher (se existirem)
+            conn = get_db_connection()
+            cursor = conn.cursor(dictionary=True)
+            cursor.execute("SELECT * FROM cobrancas WHERE charge_id = %s LIMIT 1", (charge_id,))
+            cobr = cursor.fetchone()
+            return render_template('financeiro/alterar_vencimento.html', cobranca=cobr, charge_id=charge_id)
+
+        # POST: aplicar alteração
+        new_date = request.form.get('new_vencimento')
+        if not new_date:
+            flash("Informe uma nova data de vencimento (YYYY-MM-DD).", "warning")
+            return redirect(url_for('financeiro.alterar_vencimento', charge_id=charge_id))
+
+        credentials = {
+            "client_id": current_app.config.get("EFI_CLIENT_ID") or None,
+            "client_secret": current_app.config.get("EFI_CLIENT_SECRET") or None,
+            "sandbox": current_app.config.get("EFI_SANDBOX", True),
+        }
+        success, resp = update_billet_expire(credentials, charge_id, new_date)
+        if not success:
+            flash(f"Falha ao atualizar vencimento no provedor: {resp}", "danger")
+            return redirect(url_for('financeiro.recebimentos'))
+
+        # atualizar data_vencimento na tabela cobrancas (se existir)
+        conn = conn or get_db_connection()
+        cursor = cursor or conn.cursor(dictionary=True)
+        try:
+            cursor.execute("UPDATE cobrancas SET data_vencimento = %s WHERE charge_id = %s", (new_date, charge_id))
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            current_app.logger.exception("Falha ao atualizar data_vencimento local para charge %s", charge_id)
+
+        flash("Vencimento atualizado com sucesso.", "success")
+        return redirect(url_for('financeiro.recebimentos'))
+
     except Exception as e:
-        current_app.logger.exception("[recebimentos_debug] Erro ao buscar recebimentos de debug: %s", e)
-        return jsonify({"error": str(e)}), 500
+        current_app.logger.exception("Erro em alterar_vencimento: %s", e)
+        flash(f"Erro ao alterar vencimento: {str(e)}", "danger")
+        return redirect(url_for('financeiro.recebimentos'))
     finally:
-        try:
-            if cursor:
-                cursor.close()
-        except Exception:
-            current_app.logger.exception("Erro ao fechar cursor em recebimentos_debug")
-        try:
-            if conn:
-                conn.close()
-        except Exception:
-            current_app.logger.exception("Erro ao fechar conexao em recebimentos_debug")
+        if cursor:
+            cursor.close()
+        if conn:
+            conn.close()
