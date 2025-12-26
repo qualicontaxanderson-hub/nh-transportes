@@ -1,3 +1,4 @@
+# (arquivo completo; substitua o arquivo existente pelo conteúdo abaixo)
 #!/usr/bin/env python3
 import os
 import json
@@ -28,7 +29,6 @@ def _sanitize_for_log(obj):
             return s
         if len(s) <= 4:
             return "****"
-        # mantemos começo/fim para facilitar debug sem vazar dados inteiros
         return s[:2] + "****" + s[-2:]
 
     def recurse(x):
@@ -60,17 +60,14 @@ def _log_send_attempt(method_name, body, extra_note=None):
         s = "<unserializable>"
     logger.info("SENDING (%s) %s", method_name, extra_note or "")
     if DEBUG_PAYLOAD:
-        # imprime payload completo (mascarizado)
         logger.info("SENDING-PAYLOAD (%s): %s", method_name, s)
     else:
         logger.debug("SENDING-PAYLOAD (%s): %s", method_name, s)
 
 
 def _log_provider_response(method_name, resp_raw):
-    # resp_raw pode ser dict, object, requests.Response ou string
     try:
         if hasattr(resp_raw, "status_code"):
-            # requests.Response
             code = getattr(resp_raw, "status_code", None)
             text = getattr(resp_raw, "text", None)
             logger.info("PROVIDER RESPONSE (%s): status=%s, text_len=%s", method_name, code, len(text) if text else 0)
@@ -88,20 +85,12 @@ def _log_provider_response(method_name, resp_raw):
 
 
 def _safe_get_charge_fields(response):
-    """
-    Tenta extrair charge_id, link do boleto e barcode de formas comuns.
-    Retorna (charge_id, boleto_url, barcode)
-    """
     if not response or not isinstance(response, dict):
         return None, None, None
-
     data = response.get("data") or response.get("charge") or response
-
     charge_id = data.get("id") or data.get("charge_id") or response.get("data", {}).get("id")
-
     boleto_url = None
     barcode = None
-
     try:
         if isinstance(data.get("payment"), dict):
             p = data.get("payment")
@@ -117,54 +106,31 @@ def _safe_get_charge_fields(response):
             barcode = (data.get("banking_billet") or {}).get("barcode")
     except Exception:
         logger.debug("Falha extraindo fields do response: %r", response)
-
     return charge_id, boleto_url, barcode
 
 
 def _extract_charge_id(resp):
-    """
-    Extrai charge_id de uma resposta do provedor cobrindo variantes:
-    - resp.get('data').get('id'), resp.get('data').get('charge_id')
-    - resp.get('charge').get('id') etc.
-    - resp.get('charge_id') ou resp.get('id')
-    Retorna None se não encontrar.
-    """
     try:
         if not isinstance(resp, dict):
             return None
-        # primeiro tente 'data' ou 'charge'
         data = resp.get("data") or resp.get("charge") or resp
         if isinstance(data, dict):
             cid = data.get("id") or data.get("charge_id")
             if cid:
                 return cid
-        # fallback direto em resp
         return resp.get("charge_id") or resp.get("id")
     except Exception:
         return None
 
 
 def _build_body(frete, descricao_frete, data_vencimento, valor_total_centavos):
-    """
-    Body compatível com os métodos do SDK (high-level). Usa wrapper 'payment' com 'banking_billet'
-    (mantido para compatibilidade com SDK).
-    """
     cpf_cnpj = (frete.get("cliente_cnpj") or "").replace(".", "").replace("-", "").replace("/", "").strip()
     telefone = (frete.get("cliente_telefone") or "").replace("(", "").replace(")", "").replace("-", "").replace(" ", "").strip()
     cep = (frete.get("cliente_cep") or "").replace("-", "").strip()
     if not cep or len(cep) != 8:
         cep = "74000000"
-
     nome_cliente = (frete.get("cliente_fantasia") or frete.get("cliente_nome") or "Cliente")[:80]
-
-    items = [
-        {
-            "name": descricao_frete[:80],
-            "amount": 1,
-            "value": valor_total_centavos,
-        }
-    ]
-
+    items = [{"name": descricao_frete[:80], "amount": 1, "value": valor_total_centavos}]
     banking_billet = {
         "expire_at": data_vencimento.strftime("%Y-%m-%d"),
         "customer": {
@@ -183,64 +149,24 @@ def _build_body(frete, descricao_frete, data_vencimento, valor_total_centavos):
             },
         },
     }
-
-    metadata = {
-        "custom_id": str(frete["id"]),
-        "notification_url": os.getenv("EFI_NOTIFICATION_URL", "https://nh-transportes.onrender.com/webhooks/efi"),
-    }
-
-    body = {
-        "items": items,
-        "payment": {"banking_billet": banking_billet},
-        "metadata": metadata,
-    }
-
+    metadata = {"custom_id": str(frete["id"]), "notification_url": os.getenv("EFI_NOTIFICATION_URL", "https://nh-transportes.onrender.com/webhooks/efi")}
+    body = {"items": items, "payment": {"banking_billet": banking_billet}, "metadata": metadata}
     return body
 
 
 def _build_charge_payload(frete, descricao_frete, data_vencimento, valor_total_centavos):
-    """
-    Payload para criação da transação (charge) - Two-Step first step.
-    Contém apenas items e metadata (conforme docs /v1/charge).
-    """
-    cpf_cnpj = (frete.get("cliente_cnpj") or "").replace(".", "").replace("-", "").replace("/", "").strip()
-    cep = (frete.get("cliente_cep") or "").replace("-", "").strip()
-    if not cep or len(cep) != 8:
-        cep = "74000000"
-
-    items = [
-        {
-            "name": descricao_frete[:80],
-            "amount": 1,
-            "value": valor_total_centavos,
-        }
-    ]
-
-    metadata = {
-        "custom_id": str(frete["id"]),
-        "notification_url": os.getenv("EFI_NOTIFICATION_URL", "https://nh-transportes.onrender.com/webhooks/efi"),
-    }
-
-    body = {
-        "items": items,
-        "metadata": metadata,
-    }
-    return body
+    items = [{"name": descricao_frete[:80], "amount": 1, "value": valor_total_centavos}]
+    metadata = {"custom_id": str(frete["id"]), "notification_url": os.getenv("EFI_NOTIFICATION_URL", "https://nh-transportes.onrender.com/webhooks/efi")}
+    return {"items": items, "metadata": metadata}
 
 
 def _build_pay_payload(frete, descricao_frete, data_vencimento, valor_total_centavos):
-    """
-    Payload para associar pagamento a uma charge (second step).
-    Retorna o objeto 'payment' contendo banking_billet.
-    """
     cpf_cnpj = (frete.get("cliente_cnpj") or "").replace(".", "").replace("-", "").replace("/", "").strip()
     telefone = (frete.get("cliente_telefone") or "").replace("(", "").replace(")", "").replace("-", "").replace(" ", "").strip()
     cep = (frete.get("cliente_cep") or "").replace("-", "").strip()
     if not cep or len(cep) != 8:
         cep = "74000000"
-
     nome_cliente = (frete.get("cliente_fantasia") or frete.get("cliente_nome") or "Cliente")[:80]
-
     customer = {
         "name": nome_cliente,
         "cpf": cpf_cnpj if len(cpf_cnpj) == 11 else None,
@@ -255,42 +181,20 @@ def _build_pay_payload(frete, descricao_frete, data_vencimento, valor_total_cent
             "city": (frete.get("cliente_cidade") or "")[:50],
             "state": (frete.get("cliente_estado") or "")[:2].upper(),
         },
-        # Para PJ, incluir juridical_person para maior compatibilidade
-        "juridical_person": {
-            "corporate_name": nome_cliente,
-            "cnpj": cpf_cnpj if len(cpf_cnpj) == 14 else None
-        }
+        "juridical_person": {"corporate_name": nome_cliente, "cnpj": cpf_cnpj if len(cpf_cnpj) == 14 else None},
     }
-
-    payment = {
-        "payment": {
-            "banking_billet": {
-                "expire_at": data_vencimento.strftime("%Y-%m-%d"),
-                "customer": customer
-            }
-        }
-    }
+    payment = {"payment": {"banking_billet": {"expire_at": data_vencimento.strftime("%Y-%m-%d"), "customer": customer}}}
     return payment
 
 
 def _try_sdk_methods(efi, body):
     tried = []
     response = None
-    candidates = [
-        "create_charge",
-        "create_one_step_billet",
-        "create_one_step_billet_charge",
-        "create_billet",
-        "create",
-        "charges",
-        "charge",
-        "createCharge",
-    ]
+    candidates = ["create_charge", "create_one_step_billet", "create_one_step_billet_charge", "create_billet", "create", "charges", "charge", "createCharge"]
     for attr in dir(efi):
         if any(k in attr.lower() for k in ("charge", "billet", "boleto", "create")):
             if attr not in candidates:
                 candidates.append(attr)
-
     for method in candidates:
         try:
             fn = getattr(efi, method, None)
@@ -310,7 +214,6 @@ def _try_sdk_methods(efi, body):
             logger.debug("Tentativa SDK método %s falhou: %s", method, ex)
             response = ex
             continue
-
     for attr in dir(efi):
         try:
             sub = getattr(efi, attr)
@@ -335,14 +238,16 @@ def _try_sdk_methods(efi, body):
                         continue
         except Exception:
             continue
-
     return False, response, tried
 
 
 def _direct_post(credentials, path, body):
     """
-    Post direto para a API de cobranças (auxiliar reutilizável).
-    path: string sem /v1 prefix, ex: 'charge' ou 'charge/{id}/pay'
+    Post direto para API cobrancas.
+    Retorna:
+      - dict (parsed JSON) quando o provedor retorna JSON, ou
+      - dict com chaves 'http_status' e 'text' quando a resposta não foi JSON.
+    Não lança exceção em caso de corpo não-JSON (mas loga).
     """
     sandbox = credentials.get("sandbox", True)
     base = "https://cobrancas-h.api.efipay.com.br" if sandbox else "https://cobrancas.api.efipay.com.br"
@@ -353,23 +258,22 @@ def _direct_post(credentials, path, body):
         raise ValueError("Credentials incompletas para chamada direta")
 
     headers = {"Content-Type": "application/json", "Accept": "application/json"}
-
     try:
         resp = requests.post(url, json=body, auth=(client_id, client_secret), headers=headers, timeout=30)
     except Exception as e:
-        logger.debug("Erro requests.post direct %s: %s", url, e)
-        raise
+        logger.exception("Erro HTTP no POST %s: %s", url, e)
+        return {"http_error": str(e)}
 
+    # tenta parsear JSON — se falhar, retorna texto bruto para diagnóstico
+    content_type = resp.headers.get("Content-Type", "")
+    text = resp.text or ""
+    status = resp.status_code
     try:
         j = resp.json()
+        return j
     except Exception:
-        try:
-            resp.raise_for_status()
-        except Exception:
-            pass
-        raise ValueError("Resposta não-JSON do provedor")
-
-    return j
+        logger.warning("Resposta não-JSON do provedor (status=%s, content-type=%s). Texto (primeiros 2000 chars): %s", status, content_type, (text or "")[:2000])
+        return {"http_status": status, "content_type": content_type, "text": text}
 
 
 def _direct_create_charge(credentials, body):
@@ -387,39 +291,22 @@ def emitir_boleto_frete(frete_id, vencimento_str=None):
         conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)
 
-        cursor.execute(
-            """
-            SELECT
-                f.id,
-                f.clientes_id,
-                f.valor_total_frete,
-                o.nome AS origem_nome,
-                d.nome AS destino_nome,
-                c.razao_social AS cliente_nome,
-                c.nome_fantasia AS cliente_fantasia,
-                c.cnpj AS cliente_cnpj,
-                c.endereco AS cliente_endereco,
-                c.numero AS cliente_numero,
-                c.complemento AS cliente_complemento,
-                c.bairro AS cliente_bairro,
-                c.municipio AS cliente_cidade,
-                c.uf AS cliente_estado,
-                c.cep AS cliente_cep,
-                c.telefone AS cliente_telefone,
-                c.email AS cliente_email
+        cursor.execute("""SELECT
+                f.id, f.clientes_id, f.valor_total_frete,
+                o.nome AS origem_nome, d.nome AS destino_nome,
+                c.razao_social AS cliente_nome, c.nome_fantasia AS cliente_fantasia,
+                c.cnpj AS cliente_cnpj, c.endereco AS cliente_endereco, c.numero AS cliente_numero,
+                c.complemento AS cliente_complemento, c.bairro AS cliente_bairro, c.municipio AS cliente_cidade,
+                c.uf AS cliente_estado, c.cep AS cliente_cep, c.telefone AS cliente_telefone, c.email AS cliente_email
             FROM fretes f
             INNER JOIN clientes c ON f.clientes_id = c.id
             LEFT JOIN origens o ON f.origem_id = o.id
             LEFT JOIN destinos d ON f.destino_id = d.id
-            WHERE f.id = %s
-            """,
-            (frete_id,),
-        )
+            WHERE f.id = %s""", (frete_id,))
         frete = cursor.fetchone()
 
         if not frete:
             return {"success": False, "error": "Frete não encontrado"}
-
         if not frete.get("cliente_email"):
             return {"success": False, "error": "Cliente sem e-mail cadastrado"}
         if not frete.get("cliente_telefone"):
@@ -447,7 +334,6 @@ def emitir_boleto_frete(frete_id, vencimento_str=None):
         if frete.get("origem_nome") and frete.get("destino_nome"):
             descricao_frete += f" - {frete['origem_nome']} para {frete['destino_nome']}"
 
-        # Monta payloads
         body_sdk = _build_body(frete, descricao_frete, data_vencimento, valor_total_centavos)
         body_charge = _build_charge_payload(frete, descricao_frete, data_vencimento, valor_total_centavos)
         body_pay = _build_pay_payload(frete, descricao_frete, data_vencimento, valor_total_centavos)
@@ -466,26 +352,23 @@ def emitir_boleto_frete(frete_id, vencimento_str=None):
                 getattr(efi, "create_charge")
             except Exception:
                 pass
-        except Exception as ex:
-            logger.exception("Falha ao instanciar EfiPay SDK: %s", ex)
-            # Mesmo que SDK não inicialize, tentaremos fallback direto HTTP
+        except Exception:
+            logger.exception("Falha ao instanciar EfiPay SDK")
             efi = None
 
-        # 1) Criar a charge (Two-Step)
+        # 1) criar charge
         charge_id = None
         create_response = None
-        # Tentar via SDK create_charge / create
         if efi:
             try:
                 _log_send_attempt("create_charge", body_charge, extra_note="SDK create charge")
-                s_ok, create_response, method_create = _try_sdk_methods(efi, body_charge)
+                s_ok, create_response, _ = _try_sdk_methods(efi, body_charge)
                 if s_ok and isinstance(create_response, dict):
                     charge_id = _extract_charge_id(create_response)
             except Exception as ex:
                 logger.debug("Erro ao criar charge via SDK: %s", ex)
                 create_response = ex
 
-        # fallback low-level via SDK send/request (if efi exists)
         if not charge_id and efi:
             try:
                 if hasattr(efi, "send") and callable(getattr(efi, "send")):
@@ -497,21 +380,20 @@ def emitir_boleto_frete(frete_id, vencimento_str=None):
                         create_response = resp_low
                         if isinstance(resp_low, dict):
                             charge_id = _extract_charge_id(resp_low)
+                    except Exception:
+                        pass
+                elif hasattr(efi, "request") and callable(getattr(efi, "request")):
+                    try:
+                        resp_low = efi.request(credentials, body=body_charge)
                     except TypeError:
-                        logger.debug("efi.send tipo TypeError; tentando request")
-                        if hasattr(efi, "request") and callable(getattr(efi, "request")):
-                            try:
-                                resp_low = efi.request(credentials, body=body_charge)
-                            except TypeError:
-                                resp_low = efi.request(body=body_charge)
-                            _log_provider_response("request:create_charge", resp_low)
-                            create_response = resp_low
-                            if isinstance(resp_low, dict):
-                                charge_id = _extract_charge_id(resp_low)
-            except Exception as ex:
-                logger.debug("Erro fallback SDK create charge: %s", ex)
+                        resp_low = efi.request(body=body_charge)
+                    _log_provider_response("request:create_charge", resp_low)
+                    create_response = resp_low
+                    if isinstance(resp_low, dict):
+                        charge_id = _extract_charge_id(resp_low)
+            except Exception:
+                logger.debug("Fallback SDK create_charge falhou")
 
-        # fallback direto HTTP
         if not charge_id:
             try:
                 _log_send_attempt("direct_create_charge", body_charge, extra_note="direct HTTP fallback create")
@@ -528,26 +410,23 @@ def emitir_boleto_frete(frete_id, vencimento_str=None):
             logger.warning("Não foi possível obter charge_id. create_response=%r", create_response)
             return {"success": False, "error": f"Falha ao criar transação de cobrança: {create_response}"}
 
-        # 2) Associar o pagamento à charge
+        # 2) associar pagamento à charge
         pay_response = None
         paid_success = False
 
-        # Tentativa via SDK (métodos que possam existir)
+        # tentativa via SDK (pode acabar invocando create_charge se o método for inadequado)
         if efi:
             try:
-                # muitas SDKs esperam /charge/{id}/pay via métodos encapsulados; tentamos variantes com payment body
-                payment_body_for_sdk = {"id": charge_id, **body_pay}  # alguns métodos aceitam id embutido, alguns não
+                payment_body_for_sdk = {"id": charge_id, **body_pay}
                 _log_send_attempt("sdk_pay_attempt", payment_body_for_sdk, extra_note="try SDK pay variants")
-                s_ok, pay_response, method_pay = _try_sdk_methods(efi, payment_body_for_sdk)
+                s_ok, pay_response, _ = _try_sdk_methods(efi, payment_body_for_sdk)
                 if s_ok and isinstance(pay_response, dict):
-                    # If SDK returned dict with payment info, assume success
                     if "data" in pay_response or "charge" in pay_response or pay_response.get("id") or pay_response.get("charge_id"):
                         paid_success = True
-            except Exception as ex:
-                logger.debug("Erro ao tentar pay via SDK: %s", ex)
-                pay_response = ex
+            except Exception:
+                logger.debug("Erro ao tentar pay via SDK")
 
-        # fallback direto HTTP para /v1/charge/{id}/pay
+        # fallback direto HTTP para /charge/{id}/pay
         if not paid_success:
             try:
                 _log_send_attempt("direct_pay_charge", body_pay, extra_note=f"direct HTTP pay for charge {charge_id}")
@@ -556,16 +435,38 @@ def emitir_boleto_frete(frete_id, vencimento_str=None):
                 pay_response = resp_pay
                 if isinstance(resp_pay, dict) and ("data" in resp_pay or "charge" in resp_pay or resp_pay.get("id") or resp_pay.get("charge_id")):
                     paid_success = True
+                else:
+                    # se veio resposta não-JSON ou validation que pede items, tentamos pay incluindo items+metadata
+                    reason_text = ""
+                    if isinstance(resp_pay, dict) and resp_pay.get("text"):
+                        reason_text = resp_pay.get("text")[:1000]
+                    elif isinstance(resp_pay, dict) and resp_pay.get("error"):
+                        reason_text = str(resp_pay.get("error"))
+                    logger.info("direct_pay_charge não retornou dados: %s", reason_text)
+                    # tentativa alternativa: incluir items + metadata no POST /charge/{id}/pay
+                    alt_body = {}
+                    try:
+                        alt_body.update({"items": body_charge.get("items", [])})
+                        # manter payment
+                        alt_body.update(body_pay)
+                        alt_body.update({"metadata": body_charge.get("metadata", {})})
+                        _log_send_attempt("direct_pay_charge_alt_with_items", alt_body, extra_note=f"direct HTTP pay alt for charge {charge_id}")
+                        resp_pay_alt = _direct_pay_charge(credentials, charge_id, alt_body)
+                        _log_provider_response("direct_pay_charge_alt_with_items", resp_pay_alt)
+                        pay_response = resp_pay_alt
+                        if isinstance(resp_pay_alt, dict) and ("data" in resp_pay_alt or "charge" in resp_pay_alt or resp_pay_alt.get("id") or resp_pay_alt.get("charge_id")):
+                            paid_success = True
+                    except Exception:
+                        logger.debug("Tentativa alternativa de pay (com items) falhou")
             except Exception as ex_pay:
                 logger.debug("Direct pay falhou: %s", ex_pay)
                 pay_response = ex_pay
 
-        # Se pagou / recebeu resposta com dados, extrair campos e persistir
         final_response = pay_response if pay_response is not None else create_response
+
         if paid_success and isinstance(final_response, dict):
             charge_id_final, boleto_url, barcode = _safe_get_charge_fields(final_response)
             if not charge_id_final:
-                # fallback: charge_id que já temos
                 charge_id_final = charge_id
             try:
                 cursor.execute(
@@ -593,15 +494,8 @@ def emitir_boleto_frete(frete_id, vencimento_str=None):
                 conn.rollback()
                 return {"success": False, "error": "Erro ao persistir cobrança no banco"}
 
-            return {
-                "success": True,
-                "cobranca_id": cobranca_id,
-                "charge_id": charge_id_final,
-                "boleto_url": boleto_url,
-                "barcode": barcode,
-            }
+            return {"success": True, "cobranca_id": cobranca_id, "charge_id": charge_id_final, "boleto_url": boleto_url, "barcode": barcode}
 
-        # Se não obtivemos sucesso devolvemos a mensagem de erro recebida
         if isinstance(final_response, dict) and final_response.get("error") == "validation_error":
             err_desc = final_response.get("error_description") or final_response.get("message") or final_response
             return {"success": False, "error": f"Resposta inválida do provedor de cobrança: {err_desc}"}
