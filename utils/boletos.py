@@ -130,6 +130,7 @@ def _build_body(frete, descricao_frete, data_vencimento, valor_total_centavos):
 
     nome_cliente = (frete.get("cliente_fantasia") or frete.get("cliente_nome") or "Cliente")[:80]
 
+    # Mantive os campos que você já constrói; se o provedor reclamar depois, ajustamos quantity/unit_price.
     items = [
         {
             "name": descricao_frete[:80],
@@ -138,22 +139,20 @@ def _build_body(frete, descricao_frete, data_vencimento, valor_total_centavos):
         }
     ]
 
-    banking_billet = {
-        "expire_at": data_vencimento.strftime("%Y-%m-%d"),
-        "customer": {
-            "name": nome_cliente,
-            "cpf": cpf_cnpj if len(cpf_cnpj) == 11 else None,
-            "cnpj": cpf_cnpj if len(cpf_cnpj) == 14 else None,
-            "phone_number": (telefone or "")[:11],
-            "email": (frete.get("cliente_email") or "")[:100],
-            "address": {
-                "street": (frete.get("cliente_endereco") or "")[:80],
-                "number": (frete.get("cliente_numero") or "")[:10],
-                "neighborhood": (frete.get("cliente_bairro") or "")[:50],
-                "zipcode": cep,
-                "city": (frete.get("cliente_cidade") or "")[:50],
-                "state": (frete.get("cliente_estado") or "")[:2].upper(),
-            },
+    # Dados do cliente e vencimento ficam no mesmo nível esperado pelo One-Step
+    customer = {
+        "name": nome_cliente,
+        "cpf": cpf_cnpj if len(cpf_cnpj) == 11 else None,
+        "cnpj": cpf_cnpj if len(cpf_cnpj) == 14 else None,
+        "phone_number": (telefone or "")[:11],
+        "email": (frete.get("cliente_email") or "")[:100],
+        "address": {
+            "street": (frete.get("cliente_endereco") or "")[:80],
+            "number": (frete.get("cliente_numero") or "")[:10],
+            "neighborhood": (frete.get("cliente_bairro") or "")[:50],
+            "zipcode": cep,
+            "city": (frete.get("cliente_cidade") or "")[:50],
+            "state": (frete.get("cliente_estado") or "")[:2].upper(),
         },
     }
 
@@ -162,10 +161,15 @@ def _build_body(frete, descricao_frete, data_vencimento, valor_total_centavos):
         "notification_url": os.getenv("EFI_NOTIFICATION_URL", "https://nh-transportes.onrender.com/webhooks/efi"),
     }
 
+    # One-Step: schema esperado — charge_type, expire_at, items, customer, metadata
     body = {
+        "charge_type": "banking_billet",
+        "expire_at": data_vencimento.strftime("%Y-%m-%d"),
         "items": items,
-        "payment": {"banking_billet": banking_billet},
+        "customer": customer,
         "metadata": metadata,
+        # opcional: "days_to_write_off": 0,
+        # opcional: "interest": {"type": "monthly", "amount": 0}
     }
 
     return body
