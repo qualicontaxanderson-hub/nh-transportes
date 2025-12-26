@@ -9,7 +9,7 @@ respostas de cancelamento na tabela `cobrancas`.
 Baseado no código que você enviou — já contém:
 - logging e sanitização de payload para logs
 - fallback SDK / HTTP direto
-- cache de token via client_credentials
+- cache de token via client_credentials (indexado por client_id+sandbox)
 - persistência _persist_cancel_to_db que usa utils.db.get_db_connection()
 - funções: emitir_boleto_frete, cancel_charge, fetch_charge, fetch_boleto_pdf_stream, update_billet_expire
 """
@@ -573,7 +573,8 @@ def cancel_charge(credentials, charge_id):
 
     Melhorias implementadas:
       - coerção/validação do charge_id para inteiro (evita 400 por tipo)
-      - retry-on-401: se receber 401, limpas _TOKEN_CACHE e tenta autorizar + PUT novamente (uma retry)
+      - retry-on-401: se receber 401, limpa cache específico e tenta autorizar + PUT novamente (uma retry)
+      - fallback: se ainda 401, tenta uma vez no outro ambiente invertendo sandbox
       - ao obter sucesso tenta persistir provider response na tabela cobrancas (auditoria)
     """
     try:
@@ -613,6 +614,8 @@ def cancel_charge(credentials, charge_id):
             logger.debug("cancel_charge: SDK tentativa falhou / indisponível")
 
         sandbox = credentials.get("sandbox", True)
+        client_id = credentials.get("client_id")
+        cache_key = (client_id, bool(sandbox))
         base = "https://cobrancas-h.api.efipay.com.br" if sandbox else "https://cobrancas.api.efipay.com.br"
         url_cancel = f"{base}/v1/charge/{cid_int}/cancel"
 
@@ -620,7 +623,8 @@ def cancel_charge(credentials, charge_id):
         try:
             logger.info("cancel_charge: will call cancel on base=%s sandbox=%s charge_id=%s", base, bool(sandbox), cid_int)
             # também logamos token/key_id se disponível (não expor token)
-            tok = _TOKEN_CACHE.get("access_token")
+            entry = _TOKEN_CACHE.get(cache_key)
+            tok = entry.get("access_token") if entry else None
             if tok:
                 try:
                     import base64 as _base64, json as _json
@@ -633,7 +637,7 @@ def cancel_charge(credentials, charge_id):
             logger.debug("cancel_charge: falha ao logar ambiente/token")
 
         # Função auxiliar que executa o PUT com um token/creds atuais
-        def _do_put_with_token(creds):
+        def _do_put_with_token(creds, url=url_cancel):
             token = _get_bearer_token(creds) if "client_id" in creds and "client_secret" in creds else None
             headers = {"Accept": "application/json", "Content-Type": "application/json"}
             if token:
@@ -642,10 +646,10 @@ def cancel_charge(credentials, charge_id):
                 # se não houver token, vamos deixar sem Authorization e requests tratará (ou usar basic auth no fallback)
                 pass
             try:
-                resp = requests.put(url_cancel, headers=headers, timeout=15)
+                resp = requests.put(url, headers=headers, timeout=15)
                 return resp, token
             except Exception as e:
-                logger.exception("cancel_charge: PUT %s falhou: %s", url_cancel, e)
+                logger.exception("cancel_charge: PUT %s falhou: %s", url, e)
                 return None, token
 
         logger.info("cancel_charge: tentando PUT %s (auth=Bearer? %s)", url_cancel, True)
@@ -665,13 +669,12 @@ def cancel_charge(credentials, charge_id):
                 except Exception:
                     logger.debug("persist cancel response failed")
                 return True, j
-            # retry-on-401: limpar cache, re-obter token e tentar novamente (uma vez)
+            # retry-on-401: limpar cache específico, re-obter token e tentar novamente (uma vez)
             if resp.status_code == 401:
                 logger.info("cancel_charge: PUT retornou 401, limpando cache e tentando re-authorize + retry")
                 try:
-                    # limpar cache global
-                    _TOKEN_CACHE["access_token"] = None
-                    _TOKEN_CACHE["expire_at"] = 0
+                    # limpar cache apenas para este client+env
+                    _TOKEN_CACHE.pop(cache_key, None)
                 except Exception:
                     logger.debug("falha limpando _TOKEN_CACHE")
                 # segunda tentativa
@@ -688,7 +691,36 @@ def cancel_charge(credentials, charge_id):
                         except Exception:
                             logger.debug("persist cancel response failed")
                         return True, j2
-                    # se ainda não 200/204, retornar corpo para diagnóstico
+                    # se ainda não 200/204, tentar fallback automático no outro ambiente (inverter sandbox) ANTES de devolver erro
+                    try:
+                        logger.info("cancel_charge: tentativa retry falhou, executando fallback invertendo sandbox")
+                        creds_fb = dict(credentials)
+                        creds_fb["sandbox"] = not bool(credentials.get("sandbox", True))
+                        base_fb = "https://cobrancas-h.api.efipay.com.br" if creds_fb["sandbox"] else "https://cobrancas.api.efipay.com.br"
+                        url_cancel_fb = f"{base_fb}/v1/charge/{cid_int}/cancel"
+                        token_fb = _get_bearer_token(creds_fb) if creds_fb.get("client_id") and creds_fb.get("client_secret") else None
+                        headers_fb = {"Accept": "application/json", "Content-Type": "application/json"}
+                        if token_fb:
+                            headers_fb["Authorization"] = f"Bearer {token_fb}"
+                        resp_fb = None
+                        try:
+                            resp_fb = requests.put(url_cancel_fb, headers=headers_fb, timeout=15)
+                        except Exception:
+                            logger.exception("cancel_charge: fallback PUT %s falhou", url_cancel_fb)
+                        logger.info("cancel_charge: fallback PUT %s -> status=%s text=%s", url_cancel_fb, getattr(resp_fb, "status_code", None), (getattr(resp_fb, "text", "") or "")[:2000] if resp_fb else "")
+                        if resp_fb is not None and resp_fb.status_code in (200, 204):
+                            try:
+                                jfb = resp_fb.json()
+                            except Exception:
+                                jfb = {"http_status": resp_fb.status_code, "text": resp_fb.text}
+                            try:
+                                _persist_cancel_to_db(cid_int, jfb)
+                            except Exception:
+                                logger.debug("persist cancel response failed (fallback)")
+                            return True, jfb
+                    except Exception:
+                        logger.exception("cancel_charge: fallback invert sandbox falhou")
+                    # se o fallback não conseguiu, retornar o erro original do retry (resp2)
                     try:
                         return False, resp2.json()
                     except Exception:
