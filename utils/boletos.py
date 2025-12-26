@@ -488,7 +488,7 @@ def cancel_charge(credentials, charge_id):
     Retorna (True, resp_json_or_text) se conseguiu, (False, resp_or_text) se não.
     Estratégia:
       - tenta via SDK (se disponível)
-      - tenta POST /v1/charge/{id}/cancel (alguns provedores têm esse endpoint)
+      - tenta PUT /v1/charge/{id}/cancel (conforme documentação Efí)
       - se retornar 404/405 tenta DELETE /v1/charge/{id}
       - se não suportado, retorna erro com body para diagnóstico
     Observação: comportamento do provedor pode variar — trate respostas no frontend.
@@ -520,15 +520,15 @@ def cancel_charge(credentials, charge_id):
         sandbox = credentials.get("sandbox", True)
         base = "https://cobrancas-h.api.efipay.com.br" if sandbox else "https://cobrancas.api.efipay.com.br"
 
-        # 1) tentar /charge/{id}/cancel via POST
+        # 1) tentar /charge/{id}/cancel via PUT (conforme documentação Efí)
         url_cancel = f"{base}/v1/charge/{charge_id}/cancel"
         headers = {"Accept": "application/json", "Content-Type": "application/json"}
         if token:
             headers["Authorization"] = f"Bearer {token}"
-        logger.info("cancel_charge: tentando POST %s (auth=%s)", url_cancel, bool(headers.get("Authorization")))
+        logger.info("cancel_charge: tentando PUT %s (auth=%s)", url_cancel, bool(headers.get("Authorization")))
         try:
-            resp = requests.post(url_cancel, headers=headers, timeout=15)
-            logger.info("cancel_charge: POST %s -> status=%s text=%s", url_cancel, getattr(resp, "status_code", None), (getattr(resp, "text", "") or "")[:2000])
+            resp = requests.put(url_cancel, headers=headers, timeout=15)
+            logger.info("cancel_charge: PUT %s -> status=%s text=%s", url_cancel, getattr(resp, "status_code", None), (getattr(resp, "text", "") or "")[:2000])
             if resp.status_code in (200, 204):
                 try:
                     return True, resp.json()
@@ -541,7 +541,7 @@ def cancel_charge(credentials, charge_id):
                 except Exception:
                     return False, {"http_status": resp.status_code, "text": resp.text}
         except Exception as e:
-            logger.exception("cancel_charge: POST %s falhou: %s", url_cancel, e)
+            logger.exception("cancel_charge: PUT %s falhou: %s", url_cancel, e)
 
         # 2) tentar DELETE /v1/charge/{id}
         url = f"{base}/v1/charge/{charge_id}"
