@@ -3,6 +3,7 @@ import os
 import json
 import copy
 import logging
+import time
 from datetime import datetime, timedelta
 
 import requests
@@ -274,13 +275,58 @@ def _sanitize_payment_payload(payload):
     return payload
 
 
+# Token cache (módulo) e helper para obter Bearer token via client_credentials
+_TOKEN_CACHE = {"access_token": None, "expire_at": 0.0}
+
+
+def _get_bearer_token(credentials):
+    """
+    Obtém e faz cache de um access_token via client_credentials no endpoint /authorize.
+    Retorna o token string ou None em caso de falha.
+    """
+    try:
+        now = time.time()
+        token = _TOKEN_CACHE.get("access_token")
+        if token and _TOKEN_CACHE.get("expire_at", 0) > now + 5:
+            return token
+
+        sandbox = credentials.get("sandbox", True)
+        base = "https://cobrancas-h.api.efipay.com.br" if sandbox else "https://cobrancas.api.efipay.com.br"
+        url = f"{base}/v1/authorize"
+
+        client_id = credentials.get("client_id")
+        client_secret = credentials.get("client_secret")
+        if not client_id or not client_secret:
+            logger.warning("_get_bearer_token: credentials incompletas")
+            return None
+
+        headers = {"Content-Type": "application/json", "Accept": "application/json"}
+        auth = (client_id, client_secret)
+        body = {"grant_type": "client_credentials"}
+
+        resp = requests.post(url, headers=headers, auth=auth, json=body, timeout=15)
+        if resp is None:
+            return None
+        if resp.status_code != 200:
+            logger.warning("_get_bearer_token: status=%s text=%s", resp.status_code, (resp.text or "")[:1000])
+            return None
+
+        j = resp.json()
+        token = j.get("access_token")
+        expires_in = int(j.get("expires_in", 0) or 0)
+        # cache com margem de segurança (-10s)
+        _TOKEN_CACHE["access_token"] = token
+        _TOKEN_CACHE["expire_at"] = now + max(0, expires_in - 10)
+        return token
+    except Exception:
+        logger.exception("Erro obtendo bearer token")
+        return None
+
+
 def _direct_post(credentials, path, body):
     """
-    Post direto para API cobrancas.
-    Retorna:
-      - dict (parsed JSON) quando o provedor retorna JSON, ou
-      - dict com chaves 'http_status' e 'text' quando a resposta não foi JSON.
-    Não lança exceção em caso de corpo não-JSON (mas loga).
+    Post direto para API cobrancas usando Bearer token (obtido via client_credentials).
+    Retorna o JSON parseado do provedor ou um dict com http_status/text quando não-JSON.
     """
     # sanitiza o body antes de enviar para evitar 400 por propriedades inesperadas
     try:
@@ -291,14 +337,16 @@ def _direct_post(credentials, path, body):
     sandbox = credentials.get("sandbox", True)
     base = "https://cobrancas-h.api.efipay.com.br" if sandbox else "https://cobrancas.api.efipay.com.br"
     url = f"{base}/v1/{path.lstrip('/')}"
-    client_id = credentials.get("client_id")
-    client_secret = credentials.get("client_secret")
-    if not client_id or not client_secret:
-        raise ValueError("Credentials incompletas para chamada direta")
 
-    headers = {"Content-Type": "application/json", "Accept": "application/json"}
+    # obter token (cached)
+    token = _get_bearer_token(credentials)
+    if not token:
+        logger.warning("_direct_post: não foi possível obter token Bearer (401)")
+        return {"http_status": 401, "content_type": "", "text": "Unauthorized"}
+
+    headers = {"Content-Type": "application/json", "Accept": "application/json", "Authorization": f"Bearer {token}"}
     try:
-        resp = requests.post(url, json=body, auth=(client_id, client_secret), headers=headers, timeout=30)
+        resp = requests.post(url, json=body, headers=headers, timeout=30)
     except Exception as e:
         logger.exception("Erro HTTP no POST %s: %s", url, e)
         return {"http_error": str(e)}
@@ -456,7 +504,19 @@ def emitir_boleto_frete(frete_id, vencimento_str=None):
         # tentativa via SDK (pode acabar invocando create_charge se o método for inadequado)
         if efi:
             try:
+                # montar body para SDK incluindo id + payment (e garantir items/metadata para evitar validation_error)
                 payment_body_for_sdk = {"id": charge_id, **body_pay}
+                if "items" not in payment_body_for_sdk:
+                    try:
+                        payment_body_for_sdk["items"] = body_charge.get("items", [])
+                    except Exception:
+                        payment_body_for_sdk["items"] = []
+                try:
+                    if "metadata" not in payment_body_for_sdk:
+                        payment_body_for_sdk["metadata"] = body_charge.get("metadata", {})
+                except Exception:
+                    payment_body_for_sdk.setdefault("metadata", {})
+
                 _log_send_attempt("sdk_pay_attempt", payment_body_for_sdk, extra_note="try SDK pay variants")
                 s_ok, pay_response, _ = _try_sdk_methods(efi, payment_body_for_sdk)
                 if s_ok and isinstance(pay_response, dict):
