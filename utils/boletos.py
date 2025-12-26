@@ -122,6 +122,10 @@ def _safe_get_charge_fields(response):
 
 
 def _build_body(frete, descricao_frete, data_vencimento, valor_total_centavos):
+    """
+    Body compatível com os métodos do SDK (high-level). Este usa o wrapper 'payment'
+    com 'banking_billet' — é o formato que o SDK costuma aceitar.
+    """
     cpf_cnpj = (frete.get("cliente_cnpj") or "").replace(".", "").replace("-", "").replace("/", "").strip()
     telefone = (frete.get("cliente_telefone") or "").replace("(", "").replace(")", "").replace("-", "").replace(" ", "").strip()
     cep = (frete.get("cliente_cep") or "").replace("-", "").strip()
@@ -130,7 +134,6 @@ def _build_body(frete, descricao_frete, data_vencimento, valor_total_centavos):
 
     nome_cliente = (frete.get("cliente_fantasia") or frete.get("cliente_nome") or "Cliente")[:80]
 
-    # Mantive os campos que você já constrói; se o provedor reclamar depois, ajustamos quantity/unit_price.
     items = [
         {
             "name": descricao_frete[:80],
@@ -139,7 +142,63 @@ def _build_body(frete, descricao_frete, data_vencimento, valor_total_centavos):
         }
     ]
 
-    # Dados do cliente e vencimento ficam no mesmo nível esperado pelo One-Step
+    banking_billet = {
+        "expire_at": data_vencimento.strftime("%Y-%m-%d"),
+        "customer": {
+            "name": nome_cliente,
+            "cpf": cpf_cnpj if len(cpf_cnpj) == 11 else None,
+            "cnpj": cpf_cnpj if len(cpf_cnpj) == 14 else None,
+            "phone_number": (telefone or "")[:11],
+            "email": (frete.get("cliente_email") or "")[:100],
+            "address": {
+                "street": (frete.get("cliente_endereco") or "")[:80],
+                "number": (frete.get("cliente_numero") or "")[:10],
+                "neighborhood": (frete.get("cliente_bairro") or "")[:50],
+                "zipcode": cep,
+                "city": (frete.get("cliente_cidade") or "")[:50],
+                "state": (frete.get("cliente_estado") or "")[:2].upper(),
+            },
+        },
+    }
+
+    metadata = {
+        "custom_id": str(frete["id"]),
+        "notification_url": os.getenv("EFI_NOTIFICATION_URL", "https://nh-transportes.onrender.com/webhooks/efi"),
+    }
+
+    # Formato com wrapper 'payment' — usado para chamadas via SDK (create_charge, create_one_step_billet, etc)
+    body = {
+        "items": items,
+        "payment": {"banking_billet": banking_billet},
+        "metadata": metadata,
+    }
+
+    return body
+
+
+def _build_one_step_body(frete, descricao_frete, data_vencimento, valor_total_centavos):
+    """
+    Monta o payload no formato esperado pelo endpoint one-step (raw HTTP).
+    Alguns servidores/esquemas esperam 'payment' dentro do SDK, outros aceitam o formato
+    'charge_type' + 'customer' no nível superior quando chamado via /v1/charge/one-step.
+    Usamos esse formato para o fallback direto HTTP.
+    """
+    cpf_cnpj = (frete.get("cliente_cnpj") or "").replace(".", "").replace("-", "").replace("/", "").strip()
+    telefone = (frete.get("cliente_telefone") or "").replace("(", "").replace(")", "").replace("-", "").replace(" ", "").strip()
+    cep = (frete.get("cliente_cep") or "").replace("-", "").strip()
+    if not cep or len(cep) != 8:
+        cep = "74000000"
+
+    nome_cliente = (frete.get("cliente_fantasia") or frete.get("cliente_nome") or "Cliente")[:80]
+
+    items = [
+        {
+            "name": descricao_frete[:80],
+            "amount": 1,
+            "value": valor_total_centavos,
+        }
+    ]
+
     customer = {
         "name": nome_cliente,
         "cpf": cpf_cnpj if len(cpf_cnpj) == 11 else None,
@@ -161,18 +220,15 @@ def _build_body(frete, descricao_frete, data_vencimento, valor_total_centavos):
         "notification_url": os.getenv("EFI_NOTIFICATION_URL", "https://nh-transportes.onrender.com/webhooks/efi"),
     }
 
-    # One-Step: schema esperado — charge_type, expire_at, items, customer, metadata
-    body = {
-        "charge_type": "banking_billet",
-        "expire_at": data_vencimento.strftime("%Y-%m-%d"),
+    one_step_body = {
         "items": items,
-        "customer": customer,
+        "payment": {"banking_billet": {"expire_at": data_vencimento.strftime("%Y-%m-%d"), "customer": customer}},
         "metadata": metadata,
-        # opcional: "days_to_write_off": 0,
-        # opcional: "interest": {"type": "monthly", "amount": 0}
     }
 
-    return body
+    # Algumas variações do one-step aceitam 'charge_type' + 'customer' no topo; mantemos
+    # a forma com 'payment' aqui (outra forma possível seria incluir 'charge_type': 'banking_billet').
+    return one_step_body
 
 
 def _try_sdk_methods(efi, body):
@@ -430,7 +486,9 @@ def emitir_boleto_frete(frete_id, vencimento_str=None):
         if frete.get("origem_nome") and frete.get("destino_nome"):
             descricao_frete += f" - {frete['origem_nome']} para {frete['destino_nome']}"
 
-        body = _build_body(frete, descricao_frete, data_vencimento, valor_total_centavos)
+        # Monta dois corpos: um compatível com SDK (body_sdk) e outro para one-step direto (body_one_step)
+        body_sdk = _build_body(frete, descricao_frete, data_vencimento, valor_total_centavos)
+        body_one_step = _build_one_step_body(frete, descricao_frete, data_vencimento, valor_total_centavos)
 
         credentials = {
             "client_id": os.getenv("EFI_CLIENT_ID"),
@@ -441,13 +499,10 @@ def emitir_boleto_frete(frete_id, vencimento_str=None):
         efi = None
         try:
             efi = EfiPay(credentials)
-            # Workaround: garantir que `self.endpoints` / `self.urls` sejam inicializados
-            # O SDK inicializa isso no __getattr__ quando um endpoint é acessado; sem isso,
-            # chamar authenticate() pode levantar MethodError interno (endpoints não inicializado).
+            # Workaround: inicializar endpoints internos do SDK
             try:
                 getattr(efi, "create_charge")
             except Exception:
-                # ignorar resultado do getattr; serve apenas para inicializar estrutura interna
                 pass
         except Exception as ex:
             logger.exception("Falha ao instanciar EfiPay SDK: %s", ex)
@@ -464,19 +519,21 @@ def emitir_boleto_frete(frete_id, vencimento_str=None):
             logger.debug("Ignorando erro ao verificar authenticate() no SDK", exc_info=True)
 
         try:
-            logger.info("EFI create_charge body (sanitizado): %s", _sanitize_for_log(body))
+            logger.info("EFI create_charge body (sanitizado): %s", _sanitize_for_log(body_sdk))
         except Exception:
             logger.info("EFI create_charge body: <unserializable>")
 
-        success, response, method = _try_sdk_methods(efi, body)
+        # Tenta via SDK primeiro usando body_sdk
+        success, response, method = _try_sdk_methods(efi, body_sdk)
 
+        # Se SDK não conseguiu (None/Exception), tenta fallbacks (send/request) com body_sdk
         if not success:
             try:
                 if hasattr(efi, "send") and callable(getattr(efi, "send")):
                     params = {"path": "/one_step_charge", "method": "POST"}
-                    _log_send_attempt("send", body, extra_note="low-level send")
+                    _log_send_attempt("send", body_sdk, extra_note="low-level send")
                     try:
-                        resp_low = efi.send(credentials, params, body, {})
+                        resp_low = efi.send(credentials, params, body_sdk, {})
                         _log_provider_response("send", resp_low)
                         success = True
                         response = resp_low
@@ -484,11 +541,11 @@ def emitir_boleto_frete(frete_id, vencimento_str=None):
                     except TypeError:
                         logger.debug("efi.send com assinatura TypeError; tentando request")
                         if hasattr(efi, "request") and callable(getattr(efi, "request")):
-                            _log_send_attempt("request", body, extra_note="low-level request after send TypeError")
+                            _log_send_attempt("request", body_sdk, extra_note="low-level request after send TypeError")
                             try:
-                                resp_low = efi.request(credentials, body=body)
+                                resp_low = efi.request(credentials, body=body_sdk)
                             except TypeError:
-                                resp_low = efi.request(body=body)
+                                resp_low = efi.request(body=body_sdk)
                             _log_provider_response("request", resp_low)
                             success = True
                             response = resp_low
@@ -496,11 +553,11 @@ def emitir_boleto_frete(frete_id, vencimento_str=None):
                     except Exception as ex_send:
                         logger.debug("Tentativa efi.send falhou: %s", ex_send)
                 elif hasattr(efi, "request") and callable(getattr(efi, "request")):
-                    _log_send_attempt("request", body, extra_note="low-level request")
+                    _log_send_attempt("request", body_sdk, extra_note="low-level request")
                     try:
-                        resp_low = efi.request(credentials, body=body)
+                        resp_low = efi.request(credentials, body=body_sdk)
                     except TypeError:
-                        resp_low = efi.request(body=body)
+                        resp_low = efi.request(body=body_sdk)
                     _log_provider_response("request", resp_low)
                     success = True
                     response = resp_low
@@ -508,11 +565,82 @@ def emitir_boleto_frete(frete_id, vencimento_str=None):
             except Exception as ex:
                 logger.debug("Erro ao tentar fallback send/request: %s", ex)
 
-        # Fallback direto via HTTP para /v1/charge/one-step caso SDK/fallbacks não tenham sucesso
-        if not success:
+        # Se a resposta do SDK indicar que o provedor reclama de '/payment' ou '/payments' ou '/charge_type',
+        # tentamos o fallback direto HTTP para /v1/charge/one-step usando body_one_step.
+        try:
+            last_response = response
+            needs_direct_one_step = False
+            if isinstance(last_response, dict):
+                prop = None
+                err = last_response.get("error") or ""
+                err_desc = last_response.get("error_description") or {}
+                # error_description pode ser dict ou string
+                if isinstance(err_desc, dict):
+                    prop = err_desc.get("property") or ""
+                elif isinstance(err_desc, str):
+                    prop = err_desc
+                msg = str(last_response.get("message") or last_response.get("error_description") or "")
+                if err == "validation_error" and ("/payment" in prop or "/payments" in prop or "/charge_type" in prop or "/payment" in msg or "/payments" in msg or "/charge_type" in msg):
+                    needs_direct_one_step = True
+        except Exception:
+            needs_direct_one_step = False
+
+        # Primeiro tentamos variantes (quando o provider reclama de /payment)
+        if needs_direct_one_step:
+            logger.info("Provider reclama de '/payment'/'/payments' ou '/charge_type' — tentando variantes de payload via SDK")
             try:
-                _log_send_attempt("direct_http_one_step", body, extra_note="direct HTTP fallback")
-                resp_direct = _direct_one_step_request(credentials, body)
+                s2, resp2, m2, used_body = _try_payment_variants(efi, body_sdk, credentials)
+            except Exception as ex:
+                logger.debug("Erro executando _try_payment_variants: %s", ex)
+                s2, resp2, m2, used_body = False, None, None, None
+
+            if s2:
+                _log_provider_response("variant-final", resp2)
+                if isinstance(resp2, dict) and ("data" in resp2 or "charge" in resp2):
+                    charge_id2, boleto_url2, barcode2 = _safe_get_charge_fields(resp2)
+                    if charge_id2:
+                        try:
+                            cursor.execute(
+                                """
+                                INSERT INTO cobrancas
+                                  (id_cliente, valor, data_vencimento, status,
+                                   charge_id, link_boleto, pdf_boleto, data_emissao)
+                                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                                """,
+                                (
+                                    frete["clientes_id"],
+                                    frete["valor_total_frete"],
+                                    data_vencimento.date(),
+                                    "pendente",
+                                    charge_id2,
+                                    boleto_url2,
+                                    None,
+                                    datetime.today().date(),
+                                ),
+                            )
+                            cobranca_id = getattr(cursor, "lastrowid", None)
+                            conn.commit()
+                        except Exception:
+                            logger.exception("Erro ao inserir cobranca (alt) para frete_id=%s", frete_id)
+                            conn.rollback()
+                            return {"success": False, "error": "Erro ao persistir cobrança no banco (alt)"}
+
+                        logger.info("Sucesso com variante (método=%s)", m2)
+                        return {
+                            "success": True,
+                            "cobranca_id": cobranca_id,
+                            "charge_id": charge_id2,
+                            "boleto_url": boleto_url2,
+                            "barcode": barcode2,
+                        }
+                    else:
+                        logger.warning("Alt response sem charge_id: %r", resp2)
+
+            # Se variantes falharam, tentamos direto one-step com body_one_step
+            logger.info("Tentando fallback direto HTTP /v1/charge/one-step com formato one-step")
+            try:
+                _log_send_attempt("direct_http_one_step", body_one_step, extra_note="direct HTTP fallback after validation_error")
+                resp_direct = _direct_one_step_request(credentials, body_one_step)
                 _log_provider_response("direct_http_one_step", resp_direct)
                 if isinstance(resp_direct, dict) and ("data" in resp_direct or "charge" in resp_direct):
                     success = True
@@ -520,7 +648,19 @@ def emitir_boleto_frete(frete_id, vencimento_str=None):
                     method = "direct_http_one_step"
             except Exception as ex_direct:
                 logger.debug("Tentativa direct HTTP one-step falhou: %s", ex_direct)
-                # prosseguir com o fluxo normal de erro
+
+        # Se não precisou de tratamento especial, e success ainda é False, tentamos fallback direto também
+        if not success:
+            try:
+                _log_send_attempt("direct_http_one_step", body_one_step, extra_note="direct HTTP fallback (final)")
+                resp_direct = _direct_one_step_request(credentials, body_one_step)
+                _log_provider_response("direct_http_one_step", resp_direct)
+                if isinstance(resp_direct, dict) and ("data" in resp_direct or "charge" in resp_direct):
+                    success = True
+                    response = resp_direct
+                    method = "direct_http_one_step"
+            except Exception as ex_direct:
+                logger.debug("Tentativa direct HTTP one-step (final) falhou: %s", ex_direct)
 
         if isinstance(response, Exception):
             logger.exception("SDK método retornou exceção (método=%r): %r", method, response)
@@ -528,70 +668,11 @@ def emitir_boleto_frete(frete_id, vencimento_str=None):
         logger.info("EFI create_charge response (method=%r): %r", method, response)
         last_response = response
 
-        try:
-            need_retry_payment_variant = False
-            if isinstance(last_response, dict):
-                prop = last_response.get("property") or ""
-                msg = str(last_response.get("message") or last_response.get("error_description") or "")
-                if prop == "/payment" or "/payment" in msg or ("Propriedade desconhecida" in msg and "/payment" in str(last_response)):
-                    need_retry_payment_variant = True
-        except Exception:
-            need_retry_payment_variant = False
-
-        if need_retry_payment_variant:
-            logger.info("Provider reclama de '/payment' — tentando variantes de payload")
-            try:
-                s2, resp2, m2, used_body = _try_payment_variants(efi, body, credentials)
-            except Exception as ex:
-                logger.debug("Erro executando _try_payment_variants: %s", ex)
-                s2, resp2, m2, used_body = False, None, None, None
-
-            if s2:
-                _log_provider_response("variant-final", resp2)
-            if s2 and isinstance(resp2, dict) and ("data" in resp2 or "charge" in resp2):
-                charge_id2, boleto_url2, barcode2 = _safe_get_charge_fields(resp2)
-                if charge_id2:
-                    try:
-                        cursor.execute(
-                            """
-                            INSERT INTO cobrancas
-                              (id_cliente, valor, data_vencimento, status,
-                               charge_id, link_boleto, pdf_boleto, data_emissao)
-                            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-                            """,
-                            (
-                                frete["clientes_id"],
-                                frete["valor_total_frete"],
-                                data_vencimento.date(),
-                                "pendente",
-                                charge_id2,
-                                boleto_url2,
-                                None,
-                                datetime.today().date(),
-                            ),
-                        )
-                        cobranca_id = getattr(cursor, "lastrowid", None)
-                        conn.commit()
-                    except Exception:
-                        logger.exception("Erro ao inserir cobranca (alt) para frete_id=%s", frete_id)
-                        conn.rollback()
-                        return {"success": False, "error": "Erro ao persistir cobrança no banco (alt)"}
-
-                    logger.info("Sucesso com variante (método=%s)", m2)
-                    return {
-                        "success": True,
-                        "cobranca_id": cobranca_id,
-                        "charge_id": charge_id2,
-                        "boleto_url": boleto_url2,
-                        "barcode": barcode2,
-                    }
-                else:
-                    logger.warning("Alt response sem charge_id: %r", resp2)
-
-        if success and isinstance(response, dict) and ("data" in response or "charge" in response):
-            charge_id, boleto_url, barcode = _safe_get_charge_fields(response)
+        # Se após todos os esforços tivermos sucesso com response contendo data/charge => persistir
+        if success and isinstance(last_response, dict) and ("data" in last_response or "charge" in last_response):
+            charge_id, boleto_url, barcode = _safe_get_charge_fields(last_response)
             if not charge_id:
-                logger.warning("charge_id ausente na resposta do provedor: %r", response)
+                logger.warning("charge_id ausente na resposta do provedor: %r", last_response)
             else:
                 try:
                     cursor.execute(
@@ -627,6 +708,7 @@ def emitir_boleto_frete(frete_id, vencimento_str=None):
                     "barcode": barcode,
                 }
 
+        # Se a resposta final for validation_error — devolve a mensagem amigável para UI
         if isinstance(last_response, dict) and last_response.get("error") == "validation_error":
             err_desc = last_response.get("error_description") or last_response.get("message") or last_response
             return {"success": False, "error": f"Resposta inválida do provedor de cobrança: {err_desc}"}
