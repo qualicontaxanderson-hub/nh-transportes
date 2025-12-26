@@ -1,4 +1,3 @@
-# (arquivo completo; substitua o arquivo existente pelo conteúdo abaixo)
 #!/usr/bin/env python3
 import os
 import json
@@ -241,6 +240,40 @@ def _try_sdk_methods(efi, body):
     return False, response, tried
 
 
+def _sanitize_payment_payload(payload):
+    """
+    Remove propriedades que não fazem parte do schema aceito pela API de cobranças.
+    Uso: antes de enviar um corpo para /charge/:id/pay ou /charge.
+    - remove payment.banking_billet.customer.cnpj (duplicado)
+    - remove payment.banking_billet.customer.cpf se for None (ou conforme necessidade)
+    """
+    try:
+        if not isinstance(payload, dict):
+            return payload
+        payment = payload.get("payment")
+        if not isinstance(payment, dict):
+            return payload
+        bb = payment.get("banking_billet")
+        if not isinstance(bb, dict):
+            return payload
+        customer = bb.get("customer")
+        if not isinstance(customer, dict):
+            return payload
+
+        # remover cnpj duplicado dentro de customer (deixa apenas juridical_person.cnpj)
+        customer.pop("cnpj", None)
+
+        # remover cpf se explicitamente None (muitos schemas preferem ausência em vez de null)
+        if "cpf" in customer and (customer["cpf"] is None):
+            customer.pop("cpf", None)
+
+    except Exception:
+        # se a sanitização falhar por qualquer razão, devolve o payload original
+        return payload
+
+    return payload
+
+
 def _direct_post(credentials, path, body):
     """
     Post direto para API cobrancas.
@@ -249,6 +282,12 @@ def _direct_post(credentials, path, body):
       - dict com chaves 'http_status' e 'text' quando a resposta não foi JSON.
     Não lança exceção em caso de corpo não-JSON (mas loga).
     """
+    # sanitiza o body antes de enviar para evitar 400 por propriedades inesperadas
+    try:
+        body = _sanitize_payment_payload(body)
+    except Exception:
+        pass
+
     sandbox = credentials.get("sandbox", True)
     base = "https://cobrancas-h.api.efipay.com.br" if sandbox else "https://cobrancas.api.efipay.com.br"
     url = f"{base}/v1/{path.lstrip('/')}"
