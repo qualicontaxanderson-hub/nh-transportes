@@ -36,11 +36,20 @@
                     </td>
                     <td><small>{{ r.charge_id or '-' }}</small></td>
                     <td>
-                        {% if r.link_boleto %}
-                        <a href="{{ r.link_boleto }}" target="_blank" class="btn btn-sm btn-primary">
-                            <i class="bi bi-file-pdf"></i> Ver Boleto
-                        </a>
-                        {% endif %}
+                        <div class="btn-group" role="group">
+                            {% if r.link_boleto %}
+                            <!-- Abre o PDF via rota do servidor (proxy) para permitir impressão no browser -->
+                            <a href="{{ url_for('financeiro.visualizar_boleto', charge_id=r.charge_id) }}" target="_blank" class="btn btn-sm btn-primary" title="Ver/Imprimir Boleto">
+                                <i class="bi bi-file-earmark-pdf"></i> Ver Boleto
+                            </a>
+                            {% endif %}
+                            <!-- Alterar vencimento -->
+                            {% if r.charge_id %}
+                            <a href="{{ url_for('financeiro.alterar_vencimento', charge_id=r.charge_id) }}" class="btn btn-sm btn-outline-secondary" title="Alterar Vencimento">
+                                <i class="bi bi-calendar2-date"></i> Alterar Vencimento
+                            </a>
+                            {% endif %}
+                        </div>
                     </td>
                 </tr>
                 {% endfor %}
