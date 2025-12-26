@@ -482,6 +482,43 @@ def update_billet_expire(credentials, charge_id, new_date):
         return False, "Exception ao atualizar vencimento"
 
 
+def _persist_cancel_to_db(charge_id, provider_resp):
+    """
+    Tenta persistir no banco o resultado do cancelamento para auditoria.
+    Não falha a execução principal se houver erro no DB; apenas loga.
+    """
+    try:
+        if not charge_id:
+            return
+        conn = None
+        try:
+            conn = get_db_connection()
+            cur = conn.cursor()
+            # armazena JSON se possível; usamos string JSON para compatibilidade
+            resp_text = provider_resp if isinstance(provider_resp, str) else json.dumps(provider_resp, ensure_ascii=False)
+            cur.execute(
+                "UPDATE cobrancas SET status=%s, provider_cancel_response=%s, data_cancelamento=NOW() WHERE charge_id=%s",
+                ("cancelado", resp_text, int(charge_id)),
+            )
+            conn.commit()
+            cur.close()
+        except Exception:
+            logger.exception("_persist_cancel_to_db: falha ao atualizar cobrancas")
+            if conn:
+                try:
+                    conn.rollback()
+                except Exception:
+                    logger.exception("rollback falhou em _persist_cancel_to_db")
+        finally:
+            try:
+                if conn:
+                    conn.close()
+            except Exception:
+                logger.exception("Erro fechando conexão em _persist_cancel_to_db")
+    except Exception:
+        logger.exception("Erro genérico em _persist_cancel_to_db")
+
+
 def cancel_charge(credentials, charge_id):
     """
     Tenta cancelar uma charge no provedor.
@@ -491,10 +528,21 @@ def cancel_charge(credentials, charge_id):
       - tenta PUT /v1/charge/{id}/cancel (conforme documentação Efí)
       - se retornar 404/405 tenta DELETE /v1/charge/{id}
       - se não suportado, retorna erro com body para diagnóstico
-    Observação: comportamento do provedor pode variar — trate respostas no frontend.
+
+    Melhorias implementadas:
+      - coerção/validação do charge_id para inteiro (evita 400 por tipo)
+      - retry-on-401: se receber 401, limpas _TOKEN_CACHE e tenta autorizar + PUT novamente (uma retry)
+      - ao obter sucesso tenta persistir provider response na tabela cobrancas (auditoria)
     """
     try:
         credentials = _ensure_credentials_from_env(credentials)
+
+        # validar / coercer charge_id para inteiro (evita 400 tipo inválido)
+        try:
+            cid_int = int(charge_id)
+        except Exception:
+            logger.warning("cancel_charge: charge_id inválido (deve ser inteiro): %r", charge_id)
+            return False, {"error": "charge_id inválido, deve ser inteiro"}
 
         # 0) tentativa via SDK (se disponível) — alguns SDKs expõem método de cancelamento
         try:
@@ -506,47 +554,103 @@ def cancel_charge(credentials, charge_id):
                     try:
                         # SDKs variam: tentamos passar id direto e também como named param
                         try:
-                            r = fn(charge_id)
+                            r = fn(cid_int)
                         except TypeError:
-                            r = fn(id=charge_id)
+                            r = fn(id=cid_int)
                         logger.info("cancel_charge SDK resposta: %r", r)
+                        # Persistir tentativa caso seja dict de sucesso
+                        try:
+                            if isinstance(r, dict) and (r.get("code") == 200 or r.get("status") in ("canceled", "cancelled", "cancelado")):
+                                _persist_cancel_to_db(cid_int, r)
+                        except Exception:
+                            logger.debug("persist SDK cancel falhou")
                         return True, r
                     except Exception as e:
                         logger.debug("SDK cancel %s falhou: %s", m, e)
         except Exception:
             logger.debug("cancel_charge: SDK tentativa falhou / indisponível")
 
-        token = _get_bearer_token(credentials) if "client_id" in credentials and "client_secret" in credentials else None
         sandbox = credentials.get("sandbox", True)
         base = "https://cobrancas-h.api.efipay.com.br" if sandbox else "https://cobrancas.api.efipay.com.br"
+        url_cancel = f"{base}/v1/charge/{cid_int}/cancel"
 
-        # 1) tentar /charge/{id}/cancel via PUT (conforme documentação Efí)
-        url_cancel = f"{base}/v1/charge/{charge_id}/cancel"
-        headers = {"Accept": "application/json", "Content-Type": "application/json"}
-        if token:
-            headers["Authorization"] = f"Bearer {token}"
-        logger.info("cancel_charge: tentando PUT %s (auth=%s)", url_cancel, bool(headers.get("Authorization")))
-        try:
-            resp = requests.put(url_cancel, headers=headers, timeout=15)
+        # Função auxiliar que executa o PUT com um token/creds atuais
+        def _do_put_with_token(creds):
+            token = _get_bearer_token(creds) if "client_id" in creds and "client_secret" in creds else None
+            headers = {"Accept": "application/json", "Content-Type": "application/json"}
+            if token:
+                headers["Authorization"] = f"Bearer {token}"
+            else:
+                # se não houver token, vamos deixar sem Authorization e requests tratará (ou usar basic auth no fallback)
+                pass
+            try:
+                resp = requests.put(url_cancel, headers=headers, timeout=15)
+                return resp, token
+            except Exception as e:
+                logger.exception("cancel_charge: PUT %s falhou: %s", url_cancel, e)
+                return None, token
+
+        logger.info("cancel_charge: tentando PUT %s (auth=Bearer? %s)", url_cancel, True)
+        # primeira tentativa
+        resp, used_token = _do_put_with_token(credentials)
+        if resp is not None:
             logger.info("cancel_charge: PUT %s -> status=%s text=%s", url_cancel, getattr(resp, "status_code", None), (getattr(resp, "text", "") or "")[:2000])
+            # sucesso
             if resp.status_code in (200, 204):
                 try:
-                    return True, resp.json()
+                    j = resp.json()
                 except Exception:
-                    return True, {"http_status": resp.status_code, "text": resp.text}
-            # se 404/405 continua para DELETE, se outro erro, retorna corpo para diagnóstico
+                    j = {"http_status": resp.status_code, "text": resp.text}
+                # persistir no DB (melhora auditabilidade)
+                try:
+                    _persist_cancel_to_db(cid_int, j)
+                except Exception:
+                    logger.debug("persist cancel response failed")
+                return True, j
+            # retry-on-401: limpar cache, re-obter token e tentar novamente (uma vez)
+            if resp.status_code == 401:
+                logger.info("cancel_charge: PUT retornou 401, limpando cache e tentando re-authorize + retry")
+                try:
+                    # limpar cache global
+                    _TOKEN_CACHE["access_token"] = None
+                    _TOKEN_CACHE["expire_at"] = 0
+                except Exception:
+                    logger.debug("falha limpando _TOKEN_CACHE")
+                # segunda tentativa
+                resp2, _ = _do_put_with_token(credentials)
+                if resp2 is not None:
+                    logger.info("cancel_charge: retry PUT %s -> status=%s text=%s", url_cancel, getattr(resp2, "status_code", None), (getattr(resp2, "text", "") or "")[:2000])
+                    if resp2.status_code in (200, 204):
+                        try:
+                            j2 = resp2.json()
+                        except Exception:
+                            j2 = {"http_status": resp2.status_code, "text": resp2.text}
+                        try:
+                            _persist_cancel_to_db(cid_int, j2)
+                        except Exception:
+                            logger.debug("persist cancel response failed")
+                        return True, j2
+                    # se ainda não 200/204, retornar corpo para diagnóstico
+                    try:
+                        return False, resp2.json()
+                    except Exception:
+                        return False, {"http_status": resp2.status_code, "text": resp2.text}
+                else:
+                    return False, {"error": "PUT retry falhou (exceção no request)"}
+            # se não for 404/405 tentamos retornar o corpo para diagnóstico
             if resp.status_code not in (404, 405):
                 try:
                     return False, resp.json()
                 except Exception:
                     return False, {"http_status": resp.status_code, "text": resp.text}
-        except Exception as e:
-            logger.exception("cancel_charge: PUT %s falhou: %s", url_cancel, e)
+        else:
+            logger.debug("cancel_charge: sem resposta no primeiro PUT")
 
-        # 2) tentar DELETE /v1/charge/{id}
-        url = f"{base}/v1/charge/{charge_id}"
-        logger.info("cancel_charge: tentando DELETE %s (auth=%s)", url, bool(token))
+        # 2) tentar DELETE /v1/charge/{id} como fallback (mantendo comportamento anterior)
+        url = f"{base}/v1/charge/{cid_int}"
+        logger.info("cancel_charge: tentando DELETE %s (auth=client creds/token)", url)
         try:
+            token = _get_bearer_token(credentials) if "client_id" in credentials and "client_secret" in credentials else None
             if token:
                 headers = {"Authorization": f"Bearer {token}", "Accept": "application/json"}
                 resp2 = requests.delete(url, headers=headers, timeout=15)
@@ -557,9 +661,14 @@ def cancel_charge(credentials, charge_id):
             logger.info("cancel_charge: DELETE %s -> status=%s text=%s", url, getattr(resp2, "status_code", None), (getattr(resp2, "text", "") or "")[:2000])
             if resp2.status_code in (200, 204):
                 try:
-                    return True, resp2.json()
+                    j2 = resp2.json()
                 except Exception:
-                    return True, {"http_status": resp2.status_code, "text": resp2.text}
+                    j2 = {"http_status": resp2.status_code, "text": resp2.text}
+                try:
+                    _persist_cancel_to_db(cid_int, j2)
+                except Exception:
+                    logger.debug("persist cancel response failed")
+                return True, j2
             else:
                 try:
                     return False, resp2.json()
