@@ -290,8 +290,8 @@ def _sanitize_payment_payload(payload):
     return payload
 
 
-# Token cache (módulo) e helper para obter Bearer token via client_credentials
-_TOKEN_CACHE = {"access_token": None, "expire_at": 0.0}
+# Token cache (módulo) agora indexado por (client_id, sandbox)
+_TOKEN_CACHE = {}  # keys: (client_id, bool(sandbox)) -> {"access_token": str, "expire_at": float}
 
 
 def _ensure_credentials_from_env(credentials):
@@ -310,27 +310,27 @@ def _ensure_credentials_from_env(credentials):
 def _get_bearer_token(credentials):
     """
     Obtém e faz cache de um access_token via client_credentials no endpoint /authorize.
-    Retorna o token string ou None em caso de falha.
-
-    Versão ampliada com logs seguros para diagnosticar key_id e ambiente.
+    Cache é indexado por (client_id, sandbox) para evitar usar token de prod contra sandbox (e vice-versa).
     """
     try:
         credentials = _ensure_credentials_from_env(credentials)
         now = time.time()
-        token = _TOKEN_CACHE.get("access_token")
-        if token and _TOKEN_CACHE.get("expire_at", 0) > now + 5:
-            # log mínimo: token em cache (não imprime o token)
+        client_id = credentials.get("client_id")
+        sandbox = bool(credentials.get("sandbox", True))
+        cache_key = (client_id, sandbox)
+
+        entry = _TOKEN_CACHE.get(cache_key)
+        if entry and entry.get("access_token") and entry.get("expire_at", 0) > now + 5:
             try:
-                logger.info("_get_bearer_token: token em cache, expira em %.0fs", _TOKEN_CACHE.get("expire_at", 0) - now)
+                logger.info("_get_bearer_token: token em cache (client=%s sandbox=%s) expira em %.0fs",
+                            client_id or "<no-id>", sandbox, entry.get("expire_at", 0) - now)
             except Exception:
                 logger.debug("_get_bearer_token: token em cache")
-            return token
+            return entry.get("access_token")
 
-        sandbox = credentials.get("sandbox", True)
         base = "https://cobrancas-h.api.efipay.com.br" if sandbox else "https://cobrancas.api.efipay.com.br"
         url = f"{base}/v1/authorize"
 
-        client_id = credentials.get("client_id")
         client_secret = credentials.get("client_secret")
         if not client_id or not client_secret:
             logger.warning("_get_bearer_token: credentials incompletas")
@@ -344,7 +344,8 @@ def _get_bearer_token(credentials):
         if resp is None:
             return None
         if resp.status_code != 200:
-            logger.warning("_get_bearer_token: status=%s text=%s", resp.status_code, (resp.text or "")[:1000])
+            logger.warning("_get_bearer_token: status=%s text=%s (client=%s sandbox=%s)",
+                           resp.status_code, (resp.text or "")[:1000], client_id or "<no-id>", sandbox)
             return None
 
         j = resp.json()
@@ -364,11 +365,14 @@ def _get_bearer_token(credentials):
         except Exception:
             key_id = None
 
-        logger.info("_get_bearer_token: obtained token (len=%s) key_id=%s sandbox=%s", len(token) if token else 0, key_id, bool(sandbox))
+        logger.info("_get_bearer_token: obtained token (len=%s) key_id=%s sandbox=%s client=%s",
+                    len(token) if token else 0, key_id, sandbox, client_id or "<no-id>")
 
-        # cache com margem de segurança (-10s)
-        _TOKEN_CACHE["access_token"] = token
-        _TOKEN_CACHE["expire_at"] = now + max(0, expires_in - 10)
+        # salvar no cache por (client_id, sandbox)
+        _TOKEN_CACHE[cache_key] = {
+            "access_token": token,
+            "expire_at": now + max(0, expires_in - 10),
+        }
         return token
     except Exception:
         logger.exception("Erro obtendo bearer token")
