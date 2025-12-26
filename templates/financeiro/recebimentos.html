@@ -30,7 +30,7 @@
                     <td>R$ {{ "%.2f"|format(r.valor|float) if r.valor else '0,00' }}</td>
                     <td>{{ r.data_vencimento.strftime('%d/%m/%Y') if r.data_vencimento else '-' }}</td>
                     <td>
-                        <span class="badge {% if r.status == 'pago' %}bg-success{% elif r.status == 'pendente' %}bg-warning{% else %}bg-danger{% endif %}">
+                        <span class="badge {% if r.status == 'pago' %}bg-success{% elif r.status == 'pendente' %}bg-warning{% elif r.status == 'cancelado' %}bg-secondary{% else %}bg-danger{% endif %}">
                             {{ r.status or 'pendente' }}
                         </span>
                     </td>
@@ -38,16 +38,25 @@
                     <td>
                         <div class="btn-group" role="group">
                             {% if r.link_boleto %}
-                            <!-- Abre o PDF via rota do servidor (proxy) para permitir impressão no browser -->
                             <a href="{{ url_for('financeiro.visualizar_boleto', charge_id=r.charge_id) }}" target="_blank" class="btn btn-sm btn-primary" title="Ver/Imprimir Boleto">
-                                <i class="bi bi-file-earmark-pdf"></i> Ver Boleto
+                                <i class="bi bi-file-earmark-pdf"></i> Ver
                             </a>
                             {% endif %}
-                            <!-- Alterar vencimento -->
+
                             {% if r.charge_id %}
-                            <a href="{{ url_for('financeiro.alterar_vencimento', charge_id=r.charge_id) }}" class="btn btn-sm btn-outline-secondary" title="Alterar Vencimento">
-                                <i class="bi bi-calendar2-date"></i> Alterar Vencimento
-                            </a>
+                            <!-- marcar pago -->
+                            <form method="post" action="{{ url_for('financeiro.marcar_pago', charge_id=r.charge_id) }}" style="display:inline;">
+                                <button type="submit" class="btn btn-sm btn-success" title="Marcar como Pago" onclick="return confirm('Confirma marcar esta cobrança como PAGO (admin)?');">
+                                    <i class="bi bi-check2-circle"></i> Pagar
+                                </button>
+                            </form>
+
+                            <!-- cancelar -->
+                            <form method="post" action="{{ url_for('financeiro.cancelar_boleto', charge_id=r.charge_id) }}" style="display:inline;">
+                                <button type="submit" class="btn btn-sm btn-outline-danger" title="Cancelar Boleto" onclick="return confirm('Confirma cancelar este boleto no provedor? Isto permitirá reemitir.');">
+                                    <i class="bi bi-x-circle"></i> Cancelar
+                                </button>
+                            </form>
                             {% endif %}
                         </div>
                     </td>
