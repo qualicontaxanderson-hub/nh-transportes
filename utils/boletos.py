@@ -311,12 +311,19 @@ def _get_bearer_token(credentials):
     """
     Obtém e faz cache de um access_token via client_credentials no endpoint /authorize.
     Retorna o token string ou None em caso de falha.
+
+    Versão ampliada com logs seguros para diagnosticar key_id e ambiente.
     """
     try:
         credentials = _ensure_credentials_from_env(credentials)
         now = time.time()
         token = _TOKEN_CACHE.get("access_token")
         if token and _TOKEN_CACHE.get("expire_at", 0) > now + 5:
+            # log mínimo: token em cache (não imprime o token)
+            try:
+                logger.info("_get_bearer_token: token em cache, expira em %.0fs", _TOKEN_CACHE.get("expire_at", 0) - now)
+            except Exception:
+                logger.debug("_get_bearer_token: token em cache")
             return token
 
         sandbox = credentials.get("sandbox", True)
@@ -343,6 +350,22 @@ def _get_bearer_token(credentials):
         j = resp.json()
         token = j.get("access_token")
         expires_in = int(j.get("expires_in", 0) or 0)
+
+        # tentar extrair key_id do payload (somente para log, sem validar assinatura)
+        try:
+            parts = token.split(".")
+            if len(parts) > 1:
+                import base64 as _base64, json as _json
+                payload_b64 = parts[1] + "=" * (-len(parts[1]) % 4)
+                payload_json = _json.loads(_base64.urlsafe_b64decode(payload_b64))
+                key_id = payload_json.get("data", {}).get("key_id")
+            else:
+                key_id = None
+        except Exception:
+            key_id = None
+
+        logger.info("_get_bearer_token: obtained token (len=%s) key_id=%s sandbox=%s", len(token) if token else 0, key_id, bool(sandbox))
+
         # cache com margem de segurança (-10s)
         _TOKEN_CACHE["access_token"] = token
         _TOKEN_CACHE["expire_at"] = now + max(0, expires_in - 10)
@@ -588,6 +611,22 @@ def cancel_charge(credentials, charge_id):
         sandbox = credentials.get("sandbox", True)
         base = "https://cobrancas-h.api.efipay.com.br" if sandbox else "https://cobrancas.api.efipay.com.br"
         url_cancel = f"{base}/v1/charge/{cid_int}/cancel"
+
+        # Log informativo sobre o ambiente/endpoint que será usado para o cancel
+        try:
+            logger.info("cancel_charge: will call cancel on base=%s sandbox=%s charge_id=%s", base, bool(sandbox), cid_int)
+            # também logamos token/key_id se disponível (não expor token)
+            tok = _TOKEN_CACHE.get("access_token")
+            if tok:
+                try:
+                    import base64 as _base64, json as _json
+                    p = tok.split(".")[1] + "=" * (-len(tok.split(".")[1]) % 4)
+                    payload = _json.loads(_base64.urlsafe_b64decode(p))
+                    logger.info("cancel_charge: token cached key_id=%s", payload.get("data", {}).get("key_id"))
+                except Exception:
+                    logger.info("cancel_charge: token cached (no key_id parsed)")
+        except Exception:
+            logger.debug("cancel_charge: falha ao logar ambiente/token")
 
         # Função auxiliar que executa o PUT com um token/creds atuais
         def _do_put_with_token(creds):
