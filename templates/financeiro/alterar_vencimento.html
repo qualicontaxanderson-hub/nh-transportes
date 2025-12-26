@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block titulo %}Alterar Vencimento - NH Transportes{% endblock %}
+
+{% block conteudo %}
+<div class="container mt-4">
+  <h3>Alterar vencimento do boleto</h3>
+  <p>Charge ID: <strong>{{ charge_id }}</strong></p>
+  <form method="post" action="{{ url_for('financeiro.alterar_vencimento', charge_id=charge_id) }}">
+    <div class="mb-3">
+      <label for="new_vencimento" class="form-label">Nova data de vencimento</label>
+      <input type="date" id="new_vencimento" name="new_vencimento" class="form-control" required
+             value="{{ cobranca.data_vencimento.strftime('%Y-%m-%d') if cobranca and cobranca.data_vencimento else '' }}">
+    </div>
+    <button type="submit" class="btn btn-primary">Atualizar vencimento</button>
+    <a href="{{ url_for('financeiro.recebimentos') }}" class="btn btn-secondary">Cancelar</a>
+  </form>
+</div>
+{% endblock %}
