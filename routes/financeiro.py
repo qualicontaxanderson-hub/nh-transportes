@@ -265,15 +265,38 @@ def alterar_vencimento(charge_id):
 @login_required
 def marcar_pago(charge_id):
     """
-    Marca a cobrança localmente como paga. Isso NÃO substitui uma confirmação de pagamento
-    do provedor — é um ato administrativo.
+    Marca a cobrança localmente como paga (admin).
+    Proteção: se a cobrança foi marcada como paga via provedor (pago_via_provedor=TRUE),
+    NÃO permite marcar/alterar localmente para evitar inconsistências.
     """
     conn = None
     cursor = None
     try:
         conn = get_db_connection()
-        cursor = conn.cursor()
+        cursor = conn.cursor(dictionary=True)
+
+        # Verificar se esta cobrança foi marcada pelo provedor
         try:
+            cursor.execute("SELECT pago_via_provedor, status FROM cobrancas WHERE charge_id = %s LIMIT 1", (str(charge_id),))
+            row = cursor.fetchone()
+        except Exception:
+            row = None
+
+        if row:
+            try:
+                if int(row.get('pago_via_provedor') or 0):
+                    flash("Pagamento registrado pelo provedor (EFI). Reversão/alteração não permitida pelo sistema.", "danger")
+                    return redirect(url_for('financeiro.recebimentos'))
+            except Exception:
+                # se dado malformado, prevenir alteração por segurança
+                flash("Não é possível alterar este registro automaticamente (verifique com o financeiro).", "danger")
+                return redirect(url_for('financeiro.recebimentos'))
+
+        # Se não for pago via provedor, permitir marcar como pago (admin)
+        try:
+            # usar cursor sem dictionary para updates
+            cursor.close()
+            cursor = conn.cursor()
             cursor.execute("UPDATE cobrancas SET status = %s WHERE charge_id = %s", ("pago", charge_id))
             try:
                 cursor.execute("ALTER TABLE cobrancas ADD COLUMN IF NOT EXISTS data_pagamento DATE;")
@@ -286,17 +309,26 @@ def marcar_pago(charge_id):
             conn.commit()
             flash("Cobrança marcada como PAGO (local).", "success")
         except Exception as e:
-            conn.rollback()
+            try:
+                conn.rollback()
+            except Exception:
+                pass
             current_app.logger.exception("Erro ao marcar pago: %s", e)
             flash("Falha ao marcar como pago.", "danger")
     except Exception as e:
         current_app.logger.exception("Erro em marcar_pago: %s", e)
         flash("Erro ao marcar como pago.", "danger")
     finally:
-        if cursor:
-            cursor.close()
-        if conn:
-            conn.close()
+        try:
+            if cursor:
+                cursor.close()
+        except Exception:
+            pass
+        try:
+            if conn:
+                conn.close()
+        except Exception:
+            pass
     return redirect(url_for('financeiro.recebimentos'))
 
 
