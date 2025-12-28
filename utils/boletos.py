@@ -717,7 +717,7 @@ def cancel_charge(credentials, charge_id):
                         except Exception:
                             logger.debug("persist cancel response failed")
                         return True, j2
-                    # se ainda não 200/204, tentar fallback automático no outro ambiente (inverter sandbox) ANTES de devolver erro
+                    # if retry failed, attempt fallback etc...
                     try:
                         logger.info("cancel_charge: tentativa retry falhou, executando fallback invertendo sandbox")
                         creds_fb = dict(credentials)
@@ -746,14 +746,12 @@ def cancel_charge(credentials, charge_id):
                             return True, jfb
                     except Exception:
                         logger.exception("cancel_charge: fallback invert sandbox falhou")
-                    # se o fallback não conseguiu, retornar o erro original do retry (resp2)
                     try:
                         return False, resp2.json()
                     except Exception:
                         return False, {"http_status": resp2.status_code, "text": resp2.text}
                 else:
                     return False, {"error": "PUT retry falhou (exceção no request)"}
-            # se não for 404/405 tentamos retornar o corpo para diagnóstico
             if resp.status_code not in (404, 405):
                 try:
                     return False, resp.json()
@@ -762,7 +760,7 @@ def cancel_charge(credentials, charge_id):
         else:
             logger.debug("cancel_charge: sem resposta no primeiro PUT")
 
-        # 2) tentar DELETE /v1/charge/{id} como fallback (mantendo comportamento anterior)
+        # 2) tentar DELETE /v1/charge/{id} como fallback
         url = f"{base}/v1/charge/{cid_int}"
         logger.info("cancel_charge: tentando DELETE %s (auth=client creds/token)", url)
         try:
