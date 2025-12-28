@@ -15,7 +15,6 @@ Melhorias incluídas:
 - fetch_boleto_pdf_stream: tenta com Authorization e, se necessário, sem Authorization
 - emitir_boleto_frete: persiste frete_id na tabela cobrancas e tenta baixar e salvar PDF automaticamente
 """
-
 import os
 import json
 import copy
@@ -1058,10 +1057,10 @@ def emitir_boleto_frete(frete_id, vencimento_str=None):
 
             # se não veio no response, tentar obter via fetch_charge algumas vezes
             if not pdf_url:
-                tries = 3
+                tries = 5
                 for i in range(tries):
                     try:
-                        time.sleep(1 + i)  # backoff 1s,2s,3s
+                        time.sleep(1 + i * 1.5)  # backoff crescente
                         fresh = fetch_charge(credentials, charge_id_final)
                         if isinstance(fresh, dict):
                             d = fresh.get("data") or fresh.get("charge") or fresh
@@ -1072,6 +1071,10 @@ def emitir_boleto_frete(frete_id, vencimento_str=None):
                             break
                     except Exception:
                         logger.debug("Tentativa %s fetch_charge para obter pdf falhou", i + 1)
+
+            # garantir que boleto_url receba pdf_url quando estiver vazio
+            if not boleto_url and pdf_url:
+                boleto_url = pdf_url
 
             if pdf_url:
                 try:
