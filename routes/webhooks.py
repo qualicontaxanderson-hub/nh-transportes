@@ -131,8 +131,8 @@ def webhooks_efi():
                         pdf_url = pdf_obj.get('charge') or pdf_obj.get('boleto') or pdf_obj.get('link')
                     pdf_url = pdf_url or data.get('link') or data.get('billet_link') or (data.get('payment') or {}).get('banking_billet', {}).get('link')
                     status = data.get('status') or data.get('payment_status') or data.get('state')
-                    paid_at = data.get('paid_at') or data.get('paidAt') or data.get('paid')
-                    custom_id = data.get('custom_id') or data.get('metadata', {}).get('custom_id') if data.get('metadata') else data.get('custom_id')
+                    paid_at = data.get('paid_at') or data.get('paidAt') or data.get('paid') or data.get('paid_at_date')
+                    custom_id = data.get('custom_id') or (data.get('metadata', {}).get('custom_id') if data.get('metadata') else data.get('custom_id'))
                 # if no pdf_url yet, try top-level
                 if not pdf_url and isinstance(p, dict):
                     pdf_url = p.get('pdf') or p.get('link')
@@ -146,6 +146,17 @@ def webhooks_efi():
             current_app.logger.warning("[webhook/efi] charge_id não encontrado no webhook payload")
             # ainda assim podemos logar e responder 200
             return jsonify({"ok": True, "note": "no_charge_id"}), 200
+
+        # interpretar se provedor indica pagamento
+        is_paid = False
+        if paid_at:
+            is_paid = True
+        else:
+            try:
+                if status and isinstance(status, str) and status.strip().lower() in ('pago', 'paid', 'confirmed', 'paid_and_confirmed', 'confirmed_paid', 'paid_at'):
+                    is_paid = True
+            except Exception:
+                is_paid = False
 
         # atualizar DB
         try:
@@ -181,24 +192,33 @@ def webhooks_efi():
             # montar UPDATE dinâmico
             updates = []
             params = []
+
             if pdf_url:
                 updates.append("link_boleto = %s")
                 params.append(pdf_url)
             if saved_path:
                 updates.append("pdf_boleto = %s")
                 params.append(saved_path)
-            if status:
-                updates.append("status = %s")
-                params.append(status)
-            if paid_at:
-                # gravar status pago + data_pagamento (apenas data)
+
+            # se provedor indica pagamento, gravar status + data_pagamento + flag pago_via_provedor
+            if is_paid:
                 updates.append("status = %s")
                 params.append("pago")
-                try:
-                    params.append(str(paid_at)[:10])
-                    updates.append("data_pagamento = %s")
-                except Exception:
-                    pass
+                updates.append("pago_via_provedor = %s")
+                params.append(1)
+                if paid_at:
+                    # gravar apenas a data (YYYY-MM-DD)
+                    try:
+                        params.append(str(paid_at)[:10])
+                        updates.append("data_pagamento = %s")
+                    except Exception:
+                        # se não conseguir extrair data, não adiciona data_pagamento
+                        pass
+            else:
+                # se veio apenas status do provedor, armazenar (não marca pago_via_provedor)
+                if status:
+                    updates.append("status = %s")
+                    params.append(status)
 
             if updates:
                 params.append(int(charge_id))
