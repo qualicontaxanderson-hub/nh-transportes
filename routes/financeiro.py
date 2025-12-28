@@ -1,8 +1,9 @@
-from flask import Blueprint, render_template, request, jsonify, flash, redirect, url_for, current_app, Response, stream_with_context
+from flask import Blueprint, render_template, request, jsonify, flash, redirect, url_for, current_app, Response, stream_with_context, send_file, abort
 from flask_login import login_required
 from utils.db import get_db_connection
 from utils.boletos import emitir_boleto_frete, fetch_charge, fetch_boleto_pdf_stream, update_billet_expire, cancel_charge
 from datetime import datetime
+import os
 
 financeiro_bp = Blueprint('financeiro', __name__, url_prefix='/financeiro')
 
@@ -116,10 +117,58 @@ def emitir_boleto_route(frete_id):
 @login_required
 def visualizar_boleto(charge_id):
     """
-    Proxy que busca o PDF do provedor e faz stream para o navegador.
-    Isso evita expor tokens no cliente e permite o navegador abrir/imprimir o PDF.
+    Primeiro tenta servir PDF salvo localmente (pdf_boleto em cobrancas).
+    - se pdf_boleto for um caminho local existente -> serve com send_file inline
+    - se pdf_boleto for uma URL -> redireciona para a URL (abrir no provedor)
+    Se não houver pdf_boleto ou estiver inválido, faz fetch ao provedor e stream (com fetch_boleto_pdf_stream).
     """
     try:
+        # 1) tentar obter registro local (cobrancas) para pdf_boleto/link_boleto
+        row = None
+        try:
+            conn = get_db_connection()
+            cur = conn.cursor(dictionary=True)
+            cur.execute("SELECT pdf_boleto, link_boleto FROM cobrancas WHERE charge_id = %s LIMIT 1", (charge_id,))
+            row = cur.fetchone()
+            try:
+                cur.close()
+                conn.close()
+            except Exception:
+                pass
+        except Exception:
+            row = None
+            try:
+                if 'cur' in locals() and cur:
+                    cur.close()
+                if 'conn' in locals() and conn:
+                    conn.close()
+            except Exception:
+                pass
+
+        # se houver pdf_boleto local
+        if row:
+            pdf_boleto = row.get("pdf_boleto")
+            link_boleto = row.get("link_boleto")
+            if pdf_boleto:
+                # se for um caminho local de arquivo e existir, serve diretamente
+                if isinstance(pdf_boleto, str) and (pdf_boleto.startswith('/') or pdf_boleto.startswith('.')):
+                    try:
+                        if os.path.exists(pdf_boleto):
+                            return send_file(pdf_boleto, mimetype='application/pdf', as_attachment=False, download_name=f"boleto_{charge_id}.pdf")
+                    except Exception:
+                        current_app.logger.exception("visualizar_boleto: falha ao servir arquivo local %s", pdf_boleto)
+                else:
+                    # se pdf_boleto parece ser URL, redireciona para ela
+                    try:
+                        if pdf_boleto.startswith('http://') or pdf_boleto.startswith('https://'):
+                            return redirect(pdf_boleto)
+                    except Exception:
+                        pass
+            # se houver link_boleto e pdf_boleto ausente, redireciona para link_boleto
+            if link_boleto and isinstance(link_boleto, str) and (link_boleto.startswith('http://') or link_boleto.startswith('https://')):
+                return redirect(link_boleto)
+
+        # 2) fallback: buscar no provedor (com as credenciais)
         credentials = {
             "client_id": current_app.config.get("EFI_CLIENT_ID") or None,
             "client_secret": current_app.config.get("EFI_CLIENT_SECRET") or None,
@@ -131,6 +180,7 @@ def visualizar_boleto(charge_id):
             return redirect(url_for('financeiro.recebimentos'))
 
         data = charge.get("data") or charge
+        # procurar URL de PDF no payload do provedor
         pdf_url = (data.get("pdf") or {}).get("charge") or (data.get("payment") or {}).get("banking_billet", {}).get("link") or data.get("link")
         if not pdf_url:
             flash("URL do PDF não encontrada na resposta do provedor.", "danger")
