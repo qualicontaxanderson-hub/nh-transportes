@@ -278,7 +278,6 @@ document.addEventListener('DOMContentLoaded', function () {
         if (j.boleto_url) {
           window.open(j.boleto_url, '_blank');
         } else if (j.pdf_boleto) {
-          // se pdf_boleto for URL absoluta, usa ela; se for caminho local, abre via proxy
           if (typeof j.pdf_boleto === 'string' && (j.pdf_boleto.startsWith('http://') || j.pdf_boleto.startsWith('https://'))) {
             window.open(j.pdf_boleto, '_blank');
           } else {
