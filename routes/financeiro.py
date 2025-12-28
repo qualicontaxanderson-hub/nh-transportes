@@ -45,6 +45,11 @@ def recebimentos():
             conn.close()
 
 
+def _wants_json():
+    """Helper: detect if request expects JSON (AJAX or Accept header)."""
+    return request.headers.get('X-Requested-With') == 'XMLHttpRequest' or request.accept_mimetypes.accept_json
+
+
 @financeiro_bp.route('/emitir-boleto/<int:frete_id>/', methods=['POST'])
 @login_required
 def emitir_boleto_route(frete_id):
@@ -57,18 +62,43 @@ def emitir_boleto_route(frete_id):
 
         resultado = emitir_boleto_frete(frete_id, vencimento_str=vencimento)
         if not isinstance(resultado, dict):
-            flash(f"Erro inesperado ao emitir boleto: resposta inválida", "danger")
+            msg = "Erro inesperado ao emitir boleto: resposta inválida"
+            current_app.logger.error(f"[emitir_boleto] resposta inválida: {repr(resultado)}")
+            if _wants_json():
+                return jsonify({"success": False, "error": msg}), 500
+            flash(msg, "danger")
             return redirect(url_for('fretes.lista'))
 
         if resultado.get('success'):
-            flash(f"Boleto emitido com sucesso! Charge ID: {resultado.get('charge_id')}", "success")
+            charge_id = resultado.get('charge_id')
+            boleto_url = resultado.get('boleto_url')
+            barcode = resultado.get('barcode')
+
+            # Se for requisição AJAX/JSON -> retornar JSON contendo a URL do boleto
+            if _wants_json():
+                payload = {"success": True, "charge_id": charge_id}
+                if boleto_url:
+                    payload["boleto_url"] = boleto_url
+                if barcode:
+                    payload["barcode"] = barcode
+                return jsonify(payload), 200
+
+            # caso normal (form submit) -> flash e redirect
+            flash(f"Boleto emitido com sucesso! Charge ID: {charge_id}", "success")
             return redirect(url_for('financeiro.recebimentos'))
         else:
-            error_msg = resultado.get('error', 'Erro desconhecido')
-            flash(f"Erro ao emitir boleto: {str(error_msg)}", "danger")
+            error_msg = str(resultado.get('error', 'Erro desconhecido'))
+            current_app.logger.warning(f"[emitir_boleto] erro: {error_msg}")
+
+            if _wants_json():
+                return jsonify({"success": False, "error": error_msg}), 400
+
+            flash(f"Erro ao emitir boleto: {error_msg}", "danger")
             return redirect(url_for('fretes.lista'))
     except Exception as e:
         current_app.logger.exception("Erro emitir_boleto_route: %s", e)
+        if _wants_json():
+            return jsonify({"success": False, "error": str(e)}), 500
         flash(f"Erro ao processar boleto: {str(e)}", "danger")
         return redirect(url_for('fretes.lista'))
 
