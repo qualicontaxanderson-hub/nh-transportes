@@ -1,7 +1,7 @@
 from flask import Blueprint, render_template, request, jsonify, flash, redirect, url_for, current_app, Response, stream_with_context, send_file, abort
 from flask_login import login_required
 from utils.db import get_db_connection
-from utils.boletos import emitir_boleto_frete, fetch_charge, fetch_boleto_pdf_stream, update_billet_expire, cancel_charge
+from utils.boletos import emitir_boleto_frete, emitir_boleto_multiplo, fetch_charge, fetch_boleto_pdf_stream, update_billet_expire, cancel_charge
 from datetime import datetime
 import os
 
@@ -114,6 +114,45 @@ def emitir_boleto_route(frete_id):
             return jsonify({"success": False, "error": str(e)}), 500
         flash(f"Erro ao processar boleto: {str(e)}", "danger")
         return redirect(url_for('fretes.lista'))
+
+
+@financeiro_bp.route('/emitir-boleto-multiple/', methods=['POST'])
+@login_required
+def emitir_boleto_multiple_route():
+    """
+    Emite um único boleto para múltiplos fretes (POST JSON):
+    { "frete_ids": [1,2,3], "vencimento": "YYYY-MM-DD" }
+    Retorna JSON com success e charge_id/boleto_url/pdf_boleto.
+    """
+    try:
+        if not request.is_json:
+            return jsonify({"success": False, "error": "Requisição deve ser JSON"}), 400
+        payload = request.get_json(silent=True) or {}
+        frete_ids = payload.get("frete_ids") or payload.get("ids") or []
+        vencimento = payload.get("vencimento") or payload.get("new_vencimento") or None
+
+        if not isinstance(frete_ids, (list, tuple)) or len(frete_ids) == 0:
+            return jsonify({"success": False, "error": "frete_ids ausentes ou inválidos"}), 400
+
+        resultado = emitir_boleto_multiplo(frete_ids, vencimento_str=vencimento)
+        if not isinstance(resultado, dict):
+            current_app.logger.error("emitir_boleto_multiple_route: resposta inválida")
+            return jsonify({"success": False, "error": "Resposta inválida do utilitário"}), 500
+
+        if resultado.get("success"):
+            resp = {"success": True, "charge_id": resultado.get("charge_id")}
+            if resultado.get("boleto_url"):
+                resp["boleto_url"] = resultado.get("boleto_url")
+            if resultado.get("pdf_boleto"):
+                resp["pdf_boleto"] = resultado.get("pdf_boleto")
+            if resultado.get("barcode"):
+                resp["barcode"] = resultado.get("barcode")
+            return jsonify(resp), 200
+        else:
+            return jsonify({"success": False, "error": resultado.get("error", "Erro desconhecido")}), 400
+    except Exception as e:
+        current_app.logger.exception("Erro emitir_boleto_multiple_route: %s", e)
+        return jsonify({"success": False, "error": str(e)}), 500
 
 
 @financeiro_bp.route('/visualizar-boleto/<int:charge_id>/')
