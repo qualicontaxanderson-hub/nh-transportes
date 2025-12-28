@@ -2,7 +2,7 @@
 
 {% block titulo %}Recebimentos - NH Transportes{% endblock %}
 
-{% block conteudo %}
+{% block content %}
 <div class="container-fluid mt-3">
     <h2 class="mb-3">💰 Recebimentos / Boletos</h2>
     
@@ -27,7 +27,13 @@
                     <td>{{ r.id }}</td>
                     <td>{% if r.frete_numero %}#{{ r.frete_numero }}{% else %}-{% endif %}</td>
                     <td>{{ r.cliente_fantasia or r.cliente_nome or '-' }}</td>
-                    <td>R$ {{ "%.2f"|format(r.valor|float) if r.valor else '0,00' }}</td>
+                    <td>
+                      {% if r.valor is not none %}
+                        R$ {{ ("%.2f"|format(r.valor|float)).replace('.', ',') }}
+                      {% else %}
+                        R$ 0,00
+                      {% endif %}
+                    </td>
                     <td>{{ r.data_vencimento.strftime('%d/%m/%Y') if r.data_vencimento else '-' }}</td>
                     <td>
                         <span class="badge {% if r.status == 'pago' %}bg-success{% elif r.status == 'pendente' %}bg-warning{% elif r.status == 'cancelado' %}bg-secondary{% else %}bg-danger{% endif %}">
