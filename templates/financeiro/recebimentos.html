@@ -37,7 +37,8 @@
                     <td><small>{{ r.charge_id or '-' }}</small></td>
                     <td>
                         <div class="btn-group" role="group" aria-label="Ações cobranca">
-                            {% if r.link_boleto %}
+                            {# Mostrar botão de visualização sempre que houver charge_id (serve local ou provedor) #}
+                            {% if r.charge_id %}
                             <a href="{{ url_for('financeiro.visualizar_boleto', charge_id=r.charge_id) }}" target="_blank" class="btn btn-sm btn-primary" title="Ver/Imprimir Boleto">
                                 <i class="bi bi-file-earmark-pdf"></i>
                             </a>
