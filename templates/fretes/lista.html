@@ -273,6 +273,21 @@ document.addEventListener('DOMContentLoaded', function () {
         feedback.className = 'alert alert-success';
         feedback.textContent = 'Boleto emitido com sucesso.';
         feedback.style.display = 'block';
+
+        // abre o boleto automaticamente quando possível
+        if (j.boleto_url) {
+          window.open(j.boleto_url, '_blank');
+        } else if (j.pdf_boleto) {
+          // se pdf_boleto for URL absoluta, usa ela; se for caminho local, abre via proxy
+          if (typeof j.pdf_boleto === 'string' && (j.pdf_boleto.startsWith('http://') || j.pdf_boleto.startsWith('https://'))) {
+            window.open(j.pdf_boleto, '_blank');
+          } else {
+            window.open('/financeiro/visualizar-boleto/' + j.charge_id + '/', '_blank');
+          }
+        } else if (j.charge_id) {
+          window.open('/financeiro/visualizar-boleto/' + j.charge_id + '/', '_blank');
+        }
+
         // desabilitar botão na tabela
         const btn = document.querySelector(`.btn-emit-boleto[data-frete-id="${freteId}"]`);
         if (btn){
