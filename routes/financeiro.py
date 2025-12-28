@@ -81,14 +81,17 @@ def emitir_boleto_route(frete_id):
 
         if resultado.get('success'):
             charge_id = resultado.get('charge_id')
-            boleto_url = resultado.get('boleto_url')
+            boleto_url = resultado.get('boleto_url') or resultado.get('link_boleto')
             barcode = resultado.get('barcode')
+            pdf_boleto = resultado.get('pdf_boleto')  # caminho local ou url salvo no emitir_boleto_frete
 
-            # Se for requisição AJAX/JSON -> retornar JSON contendo a URL do boleto
+            # Se for requisição AJAX/JSON -> retornar JSON contendo a URL/arquivo do boleto
             if _wants_json():
                 payload = {"success": True, "charge_id": charge_id}
                 if boleto_url:
                     payload["boleto_url"] = boleto_url
+                if pdf_boleto:
+                    payload["pdf_boleto"] = pdf_boleto
                 if barcode:
                     payload["barcode"] = barcode
                 return jsonify(payload), 200
