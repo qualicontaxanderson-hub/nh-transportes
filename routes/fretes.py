@@ -54,6 +54,7 @@ def lista():
         if filters:
             where_clause = "WHERE " + " AND ".join(filters)
 
+        # Adiciona subquery EXISTS para indicar se existe cobrança vinculada (emitted)
         query = f"""
             SELECT
                 f.id,
@@ -66,7 +67,8 @@ def lista():
                 COALESCE(v.caminhao, '') AS veiculo,
                 f.valor_total_frete,
                 COALESCE(f.lucro, 0) AS lucro,
-                COALESCE(f.status, '') AS status
+                COALESCE(f.status, '') AS status,
+                EXISTS(SELECT 1 FROM cobrancas c WHERE c.frete_id = f.id AND (c.status IS NULL OR c.status != 'cancelado')) AS emitted
             FROM fretes f
             LEFT JOIN clientes c ON f.clientes_id = c.id
             LEFT JOIN fornecedores fo ON f.fornecedores_id = fo.id
