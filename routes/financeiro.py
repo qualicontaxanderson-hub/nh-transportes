@@ -53,11 +53,20 @@ def _wants_json():
 @financeiro_bp.route('/emitir-boleto/<int:frete_id>/', methods=['POST'])
 @login_required
 def emitir_boleto_route(frete_id):
-    """Emite boleto para um frete específico (aceita campo 'vencimento' opcional YYYY-MM-DD)."""
+    """Emite boleto para um frete específico (aceita campo 'vencimento' opcional YYYY-MM-DD ou DD/MM/YYYY)."""
     try:
         # ler vencimento enviado pelo formulário (opcional)
         vencimento = None
-        if request.form:
+
+        # se veio JSON no body (o frontend da lista envia JSON), ler
+        if request.is_json:
+            try:
+                payload = request.get_json(silent=True) or {}
+                vencimento = payload.get('vencimento') or payload.get('new_vencimento') or None
+            except Exception:
+                vencimento = None
+        else:
+            # tentativa via form (submissão tradicional)
             vencimento = request.form.get('vencimento') or request.form.get('new_vencimento') or None
 
         resultado = emitir_boleto_frete(frete_id, vencimento_str=vencimento)
