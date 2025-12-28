@@ -83,7 +83,7 @@ def emitir_boleto_route(frete_id):
             charge_id = resultado.get('charge_id')
             boleto_url = resultado.get('boleto_url') or resultado.get('link_boleto')
             barcode = resultado.get('barcode')
-            pdf_boleto = resultado.get('pdf_boleto')  # caminho local ou url salvo no emitir_boleto_frete
+            pdf_boleto = resultado.get('pdf_boleto')
 
             # Se for requisição AJAX/JSON -> retornar JSON contendo a URL/arquivo do boleto
             if _wants_json():
