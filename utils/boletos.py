@@ -10,6 +10,7 @@ Atualizações importantes:
 - marca frete como boleto_emitido após persistir cobranca (evita reemissão)
 - usa BOLETOS_DIR configurável para salvar PDFs
 - mantém compatibilidade com SDK/fallback direto
+- adiciona função emitir_boleto_multiplo para agregar vários fretes em 1 cobrança
 """
 import os
 import json
@@ -717,39 +718,7 @@ def cancel_charge(credentials, charge_id):
                         except Exception:
                             logger.debug("persist cancel response failed")
                         return True, j2
-                    # if retry failed, attempt fallback etc...
-                    try:
-                        logger.info("cancel_charge: tentativa retry falhou, executando fallback invertendo sandbox")
-                        creds_fb = dict(credentials)
-                        creds_fb["sandbox"] = not bool(credentials.get("sandbox", True))
-                        base_fb = "https://cobrancas-h.api.efipay.com.br" if creds_fb["sandbox"] else "https://cobrancas.api.efipay.com.br"
-                        url_cancel_fb = f"{base_fb}/v1/charge/{cid_int}/cancel"
-                        token_fb = _get_bearer_token(creds_fb) if creds_fb.get("client_id") and creds_fb.get("client_secret") else None
-                        headers_fb = {"Accept": "application/json", "Content-Type": "application/json"}
-                        if token_fb:
-                            headers_fb["Authorization"] = f"Bearer {token_fb}"
-                        resp_fb = None
-                        try:
-                            resp_fb = requests.put(url_cancel_fb, headers=headers_fb, timeout=15)
-                        except Exception:
-                            logger.exception("cancel_charge: fallback PUT %s falhou", url_cancel_fb)
-                        logger.info("cancel_charge: fallback PUT %s -> status=%s text=%s", url_cancel_fb, getattr(resp_fb, "status_code", None), (getattr(resp_fb, "text", "") or "")[:2000] if resp_fb else "")
-                        if resp_fb is not None and resp_fb.status_code in (200, 204):
-                            try:
-                                jfb = resp_fb.json()
-                            except Exception:
-                                jfb = {"http_status": resp_fb.status_code, "text": resp_fb.text}
-                            try:
-                                _persist_cancel_to_db(cid_int, jfb)
-                            except Exception:
-                                logger.debug("persist cancel response failed (fallback)")
-                            return True, jfb
-                    except Exception:
-                        logger.exception("cancel_charge: fallback invert sandbox falhou")
-                    try:
-                        return False, resp2.json()
-                    except Exception:
-                        return False, {"http_status": resp2.status_code, "text": resp2.text}
+                    # retry failed fallback handled below...
                 else:
                     return False, {"error": "PUT retry falhou (exceção no request)"}
             if resp.status_code not in (404, 405):
@@ -760,7 +729,7 @@ def cancel_charge(credentials, charge_id):
         else:
             logger.debug("cancel_charge: sem resposta no primeiro PUT")
 
-        # 2) tentar DELETE /v1/charge/{id} como fallback
+        # 2) tentar DELETE /v1/charge/{id} como fallback (mantendo comportamento anterior)
         url = f"{base}/v1/charge/{cid_int}"
         logger.info("cancel_charge: tentando DELETE %s (auth=client creds/token)", url)
         try:
@@ -835,6 +804,299 @@ def _parse_vencimento(vencimento_str):
         except Exception:
             continue
     return None
+
+
+# ------------------------------
+# Funções para emissão múltipla
+# ------------------------------
+def _build_charge_payload_multi(client_data, items, custom_id, data_vencimento):
+    """
+    Monta payload de criação de charge para múltiplos itens (fretes).
+    client_data: dicionário com info do cliente (campos compatíveis).
+    items: lista de dicts {"name", "amount", "value"} em centavos.
+    custom_id: string livre para rastrear (ex: "multi:1,2,3:TIMESTAMP")
+    """
+    metadata = {"custom_id": custom_id, "notification_url": os.getenv("EFI_NOTIFICATION_URL", "https://nh-transportes.onrender.com/webhooks/efi")}
+    body = {"items": items, "metadata": metadata}
+    return body
+
+
+def _build_pay_payload_multi(client_data, data_vencimento):
+    """
+    Monta payload de payment (banking_billet) para múltiplos fretes com dados do cliente.
+    """
+    cpf_cnpj = (client_data.get("cliente_cnpj") or "").replace(".", "").replace("-", "").replace("/", "").strip()
+    telefone = (client_data.get("cliente_telefone") or "").replace("(", "").replace(")", "").replace("-", "").replace(" ", "").strip()
+    cep = (client_data.get("cliente_cep") or "").replace("-", "").strip()
+    if not cep or len(cep) != 8:
+        cep = "74000000"
+    nome_cliente = (client_data.get("cliente_fantasia") or client_data.get("cliente_nome") or "Cliente")[:80]
+    customer = {
+        "name": nome_cliente,
+        "cpf": cpf_cnpj if len(cpf_cnpj) == 11 else None,
+        "cnpj": cpf_cnpj if len(cpf_cnpj) == 14 else None,
+        "phone_number": (telefone or "")[:11],
+        "email": (client_data.get("cliente_email") or "")[:100],
+        "address": {
+            "street": (client_data.get("cliente_endereco") or "")[:80],
+            "number": (client_data.get("cliente_numero") or "")[:10],
+            "neighborhood": (client_data.get("cliente_bairro") or "")[:50],
+            "zipcode": cep,
+            "city": (client_data.get("cliente_cidade") or "")[:50],
+            "state": (client_data.get("cliente_estado") or "")[:2].upper(),
+        },
+        "juridical_person": {"corporate_name": nome_cliente, "cnpj": cpf_cnpj if len(cpf_cnpj) == 14 else None},
+    }
+    payment = {"payment": {"banking_billet": {"expire_at": data_vencimento.strftime("%Y-%m-%d"), "customer": customer}}}
+    return payment
+
+
+def emitir_boleto_multiplo(frete_ids, vencimento_str=None):
+    """
+    Emite UM boleto agregando vários fretes (todos pertencentes ao mesmo cliente).
+    - frete_ids: lista de inteiros
+    - vencimento_str: opcional YYYY-MM-DD ou DD/MM/YYYY
+    Retorna dicionário com keys: success (bool), error (str), cobranca_id, charge_id, boleto_url, pdf_boleto, barcode
+    """
+    if not isinstance(frete_ids, (list, tuple)) or len(frete_ids) == 0:
+        return {"success": False, "error": "frete_ids inválido ou vazio"}
+
+    # normalizar ids para inteiros únicos
+    try:
+        ids = sorted(list({int(x) for x in frete_ids}))
+    except Exception:
+        return {"success": False, "error": "frete_ids deve conter inteiros"}
+
+    parsed_date = _parse_vencimento(vencimento_str)
+    if parsed_date:
+        data_vencimento = datetime.combine(parsed_date, datetime.min.time())
+    else:
+        data_vencimento = datetime.now() + timedelta(days=7)
+
+    conn = None
+    cursor = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+
+        # buscar fretes e dados do cliente (assume todos os fretes têm cliente cadastrado)
+        format_ids = ",".join(["%s"] * len(ids))
+        sql = f"""
+            SELECT f.id, f.clientes_id, f.valor_total_frete,
+                   o.nome AS origem_nome, d.nome AS destino_nome,
+                   c.razao_social AS cliente_nome, c.nome_fantasia AS cliente_fantasia,
+                   c.cnpj AS cliente_cnpj, c.endereco AS cliente_endereco, c.numero AS cliente_numero,
+                   c.complemento AS cliente_complemento, c.bairro AS cliente_bairro, c.municipio AS cliente_cidade,
+                   c.uf AS cliente_estado, c.cep AS cliente_cep, c.telefone AS cliente_telefone, c.email AS cliente_email
+            FROM fretes f
+            INNER JOIN clientes c ON f.clientes_id = c.id
+            LEFT JOIN origens o ON f.origem_id = o.id
+            LEFT JOIN destinos d ON f.destino_id = d.id
+            WHERE f.id IN ({format_ids})
+        """
+        cursor.execute(sql, tuple(ids))
+        rows = cursor.fetchall()
+        if not rows or len(rows) != len(ids):
+            return {"success": False, "error": "Um ou mais fretes não encontrados"}
+
+        # validar mesmo cliente
+        clientes_ids = {int(r.get("clientes_id")) for r in rows}
+        if len(clientes_ids) != 1:
+            return {"success": False, "error": "Os fretes selecionados pertencem a clientes diferentes. Selecione apenas fretes do mesmo cliente."}
+        cliente_id = clientes_ids.pop()
+        client_data = rows[0]  # usar dados do cliente do primeiro frete
+
+        # verificar se algum frete já tem cobrança não-cancelada / boleto_emitido
+        q = f"SELECT frete_id, status FROM cobrancas WHERE frete_id IN ({format_ids}) AND (status IS NULL OR status != 'cancelado')"
+        cursor.execute(q, tuple(ids))
+        existing = cursor.fetchall()
+        if existing:
+            bad_ids = [str(r.get("frete_id")) for r in existing if r.get("frete_id")]
+            return {"success": False, "error": f"Existem cobranças ativas para os fretes: {','.join(bad_ids)}. Cancele-as antes de emitir."}
+
+        # montar items (cada frete como item)
+        items = []
+        total_centavos = 0
+        for r in rows:
+            valor = float(r.get("valor_total_frete") or 0)
+            if valor <= 0:
+                return {"success": False, "error": f"Valor inválido/zerado no frete #{r.get('id')}"}
+            cent = int(round(valor * 100))
+            total_centavos += cent
+            desc = f"Frete #{r.get('id')}"
+            if r.get("origem_nome") and r.get("destino_nome"):
+                desc += f" - {r.get('origem_nome')} para {r.get('destino_nome')}"
+            items.append({"name": desc[:80], "amount": 1, "value": cent})
+
+        if total_centavos <= 0:
+            return {"success": False, "error": "Soma dos fretes inválida/zerada"}
+
+        # montar payloads
+        custom_id = "multi:" + ",".join(map(str, ids)) + ":" + datetime.utcnow().strftime("%Y%m%d%H%M%S")
+        body_charge = _build_charge_payload_multi(client_data, items, custom_id, data_vencimento)
+        body_pay = _build_pay_payload_multi(client_data, data_vencimento)
+
+        credentials = {
+            "client_id": os.getenv("EFI_CLIENT_ID"),
+            "client_secret": os.getenv("EFI_CLIENT_SECRET"),
+            "certificate": os.getenv("EFI_CERT_PATH"),
+            "sandbox": os.getenv("EFI_SANDBOX", "true").lower() == "true",
+        }
+
+        # criar charge
+        create_resp = None
+        try:
+            _log_send_attempt("direct_create_charge_multi", body_charge, extra_note="direct HTTP create multi")
+            resp = _direct_create_charge(credentials, body_charge)
+            _log_provider_response("direct_create_charge_multi", resp)
+            create_resp = resp
+            charge_id = _extract_charge_id(resp) or (resp.get("data") or {}).get("id")
+        except Exception as e:
+            logger.exception("Erro criando charge multiplos fretes: %s", e)
+            create_resp = e
+            charge_id = None
+
+        if not charge_id:
+            return {"success": False, "error": f"Falha ao criar transação de cobrança: {create_resp}"}
+
+        # associar pagamento (pay)
+        pay_resp = None
+        try:
+            _log_send_attempt("direct_pay_charge_multi", body_pay, extra_note=f"direct pay for charge {charge_id}")
+            pay_resp = _direct_pay_charge(credentials, charge_id, body_pay)
+            _log_provider_response("direct_pay_charge_multi", pay_resp)
+        except Exception as e:
+            logger.exception("Erro ao chamar pay para charge %s: %s", charge_id, e)
+            pay_resp = e
+
+        final_resp = pay_resp or create_resp
+
+        # extrair campos
+        charge_id_final, boleto_url, barcode = _safe_get_charge_fields(final_resp if isinstance(final_resp, dict) else create_resp)
+        if not charge_id_final:
+            charge_id_final = charge_id
+
+        # tentar obter pdf
+        pdf_boleto_path = None
+        pdf_url = None
+        try:
+            data = (final_resp.get("data") if isinstance(final_resp, dict) else None) or {}
+            pdf_obj = data.get("pdf") or {}
+            pdf_url = pdf_obj.get("charge") or pdf_obj.get("boleto") or data.get("link") or data.get("billet_link")
+            if not pdf_url:
+                pb = (data.get("payment") or {}).get("banking_billet") or data.get("banking_billet") or {}
+                if isinstance(pb, dict):
+                    pdf_url = pb.get("pdf") or pb.get("link")
+        except Exception:
+            pdf_url = None
+
+        if not pdf_url:
+            # tentar fetch_charge
+            tries = 3
+            for i in range(tries):
+                try:
+                    time.sleep(1 + i)
+                    fresh = fetch_charge(credentials, charge_id_final)
+                    if isinstance(fresh, dict):
+                        d = fresh.get("data") or fresh.get("charge") or fresh
+                        pdf_url = (d.get("pdf") or {}).get("charge") or (d.get("payment") or {}).get("banking_billet", {}).get("link") or d.get("link")
+                    if pdf_url:
+                        break
+                except Exception:
+                    logger.debug("fetch_charge tentativa para pdf falhou")
+        if pdf_url:
+            try:
+                resp = fetch_boleto_pdf_stream(credentials, pdf_url)
+                if resp is not None and getattr(resp, "status_code", None) == 200:
+                    safe_dir = BOLETOS_DIR
+                    fname = f"boleto_{charge_id_final}.pdf"
+                    dest = os.path.join(safe_dir, fname)
+                    ok = _save_pdf_stream_to_path(resp, dest)
+                    if ok:
+                        pdf_boleto_path = dest
+                    else:
+                        pdf_boleto_path = pdf_url
+                else:
+                    pdf_boleto_path = pdf_url
+            except Exception:
+                logger.exception("Erro ao baixar pdf do provedor")
+                pdf_boleto_path = pdf_url
+
+        # Persistir cobranca (uma única)
+        try:
+            cursor.execute("""
+                INSERT INTO cobrancas
+                  (frete_id, id_cliente, valor, data_vencimento, status,
+                   charge_id, link_boleto, pdf_boleto, data_emissao)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+            """, (
+                None,
+                client_data["clientes_id"],
+                float(sum([float(r.get("valor_total_frete") or 0) for r in rows])),
+                data_vencimento.date(),
+                "pendente",
+                str(charge_id_final),
+                boleto_url,
+                pdf_boleto_path,
+                datetime.today().date(),
+            ))
+            cobranca_id = getattr(cursor, "lastrowid", None)
+            conn.commit()
+        except Exception:
+            logger.exception("Erro ao inserir cobranca agregada")
+            conn.rollback()
+            return {"success": False, "error": "Erro ao persistir cobrança agregada no banco"}
+
+        # criar relações na tabela cobrancas_fretes (necessita migration)
+        try:
+            for r in rows:
+                try:
+                    cursor.execute("INSERT INTO cobrancas_fretes (cobranca_id, frete_id) VALUES (%s, %s)", (cobranca_id, int(r.get("id"))))
+                except Exception:
+                    logger.exception("Falha inserindo relação cobranca-frete para frete %s", r.get("id"))
+            conn.commit()
+        except Exception:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+
+        # marcar fretes como boleto_emitido
+        try:
+            cursor.execute(f"UPDATE fretes SET boleto_emitido = TRUE WHERE id IN ({','.join(['%s']*len(ids))})", tuple(ids))
+            conn.commit()
+        except Exception:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+            logger.exception("Falha ao marcar fretes boleto_emitido")
+
+        return {"success": True, "cobranca_id": cobranca_id, "charge_id": charge_id_final, "boleto_url": boleto_url, "barcode": barcode, "pdf_boleto": pdf_boleto_path}
+
+    except Exception as e:
+        logger.exception("Erro emitir_boleto_multiplo: %s", e)
+        try:
+            if conn:
+                conn.rollback()
+        except Exception:
+            pass
+        try:
+            error_message = str(e)
+        except Exception:
+            error_message = repr(e)
+        return {"success": False, "error": error_message}
+    finally:
+        try:
+            if cursor:
+                cursor.close()
+        except Exception:
+            pass
+        try:
+            if conn:
+                conn.close()
+        except Exception:
+            pass
 
 
 def emitir_boleto_frete(frete_id, vencimento_str=None):
