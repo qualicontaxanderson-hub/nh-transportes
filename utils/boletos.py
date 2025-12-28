@@ -33,6 +33,9 @@ logging.basicConfig(level=logging.INFO)
 # controla logs de payloads completos (True/False via env var)
 DEBUG_PAYLOAD = os.getenv("EFI_DEBUG_PAYLOAD", "false").lower() in ("1", "true", "yes")
 
+# pasta gravável para salvar PDFs de boletos (configurável via env)
+BOLETOS_DIR = os.getenv("BOLETOS_DIR", "/tmp/boletos")
+
 
 def _sanitize_for_log(obj):
     """Cópia do objeto com campos sensíveis mascarados para logs."""
@@ -803,16 +806,42 @@ def cancel_charge(credentials, charge_id):
 
 def _save_pdf_stream_to_path(resp, dest_path):
     try:
-        os.makedirs(os.path.dirname(dest_path), exist_ok=True)
-        with open(dest_path, "wb") as fh:
+        # se o diretório pai não existe ou não é gravável, usamos BOLETOS_DIR como fallback
+        dest_dir = os.path.dirname(dest_path) or BOLETOS_DIR
+        try:
+            os.makedirs(dest_dir, exist_ok=True)
+        except Exception:
+            # fallback para BOLETOS_DIR
+            dest_dir = BOLETOS_DIR
+            try:
+                os.makedirs(dest_dir, exist_ok=True)
+            except Exception:
+                logger.exception("Falha criando diretório de boletos fallback %s", dest_dir)
+                return False
+        final_path = os.path.join(dest_dir, os.path.basename(dest_path))
+        with open(final_path, "wb") as fh:
             for chunk in resp.iter_content(1024 * 8):
                 if not chunk:
-                    break
+                    continue
                 fh.write(chunk)
+        logger.info("PDF salvo em %s", final_path)
         return True
     except Exception:
         logger.exception("Erro salvando PDF em %s", dest_path)
         return False
+
+
+def _parse_vencimento(vencimento_str):
+    """Aceita YYYY-MM-DD ou DD/MM/YYYY. Retorna datetime.date ou None."""
+    if not vencimento_str:
+        return None
+    s = str(vencimento_str).strip()
+    for fmt in ("%Y-%m-%d", "%d/%m/%Y"):
+        try:
+            return datetime.strptime(s, fmt).date()
+        except Exception:
+            continue
+    return None
 
 
 def emitir_boleto_frete(frete_id, vencimento_str=None):
@@ -845,11 +874,9 @@ def emitir_boleto_frete(frete_id, vencimento_str=None):
         if not frete.get("cliente_cnpj"):
             return {"success": False, "error": "Cliente sem CNPJ cadastrado"}
 
-        if vencimento_str:
-            try:
-                data_vencimento = datetime.strptime(vencimento_str, "%Y-%m-%d")
-            except Exception:
-                return {"success": False, "error": "Formato de vencimento inválido (use YYYY-MM-DD)"}
+        parsed_date = _parse_vencimento(vencimento_str)
+        if parsed_date:
+            data_vencimento = datetime.combine(parsed_date, datetime.min.time())
         else:
             data_vencimento = datetime.now() + timedelta(days=7)
 
@@ -1050,7 +1077,8 @@ def emitir_boleto_frete(frete_id, vencimento_str=None):
                 try:
                     resp = fetch_boleto_pdf_stream(credentials, pdf_url)
                     if resp is not None and getattr(resp, "status_code", None) == 200:
-                        safe_dir = os.getenv("BOLETOS_DIR", "/var/www/boletos")
+                        # usar BOLETOS_DIR (configurável) em vez de diretório fixo
+                        safe_dir = BOLETOS_DIR
                         fname = f"boleto_{charge_id_final}.pdf"
                         dest = os.path.join(safe_dir, fname)
                         ok = _save_pdf_stream_to_path(resp, dest)
