@@ -6,14 +6,10 @@ utils/boletos.py
 Funções para criar/consultar/Cancelar cobranças via Efipay e persistir
 respostas de cancelamento na tabela `cobrancas`.
 
-Melhorias incluídas:
-- logging e sanitização de payload para logs
-- fallback SDK / HTTP direto
-- cache de token via client_credentials (indexado por client_id+sandbox)
-- persistência _persist_cancel_to_db que usa utils.db.get_db_connection()
-- melhorias em cancel_charge: retry-on-401 + fallback invertendo sandbox
-- fetch_boleto_pdf_stream: tenta com Authorization e, se necessário, sem Authorization
-- emitir_boleto_frete: persiste frete_id na tabela cobrancas e tenta baixar e salvar PDF automaticamente
+Atualizações importantes:
+- marca frete como boleto_emitido após persistir cobranca (evita reemissão)
+- usa BOLETOS_DIR configurável para salvar PDFs
+- mantém compatibilidade com SDK/fallback direto
 """
 import os
 import json
@@ -1057,10 +1053,10 @@ def emitir_boleto_frete(frete_id, vencimento_str=None):
 
             # se não veio no response, tentar obter via fetch_charge algumas vezes
             if not pdf_url:
-                tries = 5
+                tries = 3
                 for i in range(tries):
                     try:
-                        time.sleep(1 + i * 1.5)  # backoff crescente
+                        time.sleep(1 + i)  # backoff 1s,2s,3s
                         fresh = fetch_charge(credentials, charge_id_final)
                         if isinstance(fresh, dict):
                             d = fresh.get("data") or fresh.get("charge") or fresh
@@ -1071,10 +1067,6 @@ def emitir_boleto_frete(frete_id, vencimento_str=None):
                             break
                     except Exception:
                         logger.debug("Tentativa %s fetch_charge para obter pdf falhou", i + 1)
-
-            # garantir que boleto_url receba pdf_url quando estiver vazio
-            if not boleto_url and pdf_url:
-                boleto_url = pdf_url
 
             if pdf_url:
                 try:
@@ -1127,6 +1119,22 @@ def emitir_boleto_frete(frete_id, vencimento_str=None):
                 logger.exception("Erro ao inserir cobranca para frete_id=%s", frete_id)
                 conn.rollback()
                 return {"success": False, "error": "Erro ao persistir cobrança no banco"}
+
+            # marcar frete como já tendo boleto emitido (impede re-emissão)
+            try:
+                try:
+                    cur2 = conn.cursor()
+                    cur2.execute("UPDATE fretes SET boleto_emitido = TRUE WHERE id = %s", (frete["id"],))
+                    conn.commit()
+                    cur2.close()
+                except Exception:
+                    logger.exception("Falha ao marcar frete %s boleto_emitido", frete["id"])
+                    try:
+                        conn.rollback()
+                    except Exception:
+                        pass
+            except Exception:
+                logger.exception("Erro marcando frete boleto_emitido (silenciado)")
 
             return {"success": True, "cobranca_id": cobranca_id, "charge_id": charge_id_final, "boleto_url": boleto_url, "barcode": barcode, "pdf_boleto": pdf_boleto_path}
 
