@@ -1,5 +1,5 @@
-<!doctype html>
 {% extends "base.html" %}
+
 {% block titulo %}Lista de Fretes{% endblock %}
 
 {% block content %}
@@ -38,7 +38,7 @@
             <option value="">Todos os clientes</option>
             {% for cliente in clientes %}
             <option value="{{ cliente.id }}" {% if cliente_id == cliente.id|string %}selected{% endif %}>
-                {{ cliente.razaosocial }}
+                {{ cliente.razao_social }}
             </option>
             {% endfor %}
           </select>
@@ -113,7 +113,7 @@
               </td>
               <td>
                 {% if frete.status %}
-                <span class="badge bg-{% if frete.status == 'Concluído' or frete.status == 'Concludo' %}success{% elif frete.status == 'Pendente' %}warning{% else %}secondary{% endif %}">
+                <span class="badge bg-{% if frete.status == 'Concluído' %}success{% elif frete.status == 'Pendente' %}warning{% else %}secondary{% endif %}">
                   {{ frete.status }}
                 </span>
                 {% else %}
@@ -278,7 +278,7 @@ document.addEventListener('DOMContentLoaded', function () {
         if (j.boleto_url) {
           window.open(j.boleto_url, '_blank');
         } else if (j.pdf_boleto) {
-          if (typeof j.pdf_boleto === 'string' && (j.pdf_boleto.startsWith('http://') || j.pdf_boleto.startsWith('https://'))) {
+          if (typeof j.pdf_boleto === 'string' and (j.pdf_boleto.startsWith('http://') || j.pdf_boleto.startsWith('https://'))) {
             window.open(j.pdf_boleto, '_blank');
           } else {
             window.open('/financeiro/visualizar-boleto/' + j.charge_id + '/', '_blank');
