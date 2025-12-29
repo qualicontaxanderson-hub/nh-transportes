@@ -5,6 +5,7 @@ import os
 import json
 import hmac
 import hashlib
+from datetime import datetime
 
 webhooks_bp = Blueprint('webhooks', __name__, url_prefix='')
 
@@ -109,6 +110,7 @@ def _validate_signature(raw_body):
     Se a variável de ambiente EFI_WEBHOOK_SECRET estiver definida, valida header HMAC-SHA256
     cabecalho esperado: X-EFI-SIGNATURE com hex HMAC.
     Se não houver secret configurado, retorna True (não valida).
+    Usa raw_body (bytes) exatamente como recebido para calcular HMAC.
     """
     secret = current_app.config.get("EFI_WEBHOOK_SECRET") or os.getenv("EFI_WEBHOOK_SECRET")
     if not secret:
@@ -118,7 +120,8 @@ def _validate_signature(raw_body):
         current_app.logger.warning("[webhook/efi] secret configurado mas assinatura ausente")
         return False
     try:
-        raw = raw_body if isinstance(raw_body, bytes) else (raw_body.encode('utf-8') if isinstance(raw_body, str) else json.dumps(raw_body).encode('utf-8'))
+        # raw_body deve ser bytes; se não for, converte de forma previsível
+        raw = raw_body if isinstance(raw_body, (bytes, bytearray)) else (raw_body.encode('utf-8') if isinstance(raw_body, str) else json.dumps(raw_body).encode('utf-8'))
         expected = hmac.new(secret.encode('utf-8'), raw, hashlib.sha256).hexdigest()
         # permitir header com 'sha256=...' ou apenas hex
         if sig_header.startswith('sha256='):
@@ -138,6 +141,8 @@ def webhooks_efi():
     Extrai charge_id e atualiza cobrancas (link_boleto, pdf_boleto, status, data_pagamento, pago_via_provedor).
     Responde 200 para o provedor sempre que possível.
     """
+    conn = None
+    cur = None
     try:
         raw_body = request.get_data()  # bytes
         # validar assinatura se configurada
@@ -168,15 +173,17 @@ def webhooks_efi():
 
         current_app.logger.info("[webhook/efi] recebido payload type=%s keys=%s", type(payload).__name__, list(payload.keys()) if isinstance(payload, dict) else [])
 
+        # extrair charge_id
         charge_id = _try_extract_charge_id(payload)
 
         if not charge_id:
             current_app.logger.warning("[webhook/efi] charge_id não encontrado no webhook payload")
             return jsonify({"ok": True, "note": "no_charge_id"}), 200
 
-        pdf_url, status, paid_at, custom_id = _extract_fields(payload if charge_id is None else payload)
+        # extrair campos do payload
+        pdf_url, status, paid_at, custom_id = _extract_fields(payload)
 
-        # interpretar pagamento
+        # interpretar pagamento com heurística
         is_paid = False
         if paid_at:
             is_paid = True
@@ -186,6 +193,23 @@ def webhooks_efi():
                     is_paid = True
             except Exception:
                 is_paid = False
+
+        # normalizar paid_at para YYYY-MM-DD se possível
+        paid_date = None
+        if paid_at:
+            try:
+                s = str(paid_at)
+                if s.endswith('Z'):
+                    s = s.replace('Z', '+00:00')
+                # tentativa mais direta
+                dt = datetime.fromisoformat(s)
+                paid_date = dt.date().isoformat()
+            except Exception:
+                # fallback simples: pegar os primeiros 10 chars
+                try:
+                    paid_date = str(paid_at)[:10]
+                except Exception:
+                    paid_date = None
 
         # atualizar DB
         try:
@@ -234,12 +258,9 @@ def webhooks_efi():
                 params.append("pago")
                 updates.append("pago_via_provedor = %s")
                 params.append(1)
-                if paid_at:
-                    try:
-                        updates.append("data_pagamento = %s")
-                        params.append(str(paid_at)[:10])
-                    except Exception:
-                        pass
+                if paid_date:
+                    updates.append("data_pagamento = %s")
+                    params.append(paid_date)
             else:
                 if status:
                     updates.append("status = %s")
@@ -251,18 +272,28 @@ def webhooks_efi():
                 sql = "UPDATE cobrancas SET " + ", ".join(updates) + " WHERE charge_id = %s"
                 try:
                     cur.execute(sql, tuple(params))
+                    # verificar se atualizou alguma linha
+                    if getattr(cur, "rowcount", None) == 0:
+                        current_app.logger.warning("[webhook/efi] UPDATE não afetou linhas para charge_id=%s", charge_id)
+                    else:
+                        current_app.logger.info("[webhook/efi] atualizou cobrancas charge_id=%s cols=%s", charge_id, updates)
                     conn.commit()
-                    current_app.logger.info("[webhook/efi] atualizou cobrancas charge_id=%s cols=%s", charge_id, updates)
                 except Exception:
                     current_app.logger.exception("[webhook/efi] falha update cobrancas charge_id=%s", charge_id)
 
-            try:
-                cur.close()
-                conn.close()
-            except Exception:
-                pass
         except Exception:
             current_app.logger.exception("[webhook/efi] erro DB ao processar charge_id=%s", charge_id)
+        finally:
+            try:
+                if cur:
+                    cur.close()
+            except Exception:
+                pass
+            try:
+                if conn:
+                    conn.close()
+            except Exception:
+                pass
 
         return jsonify({"ok": True}), 200
 
