@@ -11,6 +11,7 @@ Atualizações importantes:
 - usa BOLETOS_DIR configurável para salvar PDFs
 - mantém compatibilidade com SDK/fallback direto
 - adiciona função emitir_boleto_multiplo para agregar vários fretes em 1 cobrança
+- inclui produto, quantidade e data do frete na descrição do item do boleto
 """
 import os
 import json
@@ -885,6 +886,9 @@ def emitir_boleto_multiplo(frete_ids, vencimento_str=None):
         sql = f"""
             SELECT f.id, f.clientes_id, f.valor_total_frete,
                    o.nome AS origem_nome, d.nome AS destino_nome,
+                   p.nome AS produto_nome,
+                   f.quantidade_manual, q.valor AS quantidade_valor,
+                   f.data_frete,
                    c.razao_social AS cliente_nome, c.nome_fantasia AS cliente_fantasia,
                    c.cnpj AS cliente_cnpj, c.endereco AS cliente_endereco, c.numero AS cliente_numero,
                    c.complemento AS cliente_complemento, c.bairro AS cliente_bairro, c.municipio AS cliente_cidade,
@@ -893,6 +897,8 @@ def emitir_boleto_multiplo(frete_ids, vencimento_str=None):
             INNER JOIN clientes c ON f.clientes_id = c.id
             LEFT JOIN origens o ON f.origem_id = o.id
             LEFT JOIN destinos d ON f.destino_id = d.id
+            LEFT JOIN produto p ON f.produto_id = p.id
+            LEFT JOIN quantidades q ON f.quantidade_id = q.id
             WHERE f.id IN ({format_ids})
         """
         cursor.execute(sql, tuple(ids))
@@ -915,7 +921,7 @@ def emitir_boleto_multiplo(frete_ids, vencimento_str=None):
             bad_ids = [str(r.get("frete_id")) for r in existing if r.get("frete_id")]
             return {"success": False, "error": f"Existem cobranças ativas para os fretes: {','.join(bad_ids)}. Cancele-as antes de emitir."}
 
-        # montar items (cada frete como item)
+        # montar items (cada frete como item), incluindo produto/quantidade/data na descrição
         items = []
         total_centavos = 0
         for r in rows:
@@ -924,16 +930,45 @@ def emitir_boleto_multiplo(frete_ids, vencimento_str=None):
                 return {"success": False, "error": f"Valor inválido/zerado no frete #{r.get('id')}"}
             cent = int(round(valor * 100))
             total_centavos += cent
-            desc = f"Frete #{r.get('id')}"
+
+            # montar descrição estendida
+            desc_parts = [f"Frete #{r.get('id')}"]
             if r.get("origem_nome") and r.get("destino_nome"):
-                desc += f" - {r.get('origem_nome')} para {r.get('destino_nome')}"
+                desc_parts.append(f"{r.get('origem_nome')} para {r.get('destino_nome')}")
+
+            # produto
+            produto = (r.get("produto_nome") or "").strip()
+            if produto:
+                desc_parts.append(produto)
+
+            # quantidade (preferir quantidade_manual)
+            qtd_val = r.get("quantidade_manual") if r.get("quantidade_manual") not in (None, "") else r.get("quantidade_valor")
+            if qtd_val not in (None, "", 0):
+                try:
+                    qtd_text = f"{float(qtd_val):.3f} L"
+                except Exception:
+                    qtd_text = str(qtd_val)
+                desc_parts.append(qtd_text)
+
+            # data do frete
+            df = r.get("data_frete")
+            if df:
+                try:
+                    if hasattr(df, "strftime"):
+                        df_text = df.strftime("%d/%m/%Y")
+                    else:
+                        df_text = str(df)[:10]
+                    desc_parts.append(df_text)
+                except Exception:
+                    pass
+
+            desc = " - ".join(desc_parts)
             items.append({"name": desc[:80], "amount": 1, "value": cent})
 
         if total_centavos <= 0:
             return {"success": False, "error": "Soma dos fretes inválida/zerada"}
 
         # montar payloads
-        # gerar custom_id seguro: apenas A-Za-z0-9 _ - permitidos; evita ":" e "," que causavam validation_error
         raw_cid = "multi-" + "-".join(map(str, ids)) + "-" + datetime.utcnow().strftime("%Y%m%d%H%M%S")
         safe_cid = re.sub(r'[^A-Za-z0-9_-]', '_', raw_cid)[:80]
         custom_id = safe_cid
@@ -949,6 +984,7 @@ def emitir_boleto_multiplo(frete_ids, vencimento_str=None):
 
         # criar charge
         create_resp = None
+        charge_id = None
         try:
             _log_send_attempt("direct_create_charge_multi", body_charge, extra_note="direct HTTP create multi")
             resp = _direct_create_charge(credentials, body_charge)
@@ -1113,6 +1149,9 @@ def emitir_boleto_frete(frete_id, vencimento_str=None):
         cursor.execute("""SELECT
                 f.id, f.clientes_id, f.valor_total_frete,
                 o.nome AS origem_nome, d.nome AS destino_nome,
+                p.nome AS produto_nome,
+                f.quantidade_manual, q.valor AS quantidade_valor,
+                f.data_frete,
                 c.razao_social AS cliente_nome, c.nome_fantasia AS cliente_fantasia,
                 c.cnpj AS cliente_cnpj, c.endereco AS cliente_endereco, c.numero AS cliente_numero,
                 c.complemento AS cliente_complemento, c.bairro AS cliente_bairro, c.municipio AS cliente_cidade,
@@ -1121,6 +1160,8 @@ def emitir_boleto_frete(frete_id, vencimento_str=None):
             INNER JOIN clientes c ON f.clientes_id = c.id
             LEFT JOIN origens o ON f.origem_id = o.id
             LEFT JOIN destinos d ON f.destino_id = d.id
+            LEFT JOIN produto p ON f.produto_id = p.id
+            LEFT JOIN quantidades q ON f.quantidade_id = q.id
             WHERE f.id = %s""", (frete_id,))
         frete = cursor.fetchone()
 
@@ -1147,9 +1188,35 @@ def emitir_boleto_frete(frete_id, vencimento_str=None):
         if valor_total_centavos <= 0:
             return {"success": False, "error": "Valor do frete inválido ou zerado"}
 
-        descricao_frete = f"Frete #{frete['id']}"
+        # montar descrição estendida com produto, quantidade e data do frete
+        desc_parts = [f"Frete #{frete['id']}"]
         if frete.get("origem_nome") and frete.get("destino_nome"):
-            descricao_frete += f" - {frete['origem_nome']} para {frete['destino_nome']}"
+            desc_parts.append(f"{frete['origem_nome']} para {frete['destino_nome']}")
+
+        produto = (frete.get("produto_nome") or "").strip()
+        if produto:
+            desc_parts.append(produto)
+
+        qtd_val = frete.get("quantidade_manual") if frete.get("quantidade_manual") not in (None, "") else frete.get("quantidade_valor")
+        if qtd_val not in (None, "", 0):
+            try:
+                qtd_text = f"{float(qtd_val):.3f} L"
+            except Exception:
+                qtd_text = str(qtd_val)
+            desc_parts.append(qtd_text)
+
+        df = frete.get("data_frete")
+        if df:
+            try:
+                if hasattr(df, "strftime"):
+                    df_text = df.strftime("%d/%m/%Y")
+                else:
+                    df_text = str(df)[:10]
+                desc_parts.append(df_text)
+            except Exception:
+                pass
+
+        descricao_frete = " - ".join(desc_parts)
 
         body_sdk = _build_body(frete, descricao_frete, data_vencimento, valor_total_centavos)
         body_charge = _build_charge_payload(frete, descricao_frete, data_vencimento, valor_total_centavos)
@@ -1234,7 +1301,6 @@ def emitir_boleto_frete(frete_id, vencimento_str=None):
         # tentativa via SDK (pode acabar invocando create_charge se o método for inadequado)
         if efi:
             try:
-                # montar body para SDK incluindo id + payment (e garantir items/metadata para evitar validation_error)
                 payment_body_for_sdk = {"id": charge_id, **body_pay}
                 if "items" not in payment_body_for_sdk:
                     try:
@@ -1265,18 +1331,15 @@ def emitir_boleto_frete(frete_id, vencimento_str=None):
                 if isinstance(resp_pay, dict) and ("data" in resp_pay or "charge" in resp_pay or resp_pay.get("id") or resp_pay.get("charge_id")):
                     paid_success = True
                 else:
-                    # se veio resposta não-JSON ou validation que pede items, tentamos pay incluindo items+metadata
                     reason_text = ""
                     if isinstance(resp_pay, dict) and resp_pay.get("text"):
                         reason_text = resp_pay.get("text")[:1000]
                     elif isinstance(resp_pay, dict) and resp_pay.get("error"):
                         reason_text = str(resp_pay.get("error"))
                     logger.info("direct_pay_charge não retornou dados: %s", reason_text)
-                    # tentativa alternativa: incluir items + metadata no POST /charge/{id}/pay
                     alt_body = {}
                     try:
                         alt_body.update({"items": body_charge.get("items", [])})
-                        # manter payment
                         alt_body.update(body_pay)
                         alt_body.update({"metadata": body_charge.get("metadata", {})})
                         _log_send_attempt("direct_pay_charge_alt_with_items", alt_body, extra_note=f"direct HTTP pay alt for charge {charge_id}")
@@ -1298,8 +1361,7 @@ def emitir_boleto_frete(frete_id, vencimento_str=None):
             if not charge_id_final:
                 charge_id_final = charge_id
 
-            # -----------------------------------------------------------------
-            # Tentar obter e salvar o PDF automaticamente (tentativas e fallback)
+            # tentar obter e salvar o PDF automaticamente (tentativas e fallback)
             pdf_boleto_path = None
             pdf_url = None
             try:
@@ -1308,14 +1370,12 @@ def emitir_boleto_frete(frete_id, vencimento_str=None):
                     pdf_obj = data.get("pdf") or {}
                     pdf_url = pdf_obj.get("charge") or pdf_obj.get("boleto") or data.get("link") or data.get("billet_link")
                     if not pdf_url:
-                        # checar nested payment banking_billet
                         pb = (data.get("payment") or {}).get("banking_billet") or data.get("banking_billet") or {}
                         if isinstance(pb, dict):
                             pdf_url = pb.get("pdf") or pb.get("link")
             except Exception:
                 pdf_url = None
 
-            # se não veio no response, tentar obter via fetch_charge algumas vezes
             if not pdf_url:
                 tries = 3
                 for i in range(tries):
@@ -1326,7 +1386,7 @@ def emitir_boleto_frete(frete_id, vencimento_str=None):
                             d = fresh.get("data") or fresh.get("charge") or fresh
                             if isinstance(d, dict):
                                 pdf_obj = d.get("pdf") or {}
-                                pdf_url = pdf_obj.get("charge") or pdf_obj.get("boleto") or d.get("link") or d.get("billet_link") or (d.get("payment") or {}).get("banking_billet", {}).get("link"[...])
+                                pdf_url = pdf_obj.get("charge") or pdf_obj.get("boleto") or d.get("link") or d.get("billet_link") or (d.get("payment") or {}).get("banking_billet", {}).get("link")
                         if pdf_url:
                             break
                     except Exception:
@@ -1336,7 +1396,6 @@ def emitir_boleto_frete(frete_id, vencimento_str=None):
                 try:
                     resp = fetch_boleto_pdf_stream(credentials, pdf_url)
                     if resp is not None and getattr(resp, "status_code", None) == 200:
-                        # usar BOLETOS_DIR (configurável) em vez de diretório fixo
                         safe_dir = BOLETOS_DIR
                         fname = f"boleto_{charge_id_final}.pdf"
                         dest = os.path.join(safe_dir, fname)
@@ -1344,7 +1403,6 @@ def emitir_boleto_frete(frete_id, vencimento_str=None):
                         if ok:
                             pdf_boleto_path = dest
                         else:
-                            # fallback: guardar a URL do provedor
                             pdf_boleto_path = pdf_url
                     else:
                         logger.info("fetch_boleto_pdf_stream retornou status não-200 ou resp None: %s", getattr(resp, "status_code", None) if resp else None)
@@ -1355,7 +1413,6 @@ def emitir_boleto_frete(frete_id, vencimento_str=None):
             else:
                 logger.info("Nenhuma URL de PDF encontrada para charge %s", charge_id_final)
                 pdf_boleto_path = None
-            # -----------------------------------------------------------------
 
             try:
                 cursor.execute(
