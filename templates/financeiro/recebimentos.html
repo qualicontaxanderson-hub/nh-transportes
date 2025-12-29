@@ -25,7 +25,16 @@
                 {% for r in recebimentos %}
                 <tr id="cobranca-row-{{ r.charge_id or r.id }}">
                     <td>{{ r.id }}</td>
-                    <td>{% if r.frete_numero %}#{{ r.frete_numero }}{% else %}-{% endif %}</td>
+                    <td>
+                      {# Mostrar número do frete se disponível, fallback para frete_id #}
+                      {% if r.frete_numero %}
+                        #{{ r.frete_numero }}
+                      {% elif r.frete_id %}
+                        #{{ r.frete_id }}
+                      {% else %}
+                        -
+                      {% endif %}
+                    </td>
                     <td>{{ r.cliente_fantasia or r.cliente_nome or '-' }}</td>
                     <td>
                       {% if r.valor is not none %}
@@ -34,11 +43,21 @@
                         R$ 0,00
                       {% endif %}
                     </td>
-                    <td>{{ r.data_vencimento.strftime('%d/%m/%Y') if r.data_vencimento else '-' }}</td>
+                    <td>{{ r.data_vencimento_fmt or (r.data_vencimento.strftime('%d/%m/%Y') if r.data_vencimento else '-') }}</td>
                     <td>
-                        <span class="badge {% if r.status == 'pago' %}bg-success{% elif r.status == 'pendente' %}bg-warning{% elif r.status == 'cancelado' %}bg-secondary{% else %}bg-danger{% endif %}">
-                            {{ r.status or 'pendente' }}
-                        </span>
+                        {# usar display_status calculado no backend (routes/financeiro.py) #}
+                        {% set ds = r.display_status if r.display_status is defined else (r.status or 'pendente') %}
+                        {% if ds == 'pago' %}
+                            <span class="badge bg-success">Pago</span>
+                        {% elif ds == 'quitado' %}
+                            <span class="badge bg-info">Quitado</span>
+                        {% elif ds == 'vencido' %}
+                            <span class="badge bg-danger">Vencido</span>
+                        {% elif ds == 'cancelado' %}
+                            <span class="badge bg-secondary">Cancelado</span>
+                        {% else %}
+                            <span class="badge bg-warning">Pendente</span>
+                        {% endif %}
                     </td>
                     <td><small>{{ r.charge_id or '-' }}</small></td>
                     <td>
@@ -77,13 +96,13 @@
                                 <i class="bi bi-calendar-plus"></i>
                             </button>
 
-                            <!-- Reemitir: habilitado apenas se status == 'cancelado' -->
+                            <!-- Reemitir: habilitado apenas se display_status == 'cancelado' -->
                             <button type="button"
                                     class="btn btn-sm btn-outline-primary btn-reemitir"
                                     data-charge-id="{{ r.charge_id }}"
                                     data-frete-id="{{ r.frete_id or '' }}"
                                     title="Reemitir boleto"
-                                    {% if r.status != 'cancelado' %} disabled {% endif %}>
+                                    {% if ds != 'cancelado' %} disabled {% endif %}>
                                 <i class="bi bi-arrow-clockwise"></i>
                             </button>
                             {% endif %}
