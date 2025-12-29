@@ -155,6 +155,100 @@ def emitir_boleto_multiple_route():
         return jsonify({"success": False, "error": str(e)}), 500
 
 
+@financeiro_bp.route('/quitar-frete/', methods=['POST'])
+@login_required
+def quitar_frete():
+    """
+    Quitar um ou vários fretes (pagamento em dinheiro/antecipado).
+    Espera JSON: { "frete_ids": [1,2], "data_pagamento": "YYYY-MM-DD" }
+    Cria/atualiza registros em cobrancas com status='pago' e marca fretes.boleto_emitido = TRUE.
+    """
+    try:
+        if not request.is_json:
+            return jsonify({"success": False, "error": "Requisição deve ser JSON"}), 400
+        payload = request.get_json(silent=True) or {}
+        frete_ids = payload.get("frete_ids") or payload.get("ids") or []
+        data_pagamento = payload.get("data_pagamento") or payload.get("data") or None
+
+        if not frete_ids:
+            return jsonify({"success": False, "error": "frete_ids ausentes"}), 400
+        # normalize
+        try:
+            ids = [int(x) for x in frete_ids]
+        except Exception:
+            return jsonify({"success": False, "error": "frete_ids inválidos"}), 400
+
+        if not data_pagamento:
+            # default today
+            data_pagamento = datetime.today().date().isoformat()
+
+        conn = get_db_connection()
+        cur = conn.cursor()
+        saved = []
+        failed = []
+        try:
+            for fid in ids:
+                try:
+                    # fetch frete info
+                    cur.execute("SELECT id, clientes_id, valor_total_frete FROM fretes WHERE id = %s LIMIT 1", (fid,))
+                    frete = cur.fetchone()
+                    if not frete:
+                        failed.append({"id": fid, "error": "frete não encontrado"})
+                        continue
+                    cliente_id = frete[1] if isinstance(frete, (list, tuple)) else frete.get("clientes_id")
+                    valor = frete[2] if isinstance(frete, (list, tuple)) else frete.get("valor_total_frete") or 0
+
+                    # inserir cobranca como PAGO (charge_id null)
+                    cur.execute("""
+                        INSERT INTO cobrancas (frete_id, id_cliente, valor, data_vencimento, status, charge_id, data_emissao, data_pagamento, pago_via_provedor)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    """, (
+                        fid,
+                        cliente_id,
+                        float(valor),
+                        None,
+                        "pago",
+                        None,
+                        datetime.today().date(),
+                        data_pagamento,
+                        0
+                    ))
+                    cobr_id = getattr(cur, "lastrowid", None) or None
+
+                    # marcar frete como boleto_emitido para impedir emissões futuras
+                    try:
+                        cur.execute("UPDATE fretes SET boleto_emitido = TRUE WHERE id = %s", (fid,))
+                    except Exception:
+                        current_app.logger.exception("Falha marcando frete boleto_emitido para %s", fid)
+
+                    conn.commit()
+                    saved.append({"frete_id": fid, "cobranca_id": cobr_id})
+                except Exception as e:
+                    try:
+                        conn.rollback()
+                    except Exception:
+                        pass
+                    current_app.logger.exception("Erro ao quitar frete %s: %s", fid, e)
+                    failed.append({"id": fid, "error": str(e)})
+        finally:
+            try:
+                cur.close()
+            except Exception:
+                pass
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+        if failed and not saved:
+            return jsonify({"success": False, "error": "Falha ao quitar todos os fretes", "details": failed}), 500
+        return jsonify({"success": True, "saved": saved, "failed": failed}), 200
+
+    except Exception as e:
+        current_app.logger.exception("Erro em quitar_frete: %s", e)
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
 @financeiro_bp.route('/visualizar-boleto/<int:charge_id>/')
 @login_required
 def visualizar_boleto(charge_id):
