@@ -2,7 +2,7 @@ from flask import Blueprint, render_template, request, jsonify, flash, redirect,
 from flask_login import login_required
 from utils.db import get_db_connection
 from utils.boletos import emitir_boleto_frete, emitir_boleto_multiplo, fetch_charge, fetch_boleto_pdf_stream, update_billet_expire, cancel_charge
-from datetime import datetime
+from datetime import datetime, date
 import os
 
 financeiro_bp = Blueprint('financeiro', __name__, url_prefix='/financeiro')
@@ -34,6 +34,68 @@ def recebimentos():
             current_app.logger.error(f"[recebimentos] Erro SQL: {str(e)}")
             flash(f"Erro ao carregar recebimentos: {str(e)}", "danger")
             recebimentos_lista = []
+
+        # --- normalizar e calcular display_status para UI -------------------
+        # Regras:
+        # - 'pago' = pagamento por cobrança (provedor) -> pago_via_provedor = 1 ou charge_id presente e status='pago'
+        # - 'quitado' = pagamento manual via fretes/lista (status='pago' sem charge_id/pago_via_provedor)
+        # - 'cancelado' = status local = 'cancelado'
+        # - 'vencido' = data_vencimento < hoje e não pago/cancelado
+        # - 'pendente' = default (a vencer ou sem data)
+        try:
+            today = date.today()
+            for r in recebimentos_lista:
+                try:
+                    status_raw = (r.get('status') or '').strip().lower()
+                except Exception:
+                    status_raw = ''
+
+                charge_id = r.get('charge_id') if isinstance(r, dict) else None
+                try:
+                    pago_via_provedor = bool(int(r.get('pago_via_provedor') or 0))
+                except Exception:
+                    pago_via_provedor = False
+
+                # formatar data_vencimento para exibição
+                dv = r.get('data_vencimento')
+                r['data_vencimento_fmt'] = '-'
+                try:
+                    if dv:
+                        if hasattr(dv, 'strftime'):
+                            r['data_vencimento_fmt'] = dv.strftime('%d/%m/%Y')
+                        else:
+                            # aceitar string YYYY-MM-DD
+                            try:
+                                parsed = datetime.strptime(str(dv)[:10], '%Y-%m-%d').date()
+                                r['data_vencimento_fmt'] = parsed.strftime('%d/%m/%Y')
+                            except Exception:
+                                r['data_vencimento_fmt'] = str(dv)
+                except Exception:
+                    r['data_vencimento_fmt'] = '-'
+
+                # decidir display_status (prioridade)
+                if status_raw == 'cancelado':
+                    r['display_status'] = 'cancelado'
+                elif pago_via_provedor or (charge_id not in (None, '', 0) and status_raw == 'pago'):
+                    r['display_status'] = 'pago'
+                elif status_raw == 'pago' and (charge_id in (None, '', 0) and not pago_via_provedor):
+                    r['display_status'] = 'quitado'
+                else:
+                    # pendente vs vencido
+                    venc = None
+                    try:
+                        if dv:
+                            venc = dv if hasattr(dv, 'strftime') else datetime.strptime(str(dv)[:10], '%Y-%m-%d').date()
+                    except Exception:
+                        venc = None
+                    if venc:
+                        r['display_status'] = 'vencido' if venc < today else 'pendente'
+                    else:
+                        r['display_status'] = 'pendente'
+        except Exception:
+            current_app.logger.exception("[recebimentos] erro calculando display_status")
+        # -------------------------------------------------------------------
+
         return render_template('financeiro/recebimentos.html', recebimentos=recebimentos_lista)
     except Exception as e:
         current_app.logger.error(f"[recebimentos] Erro geral: {str(e)}")
