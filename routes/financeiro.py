@@ -19,13 +19,18 @@ def recebimentos():
         cursor = conn.cursor(dictionary=True)
 
         try:
+            # JOIN com fretes para trazer número, id e data do frete (usados no template)
             cursor.execute("""
                 SELECT 
                     c.*,
-                    cl.razao_social as cliente_nome,
-                    cl.nome_fantasia as cliente_fantasia
+                    cl.razao_social AS cliente_nome,
+                    cl.nome_fantasia AS cliente_fantasia,
+                    f.id AS frete_id,
+                    f.numero AS frete_numero,
+                    f.data_frete AS frete_data
                 FROM cobrancas c
                 LEFT JOIN clientes cl ON c.id_cliente = cl.id
+                LEFT JOIN fretes f ON c.frete_id = f.id
                 ORDER BY c.data_vencimento DESC, c.data_emissao DESC
             """)
             recebimentos_lista = cursor.fetchall()
@@ -36,12 +41,6 @@ def recebimentos():
             recebimentos_lista = []
 
         # --- normalizar e calcular display_status para UI -------------------
-        # Regras:
-        # - 'pago' = pagamento por cobrança (provedor) -> pago_via_provedor = 1 ou charge_id presente e status='pago'
-        # - 'quitado' = pagamento manual via fretes/lista (status='pago' sem charge_id/pago_via_provedor)
-        # - 'cancelado' = status local = 'cancelado'
-        # - 'vencido' = data_vencimento < hoje e não pago/cancelado
-        # - 'pendente' = default (a vencer ou sem data)
         try:
             today = date.today()
             for r in recebimentos_lista:
@@ -64,7 +63,6 @@ def recebimentos():
                         if hasattr(dv, 'strftime'):
                             r['data_vencimento_fmt'] = dv.strftime('%d/%m/%Y')
                         else:
-                            # aceitar string YYYY-MM-DD
                             try:
                                 parsed = datetime.strptime(str(dv)[:10], '%Y-%m-%d').date()
                                 r['data_vencimento_fmt'] = parsed.strftime('%d/%m/%Y')
@@ -81,7 +79,6 @@ def recebimentos():
                 elif status_raw == 'pago' and (charge_id in (None, '', 0) and not pago_via_provedor):
                     r['display_status'] = 'quitado'
                 else:
-                    # pendente vs vencido
                     venc = None
                     try:
                         if dv:
@@ -118,10 +115,7 @@ def _wants_json():
 def emitir_boleto_route(frete_id):
     """Emite boleto para um frete específico (aceita campo 'vencimento' opcional YYYY-MM-DD ou DD/MM/YYYY)."""
     try:
-        # ler vencimento enviado pelo formulário (opcional)
         vencimento = None
-
-        # se veio JSON no body (o frontend da lista envia JSON), ler
         if request.is_json:
             try:
                 payload = request.get_json(silent=True) or {}
@@ -129,7 +123,6 @@ def emitir_boleto_route(frete_id):
             except Exception:
                 vencimento = None
         else:
-            # tentativa via form (submissão tradicional)
             vencimento = request.form.get('vencimento') or request.form.get('new_vencimento') or None
 
         resultado = emitir_boleto_frete(frete_id, vencimento_str=vencimento)
@@ -147,7 +140,6 @@ def emitir_boleto_route(frete_id):
             barcode = resultado.get('barcode')
             pdf_boleto = resultado.get('pdf_boleto')
 
-            # Se for requisição AJAX/JSON -> retornar JSON contendo a URL/arquivo do boleto
             if _wants_json():
                 payload = {"success": True, "charge_id": charge_id}
                 if boleto_url:
@@ -158,16 +150,13 @@ def emitir_boleto_route(frete_id):
                     payload["barcode"] = barcode
                 return jsonify(payload), 200
 
-            # caso normal (form submit) -> flash e redirect
             flash(f"Boleto emitido com sucesso! Charge ID: {charge_id}", "success")
             return redirect(url_for('financeiro.recebimentos'))
         else:
             error_msg = str(resultado.get('error', 'Erro desconhecido'))
             current_app.logger.warning(f"[emitir_boleto] erro: {error_msg}")
-
             if _wants_json():
                 return jsonify({"success": False, "error": error_msg}), 400
-
             flash(f"Erro ao emitir boleto: {error_msg}", "danger")
             return redirect(url_for('fretes.lista'))
     except Exception as e:
@@ -181,11 +170,6 @@ def emitir_boleto_route(frete_id):
 @financeiro_bp.route('/emitir-boleto-multiple/', methods=['POST'])
 @login_required
 def emitir_boleto_multiple_route():
-    """
-    Emite um único boleto para múltiplos fretes (POST JSON):
-    { "frete_ids": [1,2,3], "vencimento": "YYYY-MM-DD" }
-    Retorna JSON com success e charge_id/boleto_url/pdf_boleto.
-    """
     try:
         if not request.is_json:
             return jsonify({"success": False, "error": "Requisição deve ser JSON"}), 400
@@ -217,6 +201,127 @@ def emitir_boleto_multiple_route():
         return jsonify({"success": False, "error": str(e)}), 500
 
 
+@financeiro_bp.route('/prorrogar-boleto/<charge_id>/', methods=['POST'])
+@login_required
+def prorrogar_boleto(charge_id):
+    """
+    Prorroga (altera) vencimento do boleto no provedor e atualiza localmente.
+    Espera JSON { "new_date": "YYYY-MM-DD" } ou form data.
+    """
+    try:
+        new_date = None
+        if request.is_json:
+            payload = request.get_json(silent=True) or {}
+            new_date = payload.get("new_date") or payload.get("new_vencimento")
+        else:
+            new_date = request.form.get("new_date") or request.form.get("new_vencimento")
+
+        if not new_date:
+            return jsonify({"success": False, "error": "new_date ausente"}), 400
+
+        credentials = {
+            "client_id": current_app.config.get("EFI_CLIENT_ID") or None,
+            "client_secret": current_app.config.get("EFI_CLIENT_SECRET") or None,
+            "sandbox": current_app.config.get("EFI_SANDBOX", True),
+        }
+        success, resp = update_billet_expire(credentials, charge_id, new_date)
+        if not success:
+            current_app.logger.warning("[prorrogar_boleto] falha provedor: %r", resp)
+            return jsonify({"success": False, "error": resp}), 400
+
+        # atualizar localmente data_vencimento se houver registro
+        try:
+            conn = get_db_connection()
+            cur = conn.cursor()
+            cur.execute("UPDATE cobrancas SET data_vencimento = %s WHERE charge_id = %s", (new_date, str(charge_id)))
+            conn.commit()
+            cur.close()
+            conn.close()
+        except Exception:
+            current_app.logger.exception("[prorrogar_boleto] falha atualizando DB para charge %s", charge_id)
+
+        return jsonify({"success": True}), 200
+    except Exception as e:
+        current_app.logger.exception("Erro em prorrogar_boleto: %s", e)
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@financeiro_bp.route('/reemitir-boleto/<charge_id>/', methods=['POST'])
+@login_required
+def reemitir_boleto(charge_id):
+    """
+    Reemite boleto para a mesma cobrança (após cancelamento).
+    Fluxo:
+      - busca cobranca por charge_id
+      - só permite reemissão se status == 'cancelado'
+      - tenta reemitir:
+          * se cobrancas.frete_id presente -> emitir_boleto_frete(frete_id)
+          * else se existe mapping em cobrancas_fretes -> emitir_boleto_multiplo(list_of_fretes)
+          * else se o corpo da requisição fornecer frete_id -> emitir_boleto_frete(frete_id)
+    Retorna JSON com resultado do utilitário de emissão.
+    """
+    try:
+        payload = request.get_json(silent=True) or {}
+        override_frete_id = payload.get("frete_id") or None
+
+        conn = get_db_connection()
+        cur = conn.cursor(dictionary=True)
+        cur.execute("SELECT id, frete_id, status FROM cobrancas WHERE charge_id = %s LIMIT 1", (str(charge_id),))
+        cobr = cur.fetchone()
+        if not cobr:
+            cur.close()
+            conn.close()
+            return jsonify({"success": False, "error": "Cobrança não encontrada"}), 404
+
+        status = (cobr.get("status") or "").strip().lower()
+        if status != "cancelado":
+            cur.close()
+            conn.close()
+            return jsonify({"success": False, "error": "Só é possível reemitir boleto quando a cobrança estiver 'cancelado'."}), 400
+
+        # prioridade: frete_id do payload -> frete_id da cobranca -> cobrancas_fretes mapping
+        if override_frete_id:
+            try:
+                fid = int(override_frete_id)
+                cur.close()
+                conn.close()
+                resultado = emitir_boleto_frete(fid)
+                return jsonify(resultado), (200 if resultado.get("success") else 400)
+            except Exception:
+                pass
+
+        if cobr.get("frete_id"):
+            try:
+                fid = int(cobr.get("frete_id"))
+                cur.close()
+                conn.close()
+                resultado = emitir_boleto_frete(fid)
+                return jsonify(resultado), (200 if resultado.get("success") else 400)
+            except Exception:
+                pass
+
+        # tentar buscar relações em cobrancas_fretes (agrupada)
+        try:
+            cur.execute("SELECT frete_id FROM cobrancas_fretes WHERE cobranca_id = %s", (int(cobr.get("id")),))
+            rows = cur.fetchall()
+            frete_ids = [int(r.get("frete_id")) for r in rows if r.get("frete_id")]
+            cur.close()
+            conn.close()
+            if frete_ids:
+                resultado = emitir_boleto_multiplo(frete_ids)
+                return jsonify(resultado), (200 if resultado.get("success") else 400)
+        except Exception:
+            current_app.logger.debug("reemitir_boleto: cobrancas_fretes não existe ou falhou a query")
+
+        # semfrete identificado
+        cur.close()
+        conn.close()
+        return jsonify({"success": False, "error": "Não foi possível determinar frete(s) para reemissão. Forneça 'frete_id' no corpo da requisição."}), 400
+    except Exception as e:
+        current_app.logger.exception("Erro em reemitir_boleto: %s", e)
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
 @financeiro_bp.route('/quitar-frete/', methods=['POST'])
 @login_required
 def quitar_frete():
@@ -241,7 +346,6 @@ def quitar_frete():
             return jsonify({"success": False, "error": "frete_ids inválidos"}), 400
 
         if not data_pagamento:
-            # default today
             data_pagamento = datetime.today().date().isoformat()
 
         conn = get_db_connection()
@@ -251,7 +355,6 @@ def quitar_frete():
         try:
             for fid in ids:
                 try:
-                    # fetch frete info
                     cur.execute("SELECT id, clientes_id, valor_total_frete FROM fretes WHERE id = %s LIMIT 1", (fid,))
                     frete = cur.fetchone()
                     if not frete:
@@ -260,7 +363,6 @@ def quitar_frete():
                     cliente_id = frete[1] if isinstance(frete, (list, tuple)) else frete.get("clientes_id")
                     valor = frete[2] if isinstance(frete, (list, tuple)) else frete.get("valor_total_frete") or 0
 
-                    # inserir cobranca como PAGO (charge_id null)
                     cur.execute("""
                         INSERT INTO cobrancas (frete_id, id_cliente, valor, data_vencimento, status, charge_id, data_emissao, data_pagamento, pago_via_provedor)
                         VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
@@ -277,7 +379,6 @@ def quitar_frete():
                     ))
                     cobr_id = getattr(cur, "lastrowid", None) or None
 
-                    # marcar frete como boleto_emitido para impedir emissões futuras
                     try:
                         cur.execute("UPDATE fretes SET boleto_emitido = TRUE WHERE id = %s", (fid,))
                     except Exception:
@@ -321,7 +422,6 @@ def visualizar_boleto(charge_id):
     Se não houver pdf_boleto ou estiver inválido, faz fetch ao provedor e stream (com fetch_boleto_pdf_stream).
     """
     try:
-        # 1) tentar obter registro local (cobrancas) para pdf_boleto/link_boleto
         row = None
         try:
             conn = get_db_connection()
@@ -343,12 +443,10 @@ def visualizar_boleto(charge_id):
             except Exception:
                 pass
 
-        # se houver pdf_boleto local
         if row:
             pdf_boleto = row.get("pdf_boleto")
             link_boleto = row.get("link_boleto")
             if pdf_boleto:
-                # se for um caminho local de arquivo e existir, serve diretamente
                 if isinstance(pdf_boleto, str) and (pdf_boleto.startswith('/') or pdf_boleto.startswith('.')):
                     try:
                         if os.path.exists(pdf_boleto):
@@ -356,17 +454,14 @@ def visualizar_boleto(charge_id):
                     except Exception:
                         current_app.logger.exception("visualizar_boleto: falha ao servir arquivo local %s", pdf_boleto)
                 else:
-                    # se pdf_boleto parece ser URL, redireciona para ela
                     try:
                         if pdf_boleto.startswith('http://') or pdf_boleto.startswith('https://'):
                             return redirect(pdf_boleto)
                     except Exception:
                         pass
-            # se houver link_boleto e pdf_boleto ausente, redireciona para link_boleto
             if link_boleto and isinstance(link_boleto, str) and (link_boleto.startswith('http://') or link_boleto.startswith('https://')):
                 return redirect(link_boleto)
 
-        # 2) fallback: buscar no provedor (com as credenciais)
         credentials = {
             "client_id": current_app.config.get("EFI_CLIENT_ID") or None,
             "client_secret": current_app.config.get("EFI_CLIENT_SECRET") or None,
@@ -378,7 +473,6 @@ def visualizar_boleto(charge_id):
             return redirect(url_for('financeiro.recebimentos'))
 
         data = charge.get("data") or charge
-        # procurar URL de PDF no payload do provedor
         pdf_url = (data.get("pdf") or {}).get("charge") or (data.get("payment") or {}).get("banking_billet", {}).get("link") or data.get("link")
         if not pdf_url:
             flash("URL do PDF não encontrada na resposta do provedor.", "danger")
@@ -404,10 +498,6 @@ def visualizar_boleto(charge_id):
 @financeiro_bp.route('/alterar-vencimento/<int:charge_id>/', methods=['GET', 'POST'])
 @login_required
 def alterar_vencimento(charge_id):
-    """
-    GET: mostra formulário para alterar data de vencimento.
-    POST: chama o provedor para atualizar expire_at e atualiza tabela cobrancas.
-    """
     conn = None
     cursor = None
     try:
@@ -459,18 +549,12 @@ def alterar_vencimento(charge_id):
 @financeiro_bp.route('/marcar-pago/<int:charge_id>/', methods=['POST'])
 @login_required
 def marcar_pago(charge_id):
-    """
-    Marca a cobrança localmente como paga (admin).
-    Proteção: se a cobrança foi marcada como paga via provedor (pago_via_provedor=TRUE),
-    NÃO permite marcar/alterar localmente para evitar inconsistências.
-    """
     conn = None
     cursor = None
     try:
         conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)
 
-        # Verificar se esta cobrança foi marcada pelo provedor
         try:
             cursor.execute("SELECT pago_via_provedor, status FROM cobrancas WHERE charge_id = %s LIMIT 1", (str(charge_id),))
             row = cursor.fetchone()
@@ -483,13 +567,10 @@ def marcar_pago(charge_id):
                     flash("Pagamento registrado pelo provedor (EFI). Reversão/alteração não permitida pelo sistema.", "danger")
                     return redirect(url_for('financeiro.recebimentos'))
             except Exception:
-                # se dado malformado, prevenir alteração por segurança
                 flash("Não é possível alterar este registro automaticamente (verifique com o financeiro).", "danger")
                 return redirect(url_for('financeiro.recebimentos'))
 
-        # Se não for pago via provedor, permitir marcar como pago (admin)
         try:
-            # usar cursor sem dictionary para updates
             cursor.close()
             cursor = conn.cursor()
             cursor.execute("UPDATE cobrancas SET status = %s WHERE charge_id = %s", ("pago", charge_id))
@@ -530,10 +611,6 @@ def marcar_pago(charge_id):
 @financeiro_bp.route('/cancelar-boleto/<int:charge_id>/', methods=['POST'])
 @login_required
 def cancelar_boleto(charge_id):
-    """
-    Tenta cancelar a cobrança no provedor e atualiza o registro local como 'cancelado'
-    para permitir reemissão.
-    """
     conn = None
     cursor = None
     try:
