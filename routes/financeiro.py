@@ -19,14 +19,15 @@ def recebimentos():
         cursor = conn.cursor(dictionary=True)
 
         try:
-            # JOIN com fretes para trazer número, id e data do frete (usados no template)
+            # Selecionamos campos disponíveis no schema atual.
+            # Nota: fretes não tem coluna 'numero' no schema mostrado — usamos f.id como frete_numero.
             cursor.execute("""
                 SELECT 
                     c.*,
                     cl.razao_social AS cliente_nome,
                     cl.nome_fantasia AS cliente_fantasia,
                     f.id AS frete_id,
-                    f.numero AS frete_numero,
+                    f.id AS frete_numero,
                     f.data_frete AS frete_data
                 FROM cobrancas c
                 LEFT JOIN clientes cl ON c.id_cliente = cl.id
@@ -41,6 +42,12 @@ def recebimentos():
             recebimentos_lista = []
 
         # --- normalizar e calcular display_status para UI -------------------
+        # Regras:
+        # - 'pago' = pagamento registrado pelo provedor (pago_via_provedor = 1) ou charge_id presente e status='pago'
+        # - 'quitado' = registro com status='pago' sem charge_id (pagamento manual)
+        # - 'cancelado' = status local = 'cancelado'
+        # - 'vencido' = data_vencimento < hoje e não pago/cancelado
+        # - 'pendente' = default (a vencer ou sem data)
         try:
             today = date.today()
             for r in recebimentos_lista:
@@ -63,6 +70,7 @@ def recebimentos():
                         if hasattr(dv, 'strftime'):
                             r['data_vencimento_fmt'] = dv.strftime('%d/%m/%Y')
                         else:
+                            # aceitar string YYYY-MM-DD
                             try:
                                 parsed = datetime.strptime(str(dv)[:10], '%Y-%m-%d').date()
                                 r['data_vencimento_fmt'] = parsed.strftime('%d/%m/%Y')
@@ -170,6 +178,11 @@ def emitir_boleto_route(frete_id):
 @financeiro_bp.route('/emitir-boleto-multiple/', methods=['POST'])
 @login_required
 def emitir_boleto_multiple_route():
+    """
+    Emite um único boleto para múltiplos fretes (POST JSON):
+    { "frete_ids": [1,2,3], "vencimento": "YYYY-MM-DD" }
+    Retorna JSON com success e charge_id/boleto_url/pdf_boleto.
+    """
     try:
         if not request.is_json:
             return jsonify({"success": False, "error": "Requisição deve ser JSON"}), 400
@@ -302,7 +315,7 @@ def reemitir_boleto(charge_id):
 
         # tentar buscar relações em cobrancas_fretes (agrupada)
         try:
-            cur.execute("SELECT frete_id FROM cobrancas_fretes WHERE cobranca_id = %s", (int(cobr.get("id")),))
+            cur.execute("SELECT frete_id FROM cobrancas_freites WHERE cobranca_id = %s", (int(cobr.get("id")),))
             rows = cur.fetchall()
             frete_ids = [int(r.get("frete_id")) for r in rows if r.get("frete_id")]
             cur.close()
@@ -311,9 +324,20 @@ def reemitir_boleto(charge_id):
                 resultado = emitir_boleto_multiplo(frete_ids)
                 return jsonify(resultado), (200 if resultado.get("success") else 400)
         except Exception:
-            current_app.logger.debug("reemitir_boleto: cobrancas_fretes não existe ou falhou a query")
+            # tentar com nome alternativo da tabela se usar outro nome
+            try:
+                cur.execute("SELECT frete_id FROM cobrancas_fretes WHERE cobranca_id = %s", (int(cobr.get("id")),))
+                rows = cur.fetchall()
+                frete_ids = [int(r.get("frete_id")) for r in rows if r.get("frete_id")]
+                cur.close()
+                conn.close()
+                if frete_ids:
+                    resultado = emitir_boleto_multiplo(frete_ids)
+                    return jsonify(resultado), (200 if resultado.get("success") else 400)
+            except Exception:
+                current_app.logger.debug("reemitir_boleto: cobrancas_fretes não existe ou falhou a query")
 
-        # semfrete identificado
+        # sem frete identificado
         cur.close()
         conn.close()
         return jsonify({"success": False, "error": "Não foi possível determinar frete(s) para reemissão. Forneça 'frete_id' no corpo da requisição."}), 400
@@ -498,6 +522,10 @@ def visualizar_boleto(charge_id):
 @financeiro_bp.route('/alterar-vencimento/<int:charge_id>/', methods=['GET', 'POST'])
 @login_required
 def alterar_vencimento(charge_id):
+    """
+    GET: mostra formulário para alterar data de vencimento.
+    POST: chama o provedor para atualizar expire_at e atualiza tabela cobrancas.
+    """
     conn = None
     cursor = None
     try:
@@ -549,12 +577,18 @@ def alterar_vencimento(charge_id):
 @financeiro_bp.route('/marcar-pago/<int:charge_id>/', methods=['POST'])
 @login_required
 def marcar_pago(charge_id):
+    """
+    Marca a cobrança localmente como paga (admin).
+    Proteção: se a cobrança foi marcada como paga via provedor (pago_via_provedor=TRUE),
+    NÃO permite marcar/alterar localmente para evitar inconsistências.
+    """
     conn = None
     cursor = None
     try:
         conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)
 
+        # Verificar se esta cobrança foi marcada pelo provedor
         try:
             cursor.execute("SELECT pago_via_provedor, status FROM cobrancas WHERE charge_id = %s LIMIT 1", (str(charge_id),))
             row = cursor.fetchone()
@@ -567,10 +601,13 @@ def marcar_pago(charge_id):
                     flash("Pagamento registrado pelo provedor (EFI). Reversão/alteração não permitida pelo sistema.", "danger")
                     return redirect(url_for('financeiro.recebimentos'))
             except Exception:
+                # se dado malformado, prevenir alteração por segurança
                 flash("Não é possível alterar este registro automaticamente (verifique com o financeiro).", "danger")
                 return redirect(url_for('financeiro.recebimentos'))
 
+        # Se não for pago via provedor, permitir marcar como pago (admin)
         try:
+            # usar cursor sem dictionary para updates
             cursor.close()
             cursor = conn.cursor()
             cursor.execute("UPDATE cobrancas SET status = %s WHERE charge_id = %s", ("pago", charge_id))
@@ -611,6 +648,10 @@ def marcar_pago(charge_id):
 @financeiro_bp.route('/cancelar-boleto/<int:charge_id>/', methods=['POST'])
 @login_required
 def cancelar_boleto(charge_id):
+    """
+    Tenta cancelar a cobrança no provedor e atualiza o registro local como 'cancelado'
+    para permitir reemissão.
+    """
     conn = None
     cursor = None
     try:
