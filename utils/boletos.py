@@ -17,6 +17,7 @@ import json
 import copy
 import logging
 import time
+import re
 from datetime import datetime, timedelta
 
 import requests
@@ -932,7 +933,10 @@ def emitir_boleto_multiplo(frete_ids, vencimento_str=None):
             return {"success": False, "error": "Soma dos fretes inválida/zerada"}
 
         # montar payloads
-        custom_id = "multi:" + ",".join(map(str, ids)) + ":" + datetime.utcnow().strftime("%Y%m%d%H%M%S")
+        # gerar custom_id seguro: apenas A-Za-z0-9 _ - permitidos; evita ":" e "," que causavam validation_error
+        raw_cid = "multi-" + "-".join(map(str, ids)) + "-" + datetime.utcnow().strftime("%Y%m%d%H%M%S")
+        safe_cid = re.sub(r'[^A-Za-z0-9_-]', '_', raw_cid)[:80]
+        custom_id = safe_cid
         body_charge = _build_charge_payload_multi(client_data, items, custom_id, data_vencimento)
         body_pay = _build_pay_payload_multi(client_data, data_vencimento)
 
@@ -1322,7 +1326,7 @@ def emitir_boleto_frete(frete_id, vencimento_str=None):
                             d = fresh.get("data") or fresh.get("charge") or fresh
                             if isinstance(d, dict):
                                 pdf_obj = d.get("pdf") or {}
-                                pdf_url = pdf_obj.get("charge") or pdf_obj.get("boleto") or d.get("link") or d.get("billet_link") or (d.get("payment") or {}).get("banking_billet", {}).get("link")
+                                pdf_url = pdf_obj.get("charge") or pdf_obj.get("boleto") or d.get("link") or d.get("billet_link") or (d.get("payment") or {}).get("banking_billet", {}).get("link"[...])
                         if pdf_url:
                             break
                     except Exception:
