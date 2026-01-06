@@ -292,7 +292,7 @@ def reemitir_boleto(charge_id):
             conn.close()
             return jsonify({"success": False, "error": "Só é possível reemitir boleto quando a cobrança estiver 'cancelado'."}), 400
 
-        # prioridade: frete_id do payload -> frete_id da cobranca -> cobrancas_fretes mapping
+        # prioridade: frete_id do payload -> frete_id da cobranca -> cobrancas_freites mapping
         if override_frete_id:
             try:
                 fid = int(override_frete_id)
@@ -313,7 +313,7 @@ def reemitir_boleto(charge_id):
             except Exception:
                 pass
 
-        # tentar buscar relações em cobrancas_fretes (agrupada)
+        # tentar buscar relações em cobrancas_freites (agrupada)
         try:
             cur.execute("SELECT frete_id FROM cobrancas_freites WHERE cobranca_id = %s", (int(cobr.get("id")),))
             rows = cur.fetchall()
