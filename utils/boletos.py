@@ -562,6 +562,10 @@ def update_billet_expire(credentials, charge_id, new_date):
 def _persist_cancel_to_db(charge_id, provider_resp):
     """
     Tenta persistir no banco o resultado do cancelamento para auditoria.
+    Além de atualizar a tabela cobrancas com status = 'cancelado' e provider response,
+    essa função tenta também limpar a flag fretes.boleto_emitido do frete associado,
+    para permitir que a UI de fretes reabra a emissão do boleto.
+
     Não falha a execução principal se houver erro no DB; apenas loga.
     """
     try:
@@ -573,12 +577,40 @@ def _persist_cancel_to_db(charge_id, provider_resp):
             cur = conn.cursor()
             # armazena JSON se possível; usamos string JSON para compatibilidade
             resp_text = provider_resp if isinstance(provider_resp, str) else json.dumps(provider_resp, ensure_ascii=False)
+
+            # Atualiza cobrancas
             cur.execute(
                 "UPDATE cobrancas SET status=%s, provider_cancel_response=%s, data_cancelamento=NOW() WHERE charge_id=%s",
                 ("cancelado", resp_text, int(charge_id)),
             )
             conn.commit()
-            cur.close()
+            logger.info("_persist_cancel_to_db: cobrancas atualizada para charge_id=%s", charge_id)
+
+            # Tentar descobrir frete_id associado e limpar flag boleto_emitido
+            try:
+                cur.execute("SELECT frete_id FROM cobrancas WHERE charge_id = %s LIMIT 1", (str(charge_id),))
+                row = cur.fetchone()
+                frete_id = None
+                if row:
+                    # row pode ser tuple ou dict conforme driver
+                    if isinstance(row, (list, tuple)):
+                        frete_id = row[0]
+                    elif isinstance(row, dict):
+                        frete_id = row.get("frete_id")
+                if frete_id:
+                    try:
+                        cur.execute("UPDATE fretes SET boleto_emitido = FALSE WHERE id = %s", (int(frete_id),))
+                        conn.commit()
+                        logger.info("_persist_cancel_to_db: limpei fretes.boleto_emitido para frete_id=%s (charge=%s)", frete_id, charge_id)
+                    except Exception:
+                        logger.exception("_persist_cancel_to_db: falha ao limpar fretes.boleto_emitido para frete_id=%s", frete_id)
+            except Exception:
+                logger.exception("_persist_cancel_to_db: erro ao consultar frete_id associado")
+
+            try:
+                cur.close()
+            except Exception:
+                pass
         except Exception:
             logger.exception("_persist_cancel_to_db: falha ao atualizar cobrancas")
             if conn:
