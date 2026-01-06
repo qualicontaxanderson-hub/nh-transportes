@@ -1091,7 +1091,7 @@ def emitir_boleto_multiplo(frete_ids, vencimento_str=None):
         try:
             for r in rows:
                 try:
-                    cursor.execute("INSERT INTO cobrancas_fretes (cobranca_id, frete_id) VALUES (%s, %s)", (cobranca_id, int(r.get("id"))))
+                    cursor.execute("INSERT INTO cobrancas_freites (cobranca_id, frete_id) VALUES (%s, %s)", (cobranca_id, int(r.get("id"))))
                 except Exception:
                     logger.exception("Falha inserindo relação cobranca-frete para frete %s", r.get("id"))
             conn.commit()
