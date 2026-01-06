@@ -227,7 +227,7 @@ def prorrogar_boleto(charge_id):
             payload = request.get_json(silent=True) or {}
             new_date = payload.get("new_date") or payload.get("new_vencimento")
         else:
-            new_date = request.form.get("new_date") or request.form.get("new_vencimento")
+            new_date = request.form.get('new_date') or request.form.get('new_vencimento')
 
         if not new_date:
             return jsonify({"success": False, "error": "new_date ausente"}), 400
@@ -269,7 +269,7 @@ def reemitir_boleto(charge_id):
       - só permite reemissão se status == 'cancelado'
       - tenta reemitir:
           * se cobrancas.frete_id presente -> emitir_boleto_frete(frete_id)
-          * else se existe mapping em cobrancas_fretes -> emitir_boleto_multiplo(list_of_fretes)
+          * else se existe mapping em cobrancas_freites -> emitir_boleto_multiplo(list_of_fretes)
           * else se o corpo da requisição fornecer frete_id -> emitir_boleto_frete(frete_id)
     Retorna JSON com resultado do utilitário de emissão.
     """
@@ -335,7 +335,7 @@ def reemitir_boleto(charge_id):
                     resultado = emitir_boleto_multiplo(frete_ids)
                     return jsonify(resultado), (200 if resultado.get("success") else 400)
             except Exception:
-                current_app.logger.debug("reemitir_boleto: cobrancas_fretes não existe ou falhou a query")
+                current_app.logger.debug("reemitir_boleto: cobrancas_freites não existe ou falhou a query")
 
         # sem frete identificado
         cur.close()
