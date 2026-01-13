@@ -15,7 +15,7 @@ class VendasPosto(db.Model):
     data_movimento = db.Column(db.Date, nullable=False, default=datetime.utcnow)
     
     cliente_id = db.Column(db.Integer, db.ForeignKey('clientes.id'), nullable=True)
-    produto_id = db.Column(db.Integer, db.ForeignKey('produto.id'), nullable=False)
+    produto_id = db.Column(db.Integer, db.ForeignKey('produto.id'), nullable=False)  # ← CORRIGIDO
     vendedor_id = db.Column(db.Integer, nullable=True)
     
     quantidade_litros = db.Column(db.Numeric(10, 3), nullable=False, default=0)
