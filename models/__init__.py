@@ -11,9 +11,10 @@ from models.pedido_item import PedidoItem
 from models.cliente import Cliente
 from models.veiculo import Veiculo
 from models.frete import Frete
-from models.base import Base  # <-- novo
-from models.produto import Produto  # <-- ADICIONAR
-from models.cliente_produto import ClienteProduto  # <-- ADICIONAR
+from models.base import Base
+from models.produto import Produto
+from models.cliente_produto import ClienteProduto
+from models.vendas_posto import VendasPosto
 
 __all__ = [
     'Usuario',
@@ -25,8 +26,9 @@ __all__ = [
     'Cliente',
     'Veiculo',
     'Frete',
-    'Base',  # <-- novo
-    'Produto',  # <-- ADICIONAR
-    'ClienteProduto',  # <-- ADICIONAR
+    'Base',
+    'Produto',
+    'ClienteProduto',
+    'VendasPosto',
     'db',
 ]
