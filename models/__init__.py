@@ -12,6 +12,8 @@ from models.cliente import Cliente
 from models.veiculo import Veiculo
 from models.frete import Frete
 from models.base import Base  # <-- novo
+from models.produto import Produto  # <-- ADICIONAR
+from models.cliente_produto import ClienteProduto  # <-- ADICIONAR
 
 __all__ = [
     'Usuario',
@@ -23,6 +25,8 @@ __all__ = [
     'Cliente',
     'Veiculo',
     'Frete',
-    'Base',   # <-- novo
+    'Base',  # <-- novo
+    'Produto',  # <-- ADICIONAR
+    'ClienteProduto',  # <-- ADICIONAR
     'db',
 ]
