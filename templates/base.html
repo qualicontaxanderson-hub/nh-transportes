@@ -19,7 +19,13 @@
 
     <div class="container-fluid mt-4">
         {% include 'includes/flash_messages.html' %}
+
+        {# Primary content block used by most templates #}
         {% block content %}{% endblock %}
+
+        {# Added fallback block "conteudo" to support templates that use Portuguese block name.
+           This ensures templates using {% block conteudo %} will be rendered inside the same container. #}
+        {% block conteudo %}{% endblock %}
     </div>
 
     <!-- jQuery deve vir PRIMEIRO -->

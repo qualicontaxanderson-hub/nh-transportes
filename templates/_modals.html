@@ -1,0 +1,26 @@
+<!-- Partial: modals reutilizáveis -->
+<!-- Modal de Quitar Frete -->
+<div id="modal-quitar-frete" class="modal" tabindex="-1" role="dialog" aria-hidden="true" style="display:none;">
+  <div class="modal-dialog" role="document">
+    <div class="modal-content">
+      <form id="form-quitar-frete">
+        <div class="modal-header">
+          <h5 class="modal-title">Quitar Frete</h5>
+          <button type="button" class="btn-close" data-action="close-modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <input type="hidden" id="quitar_frete_id" name="frete_id" value="">
+          <div class="mb-3">
+            <label for="quitar_data" class="form-label">Data de pagamento</label>
+            <input type="date" id="quitar_data" name="data_pagamento" class="form-control" required>
+          </div>
+          <div id="quitar-feedback" class="alert" style="display:none;"></div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-action="close-modal">Cancelar</button>
+          <button type="submit" class="btn btn-success">Quitar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>

@@ -54,6 +54,7 @@ def lista():
         if filters:
             where_clause = "WHERE " + " AND ".join(filters)
 
+        # Adiciona subquery EXISTS para indicar se existe cobrança vinculada (emitted)
         query = f"""
             SELECT
                 f.id,
@@ -66,7 +67,8 @@ def lista():
                 COALESCE(v.caminhao, '') AS veiculo,
                 f.valor_total_frete,
                 COALESCE(f.lucro, 0) AS lucro,
-                COALESCE(f.status, '') AS status
+                COALESCE(f.status, '') AS status,
+                EXISTS(SELECT 1 FROM cobrancas c WHERE c.frete_id = f.id AND (c.status IS NULL OR c.status != 'cancelado')) AS emitted
             FROM fretes f
             LEFT JOIN clientes c ON f.clientes_id = c.id
             LEFT JOIN fornecedores fo ON f.fornecedores_id = fo.id
@@ -830,22 +832,65 @@ def editar(id):
 @bp.route('/deletar/<int:id>', methods=['POST'])
 @login_required
 def deletar(id):
-    conn = get_db_connection()
-    cursor = conn.cursor()
+    """
+    Protegido: antes de excluir um frete, verifica se existe cobranca vinculada.
+      - Se existir cobranca com pago_via_provedor = TRUE -> impede exclusão e orienta contatar financeiro.
+      - Se existir cobranca (não necessariamente paga) -> impede exclusão e orienta cancelar ou remover cobrança.
+      - Só exclui se não houver cobranca vinculada.
+    """
+    conn = None
+    cursor = None
     try:
-        cursor.execute("DELETE FROM fretes WHERE id = %s", (id,))
-        conn.commit()
-        flash(f'Frete #{id} excluído.', 'success')
-    except Exception as e:
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+
+        # verificar se existe cobrança vinculada ao frete
         try:
-            conn.rollback()
+            cursor.execute("SELECT id, status, pago_via_provedor FROM cobrancas WHERE frete_id = %s LIMIT 1", (id,))
+            cobr = cursor.fetchone()
         except Exception:
-            pass
+            cobr = None
+
+        if cobr:
+            # existe cobrança vinculada -> impedir exclusão
+            try:
+                if int(cobr.get('pago_via_provedor') or 0):
+                    flash("Este frete possui cobrança quitada via provedor (EFI). Exclusão não permitida. Contate o financeiro.", "danger")
+                    return redirect(url_for('fretes.lista'))
+            except Exception:
+                # se valor inesperado, tratar como existente e bloquear
+                flash("Existe cobrança vinculada a este frete. Cancela a cobrança no financeiro antes de excluir.", "warning")
+                return redirect(url_for('fretes.lista'))
+
+            # se chegou aqui, existe cobranca porém não marcada como pago_via_provedor
+            flash("Existe cobrança vinculada a este frete. Primeiro cancele a cobrança no financeiro antes de excluir o frete.", "warning")
+            return redirect(url_for('fretes.lista'))
+
+        # se não houver cobrança, prosseguir com exclusão
+        try:
+            # reabrir cursor simples para delete (alguns drivers não permitem mixed cursor types)
+            cursor.close()
+            cursor = conn.cursor()
+            cursor.execute("DELETE FROM fretes WHERE id = %s", (id,))
+            conn.commit()
+            flash(f'Frete #{id} excluído.', 'success')
+        except Exception as e:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+            flash(f'Erro ao excluir frete: {e}', 'danger')
+    except Exception as e:
         flash(f'Erro ao excluir frete: {e}', 'danger')
     finally:
         try:
-            cursor.close()
-            conn.close()
+            if cursor:
+                cursor.close()
+        except Exception:
+            pass
+        try:
+            if conn:
+                conn.close()
         except Exception:
             pass
     return redirect(url_for('fretes.lista'))

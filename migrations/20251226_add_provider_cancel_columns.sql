@@ -1,0 +1,1 @@
+-- Migration: add columns to store provider cancel response and timestamp ALTER TABLE cobrancas ADD COLUMN provider_cancel_response TEXT NULL, ADD COLUMN data_cancelamento DATETIME NULL;

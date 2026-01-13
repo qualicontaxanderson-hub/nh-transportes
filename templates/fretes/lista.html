@@ -1,5 +1,5 @@
-<!doctype html>
 {% extends "base.html" %}
+
 {% block titulo %}Lista de Fretes{% endblock %}
 
 {% block content %}
@@ -38,7 +38,7 @@
             <option value="">Todos os clientes</option>
             {% for cliente in clientes %}
             <option value="{{ cliente.id }}" {% if cliente_id == cliente.id|string %}selected{% endif %}>
-                {{ cliente.razaosocial }}
+                {{ cliente.razao_social }}
             </option>
             {% endfor %}
           </select>
@@ -64,6 +64,14 @@
     <a class="btn btn-primary btn-sm" href="{{ url_for('pedidos.importar_lista') }}">
       <i class="bi bi-file-earmark-arrow-down"></i> Importar Pedido
     </a>
+
+    <!-- Novos botões: emitir selecionados / quitar selecionados -->
+    <button id="emit-selected-btn" class="btn btn-outline-success btn-sm">
+      <i class="bi bi-receipt"></i> Emitir Selecionados
+    </button>
+    <button id="quitar-selected-btn" class="btn btn-outline-success btn-sm">
+      <i class="bi bi-cash-stack"></i> Quitar Selecionados
+    </button>
   </div>
 
   <!-- Tabela de Fretes -->
@@ -76,6 +84,7 @@
         <table class="table table-sm table-hover mb-0" style="font-size: 0.875rem;">
           <thead style="background:#E8E8E8">
             <tr>
+              <th><input type="checkbox" id="select-all"></th>
               <th>ID</th>
               <th>Data</th>
               <th>Cliente</th>
@@ -85,12 +94,15 @@
               <th class="text-end">Valor Total</th>
               <th class="text-end">Lucro</th>
               <th>Status</th>
-              <th class="text-center" style="width: 120px;">Ações</th>
+              <th class="text-center" style="width: 200px;">Ações</th>
             </tr>
           </thead>
           <tbody>
             {% for frete in fretes %}
-            <tr>
+            <tr id="frete-row-{{ frete.id }}">
+              <td class="align-middle text-center">
+                <input type="checkbox" class="frete-select" name="frete_select" value="{{ frete.id }}">
+              </td>
               <td>{{ frete.id }}</td>
               <td>{{ frete.datafrete_formatada or '-' }}</td>
               <td>{{ frete.cliente or '-' }}</td>
@@ -113,7 +125,7 @@
               </td>
               <td>
                 {% if frete.status %}
-                <span class="badge bg-{% if frete.status == 'Concluído' or frete.status == 'Concludo' %}success{% elif frete.status == 'Pendente' %}warning{% else %}secondary{% endif %}">
+                <span class="badge bg-{% if frete.status == 'Concluído' %}success{% elif frete.status == 'Pendente' %}warning{% else %}secondary{% endif %}">
                   {{ frete.status }}
                 </span>
                 {% else %}
@@ -121,7 +133,7 @@
                 {% endif %}
               </td>
               <td class="text-center">
-                <div class="btn-group" role="group">
+                <div class="btn-group" role="group" style="align-items:center; gap:8px;">
                   <!-- Botão Editar -->
                   <a href="{{ url_for('fretes.editar', id=frete.id) }}" 
                      class="btn btn-sm btn-outline-primary" 
@@ -141,24 +153,30 @@
                     </button>
                   </form>
 
-                  <!-- Botão Emitir Boleto -->
-{% if frete.valor_total_frete and frete.valor_total_frete > 0 %}
-  <form method="post"
-    action="{{ url_for('financeiro.emitir_boleto_route', frete_id=frete.id) }}"
-    style="display:inline;">
-    <button type="submit"
-      class="btn btn-sm btn-outline-success"
-      title="Emitir Boleto">
-      <i class="bi bi-receipt"></i>
-    </button>
-  </form>
-{% endif %}
+                  <!-- Botão Quitar (por frete) -->
+                  <button type="button" class="btn btn-sm btn-outline-success btn-quitar"
+                          data-frete-id="{{ frete.id }}" title="Quitar frete">
+                    <i class="bi bi-cash-stack"></i>
+                  </button>
+
+                  <!-- Emitir Boleto: abrir modal para selecionar data -->
+                  {% if frete.valor_total_frete and frete.valor_total_frete > 0 %}
+                    {% set emitted = frete.emitted if frete.emitted is defined else 0 %}
+                    <button type="button"
+                      class="btn btn-sm btn-outline-success btn-emit-boleto"
+                      data-frete-id="{{ frete.id }}"
+                      data-emitted="{{ '1' if emitted else '0' }}"
+                      title="{% if emitted %}Boleto já emitido (cancele no financeiro para reemitir){% else %}Emitir Boleto{% endif %}"
+                      {% if emitted %}disabled{% endif %}>
+                      <i class="bi bi-receipt"></i>
+                    </button>
+                  {% endif %}
                 </div>
               </td>
             </tr>
             {% else %}
             <tr>
-              <td colspan="10" class="text-center text-muted py-4">
+              <td colspan="11" class="text-center text-muted py-4">
                 <i class="bi bi-inbox" style="font-size: 2rem;"></i>
                 <p class="mt-2">Nenhum frete encontrado.</p>
               </td>
@@ -170,4 +188,327 @@
     </div>
   </div>
 </div>
+
+<!-- Modal global para emissão de boleto -->
+<div id="emit-boleto-modal" class="modal" tabindex="-1" role="dialog" aria-hidden="true" style="display:none;">
+  <div class="modal-dialog" role="document">
+    <div class="modal-content">
+      <form id="emit-boleto-form" class="p-0">
+        <div class="modal-header">
+          <h5 class="modal-title">Emitir Boleto</h5>
+          <button type="button" class="btn-close" data-action="close-modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <input type="hidden" name="frete_id" id="modal_frete_id" value="">
+          <div class="mb-3">
+            <label for="modal_vencimento" class="form-label">Data de vencimento</label>
+            <input type="date" id="modal_vencimento" name="vencimento" class="form-control" required>
+          </div>
+          <div id="emit-boleto-feedback" style="display:none;" class="alert"></div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-action="close-modal">Cancelar</button>
+          <button type="submit" id="modal_emit_btn" class="btn btn-primary">Emitir</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Quitar -->
+<div id="quitar-frete-modal" class="modal" tabindex="-1" role="dialog" aria-hidden="true" style="display:none;">
+  <div class="modal-dialog" role="document">
+    <div class="modal-content">
+      <form id="quitar-frete-form" class="p-0">
+        <div class="modal-header">
+          <h5 class="modal-title">Quitar Frete(s)</h5>
+          <button type="button" class="btn-close" data-action="close-modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <input type="hidden" id="quitar_selected_ids" value="">
+          <div class="mb-3">
+            <label for="quitar_data" class="form-label">Data de pagamento</label>
+            <input type="date" id="quitar_data" name="data_pagamento" class="form-control" required>
+          </div>
+          <div id="quitar-feedback" style="display:none;" class="alert"></div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-action="close-modal">Cancelar</button>
+          <button type="submit" id="quitar_submit_btn" class="btn btn-success">Quitar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- JS inline para abrir modal e enviar emissão (autocontido) -->
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+  // Helpers
+  function qs(sel, el=document){ return el.querySelector(sel); }
+  function qsa(sel, el=document){ return Array.from(el.querySelectorAll(sel)); }
+
+  const modal = qs('#emit-boleto-modal');
+  const form = qs('#emit-boleto-form');
+  const inputFrete = qs('#modal_frete_id');
+  const inputVenc = qs('#modal_vencimento');
+  const feedback = qs('#emit-boleto-feedback');
+  const emitBtn = qs('#modal_emit_btn');
+
+  const quitarModal = qs('#quitar-frete-modal');
+  const quitarForm = qs('#quitar-frete-form');
+  const quitarIdsInput = qs('#quitar_selected_ids');
+  const quitarDate = qs('#quitar_data');
+  const quitarFeedback = qs('#quitar-feedback');
+  const quitarSubmitBtn = qs('#quitar_submit_btn');
+
+  function showModal(m){
+    m.style.display = 'block';
+    m.classList.add('show');
+  }
+  function closeModal(m){
+    m.style.display = 'none';
+    m.classList.remove('show');
+  }
+  qsa('[data-action="close-modal"]').forEach(btn => btn.addEventListener('click', function () {
+    closeModal(modal); closeModal(quitarModal);
+    feedback.style.display = 'none'; quitarFeedback.style.display = 'none';
+  }));
+
+  // Selection helpers
+  const selectAll = qs('#select-all');
+  function getSelectedIds(){
+    return qsa('input.frete-select:checked').map(i => parseInt(i.value));
+  }
+  if (selectAll){
+    selectAll.addEventListener('change', function () {
+      const checked = !!this.checked;
+      qsa('input.frete-select').forEach(ch => ch.checked = checked);
+    });
+  }
+
+  // Abrir modal ao clicar no botão emitir (single)
+  qsa('.btn-emit-boleto').forEach(btn => {
+    btn.addEventListener('click', function(e){
+      const freteId = btn.getAttribute('data-frete-id');
+      const emitted = btn.getAttribute('data-emitted') === '1';
+      if (emitted) return;
+      inputFrete.value = freteId || '';
+      inputVenc.value = defaultVencimento(7);
+      feedback.style.display = 'none';
+      // mark as single
+      modal.dataset.multiple = '';
+      showModal(modal);
+    });
+  });
+
+  // Abrir modal para emitir selecionados
+  const emitSelectedBtn = qs('#emit-selected-btn');
+  if (emitSelectedBtn){
+    emitSelectedBtn.addEventListener('click', function () {
+      const ids = getSelectedIds();
+      if (!ids || ids.length === 0){
+        alert('Selecione ao menos um frete para emitir.');
+        return;
+      }
+      // store selected ids on modal
+      modal.dataset.multiple = '1';
+      modal.dataset.selectedIds = JSON.stringify(ids);
+      inputFrete.value = ''; // clear single id
+      inputVenc.value = defaultVencimento(7);
+      feedback.style.display = 'none';
+      showModal(modal);
+    });
+  }
+
+  // Preencher default date quando abrir
+  function defaultVencimento(offsetDays){
+    const d = new Date();
+    d.setDate(d.getDate() + (offsetDays||7));
+    const yyyy = d.getFullYear();
+    const mm = ('0' + (d.getMonth()+1)).slice(-2);
+    const dd = ('0' + d.getDate()).slice(-2);
+    return yyyy + '-' + mm + '-' + dd;
+  }
+
+  // Envio via fetch (single or multiple)
+  form.addEventListener('submit', async function(ev){
+    ev.preventDefault();
+    emitBtn.disabled = true;
+    feedback.style.display = 'none';
+
+    const vencimento = inputVenc.value;
+    if (!vencimento){
+      feedback.className = 'alert alert-danger';
+      feedback.textContent = 'Vencimento inválido';
+      feedback.style.display = 'block';
+      emitBtn.disabled = false;
+      return;
+    }
+
+    // multiple?
+    const isMultiple = modal.dataset.multiple === '1';
+    try {
+      if (isMultiple){
+        const ids = JSON.parse(modal.dataset.selectedIds || '[]');
+        const resp = await fetch(`/financeiro/emitir-boleto-multiple/`, {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: {'Content-Type':'application/json', 'X-Requested-With':'XMLHttpRequest'},
+          body: JSON.stringify({frete_ids: ids, vencimento: vencimento})
+        });
+        const j = await resp.json();
+        if (resp.ok && j.success){
+          feedback.className = 'alert alert-success';
+          feedback.textContent = 'Boleto(s) emitido(s) com sucesso.';
+          feedback.style.display = 'block';
+          setTimeout(()=> { closeModal(modal); location.reload(); }, 700);
+        } else {
+          feedback.className = 'alert alert-danger';
+          feedback.textContent = j.error || 'Falha ao emitir boletos';
+          feedback.style.display = 'block';
+        }
+      } else {
+        const freteId = inputFrete.value;
+        if (!freteId){
+          feedback.className = 'alert alert-danger';
+          feedback.textContent = 'Frete inválido';
+          feedback.style.display = 'block';
+          emitBtn.disabled = false;
+          return;
+        }
+        const resp = await fetch(`/financeiro/emitir-boleto/${freteId}/`, {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: {'Content-Type':'application/json', 'X-Requested-With':'XMLHttpRequest'},
+          body: JSON.stringify({vencimento: vencimento})
+        });
+        const j = await resp.json();
+        if (resp.ok && j.success){
+          feedback.className = 'alert alert-success';
+          feedback.textContent = 'Boleto emitido com sucesso.';
+          feedback.style.display = 'block';
+
+          if (j.boleto_url) {
+            window.open(j.boleto_url, '_blank');
+          } else if (j.pdf_boleto) {
+            if (typeof j.pdf_boleto === 'string' && (j.pdf_boleto.startsWith('http://') || j.pdf_boleto.startsWith('https://'))) {
+              window.open(j.pdf_boleto, '_blank');
+            } else {
+              window.open('/financeiro/visualizar-boleto/' + j.charge_id + '/', '_blank');
+            }
+          } else if (j.charge_id) {
+            window.open('/financeiro/visualizar-boleto/' + j.charge_id + '/', '_blank');
+          }
+
+          const btn = document.querySelector(`.btn-emit-boleto[data-frete-id="${freteId}"]`);
+          if (btn){
+            btn.disabled = true;
+            btn.title = 'Boleto já emitido (cancele no financeiro para reemitir)';
+          }
+          setTimeout(()=> { closeModal(modal); location.reload(); }, 700);
+        } else {
+          feedback.className = 'alert alert-danger';
+          feedback.textContent = j.error || 'Falha ao emitir boleto';
+          feedback.style.display = 'block';
+        }
+      }
+    } catch (err) {
+      feedback.className = 'alert alert-danger';
+      feedback.textContent = 'Erro na requisição: ' + err;
+      feedback.style.display = 'block';
+    } finally {
+      emitBtn.disabled = false;
+    }
+  });
+
+  // Quitar: abrir modal para 1 frete (btn-quitar) ou selecionados
+  qsa('.btn-quitar').forEach(btn => {
+    btn.addEventListener('click', function () {
+      const fid = btn.getAttribute('data-frete-id');
+      quitarIdsInput.value = JSON.stringify([parseInt(fid)]);
+      quitarDate.value = new Date().toISOString().slice(0,10);
+      quitarFeedback.style.display = 'none';
+      showModal(quitarModal);
+    });
+  });
+
+  const quitarSelectedBtn = qs('#quitar-selected-btn');
+  if (quitarSelectedBtn){
+    quitarSelectedBtn.addEventListener('click', function () {
+      const ids = getSelectedIds();
+      if (!ids || ids.length === 0){
+        alert('Selecione ao menos um frete para quitar.');
+        return;
+      }
+      quitarIdsInput.value = JSON.stringify(ids);
+      quitarDate.value = new Date().toISOString().slice(0,10);
+      quitarFeedback.style.display = 'none';
+      showModal(quitarModal);
+    });
+  }
+
+  // submit quitar form
+  quitarForm.addEventListener('submit', async function (ev) {
+    ev.preventDefault();
+    quitarSubmitBtn.disabled = true;
+    quitarFeedback.style.display = 'none';
+    const dateVal = quitarDate.value;
+    if (!dateVal){
+      quitarFeedback.className = 'alert alert-danger';
+      quitarFeedback.textContent = 'Informe a data de pagamento';
+      quitarFeedback.style.display = 'block';
+      quitarSubmitBtn.disabled = false;
+      return;
+    }
+    let ids = [];
+    try {
+      ids = JSON.parse(quitarIdsInput.value || '[]');
+    } catch (e){
+      ids = [];
+    }
+    if (!ids || ids.length === 0){
+      quitarFeedback.className = 'alert alert-danger';
+      quitarFeedback.textContent = 'IDs inválidos';
+      quitarFeedback.style.display = 'block';
+      quitarSubmitBtn.disabled = false;
+      return;
+    }
+
+    try {
+      const resp = await fetch('/financeiro/quitar-frete/', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: {'Content-Type':'application/json', 'X-Requested-With':'XMLHttpRequest'},
+        body: JSON.stringify({frete_ids: ids, data_pagamento: dateVal})
+      });
+      const j = await resp.json();
+      if (resp.ok && j.success){
+        quitarFeedback.className = 'alert alert-success';
+        quitarFeedback.textContent = 'Quitação registrada.';
+        quitarFeedback.style.display = 'block';
+        setTimeout(()=> { closeModal(quitarModal); location.reload(); }, 700);
+      } else {
+        quitarFeedback.className = 'alert alert-danger';
+        quitarFeedback.textContent = j.error || 'Falha ao registrar quitação';
+        quitarFeedback.style.display = 'block';
+      }
+    } catch (err){
+      quitarFeedback.className = 'alert alert-danger';
+      quitarFeedback.textContent = 'Erro na requisição: ' + err;
+      quitarFeedback.style.display = 'block';
+    } finally {
+      quitarSubmitBtn.disabled = false;
+    }
+  });
+
+  // Fechar modal ao clicar fora (opcional)
+  window.addEventListener('click', function(ev){
+    if(ev.target === modal) closeModal(modal);
+    if(ev.target === quitarModal) closeModal(quitarModal);
+  });
+
+});
+</script>
+
 {% endblock %}
