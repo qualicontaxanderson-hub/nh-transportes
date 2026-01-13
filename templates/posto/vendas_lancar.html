@@ -1,0 +1,356 @@
+{% extends "base.html" %}
+{% block titulo %}Lançar Vendas - Posto{% endblock %}
+
+{% block styles %}
+<style>
+:root {
+  --grad-start: #4A90E2;
+  --grad-end: #F2994A;
+  --accent: #1f6fb6;
+}
+
+.page-header-posto {
+  background: linear-gradient(135deg, var(--grad-start) 0%, #9fb8d6 38%, var(--grad-end) 100%);
+  color: white;
+  padding: 1.5rem;
+  border-radius: 8px;
+  margin-bottom: 1.5rem;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+}
+
+.btn-posto-primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: white;
+  padding: 0.5rem 1.5rem;
+}
+
+.btn-posto-primary:hover {
+  background: #14588f;
+  border-color: #14588f;
+  color: white;
+}
+
+.produto-card {
+  border: 2px solid #e0e0e0;
+  border-radius: 8px;
+  padding: 1rem;
+  margin-bottom: 1rem;
+  background: #fff;
+  transition: all 0.3s ease;
+}
+
+.produto-card:hover {
+  border-color: var(--accent);
+  box-shadow: 0 2px 8px rgba(31,111,182,0.2);
+}
+
+.produto-titulo {
+  color: var(--accent);
+  font-weight: 600;
+  font-size: 1.1rem;
+  margin-bottom: 0.75rem;
+  display: flex;
+  align-items: center;
+}
+
+.form-control {
+  border-radius: 6px;
+  border: 1px solid #d0d7de;
+}
+
+.form-control:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 0.15rem rgba(31,111,182,0.12);
+}
+
+.alert-pendencia {
+  background: linear-gradient(135deg, rgba(242,153,74,0.1), rgba(242,153,74,0.2));
+  border-left: 4px solid var(--grad-end);
+}
+
+#produtos-container {
+  display: none;
+}
+
+.loading-spinner {
+  display: none;
+  text-align: center;
+  padding: 2rem;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+  <!-- Breadcrumb -->
+  <nav aria-label="breadcrumb" class="mb-3">
+    <ol class="breadcrumb">
+      <li class="breadcrumb-item"><a href="{{ url_for('index') }}">Início</a></li>
+      <li class="breadcrumb-item"><a href="{{ url_for('posto.vendas_lista') }}">Vendas Posto</a></li>
+      <li class="breadcrumb-item active">Novo Lançamento</li>
+    </ol>
+  </nav>
+
+  <!-- Cabeçalho -->
+  <div class="page-header-posto">
+    <h3 class="mb-1">
+      <i class="bi bi-plus-circle"></i> Lançar Vendas do Posto
+    </h3>
+    <p class="mb-0 opacity-75">Lançamento de todos os produtos de uma vez</p>
+  </div>
+
+  <!-- Formulário -->
+  <div class="card shadow-sm">
+    <div class="card-body">
+      <form method="POST" id="form-lancamento">
+        
+        <!-- Seleção de Cliente e Data -->
+        <div class="row mb-4">
+          <div class="col-md-8">
+            <label class="form-label fw-bold">
+              <i class="bi bi-building"></i> Posto (Cliente)
+            </label>
+            <select name="cliente_id" id="cliente_id" class="form-select form-select-lg" required>
+              <option value="">Selecione o posto...</option>
+              {% for cliente in clientes %}
+              <option value="{{ cliente.id }}" 
+                      data-ultima-data="{{ ultima_data_por_cliente.get(cliente.id, '')|string }}">
+                {{ cliente.razao_social }}
+              </option>
+              {% endfor %}
+            </select>
+            <small class="text-muted">
+              <i class="bi bi-info-circle"></i> 
+              Ao selecionar o posto, os produtos cadastrados serão carregados automaticamente
+            </small>
+          </div>
+          
+          <div class="col-md-4">
+            <label class="form-label fw-bold">
+              <i class="bi bi-calendar-event"></i> Data do Lançamento
+            </label>
+            <input type="date" name="data_movimento" id="data_movimento" 
+                   class="form-control form-control-lg"
+                   value="{{ hoje.strftime('%Y-%m-%d') }}" 
+                   max="{{ hoje.strftime('%Y-%m-%d') }}"
+                   required>
+          </div>
+        </div>
+
+        <!-- Alerta de Pendência -->
+        <div id="alert-pendencia" class="alert alert-pendencia d-none mb-4">
+          <i class="bi bi-exclamation-triangle-fill"></i>
+          <strong>Atenção!</strong> 
+          <span id="mensagem-pendencia"></span>
+        </div>
+
+        <!-- Loading -->
+        <div class="loading-spinner" id="loading">
+          <div class="spinner-border text-primary" role="status">
+            <span class="visually-hidden">Carregando...</span>
+          </div>
+          <p class="mt-2">Carregando produtos...</p>
+        </div>
+
+        <!-- Container de Produtos -->
+        <div id="produtos-container">
+          <h5 class="mb-3 text-muted">
+            <i class="bi bi-droplet-fill"></i> Produtos do Posto
+          </h5>
+          <div id="produtos-lista"></div>
+
+          <!-- Botões -->
+          <div class="d-flex justify-content-end gap-2 mt-4">
+            <a href="{{ url_for('posto.vendas_lista') }}" class="btn btn-secondary">
+              <i class="bi bi-x-circle"></i> Cancelar
+            </a>
+            <button type="submit" class="btn btn-posto-primary btn-lg">
+              <i class="bi bi-check-circle"></i> Salvar Lançamento
+            </button>
+          </div>
+        </div>
+
+      </form>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+  const clienteSelect = document.getElementById('cliente_id');
+  const dataInput = document.getElementById('data_movimento');
+  const produtosContainer = document.getElementById('produtos-container');
+  const produtosLista = document.getElementById('produtos-lista');
+  const loading = document.getElementById('loading');
+  const alertPendencia = document.getElementById('alert-pendencia');
+  const mensagemPendencia = document.getElementById('mensagem-pendencia');
+
+  // Quando cliente mudar
+  clienteSelect.addEventListener('change', function() {
+    const clienteId = this.value;
+    
+    if (!clienteId) {
+      produtosContainer.style.display = 'none';
+      alertPendencia.classList.add('d-none');
+      return;
+    }
+
+    // Mostrar loading
+    loading.style.display = 'block';
+    produtosContainer.style.display = 'none';
+    alertPendencia.classList.add('d-none');
+
+    // Buscar última data de lançamento
+    fetch(`/posto/api/ultima-data/${clienteId}`)
+      .then(response => response.json())
+      .then(dataInfo => {
+        if (dataInfo.success && dataInfo.tem_pendencia) {
+          mensagemPendencia.textContent = `Último lançamento: ${formatarData(dataInfo.ultima_data)}. Sugerimos lançar a partir de ${formatarData(dataInfo.proxima_data)}.`;
+          alertPendencia.classList.remove('d-none');
+        }
+      })
+      .catch(error => console.error('Erro ao buscar última data:', error));
+
+    // Buscar produtos do cliente
+    fetch(`/posto/api/produtos-cliente/${clienteId}`)
+      .then(response => response.json())
+      .then(data => {
+        loading.style.display = 'none';
+        
+        if (data.success) {
+          if (data.produtos.length === 0) {
+            produtosLista.innerHTML = `
+              <div class="alert alert-warning">
+                <i class="bi bi-exclamation-triangle"></i>
+                Este posto não possui produtos cadastrados. 
+                Por favor, configure os produtos no cadastro do cliente.
+              </div>
+            `;
+          } else {
+            produtosLista.innerHTML = '';
+            data.produtos.forEach(produto => {
+              const card = criarCardProduto(produto);
+              produtosLista.appendChild(card);
+            });
+          }
+          produtosContainer.style.display = 'block';
+        } else {
+          alert('Erro ao carregar produtos: ' + data.error);
+        }
+      })
+      .catch(error => {
+        loading.style.display = 'none';
+        alert('Erro ao buscar produtos: ' + error);
+        console.error('Erro:', error);
+      });
+  });
+
+  // Criar card de produto
+  function criarCardProduto(produto) {
+    const card = document.createElement('div');
+    card.className = 'produto-card';
+    card.innerHTML = `
+      <div class="produto-titulo">
+        <i class="bi bi-droplet-fill me-2"></i> ${produto.nome}
+      </div>
+      <div class="row">
+        <div class="col-md-6">
+          <label class="form-label">Quantidade (Litros)</label>
+          <input type="text" 
+                 name="quantidade_${produto.id}" 
+                 class="form-control input-quantidade" 
+                 placeholder="Ex: 1.500,00"
+                 data-produto-id="${produto.id}">
+        </div>
+        <div class="col-md-6">
+          <label class="form-label">Valor Total (R$)</label>
+          <input type="text" 
+                 name="valor_${produto.id}" 
+                 class="form-control input-valor" 
+                 placeholder="R$ 0,00"
+                 data-produto-id="${produto.id}">
+        </div>
+      </div>
+      <div class="mt-2">
+        <small class="text-muted">
+          <i class="bi bi-calculator"></i> 
+          Preço médio: <span id="preco_medio_${produto.id}">R$ 0,0000/L</span>
+        </small>
+      </div>
+    `;
+
+    // Adicionar máscaras e cálculo de preço médio
+    const inputQtd = card.querySelector('.input-quantidade');
+    const inputValor = card.querySelector('.input-valor');
+    const precoMedioSpan = card.querySelector(`#preco_medio_${produto.id}`);
+
+    // Máscara de quantidade
+    inputQtd.addEventListener('input', function(e) {
+      let value = e.target.value.replace(/\D/g, '');
+      value = (value / 100).toFixed(2).replace('.', ',');
+      value = value.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+      e.target.value = value;
+      calcularPrecoMedio();
+    });
+
+    // Máscara de valor
+    inputValor.addEventListener('input', function(e) {
+      let value = e.target.value.replace(/\D/g, '');
+      value = (value / 100).toFixed(2);
+      value = 'R$ ' + value.replace('.', ',').replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+      e.target.value = value;
+      calcularPrecoMedio();
+    });
+
+    // Calcular preço médio
+    function calcularPrecoMedio() {
+      const qtd = parseFloat(inputQtd.value.replace(/\./g, '').replace(',', '.')) || 0;
+      const valor = parseFloat(inputValor.value.replace(/[^\d,]/g, '').replace(',', '.')) || 0;
+      
+      if (qtd > 0 && valor > 0) {
+        const preco = valor / qtd;
+        precoMedioSpan.textContent = `R$ ${preco.toFixed(4).replace('.', ',')} /L`;
+        precoMedioSpan.style.color = '#28a745';
+        precoMedioSpan.style.fontWeight = 'bold';
+      } else {
+        precoMedioSpan.textContent = 'R$ 0,0000/L';
+        precoMedioSpan.style.color = '';
+        precoMedioSpan.style.fontWeight = '';
+      }
+    }
+
+    return card;
+  }
+
+  // Formatar data para exibição
+  function formatarData(dataStr) {
+    if (!dataStr) return '';
+    const partes = dataStr.split('-');
+    return `${partes[2]}/${partes[1]}/${partes[0]}`;
+  }
+
+  // Validação antes de submeter
+  document.getElementById('form-lancamento').addEventListener('submit', function(e) {
+    const quantidades = document.querySelectorAll('.input-quantidade');
+    let temPeloMenosUm = false;
+
+    quantidades.forEach(input => {
+      const valor = parseFloat(input.value.replace(/\./g, '').replace(',', '.')) || 0;
+      if (valor > 0) {
+        temPeloMenosUm = true;
+      }
+    });
+
+    if (!temPeloMenosUm) {
+      e.preventDefault();
+      alert('Por favor, preencha ao menos um produto com quantidade e valor!');
+      return false;
+    }
+  });
+});
+</script>
+{% endblock %}
