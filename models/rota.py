@@ -11,9 +11,10 @@ class Rota(db.Model):
     ativo = db.Column(db.Boolean, default=True)
     criado_em = db.Column(db.DateTime, default=datetime.datetime.utcnow)
     
-    # Relacionamentos
-    origem = db.relationship('Origem', backref='rotas_origem')
-    destino = db.relationship('Destino', backref='rotas_destino')
+    # Relacionamentos comentados temporariamente - modelos Origem/Destino não existem
+    # origem = db.relationship('Origem', backref='rotas_origem')
+    # destino = db.relationship('Destino', backref='rotas_destino')
     
     def __repr__(self):
-        return f'<Rota {self.origem.nome} -> {self.destino.nome}: R$ {self.valor_por_litro}/L>'
+        # Modificado para usar IDs ao invés dos objetos relacionados
+        return f'<Rota {self.origem_id} -> {self.destino_id}: R$ {self.valor_por_litro}/L>'
