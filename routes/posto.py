@@ -1,3 +1,14 @@
+# ===========================================
+# MÓDULO POSTO - Vendas do Posto de Gasolina
+# ===========================================
+
+from flask import Blueprint, render_template, request, flash, redirect, url_for
+from flask_login import login_required, current_user
+from models import db, Cliente, Produto, ClienteProduto
+
+# Criar blueprint do posto
+posto_bp = Blueprint('posto', __name__)
+
 # ============================================
 # ADMINISTRAÇÃO: GERENCIAR PRODUTOS DO CLIENTE
 # ============================================
@@ -22,7 +33,7 @@ def admin_clientes():
         })
     
     return render_template('posto/admin_clientes.html',
-                          clientes_com_produtos=clientes_com_produtos)
+                         clientes_com_produtos=clientes_com_produtos)
 
 
 @posto_bp.route('/admin/cliente/<int:cliente_id>/produtos', methods=['GET', 'POST'])
@@ -79,10 +90,9 @@ def admin_produtos_cliente(cliente_id):
         cliente_id=cliente_id,
         ativo=True
     ).all()
-    
     produtos_vinculados_ids = [v.produto_id for v in produtos_vinculados]
     
     return render_template('posto/admin_produtos_cliente.html',
-                          cliente=cliente,
-                          todos_produtos=todos_produtos,
-                          produtos_vinculados_ids=produtos_vinculados_ids)
+                         cliente=cliente,
+                         todos_produtos=todos_produtos,
+                         produtos_vinculados_ids=produtos_vinculados_ids)
