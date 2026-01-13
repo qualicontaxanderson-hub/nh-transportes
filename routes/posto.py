@@ -8,7 +8,7 @@ from models import db, Cliente, Produto, ClienteProduto
 from datetime import datetime
 
 # Criar blueprint do posto
-posto_bp = Blueprint('posto', __name__)
+posto_bp = Blueprint('posto', __name__, url_prefix='/posto')
 
 # ============================================
 # ADMINISTRAÇÃO: GERENCIAR PRODUTOS DO CLIENTE
