@@ -1,0 +1,226 @@
+{% extends "base.html" %}
+{% block titulo %}Configurar Produtos - {{ cliente.razao_social }}{% endblock %}
+
+{% block styles %}
+<style>
+:root {
+  --grad-start: #4A90E2;
+  --grad-end: #F2994A;
+  --accent: #1f6fb6;
+}
+
+.page-header-posto {
+  background: linear-gradient(135deg, var(--grad-start) 0%, #9fb8d6 38%, var(--grad-end) 100%);
+  color: white;
+  padding: 1.5rem;
+  border-radius: 8px;
+  margin-bottom: 1.5rem;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+}
+
+.produtos-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+  gap: 1rem;
+  margin-bottom: 2rem;
+}
+
+.produto-checkbox {
+  border: 2px solid #dee2e6;
+  border-radius: 8px;
+  padding: 1rem;
+  background: white;
+  transition: all 0.3s ease;
+  cursor: pointer;
+}
+
+.produto-checkbox:hover {
+  border-color: var(--accent);
+  box-shadow: 0 2px 8px rgba(31,111,182,0.15);
+}
+
+.produto-checkbox.checked {
+  border-color: var(--accent);
+  background: linear-gradient(135deg, rgba(74,144,226,0.05), rgba(242,153,74,0.05));
+}
+
+.produto-checkbox input[type="checkbox"] {
+  width: 20px;
+  height: 20px;
+  cursor: pointer;
+  accent-color: var(--accent);
+}
+
+.produto-label {
+  font-weight: 600;
+  color: #333;
+  margin-left: 0.5rem;
+  cursor: pointer;
+}
+
+.btn-salvar {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: white;
+  padding: 0.75rem 2rem;
+  font-size: 1.1rem;
+}
+
+.btn-salvar:hover {
+  background: #14588f;
+  border-color: #14588f;
+  color: white;
+}
+
+.selecao-info {
+  background: linear-gradient(135deg, rgba(74,144,226,0.1), rgba(242,153,74,0.1));
+  padding: 1rem;
+  border-radius: 8px;
+  margin-bottom: 1.5rem;
+  border-left: 4px solid var(--accent);
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+  <!-- Breadcrumb -->
+  <nav aria-label="breadcrumb" class="mb-3">
+    <ol class="breadcrumb">
+      <li class="breadcrumb-item"><a href="{{ url_for('index') }}">Início</a></li>
+      <li class="breadcrumb-item"><a href="{{ url_for('posto.admin_clientes') }}">Gerenciar Clientes</a></li>
+      <li class="breadcrumb-item active">{{ cliente.razao_social }}</li>
+    </ol>
+  </nav>
+
+  <!-- Cabeçalho -->
+  <div class="page-header-posto">
+    <h3 class="mb-1">
+      <i class="bi bi-droplet-fill"></i> Configurar Produtos
+    </h3>
+    <p class="mb-0 opacity-75">{{ cliente.razao_social }}</p>
+  </div>
+
+  <!-- Info -->
+  <div class="selecao-info">
+    <i class="bi bi-info-circle-fill"></i>
+    <strong>Marque os produtos que este posto vende.</strong>
+    Apenas os produtos marcados ficarão disponíveis no lançamento de vendas.
+  </div>
+
+  <!-- Formulário -->
+  <form method="POST">
+    <div class="card shadow-sm">
+      <div class="card-header bg-light">
+        <h5 class="mb-0">
+          <i class="bi bi-list-check"></i> Selecione os Produtos
+          <span class="badge bg-secondary" id="contador">0 selecionados</span>
+        </h5>
+      </div>
+
+      <div class="card-body">
+        <div class="produtos-grid">
+          {% for produto in todos_produtos %}
+          <div class="produto-checkbox {% if produto.id in produtos_vinculados_ids %}checked{% endif %}" 
+               data-produto-id="{{ produto.id }}">
+            <label class="d-flex align-items-center mb-0">
+              <input type="checkbox" 
+                     name="produtos" 
+                     value="{{ produto.id }}"
+                     {% if produto.id in produtos_vinculados_ids %}checked{% endif %}>
+              <span class="produto-label">
+                <i class="bi bi-droplet-fill"></i> {{ produto.nome }}
+              </span>
+            </label>
+          </div>
+          {% endfor %}
+        </div>
+
+        {% if not todos_produtos %}
+        <div class="alert alert-warning">
+          <i class="bi bi-exclamation-triangle"></i>
+          Nenhum produto cadastrado no sistema. Cadastre produtos primeiro.
+        </div>
+        {% endif %}
+      </div>
+
+      <div class="card-footer bg-light">
+        <div class="d-flex justify-content-between align-items-center">
+          <a href="{{ url_for('posto.admin_clientes') }}" class="btn btn-secondary">
+            <i class="bi bi-arrow-left"></i> Voltar
+          </a>
+          <button type="submit" class="btn btn-salvar">
+            <i class="bi bi-check-circle-fill"></i> Salvar Configuração
+          </button>
+        </div>
+      </div>
+    </div>
+  </form>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+  const checkboxes = document.querySelectorAll('.produto-checkbox input[type="checkbox"]');
+  const contador = document.getElementById('contador');
+  const cards = document.querySelectorAll('.produto-checkbox');
+  
+  // Atualizar visual e contador
+  function atualizarVisual() {
+    let selecionados = 0;
+    
+    checkboxes.forEach((checkbox, index) => {
+      const card = cards[index];
+      
+      if (checkbox.checked) {
+        card.classList.add('checked');
+        selecionados++;
+      } else {
+        card.classList.remove('checked');
+      }
+    });
+    
+    contador.textContent = `${selecionados} selecionado${selecionados !== 1 ? 's' : ''}`;
+  }
+  
+  // Adicionar evento de clique no card inteiro
+  cards.forEach((card, index) => {
+    const checkbox = checkboxes[index];
+    
+    card.addEventListener('click', function(e) {
+      // Se clicou diretamente no checkbox ou label, deixar o comportamento padrão
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'LABEL') {
+        return;
+      }
+      
+      // Se clicou no card, alternar o checkbox
+      checkbox.checked = !checkbox.checked;
+      atualizarVisual();
+    });
+  });
+  
+  // Adicionar evento aos checkboxes
+  checkboxes.forEach(checkbox => {
+    checkbox.addEventListener('change', atualizarVisual);
+  });
+  
+  // Atualizar visual inicial
+  atualizarVisual();
+  
+  // Validação antes de enviar
+  document.querySelector('form').addEventListener('submit', function(e) {
+    const selecionados = Array.from(checkboxes).filter(cb => cb.checked).length;
+    
+    if (selecionados === 0) {
+      e.preventDefault();
+      alert('⚠️ Selecione pelo menos um produto para continuar!');
+      return false;
+    }
+    
+    return true;
+  });
+});
+</script>
+{% endblock %}
