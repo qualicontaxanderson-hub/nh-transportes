@@ -2,7 +2,7 @@
 # MÓDULO POSTO - Vendas do Posto de Gasolina
 # ===========================================
 
-from flask import Blueprint, render_template, request, flash, redirect, url_for
+from flask import Blueprint, render_template, request, flash, redirect, url_for, jsonify
 from flask_login import login_required, current_user
 from models import db, Cliente, Produto, ClienteProduto
 from datetime import datetime
@@ -106,6 +106,47 @@ def admin_produtos_cliente(cliente_id):
                          cliente=cliente,
                          todos_produtos=todos_produtos,
                          produtos_vinculados_ids=produtos_vinculados_ids)
+
+
+# ============================================
+# API ENDPOINTS
+# ============================================
+
+@posto_bp.route('/api/produtos-cliente/<int:cliente_id>')
+@login_required
+def api_produtos_cliente(cliente_id):
+    """API: Retorna produtos ativos de um cliente"""
+    try:
+        cliente = Cliente.query.get(cliente_id)
+        if not cliente:
+            return jsonify({'success': False, 'error': 'Cliente não encontrado'}), 404
+        
+        # Buscar produtos ativos vinculados ao cliente
+        vinculos = ClienteProduto.query.filter_by(
+            cliente_id=cliente_id,
+            ativo=True
+        ).all()
+        
+        produtos = []
+        for vinculo in vinculos:
+            produto = Produto.query.get(vinculo.produto_id)
+            if produto:
+                produtos.append({
+                    'id': produto.id,
+                    'nome': produto.nome,
+                    'descricao': produto.descricao or ''
+                })
+        
+        return jsonify({
+            'success': True,
+            'produtos': produtos
+        })
+        
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
 
 
 # ============================================
