@@ -109,20 +109,58 @@ def vendas_lista():
     """Lista todas as vendas do posto de gasolina"""
     try:
         from models.vendas_posto import VendasPosto
+        from collections import defaultdict
         
-        # Buscar todas as vendas ordenadas por data
-        vendas = VendasPosto.query.order_by(
-            VendasPosto.data_movimento.desc()
-        ).all()
+        # Obter filtros da query string
+        filtros = {
+            'data_inicio': request.args.get('data_inicio', ''),
+            'data_fim': request.args.get('data_fim', ''),
+            'cliente_id': request.args.get('cliente_id', '')
+        }
         
-        # Calcular totais
-        total_litros = sum(v.quantidade_litros or 0 for v in vendas)
-        total_valor = sum(v.valor_total or 0 for v in vendas)
+        # Buscar vendas com filtros
+        query = VendasPosto.query
+        
+        if filtros['data_inicio']:
+            query = query.filter(VendasPosto.data_movimento >= filtros['data_inicio'])
+        if filtros['data_fim']:
+            query = query.filter(VendasPosto.data_movimento <= filtros['data_fim'])
+        if filtros['cliente_id']:
+            query = query.filter(VendasPosto.cliente_id == int(filtros['cliente_id']))
+        
+        vendas = query.order_by(VendasPosto.data_movimento.desc()).all()
+        
+        # Organizar vendas por data e cliente
+        vendas_organizadas = {}
+        for venda in vendas:
+            # Criar chave única: data + cliente_id
+            key = f"{venda.data_movimento}_{venda.cliente_id}"
+            
+            if key not in vendas_organizadas:
+                vendas_organizadas[key] = {
+                    'data': venda.data_movimento,
+                    'cliente': venda.cliente,
+                    'produtos': [],
+                    'total_litros': 0,
+                    'total_valor': 0
+                }
+            
+            vendas_organizadas[key]['produtos'].append({
+                'produto': venda.produto,
+                'litros': venda.quantidade_litros or 0,
+                'valor': venda.valor_total or 0,
+                'preco_medio': venda.preco_medio or 0
+            })
+            vendas_organizadas[key]['total_litros'] += venda.quantidade_litros or 0
+            vendas_organizadas[key]['total_valor'] += venda.valor_total or 0
+        
+        # Buscar todos os clientes para o filtro
+        clientes = Cliente.query.order_by(Cliente.razao_social).all()
         
         return render_template('posto/vendas_lista.html',
-                             vendas=vendas,
-                             total_litros=total_litros,
-                             total_valor=total_valor)
+                             vendas_organizadas=vendas_organizadas,
+                             filtros=filtros,
+                             clientes=clientes)
     
     except Exception as e:
         flash(f'❌ Erro ao carregar vendas: {str(e)}', 'danger')
