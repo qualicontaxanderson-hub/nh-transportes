@@ -20,17 +20,26 @@ def admin_clientes():
     """Lista clientes para gerenciar produtos"""
     clientes = Cliente.query.order_by(Cliente.razao_social).all()
     
-    # Contar quantos produtos cada cliente tem vinculado
+    # Buscar produtos vinculados para cada cliente
     clientes_com_produtos = []
     for cliente in clientes:
-        qtd_produtos = ClienteProduto.query.filter_by(
+        # Buscar produtos ativos vinculados ao cliente
+        vinculos = ClienteProduto.query.filter_by(
             cliente_id=cliente.id,
             ativo=True
-        ).count()
+        ).all()
+        
+        # Buscar nomes dos produtos
+        produtos_nomes = []
+        for vinculo in vinculos:
+            produto = Produto.query.get(vinculo.produto_id)
+            if produto:
+                produtos_nomes.append(produto.nome)
         
         clientes_com_produtos.append({
             'cliente': cliente,
-            'qtd_produtos': qtd_produtos
+            'produtos': produtos_nomes,
+            'qtd_produtos': len(produtos_nomes)
         })
     
     return render_template('posto/admin_clientes.html',
