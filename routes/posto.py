@@ -214,11 +214,12 @@ def vendas_lancar():
         clientes = Cliente.query.order_by(Cliente.razao_social).all()
         produtos = Produto.query.order_by(Produto.nome).all()
         
-        # Buscar vendedores (se o modelo existir)
+        # Buscar vendedores (usando motoristas como vendedores)
         try:
-            from models.vendedor import Vendedor
-            vendedores = Vendedor.query.filter_by(ativo=True).all()
-        except:
+            from models.motorista import Motorista
+            vendedores = Motorista.query.filter_by(ativo=True).all()
+        except Exception as e:
+            print(f"Erro ao buscar vendedores: {e}")
             vendedores = []
         
         # Buscar última data de lançamento por cliente
@@ -272,9 +273,10 @@ def vendas_editar(venda_id):
         produtos = Produto.query.order_by(Produto.nome).all()
         
         try:
-            from models.vendedor import Vendedor
-            vendedores = Vendedor.query.filter_by(ativo=True).all()
-        except:
+            from models.motorista import Motorista
+            vendedores = Motorista.query.filter_by(ativo=True).all()
+        except Exception as e:
+            print(f"Erro ao buscar vendedores: {e}")
             vendedores = []
         
         # Buscar última data de lançamento por cliente
