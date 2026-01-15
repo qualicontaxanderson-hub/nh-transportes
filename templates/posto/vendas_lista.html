@@ -119,7 +119,15 @@
             <strong>
               <i class="bi bi-calendar3"></i> 
               {{ dados.data.strftime('%d/%m/%Y') }} - 
-              {{ dados.data.strftime('%A') }}
+              {% set dia_semana = dados.data.strftime('%A') %}
+              {% if dia_semana == 'Monday' %}Segunda-feira
+              {% elif dia_semana == 'Tuesday' %}Terça-feira
+              {% elif dia_semana == 'Wednesday' %}Quarta-feira
+              {% elif dia_semana == 'Thursday' %}Quinta-feira
+              {% elif dia_semana == 'Friday' %}Sexta-feira
+              {% elif dia_semana == 'Saturday' %}Sábado
+              {% elif dia_semana == 'Sunday' %}Domingo
+              {% else %}{{ dia_semana }}{% endif %}
             </strong>
           </div>
           <div>
@@ -138,6 +146,7 @@
               <th class="text-end">Litros</th>
               <th class="text-end">Valor Total (R$)</th>
               <th class="text-end">Preço Médio (R$/L)</th>
+              <th class="text-center">Ações</th>
             </tr>
           </thead>
           <tbody>
@@ -150,6 +159,15 @@
               <td class="text-end">{{ "{:,.2f}".format(item.litros).replace(',', '_').replace('.', ',').replace('_', '.') }}</td>
               <td class="text-end">R$ {{ "{:,.2f}".format(item.valor).replace(',', '_').replace('.', ',').replace('_', '.') }}</td>
               <td class="text-end">R$ {{ "{:,.4f}".format(item.preco_medio).replace('.', ',') }}</td>
+              <td class="text-center">
+                {% if item.venda_id %}
+                <a href="{{ url_for('posto.vendas_editar', venda_id=item.venda_id) }}" 
+                   class="btn btn-sm btn-outline-primary" 
+                   title="Editar">
+                  <i class="bi bi-pencil"></i>
+                </a>
+                {% endif %}
+              </td>
             </tr>
             {% endfor %}
             
@@ -158,6 +176,7 @@
               <td><strong>TOTAL DO DIA</strong></td>
               <td class="text-end"><strong>{{ "{:,.2f}".format(dados.total_litros).replace(',', '_').replace('.', ',').replace('_', '.') }}</strong></td>
               <td class="text-end"><strong>R$ {{ "{:,.2f}".format(dados.total_valor).replace(',', '_').replace('.', ',').replace('_', '.') }}</strong></td>
+              <td></td>
               <td></td>
             </tr>
           </tbody>

@@ -115,7 +115,7 @@ def admin_produtos_cliente(cliente_id):
 @posto_bp.route('/api/produtos-cliente/<int:cliente_id>')
 @login_required
 def api_produtos_cliente(cliente_id):
-    """API: Retorna produtos ativos de um cliente"""
+    """API: Retorna produtos ativos de um cliente em ordem específica"""
     try:
         cliente = Cliente.query.get(cliente_id)
         if not cliente:
@@ -136,6 +136,16 @@ def api_produtos_cliente(cliente_id):
                     'nome': produto.nome,
                     'descricao': produto.descricao or ''
                 })
+        
+        # Ordenar produtos: ETANOL | GASOLINA | GASOLINA ADITIVADA | S-10 | S-500
+        ordem_produtos = {
+            'ETANOL': 1,
+            'GASOLINA': 2,
+            'GASOLINA ADITIVADA': 3,
+            'S-10': 4,
+            'S-500': 5
+        }
+        produtos = sorted(produtos, key=lambda p: ordem_produtos.get(p['nome'].upper(), 999))
         
         return jsonify({
             'success': True,
@@ -199,7 +209,8 @@ def vendas_lista():
                 'produto': venda.produto,
                 'litros': venda.quantidade_litros or 0,
                 'valor': venda.valor_total or 0,
-                'preco_medio': venda.preco_medio or 0
+                'preco_medio': venda.preco_medio or 0,
+                'venda_id': venda.id  # Adicionar ID da venda para botão editar
             })
             vendas_organizadas[key]['total_litros'] += venda.quantidade_litros or 0
             vendas_organizadas[key]['total_valor'] += venda.valor_total or 0
@@ -229,11 +240,21 @@ def vendas_lancar():
             data_movimento = request.form.get('data_movimento')
             cliente_id = request.form.get('cliente_id')
             
+            # Ordem específica de produtos
+            ordem_produtos = {
+                'ETANOL': 1,
+                'GASOLINA': 2,
+                'GASOLINA ADITIVADA': 3,
+                'S-10': 4,
+                'S-500': 5
+            }
+            
             # Processar produtos - o formulário envia quantidade_X e valor_X para cada produto
             vendas_criadas = 0
             produtos = Produto.query.all()
+            produtos_ordenados = sorted(produtos, key=lambda p: ordem_produtos.get(p.nome.upper(), 999))
             
-            for produto in produtos:
+            for produto in produtos_ordenados:
                 quantidade_key = f'quantidade_{produto.id}'
                 valor_key = f'valor_{produto.id}'
                 
@@ -275,8 +296,30 @@ def vendas_lancar():
             return redirect(url_for('posto.vendas_lista'))
         
         # GET - Mostrar formulário
-        clientes = Cliente.query.order_by(Cliente.razao_social).all()
-        produtos = Produto.query.order_by(Produto.nome).all()
+        # Filtrar apenas clientes que têm produtos cadastrados
+        clientes_com_produtos = []
+        todos_clientes = Cliente.query.order_by(Cliente.razao_social).all()
+        
+        for cliente in todos_clientes:
+            tem_produtos = ClienteProduto.query.filter_by(
+                cliente_id=cliente.id,
+                ativo=True
+            ).first()
+            if tem_produtos:
+                clientes_com_produtos.append(cliente)
+        
+        clientes = clientes_com_produtos
+        
+        # Ordem específica de produtos: ETANOL | GASOLINA | GASOLINA ADITIVADA | S-10 | S-500
+        ordem_produtos = {
+            'ETANOL': 1,
+            'GASOLINA': 2,
+            'GASOLINA ADITIVADA': 3,
+            'S-10': 4,
+            'S-500': 5
+        }
+        produtos = Produto.query.all()
+        produtos = sorted(produtos, key=lambda p: ordem_produtos.get(p.nome.upper(), 999))
         
         # Buscar vendedores (usando motoristas como vendedores)
         try:
