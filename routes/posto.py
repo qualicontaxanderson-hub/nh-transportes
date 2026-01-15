@@ -221,10 +221,20 @@ def vendas_lancar():
         except:
             vendedores = []
         
+        # Buscar última data de lançamento por cliente
+        ultima_data_por_cliente = {}
+        for cliente in clientes:
+            ultima_venda = VendasPosto.query.filter_by(cliente_id=cliente.id)\
+                .order_by(VendasPosto.data_movimento.desc()).first()
+            if ultima_venda:
+                ultima_data_por_cliente[cliente.id] = ultima_venda.data_movimento.strftime('%Y-%m-%d')
+        
         return render_template('posto/vendas_lancar.html',
                              clientes=clientes,
                              produtos=produtos,
-                             vendedores=vendedores)
+                             vendedores=vendedores,
+                             ultima_data_por_cliente=ultima_data_por_cliente,
+                             hoje=datetime.now())
     
     except Exception as e:
         flash(f'❌ Erro ao processar venda: {str(e)}', 'danger')
@@ -267,11 +277,21 @@ def vendas_editar(venda_id):
         except:
             vendedores = []
         
+        # Buscar última data de lançamento por cliente
+        ultima_data_por_cliente = {}
+        for cliente in clientes:
+            ultima_venda = VendasPosto.query.filter_by(cliente_id=cliente.id)\
+                .order_by(VendasPosto.data_movimento.desc()).first()
+            if ultima_venda:
+                ultima_data_por_cliente[cliente.id] = ultima_venda.data_movimento.strftime('%Y-%m-%d')
+        
         return render_template('posto/vendas_lancar.html',
                              venda=venda,
                              clientes=clientes,
                              produtos=produtos,
-                             vendedores=vendedores)
+                             vendedores=vendedores,
+                             ultima_data_por_cliente=ultima_data_por_cliente,
+                             hoje=datetime.now())
     
     except Exception as e:
         flash(f'❌ Erro ao editar venda: {str(e)}', 'danger')
