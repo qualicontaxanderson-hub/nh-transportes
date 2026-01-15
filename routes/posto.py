@@ -234,6 +234,11 @@ def vendas_lancar():
             preco_medio = float(request.form.get('preco_medio', 0))
             valor_total = float(request.form.get('valor_total', 0))
             
+            # Validar campos obrigatórios
+            if not produto_id:
+                flash('❌ Produto é obrigatório!', 'danger')
+                return redirect(url_for('posto.vendas_lancar'))
+            
             # Criar nova venda
             nova_venda = VendasPosto(
                 cliente_id=int(cliente_id) if cliente_id else None,
@@ -293,12 +298,18 @@ def vendas_editar(venda_id):
         venda = VendasPosto.query.get_or_404(venda_id)
         
         if request.method == 'POST':
+            # Validar campos obrigatórios
+            produto_id = request.form.get('produto_id')
+            if not produto_id:
+                flash('❌ Produto é obrigatório!', 'danger')
+                return redirect(url_for('posto.vendas_editar', venda_id=venda_id))
+            
             # Atualizar venda
             venda.data_movimento = datetime.strptime(
                 request.form.get('data_movimento'), '%Y-%m-%d'
             ).date()
             venda.cliente_id = int(request.form.get('cliente_id')) if request.form.get('cliente_id') else None
-            venda.produto_id = int(request.form.get('produto_id'))
+            venda.produto_id = int(produto_id)
             venda.vendedor_id = int(request.form.get('vendedor_id')) if request.form.get('vendedor_id') else None
             venda.quantidade_litros = float(request.form.get('quantidade_litros', 0))
             venda.preco_medio = float(request.form.get('preco_medio', 0))
