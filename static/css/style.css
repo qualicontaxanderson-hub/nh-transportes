@@ -13,8 +13,8 @@ body {
     -webkit-font-smoothing: antialiased;
 }
 
-/* Container principal com fundo branco */
-.container-fluid {
+/* Container principal com fundo branco - APENAS o container do conteúdo principal */
+body > .container-fluid {
     background: white;
     border-radius: 8px;
     padding: 2rem;
@@ -146,6 +146,19 @@ label.form-label {
 /* Navbar branding */
 .navbar-brand {
     font-size: 1.5rem;
+}
+
+/* Navbar specific styles */
+.navbar {
+    margin-bottom: 0;
+}
+
+.navbar .container-fluid {
+    background: transparent !important;
+    padding: 0;
+    margin: 0;
+    box-shadow: none !important;
+    border-radius: 0 !important;
 }
 
 /* Fonte menor apenas na Lista de Fretes */
