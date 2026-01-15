@@ -212,7 +212,7 @@ def vendas_lancar():
         
         # GET - Mostrar formulário
         clientes = Cliente.query.order_by(Cliente.razao_social).all()
-        produtos = Produto.query.filter_by(ativo=True).order_by(Produto.nome).all()
+        produtos = Produto.query.order_by(Produto.nome).all()
         
         # Buscar vendedores (se o modelo existir)
         try:
@@ -259,7 +259,7 @@ def vendas_editar(venda_id):
         
         # GET - Mostrar formulário preenchido
         clientes = Cliente.query.order_by(Cliente.razao_social).all()
-        produtos = Produto.query.filter_by(ativo=True).order_by(Produto.nome).all()
+        produtos = Produto.query.order_by(Produto.nome).all()
         
         try:
             from models.vendedor import Vendedor
