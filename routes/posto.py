@@ -225,35 +225,53 @@ def vendas_lancar():
         from models.vendas_posto import VendasPosto
         
         if request.method == 'POST':
-            # Processar formulário
+            # Processar formulário - múltiplos produtos de uma vez
             data_movimento = request.form.get('data_movimento')
             cliente_id = request.form.get('cliente_id')
-            produto_id = request.form.get('produto_id')
-            vendedor_id = request.form.get('vendedor_id') or None
-            quantidade_litros = float(request.form.get('quantidade_litros', 0))
-            preco_medio = float(request.form.get('preco_medio', 0))
-            valor_total = float(request.form.get('valor_total', 0))
             
-            # Validar campos obrigatórios
-            if not produto_id:
-                flash('❌ Produto é obrigatório!', 'danger')
+            # Processar produtos - o formulário envia quantidade_X e valor_X para cada produto
+            vendas_criadas = 0
+            produtos = Produto.query.all()
+            
+            for produto in produtos:
+                quantidade_key = f'quantidade_{produto.id}'
+                valor_key = f'valor_{produto.id}'
+                
+                quantidade_str = request.form.get(quantidade_key, '').replace('.', '').replace(',', '.')
+                valor_str = request.form.get(valor_key, '').replace('R$', '').replace('.', '').replace(',', '.').strip()
+                
+                if quantidade_str and valor_str:
+                    try:
+                        quantidade_litros = float(quantidade_str)
+                        valor_total = float(valor_str)
+                        
+                        # Só processar se quantidade e valor forem maiores que 0
+                        if quantidade_litros > 0 and valor_total > 0:
+                            preco_medio = valor_total / quantidade_litros
+                            
+                            # Criar nova venda
+                            nova_venda = VendasPosto(
+                                cliente_id=int(cliente_id) if cliente_id else None,
+                                data_movimento=datetime.strptime(data_movimento, '%Y-%m-%d').date(),
+                                produto_id=produto.id,
+                                vendedor_id=None,  # Vendedor não é usado neste fluxo
+                                quantidade_litros=quantidade_litros,
+                                preco_medio=preco_medio,
+                                valor_total=valor_total
+                            )
+                            
+                            db.session.add(nova_venda)
+                            vendas_criadas += 1
+                    except (ValueError, ZeroDivisionError) as e:
+                        continue  # Ignorar produtos com dados inválidos
+            
+            if vendas_criadas == 0:
+                flash('❌ Nenhum produto foi lançado. Preencha ao menos um produto com quantidade e valor!', 'warning')
                 return redirect(url_for('posto.vendas_lancar'))
             
-            # Criar nova venda
-            nova_venda = VendasPosto(
-                cliente_id=int(cliente_id) if cliente_id else None,
-                data_movimento=datetime.strptime(data_movimento, '%Y-%m-%d').date(),
-                produto_id=int(produto_id),
-                vendedor_id=int(vendedor_id) if vendedor_id else None,
-                quantidade_litros=quantidade_litros,
-                preco_medio=preco_medio,
-                valor_total=valor_total
-            )
-            
-            db.session.add(nova_venda)
             db.session.commit()
             
-            flash('✅ Venda lançada com sucesso!', 'success')
+            flash(f'✅ {vendas_criadas} venda(s) lançada(s) com sucesso!', 'success')
             return redirect(url_for('posto.vendas_lista'))
         
         # GET - Mostrar formulário
