@@ -188,17 +188,21 @@
           <div class="row mb-3">
             <div class="col-md-4">
               <label class="form-label fw-bold">Quantidade (Litros)</label>
-              <input type="number" name="quantidade_litros" class="form-control" 
+              <input type="number" name="quantidade_litros" id="edit_quantidade" class="form-control" 
                      step="0.01" min="0" value="{{ venda.quantidade_litros }}" required>
             </div>
             <div class="col-md-4">
               <label class="form-label fw-bold">Preço Médio (R$/L)</label>
-              <input type="number" name="preco_medio" class="form-control" 
-                     step="0.0001" min="0" value="{{ venda.preco_medio }}" required>
+              <input type="number" name="preco_medio" id="edit_preco_medio" class="form-control" 
+                     step="0.0001" min="0" value="{{ venda.preco_medio }}" readonly 
+                     style="background-color: #f8f9fa; cursor: not-allowed;">
+              <small class="text-muted">
+                <i class="bi bi-info-circle"></i> Calculado automaticamente
+              </small>
             </div>
             <div class="col-md-4">
               <label class="form-label fw-bold">Valor Total (R$)</label>
-              <input type="number" name="valor_total" class="form-control" 
+              <input type="number" name="valor_total" id="edit_valor_total" class="form-control" 
                      step="0.01" min="0" value="{{ venda.valor_total }}" required>
             </div>
           </div>
@@ -249,7 +253,39 @@
 {% endblock %}
 
 {% block scripts %}
-{% if not venda %}
+{% if venda %}
+<script>
+// Script para modo de edição - calcular preço médio automaticamente
+document.addEventListener('DOMContentLoaded', function() {
+  const qtdInput = document.getElementById('edit_quantidade');
+  const valorInput = document.getElementById('edit_valor_total');
+  const precoMedioInput = document.getElementById('edit_preco_medio');
+  
+  function calcularPrecoMedio() {
+    const quantidade = parseFloat(qtdInput.value) || 0;
+    const valorTotal = parseFloat(valorInput.value) || 0;
+    
+    if (quantidade > 0 && valorTotal > 0) {
+      const precoMedio = valorTotal / quantidade;
+      precoMedioInput.value = precoMedio.toFixed(4);
+    } else {
+      precoMedioInput.value = '0.0000';
+    }
+  }
+  
+  // Calcular quando quantidade mudar
+  qtdInput.addEventListener('input', calcularPrecoMedio);
+  qtdInput.addEventListener('change', calcularPrecoMedio);
+  
+  // Calcular quando valor total mudar
+  valorInput.addEventListener('input', calcularPrecoMedio);
+  valorInput.addEventListener('change', calcularPrecoMedio);
+  
+  // Calcular inicialmente
+  calcularPrecoMedio();
+});
+</script>
+{% elif not venda %}
 <script>
 document.addEventListener('DOMContentLoaded', function() {
   const clienteSelect = document.getElementById('cliente_id');
