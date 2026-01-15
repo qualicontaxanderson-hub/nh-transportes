@@ -217,7 +217,7 @@ def vendas_lancar():
         # Buscar vendedores (usando motoristas como vendedores)
         try:
             from models.motorista import Motorista
-            vendedores = Motorista.query.filter_by(ativo=True).all()
+            vendedores = Motorista.query.order_by(Motorista.nome).all()
         except Exception as e:
             print(f"Erro ao buscar vendedores: {e}")
             vendedores = []
@@ -274,7 +274,7 @@ def vendas_editar(venda_id):
         
         try:
             from models.motorista import Motorista
-            vendedores = Motorista.query.filter_by(ativo=True).all()
+            vendedores = Motorista.query.order_by(Motorista.nome).all()
         except Exception as e:
             print(f"Erro ao buscar vendedores: {e}")
             vendedores = []
