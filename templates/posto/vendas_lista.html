@@ -118,11 +118,10 @@
             </tr>
           </thead>
           <tbody>
-            {% set total_litros = 0 %}
-            {% set total_valor = 0 %}
+            {% set ns = namespace(total_litros=0, total_valor=0) %}
             {% for item in resumo_por_produto %}
-            {% set total_litros = total_litros + item.litros %}
-            {% set total_valor = total_valor + item.valor_total %}
+            {% set ns.total_litros = ns.total_litros + item.litros %}
+            {% set ns.total_valor = ns.total_valor + item.valor_total %}
             {% set produto_class = 'produto-' + item.produto.lower().replace(' ', '-') %}
             <tr>
               <td>
@@ -137,8 +136,8 @@
             <!-- Totals Row -->
             <tr class="resumo-total">
               <td><strong>TOTAL GERAL</strong></td>
-              <td class="text-end"><strong>{{ "{:,.3f}".format(total_litros).replace(',', '_').replace('.', ',').replace('_', '.') }}</strong></td>
-              <td class="text-end"><strong>R$ {{ "{:,.2f}".format(total_valor).replace(',', '_').replace('.', ',').replace('_', '.') }}</strong></td>
+              <td class="text-end"><strong>{{ "{:,.3f}".format(ns.total_litros).replace(',', '_').replace('.', ',').replace('_', '.') }}</strong></td>
+              <td class="text-end"><strong>R$ {{ "{:,.2f}".format(ns.total_valor).replace(',', '_').replace('.', ',').replace('_', '.') }}</strong></td>
               <td></td>
             </tr>
           </tbody>
