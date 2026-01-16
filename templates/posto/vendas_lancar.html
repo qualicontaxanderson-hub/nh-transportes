@@ -115,22 +115,23 @@
             <label class="form-label fw-bold">
               <i class="bi bi-building"></i> Posto (Cliente)
             </label>
-            <select name="cliente_id" id="cliente_id" class="form-select form-select-lg" required {% if venda %}disabled{% endif %}>
+            <select name="cliente_id" id="cliente_id" class="form-select form-select-lg" required {% if venda or modo_edicao_data %}disabled{% endif %}>
               <option value="">Selecione o posto...</option>
               {% for cliente in clientes %}
               <option value="{{ cliente.id }}" 
                       data-ultima-data="{{ ultima_data_por_cliente.get(cliente.id, '')|string }}"
-                      {% if venda and venda.cliente_id == cliente.id %}selected{% endif %}>
+                      {% if venda and venda.cliente_id == cliente.id %}selected{% endif %}
+                      {% if modo_edicao_data and cliente_edicao.id == cliente.id %}selected{% endif %}>
                 {{ cliente.razao_social }}
               </option>
               {% endfor %}
             </select>
-            {% if venda %}
-            <input type="hidden" name="cliente_id" value="{{ venda.cliente_id }}">
+            {% if venda or modo_edicao_data %}
+            <input type="hidden" name="cliente_id" value="{% if venda %}{{ venda.cliente_id }}{% else %}{{ cliente_edicao.id }}{% endif %}">
             {% endif %}
             <small class="text-muted">
               <i class="bi bi-info-circle"></i> 
-              {% if venda %}Cliente não pode ser alterado durante edição{% else %}Ao selecionar o posto, os produtos cadastrados serão carregados automaticamente{% endif %}
+              {% if venda or modo_edicao_data %}Cliente não pode ser alterado durante edição{% else %}Ao selecionar o posto, os produtos cadastrados serão carregados automaticamente{% endif %}
             </small>
           </div>
           
@@ -140,8 +141,9 @@
             </label>
             <input type="date" name="data_movimento" id="data_movimento" 
                    class="form-control form-control-lg"
-                   value="{% if venda %}{{ venda.data_movimento.strftime('%Y-%m-%d') }}{% else %}{{ hoje.strftime('%Y-%m-%d') }}{% endif %}" 
+                   value="{% if venda %}{{ venda.data_movimento.strftime('%Y-%m-%d') }}{% elif modo_edicao_data %}{{ data_edicao.strftime('%Y-%m-%d') }}{% else %}{{ hoje.strftime('%Y-%m-%d') }}{% endif %}" 
                    max="{{ hoje.strftime('%Y-%m-%d') }}"
+                   {% if modo_edicao_data %}readonly style="background-color: #f8f9fa;"{% endif %}
                    required>
           </div>
         </div>
@@ -153,7 +155,60 @@
           <span id="mensagem-pendencia"></span>
         </div>
 
-        {% if venda %}
+        {% if modo_edicao_data %}
+        <!-- Formulário de Edição por Data (Múltiplos Produtos) -->
+        <div id="edicao-produtos-data">
+          <h5 class="mb-3 text-muted">
+            <i class="bi bi-droplet-fill"></i> Produtos do Posto
+          </h5>
+          <div id="produtos-lista-edicao">
+            {% for produto in produtos %}
+            {% set venda_produto = vendas_por_produto.get(produto.id) %}
+            <div class="produto-card">
+              <div class="produto-titulo">
+                <i class="bi bi-droplet-fill me-2"></i> {{ produto.nome }}
+              </div>
+              <div class="row">
+                <div class="col-md-6">
+                  <label class="form-label">Quantidade (Litros)</label>
+                  <input type="text" 
+                         name="quantidade_{{ produto.id }}" 
+                         class="form-control input-quantidade-edit" 
+                         placeholder="Ex: 1.500,326"
+                         value="{% if venda_produto %}{{ '{:,.3f}'.format(venda_produto.quantidade_litros|float).replace(',', '_').replace('.', ',').replace('_', '.') }}{% endif %}"
+                         data-produto-id="{{ produto.id }}">
+                </div>
+                <div class="col-md-6">
+                  <label class="form-label">Valor Total (R$)</label>
+                  <input type="text" 
+                         name="valor_{{ produto.id }}" 
+                         class="form-control input-valor-edit" 
+                         placeholder="R$ 0,00"
+                         value="{% if venda_produto %}R$ {{ '{:,.2f}'.format(venda_produto.valor_total|float).replace(',', '_').replace('.', ',').replace('_', '.') }}{% endif %}"
+                         data-produto-id="{{ produto.id }}">
+                </div>
+              </div>
+              <div class="mt-2">
+                <small class="text-muted">
+                  <i class="bi bi-calculator"></i> 
+                  Preço médio: <span id="preco_medio_edit_{{ produto.id }}">{% if venda_produto %}R$ {{ '{:,.4f}'.format(venda_produto.preco_medio|float).replace('.', ',') }}/L{% else %}R$ 0,0000/L{% endif %}</span>
+                </small>
+              </div>
+            </div>
+            {% endfor %}
+          </div>
+
+          <!-- Botões -->
+          <div class="d-flex justify-content-end gap-2 mt-4">
+            <a href="{{ url_for('posto.vendas_lista') }}" class="btn btn-secondary">
+              <i class="bi bi-x-circle"></i> Cancelar
+            </a>
+            <button type="submit" class="btn btn-posto-primary btn-lg">
+              <i class="bi bi-check-circle"></i> Salvar Alterações
+            </button>
+          </div>
+        </div>
+        {% elif venda %}
         <!-- Formulário de Edição (Produto Único) -->
         <div id="edicao-produto">
           <h5 class="mb-3 text-muted">
@@ -253,7 +308,90 @@
 {% endblock %}
 
 {% block scripts %}
-{% if venda %}
+{% if modo_edicao_data %}
+<script>
+// Script para modo de edição por data - calcular preço médio para múltiplos produtos
+document.addEventListener('DOMContentLoaded', function() {
+  const produtosCards = document.querySelectorAll('.produto-card');
+  
+  produtosCards.forEach(card => {
+    const inputQtd = card.querySelector('.input-quantidade-edit');
+    const inputValor = card.querySelector('.input-valor-edit');
+    const produtoId = inputQtd.dataset.produtoId;
+    const precoMedioSpan = card.querySelector(`#preco_medio_edit_${produtoId}`);
+    
+    // Máscara de quantidade (3 decimais)
+    inputQtd.addEventListener('input', function(e) {
+      let value = e.target.value.replace(/\D/g, '');
+      if (value === '') {
+        e.target.value = '';
+        calcularPrecoMedio();
+        return;
+      }
+      value = (value / 1000).toFixed(3).replace('.', ',');
+      value = value.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+      e.target.value = value;
+      calcularPrecoMedio();
+    });
+    
+    // Máscara de valor (2 decimais)
+    inputValor.addEventListener('input', function(e) {
+      let value = e.target.value.replace(/\D/g, '');
+      if (value === '') {
+        e.target.value = '';
+        calcularPrecoMedio();
+        return;
+      }
+      value = (value / 100).toFixed(2);
+      value = 'R$ ' + value.replace('.', ',').replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+      e.target.value = value;
+      calcularPrecoMedio();
+    });
+    
+    // Calcular preço médio
+    function calcularPrecoMedio() {
+      const qtdStr = inputQtd.value.replace(/\./g, '').replace(',', '.');
+      const valorStr = inputValor.value.replace(/[^\d,]/g, '').replace(',', '.');
+      const qtd = parseFloat(qtdStr) || 0;
+      const valor = parseFloat(valorStr) || 0;
+      
+      if (qtd > 0 && valor > 0) {
+        const preco = valor / qtd;
+        precoMedioSpan.textContent = `R$ ${preco.toFixed(4).replace('.', ',')} /L`;
+        precoMedioSpan.style.color = '#28a745';
+        precoMedioSpan.style.fontWeight = 'bold';
+      } else {
+        precoMedioSpan.textContent = 'R$ 0,0000/L';
+        precoMedioSpan.style.color = '';
+        precoMedioSpan.style.fontWeight = '';
+      }
+    }
+    
+    // Calcular inicialmente
+    calcularPrecoMedio();
+  });
+  
+  // Validação antes de submeter
+  document.getElementById('form-lancamento').addEventListener('submit', function(e) {
+    const quantidades = document.querySelectorAll('.input-quantidade-edit');
+    let temPeloMenosUm = false;
+
+    quantidades.forEach(input => {
+      const valor = parseFloat(input.value.replace(/\./g, '').replace(',', '.')) || 0;
+      if (valor > 0) {
+        temPeloMenosUm = true;
+      }
+    });
+
+    if (!temPeloMenosUm) {
+      e.preventDefault();
+      alert('Por favor, preencha ao menos um produto com quantidade e valor!');
+      return false;
+    }
+  });
+});
+</script>
+{% elif venda %}
 <script>
 // Script para modo de edição - calcular preço médio automaticamente
 document.addEventListener('DOMContentLoaded', function() {
@@ -398,7 +536,12 @@ document.addEventListener('DOMContentLoaded', function() {
     // Máscara de quantidade
     inputQtd.addEventListener('input', function(e) {
       let value = e.target.value.replace(/\D/g, '');
-      value = (value / 100).toFixed(2).replace('.', ',');
+      if (value === '') {
+        e.target.value = '';
+        calcularPrecoMedio();
+        return;
+      }
+      value = (value / 1000).toFixed(3).replace('.', ',');
       value = value.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
       e.target.value = value;
       calcularPrecoMedio();
@@ -407,6 +550,11 @@ document.addEventListener('DOMContentLoaded', function() {
     // Máscara de valor
     inputValor.addEventListener('input', function(e) {
       let value = e.target.value.replace(/\D/g, '');
+      if (value === '') {
+        e.target.value = '';
+        calcularPrecoMedio();
+        return;
+      }
       value = (value / 100).toFixed(2);
       value = 'R$ ' + value.replace('.', ',').replace(/\B(?=(\d{3})+(?!\d))/g, '.');
       e.target.value = value;
@@ -415,8 +563,10 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Calcular preço médio
     function calcularPrecoMedio() {
-      const qtd = parseFloat(inputQtd.value.replace(/\./g, '').replace(',', '.')) || 0;
-      const valor = parseFloat(inputValor.value.replace(/[^\d,]/g, '').replace(',', '.')) || 0;
+      const qtdStr = inputQtd.value.replace(/\./g, '').replace(',', '.');
+      const valorStr = inputValor.value.replace(/[^\d,]/g, '').replace(',', '.');
+      const qtd = parseFloat(qtdStr) || 0;
+      const valor = parseFloat(valorStr) || 0;
       
       if (qtd > 0 && valor > 0) {
         const preco = valor / qtd;

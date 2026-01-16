@@ -170,11 +170,18 @@ def vendas_lista():
     try:
         from models.vendas_posto import VendasPosto
         from collections import defaultdict
+        from datetime import date
+        
+        # Default to current month if no filters provided
+        hoje = date.today()
+        primeiro_dia_mes = hoje.replace(day=1)
+        data_inicio_default = primeiro_dia_mes.strftime('%Y-%m-%d')
+        data_fim_default = hoje.strftime('%Y-%m-%d')
         
         # Obter filtros da query string
         filtros = {
-            'data_inicio': request.args.get('data_inicio', ''),
-            'data_fim': request.args.get('data_fim', ''),
+            'data_inicio': request.args.get('data_inicio', data_inicio_default),
+            'data_fim': request.args.get('data_fim', data_fim_default),
             'cliente_id': request.args.get('cliente_id', '')
         }
         
@@ -200,6 +207,7 @@ def vendas_lista():
                 vendas_organizadas[key] = {
                     'data': venda.data_movimento,
                     'cliente': venda.cliente,
+                    'cliente_id': venda.cliente_id,
                     'produtos': [],
                     'total_litros': 0,
                     'total_valor': 0
@@ -215,13 +223,46 @@ def vendas_lista():
             vendas_organizadas[key]['total_litros'] += venda.quantidade_litros or 0
             vendas_organizadas[key]['total_valor'] += venda.valor_total or 0
         
+        # Calculate summary by product
+        resumo_por_produto = {}
+        for venda in vendas:
+            produto_nome = venda.produto.nome if venda.produto else 'Desconhecido'
+            if produto_nome not in resumo_por_produto:
+                resumo_por_produto[produto_nome] = {
+                    'litros': 0,
+                    'valor_total': 0
+                }
+            resumo_por_produto[produto_nome]['litros'] += float(venda.quantidade_litros or 0)
+            resumo_por_produto[produto_nome]['valor_total'] += float(venda.valor_total or 0)
+        
+        # Calculate average price for each product
+        resumo_lista = []
+        ordem_produtos = {
+            'ETANOL': 1,
+            'GASOLINA': 2,
+            'GASOLINA ADITIVADA': 3,
+            'S-10': 4,
+            'S-500': 5
+        }
+        for produto_nome, dados in resumo_por_produto.items():
+            preco_medio = dados['valor_total'] / dados['litros'] if dados['litros'] > 0 else 0
+            resumo_lista.append({
+                'produto': produto_nome,
+                'litros': dados['litros'],
+                'valor_total': dados['valor_total'],
+                'preco_medio': preco_medio,
+                'ordem': ordem_produtos.get(produto_nome.upper(), 999)
+            })
+        resumo_lista.sort(key=lambda x: x['ordem'])
+        
         # Buscar todos os clientes para o filtro
         clientes = Cliente.query.order_by(Cliente.razao_social).all()
         
         return render_template('posto/vendas_lista.html',
                              vendas_organizadas=vendas_organizadas,
                              filtros=filtros,
-                             clientes=clientes)
+                             clientes=clientes,
+                             resumo_por_produto=resumo_lista)
     
     except Exception as e:
         flash(f'❌ Erro ao carregar vendas: {str(e)}', 'danger')
@@ -349,64 +390,147 @@ def vendas_lancar():
         return redirect(url_for('posto.vendas_lista'))
 
 
+@posto_bp.route('/vendas/editar/<data>/<int:cliente_id>', methods=['GET', 'POST'])
+@login_required
+def vendas_editar_data(data, cliente_id):
+    """Editar todas as vendas de uma data + cliente específicos"""
+    try:
+        from models.vendas_posto import VendasPosto
+        
+        # Parse date
+        data_movimento = datetime.strptime(data, '%Y-%m-%d').date()
+        
+        # Buscar todas as vendas desta data + cliente
+        vendas = VendasPosto.query.filter_by(
+            data_movimento=data_movimento,
+            cliente_id=cliente_id
+        ).all()
+        
+        if not vendas:
+            flash('❌ Nenhuma venda encontrada para esta data e cliente!', 'warning')
+            return redirect(url_for('posto.vendas_lista'))
+        
+        cliente = Cliente.query.get_or_404(cliente_id)
+        
+        if request.method == 'POST':
+            # Processar atualização de múltiplos produtos
+            ordem_produtos = {
+                'ETANOL': 1,
+                'GASOLINA': 2,
+                'GASOLINA ADITIVADA': 3,
+                'S-10': 4,
+                'S-500': 5
+            }
+            
+            vendas_atualizadas = 0
+            produtos = Produto.query.all()
+            produtos_ordenados = sorted(produtos, key=lambda p: ordem_produtos.get(p.nome.upper(), 999))
+            
+            for produto in produtos_ordenados:
+                quantidade_key = f'quantidade_{produto.id}'
+                valor_key = f'valor_{produto.id}'
+                
+                quantidade_str = request.form.get(quantidade_key, '').replace('.', '').replace(',', '.')
+                valor_str = request.form.get(valor_key, '').replace('R$', '').replace('.', '').replace(',', '.').strip()
+                
+                # Buscar venda existente para este produto
+                venda_existente = next((v for v in vendas if v.produto_id == produto.id), None)
+                
+                if quantidade_str and valor_str:
+                    try:
+                        quantidade_litros = float(quantidade_str)
+                        valor_total = float(valor_str)
+                        
+                        if quantidade_litros > 0 and valor_total > 0:
+                            preco_medio = valor_total / quantidade_litros
+                            
+                            if venda_existente:
+                                # Atualizar venda existente
+                                venda_existente.quantidade_litros = quantidade_litros
+                                venda_existente.preco_medio = preco_medio
+                                venda_existente.valor_total = valor_total
+                            else:
+                                # Criar nova venda (produto foi adicionado)
+                                nova_venda = VendasPosto(
+                                    cliente_id=cliente_id,
+                                    data_movimento=data_movimento,
+                                    produto_id=produto.id,
+                                    vendedor_id=None,
+                                    quantidade_litros=quantidade_litros,
+                                    preco_medio=preco_medio,
+                                    valor_total=valor_total
+                                )
+                                db.session.add(nova_venda)
+                            vendas_atualizadas += 1
+                        elif venda_existente:
+                            # Quantidade ou valor zerados - deletar venda
+                            db.session.delete(venda_existente)
+                    except (ValueError, ZeroDivisionError):
+                        continue
+                elif venda_existente:
+                    # Campos vazios - deletar venda
+                    db.session.delete(venda_existente)
+            
+            if vendas_atualizadas == 0:
+                flash('❌ Nenhum produto foi atualizado. Preencha ao menos um produto com quantidade e valor!', 'warning')
+                return redirect(url_for('posto.vendas_editar_data', data=data, cliente_id=cliente_id))
+            
+            db.session.commit()
+            flash(f'✅ {vendas_atualizadas} venda(s) atualizada(s) com sucesso!', 'success')
+            return redirect(url_for('posto.vendas_lista'))
+        
+        # GET - Mostrar formulário com vendas preenchidas
+        # Buscar produtos do cliente
+        vinculos = ClienteProduto.query.filter_by(
+            cliente_id=cliente_id,
+            ativo=True
+        ).all()
+        
+        produtos_cliente_ids = [v.produto_id for v in vinculos]
+        produtos = Produto.query.filter(Produto.id.in_(produtos_cliente_ids)).all()
+        
+        ordem_produtos = {
+            'ETANOL': 1,
+            'GASOLINA': 2,
+            'GASOLINA ADITIVADA': 3,
+            'S-10': 4,
+            'S-500': 5
+        }
+        produtos = sorted(produtos, key=lambda p: ordem_produtos.get(p.nome.upper(), 999))
+        
+        # Criar dicionário com valores existentes
+        vendas_por_produto = {v.produto_id: v for v in vendas}
+        
+        # Buscar clientes para o select (mesmo que disabled)
+        clientes = Cliente.query.order_by(Cliente.razao_social).all()
+        
+        return render_template('posto/vendas_lancar.html',
+                             modo_edicao_data=True,
+                             data_edicao=data_movimento,
+                             cliente_edicao=cliente,
+                             produtos=produtos,
+                             vendas_por_produto=vendas_por_produto,
+                             clientes=clientes,
+                             hoje=datetime.now())
+    
+    except Exception as e:
+        flash(f'❌ Erro ao editar vendas: {str(e)}', 'danger')
+        return redirect(url_for('posto.vendas_lista'))
+
+
 @posto_bp.route('/vendas/<int:venda_id>/editar', methods=['GET', 'POST'])
 @login_required
 def vendas_editar(venda_id):
-    """Editar uma venda existente"""
+    """Editar uma venda existente (OLD - mantido para compatibilidade)"""
     try:
         from models.vendas_posto import VendasPosto
         
         venda = VendasPosto.query.get_or_404(venda_id)
         
-        if request.method == 'POST':
-            # Validar campos obrigatórios
-            produto_id = request.form.get('produto_id')
-            if not produto_id:
-                flash('❌ Produto é obrigatório!', 'danger')
-                return redirect(url_for('posto.vendas_editar', venda_id=venda_id))
-            
-            # Atualizar venda
-            venda.data_movimento = datetime.strptime(
-                request.form.get('data_movimento'), '%Y-%m-%d'
-            ).date()
-            venda.cliente_id = int(request.form.get('cliente_id')) if request.form.get('cliente_id') else None
-            venda.produto_id = int(produto_id)
-            venda.vendedor_id = int(request.form.get('vendedor_id')) if request.form.get('vendedor_id') else None
-            venda.quantidade_litros = float(request.form.get('quantidade_litros', 0))
-            venda.preco_medio = float(request.form.get('preco_medio', 0))
-            venda.valor_total = float(request.form.get('valor_total', 0))
-            
-            db.session.commit()
-            
-            flash('✅ Venda atualizada com sucesso!', 'success')
-            return redirect(url_for('posto.vendas_lista'))
-        
-        # GET - Mostrar formulário preenchido
-        clientes = Cliente.query.order_by(Cliente.razao_social).all()
-        produtos = Produto.query.order_by(Produto.nome).all()
-        
-        try:
-            from models.motorista import Motorista
-            vendedores = Motorista.query.order_by(Motorista.nome).all()
-        except Exception as e:
-            print(f"Erro ao buscar vendedores: {e}")
-            vendedores = []
-        
-        # Buscar última data de lançamento por cliente
-        ultima_data_por_cliente = {}
-        for cliente in clientes:
-            ultima_venda = VendasPosto.query.filter_by(cliente_id=cliente.id)\
-                .order_by(VendasPosto.data_movimento.desc()).first()
-            if ultima_venda:
-                ultima_data_por_cliente[cliente.id] = ultima_venda.data_movimento.strftime('%Y-%m-%d')
-        
-        return render_template('posto/vendas_lancar.html',
-                             venda=venda,
-                             clientes=clientes,
-                             produtos=produtos,
-                             vendedores=vendedores,
-                             ultima_data_por_cliente=ultima_data_por_cliente,
-                             hoje=datetime.now())
+        # Redirecionar para nova rota de edição por data
+        return redirect(url_for('posto.vendas_editar_data', 
+                               data=venda.data_movimento.strftime('%Y-%m-%d'),
+                               cliente_id=venda.cliente_id))
     
     except Exception as e:
         flash(f'❌ Erro ao editar venda: {str(e)}', 'danger')
