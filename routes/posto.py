@@ -10,6 +10,15 @@ from datetime import datetime
 # Criar blueprint do posto
 posto_bp = Blueprint('posto', __name__, url_prefix='/posto')
 
+# Ordem padrão de produtos
+ORDEM_PRODUTOS = {
+    'ETANOL': 1,
+    'GASOLINA': 2,
+    'GASOLINA ADITIVADA': 3,
+    'S-10': 4,
+    'S-500': 5
+}
+
 # ============================================
 # ADMINISTRAÇÃO: GERENCIAR PRODUTOS DO CLIENTE
 # ============================================
@@ -137,15 +146,8 @@ def api_produtos_cliente(cliente_id):
                     'descricao': produto.descricao or ''
                 })
         
-        # Ordenar produtos: ETANOL | GASOLINA | GASOLINA ADITIVADA | S-10 | S-500
-        ordem_produtos = {
-            'ETANOL': 1,
-            'GASOLINA': 2,
-            'GASOLINA ADITIVADA': 3,
-            'S-10': 4,
-            'S-500': 5
-        }
-        produtos = sorted(produtos, key=lambda p: ordem_produtos.get(p['nome'].upper(), 999))
+        # Ordenar produtos usando ordem padrão
+        produtos = sorted(produtos, key=lambda p: ORDEM_PRODUTOS.get(p['nome'].upper(), 999))
         
         return jsonify({
             'success': True,
@@ -237,13 +239,6 @@ def vendas_lista():
         
         # Calculate average price for each product
         resumo_lista = []
-        ordem_produtos = {
-            'ETANOL': 1,
-            'GASOLINA': 2,
-            'GASOLINA ADITIVADA': 3,
-            'S-10': 4,
-            'S-500': 5
-        }
         for produto_nome, dados in resumo_por_produto.items():
             preco_medio = dados['valor_total'] / dados['litros'] if dados['litros'] > 0 else 0
             resumo_lista.append({
@@ -251,7 +246,7 @@ def vendas_lista():
                 'litros': dados['litros'],
                 'valor_total': dados['valor_total'],
                 'preco_medio': preco_medio,
-                'ordem': ordem_produtos.get(produto_nome.upper(), 999)
+                'ordem': ORDEM_PRODUTOS.get(produto_nome.upper(), 999)
             })
         resumo_lista.sort(key=lambda x: x['ordem'])
         
@@ -281,19 +276,10 @@ def vendas_lancar():
             data_movimento = request.form.get('data_movimento')
             cliente_id = request.form.get('cliente_id')
             
-            # Ordem específica de produtos
-            ordem_produtos = {
-                'ETANOL': 1,
-                'GASOLINA': 2,
-                'GASOLINA ADITIVADA': 3,
-                'S-10': 4,
-                'S-500': 5
-            }
-            
             # Processar produtos - o formulário envia quantidade_X e valor_X para cada produto
             vendas_criadas = 0
             produtos = Produto.query.all()
-            produtos_ordenados = sorted(produtos, key=lambda p: ordem_produtos.get(p.nome.upper(), 999))
+            produtos_ordenados = sorted(produtos, key=lambda p: ORDEM_PRODUTOS.get(p.nome.upper(), 999))
             
             for produto in produtos_ordenados:
                 quantidade_key = f'quantidade_{produto.id}'
@@ -351,16 +337,9 @@ def vendas_lancar():
         
         clientes = clientes_com_produtos
         
-        # Ordem específica de produtos: ETANOL | GASOLINA | GASOLINA ADITIVADA | S-10 | S-500
-        ordem_produtos = {
-            'ETANOL': 1,
-            'GASOLINA': 2,
-            'GASOLINA ADITIVADA': 3,
-            'S-10': 4,
-            'S-500': 5
-        }
+        # Buscar todos produtos ordenados
         produtos = Produto.query.all()
-        produtos = sorted(produtos, key=lambda p: ordem_produtos.get(p.nome.upper(), 999))
+        produtos = sorted(produtos, key=lambda p: ORDEM_PRODUTOS.get(p.nome.upper(), 999))
         
         # Buscar vendedores (usando motoristas como vendedores)
         try:
@@ -414,17 +393,9 @@ def vendas_editar_data(data, cliente_id):
         
         if request.method == 'POST':
             # Processar atualização de múltiplos produtos
-            ordem_produtos = {
-                'ETANOL': 1,
-                'GASOLINA': 2,
-                'GASOLINA ADITIVADA': 3,
-                'S-10': 4,
-                'S-500': 5
-            }
-            
             vendas_atualizadas = 0
             produtos = Produto.query.all()
-            produtos_ordenados = sorted(produtos, key=lambda p: ordem_produtos.get(p.nome.upper(), 999))
+            produtos_ordenados = sorted(produtos, key=lambda p: ORDEM_PRODUTOS.get(p.nome.upper(), 999))
             
             for produto in produtos_ordenados:
                 quantidade_key = f'quantidade_{produto.id}'
@@ -488,15 +459,7 @@ def vendas_editar_data(data, cliente_id):
         
         produtos_cliente_ids = [v.produto_id for v in vinculos]
         produtos = Produto.query.filter(Produto.id.in_(produtos_cliente_ids)).all()
-        
-        ordem_produtos = {
-            'ETANOL': 1,
-            'GASOLINA': 2,
-            'GASOLINA ADITIVADA': 3,
-            'S-10': 4,
-            'S-500': 5
-        }
-        produtos = sorted(produtos, key=lambda p: ordem_produtos.get(p.nome.upper(), 999))
+        produtos = sorted(produtos, key=lambda p: ORDEM_PRODUTOS.get(p.nome.upper(), 999))
         
         # Criar dicionário com valores existentes
         vendas_por_produto = {v.produto_id: v for v in vendas}
