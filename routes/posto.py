@@ -473,6 +473,13 @@ def vendas_editar_data(data, cliente_id):
         # Buscar clientes para o select (mesmo que disabled)
         clientes = Cliente.query.order_by(Cliente.razao_social).all()
         
+        # Buscar última data de venda por cliente (necessário para o template)
+        ultima_data_por_cliente = {}
+        ultima_venda = VendasPosto.query.filter_by(cliente_id=cliente_id)\
+            .order_by(VendasPosto.data_movimento.desc()).first()
+        if ultima_venda:
+            ultima_data_por_cliente[cliente_id] = ultima_venda.data_movimento
+        
         return render_template('posto/vendas_lancar.html',
                              modo_edicao_data=True,
                              data_edicao=data_movimento,
@@ -480,6 +487,7 @@ def vendas_editar_data(data, cliente_id):
                              produtos=produtos,
                              vendas_por_produto=vendas_por_produto,
                              clientes=clientes,
+                             ultima_data_por_cliente=ultima_data_por_cliente,
                              hoje=datetime.now())
     
     except Exception as e:
