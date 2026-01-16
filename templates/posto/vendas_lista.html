@@ -7,6 +7,11 @@
   --grad-start: #4A90E2;
   --grad-end: #F2994A;
   --accent: #1f6fb6;
+  --etanol-color: #28a745;
+  --gasolina-color: #dc3545;
+  --gasolina-aditivada-color: #007bff;
+  --s10-color: #007bff;
+  --s500-color: #343a40;
 }
 
 .page-header-posto {
@@ -52,6 +57,26 @@
   background: #fff;
   margin-bottom: 1.5rem;
 }
+
+/* Product colors */
+.produto-etanol { color: var(--etanol-color) !important; }
+.produto-gasolina { color: var(--gasolina-color) !important; }
+.produto-gasolina-aditivada { color: var(--gasolina-aditivada-color) !important; }
+.produto-s10 { color: var(--s10-color) !important; }
+.produto-s500 { color: var(--s500-color) !important; }
+
+/* Accounting format for currency alignment */
+.valor-contabil {
+  font-family: 'Courier New', monospace;
+  text-align: right;
+  white-space: pre;
+}
+
+.resumo-total {
+  background: linear-gradient(135deg, rgba(74,144,226,0.15), rgba(242,153,74,0.15));
+  font-weight: 700;
+  border-top: 3px solid var(--accent);
+}
 </style>
 {% endblock %}
 
@@ -89,19 +114,34 @@
             <tr>
               <th>Produto</th>
               <th class="text-end">Litros</th>
-              <th class="text-end">Valor Total (R$)</th>
-              <th class="text-end">Preço Médio (R$/L)</th>
+              <th class="text-end">Valor Total</th>
+              <th class="text-end">Preço Médio</th>
             </tr>
           </thead>
           <tbody>
+            {% set total_litros = 0 %}
+            {% set total_valor = 0 %}
             {% for item in resumo_por_produto %}
+            {% set total_litros = total_litros + item.litros %}
+            {% set total_valor = total_valor + item.valor_total %}
+            {% set produto_class = 'produto-' + item.produto.lower().replace(' ', '-') %}
             <tr>
-              <td><strong>{{ item.produto }}</strong></td>
-              <td class="text-end">{{ "{:,.3f}".format(item.litros).replace(',', '_').replace('.', ',').replace('_', '.') }}</td>
-              <td class="text-end">R$ {{ "{:,.2f}".format(item.valor_total).replace(',', '_').replace('.', ',').replace('_', '.') }}</td>
-              <td class="text-end">R$ {{ "{:,.4f}".format(item.preco_medio).replace('.', ',') }}</td>
+              <td>
+                <i class="bi bi-droplet-fill {{ produto_class }}"></i>
+                <strong class="{{ produto_class }}">{{ item.produto }}</strong>
+              </td>
+              <td class="text-end valor-contabil">{{ "{:>12,.3f}".format(item.litros).replace(',', '_').replace('.', ',').replace('_', '.') }}</td>
+              <td class="text-end valor-contabil">R$ {{ "{:>12,.2f}".format(item.valor_total).replace(',', '_').replace('.', ',').replace('_', '.') }}</td>
+              <td class="text-end valor-contabil">R$ {{ "{:>10,.4f}".format(item.preco_medio).replace('.', ',') }}/L</td>
             </tr>
             {% endfor %}
+            <!-- Totals Row -->
+            <tr class="resumo-total">
+              <td><strong>TOTAL GERAL</strong></td>
+              <td class="text-end valor-contabil"><strong>{{ "{:>12,.3f}".format(total_litros).replace(',', '_').replace('.', ',').replace('_', '.') }}</strong></td>
+              <td class="text-end valor-contabil"><strong>R$ {{ "{:>12,.2f}".format(total_valor).replace(',', '_').replace('.', ',').replace('_', '.') }}</strong></td>
+              <td></td>
+            </tr>
           </tbody>
         </table>
       </div>
@@ -190,10 +230,12 @@
           </thead>
           <tbody>
             {% for item in dados.produtos %}
+            {% set produto_nome = item.produto.nome if item.produto else 'Produto desconhecido' %}
+            {% set produto_class = 'produto-' + produto_nome.lower().replace(' ', '-') %}
             <tr class="produto-row">
               <td>
-                <i class="bi bi-droplet-fill" style="color: var(--accent);"></i>
-                {{ item.produto.nome if item.produto else 'Produto desconhecido' }}
+                <i class="bi bi-droplet-fill {{ produto_class }}"></i>
+                <span class="{{ produto_class }}">{{ produto_nome }}</span>
               </td>
               <td class="text-end">{{ "{:,.3f}".format(item.litros).replace(',', '_').replace('.', ',').replace('_', '.') }}</td>
               <td class="text-end">R$ {{ "{:,.2f}".format(item.valor).replace(',', '_').replace('.', ',').replace('_', '.') }}</td>

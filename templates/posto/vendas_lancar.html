@@ -7,6 +7,11 @@
   --grad-start: #4A90E2;
   --grad-end: #F2994A;
   --accent: #1f6fb6;
+  --etanol-color: #28a745;
+  --gasolina-color: #dc3545;
+  --gasolina-aditivada-color: #007bff;
+  --s10-color: #007bff;
+  --s500-color: #343a40;
 }
 
 .page-header-posto {
@@ -77,6 +82,30 @@
   display: none;
   text-align: center;
   padding: 2rem;
+}
+
+/* Product colors */
+.produto-etanol { color: var(--etanol-color) !important; }
+.produto-gasolina { color: var(--gasolina-color) !important; }
+.produto-gasolina-aditivada { color: var(--gasolina-aditivada-color) !important; }
+.produto-s10 { color: var(--s10-color) !important; }
+.produto-s500 { color: var(--s500-color) !important; }
+
+/* Running totals card */
+.totals-card {
+  position: sticky;
+  top: 20px;
+  background: linear-gradient(135deg, rgba(74,144,226,0.1), rgba(242,153,74,0.1));
+  border: 2px solid var(--accent);
+  border-radius: 8px;
+  padding: 1.5rem;
+  margin-top: 2rem;
+}
+
+.total-value {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--accent);
 }
 </style>
 {% endblock %}
@@ -164,9 +193,11 @@
           <div id="produtos-lista-edicao">
             {% for produto in produtos %}
             {% set venda_produto = vendas_por_produto.get(produto.id) %}
+            {% set produto_class = 'produto-' + produto.nome.lower().replace(' ', '-') %}
             <div class="produto-card">
               <div class="produto-titulo">
-                <i class="bi bi-droplet-fill me-2"></i> {{ produto.nome }}
+                <i class="bi bi-droplet-fill me-2 {{ produto_class }}"></i> 
+                <span class="{{ produto_class }}">{{ produto.nome }}</span>
               </div>
               <div class="row">
                 <div class="col-md-6">
@@ -287,6 +318,30 @@
             <i class="bi bi-droplet-fill"></i> Produtos do Posto
           </h5>
           <div id="produtos-lista"></div>
+
+          <!-- Running Totals -->
+          <div class="totals-card" id="running-totals" style="display: none;">
+            <h5 class="mb-3">
+              <i class="bi bi-calculator-fill"></i> Totais do Lançamento
+            </h5>
+            <div class="row">
+              <div class="col-md-6 mb-2">
+                <div class="d-flex justify-content-between align-items-center">
+                  <span><strong>Total em Litros:</strong></span>
+                  <span class="total-value" id="total-litros">0,000</span>
+                </div>
+              </div>
+              <div class="col-md-6 mb-2">
+                <div class="d-flex justify-content-between align-items-center">
+                  <span><strong>Total em Reais:</strong></span>
+                  <span class="total-value" id="total-reais">R$ 0,00</span>
+                </div>
+              </div>
+            </div>
+            <small class="text-muted">
+              <i class="bi bi-info-circle"></i> Os totais são atualizados automaticamente conforme você preenche os campos
+            </small>
+          </div>
 
           <!-- Botões -->
           <div class="d-flex justify-content-end gap-2 mt-4">
@@ -496,11 +551,15 @@ document.addEventListener('DOMContentLoaded', function() {
 
   // Criar card de produto
   function criarCardProduto(produto) {
+    // Determine product color class
+    const produtoClass = 'produto-' + produto.nome.toLowerCase().replace(' ', '-');
+    
     const card = document.createElement('div');
     card.className = 'produto-card';
     card.innerHTML = `
       <div class="produto-titulo">
-        <i class="bi bi-droplet-fill me-2"></i> ${produto.nome}
+        <i class="bi bi-droplet-fill me-2 ${produtoClass}"></i> 
+        <span class="${produtoClass}">${produto.nome}</span>
       </div>
       <div class="row">
         <div class="col-md-6">
@@ -508,7 +567,7 @@ document.addEventListener('DOMContentLoaded', function() {
           <input type="text" 
                  name="quantidade_${produto.id}" 
                  class="form-control input-quantidade" 
-                 placeholder="Ex: 1.500,00"
+                 placeholder="Ex: 1.500,326"
                  data-produto-id="${produto.id}">
         </div>
         <div class="col-md-6">
@@ -539,12 +598,14 @@ document.addEventListener('DOMContentLoaded', function() {
       if (value === '') {
         e.target.value = '';
         calcularPrecoMedio();
+        atualizarTotais();
         return;
       }
       value = (value / 1000).toFixed(3).replace('.', ',');
       value = value.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
       e.target.value = value;
       calcularPrecoMedio();
+      atualizarTotais();
     });
 
     // Máscara de valor
@@ -553,12 +614,14 @@ document.addEventListener('DOMContentLoaded', function() {
       if (value === '') {
         e.target.value = '';
         calcularPrecoMedio();
+        atualizarTotais();
         return;
       }
       value = (value / 100).toFixed(2);
       value = 'R$ ' + value.replace('.', ',').replace(/\B(?=(\d{3})+(?!\d))/g, '.');
       e.target.value = value;
       calcularPrecoMedio();
+      atualizarTotais();
     });
 
     // Calcular preço médio
@@ -581,6 +644,45 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     return card;
+  }
+
+  // Update running totals
+  function atualizarTotais() {
+    const quantidades = document.querySelectorAll('.input-quantidade');
+    const valores = document.querySelectorAll('.input-valor');
+    const runningTotals = document.getElementById('running-totals');
+    
+    let totalLitros = 0;
+    let totalReais = 0;
+    let temValores = false;
+
+    quantidades.forEach(input => {
+      const qtdStr = input.value.replace(/\./g, '').replace(',', '.');
+      const qtd = parseFloat(qtdStr) || 0;
+      if (qtd > 0) {
+        totalLitros += qtd;
+        temValores = true;
+      }
+    });
+
+    valores.forEach(input => {
+      const valorStr = input.value.replace(/[^\d,]/g, '').replace(',', '.');
+      const valor = parseFloat(valorStr) || 0;
+      if (valor > 0) {
+        totalReais += valor;
+      }
+    });
+
+    // Show/hide totals card
+    if (temValores) {
+      runningTotals.style.display = 'block';
+      document.getElementById('total-litros').textContent = 
+        totalLitros.toFixed(3).replace('.', ',').replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+      document.getElementById('total-reais').textContent = 
+        'R$ ' + totalReais.toFixed(2).replace('.', ',').replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+    } else {
+      runningTotals.style.display = 'none';
+    }
   }
 
   // Formatar data para exibição
