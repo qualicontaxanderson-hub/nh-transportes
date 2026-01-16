@@ -215,15 +215,21 @@ def vendas_lista():
                     'total_valor': 0
                 }
             
+            produto_nome = venda.produto.nome if venda.produto else 'Desconhecido'
             vendas_organizadas[key]['produtos'].append({
                 'produto': venda.produto,
                 'litros': venda.quantidade_litros or 0,
                 'valor': venda.valor_total or 0,
                 'preco_medio': venda.preco_medio or 0,
-                'venda_id': venda.id  # Adicionar ID da venda para botão editar
+                'venda_id': venda.id,  # Adicionar ID da venda para botão editar
+                'ordem': ORDEM_PRODUTOS.get(produto_nome.upper(), 999)
             })
             vendas_organizadas[key]['total_litros'] += venda.quantidade_litros or 0
             vendas_organizadas[key]['total_valor'] += venda.valor_total or 0
+        
+        # Sort products within each day by ordem
+        for key in vendas_organizadas:
+            vendas_organizadas[key]['produtos'].sort(key=lambda p: p['ordem'])
         
         # Calculate summary by product
         resumo_por_produto = {}
