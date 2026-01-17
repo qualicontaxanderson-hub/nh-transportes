@@ -684,3 +684,87 @@ def cancelar_boleto(charge_id):
         if conn:
             conn.close()
     return redirect(url_for('financeiro.recebimentos'))
+
+
+@financeiro_bp.route('/consultar-status-efi/<int:charge_id>/', methods=['GET'])
+@login_required
+def consultar_status_efi(charge_id):
+    """
+    Consulta o status atual da cobrança no provedor EFI (Efipay).
+    Retorna JSON com informações atualizadas da charge.
+    """
+    try:
+        credentials = {
+            "client_id": current_app.config.get("EFI_CLIENT_ID") or os.getenv("EFI_CLIENT_ID"),
+            "client_secret": current_app.config.get("EFI_CLIENT_SECRET") or os.getenv("EFI_CLIENT_SECRET"),
+            "sandbox": current_app.config.get("EFI_SANDBOX", True),
+        }
+        
+        # Buscar informações da charge no provedor
+        charge_data = fetch_charge(credentials, charge_id)
+        
+        if not charge_data or not isinstance(charge_data, dict):
+            return jsonify({
+                "success": False, 
+                "error": "Não foi possível consultar a cobrança no provedor EFI"
+            }), 400
+        
+        # Extrair dados relevantes da resposta
+        data = charge_data.get("data") or charge_data.get("charge") or charge_data
+        
+        # Informações básicas da cobrança
+        status = data.get("status") or "desconhecido"
+        total = data.get("total") or data.get("value") or 0
+        
+        # Informações de pagamento
+        payment = data.get("payment") or {}
+        banking_billet = payment.get("banking_billet") or {}
+        
+        # Data de vencimento
+        expire_at = banking_billet.get("expire_at") or data.get("expire_at")
+        
+        # Informações de pagamento
+        paid_at = data.get("paid_at")
+        payment_method = payment.get("method") or "boleto"
+        
+        # Link do boleto
+        link = banking_billet.get("link") or data.get("link")
+        barcode = banking_billet.get("barcode")
+        
+        # Montar resposta estruturada
+        result = {
+            "success": True,
+            "charge_id": charge_id,
+            "status": status,
+            "total": total,
+            "expire_at": expire_at,
+            "paid_at": paid_at,
+            "payment_method": payment_method,
+            "link": link,
+            "barcode": barcode,
+            "raw_data": data  # Dados completos para debugging
+        }
+        
+        # Traduzir status para português
+        status_translation = {
+            "new": "Nova",
+            "waiting": "Aguardando",
+            "paid": "Pago",
+            "unpaid": "Não Pago",
+            "refunded": "Reembolsado",
+            "contested": "Contestado",
+            "canceled": "Cancelado",
+            "settled": "Quitado",
+            "link": "Link Gerado",
+            "expired": "Expirado"
+        }
+        result["status_label"] = status_translation.get(status.lower(), status)
+        
+        return jsonify(result), 200
+        
+    except Exception as e:
+        current_app.logger.exception("Erro em consultar_status_efi: %s", e)
+        return jsonify({
+            "success": False, 
+            "error": f"Erro ao consultar status: {str(e)}"
+        }), 500

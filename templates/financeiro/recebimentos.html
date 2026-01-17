@@ -105,6 +105,14 @@
                                     {% if ds != 'cancelado' %} disabled {% endif %}>
                                 <i class="bi bi-arrow-clockwise"></i>
                             </button>
+
+                            <!-- Consultar Status EFI -->
+                            <button type="button"
+                                    class="btn btn-sm btn-outline-info btn-status-efi"
+                                    data-charge-id="{{ r.charge_id }}"
+                                    title="Consultar Status no Banco EFI">
+                                <i class="bi bi-info-circle"></i>
+                            </button>
                             {% endif %}
                         </div>
                     </td>
@@ -177,6 +185,55 @@ document.addEventListener('DOMContentLoaded', function () {
         }
       } catch (err) {
         alert('Erro na requisição: ' + err);
+      }
+    });
+  });
+
+  // Consultar Status EFI
+  qsa('.btn-status-efi').forEach(btn => {
+    btn.addEventListener('click', async function () {
+      const chargeId = this.getAttribute('data-charge-id');
+      if (!chargeId) { alert('Charge ID ausente'); return; }
+      
+      // Desabilitar botão e mostrar loading
+      const originalText = this.innerHTML;
+      this.disabled = true;
+      this.innerHTML = '<span class="spinner-border spinner-border-sm" role="status"></span>';
+      
+      try {
+        const resp = await fetch(`/financeiro/consultar-status-efi/${chargeId}/`, {
+          method: 'GET',
+          headers: {'X-Requested-With':'XMLHttpRequest'}
+        });
+        const j = await resp.json();
+        
+        if (resp.ok && j.success) {
+          // Montar mensagem com as informações da cobrança
+          let message = `📊 Status da Cobrança #${j.charge_id}\n\n`;
+          message += `Status: ${j.status_label || j.status}\n`;
+          if (j.total) {
+            message += `Valor: R$ ${(j.total / 100).toFixed(2).replace('.', ',')}\n`;
+          }
+          if (j.expire_at) {
+            message += `Vencimento: ${j.expire_at}\n`;
+          }
+          if (j.paid_at) {
+            message += `Pago em: ${j.paid_at}\n`;
+          }
+          if (j.barcode) {
+            message += `\nCódigo de Barras:\n${j.barcode}\n`;
+          }
+          
+          alert(message);
+        } else {
+          alert('Falha ao consultar status: ' + (j.error || JSON.stringify(j)));
+        }
+      } catch (err) {
+        alert('Erro na requisição: ' + err);
+      } finally {
+        // Restaurar botão
+        this.disabled = false;
+        this.innerHTML = originalText;
       }
     });
   });
