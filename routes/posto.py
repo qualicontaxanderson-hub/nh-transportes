@@ -5,7 +5,7 @@
 from flask import Blueprint, render_template, request, flash, redirect, url_for, jsonify
 from flask_login import login_required, current_user
 from models import db, Cliente, Produto, ClienteProduto
-from datetime import datetime
+from datetime import datetime, timedelta
 
 # Criar blueprint do posto
 posto_bp = Blueprint('posto', __name__, url_prefix='/posto')
@@ -161,6 +161,42 @@ def api_produtos_cliente(cliente_id):
         }), 500
 
 
+@posto_bp.route('/api/ultima-data/<int:cliente_id>')
+@login_required
+def api_ultima_data(cliente_id):
+    """API: Retorna a última data de lançamento para um cliente e sugere próxima data"""
+    try:
+        from models.vendas_posto import VendasPosto
+        
+        # Buscar última venda do cliente
+        ultima_venda = VendasPosto.query.filter_by(cliente_id=cliente_id)\
+            .order_by(VendasPosto.data_movimento.desc()).first()
+        
+        if ultima_venda:
+            ultima_data = ultima_venda.data_movimento
+            proxima_data = ultima_data + timedelta(days=1)
+            
+            return jsonify({
+                'success': True,
+                'tem_pendencia': True,
+                'ultima_data': ultima_data.strftime('%Y-%m-%d'),
+                'proxima_data': proxima_data.strftime('%Y-%m-%d')
+            })
+        else:
+            # Nenhuma venda anterior, sugerir hoje
+            return jsonify({
+                'success': True,
+                'tem_pendencia': False,
+                'proxima_data': datetime.now().strftime('%Y-%m-%d')
+            })
+        
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
 # ============================================
 # VENDAS DO POSTO
 # ============================================
@@ -281,6 +317,17 @@ def vendas_lancar():
             # Processar formulário - múltiplos produtos de uma vez
             data_movimento = request.form.get('data_movimento')
             cliente_id = request.form.get('cliente_id')
+            
+            # Verificar se já existe lançamento para este cliente nesta data
+            data_obj = datetime.strptime(data_movimento, '%Y-%m-%d').date()
+            venda_existente = VendasPosto.query.filter_by(
+                cliente_id=int(cliente_id),
+                data_movimento=data_obj
+            ).first()
+            
+            if venda_existente:
+                flash('❌ Já existe lançamento para este posto nesta data! Não é permitido lançar duas vezes no mesmo dia.', 'danger')
+                return redirect(url_for('posto.vendas_lancar'))
             
             # Processar produtos - o formulário envia quantidade_X e valor_X para cada produto
             vendas_criadas = 0

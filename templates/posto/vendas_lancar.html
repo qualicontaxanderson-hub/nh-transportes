@@ -504,13 +504,21 @@ document.addEventListener('DOMContentLoaded', function() {
     produtosContainer.style.display = 'none';
     alertPendencia.classList.add('d-none');
 
-    // Buscar última data de lançamento
+    // Buscar última data de lançamento e definir próxima data automaticamente
     fetch(`/posto/api/ultima-data/${clienteId}`)
       .then(response => response.json())
       .then(dataInfo => {
-        if (dataInfo.success && dataInfo.tem_pendencia) {
-          mensagemPendencia.textContent = `Último lançamento: ${formatarData(dataInfo.ultima_data)}. Sugerimos lançar a partir de ${formatarData(dataInfo.proxima_data)}.`;
-          alertPendencia.classList.remove('d-none');
+        if (dataInfo.success) {
+          // Definir automaticamente a próxima data no campo
+          if (dataInfo.proxima_data) {
+            dataInput.value = dataInfo.proxima_data;
+          }
+          
+          // Mostrar mensagem se houver pendência
+          if (dataInfo.tem_pendencia) {
+            mensagemPendencia.textContent = `Último lançamento: ${formatarData(dataInfo.ultima_data)}. Data definida automaticamente para ${formatarData(dataInfo.proxima_data)}.`;
+            alertPendencia.classList.remove('d-none');
+          }
         }
       })
       .catch(error => console.error('Erro ao buscar última data:', error));
