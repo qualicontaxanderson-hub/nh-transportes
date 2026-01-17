@@ -8,6 +8,16 @@ import os
 financeiro_bp = Blueprint('financeiro', __name__, url_prefix='/financeiro')
 
 
+def _get_efi_credentials():
+    """Helper function to get EFI credentials consistently across routes."""
+    return {
+        "client_id": current_app.config.get("EFI_CLIENT_ID") or os.getenv("EFI_CLIENT_ID"),
+        "client_secret": current_app.config.get("EFI_CLIENT_SECRET") or os.getenv("EFI_CLIENT_SECRET"),
+        "sandbox": current_app.config.get("EFI_SANDBOX", True),
+    }
+
+
+
 @financeiro_bp.route('/recebimentos/')
 @login_required
 def recebimentos():
@@ -232,11 +242,7 @@ def prorrogar_boleto(charge_id):
         if not new_date:
             return jsonify({"success": False, "error": "new_date ausente"}), 400
 
-        credentials = {
-            "client_id": current_app.config.get("EFI_CLIENT_ID") or None,
-            "client_secret": current_app.config.get("EFI_CLIENT_SECRET") or None,
-            "sandbox": current_app.config.get("EFI_SANDBOX", True),
-        }
+        credentials = _get_efi_credentials()
         success, resp = update_billet_expire(credentials, charge_id, new_date)
         if not success:
             current_app.logger.warning("[prorrogar_boleto] falha provedor: %r", resp)
@@ -486,11 +492,7 @@ def visualizar_boleto(charge_id):
             if link_boleto and isinstance(link_boleto, str) and (link_boleto.startswith('http://') or link_boleto.startswith('https://')):
                 return redirect(link_boleto)
 
-        credentials = {
-            "client_id": current_app.config.get("EFI_CLIENT_ID") or None,
-            "client_secret": current_app.config.get("EFI_CLIENT_SECRET") or None,
-            "sandbox": current_app.config.get("EFI_SANDBOX", True),
-        }
+        credentials = _get_efi_credentials()
         charge = fetch_charge(credentials, charge_id)
         if not charge or not isinstance(charge, dict):
             flash("Não foi possível obter dados da cobrança no provedor.", "danger")
@@ -541,11 +543,7 @@ def alterar_vencimento(charge_id):
             flash("Informe uma nova data de vencimento (YYYY-MM-DD).", "warning")
             return redirect(url_for('financeiro.alterar_vencimento', charge_id=charge_id))
 
-        credentials = {
-            "client_id": current_app.config.get("EFI_CLIENT_ID") or None,
-            "client_secret": current_app.config.get("EFI_CLIENT_SECRET") or None,
-            "sandbox": current_app.config.get("EFI_SANDBOX", True),
-        }
+        credentials = _get_efi_credentials()
         success, resp = update_billet_expire(credentials, charge_id, new_date)
         if not success:
             flash(f"Falha ao atualizar vencimento no provedor: {resp}", "danger")
@@ -655,11 +653,7 @@ def cancelar_boleto(charge_id):
     conn = None
     cursor = None
     try:
-        credentials = {
-            "client_id": current_app.config.get("EFI_CLIENT_ID") or None,
-            "client_secret": current_app.config.get("EFI_CLIENT_SECRET") or None,
-            "sandbox": current_app.config.get("EFI_SANDBOX", True),
-        }
+        credentials = _get_efi_credentials()
         success, resp = cancel_charge(credentials, charge_id)
         if not success:
             flash(f"Falha ao cancelar no provedor: {resp}", "danger")
@@ -694,11 +688,7 @@ def consultar_status_efi(charge_id):
     Retorna JSON com informações atualizadas da charge.
     """
     try:
-        credentials = {
-            "client_id": current_app.config.get("EFI_CLIENT_ID") or os.getenv("EFI_CLIENT_ID"),
-            "client_secret": current_app.config.get("EFI_CLIENT_SECRET") or os.getenv("EFI_CLIENT_SECRET"),
-            "sandbox": current_app.config.get("EFI_SANDBOX", True),
-        }
+        credentials = _get_efi_credentials()
         
         # Buscar informações da charge no provedor
         charge_data = fetch_charge(credentials, charge_id)
@@ -731,7 +721,7 @@ def consultar_status_efi(charge_id):
         link = banking_billet.get("link") or data.get("link")
         barcode = banking_billet.get("barcode")
         
-        # Montar resposta estruturada
+        # Montar resposta estruturada (sem raw_data para evitar vazamento de informações)
         result = {
             "success": True,
             "charge_id": charge_id,
@@ -741,8 +731,7 @@ def consultar_status_efi(charge_id):
             "paid_at": paid_at,
             "payment_method": payment_method,
             "link": link,
-            "barcode": barcode,
-            "raw_data": data  # Dados completos para debugging
+            "barcode": barcode
         }
         
         # Traduzir status para português
