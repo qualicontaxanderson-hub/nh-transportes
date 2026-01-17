@@ -1,8 +1,8 @@
-<nav class="navbar navbar-expand-lg navbar-light" style="background:#2f9df5;">
+<nav class="navbar navbar-expand-lg navbar-light" style="background: linear-gradient(135deg, var(--grad-start), var(--grad-end));">
   <div class="container-fluid">
     <!-- Left: logo + app name -->
     <a class="navbar-brand d-flex align-items-center" href="/" style="color:#fff; font-weight:700;">
-      <img src="{{ url_for('static', filename='logo-nh.png') }}" alt="NH" style="height:34px; margin-right:8px;">
+      <img src="{{ url_for('static', filename='logo-nh.png') }}" alt="NH" style="height:34px; margin-right:8px; background: white; padding: 4px; border-radius: 4px;">
       <span>GRUPO NH</span>
     </a>
 
@@ -20,12 +20,12 @@
             <i class="bi bi-people-fill"></i> Cadastros
           </a>
           <ul class="dropdown-menu" aria-labelledby="navCadastros">
-            <li><a class="dropdown-item" href="/clientes/">Clientes</a></li>
-            <li><a class="dropdown-item" href="/fornecedores/">Fornecedores</a></li>
-            <li><a class="dropdown-item" href="/produtos/">Produtos</a></li>
-            <li><a class="dropdown-item" href="/motoristas/">Motoristas</a></li>
-            <li><a class="dropdown-item" href="/veiculos/">Veículos</a></li>
-            <li><a class="dropdown-item" href="/origens_destinos/">Origens/Destinos</a></li>
+            <li><a class="dropdown-item" href="/clientes/"><i class="bi bi-person-badge" style="color: #007bff;"></i> Clientes</a></li>
+            <li><a class="dropdown-item" href="/fornecedores/"><i class="bi bi-building" style="color: #6f42c1;"></i> Fornecedores</a></li>
+            <li><a class="dropdown-item" href="/produtos/"><i class="bi bi-box-seam" style="color: #fd7e14;"></i> Produtos</a></li>
+            <li><a class="dropdown-item" href="/motoristas/"><i class="bi bi-person-vcard" style="color: #28a745;"></i> Motoristas</a></li>
+            <li><a class="dropdown-item" href="/veiculos/"><i class="bi bi-truck" style="color: #dc3545;"></i> Veículos</a></li>
+            <li><a class="dropdown-item" href="/origens_destinos/"><i class="bi bi-geo-alt" style="color: #17a2b8;"></i> Origens/Destinos</a></li>
           </ul>
         </li>
 
@@ -35,15 +35,15 @@
             <i class="bi bi-journal-plus"></i> Lançamentos
           </a>
           <ul class="dropdown-menu" aria-labelledby="navLancamentos">
-            <li><a class="dropdown-item" href="/pedidos/">Pedidos</a></li>
-            <li><a class="dropdown-item" href="/fretes/">Fretes</a></li>
-            <li><a class="dropdown-item" href="/rotas/">Rotas</a></li>
-            <li><a class="dropdown-item" href="/quilometragem/">Quilometragem</a></li>
+            <li><a class="dropdown-item" href="/pedidos/"><i class="bi bi-clipboard-check" style="color: #007bff;"></i> Pedidos</a></li>
+            <li><a class="dropdown-item" href="/fretes/"><i class="bi bi-truck-front" style="color: #dc3545;"></i> Fretes</a></li>
+            <li><a class="dropdown-item" href="/rotas/"><i class="bi bi-map" style="color: #ffc107;"></i> Rotas</a></li>
+            <li><a class="dropdown-item" href="/quilometragem/"><i class="bi bi-speedometer2" style="color: #17a2b8;"></i> Quilometragem</a></li>
             <li><hr class="dropdown-divider"></li>
-            <li><a class="dropdown-item" href="/arla/"><i class="bi bi-droplet-half"></i> ARLA</a></li>
-            <li><a class="dropdown-item" href="/posto/vendas"><i class="bi bi-fuel-pump"></i> Vendas Posto</a></li>
+            <li><a class="dropdown-item" href="/arla/"><i class="bi bi-droplet-half" style="color: #007bff;"></i> ARLA</a></li>
+            <li><a class="dropdown-item" href="/posto/vendas"><i class="bi bi-fuel-pump" style="color: #28a745;"></i> Vendas Posto</a></li>
             <li><hr class="dropdown-divider"></li>
-            <li><a class="dropdown-item" href="/posto/admin/clientes"><i class="bi bi-gear"></i> Config. Produtos Posto</a></li>
+            <li><a class="dropdown-item" href="/posto/admin/clientes"><i class="bi bi-gear" style="color: #6c757d;"></i> Config. Produtos Posto</a></li>
           </ul>
         </li>
 
@@ -53,9 +53,9 @@
             <i class="bi bi-wallet2"></i> Financeiro
           </a>
           <ul class="dropdown-menu" aria-labelledby="navFinanceiro">
-            <li><a class="dropdown-item" href="/financeiro/contas/">Contas</a></li>
-            <li><a class="dropdown-item" href="/financeiro/pagamentos/">Pagamentos</a></li>
-            <li><a class="dropdown-item" href="/financeiro/recebimentos/">Recebimentos</a></li>
+            <li><a class="dropdown-item" href="/financeiro/contas/"><i class="bi bi-bank" style="color: #007bff;"></i> Contas</a></li>
+            <li><a class="dropdown-item" href="/financeiro/pagamentos/"><i class="bi bi-cash-coin" style="color: #dc3545;"></i> Pagamentos</a></li>
+            <li><a class="dropdown-item" href="/financeiro/recebimentos/"><i class="bi bi-credit-card" style="color: #28a745;"></i> Recebimentos</a></li>
           </ul>
         </li>
 
@@ -65,10 +65,10 @@
             <i class="bi bi-bar-chart"></i> Relatórios
           </a>
           <ul class="dropdown-menu" aria-labelledby="navRelatorios">
-            <li><a class="dropdown-item" href="/relatorios/fretes_comissao_cte">Comissão CTE</a></li>
-            <li><a class="dropdown-item" href="/relatorios/fretes_comissao_motorista">Comissão Motorista</a></li>
-            <li><a class="dropdown-item" href="/relatorios/fretes_lucro">Lucro</a></li>
-            <li><a class="dropdown-item" href="/relatorios/fretes_produtos">Produtos</a></li>
+            <li><a class="dropdown-item" href="/relatorios/fretes_comissao_cte"><i class="bi bi-file-earmark-text" style="color: #007bff;"></i> Comissão CTE</a></li>
+            <li><a class="dropdown-item" href="/relatorios/fretes_comissao_motorista"><i class="bi bi-person-check" style="color: #28a745;"></i> Comissão Motorista</a></li>
+            <li><a class="dropdown-item" href="/relatorios/fretes_lucro"><i class="bi bi-graph-up-arrow" style="color: #ffc107;"></i> Lucro</a></li>
+            <li><a class="dropdown-item" href="/relatorios/fretes_produtos"><i class="bi bi-box-seam" style="color: #fd7e14;"></i> Produtos</a></li>
           </ul>
         </li>
       </ul>
@@ -85,10 +85,10 @@
             <i class="bi bi-person-circle"></i> {{ current_user.username or current_user.name or 'Usuário' }}
           </a>
           <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="navUser">
-            <li><a class="dropdown-item" href="/auth/profile">Perfil</a></li>
-            <li><a class="dropdown-item" href="/auth/settings">Configurações</a></li>
+            <li><a class="dropdown-item" href="/auth/profile"><i class="bi bi-person"></i> Perfil</a></li>
+            <li><a class="dropdown-item" href="/auth/settings"><i class="bi bi-gear-fill"></i> Configurações</a></li>
             <li><hr class="dropdown-divider"></li>
-            <li><a class="dropdown-item text-danger" href="/auth/logout">Sair</a></li>
+            <li><a class="dropdown-item text-danger" href="/auth/logout"><i class="bi bi-box-arrow-right"></i> Sair</a></li>
           </ul>
         </li>
         {% else %}

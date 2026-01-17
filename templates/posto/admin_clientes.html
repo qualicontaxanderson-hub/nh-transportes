@@ -18,41 +18,74 @@
   box-shadow: 0 4px 12px rgba(0,0,0,0.15);
 }
 
-.cliente-card {
+.cliente-lista-item {
   border: 1px solid #dee2e6;
   border-radius: 8px;
-  padding: 1rem;
-  margin-bottom: 1rem;
+  padding: 1rem 1.5rem;
+  margin-bottom: 0.75rem;
   transition: all 0.3s ease;
   background: white;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
 }
 
-.cliente-card:hover {
+.cliente-lista-item:hover {
   border-color: var(--accent);
   box-shadow: 0 2px 8px rgba(31,111,182,0.15);
-  transform: translateY(-2px);
 }
 
-.badge-produtos {
-  background: var(--accent);
-  color: white;
-  padding: 0.3rem 0.6rem;
-  border-radius: 12px;
-  font-size: 0.85rem;
+.cliente-info {
+  flex: 1;
+  min-width: 300px;
 }
 
-.badge-sem-produtos {
-  background: #dc3545;
-  color: white;
-  padding: 0.3rem 0.6rem;
-  border-radius: 12px;
+.cliente-nome {
+  font-weight: 600;
+  color: #212529;
+  margin-bottom: 0.25rem;
+}
+
+.produtos-inline {
+  color: #6c757d;
+  font-size: 0.95rem;
+  margin-top: 0.25rem;
+}
+
+.produtos-inline strong {
+  color: var(--accent);
+}
+
+.produto-tag {
+  display: inline-block;
+  padding: 0.15rem 0.5rem;
+  margin: 0 0.25rem;
+  background: #e7f1ff;
+  border: 1px solid var(--accent);
+  color: var(--accent);
+  border-radius: 4px;
   font-size: 0.85rem;
+  font-weight: 500;
+}
+
+.sem-produtos-tag {
+  display: inline-block;
+  padding: 0.15rem 0.5rem;
+  background: #f8d7da;
+  border: 1px solid #dc3545;
+  color: #dc3545;
+  border-radius: 4px;
+  font-size: 0.85rem;
+  font-weight: 500;
 }
 
 .btn-configurar {
   background: var(--accent);
   border-color: var(--accent);
   color: white;
+  white-space: nowrap;
+  padding: 0.5rem 1.25rem;
 }
 
 .btn-configurar:hover {
@@ -83,39 +116,30 @@
   </div>
 
   <!-- Lista de Clientes -->
-  <div class="row">
+  <div class="clientes-lista">
     {% for item in clientes_com_produtos %}
-    <div class="col-md-6 col-lg-4">
-      <div class="cliente-card">
-        <div class="d-flex justify-content-between align-items-start mb-2">
-          <div>
-            <h5 class="mb-1">
-              <i class="bi bi-building"></i>
-              {{ item.cliente.razao_social }}
-            </h5>
-            {% if item.cliente.nome_fantasia %}
-            <small class="text-muted">{{ item.cliente.nome_fantasia }}</small>
-            {% endif %}
-          </div>
-          <div>
-            {% if item.qtd_produtos > 0 %}
-            <span class="badge-produtos">
-              <i class="bi bi-check-circle-fill"></i> {{ item.qtd_produtos }} produto(s)
-            </span>
-            {% else %}
-            <span class="badge-sem-produtos">
-              <i class="bi bi-exclamation-circle-fill"></i> Sem produtos
-            </span>
-            {% endif %}
-          </div>
+    <div class="cliente-lista-item">
+      <div class="cliente-info">
+        <div class="cliente-nome">
+          <i class="bi bi-building"></i>
+          {{ item.cliente.razao_social }}
         </div>
-
-        <div class="d-grid mt-3">
-          <a href="{{ url_for('posto.admin_produtos_cliente', cliente_id=item.cliente.id) }}" 
-             class="btn btn-configurar">
-            <i class="bi bi-pencil-square"></i> Configurar Produtos
-          </a>
+        <div class="produtos-inline">
+          {% if item.produtos|length > 0 %}
+            <strong>Produtos:</strong>
+            {% for produto in item.produtos %}
+              <span class="produto-tag">{{ produto }}</span>
+            {% endfor %}
+          {% else %}
+            <span class="sem-produtos-tag">Sem Produtos</span>
+          {% endif %}
         </div>
+      </div>
+      <div>
+        <a href="{{ url_for('posto.admin_produtos_cliente', cliente_id=item.cliente.id) }}" 
+           class="btn btn-configurar btn-sm">
+          <i class="bi bi-pencil-square"></i> Configurar
+        </a>
       </div>
     </div>
     {% endfor %}

@@ -7,6 +7,11 @@
   --grad-start: #4A90E2;
   --grad-end: #F2994A;
   --accent: #1f6fb6;
+  --etanol-color: #28a745;
+  --gasolina-color: #dc3545;
+  --gasolina-aditivada-color: #007bff;
+  --s10-color: #007bff;
+  --s500-color: #343a40;
 }
 
 .page-header-posto {
@@ -52,6 +57,25 @@
   background: #fff;
   margin-bottom: 1.5rem;
 }
+
+/* Product colors */
+.produto-etanol { color: var(--etanol-color) !important; }
+.produto-gasolina { color: var(--gasolina-color) !important; }
+.produto-gasolina-aditivada { color: var(--gasolina-aditivada-color) !important; }
+.produto-s-10 { color: var(--s10-color) !important; }
+.produto-s-500 { color: var(--s500-color) !important; }
+
+/* Accounting format for currency alignment */
+.valor-contabil {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.resumo-total {
+  background: linear-gradient(135deg, rgba(74,144,226,0.15), rgba(242,153,74,0.15));
+  font-weight: 700;
+  border-top: 3px solid var(--accent);
+}
 </style>
 {% endblock %}
 
@@ -73,6 +97,55 @@
       </div>
     </div>
   </div>
+
+  <!-- Summary by Product -->
+  {% if resumo_por_produto %}
+  <div class="card shadow-sm mb-4">
+    <div class="card-header" style="background: var(--accent); color: white;">
+      <h5 class="mb-0">
+        <i class="bi bi-bar-chart-fill"></i> Resumo por Produto
+      </h5>
+    </div>
+    <div class="card-body">
+      <div class="table-responsive">
+        <table class="table table-sm table-hover mb-0">
+          <thead style="background: #f8f9fa;">
+            <tr>
+              <th>Produto</th>
+              <th class="text-end">Litros</th>
+              <th class="text-end">Valor Total</th>
+              <th class="text-end">Preço Médio</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% set ns = namespace(total_litros=0, total_valor=0) %}
+            {% for item in resumo_por_produto %}
+            {% set ns.total_litros = ns.total_litros + item.litros %}
+            {% set ns.total_valor = ns.total_valor + item.valor_total %}
+            {% set produto_class = 'produto-' + item.produto.lower().replace(' ', '-') %}
+            <tr>
+              <td>
+                <i class="bi bi-droplet-fill {{ produto_class }}"></i>
+                <strong class="{{ produto_class }}">{{ item.produto }}</strong>
+              </td>
+              <td class="text-end">{{ "{:,.3f}".format(item.litros).replace(',', '_').replace('.', ',').replace('_', '.') }}</td>
+              <td class="text-end">R$ {{ "{:,.2f}".format(item.valor_total).replace(',', '_').replace('.', ',').replace('_', '.') }}</td>
+              <td class="text-end">R$ {{ "{:,.4f}".format(item.preco_medio).replace('.', ',') }}/L</td>
+            </tr>
+            {% endfor %}
+            <!-- Totals Row -->
+            <tr class="resumo-total">
+              <td><strong>TOTAL GERAL</strong></td>
+              <td class="text-end"><strong>{{ "{:,.3f}".format(ns.total_litros).replace(',', '_').replace('.', ',').replace('_', '.') }}</strong></td>
+              <td class="text-end"><strong>R$ {{ "{:,.2f}".format(ns.total_valor).replace(',', '_').replace('.', ',').replace('_', '.') }}</strong></td>
+              <td></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+  {% endif %}
 
   <!-- Filtros -->
   <div class="card filtros-card">
@@ -119,13 +192,26 @@
             <strong>
               <i class="bi bi-calendar3"></i> 
               {{ dados.data.strftime('%d/%m/%Y') }} - 
-              {{ dados.data.strftime('%A') }}
+              {% set dia_semana = dados.data.strftime('%A') %}
+              {% if dia_semana == 'Monday' %}Segunda-feira
+              {% elif dia_semana == 'Tuesday' %}Terça-feira
+              {% elif dia_semana == 'Wednesday' %}Quarta-feira
+              {% elif dia_semana == 'Thursday' %}Quinta-feira
+              {% elif dia_semana == 'Friday' %}Sexta-feira
+              {% elif dia_semana == 'Saturday' %}Sábado
+              {% elif dia_semana == 'Sunday' %}Domingo
+              {% else %}{{ dia_semana }}{% endif %}
             </strong>
           </div>
-          <div>
+          <div class="d-flex gap-2 align-items-center">
             <span class="badge bg-primary">
               {{ dados.cliente.razao_social if dados.cliente else 'Cliente não identificado' }}
             </span>
+            <a href="{{ url_for('posto.vendas_editar_data', data=dados.data.strftime('%Y-%m-%d'), cliente_id=dados.cliente_id) }}" 
+               class="btn btn-sm btn-outline-primary" 
+               title="Editar todos os produtos deste dia">
+              <i class="bi bi-pencil"></i> Editar
+            </a>
           </div>
         </div>
       </div>
@@ -142,12 +228,14 @@
           </thead>
           <tbody>
             {% for item in dados.produtos %}
+            {% set produto_nome = item.produto.nome if item.produto else 'Produto desconhecido' %}
+            {% set produto_class = 'produto-' + produto_nome.lower().replace(' ', '-') %}
             <tr class="produto-row">
               <td>
-                <i class="bi bi-droplet-fill" style="color: var(--accent);"></i>
-                {{ item.produto.nome if item.produto else 'Produto desconhecido' }}
+                <i class="bi bi-droplet-fill {{ produto_class }}"></i>
+                <span class="{{ produto_class }}">{{ produto_nome }}</span>
               </td>
-              <td class="text-end">{{ "{:,.2f}".format(item.litros).replace(',', '_').replace('.', ',').replace('_', '.') }}</td>
+              <td class="text-end">{{ "{:,.3f}".format(item.litros).replace(',', '_').replace('.', ',').replace('_', '.') }}</td>
               <td class="text-end">R$ {{ "{:,.2f}".format(item.valor).replace(',', '_').replace('.', ',').replace('_', '.') }}</td>
               <td class="text-end">R$ {{ "{:,.4f}".format(item.preco_medio).replace('.', ',') }}</td>
             </tr>
@@ -156,7 +244,7 @@
             <!-- Total do Dia -->
             <tr class="total-dia">
               <td><strong>TOTAL DO DIA</strong></td>
-              <td class="text-end"><strong>{{ "{:,.2f}".format(dados.total_litros).replace(',', '_').replace('.', ',').replace('_', '.') }}</strong></td>
+              <td class="text-end"><strong>{{ "{:,.3f}".format(dados.total_litros).replace(',', '_').replace('.', ',').replace('_', '.') }}</strong></td>
               <td class="text-end"><strong>R$ {{ "{:,.2f}".format(dados.total_valor).replace(',', '_').replace('.', ',').replace('_', '.') }}</strong></td>
               <td></td>
             </tr>

@@ -94,9 +94,18 @@ def formatar_moeda(valor):
 
 def create_app():
     app = Flask(__name__, static_folder='static', template_folder='templates')
-    app.config.from_mapping(
-        SECRET_KEY=os.environ.get('SECRET_KEY', 'dev-key'),
-    )
+    
+    # Load configuration
+    from config import Config
+    app.config.from_object(Config)
+    
+    # Override with environment variable if set
+    if os.environ.get('SECRET_KEY'):
+        app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY')
+
+    # Initialize SQLAlchemy
+    from models import db
+    db.init_app(app)
 
     # Logging básico (arquivo rotativo)
     if not app.debug and not app.testing:

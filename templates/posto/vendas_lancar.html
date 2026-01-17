@@ -7,6 +7,11 @@
   --grad-start: #4A90E2;
   --grad-end: #F2994A;
   --accent: #1f6fb6;
+  --etanol-color: #28a745;
+  --gasolina-color: #dc3545;
+  --gasolina-aditivada-color: #007bff;
+  --s10-color: #007bff;
+  --s500-color: #343a40;
 }
 
 .page-header-posto {
@@ -78,6 +83,30 @@
   text-align: center;
   padding: 2rem;
 }
+
+/* Product colors */
+.produto-etanol { color: var(--etanol-color) !important; }
+.produto-gasolina { color: var(--gasolina-color) !important; }
+.produto-gasolina-aditivada { color: var(--gasolina-aditivada-color) !important; }
+.produto-s-10 { color: var(--s10-color) !important; }
+.produto-s-500 { color: var(--s500-color) !important; }
+
+/* Running totals card */
+.totals-card {
+  position: sticky;
+  top: 20px;
+  background: linear-gradient(135deg, rgba(74,144,226,0.1), rgba(242,153,74,0.1));
+  border: 2px solid var(--accent);
+  border-radius: 8px;
+  padding: 1.5rem;
+  margin-top: 2rem;
+}
+
+.total-value {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--accent);
+}
 </style>
 {% endblock %}
 
@@ -88,16 +117,20 @@
     <ol class="breadcrumb">
       <li class="breadcrumb-item"><a href="{{ url_for('index') }}">Início</a></li>
       <li class="breadcrumb-item"><a href="{{ url_for('posto.vendas_lista') }}">Vendas Posto</a></li>
-      <li class="breadcrumb-item active">Novo Lançamento</li>
+      <li class="breadcrumb-item active">{% if venda %}Editar Lançamento{% else %}Novo Lançamento{% endif %}</li>
     </ol>
   </nav>
 
   <!-- Cabeçalho -->
   <div class="page-header-posto">
     <h3 class="mb-1">
+      {% if venda %}
+      <i class="bi bi-pencil-square"></i> Editar Lançamento
+      {% else %}
       <i class="bi bi-plus-circle"></i> Lançar Vendas do Posto
+      {% endif %}
     </h3>
-    <p class="mb-0 opacity-75">Lançamento de todos os produtos de uma vez</p>
+    <p class="mb-0 opacity-75">{% if venda %}Edição de lançamento individual{% else %}Lançamento de todos os produtos de uma vez{% endif %}</p>
   </div>
 
   <!-- Formulário -->
@@ -111,18 +144,23 @@
             <label class="form-label fw-bold">
               <i class="bi bi-building"></i> Posto (Cliente)
             </label>
-            <select name="cliente_id" id="cliente_id" class="form-select form-select-lg" required>
+            <select name="cliente_id" id="cliente_id" class="form-select form-select-lg" required {% if venda or modo_edicao_data %}disabled{% endif %}>
               <option value="">Selecione o posto...</option>
               {% for cliente in clientes %}
               <option value="{{ cliente.id }}" 
-                      data-ultima-data="{{ ultima_data_por_cliente.get(cliente.id, '')|string }}">
+                      data-ultima-data="{{ ultima_data_por_cliente.get(cliente.id, '')|string }}"
+                      {% if venda and venda.cliente_id == cliente.id %}selected{% endif %}
+                      {% if modo_edicao_data and cliente_edicao.id == cliente.id %}selected{% endif %}>
                 {{ cliente.razao_social }}
               </option>
               {% endfor %}
             </select>
+            {% if venda or modo_edicao_data %}
+            <input type="hidden" name="cliente_id" value="{% if venda %}{{ venda.cliente_id }}{% else %}{{ cliente_edicao.id }}{% endif %}">
+            {% endif %}
             <small class="text-muted">
               <i class="bi bi-info-circle"></i> 
-              Ao selecionar o posto, os produtos cadastrados serão carregados automaticamente
+              {% if venda or modo_edicao_data %}Cliente não pode ser alterado durante edição{% else %}Ao selecionar o posto, os produtos cadastrados serão carregados automaticamente{% endif %}
             </small>
           </div>
           
@@ -132,8 +170,9 @@
             </label>
             <input type="date" name="data_movimento" id="data_movimento" 
                    class="form-control form-control-lg"
-                   value="{{ hoje.strftime('%Y-%m-%d') }}" 
+                   value="{% if venda %}{{ venda.data_movimento.strftime('%Y-%m-%d') }}{% elif modo_edicao_data %}{{ data_edicao.strftime('%Y-%m-%d') }}{% else %}{{ hoje.strftime('%Y-%m-%d') }}{% endif %}" 
                    max="{{ hoje.strftime('%Y-%m-%d') }}"
+                   {% if modo_edicao_data %}readonly style="background-color: #f8f9fa;"{% endif %}
                    required>
           </div>
         </div>
@@ -145,6 +184,126 @@
           <span id="mensagem-pendencia"></span>
         </div>
 
+        {% if modo_edicao_data %}
+        <!-- Formulário de Edição por Data (Múltiplos Produtos) -->
+        <div id="edicao-produtos-data">
+          <h5 class="mb-3 text-muted">
+            <i class="bi bi-droplet-fill"></i> Produtos do Posto
+          </h5>
+          <div id="produtos-lista-edicao">
+            {% for produto in produtos %}
+            {% set venda_produto = vendas_por_produto.get(produto.id) %}
+            {% set produto_class = 'produto-' + produto.nome.lower().replace(' ', '-') %}
+            <div class="produto-card">
+              <div class="produto-titulo">
+                <i class="bi bi-droplet-fill me-2 {{ produto_class }}"></i> 
+                <span class="{{ produto_class }}">{{ produto.nome }}</span>
+              </div>
+              <div class="row">
+                <div class="col-md-6">
+                  <label class="form-label">Quantidade (Litros)</label>
+                  <input type="text" 
+                         name="quantidade_{{ produto.id }}" 
+                         class="form-control input-quantidade-edit" 
+                         placeholder="Ex: 1.500,326"
+                         value="{% if venda_produto %}{{ '{:,.3f}'.format(venda_produto.quantidade_litros|float).replace(',', '_').replace('.', ',').replace('_', '.') }}{% endif %}"
+                         data-produto-id="{{ produto.id }}">
+                </div>
+                <div class="col-md-6">
+                  <label class="form-label">Valor Total (R$)</label>
+                  <input type="text" 
+                         name="valor_{{ produto.id }}" 
+                         class="form-control input-valor-edit" 
+                         placeholder="R$ 0,00"
+                         value="{% if venda_produto %}R$ {{ '{:,.2f}'.format(venda_produto.valor_total|float).replace(',', '_').replace('.', ',').replace('_', '.') }}{% endif %}"
+                         data-produto-id="{{ produto.id }}">
+                </div>
+              </div>
+              <div class="mt-2">
+                <small class="text-muted">
+                  <i class="bi bi-calculator"></i> 
+                  Preço médio: <span id="preco_medio_edit_{{ produto.id }}">{% if venda_produto %}R$ {{ '{:,.4f}'.format(venda_produto.preco_medio|float).replace('.', ',') }}/L{% else %}R$ 0,0000/L{% endif %}</span>
+                </small>
+              </div>
+            </div>
+            {% endfor %}
+          </div>
+
+          <!-- Botões -->
+          <div class="d-flex justify-content-end gap-2 mt-4">
+            <a href="{{ url_for('posto.vendas_lista') }}" class="btn btn-secondary">
+              <i class="bi bi-x-circle"></i> Cancelar
+            </a>
+            <button type="submit" class="btn btn-posto-primary btn-lg">
+              <i class="bi bi-check-circle"></i> Salvar Alterações
+            </button>
+          </div>
+        </div>
+        {% elif venda %}
+        <!-- Formulário de Edição (Produto Único) -->
+        <div id="edicao-produto">
+          <h5 class="mb-3 text-muted">
+            <i class="bi bi-droplet-fill"></i> Dados do Produto
+          </h5>
+          
+          <div class="row mb-3">
+            <div class="col-md-6">
+              <label class="form-label fw-bold">Produto</label>
+              <select name="produto_id" class="form-select" required>
+                <option value="">Selecione o produto...</option>
+                {% for produto in produtos %}
+                <option value="{{ produto.id }}" {% if venda.produto_id == produto.id %}selected{% endif %}>
+                  {{ produto.nome }}
+                </option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label fw-bold">Vendedor</label>
+              <select name="vendedor_id" class="form-select">
+                <option value="">Nenhum</option>
+                {% for vendedor in vendedores %}
+                <option value="{{ vendedor.id }}" {% if venda.vendedor_id == vendedor.id %}selected{% endif %}>
+                  {{ vendedor.nome }}
+                </option>
+                {% endfor %}
+              </select>
+            </div>
+          </div>
+
+          <div class="row mb-3">
+            <div class="col-md-4">
+              <label class="form-label fw-bold">Quantidade (Litros)</label>
+              <input type="number" name="quantidade_litros" id="edit_quantidade" class="form-control" 
+                     step="0.01" min="0" value="{{ venda.quantidade_litros }}" required>
+            </div>
+            <div class="col-md-4">
+              <label class="form-label fw-bold">Preço Médio (R$/L)</label>
+              <input type="number" name="preco_medio" id="edit_preco_medio" class="form-control" 
+                     step="0.0001" min="0" value="{{ venda.preco_medio }}" readonly 
+                     style="background-color: #f8f9fa; cursor: not-allowed;">
+              <small class="text-muted">
+                <i class="bi bi-info-circle"></i> Calculado automaticamente
+              </small>
+            </div>
+            <div class="col-md-4">
+              <label class="form-label fw-bold">Valor Total (R$)</label>
+              <input type="number" name="valor_total" id="edit_valor_total" class="form-control" 
+                     step="0.01" min="0" value="{{ venda.valor_total }}" required>
+            </div>
+          </div>
+
+          <!-- Botões -->
+          <div class="d-flex justify-content-end gap-2 mt-4">
+            <a href="{{ url_for('posto.vendas_lista') }}" class="btn btn-secondary">
+              <i class="bi bi-x-circle"></i> Cancelar
+            </a>
+            <button type="submit" class="btn btn-posto-primary btn-lg">
+              <i class="bi bi-check-circle"></i> Salvar Alterações
+            </button>
+          </div>
+        </div>
+        {% else %}
         <!-- Loading -->
         <div class="loading-spinner" id="loading">
           <div class="spinner-border text-primary" role="status">
@@ -160,6 +319,30 @@
           </h5>
           <div id="produtos-lista"></div>
 
+          <!-- Running Totals -->
+          <div class="totals-card" id="running-totals" style="display: none;">
+            <h5 class="mb-3">
+              <i class="bi bi-calculator-fill"></i> Totais do Lançamento
+            </h5>
+            <div class="row">
+              <div class="col-md-6 mb-2">
+                <div class="d-flex justify-content-between align-items-center">
+                  <span><strong>Total em Litros:</strong></span>
+                  <span class="total-value" id="total-litros">0,000</span>
+                </div>
+              </div>
+              <div class="col-md-6 mb-2">
+                <div class="d-flex justify-content-between align-items-center">
+                  <span><strong>Total em Reais:</strong></span>
+                  <span class="total-value" id="total-reais">R$ 0,00</span>
+                </div>
+              </div>
+            </div>
+            <small class="text-muted">
+              <i class="bi bi-info-circle"></i> Os totais são atualizados automaticamente conforme você preenche os campos
+            </small>
+          </div>
+
           <!-- Botões -->
           <div class="d-flex justify-content-end gap-2 mt-4">
             <a href="{{ url_for('posto.vendas_lista') }}" class="btn btn-secondary">
@@ -170,6 +353,7 @@
             </button>
           </div>
         </div>
+        {% endif %}
 
       </form>
     </div>
@@ -179,6 +363,122 @@
 {% endblock %}
 
 {% block scripts %}
+{% if modo_edicao_data %}
+<script>
+// Script para modo de edição por data - calcular preço médio para múltiplos produtos
+document.addEventListener('DOMContentLoaded', function() {
+  const produtosCards = document.querySelectorAll('.produto-card');
+  
+  produtosCards.forEach(card => {
+    const inputQtd = card.querySelector('.input-quantidade-edit');
+    const inputValor = card.querySelector('.input-valor-edit');
+    const produtoId = inputQtd.dataset.produtoId;
+    const precoMedioSpan = card.querySelector(`#preco_medio_edit_${produtoId}`);
+    
+    // Máscara de quantidade (3 decimais)
+    inputQtd.addEventListener('input', function(e) {
+      let value = e.target.value.replace(/\D/g, '');
+      if (value === '') {
+        e.target.value = '';
+        calcularPrecoMedio();
+        return;
+      }
+      value = (value / 1000).toFixed(3).replace('.', ',');
+      value = value.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+      e.target.value = value;
+      calcularPrecoMedio();
+    });
+    
+    // Máscara de valor (2 decimais)
+    inputValor.addEventListener('input', function(e) {
+      let value = e.target.value.replace(/\D/g, '');
+      if (value === '') {
+        e.target.value = '';
+        calcularPrecoMedio();
+        return;
+      }
+      value = (value / 100).toFixed(2);
+      value = 'R$ ' + value.replace('.', ',').replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+      e.target.value = value;
+      calcularPrecoMedio();
+    });
+    
+    // Calcular preço médio
+    function calcularPrecoMedio() {
+      const qtdStr = inputQtd.value.replace(/\./g, '').replace(',', '.');
+      const valorStr = inputValor.value.replace(/[^\d,]/g, '').replace(',', '.');
+      const qtd = parseFloat(qtdStr) || 0;
+      const valor = parseFloat(valorStr) || 0;
+      
+      if (qtd > 0 && valor > 0) {
+        const preco = valor / qtd;
+        precoMedioSpan.textContent = `R$ ${preco.toFixed(4).replace('.', ',')} /L`;
+        precoMedioSpan.style.color = '#28a745';
+        precoMedioSpan.style.fontWeight = 'bold';
+      } else {
+        precoMedioSpan.textContent = 'R$ 0,0000/L';
+        precoMedioSpan.style.color = '';
+        precoMedioSpan.style.fontWeight = '';
+      }
+    }
+    
+    // Calcular inicialmente
+    calcularPrecoMedio();
+  });
+  
+  // Validação antes de submeter
+  document.getElementById('form-lancamento').addEventListener('submit', function(e) {
+    const quantidades = document.querySelectorAll('.input-quantidade-edit');
+    let temPeloMenosUm = false;
+
+    quantidades.forEach(input => {
+      const valor = parseFloat(input.value.replace(/\./g, '').replace(',', '.')) || 0;
+      if (valor > 0) {
+        temPeloMenosUm = true;
+      }
+    });
+
+    if (!temPeloMenosUm) {
+      e.preventDefault();
+      alert('Por favor, preencha ao menos um produto com quantidade e valor!');
+      return false;
+    }
+  });
+});
+</script>
+{% elif venda %}
+<script>
+// Script para modo de edição - calcular preço médio automaticamente
+document.addEventListener('DOMContentLoaded', function() {
+  const qtdInput = document.getElementById('edit_quantidade');
+  const valorInput = document.getElementById('edit_valor_total');
+  const precoMedioInput = document.getElementById('edit_preco_medio');
+  
+  function calcularPrecoMedio() {
+    const quantidade = parseFloat(qtdInput.value) || 0;
+    const valorTotal = parseFloat(valorInput.value) || 0;
+    
+    if (quantidade > 0 && valorTotal > 0) {
+      const precoMedio = valorTotal / quantidade;
+      precoMedioInput.value = precoMedio.toFixed(4);
+    } else {
+      precoMedioInput.value = '0.0000';
+    }
+  }
+  
+  // Calcular quando quantidade mudar
+  qtdInput.addEventListener('input', calcularPrecoMedio);
+  qtdInput.addEventListener('change', calcularPrecoMedio);
+  
+  // Calcular quando valor total mudar
+  valorInput.addEventListener('input', calcularPrecoMedio);
+  valorInput.addEventListener('change', calcularPrecoMedio);
+  
+  // Calcular inicialmente
+  calcularPrecoMedio();
+});
+</script>
+{% elif not venda %}
 <script>
 document.addEventListener('DOMContentLoaded', function() {
   const clienteSelect = document.getElementById('cliente_id');
@@ -204,13 +504,21 @@ document.addEventListener('DOMContentLoaded', function() {
     produtosContainer.style.display = 'none';
     alertPendencia.classList.add('d-none');
 
-    // Buscar última data de lançamento
+    // Buscar última data de lançamento e definir próxima data automaticamente
     fetch(`/posto/api/ultima-data/${clienteId}`)
       .then(response => response.json())
       .then(dataInfo => {
-        if (dataInfo.success && dataInfo.tem_pendencia) {
-          mensagemPendencia.textContent = `Último lançamento: ${formatarData(dataInfo.ultima_data)}. Sugerimos lançar a partir de ${formatarData(dataInfo.proxima_data)}.`;
-          alertPendencia.classList.remove('d-none');
+        if (dataInfo.success) {
+          // Definir automaticamente a próxima data no campo
+          if (dataInfo.proxima_data) {
+            dataInput.value = dataInfo.proxima_data;
+          }
+          
+          // Mostrar mensagem se houver pendência
+          if (dataInfo.tem_pendencia) {
+            mensagemPendencia.textContent = `Último lançamento: ${formatarData(dataInfo.ultima_data)}. Data definida automaticamente para ${formatarData(dataInfo.proxima_data)}.`;
+            alertPendencia.classList.remove('d-none');
+          }
         }
       })
       .catch(error => console.error('Erro ao buscar última data:', error));
@@ -251,11 +559,15 @@ document.addEventListener('DOMContentLoaded', function() {
 
   // Criar card de produto
   function criarCardProduto(produto) {
+    // Determine product color class
+    const produtoClass = 'produto-' + produto.nome.toLowerCase().replace(' ', '-');
+    
     const card = document.createElement('div');
     card.className = 'produto-card';
     card.innerHTML = `
       <div class="produto-titulo">
-        <i class="bi bi-droplet-fill me-2"></i> ${produto.nome}
+        <i class="bi bi-droplet-fill me-2 ${produtoClass}"></i> 
+        <span class="${produtoClass}">${produto.nome}</span>
       </div>
       <div class="row">
         <div class="col-md-6">
@@ -263,7 +575,7 @@ document.addEventListener('DOMContentLoaded', function() {
           <input type="text" 
                  name="quantidade_${produto.id}" 
                  class="form-control input-quantidade" 
-                 placeholder="Ex: 1.500,00"
+                 placeholder="Ex: 1.500,326"
                  data-produto-id="${produto.id}">
         </div>
         <div class="col-md-6">
@@ -291,25 +603,41 @@ document.addEventListener('DOMContentLoaded', function() {
     // Máscara de quantidade
     inputQtd.addEventListener('input', function(e) {
       let value = e.target.value.replace(/\D/g, '');
-      value = (value / 100).toFixed(2).replace('.', ',');
+      if (value === '') {
+        e.target.value = '';
+        calcularPrecoMedio();
+        atualizarTotais();
+        return;
+      }
+      value = (value / 1000).toFixed(3).replace('.', ',');
       value = value.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
       e.target.value = value;
       calcularPrecoMedio();
+      atualizarTotais();
     });
 
     // Máscara de valor
     inputValor.addEventListener('input', function(e) {
       let value = e.target.value.replace(/\D/g, '');
+      if (value === '') {
+        e.target.value = '';
+        calcularPrecoMedio();
+        atualizarTotais();
+        return;
+      }
       value = (value / 100).toFixed(2);
       value = 'R$ ' + value.replace('.', ',').replace(/\B(?=(\d{3})+(?!\d))/g, '.');
       e.target.value = value;
       calcularPrecoMedio();
+      atualizarTotais();
     });
 
     // Calcular preço médio
     function calcularPrecoMedio() {
-      const qtd = parseFloat(inputQtd.value.replace(/\./g, '').replace(',', '.')) || 0;
-      const valor = parseFloat(inputValor.value.replace(/[^\d,]/g, '').replace(',', '.')) || 0;
+      const qtdStr = inputQtd.value.replace(/\./g, '').replace(',', '.');
+      const valorStr = inputValor.value.replace(/[^\d,]/g, '').replace(',', '.');
+      const qtd = parseFloat(qtdStr) || 0;
+      const valor = parseFloat(valorStr) || 0;
       
       if (qtd > 0 && valor > 0) {
         const preco = valor / qtd;
@@ -324,6 +652,45 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     return card;
+  }
+
+  // Update running totals
+  function atualizarTotais() {
+    const quantidades = document.querySelectorAll('.input-quantidade');
+    const valores = document.querySelectorAll('.input-valor');
+    const runningTotals = document.getElementById('running-totals');
+    
+    let totalLitros = 0;
+    let totalReais = 0;
+    let temValores = false;
+
+    quantidades.forEach(input => {
+      const qtdStr = input.value.replace(/\./g, '').replace(',', '.');
+      const qtd = parseFloat(qtdStr) || 0;
+      if (qtd > 0) {
+        totalLitros += qtd;
+        temValores = true;
+      }
+    });
+
+    valores.forEach(input => {
+      const valorStr = input.value.replace(/[^\d,]/g, '').replace(',', '.');
+      const valor = parseFloat(valorStr) || 0;
+      if (valor > 0) {
+        totalReais += valor;
+      }
+    });
+
+    // Show/hide totals card
+    if (temValores) {
+      runningTotals.style.display = 'block';
+      document.getElementById('total-litros').textContent = 
+        totalLitros.toFixed(3).replace('.', ',').replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+      document.getElementById('total-reais').textContent = 
+        'R$ ' + totalReais.toFixed(2).replace('.', ',').replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+    } else {
+      runningTotals.style.display = 'none';
+    }
   }
 
   // Formatar data para exibição
@@ -353,4 +720,5 @@ document.addEventListener('DOMContentLoaded', function() {
   });
 });
 </script>
+{% endif %}
 {% endblock %}

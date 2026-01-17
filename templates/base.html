@@ -11,6 +11,7 @@
     <!-- Seu CSS customizado -->
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
     {% block head %}{% endblock %}
+    {% block styles %}{% endblock %}
 </head>
 <body>
     {% if current_user.is_authenticated %}
