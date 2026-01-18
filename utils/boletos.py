@@ -467,6 +467,14 @@ def fetch_charge(credentials, charge_id):
                     headers_basic = {"Accept": "application/json"}
                     resp = requests.get(url, headers=headers_basic, auth=(client_id, client_secret), timeout=15)
                     logger.info("fetch_charge: Basic Auth status=%s len=%s", getattr(resp, "status_code", None), len(getattr(resp, "text", "") or ""))
+                    
+                    # Se ambos retornarem 401, adicionar informação de diagnóstico
+                    if resp.status_code == 401:
+                        logger.error("fetch_charge: AMBOS Bearer e Basic Auth retornaram 401. Possíveis causas: "
+                                   "1) Credenciais incorretas ou expiradas, "
+                                   "2) Ambiente incorreto (sandbox=%s mas credenciais são de %s), "
+                                   "3) Charge ID não pertence a esta conta EFI", 
+                                   sandbox, "produção" if sandbox else "sandbox")
         else:
             # Se não tiver token, usar Basic Auth diretamente
             client_id = credentials.get("client_id")

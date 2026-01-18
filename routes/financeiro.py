@@ -706,10 +706,25 @@ def consultar_status_efi(charge_id):
         # Verificar se há erro HTTP na resposta
         if "http_status" in charge_data and charge_data.get("http_status") != 200:
             error_text = charge_data.get("text", "Erro desconhecido")
-            current_app.logger.warning(f"[consultar_status_efi] HTTP error: {charge_data.get('http_status')} - {error_text[:200]}")
+            http_status = charge_data.get("http_status")
+            current_app.logger.warning(f"[consultar_status_efi] HTTP error: {http_status} - {error_text[:200]}")
+            
+            # Mensagem de erro mais específica para 401
+            if http_status == 401:
+                sandbox_status = "SANDBOX (homologação)" if current_app.config.get("EFI_SANDBOX", True) else "PRODUÇÃO"
+                error_msg = (
+                    f"Credenciais EFI não autorizadas. "
+                    f"Ambiente atual: {sandbox_status}. "
+                    f"Verifique: 1) Client ID e Secret corretos, "
+                    f"2) Credenciais são do ambiente correto (sandbox vs produção), "
+                    f"3) Charge ID {charge_id} pertence à sua conta EFI"
+                )
+            else:
+                error_msg = f"Erro ao consultar EFI (HTTP {http_status}): {error_text[:100]}"
+            
             return jsonify({
                 "success": False,
-                "error": f"Erro ao consultar EFI (HTTP {charge_data.get('http_status')}): {error_text[:100]}"
+                "error": error_msg
             }), 400
         
         # Extrair dados relevantes da resposta com múltiplas tentativas
