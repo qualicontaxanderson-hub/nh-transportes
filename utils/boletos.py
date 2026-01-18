@@ -439,6 +439,7 @@ def fetch_charge(credentials, charge_id):
     """
     Busca a charge no provedor (GET /v1/charge/{id}).
     Retorna o JSON parseado ou None/obj erro.
+    Tenta Bearer token primeiro, depois Basic Auth como fallback.
     """
     try:
         credentials = _ensure_credentials_from_env(credentials)
@@ -449,12 +450,35 @@ def fetch_charge(credentials, charge_id):
         url = f"{base}/v1/charge/{charge_id}"
 
         headers = {"Accept": "application/json"}
+        
+        # Tentar primeiro com Bearer token se disponível
         if token:
             headers["Authorization"] = f"Bearer {token}"
-
-        logger.info("fetch_charge: GET %s", url)
-        resp = requests.get(url, headers=headers, timeout=15)
-        logger.info("fetch_charge: status=%s len=%s", getattr(resp, "status_code", None), len(getattr(resp, "text", "") or ""))
+            logger.info("fetch_charge: GET %s (usando Bearer token)", url)
+            resp = requests.get(url, headers=headers, timeout=15)
+            logger.info("fetch_charge: status=%s len=%s", getattr(resp, "status_code", None), len(getattr(resp, "text", "") or ""))
+            
+            # Se retornar 401 com Bearer, tentar Basic Auth como fallback
+            if resp.status_code == 401:
+                logger.info("fetch_charge: Bearer token retornou 401, tentando Basic Auth")
+                client_id = credentials.get("client_id")
+                client_secret = credentials.get("client_secret")
+                if client_id and client_secret:
+                    headers_basic = {"Accept": "application/json"}
+                    resp = requests.get(url, headers=headers_basic, auth=(client_id, client_secret), timeout=15)
+                    logger.info("fetch_charge: Basic Auth status=%s len=%s", getattr(resp, "status_code", None), len(getattr(resp, "text", "") or ""))
+        else:
+            # Se não tiver token, usar Basic Auth diretamente
+            client_id = credentials.get("client_id")
+            client_secret = credentials.get("client_secret")
+            if not client_id or not client_secret:
+                logger.warning("fetch_charge: credenciais ausentes")
+                return {"http_status": 401, "text": "Credenciais ausentes"}
+            
+            logger.info("fetch_charge: GET %s (usando Basic Auth)", url)
+            resp = requests.get(url, headers=headers, auth=(client_id, client_secret), timeout=15)
+            logger.info("fetch_charge: status=%s len=%s", getattr(resp, "status_code", None), len(getattr(resp, "text", "") or ""))
+        
         try:
             return resp.json()
         except Exception:
