@@ -693,33 +693,60 @@ def consultar_status_efi(charge_id):
         # Buscar informações da charge no provedor
         charge_data = fetch_charge(credentials, charge_id)
         
+        # Log para debug
+        current_app.logger.info(f"[consultar_status_efi] charge_id={charge_id}, response_keys={list(charge_data.keys()) if isinstance(charge_data, dict) else 'not_dict'}")
+        
         if not charge_data or not isinstance(charge_data, dict):
             return jsonify({
                 "success": False, 
                 "error": "Não foi possível consultar a cobrança no provedor EFI"
             }), 400
         
-        # Extrair dados relevantes da resposta
+        # Verificar se há erro HTTP na resposta
+        if "http_status" in charge_data and charge_data.get("http_status") != 200:
+            error_text = charge_data.get("text", "Erro desconhecido")
+            current_app.logger.warning(f"[consultar_status_efi] HTTP error: {charge_data.get('http_status')} - {error_text[:200]}")
+            return jsonify({
+                "success": False,
+                "error": f"Erro ao consultar EFI (HTTP {charge_data.get('http_status')}): {error_text[:100]}"
+            }), 400
+        
+        # Extrair dados relevantes da resposta com múltiplas tentativas
         data = charge_data.get("data") or charge_data.get("charge") or charge_data
+        
+        # Log estrutura para debug
+        if isinstance(data, dict):
+            current_app.logger.info(f"[consultar_status_efi] data_keys={list(data.keys())}")
         
         # Informações básicas da cobrança
         status = data.get("status") or "desconhecido"
+        
+        # Tentar extrair valor de múltiplas formas
         total = data.get("total") or data.get("value") or 0
+        if not total and isinstance(data.get("items"), list) and len(data.get("items", [])) > 0:
+            # Tentar somar valores dos itens
+            try:
+                total = sum(item.get("value", 0) * item.get("amount", 1) for item in data.get("items", []))
+            except Exception:
+                total = 0
         
         # Informações de pagamento
         payment = data.get("payment") or {}
-        banking_billet = payment.get("banking_billet") or {}
+        if isinstance(payment, list) and len(payment) > 0:
+            payment = payment[0]
+        
+        banking_billet = payment.get("banking_billet") or {} if isinstance(payment, dict) else {}
         
         # Data de vencimento
-        expire_at = banking_billet.get("expire_at") or data.get("expire_at")
+        expire_at = banking_billet.get("expire_at") or data.get("expire_at") or payment.get("expire_at")
         
         # Informações de pagamento
-        paid_at = data.get("paid_at")
+        paid_at = data.get("paid_at") or payment.get("paid_at")
         payment_method = payment.get("method") or "boleto"
         
         # Link do boleto
-        link = banking_billet.get("link") or data.get("link")
-        barcode = banking_billet.get("barcode")
+        link = banking_billet.get("link") or data.get("link") or banking_billet.get("pdf")
+        barcode = banking_billet.get("barcode") or data.get("barcode")
         
         # Montar resposta estruturada (sem raw_data para evitar vazamento de informações)
         result = {

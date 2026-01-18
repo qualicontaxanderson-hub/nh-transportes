@@ -210,26 +210,41 @@ document.addEventListener('DOMContentLoaded', function () {
         if (resp.ok && j.success) {
           // Montar mensagem com as informações da cobrança
           let message = `📊 Status da Cobrança #${j.charge_id}\n\n`;
-          message += `Status: ${j.status_label || j.status}\n`;
-          if (j.total) {
+          message += `Status: ${j.status_label || j.status || 'Desconhecido'}\n`;
+          
+          // Mostrar valor se existir e for maior que zero
+          if (j.total && j.total > 0) {
             message += `Valor: R$ ${(j.total / 100).toFixed(2).replace('.', ',')}\n`;
+          } else if (j.total === 0) {
+            message += `Valor: R$ 0,00\n`;
           }
+          
           if (j.expire_at) {
             message += `Vencimento: ${j.expire_at}\n`;
           }
           if (j.paid_at) {
             message += `Pago em: ${j.paid_at}\n`;
           }
+          if (j.payment_method && j.payment_method !== 'boleto') {
+            message += `Método: ${j.payment_method}\n`;
+          }
           if (j.barcode) {
             message += `\nCódigo de Barras:\n${j.barcode}\n`;
           }
           
+          // Adicionar aviso se status for desconhecido
+          if (j.status === 'desconhecido' || !j.status) {
+            message += `\n⚠️ Atenção: O status retornado pelo EFI não pôde ser identificado.\nVerifique os logs do sistema para mais detalhes.`;
+          }
+          
           alert(message);
         } else {
-          alert('Falha ao consultar status: ' + (j.error || JSON.stringify(j)));
+          // Mostrar erro mais detalhado
+          const errorMsg = j.error || 'Erro desconhecido ao consultar status';
+          alert(`❌ Falha ao consultar status EFI\n\nCharge ID: ${chargeId}\nErro: ${errorMsg}\n\nVerifique:\n- Se o Charge ID está correto\n- Se as credenciais EFI estão configuradas\n- Os logs do sistema para mais detalhes`);
         }
       } catch (err) {
-        alert('Erro na requisição: ' + err);
+        alert(`❌ Erro na requisição\n\nCharge ID: ${chargeId}\nErro: ${err}\n\nVerifique sua conexão e tente novamente.`);
       } finally {
         // Restaurar botão
         this.disabled = false;
