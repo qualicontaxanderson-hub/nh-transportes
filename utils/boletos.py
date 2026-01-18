@@ -439,10 +439,44 @@ def fetch_charge(credentials, charge_id):
     """
     Busca a charge no provedor (GET /v1/charge/{id}).
     Retorna o JSON parseado ou None/obj erro.
-    Tenta Bearer token primeiro, depois Basic Auth como fallback.
+    Tenta SDK primeiro, depois Bearer token, depois Basic Auth como fallback.
     """
     try:
         credentials = _ensure_credentials_from_env(credentials)
+        
+        # Tentar primeiro via SDK (pode ter certificado configurado)
+        try:
+            efi = EfiPay({
+                "client_id": credentials.get("client_id"),
+                "client_secret": credentials.get("client_secret"),
+                "sandbox": credentials.get("sandbox", True),
+                "certificate": credentials.get("certificate")
+            })
+            
+            # Tentar métodos comuns do SDK para buscar charge
+            for method_name in ("detail_charge", "get_charge", "charge_detail", "detail", "get"):
+                fn = getattr(efi, method_name, None)
+                if callable(fn):
+                    logger.info("fetch_charge: tentando SDK método %s para charge_id=%s", method_name, charge_id)
+                    try:
+                        # Tentar com parâmetro params
+                        result = fn(params={"id": str(charge_id)})
+                        logger.info("fetch_charge: SDK método %s retornou dados", method_name)
+                        return result
+                    except TypeError:
+                        try:
+                            # Tentar passando ID diretamente
+                            result = fn({"id": str(charge_id)})
+                            logger.info("fetch_charge: SDK método %s retornou dados", method_name)
+                            return result
+                        except Exception:
+                            pass
+                    except Exception as e:
+                        logger.debug("fetch_charge: SDK método %s falhou: %s", method_name, e)
+        except Exception as e:
+            logger.debug("fetch_charge: tentativa via SDK falhou ou SDK indisponível: %s", e)
+        
+        # Fallback para requisições HTTP diretas
         token = _get_bearer_token(credentials) if "client_id" in credentials and "client_secret" in credentials else None
 
         sandbox = credentials.get("sandbox", True)
@@ -451,7 +485,7 @@ def fetch_charge(credentials, charge_id):
 
         headers = {"Accept": "application/json"}
         
-        # Tentar primeiro com Bearer token se disponível
+        # Tentar com Bearer token se disponível
         if token:
             headers["Authorization"] = f"Bearer {token}"
             logger.info("fetch_charge: GET %s (usando Bearer token)", url)
@@ -473,7 +507,8 @@ def fetch_charge(credentials, charge_id):
                         logger.error("fetch_charge: AMBOS Bearer e Basic Auth retornaram 401. Possíveis causas: "
                                    "1) Credenciais incorretas ou expiradas, "
                                    "2) Ambiente incorreto (sandbox=%s mas credenciais são de %s), "
-                                   "3) Charge ID não pertence a esta conta EFI", 
+                                   "3) Charge ID não pertence a esta conta EFI, "
+                                   "4) Endpoint requer certificado digital (configure EFI_CERT_PATH)", 
                                    sandbox, "produção" if sandbox else "sandbox")
         else:
             # Se não tiver token, usar Basic Auth diretamente
