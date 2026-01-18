@@ -693,8 +693,9 @@ def consultar_status_efi(charge_id):
         # Buscar informações da charge no provedor
         charge_data = fetch_charge(credentials, charge_id)
         
-        # Log para debug
-        current_app.logger.info(f"[consultar_status_efi] charge_id={charge_id}, response_keys={list(charge_data.keys()) if isinstance(charge_data, dict) else 'not_dict'}")
+        # Log para debug (apenas em caso de problemas)
+        if current_app.debug:
+            current_app.logger.debug(f"[consultar_status_efi] charge_id={charge_id}, response_keys={list(charge_data.keys()) if isinstance(charge_data, dict) else 'not_dict'}")
         
         if not charge_data or not isinstance(charge_data, dict):
             return jsonify({
@@ -714,9 +715,9 @@ def consultar_status_efi(charge_id):
         # Extrair dados relevantes da resposta com múltiplas tentativas
         data = charge_data.get("data") or charge_data.get("charge") or charge_data
         
-        # Log estrutura para debug
-        if isinstance(data, dict):
-            current_app.logger.info(f"[consultar_status_efi] data_keys={list(data.keys())}")
+        # Log estrutura para debug (apenas em modo debug)
+        if current_app.debug and isinstance(data, dict):
+            current_app.logger.debug(f"[consultar_status_efi] data_keys={list(data.keys())}")
         
         # Informações básicas da cobrança
         status = data.get("status") or "desconhecido"
@@ -726,8 +727,8 @@ def consultar_status_efi(charge_id):
         if not total and isinstance(data.get("items"), list) and len(data.get("items", [])) > 0:
             # Tentar somar valores dos itens
             try:
-                total = sum(item.get("value", 0) * item.get("amount", 1) for item in data.get("items", []))
-            except Exception:
+                total = sum(item.get("value", 0) * item.get("amount", 1) for item in data["items"])
+            except (TypeError, ValueError, KeyError):
                 total = 0
         
         # Informações de pagamento
