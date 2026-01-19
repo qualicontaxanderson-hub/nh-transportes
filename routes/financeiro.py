@@ -693,14 +693,17 @@ def consultar_status_efi(charge_id):
         # Buscar informações da charge no provedor
         charge_data = fetch_charge(credentials, charge_id)
         
-        # Log para debug (apenas em caso de problemas)
-        if current_app.debug:
-            current_app.logger.debug(f"[consultar_status_efi] charge_id={charge_id}, response_keys={list(charge_data.keys()) if isinstance(charge_data, dict) else 'not_dict'}")
+        # Log para debug
+        current_app.logger.info(f"[consultar_status_efi] charge_id={charge_id}, response_type={type(charge_data).__name__}")
+        if isinstance(charge_data, dict):
+            current_app.logger.info(f"[consultar_status_efi] response_keys={list(charge_data.keys())}")
+        else:
+            current_app.logger.warning(f"[consultar_status_efi] response não é dict: {str(charge_data)[:200]}")
         
         if not charge_data or not isinstance(charge_data, dict):
             return jsonify({
                 "success": False, 
-                "error": "Não foi possível consultar a cobrança no provedor EFI"
+                "error": f"Não foi possível consultar a cobrança no provedor EFI (tipo de resposta: {type(charge_data).__name__})"
             }), 400
         
         # Verificar se há erro HTTP na resposta
@@ -730,9 +733,13 @@ def consultar_status_efi(charge_id):
         # Extrair dados relevantes da resposta com múltiplas tentativas
         data = charge_data.get("data") or charge_data.get("charge") or charge_data
         
-        # Log estrutura para debug (apenas em modo debug)
-        if current_app.debug and isinstance(data, dict):
-            current_app.logger.debug(f"[consultar_status_efi] data_keys={list(data.keys())}")
+        # Log estrutura para debug
+        current_app.logger.info(f"[consultar_status_efi] data_type={type(data).__name__}")
+        if isinstance(data, dict):
+            current_app.logger.info(f"[consultar_status_efi] data_keys={list(data.keys())}")
+            current_app.logger.info(f"[consultar_status_efi] status={data.get('status')}, total={data.get('total')}")
+        else:
+            current_app.logger.warning(f"[consultar_status_efi] data não é dict: {str(data)[:200]}")
         
         # Informações básicas da cobrança
         status = data.get("status") or "desconhecido"
