@@ -461,13 +461,33 @@ def fetch_charge(credentials, charge_id):
                     try:
                         # Tentar com parâmetro params
                         result = fn(params={"id": str(charge_id)})
-                        logger.info("fetch_charge: SDK método %s retornou dados", method_name)
+                        logger.info("fetch_charge: SDK método %s retornou dados (tipo: %s)", method_name, type(result).__name__)
+                        
+                        # Se o SDK retornar string JSON, fazer parse
+                        if isinstance(result, str):
+                            try:
+                                result = json.loads(result)
+                                logger.info("fetch_charge: JSON string parseado com sucesso")
+                            except json.JSONDecodeError as e:
+                                logger.warning("fetch_charge: Falha ao parsear JSON string: %s", e)
+                                return {"error": "Resposta inválida do SDK", "raw": result[:200]}
+                        
                         return result
                     except TypeError:
                         try:
                             # Tentar passando ID diretamente
                             result = fn({"id": str(charge_id)})
-                            logger.info("fetch_charge: SDK método %s retornou dados", method_name)
+                            logger.info("fetch_charge: SDK método %s retornou dados (tipo: %s)", method_name, type(result).__name__)
+                            
+                            # Se o SDK retornar string JSON, fazer parse
+                            if isinstance(result, str):
+                                try:
+                                    result = json.loads(result)
+                                    logger.info("fetch_charge: JSON string parseado com sucesso")
+                                except json.JSONDecodeError as e:
+                                    logger.warning("fetch_charge: Falha ao parsear JSON string: %s", e)
+                                    return {"error": "Resposta inválida do SDK", "raw": result[:200]}
+                            
                             return result
                         except Exception:
                             pass
