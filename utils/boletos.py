@@ -466,11 +466,17 @@ def fetch_charge(credentials, charge_id):
                         # Se o SDK retornar string JSON, fazer parse
                         if isinstance(result, str):
                             try:
+                                logger.info("fetch_charge: resposta string (primeiros 500 chars): %s", result[:500])
                                 result = json.loads(result)
                                 logger.info("fetch_charge: JSON string parseado com sucesso")
                             except json.JSONDecodeError as e:
                                 logger.warning("fetch_charge: Falha ao parsear JSON string: %s", e)
                                 return {"error": "Resposta inválida do SDK", "raw": result[:200]}
+                        
+                        # Log conteúdo parseado
+                        if isinstance(result, dict):
+                            logger.info("fetch_charge: resposta parseada - chaves: %s", list(result.keys()))
+                            logger.info("fetch_charge: resposta completa (truncada): %s", str(result)[:1000])
                         
                         return result
                     except TypeError:
@@ -482,11 +488,17 @@ def fetch_charge(credentials, charge_id):
                             # Se o SDK retornar string JSON, fazer parse
                             if isinstance(result, str):
                                 try:
+                                    logger.info("fetch_charge: resposta string (primeiros 500 chars): %s", result[:500])
                                     result = json.loads(result)
                                     logger.info("fetch_charge: JSON string parseado com sucesso")
                                 except json.JSONDecodeError as e:
                                     logger.warning("fetch_charge: Falha ao parsear JSON string: %s", e)
                                     return {"error": "Resposta inválida do SDK", "raw": result[:200]}
+                            
+                            # Log conteúdo parseado
+                            if isinstance(result, dict):
+                                logger.info("fetch_charge: resposta parseada - chaves: %s", list(result.keys()))
+                                logger.info("fetch_charge: resposta completa (truncada): %s", str(result)[:1000])
                             
                             return result
                         except Exception:
