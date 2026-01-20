@@ -19,6 +19,7 @@ import copy
 import logging
 import time
 import re
+import ast
 from datetime import datetime, timedelta
 
 import requests
@@ -463,15 +464,21 @@ def fetch_charge(credentials, charge_id):
                         result = fn(params={"id": str(charge_id)})
                         logger.info("fetch_charge: SDK método %s retornou dados (tipo: %s)", method_name, type(result).__name__)
                         
-                        # Se o SDK retornar string JSON, fazer parse
+                        # Se o SDK retornar string, fazer parse (pode ser dict Python ou JSON)
                         if isinstance(result, str):
+                            logger.info("fetch_charge: resposta string (primeiros 500 chars): %s", result[:500])
                             try:
-                                logger.info("fetch_charge: resposta string (primeiros 500 chars): %s", result[:500])
-                                result = json.loads(result)
-                                logger.info("fetch_charge: JSON string parseado com sucesso")
-                            except json.JSONDecodeError as e:
-                                logger.warning("fetch_charge: Falha ao parsear JSON string: %s", e)
-                                return {"error": "Resposta inválida do SDK", "raw": result[:200]}
+                                # Tentar ast.literal_eval() primeiro (para {'code': 401} com aspas simples)
+                                result = ast.literal_eval(result)
+                                logger.info("fetch_charge: Python dict string parseado com sucesso via ast.literal_eval()")
+                            except (ValueError, SyntaxError):
+                                try:
+                                    # Tentar JSON (para {"code": 401} com aspas duplas)
+                                    result = json.loads(result)
+                                    logger.info("fetch_charge: JSON string parseado com sucesso via json.loads()")
+                                except json.JSONDecodeError as e:
+                                    logger.warning("fetch_charge: Falha ao parsear string (nem Python dict nem JSON): %s", e)
+                                    return {"error": "Resposta inválida do SDK", "raw": result[:200]}
                         
                         # Log conteúdo parseado
                         if isinstance(result, dict):
@@ -485,15 +492,21 @@ def fetch_charge(credentials, charge_id):
                             result = fn({"id": str(charge_id)})
                             logger.info("fetch_charge: SDK método %s retornou dados (tipo: %s)", method_name, type(result).__name__)
                             
-                            # Se o SDK retornar string JSON, fazer parse
+                            # Se o SDK retornar string, fazer parse (pode ser dict Python ou JSON)
                             if isinstance(result, str):
+                                logger.info("fetch_charge: resposta string (primeiros 500 chars): %s", result[:500])
                                 try:
-                                    logger.info("fetch_charge: resposta string (primeiros 500 chars): %s", result[:500])
-                                    result = json.loads(result)
-                                    logger.info("fetch_charge: JSON string parseado com sucesso")
-                                except json.JSONDecodeError as e:
-                                    logger.warning("fetch_charge: Falha ao parsear JSON string: %s", e)
-                                    return {"error": "Resposta inválida do SDK", "raw": result[:200]}
+                                    # Tentar ast.literal_eval() primeiro (para {'code': 401} com aspas simples)
+                                    result = ast.literal_eval(result)
+                                    logger.info("fetch_charge: Python dict string parseado com sucesso via ast.literal_eval()")
+                                except (ValueError, SyntaxError):
+                                    try:
+                                        # Tentar JSON (para {"code": 401} com aspas duplas)
+                                        result = json.loads(result)
+                                        logger.info("fetch_charge: JSON string parseado com sucesso via json.loads()")
+                                    except json.JSONDecodeError as e:
+                                        logger.warning("fetch_charge: Falha ao parsear string (nem Python dict nem JSON): %s", e)
+                                        return {"error": "Resposta inválida do SDK", "raw": result[:200]}
                             
                             # Log conteúdo parseado
                             if isinstance(result, dict):
