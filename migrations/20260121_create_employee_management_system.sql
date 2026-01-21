@@ -51,7 +51,9 @@ INSERT INTO `rubricas` (`nome`, `descricao`, `tipo`, `percentualouvalorfixo`, `o
 ('FÉRIAS', 'Férias', 'BENEFICIO', 'VALOR_FIXO', 6),
 ('13º SALÁRIO', '13º salário', 'BENEFICIO', 'VALOR_FIXO', 7),
 ('RESCISÃO', 'Rescisão contratual', 'OUTRO', 'VALOR_FIXO', 8),
-('EMPRÉSTIMOS', 'Empréstimos e adiantamentos', 'DESCONTO', 'VALOR_FIXO', 9)
+('EMPRÉSTIMOS', 'Empréstimos e adiantamentos', 'DESCONTO', 'VALOR_FIXO', 9),
+('COMISSÃO', 'Comissão sobre vendas/fretes', 'BENEFICIO', 'VALOR_FIXO', 10),
+('VALES', 'Vales e adiantamentos', 'ADIANTAMENTO', 'VALOR_FIXO', 11)
 ON DUPLICATE KEY UPDATE nome=nome;
 
 -- ============================================
@@ -122,7 +124,7 @@ CREATE TABLE IF NOT EXISTS `lancamentosfuncionarios_v2` (
     `id` INT AUTO_INCREMENT PRIMARY KEY,
     `clienteid` INT NOT NULL,
     `funcionarioid` INT NOT NULL,
-    `mes` CHAR(7) NOT NULL COMMENT 'Formato: MMM/YYYY ex: JAN/2026',
+    `mes` CHAR(7) NOT NULL COMMENT 'Formato: MM/YYYY ex: 01/2026',
     `rubricaid` INT NOT NULL,
     `valor` DECIMAL(12,2) NOT NULL,
     `percentual` DECIMAL(5,2) NULL,

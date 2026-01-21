@@ -36,6 +36,35 @@
                     </div>
                 </div>
 
+                <!-- Summary Box -->
+                <div id="summary-box" style="display:none;" class="mb-4">
+                    <div class="card border-primary">
+                        <div class="card-header bg-primary text-white">
+                            <h6 class="mb-0"><i class="bi bi-calculator"></i> Resumo Geral</h6>
+                        </div>
+                        <div class="card-body">
+                            <div class="row">
+                                <div class="col-md-3">
+                                    <strong>Total Funcionários:</strong><br>
+                                    <span id="total-funcionarios" class="text-primary fs-5">0</span>
+                                </div>
+                                <div class="col-md-3">
+                                    <strong>Total Proventos:</strong><br>
+                                    <span id="total-proventos" class="text-success fs-5">R$ 0,00</span>
+                                </div>
+                                <div class="col-md-3">
+                                    <strong>Total Descontos:</strong><br>
+                                    <span id="total-descontos" class="text-danger fs-5">R$ 0,00</span>
+                                </div>
+                                <div class="col-md-3">
+                                    <strong>Líquido Total:</strong><br>
+                                    <span id="total-liquido" class="text-primary fw-bold fs-4">R$ 0,00</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
                 <div id="funcionarios-container" style="display:none;">
                     <h5 class="mb-3">Funcionários e Lançamentos</h5>
                     <p class="text-muted mb-3">Preencha os valores para cada rubrica. Deixe em branco ou 0 para rubricas não aplicáveis.</p>
@@ -92,17 +121,28 @@
 
 <script>
 const rubricas = {{ rubricas|tojson|safe }};
+let comissoesData = {};
 
-document.getElementById('clienteid').addEventListener('change', function() {
-    const clienteId = this.value;
-    if (!clienteId) {
+// Wait for both client and month to be selected before loading
+function checkAndLoadFuncionarios() {
+    const clienteId = document.getElementById('clienteid').value;
+    const mes = document.getElementById('mes').value;
+    
+    if (!clienteId || !mes) {
         document.getElementById('funcionarios-container').style.display = 'none';
         document.getElementById('form-buttons').style.display = 'none';
+        document.getElementById('summary-box').style.display = 'none';
         return;
     }
     
-    // Fetch funcionarios for this client
-    fetch(`/lancamentos-funcionarios/get-funcionarios/${clienteId}`)
+    // First fetch commission data
+    fetch(`/lancamentos-funcionarios/get-comissoes/${clienteId}/${mes}`)
+        .then(response => response.json())
+        .then(data => {
+            comissoesData = data;
+            // Then fetch funcionarios
+            return fetch(`/lancamentos-funcionarios/get-funcionarios/${clienteId}`);
+        })
         .then(response => response.json())
         .then(funcionarios => {
             const tbody = document.getElementById('funcionarios-tbody');
@@ -110,15 +150,31 @@ document.getElementById('clienteid').addEventListener('change', function() {
             
             funcionarios.forEach(func => {
                 const row = document.createElement('tr');
+                const isMotorista = func.tipo === 'motorista';
+                const comissaoValue = isMotorista && comissoesData[func.id] ? comissoesData[func.id] : '';
+                
                 row.innerHTML = `
                     <td>
                         ${func.nome}
                         <input type="hidden" name="funcionarioid[]" value="${func.id}">
+                        <input type="hidden" name="funcionario_tipo_${func.id}" value="${func.tipo}">
                     </td>
                     <td>
-                        <span class="badge bg-info">${func.categoria_nome || 'N/A'}</span>
+                        <span class="badge bg-info">${func.categoria || 'N/A'}</span>
                     </td>
-                    ${rubricas.map(rubrica => `
+                    ${rubricas.map(rubrica => {
+                        let defaultValue = '';
+                        
+                        // Auto-fill salary base
+                        if (rubrica.nome === 'SALÁRIO BASE' && func.salario_base) {
+                            defaultValue = func.salario_base;
+                        }
+                        // Auto-fill commission for motoristas
+                        else if (rubrica.nome === 'COMISSÃO' && isMotorista && comissaoValue) {
+                            defaultValue = comissaoValue;
+                        }
+                        
+                        return `
                         <td>
                             <input type="hidden" name="rubrica_${func.id}[]" value="${rubrica.id}">
                             <input type="number" 
@@ -126,11 +182,13 @@ document.getElementById('clienteid').addEventListener('change', function() {
                                    class="form-control form-control-sm valor-input" 
                                    data-funcionario="${func.id}"
                                    data-rubrica-tipo="${rubrica.tipo}"
+                                   data-rubrica-nome="${rubrica.nome}"
                                    step="0.01" 
                                    placeholder="0,00"
-                                   value="${rubrica.nome === 'SALÁRIO BASE' && func.salario_base ? func.salario_base : ''}">
+                                   value="${defaultValue}">
                         </td>
-                    `).join('')}
+                        `;
+                    }).join('')}
                     <td>
                         <strong class="total-funcionario" data-funcionario="${func.id}">R$ 0,00</strong>
                     </td>
@@ -141,6 +199,7 @@ document.getElementById('clienteid').addEventListener('change', function() {
             // Show container and buttons
             document.getElementById('funcionarios-container').style.display = 'block';
             document.getElementById('form-buttons').style.display = 'flex';
+            document.getElementById('summary-box').style.display = 'block';
             
             // Add event listeners for calculation
             document.querySelectorAll('.valor-input').forEach(input => {
@@ -154,7 +213,10 @@ document.getElementById('clienteid').addEventListener('change', function() {
             console.error('Error:', error);
             alert('Erro ao carregar funcionários');
         });
-});
+}
+
+document.getElementById('clienteid').addEventListener('change', checkAndLoadFuncionarios);
+document.getElementById('mes').addEventListener('change', checkAndLoadFuncionarios);
 
 function calculateTotals() {
     // Calculate total for each funcionario
@@ -162,28 +224,46 @@ function calculateTotals() {
         Array.from(document.querySelectorAll('.valor-input')).map(i => i.dataset.funcionario)
     )];
     
+    let grandTotalProventos = 0;
+    let grandTotalDescontos = 0;
+    let totalFuncionarios = funcionariosIds.length;
+    
     funcionariosIds.forEach(funcId => {
         const inputs = document.querySelectorAll(`.valor-input[data-funcionario="${funcId}"]`);
-        let total = 0;
+        let totalProventos = 0;
+        let totalDescontos = 0;
         
         inputs.forEach((input) => {
             const valor = parseFloat(input.value) || 0;
             const rubricaTipo = input.dataset.rubricaTipo;
             
-            // Subtract descontos and impostos
-            if (rubricaTipo === 'DESCONTO' || rubricaTipo === 'IMPOSTO') {
-                total -= valor;
-            } else {
-                total += valor;
+            // Proventos: SALARIO, BENEFICIO
+            // Descontos: DESCONTO, IMPOSTO, ADIANTAMENTO
+            if (rubricaTipo === 'DESCONTO' || rubricaTipo === 'IMPOSTO' || rubricaTipo === 'ADIANTAMENTO') {
+                totalDescontos += valor;
+            } else if (rubricaTipo === 'SALARIO' || rubricaTipo === 'BENEFICIO') {
+                totalProventos += valor;
             }
+            // OUTRO type doesn't affect calculation
         });
+        
+        const totalLiquido = totalProventos - totalDescontos;
         
         const totalElement = document.querySelector(`.total-funcionario[data-funcionario="${funcId}"]`);
         if (totalElement) {
-            totalElement.textContent = `R$ ${total.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
-            totalElement.style.color = total < 0 ? 'red' : 'green';
+            totalElement.textContent = `R$ ${totalLiquido.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+            totalElement.style.color = totalLiquido < 0 ? 'red' : 'green';
         }
+        
+        grandTotalProventos += totalProventos;
+        grandTotalDescontos += totalDescontos;
     });
+    
+    // Update summary box
+    document.getElementById('total-funcionarios').textContent = totalFuncionarios;
+    document.getElementById('total-proventos').textContent = `R$ ${grandTotalProventos.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+    document.getElementById('total-descontos').textContent = `R$ ${grandTotalDescontos.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+    document.getElementById('total-liquido').textContent = `R$ ${(grandTotalProventos - grandTotalDescontos).toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
 }
 </script>
 {% endblock %}

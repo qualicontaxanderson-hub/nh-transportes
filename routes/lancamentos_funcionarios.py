@@ -166,21 +166,24 @@ def get_funcionarios(cliente_id):
                 f.id,
                 f.nome,
                 f.categoria,
-                f.salario_base
+                f.salario_base,
+                'funcionario' as tipo
             FROM funcionarios f
             WHERE f.ativo = 1 AND (f.id_cliente = %s OR f.id_cliente IS NULL)
             ORDER BY f.nome
         """, (cliente_id,))
         funcionarios = cursor.fetchall()
         
-        # Also get motoristas as funcionarios if they're not already included
+        # Also get motoristas that receive commission
         cursor.execute("""
             SELECT 
                 m.id,
                 m.nome,
                 'MOTORISTA' as categoria,
-                0 as salario_base
+                0 as salario_base,
+                'motorista' as tipo
             FROM motoristas m
+            WHERE m.paga_comissao = 1
             ORDER BY m.nome
         """)
         motoristas = cursor.fetchall()
@@ -189,6 +192,60 @@ def get_funcionarios(cliente_id):
         all_employees = funcionarios + motoristas
         
         return jsonify(all_employees)
+    finally:
+        cursor.close()
+        conn.close()
+
+@bp.route('/get-comissoes/<int:cliente_id>/<mes>')
+@login_required
+def get_comissoes(cliente_id, mes):
+    """API endpoint to get commission data for motoristas for a specific month"""
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    
+    try:
+        # Convert MM/YYYY to date range
+        try:
+            month_str, year_str = mes.split('/')
+            month = int(month_str)
+            year = int(year_str)
+            
+            # First day of the month
+            data_inicio = f"{year}-{month:02d}-01"
+            
+            # Last day of the month
+            if month == 12:
+                data_fim = f"{year}-12-31"
+            else:
+                next_month = month + 1
+                import calendar
+                last_day = calendar.monthrange(year, month)[1]
+                data_fim = f"{year}-{month:02d}-{last_day}"
+        except:
+            return jsonify({})
+        
+        # Get commission totals per motorista for the month
+        cursor.execute("""
+            SELECT 
+                m.id as motorista_id,
+                m.nome as motorista_nome,
+                COALESCE(SUM(f.comissao_motorista), 0) as comissao_total
+            FROM motoristas m
+            LEFT JOIN fretes f ON m.id = f.motoristas_id 
+                AND f.data_frete >= %s 
+                AND f.data_frete <= %s
+                AND f.id_cliente = %s
+            WHERE m.paga_comissao = 1
+            GROUP BY m.id, m.nome
+            HAVING comissao_total > 0
+        """, (data_inicio, data_fim, cliente_id))
+        
+        comissoes = cursor.fetchall()
+        
+        # Convert to dictionary for easy lookup
+        comissoes_dict = {c['motorista_id']: float(c['comissao_total']) for c in comissoes}
+        
+        return jsonify(comissoes_dict)
     finally:
         cursor.close()
         conn.close()
