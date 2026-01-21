@@ -32,6 +32,13 @@
         </div>
     </div>
 
+    <!-- Alerta de Data Auto-preenchida -->
+    <div id="alert-data-auto" class="alert alert-info d-none mb-3">
+        <i class="bi bi-info-circle-fill"></i>
+        <strong>Informação:</strong> 
+        <span id="mensagem-data-auto"></span>
+    </div>
+
     <!-- FORMULÁRIO DE LANÇAMENTO -->
     <div class="card" style="margin-bottom:20px;">
         <div class="card-header" style="background:#1D63A5;color:white;font-size:0.9rem;font-weight:600;">
@@ -96,6 +103,8 @@ document.addEventListener('DOMContentLoaded', function() {
     const encerranteFinalInput = document.getElementById('encerrante_final');
     const quantidadeVendidaInput = document.getElementById('quantidade_vendida');
     const valorTotalInput = document.getElementById('valor_total');
+    const alertDataAuto = document.getElementById('alert-data-auto');
+    const mensagemDataAuto = document.getElementById('mensagem-data-auto');
 
     // Valores vindos do backend
     let encerrante_anterior = {{ encerrante_anterior|default(0) }};
@@ -106,6 +115,7 @@ document.addEventListener('DOMContentLoaded', function() {
         const clienteId = this.value;
         
         if (!clienteId) {
+            alertDataAuto.classList.add('d-none');
             return;
         }
 
@@ -117,6 +127,14 @@ document.addEventListener('DOMContentLoaded', function() {
                     // Definir automaticamente a próxima data no campo
                     if (dataInfo.proxima_data) {
                         dataInput.value = dataInfo.proxima_data;
+                        
+                        // Mostrar mensagem se houver pendência
+                        if (dataInfo.tem_pendencia) {
+                            mensagemDataAuto.textContent = `Último lançamento: ${formatarData(dataInfo.ultima_data)}. Data definida automaticamente para ${formatarData(dataInfo.proxima_data)}.`;
+                            alertDataAuto.classList.remove('d-none');
+                        } else {
+                            alertDataAuto.classList.add('d-none');
+                        }
                     }
                 }
             })
@@ -149,6 +167,13 @@ document.addEventListener('DOMContentLoaded', function() {
             minimumFractionDigits: 2,
             maximumFractionDigits: 2
         });
+    }
+
+    // Formatar data para exibição
+    function formatarData(dataStr) {
+        if (!dataStr) return '';
+        const partes = dataStr.split('-');
+        return `${partes[2]}/${partes[1]}/${partes[0]}`;
     }
 
     // Calcula quando o usuário digita no encerrante final
