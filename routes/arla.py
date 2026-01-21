@@ -1,4 +1,4 @@
-from flask import Blueprint, render_template, request, redirect, url_for, flash
+from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify
 from flask_login import login_required
 import mysql.connector
 from datetime import datetime, date, timedelta
@@ -393,6 +393,98 @@ def preco_venda():
     conn.close()
 
     return render_template('arla/preco_venda.html', preco_atual=preco_atual, clientes_arla=clientes_arla)
+
+# =============================================
+# API - ÚLTIMA DATA DE LANÇAMENTO
+# =============================================
+@bp.route('/api/ultima-data/<int:cliente_id>')
+@login_required
+def api_ultima_data(cliente_id):
+    """API: Retorna a última data de lançamento para um cliente e sugere próxima data"""
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True)
+    
+    try:
+        # Buscar último lançamento do cliente
+        cursor.execute("""
+            SELECT data FROM arla_lancamentos
+            WHERE cliente_id = %s
+            ORDER BY data DESC LIMIT 1
+        """, (cliente_id,))
+        ultimo_lancamento = cursor.fetchone()
+        
+        if ultimo_lancamento:
+            ultima_data = ultimo_lancamento['data']
+            proxima_data = ultima_data + timedelta(days=1)
+            
+            cursor.close()
+            conn.close()
+            
+            return jsonify({
+                'success': True,
+                'tem_pendencia': True,
+                'ultima_data': ultima_data.strftime('%Y-%m-%d'),
+                'proxima_data': proxima_data.strftime('%Y-%m-%d')
+            })
+        else:
+            # Nenhum lançamento anterior, sugerir hoje
+            cursor.close()
+            conn.close()
+            
+            return jsonify({
+                'success': True,
+                'tem_pendencia': False,
+                'proxima_data': datetime.now().strftime('%Y-%m-%d')
+            })
+        
+    except Exception as e:
+        cursor.close()
+        conn.close()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+# =============================================
+# API - ENCERRANTE ANTERIOR
+# =============================================
+@bp.route('/api/encerrante-anterior/<int:cliente_id>')
+@login_required
+def api_encerrante_anterior(cliente_id):
+    """API: Retorna o encerrante anterior para um cliente"""
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True)
+    
+    try:
+        # Buscar último lançamento do cliente
+        cursor.execute("""
+            SELECT encerrante_final FROM arla_lancamentos
+            WHERE cliente_id = %s
+            ORDER BY data DESC LIMIT 1
+        """, (cliente_id,))
+        ultimo_lancamento = cursor.fetchone()
+        
+        if ultimo_lancamento:
+            encerrante_anterior = float(ultimo_lancamento['encerrante_final'])
+        else:
+            # Se não há lançamento, buscar do saldo inicial
+            cursor.execute("""
+                SELECT encerrante_inicial FROM arla_saldo_inicial
+                WHERE cliente_id = %s
+                ORDER BY data DESC LIMIT 1
+            """, (cliente_id,))
+            saldo_ini = cursor.fetchone()
+            encerrante_anterior = float(saldo_ini['encerrante_inicial']) if saldo_ini else 0
+        
+        cursor.close()
+        conn.close()
+        
+        return jsonify({
+            'success': True,
+            'encerrante_anterior': encerrante_anterior
+        })
+        
+    except Exception as e:
+        cursor.close()
+        conn.close()
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 # =============================================
 # LANÇAMENTO DIÁRIO - CRIAR

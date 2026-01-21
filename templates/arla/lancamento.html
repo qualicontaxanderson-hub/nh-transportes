@@ -91,13 +91,48 @@
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {
+    const clienteSelect = document.getElementById('cliente_id');
+    const dataInput = document.getElementById('data');
     const encerranteFinalInput = document.getElementById('encerrante_final');
     const quantidadeVendidaInput = document.getElementById('quantidade_vendida');
     const valorTotalInput = document.getElementById('valor_total');
 
     // Valores vindos do backend
-    const encerrante_anterior = {{ encerrante_anterior|default(0) }};
+    let encerrante_anterior = {{ encerrante_anterior|default(0) }};
     const preco_venda = {{ preco_venda|default(0) }};
+
+    // Quando cliente mudar, buscar última data e auto-preencher próxima data
+    clienteSelect.addEventListener('change', function() {
+        const clienteId = this.value;
+        
+        if (!clienteId) {
+            return;
+        }
+
+        // Buscar última data de lançamento e definir próxima data automaticamente
+        fetch(`/arla/api/ultima-data/${clienteId}`)
+            .then(response => response.json())
+            .then(dataInfo => {
+                if (dataInfo.success) {
+                    // Definir automaticamente a próxima data no campo
+                    if (dataInfo.proxima_data) {
+                        dataInput.value = dataInfo.proxima_data;
+                    }
+                }
+            })
+            .catch(error => console.error('Erro ao buscar última data:', error));
+        
+        // Também buscar o encerrante anterior deste cliente
+        fetch(`/arla/api/encerrante-anterior/${clienteId}`)
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    encerrante_anterior = data.encerrante_anterior || 0;
+                    calcularValores();
+                }
+            })
+            .catch(error => console.error('Erro ao buscar encerrante anterior:', error));
+    });
 
     function calcularValores() {
         const encerranteFinal = parseFloat(encerranteFinalInput.value) || 0;
