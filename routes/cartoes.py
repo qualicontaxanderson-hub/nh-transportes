@@ -5,6 +5,36 @@ from utils.decorators import admin_required
 
 bp = Blueprint('cartoes', __name__, url_prefix='/cartoes')
 
+# Constants
+VALID_TIPOS = {'DEBITO', 'CREDITO'}
+MAX_NOME_LENGTH = 50
+
+
+def validate_card_input(nome, tipo):
+    """
+    Validate card brand input fields.
+    
+    Args:
+        nome: Card brand name
+        tipo: Card type (DEBITO or CREDITO)
+        
+    Returns:
+        tuple: (is_valid, list of error messages)
+    """
+    errors = []
+    
+    if not nome:
+        errors.append('Nome é obrigatório e não pode conter apenas espaços em branco.')
+    elif len(nome) > MAX_NOME_LENGTH:
+        errors.append(f'Nome deve ter no máximo {MAX_NOME_LENGTH} caracteres.')
+    
+    if not tipo:
+        errors.append('Tipo é obrigatório!')
+    elif tipo not in VALID_TIPOS:
+        errors.append('Tipo inválido! Selecione DEBITO ou CREDITO.')
+    
+    return len(errors) == 0, errors
+
 
 @bp.route('/')
 @login_required
@@ -39,20 +69,10 @@ def novo():
         tipo = (request.form.get('tipo', '') or '').strip()
         ativo = request.form.get('ativo', '1')
 
-        validation_errors = []
-
-        if not nome:
-            validation_errors.append('Nome é obrigatório e não pode conter apenas espaços em branco.')
-        elif len(nome) > 50:
-            validation_errors.append('Nome deve ter no máximo 50 caracteres.')
-
-        valid_tipos = {'DEBITO', 'CREDITO'}
-        if not tipo:
-            validation_errors.append('Tipo é obrigatório!')
-        elif tipo not in valid_tipos:
-            validation_errors.append('Tipo inválido! Selecione DEBITO ou CREDITO.')
-
-        if validation_errors:
+        # Validate input
+        is_valid, validation_errors = validate_card_input(nome, tipo)
+        
+        if not is_valid:
             for message in validation_errors:
                 flash(message, 'danger')
             return render_template('cartoes/novo.html', nome=nome, tipo=tipo, ativo=ativo)
@@ -99,20 +119,10 @@ def editar(id):
             tipo = (request.form.get('tipo', '') or '').strip()
             ativo = request.form.get('ativo', '1')
 
-            validation_errors = []
-
-            if not nome:
-                validation_errors.append('Nome é obrigatório e não pode conter apenas espaços em branco.')
-            elif len(nome) > 50:
-                validation_errors.append('Nome deve ter no máximo 50 caracteres.')
-
-            valid_tipos = {'DEBITO', 'CREDITO'}
-            if not tipo:
-                validation_errors.append('Tipo é obrigatório!')
-            elif tipo not in valid_tipos:
-                validation_errors.append('Tipo inválido! Selecione DEBITO ou CREDITO.')
-
-            if validation_errors:
+            # Validate input
+            is_valid, validation_errors = validate_card_input(nome, tipo)
+            
+            if not is_valid:
                 for message in validation_errors:
                     flash(message, 'danger')
                 cursor.execute("SELECT * FROM bandeiras_cartao WHERE id = %s", (id,))
