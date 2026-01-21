@@ -11,9 +11,8 @@ def lista():
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
     cursor.execute("""
-        SELECT f.*, c.nome as categoria_nome
-        FROM funcionarios f
-        LEFT JOIN categoriasfuncionarios c ON f.categoriaid = c.id
+        SELECT f.*
+        FROM funcionarios_financeiro f
         WHERE f.ativo = 1
         ORDER BY f.nome
     """)
@@ -31,20 +30,21 @@ def novo():
         cursor = conn.cursor()
         
         cursor.execute("""
-            INSERT INTO funcionarios (
-                nome, clienteid, categoriaid, cpf, telefone, email, 
-                cargo, data_admissao, salario_base, ativo
-            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            INSERT INTO funcionarios_financeiro (
+                nome, id_cliente, tipo, cpf, telefone, email, 
+                cargo, data_admissao, salario_base, categoria, ativo
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         """, (
             request.form.get('nome'),
             request.form.get('clienteid') or None,
-            request.form.get('categoriaid') or None,
+            'FUNCIONARIO',
             request.form.get('cpf'),
             request.form.get('telefone'),
             request.form.get('email'),
             request.form.get('cargo'),
             request.form.get('data_admissao') or None,
             request.form.get('salario_base') or None,
+            request.form.get('categoria'),
             1
         ))
         conn.commit()
@@ -74,14 +74,14 @@ def editar(id):
     
     if request.method == 'POST':
         cursor.execute("""
-            UPDATE funcionarios SET 
-                nome=%s, clienteid=%s, categoriaid=%s, cpf=%s, telefone=%s, 
+            UPDATE funcionarios_financeiro SET 
+                nome=%s, id_cliente=%s, categoria=%s, cpf=%s, telefone=%s, 
                 email=%s, cargo=%s, data_admissao=%s, salario_base=%s
             WHERE id=%s
         """, (
             request.form.get('nome'),
             request.form.get('clienteid') or None,
-            request.form.get('categoriaid') or None,
+            request.form.get('categoria'),
             request.form.get('cpf'),
             request.form.get('telefone'),
             request.form.get('email'),
@@ -96,7 +96,7 @@ def editar(id):
         flash('Funcionário atualizado com sucesso!', 'success')
         return redirect(url_for('funcionarios.lista'))
     
-    cursor.execute("SELECT * FROM funcionarios WHERE id = %s", (id,))
+    cursor.execute("SELECT * FROM funcionarios_financeiro WHERE id = %s", (id,))
     funcionario = cursor.fetchone()
     cursor.execute("SELECT * FROM categoriasfuncionarios WHERE ativo = 1 ORDER BY nome")
     categorias = cursor.fetchall()
@@ -114,7 +114,7 @@ def excluir(id):
     conn = get_db_connection()
     cursor = conn.cursor()
     # Soft delete
-    cursor.execute("UPDATE funcionarios SET ativo = 0 WHERE id = %s", (id,))
+    cursor.execute("UPDATE funcionarios_financeiro SET ativo = 0 WHERE id = %s", (id,))
     conn.commit()
     cursor.close()
     conn.close()
@@ -147,7 +147,7 @@ def vincular_veiculo(id):
         flash('Veículo vinculado com sucesso!', 'success')
         return redirect(url_for('funcionarios.editar', id=id))
     
-    cursor.execute("SELECT * FROM funcionarios WHERE id = %s", (id,))
+    cursor.execute("SELECT * FROM funcionarios_financeiro WHERE id = %s", (id,))
     funcionario = cursor.fetchone()
     cursor.execute("SELECT * FROM veiculos WHERE ativo = 1 ORDER BY caminhao")
     veiculos = cursor.fetchall()

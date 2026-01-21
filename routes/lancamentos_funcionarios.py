@@ -154,22 +154,20 @@ def get_funcionarios(cliente_id):
             SELECT 
                 f.id,
                 f.nome,
-                f.categoriaid,
-                f.salario_base,
-                c.nome as categoria_nome
-            FROM funcionarios f
-            LEFT JOIN categoriasfuncionarios c ON f.categoriaid = c.id
-            WHERE f.ativo = 1 AND (f.clienteid = %s OR f.clienteid IS NULL)
+                f.categoria,
+                f.salario_base
+            FROM funcionarios_financeiro f
+            WHERE f.ativo = 1 AND (f.id_cliente = %s OR f.id_cliente IS NULL)
             ORDER BY f.nome
         """, (cliente_id,))
         funcionarios = cursor.fetchall()
         
-        # Also get motoristas as funcionarios
+        # Also get motoristas as funcionarios if they're not already included
         cursor.execute("""
             SELECT 
                 m.id,
                 m.nome,
-                'MOTORISTA' as categoria_nome,
+                'MOTORISTA' as categoria,
                 0 as salario_base
             FROM motoristas m
             WHERE m.ativo = 1

@@ -41,8 +41,8 @@
                         <tr>
                             <td>{{ funcionario.nome }}</td>
                             <td>
-                                {% if funcionario.categoria_nome %}
-                                    <span class="badge bg-info">{{ funcionario.categoria_nome }}</span>
+                                {% if funcionario.categoria %}
+                                    <span class="badge bg-info">{{ funcionario.categoria }}</span>
                                 {% else %}
                                     <span class="badge bg-secondary">N/A</span>
                                 {% endif %}
