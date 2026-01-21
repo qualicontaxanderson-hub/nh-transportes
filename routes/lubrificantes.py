@@ -335,12 +335,21 @@ def compras():
     """)
     produtos = cursor.fetchall()
     
+    # Busca fornecedores
+    cursor.execute("""
+        SELECT id, razao_social 
+        FROM fornecedores
+        ORDER BY razao_social
+    """)
+    fornecedores = cursor.fetchall()
+    
     cursor.close()
     conn.close()
 
     return render_template('lubrificantes/compras.html', 
                          clientes_lubrificantes=clientes_lubrificantes,
-                         produtos=produtos)
+                         produtos=produtos,
+                         fornecedores=fornecedores)
 
 # =============================================
 # PREÇO DE VENDA - CRIAR
@@ -429,27 +438,16 @@ def lancamento():
         data = request.form['data']
         valor_total = float(request.form['valor_total'])
         cliente_id = request.form.get('cliente_id')
+        produto_id = request.form.get('produto_id')
         observacoes = request.form.get('observacoes', None)
         
         if not cliente_id:
             flash('Por favor, selecione um cliente!', 'danger')
             return redirect(url_for('lubrificantes.lancamento'))
         
-        # Busca o produto "PRODUTOS" (produto genérico)
-        cursor.execute("""
-            SELECT id FROM lubrificantes_produtos 
-            WHERE nome = 'PRODUTOS' AND ativo = 1
-            LIMIT 1
-        """)
-        produto_row = cursor.fetchone()
-        
-        if not produto_row:
-            flash('Produto "PRODUTOS" não encontrado! Por favor, cadastre o produto primeiro.', 'danger')
-            cursor.close()
-            conn.close()
+        if not produto_id:
+            flash('Por favor, selecione um produto!', 'danger')
             return redirect(url_for('lubrificantes.lancamento'))
-        
-        produto_id = produto_row['id']
 
         cursor.execute("""
             SELECT id FROM lubrificantes_lancamentos 
@@ -457,7 +455,7 @@ def lancamento():
         """, (data, cliente_id, produto_id))
         existe = cursor.fetchone()
         if existe:
-            flash('Já existe um lançamento para esta data e cliente!', 'danger')
+            flash('Já existe um lançamento para esta data, cliente e produto!', 'danger')
             cursor.close()
             conn.close()
             return redirect(url_for('lubrificantes.lancamento'))
@@ -489,13 +487,40 @@ def lancamento():
         ORDER BY c.razao_social
     """)
     clientes_lubrificantes = cursor.fetchall()
+    
+    # Busca produtos de lubrificantes
+    cursor.execute("""
+        SELECT * FROM lubrificantes_produtos 
+        WHERE ativo = 1
+        ORDER BY nome
+    """)
+    produtos = cursor.fetchall()
+    
+    # Busca a última data de lançamento
+    cursor.execute("""
+        SELECT MAX(data) as ultima_data 
+        FROM lubrificantes_lancamentos
+    """)
+    result = cursor.fetchone()
+    ultima_data = result['ultima_data'] if result and result['ultima_data'] else None
+    
+    # Calcula a próxima data sugerida (dia seguinte ao último lançamento ou hoje)
+    if ultima_data:
+        proxima_data = (ultima_data + timedelta(days=1)).strftime('%Y-%m-%d')
+        ultima_data_formatada = ultima_data.strftime('%d/%m/%Y')
+    else:
+        proxima_data = date.today().strftime('%Y-%m-%d')
+        ultima_data_formatada = None
 
     cursor.close()
     conn.close()
 
     return render_template(
         'lubrificantes/lancamento.html',
-        clientes_lubrificantes=clientes_lubrificantes
+        clientes_lubrificantes=clientes_lubrificantes,
+        produtos=produtos,
+        proxima_data=proxima_data,
+        ultima_data=ultima_data_formatada
     )
 
 # =============================================

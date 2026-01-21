@@ -51,10 +51,10 @@
                     <label for="preco_unitario" class="form-label">Preço Unitário</label>
                     <div class="input-group">
                         <span class="input-group-text">R$</span>
-                        <input type="text" class="form-control" id="preco_unitario_display" placeholder="0,0000">
+                        <input type="text" class="form-control" id="preco_unitario_display" placeholder="0,00">
                         <input type="hidden" id="preco_unitario" name="preco_unitario" required>
                     </div>
-                    <small class="text-muted">Digite apenas números: 150000 = R$ 15,0000</small>
+                    <small class="text-muted">Digite: 4600 = R$ 46,00</small>
                 </div>
                 <div class="col-md-3">
                     <label for="valor_total" class="form-label">Valor Total (R$)</label>
@@ -64,7 +64,9 @@
                     <label for="fornecedor_id" class="form-label">Fornecedor (opcional)</label>
                     <select class="form-select" id="fornecedor_id" name="fornecedor_id">
                         <option value="">Selecione um fornecedor...</option>
-                        <!-- Fornecedores serão carregados aqui -->
+                        {% for fornecedor in fornecedores %}
+                        <option value="{{ fornecedor.id }}">{{ fornecedor.razao_social }}</option>
+                        {% endfor %}
                     </select>
                 </div>
                 <div class="col-md-6">
@@ -107,21 +109,21 @@ document.addEventListener('DOMContentLoaded', function() {
     const precoUnitarioHiddenInput = document.getElementById('preco_unitario');
     const valorTotalInput = document.getElementById('valor_total');
 
-    // Função para formatar moeda brasileira para preço unitário com 4 casas decimais
+    // Função para formatar moeda brasileira para preço unitário com 2 casas decimais
     function formatarMoedaUnitario(valor) {
         // Remove tudo que não é dígito
         valor = valor.replace(/\D/g, '');
         
-        // Se vazio, retorna 0,0000
-        if (valor === '') return '0,0000';
+        // Se vazio, retorna 0,00
+        if (valor === '') return '0,00';
         
-        // Converte para número e divide por 10000 para obter 4 casas decimais
-        const numero = parseInt(valor) / 10000;
+        // Converte para número e divide por 100 para obter 2 casas decimais
+        const numero = parseInt(valor) / 100;
         
-        // Formata para o padrão brasileiro com 4 casas decimais (12,3456)
+        // Formata para o padrão brasileiro com 2 casas decimais (46,00)
         return numero.toLocaleString('pt-BR', {
-            minimumFractionDigits: 4,
-            maximumFractionDigits: 4
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2
         });
     }
 
