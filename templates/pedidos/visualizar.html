@@ -100,8 +100,8 @@
                 <div class="mt-2">
                     {% for item in itens %}
                     <button type="button" class="btn btn-outline-secondary btn-sm mb-1" 
-                            onclick="copiarCliente('{{ item.cliente_fantasia or item.cliente_razao }}', '{{ item.cliente_cnpj }}', '{{ item.produto_nome }}', '{{ item.fornecedor_fantasia or item.fornecedor_razao }}', '{{ item.origem_nome }}', '{{ item.base_nome or '' }}', {{ item.quantidade }}, {{ item.preco_unitario }}, {{ item.total_nf }})">
-                        {{ item.cliente_fantasia or item.cliente_razao }}
+                            onclick="copiarCliente('{{ item.cliente_razao or item.cliente_fantasia }}', '{{ item.cliente_cnpj }}', '{{ item.produto_nome }}', '{{ item.fornecedor_fantasia or item.fornecedor_razao }}', '{{ item.origem_nome }}', '{{ item.base_nome or '' }}', {{ item.quantidade }}, {{ item.preco_unitario }}, {{ item.total_nf }})">
+                        {{ item.cliente_razao or item.cliente_fantasia }}
                     </button>
                     {% endfor %}
                 </div>
@@ -133,7 +133,7 @@
                     <tbody>
                         {% for item in itens %}
                         <tr>
-                            <td>{{ item.cliente_fantasia or item.cliente_razao }}</td>
+                            <td>{{ item.cliente_razao or item.cliente_fantasia }}</td>
                             <td>{{ item.cliente_cnpj }}</td>
                             <td>{{ item.produto_nome }}</td>
                             <td>{{ item.fornecedor_fantasia or item.fornecedor_razao }}</td>
@@ -182,7 +182,7 @@
                     <tbody>
                         {% for item in itens_forn %}
                         <tr>
-                            <td>{{ item.cliente_fantasia or item.cliente_razao }}</td>
+                            <td>{{ item.cliente_razao or item.cliente_fantasia }}</td>
                             <td>{{ item.cliente_cnpj }}</td>
                             <td>{{ item.produto_nome }}</td>
                             <td>{{ item.origem_nome }}</td>
@@ -208,7 +208,7 @@ var pedidoMotorista = "{{ pedido.motorista_nome or 'Não definido' }}";
 var itens = [
     {% for item in itens %}
     {
-        cliente: "{{ item.cliente_fantasia or item.cliente_razao }}",
+        cliente: "{{ item.cliente_razao or item.cliente_fantasia }}",
         cnpj: "{{ item.cliente_cnpj }}",
         produto: "{{ item.produto_nome }}",
         fornecedor: "{{ item.fornecedor_fantasia or item.fornecedor_razao }}",
@@ -226,7 +226,7 @@ var itensPorFornecedor = {
     "{{ fornecedor }}": [
         {% for item in itens_forn %}
         {
-            cliente: "{{ item.cliente_fantasia or item.cliente_razao }}",
+            cliente: "{{ item.cliente_razao or item.cliente_fantasia }}",
             cnpj: "{{ item.cliente_cnpj }}",
             produto: "{{ item.produto_nome }}",
             origem: "{{ item.origem_nome }}",
@@ -277,7 +277,7 @@ function copiarTudo() {
         
         for (var i = 0; i < itensF.length; i++) {
             var item = itensF[i];
-            texto += '📍 ' + item.cliente + '\n';
+            texto += '📍 *' + item.cliente + '*\n';
             texto += '   CNPJ: ' + item.cnpj + '\n';
             texto += '   Produto: ' + item.produto + '\n';
             texto += '   Origem: ' + item.origem + '\n';
