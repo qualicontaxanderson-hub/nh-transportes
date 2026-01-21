@@ -1,0 +1,119 @@
+{% extends "base.html" %}
+
+{% block title %}LUBRIFICANTES - Lançamento de Venda{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h2 style="font-size: 1.5rem;">
+            <i class="bi bi-droplet"></i> Controle de LUBRIFICANTES - Novo Lançamento
+        </h2>
+        <div>
+            <a href="{{ url_for('lubrificantes.index') }}" class="btn btn-secondary btn-sm">
+                <i class="bi bi-arrow-left"></i> Voltar
+            </a>
+        </div>
+    </div>
+
+    <div class="card" style="margin-bottom:20px;">
+        <div class="card-header" style="background:#1D63A5;color:white;font-size:0.9rem;font-weight:600;">
+            <i class="bi bi-arrow-right-circle"></i> Lançamento de Venda
+        </div>
+        <div class="card-body">
+            <form method="post" class="row g-3">
+                <div class="col-md-3">
+                    <label for="cliente_id" class="form-label">Cliente <span class="text-danger">*</span></label>
+                    <select class="form-select" id="cliente_id" name="cliente_id" required>
+                        <option value="">Selecione um cliente...</option>
+                        {% for cliente in clientes_lubrificantes %}
+                        <option value="{{ cliente.id }}">{{ cliente.razao_social }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label for="produto_id" class="form-label">Produto <span class="text-danger">*</span></label>
+                    <select class="form-select" id="produto_id" name="produto_id" required>
+                        <option value="">Selecione um produto...</option>
+                        {% for produto in produtos %}
+                        <option value="{{ produto.id }}" {% if produto.nome == 'PRODUTOS' %}selected{% endif %}>{{ produto.nome }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label for="data" class="form-label">Data da Venda <span class="text-danger">*</span></label>
+                    <input type="date" class="form-control" id="data" name="data" value="{{ proxima_data }}" required>
+                    {% if ultima_data %}
+                    <small class="text-muted">Último lançamento: {{ ultima_data }}</small>
+                    {% endif %}
+                </div>
+                <div class="col-md-3">
+                    <label for="valor_total" class="form-label">Valor Total (R$) <span class="text-danger">*</span></label>
+                    <div class="input-group">
+                        <span class="input-group-text">R$</span>
+                        <input type="text" class="form-control" id="valor_total_display" placeholder="0,00" required>
+                        <input type="hidden" id="valor_total" name="valor_total" required>
+                    </div>
+                    <small class="text-muted">Digite: 4600 = R$ 46,00</small>
+                </div>
+                <div class="col-12">
+                    <label for="observacoes" class="form-label">Observações (opcional)</label>
+                    <textarea class="form-control" id="observacoes" name="observacoes" rows="2"></textarea>
+                </div>
+                <div class="col-12 mt-3">
+                    <button type="submit" class="btn btn-primary">
+                        <i class="bi bi-save"></i> Salvar Lançamento
+                    </button>
+                    <a href="{{ url_for('lubrificantes.index') }}" class="btn btn-secondary">
+                        <i class="bi bi-x-circle"></i> Cancelar
+                    </a>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<style>
+    .table th { font-weight: 600; font-size: 0.85rem; }
+    .btn-sm { font-size: 0.8rem; padding: 0.3rem 0.6rem; }
+    @media (max-width: 768px) {
+        h2 { font-size: 1.2rem !important; }
+        .table { font-size: 0.75rem !important; }
+    }
+</style>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const valorTotalDisplayInput = document.getElementById('valor_total_display');
+    const valorTotalHiddenInput = document.getElementById('valor_total');
+
+    // Função para formatar moeda brasileira (apenas números -> 46,00)
+    function formatarMoeda(valor) {
+        // Remove tudo que não é dígito
+        valor = valor.replace(/\D/g, '');
+        
+        // Se vazio, retorna 0,00
+        if (valor === '') return '0,00';
+        
+        // Converte para número e divide por 100 para obter os centavos
+        const numero = parseInt(valor) / 100;
+        
+        // Formata para o padrão brasileiro (46,00)
+        return numero.toLocaleString('pt-BR', {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2
+        });
+    }
+
+    // Evento para formatar o valor total enquanto digita
+    valorTotalDisplayInput.addEventListener('input', function(e) {
+        let valor = e.target.value;
+        const formatado = formatarMoeda(valor);
+        e.target.value = formatado;
+        
+        // Armazena o valor real (formato americano) no campo hidden
+        const valorReal = formatado.replace(/\./g, '').replace(',', '.');
+        valorTotalHiddenInput.value = valorReal;
+    });
+});
+</script>
+{% endblock %}

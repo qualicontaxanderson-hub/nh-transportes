@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+
+{% block title %}LUBRIFICANTES - Produtos{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h2 style="font-size: 1.5rem;">
+            <i class="bi bi-box-seam"></i> Cadastro de Produtos - LUBRIFICANTES
+        </h2>
+        <div>
+            <a href="{{ url_for('lubrificantes.novo_produto') }}" class="btn btn-primary btn-sm me-2">
+                <i class="bi bi-plus-circle"></i> Novo Produto
+            </a>
+            <a href="{{ url_for('lubrificantes.index') }}" class="btn btn-secondary btn-sm">
+                <i class="bi bi-arrow-left"></i> Voltar
+            </a>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header" style="background:#495057;color:#fff;font-weight:600;">
+            <i class="bi bi-list-ul"></i> Lista de Produtos
+        </div>
+        <div class="card-body p-0">
+            {% if produtos %}
+            <div class="table-responsive">
+                <table class="table table-striped table-hover mb-0">
+                    <thead style="background:#f8f9fa;">
+                        <tr>
+                            <th>ID</th>
+                            <th>Nome</th>
+                            <th>Descrição</th>
+                            <th>Unidade</th>
+                            <th>Status</th>
+                            <th class="text-center">Ações</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for produto in produtos %}
+                        <tr>
+                            <td>{{ produto.id }}</td>
+                            <td><strong>{{ produto.nome }}</strong></td>
+                            <td>{{ produto.descricao if produto.descricao else '-' }}</td>
+                            <td>{{ produto.unidade }}</td>
+                            <td>
+                                {% if produto.ativo %}
+                                <span class="badge bg-success">Ativo</span>
+                                {% else %}
+                                <span class="badge bg-secondary">Inativo</span>
+                                {% endif %}
+                            </td>
+                            <td class="text-center">
+                                <a href="{{ url_for('lubrificantes.editar_produto', id=produto.id) }}" 
+                                   class="btn btn-sm btn-warning" title="Editar">
+                                    <i class="bi bi-pencil"></i>
+                                </a>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="p-3 text-center text-muted">
+                <i class="bi bi-inbox" style="font-size: 2rem;"></i>
+                <p class="mb-0 mt-2">Nenhum produto cadastrado.</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<style>
+    .table th { font-weight: 600; font-size: 0.85rem; }
+    .btn-sm { font-size: 0.8rem; padding: 0.3rem 0.6rem; }
+    @media (max-width: 768px) {
+        h2 { font-size: 1.2rem !important; }
+        .table { font-size: 0.75rem !important; }
+    }
+</style>
+{% endblock %}
