@@ -1,0 +1,102 @@
+{% extends 'base.html' %}
+{% block title %}Editar Funcionário - {{ app_name }}{% endblock %}
+{% block content %}
+<div class="container-fluid">
+    <nav aria-label="breadcrumb" class="mt-2 mb-3">
+        <ol class="breadcrumb" style="font-size: 0.85rem;">
+            <li class="breadcrumb-item"><a href="{{ url_for('index') }}">Dashboard</a></li>
+            <li class="breadcrumb-item"><a href="{{ url_for('funcionarios.lista') }}">Funcionários</a></li>
+            <li class="breadcrumb-item active" aria-current="page">Editar Funcionário</li>
+        </ol>
+    </nav>
+    
+    <h2 class="mb-3" style="color:#1D63A5; font-size: 1.3rem;"><i class="bi bi-pencil-fill"></i> Editar Funcionário</h2>
+    
+    <div class="card shadow-sm">
+        <div class="card-header" style="background:#ff9800;color:white; font-size: 0.95rem; padding: 0.6rem 1rem;">
+            <h5 class="mb-0" style="font-size: 1rem;">Editar Cadastro de Funcionário</h5>
+        </div>
+        <div class="card-body" style="padding: 1rem;">
+            <form method="POST">
+                <!-- Dados Principais -->
+                <div class="row">
+                    <div class="col-md-6 mb-2">
+                        <label class="form-label" style="font-size: 0.85rem;">Nome *</label>
+                        <input type="text" name="nome" class="form-control form-control-sm" value="{{ funcionario.nome }}" required>
+                    </div>
+                    <div class="col-md-3 mb-2">
+                        <label class="form-label" style="font-size: 0.85rem;">Cliente/Empresa</label>
+                        <select name="cliente_id" class="form-select form-select-sm">
+                            <option value="">Selecione...</option>
+                            {% for cliente in clientes %}
+                            <option value="{{ cliente.id }}" {% if funcionario.cliente_id == cliente.id %}selected{% endif %}>{{ cliente.nome }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-3 mb-2">
+                        <label class="form-label" style="font-size: 0.85rem;">Categoria *</label>
+                        <select name="categoria_id" class="form-select form-select-sm" required>
+                            <option value="">Selecione...</option>
+                            {% for categoria in categorias %}
+                            <option value="{{ categoria.id }}" {% if funcionario.categoria_id == categoria.id %}selected{% endif %}>{{ categoria.nome }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+                
+                <!-- Documentos e Contato -->
+                <div class="row">
+                    <div class="col-md-3 mb-2">
+                        <label class="form-label" style="font-size: 0.85rem;">CPF</label>
+                        <input type="text" name="cpf" class="form-control form-control-sm" value="{{ funcionario.cpf or '' }}">
+                    </div>
+                    <div class="col-md-3 mb-2">
+                        <label class="form-label" style="font-size: 0.85rem;">Telefone</label>
+                        <input type="text" name="telefone" class="form-control form-control-sm" value="{{ funcionario.telefone or '' }}">
+                    </div>
+                    <div class="col-md-6 mb-2">
+                        <label class="form-label" style="font-size: 0.85rem;">E-mail</label>
+                        <input type="email" name="email" class="form-control form-control-sm" value="{{ funcionario.email or '' }}">
+                    </div>
+                </div>
+                
+                <!-- Cargo e Datas -->
+                <div class="row">
+                    <div class="col-md-4 mb-2">
+                        <label class="form-label" style="font-size: 0.85rem;">Cargo</label>
+                        <input type="text" name="cargo" class="form-control form-control-sm" value="{{ funcionario.cargo or '' }}">
+                    </div>
+                    <div class="col-md-4 mb-2">
+                        <label class="form-label" style="font-size: 0.85rem;">Data de Admissão</label>
+                        <input type="date" name="data_admissao" class="form-control form-control-sm" value="{{ funcionario.data_admissao.strftime('%Y-%m-%d') if funcionario.data_admissao else '' }}">
+                    </div>
+                    <div class="col-md-4 mb-2">
+                        <label class="form-label" style="font-size: 0.85rem;">Salário Base (R$)</label>
+                        <input type="number" name="salario_base" step="0.01" class="form-control form-control-sm" value="{{ funcionario.salario_base or '' }}">
+                    </div>
+                </div>
+                
+                <!-- Botões -->
+                <div class="d-flex justify-content-between mt-3">
+                    <a href="{{ url_for('funcionarios.lista') }}" class="btn btn-secondary btn-sm">
+                        <i class="bi bi-arrow-left"></i> Voltar
+                    </a>
+                    <button type="submit" class="btn btn-success btn-sm">
+                        <i class="bi bi-check-circle"></i> Atualizar
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<style>
+    .form-control-sm, .form-select-sm {
+        font-size: 0.85rem;
+    }
+    .btn-sm {
+        font-size: 0.85rem;
+        padding: 0.4rem 0.8rem;
+    }
+</style>
+{% endblock %}

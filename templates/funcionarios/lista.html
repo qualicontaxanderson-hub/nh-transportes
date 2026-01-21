@@ -1,0 +1,93 @@
+{% extends 'base.html' %}
+{% block title %}Funcionários - {{ app_name }}{% endblock %}
+{% block content %}
+<div class="container-fluid">
+    <nav aria-label="breadcrumb" class="mt-2 mb-3">
+        <ol class="breadcrumb" style="font-size: 0.85rem;">
+            <li class="breadcrumb-item"><a href="{{ url_for('index') }}">Dashboard</a></li>
+            <li class="breadcrumb-item active" aria-current="page">Funcionários</li>
+        </ol>
+    </nav>
+    
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h2 style="color:#1D63A5; font-size: 1.3rem;"><i class="bi bi-people-fill"></i> Funcionários</h2>
+        <a href="{{ url_for('funcionarios.novo') }}" class="btn btn-primary btn-sm">
+            <i class="bi bi-plus-circle"></i> Novo Funcionário
+        </a>
+    </div>
+    
+    <div class="card shadow-sm">
+        <div class="card-header" style="background:#1D63A5;color:white; font-size: 0.95rem; padding: 0.6rem 1rem;">
+            <h5 class="mb-0" style="font-size: 1rem;">Lista de Funcionários</h5>
+        </div>
+        <div class="card-body" style="padding: 1rem;">
+            <div class="table-responsive">
+                <table class="table table-striped table-hover table-sm">
+                    <thead>
+                        <tr>
+                            <th>Nome</th>
+                            <th>Categoria</th>
+                            <th>CPF</th>
+                            <th>Telefone</th>
+                            <th>Email</th>
+                            <th>Cargo</th>
+                            <th>Data Admissão</th>
+                            <th>Salário Base</th>
+                            <th>Ações</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for funcionario in funcionarios %}
+                        <tr>
+                            <td>{{ funcionario.nome }}</td>
+                            <td>
+                                {% if funcionario.categoria_nome %}
+                                    <span class="badge bg-info">{{ funcionario.categoria_nome }}</span>
+                                {% else %}
+                                    <span class="badge bg-secondary">N/A</span>
+                                {% endif %}
+                            </td>
+                            <td>{{ funcionario.cpf or '-' }}</td>
+                            <td>{{ funcionario.telefone or '-' }}</td>
+                            <td>{{ funcionario.email or '-' }}</td>
+                            <td>{{ funcionario.cargo or '-' }}</td>
+                            <td>{{ funcionario.data_admissao.strftime('%d/%m/%Y') if funcionario.data_admissao else '-' }}</td>
+                            <td>{{ funcionario.salario_base|formatar_moeda if funcionario.salario_base else '-' }}</td>
+                            <td>
+                                <a href="{{ url_for('funcionarios.editar', id=funcionario.id) }}" class="btn btn-sm btn-warning" title="Editar">
+                                    <i class="bi bi-pencil"></i>
+                                </a>
+                                {% if funcionario.categoria_nome == 'MOTORISTA' %}
+                                <a href="{{ url_for('funcionarios.vincular_veiculo', id=funcionario.id) }}" class="btn btn-sm btn-info" title="Vincular Veículo">
+                                    <i class="bi bi-truck"></i>
+                                </a>
+                                {% endif %}
+                                <form method="POST" action="{{ url_for('funcionarios.excluir', id=funcionario.id) }}" style="display:inline;" onsubmit="return confirm('Tem certeza que deseja desativar este funcionário?');">
+                                    <button type="submit" class="btn btn-sm btn-danger" title="Desativar">
+                                        <i class="bi bi-trash"></i>
+                                    </button>
+                                </form>
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="9" class="text-center">Nenhum funcionário cadastrado</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    .table-sm {
+        font-size: 0.85rem;
+    }
+    .btn-sm {
+        font-size: 0.85rem;
+        padding: 0.4rem 0.8rem;
+    }
+</style>
+{% endblock %}

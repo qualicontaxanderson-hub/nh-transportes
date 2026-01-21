@@ -1,0 +1,96 @@
+{% extends 'base.html' %}
+{% block title %}Rubricas - {{ app_name }}{% endblock %}
+{% block content %}
+<div class="container-fluid">
+    <nav aria-label="breadcrumb" class="mt-2 mb-3">
+        <ol class="breadcrumb" style="font-size: 0.85rem;">
+            <li class="breadcrumb-item"><a href="{{ url_for('index') }}">Dashboard</a></li>
+            <li class="breadcrumb-item active" aria-current="page">Rubricas</li>
+        </ol>
+    </nav>
+    
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h2 style="color:#1D63A5; font-size: 1.3rem;"><i class="bi bi-list-check"></i> Rubricas</h2>
+        <a href="{{ url_for('rubricas.novo') }}" class="btn btn-primary btn-sm">
+            <i class="bi bi-plus-circle"></i> Nova Rubrica
+        </a>
+    </div>
+    
+    <div class="card shadow-sm">
+        <div class="card-header" style="background:#1D63A5;color:white; font-size: 0.95rem; padding: 0.6rem 1rem;">
+            <h5 class="mb-0" style="font-size: 1rem;">Lista de Rubricas</h5>
+        </div>
+        <div class="card-body" style="padding: 1rem;">
+            <div class="table-responsive">
+                <table class="table table-striped table-hover table-sm">
+                    <thead>
+                        <tr>
+                            <th>Ordem</th>
+                            <th>Nome</th>
+                            <th>Tipo</th>
+                            <th>Cálculo</th>
+                            <th>Descrição</th>
+                            <th>Ações</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for rubrica in rubricas %}
+                        <tr>
+                            <td>{{ rubrica.ordem }}</td>
+                            <td><strong>{{ rubrica.nome }}</strong></td>
+                            <td>
+                                {% if rubrica.tipo == 'SALARIO' %}
+                                    <span class="badge bg-primary">Salário</span>
+                                {% elif rubrica.tipo == 'BENEFICIO' %}
+                                    <span class="badge bg-success">Benefício</span>
+                                {% elif rubrica.tipo == 'DESCONTO' %}
+                                    <span class="badge bg-danger">Desconto</span>
+                                {% elif rubrica.tipo == 'IMPOSTO' %}
+                                    <span class="badge bg-warning">Imposto</span>
+                                {% elif rubrica.tipo == 'ADIANTAMENTO' %}
+                                    <span class="badge bg-info">Adiantamento</span>
+                                {% else %}
+                                    <span class="badge bg-secondary">Outro</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if rubrica.percentual_ou_valor_fixo == 'PERCENTUAL' %}
+                                    <span class="badge bg-info">Percentual</span>
+                                {% else %}
+                                    <span class="badge bg-secondary">Valor Fixo</span>
+                                {% endif %}
+                            </td>
+                            <td>{{ rubrica.descricao or '-' }}</td>
+                            <td>
+                                <a href="{{ url_for('rubricas.editar', id=rubrica.id) }}" class="btn btn-sm btn-warning" title="Editar">
+                                    <i class="bi bi-pencil"></i>
+                                </a>
+                                <form method="POST" action="{{ url_for('rubricas.excluir', id=rubrica.id) }}" style="display:inline;" onsubmit="return confirm('Tem certeza que deseja desativar esta rubrica?');">
+                                    <button type="submit" class="btn btn-sm btn-danger" title="Desativar">
+                                        <i class="bi bi-trash"></i>
+                                    </button>
+                                </form>
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="6" class="text-center">Nenhuma rubrica cadastrada</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    .table-sm {
+        font-size: 0.85rem;
+    }
+    .btn-sm {
+        font-size: 0.85rem;
+        padding: 0.4rem 0.8rem;
+    }
+</style>
+{% endblock %}

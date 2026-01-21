@@ -1,0 +1,188 @@
+{% extends 'base.html' %}
+{% block title %}Novo Lançamento de Funcionários - {{ app_name }}{% endblock %}
+{% block content %}
+<div class="container-fluid">
+    <nav aria-label="breadcrumb" class="mt-2 mb-3">
+        <ol class="breadcrumb" style="font-size: 0.85rem;">
+            <li class="breadcrumb-item"><a href="{{ url_for('index') }}">Dashboard</a></li>
+            <li class="breadcrumb-item"><a href="{{ url_for('lancamentos_funcionarios.lista') }}">Lançamentos</a></li>
+            <li class="breadcrumb-item active" aria-current="page">Novo Lançamento</li>
+        </ol>
+    </nav>
+    
+    <h2 class="mb-3" style="color:#1D63A5; font-size: 1.3rem;"><i class="bi bi-calendar-plus"></i> Novo Lançamento de Funcionários</h2>
+    
+    <div class="card shadow-sm">
+        <div class="card-header" style="background:#ff9800;color:white; font-size: 0.95rem; padding: 0.6rem 1rem;">
+            <h5 class="mb-0" style="font-size: 1rem;">Lançamento Mensal</h5>
+        </div>
+        <div class="card-body" style="padding: 1rem;">
+            <form method="POST" id="lancamentoForm">
+                <!-- Filtros Principais -->
+                <div class="row mb-4">
+                    <div class="col-md-3 mb-2">
+                        <label class="form-label fw-bold" style="font-size: 0.85rem;">Mês/Ano de Referência *</label>
+                        <input type="text" name="mes" id="mes" class="form-control form-control-sm" value="{{ mes_padrao }}" placeholder="JAN/2026" required>
+                        <small class="text-muted">Formato: MMM/YYYY (ex: JAN/2026)</small>
+                    </div>
+                    <div class="col-md-9 mb-2">
+                        <label class="form-label fw-bold" style="font-size: 0.85rem;">Cliente/Empresa *</label>
+                        <select name="cliente_id" id="cliente_id" class="form-select form-select-sm" required>
+                            <option value="">Selecione o cliente...</option>
+                            {% for cliente in clientes %}
+                            <option value="{{ cliente.id }}">{{ cliente.nome }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+
+                <div id="funcionarios-container" style="display:none;">
+                    <h5 class="mb-3">Funcionários e Lançamentos</h5>
+                    <p class="text-muted mb-3">Preencha os valores para cada rubrica. Deixe em branco ou 0 para rubricas não aplicáveis.</p>
+                    
+                    <div class="table-responsive">
+                        <table class="table table-bordered table-sm" id="lancamentos-table">
+                            <thead class="table-dark">
+                                <tr>
+                                    <th style="min-width: 200px;">Nome do Funcionário</th>
+                                    <th>Categoria</th>
+                                    {% for rubrica in rubricas %}
+                                    <th style="min-width: 120px;">{{ rubrica.nome }}</th>
+                                    {% endfor %}
+                                    <th style="min-width: 120px;">TOTAL</th>
+                                </tr>
+                            </thead>
+                            <tbody id="funcionarios-tbody">
+                                <!-- Rows will be added dynamically -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                
+                <!-- Botões -->
+                <div class="d-flex justify-content-between mt-4" id="form-buttons" style="display:none !important;">
+                    <a href="{{ url_for('lancamentos_funcionarios.lista') }}" class="btn btn-secondary btn-sm">
+                        <i class="bi bi-arrow-left"></i> Voltar
+                    </a>
+                    <button type="submit" class="btn btn-success btn-sm">
+                        <i class="bi bi-check-circle"></i> Salvar Lançamentos
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<style>
+    .form-control-sm, .form-select-sm {
+        font-size: 0.85rem;
+    }
+    .btn-sm {
+        font-size: 0.85rem;
+        padding: 0.4rem 0.8rem;
+    }
+    .table-sm {
+        font-size: 0.8rem;
+    }
+    .table-sm input {
+        font-size: 0.8rem;
+        padding: 0.25rem;
+    }
+</style>
+
+<script>
+const rubricas = {{ rubricas|tojson|safe }};
+
+document.getElementById('cliente_id').addEventListener('change', function() {
+    const clienteId = this.value;
+    if (!clienteId) {
+        document.getElementById('funcionarios-container').style.display = 'none';
+        document.getElementById('form-buttons').style.display = 'none';
+        return;
+    }
+    
+    // Fetch funcionarios for this client
+    fetch(`/lancamentos-funcionarios/get-funcionarios/${clienteId}`)
+        .then(response => response.json())
+        .then(funcionarios => {
+            const tbody = document.getElementById('funcionarios-tbody');
+            tbody.innerHTML = '';
+            
+            funcionarios.forEach(func => {
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>
+                        ${func.nome}
+                        <input type="hidden" name="funcionario_id[]" value="${func.id}">
+                    </td>
+                    <td>
+                        <span class="badge bg-info">${func.categoria_nome || 'N/A'}</span>
+                    </td>
+                    ${rubricas.map(rubrica => `
+                        <td>
+                            <input type="hidden" name="rubrica_${func.id}[]" value="${rubrica.id}">
+                            <input type="number" 
+                                   name="valor_${func.id}[]" 
+                                   class="form-control form-control-sm valor-input" 
+                                   data-funcionario="${func.id}"
+                                   step="0.01" 
+                                   placeholder="0,00"
+                                   value="${rubrica.nome === 'SALÁRIO BASE' && func.salario_base ? func.salario_base : ''}">
+                        </td>
+                    `).join('')}
+                    <td>
+                        <strong class="total-funcionario" data-funcionario="${func.id}">R$ 0,00</strong>
+                    </td>
+                `;
+                tbody.appendChild(row);
+            });
+            
+            // Show container and buttons
+            document.getElementById('funcionarios-container').style.display = 'block';
+            document.getElementById('form-buttons').style.display = 'flex';
+            
+            // Add event listeners for calculation
+            document.querySelectorAll('.valor-input').forEach(input => {
+                input.addEventListener('input', calculateTotals);
+            });
+            
+            // Initial calculation
+            calculateTotals();
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('Erro ao carregar funcionários');
+        });
+});
+
+function calculateTotals() {
+    // Calculate total for each funcionario
+    const funcionariosIds = [...new Set(
+        Array.from(document.querySelectorAll('.valor-input')).map(i => i.dataset.funcionario)
+    )];
+    
+    funcionariosIds.forEach(funcId => {
+        const inputs = document.querySelectorAll(`.valor-input[data-funcionario="${funcId}"]`);
+        let total = 0;
+        
+        inputs.forEach((input, index) => {
+            const valor = parseFloat(input.value) || 0;
+            const rubricaTipo = rubricas[index].tipo;
+            
+            // Subtract descontos and impostos
+            if (rubricaTipo === 'DESCONTO' || rubricaTipo === 'IMPOSTO') {
+                total -= valor;
+            } else {
+                total += valor;
+            }
+        });
+        
+        const totalElement = document.querySelector(`.total-funcionario[data-funcionario="${funcId}"]`);
+        if (totalElement) {
+            totalElement.textContent = `R$ ${total.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+            totalElement.style.color = total < 0 ? 'red' : 'green';
+        }
+    });
+}
+</script>
+{% endblock %}
