@@ -8,12 +8,11 @@ import calendar
 bp = Blueprint('lancamentos_funcionarios', __name__, url_prefix='/lancamentos-funcionarios')
 
 def get_previous_month():
-    """Get previous month in MMM/YYYY format"""
+    """Get previous month in MM/YYYY format"""
     today = datetime.now()
     first_day = today.replace(day=1)
     last_month = first_day - timedelta(days=1)
-    month_abbr = calendar.month_abbr[last_month.month].upper()
-    return f"{month_abbr}/{last_month.year}"
+    return f"{last_month.month:02d}/{last_month.year}"
 
 @bp.route('/')
 @login_required
@@ -61,8 +60,14 @@ def lista():
     cursor.execute(query, params)
     lancamentos = cursor.fetchall()
     
-    # Get clients for filter
-    cursor.execute("SELECT id, razao_social as nome FROM clientes ORDER BY razao_social")
+    # Get clients for filter - only those with products configured
+    cursor.execute("""
+        SELECT DISTINCT c.id, c.razao_social as nome 
+        FROM clientes c
+        INNER JOIN cliente_produtos cp ON c.id = cp.cliente_id
+        WHERE cp.ativo = 1
+        ORDER BY c.razao_social
+    """)
     clientes = cursor.fetchall()
     
     cursor.close()
@@ -176,7 +181,6 @@ def get_funcionarios(cliente_id):
                 'MOTORISTA' as categoria,
                 0 as salario_base
             FROM motoristas m
-            WHERE m.ativo = 1
             ORDER BY m.nome
         """)
         motoristas = cursor.fetchall()

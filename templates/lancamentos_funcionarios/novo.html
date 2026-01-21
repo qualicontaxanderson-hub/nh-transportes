@@ -22,8 +22,8 @@
                 <div class="row mb-4">
                     <div class="col-md-3 mb-2">
                         <label class="form-label fw-bold" style="font-size: 0.85rem;">Mês/Ano de Referência *</label>
-                        <input type="text" name="mes" id="mes" class="form-control form-control-sm" value="{{ mes_padrao }}" placeholder="JAN/2026" required>
-                        <small class="text-muted">Formato: MMM/YYYY (ex: JAN/2026)</small>
+                        <input type="text" name="mes" id="mes" class="form-control form-control-sm" value="{{ mes_padrao }}" placeholder="01/2026" required pattern="\d{2}/\d{4}" maxlength="7">
+                        <small class="text-muted">Formato: MM/YYYY (ex: 01/2026)</small>
                     </div>
                     <div class="col-md-9 mb-2">
                         <label class="form-label fw-bold" style="font-size: 0.85rem;">Cliente/Empresa *</label>
