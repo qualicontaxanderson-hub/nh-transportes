@@ -38,7 +38,7 @@ def index():
     data_inicio = request.args.get('data_inicio', '')
     data_fim = request.args.get('data_fim', '')
     status = request.args.get('status', '')
-    mostrar_todos = request.args.get('mostrar_todos', '')
+    mostrar_todos = request.args.get('mostrar_todos', '') == '1'
     
     # Se não houver filtros de data e não for solicitado mostrar todos, carregar últimos 30 dias por padrão
     if not data_inicio and not data_fim and not mostrar_todos:
