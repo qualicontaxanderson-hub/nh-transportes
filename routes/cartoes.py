@@ -10,17 +10,22 @@ bp = Blueprint('cartoes', __name__, url_prefix='/cartoes')
 @login_required
 def lista():
     """List all card brands"""
+    conn = None
+    cursor = None
     try:
         conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)
         cursor.execute("SELECT * FROM bandeiras_cartao ORDER BY tipo, nome")
         cartoes = cursor.fetchall()
-        cursor.close()
-        conn.close()
         return render_template('cartoes/lista.html', cartoes=cartoes)
     except Exception as e:
         flash(f'Erro ao carregar cartões: {str(e)}', 'danger')
         return render_template('cartoes/lista.html', cartoes=[])
+    finally:
+        if cursor is not None:
+            cursor.close()
+        if conn is not None:
+            conn.close()
 
 
 @bp.route('/novo', methods=['GET', 'POST'])
@@ -29,13 +34,28 @@ def lista():
 def novo():
     """Create a new card brand"""
     if request.method == 'POST':
-        nome = request.form.get('nome')
-        tipo = request.form.get('tipo')
+        # Normalize input values
+        nome = (request.form.get('nome', '') or '').strip()
+        tipo = (request.form.get('tipo', '') or '').strip()
         ativo = request.form.get('ativo', '1')
 
-        if not nome or not tipo:
-            flash('Nome e tipo são obrigatórios!', 'danger')
-            return render_template('cartoes/novo.html')
+        validation_errors = []
+
+        if not nome:
+            validation_errors.append('Nome é obrigatório e não pode conter apenas espaços em branco.')
+        elif len(nome) > 50:
+            validation_errors.append('Nome deve ter no máximo 50 caracteres.')
+
+        valid_tipos = {'DEBITO', 'CREDITO'}
+        if not tipo:
+            validation_errors.append('Tipo é obrigatório!')
+        elif tipo not in valid_tipos:
+            validation_errors.append('Tipo inválido! Selecione DEBITO ou CREDITO.')
+
+        if validation_errors:
+            for message in validation_errors:
+                flash(message, 'danger')
+            return render_template('cartoes/novo.html', nome=nome, tipo=tipo, ativo=ativo)
 
         conn = None
         cursor = None
@@ -51,6 +71,7 @@ def novo():
             return redirect(url_for('cartoes.lista'))
         except Exception as e:
             flash(f'Erro ao cadastrar cartão: {str(e)}', 'danger')
+            return render_template('cartoes/novo.html', nome=nome, tipo=tipo, ativo=ativo)
         finally:
             if cursor:
                 cursor.close()
@@ -65,17 +86,35 @@ def novo():
 @admin_required
 def editar(id):
     """Edit an existing card brand"""
-    conn = get_db_connection()
-    cursor = conn.cursor(dictionary=True)
+    conn = None
+    cursor = None
 
     try:
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+
         if request.method == 'POST':
-            nome = request.form.get('nome')
-            tipo = request.form.get('tipo')
+            # Normalize input values
+            nome = (request.form.get('nome', '') or '').strip()
+            tipo = (request.form.get('tipo', '') or '').strip()
             ativo = request.form.get('ativo', '1')
 
-            if not nome or not tipo:
-                flash('Nome e tipo são obrigatórios!', 'danger')
+            validation_errors = []
+
+            if not nome:
+                validation_errors.append('Nome é obrigatório e não pode conter apenas espaços em branco.')
+            elif len(nome) > 50:
+                validation_errors.append('Nome deve ter no máximo 50 caracteres.')
+
+            valid_tipos = {'DEBITO', 'CREDITO'}
+            if not tipo:
+                validation_errors.append('Tipo é obrigatório!')
+            elif tipo not in valid_tipos:
+                validation_errors.append('Tipo inválido! Selecione DEBITO ou CREDITO.')
+
+            if validation_errors:
+                for message in validation_errors:
+                    flash(message, 'danger')
                 cursor.execute("SELECT * FROM bandeiras_cartao WHERE id = %s", (id,))
                 cartao = cursor.fetchone()
                 return render_template('cartoes/editar.html', cartao=cartao)
@@ -103,8 +142,10 @@ def editar(id):
         flash(f'Erro ao atualizar cartão: {str(e)}', 'danger')
         return redirect(url_for('cartoes.lista'))
     finally:
-        cursor.close()
-        conn.close()
+        if cursor is not None:
+            cursor.close()
+        if conn is not None:
+            conn.close()
 
 
 @bp.route('/bloquear/<int:id>', methods=['POST'])
@@ -112,6 +153,9 @@ def editar(id):
 @admin_required
 def bloquear(id):
     """Block/unblock a card brand (toggle ativo status)"""
+    conn = None
+    cursor = None
+    
     try:
         conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)
@@ -132,12 +176,15 @@ def bloquear(id):
             WHERE id = %s
         """, (novo_status, id))
         conn.commit()
-        cursor.close()
-        conn.close()
         
         status_text = 'desbloqueado' if novo_status else 'bloqueado'
         flash(f'Cartão {status_text} com sucesso!', 'success')
     except Exception as e:
         flash(f'Erro ao alterar status do cartão: {str(e)}', 'danger')
+    finally:
+        if cursor is not None:
+            cursor.close()
+        if conn is not None:
+            conn.close()
     
     return redirect(url_for('cartoes.lista'))
