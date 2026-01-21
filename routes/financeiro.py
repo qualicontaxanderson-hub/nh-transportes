@@ -706,28 +706,32 @@ def consultar_status_efi(charge_id):
                 "error": f"Não foi possível consultar a cobrança no provedor EFI (tipo de resposta: {type(charge_data).__name__})"
             }), 400
         
-        # Verificar se há erro HTTP na resposta
-        if "http_status" in charge_data and charge_data.get("http_status") != 200:
-            error_text = charge_data.get("text", "Erro desconhecido")
-            http_status = charge_data.get("http_status")
-            current_app.logger.warning(f"[consultar_status_efi] HTTP error: {http_status} - {error_text[:200]}")
+        # Verificar se há erro HTTP na resposta (http_status ou code)
+        error_code = charge_data.get("http_status") or charge_data.get("code")
+        if error_code and error_code != 200:
+            error_text = charge_data.get("text", "") or charge_data.get("message", "") or "Erro desconhecido"
+            current_app.logger.warning(f"[consultar_status_efi] Erro {error_code}: {error_text[:200]}")
             
             # Mensagem de erro mais específica para 401
-            if http_status == 401:
+            if error_code == 401:
                 sandbox_status = "SANDBOX (homologação)" if current_app.config.get("EFI_SANDBOX", True) else "PRODUÇÃO"
                 error_msg = (
-                    f"Credenciais EFI não autorizadas. "
-                    f"Ambiente atual: {sandbox_status}. "
-                    f"Verifique: 1) Client ID e Secret corretos, "
-                    f"2) Credenciais são do ambiente correto (sandbox vs produção), "
-                    f"3) Charge ID {charge_id} pertence à sua conta EFI"
+                    f"❌ Acesso Negado (401 Unauthorized)\n\n"
+                    f"As credenciais não têm permissão para consultar esta cobrança.\n\n"
+                    f"🔍 Possíveis causas:\n"
+                    f"1. A cobrança foi criada com credenciais diferentes\n"
+                    f"2. O certificado não tem permissão de leitura (apenas criação)\n"
+                    f"3. Ambiente incorreto - Atual: {sandbox_status}\n"
+                    f"4. Charge ID {charge_id} não pertence à sua conta EFI\n\n"
+                    f"💡 Solução: Teste com uma cobrança criada recentemente por este sistema."
                 )
             else:
-                error_msg = f"Erro ao consultar EFI (HTTP {http_status}): {error_text[:100]}"
+                error_msg = f"Erro ao consultar EFI (código {error_code}): {error_text[:100]}"
             
             return jsonify({
                 "success": False,
-                "error": error_msg
+                "error": error_msg,
+                "error_code": error_code
             }), 400
         
         # Extrair dados relevantes da resposta com múltiplas tentativas
