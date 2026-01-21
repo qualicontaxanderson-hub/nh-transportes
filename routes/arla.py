@@ -48,79 +48,42 @@ def index():
     """)
     clientes_arla = cursor.fetchall()
     
-    # Busca saldo inicial (filtrado por cliente se selecionado)
-    if cliente_id:
-        cursor.execute("""
-            SELECT * FROM arla_saldo_inicial 
-            WHERE cliente_id = %s 
-            ORDER BY data DESC LIMIT 1
-        """, (cliente_id,))
-    else:
-        cursor.execute("""
-            SELECT * FROM arla_saldo_inicial ORDER BY data DESC LIMIT 1
-        """)
+    # Busca saldo inicial
+    cursor.execute("""
+        SELECT * FROM arla_saldo_inicial ORDER BY data DESC LIMIT 1
+    """)
     saldo = cursor.fetchone()
     
-    # Busca preço vigente (filtrado por cliente se selecionado)
-    if cliente_id:
-        cursor.execute("""
-            SELECT * FROM arla_precos_venda 
-            WHERE cliente_id = %s 
-            ORDER BY data_inicio DESC LIMIT 1
-        """, (cliente_id,))
-    else:
-        cursor.execute("""
-            SELECT * FROM arla_precos_venda ORDER BY data_inicio DESC LIMIT 1
-        """)
+    # Busca preço vigente
+    cursor.execute("""
+        SELECT * FROM arla_precos_venda ORDER BY data_inicio DESC LIMIT 1
+    """)
     preco = cursor.fetchone()
     
     # Busca compras com filtros
-    if cliente_id:
-        cursor.execute("""
-            SELECT id, data, quantidade, preco_compra, 'COMPRA' as tipo, cliente_id
-            FROM arla_compras
-            WHERE data BETWEEN %s AND %s AND cliente_id = %s
-            ORDER BY data DESC
-        """, (data_inicio, data_fim, cliente_id))
-    else:
-        cursor.execute("""
-            SELECT id, data, quantidade, preco_compra, 'COMPRA' as tipo, cliente_id
-            FROM arla_compras
-            WHERE data BETWEEN %s AND %s
-            ORDER BY data DESC
-        """, (data_inicio, data_fim))
+    cursor.execute("""
+        SELECT id, data, quantidade, preco_compra, 'COMPRA' as tipo
+        FROM arla_compras
+        WHERE data BETWEEN %s AND %s
+        ORDER BY data DESC
+    """, (data_inicio, data_fim))
     compras = cursor.fetchall()
     
     # Busca lançamentos/vendas com filtros
-    if cliente_id:
-        cursor.execute("""
-            SELECT id, data, quantidade_vendida, preco_venda_aplicado, encerrante_final, 'VENDA' as tipo, cliente_id
-            FROM arla_lancamentos
-            WHERE data BETWEEN %s AND %s AND cliente_id = %s
-            ORDER BY data DESC
-        """, (data_inicio, data_fim, cliente_id))
-    else:
-        cursor.execute("""
-            SELECT id, data, quantidade_vendida, preco_venda_aplicado, encerrante_final, 'VENDA' as tipo, cliente_id
-            FROM arla_lancamentos
-            WHERE data BETWEEN %s AND %s
-            ORDER BY data DESC
-        """, (data_inicio, data_fim))
+    cursor.execute("""
+        SELECT id, data, quantidade_vendida, preco_venda_aplicado, encerrante_final, 'VENDA' as tipo
+        FROM arla_lancamentos
+        WHERE data BETWEEN %s AND %s
+        ORDER BY data DESC
+    """, (data_inicio, data_fim))
     lancamentos = cursor.fetchall()
     
-    # Calcula totais de TODAS as compras e vendas (considerando filtro de cliente) para o estoque
-    if cliente_id:
-        cursor.execute("SELECT COALESCE(SUM(quantidade), 0) as total FROM arla_compras WHERE cliente_id = %s", (cliente_id,))
-        total_compras = float(cursor.fetchone()['total'])
-        
-        cursor.execute("SELECT COALESCE(SUM(quantidade_vendida), 0) as total FROM arla_lancamentos WHERE cliente_id = %s", (cliente_id,))
-        total_vendas = float(cursor.fetchone()['total'])
-    else:
-        cursor.execute("SELECT COALESCE(SUM(quantidade), 0) as total FROM arla_compras")
-        total_compras = float(cursor.fetchone()['total'])
-        
-        cursor.execute("SELECT COALESCE(SUM(quantidade_vendida), 0) as total FROM arla_lancamentos")
-        total_vendas = float(cursor.fetchone()['total'])
+    # Calcula totais de TODAS as compras e vendas para o estoque
+    cursor.execute("SELECT COALESCE(SUM(quantidade), 0) as total FROM arla_compras")
+    total_compras = float(cursor.fetchone()['total'])
+    
+    cursor.execute("SELECT COALESCE(SUM(quantidade_vendida), 0) as total FROM arla_lancamentos")
+    total_vendas = float(cursor.fetchone()['total'])
     
     # Estoque atual = Saldo inicial + Compras - Vendas
     volume_inicial = float(saldo['volume_inicial']) if saldo else 0
