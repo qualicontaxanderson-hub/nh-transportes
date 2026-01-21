@@ -1,0 +1,430 @@
+{% extends "base.html" %}
+{% block titulo %}Editar Descarga #{{ descarga.id }}{% endblock %}
+
+{% block styles %}
+<style>
+:root {
+  --grad-start: #4A90E2;
+  --grad-end: #F2994A;
+  --accent: #1f6fb6;
+}
+
+.page-header-descargas {
+  background: linear-gradient(135deg, var(--grad-start) 0%, #9fb8d6 38%, var(--grad-end) 100%);
+  color: white;
+  padding: 1.5rem;
+  border-radius: 8px;
+  margin-bottom: 1.5rem;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+}
+
+.section-card {
+  border-left: 4px solid var(--accent);
+  margin-bottom: 1.5rem;
+}
+
+.form-label {
+  font-weight: 600;
+  color: #495057;
+}
+
+.readonly-field {
+  background-color: #FFD580;
+}
+
+.etapa-card {
+  border-left: 4px solid #6f42c1;
+  margin-bottom: 1rem;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+  <!-- Cabeçalho -->
+  <div class="page-header-descargas">
+    <div class="d-flex justify-content-between align-items-center">
+      <div>
+        <h3 class="mb-1">
+          <i class="bi bi-pencil"></i> Editar Descarga #{{ descarga.id }}
+        </h3>
+        <p class="mb-0 opacity-75">Frete #{{ descarga.frete_id }} - {{ descarga.fornecedor }}</p>
+      </div>
+      <div>
+        <button onclick="copiarWhatsApp({{ descarga.id }})" class="btn btn-success me-2">
+          <i class="bi bi-whatsapp"></i> Copiar WhatsApp
+        </button>
+        <a href="{{ url_for('descargas.lista') }}" class="btn btn-light">
+          <i class="bi bi-arrow-left"></i> Voltar
+        </a>
+      </div>
+    </div>
+  </div>
+
+  <form method="POST" action="{{ url_for('descargas.editar', descarga_id=descarga.id) }}">
+    <!-- Dados do Frete -->
+    <div class="card section-card">
+      <div class="card-header" style="background:#17a2b8;color:white;">
+        <strong><i class="bi bi-info-circle"></i> Dados do Frete</strong>
+      </div>
+      <div class="card-body">
+        <div class="row">
+          <div class="col-md-3">
+            <label class="form-label">Cliente</label>
+            <input type="text" class="form-control readonly-field" value="{{ descarga.cliente }}" readonly>
+          </div>
+          <div class="col-md-3">
+            <label class="form-label">Fornecedor</label>
+            <input type="text" class="form-control readonly-field" value="{{ descarga.fornecedor }}" readonly>
+          </div>
+          <div class="col-md-3">
+            <label class="form-label">Produto</label>
+            <input type="text" class="form-control readonly-field" value="{{ descarga.produto }}" readonly>
+          </div>
+          <div class="col-md-3">
+            <label class="form-label">Motorista</label>
+            <input type="text" class="form-control readonly-field" value="{{ descarga.motorista }}" readonly>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Dados da Descarga -->
+    <div class="card section-card">
+      <div class="card-header" style="background:#28a745;color:white;">
+        <strong><i class="bi bi-calendar-check"></i> Dados da Descarga</strong>
+      </div>
+      <div class="card-body">
+        <div class="row mb-3">
+          <div class="col-md-3">
+            <label class="form-label">Data de Carregamento *</label>
+            <input type="date" class="form-control" name="data_carregamento" value="{{ descarga.data_carregamento_input }}" required>
+          </div>
+          <div class="col-md-3">
+            <label class="form-label">Data de Descarga *</label>
+            <input type="date" class="form-control" name="data_descarga" value="{{ descarga.data_descarga_input }}" required>
+          </div>
+          <div class="col-md-3">
+            <label class="form-label">Volume Total (L)</label>
+            <input type="text" class="form-control readonly-field" value="{{ '{:,.0f}'.format(descarga.volume_total|float).replace(',', '.') }}" readonly>
+          </div>
+          <div class="col-md-3">
+            <label class="form-label">Volume Descarregado (L)</label>
+            <input type="text" class="form-control readonly-field" value="{{ '{:,.0f}'.format(descarga.volume_descarregado|float).replace(',', '.') }}" readonly>
+            <small class="text-muted">Atualizado pelas etapas</small>
+          </div>
+        </div>
+
+        <div class="row mb-3">
+          <div class="col-md-3">
+            <label class="form-label">Abastecimento Durante (L)</label>
+            <input type="text" class="form-control" name="abastecimento_durante_descarga" value="{{ '{:,.2f}'.format(descarga.abastecimento_durante_descarga|float).replace(',', 'X').replace('.', ',').replace('X', '.') if descarga.abastecimento_durante_descarga else '0' }}">
+          </div>
+          <div class="col-md-3">
+            <label class="form-label">Temperatura (°C)</label>
+            <input type="text" class="form-control" name="temperatura" value="{{ '{:,.2f}'.format(descarga.temperatura|float).replace(',', 'X').replace('.', ',').replace('X', '.') if descarga.temperatura else '' }}">
+          </div>
+          <div class="col-md-3">
+            <label class="form-label">Densidade</label>
+            <input type="text" class="form-control" name="densidade" value="{{ '{:,.4f}'.format(descarga.densidade|float).replace(',', 'X').replace('.', ',').replace('X', '.') if descarga.densidade else '' }}">
+          </div>
+          <div class="col-md-3">
+            <label class="form-label">Status</label>
+            <input type="text" class="form-control readonly-field" value="{{ descarga.status }}" readonly>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Medição Sistema -->
+    <div class="card section-card">
+      <div class="card-header" style="background:#007bff;color:white;">
+        <strong><i class="bi bi-speedometer"></i> Medição Sistema</strong>
+      </div>
+      <div class="card-body">
+        <div class="row mb-3">
+          <div class="col-md-4">
+            <label class="form-label">Estoque Antes (L)</label>
+            <input type="text" class="form-control" name="estoque_sistema_antes" id="estoque_sistema_antes" value="{{ '{:,.2f}'.format(descarga.estoque_sistema_antes|float).replace(',', 'X').replace('.', ',').replace('X', '.') if descarga.estoque_sistema_antes else '' }}">
+          </div>
+          <div class="col-md-4">
+            <label class="form-label">Estoque Depois (L)</label>
+            <input type="text" class="form-control" name="estoque_sistema_depois" id="estoque_sistema_depois" value="{{ '{:,.2f}'.format(descarga.estoque_sistema_depois|float).replace(',', 'X').replace('.', ',').replace('X', '.') if descarga.estoque_sistema_depois else '' }}">
+          </div>
+          <div class="col-md-4">
+            <label class="form-label">Diferença (L)</label>
+            <input type="text" class="form-control readonly-field" id="diferenca_sistema" value="{{ '{:,.2f}'.format(descarga.diferenca_sistema|float).replace(',', 'X').replace('.', ',').replace('X', '.') if descarga.diferenca_sistema else '' }}" readonly>
+            <small class="text-muted">Calculado automaticamente</small>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Medição Régua -->
+    <div class="card section-card">
+      <div class="card-header" style="background:#6f42c1;color:white;">
+        <strong><i class="bi bi-rulers"></i> Medição Régua</strong>
+      </div>
+      <div class="card-body">
+        <div class="row mb-3">
+          <div class="col-md-4">
+            <label class="form-label">Estoque Antes (L)</label>
+            <input type="text" class="form-control" name="estoque_regua_antes" id="estoque_regua_antes" value="{{ '{:,.2f}'.format(descarga.estoque_regua_antes|float).replace(',', 'X').replace('.', ',').replace('X', '.') if descarga.estoque_regua_antes else '' }}">
+          </div>
+          <div class="col-md-4">
+            <label class="form-label">Estoque Depois (L)</label>
+            <input type="text" class="form-control" name="estoque_regua_depois" id="estoque_regua_depois" value="{{ '{:,.2f}'.format(descarga.estoque_regua_depois|float).replace(',', 'X').replace('.', ',').replace('X', '.') if descarga.estoque_regua_depois else '' }}">
+          </div>
+          <div class="col-md-4">
+            <label class="form-label">Diferença (L)</label>
+            <input type="text" class="form-control readonly-field" id="diferenca_regua" value="{{ '{:,.2f}'.format(descarga.diferenca_regua|float).replace(',', 'X').replace('.', ',').replace('X', '.') if descarga.diferenca_regua else '' }}" readonly>
+            <small class="text-muted">Calculado automaticamente</small>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Observações -->
+    <div class="card section-card">
+      <div class="card-header">
+        <strong><i class="bi bi-chat-left-text"></i> Observações</strong>
+      </div>
+      <div class="card-body">
+        <textarea class="form-control" name="observacoes" rows="3">{{ descarga.observacoes or '' }}</textarea>
+      </div>
+    </div>
+
+    <!-- Botões -->
+    <div class="d-flex justify-content-end mb-4">
+      <button type="submit" class="btn btn-primary btn-lg">
+        <i class="bi bi-save"></i> Salvar Alterações
+      </button>
+    </div>
+  </form>
+
+  <!-- Etapas de Descarga -->
+  <div class="card section-card">
+    <div class="card-header" style="background:#6f42c1;color:white;">
+      <div class="d-flex justify-content-between align-items-center">
+        <strong><i class="bi bi-list-check"></i> Etapas de Descarga</strong>
+        <button type="button" class="btn btn-sm btn-light" data-bs-toggle="modal" data-bs-target="#modalNovaEtapa">
+          <i class="bi bi-plus-circle"></i> Adicionar Etapa
+        </button>
+      </div>
+    </div>
+    <div class="card-body">
+      {% if etapas %}
+      {% for etapa in etapas %}
+      <div class="card etapa-card">
+        <div class="card-body">
+          <div class="row">
+            <div class="col-md-2">
+              <strong>Data:</strong><br>
+              {{ etapa.data_etapa_formatada }}
+            </div>
+            <div class="col-md-2">
+              <strong>Volume:</strong><br>
+              {{ '{:,.2f}'.format(etapa.volume_etapa|float).replace(',', 'X').replace('.', ',').replace('X', '.') }} L
+            </div>
+            <div class="col-md-2">
+              <strong>Sistema Antes:</strong><br>
+              {{ '{:,.2f}'.format(etapa.estoque_sistema_antes|float).replace(',', 'X').replace('.', ',').replace('X', '.') if etapa.estoque_sistema_antes else '-' }}
+            </div>
+            <div class="col-md-2">
+              <strong>Sistema Depois:</strong><br>
+              {{ '{:,.2f}'.format(etapa.estoque_sistema_depois|float).replace(',', 'X').replace('.', ',').replace('X', '.') if etapa.estoque_sistema_depois else '-' }}
+            </div>
+            <div class="col-md-2">
+              <strong>Dif. Sistema:</strong><br>
+              {{ '{:,.2f}'.format(etapa.diferenca_sistema|float).replace(',', 'X').replace('.', ',').replace('X', '.') if etapa.diferenca_sistema else '-' }}
+            </div>
+            <div class="col-md-2">
+              <strong>Abastecimento:</strong><br>
+              {{ '{:,.2f}'.format(etapa.abastecimento_durante_etapa|float).replace(',', 'X').replace('.', ',').replace('X', '.') if etapa.abastecimento_durante_etapa else '0' }}
+            </div>
+          </div>
+          {% if etapa.observacoes %}
+          <div class="row mt-2">
+            <div class="col-12">
+              <strong>Observações:</strong> {{ etapa.observacoes }}
+            </div>
+          </div>
+          {% endif %}
+        </div>
+      </div>
+      {% endfor %}
+      {% else %}
+      <div class="alert alert-info">
+        <i class="bi bi-info-circle"></i>
+        Nenhuma etapa registrada. Use o botão "Adicionar Etapa" para registrar descargas parciais.
+      </div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Nova Etapa -->
+<div class="modal fade" id="modalNovaEtapa" tabindex="-1" aria-labelledby="modalNovaEtapaLabel" aria-hidden="true">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header" style="background:#6f42c1;color:white;">
+        <h5 class="modal-title" id="modalNovaEtapaLabel">
+          <i class="bi bi-plus-circle"></i> Adicionar Etapa de Descarga
+        </h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Fechar"></button>
+      </div>
+      <form method="POST" action="{{ url_for('descargas.adicionar_etapa', descarga_id=descarga.id) }}">
+        <div class="modal-body">
+          <div class="row mb-3">
+            <div class="col-md-6">
+              <label class="form-label">Data da Etapa *</label>
+              <input type="date" class="form-control" name="data_etapa" required>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Volume da Etapa (L) *</label>
+              <input type="text" class="form-control" name="volume_etapa" id="modal_volume_etapa" required>
+            </div>
+          </div>
+
+          <hr>
+          <h6>Medição Sistema</h6>
+          <div class="row mb-3">
+            <div class="col-md-4">
+              <label class="form-label">Estoque Antes (L)</label>
+              <input type="text" class="form-control" name="etapa_estoque_sistema_antes" id="modal_sistema_antes">
+            </div>
+            <div class="col-md-4">
+              <label class="form-label">Estoque Depois (L)</label>
+              <input type="text" class="form-control" name="etapa_estoque_sistema_depois" id="modal_sistema_depois">
+            </div>
+            <div class="col-md-4">
+              <label class="form-label">Diferença (L)</label>
+              <input type="text" class="form-control readonly-field" id="modal_dif_sistema" readonly>
+            </div>
+          </div>
+
+          <hr>
+          <h6>Medição Régua</h6>
+          <div class="row mb-3">
+            <div class="col-md-4">
+              <label class="form-label">Estoque Antes (L)</label>
+              <input type="text" class="form-control" name="etapa_estoque_regua_antes" id="modal_regua_antes">
+            </div>
+            <div class="col-md-4">
+              <label class="form-label">Estoque Depois (L)</label>
+              <input type="text" class="form-control" name="etapa_estoque_regua_depois" id="modal_regua_depois">
+            </div>
+            <div class="col-md-4">
+              <label class="form-label">Diferença (L)</label>
+              <input type="text" class="form-control readonly-field" id="modal_dif_regua" readonly>
+            </div>
+          </div>
+
+          <hr>
+          <div class="row mb-3">
+            <div class="col-md-6">
+              <label class="form-label">Abastecimento Durante (L)</label>
+              <input type="text" class="form-control" name="etapa_abastecimento_durante" id="modal_abastecimento" value="0">
+            </div>
+          </div>
+
+          <div class="row mb-3">
+            <div class="col-12">
+              <label class="form-label">Observações</label>
+              <textarea class="form-control" name="etapa_observacoes" rows="2"></textarea>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+          <button type="submit" class="btn btn-success">
+            <i class="bi bi-save"></i> Salvar Etapa
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<script>
+// Função para calcular diferenças (página principal)
+function calcularDiferencas() {
+  const sistemaAntes = parseFloat(document.getElementById('estoque_sistema_antes').value.replace(/\./g, '').replace(',', '.')) || 0;
+  const sistemaDepois = parseFloat(document.getElementById('estoque_sistema_depois').value.replace(/\./g, '').replace(',', '.')) || 0;
+  const volumeDescarregado = {{ descarga.volume_descarregado|float|tojson }};
+  const abastecimento = parseFloat(document.querySelector('[name="abastecimento_durante_descarga"]').value.replace(/\./g, '').replace(',', '.')) || 0;
+  
+  if (sistemaAntes && sistemaDepois && volumeDescarregado) {
+    const difSistema = sistemaDepois - sistemaAntes - volumeDescarregado + abastecimento;
+    document.getElementById('diferenca_sistema').value = difSistema.toFixed(2).replace('.', ',');
+  }
+  
+  const reguaAntes = parseFloat(document.getElementById('estoque_regua_antes').value.replace(/\./g, '').replace(',', '.')) || 0;
+  const reguaDepois = parseFloat(document.getElementById('estoque_regua_depois').value.replace(/\./g, '').replace(',', '.')) || 0;
+  
+  if (reguaAntes && reguaDepois && volumeDescarregado) {
+    const difRegua = reguaDepois - reguaAntes - volumeDescarregado + abastecimento;
+    document.getElementById('diferenca_regua').value = difRegua.toFixed(2).replace('.', ',');
+  }
+}
+
+// Função para calcular diferenças no modal
+function calcularDiferencasModal() {
+  const volumeEtapa = parseFloat(document.getElementById('modal_volume_etapa').value.replace(/\./g, '').replace(',', '.')) || 0;
+  const abastecimento = parseFloat(document.getElementById('modal_abastecimento').value.replace(/\./g, '').replace(',', '.')) || 0;
+  
+  const sistemaAntes = parseFloat(document.getElementById('modal_sistema_antes').value.replace(/\./g, '').replace(',', '.')) || 0;
+  const sistemaDepois = parseFloat(document.getElementById('modal_sistema_depois').value.replace(/\./g, '').replace(',', '.')) || 0;
+  
+  if (sistemaAntes && sistemaDepois && volumeEtapa) {
+    const difSistema = sistemaDepois - sistemaAntes - volumeEtapa + abastecimento;
+    document.getElementById('modal_dif_sistema').value = difSistema.toFixed(2).replace('.', ',');
+  }
+  
+  const reguaAntes = parseFloat(document.getElementById('modal_regua_antes').value.replace(/\./g, '').replace(',', '.')) || 0;
+  const reguaDepois = parseFloat(document.getElementById('modal_regua_depois').value.replace(/\./g, '').replace(',', '.')) || 0;
+  
+  if (reguaAntes && reguaDepois && volumeEtapa) {
+    const difRegua = reguaDepois - reguaAntes - volumeEtapa + abastecimento;
+    document.getElementById('modal_dif_regua').value = difRegua.toFixed(2).replace('.', ',');
+  }
+}
+
+// Adicionar listeners (página principal)
+document.getElementById('estoque_sistema_antes')?.addEventListener('input', calcularDiferencas);
+document.getElementById('estoque_sistema_depois')?.addEventListener('input', calcularDiferencas);
+document.getElementById('estoque_regua_antes')?.addEventListener('input', calcularDiferencas);
+document.getElementById('estoque_regua_depois')?.addEventListener('input', calcularDiferencas);
+document.querySelector('[name="abastecimento_durante_descarga"]')?.addEventListener('input', calcularDiferencas);
+
+// Adicionar listeners (modal)
+document.getElementById('modal_volume_etapa')?.addEventListener('input', calcularDiferencasModal);
+document.getElementById('modal_sistema_antes')?.addEventListener('input', calcularDiferencasModal);
+document.getElementById('modal_sistema_depois')?.addEventListener('input', calcularDiferencasModal);
+document.getElementById('modal_regua_antes')?.addEventListener('input', calcularDiferencasModal);
+document.getElementById('modal_regua_depois')?.addEventListener('input', calcularDiferencasModal);
+document.getElementById('modal_abastecimento')?.addEventListener('input', calcularDiferencasModal);
+
+// Função copiar WhatsApp
+function copiarWhatsApp(descargaId) {
+  fetch(`/descargas/${descargaId}/whatsapp`)
+    .then(response => response.json())
+    .then(data => {
+      if (data.texto) {
+        navigator.clipboard.writeText(data.texto).then(() => {
+          alert('Texto copiado para a área de transferência! Cole no WhatsApp.');
+        }).catch(err => {
+          console.error('Erro ao copiar:', err);
+          alert('Erro ao copiar texto. Tente novamente.');
+        });
+      } else {
+        alert('Erro ao gerar texto: ' + (data.error || 'Erro desconhecido'));
+      }
+    })
+    .catch(err => {
+      console.error('Erro:', err);
+      alert('Erro ao copiar texto para WhatsApp.');
+    });
+}
+</script>
+{% endblock %}

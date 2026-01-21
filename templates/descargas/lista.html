@@ -1,0 +1,266 @@
+{% extends "base.html" %}
+{% block titulo %}Controle de Descargas{% endblock %}
+
+{% block styles %}
+<style>
+:root {
+  --grad-start: #4A90E2;
+  --grad-end: #F2994A;
+  --accent: #1f6fb6;
+  --etanol-color: #28a745;
+  --gasolina-color: #dc3545;
+  --gasolina-aditivada-color: #007bff;
+  --s10-color: #007bff;
+  --s500-color: #343a40;
+}
+
+.page-header-descargas {
+  background: linear-gradient(135deg, var(--grad-start) 0%, #9fb8d6 38%, var(--grad-end) 100%);
+  color: white;
+  padding: 1.5rem;
+  border-radius: 8px;
+  margin-bottom: 1.5rem;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+}
+
+.btn-descargas-primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: white;
+}
+
+.btn-descargas-primary:hover {
+  background: #14588f;
+  border-color: #14588f;
+  color: white;
+}
+
+/* Product colors */
+.produto-etanol { color: var(--etanol-color) !important; font-weight: 600; }
+.produto-gasolina { color: var(--gasolina-color) !important; font-weight: 600; }
+.produto-gasolina-aditivada { color: var(--gasolina-aditivada-color) !important; font-weight: 600; }
+.produto-s-10 { color: var(--s10-color) !important; font-weight: 600; }
+.produto-s-500 { color: var(--s500-color) !important; font-weight: 600; }
+
+/* Status badges */
+.badge-pendente { background-color: #ffc107; color: #000; }
+.badge-em_andamento { background-color: #17a2b8; color: #fff; }
+.badge-completo { background-color: #28a745; color: #fff; }
+
+.filtros-card {
+  border: 1px solid #dee2e6;
+  border-radius: 8px;
+  background: #fff;
+  margin-bottom: 1.5rem;
+}
+
+.table-hover tbody tr:hover {
+  background-color: #f8f9fa;
+}
+
+.diferenca-positiva {
+  color: #28a745;
+  font-weight: 600;
+}
+
+.diferenca-negativa {
+  color: #dc3545;
+  font-weight: 600;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+  <!-- Cabeçalho -->
+  <div class="page-header-descargas">
+    <div class="d-flex justify-content-between align-items-center">
+      <div>
+        <h3 class="mb-1">
+          <i class="bi bi-truck"></i> Controle de Descargas
+        </h3>
+        <p class="mb-0 opacity-75">Gerenciamento de descargas de combustível</p>
+      </div>
+      <div>
+        <a href="{{ url_for('descargas.selecionar_frete') }}" class="btn btn-light btn-lg">
+          <i class="bi bi-plus-circle"></i> Nova Descarga
+        </a>
+      </div>
+    </div>
+  </div>
+
+  <!-- Filtros -->
+  <div class="card filtros-card">
+    <div class="card-body">
+      <form method="GET" action="{{ url_for('descargas.lista') }}" class="row g-3">
+        <div class="col-md-2">
+          <label class="form-label">Data Início</label>
+          <input type="date" class="form-control" name="data_inicio" value="{{ data_inicio }}">
+        </div>
+        <div class="col-md-2">
+          <label class="form-label">Data Fim</label>
+          <input type="date" class="form-control" name="data_fim" value="{{ data_fim }}">
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">Cliente</label>
+          <select class="form-select" name="cliente_id">
+            <option value="">Todos</option>
+            {% for cliente in clientes %}
+            <option value="{{ cliente.id }}" {% if cliente_id|string == cliente.id|string %}selected{% endif %}>
+              {{ cliente.razao_social }}
+            </option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-md-2">
+          <label class="form-label">Status</label>
+          <select class="form-select" name="status">
+            <option value="">Todos</option>
+            <option value="pendente" {% if status_filtro == 'pendente' %}selected{% endif %}>Pendente</option>
+            <option value="em_andamento" {% if status_filtro == 'em_andamento' %}selected{% endif %}>Em Andamento</option>
+            <option value="completo" {% if status_filtro == 'completo' %}selected{% endif %}>Completo</option>
+          </select>
+        </div>
+        <div class="col-md-3 d-flex align-items-end">
+          <button type="submit" class="btn btn-descargas-primary me-2">
+            <i class="bi bi-search"></i> Filtrar
+          </button>
+          <a href="{{ url_for('descargas.lista') }}" class="btn btn-secondary">
+            <i class="bi bi-x-circle"></i> Limpar
+          </a>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Lista de Descargas -->
+  <div class="card">
+    <div class="card-body">
+      {% if descargas %}
+      <div class="table-responsive">
+        <table class="table table-hover table-sm">
+          <thead class="table-light">
+            <tr>
+              <th>ID</th>
+              <th>Data Descarga</th>
+              <th>Cliente</th>
+              <th>Fornecedor</th>
+              <th>Produto</th>
+              <th>Motorista</th>
+              <th class="text-end">Volume Total</th>
+              <th class="text-end">Descarregado</th>
+              <th class="text-center">Dif. Sistema</th>
+              <th class="text-center">Dif. Régua</th>
+              <th class="text-center">Status</th>
+              <th class="text-center">Ações</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for descarga in descargas %}
+            <tr>
+              <td>{{ descarga.id }}</td>
+              <td>{{ descarga.data_descarga_formatada }}</td>
+              <td>{{ descarga.cliente }}</td>
+              <td>{{ descarga.fornecedor }}</td>
+              <td>
+                {% set produto_class = '' %}
+                {% if descarga.produto %}
+                  {% set produto_upper = descarga.produto|upper %}
+                  {% if 'ETANOL' in produto_upper %}
+                    {% set produto_class = 'produto-etanol' %}
+                  {% elif 'GASOLINA ADITIVADA' in produto_upper or 'ADITIVADA' in produto_upper %}
+                    {% set produto_class = 'produto-gasolina-aditivada' %}
+                  {% elif 'GASOLINA' in produto_upper %}
+                    {% set produto_class = 'produto-gasolina' %}
+                  {% elif 'S-10' in produto_upper or 'S10' in produto_upper %}
+                    {% set produto_class = 'produto-s-10' %}
+                  {% elif 'S-500' in produto_upper or 'S500' in produto_upper %}
+                    {% set produto_class = 'produto-s-500' %}
+                  {% endif %}
+                {% endif %}
+                <span class="{{ produto_class }}">{{ descarga.produto }}</span>
+              </td>
+              <td>{{ descarga.motorista }}</td>
+              <td class="text-end">{{ '{:,.0f}'.format(descarga.volume_total|float).replace(',', '.') }}</td>
+              <td class="text-end">{{ '{:,.0f}'.format(descarga.volume_descarregado|float).replace(',', '.') }}</td>
+              <td class="text-center">
+                {% if descarga.diferenca_sistema is not none %}
+                  {% set dif = descarga.diferenca_sistema|float %}
+                  <span class="{% if dif < 0 %}diferenca-negativa{% elif dif > 0 %}diferenca-positiva{% endif %}">
+                    {{ '{:,.2f}'.format(dif).replace(',', 'X').replace('.', ',').replace('X', '.') }}
+                  </span>
+                {% else %}
+                  -
+                {% endif %}
+              </td>
+              <td class="text-center">
+                {% if descarga.diferenca_regua is not none %}
+                  {% set dif = descarga.diferenca_regua|float %}
+                  <span class="{% if dif < 0 %}diferenca-negativa{% elif dif > 0 %}diferenca-positiva{% endif %}">
+                    {{ '{:,.2f}'.format(dif).replace(',', 'X').replace('.', ',').replace('X', '.') }}
+                  </span>
+                {% else %}
+                  -
+                {% endif %}
+              </td>
+              <td class="text-center">
+                {% if descarga.status == 'pendente' %}
+                  <span class="badge badge-pendente">Pendente</span>
+                {% elif descarga.status == 'em_andamento' %}
+                  <span class="badge badge-em_andamento">Em Andamento</span>
+                {% elif descarga.status == 'completo' %}
+                  <span class="badge badge-completo">Completo</span>
+                {% else %}
+                  <span class="badge bg-secondary">{{ descarga.status }}</span>
+                {% endif %}
+              </td>
+              <td class="text-center">
+                <a href="{{ url_for('descargas.editar', descarga_id=descarga.id) }}" 
+                   class="btn btn-sm btn-primary" 
+                   title="Editar">
+                  <i class="bi bi-pencil"></i>
+                </a>
+                <button onclick="copiarWhatsApp({{ descarga.id }})" 
+                        class="btn btn-sm btn-success" 
+                        title="Copiar para WhatsApp">
+                  <i class="bi bi-whatsapp"></i>
+                </button>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <div class="alert alert-info text-center">
+        <i class="bi bi-info-circle"></i>
+        Nenhuma descarga encontrada. Clique em "Nova Descarga" para criar uma.
+      </div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+<script>
+function copiarWhatsApp(descargaId) {
+  fetch(`/descargas/${descargaId}/whatsapp`)
+    .then(response => response.json())
+    .then(data => {
+      if (data.texto) {
+        navigator.clipboard.writeText(data.texto).then(() => {
+          alert('Texto copiado para a área de transferência! Cole no WhatsApp.');
+        }).catch(err => {
+          console.error('Erro ao copiar:', err);
+          alert('Erro ao copiar texto. Tente novamente.');
+        });
+      } else {
+        alert('Erro ao gerar texto: ' + (data.error || 'Erro desconhecido'));
+      }
+    })
+    .catch(err => {
+      console.error('Erro:', err);
+      alert('Erro ao copiar texto para WhatsApp.');
+    });
+}
+</script>
+{% endblock %}
