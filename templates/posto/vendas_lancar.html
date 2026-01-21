@@ -200,7 +200,16 @@
                 <span class="{{ produto_class }}">{{ produto.nome }}</span>
               </div>
               <div class="row">
-                <div class="col-md-6">
+                <div class="col-md-4">
+                  <label class="form-label">Estoque Inicial (Litros)</label>
+                  <input type="text" 
+                         name="estoque_inicial_{{ produto.id }}" 
+                         class="form-control input-estoque-edit" 
+                         placeholder="Ex: 5.000"
+                         value="{% if venda_produto and venda_produto.estoque_inicial %}{{ '{:,d}'.format(venda_produto.estoque_inicial|int).replace(',', '.') }}{% endif %}"
+                         data-produto-id="{{ produto.id }}">
+                </div>
+                <div class="col-md-4">
                   <label class="form-label">Quantidade (Litros)</label>
                   <input type="text" 
                          name="quantidade_{{ produto.id }}" 
@@ -209,7 +218,7 @@
                          value="{% if venda_produto %}{{ '{:,.3f}'.format(venda_produto.quantidade_litros|float).replace(',', '_').replace('.', ',').replace('_', '.') }}{% endif %}"
                          data-produto-id="{{ produto.id }}">
                 </div>
-                <div class="col-md-6">
+                <div class="col-md-4">
                   <label class="form-label">Valor Total (R$)</label>
                   <input type="text" 
                          name="valor_{{ produto.id }}" 
@@ -370,10 +379,28 @@ document.addEventListener('DOMContentLoaded', function() {
   const produtosCards = document.querySelectorAll('.produto-card');
   
   produtosCards.forEach(card => {
+    const inputEstoque = card.querySelector('.input-estoque-edit');
     const inputQtd = card.querySelector('.input-quantidade-edit');
     const inputValor = card.querySelector('.input-valor-edit');
     const produtoId = inputQtd.dataset.produtoId;
     const precoMedioSpan = card.querySelector(`#preco_medio_edit_${produtoId}`);
+    
+    // Máscara de estoque inicial (números inteiros com separador de milhar)
+    if (inputEstoque) {
+      inputEstoque.addEventListener('input', function(e) {
+        let value = e.target.value.replace(/\D/g, '');
+        if (value === '') {
+          e.target.value = '';
+          return;
+        }
+        // Format as integer with thousand separator (e.g., 1000 -> 1.000, 15000 -> 15.000)
+        const numValue = parseInt(value, 10);
+        if (!isNaN(numValue)) {
+          value = numValue.toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+          e.target.value = value;
+        }
+      });
+    }
     
     // Máscara de quantidade (3 decimais)
     inputQtd.addEventListener('input', function(e) {
@@ -570,7 +597,15 @@ document.addEventListener('DOMContentLoaded', function() {
         <span class="${produtoClass}">${produto.nome}</span>
       </div>
       <div class="row">
-        <div class="col-md-6">
+        <div class="col-md-4">
+          <label class="form-label">Estoque Inicial (Litros)</label>
+          <input type="text" 
+                 name="estoque_inicial_${produto.id}" 
+                 class="form-control input-estoque" 
+                 placeholder="Ex: 5.000"
+                 data-produto-id="${produto.id}">
+        </div>
+        <div class="col-md-4">
           <label class="form-label">Quantidade (Litros)</label>
           <input type="text" 
                  name="quantidade_${produto.id}" 
@@ -578,7 +613,7 @@ document.addEventListener('DOMContentLoaded', function() {
                  placeholder="Ex: 1.500,326"
                  data-produto-id="${produto.id}">
         </div>
-        <div class="col-md-6">
+        <div class="col-md-4">
           <label class="form-label">Valor Total (R$)</label>
           <input type="text" 
                  name="valor_${produto.id}" 
@@ -596,9 +631,27 @@ document.addEventListener('DOMContentLoaded', function() {
     `;
 
     // Adicionar máscaras e cálculo de preço médio
+    const inputEstoque = card.querySelector('.input-estoque');
     const inputQtd = card.querySelector('.input-quantidade');
     const inputValor = card.querySelector('.input-valor');
     const precoMedioSpan = card.querySelector(`#preco_medio_${produto.id}`);
+
+    // Máscara de estoque inicial (números inteiros com separador de milhar)
+    if (inputEstoque) {
+      inputEstoque.addEventListener('input', function(e) {
+        let value = e.target.value.replace(/\D/g, '');
+        if (value === '') {
+          e.target.value = '';
+          return;
+        }
+        // Format as integer with thousand separator (e.g., 1000 -> 1.000, 15000 -> 15.000)
+        const numValue = parseInt(value, 10);
+        if (!isNaN(numValue)) {
+          value = numValue.toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+          e.target.value = value;
+        }
+      });
+    }
 
     // Máscara de quantidade
     inputQtd.addEventListener('input', function(e) {
