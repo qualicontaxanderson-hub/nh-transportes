@@ -21,16 +21,25 @@ def _get_efi_credentials():
 @financeiro_bp.route('/recebimentos/')
 @login_required
 def recebimentos():
-    """Lista todos os recebimentos/boletos"""
+    """Lista todos os recebimentos/boletos com filtro de data e resumo"""
     conn = None
     cursor = None
     try:
         conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)
 
+        # Filtros de data - PADRÃO: mês/ano atual
+        hoje = date.today()
+        from calendar import monthrange
+        primeiro_dia_mes = date(hoje.year, hoje.month, 1)
+        ultimo_dia = monthrange(hoje.year, hoje.month)[1]
+        ultimo_dia_mes = date(hoje.year, hoje.month, ultimo_dia)
+        
+        data_inicio = request.args.get('data_inicio', primeiro_dia_mes.strftime('%Y-%m-%d'))
+        data_fim = request.args.get('data_fim', ultimo_dia_mes.strftime('%Y-%m-%d'))
+
         try:
-            # Selecionamos campos disponíveis no schema atual.
-            # Nota: fretes não tem coluna 'numero' no schema mostrado — usamos f.id como frete_numero.
+            # Buscar recebimentos/boletos emitidos no período
             cursor.execute("""
                 SELECT 
                     c.*,
@@ -42,14 +51,42 @@ def recebimentos():
                 FROM cobrancas c
                 LEFT JOIN clientes cl ON c.id_cliente = cl.id
                 LEFT JOIN fretes f ON c.frete_id = f.id
+                WHERE c.data_emissao BETWEEN %s AND %s
                 ORDER BY c.data_vencimento DESC, c.data_emissao DESC
-            """)
+            """, (data_inicio, data_fim))
             recebimentos_lista = cursor.fetchall()
             current_app.logger.info(f"[recebimentos] Encontrados {len(recebimentos_lista)} recebimentos")
         except Exception as e:
             current_app.logger.error(f"[recebimentos] Erro SQL: {str(e)}")
             flash(f"Erro ao carregar recebimentos: {str(e)}", "danger")
             recebimentos_lista = []
+
+        # Calcular resumos do período
+        try:
+            # Total de fretes no período
+            cursor.execute("""
+                SELECT COALESCE(SUM(f.valor_total_frete), 0) AS total_fretes
+                FROM fretes f
+                WHERE f.data_frete BETWEEN %s AND %s
+            """, (data_inicio, data_fim))
+            total_fretes = float(cursor.fetchone().get('total_fretes', 0) or 0)
+
+            # Total de boletos emitidos no período (soma dos valores das cobranças)
+            cursor.execute("""
+                SELECT COALESCE(SUM(c.valor), 0) AS total_boletos
+                FROM cobrancas c
+                WHERE c.data_emissao BETWEEN %s AND %s
+                AND (c.status IS NULL OR c.status != 'cancelado')
+            """, (data_inicio, data_fim))
+            total_boletos = float(cursor.fetchone().get('total_boletos', 0) or 0)
+
+            # Diferença
+            diferenca = total_fretes - total_boletos
+        except Exception as e:
+            current_app.logger.error(f"[recebimentos] Erro ao calcular resumos: {str(e)}")
+            total_fretes = 0
+            total_boletos = 0
+            diferenca = 0
 
         # --- normalizar e calcular display_status para UI -------------------
         # Regras:
@@ -111,11 +148,19 @@ def recebimentos():
             current_app.logger.exception("[recebimentos] erro calculando display_status")
         # -------------------------------------------------------------------
 
-        return render_template('financeiro/recebimentos.html', recebimentos=recebimentos_lista)
+        return render_template('financeiro/recebimentos.html', 
+                             recebimentos=recebimentos_lista,
+                             data_inicio=data_inicio,
+                             data_fim=data_fim,
+                             total_fretes=total_fretes,
+                             total_boletos=total_boletos,
+                             diferenca=diferenca)
     except Exception as e:
         current_app.logger.error(f"[recebimentos] Erro geral: {str(e)}")
         flash(f"Erro ao acessar recebimentos: {str(e)}", "danger")
-        return render_template('financeiro/recebimentos.html', recebimentos=[])
+        return render_template('financeiro/recebimentos.html', recebimentos=[],
+                             data_inicio='', data_fim='',
+                             total_fretes=0, total_boletos=0, diferenca=0)
     finally:
         if cursor:
             cursor.close()
