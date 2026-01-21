@@ -25,7 +25,7 @@
                     </div>
                     <div class="col-md-6 mb-2">
                         <label class="form-label" style="font-size: 0.85rem;">Cliente (opcional)</label>
-                        <select name="cliente_id" class="form-select form-select-sm">
+                        <select name="clienteid" class="form-select form-select-sm">
                             <option value="">Geral (todos os clientes)</option>
                             {% for cliente in clientes %}
                             <option value="{{ cliente.id }}">{{ cliente.nome }}</option>

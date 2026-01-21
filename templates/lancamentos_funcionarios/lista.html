@@ -31,7 +31,7 @@
                 </div>
                 <div class="col-md-6">
                     <label class="form-label" style="font-size: 0.85rem;">Cliente</label>
-                    <select name="cliente_id" class="form-select form-select-sm">
+                    <select name="clienteid" class="form-select form-select-sm">
                         <option value="">Todos os clientes</option>
                         {% for cliente in clientes %}
                         <option value="{{ cliente.id }}" {% if cliente_filtro == cliente.id|string %}selected{% endif %}>{{ cliente.nome }}</option>
@@ -83,7 +83,7 @@
                                 {% endif %}
                             </td>
                             <td>
-                                <a href="{{ url_for('lancamentos_funcionarios.detalhe', mes=lanc.mes, cliente_id=lanc.cliente_id) }}" class="btn btn-sm btn-info" title="Ver Detalhes">
+                                <a href="{{ url_for('lancamentos_funcionarios.detalhe', mes=lanc.mes, cliente_id=lanc.clienteid) }}" class="btn btn-sm btn-info" title="Ver Detalhes">
                                     <i class="bi bi-eye"></i> Detalhe
                                 </a>
                             </td>

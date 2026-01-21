@@ -26,13 +26,13 @@ def novo():
         
         cursor.execute("""
             INSERT INTO rubricas (
-                nome, descricao, tipo, percentual_ou_valor_fixo, ordem, ativo
+                nome, descricao, tipo, percentualouvalorfixo, ordem, ativo
             ) VALUES (%s, %s, %s, %s, %s, %s)
         """, (
             request.form.get('nome'),
             request.form.get('descricao'),
             request.form.get('tipo'),
-            request.form.get('percentual_ou_valor_fixo', 'VALOR_FIXO'),
+            request.form.get('percentualouvalorfixo', 'VALOR_FIXO'),
             request.form.get('ordem', 1),
             1
         ))
@@ -54,13 +54,13 @@ def editar(id):
     if request.method == 'POST':
         cursor.execute("""
             UPDATE rubricas 
-            SET nome=%s, descricao=%s, tipo=%s, percentual_ou_valor_fixo=%s, ordem=%s
+            SET nome=%s, descricao=%s, tipo=%s, percentualouvalorfixo=%s, ordem=%s
             WHERE id=%s
         """, (
             request.form.get('nome'),
             request.form.get('descricao'),
             request.form.get('tipo'),
-            request.form.get('percentual_ou_valor_fixo'),
+            request.form.get('percentualouvalorfixo'),
             request.form.get('ordem'),
             id
         ))

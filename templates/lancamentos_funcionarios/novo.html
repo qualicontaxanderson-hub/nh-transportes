@@ -27,7 +27,7 @@
                     </div>
                     <div class="col-md-9 mb-2">
                         <label class="form-label fw-bold" style="font-size: 0.85rem;">Cliente/Empresa *</label>
-                        <select name="cliente_id" id="cliente_id" class="form-select form-select-sm" required>
+                        <select name="clienteid" id="clienteid" class="form-select form-select-sm" required>
                             <option value="">Selecione o cliente...</option>
                             {% for cliente in clientes %}
                             <option value="{{ cliente.id }}">{{ cliente.nome }}</option>
@@ -93,7 +93,7 @@
 <script>
 const rubricas = {{ rubricas|tojson|safe }};
 
-document.getElementById('cliente_id').addEventListener('change', function() {
+document.getElementById('clienteid').addEventListener('change', function() {
     const clienteId = this.value;
     if (!clienteId) {
         document.getElementById('funcionarios-container').style.display = 'none';
@@ -113,7 +113,7 @@ document.getElementById('cliente_id').addEventListener('change', function() {
                 row.innerHTML = `
                     <td>
                         ${func.nome}
-                        <input type="hidden" name="funcionario_id[]" value="${func.id}">
+                        <input type="hidden" name="funcionarioid[]" value="${func.id}">
                     </td>
                     <td>
                         <span class="badge bg-info">${func.categoria_nome || 'N/A'}</span>

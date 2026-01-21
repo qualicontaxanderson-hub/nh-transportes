@@ -24,7 +24,7 @@
                 <div class="row">
                     <div class="col-md-6 mb-2">
                         <label class="form-label" style="font-size: 0.85rem;">Veículo *</label>
-                        <select name="veiculo_id" class="form-select form-select-sm" required>
+                        <select name="veiculoid" class="form-select form-select-sm" required>
                             <option value="">Selecione o veículo...</option>
                             {% for veiculo in veiculos %}
                             <option value="{{ veiculo.id }}">{{ veiculo.caminhao }} - {{ veiculo.placa }}</option>
@@ -33,11 +33,11 @@
                     </div>
                     <div class="col-md-3 mb-2">
                         <label class="form-label" style="font-size: 0.85rem;">Data Início *</label>
-                        <input type="date" name="data_inicio" class="form-control form-control-sm" required>
+                        <input type="date" name="datainicio" class="form-control form-control-sm" required>
                     </div>
                     <div class="col-md-3 mb-2">
                         <label class="form-label" style="font-size: 0.85rem;">Data Fim</label>
-                        <input type="date" name="data_fim" class="form-control form-control-sm">
+                        <input type="date" name="datafim" class="form-control form-control-sm">
                     </div>
                 </div>
                 <div class="row">

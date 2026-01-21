@@ -8,10 +8,10 @@ class Rubrica(db.Model):
     nome = db.Column(db.String(100), nullable=False)
     descricao = db.Column(db.String(255), nullable=True)
     tipo = db.Column(db.Enum('SALARIO', 'BENEFICIO', 'DESCONTO', 'IMPOSTO', 'ADIANTAMENTO', 'OUTRO'), nullable=False)
-    percentual_ou_valor_fixo = db.Column(db.Enum('PERCENTUAL', 'VALOR_FIXO'), default='VALOR_FIXO')
+    percentualouvalorfixo = db.Column('percentualouvalorfixo', db.Enum('PERCENTUAL', 'VALOR_FIXO'), default='VALOR_FIXO')
     ativo = db.Column(db.Boolean, default=True, nullable=False)
     ordem = db.Column(db.Integer, default=1)
-    criado_em = db.Column(db.DateTime, default=datetime.datetime.utcnow)
+    criadoem = db.Column('criadoem', db.DateTime, default=datetime.datetime.utcnow)
     
     def __repr__(self):
         return f'<Rubrica {self.nome}>'

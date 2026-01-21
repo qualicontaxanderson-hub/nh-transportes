@@ -24,26 +24,26 @@ def lista():
     # Get unique months for filtering
     cursor.execute("""
         SELECT DISTINCT mes 
-        FROM lancamentos_funcionarios_v2 
+        FROM lancamentosfuncionarios_v2 
         ORDER BY mes DESC
     """)
     meses = cursor.fetchall()
     
     # Get filter parameters
     mes_filtro = request.args.get('mes')
-    cliente_filtro = request.args.get('cliente_id')
+    cliente_filtro = request.args.get('clienteid')
     
     # Build query
     query = """
         SELECT 
             l.mes,
-            l.cliente_id,
+            l.clienteid,
             c.nome as cliente_nome,
-            COUNT(DISTINCT l.funcionario_id) as total_funcionarios,
+            COUNT(DISTINCT l.funcionarioid) as total_funcionarios,
             SUM(l.valor) as total_valor,
-            l.status_lancamento
-        FROM lancamentos_funcionarios_v2 l
-        LEFT JOIN clientes c ON l.cliente_id = c.id
+            l.statuslancamento
+        FROM lancamentosfuncionarios_v2 l
+        LEFT JOIN clientes c ON l.clienteid = c.id
         WHERE 1=1
     """
     params = []
@@ -53,10 +53,10 @@ def lista():
         params.append(mes_filtro)
     
     if cliente_filtro:
-        query += " AND l.cliente_id = %s"
+        query += " AND l.clienteid = %s"
         params.append(cliente_filtro)
     
-    query += " GROUP BY l.mes, l.cliente_id, l.status_lancamento ORDER BY l.mes DESC, c.nome"
+    query += " GROUP BY l.mes, l.clienteid, l.statuslancamento ORDER BY l.mes DESC, c.nome"
     
     cursor.execute(query, params)
     lancamentos = cursor.fetchall()
@@ -84,30 +84,30 @@ def novo():
         cursor = conn.cursor()
         
         mes = request.form.get('mes')
-        cliente_id = request.form.get('cliente_id')
+        clienteid = request.form.get('clienteid')
         
         # Process each employee's data
-        funcionarios_ids = request.form.getlist('funcionario_id[]')
+        funcionarios_ids = request.form.getlist('funcionarioid[]')
         
         for func_id in funcionarios_ids:
             # Get all rubrica values for this employee
             rubricas = request.form.getlist(f'rubrica_{func_id}[]')
             valores = request.form.getlist(f'valor_{func_id}[]')
             
-            for i, rubrica_id in enumerate(rubricas):
-                if rubrica_id and valores[i]:
+            for i, rubricaid in enumerate(rubricas):
+                if rubricaid and valores[i]:
                     valor = float(valores[i]) if valores[i] else 0
                     if valor != 0:
                         cursor.execute("""
-                            INSERT INTO lancamentos_funcionarios_v2 (
-                                cliente_id, funcionario_id, mes, rubrica_id, valor, 
-                                status_lancamento
+                            INSERT INTO lancamentosfuncionarios_v2 (
+                                clienteid, funcionarioid, mes, rubricaid, valor, 
+                                statuslancamento
                             ) VALUES (%s, %s, %s, %s, %s, %s)
                         """, (
-                            cliente_id,
+                            clienteid,
                             func_id,
                             mes,
-                            rubrica_id,
+                            rubricaid,
                             valor,
                             'PENDENTE'
                         ))
@@ -154,12 +154,12 @@ def get_funcionarios(cliente_id):
             SELECT 
                 f.id,
                 f.nome,
-                f.categoria_id,
+                f.categoriaid,
                 f.salario_base,
                 c.nome as categoria_nome
             FROM funcionarios f
-            LEFT JOIN categorias_funcionarios c ON f.categoria_id = c.id
-            WHERE f.ativo = 1 AND (f.cliente_id = %s OR f.cliente_id IS NULL)
+            LEFT JOIN categoriasfuncionarios c ON f.categoriaid = c.id
+            WHERE f.ativo = 1 AND (f.clienteid = %s OR f.clienteid IS NULL)
             ORDER BY f.nome
         """, (cliente_id,))
         funcionarios = cursor.fetchall()
@@ -200,8 +200,8 @@ def get_veiculos(funcionario_id):
                 v.placa,
                 fmv.principal
             FROM funcionariomotoristaveiculos fmv
-            INNER JOIN veiculos v ON fmv.veiculo_id = v.id
-            WHERE fmv.funcionario_id = %s AND fmv.ativo = 1
+            INNER JOIN veiculos v ON fmv.veiculoid = v.id
+            WHERE fmv.funcionarioid = %s AND fmv.ativo = 1
             ORDER BY fmv.principal DESC, v.caminhao
         """, (funcionario_id,))
         veiculos = cursor.fetchall()
@@ -228,11 +228,11 @@ def detalhe(mes, cliente_id):
             r.nome as rubrica_nome,
             r.tipo as rubrica_tipo,
             v.caminhao
-        FROM lancamentos_funcionarios_v2 l
-        INNER JOIN funcionarios f ON l.funcionario_id = f.id
-        INNER JOIN rubricas r ON l.rubrica_id = r.id
-        LEFT JOIN veiculos v ON l.caminhao_id = v.id
-        WHERE l.mes = %s AND l.cliente_id = %s
+        FROM lancamentosfuncionarios_v2 l
+        INNER JOIN funcionarios f ON l.funcionarioid = f.id
+        INNER JOIN rubricas r ON l.rubricaid = r.id
+        LEFT JOIN veiculos v ON l.caminhaoid = v.id
+        WHERE l.mes = %s AND l.clienteid = %s
         ORDER BY f.nome, r.ordem
     """, (mes, cliente_id))
     lancamentos = cursor.fetchall()
@@ -247,7 +247,7 @@ def detalhe(mes, cliente_id):
     # Group by employee
     funcionarios_data = {}
     for lanc in lancamentos:
-        func_id = lanc['funcionario_id']
+        func_id = lanc['funcionarioid']
         if func_id not in funcionarios_data:
             funcionarios_data[func_id] = {
                 'nome': lanc['funcionario_nome'],

@@ -26,7 +26,7 @@
                     </div>
                     <div class="col-md-3 mb-2">
                         <label class="form-label" style="font-size: 0.85rem;">Cliente/Empresa</label>
-                        <select name="cliente_id" class="form-select form-select-sm">
+                        <select name="clienteid" class="form-select form-select-sm">
                             <option value="">Selecione...</option>
                             {% for cliente in clientes %}
                             <option value="{{ cliente.id }}">{{ cliente.nome }}</option>
@@ -35,7 +35,7 @@
                     </div>
                     <div class="col-md-3 mb-2">
                         <label class="form-label" style="font-size: 0.85rem;">Categoria *</label>
-                        <select name="categoria_id" class="form-select form-select-sm" required>
+                        <select name="categoriaid" class="form-select form-select-sm" required>
                             <option value="">Selecione...</option>
                             {% for categoria in categorias %}
                             <option value="{{ categoria.id }}">{{ categoria.nome }}</option>

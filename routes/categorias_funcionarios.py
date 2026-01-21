@@ -10,7 +10,7 @@ bp = Blueprint('categorias_funcionarios', __name__, url_prefix='/categorias-func
 def lista():
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
-    cursor.execute("SELECT * FROM categorias_funcionarios WHERE ativo = 1 ORDER BY nome")
+    cursor.execute("SELECT * FROM categoriasfuncionarios WHERE ativo = 1 ORDER BY nome")
     categorias = cursor.fetchall()
     cursor.close()
     conn.close()
@@ -25,12 +25,12 @@ def novo():
         cursor = conn.cursor()
         
         cursor.execute("""
-            INSERT INTO categorias_funcionarios (nome, descricao, cliente_id, ativo)
+            INSERT INTO categoriasfuncionarios (nome, descricao, clienteid, ativo)
             VALUES (%s, %s, %s, %s)
         """, (
             request.form.get('nome'),
             request.form.get('descricao'),
-            request.form.get('cliente_id') or None,
+            request.form.get('clienteid') or None,
             1
         ))
         conn.commit()
@@ -57,13 +57,13 @@ def editar(id):
     
     if request.method == 'POST':
         cursor.execute("""
-            UPDATE categorias_funcionarios 
-            SET nome=%s, descricao=%s, cliente_id=%s
+            UPDATE categoriasfuncionarios 
+            SET nome=%s, descricao=%s, clienteid=%s
             WHERE id=%s
         """, (
             request.form.get('nome'),
             request.form.get('descricao'),
-            request.form.get('cliente_id') or None,
+            request.form.get('clienteid') or None,
             id
         ))
         conn.commit()
@@ -72,7 +72,7 @@ def editar(id):
         flash('Categoria atualizada com sucesso!', 'success')
         return redirect(url_for('categorias_funcionarios.lista'))
     
-    cursor.execute("SELECT * FROM categorias_funcionarios WHERE id = %s", (id,))
+    cursor.execute("SELECT * FROM categoriasfuncionarios WHERE id = %s", (id,))
     categoria = cursor.fetchone()
     cursor.execute("SELECT id, nome FROM clientes WHERE ativo = 1 ORDER BY nome")
     clientes = cursor.fetchall()
@@ -87,7 +87,7 @@ def editar(id):
 def excluir(id):
     conn = get_db_connection()
     cursor = conn.cursor()
-    cursor.execute("UPDATE categorias_funcionarios SET ativo = 0 WHERE id = %s", (id,))
+    cursor.execute("UPDATE categoriasfuncionarios SET ativo = 0 WHERE id = %s", (id,))
     conn.commit()
     cursor.close()
     conn.close()

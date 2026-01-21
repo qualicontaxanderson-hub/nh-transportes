@@ -6,8 +6,8 @@ class Funcionario(db.Model):
     
     id = db.Column(db.Integer, primary_key=True)
     nome = db.Column(db.String(150), nullable=False)
-    cliente_id = db.Column(db.Integer, nullable=True)
-    categoria_id = db.Column(db.Integer, db.ForeignKey('categorias_funcionarios.id'), nullable=True)
+    clienteid = db.Column('clienteid', db.Integer, nullable=True)
+    categoriaid = db.Column('categoriaid', db.Integer, db.ForeignKey('categoriasfuncionarios.id'), nullable=True)
     cpf = db.Column(db.String(14), nullable=True)
     telefone = db.Column(db.String(20), nullable=True)
     email = db.Column(db.String(100), nullable=True)
@@ -16,7 +16,7 @@ class Funcionario(db.Model):
     data_saida = db.Column(db.Date, nullable=True)
     salario_base = db.Column(db.Numeric(12, 2), nullable=True)
     ativo = db.Column(db.Boolean, default=True, nullable=False)
-    criado_em = db.Column(db.DateTime, default=datetime.datetime.utcnow)
+    criadoem = db.Column('criadoem', db.DateTime, default=datetime.datetime.utcnow)
     
     # Relationship
     categoria = db.relationship('CategoriaFuncionario', backref='funcionarios')

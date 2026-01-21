@@ -13,7 +13,7 @@ def lista():
     cursor.execute("""
         SELECT f.*, c.nome as categoria_nome
         FROM funcionarios f
-        LEFT JOIN categorias_funcionarios c ON f.categoria_id = c.id
+        LEFT JOIN categoriasfuncionarios c ON f.categoriaid = c.id
         WHERE f.ativo = 1
         ORDER BY f.nome
     """)
@@ -32,13 +32,13 @@ def novo():
         
         cursor.execute("""
             INSERT INTO funcionarios (
-                nome, cliente_id, categoria_id, cpf, telefone, email, 
+                nome, clienteid, categoriaid, cpf, telefone, email, 
                 cargo, data_admissao, salario_base, ativo
             ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         """, (
             request.form.get('nome'),
-            request.form.get('cliente_id') or None,
-            request.form.get('categoria_id') or None,
+            request.form.get('clienteid') or None,
+            request.form.get('categoriaid') or None,
             request.form.get('cpf'),
             request.form.get('telefone'),
             request.form.get('email'),
@@ -56,7 +56,7 @@ def novo():
     # Get categories for dropdown
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
-    cursor.execute("SELECT * FROM categorias_funcionarios WHERE ativo = 1 ORDER BY nome")
+    cursor.execute("SELECT * FROM categoriasfuncionarios WHERE ativo = 1 ORDER BY nome")
     categorias = cursor.fetchall()
     cursor.execute("SELECT id, nome FROM clientes WHERE ativo = 1 ORDER BY nome")
     clientes = cursor.fetchall()
@@ -75,13 +75,13 @@ def editar(id):
     if request.method == 'POST':
         cursor.execute("""
             UPDATE funcionarios SET 
-                nome=%s, cliente_id=%s, categoria_id=%s, cpf=%s, telefone=%s, 
+                nome=%s, clienteid=%s, categoriaid=%s, cpf=%s, telefone=%s, 
                 email=%s, cargo=%s, data_admissao=%s, salario_base=%s
             WHERE id=%s
         """, (
             request.form.get('nome'),
-            request.form.get('cliente_id') or None,
-            request.form.get('categoria_id') or None,
+            request.form.get('clienteid') or None,
+            request.form.get('categoriaid') or None,
             request.form.get('cpf'),
             request.form.get('telefone'),
             request.form.get('email'),
@@ -98,7 +98,7 @@ def editar(id):
     
     cursor.execute("SELECT * FROM funcionarios WHERE id = %s", (id,))
     funcionario = cursor.fetchone()
-    cursor.execute("SELECT * FROM categorias_funcionarios WHERE ativo = 1 ORDER BY nome")
+    cursor.execute("SELECT * FROM categoriasfuncionarios WHERE ativo = 1 ORDER BY nome")
     categorias = cursor.fetchall()
     cursor.execute("SELECT id, nome FROM clientes WHERE ativo = 1 ORDER BY nome")
     clientes = cursor.fetchall()
@@ -131,13 +131,13 @@ def vincular_veiculo(id):
     if request.method == 'POST':
         cursor.execute("""
             INSERT INTO funcionariomotoristaveiculos (
-                funcionario_id, veiculo_id, data_inicio, data_fim, principal, ativo
+                funcionarioid, veiculoid, datainicio, datafim, principal, ativo
             ) VALUES (%s, %s, %s, %s, %s, %s)
         """, (
             id,
-            request.form.get('veiculo_id'),
-            request.form.get('data_inicio'),
-            request.form.get('data_fim') or None,
+            request.form.get('veiculoid'),
+            request.form.get('datainicio'),
+            request.form.get('datafim') or None,
             1 if request.form.get('principal') == '1' else 0,
             1
         ))
