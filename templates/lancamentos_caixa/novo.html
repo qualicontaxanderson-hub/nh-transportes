@@ -1,0 +1,351 @@
+{% extends 'base.html' %}
+{% block title %}Novo Lançamento de Caixa - NH Transportes{% endblock %}
+{% block content %}
+<div class="container-fluid">
+    <nav aria-label="breadcrumb" class="mt-2 mb-3">
+        <ol class="breadcrumb" style="font-size: 0.85rem;">
+            <li class="breadcrumb-item"><a href="/">Dashboard</a></li>
+            <li class="breadcrumb-item"><a href="{{ url_for('lancamentos_caixa.lista') }}">Lançamentos de Caixa</a></li>
+            <li class="breadcrumb-item active" aria-current="page">Novo Lançamento</li>
+        </ol>
+    </nav>
+    
+    <h2 class="mb-3" style="color:#1D63A5; font-size: 1.3rem;"><i class="bi bi-cash-stack"></i> Novo Fechamento de Caixa</h2>
+    
+    <form id="formCaixa" method="POST">
+        <!-- Main info -->
+        <div class="card shadow-sm mb-3">
+            <div class="card-header" style="background:#ff9800;color:white; font-size: 0.95rem; padding: 0.6rem 1rem;">
+                <h5 class="mb-0" style="font-size: 1rem;">Informações Gerais</h5>
+            </div>
+            <div class="card-body" style="padding: 1rem;">
+                <div class="row">
+                    <div class="col-md-3 mb-3">
+                        <label class="form-label" style="font-size: 0.85rem;">Data *</label>
+                        <input type="date" name="data" id="data" class="form-control form-control-sm" required 
+                               value="{{ data if data else '' }}">
+                    </div>
+                    <div class="col-md-9 mb-3">
+                        <label class="form-label" style="font-size: 0.85rem;">Observação</label>
+                        <input type="text" name="observacao" class="form-control form-control-sm" 
+                               placeholder="Observações sobre o fechamento do caixa">
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Split layout -->
+        <div class="row">
+            <!-- LEFT SIDE: Receitas e Entradas -->
+            <div class="col-lg-6 mb-3">
+                <div class="card shadow-sm h-100">
+                    <div class="card-header" style="background:#28a745;color:white; font-size: 0.95rem; padding: 0.6rem 1rem;">
+                        <h5 class="mb-0" style="font-size: 1rem;"><i class="bi bi-arrow-down-circle"></i> Receitas e Entradas</h5>
+                    </div>
+                    <div class="card-body" style="padding: 1rem;">
+                        <div id="receitas-container">
+                            <!-- Receitas will be added here dynamically -->
+                        </div>
+                        <button type="button" class="btn btn-success btn-sm" onclick="addReceita()">
+                            <i class="bi bi-plus-circle"></i> Adicionar Receita
+                        </button>
+                        <hr>
+                        <div class="d-flex justify-content-between align-items-center">
+                            <strong>Total Receitas:</strong>
+                            <strong id="total-receitas" class="text-success">R$ 0,00</strong>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- RIGHT SIDE: Comprovações -->
+            <div class="col-lg-6 mb-3">
+                <div class="card shadow-sm h-100">
+                    <div class="card-header" style="background:#007bff;color:white; font-size: 0.95rem; padding: 0.6rem 1rem;">
+                        <h5 class="mb-0" style="font-size: 1rem;"><i class="bi bi-check-circle"></i> Comprovação para Fechamento</h5>
+                    </div>
+                    <div class="card-body" style="padding: 1rem;">
+                        <div id="comprovacoes-container">
+                            <!-- Comprovacoes will be added here dynamically -->
+                        </div>
+                        <button type="button" class="btn btn-primary btn-sm" onclick="addComprovacao()">
+                            <i class="bi bi-plus-circle"></i> Adicionar Comprovação
+                        </button>
+                        <hr>
+                        <div class="d-flex justify-content-between align-items-center">
+                            <strong>Total Comprovação:</strong>
+                            <strong id="total-comprovacao" class="text-primary">R$ 0,00</strong>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Diferença -->
+        <div class="card shadow-sm mb-3">
+            <div class="card-body" style="padding: 1rem;">
+                <div class="row">
+                    <div class="col-md-4">
+                        <div class="d-flex justify-content-between">
+                            <strong>Total Receitas:</strong>
+                            <strong id="total-receitas-resumo" class="text-success">R$ 0,00</strong>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="d-flex justify-content-between">
+                            <strong>Total Comprovação:</strong>
+                            <strong id="total-comprovacao-resumo" class="text-primary">R$ 0,00</strong>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="d-flex justify-content-between">
+                            <strong>Diferença:</strong>
+                            <strong id="diferenca" class="text-dark">R$ 0,00</strong>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Hidden inputs for JSON data -->
+        <input type="hidden" name="receitas" id="receitas-json">
+        <input type="hidden" name="comprovacoes" id="comprovacoes-json">
+
+        <!-- Actions -->
+        <div class="d-flex justify-content-between mb-3">
+            <a href="{{ url_for('lancamentos_caixa.lista') }}" class="btn btn-secondary btn-sm">
+                <i class="bi bi-arrow-left"></i> Voltar
+            </a>
+            <button type="submit" class="btn btn-success btn-sm">
+                <i class="bi bi-check-circle"></i> Salvar Lançamento
+            </button>
+        </div>
+    </form>
+</div>
+
+<style>
+    .receita-item, .comprovacao-item {
+        border: 1px solid #dee2e6;
+        border-radius: 0.25rem;
+        padding: 0.75rem;
+        margin-bottom: 0.75rem;
+        background-color: #f8f9fa;
+    }
+    
+    .form-label {
+        font-weight: 600;
+        margin-bottom: 0.25rem;
+    }
+    
+    .form-control-sm, .form-select-sm {
+        font-size: 0.85rem;
+        padding: 0.4rem 0.6rem;
+    }
+    
+    @media (max-width: 768px) {
+        h2 {
+            font-size: 1.1rem !important;
+        }
+    }
+</style>
+
+<script>
+let receitaIndex = 0;
+let comprovacaoIndex = 0;
+
+const tiposReceita = {{ tipos_receita|tojson }};
+const formasPagamento = {{ formas_pagamento|tojson }};
+const cartoes = {{ cartoes|tojson }};
+
+function formatCurrency(value) {
+    return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
+}
+
+function parseCurrency(value) {
+    if (!value) return 0;
+    // Remove tudo exceto números e vírgula
+    let cleanValue = value.toString().replace(/[^\d,]/g, '');
+    // Substitui vírgula por ponto
+    cleanValue = cleanValue.replace(',', '.');
+    return parseFloat(cleanValue) || 0;
+}
+
+function addReceita() {
+    const container = document.getElementById('receitas-container');
+    const item = document.createElement('div');
+    item.className = 'receita-item';
+    item.id = `receita-${receitaIndex}`;
+    
+    let tiposOptions = '<option value="">Selecione...</option>';
+    for (const [key, value] of Object.entries(tiposReceita)) {
+        tiposOptions += `<option value="${key}">${value}</option>`;
+    }
+    
+    item.innerHTML = `
+        <div class="row">
+            <div class="col-md-4 mb-2">
+                <label class="form-label" style="font-size: 0.75rem;">Tipo</label>
+                <select class="form-select form-select-sm receita-tipo" data-index="${receitaIndex}">
+                    ${tiposOptions}
+                </select>
+            </div>
+            <div class="col-md-5 mb-2">
+                <label class="form-label" style="font-size: 0.75rem;">Descrição</label>
+                <input type="text" class="form-control form-control-sm receita-descricao" data-index="${receitaIndex}">
+            </div>
+            <div class="col-md-2 mb-2">
+                <label class="form-label" style="font-size: 0.75rem;">Valor</label>
+                <input type="text" class="form-control form-control-sm receita-valor" data-index="${receitaIndex}" 
+                       placeholder="0,00" onchange="calcularTotais()">
+            </div>
+            <div class="col-md-1 mb-2 d-flex align-items-end">
+                <button type="button" class="btn btn-danger btn-sm" onclick="removeReceita(${receitaIndex})">
+                    <i class="bi bi-trash"></i>
+                </button>
+            </div>
+        </div>
+    `;
+    
+    container.appendChild(item);
+    receitaIndex++;
+}
+
+function removeReceita(index) {
+    const item = document.getElementById(`receita-${index}`);
+    if (item) {
+        item.remove();
+        calcularTotais();
+    }
+}
+
+function addComprovacao() {
+    const container = document.getElementById('comprovacoes-container');
+    const item = document.createElement('div');
+    item.className = 'comprovacao-item';
+    item.id = `comprovacao-${comprovacaoIndex}`;
+    
+    let formasOptions = '<option value="">Selecione...</option>';
+    formasPagamento.forEach(forma => {
+        formasOptions += `<option value="${forma.id}">${forma.nome}</option>`;
+    });
+    
+    let cartoesOptions = '<option value="">Nenhum</option>';
+    cartoes.forEach(cartao => {
+        cartoesOptions += `<option value="${cartao.id}">${cartao.nome} (${cartao.tipo})</option>`;
+    });
+    
+    item.innerHTML = `
+        <div class="row">
+            <div class="col-md-4 mb-2">
+                <label class="form-label" style="font-size: 0.75rem;">Forma Pagamento</label>
+                <select class="form-select form-select-sm comprovacao-forma" data-index="${comprovacaoIndex}">
+                    ${formasOptions}
+                </select>
+            </div>
+            <div class="col-md-3 mb-2">
+                <label class="form-label" style="font-size: 0.75rem;">Cartão</label>
+                <select class="form-select form-select-sm comprovacao-cartao" data-index="${comprovacaoIndex}">
+                    ${cartoesOptions}
+                </select>
+            </div>
+            <div class="col-md-2 mb-2">
+                <label class="form-label" style="font-size: 0.75rem;">Valor</label>
+                <input type="text" class="form-control form-control-sm comprovacao-valor" data-index="${comprovacaoIndex}" 
+                       placeholder="0,00" onchange="calcularTotais()">
+            </div>
+            <div class="col-md-2 mb-2">
+                <label class="form-label" style="font-size: 0.75rem;">Descrição</label>
+                <input type="text" class="form-control form-control-sm comprovacao-descricao" data-index="${comprovacaoIndex}">
+            </div>
+            <div class="col-md-1 mb-2 d-flex align-items-end">
+                <button type="button" class="btn btn-danger btn-sm" onclick="removeComprovacao(${comprovacaoIndex})">
+                    <i class="bi bi-trash"></i>
+                </button>
+            </div>
+        </div>
+    `;
+    
+    container.appendChild(item);
+    comprovacaoIndex++;
+}
+
+function removeComprovacao(index) {
+    const item = document.getElementById(`comprovacao-${index}`);
+    if (item) {
+        item.remove();
+        calcularTotais();
+    }
+}
+
+function calcularTotais() {
+    // Calculate receitas total
+    let totalReceitas = 0;
+    document.querySelectorAll('.receita-valor').forEach(input => {
+        totalReceitas += parseCurrency(input.value);
+    });
+    
+    // Calculate comprovacoes total
+    let totalComprovacao = 0;
+    document.querySelectorAll('.comprovacao-valor').forEach(input => {
+        totalComprovacao += parseCurrency(input.value);
+    });
+    
+    // Calculate diferenca
+    const diferenca = totalReceitas - totalComprovacao;
+    
+    // Update displays
+    document.getElementById('total-receitas').textContent = formatCurrency(totalReceitas);
+    document.getElementById('total-receitas-resumo').textContent = formatCurrency(totalReceitas);
+    document.getElementById('total-comprovacao').textContent = formatCurrency(totalComprovacao);
+    document.getElementById('total-comprovacao-resumo').textContent = formatCurrency(totalComprovacao);
+    
+    const diferencaEl = document.getElementById('diferenca');
+    diferencaEl.textContent = formatCurrency(diferenca);
+    
+    if (diferenca < 0) {
+        diferencaEl.className = 'text-danger';
+    } else if (diferenca > 0) {
+        diferencaEl.className = 'text-warning';
+    } else {
+        diferencaEl.className = 'text-success';
+    }
+}
+
+document.getElementById('formCaixa').addEventListener('submit', function(e) {
+    // Collect receitas
+    const receitas = [];
+    document.querySelectorAll('.receita-item').forEach(item => {
+        const index = item.querySelector('.receita-tipo').dataset.index;
+        const tipo = item.querySelector('.receita-tipo').value;
+        const descricao = item.querySelector('.receita-descricao').value;
+        const valor = item.querySelector('.receita-valor').value;
+        
+        if (tipo && valor) {
+            receitas.push({ tipo, descricao, valor });
+        }
+    });
+    
+    // Collect comprovacoes
+    const comprovacoes = [];
+    document.querySelectorAll('.comprovacao-item').forEach(item => {
+        const index = item.querySelector('.comprovacao-forma').dataset.index;
+        const forma_pagamento_id = item.querySelector('.comprovacao-forma').value;
+        const bandeira_cartao_id = item.querySelector('.comprovacao-cartao').value;
+        const valor = item.querySelector('.comprovacao-valor').value;
+        const descricao = item.querySelector('.comprovacao-descricao').value;
+        
+        if (forma_pagamento_id && valor) {
+            comprovacoes.push({ forma_pagamento_id, bandeira_cartao_id, valor, descricao });
+        }
+    });
+    
+    // Set JSON values
+    document.getElementById('receitas-json').value = JSON.stringify(receitas);
+    document.getElementById('comprovacoes-json').value = JSON.stringify(comprovacoes);
+});
+
+// Add initial items
+addReceita();
+addComprovacao();
+</script>
+{% endblock %}

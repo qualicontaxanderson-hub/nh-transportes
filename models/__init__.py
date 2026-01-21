@@ -18,6 +18,10 @@ from models.vendas_posto import VendasPosto
 from models.bandeira_cartao import BandeiraCartao
 from models.receita import Receita
 from models.lancamento_receita import LancamentoReceita
+from models.forma_pagamento_caixa import FormaPagamentoCaixa
+from models.categoria_despesa import CategoriaDespesa
+from models.subcategoria_despesa import SubcategoriaDespesa
+from models.lancamento_caixa import LancamentoCaixa, LancamentoCaixaReceita, LancamentoCaixaComprovacao
 
 __all__ = [
     'Usuario',
@@ -36,5 +40,11 @@ __all__ = [
     'BandeiraCartao',
     'Receita',
     'LancamentoReceita',
+    'FormaPagamentoCaixa',
+    'CategoriaDespesa',
+    'SubcategoriaDespesa',
+    'LancamentoCaixa',
+    'LancamentoCaixaReceita',
+    'LancamentoCaixaComprovacao',
     'db',
 ]
