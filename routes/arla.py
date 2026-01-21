@@ -1,8 +1,8 @@
 from flask import Blueprint, render_template, request, redirect, url_for, flash
 from flask_login import login_required
 import mysql.connector
-from datetime import datetime, date
-from dateutil.relativedelta import relativedelta
+from datetime import datetime, date, timedelta
+from calendar import monthrange
 
 bp = Blueprint('arla', __name__, url_prefix='/arla')
 
@@ -27,7 +27,9 @@ def index():
     # Filtros de data - PADRÃO: mês/ano atual
     hoje = date.today()
     primeiro_dia_mes = date(hoje.year, hoje.month, 1)
-    ultimo_dia_mes = (primeiro_dia_mes + relativedelta(months=1)) - relativedelta(days=1)
+    # Calcula último dia do mês usando monthrange
+    ultimo_dia = monthrange(hoje.year, hoje.month)[1]
+    ultimo_dia_mes = date(hoje.year, hoje.month, ultimo_dia)
     
     data_inicio = request.args.get('data_inicio', primeiro_dia_mes.strftime('%Y-%m-%d'))
     data_fim = request.args.get('data_fim', ultimo_dia_mes.strftime('%Y-%m-%d'))
