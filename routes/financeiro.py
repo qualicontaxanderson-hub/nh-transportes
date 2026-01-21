@@ -3,6 +3,7 @@ from flask_login import login_required
 from utils.db import get_db_connection
 from utils.boletos import emitir_boleto_frete, emitir_boleto_multiplo, fetch_charge, fetch_boleto_pdf_stream, update_billet_expire, cancel_charge
 from datetime import datetime, date
+from calendar import monthrange
 import os
 
 financeiro_bp = Blueprint('financeiro', __name__, url_prefix='/financeiro')
@@ -30,7 +31,6 @@ def recebimentos():
 
         # Filtros de data - PADRÃO: mês/ano atual
         hoje = date.today()
-        from calendar import monthrange
         primeiro_dia_mes = date(hoje.year, hoje.month, 1)
         ultimo_dia = monthrange(hoje.year, hoje.month)[1]
         ultimo_dia_mes = date(hoje.year, hoje.month, ultimo_dia)

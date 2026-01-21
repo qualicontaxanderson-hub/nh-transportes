@@ -69,11 +69,20 @@ def lista():
                 f.valor_total_frete,
                 COALESCE(f.lucro, 0) AS lucro,
                 COALESCE(f.status, '') AS status,
-                EXISTS(
-                    SELECT 1 FROM cobrancas cb 
-                    WHERE (cb.frete_id = f.id OR EXISTS(SELECT 1 FROM cobrancas_freites cf WHERE cf.cobranca_id = cb.id AND cf.frete_id = f.id))
-                    AND (cb.status IS NULL OR cb.status != 'cancelado')
-                ) AS emitted
+                CASE 
+                    WHEN EXISTS(
+                        SELECT 1 FROM cobrancas cb 
+                        WHERE cb.frete_id = f.id
+                        AND (cb.status IS NULL OR cb.status != 'cancelado')
+                    ) THEN 1
+                    WHEN EXISTS(
+                        SELECT 1 FROM cobrancas_freites cf
+                        INNER JOIN cobrancas cb ON cf.cobranca_id = cb.id
+                        WHERE cf.frete_id = f.id
+                        AND (cb.status IS NULL OR cb.status != 'cancelado')
+                    ) THEN 1
+                    ELSE 0
+                END AS emitted
             FROM fretes f
             LEFT JOIN clientes c ON f.clientes_id = c.id
             LEFT JOIN fornecedores fo ON f.fornecedores_id = fo.id
