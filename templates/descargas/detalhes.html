@@ -371,7 +371,12 @@ body {
 <script>
 function copiarWhatsApp(descargaId) {
   fetch(`/descargas/whatsapp/${descargaId}`)
-    .then(response => response.json())
+    .then(response => {
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      return response.json();
+    })
     .then(data => {
       if (data.texto) {
         // Copiar para clipboard
@@ -382,11 +387,13 @@ function copiarWhatsApp(descargaId) {
           // Fallback: mostrar em um modal
           alert('Texto para WhatsApp:\n\n' + data.texto);
         });
+      } else if (data.error) {
+        alert('❌ Erro: ' + data.error);
       }
     })
     .catch(error => {
       console.error('Erro:', error);
-      alert('❌ Erro ao gerar texto para WhatsApp');
+      alert('❌ Erro ao gerar texto para WhatsApp: ' + error.message);
     });
 }
 </script>

@@ -2,8 +2,6 @@ from flask import Blueprint, render_template, request, redirect, url_for, flash,
 from flask_login import login_required
 from datetime import datetime, date
 from utils.db import get_db_connection
-from utils.helpers import parse_moeda
-from models import db, Descarga, DescargaEtapa
 from decimal import Decimal
 
 bp = Blueprint('descargas', __name__, url_prefix='/descargas')
@@ -402,21 +400,21 @@ def whatsapp(descarga_id):
             return jsonify({'error': 'Descarga não encontrada'}), 404
         
         # Formatar texto para WhatsApp
-        texto = f"""Distribuidora: {descarga['fornecedor']}
-Data de carregamento: {descarga['data_carregamento_formatada']}
-Data de descarga: {descarga['data_descarga_formatada']}
-Produto: {descarga['produto']}
-Volume: {descarga['volume_descarregado']:.2f}
-Motorista: {descarga['motorista']}
-Medida Sistema Antes: {descarga['estoque_sistema_antes'] or ''}
-Medida Sistema Depois: {descarga['estoque_sistema_depois'] or ''}
-Diferença: {descarga['diferenca_sistema'] or ''}
-Temperatura: {descarga['temperatura'] or ''}
-Densidade: {descarga['densidade'] or ''}
+        texto = f"""Distribuidora: {descarga.get('fornecedor', '')}
+Data de carregamento: {descarga.get('data_carregamento_formatada', '')}
+Data de descarga: {descarga.get('data_descarga_formatada', '')}
+Produto: {descarga.get('produto', '')}
+Volume: {float(descarga.get('volume_descarregado', 0)):.2f}
+Motorista: {descarga.get('motorista', '')}
+Medida Sistema Antes: {descarga.get('estoque_sistema_antes', '') or ''}
+Medida Sistema Depois: {descarga.get('estoque_sistema_depois', '') or ''}
+Diferença: {descarga.get('diferenca_sistema', '') or ''}
+Temperatura: {descarga.get('temperatura', '') or ''}
+Densidade: {descarga.get('densidade', '') or ''}
 Medição Régua:
-Antes: {descarga['estoque_regua_antes'] or ''}
-Depois: {descarga['estoque_regua_depois'] or ''}
-Diferença: {descarga['diferenca_regua'] or ''}"""
+Antes: {descarga.get('estoque_regua_antes', '') or ''}
+Depois: {descarga.get('estoque_regua_depois', '') or ''}
+Diferença: {descarga.get('diferenca_regua', '') or ''}"""
         
         return jsonify({'texto': texto})
         

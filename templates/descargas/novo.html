@@ -220,8 +220,7 @@ body {
           </div>
           <div class="col-md-6">
             <label for="data_descarga" class="form-label">Data de Descarga *</label>
-            <input type="date" class="form-control" id="data_descarga" name="data_descarga" 
-                   value="{{ 'now'|date('%Y-%m-%d') }}" required>
+            <input type="date" class="form-control" id="data_descarga" name="data_descarga" required>
           </div>
         </div>
 
@@ -396,6 +395,13 @@ function calcularDiferencas() {
 
 // Adicionar event listeners
 document.addEventListener('DOMContentLoaded', function() {
+  // Set today's date as default for data_descarga
+  const dataDescargaInput = document.getElementById('data_descarga');
+  if (dataDescargaInput && !dataDescargaInput.value) {
+    const today = new Date().toISOString().split('T')[0];
+    dataDescargaInput.value = today;
+  }
+  
   const inputs = [
     'volume_etapa',
     'abastecimento_durante_descarga',
