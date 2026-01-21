@@ -108,6 +108,13 @@
 <script>
     let kmInicial = 0;
 
+    // Helper function to parse formatted numbers back to float
+    function parseFormattedNumber(value) {
+        if (!value) return 0;
+        // Remove thousands separators (.) and replace decimal comma (,) with dot (.)
+        return parseFloat(value.toString().replace(/\./g, '').replace(',', '.')) || 0;
+    }
+
     // Function to format number with 2 decimal places and thousands separator
     function formatCurrency(value) {
         // Remove non-numeric characters
@@ -195,7 +202,7 @@
     });
 
     function calcularKmRodados() {
-        const kmFinal = parseFloat(document.getElementById('km_final').value.replace(/\./g, '').replace(',', '.')) || 0;
+        const kmFinal = parseFormattedNumber(document.getElementById('km_final').value);
         const kmRodados = kmFinal - kmInicial;
         if (kmRodados > 0) {
             document.getElementById('km_rodados').value = kmRodados.toLocaleString('pt-BR', {minimumFractionDigits: 0, maximumFractionDigits: 0});
@@ -206,8 +213,8 @@
     }
     
     function calcularMedia() {
-        const kmRodados = parseFloat(document.getElementById('km_rodados').value.replace(/\./g, '').replace(',', '.')) || 0;
-        const litros = parseFloat(document.getElementById('litros_abastecidos').value.replace(/\./g, '').replace(',', '.')) || 0;
+        const kmRodados = parseFormattedNumber(document.getElementById('km_rodados').value);
+        const litros = parseFormattedNumber(document.getElementById('litros_abastecidos').value);
         if (kmRodados > 0 && litros > 0) {
             const media = kmRodados / litros;
             document.getElementById('media_consumo').innerHTML = `<strong>${media.toFixed(2).replace('.', ',')} km/l</strong>`;
