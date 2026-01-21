@@ -42,7 +42,7 @@
                             <td>{{ produto.id }}</td>
                             <td><strong>{{ produto.nome }}</strong></td>
                             <td>{{ produto.descricao if produto.descricao else '-' }}</td>
-                            <td>{{ produto.unidade_medida }}</td>
+                            <td>{{ produto.unidade }}</td>
                             <td>
                                 {% if produto.ativo %}
                                 <span class="badge bg-success">Ativo</span>

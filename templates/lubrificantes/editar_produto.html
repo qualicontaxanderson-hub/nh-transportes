@@ -27,11 +27,11 @@
                     <small class="text-muted">O nome será automaticamente convertido para maiúsculas</small>
                 </div>
                 <div class="col-md-3">
-                    <label for="unidade_medida" class="form-label">Unidade de Medida</label>
-                    <select class="form-select" id="unidade_medida" name="unidade_medida">
-                        <option value="L" {% if produto.unidade_medida == 'L' %}selected{% endif %}>Litros (L)</option>
-                        <option value="KG" {% if produto.unidade_medida == 'KG' %}selected{% endif %}>Quilos (KG)</option>
-                        <option value="UN" {% if produto.unidade_medida == 'UN' %}selected{% endif %}>Unidade (UN)</option>
+                    <label for="unidade" class="form-label">Unidade de Medida</label>
+                    <select class="form-select" id="unidade" name="unidade">
+                        <option value="LITROS" {% if produto.unidade == 'LITROS' %}selected{% endif %}>Litros</option>
+                        <option value="KG" {% if produto.unidade == 'KG' %}selected{% endif %}>Quilos (KG)</option>
+                        <option value="UN" {% if produto.unidade == 'UN' %}selected{% endif %}>Unidade (UN)</option>
                     </select>
                 </div>
                 <div class="col-md-3">

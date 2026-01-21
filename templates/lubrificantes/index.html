@@ -39,8 +39,8 @@
                     {% if saldo %}
                         <ul style="margin-bottom:0; list-style: none; padding-left: 0;">
                             <li><strong>Data:</strong> {{ saldo.data.strftime('%d/%m/%Y') if saldo.data else '-' }}</li>
-                            <li><strong>Volume:</strong> {{ "{:,.2f}".format(saldo.volume_inicial).replace(',', 'X').replace('.', ',').replace('X', '.') }}</li>
-                            <li><strong>Preço Médio:</strong> R$ {{ "{:,.2f}".format(saldo.preco_medio_compra).replace(',', 'X').replace('.', ',').replace('X', '.') }}</li>
+                            <li><strong>Quantidade:</strong> {{ "{:,.2f}".format(saldo.quantidade).replace(',', 'X').replace('.', ',').replace('X', '.') }}</li>
+                            <li><strong>Custo Médio:</strong> R$ {{ "{:,.4f}".format(saldo.custo_medio_compra).replace(',', 'X').replace('.', ',').replace('X', '.') }}</li>
                         </ul>
                     {% else %}
                         <span class="text-muted"><i class="bi bi-info-circle"></i> Não cadastrado.</span>

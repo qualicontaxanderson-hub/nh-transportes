@@ -62,10 +62,10 @@ def index():
     saldo_query = "SELECT * FROM lubrificantes_saldo_inicial WHERE 1=1"
     params = []
     if cliente_id:
-        saldo_query += " AND cliente_id = %s"
+        saldo_query += " AND clienteid = %s"
         params.append(cliente_id)
     if produto_id:
-        saldo_query += " AND produto_id = %s"
+        saldo_query += " AND produtoid = %s"
         params.append(produto_id)
     saldo_query += " ORDER BY data DESC LIMIT 1"
     
@@ -73,13 +73,13 @@ def index():
     saldo = cursor.fetchone()
     
     # Busca preço vigente (filtrado por cliente e produto se selecionado)
-    preco_query = "SELECT * FROM lubrificantes_precos_venda WHERE 1=1"
+    preco_query = "SELECT * FROM lubrificantes_precos_venda WHERE ativo = 1"
     preco_params = []
     if cliente_id:
-        preco_query += " AND cliente_id = %s"
+        preco_query += " AND clienteid = %s"
         preco_params.append(cliente_id)
     if produto_id:
-        preco_query += " AND produto_id = %s"
+        preco_query += " AND produtoid = %s"
         preco_params.append(produto_id)
     preco_query += " ORDER BY data_inicio DESC LIMIT 1"
     
@@ -88,18 +88,18 @@ def index():
     
     # Busca compras com filtros
     compras_query = """
-        SELECT c.id, c.data, c.quantidade, c.preco_compra, 'COMPRA' as tipo, 
-               c.cliente_id, c.produto_id, p.nome as produto_nome
+        SELECT c.id, c.data, c.quantidade, c.preco_unitario, 'COMPRA' as tipo, 
+               c.clienteid, c.produtoid, p.nome as produto_nome, c.total_nf
         FROM lubrificantes_compras c
-        INNER JOIN lubrificantes_produtos p ON c.produto_id = p.id
+        INNER JOIN lubrificantes_produtos p ON c.produtoid = p.id
         WHERE c.data BETWEEN %s AND %s
     """
     compras_params = [data_inicio, data_fim]
     if cliente_id:
-        compras_query += " AND c.cliente_id = %s"
+        compras_query += " AND c.clienteid = %s"
         compras_params.append(cliente_id)
     if produto_id:
-        compras_query += " AND c.produto_id = %s"
+        compras_query += " AND c.produtoid = %s"
         compras_params.append(produto_id)
     compras_query += " ORDER BY c.data DESC"
     
@@ -108,19 +108,19 @@ def index():
     
     # Busca lançamentos/vendas com filtros
     lancamentos_query = """
-        SELECT l.id, l.data, l.quantidade_vendida, l.preco_venda_aplicado, 
-               l.encerrante_final, 'VENDA' as tipo, l.cliente_id, l.produto_id,
+        SELECT l.id, l.data, l.quantidade, l.preco_venda_aplicado, 
+               l.valor_total, 'VENDA' as tipo, l.clienteid, l.produtoid,
                p.nome as produto_nome
         FROM lubrificantes_lancamentos l
-        INNER JOIN lubrificantes_produtos p ON l.produto_id = p.id
+        INNER JOIN lubrificantes_produtos p ON l.produtoid = p.id
         WHERE l.data BETWEEN %s AND %s
     """
     lancamentos_params = [data_inicio, data_fim]
     if cliente_id:
-        lancamentos_query += " AND l.cliente_id = %s"
+        lancamentos_query += " AND l.clienteid = %s"
         lancamentos_params.append(cliente_id)
     if produto_id:
-        lancamentos_query += " AND l.produto_id = %s"
+        lancamentos_query += " AND l.produtoid = %s"
         lancamentos_params.append(produto_id)
     lancamentos_query += " ORDER BY l.data DESC"
     
@@ -131,30 +131,30 @@ def index():
     total_compras_query = "SELECT COALESCE(SUM(quantidade), 0) as total FROM lubrificantes_compras WHERE 1=1"
     total_params = []
     if cliente_id:
-        total_compras_query += " AND cliente_id = %s"
+        total_compras_query += " AND clienteid = %s"
         total_params.append(cliente_id)
     if produto_id:
-        total_compras_query += " AND produto_id = %s"
+        total_compras_query += " AND produtoid = %s"
         total_params.append(produto_id)
     
     cursor.execute(total_compras_query, tuple(total_params))
     total_compras = float(cursor.fetchone()['total'])
     
-    total_vendas_query = "SELECT COALESCE(SUM(quantidade_vendida), 0) as total FROM lubrificantes_lancamentos WHERE 1=1"
+    total_vendas_query = "SELECT COALESCE(SUM(quantidade), 0) as total FROM lubrificantes_lancamentos WHERE 1=1"
     total_vendas_params = []
     if cliente_id:
-        total_vendas_query += " AND cliente_id = %s"
+        total_vendas_query += " AND clienteid = %s"
         total_vendas_params.append(cliente_id)
     if produto_id:
-        total_vendas_query += " AND produto_id = %s"
+        total_vendas_query += " AND produtoid = %s"
         total_vendas_params.append(produto_id)
     
     cursor.execute(total_vendas_query, tuple(total_vendas_params))
     total_vendas = float(cursor.fetchone()['total'])
     
     # Estoque atual = Saldo inicial + Compras - Vendas
-    volume_inicial = float(saldo['volume_inicial']) if saldo else 0
-    estoque_atual = volume_inicial + total_compras - total_vendas
+    quantidade_inicial = float(saldo['quantidade']) if saldo else 0
+    estoque_atual = quantidade_inicial + total_compras - total_vendas
     
     # Unifica movimentações para a tabela
     movimentacoes = []
@@ -166,8 +166,8 @@ def index():
             'tipo': 'COMPRA',
             'produto_nome': compra['produto_nome'],
             'quantidade': float(compra['quantidade']),
-            'preco': float(compra['preco_compra']),
-            'valor_total': float(compra['quantidade']) * float(compra['preco_compra']),
+            'preco': float(compra['preco_unitario']),
+            'valor_total': float(compra['total_nf']),
             'encerrante': None
         })
     
@@ -177,10 +177,10 @@ def index():
             'data': lanc['data'],
             'tipo': 'VENDA',
             'produto_nome': lanc['produto_nome'],
-            'quantidade': float(lanc['quantidade_vendida']),
+            'quantidade': float(lanc['quantidade']),
             'preco': float(lanc['preco_venda_aplicado']),
-            'valor_total': float(lanc['quantidade_vendida']) * float(lanc['preco_venda_aplicado']),
-            'encerrante': float(lanc['encerrante_final']) if lanc['encerrante_final'] else None
+            'valor_total': float(lanc['valor_total']),
+            'encerrante': None
         })
     
     # Ordena por data (mais recente primeiro)
@@ -221,9 +221,8 @@ def saldo_inicial():
 
     if request.method == 'POST':
         data = request.form['data']
-        volume_inicial = request.form['volume_inicial']
-        preco_medio_compra = request.form['preco_medio_compra']
-        encerrante_inicial = request.form.get('encerrante_inicial', None)
+        quantidade = request.form['quantidade']
+        custo_medio_compra = request.form['custo_medio_compra']
         cliente_id = request.form.get('cliente_id')
         produto_id = request.form.get('produto_id')
         
@@ -237,9 +236,9 @@ def saldo_inicial():
 
         cursor.execute("""
             INSERT INTO lubrificantes_saldo_inicial 
-            (data, produto_id, cliente_id, volume_inicial, preco_medio_compra, encerrante_inicial)
-            VALUES (%s, %s, %s, %s, %s, %s)
-        """, (data, produto_id, cliente_id, volume_inicial, preco_medio_compra, encerrante_inicial))
+            (data, produtoid, clienteid, quantidade, custo_medio_compra)
+            VALUES (%s, %s, %s, %s, %s)
+        """, (data, produto_id, cliente_id, quantidade, custo_medio_compra))
         conn.commit()
         cursor.close()
         conn.close()
@@ -288,12 +287,12 @@ def compras():
     if request.method == 'POST':
         data = request.form['data']
         quantidade = request.form['quantidade']
-        preco_compra = request.form['preco_compra']
+        preco_unitario = request.form['preco_unitario']
         cliente_id = request.form.get('cliente_id')
         produto_id = request.form.get('produto_id')
-        fornecedor = request.form.get('fornecedor', None)
-        nota_fiscal = request.form.get('nota_fiscal', None)
-        observacao = request.form.get('observacao', None)
+        fornecedor_id = request.form.get('fornecedor_id', None)
+        numero_nf = request.form.get('numero_nf', None)
+        observacoes = request.form.get('observacoes', None)
         
         if not cliente_id:
             flash('Por favor, selecione um cliente!', 'danger')
@@ -302,12 +301,15 @@ def compras():
         if not produto_id:
             flash('Por favor, selecione um produto!', 'danger')
             return redirect(url_for('lubrificantes.compras'))
+        
+        # Calcula o total da nota fiscal
+        total_nf = float(quantidade) * float(preco_unitario)
 
         cursor.execute("""
             INSERT INTO lubrificantes_compras 
-            (data, produto_id, cliente_id, quantidade, preco_compra, fornecedor, nota_fiscal, observacao)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-        """, (data, produto_id, cliente_id, quantidade, preco_compra, fornecedor, nota_fiscal, observacao))
+            (data, produtoid, clienteid, quantidade, preco_unitario, total_nf, fornecedorid, numero_nf, observacoes)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+        """, (data, produto_id, cliente_id, quantidade, preco_unitario, total_nf, fornecedor_id, numero_nf, observacoes))
         conn.commit()
         cursor.close()
         conn.close()
@@ -362,10 +364,17 @@ def preco_venda():
         if not produto_id:
             flash('Por favor, selecione um produto!', 'danger')
             return redirect(url_for('lubrificantes.preco_venda'))
+        
+        # Desativa todos os preços anteriores para este produto/cliente
+        cursor.execute("""
+            UPDATE lubrificantes_precos_venda 
+            SET ativo = 0
+            WHERE produtoid = %s AND clienteid = %s
+        """, (produto_id, cliente_id))
 
         cursor.execute("""
-            INSERT INTO lubrificantes_precos_venda (data_inicio, produto_id, cliente_id, preco_venda)
-            VALUES (%s, %s, %s, %s)
+            INSERT INTO lubrificantes_precos_venda (data_inicio, produtoid, clienteid, preco_venda, ativo)
+            VALUES (%s, %s, %s, %s, 1)
         """, (data_inicio, produto_id, cliente_id, preco_venda))
         conn.commit()
         cursor.close()
@@ -375,7 +384,9 @@ def preco_venda():
         return redirect(url_for('lubrificantes.index'))
 
     cursor.execute("""
-        SELECT * FROM lubrificantes_precos_venda ORDER BY data_inicio DESC LIMIT 1
+        SELECT * FROM lubrificantes_precos_venda 
+        WHERE ativo = 1
+        ORDER BY data_inicio DESC LIMIT 1
     """)
     preco_atual = cursor.fetchone()
     
@@ -406,48 +417,6 @@ def preco_venda():
                          produtos=produtos)
 
 # =============================================
-# API - ENCERRANTE ANTERIOR
-# =============================================
-@bp.route('/api/encerrante-anterior/<int:cliente_id>/<int:produto_id>')
-@login_required
-def api_encerrante_anterior(cliente_id, produto_id):
-    """API: Retorna o encerrante anterior para um cliente e produto"""
-    conn = get_db()
-    cursor = conn.cursor(dictionary=True)
-    
-    try:
-        # Buscar último lançamento do cliente e produto
-        cursor.execute("""
-            SELECT encerrante_final FROM lubrificantes_lancamentos
-            WHERE cliente_id = %s AND produto_id = %s
-            ORDER BY data DESC LIMIT 1
-        """, (cliente_id, produto_id))
-        ultimo_lancamento = cursor.fetchone()
-        
-        if ultimo_lancamento:
-            encerrante_anterior = float(ultimo_lancamento['encerrante_final'])
-        else:
-            # Se não há lançamento, buscar do saldo inicial
-            cursor.execute("""
-                SELECT encerrante_inicial FROM lubrificantes_saldo_inicial
-                WHERE cliente_id = %s AND produto_id = %s
-                ORDER BY data DESC LIMIT 1
-            """, (cliente_id, produto_id))
-            saldo_ini = cursor.fetchone()
-            encerrante_anterior = float(saldo_ini['encerrante_inicial']) if (saldo_ini and saldo_ini['encerrante_inicial']) else 0
-        
-        return jsonify({
-            'success': True,
-            'encerrante_anterior': encerrante_anterior
-        })
-        
-    except Exception as e:
-        return jsonify({'success': False, 'error': str(e)}), 500
-    finally:
-        cursor.close()
-        conn.close()
-
-# =============================================
 # LANÇAMENTO DIÁRIO - CRIAR
 # =============================================
 @bp.route('/lancamento', methods=['GET', 'POST'])
@@ -458,11 +427,10 @@ def lancamento():
 
     if request.method == 'POST':
         data = request.form['data']
-        quantidade_vendida = float(request.form['quantidade_vendida'])
+        quantidade = float(request.form['quantidade'])
         cliente_id = request.form.get('cliente_id')
         produto_id = request.form.get('produto_id')
-        encerrante_final = request.form.get('encerrante_final', None)
-        observacao = request.form.get('observacao', None)
+        observacoes = request.form.get('observacoes', None)
         
         if not cliente_id:
             flash('Por favor, selecione um cliente!', 'danger')
@@ -474,7 +442,7 @@ def lancamento():
 
         cursor.execute("""
             SELECT id FROM lubrificantes_lancamentos 
-            WHERE data = %s AND cliente_id = %s AND produto_id = %s
+            WHERE data = %s AND clienteid = %s AND produtoid = %s
         """, (data, cliente_id, produto_id))
         existe = cursor.fetchone()
         if existe:
@@ -485,17 +453,20 @@ def lancamento():
 
         cursor.execute("""
             SELECT preco_venda FROM lubrificantes_precos_venda 
-            WHERE data_inicio <= %s AND cliente_id = %s AND produto_id = %s
+            WHERE data_inicio <= %s AND clienteid = %s AND produtoid = %s AND ativo = 1
             ORDER BY data_inicio DESC LIMIT 1
         """, (data, cliente_id, produto_id))
         preco_row = cursor.fetchone()
         preco_venda = preco_row['preco_venda'] if preco_row else 0
+        
+        # Calcula o valor total
+        valor_total = quantidade * float(preco_venda)
 
         cursor.execute("""
             INSERT INTO lubrificantes_lancamentos
-            (data, produto_id, cliente_id, quantidade_vendida, preco_venda_aplicado, encerrante_final, observacao)
+            (data, produtoid, clienteid, quantidade, preco_venda_aplicado, valor_total, observacoes)
             VALUES (%s, %s, %s, %s, %s, %s, %s)
-        """, (data, produto_id, cliente_id, quantidade_vendida, preco_venda, encerrante_final, observacao))
+        """, (data, produto_id, cliente_id, quantidade, preco_venda, valor_total, observacoes))
         conn.commit()
         cursor.close()
         conn.close()
@@ -505,7 +476,9 @@ def lancamento():
 
     # GET - Busca dados para exibir no formulário
     cursor.execute("""
-        SELECT preco_venda FROM lubrificantes_precos_venda ORDER BY data_inicio DESC LIMIT 1
+        SELECT preco_venda FROM lubrificantes_precos_venda 
+        WHERE ativo = 1
+        ORDER BY data_inicio DESC LIMIT 1
     """)
     preco_row = cursor.fetchone()
     preco_venda = float(preco_row['preco_venda']) if preco_row else 0
@@ -570,7 +543,7 @@ def novo_produto():
     if request.method == 'POST':
         nome = request.form['nome'].strip().upper()
         descricao = request.form.get('descricao', '').strip()
-        unidade_medida = request.form.get('unidade_medida', 'L')
+        unidade = request.form.get('unidade', 'LITROS')
         ativo = request.form.get('ativo', '1')
         
         if not nome:
@@ -578,9 +551,9 @@ def novo_produto():
             return redirect(url_for('lubrificantes.novo_produto'))
         
         cursor.execute("""
-            INSERT INTO lubrificantes_produtos (nome, descricao, unidade_medida, ativo)
+            INSERT INTO lubrificantes_produtos (nome, descricao, unidade, ativo)
             VALUES (%s, %s, %s, %s)
-        """, (nome, descricao if descricao else None, unidade_medida, int(ativo)))
+        """, (nome, descricao if descricao else None, unidade, int(ativo)))
         conn.commit()
         cursor.close()
         conn.close()
@@ -605,7 +578,7 @@ def editar_produto(id):
     if request.method == 'POST':
         nome = request.form['nome'].strip().upper()
         descricao = request.form.get('descricao', '').strip()
-        unidade_medida = request.form.get('unidade_medida', 'L')
+        unidade = request.form.get('unidade', 'LITROS')
         ativo = request.form.get('ativo', '1')
         
         if not nome:
@@ -614,9 +587,9 @@ def editar_produto(id):
         
         cursor.execute("""
             UPDATE lubrificantes_produtos 
-            SET nome = %s, descricao = %s, unidade_medida = %s, ativo = %s
+            SET nome = %s, descricao = %s, unidade = %s, ativo = %s
             WHERE id = %s
-        """, (nome, descricao if descricao else None, unidade_medida, int(ativo), id))
+        """, (nome, descricao if descricao else None, unidade, int(ativo), id))
         conn.commit()
         cursor.close()
         conn.close()
