@@ -163,10 +163,17 @@ function formatCurrency(value) {
 
 function parseCurrency(value) {
     if (!value) return 0;
-    // Remove tudo exceto números e vírgula
-    let cleanValue = value.toString().replace(/[^\d,]/g, '');
-    // Substitui vírgula por ponto
-    cleanValue = cleanValue.replace(',', '.');
+    // Remove R$ symbol and trim
+    let cleanValue = value.toString().replace(/R\$/g, '').trim();
+    
+    // Check if Brazilian format (has comma as decimal separator)
+    if (cleanValue.includes(',')) {
+        // Remove thousand separators (dots)
+        cleanValue = cleanValue.replace(/\./g, '');
+        // Replace comma with dot for decimal
+        cleanValue = cleanValue.replace(',', '.');
+    }
+    
     return parseFloat(cleanValue) || 0;
 }
 

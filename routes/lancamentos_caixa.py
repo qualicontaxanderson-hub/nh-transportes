@@ -39,11 +39,13 @@ def parse_brazilian_currency(value_str):
     # Remove o símbolo R$ se existir
     value_str = value_str.replace('R$', '').strip()
     
-    # Remove pontos (separador de milhares)
-    value_str = value_str.replace('.', '')
-    
-    # Substitui vírgula por ponto (separador decimal)
-    value_str = value_str.replace(',', '.')
+    # Check if there's a comma (Brazilian decimal separator)
+    if ',' in value_str:
+        # Remove pontos (separador de milhares)
+        value_str = value_str.replace('.', '')
+        # Substitui vírgula por ponto (separador decimal)
+        value_str = value_str.replace(',', '.')
+    # If no comma but has dots, assume it's already in English format
     
     return Decimal(value_str)
 
@@ -134,13 +136,16 @@ def novo():
             # Insert comprovacoes
             for comprovacao in comprovacoes:
                 if comprovacao.get('forma_pagamento_id') and comprovacao.get('valor'):
+                    forma_id = comprovacao['forma_pagamento_id']
+                    cartao_id = comprovacao.get('bandeira_cartao_id')
+                    
                     cursor.execute("""
                         INSERT INTO lancamentos_caixa_comprovacao 
                         (lancamento_caixa_id, forma_pagamento_id, bandeira_cartao_id, descricao, valor)
                         VALUES (%s, %s, %s, %s, %s)
                     """, (lancamento_id, 
-                          int(comprovacao['forma_pagamento_id']) if comprovacao['forma_pagamento_id'] else None,
-                          int(comprovacao['bandeira_cartao_id']) if comprovacao.get('bandeira_cartao_id') else None,
+                          int(forma_id) if forma_id and forma_id != '' else None,
+                          int(cartao_id) if cartao_id and cartao_id != '' else None,
                           comprovacao.get('descricao', ''),
                           float(parse_brazilian_currency(comprovacao['valor']))))
             

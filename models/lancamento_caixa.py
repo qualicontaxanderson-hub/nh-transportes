@@ -62,6 +62,7 @@ class LancamentoCaixaComprovacao(db.Model):
     
     # Relacionamentos
     forma_pagamento = db.relationship('FormaPagamentoCaixa', backref='comprovacoes', lazy=True)
+    bandeira_cartao = db.relationship('BandeiraCartao', backref='comprovacoes_caixa', lazy=True)
     
     def __repr__(self):
         return f"<LancamentoCaixaComprovacao {self.id} - R$ {self.valor}>"
