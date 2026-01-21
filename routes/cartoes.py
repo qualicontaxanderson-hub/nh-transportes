@@ -2,6 +2,7 @@ from flask import Blueprint, render_template, request, redirect, url_for, flash
 from flask_login import login_required
 from utils.db import get_db_connection
 from utils.decorators import admin_required
+from utils.text_utils import normalize_text_field
 
 bp = Blueprint('cartoes', __name__, url_prefix='/cartoes')
 
@@ -64,9 +65,9 @@ def lista():
 def novo():
     """Create a new card brand"""
     if request.method == 'POST':
-        # Normalize input values
-        nome = (request.form.get('nome', '') or '').strip()
-        tipo = (request.form.get('tipo', '') or '').strip()
+        # Normalize input values (já converte para maiúsculas)
+        nome = normalize_text_field(request.form.get('nome', ''))
+        tipo = normalize_text_field(request.form.get('tipo', ''))
         ativo = request.form.get('ativo', '1')
 
         # Validate input
@@ -114,9 +115,9 @@ def editar(id):
         cursor = conn.cursor(dictionary=True)
 
         if request.method == 'POST':
-            # Normalize input values
-            nome = (request.form.get('nome', '') or '').strip()
-            tipo = (request.form.get('tipo', '') or '').strip()
+            # Normalize input values (já converte para maiúsculas)
+            nome = normalize_text_field(request.form.get('nome', ''))
+            tipo = normalize_text_field(request.form.get('tipo', ''))
             ativo = request.form.get('ativo', '1')
 
             # Validate input

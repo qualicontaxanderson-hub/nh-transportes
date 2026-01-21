@@ -43,6 +43,37 @@ document.addEventListener('DOMContentLoaded', function() {
     });
   });
 
+  // CONVERSÃO AUTOMÁTICA PARA MAIÚSCULAS
+  // Converte automaticamente campos de texto para maiúsculas (exceto email, password, textarea)
+  var textInputs = document.querySelectorAll('input[type="text"], input:not([type])');
+  textInputs.forEach(function(input) {
+    // Ignora campos que não devem ser convertidos
+    var excludeNames = ['email', 'password', 'senha', 'observacao', 'observacoes'];
+    var excludeTypes = ['email', 'password', 'url'];
+    
+    var inputName = (input.name || '').toLowerCase();
+    var inputType = (input.type || '').toLowerCase();
+    
+    // Verifica se o campo deve ser excluído
+    var shouldExclude = excludeTypes.includes(inputType) || 
+                        excludeNames.some(function(name) { return inputName.includes(name); });
+    
+    if (!shouldExclude) {
+      // Converte para maiúsculas ao digitar
+      input.addEventListener('input', function(e) {
+        var start = e.target.selectionStart;
+        var end = e.target.selectionEnd;
+        e.target.value = e.target.value.toUpperCase();
+        e.target.setSelectionRange(start, end);
+      });
+      
+      // Garante conversão ao sair do campo
+      input.addEventListener('blur', function(e) {
+        e.target.value = e.target.value.toUpperCase();
+      });
+    }
+  });
+
   // TRAVA DE CLIQUE EM FORMULÁRIOS
   var forms = document.querySelectorAll('form');
 

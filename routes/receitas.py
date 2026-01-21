@@ -2,6 +2,7 @@ from flask import Blueprint, render_template, request, redirect, url_for, flash
 from flask_login import login_required
 from utils.db import get_db_connection
 from utils.decorators import admin_required
+from utils.text_utils import normalize_text_field
 
 bp = Blueprint('receitas', __name__, url_prefix='/receitas')
 
@@ -78,8 +79,8 @@ def novo():
         cursor = conn.cursor(dictionary=True)
         
         if request.method == 'POST':
-            # Normalize input values
-            nome = (request.form.get('nome', '') or '').strip()
+            # Normalize input values (já converte para maiúsculas)
+            nome = normalize_text_field(request.form.get('nome', ''))
             cliente_id = request.form.get('cliente_id', '')
             ativo = request.form.get('ativo', '1')
 
@@ -151,8 +152,8 @@ def editar(id):
         cursor = conn.cursor(dictionary=True)
 
         if request.method == 'POST':
-            # Normalize input values
-            nome = (request.form.get('nome', '') or '').strip()
+            # Normalize input values (já converte para maiúsculas)
+            nome = normalize_text_field(request.form.get('nome', ''))
             cliente_id = request.form.get('cliente_id', '')
             ativo = request.form.get('ativo', '1')
 

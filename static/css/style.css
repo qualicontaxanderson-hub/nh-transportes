@@ -60,6 +60,22 @@ body > .container-fluid {
     outline: none;
 }
 
+/* Campos de texto em maiúsculas por padrão */
+input[type="text"]:not([name*="email"]):not([name*="senha"]):not([name*="password"]),
+input:not([type]):not([name*="email"]):not([name*="senha"]):not([name*="password"]) {
+    text-transform: uppercase;
+}
+
+/* Exceções para campos que não devem ser em maiúsculas */
+input[type="email"],
+input[type="password"],
+input[type="url"],
+input[name*="observacao"],
+input[name*="observacoes"],
+textarea {
+    text-transform: none;
+}
+
 label.form-label {
     font-weight: 600;
     color: #333;
