@@ -123,7 +123,14 @@ def index():
         total_vendas = float(cursor.fetchone()['total'])
     
     # Estoque atual = Saldo inicial + Compras - Vendas
-    volume_inicial = float(saldo['volume_inicial']) if saldo else 0
+    # Se há filtro de cliente, usa o saldo inicial daquele cliente
+    # Se não há filtro, soma TODOS os saldos iniciais de todos os clientes
+    if cliente_id:
+        volume_inicial = float(saldo['volume_inicial']) if saldo else 0
+    else:
+        cursor.execute("SELECT COALESCE(SUM(volume_inicial), 0) as total FROM arla_saldo_inicial")
+        volume_inicial = float(cursor.fetchone()['total'])
+    
     estoque_atual = volume_inicial + total_compras - total_vendas
     
     # Unifica movimentações para a tabela
@@ -191,11 +198,16 @@ def saldo_inicial():
         volume_inicial = request.form['volume_inicial']
         preco_medio_compra = request.form['preco_medio_compra']
         encerrante_inicial = request.form['encerrante_inicial']
+        cliente_id = request.form.get('cliente_id')
+        
+        if not cliente_id:
+            flash('Por favor, selecione um cliente!', 'danger')
+            return redirect(url_for('arla.saldo_inicial'))
 
         cursor.execute("""
-            INSERT INTO arla_saldo_inicial (data, volume_inicial, preco_medio_compra, encerrante_inicial)
-            VALUES (%s, %s, %s, %s)
-        """, (data, volume_inicial, preco_medio_compra, encerrante_inicial))
+            INSERT INTO arla_saldo_inicial (data, volume_inicial, preco_medio_compra, encerrante_inicial, cliente_id)
+            VALUES (%s, %s, %s, %s, %s)
+        """, (data, volume_inicial, preco_medio_compra, encerrante_inicial, cliente_id))
         conn.commit()
         cursor.close()
         conn.close()
@@ -205,10 +217,21 @@ def saldo_inicial():
 
     cursor.execute("SELECT * FROM arla_saldo_inicial ORDER BY data DESC LIMIT 1")
     saldo = cursor.fetchone()
+    
+    # Busca clientes com ARLA configurado
+    cursor.execute("""
+        SELECT DISTINCT c.id, c.razao_social 
+        FROM clientes c
+        INNER JOIN cliente_produtos cp ON c.id = cp.cliente_id
+        INNER JOIN produto p ON cp.produto_id = p.id
+        WHERE p.nome = 'ARLA' AND cp.ativo = 1
+        ORDER BY c.razao_social
+    """)
+    clientes_arla = cursor.fetchall()
     cursor.close()
     conn.close()
 
-    return render_template('arla/saldo_inicial.html', saldo=saldo)
+    return render_template('arla/saldo_inicial.html', saldo=saldo, clientes_arla=clientes_arla)
 
 # =============================================
 # SALDO INICIAL - EDITAR
@@ -250,25 +273,44 @@ def editar_saldo_inicial(id):
 @bp.route('/compras', methods=['GET', 'POST'])
 @login_required
 def compras():
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True)
+    
     if request.method == 'POST':
         data = request.form['data']
         quantidade = request.form['quantidade']
         preco_compra = request.form['preco_compra']
+        cliente_id = request.form.get('cliente_id')
+        
+        if not cliente_id:
+            flash('Por favor, selecione um cliente!', 'danger')
+            return redirect(url_for('arla.compras'))
 
-        conn = get_db()
-        cursor = conn.cursor()
         cursor.execute("""
-            INSERT INTO arla_compras (data, quantidade, preco_compra)
-            VALUES (%s, %s, %s)
-        """, (data, quantidade, preco_compra))
+            INSERT INTO arla_compras (data, quantidade, preco_compra, cliente_id)
+            VALUES (%s, %s, %s, %s)
+        """, (data, quantidade, preco_compra, cliente_id))
         conn.commit()
         cursor.close()
         conn.close()
 
         flash('Compra registrada com sucesso!', 'success')
         return redirect(url_for('arla.index'))
+    
+    # Busca clientes com ARLA configurado
+    cursor.execute("""
+        SELECT DISTINCT c.id, c.razao_social 
+        FROM clientes c
+        INNER JOIN cliente_produtos cp ON c.id = cp.cliente_id
+        INNER JOIN produto p ON cp.produto_id = p.id
+        WHERE p.nome = 'ARLA' AND cp.ativo = 1
+        ORDER BY c.razao_social
+    """)
+    clientes_arla = cursor.fetchall()
+    cursor.close()
+    conn.close()
 
-    return render_template('arla/compras.html')
+    return render_template('arla/compras.html', clientes_arla=clientes_arla)
 
 # =============================================
 # COMPRAS - EDITAR
@@ -315,11 +357,16 @@ def preco_venda():
     if request.method == 'POST':
         data_inicio = request.form['data_inicio']
         preco_venda = request.form['preco_venda']
+        cliente_id = request.form.get('cliente_id')
+        
+        if not cliente_id:
+            flash('Por favor, selecione um cliente!', 'danger')
+            return redirect(url_for('arla.preco_venda'))
 
         cursor.execute("""
-            INSERT INTO arla_precos_venda (data_inicio, preco_venda)
-            VALUES (%s, %s)
-        """, (data_inicio, preco_venda))
+            INSERT INTO arla_precos_venda (data_inicio, preco_venda, cliente_id)
+            VALUES (%s, %s, %s)
+        """, (data_inicio, preco_venda, cliente_id))
         conn.commit()
         cursor.close()
         conn.close()
@@ -331,10 +378,21 @@ def preco_venda():
         SELECT * FROM arla_precos_venda ORDER BY data_inicio DESC LIMIT 1
     """)
     preco_atual = cursor.fetchone()
+    
+    # Busca clientes com ARLA configurado
+    cursor.execute("""
+        SELECT DISTINCT c.id, c.razao_social 
+        FROM clientes c
+        INNER JOIN cliente_produtos cp ON c.id = cp.cliente_id
+        INNER JOIN produto p ON cp.produto_id = p.id
+        WHERE p.nome = 'ARLA' AND cp.ativo = 1
+        ORDER BY c.razao_social
+    """)
+    clientes_arla = cursor.fetchall()
     cursor.close()
     conn.close()
 
-    return render_template('arla/preco_venda.html', preco_atual=preco_atual)
+    return render_template('arla/preco_venda.html', preco_atual=preco_atual, clientes_arla=clientes_arla)
 
 # =============================================
 # LANÇAMENTO DIÁRIO - CRIAR
@@ -348,20 +406,25 @@ def lancamento():
     if request.method == 'POST':
         data = request.form['data']
         encerrante_final = float(request.form['encerrante_final'])
+        cliente_id = request.form.get('cliente_id')
+        
+        if not cliente_id:
+            flash('Por favor, selecione um cliente!', 'danger')
+            return redirect(url_for('arla.lancamento'))
 
-        cursor.execute("SELECT id FROM arla_lancamentos WHERE data = %s", (data,))
+        cursor.execute("SELECT id FROM arla_lancamentos WHERE data = %s AND cliente_id = %s", (data, cliente_id))
         existe = cursor.fetchone()
         if existe:
-            flash('Já existe um lançamento para esta data!', 'danger')
+            flash('Já existe um lançamento para esta data e cliente!', 'danger')
             cursor.close()
             conn.close()
             return redirect(url_for('arla.lancamento'))
 
         cursor.execute("""
             SELECT encerrante_final FROM arla_lancamentos
-            WHERE data < %s
+            WHERE data < %s AND cliente_id = %s
             ORDER BY data DESC LIMIT 1
-        """, (data,))
+        """, (data, cliente_id))
         ante = cursor.fetchone()
         
         encerrante_anterior = ante['encerrante_final'] if ante else None
@@ -369,25 +432,26 @@ def lancamento():
         if encerrante_anterior is None:
             cursor.execute("""
                 SELECT encerrante_inicial FROM arla_saldo_inicial
-                WHERE data <= %s ORDER BY data DESC LIMIT 1
-            """, (data,))
+                WHERE data <= %s AND cliente_id = %s ORDER BY data DESC LIMIT 1
+            """, (data, cliente_id))
             saldo_ini = cursor.fetchone()
             encerrante_anterior = saldo_ini['encerrante_inicial'] if saldo_ini else 0
 
         quantidade_vendida = encerrante_final - float(encerrante_anterior)
 
         cursor.execute("""
-            SELECT preco_venda FROM arla_precos_venda WHERE data_inicio <= %s
+            SELECT preco_venda FROM arla_precos_venda 
+            WHERE data_inicio <= %s AND cliente_id = %s
             ORDER BY data_inicio DESC LIMIT 1
-        """, (data,))
+        """, (data, cliente_id))
         preco_row = cursor.fetchone()
         preco_venda = preco_row['preco_venda'] if preco_row else 0
 
         cursor.execute("""
             INSERT INTO arla_lancamentos
-            (data, encerrante_final, quantidade_vendida, preco_venda_aplicado)
-            VALUES (%s, %s, %s, %s)
-        """, (data, encerrante_final, quantidade_vendida, preco_venda))
+            (data, encerrante_final, quantidade_vendida, preco_venda_aplicado, cliente_id)
+            VALUES (%s, %s, %s, %s, %s)
+        """, (data, encerrante_final, quantidade_vendida, preco_venda, cliente_id))
         conn.commit()
         cursor.close()
         conn.close()
@@ -415,6 +479,17 @@ def lancamento():
     """)
     preco_row = cursor.fetchone()
     preco_venda = float(preco_row['preco_venda']) if preco_row else 0
+    
+    # Busca clientes com ARLA configurado
+    cursor.execute("""
+        SELECT DISTINCT c.id, c.razao_social 
+        FROM clientes c
+        INNER JOIN cliente_produtos cp ON c.id = cp.cliente_id
+        INNER JOIN produto p ON cp.produto_id = p.id
+        WHERE p.nome = 'ARLA' AND cp.ativo = 1
+        ORDER BY c.razao_social
+    """)
+    clientes_arla = cursor.fetchall()
 
     cursor.close()
     conn.close()
@@ -423,7 +498,8 @@ def lancamento():
         'arla/lancamento.html',
         ultimo_lancamento=ultimo_lancamento,
         encerrante_anterior=encerrante_anterior,
-        preco_venda=preco_venda
+        preco_venda=preco_venda,
+        clientes_arla=clientes_arla
     )
 
 
