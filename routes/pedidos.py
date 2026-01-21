@@ -1,7 +1,7 @@
 from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify
 from flask_login import login_required
 import mysql.connector
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 
 bp = Blueprint('pedidos', __name__, url_prefix='/pedidos')
 
@@ -32,17 +32,16 @@ def gerar_numero_pedido():
 @bp.route('/')
 @login_required
 def index():
-    from datetime import timedelta
-    
     conn = get_db()
     cursor = conn.cursor(dictionary=True)
     
     data_inicio = request.args.get('data_inicio', '')
     data_fim = request.args.get('data_fim', '')
     status = request.args.get('status', '')
+    mostrar_todos = request.args.get('mostrar_todos', '')
     
-    # Se não houver filtros de data, carregar últimos 30 dias por padrão
-    if not data_inicio and not data_fim:
+    # Se não houver filtros de data e não for solicitado mostrar todos, carregar últimos 30 dias por padrão
+    if not data_inicio and not data_fim and not mostrar_todos:
         data_fim_obj = date.today()
         data_inicio_obj = data_fim_obj - timedelta(days=30)
         data_inicio = data_inicio_obj.strftime('%Y-%m-%d')
