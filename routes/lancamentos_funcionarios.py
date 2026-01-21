@@ -56,7 +56,7 @@ def lista():
         query += " AND l.clienteid = %s"
         params.append(cliente_filtro)
     
-    query += " GROUP BY l.mes, l.clienteid, l.statuslancamento ORDER BY l.mes DESC, c.nome"
+    query += " GROUP BY l.mes, l.clienteid, l.statuslancamento ORDER BY l.mes DESC, c.razao_social"
     
     cursor.execute(query, params)
     lancamentos = cursor.fetchall()
@@ -125,8 +125,14 @@ def novo():
     # Get default month (previous month)
     mes_padrao = get_previous_month()
     
-    # Get clientes
-    cursor.execute("SELECT id, razao_social as nome FROM clientes ORDER BY razao_social")
+    # Get clientes - only those with products configured
+    cursor.execute("""
+        SELECT DISTINCT c.id, c.razao_social as nome 
+        FROM clientes c
+        INNER JOIN cliente_produtos cp ON c.id = cp.cliente_id
+        WHERE cp.ativo = 1
+        ORDER BY c.razao_social
+    """)
     clientes = cursor.fetchall()
     
     # Get all rubricas

@@ -58,7 +58,14 @@ def novo():
     cursor = conn.cursor(dictionary=True)
     cursor.execute("SELECT * FROM categoriasfuncionarios WHERE ativo = 1 ORDER BY nome")
     categorias = cursor.fetchall()
-    cursor.execute("SELECT id, razao_social as nome FROM clientes ORDER BY razao_social")
+    # Only show clients that have products configured (cliente_produtos)
+    cursor.execute("""
+        SELECT DISTINCT c.id, c.razao_social as nome 
+        FROM clientes c
+        INNER JOIN cliente_produtos cp ON c.id = cp.cliente_id
+        WHERE cp.ativo = 1
+        ORDER BY c.razao_social
+    """)
     clientes = cursor.fetchall()
     cursor.close()
     conn.close()
@@ -100,7 +107,14 @@ def editar(id):
     funcionario = cursor.fetchone()
     cursor.execute("SELECT * FROM categoriasfuncionarios WHERE ativo = 1 ORDER BY nome")
     categorias = cursor.fetchall()
-    cursor.execute("SELECT id, razao_social as nome FROM clientes ORDER BY razao_social")
+    # Only show clients that have products configured (cliente_produtos)
+    cursor.execute("""
+        SELECT DISTINCT c.id, c.razao_social as nome 
+        FROM clientes c
+        INNER JOIN cliente_produtos cp ON c.id = cp.cliente_id
+        WHERE cp.ativo = 1
+        ORDER BY c.razao_social
+    """)
     clientes = cursor.fetchall()
     cursor.close()
     conn.close()
