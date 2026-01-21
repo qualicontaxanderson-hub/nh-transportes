@@ -42,7 +42,8 @@ def index():
         SELECT DISTINCT c.id, c.razao_social 
         FROM clientes c
         INNER JOIN cliente_produtos cp ON c.id = cp.cliente_id
-        WHERE cp.arla = 1
+        INNER JOIN produto p ON cp.produto_id = p.id
+        WHERE p.nome = 'ARLA' AND cp.ativo = 1
         ORDER BY c.razao_social
     """)
     clientes_arla = cursor.fetchall()
