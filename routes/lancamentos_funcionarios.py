@@ -156,17 +156,20 @@ def novo():
 @login_required
 def get_funcionarios(cliente_id):
     """API endpoint to get employees by client"""
-    conn = get_db_connection()
-    cursor = conn.cursor(dictionary=True)
+    conn = None
+    cursor = None
     
     try:
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+        
         # Get all active employees for the client
         cursor.execute("""
             SELECT 
                 f.id,
                 f.nome,
                 f.categoria,
-                f.salario_base,
+                COALESCE(f.salario_base, 0) as salario_base,
                 'funcionario' as tipo
             FROM funcionarios f
             WHERE f.ativo = 1 AND (f.id_cliente = %s OR f.id_cliente IS NULL)
@@ -174,7 +177,7 @@ def get_funcionarios(cliente_id):
         """, (cliente_id,))
         funcionarios = cursor.fetchall()
         
-        # Also get motoristas that receive commission
+        # Also get motoristas that receive commission for this client
         cursor.execute("""
             SELECT 
                 m.id,
@@ -192,18 +195,27 @@ def get_funcionarios(cliente_id):
         all_employees = funcionarios + motoristas
         
         return jsonify(all_employees)
+    except Exception as e:
+        import logging
+        logging.error(f"Error in get_funcionarios: {str(e)}")
+        return jsonify({'error': 'Erro ao carregar funcionários'}), 500
     finally:
-        cursor.close()
-        conn.close()
+        if cursor:
+            cursor.close()
+        if conn:
+            conn.close()
 
 @bp.route('/get-comissoes/<int:cliente_id>/<mes>')
 @login_required
 def get_comissoes(cliente_id, mes):
     """API endpoint to get commission data for motoristas for a specific month"""
-    conn = get_db_connection()
-    cursor = conn.cursor(dictionary=True)
+    conn = None
+    cursor = None
     
     try:
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+        
         # Convert MM/YYYY to date range
         try:
             month_str, year_str = mes.split('/')
@@ -214,14 +226,12 @@ def get_comissoes(cliente_id, mes):
             data_inicio = f"{year}-{month:02d}-01"
             
             # Last day of the month
-            if month == 12:
-                data_fim = f"{year}-12-31"
-            else:
-                next_month = month + 1
-                import calendar
-                last_day = calendar.monthrange(year, month)[1]
-                data_fim = f"{year}-{month:02d}-{last_day}"
-        except:
+            import calendar
+            last_day = calendar.monthrange(year, month)[1]
+            data_fim = f"{year}-{month:02d}-{last_day}"
+        except Exception as e:
+            import logging
+            logging.error(f"Error parsing month in get_comissoes: {str(e)}")
             return jsonify({})
         
         # Get commission totals per motorista for the month
@@ -246,8 +256,13 @@ def get_comissoes(cliente_id, mes):
         comissoes_dict = {c['motorista_id']: float(c['comissao_total']) for c in comissoes}
         
         return jsonify(comissoes_dict)
+    except Exception as e:
+        import logging
+        logging.error(f"Error in get_comissoes: {str(e)}")
+        return jsonify({})
     finally:
-        cursor.close()
+        if cursor:
+            cursor.close()
         conn.close()
 
 @bp.route('/get-veiculos/<int:funcionario_id>')
