@@ -37,7 +37,7 @@ def index():
     # Filtro de cliente
     cliente_id = request.args.get('cliente_id', '')
     
-    # Busca clientes com ARLA configurado (produto_id = 7)
+    # Busca clientes com ARLA configurado
     cursor.execute("""
         SELECT DISTINCT c.id, c.razao_social 
         FROM clientes c
