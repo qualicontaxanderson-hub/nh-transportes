@@ -35,19 +35,28 @@
             {% else %}
                 <!-- Formulário só aparece se NÃO existe saldo cadastrado -->
                 <form method="post" class="row g-3">
-                    <div class="col-md-3">
+                    <div class="col-md-4">
+                        <label for="cliente_id" class="form-label">Cliente <span class="text-danger">*</span></label>
+                        <select class="form-select" id="cliente_id" name="cliente_id" required>
+                            <option value="">Selecione um cliente...</option>
+                            {% for cliente in clientes_arla %}
+                            <option value="{{ cliente.id }}">{{ cliente.razao_social }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-4">
                         <label for="data" class="form-label">Data do Saldo Inicial</label>
                         <input type="date" class="form-control" id="data" name="data" required>
                     </div>
-                    <div class="col-md-3">
+                    <div class="col-md-4">
                         <label for="volume_inicial" class="form-label">Volume Inicial (litros)</label>
                         <input type="number" min="0" step="0.01" class="form-control" id="volume_inicial" name="volume_inicial" required>
                     </div>
-                    <div class="col-md-3">
+                    <div class="col-md-6">
                         <label for="preco_medio_compra" class="form-label">Preço Médio Compra (por litro)</label>
                         <input type="number" min="0" step="0.01" class="form-control" id="preco_medio_compra" name="preco_medio_compra" required>
                     </div>
-                    <div class="col-md-3">
+                    <div class="col-md-6">
                         <label for="encerrante_inicial" class="form-label">Encerrante Inicial</label>
                         <input type="number" min="0" step="0.01" class="form-control" id="encerrante_inicial" name="encerrante_inicial" required>
                     </div>

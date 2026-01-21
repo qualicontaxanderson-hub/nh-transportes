@@ -21,6 +21,15 @@
         </div>
         <div class="card-body">
             <form method="post" class="row g-3">
+                <div class="col-md-6">
+                    <label for="cliente_id" class="form-label">Cliente <span class="text-danger">*</span></label>
+                    <select class="form-select" id="cliente_id" name="cliente_id" required>
+                        <option value="">Selecione um cliente...</option>
+                        {% for cliente in clientes_arla %}
+                        <option value="{{ cliente.id }}">{{ cliente.razao_social }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
                 <div class="col-md-3">
                     <label for="data" class="form-label">Data da Compra</label>
                     <input type="date" class="form-control" id="data" name="data" required>
@@ -29,11 +38,16 @@
                     <label for="quantidade" class="form-label">Quantidade (litros)</label>
                     <input type="number" min="0" step="0.01" class="form-control" id="quantidade" name="quantidade" required>
                 </div>
-                <div class="col-md-3">
+                <div class="col-md-6">
                     <label for="preco_compra" class="form-label">Preço de Compra (por litro)</label>
-                    <input type="number" min="0" step="0.01" class="form-control" id="preco_compra" name="preco_compra" required>
+                    <div class="input-group">
+                        <span class="input-group-text">R$</span>
+                        <input type="text" class="form-control" id="preco_compra_display" placeholder="0,00">
+                        <input type="hidden" id="preco_compra" name="preco_compra" required>
+                    </div>
+                    <small class="text-muted">Digite apenas números: 150000 = R$ 1.500,00</small>
                 </div>
-                <div class="col-md-3">
+                <div class="col-md-6">
                     <label for="valor_total" class="form-label">Valor Total da Nota (R$)</label>
                     <input type="text" class="form-control bg-warning" id="valor_total" name="valor_total" value="0,00" readonly>
                 </div>
@@ -65,12 +79,44 @@
 <script>
 document.addEventListener('DOMContentLoaded', function() {
     const quantidadeInput = document.getElementById('quantidade');
-    const precoCompraInput = document.getElementById('preco_compra');
+    const precoCompraDisplayInput = document.getElementById('preco_compra_display');
+    const precoCompraHiddenInput = document.getElementById('preco_compra');
     const valorTotalInput = document.getElementById('valor_total');
+
+    // Função para formatar moeda brasileira (apenas números -> 1.500,00)
+    function formatarMoeda(valor) {
+        // Remove tudo que não é dígito
+        valor = valor.replace(/\D/g, '');
+        
+        // Se vazio, retorna 0,00
+        if (valor === '') return '0,00';
+        
+        // Converte para número e divide por 100 para obter os centavos
+        const numero = parseInt(valor) / 100;
+        
+        // Formata para o padrão brasileiro (1.234,56)
+        return numero.toLocaleString('pt-BR', {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2
+        });
+    }
+
+    // Evento para formatar o preço de compra enquanto digita
+    precoCompraDisplayInput.addEventListener('input', function(e) {
+        let valor = e.target.value;
+        const formatado = formatarMoeda(valor);
+        e.target.value = formatado;
+        
+        // Armazena o valor real (formato americano) no campo hidden
+        const valorReal = formatado.replace(/\./g, '').replace(',', '.');
+        precoCompraHiddenInput.value = valorReal;
+        
+        calcularTotal();
+    });
 
     function calcularTotal() {
         const quantidade = parseFloat(quantidadeInput.value) || 0;
-        const precoCompra = parseFloat(precoCompraInput.value) || 0;
+        const precoCompra = parseFloat(precoCompraHiddenInput.value) || 0;
         const total = quantidade * precoCompra;
         
         // Formata para o padrão brasileiro (1.234,56)
@@ -80,9 +126,8 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    // Calcula quando o usuário digita nos campos
+    // Calcula quando o usuário digita a quantidade
     quantidadeInput.addEventListener('input', calcularTotal);
-    precoCompraInput.addEventListener('input', calcularTotal);
 });
 </script>
 {% endblock %}
