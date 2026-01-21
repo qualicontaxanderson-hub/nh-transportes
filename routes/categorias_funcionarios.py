@@ -41,7 +41,7 @@ def novo():
     
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
-    cursor.execute("SELECT id, nome FROM clientes WHERE ativo = 1 ORDER BY nome")
+    cursor.execute("SELECT id, razao_social as nome FROM clientes ORDER BY razao_social")
     clientes = cursor.fetchall()
     cursor.close()
     conn.close()
@@ -74,7 +74,7 @@ def editar(id):
     
     cursor.execute("SELECT * FROM categoriasfuncionarios WHERE id = %s", (id,))
     categoria = cursor.fetchone()
-    cursor.execute("SELECT id, nome FROM clientes WHERE ativo = 1 ORDER BY nome")
+    cursor.execute("SELECT id, razao_social as nome FROM clientes ORDER BY razao_social")
     clientes = cursor.fetchall()
     cursor.close()
     conn.close()

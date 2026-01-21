@@ -38,7 +38,7 @@ def lista():
         SELECT 
             l.mes,
             l.clienteid,
-            c.nome as cliente_nome,
+            c.razao_social as cliente_nome,
             COUNT(DISTINCT l.funcionarioid) as total_funcionarios,
             SUM(l.valor) as total_valor,
             l.statuslancamento
@@ -62,7 +62,7 @@ def lista():
     lancamentos = cursor.fetchall()
     
     # Get clients for filter
-    cursor.execute("SELECT id, nome FROM clientes WHERE ativo = 1 ORDER BY nome")
+    cursor.execute("SELECT id, razao_social as nome FROM clientes ORDER BY razao_social")
     clientes = cursor.fetchall()
     
     cursor.close()
@@ -126,7 +126,7 @@ def novo():
     mes_padrao = get_previous_month()
     
     # Get clientes
-    cursor.execute("SELECT id, nome FROM clientes WHERE ativo = 1 ORDER BY nome")
+    cursor.execute("SELECT id, razao_social as nome FROM clientes ORDER BY razao_social")
     clientes = cursor.fetchall()
     
     # Get all rubricas
@@ -238,7 +238,7 @@ def detalhe(mes, cliente_id):
     lancamentos = cursor.fetchall()
     
     # Get client name
-    cursor.execute("SELECT nome FROM clientes WHERE id = %s", (cliente_id,))
+    cursor.execute("SELECT razao_social as nome FROM clientes WHERE id = %s", (cliente_id,))
     cliente = cursor.fetchone()
     
     cursor.close()
