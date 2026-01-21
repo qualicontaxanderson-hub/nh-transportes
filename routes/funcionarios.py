@@ -12,7 +12,7 @@ def lista():
     cursor = conn.cursor(dictionary=True)
     cursor.execute("""
         SELECT f.*
-        FROM funcionarios_financeiro f
+        FROM funcionarios f
         WHERE f.ativo = 1
         ORDER BY f.nome
     """)
@@ -30,7 +30,7 @@ def novo():
         cursor = conn.cursor()
         
         cursor.execute("""
-            INSERT INTO funcionarios_financeiro (
+            INSERT INTO funcionarios (
                 nome, id_cliente, tipo, cpf, telefone, email, 
                 cargo, data_admissao, salario_base, categoria, ativo
             ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
@@ -74,7 +74,7 @@ def editar(id):
     
     if request.method == 'POST':
         cursor.execute("""
-            UPDATE funcionarios_financeiro SET 
+            UPDATE funcionarios SET 
                 nome=%s, id_cliente=%s, categoria=%s, cpf=%s, telefone=%s, 
                 email=%s, cargo=%s, data_admissao=%s, salario_base=%s
             WHERE id=%s
@@ -96,7 +96,7 @@ def editar(id):
         flash('Funcionário atualizado com sucesso!', 'success')
         return redirect(url_for('funcionarios.lista'))
     
-    cursor.execute("SELECT * FROM funcionarios_financeiro WHERE id = %s", (id,))
+    cursor.execute("SELECT * FROM funcionarios WHERE id = %s", (id,))
     funcionario = cursor.fetchone()
     cursor.execute("SELECT * FROM categoriasfuncionarios WHERE ativo = 1 ORDER BY nome")
     categorias = cursor.fetchall()
@@ -114,7 +114,7 @@ def excluir(id):
     conn = get_db_connection()
     cursor = conn.cursor()
     # Soft delete
-    cursor.execute("UPDATE funcionarios_financeiro SET ativo = 0 WHERE id = %s", (id,))
+    cursor.execute("UPDATE funcionarios SET ativo = 0 WHERE id = %s", (id,))
     conn.commit()
     cursor.close()
     conn.close()
@@ -147,7 +147,7 @@ def vincular_veiculo(id):
         flash('Veículo vinculado com sucesso!', 'success')
         return redirect(url_for('funcionarios.editar', id=id))
     
-    cursor.execute("SELECT * FROM funcionarios_financeiro WHERE id = %s", (id,))
+    cursor.execute("SELECT * FROM funcionarios WHERE id = %s", (id,))
     funcionario = cursor.fetchone()
     cursor.execute("SELECT * FROM veiculos WHERE ativo = 1 ORDER BY caminhao")
     veiculos = cursor.fetchall()

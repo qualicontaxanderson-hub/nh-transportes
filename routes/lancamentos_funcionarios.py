@@ -156,7 +156,7 @@ def get_funcionarios(cliente_id):
                 f.nome,
                 f.categoria,
                 f.salario_base
-            FROM funcionarios_financeiro f
+            FROM funcionarios f
             WHERE f.ativo = 1 AND (f.id_cliente = %s OR f.id_cliente IS NULL)
             ORDER BY f.nome
         """, (cliente_id,))
