@@ -207,6 +207,62 @@ def novo():
         motoristas=motoristas
     )
 
+@bp.route('/novo-produto', methods=['GET', 'POST'])
+@login_required
+def novo_produto():
+    """Rota para lançar apenas produtos diversos, sem abastecimento"""
+    if request.method == 'POST':
+        try:
+            veiculos_id = request.form.get('veiculos_id')
+            motoristas_id = request.form.get('motoristas_id')
+            data = request.form.get('data')
+            valor_produtos_diversos = converter_para_decimal(request.form.get('valor_produtos_diversos', '0'))
+            observacoes = request.form.get('observacoes', '')
+            
+            # Para produtos sem abastecimento, vamos usar valores zerados/nulos para combustível
+            # mas ainda precisamos do KM para manter a consistência da tabela
+            km_inicial = get_ultimo_km_veiculo(veiculos_id)
+            if km_inicial is None:
+                flash('Erro: Este veículo não possui KM inicial cadastrado. Configure o KM inicial primeiro.', 'danger')
+                return redirect(url_for('quilometragem.novo_produto'))
+            
+            # Usar o mesmo KM inicial como KM final para produtos sem abastecimento
+            km_final = km_inicial
+            km_rodados = 0
+            valor_combustivel = 0
+            litros_abastecidos = 0
+            
+            conn = get_db()
+            cursor = conn.cursor()
+            cursor.execute("""
+                INSERT INTO quilometragem 
+                (veiculos_id, motoristas_id, data, km_inicial, km_final, km_rodados, 
+                 valor_combustivel, litros_abastecidos, valor_produtos_diversos, observacoes)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            """, (veiculos_id, motoristas_id, data, km_inicial, km_final, km_rodados,
+                  valor_combustivel, litros_abastecidos, valor_produtos_diversos, observacoes))
+            conn.commit()
+            cursor.close()
+            conn.close()
+            flash('Produtos diversos cadastrados com sucesso!', 'success')
+            return redirect(url_for('quilometragem.lista'))
+        except Exception as e:
+            flash(f'Erro ao cadastrar produtos: {str(e)}', 'danger')
+    
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True)
+    cursor.execute("SELECT id, placa, modelo FROM veiculos WHERE ativo = 1 ORDER BY placa")
+    veiculos = cursor.fetchall()
+    cursor.execute("SELECT id, nome FROM motoristas ORDER BY nome")
+    motoristas = cursor.fetchall()
+    cursor.close()
+    conn.close()
+    return render_template(
+        'quilometragem/novo_produto.html',
+        veiculos=veiculos,
+        motoristas=motoristas
+    )
+
 @bp.route('/editar/<int:id>', methods=['GET', 'POST'])
 @login_required
 def editar(id):

@@ -1,0 +1,130 @@
+{% extends "base.html" %}
+
+{% block title %}Produtos Diversos - NH Transportes{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h2 style="font-size: 1.5rem;"><i class="bi bi-cart-plus"></i> Lançamento de Produtos Diversos</h2>
+        <a href="{{ url_for('quilometragem.lista') }}" class="btn btn-secondary btn-sm">
+            <i class="bi bi-arrow-left"></i> Voltar
+        </a>
+    </div>
+
+    <div class="card">
+        <div class="card-header" style="background:#17a2b8;color:white;font-size:0.9rem;font-weight:600;">
+            <i class="bi bi-cart-plus"></i> Cadastro de Produtos Diversos (Sem Abastecimento)
+        </div>
+        <div class="card-body" style="padding: 1rem;">
+            <div class="alert alert-info" role="alert">
+                <i class="bi bi-info-circle"></i> Use este formulário para registrar apenas despesas com produtos diversos, <strong>sem abastecimento de combustível</strong>.
+            </div>
+
+            <form method="POST" action="{{ url_for('quilometragem.novo_produto') }}" id="formProdutos" onsubmit="mostrarCarregando(event)">
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <label class="form-label" style="font-size: 0.9rem;font-weight:600;">Veículo <span class="text-danger">*</span></label>
+                        <select name="veiculos_id" class="form-select form-select-sm" required>
+                            <option value="">Selecione...</option>
+                            {% for veiculo in veiculos %}
+                            <option value="{{ veiculo.id }}">{{ veiculo.placa }} - {{ veiculo.modelo }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label" style="font-size: 0.9rem;font-weight:600;">Motorista <span class="text-danger">*</span></label>
+                        <select name="motoristas_id" class="form-select form-select-sm" required>
+                            <option value="">Selecione...</option>
+                            {% for motorista in motoristas %}
+                            <option value="{{ motorista.id }}">{{ motorista.nome }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+
+                <div class="row g-3 mt-2">
+                    <div class="col-md-6">
+                        <label class="form-label" style="font-size: 0.9rem;font-weight:600;">Data <span class="text-danger">*</span></label>
+                        <input type="date" name="data" class="form-control form-control-sm" required>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label" style="font-size: 0.9rem;font-weight:600;">Valor Produtos Diversos <span class="text-danger">*</span></label>
+                        <input type="text" name="valor_produtos_diversos" id="valor_produtos_diversos" class="form-control form-control-sm" required>
+                        <small class="text-muted">Digite apenas números (ex: 5000 = 50,00)</small>
+                    </div>
+                </div>
+
+                <div class="row g-3 mt-2">
+                    <div class="col-md-12">
+                        <label class="form-label" style="font-size: 0.9rem;font-weight:600;">Observações</label>
+                        <textarea name="observacoes" class="form-control form-control-sm" rows="3" placeholder="Descreva os produtos adquiridos..."></textarea>
+                    </div>
+                </div>
+
+                <div class="d-flex justify-content-between mt-3">
+                    <a href="{{ url_for('quilometragem.lista') }}" class="btn btn-secondary btn-sm">
+                        <i class="bi bi-arrow-left"></i> Voltar
+                    </a>
+                    <button type="submit" class="btn btn-success btn-sm" id="btnSalvar">
+                        <i class="bi bi-check-circle"></i> <span id="btnTexto">Salvar</span>
+                        <span id="btnSpinner" class="spinner-border spinner-border-sm d-none" role="status" aria-hidden="true"></span>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+    // Função para formatar valor com 2 casas decimais
+    function formatCurrency(value) {
+        let num = value.replace(/\D/g, '');
+        if (!num) return '';
+        
+        // Divide por 100 para posicionar o ponto decimal corretamente
+        // Exemplo: usuário digita "10000" -> queremos "100.00" -> divide 10000 por 100
+        let decimal = parseInt(num) / 100;
+        
+        return decimal.toLocaleString('pt-BR', {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2
+        });
+    }
+
+    // Aplicar formatação ao campo de valor
+    document.getElementById('valor_produtos_diversos').addEventListener('input', function(e) {
+        let formatted = formatCurrency(e.target.value);
+        e.target.value = formatted;
+    });
+
+    // Função para mostrar indicador de carregamento
+    function mostrarCarregando(event) {
+        const btnSalvar = document.getElementById('btnSalvar');
+        const btnTexto = document.getElementById('btnTexto');
+        const btnSpinner = document.getElementById('btnSpinner');
+        
+        // Desabilita o botão
+        btnSalvar.disabled = true;
+        
+        // Oculta o texto e mostra o spinner
+        btnTexto.classList.add('d-none');
+        btnSpinner.classList.remove('d-none');
+    }
+</script>
+
+<style>
+    .form-label {
+        font-weight: 600;
+        font-size: 0.9rem;
+    }
+    .btn-sm {
+        font-size: 0.8rem;
+        padding: 0.3rem 0.6rem;
+    }
+    @media (max-width: 768px) {
+        h2 {
+            font-size: 1.2rem !important;
+        }
+    }
+</style>
+{% endblock %}

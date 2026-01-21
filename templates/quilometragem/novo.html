@@ -16,7 +16,7 @@
             <i class="bi bi-plus-circle"></i> Cadastro de Quilometragem
         </div>
         <div class="card-body" style="padding: 1rem;">
-            <form method="POST" action="{{ url_for('quilometragem.novo') }}" id="formQuilometragem">
+            <form method="POST" action="{{ url_for('quilometragem.novo') }}" id="formQuilometragem" onsubmit="mostrarCarregando(event)">
                 <div class="row g-3">
                     <div class="col-md-6">
                         <label class="form-label" style="font-size: 0.9rem;font-weight:600;">Veículo <span class="text-danger">*</span></label>
@@ -96,8 +96,9 @@
                     <a href="{{ url_for('quilometragem.lista') }}" class="btn btn-secondary btn-sm">
                         <i class="bi bi-arrow-left"></i> Voltar
                     </a>
-                    <button type="submit" class="btn btn-success btn-sm">
-                        <i class="bi bi-check-circle"></i> Salvar
+                    <button type="submit" class="btn btn-success btn-sm" id="btnSalvar">
+                        <i class="bi bi-check-circle"></i> <span id="btnTexto">Salvar</span>
+                        <span id="btnSpinner" class="spinner-border spinner-border-sm d-none" role="status" aria-hidden="true"></span>
                     </button>
                 </div>
             </form>
@@ -224,6 +225,20 @@
         } else {
             document.getElementById('media_consumo').textContent = '-';
         }
+    }
+
+    // Função para mostrar indicador de carregamento
+    function mostrarCarregando(event) {
+        const btnSalvar = document.getElementById('btnSalvar');
+        const btnTexto = document.getElementById('btnTexto');
+        const btnSpinner = document.getElementById('btnSpinner');
+        
+        // Desabilita o botão
+        btnSalvar.disabled = true;
+        
+        // Oculta o texto e mostra o spinner
+        btnTexto.classList.add('d-none');
+        btnSpinner.classList.remove('d-none');
     }
 </script>
 
