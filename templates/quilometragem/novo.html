@@ -16,7 +16,7 @@
             <i class="bi bi-plus-circle"></i> Cadastro de Quilometragem
         </div>
         <div class="card-body" style="padding: 1rem;">
-            <form method="POST" action="{{ url_for('quilometragem.novo') }}" id="formQuilometragem">
+            <form method="POST" action="{{ url_for('quilometragem.novo') }}" id="formQuilometragem" onsubmit="mostrarCarregando(event)">
                 <div class="row g-3">
                     <div class="col-md-6">
                         <label class="form-label" style="font-size: 0.9rem;font-weight:600;">Veículo <span class="text-danger">*</span></label>
@@ -63,10 +63,20 @@
                     <div class="col-md-4">
                         <label class="form-label" style="font-size: 0.9rem;font-weight:600;">Litros Abastecidos <span class="text-danger">*</span></label>
                         <input type="text" name="litros_abastecidos" id="litros_abastecidos" class="form-control form-control-sm" required>
+                        <small class="text-muted">Digite apenas números (ex: 1000 = 1,000 litros)</small>
                     </div>
                     <div class="col-md-4">
                         <label class="form-label" style="font-size: 0.9rem;font-weight:600;">Valor Combustível <span class="text-danger">*</span></label>
                         <input type="text" name="valor_combustivel" id="valor_combustivel" class="form-control form-control-sm" required>
+                        <small class="text-muted">Digite apenas números (ex: 10000 = 100,00)</small>
+                    </div>
+                </div>
+
+                <div class="row g-3 mt-2">
+                    <div class="col-md-12">
+                        <label class="form-label" style="font-size: 0.9rem;font-weight:600;">Valor Produtos Diversos</label>
+                        <input type="text" name="valor_produtos_diversos" id="valor_produtos_diversos" class="form-control form-control-sm">
+                        <small class="text-muted">Gastos com outros produtos (não combustível). Opcional. Digite apenas números (ex: 5000 = 50,00)</small>
                     </div>
                 </div>
 
@@ -86,8 +96,9 @@
                     <a href="{{ url_for('quilometragem.lista') }}" class="btn btn-secondary btn-sm">
                         <i class="bi bi-arrow-left"></i> Voltar
                     </a>
-                    <button type="submit" class="btn btn-success btn-sm">
-                        <i class="bi bi-check-circle"></i> Salvar
+                    <button type="submit" class="btn btn-success btn-sm" id="btnSalvar">
+                        <i class="bi bi-check-circle"></i> <span id="btnTexto">Salvar</span>
+                        <span id="btnSpinner" class="spinner-border spinner-border-sm d-none" role="status" aria-hidden="true"></span>
                     </button>
                 </div>
             </form>
@@ -97,6 +108,74 @@
 
 <script>
     let kmInicial = 0;
+
+    // Helper function to parse formatted numbers back to float
+    function parseFormattedNumber(value) {
+        if (!value) return 0;
+        // Remove thousands separators (.) and replace decimal comma (,) with dot (.)
+        // Handles both formatted strings like "1.000,00" and plain numbers
+        return parseFloat(value.toString().replace(/\./g, '').replace(',', '.')) || 0;
+    }
+
+    // Function to format number with 2 decimal places and thousands separator
+    function formatCurrency(value) {
+        // Remove non-numeric characters (regex removes everything except digits)
+        let num = value.replace(/\D/g, '');
+        if (!num) return '';
+        
+        // Divide by 100 to position decimal point correctly
+        // Example: user types "10000" -> we want "100.00" -> divide 10000 by 100
+        let decimal = parseInt(num) / 100;
+        
+        // Format with thousands separator and 2 decimal places
+        return decimal.toLocaleString('pt-BR', {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2
+        });
+    }
+    
+    // Function to format liters with 3 decimal places and thousands separator
+    function formatLiters(value) {
+        // Remove non-numeric characters (regex removes everything except digits)
+        let num = value.replace(/\D/g, '');
+        if (!num) return '';
+        
+        // Divide by 1000 to position decimal point correctly for 3 decimal places
+        // Example: user types "10000" -> we want "10.000" -> divide 10000 by 1000
+        let decimal = parseInt(num) / 1000;
+        
+        // Format with thousands separator and 3 decimal places
+        return decimal.toLocaleString('pt-BR', {
+            minimumFractionDigits: 3,
+            maximumFractionDigits: 3
+        });
+    }
+
+    // Apply formatting to KM Final (2 decimals)
+    document.getElementById('km_final').addEventListener('input', function(e) {
+        let formatted = formatCurrency(e.target.value);
+        e.target.value = formatted;
+        calcularKmRodados();
+    });
+
+    // Apply formatting to Valor Combustivel (2 decimals)
+    document.getElementById('valor_combustivel').addEventListener('input', function(e) {
+        let formatted = formatCurrency(e.target.value);
+        e.target.value = formatted;
+    });
+
+    // Apply formatting to Valor Produtos Diversos (2 decimals)
+    document.getElementById('valor_produtos_diversos').addEventListener('input', function(e) {
+        let formatted = formatCurrency(e.target.value);
+        e.target.value = formatted;
+    });
+
+    // Apply formatting to Litros Abastecidos (3 decimals)
+    document.getElementById('litros_abastecidos').addEventListener('input', function(e) {
+        let formatted = formatLiters(e.target.value);
+        e.target.value = formatted;
+        calcularMedia();
+    });
 
     document.getElementById('veiculos_id').addEventListener('change', function() {
         const veiculoId = this.value;
@@ -127,7 +206,7 @@
     });
 
     function calcularKmRodados() {
-        const kmFinal = parseFloat(document.getElementById('km_final').value.replace(/\./g, '').replace(',', '.')) || 0;
+        const kmFinal = parseFormattedNumber(document.getElementById('km_final').value);
         const kmRodados = kmFinal - kmInicial;
         if (kmRodados > 0) {
             document.getElementById('km_rodados').value = kmRodados.toLocaleString('pt-BR', {minimumFractionDigits: 0, maximumFractionDigits: 0});
@@ -138,8 +217,8 @@
     }
     
     function calcularMedia() {
-        const kmRodados = parseFloat(document.getElementById('km_rodados').value.replace(/\./g, '').replace(',', '.')) || 0;
-        const litros = parseFloat(document.getElementById('litros_abastecidos').value.replace(/\./g, '').replace(',', '.')) || 0;
+        const kmRodados = parseFormattedNumber(document.getElementById('km_rodados').value);
+        const litros = parseFormattedNumber(document.getElementById('litros_abastecidos').value);
         if (kmRodados > 0 && litros > 0) {
             const media = kmRodados / litros;
             document.getElementById('media_consumo').innerHTML = `<strong>${media.toFixed(2).replace('.', ',')} km/l</strong>`;
@@ -147,9 +226,20 @@
             document.getElementById('media_consumo').textContent = '-';
         }
     }
-    
-    document.getElementById('km_final').addEventListener('input', calcularKmRodados);
-    document.getElementById('litros_abastecidos').addEventListener('input', calcularMedia);
+
+    // Função para mostrar indicador de carregamento
+    function mostrarCarregando(event) {
+        const btnSalvar = document.getElementById('btnSalvar');
+        const btnTexto = document.getElementById('btnTexto');
+        const btnSpinner = document.getElementById('btnSpinner');
+        
+        // Desabilita o botão
+        btnSalvar.disabled = true;
+        
+        // Oculta o texto e mostra o spinner
+        btnTexto.classList.add('d-none');
+        btnSpinner.classList.remove('d-none');
+    }
 </script>
 
 <style>

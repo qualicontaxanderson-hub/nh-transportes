@@ -16,7 +16,7 @@
             <i class="bi bi-pencil"></i> Edição de Quilometragem
         </div>
         <div class="card-body" style="padding: 1rem;">
-            <form method="POST" action="{{ url_for('quilometragem.editar', id=quilometragem.id) }}" id="formQuilometragem">
+            <form method="POST" action="{{ url_for('quilometragem.editar', id=quilometragem.id) }}" id="formQuilometragem" onsubmit="mostrarCarregando(event)">
                 <div class="row g-3">
                     <div class="col-md-6">
                         <label class="form-label" style="font-size: 0.9rem;font-weight:600;">Veículo <span class="text-danger">*</span></label>
@@ -74,6 +74,14 @@
 
                 <div class="row g-3 mt-2">
                     <div class="col-md-12">
+                        <label class="form-label" style="font-size: 0.9rem;font-weight:600;">Valor Produtos Diversos</label>
+                        <input type="text" name="valor_produtos_diversos" id="valor_produtos_diversos" class="form-control form-control-sm" value="{% if quilometragem.valor_produtos_diversos %}{{ '{:,.2f}'.format(quilometragem.valor_produtos_diversos).replace(',', 'X').replace('.', ',').replace('X', '.') }}{% endif %}">
+                        <small class="text-muted">Gastos com outros produtos (não combustível). Opcional.</small>
+                    </div>
+                </div>
+
+                <div class="row g-3 mt-2">
+                    <div class="col-md-12">
                         <label class="form-label" style="font-size: 0.9rem;font-weight:600;">Observações</label>
                         <textarea name="observacoes" class="form-control form-control-sm" rows="3">{{ quilometragem.observacoes }}</textarea>
                     </div>
@@ -94,8 +102,9 @@
                     <a href="{{ url_for('quilometragem.lista') }}" class="btn btn-secondary btn-sm">
                         <i class="bi bi-arrow-left"></i> Voltar
                     </a>
-                    <button type="submit" class="btn btn-warning btn-sm">
-                        <i class="bi bi-check-circle"></i> Atualizar
+                    <button type="submit" class="btn btn-warning btn-sm" id="btnSalvar">
+                        <i class="bi bi-check-circle"></i> <span id="btnTexto">Atualizar</span>
+                        <span id="btnSpinner" class="spinner-border spinner-border-sm d-none" role="status" aria-hidden="true"></span>
                     </button>
                 </div>
             </form>
@@ -125,6 +134,20 @@
         } else {
             document.getElementById('media_consumo').textContent = '-';
         }
+    }
+
+    // Função para mostrar indicador de carregamento
+    function mostrarCarregando(event) {
+        const btnSalvar = document.getElementById('btnSalvar');
+        const btnTexto = document.getElementById('btnTexto');
+        const btnSpinner = document.getElementById('btnSpinner');
+        
+        // Desabilita o botão
+        btnSalvar.disabled = true;
+        
+        // Oculta o texto e mostra o spinner
+        btnTexto.classList.add('d-none');
+        btnSpinner.classList.remove('d-none');
     }
     
     document.getElementById('km_inicial').addEventListener('input', calcularKmRodados);
