@@ -83,20 +83,31 @@
         </div>
     </div>
 
-    <!-- FILTRO POR DATA -->
+    <!-- FILTRO POR DATA E CLIENTE -->
     <div class="card mb-3">
         <div class="card-header" style="background:#e9ecef;font-weight:600;">
-            <i class="bi bi-funnel"></i> Filtrar por Período
+            <i class="bi bi-funnel"></i> Filtrar por Período e Cliente
         </div>
         <div class="card-body">
             <form method="GET" action="{{ url_for('arla.index') }}" class="row g-2 align-items-end">
-                <div class="col-md-4">
+                <div class="col-md-3">
                     <label for="data_inicio" class="form-label" style="font-size:0.9rem;">Data Inicial</label>
                     <input type="date" class="form-control form-control-sm" id="data_inicio" name="data_inicio" value="{{ filtros.data_inicio }}">
                 </div>
-                <div class="col-md-4">
+                <div class="col-md-3">
                     <label for="data_fim" class="form-label" style="font-size:0.9rem;">Data Final</label>
                     <input type="date" class="form-control form-control-sm" id="data_fim" name="data_fim" value="{{ filtros.data_fim }}">
+                </div>
+                <div class="col-md-4">
+                    <label for="cliente_id" class="form-label" style="font-size:0.9rem;">Cliente</label>
+                    <select class="form-select form-select-sm" id="cliente_id" name="cliente_id">
+                        <option value="">Todos os Clientes</option>
+                        {% for cliente in clientes_arla %}
+                        <option value="{{ cliente.id }}" {% if filtros.cliente_id == cliente.id|string %}selected{% endif %}>
+                            {{ cliente.razao_social }}
+                        </option>
+                        {% endfor %}
+                    </select>
                 </div>
                 <div class="col-md-4">
                     <button type="submit" class="btn btn-primary btn-sm me-2">

@@ -1,0 +1,94 @@
+{% extends 'base.html' %}
+{% block title %}Editar Lançamento - NH Transportes{% endblock %}
+{% block content %}
+<div class="container-fluid">
+    <nav aria-label="breadcrumb" class="mt-2 mb-3">
+        <ol class="breadcrumb" style="font-size: 0.85rem;">
+            <li class="breadcrumb-item"><a href="/">Dashboard</a></li>
+            <li class="breadcrumb-item"><a href="{{ url_for('lancamentos_receitas.lista') }}">Lançamentos de Receitas</a></li>
+            <li class="breadcrumb-item active" aria-current="page">Editar Lançamento</li>
+        </ol>
+    </nav>
+    
+    <h2 class="mb-3" style="color:#1D63A5; font-size: 1.3rem;"><i class="bi bi-pencil-square"></i> Editar Lançamento</h2>
+    
+    <div class="card shadow-sm">
+        <div class="card-header" style="background:#ffc107;color:#000; font-size: 0.95rem; padding: 0.6rem 1rem;">
+            <h5 class="mb-0" style="font-size: 1rem;">Editar Lançamento de Receita</h5>
+        </div>
+        <div class="card-body" style="padding: 1rem;">
+            <form method="POST">
+                <div class="row">
+                    <div class="col-md-3 mb-3">
+                        <label class="form-label" style="font-size: 0.85rem;">Data *</label>
+                        <input type="date" name="data" class="form-control form-control-sm" required 
+                               value="{{ lancamento.data.strftime('%Y-%m-%d') if lancamento.data else '' }}">
+                    </div>
+                    <div class="col-md-5 mb-3">
+                        <label class="form-label" style="font-size: 0.85rem;">Receita *</label>
+                        <select name="receita_id" class="form-select form-select-sm" required>
+                            <option value="">Selecione...</option>
+                            {% for receita in receitas %}
+                            <option value="{{ receita.id }}" {% if lancamento.receita_id == receita.id %}selected{% endif %}>
+                                {{ receita.nome }} - {{ receita.cliente_nome }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-4 mb-3">
+                        <label class="form-label" style="font-size: 0.85rem;">Valor * <small class="text-muted">(digite apenas números)</small></label>
+                        <div class="input-group input-group-sm">
+                            <span class="input-group-text">R$</span>
+                            <input type="text" name="valor" class="form-control js-currency" required 
+                                   value="{{ "%.2f"|format(lancamento.valor)|replace('.', ',') }}" 
+                                   placeholder="0,00"
+                                   title="Digite apenas números. Ex: 150000 = R$ 1.500,00">
+                        </div>
+                        <small class="form-text text-muted">Digite 150000 para R$ 1.500,00</small>
+                    </div>
+                </div>
+
+                <div class="row">
+                    <div class="col-12 mb-3">
+                        <label class="form-label" style="font-size: 0.85rem;">Observação</label>
+                        <textarea name="observacao" class="form-control form-control-sm" rows="3" 
+                                  placeholder="Observações sobre o lançamento (opcional)">{{ lancamento.observacao if lancamento.observacao else '' }}</textarea>
+                    </div>
+                </div>
+
+                <hr style="margin: 1rem 0;">
+                
+                <div class="d-flex justify-content-between">
+                    <a href="{{ url_for('lancamentos_receitas.lista') }}" class="btn btn-secondary btn-sm">
+                        <i class="bi bi-arrow-left"></i> Voltar
+                    </a>
+                    <button type="submit" class="btn btn-success btn-sm">
+                        <i class="bi bi-check-circle"></i> Salvar Alterações
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<style>
+    .form-label {
+        font-weight: 600;
+        margin-bottom: 0.25rem;
+    }
+    
+    .form-control-sm, .form-select-sm {
+        font-size: 0.85rem;
+        padding: 0.4rem 0.6rem;
+    }
+    
+    @media (max-width: 768px) {
+        h2 {
+            font-size: 1.1rem !important;
+        }
+        .col-md-3, .col-md-4, .col-md-5 {
+            margin-bottom: 0.5rem !important;
+        }
+    }
+</style>
+{% endblock %}
