@@ -1,0 +1,234 @@
+{% extends "base.html" %}
+{% block titulo %}Nova Descarga{% endblock %}
+
+{% block styles %}
+<style>
+:root {
+  --grad-start: #4A90E2;
+  --grad-end: #F2994A;
+  --accent: #1f6fb6;
+}
+
+.page-header-descargas {
+  background: linear-gradient(135deg, var(--grad-start) 0%, #9fb8d6 38%, var(--grad-end) 100%);
+  color: white;
+  padding: 1.5rem;
+  border-radius: 8px;
+  margin-bottom: 1.5rem;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+}
+
+.section-card {
+  border-left: 4px solid var(--accent);
+  margin-bottom: 1.5rem;
+}
+
+.form-label {
+  font-weight: 600;
+  color: #495057;
+}
+
+.readonly-field {
+  background-color: #FFD580;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+  <!-- Cabeçalho -->
+  <div class="page-header-descargas">
+    <div class="d-flex justify-content-between align-items-center">
+      <div>
+        <h3 class="mb-1">
+          <i class="bi bi-plus-circle"></i> Nova Descarga
+        </h3>
+        <p class="mb-0 opacity-75">Frete #{{ frete.id }} - {{ frete.data_frete_formatada }}</p>
+      </div>
+      <div>
+        <a href="{{ url_for('descargas.selecionar_frete') }}" class="btn btn-light">
+          <i class="bi bi-arrow-left"></i> Voltar
+        </a>
+      </div>
+    </div>
+  </div>
+
+  <form method="POST" action="{{ url_for('descargas.nova', frete_id=frete.id) }}">
+    <!-- Dados do Frete -->
+    <div class="card section-card">
+      <div class="card-header" style="background:#17a2b8;color:white;">
+        <strong><i class="bi bi-info-circle"></i> Dados do Frete</strong>
+      </div>
+      <div class="card-body">
+        <div class="row">
+          <div class="col-md-3">
+            <label class="form-label">Cliente</label>
+            <input type="text" class="form-control readonly-field" value="{{ frete.cliente }}" readonly>
+          </div>
+          <div class="col-md-3">
+            <label class="form-label">Fornecedor</label>
+            <input type="text" class="form-control readonly-field" value="{{ frete.fornecedor }}" readonly>
+          </div>
+          <div class="col-md-3">
+            <label class="form-label">Produto</label>
+            <input type="text" class="form-control readonly-field" value="{{ frete.produto }}" readonly>
+          </div>
+          <div class="col-md-3">
+            <label class="form-label">Motorista</label>
+            <input type="text" class="form-control readonly-field" value="{{ frete.motorista }}" readonly>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Dados da Descarga -->
+    <div class="card section-card">
+      <div class="card-header" style="background:#28a745;color:white;">
+        <strong><i class="bi bi-calendar-check"></i> Dados da Descarga</strong>
+      </div>
+      <div class="card-body">
+        <div class="row mb-3">
+          <div class="col-md-3">
+            <label class="form-label">Data de Carregamento *</label>
+            <input type="date" class="form-control" name="data_carregamento" value="{{ frete.data_frete.strftime('%Y-%m-%d') if frete.data_frete else '' }}" required>
+          </div>
+          <div class="col-md-3">
+            <label class="form-label">Data de Descarga *</label>
+            <input type="date" class="form-control" name="data_descarga" required>
+          </div>
+          <div class="col-md-3">
+            <label class="form-label">Volume Total (L) *</label>
+            <input type="text" class="form-control" name="volume_total" value="{{ '{:,.0f}'.format(frete.quantidade|float).replace(',', '.') }}" required>
+          </div>
+          <div class="col-md-3">
+            <label class="form-label">Volume Descarregado (L) *</label>
+            <input type="text" class="form-control" name="volume_descarregado" id="volume_descarregado" required>
+            <small class="text-muted">Pode ser parcial para descarga em etapas</small>
+          </div>
+        </div>
+
+        <div class="row mb-3">
+          <div class="col-md-3">
+            <label class="form-label">Abastecimento Durante (L)</label>
+            <input type="text" class="form-control" name="abastecimento_durante_descarga" value="0">
+            <small class="text-muted">Se houve abastecimento durante a descarga</small>
+          </div>
+          <div class="col-md-3">
+            <label class="form-label">Temperatura (°C)</label>
+            <input type="text" class="form-control" name="temperatura">
+          </div>
+          <div class="col-md-3">
+            <label class="form-label">Densidade</label>
+            <input type="text" class="form-control" name="densidade">
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Medição Sistema -->
+    <div class="card section-card">
+      <div class="card-header" style="background:#007bff;color:white;">
+        <strong><i class="bi bi-speedometer"></i> Medição Sistema</strong>
+      </div>
+      <div class="card-body">
+        <div class="row mb-3">
+          <div class="col-md-4">
+            <label class="form-label">Estoque Antes (L)</label>
+            <input type="text" class="form-control" name="estoque_sistema_antes" id="estoque_sistema_antes">
+          </div>
+          <div class="col-md-4">
+            <label class="form-label">Estoque Depois (L)</label>
+            <input type="text" class="form-control" name="estoque_sistema_depois" id="estoque_sistema_depois">
+          </div>
+          <div class="col-md-4">
+            <label class="form-label">Diferença (L)</label>
+            <input type="text" class="form-control readonly-field" id="diferenca_sistema" readonly>
+            <small class="text-muted">Calculado automaticamente</small>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Medição Régua -->
+    <div class="card section-card">
+      <div class="card-header" style="background:#6f42c1;color:white;">
+        <strong><i class="bi bi-rulers"></i> Medição Régua</strong>
+      </div>
+      <div class="card-body">
+        <div class="row mb-3">
+          <div class="col-md-4">
+            <label class="form-label">Estoque Antes (L)</label>
+            <input type="text" class="form-control" name="estoque_regua_antes" id="estoque_regua_antes">
+          </div>
+          <div class="col-md-4">
+            <label class="form-label">Estoque Depois (L)</label>
+            <input type="text" class="form-control" name="estoque_regua_depois" id="estoque_regua_depois">
+          </div>
+          <div class="col-md-4">
+            <label class="form-label">Diferença (L)</label>
+            <input type="text" class="form-control readonly-field" id="diferenca_regua" readonly>
+            <small class="text-muted">Calculado automaticamente</small>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Observações -->
+    <div class="card section-card">
+      <div class="card-header">
+        <strong><i class="bi bi-chat-left-text"></i> Observações</strong>
+      </div>
+      <div class="card-body">
+        <textarea class="form-control" name="observacoes" rows="3"></textarea>
+      </div>
+    </div>
+
+    <!-- Botões -->
+    <div class="d-flex justify-content-between mb-4">
+      <a href="{{ url_for('descargas.selecionar_frete') }}" class="btn btn-secondary">
+        <i class="bi bi-x-circle"></i> Cancelar
+      </a>
+      <button type="submit" class="btn btn-success btn-lg">
+        <i class="bi bi-save"></i> Salvar Descarga
+      </button>
+    </div>
+  </form>
+</div>
+
+<script>
+// Função para calcular diferenças
+function calcularDiferencas() {
+  // Sistema
+  const sistemaAntes = parseFloat(document.getElementById('estoque_sistema_antes').value.replace(/\./g, '').replace(',', '.')) || 0;
+  const sistemaDepois = parseFloat(document.getElementById('estoque_sistema_depois').value.replace(/\./g, '').replace(',', '.')) || 0;
+  const volumeDescarregado = parseFloat(document.getElementById('volume_descarregado').value.replace(/\./g, '').replace(',', '.')) || 0;
+  const abastecimento = parseFloat(document.querySelector('[name="abastecimento_durante_descarga"]').value.replace(/\./g, '').replace(',', '.')) || 0;
+  
+  if (sistemaAntes && sistemaDepois && volumeDescarregado) {
+    const difSistema = sistemaDepois - sistemaAntes - volumeDescarregado + abastecimento;
+    document.getElementById('diferenca_sistema').value = difSistema.toFixed(2).replace('.', ',');
+  } else {
+    document.getElementById('diferenca_sistema').value = '';
+  }
+  
+  // Régua
+  const reguaAntes = parseFloat(document.getElementById('estoque_regua_antes').value.replace(/\./g, '').replace(',', '.')) || 0;
+  const reguaDepois = parseFloat(document.getElementById('estoque_regua_depois').value.replace(/\./g, '').replace(',', '.')) || 0;
+  
+  if (reguaAntes && reguaDepois && volumeDescarregado) {
+    const difRegua = reguaDepois - reguaAntes - volumeDescarregado + abastecimento;
+    document.getElementById('diferenca_regua').value = difRegua.toFixed(2).replace('.', ',');
+  } else {
+    document.getElementById('diferenca_regua').value = '';
+  }
+}
+
+// Adicionar listeners
+document.getElementById('estoque_sistema_antes')?.addEventListener('input', calcularDiferencas);
+document.getElementById('estoque_sistema_depois')?.addEventListener('input', calcularDiferencas);
+document.getElementById('estoque_regua_antes')?.addEventListener('input', calcularDiferencas);
+document.getElementById('estoque_regua_depois')?.addEventListener('input', calcularDiferencas);
+document.getElementById('volume_descarregado')?.addEventListener('input', calcularDiferencas);
+document.querySelector('[name="abastecimento_durante_descarga"]')?.addEventListener('input', calcularDiferencas);
+</script>
+{% endblock %}

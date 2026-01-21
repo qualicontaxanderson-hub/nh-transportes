@@ -1,0 +1,155 @@
+{% extends "base.html" %}
+{% block titulo %}Selecionar Frete - Descargas{% endblock %}
+
+{% block styles %}
+<style>
+:root {
+  --grad-start: #4A90E2;
+  --grad-end: #F2994A;
+  --accent: #1f6fb6;
+  --etanol-color: #28a745;
+  --gasolina-color: #dc3545;
+  --gasolina-aditivada-color: #007bff;
+  --s10-color: #007bff;
+  --s500-color: #343a40;
+}
+
+.page-header-descargas {
+  background: linear-gradient(135deg, var(--grad-start) 0%, #9fb8d6 38%, var(--grad-end) 100%);
+  color: white;
+  padding: 1.5rem;
+  border-radius: 8px;
+  margin-bottom: 1.5rem;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+}
+
+/* Product colors */
+.produto-etanol { color: var(--etanol-color) !important; font-weight: 600; }
+.produto-gasolina { color: var(--gasolina-color) !important; font-weight: 600; }
+.produto-gasolina-aditivada { color: var(--gasolina-aditivada-color) !important; font-weight: 600; }
+.produto-s-10 { color: var(--s10-color) !important; font-weight: 600; }
+.produto-s-500 { color: var(--s500-color) !important; font-weight: 600; }
+
+.frete-card {
+  border-left: 4px solid #007bff;
+  margin-bottom: 1rem;
+  transition: all 0.3s ease;
+  cursor: pointer;
+}
+
+.frete-card:hover {
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+  transform: translateY(-2px);
+}
+
+.frete-card.selected {
+  border-left-color: #28a745;
+  background-color: #f0f8f0;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+  <!-- Cabeçalho -->
+  <div class="page-header-descargas">
+    <div class="d-flex justify-content-between align-items-center">
+      <div>
+        <h3 class="mb-1">
+          <i class="bi bi-truck"></i> Selecionar Frete para Descarga
+        </h3>
+        <p class="mb-0 opacity-75">Escolha o frete que deseja descarregar</p>
+      </div>
+      <div>
+        <a href="{{ url_for('descargas.lista') }}" class="btn btn-light btn-lg">
+          <i class="bi bi-arrow-left"></i> Voltar
+        </a>
+      </div>
+    </div>
+  </div>
+
+  <!-- Lista de Fretes Disponíveis -->
+  <div class="card">
+    <div class="card-body">
+      {% if fretes %}
+      <div class="mb-3">
+        <input type="text" id="searchInput" class="form-control" placeholder="Buscar por cliente, fornecedor, produto ou motorista...">
+      </div>
+      
+      <div id="fretesContainer">
+        {% for frete in fretes %}
+        <div class="card frete-card" data-frete-id="{{ frete.id }}">
+          <div class="card-body">
+            <div class="row align-items-center">
+              <div class="col-md-8">
+                <h5 class="card-title mb-2">
+                  Frete #{{ frete.id }} - {{ frete.data_frete_formatada }}
+                </h5>
+                <div class="row">
+                  <div class="col-md-6">
+                    <p class="mb-1"><strong>Cliente:</strong> {{ frete.cliente }}</p>
+                    <p class="mb-1"><strong>Fornecedor:</strong> {{ frete.fornecedor }}</p>
+                  </div>
+                  <div class="col-md-6">
+                    <p class="mb-1">
+                      <strong>Produto:</strong> 
+                      {% set produto_class = '' %}
+                      {% if frete.produto %}
+                        {% set produto_upper = frete.produto|upper %}
+                        {% if 'ETANOL' in produto_upper %}
+                          {% set produto_class = 'produto-etanol' %}
+                        {% elif 'GASOLINA ADITIVADA' in produto_upper or 'ADITIVADA' in produto_upper %}
+                          {% set produto_class = 'produto-gasolina-aditivada' %}
+                        {% elif 'GASOLINA' in produto_upper %}
+                          {% set produto_class = 'produto-gasolina' %}
+                        {% elif 'S-10' in produto_upper or 'S10' in produto_upper %}
+                          {% set produto_class = 'produto-s-10' %}
+                        {% elif 'S-500' in produto_upper or 'S500' in produto_upper %}
+                          {% set produto_class = 'produto-s-500' %}
+                        {% endif %}
+                      {% endif %}
+                      <span class="{{ produto_class }}">{{ frete.produto }}</span>
+                    </p>
+                    <p class="mb-1"><strong>Motorista:</strong> {{ frete.motorista }}</p>
+                  </div>
+                </div>
+              </div>
+              <div class="col-md-4 text-end">
+                <p class="mb-2"><strong>Quantidade:</strong> {{ '{:,.0f}'.format(frete.quantidade|float).replace(',', '.') }} L</p>
+                <p class="mb-2"><strong>Veículo:</strong> {{ frete.veiculo }}</p>
+                <a href="{{ url_for('descargas.nova', frete_id=frete.id) }}" class="btn btn-success">
+                  <i class="bi bi-plus-circle"></i> Descarregar
+                </a>
+              </div>
+            </div>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+      {% else %}
+      <div class="alert alert-info text-center">
+        <i class="bi bi-info-circle"></i>
+        Nenhum frete disponível para descarga. Todos os fretes já possuem descargas associadas ou não há fretes cadastrados.
+      </div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+<script>
+// Filtro de busca em tempo real
+document.getElementById('searchInput')?.addEventListener('input', function(e) {
+  const searchTerm = e.target.value.toLowerCase();
+  const freteCards = document.querySelectorAll('.frete-card');
+  
+  freteCards.forEach(card => {
+    const text = card.textContent.toLowerCase();
+    if (text.includes(searchTerm)) {
+      card.style.display = '';
+    } else {
+      card.style.display = 'none';
+    }
+  });
+});
+</script>
+{% endblock %}
