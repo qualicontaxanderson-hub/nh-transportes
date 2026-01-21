@@ -4,7 +4,80 @@
 
 {% block content %}
 <div class="container-fluid mt-3">
-    <h2 class="mb-3">💰 Recebimentos / Boletos</h2>
+    <h2 class="mb-3" style="color:#1D63A5">
+        <i class="bi bi-wallet2"></i> Recebimentos / Boletos
+    </h2>
+
+    <!-- RESUMO: FRETES, BOLETOS, DIFERENÇA -->
+    <div class="row mb-3">
+        <!-- TOTAL FRETES -->
+        <div class="col-md-4 mb-2">
+            <div class="card h-100">
+                <div class="card-header d-flex justify-content-between align-items-center" style="background:#92a7be;font-weight:600;">
+                    <span>Valor de Frete</span>
+                </div>
+                <div class="card-body text-center">
+                    <h3 style="color:#17963c; margin-bottom: 0;">R$ {{ "{:,.2f}".format(total_fretes).replace(',', 'X').replace('.', ',').replace('X', '.') }}</h3>
+                    <small class="text-muted">Total do período</small>
+                </div>
+            </div>
+        </div>
+
+        <!-- TOTAL BOLETOS EMITIDOS -->
+        <div class="col-md-4 mb-2">
+            <div class="card h-100">
+                <div class="card-header" style="background:#85e6e6;font-weight:600;">
+                    Boletos Emitidos
+                </div>
+                <div class="card-body text-center">
+                    <h3 style="color:#0066cc; margin-bottom: 0;">R$ {{ "{:,.2f}".format(total_boletos).replace(',', 'X').replace('.', ',').replace('X', '.') }}</h3>
+                    <small class="text-muted">Total emitido</small>
+                </div>
+            </div>
+        </div>
+
+        <!-- DIFERENÇA -->
+        <div class="col-md-4 mb-2">
+            <div class="card h-100">
+                <div class="card-header" style="background:#f8b500;font-weight:600;">
+                    Diferença (Fretes - Boletos)
+                </div>
+                <div class="card-body text-center">
+                    <h3 style="color:{% if diferenca >= 0 %}#333{% else %}#dc3545{% endif %}; margin-bottom: 0;">
+                        R$ {{ "{:,.2f}".format(diferenca).replace(',', 'X').replace('.', ',').replace('X', '.') }}
+                    </h3>
+                    <small class="text-muted">Saldo do período</small>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- FILTRO POR DATA -->
+    <div class="card mb-3">
+        <div class="card-header" style="background:#e9ecef;font-weight:600;">
+            <i class="bi bi-funnel"></i> Filtrar por Período
+        </div>
+        <div class="card-body">
+            <form method="GET" action="{{ url_for('financeiro.recebimentos') }}" class="row g-2 align-items-end">
+                <div class="col-md-4">
+                    <label for="data_inicio" class="form-label" style="font-size:0.9rem;">Data Inicial</label>
+                    <input type="date" class="form-control form-control-sm" id="data_inicio" name="data_inicio" value="{{ data_inicio }}">
+                </div>
+                <div class="col-md-4">
+                    <label for="data_fim" class="form-label" style="font-size:0.9rem;">Data Final</label>
+                    <input type="date" class="form-control form-control-sm" id="data_fim" name="data_fim" value="{{ data_fim }}">
+                </div>
+                <div class="col-md-4">
+                    <button type="submit" class="btn btn-primary btn-sm me-2">
+                        <i class="bi bi-search"></i> Filtrar
+                    </button>
+                    <a href="{{ url_for('financeiro.recebimentos') }}" class="btn btn-secondary btn-sm">
+                        <i class="bi bi-x-circle"></i> Limpar
+                    </a>
+                </div>
+            </form>
+        </div>
+    </div>
     
     {% if recebimentos %}
     <div class="table-responsive">

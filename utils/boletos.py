@@ -148,7 +148,7 @@ def _build_body(frete, descricao_frete, data_vencimento, valor_total_centavos):
     cep = (frete.get("cliente_cep") or "").replace("-", "").strip()
     if not cep or len(cep) != 8:
         cep = "74000000"
-    nome_cliente = (frete.get("cliente_fantasia") or frete.get("cliente_nome") or "Cliente")[:80]
+    nome_cliente = (frete.get("cliente_nome") or frete.get("cliente_fantasia") or "Cliente")[:80]
     items = [{"name": descricao_frete[:80], "amount": 1, "value": valor_total_centavos}]
     banking_billet = {
         "expire_at": data_vencimento.strftime("%Y-%m-%d"),
@@ -185,7 +185,7 @@ def _build_pay_payload(frete, descricao_frete, data_vencimento, valor_total_cent
     cep = (frete.get("cliente_cep") or "").replace("-", "").strip()
     if not cep or len(cep) != 8:
         cep = "74000000"
-    nome_cliente = (frete.get("cliente_fantasia") or frete.get("cliente_nome") or "Cliente")[:80]
+    nome_cliente = (frete.get("cliente_nome") or frete.get("cliente_fantasia") or "Cliente")[:80]
     customer = {
         "name": nome_cliente,
         "cpf": cpf_cnpj if len(cpf_cnpj) == 11 else None,
@@ -976,7 +976,7 @@ def _build_pay_payload_multi(client_data, data_vencimento):
     cep = (client_data.get("cliente_cep") or "").replace("-", "").strip()
     if not cep or len(cep) != 8:
         cep = "74000000"
-    nome_cliente = (client_data.get("cliente_fantasia") or client_data.get("cliente_nome") or "Cliente")[:80]
+    nome_cliente = (client_data.get("cliente_nome") or client_data.get("cliente_fantasia") or "Cliente")[:80]
     customer = {
         "name": nome_cliente,
         "cpf": cpf_cnpj if len(cpf_cnpj) == 11 else None,
@@ -1017,7 +1017,7 @@ def emitir_boleto_multiplo(frete_ids, vencimento_str=None):
     if parsed_date:
         data_vencimento = datetime.combine(parsed_date, datetime.min.time())
     else:
-        data_vencimento = datetime.now() + timedelta(days=7)
+        data_vencimento = datetime.now() + timedelta(days=3)
 
     conn = None
     cursor = None
@@ -1322,7 +1322,7 @@ def emitir_boleto_frete(frete_id, vencimento_str=None):
         if parsed_date:
             data_vencimento = datetime.combine(parsed_date, datetime.min.time())
         else:
-            data_vencimento = datetime.now() + timedelta(days=7)
+            data_vencimento = datetime.now() + timedelta(days=3)
 
         try:
             valor_total_centavos = int(float(frete["valor_total_frete"] or 0) * 100)

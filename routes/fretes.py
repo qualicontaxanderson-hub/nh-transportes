@@ -55,6 +55,7 @@ def lista():
             where_clause = "WHERE " + " AND ".join(filters)
 
         # Adiciona subquery EXISTS para indicar se existe cobrança vinculada (emitted)
+        # Verifica tanto cobrancas diretas (frete_id) quanto via tabela cobrancas_freites (bulk)
         query = f"""
             SELECT
                 f.id,
@@ -68,7 +69,20 @@ def lista():
                 f.valor_total_frete,
                 COALESCE(f.lucro, 0) AS lucro,
                 COALESCE(f.status, '') AS status,
-                EXISTS(SELECT 1 FROM cobrancas c WHERE c.frete_id = f.id AND (c.status IS NULL OR c.status != 'cancelado')) AS emitted
+                CASE 
+                    WHEN EXISTS(
+                        SELECT 1 FROM cobrancas cb 
+                        WHERE cb.frete_id = f.id
+                        AND (cb.status IS NULL OR cb.status != 'cancelado')
+                    ) THEN 1
+                    WHEN EXISTS(
+                        SELECT 1 FROM cobrancas_freites cf
+                        INNER JOIN cobrancas cb ON cf.cobranca_id = cb.id
+                        WHERE cf.frete_id = f.id
+                        AND (cb.status IS NULL OR cb.status != 'cancelado')
+                    ) THEN 1
+                    ELSE 0
+                END AS emitted
             FROM fretes f
             LEFT JOIN clientes c ON f.clientes_id = c.id
             LEFT JOIN fornecedores fo ON f.fornecedores_id = fo.id
@@ -844,12 +858,29 @@ def deletar(id):
         conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)
 
-        # verificar se existe cobrança vinculada ao frete
+        # verificar se existe cobrança vinculada ao frete (direta ou via bulk)
+        cobr = None
         try:
+            # Verificar cobrança direta
             cursor.execute("SELECT id, status, pago_via_provedor FROM cobrancas WHERE frete_id = %s LIMIT 1", (id,))
             cobr = cursor.fetchone()
         except Exception:
             cobr = None
+
+        # Se não encontrou cobrança direta, verificar cobrança via emissão múltipla
+        if not cobr:
+            try:
+                cursor.execute("""
+                    SELECT c.id, c.status, c.pago_via_provedor 
+                    FROM cobrancas c
+                    INNER JOIN cobrancas_freites cf ON c.id = cf.cobranca_id
+                    WHERE cf.frete_id = %s
+                    LIMIT 1
+                """, (id,))
+                cobr = cursor.fetchone()
+            except Exception:
+                # Tabela cobrancas_freites pode não existir ainda, ignorar erro
+                cobr = None
 
         if cobr:
             # existe cobrança vinculada -> impedir exclusão
