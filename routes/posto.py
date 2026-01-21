@@ -254,7 +254,7 @@ def vendas_lista():
             produto_nome = venda.produto.nome if venda.produto else 'Desconhecido'
             vendas_organizadas[key]['produtos'].append({
                 'produto': venda.produto,
-                'estoque_inicial': venda.estoque_inicial or 0,
+                'estoque_inicial': venda.estoque_inicial,  # Keep None as None, don't convert to 0
                 'litros': venda.quantidade_litros or 0,
                 'valor': venda.valor_total or 0,
                 'preco_medio': venda.preco_medio or 0,
