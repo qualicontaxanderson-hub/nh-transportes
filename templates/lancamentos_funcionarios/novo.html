@@ -23,7 +23,7 @@
                     <div class="col-md-3 mb-2">
                         <label class="form-label fw-bold" style="font-size: 0.85rem;">Mês/Ano de Referência *</label>
                         <input type="text" name="mes" id="mes" class="form-control form-control-sm" value="{{ mes_padrao }}" placeholder="01/2026" required pattern="\d{2}/\d{4}" maxlength="7">
-                        <small class="text-muted">Formato: MM/YYYY (ex: 01/2026)</small>
+                        <small class="text-muted">Digite: MMAAAA (ex: 012026)</small>
                     </div>
                     <div class="col-md-9 mb-2">
                         <label class="form-label fw-bold" style="font-size: 0.85rem;">Cliente/Empresa *</label>
@@ -123,6 +123,54 @@
 const rubricas = {{ rubricas|tojson|safe }};
 let comissoesData = {};
 
+// Currency formatting functions
+function formatCurrency(value) {
+    // Convert to number and handle decimal places
+    let num = parseFloat(value) || 0;
+    num = num / 100; // Divide by 100 to get proper decimal
+    
+    // Format with Brazilian locale
+    return num.toLocaleString('pt-BR', {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+    });
+}
+
+function parseCurrency(formatted) {
+    // Remove thousand separators and replace comma with dot
+    return parseFloat(formatted.replace(/\./g, '').replace(',', '.')) || 0;
+}
+
+function formatMonthInput(value) {
+    // Remove non-digits
+    const digits = value.replace(/\D/g, '');
+    
+    // Format as MM/YYYY
+    if (digits.length <= 2) {
+        return digits;
+    } else if (digits.length <= 6) {
+        return digits.slice(0, 2) + '/' + digits.slice(2);
+    }
+    return digits.slice(0, 2) + '/' + digits.slice(2, 6);
+}
+
+// Month input formatter
+document.addEventListener('DOMContentLoaded', function() {
+    const mesInput = document.getElementById('mes');
+    
+    mesInput.addEventListener('input', function(e) {
+        const cursorPosition = this.selectionStart;
+        const oldLength = this.value.length;
+        
+        this.value = formatMonthInput(this.value);
+        
+        // Adjust cursor position
+        const newLength = this.value.length;
+        const diff = newLength - oldLength;
+        this.setSelectionRange(cursorPosition + diff, cursorPosition + diff);
+    });
+});
+
 // Wait for both client and month to be selected before loading
 function checkAndLoadFuncionarios() {
     const clienteId = document.getElementById('clienteid').value;
@@ -177,15 +225,15 @@ function checkAndLoadFuncionarios() {
                         return `
                         <td>
                             <input type="hidden" name="rubrica_${func.id}[]" value="${rubrica.id}">
-                            <input type="number" 
+                            <input type="text" 
                                    name="valor_${func.id}[]" 
                                    class="form-control form-control-sm valor-input" 
                                    data-funcionario="${func.id}"
                                    data-rubrica-tipo="${rubrica.tipo}"
                                    data-rubrica-nome="${rubrica.nome}"
-                                   step="0.01" 
                                    placeholder="0,00"
-                                   value="${defaultValue}">
+                                   value="${defaultValue ? formatCurrency(defaultValue) : ''}"
+                                   data-raw-value="${defaultValue || '0'}">
                         </td>
                         `;
                     }).join('')}
@@ -203,7 +251,35 @@ function checkAndLoadFuncionarios() {
             
             // Add event listeners for calculation
             document.querySelectorAll('.valor-input').forEach(input => {
-                input.addEventListener('input', calculateTotals);
+                // Currency formatting on input
+                input.addEventListener('input', function(e) {
+                    const cursorPosition = this.selectionStart;
+                    const oldValue = this.value;
+                    
+                    // Remove non-digits
+                    let digits = this.value.replace(/\D/g, '');
+                    
+                    // Store raw value
+                    this.dataset.rawValue = digits;
+                    
+                    // Format display value
+                    if (digits === '' || digits === '0') {
+                        this.value = '';
+                    } else {
+                        this.value = formatCurrency(digits);
+                    }
+                    
+                    calculateTotals();
+                });
+                
+                // Initial formatting
+                if (input.value) {
+                    const digits = input.value.replace(/\D/g, '');
+                    input.dataset.rawValue = digits;
+                    if (digits && digits !== '0') {
+                        input.value = formatCurrency(digits);
+                    }
+                }
             });
             
             // Initial calculation
@@ -234,7 +310,9 @@ function calculateTotals() {
         let totalDescontos = 0;
         
         inputs.forEach((input) => {
-            const valor = parseFloat(input.value) || 0;
+            // Get raw value from data attribute (in cents)
+            const rawValue = parseFloat(input.dataset.rawValue) || 0;
+            const valor = rawValue / 100; // Convert cents to reais
             const rubricaTipo = input.dataset.rubricaTipo;
             
             // Proventos: SALARIO, BENEFICIO
@@ -265,5 +343,23 @@ function calculateTotals() {
     document.getElementById('total-descontos').textContent = `R$ ${grandTotalDescontos.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
     document.getElementById('total-liquido').textContent = `R$ ${(grandTotalProventos - grandTotalDescontos).toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
 }
+
+// Form submission handler - convert formatted values to numeric
+document.getElementById('lancamentoForm').addEventListener('submit', function(e) {
+    // Convert all formatted currency inputs to numeric values before submission
+    document.querySelectorAll('.valor-input').forEach(input => {
+        if (input.dataset.rawValue) {
+            const rawValue = parseFloat(input.dataset.rawValue) || 0;
+            input.value = (rawValue / 100).toFixed(2); // Convert cents to reais with 2 decimals
+        } else if (input.value) {
+            // Fallback: parse formatted value
+            input.value = parseCurrency(input.value).toFixed(2);
+        } else {
+            input.value = '0.00';
+        }
+    });
+    
+    // The form will now submit with proper numeric values
+});
 </script>
 {% endblock %}
