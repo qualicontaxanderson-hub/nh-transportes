@@ -427,18 +427,29 @@ def lancamento():
 
     if request.method == 'POST':
         data = request.form['data']
-        quantidade = float(request.form['quantidade'])
+        valor_total = float(request.form['valor_total'])
         cliente_id = request.form.get('cliente_id')
-        produto_id = request.form.get('produto_id')
         observacoes = request.form.get('observacoes', None)
         
         if not cliente_id:
             flash('Por favor, selecione um cliente!', 'danger')
             return redirect(url_for('lubrificantes.lancamento'))
         
-        if not produto_id:
-            flash('Por favor, selecione um produto!', 'danger')
+        # Busca o produto "PRODUTOS" (produto genérico)
+        cursor.execute("""
+            SELECT id FROM lubrificantes_produtos 
+            WHERE nome = 'PRODUTOS' AND ativo = 1
+            LIMIT 1
+        """)
+        produto_row = cursor.fetchone()
+        
+        if not produto_row:
+            flash('Produto "PRODUTOS" não encontrado! Por favor, cadastre o produto primeiro.', 'danger')
+            cursor.close()
+            conn.close()
             return redirect(url_for('lubrificantes.lancamento'))
+        
+        produto_id = produto_row['id']
 
         cursor.execute("""
             SELECT id FROM lubrificantes_lancamentos 
@@ -446,27 +457,21 @@ def lancamento():
         """, (data, cliente_id, produto_id))
         existe = cursor.fetchone()
         if existe:
-            flash('Já existe um lançamento para esta data, cliente e produto!', 'danger')
+            flash('Já existe um lançamento para esta data e cliente!', 'danger')
             cursor.close()
             conn.close()
             return redirect(url_for('lubrificantes.lancamento'))
-
-        cursor.execute("""
-            SELECT preco_venda FROM lubrificantes_precos_venda 
-            WHERE data_inicio <= %s AND clienteid = %s AND produtoid = %s AND ativo = 1
-            ORDER BY data_inicio DESC LIMIT 1
-        """, (data, cliente_id, produto_id))
-        preco_row = cursor.fetchone()
-        preco_venda = preco_row['preco_venda'] if preco_row else 0
         
-        # Calcula o valor total
-        valor_total = quantidade * float(preco_venda)
+        # Como é lançamento direto de valor, não usamos preço unitário
+        # quantidade e preco_venda_aplicado serão 0, apenas valor_total importa
+        quantidade = 0
+        preco_venda_aplicado = 0
 
         cursor.execute("""
             INSERT INTO lubrificantes_lancamentos
             (data, produtoid, clienteid, quantidade, preco_venda_aplicado, valor_total, observacoes)
             VALUES (%s, %s, %s, %s, %s, %s, %s)
-        """, (data, produto_id, cliente_id, quantidade, preco_venda, valor_total, observacoes))
+        """, (data, produto_id, cliente_id, quantidade, preco_venda_aplicado, valor_total, observacoes))
         conn.commit()
         cursor.close()
         conn.close()
@@ -475,14 +480,6 @@ def lancamento():
         return redirect(url_for('lubrificantes.index'))
 
     # GET - Busca dados para exibir no formulário
-    cursor.execute("""
-        SELECT preco_venda FROM lubrificantes_precos_venda 
-        WHERE ativo = 1
-        ORDER BY data_inicio DESC LIMIT 1
-    """)
-    preco_row = cursor.fetchone()
-    preco_venda = float(preco_row['preco_venda']) if preco_row else 0
-    
     # Busca clientes configurados
     cursor.execute("""
         SELECT DISTINCT c.id, c.razao_social 
@@ -492,23 +489,13 @@ def lancamento():
         ORDER BY c.razao_social
     """)
     clientes_lubrificantes = cursor.fetchall()
-    
-    # Busca produtos de lubrificantes
-    cursor.execute("""
-        SELECT * FROM lubrificantes_produtos 
-        WHERE ativo = 1
-        ORDER BY nome
-    """)
-    produtos = cursor.fetchall()
 
     cursor.close()
     conn.close()
 
     return render_template(
         'lubrificantes/lancamento.html',
-        preco_venda=preco_venda,
-        clientes_lubrificantes=clientes_lubrificantes,
-        produtos=produtos
+        clientes_lubrificantes=clientes_lubrificantes
     )
 
 # =============================================
@@ -545,15 +532,19 @@ def novo_produto():
         descricao = request.form.get('descricao', '').strip()
         unidade = request.form.get('unidade', 'LITROS')
         ativo = request.form.get('ativo', '1')
+        preco_venda = request.form.get('preco_venda', None)
         
         if not nome:
             flash('Nome é obrigatório!', 'danger')
             return redirect(url_for('lubrificantes.novo_produto'))
         
+        # Converte preco_venda para None se estiver vazio
+        preco_venda_value = float(preco_venda) if preco_venda and preco_venda.strip() else None
+        
         cursor.execute("""
-            INSERT INTO lubrificantes_produtos (nome, descricao, unidade, ativo)
-            VALUES (%s, %s, %s, %s)
-        """, (nome, descricao if descricao else None, unidade, int(ativo)))
+            INSERT INTO lubrificantes_produtos (nome, descricao, unidade, ativo, preco_venda)
+            VALUES (%s, %s, %s, %s, %s)
+        """, (nome, descricao if descricao else None, unidade, int(ativo), preco_venda_value))
         conn.commit()
         cursor.close()
         conn.close()
@@ -580,16 +571,20 @@ def editar_produto(id):
         descricao = request.form.get('descricao', '').strip()
         unidade = request.form.get('unidade', 'LITROS')
         ativo = request.form.get('ativo', '1')
+        preco_venda = request.form.get('preco_venda', None)
         
         if not nome:
             flash('Nome é obrigatório!', 'danger')
             return redirect(url_for('lubrificantes.editar_produto', id=id))
         
+        # Converte preco_venda para None se estiver vazio
+        preco_venda_value = float(preco_venda) if preco_venda and preco_venda.strip() else None
+        
         cursor.execute("""
             UPDATE lubrificantes_produtos 
-            SET nome = %s, descricao = %s, unidade = %s, ativo = %s
+            SET nome = %s, descricao = %s, unidade = %s, ativo = %s, preco_venda = %s
             WHERE id = %s
-        """, (nome, descricao if descricao else None, unidade, int(ativo), id))
+        """, (nome, descricao if descricao else None, unidade, int(ativo), preco_venda_value, id))
         conn.commit()
         cursor.close()
         conn.close()

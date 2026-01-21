@@ -41,6 +41,14 @@
                         <option value="0">Inativo</option>
                     </select>
                 </div>
+                <div class="col-md-6">
+                    <label for="preco_venda" class="form-label">Preço de Venda (opcional)</label>
+                    <div class="input-group">
+                        <span class="input-group-text">R$</span>
+                        <input type="number" min="0" step="0.01" class="form-control" id="preco_venda" name="preco_venda" placeholder="0,00">
+                    </div>
+                    <small class="text-muted">Deixe em branco para produto genérico "PRODUTOS"</small>
+                </div>
                 <div class="col-12">
                     <label for="descricao" class="form-label">Descrição (opcional)</label>
                     <textarea class="form-control" id="descricao" name="descricao" rows="3"></textarea>
