@@ -185,7 +185,7 @@
                             <th style="width:15%;" class="text-end">Quantidade</th>
                             <th style="width:15%;" class="text-end">Preço Unit.</th>
                             <th style="width:15%;" class="text-end">Valor Total</th>
-                            <th style="width:15%;" class="text-end">Encerrante</th>
+                            <th style="width:10%;" class="text-center">Ações</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -203,9 +203,11 @@
                             <td class="text-end">{{ "{:,.2f}".format(mov.quantidade).replace(',', 'X').replace('.', ',').replace('X', '.') }}</td>
                             <td class="text-end">R$ {{ "{:,.2f}".format(mov.preco).replace(',', 'X').replace('.', ',').replace('X', '.') }}</td>
                             <td class="text-end" style="font-weight:600;">R$ {{ "{:,.2f}".format(mov.valor_total).replace(',', 'X').replace('.', ',').replace('X', '.') }}</td>
-                            <td class="text-end">
-                                {% if mov.encerrante %}
-                                {{ "{:,.2f}".format(mov.encerrante).replace(',', 'X').replace('.', ',').replace('X', '.') }}
+                            <td class="text-center">
+                                {% if mov.tipo == 'VENDA' %}
+                                <a href="{{ url_for('lubrificantes.editar_lancamento', id=mov.id) }}" class="btn btn-sm btn-primary" title="Editar Lançamento">
+                                    <i class="bi bi-pencil"></i>
+                                </a>
                                 {% else %}
                                 -
                                 {% endif %}

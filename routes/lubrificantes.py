@@ -524,6 +524,100 @@ def lancamento():
     )
 
 # =============================================
+# LANÇAMENTO DIÁRIO - EDITAR
+# =============================================
+@bp.route('/lancamento/editar/<int:id>', methods=['GET', 'POST'])
+@login_required
+def editar_lancamento(id):
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True)
+    
+    if request.method == 'POST':
+        data = request.form['data']
+        valor_total = float(request.form['valor_total'])
+        cliente_id = request.form.get('cliente_id')
+        produto_id = request.form.get('produto_id')
+        observacoes = request.form.get('observacoes', None)
+        
+        if not cliente_id:
+            flash('Por favor, selecione um cliente!', 'danger')
+            return redirect(url_for('lubrificantes.editar_lancamento', id=id))
+        
+        if not produto_id:
+            flash('Por favor, selecione um produto!', 'danger')
+            return redirect(url_for('lubrificantes.editar_lancamento', id=id))
+        
+        # Verifica se já existe outro lançamento com a mesma data/cliente/produto
+        cursor.execute("""
+            SELECT id FROM lubrificantes_lancamentos 
+            WHERE data = %s AND clienteid = %s AND produtoid = %s AND id != %s
+        """, (data, cliente_id, produto_id, id))
+        existe = cursor.fetchone()
+        if existe:
+            flash('Já existe outro lançamento para esta data, cliente e produto!', 'danger')
+            cursor.close()
+            conn.close()
+            return redirect(url_for('lubrificantes.editar_lancamento', id=id))
+        
+        # Como é lançamento direto de valor, não usamos preço unitário
+        # quantidade e preco_venda_aplicado serão 0, apenas valor_total importa
+        quantidade = 0
+        preco_venda_aplicado = 0
+        
+        cursor.execute("""
+            UPDATE lubrificantes_lancamentos
+            SET data = %s, produtoid = %s, clienteid = %s, 
+                quantidade = %s, preco_venda_aplicado = %s, valor_total = %s, observacoes = %s
+            WHERE id = %s
+        """, (data, produto_id, cliente_id, quantidade, preco_venda_aplicado, valor_total, observacoes, id))
+        conn.commit()
+        cursor.close()
+        conn.close()
+        
+        flash('Lançamento atualizado com sucesso!', 'success')
+        return redirect(url_for('lubrificantes.index'))
+    
+    # GET - Busca o lançamento a ser editado
+    cursor.execute("""
+        SELECT * FROM lubrificantes_lancamentos WHERE id = %s
+    """, (id,))
+    lancamento = cursor.fetchone()
+    
+    if not lancamento:
+        flash('Lançamento não encontrado!', 'danger')
+        cursor.close()
+        conn.close()
+        return redirect(url_for('lubrificantes.index'))
+    
+    # Busca clientes configurados
+    cursor.execute("""
+        SELECT DISTINCT c.id, c.razao_social 
+        FROM clientes c
+        INNER JOIN cliente_produtos cp ON c.id = cp.cliente_id
+        WHERE cp.ativo = 1
+        ORDER BY c.razao_social
+    """)
+    clientes_lubrificantes = cursor.fetchall()
+    
+    # Busca produtos de lubrificantes
+    cursor.execute("""
+        SELECT * FROM lubrificantes_produtos 
+        WHERE ativo = 1
+        ORDER BY nome
+    """)
+    produtos = cursor.fetchall()
+    
+    cursor.close()
+    conn.close()
+    
+    return render_template(
+        'lubrificantes/editar_lancamento.html',
+        lancamento=lancamento,
+        clientes_lubrificantes=clientes_lubrificantes,
+        produtos=produtos
+    )
+
+# =============================================
 # PRODUTOS - LISTAR
 # =============================================
 @bp.route('/produtos')
