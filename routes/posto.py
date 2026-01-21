@@ -254,6 +254,7 @@ def vendas_lista():
             produto_nome = venda.produto.nome if venda.produto else 'Desconhecido'
             vendas_organizadas[key]['produtos'].append({
                 'produto': venda.produto,
+                'estoque_inicial': venda.estoque_inicial or 0,
                 'litros': venda.quantidade_litros or 0,
                 'valor': venda.valor_total or 0,
                 'preco_medio': venda.preco_medio or 0,
@@ -337,14 +338,17 @@ def vendas_lancar():
             for produto in produtos_ordenados:
                 quantidade_key = f'quantidade_{produto.id}'
                 valor_key = f'valor_{produto.id}'
+                estoque_key = f'estoque_inicial_{produto.id}'
                 
                 quantidade_str = request.form.get(quantidade_key, '').replace('.', '').replace(',', '.')
                 valor_str = request.form.get(valor_key, '').replace('R$', '').replace('.', '').replace(',', '.').strip()
+                estoque_str = request.form.get(estoque_key, '').replace('.', '').replace(',', '.')
                 
                 if quantidade_str and valor_str:
                     try:
                         quantidade_litros = float(quantidade_str)
                         valor_total = float(valor_str)
+                        estoque_inicial = float(estoque_str) if estoque_str else None
                         
                         # Só processar se quantidade e valor forem maiores que 0
                         if quantidade_litros > 0 and valor_total > 0:
@@ -357,6 +361,7 @@ def vendas_lancar():
                                 produto_id=produto.id,
                                 vendedor_id=None,  # Vendedor não é usado neste fluxo
                                 quantidade_litros=quantidade_litros,
+                                estoque_inicial=estoque_inicial,
                                 preco_medio=preco_medio,
                                 valor_total=valor_total
                             )
@@ -453,9 +458,11 @@ def vendas_editar_data(data, cliente_id):
             for produto in produtos_ordenados:
                 quantidade_key = f'quantidade_{produto.id}'
                 valor_key = f'valor_{produto.id}'
+                estoque_key = f'estoque_inicial_{produto.id}'
                 
                 quantidade_str = request.form.get(quantidade_key, '').replace('.', '').replace(',', '.')
                 valor_str = request.form.get(valor_key, '').replace('R$', '').replace('.', '').replace(',', '.').strip()
+                estoque_str = request.form.get(estoque_key, '').replace('.', '').replace(',', '.')
                 
                 # Buscar venda existente para este produto
                 venda_existente = next((v for v in vendas if v.produto_id == produto.id), None)
@@ -464,6 +471,7 @@ def vendas_editar_data(data, cliente_id):
                     try:
                         quantidade_litros = float(quantidade_str)
                         valor_total = float(valor_str)
+                        estoque_inicial = float(estoque_str) if estoque_str else None
                         
                         if quantidade_litros > 0 and valor_total > 0:
                             preco_medio = valor_total / quantidade_litros
@@ -471,6 +479,7 @@ def vendas_editar_data(data, cliente_id):
                             if venda_existente:
                                 # Atualizar venda existente
                                 venda_existente.quantidade_litros = quantidade_litros
+                                venda_existente.estoque_inicial = estoque_inicial
                                 venda_existente.preco_medio = preco_medio
                                 venda_existente.valor_total = valor_total
                             else:
@@ -481,6 +490,7 @@ def vendas_editar_data(data, cliente_id):
                                     produto_id=produto.id,
                                     vendedor_id=None,
                                     quantidade_litros=quantidade_litros,
+                                    estoque_inicial=estoque_inicial,
                                     preco_medio=preco_medio,
                                     valor_total=valor_total
                                 )
