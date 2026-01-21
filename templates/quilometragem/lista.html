@@ -51,7 +51,8 @@
                             <th class="text-end">KM Final</th>
                             <th class="text-end">KM Rodados</th>
                             <th class="text-end">Litros</th>
-                            <th class="text-end">Valor</th>
+                            <th class="text-end">Valor Combustível</th>
+                            <th class="text-end">Produtos Diversos</th>
                             <th class="text-end">Média</th>
                             <th class="text-center">Ações</th>
                         </tr>
@@ -74,6 +75,13 @@
                                 <td class="text-end">{{ "{:,.0f}".format(registro.km_rodados).replace(',', '.') }}</td>
                                 <td class="text-end">{{ "{:,.2f}".format(registro.litros_abastecidos).replace('.', ',') }}</td>
                                 <td class="text-end">R$ {{ "{:,.2f}".format(registro.valor_combustivel).replace(',', 'X').replace('.', ',').replace('X', '.') }}</td>
+                                <td class="text-end">
+                                    {% if registro.valor_produtos_diversos and registro.valor_produtos_diversos > 0 %}
+                                        R$ {{ "{:,.2f}".format(registro.valor_produtos_diversos).replace(',', 'X').replace('.', ',').replace('X', '.') }}
+                                    {% else %}
+                                        -
+                                    {% endif %}
+                                </td>
                                 <td class="text-end">
                                     {% if registro.litros_abastecidos > 0 %}
                                         {{ "{:.2f}".format(registro.km_rodados / registro.litros_abastecidos).replace('.', ',') }} km/l
@@ -102,7 +110,7 @@
                             {% endfor %}
                         {% else %}
                             <tr>
-                                <td colspan="10" class="text-center text-muted" style="padding: 2rem;">
+                                <td colspan="11" class="text-center text-muted" style="padding: 2rem;">
                                     <i class="bi bi-inbox" style="font-size: 2rem;"></i>
                                     <p class="mb-0 mt-2">Nenhum registro encontrado</p>
                                 </td>
@@ -115,29 +123,59 @@
     </div>
 
     <!-- RESUMO POR VEÍCULO AO FINAL -->
+    {% if resumo_veiculos %}
     <div class="card mt-4">
-        <div class="card-header" style="background: #f8f9fa; font-weight: 600;">
-            Resumo dos Abastecimentos
+        <div class="card-header" style="background: #1D63A5; color: white; font-weight: 600;">
+            <i class="bi bi-bar-chart-fill"></i> Resumo dos Abastecimentos
         </div>
-        <div class="card-body" style="font-size:1rem;">
-            <ul style="list-style:none; padding:0;">
-            {% for resumo in resumo_veiculos %}
-                <li>
-                    <strong>{{ resumo.placa }} - {{ resumo.modelo }}</strong><br>
-                    KMs rodados totais: {{ "{:,.0f}".format(resumo.total_km).replace(',', '.') }} km<br>
-                    Valor total abastecido: R$ {{ "{:,.2f}".format(resumo.total_valor).replace(',', 'X').replace('.', ',').replace('X', '.') }}<br>
-                    Média km/l:
-                    {% if resumo.total_litros > 0 %}
-                        {{ "{:.2f}".format(resumo.total_km / resumo.total_litros).replace('.', ',') }} km/l
-                    {% else %}
-                        -
-                    {% endif %}
-                    <br><br>
-                </li>
-            {% endfor %}
-            </ul>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-sm table-hover mb-0">
+                    <thead style="background:#f8f9fa;">
+                        <tr>
+                            <th>Placa</th>
+                            <th>Modelo</th>
+                            <th class="text-end">Qtd. Abastecimentos</th>
+                            <th class="text-end">Total Litros</th>
+                            <th class="text-end">KMs Rodados</th>
+                            <th class="text-end">Valor Total</th>
+                            <th class="text-end">Média km/l</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for resumo in resumo_veiculos %}
+                        <tr>
+                            <td><strong>{{ resumo.placa }}</strong></td>
+                            <td>{{ resumo.modelo }}</td>
+                            <td class="text-end">{{ resumo.quantidade_abastecimentos }}</td>
+                            <td class="text-end">{{ "{:,.3f}".format(resumo.total_litros).replace(',', '_').replace('.', ',').replace('_', '.') }}</td>
+                            <td class="text-end">{{ "{:,.0f}".format(resumo.total_km).replace(',', '.') }}</td>
+                            <td class="text-end">R$ {{ "{:,.2f}".format(resumo.total_valor).replace(',', 'X').replace('.', ',').replace('X', '.') }}</td>
+                            <td class="text-end">
+                                {% if resumo.total_litros > 0 %}
+                                    {{ "{:.2f}".format(resumo.total_km / resumo.total_litros).replace('.', ',') }} km/l
+                                {% else %}
+                                    -
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
         </div>
     </div>
+    {% else %}
+    <div class="card mt-4">
+        <div class="card-header" style="background: #1D63A5; color: white; font-weight: 600;">
+            <i class="bi bi-bar-chart-fill"></i> Resumo dos Abastecimentos
+        </div>
+        <div class="card-body text-center text-muted">
+            <i class="bi bi-inbox" style="font-size: 2rem;"></i>
+            <p class="mb-0 mt-2">Nenhum abastecimento encontrado no período selecionado</p>
+        </div>
+    </div>
+    {% endif %}
 
     <!-- MODAL KM INICIAL -->
     <div class="modal fade" id="modalKmInicial" tabindex="-1" aria-labelledby="modalKmInicialLabel" aria-hidden="true">

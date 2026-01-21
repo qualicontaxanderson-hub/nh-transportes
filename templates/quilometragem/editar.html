@@ -74,6 +74,14 @@
 
                 <div class="row g-3 mt-2">
                     <div class="col-md-12">
+                        <label class="form-label" style="font-size: 0.9rem;font-weight:600;">Valor Produtos Diversos</label>
+                        <input type="text" name="valor_produtos_diversos" id="valor_produtos_diversos" class="form-control form-control-sm" value="{% if quilometragem.valor_produtos_diversos %}{{ '{:,.2f}'.format(quilometragem.valor_produtos_diversos).replace(',', 'X').replace('.', ',').replace('X', '.') }}{% endif %}">
+                        <small class="text-muted">Gastos com outros produtos (não combustível). Opcional.</small>
+                    </div>
+                </div>
+
+                <div class="row g-3 mt-2">
+                    <div class="col-md-12">
                         <label class="form-label" style="font-size: 0.9rem;font-weight:600;">Observações</label>
                         <textarea name="observacoes" class="form-control form-control-sm" rows="3">{{ quilometragem.observacoes }}</textarea>
                     </div>

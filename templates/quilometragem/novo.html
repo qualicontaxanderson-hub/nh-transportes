@@ -63,10 +63,20 @@
                     <div class="col-md-4">
                         <label class="form-label" style="font-size: 0.9rem;font-weight:600;">Litros Abastecidos <span class="text-danger">*</span></label>
                         <input type="text" name="litros_abastecidos" id="litros_abastecidos" class="form-control form-control-sm" required>
+                        <small class="text-muted">Digite apenas números (ex: 1000 = 1,000 litros)</small>
                     </div>
                     <div class="col-md-4">
                         <label class="form-label" style="font-size: 0.9rem;font-weight:600;">Valor Combustível <span class="text-danger">*</span></label>
                         <input type="text" name="valor_combustivel" id="valor_combustivel" class="form-control form-control-sm" required>
+                        <small class="text-muted">Digite apenas números (ex: 10000 = 100,00)</small>
+                    </div>
+                </div>
+
+                <div class="row g-3 mt-2">
+                    <div class="col-md-12">
+                        <label class="form-label" style="font-size: 0.9rem;font-weight:600;">Valor Produtos Diversos</label>
+                        <input type="text" name="valor_produtos_diversos" id="valor_produtos_diversos" class="form-control form-control-sm">
+                        <small class="text-muted">Gastos com outros produtos (não combustível). Opcional. Digite apenas números (ex: 5000 = 50,00)</small>
                     </div>
                 </div>
 
@@ -97,6 +107,64 @@
 
 <script>
     let kmInicial = 0;
+
+    // Function to format number with 2 decimal places and thousands separator
+    function formatCurrency(value) {
+        // Remove non-numeric characters
+        let num = value.replace(/\D/g, '');
+        if (!num) return '';
+        
+        // Convert to decimal (divide by 100 for 2 decimal places)
+        let decimal = parseInt(num) / 100;
+        
+        // Format with thousands separator and 2 decimal places
+        return decimal.toLocaleString('pt-BR', {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2
+        });
+    }
+    
+    // Function to format liters with 3 decimal places and thousands separator
+    function formatLiters(value) {
+        // Remove non-numeric characters
+        let num = value.replace(/\D/g, '');
+        if (!num) return '';
+        
+        // Convert to decimal (divide by 1000 for 3 decimal places)
+        let decimal = parseInt(num) / 1000;
+        
+        // Format with thousands separator and 3 decimal places
+        return decimal.toLocaleString('pt-BR', {
+            minimumFractionDigits: 3,
+            maximumFractionDigits: 3
+        });
+    }
+
+    // Apply formatting to KM Final (2 decimals)
+    document.getElementById('km_final').addEventListener('input', function(e) {
+        let formatted = formatCurrency(e.target.value);
+        e.target.value = formatted;
+        calcularKmRodados();
+    });
+
+    // Apply formatting to Valor Combustivel (2 decimals)
+    document.getElementById('valor_combustivel').addEventListener('input', function(e) {
+        let formatted = formatCurrency(e.target.value);
+        e.target.value = formatted;
+    });
+
+    // Apply formatting to Valor Produtos Diversos (2 decimals)
+    document.getElementById('valor_produtos_diversos').addEventListener('input', function(e) {
+        let formatted = formatCurrency(e.target.value);
+        e.target.value = formatted;
+    });
+
+    // Apply formatting to Litros Abastecidos (3 decimals)
+    document.getElementById('litros_abastecidos').addEventListener('input', function(e) {
+        let formatted = formatLiters(e.target.value);
+        e.target.value = formatted;
+        calcularMedia();
+    });
 
     document.getElementById('veiculos_id').addEventListener('change', function() {
         const veiculoId = this.value;
@@ -147,9 +215,6 @@
             document.getElementById('media_consumo').textContent = '-';
         }
     }
-    
-    document.getElementById('km_final').addEventListener('input', calcularKmRodados);
-    document.getElementById('litros_abastecidos').addEventListener('input', calcularMedia);
 </script>
 
 <style>

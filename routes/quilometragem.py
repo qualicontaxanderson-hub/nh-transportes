@@ -2,6 +2,7 @@ from flask import Blueprint, render_template, request, redirect, url_for, flash,
 from flask_login import login_required
 from config import Config
 import mysql.connector
+from datetime import date
 
 bp = Blueprint('quilometragem', __name__, url_prefix='/quilometragem')
 
@@ -46,10 +47,17 @@ def get_ultimo_km_veiculo(veiculos_id):
 def lista():
     conn = get_db()
     cursor = conn.cursor(dictionary=True)
+    
+    # Default to current month if no filters provided
+    hoje = date.today()
+    primeiro_dia_mes = hoje.replace(day=1)
+    data_inicio_default = primeiro_dia_mes.strftime('%Y-%m-%d')
+    data_fim_default = hoje.strftime('%Y-%m-%d')
+    
     veiculos_id = request.args.get('veiculos_id', '')
     motoristas_id = request.args.get('motoristas_id', '')
-    data_inicio = request.args.get('data_inicio', '')
-    data_fim = request.args.get('data_fim', '')
+    data_inicio = request.args.get('data_inicio', data_inicio_default)
+    data_fim = request.args.get('data_fim', data_fim_default)
     query = """
         SELECT 
             q.id,
@@ -59,6 +67,7 @@ def lista():
             q.km_rodados,
             q.valor_combustivel,
             q.litros_abastecidos,
+            q.valor_produtos_diversos,
             q.observacoes,
             v.placa,
             v.modelo,
@@ -101,16 +110,17 @@ def lista():
         ORDER BY v.placa
     """)
     veiculos_km_inicial = cursor.fetchall()
-    # RESUMO agrupado por veículo!
+    # RESUMO agrupado por veículo - only show vehicles with refuelings
     resumo_query = """
         SELECT 
             v.placa,
             v.modelo,
+            COUNT(q.id) as quantidade_abastecimentos,
             SUM(q.litros_abastecidos) as total_litros,
             SUM(q.km_rodados) as total_km,
             SUM(q.valor_combustivel) as total_valor
         FROM quilometragem q
-        LEFT JOIN veiculos v ON q.veiculos_id = v.id
+        INNER JOIN veiculos v ON q.veiculos_id = v.id
         WHERE 1=1
     """
     resumo_params = []
@@ -157,6 +167,7 @@ def novo():
             km_final = converter_para_decimal(request.form.get('km_final'))
             valor_combustivel = converter_para_decimal(request.form.get('valor_combustivel'))
             litros_abastecidos = converter_para_decimal(request.form.get('litros_abastecidos'))
+            valor_produtos_diversos = converter_para_decimal(request.form.get('valor_produtos_diversos', '0'))
             observacoes = request.form.get('observacoes', '')
             km_inicial = get_ultimo_km_veiculo(veiculos_id)
             if km_inicial is None:
@@ -171,10 +182,10 @@ def novo():
             cursor.execute("""
                 INSERT INTO quilometragem 
                 (veiculos_id, motoristas_id, data, km_inicial, km_final, km_rodados, 
-                 valor_combustivel, litros_abastecidos, observacoes)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                 valor_combustivel, litros_abastecidos, valor_produtos_diversos, observacoes)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             """, (veiculos_id, motoristas_id, data, km_inicial, km_final, km_rodados,
-                  valor_combustivel, litros_abastecidos, observacoes))
+                  valor_combustivel, litros_abastecidos, valor_produtos_diversos, observacoes))
             conn.commit()
             cursor.close()
             conn.close()
@@ -211,15 +222,16 @@ def editar(id):
             km_rodados = float(km_final) - float(km_inicial)
             valor_combustivel = converter_para_decimal(request.form.get('valor_combustivel'))
             litros_abastecidos = converter_para_decimal(request.form.get('litros_abastecidos'))
+            valor_produtos_diversos = converter_para_decimal(request.form.get('valor_produtos_diversos', '0'))
             observacoes = request.form.get('observacoes', '')
             cursor.execute("""
                 UPDATE quilometragem 
                 SET veiculos_id = %s, motoristas_id = %s, data = %s, 
                     km_inicial = %s, km_final = %s, km_rodados = %s,
-                    valor_combustivel = %s, litros_abastecidos = %s, observacoes = %s
+                    valor_combustivel = %s, litros_abastecidos = %s, valor_produtos_diversos = %s, observacoes = %s
                 WHERE id = %s
             """, (veiculos_id, motoristas_id, data, km_inicial, km_final, km_rodados,
-                  valor_combustivel, litros_abastecidos, observacoes, id))
+                  valor_combustivel, litros_abastecidos, valor_produtos_diversos, observacoes, id))
             conn.commit()
             cursor.close()
             conn.close()
