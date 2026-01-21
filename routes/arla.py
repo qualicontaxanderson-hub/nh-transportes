@@ -34,20 +34,6 @@ def index():
     data_inicio = request.args.get('data_inicio', primeiro_dia_mes.strftime('%Y-%m-%d'))
     data_fim = request.args.get('data_fim', ultimo_dia_mes.strftime('%Y-%m-%d'))
     
-    # Filtro de cliente
-    cliente_id = request.args.get('cliente_id', '')
-    
-    # Busca clientes com ARLA configurado
-    cursor.execute("""
-        SELECT DISTINCT c.id, c.razao_social 
-        FROM clientes c
-        INNER JOIN cliente_produtos cp ON c.id = cp.cliente_id
-        INNER JOIN produto p ON cp.produto_id = p.id
-        WHERE p.nome = 'ARLA' AND cp.ativo = 1
-        ORDER BY c.razao_social
-    """)
-    clientes_arla = cursor.fetchall()
-    
     # Busca saldo inicial
     cursor.execute("""
         SELECT * FROM arla_saldo_inicial ORDER BY data DESC LIMIT 1
@@ -136,8 +122,7 @@ def index():
         total_valor_compras=total_valor_compras,
         total_qtd_vendas=total_qtd_vendas,
         total_valor_vendas=total_valor_vendas,
-        filtros={'data_inicio': data_inicio, 'data_fim': data_fim, 'cliente_id': cliente_id},
-        clientes_arla=clientes_arla
+        filtros={'data_inicio': data_inicio, 'data_fim': data_fim}
     )
 
 # =============================================
