@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+
+{% block title %}Editar Produto - LUBRIFICANTES{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h2 style="font-size: 1.5rem;">
+            <i class="bi bi-box-seam"></i> Editar Produto - LUBRIFICANTES
+        </h2>
+        <div>
+            <a href="{{ url_for('lubrificantes.produtos') }}" class="btn btn-secondary btn-sm">
+                <i class="bi bi-arrow-left"></i> Voltar
+            </a>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header" style="background:#1D63A5;color:white;font-weight:600;">
+            <i class="bi bi-pencil"></i> Editar Produto
+        </div>
+        <div class="card-body">
+            <form method="post" class="row g-3">
+                <div class="col-md-6">
+                    <label for="nome" class="form-label">Nome do Produto <span class="text-danger">*</span></label>
+                    <input type="text" class="form-control" id="nome" name="nome" value="{{ produto.nome }}" required maxlength="200">
+                    <small class="text-muted">O nome será automaticamente convertido para maiúsculas</small>
+                </div>
+                <div class="col-md-3">
+                    <label for="unidade_medida" class="form-label">Unidade de Medida</label>
+                    <select class="form-select" id="unidade_medida" name="unidade_medida">
+                        <option value="L" {% if produto.unidade_medida == 'L' %}selected{% endif %}>Litros (L)</option>
+                        <option value="KG" {% if produto.unidade_medida == 'KG' %}selected{% endif %}>Quilos (KG)</option>
+                        <option value="UN" {% if produto.unidade_medida == 'UN' %}selected{% endif %}>Unidade (UN)</option>
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label for="ativo" class="form-label">Status</label>
+                    <select class="form-select" id="ativo" name="ativo">
+                        <option value="1" {% if produto.ativo %}selected{% endif %}>Ativo</option>
+                        <option value="0" {% if not produto.ativo %}selected{% endif %}>Inativo</option>
+                    </select>
+                </div>
+                <div class="col-12">
+                    <label for="descricao" class="form-label">Descrição (opcional)</label>
+                    <textarea class="form-control" id="descricao" name="descricao" rows="3">{{ produto.descricao if produto.descricao else '' }}</textarea>
+                </div>
+                <div class="col-12 mt-3">
+                    <button type="submit" class="btn btn-primary">
+                        <i class="bi bi-save"></i> Atualizar Produto
+                    </button>
+                    <a href="{{ url_for('lubrificantes.produtos') }}" class="btn btn-secondary">
+                        <i class="bi bi-x-circle"></i> Cancelar
+                    </a>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<style>
+    .btn-sm { font-size: 0.8rem; padding: 0.3rem 0.6rem; }
+    @media (max-width: 768px) {
+        h2 { font-size: 1.2rem !important; }
+    }
+</style>
+{% endblock %}
