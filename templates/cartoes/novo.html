@@ -1,0 +1,78 @@
+{% extends 'base.html' %}
+{% block title %}Novo Cartão - NH Transportes{% endblock %}
+{% block content %}
+<div class="container-fluid">
+    <nav aria-label="breadcrumb" class="mt-2 mb-3">
+        <ol class="breadcrumb" style="font-size: 0.85rem;">
+            <li class="breadcrumb-item"><a href="/">Dashboard</a></li>
+            <li class="breadcrumb-item"><a href="{{ url_for('cartoes.lista') }}">Cartões</a></li>
+            <li class="breadcrumb-item active" aria-current="page">Novo Cartão</li>
+        </ol>
+    </nav>
+    
+    <h2 class="mb-3" style="color:#1D63A5; font-size: 1.3rem;"><i class="bi bi-credit-card-2-front"></i> Novo Cartão</h2>
+    
+    <div class="card shadow-sm">
+        <div class="card-header" style="background:#ff9800;color:white; font-size: 0.95rem; padding: 0.6rem 1rem;">
+            <h5 class="mb-0" style="font-size: 1rem;">Cadastrar Bandeira de Cartão</h5>
+        </div>
+        <div class="card-body" style="padding: 1rem;">
+            <form method="POST">
+                <div class="row">
+                    <div class="col-md-4 mb-3">
+                        <label class="form-label" style="font-size: 0.85rem;">Nome da Bandeira *</label>
+                        <input type="text" name="nome" class="form-control form-control-sm" required placeholder="Ex: VISA, MASTERCARD, ELO">
+                    </div>
+                    <div class="col-md-4 mb-3">
+                        <label class="form-label" style="font-size: 0.85rem;">Tipo *</label>
+                        <select name="tipo" class="form-select form-select-sm" required>
+                            <option value="">Selecione...</option>
+                            <option value="DEBITO">DÉBITO</option>
+                            <option value="CREDITO">CRÉDITO</option>
+                        </select>
+                    </div>
+                    <div class="col-md-4 mb-3">
+                        <label class="form-label" style="font-size: 0.85rem;">Status</label>
+                        <select name="ativo" class="form-select form-select-sm">
+                            <option value="1" selected>Ativo</option>
+                            <option value="0">Bloqueado</option>
+                        </select>
+                    </div>
+                </div>
+
+                <hr style="margin: 1rem 0;">
+                
+                <div class="d-flex justify-content-between">
+                    <a href="{{ url_for('cartoes.lista') }}" class="btn btn-secondary btn-sm">
+                        <i class="bi bi-arrow-left"></i> Voltar
+                    </a>
+                    <button type="submit" class="btn btn-success btn-sm">
+                        <i class="bi bi-check-circle"></i> Salvar
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<style>
+    .form-label {
+        font-weight: 600;
+        margin-bottom: 0.25rem;
+    }
+    
+    .form-control-sm, .form-select-sm {
+        font-size: 0.85rem;
+        padding: 0.4rem 0.6rem;
+    }
+    
+    @media (max-width: 768px) {
+        h2 {
+            font-size: 1.1rem !important;
+        }
+        .col-md-4 {
+            margin-bottom: 0.5rem !important;
+        }
+    }
+</style>
+{% endblock %}
