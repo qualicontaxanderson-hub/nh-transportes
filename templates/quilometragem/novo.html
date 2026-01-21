@@ -112,16 +112,18 @@
     function parseFormattedNumber(value) {
         if (!value) return 0;
         // Remove thousands separators (.) and replace decimal comma (,) with dot (.)
+        // Handles both formatted strings like "1.000,00" and plain numbers
         return parseFloat(value.toString().replace(/\./g, '').replace(',', '.')) || 0;
     }
 
     // Function to format number with 2 decimal places and thousands separator
     function formatCurrency(value) {
-        // Remove non-numeric characters
+        // Remove non-numeric characters (regex removes everything except digits)
         let num = value.replace(/\D/g, '');
         if (!num) return '';
         
         // Convert to decimal (divide by 100 for 2 decimal places)
+        // parseInt is correct here since num contains only digits after regex
         let decimal = parseInt(num) / 100;
         
         // Format with thousands separator and 2 decimal places
@@ -133,11 +135,12 @@
     
     // Function to format liters with 3 decimal places and thousands separator
     function formatLiters(value) {
-        // Remove non-numeric characters
+        // Remove non-numeric characters (regex removes everything except digits)
         let num = value.replace(/\D/g, '');
         if (!num) return '';
         
         // Convert to decimal (divide by 1000 for 3 decimal places)
+        // parseInt is correct here since num contains only digits after regex
         let decimal = parseInt(num) / 1000;
         
         // Format with thousands separator and 3 decimal places
