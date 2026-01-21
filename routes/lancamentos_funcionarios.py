@@ -192,21 +192,24 @@ def get_veiculos(funcionario_id):
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
     
-    cursor.execute("""
-        SELECT 
-            v.id,
-            v.caminhao,
-            v.placa,
-            fmv.principal
-        FROM funcionariomotoristaveiculos fmv
-        INNER JOIN veiculos v ON fmv.veiculo_id = v.id
-        WHERE fmv.funcionario_id = %s AND fmv.ativo = 1
-        ORDER BY fmv.principal DESC, v.caminhao
-    """, (funcionario_id,))
-    veiculos = cursor.fetchall()
-    
-    cursor.close()
-    conn.close()
+    try:
+        cursor.execute("""
+            SELECT 
+                v.id,
+                v.caminhao,
+                v.placa,
+                fmv.principal
+            FROM funcionariomotoristaveiculos fmv
+            INNER JOIN veiculos v ON fmv.veiculo_id = v.id
+            WHERE fmv.funcionario_id = %s AND fmv.ativo = 1
+            ORDER BY fmv.principal DESC, v.caminhao
+        """, (funcionario_id,))
+        veiculos = cursor.fetchall()
+        
+        return jsonify(veiculos)
+    finally:
+        cursor.close()
+        conn.close()
     
     return jsonify(veiculos)
 

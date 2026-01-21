@@ -110,7 +110,7 @@ document.getElementById('cliente_id').addEventListener('change', function() {
             
             funcionarios.forEach(func => {
                 const row = document.createElement('tr');
-                 row.innerHTML = `
+                row.innerHTML = `
                     <td>
                         ${func.nome}
                         <input type="hidden" name="funcionario_id[]" value="${func.id}">
