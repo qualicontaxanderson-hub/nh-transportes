@@ -1,0 +1,288 @@
+from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify
+from flask_login import login_required, current_user
+from utils.db import get_db_connection
+from utils.decorators import admin_required
+from datetime import datetime
+from decimal import Decimal
+import json
+
+bp = Blueprint('lancamentos_caixa', __name__, url_prefix='/lancamentos_caixa')
+
+# Constants for revenue types
+TIPOS_RECEITA = {
+    'VENDAS_POSTO': 'Vendas do Posto',
+    'LUBRIFICANTES': 'Lubrificantes',
+    'ARLA': 'ARLA',
+    'TROCO_PIX': 'Troco PIX',
+    'EMPRESTIMOS': 'Empréstimos',
+    'OUTROS': 'Outros'
+}
+
+
+def parse_brazilian_currency(value_str):
+    """
+    Convert Brazilian currency format to Decimal.
+    Examples: '1.500,00' -> 1500.00, '150000' -> 1500.00
+    
+    Args:
+        value_str: String value in Brazilian format
+        
+    Returns:
+        Decimal: Parsed decimal value
+    """
+    if not value_str:
+        return Decimal('0')
+    
+    # Remove espaços
+    value_str = str(value_str).strip()
+    
+    # Remove o símbolo R$ se existir
+    value_str = value_str.replace('R$', '').strip()
+    
+    # Check if there's a comma (Brazilian decimal separator)
+    if ',' in value_str:
+        # Remove pontos (separador de milhares)
+        value_str = value_str.replace('.', '')
+        # Substitui vírgula por ponto (separador decimal)
+        value_str = value_str.replace(',', '.')
+    # If no comma but has dots, assume it's already in English format
+    
+    return Decimal(value_str)
+
+
+@bp.route('/')
+@login_required
+def lista():
+    """List all cash closure entries"""
+    conn = None
+    cursor = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute("""
+            SELECT lc.*, u.username as usuario_nome
+            FROM lancamentos_caixa lc
+            LEFT JOIN usuarios u ON lc.usuario_id = u.id
+            ORDER BY lc.data DESC, lc.id DESC
+        """)
+        lancamentos = cursor.fetchall()
+        return render_template('lancamentos_caixa/lista.html', lancamentos=lancamentos)
+    except Exception as e:
+        flash(f'Erro ao carregar lançamentos de caixa: {str(e)}', 'danger')
+        return render_template('lancamentos_caixa/lista.html', lancamentos=[])
+    finally:
+        if cursor is not None:
+            cursor.close()
+        if conn is not None:
+            conn.close()
+
+
+@bp.route('/novo', methods=['GET', 'POST'])
+@login_required
+@admin_required
+def novo():
+    """Create a new cash closure entry"""
+    conn = None
+    cursor = None
+    
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+        
+        if request.method == 'POST':
+            # Get main data
+            data = request.form.get('data', '')
+            observacao = request.form.get('observacao', '').strip()
+            
+            # Get receitas (left side) - JSON encoded
+            receitas_json = request.form.get('receitas', '[]')
+            receitas = json.loads(receitas_json)
+            
+            # Get comprovacoes (right side) - JSON encoded
+            comprovacoes_json = request.form.get('comprovacoes', '[]')
+            comprovacoes = json.loads(comprovacoes_json)
+            
+            # Validate
+            if not data:
+                flash('Data é obrigatória!', 'danger')
+                raise ValueError('Data não fornecida')
+            
+            # Calculate totals
+            total_receitas = sum(parse_brazilian_currency(r.get('valor', 0)) for r in receitas)
+            total_comprovacao = sum(parse_brazilian_currency(c.get('valor', 0)) for c in comprovacoes)
+            diferenca = total_receitas - total_comprovacao
+            
+            # Insert lancamento_caixa
+            cursor.execute("""
+                INSERT INTO lancamentos_caixa 
+                (data, usuario_id, observacao, total_receitas, total_comprovacao, diferenca, status)
+                VALUES (%s, %s, %s, %s, %s, %s, 'ABERTO')
+            """, (data, current_user.id, observacao if observacao else None, 
+                  float(total_receitas), float(total_comprovacao), float(diferenca)))
+            
+            lancamento_id = cursor.lastrowid
+            
+            # Insert receitas
+            for receita in receitas:
+                if receita.get('tipo') and receita.get('valor'):
+                    cursor.execute("""
+                        INSERT INTO lancamentos_caixa_receitas 
+                        (lancamento_caixa_id, tipo, descricao, valor)
+                        VALUES (%s, %s, %s, %s)
+                    """, (lancamento_id, receita['tipo'], 
+                          receita.get('descricao', ''), 
+                          float(parse_brazilian_currency(receita['valor']))))
+            
+            # Insert comprovacoes
+            for comprovacao in comprovacoes:
+                if comprovacao.get('forma_pagamento_id') and comprovacao.get('valor'):
+                    forma_id = comprovacao['forma_pagamento_id']
+                    cartao_id = comprovacao.get('bandeira_cartao_id')
+                    
+                    cursor.execute("""
+                        INSERT INTO lancamentos_caixa_comprovacao 
+                        (lancamento_caixa_id, forma_pagamento_id, bandeira_cartao_id, descricao, valor)
+                        VALUES (%s, %s, %s, %s, %s)
+                    """, (lancamento_id, 
+                          int(forma_id) if forma_id and forma_id != '' else None,
+                          int(cartao_id) if cartao_id and cartao_id != '' else None,
+                          comprovacao.get('descricao', ''),
+                          float(parse_brazilian_currency(comprovacao['valor']))))
+            
+            conn.commit()
+            flash('Lançamento de caixa cadastrado com sucesso!', 'success')
+            return redirect(url_for('lancamentos_caixa.lista'))
+
+        # GET request - load data for dropdown
+        cursor.execute("SELECT * FROM formas_pagamento_caixa WHERE ativo = 1 ORDER BY nome")
+        formas_pagamento = cursor.fetchall()
+        
+        cursor.execute("SELECT * FROM bandeiras_cartao WHERE ativo = 1 ORDER BY nome")
+        cartoes = cursor.fetchall()
+        
+        # Default to today's date
+        hoje = datetime.now().strftime('%Y-%m-%d')
+        return render_template('lancamentos_caixa/novo.html', 
+                             formas_pagamento=formas_pagamento,
+                             cartoes=cartoes,
+                             tipos_receita=TIPOS_RECEITA,
+                             data=hoje)
+        
+    except Exception as e:
+        if conn:
+            conn.rollback()
+        flash(f'Erro ao cadastrar lançamento de caixa: {str(e)}', 'danger')
+        # Try to get data for re-rendering form
+        try:
+            cursor.execute("SELECT * FROM formas_pagamento_caixa WHERE ativo = 1 ORDER BY nome")
+            formas_pagamento = cursor.fetchall()
+            cursor.execute("SELECT * FROM bandeiras_cartao WHERE ativo = 1 ORDER BY nome")
+            cartoes = cursor.fetchall()
+            return render_template('lancamentos_caixa/novo.html', 
+                                 formas_pagamento=formas_pagamento,
+                                 cartoes=cartoes,
+                                 tipos_receita=TIPOS_RECEITA)
+        except:
+            return redirect(url_for('lancamentos_caixa.lista'))
+    finally:
+        if cursor is not None:
+            cursor.close()
+        if conn is not None:
+            conn.close()
+
+
+@bp.route('/visualizar/<int:id>')
+@login_required
+def visualizar(id):
+    """View a cash closure entry"""
+    conn = None
+    cursor = None
+
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+
+        # Get lancamento
+        cursor.execute("""
+            SELECT lc.*, u.username as usuario_nome
+            FROM lancamentos_caixa lc
+            LEFT JOIN usuarios u ON lc.usuario_id = u.id
+            WHERE lc.id = %s
+        """, (id,))
+        lancamento = cursor.fetchone()
+        
+        if not lancamento:
+            flash('Lançamento de caixa não encontrado!', 'danger')
+            return redirect(url_for('lancamentos_caixa.lista'))
+        
+        # Get receitas
+        cursor.execute("""
+            SELECT * FROM lancamentos_caixa_receitas
+            WHERE lancamento_caixa_id = %s
+            ORDER BY id
+        """, (id,))
+        receitas = cursor.fetchall()
+        
+        # Add friendly type names
+        for receita in receitas:
+            receita['tipo_nome'] = TIPOS_RECEITA.get(receita['tipo'], receita['tipo'])
+        
+        # Get comprovacoes
+        cursor.execute("""
+            SELECT lcc.*, fpc.nome as forma_pagamento_nome, bc.nome as cartao_nome
+            FROM lancamentos_caixa_comprovacao lcc
+            LEFT JOIN formas_pagamento_caixa fpc ON lcc.forma_pagamento_id = fpc.id
+            LEFT JOIN bandeiras_cartao bc ON lcc.bandeira_cartao_id = bc.id
+            WHERE lcc.lancamento_caixa_id = %s
+            ORDER BY lcc.id
+        """, (id,))
+        comprovacoes = cursor.fetchall()
+        
+        return render_template('lancamentos_caixa/visualizar.html', 
+                             lancamento=lancamento, 
+                             receitas=receitas,
+                             comprovacoes=comprovacoes)
+    except Exception as e:
+        flash(f'Erro ao visualizar lançamento: {str(e)}', 'danger')
+        return redirect(url_for('lancamentos_caixa.lista'))
+    finally:
+        if cursor is not None:
+            cursor.close()
+        if conn is not None:
+            conn.close()
+
+
+@bp.route('/excluir/<int:id>', methods=['POST'])
+@login_required
+@admin_required
+def excluir(id):
+    """Delete a cash closure entry"""
+    conn = None
+    cursor = None
+    
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        # Delete comprovacoes
+        cursor.execute("DELETE FROM lancamentos_caixa_comprovacao WHERE lancamento_caixa_id = %s", (id,))
+        
+        # Delete receitas
+        cursor.execute("DELETE FROM lancamentos_caixa_receitas WHERE lancamento_caixa_id = %s", (id,))
+        
+        # Delete lancamento
+        cursor.execute("DELETE FROM lancamentos_caixa WHERE id = %s", (id,))
+        
+        conn.commit()
+        flash('Lançamento de caixa excluído com sucesso!', 'success')
+    except Exception as e:
+        if conn:
+            conn.rollback()
+        flash(f'Erro ao excluir lançamento: {str(e)}', 'danger')
+    finally:
+        if cursor is not None:
+            cursor.close()
+        if conn is not None:
+            conn.close()
+    
+    return redirect(url_for('lancamentos_caixa.lista'))
