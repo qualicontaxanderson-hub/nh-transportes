@@ -123,7 +123,14 @@ def index():
         total_vendas = float(cursor.fetchone()['total'])
     
     # Estoque atual = Saldo inicial + Compras - Vendas
-    volume_inicial = float(saldo['volume_inicial']) if saldo else 0
+    # Se há filtro de cliente, usa o saldo inicial daquele cliente
+    # Se não há filtro, soma TODOS os saldos iniciais de todos os clientes
+    if cliente_id:
+        volume_inicial = float(saldo['volume_inicial']) if saldo else 0
+    else:
+        cursor.execute("SELECT COALESCE(SUM(volume_inicial), 0) as total FROM arla_saldo_inicial")
+        volume_inicial = float(cursor.fetchone()['total'])
+    
     estoque_atual = volume_inicial + total_compras - total_vendas
     
     # Unifica movimentações para a tabela
