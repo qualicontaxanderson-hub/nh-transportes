@@ -148,7 +148,7 @@ def _build_body(frete, descricao_frete, data_vencimento, valor_total_centavos):
     cep = (frete.get("cliente_cep") or "").replace("-", "").strip()
     if not cep or len(cep) != 8:
         cep = "74000000"
-    nome_cliente = (frete.get("cliente_fantasia") or frete.get("cliente_nome") or "Cliente")[:80]
+    nome_cliente = (frete.get("cliente_nome") or frete.get("cliente_fantasia") or "Cliente")[:80]
     items = [{"name": descricao_frete[:80], "amount": 1, "value": valor_total_centavos}]
     banking_billet = {
         "expire_at": data_vencimento.strftime("%Y-%m-%d"),
