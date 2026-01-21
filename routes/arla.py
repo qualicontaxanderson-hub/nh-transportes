@@ -417,9 +417,6 @@ def api_ultima_data(cliente_id):
             ultima_data = ultimo_lancamento['data']
             proxima_data = ultima_data + timedelta(days=1)
             
-            cursor.close()
-            conn.close()
-            
             return jsonify({
                 'success': True,
                 'tem_pendencia': True,
@@ -428,9 +425,6 @@ def api_ultima_data(cliente_id):
             })
         else:
             # Nenhum lançamento anterior, sugerir hoje
-            cursor.close()
-            conn.close()
-            
             return jsonify({
                 'success': True,
                 'tem_pendencia': False,
@@ -438,9 +432,10 @@ def api_ultima_data(cliente_id):
             })
         
     except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+    finally:
         cursor.close()
         conn.close()
-        return jsonify({'success': False, 'error': str(e)}), 500
 
 # =============================================
 # API - ENCERRANTE ANTERIOR
@@ -473,18 +468,16 @@ def api_encerrante_anterior(cliente_id):
             saldo_ini = cursor.fetchone()
             encerrante_anterior = float(saldo_ini['encerrante_inicial']) if saldo_ini else 0
         
-        cursor.close()
-        conn.close()
-        
         return jsonify({
             'success': True,
             'encerrante_anterior': encerrante_anterior
         })
         
     except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+    finally:
         cursor.close()
         conn.close()
-        return jsonify({'success': False, 'error': str(e)}), 500
 
 # =============================================
 # LANÇAMENTO DIÁRIO - CRIAR
