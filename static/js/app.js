@@ -74,6 +74,58 @@ document.addEventListener('DOMContentLoaded', function() {
     }
   });
 
+  // FORMATAÇÃO AUTOMÁTICA DE VALORES MONETÁRIOS (formato brasileiro: 1.500,00)
+  // Identifica campos de valor por name="valor" ou class="js-currency"
+  var currencyInputs = document.querySelectorAll('input[name="valor"], input.js-currency');
+  
+  currencyInputs.forEach(function(input) {
+    // Função para formatar o valor
+    function formatCurrency(value) {
+      // Remove tudo que não é número
+      var numbers = value.replace(/\D/g, '');
+      
+      if (numbers === '') return '';
+      
+      // Converte para número e divide por 100 para ter os centavos
+      var amount = parseInt(numbers) / 100;
+      
+      // Formata com separadores brasileiros
+      return amount.toLocaleString('pt-BR', {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+      });
+    }
+    
+    // Evento ao digitar
+    input.addEventListener('input', function(e) {
+      var cursorPosition = e.target.selectionStart;
+      var oldLength = e.target.value.length;
+      
+      e.target.value = formatCurrency(e.target.value);
+      
+      var newLength = e.target.value.length;
+      var lengthDiff = newLength - oldLength;
+      
+      // Ajusta a posição do cursor
+      e.target.setSelectionRange(cursorPosition + lengthDiff, cursorPosition + lengthDiff);
+    });
+    
+    // Garante formatação ao sair do campo
+    input.addEventListener('blur', function(e) {
+      if (e.target.value) {
+        e.target.value = formatCurrency(e.target.value);
+      }
+    });
+    
+    // Formata valor inicial se existir
+    if (input.value) {
+      // Se já estiver no formato brasileiro (com vírgula), mantém
+      if (input.value.includes(',')) {
+        input.value = formatCurrency(input.value);
+      }
+    }
+  });
+
   // TRAVA DE CLIQUE EM FORMULÁRIOS
   var forms = document.querySelectorAll('form');
 

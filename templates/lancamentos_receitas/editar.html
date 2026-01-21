@@ -36,15 +36,15 @@
                         </select>
                     </div>
                     <div class="col-md-4 mb-3">
-                        <label class="form-label" style="font-size: 0.85rem;">Valor *</label>
+                        <label class="form-label" style="font-size: 0.85rem;">Valor * <small class="text-muted">(digite apenas números)</small></label>
                         <div class="input-group input-group-sm">
                             <span class="input-group-text">R$</span>
-                            <input type="text" name="valor" class="form-control" required 
+                            <input type="text" name="valor" class="form-control js-currency" required 
                                    value="{{ "%.2f"|format(lancamento.valor)|replace('.', ',') }}" 
                                    placeholder="0,00"
-                                   pattern="[0-9]+([,.][0-9]{1,2})?"
-                                   title="Digite um valor válido (ex: 1000.50 ou 1000,50)">
+                                   title="Digite apenas números. Ex: 150000 = R$ 1.500,00">
                         </div>
+                        <small class="form-text text-muted">Digite 150000 para R$ 1.500,00</small>
                     </div>
                 </div>
 

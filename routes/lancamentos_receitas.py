@@ -8,6 +8,35 @@ from decimal import Decimal
 bp = Blueprint('lancamentos_receitas', __name__, url_prefix='/lancamentos_receitas')
 
 
+def parse_brazilian_currency(value_str):
+    """
+    Convert Brazilian currency format to Decimal.
+    Examples: '1.500,00' -> 1500.00, '150000' -> 1500.00
+    
+    Args:
+        value_str: String value in Brazilian format
+        
+    Returns:
+        Decimal: Parsed decimal value
+    """
+    if not value_str:
+        return Decimal('0')
+    
+    # Remove espaços
+    value_str = str(value_str).strip()
+    
+    # Remove o símbolo R$ se existir
+    value_str = value_str.replace('R$', '').strip()
+    
+    # Remove pontos (separador de milhares)
+    value_str = value_str.replace('.', '')
+    
+    # Substitui vírgula por ponto (separador decimal)
+    value_str = value_str.replace(',', '.')
+    
+    return Decimal(value_str)
+
+
 def validate_lancamento_input(data, receita_id, valor):
     """
     Validate lancamento input fields.
@@ -42,7 +71,7 @@ def validate_lancamento_input(data, receita_id, valor):
         errors.append('Valor é obrigatório!')
     else:
         try:
-            val = Decimal(str(valor).replace(',', '.'))
+            val = parse_brazilian_currency(valor)
             if val <= 0:
                 errors.append('Valor deve ser maior que zero!')
         except:
@@ -116,8 +145,8 @@ def novo():
                 return render_template('lancamentos_receitas/novo.html', receitas=receitas, 
                                      data=data, receita_id=receita_id, valor=valor, observacao=observacao)
 
-            # Convert value to decimal
-            valor_decimal = Decimal(str(valor).replace(',', '.'))
+            # Convert value to decimal using Brazilian format parser
+            valor_decimal = parse_brazilian_currency(valor)
             
             cursor.execute("""
                 INSERT INTO lancamentos_receitas (data, receita_id, valor, observacao)
@@ -200,8 +229,8 @@ def editar(id):
                 receitas = cursor.fetchall()
                 return render_template('lancamentos_receitas/editar.html', lancamento=lancamento, receitas=receitas)
 
-            # Convert value to decimal
-            valor_decimal = Decimal(str(valor).replace(',', '.'))
+            # Convert value to decimal using Brazilian format parser
+            valor_decimal = parse_brazilian_currency(valor)
             
             cursor.execute("""
                 UPDATE lancamentos_receitas 
