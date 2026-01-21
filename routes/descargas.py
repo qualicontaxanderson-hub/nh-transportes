@@ -44,7 +44,7 @@ def lista():
         if data_inicio:
             try:
                 di = datetime.strptime(data_inicio, '%d/%m/%Y').strftime('%Y-%m-%d')
-            except Exception:
+            except ValueError:
                 di = data_inicio
             filters.append("d.data_descarga >= %s")
             params.append(di)
@@ -52,7 +52,7 @@ def lista():
         if data_fim:
             try:
                 df = datetime.strptime(data_fim, '%d/%m/%Y').strftime('%Y-%m-%d')
-            except Exception:
+            except ValueError:
                 df = data_fim
             filters.append("d.data_descarga <= %s")
             params.append(df)
@@ -116,11 +116,8 @@ def lista():
                              descargas=[],
                              clientes=[])
     finally:
-        try:
-            cursor.close()
-            conn.close()
-        except Exception:
-            pass
+        cursor.close()
+        conn.close()
 
 
 # ============================================
@@ -170,11 +167,8 @@ def selecionar_frete():
         flash(f'Erro ao buscar fretes: {e}', 'danger')
         return redirect(url_for('descargas.lista'))
     finally:
-        try:
-            cursor.close()
-            conn.close()
-        except Exception:
-            pass
+        cursor.close()
+        conn.close()
 
 
 # ============================================
@@ -618,11 +612,8 @@ def adicionar_etapa(descarga_id):
             pass
         flash(f'Erro ao adicionar etapa: {e}', 'danger')
     finally:
-        try:
-            cursor.close()
-            conn.close()
-        except Exception:
-            pass
+        cursor.close()
+        conn.close()
     
     return redirect(url_for('descargas.editar', descarga_id=descarga_id))
 
@@ -693,8 +684,5 @@ Diferença: {fmt_valor(descarga['diferenca_regua'])}"""
     except Exception as e:
         return jsonify({'error': str(e)}), 500
     finally:
-        try:
-            cursor.close()
-            conn.close()
-        except Exception:
-            pass
+        cursor.close()
+        conn.close()

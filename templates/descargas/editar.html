@@ -351,7 +351,7 @@
 function calcularDiferencas() {
   const sistemaAntes = parseFloat(document.getElementById('estoque_sistema_antes').value.replace(/\./g, '').replace(',', '.')) || 0;
   const sistemaDepois = parseFloat(document.getElementById('estoque_sistema_depois').value.replace(/\./g, '').replace(',', '.')) || 0;
-  const volumeDescarregado = {{ descarga.volume_descarregado|float }};
+  const volumeDescarregado = {{ descarga.volume_descarregado|float|tojson }};
   const abastecimento = parseFloat(document.querySelector('[name="abastecimento_durante_descarga"]').value.replace(/\./g, '').replace(',', '.')) || 0;
   
   if (sistemaAntes && sistemaDepois && volumeDescarregado) {
