@@ -1,0 +1,96 @@
+{% extends "base.html" %}
+
+{% block title %}Lançamentos de Receitas - NH Transportes{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h2 style="font-size: 1.5rem;"><i class="bi bi-cash-stack"></i> Lançamentos de Receitas</h2>
+        {% if current_user.nivel == 'admin' %}
+        <a href="{{ url_for('lancamentos_receitas.novo') }}" class="btn btn-primary btn-sm">
+            <i class="bi bi-plus-circle"></i> Novo Lançamento
+        </a>
+        {% endif %}
+    </div>
+
+    <!-- Tabela de Lançamentos -->
+    <div class="card">
+        <div class="card-header" style="background:#1D63A5;color:white;font-size:0.9rem;font-weight:600;">
+            <i class="bi bi-list"></i> Lista de Lançamentos
+        </div>
+        <div class="card-body" style="padding: 0.5rem;">
+            <div class="table-responsive">
+                <table class="table table-hover table-striped table-sm mb-0">
+                    <thead style="background:#4A90E2;color:#000;font-weight:700;font-size:0.85rem;">
+                        <tr>
+                            <th>ID</th>
+                            <th>Data</th>
+                            <th>Receita</th>
+                            <th>Cliente</th>
+                            <th class="text-end">Valor</th>
+                            <th>Observação</th>
+                            <th class="text-center">Ações</th>
+                        </tr>
+                    </thead>
+                    <tbody style="font-size: 0.85rem;">
+                        {% if lancamentos %}
+                            {% for lanc in lancamentos %}
+                            <tr>
+                                <td><strong>{{ lanc.id }}</strong></td>
+                                <td>{{ lanc.data.strftime('%d/%m/%Y') if lanc.data else '-' }}</td>
+                                <td>{{ lanc.receita_nome }}</td>
+                                <td>{{ lanc.cliente_nome }}</td>
+                                <td class="text-end"><strong>{{ "R$ {:,.2f}".format(lanc.valor).replace(',', 'X').replace('.', ',').replace('X', '.') }}</strong></td>
+                                <td>{{ lanc.observacao[:30] + '...' if lanc.observacao and lanc.observacao|length > 30 else (lanc.observacao or '-') }}</td>
+                                <td class="text-center">
+                                    {% if current_user.nivel == 'admin' %}
+                                    <a href="{{ url_for('lancamentos_receitas.editar', id=lanc.id) }}" class="btn btn-sm btn-warning" title="Editar" style="padding: 0.2rem 0.4rem;">
+                                        <i class="bi bi-pencil"></i>
+                                    </a>
+                                    <form method="POST" action="{{ url_for('lancamentos_receitas.excluir', id=lanc.id) }}" style="display:inline;" onsubmit="return confirm('Deseja realmente excluir este lançamento?');">
+                                        <button type="submit" class="btn btn-sm btn-danger" title="Excluir" style="padding: 0.2rem 0.4rem;">
+                                            <i class="bi bi-trash"></i>
+                                        </button>
+                                    </form>
+                                    {% else %}
+                                    <span class="text-muted" style="font-size: 0.75rem;">-</span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        {% else %}
+                            <tr>
+                                <td colspan="7" class="text-center text-muted py-3" style="font-size: 0.9rem;">
+                                    <i class="bi bi-inbox" style="font-size:1.5rem;"></i><br>
+                                    Nenhum lançamento cadastrado
+                                </td>
+                            </tr>
+                        {% endif %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    .table-sm th, .table-sm td {
+        padding: 0.4rem;
+    }
+    
+    .btn-sm {
+        font-size: 0.8rem;
+        padding: 0.3rem 0.6rem;
+    }
+    
+    @media (max-width: 768px) {
+        h2 {
+            font-size: 1.2rem !important;
+        }
+        .table-sm th, .table-sm td {
+            font-size: 0.75rem !important;
+            padding: 0.3rem !important;
+        }
+    }
+</style>
+{% endblock %}

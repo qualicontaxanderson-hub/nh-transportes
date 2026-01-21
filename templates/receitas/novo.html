@@ -1,0 +1,85 @@
+{% extends 'base.html' %}
+{% block title %}Nova Receita - NH Transportes{% endblock %}
+{% block content %}
+<div class="container-fluid">
+    <nav aria-label="breadcrumb" class="mt-2 mb-3">
+        <ol class="breadcrumb" style="font-size: 0.85rem;">
+            <li class="breadcrumb-item"><a href="/">Dashboard</a></li>
+            <li class="breadcrumb-item"><a href="{{ url_for('receitas.lista') }}">Receitas</a></li>
+            <li class="breadcrumb-item active" aria-current="page">Nova Receita</li>
+        </ol>
+    </nav>
+    
+    <h2 class="mb-3" style="color:#1D63A5; font-size: 1.3rem;"><i class="bi bi-wallet-fill"></i> Nova Receita</h2>
+    
+    <div class="card shadow-sm">
+        <div class="card-header" style="background:#ff9800;color:white; font-size: 0.95rem; padding: 0.6rem 1rem;">
+            <h5 class="mb-0" style="font-size: 1rem;">Cadastrar Receita</h5>
+        </div>
+        <div class="card-body" style="padding: 1rem;">
+            <form method="POST">
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label" style="font-size: 0.85rem;">Nome da Receita *</label>
+                        <input type="text" name="nome" class="form-control form-control-sm" required 
+                               value="{{ nome if nome else '' }}" placeholder="Ex: Taxa de Manutenção, Comissão, etc.">
+                    </div>
+                    <div class="col-md-4 mb-3">
+                        <label class="form-label" style="font-size: 0.85rem;">Cliente *</label>
+                        <select name="cliente_id" class="form-select form-select-sm" required>
+                            <option value="">Selecione...</option>
+                            {% for cliente in clientes %}
+                            <option value="{{ cliente.id }}" {% if cliente_id and cliente.id == cliente_id|int %}selected{% endif %}>
+                                {{ cliente.razao_social }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                        <small class="form-text text-muted" style="font-size: 0.75rem;">
+                            Apenas clientes com produtos configurados
+                        </small>
+                    </div>
+                    <div class="col-md-2 mb-3">
+                        <label class="form-label" style="font-size: 0.85rem;">Status</label>
+                        <select name="ativo" class="form-select form-select-sm">
+                            <option value="1" {% if not ativo or ativo == '1' %}selected{% endif %}>Ativo</option>
+                            <option value="0" {% if ativo == '0' %}selected{% endif %}>Bloqueado</option>
+                        </select>
+                    </div>
+                </div>
+
+                <hr style="margin: 1rem 0;">
+                
+                <div class="d-flex justify-content-between">
+                    <a href="{{ url_for('receitas.lista') }}" class="btn btn-secondary btn-sm">
+                        <i class="bi bi-arrow-left"></i> Voltar
+                    </a>
+                    <button type="submit" class="btn btn-success btn-sm">
+                        <i class="bi bi-check-circle"></i> Salvar
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<style>
+    .form-label {
+        font-weight: 600;
+        margin-bottom: 0.25rem;
+    }
+    
+    .form-control-sm, .form-select-sm {
+        font-size: 0.85rem;
+        padding: 0.4rem 0.6rem;
+    }
+    
+    @media (max-width: 768px) {
+        h2 {
+            font-size: 1.1rem !important;
+        }
+        .col-md-4, .col-md-6, .col-md-2 {
+            margin-bottom: 0.5rem !important;
+        }
+    }
+</style>
+{% endblock %}
