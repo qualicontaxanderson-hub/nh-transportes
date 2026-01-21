@@ -844,12 +844,29 @@ def deletar(id):
         conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)
 
-        # verificar se existe cobrança vinculada ao frete
+        # verificar se existe cobrança vinculada ao frete (direta ou via bulk)
+        cobr = None
         try:
+            # Verificar cobrança direta
             cursor.execute("SELECT id, status, pago_via_provedor FROM cobrancas WHERE frete_id = %s LIMIT 1", (id,))
             cobr = cursor.fetchone()
         except Exception:
             cobr = None
+
+        # Se não encontrou cobrança direta, verificar cobrança via emissão múltipla
+        if not cobr:
+            try:
+                cursor.execute("""
+                    SELECT c.id, c.status, c.pago_via_provedor 
+                    FROM cobrancas c
+                    INNER JOIN cobrancas_freites cf ON c.id = cf.cobranca_id
+                    WHERE cf.frete_id = %s
+                    LIMIT 1
+                """, (id,))
+                cobr = cursor.fetchone()
+            except Exception:
+                # Tabela cobrancas_freites pode não existir ainda, ignorar erro
+                cobr = None
 
         if cobr:
             # existe cobrança vinculada -> impedir exclusão
