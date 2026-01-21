@@ -122,8 +122,8 @@
         let num = value.replace(/\D/g, '');
         if (!num) return '';
         
-        // Convert to decimal (divide by 100 for 2 decimal places)
-        // parseInt is correct here since num contains only digits after regex
+        // Divide by 100 to position decimal point correctly
+        // Example: user types "10000" -> we want "100.00" -> divide 10000 by 100
         let decimal = parseInt(num) / 100;
         
         // Format with thousands separator and 2 decimal places
@@ -139,8 +139,8 @@
         let num = value.replace(/\D/g, '');
         if (!num) return '';
         
-        // Convert to decimal (divide by 1000 for 3 decimal places)
-        // parseInt is correct here since num contains only digits after regex
+        // Divide by 1000 to position decimal point correctly for 3 decimal places
+        // Example: user types "10000" -> we want "10.000" -> divide 10000 by 1000
         let decimal = parseInt(num) / 1000;
         
         // Format with thousands separator and 3 decimal places

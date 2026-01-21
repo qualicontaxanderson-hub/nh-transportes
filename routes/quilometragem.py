@@ -110,7 +110,7 @@ def lista():
         ORDER BY v.placa
     """)
     veiculos_km_inicial = cursor.fetchall()
-    # RESUMO agrupado por veículo - only show vehicles with refuelings
+    # RESUMO agrupado por veículo - mostra apenas veículos com abastecimentos
     resumo_query = """
         SELECT 
             v.placa,
