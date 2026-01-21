@@ -11,7 +11,7 @@ This migration adds the `estoque_inicial` (initial stock) column to the `vendas_
 
 ### Database Schema
 - Added `estoque_inicial` column to `vendas_posto` table
-  - Type: `DECIMAL(10, 3)` (supports up to 3 decimal places for liters)
+  - Type: `INT` (whole numbers only, no decimal places)
   - Nullable: `NULL` (optional field)
   - Position: After `quantidade_litros` column
 
@@ -93,5 +93,6 @@ Users can now:
 
 ## Notes
 - The `estoque_inicial` field is optional and can be left empty
-- Values are displayed with 3 decimal places (e.g., 5.000,000)
-- The field uses the same decimal format as `quantidade_litros` for consistency
+- Values are displayed as whole numbers with thousand separator (e.g., 5.000)
+- The field uses INT type for whole numbers (no decimal places)
+- Format: type 1000 → display 1.000, type 15000 → display 15.000

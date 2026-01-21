@@ -342,13 +342,13 @@ def vendas_lancar():
                 
                 quantidade_str = request.form.get(quantidade_key, '').replace('.', '').replace(',', '.')
                 valor_str = request.form.get(valor_key, '').replace('R$', '').replace('.', '').replace(',', '.').strip()
-                estoque_str = request.form.get(estoque_key, '').replace('.', '').replace(',', '.')
+                estoque_str = request.form.get(estoque_key, '').replace('.', '')  # Remove thousand separator, no decimal conversion
                 
                 if quantidade_str and valor_str:
                     try:
                         quantidade_litros = float(quantidade_str)
                         valor_total = float(valor_str)
-                        estoque_inicial = float(estoque_str) if estoque_str else None
+                        estoque_inicial = int(estoque_str) if estoque_str else None  # Convert to integer
                         
                         # Só processar se quantidade e valor forem maiores que 0
                         if quantidade_litros > 0 and valor_total > 0:
@@ -462,7 +462,7 @@ def vendas_editar_data(data, cliente_id):
                 
                 quantidade_str = request.form.get(quantidade_key, '').replace('.', '').replace(',', '.')
                 valor_str = request.form.get(valor_key, '').replace('R$', '').replace('.', '').replace(',', '.').strip()
-                estoque_str = request.form.get(estoque_key, '').replace('.', '').replace(',', '.')
+                estoque_str = request.form.get(estoque_key, '').replace('.', '')  # Remove thousand separator, no decimal conversion
                 
                 # Buscar venda existente para este produto
                 venda_existente = next((v for v in vendas if v.produto_id == produto.id), None)
@@ -471,7 +471,7 @@ def vendas_editar_data(data, cliente_id):
                     try:
                         quantidade_litros = float(quantidade_str)
                         valor_total = float(valor_str)
-                        estoque_inicial = float(estoque_str) if estoque_str else None
+                        estoque_inicial = int(estoque_str) if estoque_str else None  # Convert to integer
                         
                         if quantidade_litros > 0 and valor_total > 0:
                             preco_medio = valor_total / quantidade_litros

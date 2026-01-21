@@ -205,8 +205,8 @@
                   <input type="text" 
                          name="estoque_inicial_{{ produto.id }}" 
                          class="form-control input-estoque-edit" 
-                         placeholder="Ex: 5.000,000"
-                         value="{% if venda_produto and venda_produto.estoque_inicial %}{{ '{:,.3f}'.format(venda_produto.estoque_inicial|float).replace(',', '_').replace('.', ',').replace('_', '.') }}{% endif %}"
+                         placeholder="Ex: 5.000"
+                         value="{% if venda_produto and venda_produto.estoque_inicial %}{{ '{:,d}'.format(venda_produto.estoque_inicial|int).replace(',', '.') }}{% endif %}"
                          data-produto-id="{{ produto.id }}">
                 </div>
                 <div class="col-md-4">
@@ -385,7 +385,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const produtoId = inputQtd.dataset.produtoId;
     const precoMedioSpan = card.querySelector(`#preco_medio_edit_${produtoId}`);
     
-    // Máscara de estoque inicial (3 decimais)
+    // Máscara de estoque inicial (números inteiros com separador de milhar)
     if (inputEstoque) {
       inputEstoque.addEventListener('input', function(e) {
         let value = e.target.value.replace(/\D/g, '');
@@ -393,8 +393,8 @@ document.addEventListener('DOMContentLoaded', function() {
           e.target.value = '';
           return;
         }
-        value = (value / 1000).toFixed(3).replace('.', ',');
-        value = value.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+        // Format as integer with thousand separator (e.g., 1000 -> 1.000, 15000 -> 15.000)
+        value = parseInt(value, 10).toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.');
         e.target.value = value;
       });
     }
@@ -599,7 +599,7 @@ document.addEventListener('DOMContentLoaded', function() {
           <input type="text" 
                  name="estoque_inicial_${produto.id}" 
                  class="form-control input-estoque" 
-                 placeholder="Ex: 5.000,000"
+                 placeholder="Ex: 5.000"
                  data-produto-id="${produto.id}">
         </div>
         <div class="col-md-4">
@@ -633,7 +633,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const inputValor = card.querySelector('.input-valor');
     const precoMedioSpan = card.querySelector(`#preco_medio_${produto.id}`);
 
-    // Máscara de estoque inicial (3 decimais)
+    // Máscara de estoque inicial (números inteiros com separador de milhar)
     if (inputEstoque) {
       inputEstoque.addEventListener('input', function(e) {
         let value = e.target.value.replace(/\D/g, '');
@@ -641,8 +641,8 @@ document.addEventListener('DOMContentLoaded', function() {
           e.target.value = '';
           return;
         }
-        value = (value / 1000).toFixed(3).replace('.', ',');
-        value = value.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+        // Format as integer with thousand separator (e.g., 1000 -> 1.000, 15000 -> 15.000)
+        value = parseInt(value, 10).toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.');
         e.target.value = value;
       });
     }

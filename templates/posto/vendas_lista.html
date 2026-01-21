@@ -236,7 +236,7 @@
                 <i class="bi bi-droplet-fill {{ produto_class }}"></i>
                 <span class="{{ produto_class }}">{{ produto_nome }}</span>
               </td>
-              <td class="text-end">{% if item.estoque_inicial %}{{ "{:,.3f}".format(item.estoque_inicial).replace(',', '_').replace('.', ',').replace('_', '.') }}{% else %}-{% endif %}</td>
+              <td class="text-end">{% if item.estoque_inicial %}{{ "{:,d}".format(item.estoque_inicial|int).replace(',', '.') }}{% else %}-{% endif %}</td>
               <td class="text-end">{{ "{:,.3f}".format(item.litros).replace(',', '_').replace('.', ',').replace('_', '.') }}</td>
               <td class="text-end">R$ {{ "{:,.2f}".format(item.valor).replace(',', '_').replace('.', ',').replace('_', '.') }}</td>
               <td class="text-end">R$ {{ "{:,.4f}".format(item.preco_medio).replace('.', ',') }}</td>

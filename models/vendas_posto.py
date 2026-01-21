@@ -19,7 +19,7 @@ class VendasPosto(db.Model):
     vendedor_id = db.Column(db.Integer, nullable=True)
     
     quantidade_litros = db.Column(db.Numeric(10, 3), nullable=False, default=0)
-    estoque_inicial = db.Column(db.Numeric(10, 3), nullable=True, default=None)
+    estoque_inicial = db.Column(db.Integer, nullable=True, default=None)
     preco_medio = db.Column(db.Numeric(10, 2), nullable=False, default=0)
     valor_total = db.Column(db.Numeric(10, 2), nullable=False, default=0)
     
