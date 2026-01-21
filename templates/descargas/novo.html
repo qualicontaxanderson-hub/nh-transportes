@@ -1,0 +1,420 @@
+{% extends "base.html" %}
+
+{% block title %}{% if descarga_existente %}Adicionar Etapa{% else %}Nova Descarga{% endif %} - NH Transportes{% endblock %}
+
+{% block styles %}
+<style>
+:root {
+  --grad-start: #4a90e2;
+  --grad-end: #f2994a;
+  --accent: #4a90e2;
+  --etanol-color: #28a745;
+  --gasolina-color: #dc3545;
+  --gasolina-aditivada-color: #007bff;
+  --s10-color: #007bff;
+  --s500-color: #343a40;
+}
+
+body {
+  background: linear-gradient(135deg, var(--grad-start) 0%, #9fb8d6 38%, var(--grad-end) 100%);
+  min-height: 100vh;
+}
+
+.card {
+  background-color: #fff;
+  border: none;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+}
+
+.card-header {
+  background: var(--accent);
+  color: white;
+}
+
+.btn-primary {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.btn-primary:hover {
+  background: #14588f;
+  border-color: #14588f;
+}
+
+.info-box {
+  background: linear-gradient(135deg, rgba(74,144,226,0.1), rgba(242,153,74,0.1));
+  border-left: 4px solid var(--accent);
+  padding: 15px;
+  margin-bottom: 20px;
+}
+
+.calculation-result {
+  background: #e7f3ff;
+  padding: 10px;
+  border-radius: 5px;
+  font-weight: bold;
+}
+
+.produto-etanol { color: var(--etanol-color) !important; }
+.produto-gasolina { color: var(--gasolina-color) !important; }
+.produto-gasolina-aditivada { color: var(--gasolina-aditivada-color) !important; }
+.produto-s-10 { color: var(--s10-color) !important; }
+.produto-s-500 { color: var(--s500-color) !important; }
+
+.etapas-card {
+  background: #f8f9fa;
+  border-left: 4px solid #17a2b8;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+  <div class="d-flex justify-content-between align-items-center mb-4">
+    <h1 class="text-white">
+      <i class="bi bi-clipboard-plus"></i> 
+      {% if descarga_existente %}Adicionar Etapa de Descarga{% else %}Nova Descarga{% endif %}
+    </h1>
+    <a href="{{ url_for('descargas.lista') }}" class="btn btn-secondary">
+      <i class="bi bi-arrow-left"></i> Voltar
+    </a>
+  </div>
+
+  <!-- Informações do Frete -->
+  <div class="card mb-4">
+    <div class="card-header">
+      <h5 class="mb-0"><i class="bi bi-info-circle"></i> Informações do Frete</h5>
+    </div>
+    <div class="card-body">
+      <div class="row">
+        <div class="col-md-3">
+          <strong>Cliente:</strong><br>
+          {{ frete.cliente }}
+        </div>
+        <div class="col-md-3">
+          <strong>Fornecedor:</strong><br>
+          {{ frete.fornecedor }}
+        </div>
+        <div class="col-md-3">
+          <strong>Produto:</strong><br>
+          {% set produto_class = '' %}
+          {% if frete.produto %}
+            {% set produto_upper = frete.produto|upper %}
+            {% if 'ETANOL' in produto_upper %}
+              {% set produto_class = 'produto-etanol' %}
+            {% elif 'GASOLINA ADITIVADA' in produto_upper %}
+              {% set produto_class = 'produto-gasolina-aditivada' %}
+            {% elif 'GASOLINA' in produto_upper %}
+              {% set produto_class = 'produto-gasolina' %}
+            {% elif 'S-10' in produto_upper or 'S10' in produto_upper %}
+              {% set produto_class = 'produto-s-10' %}
+            {% elif 'S-500' in produto_upper or 'S500' in produto_upper %}
+              {% set produto_class = 'produto-s-500' %}
+            {% endif %}
+          {% endif %}
+          <span class="{{ produto_class }}">{{ frete.produto }}</span>
+        </div>
+        <div class="col-md-3">
+          <strong>Motorista:</strong><br>
+          {{ frete.motorista }}
+        </div>
+      </div>
+      <hr>
+      <div class="row">
+        <div class="col-md-3">
+          <strong>Volume Total:</strong><br>
+          {{ "%.2f"|format(frete.volume_total) }} litros
+        </div>
+        <div class="col-md-3">
+          <strong>Data do Frete:</strong><br>
+          {{ frete.data_frete_formatada }}
+        </div>
+        {% if descarga_existente %}
+        <div class="col-md-3">
+          <strong>Volume Descarregado:</strong><br>
+          <span class="text-success">{{ "%.2f"|format(descarga_existente.volume_descarregado) }} litros</span>
+        </div>
+        <div class="col-md-3">
+          <strong>Volume Restante:</strong><br>
+          <span class="text-warning">{{ "%.2f"|format(frete.volume_total - descarga_existente.volume_descarregado) }} litros</span>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  {% if etapas %}
+  <!-- Etapas Anteriores -->
+  <div class="card etapas-card mb-4">
+    <div class="card-header bg-info text-white">
+      <h5 class="mb-0"><i class="bi bi-clock-history"></i> Etapas Anteriores</h5>
+    </div>
+    <div class="card-body">
+      <div class="table-responsive">
+        <table class="table table-sm">
+          <thead>
+            <tr>
+              <th>Data</th>
+              <th>Volume</th>
+              <th>Sistema Antes</th>
+              <th>Sistema Depois</th>
+              <th>Diferença Sistema</th>
+              <th>Régua Antes</th>
+              <th>Régua Depois</th>
+              <th>Diferença Régua</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for etapa in etapas %}
+            <tr>
+              <td>{{ etapa.data_etapa_formatada }}</td>
+              <td>{{ "%.2f"|format(etapa.volume_etapa) }}</td>
+              <td>{{ "%.2f"|format(etapa.estoque_sistema_antes) if etapa.estoque_sistema_antes else '-' }}</td>
+              <td>{{ "%.2f"|format(etapa.estoque_sistema_depois) if etapa.estoque_sistema_depois else '-' }}</td>
+              <td>
+                {% if etapa.diferenca_sistema %}
+                  {% if etapa.diferenca_sistema > 0 %}
+                    <span class="text-success">+{{ "%.2f"|format(etapa.diferenca_sistema) }}</span>
+                  {% else %}
+                    <span class="text-danger">{{ "%.2f"|format(etapa.diferenca_sistema) }}</span>
+                  {% endif %}
+                {% else %}-{% endif %}
+              </td>
+              <td>{{ "%.2f"|format(etapa.estoque_regua_antes) if etapa.estoque_regua_antes else '-' }}</td>
+              <td>{{ "%.2f"|format(etapa.estoque_regua_depois) if etapa.estoque_regua_depois else '-' }}</td>
+              <td>
+                {% if etapa.diferenca_regua %}
+                  {% if etapa.diferenca_regua > 0 %}
+                    <span class="text-success">+{{ "%.2f"|format(etapa.diferenca_regua) }}</span>
+                  {% else %}
+                    <span class="text-danger">{{ "%.2f"|format(etapa.diferenca_regua) }}</span>
+                  {% endif %}
+                {% else %}-{% endif %}
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- Formulário de Descarga -->
+  <form method="POST" id="formDescarga">
+    <div class="card">
+      <div class="card-header">
+        <h5 class="mb-0">
+          <i class="bi bi-file-earmark-text"></i> 
+          {% if descarga_existente %}Nova Etapa{% else %}Dados da Descarga{% endif %}
+        </h5>
+      </div>
+      <div class="card-body">
+        <!-- Datas -->
+        <div class="row mb-3">
+          <div class="col-md-6">
+            <label for="data_carregamento" class="form-label">Data de Carregamento *</label>
+            <input type="date" class="form-control" id="data_carregamento" name="data_carregamento" 
+                   value="{% if descarga_existente %}{{ descarga_existente.data_carregamento }}{% else %}{{ frete.data_frete }}{% endif %}"
+                   {% if descarga_existente %}readonly{% endif %} required>
+          </div>
+          <div class="col-md-6">
+            <label for="data_descarga" class="form-label">Data de Descarga *</label>
+            <input type="date" class="form-control" id="data_descarga" name="data_descarga" 
+                   value="{{ 'now'|date('%Y-%m-%d') }}" required>
+          </div>
+        </div>
+
+        <!-- Volume -->
+        <div class="row mb-3">
+          <div class="col-md-6">
+            <label for="volume_etapa" class="form-label">Volume desta {% if descarga_existente %}Etapa{% else %}Descarga{% endif %} (litros) *</label>
+            <input type="number" step="0.01" class="form-control" id="volume_etapa" name="volume_etapa" 
+                   value="{% if descarga_existente %}{{ "%.2f"|format(frete.volume_total - descarga_existente.volume_descarregado) }}{% else %}{{ "%.2f"|format(frete.volume_total) }}{% endif %}"
+                   max="{% if descarga_existente %}{{ frete.volume_total - descarga_existente.volume_descarregado }}{% else %}{{ frete.volume_total }}{% endif %}"
+                   required>
+            <small class="form-text text-muted">
+              {% if descarga_existente %}
+                Volume restante: {{ "%.2f"|format(frete.volume_total - descarga_existente.volume_descarregado) }} litros
+              {% else %}
+                Volume total do frete: {{ "%.2f"|format(frete.volume_total) }} litros
+              {% endif %}
+            </small>
+          </div>
+          <div class="col-md-6">
+            <label for="abastecimento_durante_descarga" class="form-label">Abastecimento Durante Descarga (litros)</label>
+            <input type="number" step="0.01" class="form-control" id="abastecimento_durante_descarga" 
+                   name="abastecimento_durante_descarga" value="0">
+            <small class="form-text text-muted">Informe se houve abastecimento durante a descarga</small>
+          </div>
+        </div>
+
+        <hr>
+        <h6><i class="bi bi-speedometer"></i> Medições do Sistema</h6>
+        
+        <!-- Medições Sistema -->
+        <div class="row mb-3">
+          <div class="col-md-6">
+            <label for="estoque_sistema_antes" class="form-label">Estoque Sistema Antes (litros)</label>
+            <input type="number" step="0.01" class="form-control" id="estoque_sistema_antes" 
+                   name="estoque_sistema_antes">
+          </div>
+          <div class="col-md-6">
+            <label for="estoque_sistema_depois" class="form-label">Estoque Sistema Depois (litros)</label>
+            <input type="number" step="0.01" class="form-control" id="estoque_sistema_depois" 
+                   name="estoque_sistema_depois">
+          </div>
+        </div>
+
+        <div class="row mb-3">
+          <div class="col-md-12">
+            <div class="calculation-result" id="diferenca_sistema_display">
+              <i class="bi bi-calculator"></i> Diferença Sistema: <span id="diferenca_sistema_valor">-</span>
+            </div>
+          </div>
+        </div>
+
+        <hr>
+        <h6><i class="bi bi-rulers"></i> Medições da Régua</h6>
+
+        <!-- Medições Régua -->
+        <div class="row mb-3">
+          <div class="col-md-6">
+            <label for="estoque_regua_antes" class="form-label">Estoque Régua Antes (litros)</label>
+            <input type="number" step="0.01" class="form-control" id="estoque_regua_antes" 
+                   name="estoque_regua_antes">
+          </div>
+          <div class="col-md-6">
+            <label for="estoque_regua_depois" class="form-label">Estoque Régua Depois (litros)</label>
+            <input type="number" step="0.01" class="form-control" id="estoque_regua_depois" 
+                   name="estoque_regua_depois">
+          </div>
+        </div>
+
+        <div class="row mb-3">
+          <div class="col-md-12">
+            <div class="calculation-result" id="diferenca_regua_display">
+              <i class="bi bi-calculator"></i> Diferença Régua: <span id="diferenca_regua_valor">-</span>
+            </div>
+          </div>
+        </div>
+
+        <hr>
+        <h6><i class="bi bi-thermometer-half"></i> Medidas Adicionais</h6>
+
+        <!-- Medidas Adicionais -->
+        <div class="row mb-3">
+          <div class="col-md-6">
+            <label for="temperatura" class="form-label">Temperatura (°C)</label>
+            <input type="number" step="0.01" class="form-control" id="temperatura" name="temperatura">
+          </div>
+          <div class="col-md-6">
+            <label for="densidade" class="form-label">Densidade</label>
+            <input type="number" step="0.0001" class="form-control" id="densidade" name="densidade">
+          </div>
+        </div>
+
+        <!-- Observações -->
+        <div class="row mb-3">
+          <div class="col-md-12">
+            <label for="observacoes" class="form-label">Observações</label>
+            <textarea class="form-control" id="observacoes" name="observacoes" rows="3"></textarea>
+          </div>
+        </div>
+
+        <div class="info-box">
+          <strong><i class="bi bi-info-circle"></i> Informação:</strong>
+          <p class="mb-0">
+            As diferenças são calculadas automaticamente: 
+            <code>Diferença = (Estoque Depois - Estoque Antes) - Volume + Abastecimento</code>
+            <br>
+            Valores positivos indicam sobra, valores negativos indicam perda.
+          </p>
+        </div>
+
+        <div class="d-flex justify-content-end gap-2">
+          <a href="{{ url_for('descargas.lista') }}" class="btn btn-secondary">
+            <i class="bi bi-x-circle"></i> Cancelar
+          </a>
+          <button type="submit" class="btn btn-primary">
+            <i class="bi bi-save"></i> Salvar Descarga
+          </button>
+        </div>
+      </div>
+    </div>
+  </form>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Função para calcular diferenças automaticamente
+function calcularDiferencas() {
+  const volume = parseFloat(document.getElementById('volume_etapa').value) || 0;
+  const abastecimento = parseFloat(document.getElementById('abastecimento_durante_descarga').value) || 0;
+  
+  // Diferença Sistema
+  const sistemaAntes = parseFloat(document.getElementById('estoque_sistema_antes').value);
+  const sistemaDepois = parseFloat(document.getElementById('estoque_sistema_depois').value);
+  
+  if (!isNaN(sistemaAntes) && !isNaN(sistemaDepois)) {
+    const diferencaSistema = sistemaDepois - sistemaAntes - volume + abastecimento;
+    const spanSistema = document.getElementById('diferenca_sistema_valor');
+    spanSistema.textContent = diferencaSistema.toFixed(2) + ' litros';
+    if (diferencaSistema > 0) {
+      spanSistema.className = 'text-success';
+      spanSistema.textContent = '+' + diferencaSistema.toFixed(2) + ' litros (Sobra)';
+    } else if (diferencaSistema < 0) {
+      spanSistema.className = 'text-danger';
+      spanSistema.textContent = diferencaSistema.toFixed(2) + ' litros (Perda)';
+    } else {
+      spanSistema.className = 'text-primary';
+      spanSistema.textContent = diferencaSistema.toFixed(2) + ' litros (Exato)';
+    }
+  }
+  
+  // Diferença Régua
+  const reguaAntes = parseFloat(document.getElementById('estoque_regua_antes').value);
+  const reguaDepois = parseFloat(document.getElementById('estoque_regua_depois').value);
+  
+  if (!isNaN(reguaAntes) && !isNaN(reguaDepois)) {
+    const diferencaRegua = reguaDepois - reguaAntes - volume + abastecimento;
+    const spanRegua = document.getElementById('diferenca_regua_valor');
+    spanRegua.textContent = diferencaRegua.toFixed(2) + ' litros';
+    if (diferencaRegua > 0) {
+      spanRegua.className = 'text-success';
+      spanRegua.textContent = '+' + diferencaRegua.toFixed(2) + ' litros (Sobra)';
+    } else if (diferencaRegua < 0) {
+      spanRegua.className = 'text-danger';
+      spanRegua.textContent = diferencaRegua.toFixed(2) + ' litros (Perda)';
+    } else {
+      spanRegua.className = 'text-primary';
+      spanRegua.textContent = diferencaRegua.toFixed(2) + ' litros (Exato)';
+    }
+  }
+}
+
+// Adicionar event listeners
+document.addEventListener('DOMContentLoaded', function() {
+  const inputs = [
+    'volume_etapa',
+    'abastecimento_durante_descarga',
+    'estoque_sistema_antes',
+    'estoque_sistema_depois',
+    'estoque_regua_antes',
+    'estoque_regua_depois'
+  ];
+  
+  inputs.forEach(id => {
+    const element = document.getElementById(id);
+    if (element) {
+      element.addEventListener('input', calcularDiferencas);
+      element.addEventListener('change', calcularDiferencas);
+    }
+  });
+  
+  // Calcular inicialmente
+  calcularDiferencas();
+});
+</script>
+{% endblock %}

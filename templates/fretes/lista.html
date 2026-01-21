@@ -159,6 +159,13 @@
                     <i class="bi bi-cash-stack"></i>
                   </button>
 
+                  <!-- Botão Criar Descarga -->
+                  <a href="{{ url_for('descargas.novo', frete_id=frete.id) }}" 
+                     class="btn btn-sm btn-outline-info" 
+                     title="Criar Descarga">
+                    <i class="bi bi-truck"></i>
+                  </a>
+
                   <!-- Emitir Boleto: abrir modal para selecionar data -->
                   {% if frete.valor_total_frete and frete.valor_total_frete > 0 %}
                     {% set emitted = frete.emitted if frete.emitted is defined else 0 %}

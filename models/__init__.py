@@ -18,6 +18,8 @@ from models.vendas_posto import VendasPosto
 from models.bandeira_cartao import BandeiraCartao
 from models.receita import Receita
 from models.lancamento_receita import LancamentoReceita
+from models.descarga import Descarga
+from models.descarga_etapa import DescargaEtapa
 
 __all__ = [
     'Usuario',
@@ -36,5 +38,7 @@ __all__ = [
     'BandeiraCartao',
     'Receita',
     'LancamentoReceita',
+    'Descarga',
+    'DescargaEtapa',
     'db',
 ]

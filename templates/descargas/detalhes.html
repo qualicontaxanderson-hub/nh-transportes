@@ -1,0 +1,393 @@
+{% extends "base.html" %}
+
+{% block title %}Detalhes da Descarga - NH Transportes{% endblock %}
+
+{% block styles %}
+<style>
+:root {
+  --grad-start: #4a90e2;
+  --grad-end: #f2994a;
+  --accent: #4a90e2;
+  --etanol-color: #28a745;
+  --gasolina-color: #dc3545;
+  --gasolina-aditivada-color: #007bff;
+  --s10-color: #007bff;
+  --s500-color: #343a40;
+}
+
+body {
+  background: linear-gradient(135deg, var(--grad-start) 0%, #9fb8d6 38%, var(--grad-end) 100%);
+  min-height: 100vh;
+}
+
+.card {
+  background-color: #fff;
+  border: none;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+}
+
+.card-header {
+  background: var(--accent);
+  color: white;
+}
+
+.btn-primary {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.btn-primary:hover {
+  background: #14588f;
+  border-color: #14588f;
+}
+
+.info-label {
+  font-weight: bold;
+  color: #6c757d;
+  font-size: 0.9rem;
+}
+
+.info-value {
+  font-size: 1.1rem;
+  color: #212529;
+}
+
+.produto-etanol { color: var(--etanol-color) !important; }
+.produto-gasolina { color: var(--gasolina-color) !important; }
+.produto-gasolina-aditivada { color: var(--gasolina-aditivada-color) !important; }
+.produto-s-10 { color: var(--s10-color) !important; }
+.produto-s-500 { color: var(--s500-color) !important; }
+
+.badge-pendente {
+  background-color: #ffc107;
+  color: #000;
+}
+
+.badge-parcial {
+  background-color: #17a2b8;
+  color: #fff;
+}
+
+.badge-concluido {
+  background-color: #28a745;
+  color: #fff;
+}
+
+.section-divider {
+  border-top: 2px solid #e9ecef;
+  margin: 20px 0;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+  <div class="d-flex justify-content-between align-items-center mb-4">
+    <h1 class="text-white">
+      <i class="bi bi-file-text"></i> Detalhes da Descarga #{{ descarga.id }}
+    </h1>
+    <div>
+      <button class="btn btn-success" onclick="copiarWhatsApp({{ descarga.id }})">
+        <i class="bi bi-whatsapp"></i> Copiar para WhatsApp
+      </button>
+      <a href="{{ url_for('descargas.lista') }}" class="btn btn-secondary">
+        <i class="bi bi-arrow-left"></i> Voltar
+      </a>
+    </div>
+  </div>
+
+  <!-- Informações Gerais -->
+  <div class="card mb-4">
+    <div class="card-header">
+      <h5 class="mb-0"><i class="bi bi-info-circle"></i> Informações Gerais</h5>
+    </div>
+    <div class="card-body">
+      <div class="row">
+        <div class="col-md-3">
+          <div class="info-label">Status</div>
+          <div class="info-value">
+            {% if descarga.status == 'pendente' %}
+              <span class="badge badge-pendente">Pendente</span>
+            {% elif descarga.status == 'parcial' %}
+              <span class="badge badge-parcial">Parcial</span>
+            {% elif descarga.status == 'concluido' %}
+              <span class="badge badge-concluido">Concluído</span>
+            {% endif %}
+          </div>
+        </div>
+        <div class="col-md-3">
+          <div class="info-label">Data de Carregamento</div>
+          <div class="info-value">{{ descarga.data_carregamento_formatada }}</div>
+        </div>
+        <div class="col-md-3">
+          <div class="info-label">Data de Descarga</div>
+          <div class="info-value">{{ descarga.data_descarga_formatada }}</div>
+        </div>
+        <div class="col-md-3">
+          <div class="info-label">Volume Total</div>
+          <div class="info-value">{{ "%.2f"|format(descarga.volume_total) }} litros</div>
+        </div>
+      </div>
+      
+      <div class="section-divider"></div>
+      
+      <div class="row">
+        <div class="col-md-3">
+          <div class="info-label">Cliente</div>
+          <div class="info-value">{{ descarga.cliente }}</div>
+        </div>
+        <div class="col-md-3">
+          <div class="info-label">Fornecedor (Distribuidora)</div>
+          <div class="info-value">{{ descarga.fornecedor }}</div>
+        </div>
+        <div class="col-md-3">
+          <div class="info-label">Produto</div>
+          <div class="info-value">
+            {% set produto_class = '' %}
+            {% if descarga.produto %}
+              {% set produto_upper = descarga.produto|upper %}
+              {% if 'ETANOL' in produto_upper %}
+                {% set produto_class = 'produto-etanol' %}
+              {% elif 'GASOLINA ADITIVADA' in produto_upper %}
+                {% set produto_class = 'produto-gasolina-aditivada' %}
+              {% elif 'GASOLINA' in produto_upper %}
+                {% set produto_class = 'produto-gasolina' %}
+              {% elif 'S-10' in produto_upper or 'S10' in produto_upper %}
+                {% set produto_class = 'produto-s-10' %}
+              {% elif 'S-500' in produto_upper or 'S500' in produto_upper %}
+                {% set produto_class = 'produto-s-500' %}
+              {% endif %}
+            {% endif %}
+            <span class="{{ produto_class }}">{{ descarga.produto }}</span>
+          </div>
+        </div>
+        <div class="col-md-3">
+          <div class="info-label">Motorista</div>
+          <div class="info-value">{{ descarga.motorista }}</div>
+        </div>
+      </div>
+      
+      <div class="section-divider"></div>
+      
+      <div class="row">
+        <div class="col-md-4">
+          <div class="info-label">Volume Descarregado</div>
+          <div class="info-value text-success">
+            <strong>{{ "%.2f"|format(descarga.volume_descarregado) }} litros</strong>
+          </div>
+        </div>
+        <div class="col-md-4">
+          <div class="info-label">Abastecimento Durante Descarga</div>
+          <div class="info-value">
+            {{ "%.2f"|format(descarga.abastecimento_durante_descarga) if descarga.abastecimento_durante_descarga else '0.00' }} litros
+          </div>
+        </div>
+        <div class="col-md-4">
+          <div class="info-label">Frete Vinculado</div>
+          <div class="info-value">
+            <a href="{{ url_for('fretes.lista') }}" class="btn btn-sm btn-outline-primary">
+              Frete #{{ descarga.frete_id }}
+            </a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Medições -->
+  <div class="card mb-4">
+    <div class="card-header">
+      <h5 class="mb-0"><i class="bi bi-speedometer"></i> Medições e Diferenças</h5>
+    </div>
+    <div class="card-body">
+      <div class="row">
+        <!-- Sistema -->
+        <div class="col-md-6">
+          <h6 class="text-primary"><i class="bi bi-laptop"></i> Medidas do Sistema</h6>
+          <table class="table table-sm">
+            <tr>
+              <td class="info-label">Estoque Antes:</td>
+              <td class="info-value">
+                {{ "%.2f"|format(descarga.estoque_sistema_antes) if descarga.estoque_sistema_antes else '-' }} litros
+              </td>
+            </tr>
+            <tr>
+              <td class="info-label">Estoque Depois:</td>
+              <td class="info-value">
+                {{ "%.2f"|format(descarga.estoque_sistema_depois) if descarga.estoque_sistema_depois else '-' }} litros
+              </td>
+            </tr>
+            <tr>
+              <td class="info-label"><strong>Diferença:</strong></td>
+              <td class="info-value">
+                {% if descarga.diferenca_sistema %}
+                  {% if descarga.diferenca_sistema > 0 %}
+                    <strong class="text-success">+{{ "%.2f"|format(descarga.diferenca_sistema) }} litros (Sobra)</strong>
+                  {% elif descarga.diferenca_sistema < 0 %}
+                    <strong class="text-danger">{{ "%.2f"|format(descarga.diferenca_sistema) }} litros (Perda)</strong>
+                  {% else %}
+                    <strong class="text-primary">{{ "%.2f"|format(descarga.diferenca_sistema) }} litros (Exato)</strong>
+                  {% endif %}
+                {% else %}
+                  <span class="text-muted">-</span>
+                {% endif %}
+              </td>
+            </tr>
+          </table>
+        </div>
+
+        <!-- Régua -->
+        <div class="col-md-6">
+          <h6 class="text-primary"><i class="bi bi-rulers"></i> Medidas da Régua</h6>
+          <table class="table table-sm">
+            <tr>
+              <td class="info-label">Estoque Antes:</td>
+              <td class="info-value">
+                {{ "%.2f"|format(descarga.estoque_regua_antes) if descarga.estoque_regua_antes else '-' }} litros
+              </td>
+            </tr>
+            <tr>
+              <td class="info-label">Estoque Depois:</td>
+              <td class="info-value">
+                {{ "%.2f"|format(descarga.estoque_regua_depois) if descarga.estoque_regua_depois else '-' }} litros
+              </td>
+            </tr>
+            <tr>
+              <td class="info-label"><strong>Diferença:</strong></td>
+              <td class="info-value">
+                {% if descarga.diferenca_regua %}
+                  {% if descarga.diferenca_regua > 0 %}
+                    <strong class="text-success">+{{ "%.2f"|format(descarga.diferenca_regua) }} litros (Sobra)</strong>
+                  {% elif descarga.diferenca_regua < 0 %}
+                    <strong class="text-danger">{{ "%.2f"|format(descarga.diferenca_regua) }} litros (Perda)</strong>
+                  {% else %}
+                    <strong class="text-primary">{{ "%.2f"|format(descarga.diferenca_regua) }} litros (Exato)</strong>
+                  {% endif %}
+                {% else %}
+                  <span class="text-muted">-</span>
+                {% endif %}
+              </td>
+            </tr>
+          </table>
+        </div>
+      </div>
+
+      <div class="section-divider"></div>
+
+      <!-- Medidas Adicionais -->
+      <div class="row">
+        <div class="col-md-6">
+          <div class="info-label">Temperatura</div>
+          <div class="info-value">
+            {{ "%.2f"|format(descarga.temperatura) if descarga.temperatura else '-' }} °C
+          </div>
+        </div>
+        <div class="col-md-6">
+          <div class="info-label">Densidade</div>
+          <div class="info-value">
+            {{ "%.4f"|format(descarga.densidade) if descarga.densidade else '-' }}
+          </div>
+        </div>
+      </div>
+
+      {% if descarga.observacoes %}
+      <div class="section-divider"></div>
+      <div class="row">
+        <div class="col-md-12">
+          <div class="info-label">Observações</div>
+          <div class="info-value">{{ descarga.observacoes }}</div>
+        </div>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- Etapas (se houver) -->
+  {% if etapas %}
+  <div class="card">
+    <div class="card-header bg-info text-white">
+      <h5 class="mb-0"><i class="bi bi-list-check"></i> Etapas da Descarga</h5>
+    </div>
+    <div class="card-body">
+      <div class="table-responsive">
+        <table class="table table-striped">
+          <thead>
+            <tr>
+              <th>Data</th>
+              <th>Volume</th>
+              <th>Sistema Antes</th>
+              <th>Sistema Depois</th>
+              <th>Diferença Sistema</th>
+              <th>Régua Antes</th>
+              <th>Régua Depois</th>
+              <th>Diferença Régua</th>
+              <th>Abastecimento</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for etapa in etapas %}
+            <tr>
+              <td>{{ etapa.data_etapa_formatada }}</td>
+              <td><strong>{{ "%.2f"|format(etapa.volume_etapa) }}</strong></td>
+              <td>{{ "%.2f"|format(etapa.estoque_sistema_antes) if etapa.estoque_sistema_antes else '-' }}</td>
+              <td>{{ "%.2f"|format(etapa.estoque_sistema_depois) if etapa.estoque_sistema_depois else '-' }}</td>
+              <td>
+                {% if etapa.diferenca_sistema %}
+                  {% if etapa.diferenca_sistema > 0 %}
+                    <span class="text-success">+{{ "%.2f"|format(etapa.diferenca_sistema) }}</span>
+                  {% elif etapa.diferenca_sistema < 0 %}
+                    <span class="text-danger">{{ "%.2f"|format(etapa.diferenca_sistema) }}</span>
+                  {% else %}
+                    <span class="text-primary">{{ "%.2f"|format(etapa.diferenca_sistema) }}</span>
+                  {% endif %}
+                {% else %}-{% endif %}
+              </td>
+              <td>{{ "%.2f"|format(etapa.estoque_regua_antes) if etapa.estoque_regua_antes else '-' }}</td>
+              <td>{{ "%.2f"|format(etapa.estoque_regua_depois) if etapa.estoque_regua_depois else '-' }}</td>
+              <td>
+                {% if etapa.diferenca_regua %}
+                  {% if etapa.diferenca_regua > 0 %}
+                    <span class="text-success">+{{ "%.2f"|format(etapa.diferenca_regua) }}</span>
+                  {% elif etapa.diferenca_regua < 0 %}
+                    <span class="text-danger">{{ "%.2f"|format(etapa.diferenca_regua) }}</span>
+                  {% else %}
+                    <span class="text-primary">{{ "%.2f"|format(etapa.diferenca_regua) }}</span>
+                  {% endif %}
+                {% else %}-{% endif %}
+              </td>
+              <td>{{ "%.2f"|format(etapa.abastecimento_durante_etapa) if etapa.abastecimento_durante_etapa else '0.00' }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function copiarWhatsApp(descargaId) {
+  fetch(`/descargas/whatsapp/${descargaId}`)
+    .then(response => response.json())
+    .then(data => {
+      if (data.texto) {
+        // Copiar para clipboard
+        navigator.clipboard.writeText(data.texto).then(() => {
+          alert('✅ Texto copiado para a área de transferência!\n\nVocê pode colar no WhatsApp agora.');
+        }).catch(err => {
+          console.error('Erro ao copiar:', err);
+          // Fallback: mostrar em um modal
+          alert('Texto para WhatsApp:\n\n' + data.texto);
+        });
+      }
+    })
+    .catch(error => {
+      console.error('Erro:', error);
+      alert('❌ Erro ao gerar texto para WhatsApp');
+    });
+}
+</script>
+{% endblock %}
