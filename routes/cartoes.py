@@ -37,6 +37,8 @@ def novo():
             flash('Nome e tipo são obrigatórios!', 'danger')
             return render_template('cartoes/novo.html')
 
+        conn = None
+        cursor = None
         try:
             conn = get_db_connection()
             cursor = conn.cursor()
@@ -45,12 +47,15 @@ def novo():
                 VALUES (%s, %s, %s)
             """, (nome, tipo, int(ativo)))
             conn.commit()
-            cursor.close()
-            conn.close()
             flash('Cartão cadastrado com sucesso!', 'success')
             return redirect(url_for('cartoes.lista'))
         except Exception as e:
             flash(f'Erro ao cadastrar cartão: {str(e)}', 'danger')
+        finally:
+            if cursor:
+                cursor.close()
+            if conn:
+                conn.close()
 
     return render_template('cartoes/novo.html')
 
@@ -63,20 +68,18 @@ def editar(id):
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
 
-    if request.method == 'POST':
-        nome = request.form.get('nome')
-        tipo = request.form.get('tipo')
-        ativo = request.form.get('ativo', '1')
+    try:
+        if request.method == 'POST':
+            nome = request.form.get('nome')
+            tipo = request.form.get('tipo')
+            ativo = request.form.get('ativo', '1')
 
-        if not nome or not tipo:
-            flash('Nome e tipo são obrigatórios!', 'danger')
-            cursor.execute("SELECT * FROM bandeiras_cartao WHERE id = %s", (id,))
-            cartao = cursor.fetchone()
-            cursor.close()
-            conn.close()
-            return render_template('cartoes/editar.html', cartao=cartao)
+            if not nome or not tipo:
+                flash('Nome e tipo são obrigatórios!', 'danger')
+                cursor.execute("SELECT * FROM bandeiras_cartao WHERE id = %s", (id,))
+                cartao = cursor.fetchone()
+                return render_template('cartoes/editar.html', cartao=cartao)
 
-        try:
             cursor.execute("""
                 UPDATE bandeiras_cartao 
                 SET nome = %s,
@@ -85,23 +88,23 @@ def editar(id):
                 WHERE id = %s
             """, (nome, tipo, int(ativo), id))
             conn.commit()
-            cursor.close()
-            conn.close()
             flash('Cartão atualizado com sucesso!', 'success')
             return redirect(url_for('cartoes.lista'))
-        except Exception as e:
-            flash(f'Erro ao atualizar cartão: {str(e)}', 'danger')
 
-    cursor.execute("SELECT * FROM bandeiras_cartao WHERE id = %s", (id,))
-    cartao = cursor.fetchone()
-    cursor.close()
-    conn.close()
-    
-    if not cartao:
-        flash('Cartão não encontrado!', 'danger')
+        cursor.execute("SELECT * FROM bandeiras_cartao WHERE id = %s", (id,))
+        cartao = cursor.fetchone()
+        
+        if not cartao:
+            flash('Cartão não encontrado!', 'danger')
+            return redirect(url_for('cartoes.lista'))
+        
+        return render_template('cartoes/editar.html', cartao=cartao)
+    except Exception as e:
+        flash(f'Erro ao atualizar cartão: {str(e)}', 'danger')
         return redirect(url_for('cartoes.lista'))
-    
-    return render_template('cartoes/editar.html', cartao=cartao)
+    finally:
+        cursor.close()
+        conn.close()
 
 
 @bp.route('/bloquear/<int:id>', methods=['POST'])

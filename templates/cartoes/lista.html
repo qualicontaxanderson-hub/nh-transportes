@@ -6,9 +6,11 @@
 <div class="container-fluid">
     <div class="d-flex justify-content-between align-items-center mb-3">
         <h2 style="font-size: 1.5rem;"><i class="bi bi-credit-card"></i> Cartões</h2>
+        {% if current_user.nivel == 'admin' %}
         <a href="{{ url_for('cartoes.novo') }}" class="btn btn-primary btn-sm">
             <i class="bi bi-plus-circle"></i> Novo Cartão
         </a>
+        {% endif %}
     </div>
 
     <!-- Tabela de Cartões -->
@@ -51,10 +53,10 @@
                                     {% endif %}
                                 </td>
                                 <td class="text-center">
+                                    {% if current_user.nivel == 'admin' %}
                                     <a href="{{ url_for('cartoes.editar', id=cartao.id) }}" class="btn btn-sm btn-warning" title="Editar" style="padding: 0.2rem 0.4rem;">
                                         <i class="bi bi-pencil"></i>
                                     </a>
-                                    {% if current_user.nivel == 'admin' %}
                                     <form method="POST" action="{{ url_for('cartoes.bloquear', id=cartao.id) }}" style="display:inline;">
                                         <button type="submit" class="btn btn-sm {% if cartao.ativo %}btn-danger{% else %}btn-success{% endif %}" 
                                                 title="{% if cartao.ativo %}Bloquear{% else %}Desbloquear{% endif %}" 
@@ -62,6 +64,8 @@
                                             <i class="bi {% if cartao.ativo %}bi-lock{% else %}bi-unlock{% endif %}"></i>
                                         </button>
                                     </form>
+                                    {% else %}
+                                    <span class="text-muted" style="font-size: 0.75rem;">-</span>
                                     {% endif %}
                                 </td>
                             </tr>
