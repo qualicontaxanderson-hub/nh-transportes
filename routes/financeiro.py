@@ -728,11 +728,14 @@ def consultar_status_efi(charge_id):
             else:
                 error_msg = f"Erro ao consultar EFI (código {error_code}): {error_text[:100]}"
             
+            # Retornar 200 com sucesso False para que frontend processe a mensagem
             return jsonify({
                 "success": False,
                 "error": error_msg,
-                "error_code": error_code
-            }), 400
+                "error_code": error_code,
+                "charge_id": charge_id,
+                "status": "erro_autorizacao" if error_code == 401 else "erro_consulta"
+            }), 200
         
         # Extrair dados relevantes da resposta com múltiplas tentativas
         data = charge_data.get("data") or charge_data.get("charge") or charge_data
