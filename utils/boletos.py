@@ -19,6 +19,7 @@ import copy
 import logging
 import time
 import re
+import ast
 from datetime import datetime, timedelta
 
 import requests
@@ -439,9 +440,88 @@ def fetch_charge(credentials, charge_id):
     """
     Busca a charge no provedor (GET /v1/charge/{id}).
     Retorna o JSON parseado ou None/obj erro.
+    Tenta SDK primeiro, depois Bearer token, depois Basic Auth como fallback.
     """
     try:
         credentials = _ensure_credentials_from_env(credentials)
+        
+        # Tentar primeiro via SDK (pode ter certificado configurado)
+        try:
+            efi = EfiPay({
+                "client_id": credentials.get("client_id"),
+                "client_secret": credentials.get("client_secret"),
+                "sandbox": credentials.get("sandbox", True),
+                "certificate": credentials.get("certificate")
+            })
+            
+            # Tentar métodos comuns do SDK para buscar charge
+            for method_name in ("detail_charge", "get_charge", "charge_detail", "detail", "get"):
+                fn = getattr(efi, method_name, None)
+                if callable(fn):
+                    logger.info("fetch_charge: tentando SDK método %s para charge_id=%s", method_name, charge_id)
+                    try:
+                        # Tentar com parâmetro params
+                        result = fn(params={"id": str(charge_id)})
+                        logger.info("fetch_charge: SDK método %s retornou dados (tipo: %s)", method_name, type(result).__name__)
+                        
+                        # Se o SDK retornar string, fazer parse (pode ser dict Python ou JSON)
+                        if isinstance(result, str):
+                            logger.info("fetch_charge: resposta string (primeiros 500 chars): %s", result[:500])
+                            try:
+                                # Tentar ast.literal_eval() primeiro (para {'code': 401} com aspas simples)
+                                result = ast.literal_eval(result)
+                                logger.info("fetch_charge: Python dict string parseado com sucesso via ast.literal_eval()")
+                            except (ValueError, SyntaxError):
+                                try:
+                                    # Tentar JSON (para {"code": 401} com aspas duplas)
+                                    result = json.loads(result)
+                                    logger.info("fetch_charge: JSON string parseado com sucesso via json.loads()")
+                                except json.JSONDecodeError as e:
+                                    logger.warning("fetch_charge: Falha ao parsear string (nem Python dict nem JSON): %s", e)
+                                    return {"error": "Resposta inválida do SDK", "raw": result[:200]}
+                        
+                        # Log conteúdo parseado
+                        if isinstance(result, dict):
+                            logger.info("fetch_charge: resposta parseada - chaves: %s", list(result.keys()))
+                            logger.info("fetch_charge: resposta completa (truncada): %s", str(result)[:1000])
+                        
+                        return result
+                    except TypeError:
+                        try:
+                            # Tentar passando ID diretamente
+                            result = fn({"id": str(charge_id)})
+                            logger.info("fetch_charge: SDK método %s retornou dados (tipo: %s)", method_name, type(result).__name__)
+                            
+                            # Se o SDK retornar string, fazer parse (pode ser dict Python ou JSON)
+                            if isinstance(result, str):
+                                logger.info("fetch_charge: resposta string (primeiros 500 chars): %s", result[:500])
+                                try:
+                                    # Tentar ast.literal_eval() primeiro (para {'code': 401} com aspas simples)
+                                    result = ast.literal_eval(result)
+                                    logger.info("fetch_charge: Python dict string parseado com sucesso via ast.literal_eval()")
+                                except (ValueError, SyntaxError):
+                                    try:
+                                        # Tentar JSON (para {"code": 401} com aspas duplas)
+                                        result = json.loads(result)
+                                        logger.info("fetch_charge: JSON string parseado com sucesso via json.loads()")
+                                    except json.JSONDecodeError as e:
+                                        logger.warning("fetch_charge: Falha ao parsear string (nem Python dict nem JSON): %s", e)
+                                        return {"error": "Resposta inválida do SDK", "raw": result[:200]}
+                            
+                            # Log conteúdo parseado
+                            if isinstance(result, dict):
+                                logger.info("fetch_charge: resposta parseada - chaves: %s", list(result.keys()))
+                                logger.info("fetch_charge: resposta completa (truncada): %s", str(result)[:1000])
+                            
+                            return result
+                        except Exception:
+                            pass
+                    except Exception as e:
+                        logger.debug("fetch_charge: SDK método %s falhou: %s", method_name, e)
+        except Exception as e:
+            logger.debug("fetch_charge: tentativa via SDK falhou ou SDK indisponível: %s", e)
+        
+        # Fallback para requisições HTTP diretas
         token = _get_bearer_token(credentials) if "client_id" in credentials and "client_secret" in credentials else None
 
         sandbox = credentials.get("sandbox", True)
@@ -449,12 +529,44 @@ def fetch_charge(credentials, charge_id):
         url = f"{base}/v1/charge/{charge_id}"
 
         headers = {"Accept": "application/json"}
+        
+        # Tentar com Bearer token se disponível
         if token:
             headers["Authorization"] = f"Bearer {token}"
-
-        logger.info("fetch_charge: GET %s", url)
-        resp = requests.get(url, headers=headers, timeout=15)
-        logger.info("fetch_charge: status=%s len=%s", getattr(resp, "status_code", None), len(getattr(resp, "text", "") or ""))
+            logger.info("fetch_charge: GET %s (usando Bearer token)", url)
+            resp = requests.get(url, headers=headers, timeout=15)
+            logger.info("fetch_charge: status=%s len=%s", getattr(resp, "status_code", None), len(getattr(resp, "text", "") or ""))
+            
+            # Se retornar 401 com Bearer, tentar Basic Auth como fallback
+            if resp.status_code == 401:
+                logger.info("fetch_charge: Bearer token retornou 401, tentando Basic Auth")
+                client_id = credentials.get("client_id")
+                client_secret = credentials.get("client_secret")
+                if client_id and client_secret:
+                    headers_basic = {"Accept": "application/json"}
+                    resp = requests.get(url, headers=headers_basic, auth=(client_id, client_secret), timeout=15)
+                    logger.info("fetch_charge: Basic Auth status=%s len=%s", getattr(resp, "status_code", None), len(getattr(resp, "text", "") or ""))
+                    
+                    # Se ambos retornarem 401, adicionar informação de diagnóstico
+                    if resp.status_code == 401:
+                        logger.error("fetch_charge: AMBOS Bearer e Basic Auth retornaram 401. Possíveis causas: "
+                                   "1) Credenciais incorretas ou expiradas, "
+                                   "2) Ambiente incorreto (sandbox=%s mas credenciais são de %s), "
+                                   "3) Charge ID não pertence a esta conta EFI, "
+                                   "4) Endpoint requer certificado digital (configure EFI_CERT_PATH)", 
+                                   sandbox, "produção" if sandbox else "sandbox")
+        else:
+            # Se não tiver token, usar Basic Auth diretamente
+            client_id = credentials.get("client_id")
+            client_secret = credentials.get("client_secret")
+            if not client_id or not client_secret:
+                logger.warning("fetch_charge: credenciais ausentes")
+                return {"http_status": 401, "text": "Credenciais ausentes"}
+            
+            logger.info("fetch_charge: GET %s (usando Basic Auth)", url)
+            resp = requests.get(url, headers=headers, auth=(client_id, client_secret), timeout=15)
+            logger.info("fetch_charge: status=%s len=%s", getattr(resp, "status_code", None), len(getattr(resp, "text", "") or ""))
+        
         try:
             return resp.json()
         except Exception:

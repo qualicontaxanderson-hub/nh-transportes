@@ -105,6 +105,14 @@
                                     {% if ds != 'cancelado' %} disabled {% endif %}>
                                 <i class="bi bi-arrow-clockwise"></i>
                             </button>
+
+                            <!-- Consultar Status EFI -->
+                            <button type="button"
+                                    class="btn btn-sm btn-outline-info btn-status-efi"
+                                    data-charge-id="{{ r.charge_id }}"
+                                    title="Consultar Status no Banco EFI">
+                                <i class="bi bi-info-circle"></i>
+                            </button>
                             {% endif %}
                         </div>
                     </td>
@@ -177,6 +185,70 @@ document.addEventListener('DOMContentLoaded', function () {
         }
       } catch (err) {
         alert('Erro na requisição: ' + err);
+      }
+    });
+  });
+
+  // Consultar Status EFI
+  qsa('.btn-status-efi').forEach(btn => {
+    btn.addEventListener('click', async function () {
+      const chargeId = this.getAttribute('data-charge-id');
+      if (!chargeId) { alert('Charge ID ausente'); return; }
+      
+      // Desabilitar botão e mostrar loading
+      const originalText = this.innerHTML;
+      this.disabled = true;
+      this.innerHTML = '<span class="spinner-border spinner-border-sm" role="status"></span>';
+      
+      try {
+        const resp = await fetch(`/financeiro/consultar-status-efi/${chargeId}/`, {
+          method: 'GET',
+          headers: {'X-Requested-With':'XMLHttpRequest'}
+        });
+        const j = await resp.json();
+        
+        if (resp.ok && j.success) {
+          // Montar mensagem com as informações da cobrança
+          let message = `📊 Status da Cobrança #${j.charge_id}\n\n`;
+          message += `Status: ${j.status_label || j.status || 'Desconhecido'}\n`;
+          
+          // Mostrar valor se existir e for maior que zero
+          if (j.total && j.total > 0) {
+            message += `Valor: R$ ${(j.total / 100).toFixed(2).replace('.', ',')}\n`;
+          } else if (j.total === 0) {
+            message += `Valor: R$ 0,00\n`;
+          }
+          
+          if (j.expire_at) {
+            message += `Vencimento: ${j.expire_at}\n`;
+          }
+          if (j.paid_at) {
+            message += `Pago em: ${j.paid_at}\n`;
+          }
+          if (j.payment_method && j.payment_method !== 'boleto') {
+            message += `Método: ${j.payment_method}\n`;
+          }
+          if (j.barcode) {
+            message += `\nCódigo de Barras:\n${j.barcode}\n`;
+          }
+          
+          // Adicionar aviso se status for desconhecido
+          if (j.status === 'desconhecido' || !j.status) {
+            message += `\n⚠️ Atenção: O status retornado pelo EFI não pôde ser identificado.\nVerifique os logs do sistema para mais detalhes.`;
+          }
+          
+          alert(message);
+        } else {
+          // Mostrar erro mais detalhado
+          const errorMsg = j.error || 'Erro desconhecido ao consultar status';
+          alert(`❌ Falha ao consultar status EFI\n\nCharge ID: ${chargeId}\nErro: ${errorMsg}\n\nVerifique:\n- Se o Charge ID está correto\n- Se as credenciais EFI estão configuradas\n- Os logs do sistema para mais detalhes`);
+        }
+      } catch (err) {
+        alert(`❌ Erro na requisição\n\nCharge ID: ${chargeId}\nErro: ${err}\n\nVerifique sua conexão e tente novamente.`);
+      } finally {
+        // Restaurar botão
+        this.disabled = false;
+        this.innerHTML = originalText;
       }
     });
   });

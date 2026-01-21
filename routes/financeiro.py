@@ -8,6 +8,16 @@ import os
 financeiro_bp = Blueprint('financeiro', __name__, url_prefix='/financeiro')
 
 
+def _get_efi_credentials():
+    """Helper function to get EFI credentials consistently across routes."""
+    return {
+        "client_id": current_app.config.get("EFI_CLIENT_ID") or os.getenv("EFI_CLIENT_ID"),
+        "client_secret": current_app.config.get("EFI_CLIENT_SECRET") or os.getenv("EFI_CLIENT_SECRET"),
+        "sandbox": current_app.config.get("EFI_SANDBOX", True),
+    }
+
+
+
 @financeiro_bp.route('/recebimentos/')
 @login_required
 def recebimentos():
@@ -232,11 +242,7 @@ def prorrogar_boleto(charge_id):
         if not new_date:
             return jsonify({"success": False, "error": "new_date ausente"}), 400
 
-        credentials = {
-            "client_id": current_app.config.get("EFI_CLIENT_ID") or None,
-            "client_secret": current_app.config.get("EFI_CLIENT_SECRET") or None,
-            "sandbox": current_app.config.get("EFI_SANDBOX", True),
-        }
+        credentials = _get_efi_credentials()
         success, resp = update_billet_expire(credentials, charge_id, new_date)
         if not success:
             current_app.logger.warning("[prorrogar_boleto] falha provedor: %r", resp)
@@ -486,11 +492,7 @@ def visualizar_boleto(charge_id):
             if link_boleto and isinstance(link_boleto, str) and (link_boleto.startswith('http://') or link_boleto.startswith('https://')):
                 return redirect(link_boleto)
 
-        credentials = {
-            "client_id": current_app.config.get("EFI_CLIENT_ID") or None,
-            "client_secret": current_app.config.get("EFI_CLIENT_SECRET") or None,
-            "sandbox": current_app.config.get("EFI_SANDBOX", True),
-        }
+        credentials = _get_efi_credentials()
         charge = fetch_charge(credentials, charge_id)
         if not charge or not isinstance(charge, dict):
             flash("Não foi possível obter dados da cobrança no provedor.", "danger")
@@ -541,11 +543,7 @@ def alterar_vencimento(charge_id):
             flash("Informe uma nova data de vencimento (YYYY-MM-DD).", "warning")
             return redirect(url_for('financeiro.alterar_vencimento', charge_id=charge_id))
 
-        credentials = {
-            "client_id": current_app.config.get("EFI_CLIENT_ID") or None,
-            "client_secret": current_app.config.get("EFI_CLIENT_SECRET") or None,
-            "sandbox": current_app.config.get("EFI_SANDBOX", True),
-        }
+        credentials = _get_efi_credentials()
         success, resp = update_billet_expire(credentials, charge_id, new_date)
         if not success:
             flash(f"Falha ao atualizar vencimento no provedor: {resp}", "danger")
@@ -655,11 +653,7 @@ def cancelar_boleto(charge_id):
     conn = None
     cursor = None
     try:
-        credentials = {
-            "client_id": current_app.config.get("EFI_CLIENT_ID") or None,
-            "client_secret": current_app.config.get("EFI_CLIENT_SECRET") or None,
-            "sandbox": current_app.config.get("EFI_SANDBOX", True),
-        }
+        credentials = _get_efi_credentials()
         success, resp = cancel_charge(credentials, charge_id)
         if not success:
             flash(f"Falha ao cancelar no provedor: {resp}", "danger")
@@ -684,3 +678,139 @@ def cancelar_boleto(charge_id):
         if conn:
             conn.close()
     return redirect(url_for('financeiro.recebimentos'))
+
+
+@financeiro_bp.route('/consultar-status-efi/<int:charge_id>/', methods=['GET'])
+@login_required
+def consultar_status_efi(charge_id):
+    """
+    Consulta o status atual da cobrança no provedor EFI (Efipay).
+    Retorna JSON com informações atualizadas da charge.
+    """
+    try:
+        credentials = _get_efi_credentials()
+        
+        # Buscar informações da charge no provedor
+        charge_data = fetch_charge(credentials, charge_id)
+        
+        # Log para debug
+        current_app.logger.info(f"[consultar_status_efi] charge_id={charge_id}, response_type={type(charge_data).__name__}")
+        if isinstance(charge_data, dict):
+            current_app.logger.info(f"[consultar_status_efi] response_keys={list(charge_data.keys())}")
+        else:
+            current_app.logger.warning(f"[consultar_status_efi] response não é dict: {str(charge_data)[:200]}")
+        
+        if not charge_data or not isinstance(charge_data, dict):
+            return jsonify({
+                "success": False, 
+                "error": f"Não foi possível consultar a cobrança no provedor EFI (tipo de resposta: {type(charge_data).__name__})"
+            }), 400
+        
+        # Verificar se há erro HTTP na resposta (http_status ou code)
+        error_code = charge_data.get("http_status") or charge_data.get("code")
+        if error_code and error_code != 200:
+            error_text = charge_data.get("text", "") or charge_data.get("message", "") or "Erro desconhecido"
+            current_app.logger.warning(f"[consultar_status_efi] Erro {error_code}: {error_text[:200]}")
+            
+            # Mensagem de erro mais específica para 401
+            if error_code == 401:
+                sandbox_status = "SANDBOX (homologação)" if current_app.config.get("EFI_SANDBOX", True) else "PRODUÇÃO"
+                error_msg = (
+                    f"❌ Acesso Negado (401 Unauthorized)\n\n"
+                    f"As credenciais não têm permissão para consultar esta cobrança.\n\n"
+                    f"🔍 Possíveis causas:\n"
+                    f"1. A cobrança foi criada com credenciais diferentes\n"
+                    f"2. O certificado não tem permissão de leitura (apenas criação)\n"
+                    f"3. Ambiente incorreto - Atual: {sandbox_status}\n"
+                    f"4. Charge ID {charge_id} não pertence à sua conta EFI\n\n"
+                    f"💡 Solução: Teste com uma cobrança criada recentemente por este sistema."
+                )
+            else:
+                error_msg = f"Erro ao consultar EFI (código {error_code}): {error_text[:100]}"
+            
+            # Retornar 200 com sucesso False para que frontend processe a mensagem
+            return jsonify({
+                "success": False,
+                "error": error_msg,
+                "error_code": error_code,
+                "charge_id": charge_id,
+                "status": "erro_autorizacao" if error_code == 401 else "erro_consulta"
+            }), 200
+        
+        # Extrair dados relevantes da resposta com múltiplas tentativas
+        data = charge_data.get("data") or charge_data.get("charge") or charge_data
+        
+        # Log estrutura para debug
+        current_app.logger.info(f"[consultar_status_efi] data_type={type(data).__name__}")
+        if isinstance(data, dict):
+            current_app.logger.info(f"[consultar_status_efi] data_keys={list(data.keys())}")
+            current_app.logger.info(f"[consultar_status_efi] status={data.get('status')}, total={data.get('total')}")
+        else:
+            current_app.logger.warning(f"[consultar_status_efi] data não é dict: {str(data)[:200]}")
+        
+        # Informações básicas da cobrança
+        status = data.get("status") or "desconhecido"
+        
+        # Tentar extrair valor de múltiplas formas
+        total = data.get("total") or data.get("value") or 0
+        if not total and isinstance(data.get("items"), list) and len(data.get("items", [])) > 0:
+            # Tentar somar valores dos itens
+            try:
+                total = sum(item.get("value", 0) * item.get("amount", 1) for item in data["items"])
+            except (TypeError, ValueError, KeyError):
+                total = 0
+        
+        # Informações de pagamento
+        payment = data.get("payment") or {}
+        if isinstance(payment, list) and len(payment) > 0:
+            payment = payment[0]
+        
+        banking_billet = payment.get("banking_billet") or {} if isinstance(payment, dict) else {}
+        
+        # Data de vencimento
+        expire_at = banking_billet.get("expire_at") or data.get("expire_at") or payment.get("expire_at")
+        
+        # Informações de pagamento
+        paid_at = data.get("paid_at") or payment.get("paid_at")
+        payment_method = payment.get("method") or "boleto"
+        
+        # Link do boleto
+        link = banking_billet.get("link") or data.get("link") or banking_billet.get("pdf")
+        barcode = banking_billet.get("barcode") or data.get("barcode")
+        
+        # Montar resposta estruturada (sem raw_data para evitar vazamento de informações)
+        result = {
+            "success": True,
+            "charge_id": charge_id,
+            "status": status,
+            "total": total,
+            "expire_at": expire_at,
+            "paid_at": paid_at,
+            "payment_method": payment_method,
+            "link": link,
+            "barcode": barcode
+        }
+        
+        # Traduzir status para português
+        status_translation = {
+            "new": "Nova",
+            "waiting": "Aguardando",
+            "paid": "Pago",
+            "unpaid": "Não Pago",
+            "refunded": "Reembolsado",
+            "contested": "Contestado",
+            "canceled": "Cancelado",
+            "settled": "Quitado",
+            "link": "Link Gerado",
+            "expired": "Expirado"
+        }
+        result["status_label"] = status_translation.get(status.lower(), status)
+        
+        return jsonify(result), 200
+        
+    except Exception as e:
+        current_app.logger.exception("Erro em consultar_status_efi: %s", e)
+        return jsonify({
+            "success": False, 
+            "error": f"Erro ao consultar status: {str(e)}"
+        }), 500
