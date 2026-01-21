@@ -148,41 +148,42 @@ def get_funcionarios(cliente_id):
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
     
-    # Get all active employees for the client
-    cursor.execute("""
-        SELECT 
-            f.id,
-            f.nome,
-            f.categoria_id,
-            f.salario_base,
-            c.nome as categoria_nome
-        FROM funcionarios f
-        LEFT JOIN categorias_funcionarios c ON f.categoria_id = c.id
-        WHERE f.ativo = 1 AND (f.cliente_id = %s OR f.cliente_id IS NULL)
-        ORDER BY f.nome
-    """, (cliente_id,))
-    funcionarios = cursor.fetchall()
-    
-    # Also get motoristas as funcionarios
-    cursor.execute("""
-        SELECT 
-            m.id,
-            m.nome,
-            'MOTORISTA' as categoria_nome,
-            0 as salario_base
-        FROM motoristas m
-        WHERE m.ativo = 1
-        ORDER BY m.nome
-    """)
-    motoristas = cursor.fetchall()
-    
-    cursor.close()
-    conn.close()
-    
-    # Combine both lists
-    all_employees = funcionarios + motoristas
-    
-    return jsonify(all_employees)
+    try:
+        # Get all active employees for the client
+        cursor.execute("""
+            SELECT 
+                f.id,
+                f.nome,
+                f.categoria_id,
+                f.salario_base,
+                c.nome as categoria_nome
+            FROM funcionarios f
+            LEFT JOIN categorias_funcionarios c ON f.categoria_id = c.id
+            WHERE f.ativo = 1 AND (f.cliente_id = %s OR f.cliente_id IS NULL)
+            ORDER BY f.nome
+        """, (cliente_id,))
+        funcionarios = cursor.fetchall()
+        
+        # Also get motoristas as funcionarios
+        cursor.execute("""
+            SELECT 
+                m.id,
+                m.nome,
+                'MOTORISTA' as categoria_nome,
+                0 as salario_base
+            FROM motoristas m
+            WHERE m.ativo = 1
+            ORDER BY m.nome
+        """)
+        motoristas = cursor.fetchall()
+        
+        # Combine both lists
+        all_employees = funcionarios + motoristas
+        
+        return jsonify(all_employees)
+    finally:
+        cursor.close()
+        conn.close()
 
 @bp.route('/get-veiculos/<int:funcionario_id>')
 @login_required

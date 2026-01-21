@@ -110,7 +110,7 @@ document.getElementById('cliente_id').addEventListener('change', function() {
             
             funcionarios.forEach(func => {
                 const row = document.createElement('tr');
-                row.innerHTML = `
+                 row.innerHTML = `
                     <td>
                         ${func.nome}
                         <input type="hidden" name="funcionario_id[]" value="${func.id}">
@@ -125,6 +125,7 @@ document.getElementById('cliente_id').addEventListener('change', function() {
                                    name="valor_${func.id}[]" 
                                    class="form-control form-control-sm valor-input" 
                                    data-funcionario="${func.id}"
+                                   data-rubrica-tipo="${rubrica.tipo}"
                                    step="0.01" 
                                    placeholder="0,00"
                                    value="${rubrica.nome === 'SALÁRIO BASE' && func.salario_base ? func.salario_base : ''}">
@@ -165,9 +166,9 @@ function calculateTotals() {
         const inputs = document.querySelectorAll(`.valor-input[data-funcionario="${funcId}"]`);
         let total = 0;
         
-        inputs.forEach((input, index) => {
+        inputs.forEach((input) => {
             const valor = parseFloat(input.value) || 0;
-            const rubricaTipo = rubricas[index].tipo;
+            const rubricaTipo = input.dataset.rubricaTipo;
             
             // Subtract descontos and impostos
             if (rubricaTipo === 'DESCONTO' || rubricaTipo === 'IMPOSTO') {
