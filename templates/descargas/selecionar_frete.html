@@ -1,0 +1,178 @@
+{% extends "base.html" %}
+
+{% block title %}Selecionar Frete para Descarga - NH Transportes{% endblock %}
+
+{% block styles %}
+<style>
+:root {
+  --grad-start: #4a90e2;
+  --grad-end: #f2994a;
+  --accent: #4a90e2;
+  --etanol-color: #28a745;
+  --gasolina-color: #dc3545;
+  --gasolina-aditivada-color: #007bff;
+  --s10-color: #007bff;
+  --s500-color: #343a40;
+}
+
+body {
+  background: linear-gradient(135deg, var(--grad-start) 0%, #9fb8d6 38%, var(--grad-end) 100%);
+  color: white;
+  min-height: 100vh;
+}
+
+.btn-primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: white;
+}
+
+.btn-primary:hover {
+  background: #14588f;
+  border-color: #14588f;
+  color: white;
+}
+
+.card {
+  background-color: #fff;
+  border: none;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+}
+
+.card-header {
+  background: var(--accent);
+  color: white;
+}
+
+.table-container {
+  background: #fff;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+/* Product colors */
+.produto-etanol { color: var(--etanol-color) !important; font-weight: bold; }
+.produto-gasolina { color: var(--gasolina-color) !important; font-weight: bold; }
+.produto-gasolina-aditivada { color: var(--gasolina-aditivada-color) !important; font-weight: bold; }
+.produto-s-10 { color: var(--s10-color) !important; font-weight: bold; }
+.produto-s-500 { color: var(--s500-color) !important; font-weight: bold; }
+
+.table-hover tbody tr:hover {
+  background-color: rgba(74,144,226,0.1);
+}
+
+.badge-tem-descarga {
+  background-color: #6c757d;
+  color: #fff;
+}
+
+.badge-sem-descarga {
+  background-color: #28a745;
+  color: #fff;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+  <div class="d-flex justify-content-between align-items-center mb-4">
+    <h1 class="text-white"><i class="bi bi-truck"></i> Selecionar Frete para Descarregar</h1>
+    <a href="{{ url_for('descargas.lista') }}" class="btn btn-secondary">
+      <i class="bi bi-arrow-left"></i> Voltar
+    </a>
+  </div>
+
+  <!-- Tabela de Fretes -->
+  <div class="card">
+    <div class="card-header">
+      <h5 class="mb-0">
+        <i class="bi bi-list-ul"></i> Fretes Disponíveis
+        <span class="badge bg-light text-dark">{{ fretes|length }} registros</span>
+      </h5>
+    </div>
+    <div class="card-body p-0">
+      <div class="table-responsive">
+        <table class="table table-hover mb-0">
+          <thead style="background: #f8f9fa;">
+            <tr>
+              <th>Data</th>
+              <th>Cliente</th>
+              <th>Fornecedor</th>
+              <th>Produto</th>
+              <th>Motorista</th>
+              <th>Volume</th>
+              <th>Status</th>
+              <th class="text-center">Ação</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% if fretes %}
+              {% for frete in fretes %}
+                <tr>
+                  <td class="text-dark">{{ frete.data_frete_formatada }}</td>
+                  <td class="text-dark">{{ frete.cliente }}</td>
+                  <td class="text-dark">{{ frete.fornecedor }}</td>
+                  <td>
+                    {% set produto_class = '' %}
+                    {% if frete.produto %}
+                      {% set produto_upper = frete.produto|upper %}
+                      {% if 'ETANOL' in produto_upper %}
+                        {% set produto_class = 'produto-etanol' %}
+                      {% elif 'GASOLINA ADITIVADA' in produto_upper %}
+                        {% set produto_class = 'produto-gasolina-aditivada' %}
+                      {% elif 'GASOLINA' in produto_upper %}
+                        {% set produto_class = 'produto-gasolina' %}
+                      {% elif 'S-10' in produto_upper or 'S10' in produto_upper %}
+                        {% set produto_class = 'produto-s-10' %}
+                      {% elif 'S-500' in produto_upper or 'S500' in produto_upper %}
+                        {% set produto_class = 'produto-s-500' %}
+                      {% endif %}
+                    {% endif %}
+                    <span class="{{ produto_class }}">{{ frete.produto }}</span>
+                  </td>
+                  <td class="text-dark">{{ frete.motorista }}</td>
+                  <td class="text-dark">{{ "%.2f"|format(frete.volume) }} L</td>
+                  <td>
+                    {% if frete.tem_descarga %}
+                      {% if frete.status_descarga == 'concluido' %}
+                        <span class="badge bg-success">Concluído</span>
+                      {% elif frete.status_descarga == 'parcial' %}
+                        <span class="badge bg-info">Parcial</span>
+                      {% else %}
+                        <span class="badge bg-warning text-dark">Pendente</span>
+                      {% endif %}
+                    {% else %}
+                      <span class="badge badge-sem-descarga">Disponível</span>
+                    {% endif %}
+                  </td>
+                  <td class="text-center">
+                    {% if not frete.tem_descarga or frete.status_descarga != 'concluido' %}
+                      <a href="{{ url_for('descargas.novo', frete_id=frete.id) }}" 
+                         class="btn btn-sm btn-success">
+                        <i class="bi bi-truck"></i> DESCARREGAR
+                      </a>
+                    {% else %}
+                      <a href="{{ url_for('descargas.lista') }}" 
+                         class="btn btn-sm btn-secondary">
+                        <i class="bi bi-eye"></i> Ver Descargas
+                      </a>
+                    {% endif %}
+                  </td>
+                </tr>
+              {% endfor %}
+            {% else %}
+              <tr>
+                <td colspan="8" class="text-center text-muted py-4">
+                  <i class="bi bi-inbox" style="font-size: 3rem;"></i>
+                  <p class="mt-2">Nenhum frete disponível para descarga</p>
+                  <p class="small">Apenas fretes de clientes com produtos configurados no Posto são exibidos</p>
+                </td>
+              </tr>
+            {% endif %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

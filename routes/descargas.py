@@ -7,6 +7,55 @@ from decimal import Decimal
 bp = Blueprint('descargas', __name__, url_prefix='/descargas')
 
 
+@bp.route('/selecionar-frete', methods=['GET'])
+@login_required
+def selecionar_frete():
+    """Lista fretes disponíveis para descarga - apenas clientes com produtos configurados"""
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    
+    try:
+        # Buscar fretes de clientes que têm produtos configurados no posto
+        query = """
+            SELECT
+                f.id,
+                f.data_frete,
+                DATE_FORMAT(f.data_frete, '%d/%m/%Y') AS data_frete_formatada,
+                COALESCE(c.razao_social, '') AS cliente,
+                COALESCE(fo.razao_social, '') AS fornecedor,
+                COALESCE(p.nome, '') AS produto,
+                COALESCE(m.nome, '') AS motorista,
+                COALESCE(v.caminhao, '') AS veiculo,
+                COALESCE(f.quantidade_manual, 0) AS volume,
+                COALESCE(d.id, 0) AS tem_descarga,
+                COALESCE(d.status, '') AS status_descarga
+            FROM fretes f
+            INNER JOIN clientes c ON f.clientes_id = c.id
+            INNER JOIN cliente_produtos cp ON c.id = cp.cliente_id AND cp.ativo = 1
+            LEFT JOIN fornecedores fo ON f.fornecedores_id = fo.id
+            LEFT JOIN produto p ON f.produto_id = p.id
+            LEFT JOIN motoristas m ON f.motoristas_id = m.id
+            LEFT JOIN veiculos v ON f.veiculos_id = v.id
+            LEFT JOIN descargas d ON f.id = d.frete_id
+            WHERE f.data_frete >= DATE_SUB(CURDATE(), INTERVAL 90 DAY)
+            GROUP BY f.id
+            ORDER BY f.data_frete DESC, f.id DESC
+            LIMIT 100
+        """
+        
+        cursor.execute(query)
+        fretes = cursor.fetchall()
+        
+    except Exception as e:
+        flash(f'Erro ao carregar fretes: {str(e)}', 'danger')
+        fretes = []
+    finally:
+        cursor.close()
+        conn.close()
+    
+    return render_template('descargas/selecionar_frete.html', fretes=fretes)
+
+
 @bp.route('/', methods=['GET'])
 @login_required
 def lista():
