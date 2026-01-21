@@ -55,6 +55,7 @@ def lista():
             where_clause = "WHERE " + " AND ".join(filters)
 
         # Adiciona subquery EXISTS para indicar se existe cobrança vinculada (emitted)
+        # Verifica tanto cobrancas diretas (frete_id) quanto via tabela cobrancas_freites
         query = f"""
             SELECT
                 f.id,
@@ -68,7 +69,11 @@ def lista():
                 f.valor_total_frete,
                 COALESCE(f.lucro, 0) AS lucro,
                 COALESCE(f.status, '') AS status,
-                EXISTS(SELECT 1 FROM cobrancas c WHERE c.frete_id = f.id AND (c.status IS NULL OR c.status != 'cancelado')) AS emitted
+                EXISTS(
+                    SELECT 1 FROM cobrancas cb 
+                    WHERE (cb.frete_id = f.id OR EXISTS(SELECT 1 FROM cobrancas_freites cf WHERE cf.cobranca_id = cb.id AND cf.frete_id = f.id))
+                    AND (cb.status IS NULL OR cb.status != 'cancelado')
+                ) AS emitted
             FROM fretes f
             LEFT JOIN clientes c ON f.clientes_id = c.id
             LEFT JOIN fornecedores fo ON f.fornecedores_id = fo.id
