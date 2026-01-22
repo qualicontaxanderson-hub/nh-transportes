@@ -176,22 +176,39 @@ function checkAndLoadFuncionarios() {
     const clienteId = document.getElementById('clienteid').value;
     const mes = document.getElementById('mes').value;
     
-    if (!clienteId || !mes) {
+    // Validate that both client and month are selected
+    if (!clienteId || !mes || clienteId === '' || mes === '') {
         document.getElementById('funcionarios-container').style.display = 'none';
         document.getElementById('form-buttons').style.display = 'none';
         document.getElementById('summary-box').style.display = 'none';
         return;
     }
     
+    // Validate client ID is a number
+    if (isNaN(parseInt(clienteId))) {
+        console.error('Invalid client ID:', clienteId);
+        return;
+    }
+    
     // First fetch commission data (URL encode the mes parameter to handle the /)
     fetch(`/lancamentos-funcionarios/get-comissoes/${clienteId}/${encodeURIComponent(mes)}`)
-        .then(response => response.json())
+        .then(response => {
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            return response.json();
+        })
         .then(data => {
             comissoesData = data;
             // Then fetch funcionarios
             return fetch(`/lancamentos-funcionarios/get-funcionarios/${clienteId}`);
         })
-        .then(response => response.json())
+        .then(response => {
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            return response.json();
+        })
         .then(funcionarios => {
             const tbody = document.getElementById('funcionarios-tbody');
             tbody.innerHTML = '';
