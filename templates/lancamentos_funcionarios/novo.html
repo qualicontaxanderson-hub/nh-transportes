@@ -183,8 +183,8 @@ function checkAndLoadFuncionarios() {
         return;
     }
     
-    // First fetch commission data
-    fetch(`/lancamentos-funcionarios/get-comissoes/${clienteId}/${mes}`)
+    // First fetch commission data (URL encode the mes parameter to handle the /)
+    fetch(`/lancamentos-funcionarios/get-comissoes/${clienteId}/${encodeURIComponent(mes)}`)
         .then(response => response.json())
         .then(data => {
             comissoesData = data;
