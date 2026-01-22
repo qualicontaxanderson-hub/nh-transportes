@@ -172,7 +172,7 @@ def get_funcionarios(cliente_id):
                 COALESCE(f.salario_base, 0) as salario_base,
                 'funcionario' as tipo
             FROM funcionarios f
-            WHERE f.ativo = 1 AND (f.clienteid = %s OR f.clienteid IS NULL)
+            WHERE f.ativo = 1 AND (f.id_cliente = %s OR f.id_cliente IS NULL)
             ORDER BY f.nome
         """, (cliente_id,))
         funcionarios = cursor.fetchall()
