@@ -216,9 +216,13 @@ def get_comissoes(cliente_id, mes):
         conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)
         
-        # Convert MM/YYYY to date range
+        # Convert MM-YYYY or MM/YYYY to date range (accept both formats)
         try:
-            month_str, year_str = mes.split('/')
+            # Accept both MM-YYYY (URL format) and MM/YYYY (display format)
+            if '-' in mes:
+                month_str, year_str = mes.split('-')
+            else:
+                month_str, year_str = mes.split('/')
             month = int(month_str)
             year = int(year_str)
             

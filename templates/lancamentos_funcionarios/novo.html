@@ -190,8 +190,11 @@ function checkAndLoadFuncionarios() {
         return;
     }
     
-    // First fetch commission data (URL encode the mes parameter to handle the /)
-    fetch(`/lancamentos-funcionarios/get-comissoes/${clienteId}/${encodeURIComponent(mes)}`)
+    // Convert MM/YYYY to MM-YYYY for URL (replace / with -)
+    const mesForUrl = mes.replace('/', '-');
+    
+    // First fetch commission data
+    fetch(`/lancamentos-funcionarios/get-comissoes/${clienteId}/${mesForUrl}`)
         .then(response => {
             if (!response.ok) {
                 throw new Error(`HTTP error! status: ${response.status}`);
