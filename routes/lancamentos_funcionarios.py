@@ -183,7 +183,7 @@ def get_funcionarios(cliente_id):
                 m.id,
                 m.nome,
                 'MOTORISTA' as categoria,
-                0 as salario_base,
+                CAST(0 AS DECIMAL(12,2)) as salario_base,
                 'motorista' as tipo
             FROM motoristas m
             WHERE m.paga_comissao = 1
