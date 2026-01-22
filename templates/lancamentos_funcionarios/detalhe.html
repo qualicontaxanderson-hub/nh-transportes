@@ -1,0 +1,109 @@
+{% extends 'base.html' %}
+{% block title %}Detalhes do Lançamento - {{ app_name }}{% endblock %}
+{% block content %}
+<div class="container-fluid">
+    <nav aria-label="breadcrumb" class="mt-2 mb-3">
+        <ol class="breadcrumb" style="font-size: 0.85rem;">
+            <li class="breadcrumb-item"><a href="{{ url_for('index') }}">Dashboard</a></li>
+            <li class="breadcrumb-item"><a href="{{ url_for('lancamentos_funcionarios.lista') }}">Lançamentos</a></li>
+            <li class="breadcrumb-item active" aria-current="page">Detalhes</li>
+        </ol>
+    </nav>
+    
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h2 style="color:#1D63A5; font-size: 1.3rem;">
+            <i class="bi bi-file-text"></i> Lançamento: {{ mes }} - {{ cliente.nome }}
+        </h2>
+        <a href="{{ url_for('lancamentos_funcionarios.lista') }}" class="btn btn-secondary btn-sm">
+            <i class="bi bi-arrow-left"></i> Voltar
+        </a>
+    </div>
+    
+    <div class="card shadow-sm">
+        <div class="card-header" style="background:#1D63A5;color:white; font-size: 0.95rem; padding: 0.6rem 1rem;">
+            <h5 class="mb-0" style="font-size: 1rem;">Detalhes por Funcionário</h5>
+        </div>
+        <div class="card-body" style="padding: 1rem;">
+            {% for func_id, func_data in funcionarios_data.items() %}
+            <div class="employee-section mb-4">
+                <h5 class="text-primary mb-3">
+                    <i class="bi bi-person"></i> {{ func_data.nome }}
+                    <span class="float-end text-success fw-bold">Total: R$ {{ "%.2f"|format(func_data.total) }}</span>
+                </h5>
+                
+                <div class="table-responsive">
+                    <table class="table table-bordered table-sm">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Rubrica</th>
+                                <th>Tipo</th>
+                                <th>Valor</th>
+                                <th>Referência</th>
+                                <th>Caminhão</th>
+                                <th>Observação</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for rubrica in func_data.rubricas %}
+                            <tr>
+                                <td><strong>{{ rubrica.rubrica_nome }}</strong></td>
+                                <td>
+                                    {% if rubrica.rubrica_tipo == 'SALARIO' %}
+                                        <span class="badge bg-primary">Salário</span>
+                                    {% elif rubrica.rubrica_tipo == 'BENEFICIO' %}
+                                        <span class="badge bg-success">Benefício</span>
+                                    {% elif rubrica.rubrica_tipo == 'DESCONTO' %}
+                                        <span class="badge bg-danger">Desconto</span>
+                                    {% elif rubrica.rubrica_tipo == 'IMPOSTO' %}
+                                        <span class="badge bg-warning">Imposto</span>
+                                    {% else %}
+                                        <span class="badge bg-secondary">{{ rubrica.rubrica_tipo }}</span>
+                                    {% endif %}
+                                </td>
+                                <td class="text-end">
+                                    {% if rubrica.rubrica_tipo in ['DESCONTO', 'IMPOSTO'] %}
+                                        <span class="text-danger">- {{ rubrica.valor|formatar_moeda }}</span>
+                                    {% else %}
+                                        <span class="text-success">{{ rubrica.valor|formatar_moeda }}</span>
+                                    {% endif %}
+                                </td>
+                                <td>{{ rubrica.referencia or '-' }}</td>
+                                <td>{{ rubrica.caminhao or '-' }}</td>
+                                <td>{{ rubrica.observacao or '-' }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                        <tfoot>
+                            <tr class="table-secondary">
+                                <td colspan="2"><strong>TOTAL LÍQUIDO</strong></td>
+                                <td class="text-end">
+                                    <strong class="{% if func_data.total < 0 %}text-danger{% else %}text-success{% endif %}">
+                                        R$ {{ "%.2f"|format(func_data.total) }}
+                                    </strong>
+                                </td>
+                                <td colspan="3"></td>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+            </div>
+            <hr>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+
+<style>
+    .table-sm {
+        font-size: 0.85rem;
+    }
+    .btn-sm {
+        font-size: 0.85rem;
+        padding: 0.4rem 0.8rem;
+    }
+    .employee-section {
+        border-left: 4px solid #1D63A5;
+        padding-left: 15px;
+    }
+</style>
+{% endblock %}

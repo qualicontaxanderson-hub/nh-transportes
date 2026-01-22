@@ -1,0 +1,76 @@
+{% extends 'base.html' %}
+{% block title %}Vincular Veículo - {{ app_name }}{% endblock %}
+{% block content %}
+<div class="container-fluid">
+    <nav aria-label="breadcrumb" class="mt-2 mb-3">
+        <ol class="breadcrumb" style="font-size: 0.85rem;">
+            <li class="breadcrumb-item"><a href="{{ url_for('index') }}">Dashboard</a></li>
+            <li class="breadcrumb-item"><a href="{{ url_for('funcionarios.lista') }}">Funcionários</a></li>
+            <li class="breadcrumb-item"><a href="{{ url_for('funcionarios.editar', id=funcionario.id) }}">{{ funcionario.nome }}</a></li>
+            <li class="breadcrumb-item active" aria-current="page">Vincular Veículo</li>
+        </ol>
+    </nav>
+    
+    <h2 class="mb-3" style="color:#1D63A5; font-size: 1.3rem;">
+        <i class="bi bi-truck"></i> Vincular Veículo - {{ funcionario.nome }}
+    </h2>
+    
+    <div class="card shadow-sm">
+        <div class="card-header" style="background:#ff9800;color:white; font-size: 0.95rem; padding: 0.6rem 1rem;">
+            <h5 class="mb-0" style="font-size: 1rem;">Vincular Veículo ao Motorista</h5>
+        </div>
+        <div class="card-body" style="padding: 1rem;">
+            <form method="POST">
+                <div class="row">
+                    <div class="col-md-6 mb-2">
+                        <label class="form-label" style="font-size: 0.85rem;">Veículo *</label>
+                        <select name="veiculoid" class="form-select form-select-sm" required>
+                            <option value="">Selecione o veículo...</option>
+                            {% for veiculo in veiculos %}
+                            <option value="{{ veiculo.id }}">{{ veiculo.caminhao }} - {{ veiculo.placa }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-3 mb-2">
+                        <label class="form-label" style="font-size: 0.85rem;">Data Início *</label>
+                        <input type="date" name="datainicio" class="form-control form-control-sm" required>
+                    </div>
+                    <div class="col-md-3 mb-2">
+                        <label class="form-label" style="font-size: 0.85rem;">Data Fim</label>
+                        <input type="date" name="datafim" class="form-control form-control-sm">
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="col-12 mb-2">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" name="principal" id="principal" value="1" checked>
+                            <label class="form-check-label" for="principal" style="font-size: 0.85rem;">
+                                <strong>Veículo Principal</strong> - Este é o veículo principal do motorista
+                            </label>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="d-flex justify-content-between mt-3">
+                    <a href="{{ url_for('funcionarios.editar', id=funcionario.id) }}" class="btn btn-secondary btn-sm">
+                        <i class="bi bi-arrow-left"></i> Voltar
+                    </a>
+                    <button type="submit" class="btn btn-success btn-sm">
+                        <i class="bi bi-check-circle"></i> Vincular
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<style>
+    .form-control-sm, .form-select-sm {
+        font-size: 0.85rem;
+    }
+    .btn-sm {
+        font-size: 0.85rem;
+        padding: 0.4rem 0.8rem;
+    }
+</style>
+{% endblock %}
