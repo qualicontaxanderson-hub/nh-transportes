@@ -172,7 +172,7 @@ def get_funcionarios(cliente_id):
                 COALESCE(f.salario_base, 0) as salario_base,
                 'funcionario' as tipo
             FROM funcionarios f
-            WHERE f.ativo = 1 AND (f.id_cliente = %s OR f.id_cliente IS NULL)
+            WHERE f.ativo = 1 AND (f.clienteid = %s OR f.clienteid IS NULL)
             ORDER BY f.nome
         """, (cliente_id,))
         funcionarios = cursor.fetchall()
@@ -248,7 +248,7 @@ def get_comissoes(cliente_id, mes):
             LEFT JOIN fretes f ON m.id = f.motoristas_id 
                 AND f.data_frete >= %s 
                 AND f.data_frete <= %s
-                AND f.id_cliente = %s
+                AND f.clientes_id = %s
             WHERE m.paga_comissao = 1
             GROUP BY m.id, m.nome
             HAVING comissao_total > 0
