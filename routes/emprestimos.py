@@ -140,7 +140,7 @@ def novo():
     
     # Get funcionarios
     cursor.execute("""
-        SELECT id, nome, clienteid
+        SELECT id, nome, id_cliente
         FROM funcionarios 
         WHERE ativo = 1 
         ORDER BY nome

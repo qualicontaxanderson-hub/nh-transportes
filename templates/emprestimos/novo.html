@@ -24,7 +24,7 @@
                         <select name="funcionario_id" id="funcionario_id" class="form-select" required>
                             <option value="">Selecione o funcionário...</option>
                             {% for func in funcionarios %}
-                            <option value="{{ func.id }}" data-clienteid="{{ func.clienteid }}">{{ func.nome }}</option>
+                            <option value="{{ func.id }}" data-clienteid="{{ func.id_cliente }}">{{ func.nome }}</option>
                             {% endfor %}
                         </select>
                     </div>
