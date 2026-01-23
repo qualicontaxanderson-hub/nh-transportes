@@ -1,0 +1,110 @@
+{% extends 'base.html' %}
+{% block title %}Editar Empréstimo - {{ app_name }}{% endblock %}
+{% block content %}
+<div class="container-fluid">
+    <nav aria-label="breadcrumb" class="mt-2 mb-3">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="{{ url_for('index') }}">Dashboard</a></li>
+            <li class="breadcrumb-item"><a href="{{ url_for('emprestimos.lista') }}">Empréstimos</a></li>
+            <li class="breadcrumb-item active" aria-current="page">Editar Empréstimo #{{ emprestimo.id }}</li>
+        </ol>
+    </nav>
+    
+    <h2 class="mb-3" style="color:#1D63A5;"><i class="bi bi-pencil"></i> Editar Empréstimo</h2>
+    
+    <!-- Emprestimo Info -->
+    <div class="card shadow-sm mb-3">
+        <div class="card-header" style="background:#17a2b8;color:white;">
+            <h5 class="mb-0">Informações do Empréstimo</h5>
+        </div>
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-6">
+                    <p><strong>Funcionário:</strong> {{ emprestimo.funcionario_nome }}</p>
+                    <p><strong>Cliente:</strong> {{ emprestimo.cliente_nome or 'N/A' }}</p>
+                    <p><strong>Data do Empréstimo:</strong> {{ emprestimo.data_emprestimo.strftime('%d/%m/%Y') if emprestimo.data_emprestimo else 'N/A' }}</p>
+                </div>
+                <div class="col-md-6">
+                    <p><strong>Valor Total:</strong> R$ {{ "%.2f"|format(emprestimo.valor_total)|replace('.', ',') }}</p>
+                    <p><strong>Quantidade de Parcelas:</strong> {{ emprestimo.quantidade_parcelas }}x</p>
+                    <p><strong>Valor por Parcela:</strong> R$ {{ "%.2f"|format(emprestimo.valor_parcela)|replace('.', ',') }}</p>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Edit Form -->
+    <div class="card shadow-sm mb-3">
+        <div class="card-header" style="background:#ff9800;color:white;">
+            <h5 class="mb-0">Alterar Status e Descrição</h5>
+        </div>
+        <div class="card-body">
+            <form method="POST">
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label fw-bold">Status</label>
+                        <select name="status" class="form-select" required>
+                            <option value="ATIVO" {% if emprestimo.status == 'ATIVO' %}selected{% endif %}>Ativo</option>
+                            <option value="QUITADO" {% if emprestimo.status == 'QUITADO' %}selected{% endif %}>Quitado</option>
+                            <option value="CANCELADO" {% if emprestimo.status == 'CANCELADO' %}selected{% endif %}>Cancelado</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <div class="mb-3">
+                    <label class="form-label fw-bold">Descrição</label>
+                    <textarea name="descricao" class="form-control" rows="3">{{ emprestimo.descricao or '' }}</textarea>
+                </div>
+                
+                <div class="d-flex justify-content-between">
+                    <a href="{{ url_for('emprestimos.lista') }}" class="btn btn-secondary">
+                        <i class="bi bi-arrow-left"></i> Voltar
+                    </a>
+                    <button type="submit" class="btn btn-success">
+                        <i class="bi bi-check-circle"></i> Salvar Alterações
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+    
+    <!-- Installments List -->
+    <div class="card shadow-sm">
+        <div class="card-header" style="background:#28a745;color:white;">
+            <h5 class="mb-0">Parcelas</h5>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-sm table-striped">
+                    <thead class="table-dark">
+                        <tr>
+                            <th>Parcela</th>
+                            <th>Mês Referência</th>
+                            <th>Valor</th>
+                            <th>Status</th>
+                            <th>Data Pagamento</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for parcela in parcelas %}
+                        <tr>
+                            <td>{{ parcela.numero_parcela }}/{{ emprestimo.quantidade_parcelas }}</td>
+                            <td>{{ parcela.mes_referencia }}</td>
+                            <td>R$ {{ "%.2f"|format(parcela.valor)|replace('.', ',') }}</td>
+                            <td>
+                                {% if parcela.pago %}
+                                    <span class="badge bg-success">Pago</span>
+                                {% else %}
+                                    <span class="badge bg-warning text-dark">Pendente</span>
+                                {% endif %}
+                            </td>
+                            <td>{{ parcela.data_pagamento.strftime('%d/%m/%Y') if parcela.data_pagamento else '-' }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

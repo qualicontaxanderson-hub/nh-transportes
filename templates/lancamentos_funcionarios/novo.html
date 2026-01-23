@@ -122,6 +122,7 @@
 <script>
 const rubricas = {{ rubricas|tojson|safe }};
 let comissoesData = {};
+let emprestimosData = {};
 
 // Currency formatting functions
 function formatCurrency(value) {
@@ -193,24 +194,41 @@ function checkAndLoadFuncionarios() {
     // Convert MM/YYYY to MM-YYYY for URL (replace / with -)
     const mesForUrl = mes.replace('/', '-');
     
-    // First fetch commission data
-    fetch(`/lancamentos-funcionarios/get-comissoes/${clienteId}/${mesForUrl}`)
-        .then(response => {
-            if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
-            }
-            return response.json();
-        })
-        .then(data => {
-            comissoesData = data;
-            // Then fetch funcionarios
-            return fetch(`/lancamentos-funcionarios/get-funcionarios/${clienteId}`);
-        })
-        .then(response => {
-            if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
-            }
-            return response.json();
+    // Fetch commission data, loans data, and funcionarios in sequence
+    Promise.all([
+        fetch(`/lancamentos-funcionarios/get-comissoes/${clienteId}/${mesForUrl}`).then(r => r.json()),
+        fetch(`/lancamentos-funcionarios/get-funcionarios/${clienteId}`).then(r => r.json())
+    ])
+        .then(([comissoes, funcionarios]) => {
+            comissoesData = comissoes;
+            
+            // Fetch loans for each funcionario
+            const loanPromises = funcionarios.map(func => 
+                fetch(`/emprestimos/get-emprestimos-ativos/${func.id}/${mes}`)
+                    .then(r => r.json())
+                    .then(loans => ({ funcionarioId: func.id, loans }))
+                    .catch(e => ({ funcionarioId: func.id, loans: [] }))
+            );
+            
+            return Promise.all(loanPromises).then(loansData => {
+                // Build emprestimosData map
+                emprestimosData = {};
+                loansData.forEach(item => {
+                    if (item.loans && item.loans.length > 0) {
+                        // Calculate total loan deduction for this month
+                        const totalLoanDeduction = item.loans.reduce((sum, loan) => sum + loan.valor_parcela, 0);
+                        const loanInfo = item.loans.map(loan => 
+                            `${loan.numero_parcela}/${loan.quantidade_parcelas}`
+                        ).join(', ');
+                        emprestimosData[item.funcionarioId] = {
+                            valor: totalLoanDeduction,
+                            info: loanInfo
+                        };
+                    }
+                });
+                
+                return funcionarios;
+            });
         })
         .then(funcionarios => {
             const tbody = document.getElementById('funcionarios-tbody');
@@ -220,6 +238,7 @@ function checkAndLoadFuncionarios() {
                 const row = document.createElement('tr');
                 const isMotorista = func.tipo === 'motorista';
                 const comissaoValue = isMotorista && comissoesData[func.id] ? comissoesData[func.id] : '';
+                const loanData = emprestimosData[func.id];
                 
                 row.innerHTML = `
                     <td>
@@ -232,6 +251,7 @@ function checkAndLoadFuncionarios() {
                     </td>
                     ${rubricas.map(rubrica => {
                         let defaultValue = '';
+                        let cellContent = '';
                         
                         // Auto-fill salary base
                         if (rubrica.nome === 'SALÁRIO BASE' && func.salario_base) {
@@ -240,6 +260,11 @@ function checkAndLoadFuncionarios() {
                         // Auto-fill commission for motoristas
                         else if (rubrica.nome === 'COMISSÃO' && isMotorista && comissaoValue) {
                             defaultValue = comissaoValue;
+                        }
+                        // Auto-fill loans (EMPRÉSTIMOS)
+                        else if (rubrica.nome === 'EMPRÉSTIMOS' && loanData) {
+                            defaultValue = loanData.valor * 100; // Convert to cents for formatCurrency
+                            cellContent = `<small class="text-muted d-block">Parcela: ${loanData.info}</small>`;
                         }
                         
                         return `
@@ -254,6 +279,7 @@ function checkAndLoadFuncionarios() {
                                    placeholder="0,00"
                                    value="${defaultValue ? formatCurrency(defaultValue) : ''}"
                                    data-raw-value="${defaultValue || '0'}">
+                            ${cellContent}
                         </td>
                         `;
                     }).join('')}
