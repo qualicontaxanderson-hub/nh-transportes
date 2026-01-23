@@ -102,6 +102,22 @@
 </div>
 
 <script>
+// Currency formatting utilities
+function parseBrazilianCurrency(value) {
+    // Remove thousand separators (.) and replace decimal comma with dot
+    return parseFloat(value.replace(/\./g, '').replace(',', '.')) || 0;
+}
+
+function formatBrazilianCurrency(value) {
+    // Convert to number and format with Brazilian locale
+    const num = parseFloat(value);
+    if (isNaN(num)) return '';
+    return num.toLocaleString('pt-BR', {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+    });
+}
+
 // Auto-fill client when funcionario is selected
 document.getElementById('funcionario_id').addEventListener('change', function() {
     const selectedOption = this.options[this.selectedIndex];
@@ -118,14 +134,12 @@ function calculateParcela() {
     const quantidadeParcelas = document.getElementById('quantidade_parcelas').value;
     
     if (valorTotal && quantidadeParcelas && quantidadeParcelas > 0) {
-        // Parse Brazilian format (1.000,00)
-        const valor = parseFloat(valorTotal.replace(/\./g, '').replace(',', '.'));
+        const valor = parseBrazilianCurrency(valorTotal);
         const parcelas = parseInt(quantidadeParcelas);
         
-        if (!isNaN(valor) && !isNaN(parcelas)) {
+        if (!isNaN(valor) && !isNaN(parcelas) && parcelas > 0) {
             const valorParcela = valor / parcelas;
-            document.getElementById('valor_parcela').value = 
-                valorParcela.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+            document.getElementById('valor_parcela').value = formatBrazilianCurrency(valorParcela);
         }
     }
 }

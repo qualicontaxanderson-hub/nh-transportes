@@ -5,8 +5,15 @@ from utils.decorators import admin_required
 from datetime import datetime
 from decimal import Decimal
 import calendar
+import logging
 
 bp = Blueprint('emprestimos', __name__, url_prefix='/emprestimos')
+
+def parse_brazilian_currency(value_str):
+    """Parse Brazilian currency format to Decimal"""
+    # Remove thousand separators (.) and replace decimal comma with dot
+    cleaned = value_str.replace('.', '').replace(',', '.')
+    return Decimal(cleaned)
 
 def calcular_mes_parcela(mes_inicio, numero_parcela):
     """Calculate the month for a given installment number"""
@@ -88,7 +95,7 @@ def novo():
             data_emprestimo = request.form.get('data_emprestimo')
             mes_inicio_desconto = request.form.get('mes_inicio_desconto')
             descricao = request.form.get('descricao')
-            valor_total = Decimal(request.form.get('valor_total').replace(',', '.'))
+            valor_total = parse_brazilian_currency(request.form.get('valor_total'))
             quantidade_parcelas = int(request.form.get('quantidade_parcelas'))
             
             # Calculate installment value
@@ -262,7 +269,6 @@ def get_emprestimos_ativos(funcionario_id, mes):
         return jsonify(emprestimos)
         
     except Exception as e:
-        import logging
         logging.error(f"Error in get_emprestimos_ativos: {str(e)}")
         return jsonify([])
 

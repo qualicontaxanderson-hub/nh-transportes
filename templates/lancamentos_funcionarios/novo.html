@@ -207,7 +207,10 @@ function checkAndLoadFuncionarios() {
                 fetch(`/emprestimos/get-emprestimos-ativos/${func.id}/${mes}`)
                     .then(r => r.json())
                     .then(loans => ({ funcionarioId: func.id, loans }))
-                    .catch(e => ({ funcionarioId: func.id, loans: [] }))
+                    .catch(e => {
+                        console.error(`Failed to fetch loans for funcionario ${func.id}:`, e);
+                        return { funcionarioId: func.id, loans: [] };
+                    })
             );
             
             return Promise.all(loanPromises).then(loansData => {
@@ -263,7 +266,9 @@ function checkAndLoadFuncionarios() {
                         }
                         // Auto-fill loans (EMPRÉSTIMOS)
                         else if (rubrica.nome === 'EMPRÉSTIMOS' && loanData) {
-                            defaultValue = loanData.valor * 100; // Convert to cents for formatCurrency
+                            // loanData.valor is already a float with correct decimal places
+                            // Convert to cents by multiplying by 100 for formatCurrency
+                            defaultValue = Math.round(loanData.valor * 100);
                             cellContent = `<small class="text-muted d-block">Parcela: ${loanData.info}</small>`;
                         }
                         
