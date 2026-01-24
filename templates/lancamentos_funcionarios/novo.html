@@ -267,11 +267,19 @@ function checkAndLoadFuncionarios() {
                 console.log(`Processando funcionário: ${func.nome} (ID: ${func.id}, Tipo: ${func.tipo})`);
                 const row = document.createElement('tr');
                 const isMotorista = func.tipo === 'motorista';
+                
+                // Debug commission lookup
+                if (isMotorista) {
+                    console.log(`  - É motorista. Verificando comissão para ID ${func.id}`);
+                    console.log(`  - comissoesData completo:`, comissoesData);
+                    console.log(`  - comissoesData[${func.id}]:`, comissoesData[func.id]);
+                }
+                
                 const comissaoValue = isMotorista && comissoesData[func.id] ? comissoesData[func.id] : '';
                 const loanData = emprestimosData[func.id];
                 
                 if (isMotorista) {
-                    console.log(`  - É motorista. Comissão: ${comissaoValue}`);
+                    console.log(`  - Valor da comissão encontrado: ${comissaoValue}`);
                 }
                 if (loanData) {
                     console.log(`  - Tem empréstimo. Valor: ${loanData.valor}, Info: ${loanData.info}`);
