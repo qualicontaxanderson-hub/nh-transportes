@@ -221,9 +221,15 @@ function checkAndLoadFuncionarios() {
             
             // Fetch loans for each funcionario
             const loanPromises = funcionarios.map(func => 
-                fetch(`/emprestimos/get-emprestimos-ativos/${func.id}/${mes}`)
-                    .then(r => r.json())
-                    .then(loans => ({ funcionarioId: func.id, loans }))
+                fetch(`/emprestimos/get-emprestimos-ativos/${func.id}/${mesForUrl}`)
+                    .then(r => {
+                        console.log(`[DEBUG] Fetching loans: /emprestimos/get-emprestimos-ativos/${func.id}/${mesForUrl}`);
+                        return r.json();
+                    })
+                    .then(loans => {
+                        console.log(`[DEBUG] Loans received for funcionario ${func.id}:`, loans);
+                        return { funcionarioId: func.id, loans };
+                    })
                     .catch(e => {
                         console.error(`Failed to fetch loans for funcionario ${func.id}:`, e);
                         return { funcionarioId: func.id, loans: [] };
