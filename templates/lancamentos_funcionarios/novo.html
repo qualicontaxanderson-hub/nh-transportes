@@ -264,7 +264,8 @@ function checkAndLoadFuncionarios() {
                         // Auto-fill commission for motoristas (readonly)
                         else if (rubrica.nome === 'Comissão' && isMotorista) {
                             if (comissaoValue) {
-                                defaultValue = comissaoValue;
+                                // Convert from float to cents for formatCurrency (multiply by 100)
+                                defaultValue = Math.round(comissaoValue * 100);
                             }
                             isReadonly = true; // Motoristas cannot edit commission
                         }
