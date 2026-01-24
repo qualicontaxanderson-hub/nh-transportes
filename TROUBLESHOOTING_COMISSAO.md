@@ -1,10 +1,10 @@
 # Troubleshooting: Comissão não aparece no formulário
 
 ## Problema
-A coluna "COMISSÃO" não está aparecendo na planilha de lançamentos de funcionários (`/lancamentos-funcionarios/novo`).
+A coluna "Comissão" não está aparecendo na planilha de lançamentos de funcionários (`/lancamentos-funcionarios/novo`).
 
 ## Causa Provável
-A rubrica "COMISSÃO" não existe na tabela `rubricas` do banco de dados, ou está inativa.
+A rubrica "Comissão" não existe na tabela `rubricas` do banco de dados, ou está inativa.
 
 ## Solução
 
@@ -12,7 +12,7 @@ A rubrica "COMISSÃO" não existe na tabela `rubricas` do banco de dados, ou est
 
 Execute no banco de dados:
 ```sql
-SELECT * FROM rubricas WHERE nome = 'COMISSÃO';
+SELECT * FROM rubricas WHERE nome = 'Comissão';
 ```
 
 Se não retornar nenhum resultado, a rubrica não existe.
@@ -28,7 +28,7 @@ mysql -u seu_usuario -p seu_banco < migrations/20260124_ensure_comissao_rubrica.
 Ou execute manualmente no banco:
 ```sql
 INSERT INTO `rubricas` (`nome`, `descricao`, `tipo`, `percentualouvalorfixo`, `ativo`, `ordem`) 
-VALUES ('COMISSÃO', 'Comissão sobre vendas/fretes', 'BENEFICIO', 'VALOR_FIXO', 1, 10)
+VALUES ('Comissão', 'Comissão sobre vendas/fretes', 'BENEFICIO', 'VALOR_FIXO', 1, 10)
 ON DUPLICATE KEY UPDATE 
     descricao = 'Comissão sobre vendas/fretes',
     tipo = 'BENEFICIO',
@@ -40,14 +40,21 @@ ON DUPLICATE KEY UPDATE
 
 Se a rubrica existe mas não aparece, pode estar inativa:
 ```sql
-UPDATE rubricas SET ativo = 1 WHERE nome = 'COMISSÃO';
+UPDATE rubricas SET ativo = 1 WHERE nome = 'Comissão';
+```
+
+### Opção 4: Migrar de "COMISSÃO" para "Comissão"
+
+Se você tinha a rubrica com nome "COMISSÃO" (maiúsculas), atualize para "Comissão":
+```sql
+UPDATE rubricas SET nome = 'Comissão' WHERE nome = 'COMISSÃO';
 ```
 
 ## Como Verificar se Funcionou
 
 1. Acesse `/lancamentos-funcionarios/novo`
 2. Selecione um **Cliente** e um **Mês/Ano**
-3. A tabela deve carregar com uma coluna "COMISSÃO"
+3. A tabela deve carregar com uma coluna "Comissão"
 4. Para motoristas que tiveram comissão no mês, o valor deve aparecer automaticamente preenchido
 
 ## Verificação de Comissões de Motoristas
@@ -93,4 +100,4 @@ console.log('Comissões:', comissoesData);
 Se o problema persistir após seguir estes passos, verifique:
 - Se o script de migração `20260121_create_employee_management_system.sql` foi executado
 - Se há erros no log do servidor
-- Se a versão do código está atualizada (commit 787c8ea ou posterior)
+- Se a versão do código está atualizada
