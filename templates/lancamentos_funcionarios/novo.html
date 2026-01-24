@@ -84,6 +84,9 @@
                             <tbody id="funcionarios-tbody">
                                 <!-- Rows will be added dynamically -->
                             </tbody>
+                            <tfoot id="funcionarios-tfoot" class="table-secondary fw-bold">
+                                <!-- Totals row will be added dynamically -->
+                            </tfoot>
                         </table>
                     </div>
                 </div>
@@ -346,6 +349,9 @@ function checkAndLoadFuncionarios() {
                 tbody.appendChild(row);
             });
             
+            // Create totals row in tfoot
+            createTotalsRow();
+            
             // Show container and buttons
             document.getElementById('funcionarios-container').style.display = 'block';
             document.getElementById('form-buttons').style.display = 'flex';
@@ -396,6 +402,34 @@ function checkAndLoadFuncionarios() {
 document.getElementById('clienteid').addEventListener('change', checkAndLoadFuncionarios);
 document.getElementById('mes').addEventListener('change', checkAndLoadFuncionarios);
 
+function createTotalsRow() {
+    const tfoot = document.getElementById('funcionarios-tfoot');
+    tfoot.innerHTML = '';
+    
+    const row = document.createElement('tr');
+    
+    // First cell: "TOTAIS" label
+    row.innerHTML = `
+        <td colspan="2" class="text-end"><strong>TOTAIS:</strong></td>
+    `;
+    
+    // Add a total cell for each rubrica
+    rubricas.forEach(rubrica => {
+        const td = document.createElement('td');
+        td.className = 'text-center';
+        td.innerHTML = `<strong class="rubrica-total" data-rubrica="${rubrica.nome}">R$ 0,00</strong>`;
+        row.appendChild(td);
+    });
+    
+    // Add grand total cell
+    const grandTotalTd = document.createElement('td');
+    grandTotalTd.className = 'text-center';
+    grandTotalTd.innerHTML = `<strong id="grand-total-all">R$ 0,00</strong>`;
+    row.appendChild(grandTotalTd);
+    
+    tfoot.appendChild(row);
+}
+
 function calculateTotals() {
     // Calculate total for each funcionario
     const funcionariosIds = [...new Set(
@@ -405,6 +439,12 @@ function calculateTotals() {
     let grandTotalProventos = 0;
     let grandTotalDescontos = 0;
     let totalFuncionarios = funcionariosIds.length;
+    
+    // Initialize column totals
+    const rubricaTotals = {};
+    rubricas.forEach(rubrica => {
+        rubricaTotals[rubrica.nome] = 0;
+    });
     
     funcionariosIds.forEach(funcId => {
         const inputs = document.querySelectorAll(`.valor-input[data-funcionario="${funcId}"]`);
@@ -416,6 +456,12 @@ function calculateTotals() {
             const rawValue = parseFloat(input.dataset.rawValue) || 0;
             const valor = rawValue / 100; // Convert cents to reais
             const rubricaTipo = input.dataset.rubricaTipo;
+            const rubricaNome = input.dataset.rubricaNome;
+            
+            // Add to column total
+            if (rubricaNome && rubricaTotals.hasOwnProperty(rubricaNome)) {
+                rubricaTotals[rubricaNome] += valor;
+            }
             
             // Proventos: SALARIO, BENEFICIO
             // Descontos: DESCONTO, IMPOSTO, ADIANTAMENTO
@@ -438,6 +484,23 @@ function calculateTotals() {
         grandTotalProventos += totalProventos;
         grandTotalDescontos += totalDescontos;
     });
+    
+    // Update column totals in footer
+    rubricas.forEach(rubrica => {
+        const totalElement = document.querySelector(`.rubrica-total[data-rubrica="${rubrica.nome}"]`);
+        if (totalElement) {
+            const total = rubricaTotals[rubrica.nome];
+            totalElement.textContent = `R$ ${total.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+        }
+    });
+    
+    // Update grand total in footer (total of all TOTAL column)
+    const grandTotalElement = document.getElementById('grand-total-all');
+    if (grandTotalElement) {
+        const grandTotal = grandTotalProventos - grandTotalDescontos;
+        grandTotalElement.textContent = `R$ ${grandTotal.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+        grandTotalElement.style.color = grandTotal < 0 ? 'red' : 'green';
+    }
     
     // Update summary box
     document.getElementById('total-funcionarios').textContent = totalFuncionarios;
