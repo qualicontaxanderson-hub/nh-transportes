@@ -235,6 +235,9 @@ def editar(id):
 def get_emprestimos_ativos(funcionario_id, mes):
     """API endpoint to get active loans for an employee in a specific month"""
     try:
+        # Convert mes format from MM-YYYY to MM/YYYY for database query
+        mes_db = mes.replace('-', '/')
+        
         conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)
         
@@ -254,7 +257,7 @@ def get_emprestimos_ativos(funcionario_id, mes):
                 AND e.status = 'ATIVO'
                 AND p.mes_referencia = %s
             ORDER BY e.criado_em
-        """, (funcionario_id, mes))
+        """, (funcionario_id, mes_db))
         
         emprestimos = cursor.fetchall()
         
