@@ -272,7 +272,9 @@ function checkAndLoadFuncionarios() {
                 if (isMotorista) {
                     console.log(`  - É motorista. Verificando comissão para ID ${func.id}`);
                     console.log(`  - comissoesData completo:`, comissoesData);
+                    console.log(`  - comissoesData keys:`, Object.keys(comissoesData));
                     console.log(`  - comissoesData[${func.id}]:`, comissoesData[func.id]);
+                    console.log(`  - comissoesData["${func.id}"]:`, comissoesData[String(func.id)]);
                 }
                 
                 const comissaoValue = isMotorista && comissoesData[func.id] ? comissoesData[func.id] : '';
