@@ -196,11 +196,28 @@ function checkAndLoadFuncionarios() {
     
     // Fetch commission data, loans data, and funcionarios in sequence
     Promise.all([
-        fetch(`/lancamentos-funcionarios/get-comissoes/${clienteId}/${mesForUrl}`).then(r => r.json()),
-        fetch(`/lancamentos-funcionarios/get-funcionarios/${clienteId}`).then(r => r.json())
+        fetch(`/lancamentos-funcionarios/get-comissoes/${clienteId}/${mesForUrl}`)
+            .then(r => {
+                console.log(`Fetching comissões: /lancamentos-funcionarios/get-comissoes/${clienteId}/${mesForUrl}`);
+                return r.json();
+            })
+            .then(data => {
+                console.log('Comissões recebidas:', data);
+                return data;
+            }),
+        fetch(`/lancamentos-funcionarios/get-funcionarios/${clienteId}`)
+            .then(r => {
+                console.log(`Fetching funcionários: /lancamentos-funcionarios/get-funcionarios/${clienteId}`);
+                return r.json();
+            })
+            .then(data => {
+                console.log('Funcionários recebidos:', data);
+                return data;
+            })
     ])
         .then(([comissoes, funcionarios]) => {
             comissoesData = comissoes;
+            console.log('comissoesData atribuído:', comissoesData);
             
             // Fetch loans for each funcionario
             const loanPromises = funcionarios.map(func => 
@@ -216,6 +233,7 @@ function checkAndLoadFuncionarios() {
             return Promise.all(loanPromises).then(loansData => {
                 // Build emprestimosData map
                 emprestimosData = {};
+                console.log('Dados de empréstimos recebidos:', loansData);
                 loansData.forEach(item => {
                     if (item.loans && item.loans.length > 0) {
                         // Calculate total loan deduction for this month
@@ -227,8 +245,10 @@ function checkAndLoadFuncionarios() {
                             valor: totalLoanDeduction,
                             info: loanInfo
                         };
+                        console.log(`Empréstimo para funcionário ${item.funcionarioId}:`, emprestimosData[item.funcionarioId]);
                     }
                 });
+                console.log('emprestimosData final:', emprestimosData);
                 
                 return funcionarios;
             });
@@ -238,10 +258,18 @@ function checkAndLoadFuncionarios() {
             tbody.innerHTML = '';
             
             funcionarios.forEach(func => {
+                console.log(`Processando funcionário: ${func.nome} (ID: ${func.id}, Tipo: ${func.tipo})`);
                 const row = document.createElement('tr');
                 const isMotorista = func.tipo === 'motorista';
                 const comissaoValue = isMotorista && comissoesData[func.id] ? comissoesData[func.id] : '';
                 const loanData = emprestimosData[func.id];
+                
+                if (isMotorista) {
+                    console.log(`  - É motorista. Comissão: ${comissaoValue}`);
+                }
+                if (loanData) {
+                    console.log(`  - Tem empréstimo. Valor: ${loanData.valor}, Info: ${loanData.info}`);
+                }
                 
                 row.innerHTML = `
                     <td>
