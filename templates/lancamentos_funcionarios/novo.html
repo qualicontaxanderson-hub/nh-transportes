@@ -255,21 +255,26 @@ function checkAndLoadFuncionarios() {
                     ${rubricas.map(rubrica => {
                         let defaultValue = '';
                         let cellContent = '';
+                        let isReadonly = false;
                         
                         // Auto-fill salary base
                         if (rubrica.nome === 'SALÁRIO BASE' && func.salario_base) {
                             defaultValue = func.salario_base;
                         }
-                        // Auto-fill commission for motoristas
-                        else if (rubrica.nome === 'Comissão' && isMotorista && comissaoValue) {
-                            defaultValue = comissaoValue;
+                        // Auto-fill commission for motoristas (readonly)
+                        else if (rubrica.nome === 'Comissão' && isMotorista) {
+                            if (comissaoValue) {
+                                defaultValue = comissaoValue;
+                            }
+                            isReadonly = true; // Motoristas cannot edit commission
                         }
-                        // Auto-fill loans (EMPRÉSTIMOS)
+                        // Auto-fill loans (EMPRÉSTIMOS) - readonly
                         else if (rubrica.nome === 'EMPRÉSTIMOS' && loanData) {
                             // loanData.valor is already a float with correct decimal places
                             // Convert to cents by multiplying by 100 for formatCurrency
                             defaultValue = Math.round(loanData.valor * 100);
                             cellContent = `<small class="text-muted d-block">Parcela: ${loanData.info}</small>`;
+                            isReadonly = true; // Loans are always readonly (calculated from emprestimos)
                         }
                         
                         return `
@@ -277,13 +282,14 @@ function checkAndLoadFuncionarios() {
                             <input type="hidden" name="rubrica_${func.id}[]" value="${rubrica.id}">
                             <input type="text" 
                                    name="valor_${func.id}[]" 
-                                   class="form-control form-control-sm valor-input" 
+                                   class="form-control form-control-sm valor-input ${isReadonly ? 'bg-light' : ''}" 
                                    data-funcionario="${func.id}"
                                    data-rubrica-tipo="${rubrica.tipo}"
                                    data-rubrica-nome="${rubrica.nome}"
                                    placeholder="0,00"
                                    value="${defaultValue ? formatCurrency(defaultValue) : ''}"
-                                   data-raw-value="${defaultValue || '0'}">
+                                   data-raw-value="${defaultValue || '0'}"
+                                   ${isReadonly ? 'readonly' : ''}>
                             ${cellContent}
                         </td>
                         `;
