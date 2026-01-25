@@ -22,6 +22,10 @@ from models.categoria_funcionario import CategoriaFuncionario
 from models.rubrica import Rubrica
 from models.funcionario import Funcionario
 from models.lancamento_funcionario import LancamentoFuncionario
+from models.forma_pagamento_caixa import FormaPagamentoCaixa
+from models.categoria_despesa import CategoriaDespesa
+from models.subcategoria_despesa import SubcategoriaDespesa
+from models.lancamento_caixa import LancamentoCaixa
 
 __all__ = [
     'Usuario',
@@ -44,5 +48,9 @@ __all__ = [
     'Rubrica',
     'Funcionario',
     'LancamentoFuncionario',
+    'FormaPagamentoCaixa',
+    'CategoriaDespesa',
+    'SubcategoriaDespesa',
+    'LancamentoCaixa',
     'db',
 ]

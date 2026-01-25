@@ -1,0 +1,90 @@
+{% extends 'base.html' %}
+{% block title %}Lançamentos de Caixa - NH Transportes{% endblock %}
+{% block content %}
+<div class="container-fluid">
+    <nav aria-label="breadcrumb" class="mt-2 mb-3">
+        <ol class="breadcrumb" style="font-size: 0.85rem;">
+            <li class="breadcrumb-item"><a href="/">Dashboard</a></li>
+            <li class="breadcrumb-item active" aria-current="page">Lançamentos de Caixa</li>
+        </ol>
+    </nav>
+    
+    <h2 class="mb-3" style="color:#1D63A5; font-size: 1.3rem;"><i class="bi bi-cash-stack"></i> Lançamentos de Caixa</h2>
+    
+    <div class="card shadow-sm">
+        <div class="card-header" style="background:#ff9800;color:white; font-size: 0.95rem; padding: 0.6rem 1rem;">
+            <div class="d-flex justify-content-between align-items-center">
+                <h5 class="mb-0" style="font-size: 1rem;">Lista de Lançamentos</h5>
+                <a href="{{ url_for('lancamentos_caixa.novo') }}" class="btn btn-light btn-sm">
+                    <i class="bi bi-plus-circle"></i> Novo Lançamento
+                </a>
+            </div>
+        </div>
+        <div class="card-body" style="padding: 1rem;">
+            {% if lancamentos %}
+            <div class="table-responsive">
+                <table class="table table-hover table-sm">
+                    <thead style="background:#f8f9fa;">
+                        <tr>
+                            <th style="font-size: 0.85rem;">ID</th>
+                            <th style="font-size: 0.85rem;">Data</th>
+                            <th style="font-size: 0.85rem;">Total Receitas</th>
+                            <th style="font-size: 0.85rem;">Total Comprovação</th>
+                            <th style="font-size: 0.85rem;">Diferença</th>
+                            <th style="font-size: 0.85rem;">Status</th>
+                            <th style="font-size: 0.85rem;">Usuário</th>
+                            <th style="font-size: 0.85rem;">Ações</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for lanc in lancamentos %}
+                        <tr>
+                            <td style="font-size: 0.85rem;">{{ lanc.id }}</td>
+                            <td style="font-size: 0.85rem;">{{ lanc.data.strftime('%d/%m/%Y') if lanc.data else '' }}</td>
+                            <td style="font-size: 0.85rem;">R$ {{ "%.2f"|format(lanc.total_receitas|float) }}</td>
+                            <td style="font-size: 0.85rem;">R$ {{ "%.2f"|format(lanc.total_comprovacao|float) }}</td>
+                            <td style="font-size: 0.85rem;" class="{% if lanc.diferenca|float < 0 %}text-danger{% elif lanc.diferenca|float > 0 %}text-warning{% else %}text-success{% endif %}">
+                                R$ {{ "%.2f"|format(lanc.diferenca|float) }}
+                            </td>
+                            <td style="font-size: 0.85rem;">
+                                {% if lanc.status == 'ABERTO' %}
+                                <span class="badge bg-warning">Aberto</span>
+                                {% else %}
+                                <span class="badge bg-success">Fechado</span>
+                                {% endif %}
+                            </td>
+                            <td style="font-size: 0.85rem;">{{ lanc.usuario_nome if lanc.usuario_nome else '-' }}</td>
+                            <td style="font-size: 0.85rem;">
+                                <a href="{{ url_for('lancamentos_caixa.visualizar', id=lanc.id) }}" class="btn btn-info btn-sm" title="Visualizar">
+                                    <i class="bi bi-eye"></i>
+                                </a>
+                                <form method="POST" action="{{ url_for('lancamentos_caixa.excluir', id=lanc.id) }}" style="display:inline;" onsubmit="return confirm('Tem certeza que deseja excluir este lançamento?');">
+                                    <button type="submit" class="btn btn-danger btn-sm" title="Excluir">
+                                        <i class="bi bi-trash"></i>
+                                    </button>
+                                </form>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <p class="text-center text-muted" style="margin: 2rem 0;">Nenhum lançamento cadastrado.</p>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<style>
+    .table th, .table td {
+        vertical-align: middle;
+    }
+    
+    @media (max-width: 768px) {
+        h2 {
+            font-size: 1.1rem !important;
+        }
+    }
+</style>
+{% endblock %}
