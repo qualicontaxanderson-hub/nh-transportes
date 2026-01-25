@@ -105,6 +105,11 @@
                     </tbody>
                 </table>
             </div>
+            {% elif table_exists and has_new_schema %}
+            <div class="alert alert-success" role="alert">
+                <h5 class="alert-heading"><i class="bi bi-check-circle"></i> Sistema Configurado com Sucesso!</h5>
+                <p class="mb-0">O sistema de Fechamento de Caixa está pronto. Clique em <strong>"Novo Lançamento"</strong> acima para criar seu primeiro fechamento de caixa.</p>
+            </div>
             {% else %}
             <div class="alert alert-info" role="alert">
                 <h5 class="alert-heading"><i class="bi bi-info-circle"></i> Sistema de Fechamento de Caixa</h5>

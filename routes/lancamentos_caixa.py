@@ -60,21 +60,27 @@ def lista():
         conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)
         
-        # Check if table exists first
+        # Check if table exists first and determine schema
+        has_new_schema = False
         try:
             cursor.execute("DESCRIBE lancamentos_caixa")
             columns = [col[0] for col in cursor.fetchall()]
+            
+            # Determine if this is the new schema
+            has_new_schema = 'usuario_id' in columns and 'data' in columns and 'total_receitas' in columns
+            
         except Exception as table_error:
             # Table doesn't exist at all
             if "doesn't exist" in str(table_error) or "1146" in str(table_error):
                 return render_template('lancamentos_caixa/lista.html', 
                                      lancamentos=[],
-                                     has_new_schema=False)
+                                     has_new_schema=False,
+                                     table_exists=False)
             else:
                 raise  # Re-raise if it's a different error
         
         # Build query based on available columns
-        if 'usuario_id' in columns and 'data' in columns:
+        if has_new_schema:
             # New schema with usuario_id and data
             cursor.execute("""
                 SELECT lc.*, u.username as usuario_nome
@@ -100,12 +106,10 @@ def lista():
         
         lancamentos = cursor.fetchall()
         
-        # Add a flag to indicate if we're using the old or new schema
-        has_new_schema = 'usuario_id' in columns and 'data' in columns and 'total_receitas' in columns
-        
         return render_template('lancamentos_caixa/lista.html', 
                              lancamentos=lancamentos,
-                             has_new_schema=has_new_schema)
+                             has_new_schema=has_new_schema,
+                             table_exists=True)
     except Exception as e:
         import traceback
         error_details = traceback.format_exc()
@@ -115,7 +119,8 @@ def lista():
             flash(f'Erro ao carregar lançamentos de caixa: {str(e)}', 'danger')
         return render_template('lancamentos_caixa/lista.html', 
                              lancamentos=[],
-                             has_new_schema=False)
+                             has_new_schema=False,
+                             table_exists=False)
     finally:
         if cursor is not None:
             cursor.close()
