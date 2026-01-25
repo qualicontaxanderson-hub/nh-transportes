@@ -1,0 +1,113 @@
+{% extends 'base.html' %}
+{% block title %}Empréstimos - {{ app_name }}{% endblock %}
+{% block content %}
+<div class="container-fluid">
+    <nav aria-label="breadcrumb" class="mt-2 mb-3">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="{{ url_for('index') }}">Dashboard</a></li>
+            <li class="breadcrumb-item active" aria-current="page">Empréstimos</li>
+        </ol>
+    </nav>
+    
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h2 style="color:#1D63A5;"><i class="bi bi-cash-coin"></i> Gestão de Empréstimos</h2>
+        <a href="{{ url_for('emprestimos.novo') }}" class="btn btn-success">
+            <i class="bi bi-plus-circle"></i> Novo Empréstimo
+        </a>
+    </div>
+    
+    <!-- Filters -->
+    <div class="card mb-3">
+        <div class="card-header" style="background:#ff9800;color:white;">
+            <h6 class="mb-0"><i class="bi bi-funnel"></i> Filtros</h6>
+        </div>
+        <div class="card-body">
+            <form method="GET" class="row g-3">
+                <div class="col-md-4">
+                    <label class="form-label">Status</label>
+                    <select name="status" class="form-select" onchange="this.form.submit()">
+                        <option value="">Todos</option>
+                        <option value="ATIVO" {% if status_filtro == 'ATIVO' %}selected{% endif %}>Ativo</option>
+                        <option value="QUITADO" {% if status_filtro == 'QUITADO' %}selected{% endif %}>Quitado</option>
+                        <option value="CANCELADO" {% if status_filtro == 'CANCELADO' %}selected{% endif %}>Cancelado</option>
+                    </select>
+                </div>
+                <div class="col-md-8">
+                    <label class="form-label">Funcionário</label>
+                    <select name="funcionario_id" class="form-select" onchange="this.form.submit()">
+                        <option value="">Todos os funcionários</option>
+                        {% for func in funcionarios %}
+                        <option value="{{ func.id }}">{{ func.nome }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </form>
+        </div>
+    </div>
+    
+    <!-- Emprestimos List -->
+    <div class="card">
+        <div class="card-body">
+            {% if emprestimos %}
+            <div class="table-responsive">
+                <table class="table table-hover">
+                    <thead class="table-dark">
+                        <tr>
+                            <th>ID</th>
+                            <th>Funcionário</th>
+                            <th>Cliente</th>
+                            <th>Descrição</th>
+                            <th>Valor Total</th>
+                            <th>Parcelas</th>
+                            <th>Valor/Parcela</th>
+                            <th>Início Desconto</th>
+                            <th>Status</th>
+                            <th>Ações</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for emp in emprestimos %}
+                        <tr>
+                            <td>{{ emp.id }}</td>
+                            <td>{{ emp.funcionario_nome }}</td>
+                            <td>{{ emp.cliente_nome or 'N/A' }}</td>
+                            <td>{{ emp.descricao or '-' }}</td>
+                            <td>R$ {{ "%.2f"|format(emp.valor_total)|replace('.', ',') }}</td>
+                            <td>{{ emp.quantidade_parcelas }}x</td>
+                            <td>R$ {{ "%.2f"|format(emp.valor_parcela)|replace('.', ',') }}</td>
+                            <td>{{ emp.mes_inicio_desconto }}</td>
+                            <td>
+                                {% if emp.status == 'ATIVO' %}
+                                    <span class="badge bg-success">Ativo</span>
+                                {% elif emp.status == 'QUITADO' %}
+                                    <span class="badge bg-primary">Quitado</span>
+                                {% else %}
+                                    <span class="badge bg-secondary">Cancelado</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <a href="{{ url_for('emprestimos.editar', id=emp.id) }}" class="btn btn-sm btn-primary">
+                                    <i class="bi bi-pencil"></i>
+                                </a>
+                                {% if emp.status == 'ATIVO' %}
+                                <form method="POST" action="{{ url_for('emprestimos.deletar', id=emp.id) }}" class="d-inline" onsubmit="return confirm('Tem certeza que deseja excluir este empréstimo?');">
+                                    <button type="submit" class="btn btn-sm btn-danger">
+                                        <i class="bi bi-trash"></i>
+                                    </button>
+                                </form>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="alert alert-info">
+                <i class="bi bi-info-circle"></i> Nenhum empréstimo encontrado.
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}

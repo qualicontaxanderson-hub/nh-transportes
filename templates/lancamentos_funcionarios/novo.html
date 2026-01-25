@@ -84,6 +84,9 @@
                             <tbody id="funcionarios-tbody">
                                 <!-- Rows will be added dynamically -->
                             </tbody>
+                            <tfoot id="funcionarios-tfoot" class="table-secondary fw-bold">
+                                <!-- Totals row will be added dynamically -->
+                            </tfoot>
                         </table>
                     </div>
                 </div>
@@ -122,6 +125,7 @@
 <script>
 const rubricas = {{ rubricas|tojson|safe }};
 let comissoesData = {};
+let emprestimosData = {};
 
 // Currency formatting functions
 function formatCurrency(value) {
@@ -193,33 +197,98 @@ function checkAndLoadFuncionarios() {
     // Convert MM/YYYY to MM-YYYY for URL (replace / with -)
     const mesForUrl = mes.replace('/', '-');
     
-    // First fetch commission data
-    fetch(`/lancamentos-funcionarios/get-comissoes/${clienteId}/${mesForUrl}`)
-        .then(response => {
-            if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
-            }
-            return response.json();
-        })
-        .then(data => {
-            comissoesData = data;
-            // Then fetch funcionarios
-            return fetch(`/lancamentos-funcionarios/get-funcionarios/${clienteId}`);
-        })
-        .then(response => {
-            if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
-            }
-            return response.json();
+    // Fetch commission data, loans data, and funcionarios in sequence
+    Promise.all([
+        fetch(`/lancamentos-funcionarios/get-comissoes/${clienteId}/${mesForUrl}`)
+            .then(r => {
+                console.log(`Fetching comissões: /lancamentos-funcionarios/get-comissoes/${clienteId}/${mesForUrl}`);
+                return r.json();
+            })
+            .then(data => {
+                console.log('Comissões recebidas:', data);
+                return data;
+            }),
+        fetch(`/lancamentos-funcionarios/get-funcionarios/${clienteId}`)
+            .then(r => {
+                console.log(`Fetching funcionários: /lancamentos-funcionarios/get-funcionarios/${clienteId}`);
+                return r.json();
+            })
+            .then(data => {
+                console.log('Funcionários recebidos:', data);
+                return data;
+            })
+    ])
+        .then(([comissoes, funcionarios]) => {
+            comissoesData = comissoes;
+            console.log('comissoesData atribuído:', comissoesData);
+            
+            // Fetch loans for each funcionario
+            const loanPromises = funcionarios.map(func => 
+                fetch(`/emprestimos/get-emprestimos-ativos/${func.id}/${mesForUrl}`)
+                    .then(r => {
+                        console.log(`[DEBUG] Fetching loans: /emprestimos/get-emprestimos-ativos/${func.id}/${mesForUrl}`);
+                        return r.json();
+                    })
+                    .then(loans => {
+                        console.log(`[DEBUG] Loans received for funcionario ${func.id}:`, loans);
+                        return { funcionarioId: func.id, loans };
+                    })
+                    .catch(e => {
+                        console.error(`Failed to fetch loans for funcionario ${func.id}:`, e);
+                        return { funcionarioId: func.id, loans: [] };
+                    })
+            );
+            
+            return Promise.all(loanPromises).then(loansData => {
+                // Build emprestimosData map
+                emprestimosData = {};
+                console.log('Dados de empréstimos recebidos:', loansData);
+                loansData.forEach(item => {
+                    if (item.loans && item.loans.length > 0) {
+                        // Calculate total loan deduction for this month
+                        const totalLoanDeduction = item.loans.reduce((sum, loan) => sum + loan.valor_parcela, 0);
+                        const loanInfo = item.loans.map(loan => 
+                            `${loan.numero_parcela}/${loan.quantidade_parcelas}`
+                        ).join(', ');
+                        emprestimosData[item.funcionarioId] = {
+                            valor: totalLoanDeduction,
+                            info: loanInfo
+                        };
+                        console.log(`Empréstimo para funcionário ${item.funcionarioId}:`, emprestimosData[item.funcionarioId]);
+                    }
+                });
+                console.log('emprestimosData final:', emprestimosData);
+                
+                return funcionarios;
+            });
         })
         .then(funcionarios => {
             const tbody = document.getElementById('funcionarios-tbody');
             tbody.innerHTML = '';
             
             funcionarios.forEach(func => {
+                console.log(`Processando funcionário: ${func.nome} (ID: ${func.id}, Tipo: ${func.tipo})`);
                 const row = document.createElement('tr');
                 const isMotorista = func.tipo === 'motorista';
+                
+                // Debug commission lookup
+                if (isMotorista) {
+                    console.log(`  - É motorista. Verificando comissão para ID ${func.id}`);
+                    console.log(`  - comissoesData completo:`, comissoesData);
+                    console.log(`  - comissoesData keys:`, Object.keys(comissoesData));
+                    console.log(`  - comissoesData[${func.id}]:`, comissoesData[func.id]);
+                    console.log(`  - comissoesData["${func.id}"]:`, comissoesData[String(func.id)]);
+                }
+                
                 const comissaoValue = isMotorista && comissoesData[func.id] ? comissoesData[func.id] : '';
+                const loanData = emprestimosData[func.id];
+                
+                if (isMotorista) {
+                    console.log(`  - Valor da comissão encontrado: ${comissaoValue}`);
+                }
+                if (loanData) {
+                    console.log(`  - Tem empréstimo. Valor: ${loanData.valor}, Info: ${loanData.info}`);
+                }
                 
                 row.innerHTML = `
                     <td>
@@ -232,14 +301,28 @@ function checkAndLoadFuncionarios() {
                     </td>
                     ${rubricas.map(rubrica => {
                         let defaultValue = '';
+                        let cellContent = '';
+                        let isReadonly = false;
                         
                         // Auto-fill salary base
                         if (rubrica.nome === 'SALÁRIO BASE' && func.salario_base) {
                             defaultValue = func.salario_base;
                         }
-                        // Auto-fill commission for motoristas
-                        else if (rubrica.nome === 'COMISSÃO' && isMotorista && comissaoValue) {
-                            defaultValue = comissaoValue;
+                        // Auto-fill commission for motoristas (readonly)
+                        else if (rubrica.nome === 'Comissão' && isMotorista) {
+                            if (comissaoValue) {
+                                // Convert from float to cents for formatCurrency (multiply by 100)
+                                defaultValue = Math.round(comissaoValue * 100);
+                            }
+                            isReadonly = true; // Motoristas cannot edit commission
+                        }
+                        // Auto-fill loans (EMPRÉSTIMOS) - readonly
+                        else if (rubrica.nome === 'EMPRÉSTIMOS' && loanData) {
+                            // loanData.valor is already a float with correct decimal places
+                            // Convert to cents by multiplying by 100 for formatCurrency
+                            defaultValue = Math.round(loanData.valor * 100);
+                            cellContent = `<small class="text-muted d-block">Parcela: ${loanData.info}</small>`;
+                            isReadonly = true; // Loans are always readonly (calculated from emprestimos)
                         }
                         
                         return `
@@ -247,13 +330,15 @@ function checkAndLoadFuncionarios() {
                             <input type="hidden" name="rubrica_${func.id}[]" value="${rubrica.id}">
                             <input type="text" 
                                    name="valor_${func.id}[]" 
-                                   class="form-control form-control-sm valor-input" 
+                                   class="form-control form-control-sm valor-input ${isReadonly ? 'bg-light' : ''}" 
                                    data-funcionario="${func.id}"
                                    data-rubrica-tipo="${rubrica.tipo}"
                                    data-rubrica-nome="${rubrica.nome}"
                                    placeholder="0,00"
                                    value="${defaultValue ? formatCurrency(defaultValue) : ''}"
-                                   data-raw-value="${defaultValue || '0'}">
+                                   data-raw-value="${defaultValue || '0'}"
+                                   ${isReadonly ? 'readonly' : ''}>
+                            ${cellContent}
                         </td>
                         `;
                     }).join('')}
@@ -263,6 +348,9 @@ function checkAndLoadFuncionarios() {
                 `;
                 tbody.appendChild(row);
             });
+            
+            // Create totals row in tfoot
+            createTotalsRow();
             
             // Show container and buttons
             document.getElementById('funcionarios-container').style.display = 'block';
@@ -314,6 +402,34 @@ function checkAndLoadFuncionarios() {
 document.getElementById('clienteid').addEventListener('change', checkAndLoadFuncionarios);
 document.getElementById('mes').addEventListener('change', checkAndLoadFuncionarios);
 
+function createTotalsRow() {
+    const tfoot = document.getElementById('funcionarios-tfoot');
+    tfoot.innerHTML = '';
+    
+    const row = document.createElement('tr');
+    
+    // First cell: "TOTAIS" label
+    row.innerHTML = `
+        <td colspan="2" class="text-end"><strong>TOTAIS:</strong></td>
+    `;
+    
+    // Add a total cell for each rubrica
+    rubricas.forEach(rubrica => {
+        const td = document.createElement('td');
+        td.className = 'text-center';
+        td.innerHTML = `<strong class="rubrica-total" data-rubrica="${rubrica.nome}">R$ 0,00</strong>`;
+        row.appendChild(td);
+    });
+    
+    // Add grand total cell
+    const grandTotalTd = document.createElement('td');
+    grandTotalTd.className = 'text-center';
+    grandTotalTd.innerHTML = `<strong id="grand-total-all">R$ 0,00</strong>`;
+    row.appendChild(grandTotalTd);
+    
+    tfoot.appendChild(row);
+}
+
 function calculateTotals() {
     // Calculate total for each funcionario
     const funcionariosIds = [...new Set(
@@ -323,6 +439,12 @@ function calculateTotals() {
     let grandTotalProventos = 0;
     let grandTotalDescontos = 0;
     let totalFuncionarios = funcionariosIds.length;
+    
+    // Initialize column totals
+    const rubricaTotals = {};
+    rubricas.forEach(rubrica => {
+        rubricaTotals[rubrica.nome] = 0;
+    });
     
     funcionariosIds.forEach(funcId => {
         const inputs = document.querySelectorAll(`.valor-input[data-funcionario="${funcId}"]`);
@@ -334,6 +456,12 @@ function calculateTotals() {
             const rawValue = parseFloat(input.dataset.rawValue) || 0;
             const valor = rawValue / 100; // Convert cents to reais
             const rubricaTipo = input.dataset.rubricaTipo;
+            const rubricaNome = input.dataset.rubricaNome;
+            
+            // Add to column total
+            if (rubricaNome && rubricaTotals.hasOwnProperty(rubricaNome)) {
+                rubricaTotals[rubricaNome] += valor;
+            }
             
             // Proventos: SALARIO, BENEFICIO
             // Descontos: DESCONTO, IMPOSTO, ADIANTAMENTO
@@ -356,6 +484,23 @@ function calculateTotals() {
         grandTotalProventos += totalProventos;
         grandTotalDescontos += totalDescontos;
     });
+    
+    // Update column totals in footer
+    rubricas.forEach(rubrica => {
+        const totalElement = document.querySelector(`.rubrica-total[data-rubrica="${rubrica.nome}"]`);
+        if (totalElement) {
+            const total = rubricaTotals[rubrica.nome];
+            totalElement.textContent = `R$ ${total.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+        }
+    });
+    
+    // Update grand total in footer (total of all TOTAL column)
+    const grandTotalElement = document.getElementById('grand-total-all');
+    if (grandTotalElement) {
+        const grandTotal = grandTotalProventos - grandTotalDescontos;
+        grandTotalElement.textContent = `R$ ${grandTotal.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+        grandTotalElement.style.color = grandTotal < 0 ? 'red' : 'green';
+    }
     
     // Update summary box
     document.getElementById('total-funcionarios').textContent = totalFuncionarios;

@@ -238,7 +238,7 @@ def get_comissoes(cliente_id, mes):
             logging.error(f"Error parsing month in get_comissoes: {str(e)}")
             return jsonify({})
         
-        # Get commission totals per motorista for the month
+        # Get commission totals per motorista for the month (across ALL clients)
         cursor.execute("""
             SELECT 
                 m.id as motorista_id,
@@ -248,11 +248,10 @@ def get_comissoes(cliente_id, mes):
             LEFT JOIN fretes f ON m.id = f.motoristas_id 
                 AND f.data_frete >= %s 
                 AND f.data_frete <= %s
-                AND f.id_cliente = %s
             WHERE m.paga_comissao = 1
             GROUP BY m.id, m.nome
             HAVING comissao_total > 0
-        """, (data_inicio, data_fim, cliente_id))
+        """, (data_inicio, data_fim))
         
         comissoes = cursor.fetchall()
         

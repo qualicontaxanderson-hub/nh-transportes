@@ -1,0 +1,179 @@
+{% extends 'base.html' %}
+{% block title %}Novo Empréstimo - {{ app_name }}{% endblock %}
+{% block content %}
+<div class="container-fluid">
+    <nav aria-label="breadcrumb" class="mt-2 mb-3">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="{{ url_for('index') }}">Dashboard</a></li>
+            <li class="breadcrumb-item"><a href="{{ url_for('emprestimos.lista') }}">Empréstimos</a></li>
+            <li class="breadcrumb-item active" aria-current="page">Novo Empréstimo</li>
+        </ol>
+    </nav>
+    
+    <h2 class="mb-3" style="color:#1D63A5;"><i class="bi bi-plus-circle"></i> Novo Empréstimo</h2>
+    
+    <div class="card shadow-sm">
+        <div class="card-header" style="background:#ff9800;color:white;">
+            <h5 class="mb-0">Dados do Empréstimo</h5>
+        </div>
+        <div class="card-body">
+            <form method="POST" id="emprestimoForm">
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label fw-bold">Funcionário *</label>
+                        <select name="funcionario_id" id="funcionario_id" class="form-select" required>
+                            <option value="">Selecione o funcionário...</option>
+                            {% for func in funcionarios %}
+                            <option value="{{ func.id }}" data-clienteid="{{ func.id_cliente }}">{{ func.nome }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label fw-bold">Cliente/Empresa *</label>
+                        <select name="cliente_id" id="cliente_id" class="form-select" required>
+                            <option value="">Selecione o cliente...</option>
+                            {% for cliente in clientes %}
+                            <option value="{{ cliente.id }}">{{ cliente.nome }}</option>
+                            {% endfor %}
+                        </select>
+                        <small class="text-muted">Será preenchido automaticamente ao selecionar o funcionário</small>
+                    </div>
+                </div>
+                
+                <div class="row">
+                    <div class="col-md-4 mb-3">
+                        <label class="form-label fw-bold">Data do Empréstimo *</label>
+                        <input type="date" name="data_emprestimo" class="form-control" required>
+                    </div>
+                    
+                    <div class="col-md-4 mb-3">
+                        <label class="form-label fw-bold">Mês Início Desconto *</label>
+                        <input type="text" name="mes_inicio_desconto" id="mes_inicio_desconto" 
+                               class="form-control" value="{{ mes_inicio_default }}" 
+                               placeholder="01/2026" required pattern="\d{2}/\d{4}" maxlength="7">
+                        <small class="text-muted">Formato: MM/AAAA</small>
+                    </div>
+                    
+                    <div class="col-md-4 mb-3">
+                        <label class="form-label fw-bold">Quantidade de Parcelas *</label>
+                        <input type="number" name="quantidade_parcelas" id="quantidade_parcelas" 
+                               class="form-control" min="1" max="60" required>
+                    </div>
+                </div>
+                
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label fw-bold">Valor Total *</label>
+                        <input type="text" name="valor_total" id="valor_total" 
+                               class="form-control" placeholder="0,00" required>
+                    </div>
+                    
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label fw-bold">Valor da Parcela</label>
+                        <input type="text" id="valor_parcela" class="form-control" readonly 
+                               placeholder="Será calculado automaticamente">
+                    </div>
+                </div>
+                
+                <div class="mb-3">
+                    <label class="form-label fw-bold">Descrição</label>
+                    <textarea name="descricao" class="form-control" rows="3" 
+                              placeholder="Motivo ou observações sobre o empréstimo"></textarea>
+                </div>
+                
+                <div class="alert alert-info">
+                    <i class="bi bi-info-circle"></i> 
+                    <strong>Importante:</strong> O valor será descontado automaticamente nos lançamentos mensais 
+                    do funcionário, iniciando no mês informado.
+                </div>
+                
+                <div class="d-flex justify-content-between">
+                    <a href="{{ url_for('emprestimos.lista') }}" class="btn btn-secondary">
+                        <i class="bi bi-arrow-left"></i> Voltar
+                    </a>
+                    <button type="submit" class="btn btn-success">
+                        <i class="bi bi-check-circle"></i> Salvar Empréstimo
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+// Currency formatting utilities
+function parseBrazilianCurrency(value) {
+    // Remove thousand separators (.) and replace decimal comma with dot
+    return parseFloat(value.replace(/\./g, '').replace(',', '.')) || 0;
+}
+
+function formatBrazilianCurrency(value) {
+    // Convert to number and format with Brazilian locale
+    const num = parseFloat(value);
+    if (isNaN(num)) return '';
+    return num.toLocaleString('pt-BR', {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+    });
+}
+
+// Auto-fill client when funcionario is selected
+document.getElementById('funcionario_id').addEventListener('change', function() {
+    const selectedOption = this.options[this.selectedIndex];
+    const clienteId = selectedOption.dataset.clienteid;
+    
+    if (clienteId) {
+        document.getElementById('cliente_id').value = clienteId;
+    }
+});
+
+// Calculate installment value
+function calculateParcela() {
+    const valorTotal = document.getElementById('valor_total').value;
+    const quantidadeParcelas = document.getElementById('quantidade_parcelas').value;
+    
+    if (valorTotal && quantidadeParcelas && quantidadeParcelas > 0) {
+        const valor = parseBrazilianCurrency(valorTotal);
+        const parcelas = parseInt(quantidadeParcelas);
+        
+        if (!isNaN(valor) && !isNaN(parcelas) && parcelas > 0) {
+            const valorParcela = valor / parcelas;
+            document.getElementById('valor_parcela').value = formatBrazilianCurrency(valorParcela);
+        }
+    }
+}
+
+document.getElementById('valor_total').addEventListener('input', calculateParcela);
+document.getElementById('quantidade_parcelas').addEventListener('input', calculateParcela);
+
+// Format month input
+document.getElementById('mes_inicio_desconto').addEventListener('input', function(e) {
+    let value = this.value.replace(/\D/g, '');
+    
+    if (value.length <= 2) {
+        this.value = value;
+    } else if (value.length <= 6) {
+        this.value = value.slice(0, 2) + '/' + value.slice(2);
+    }
+});
+
+// Format currency input
+document.getElementById('valor_total').addEventListener('input', function(e) {
+    let value = this.value.replace(/\D/g, '');
+    
+    if (value === '') {
+        this.value = '';
+        return;
+    }
+    
+    // Convert to number and format
+    value = (parseInt(value) / 100).toFixed(2);
+    value = value.replace('.', ',');
+    value = value.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+    
+    this.value = value;
+    calculateParcela();
+});
+</script>
+{% endblock %}

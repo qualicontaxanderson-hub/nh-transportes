@@ -52,7 +52,7 @@ INSERT INTO `rubricas` (`nome`, `descricao`, `tipo`, `percentualouvalorfixo`, `o
 ('13º SALÁRIO', '13º salário', 'BENEFICIO', 'VALOR_FIXO', 7),
 ('RESCISÃO', 'Rescisão contratual', 'OUTRO', 'VALOR_FIXO', 8),
 ('EMPRÉSTIMOS', 'Empréstimos e adiantamentos', 'DESCONTO', 'VALOR_FIXO', 9),
-('COMISSÃO', 'Comissão sobre vendas/fretes', 'BENEFICIO', 'VALOR_FIXO', 10),
+('Comissão', 'Comissão sobre vendas/fretes', 'BENEFICIO', 'VALOR_FIXO', 10),
 ('VALES', 'Vales e adiantamentos', 'ADIANTAMENTO', 'VALOR_FIXO', 11)
 ON DUPLICATE KEY UPDATE nome=nome;
 
