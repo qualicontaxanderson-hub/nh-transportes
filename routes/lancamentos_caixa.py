@@ -90,10 +90,21 @@ def lista():
             """)
         
         lancamentos = cursor.fetchall()
-        return render_template('lancamentos_caixa/lista.html', lancamentos=lancamentos)
+        
+        # Add a flag to indicate if we're using the old or new schema
+        has_new_schema = 'usuario_id' in columns and 'data' in columns and 'total_receitas' in columns
+        
+        return render_template('lancamentos_caixa/lista.html', 
+                             lancamentos=lancamentos,
+                             has_new_schema=has_new_schema)
     except Exception as e:
+        import traceback
+        error_details = traceback.format_exc()
+        print(f"Error in lancamentos_caixa lista: {error_details}")  # Log to console
         flash(f'Erro ao carregar lançamentos de caixa: {str(e)}', 'danger')
-        return render_template('lancamentos_caixa/lista.html', lancamentos=[])
+        return render_template('lancamentos_caixa/lista.html', 
+                             lancamentos=[],
+                             has_new_schema=False)
     finally:
         if cursor is not None:
             cursor.close()

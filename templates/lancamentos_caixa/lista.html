@@ -22,6 +22,12 @@
         </div>
         <div class="card-body" style="padding: 1rem;">
             {% if lancamentos %}
+            {% if not has_new_schema %}
+            <div class="alert alert-warning" role="alert">
+                <h6 class="alert-heading"><i class="bi bi-exclamation-triangle"></i> Lançamentos do Sistema Antigo</h6>
+                <p class="mb-0 small">Você está visualizando lançamentos individuais do sistema antigo. Para usar o sistema completo de <strong>Fechamento de Caixa</strong>, execute a migration SQL.</p>
+            </div>
+            {% endif %}
             <div class="table-responsive">
                 <table class="table table-hover table-sm">
                     <thead style="background:#f8f9fa;">
