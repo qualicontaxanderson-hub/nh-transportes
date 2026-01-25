@@ -64,7 +64,9 @@ def lista():
         has_new_schema = False
         try:
             cursor.execute("DESCRIBE lancamentos_caixa")
-            columns = [col[0] for col in cursor.fetchall()]
+            describe_results = cursor.fetchall()
+            # With dictionary=True, DESCRIBE returns dicts with 'Field' key
+            columns = [col['Field'] for col in describe_results]
             
             # Determine if this is the new schema
             has_new_schema = 'usuario_id' in columns and 'data' in columns and 'total_receitas' in columns
