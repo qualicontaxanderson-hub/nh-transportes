@@ -144,7 +144,8 @@ def novo():
         
         # Check which columns exist in the table
         cursor.execute("DESCRIBE lancamentos_caixa")
-        columns = [col[0] for col in cursor.fetchall()]
+        describe_results = cursor.fetchall()
+        columns = [col['Field'] for col in describe_results]
         has_new_schema = 'usuario_id' in columns and 'data' in columns and 'total_receitas' in columns
         
         if not has_new_schema:
@@ -266,7 +267,8 @@ def visualizar(id):
         
         # Check which columns exist in the table
         cursor.execute("DESCRIBE lancamentos_caixa")
-        columns = [col[0] for col in cursor.fetchall()]
+        describe_results = cursor.fetchall()
+        columns = [col['Field'] for col in describe_results]
         has_new_schema = 'usuario_id' in columns and 'data' in columns and 'total_receitas' in columns
 
         # Get lancamento
