@@ -59,12 +59,36 @@ def lista():
     try:
         conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)
-        cursor.execute("""
-            SELECT lc.*, u.username as usuario_nome
-            FROM lancamentos_caixa lc
-            LEFT JOIN usuarios u ON lc.usuario_id = u.id
-            ORDER BY lc.data DESC, lc.id DESC
-        """)
+        
+        # Check which columns exist in the table
+        cursor.execute("DESCRIBE lancamentos_caixa")
+        columns = [col[0] for col in cursor.fetchall()]
+        
+        # Build query based on available columns
+        if 'usuario_id' in columns and 'data' in columns:
+            # New schema with usuario_id and data
+            cursor.execute("""
+                SELECT lc.*, u.username as usuario_nome
+                FROM lancamentos_caixa lc
+                LEFT JOIN usuarios u ON lc.usuario_id = u.id
+                ORDER BY lc.data DESC, lc.id DESC
+            """)
+        elif 'data_movimento' in columns:
+            # Existing schema with data_movimento
+            cursor.execute("""
+                SELECT lc.*
+                FROM lancamentos_caixa lc
+                ORDER BY lc.data_movimento DESC, lc.id DESC
+                LIMIT 100
+            """)
+        else:
+            # Fallback - just get recent records
+            cursor.execute("""
+                SELECT * FROM lancamentos_caixa
+                ORDER BY id DESC
+                LIMIT 100
+            """)
+        
         lancamentos = cursor.fetchall()
         return render_template('lancamentos_caixa/lista.html', lancamentos=lancamentos)
     except Exception as e:
@@ -88,6 +112,15 @@ def novo():
     try:
         conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)
+        
+        # Check which columns exist in the table
+        cursor.execute("DESCRIBE lancamentos_caixa")
+        columns = [col[0] for col in cursor.fetchall()]
+        has_new_schema = 'usuario_id' in columns and 'data' in columns and 'total_receitas' in columns
+        
+        if not has_new_schema:
+            flash('Esta funcionalidade requer a execução da migration SQL. O schema atual do banco não é compatível com o sistema de Fechamento de Caixa.', 'warning')
+            return redirect(url_for('lancamentos_caixa.lista'))
         
         if request.method == 'POST':
             # Get main data
@@ -201,18 +234,34 @@ def visualizar(id):
     try:
         conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)
+        
+        # Check which columns exist in the table
+        cursor.execute("DESCRIBE lancamentos_caixa")
+        columns = [col[0] for col in cursor.fetchall()]
+        has_new_schema = 'usuario_id' in columns and 'data' in columns and 'total_receitas' in columns
 
         # Get lancamento
-        cursor.execute("""
-            SELECT lc.*, u.username as usuario_nome
-            FROM lancamentos_caixa lc
-            LEFT JOIN usuarios u ON lc.usuario_id = u.id
-            WHERE lc.id = %s
-        """, (id,))
+        if has_new_schema:
+            cursor.execute("""
+                SELECT lc.*, u.username as usuario_nome
+                FROM lancamentos_caixa lc
+                LEFT JOIN usuarios u ON lc.usuario_id = u.id
+                WHERE lc.id = %s
+            """, (id,))
+        else:
+            cursor.execute("""
+                SELECT * FROM lancamentos_caixa
+                WHERE id = %s
+            """, (id,))
+        
         lancamento = cursor.fetchone()
         
         if not lancamento:
             flash('Lançamento de caixa não encontrado!', 'danger')
+            return redirect(url_for('lancamentos_caixa.lista'))
+        
+        if not has_new_schema:
+            flash('Esta funcionalidade de visualização requer a execução da migration SQL. O schema atual não é compatível.', 'warning')
             return redirect(url_for('lancamentos_caixa.lista'))
         
         # Get receitas

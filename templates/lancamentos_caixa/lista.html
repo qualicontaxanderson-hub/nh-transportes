@@ -28,11 +28,17 @@
                         <tr>
                             <th style="font-size: 0.85rem;">ID</th>
                             <th style="font-size: 0.85rem;">Data</th>
+                            {% if lancamentos[0].get('total_receitas') is defined %}
                             <th style="font-size: 0.85rem;">Total Receitas</th>
                             <th style="font-size: 0.85rem;">Total Comprovação</th>
                             <th style="font-size: 0.85rem;">Diferença</th>
                             <th style="font-size: 0.85rem;">Status</th>
                             <th style="font-size: 0.85rem;">Usuário</th>
+                            {% else %}
+                            <th style="font-size: 0.85rem;">Tipo</th>
+                            <th style="font-size: 0.85rem;">Descrição</th>
+                            <th style="font-size: 0.85rem;">Valor</th>
+                            {% endif %}
                             <th style="font-size: 0.85rem;">Ações</th>
                         </tr>
                     </thead>
@@ -40,7 +46,16 @@
                         {% for lanc in lancamentos %}
                         <tr>
                             <td style="font-size: 0.85rem;">{{ lanc.id }}</td>
-                            <td style="font-size: 0.85rem;">{{ lanc.data.strftime('%d/%m/%Y') if lanc.data else '' }}</td>
+                            <td style="font-size: 0.85rem;">
+                                {% if lanc.data %}
+                                    {{ lanc.data.strftime('%d/%m/%Y') }}
+                                {% elif lanc.data_movimento %}
+                                    {{ lanc.data_movimento.strftime('%d/%m/%Y') }}
+                                {% else %}
+                                    -
+                                {% endif %}
+                            </td>
+                            {% if lanc.get('total_receitas') is not none %}
                             <td style="font-size: 0.85rem;">R$ {{ "%.2f"|format(lanc.total_receitas|float) }}</td>
                             <td style="font-size: 0.85rem;">R$ {{ "%.2f"|format(lanc.total_comprovacao|float) }}</td>
                             <td style="font-size: 0.85rem;" class="{% if lanc.diferenca|float < 0 %}text-danger{% elif lanc.diferenca|float > 0 %}text-warning{% else %}text-success{% endif %}">
@@ -54,7 +69,19 @@
                                 {% endif %}
                             </td>
                             <td style="font-size: 0.85rem;">{{ lanc.usuario_nome if lanc.usuario_nome else '-' }}</td>
+                            {% else %}
                             <td style="font-size: 0.85rem;">
+                                {% if lanc.tipo %}
+                                <span class="badge bg-{% if lanc.tipo == 'ENTRADA' %}success{% else %}danger{% endif %}">{{ lanc.tipo }}</span>
+                                {% else %}
+                                -
+                                {% endif %}
+                            </td>
+                            <td style="font-size: 0.85rem;">{{ lanc.descricao if lanc.descricao else '-' }}</td>
+                            <td style="font-size: 0.85rem;">R$ {{ "%.2f"|format(lanc.valor|float) if lanc.valor else '0.00' }}</td>
+                            {% endif %}
+                            <td style="font-size: 0.85rem;">
+                                {% if lanc.get('total_receitas') is not none %}
                                 <a href="{{ url_for('lancamentos_caixa.visualizar', id=lanc.id) }}" class="btn btn-info btn-sm" title="Visualizar">
                                     <i class="bi bi-eye"></i>
                                 </a>
@@ -63,6 +90,9 @@
                                         <i class="bi bi-trash"></i>
                                     </button>
                                 </form>
+                                {% else %}
+                                <span class="text-muted small">Lançamento antigo</span>
+                                {% endif %}
                             </td>
                         </tr>
                         {% endfor %}
@@ -70,7 +100,13 @@
                 </table>
             </div>
             {% else %}
-            <p class="text-center text-muted" style="margin: 2rem 0;">Nenhum lançamento cadastrado.</p>
+            <div class="alert alert-info" role="alert">
+                <h5 class="alert-heading"><i class="bi bi-info-circle"></i> Sistema de Fechamento de Caixa</h5>
+                <p>Para usar este sistema, você precisa executar a migration SQL que cria a estrutura completa.</p>
+                <hr>
+                <p class="mb-0">Execute: <code>mysql -u usuario -p database &lt; migrations/20260121_add_caixa_tables.sql</code></p>
+                <p class="mb-0 mt-2">Consulte o arquivo <strong>CAIXA_SETUP_GUIDE.md</strong> para mais informações.</p>
+            </div>
             {% endif %}
         </div>
     </div>
