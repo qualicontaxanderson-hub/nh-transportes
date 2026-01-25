@@ -60,9 +60,18 @@ def lista():
         conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)
         
-        # Check which columns exist in the table
-        cursor.execute("DESCRIBE lancamentos_caixa")
-        columns = [col[0] for col in cursor.fetchall()]
+        # Check if table exists first
+        try:
+            cursor.execute("DESCRIBE lancamentos_caixa")
+            columns = [col[0] for col in cursor.fetchall()]
+        except Exception as table_error:
+            # Table doesn't exist at all
+            if "doesn't exist" in str(table_error) or "1146" in str(table_error):
+                return render_template('lancamentos_caixa/lista.html', 
+                                     lancamentos=[],
+                                     has_new_schema=False)
+            else:
+                raise  # Re-raise if it's a different error
         
         # Build query based on available columns
         if 'usuario_id' in columns and 'data' in columns:
@@ -101,7 +110,9 @@ def lista():
         import traceback
         error_details = traceback.format_exc()
         print(f"Error in lancamentos_caixa lista: {error_details}")  # Log to console
-        flash(f'Erro ao carregar lançamentos de caixa: {str(e)}', 'danger')
+        # Don't show the error message to user if table doesn't exist - that's expected
+        if "doesn't exist" not in str(e) and "1146" not in str(e):
+            flash(f'Erro ao carregar lançamentos de caixa: {str(e)}', 'danger')
         return render_template('lancamentos_caixa/lista.html', 
                              lancamentos=[],
                              has_new_schema=False)
