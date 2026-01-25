@@ -54,12 +54,16 @@ def lista():
     try:
         conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)
-        cursor.execute("SELECT * FROM formas_pagamento_caixa ORDER BY tipo, nome")
+        cursor.execute("SELECT * FROM formas_pagamento_caixa ORDER BY nome")
         formas_pagamento = cursor.fetchall()
         
-        # Add friendly type names
+        # Add tipo field if it doesn't exist (for compatibility)
         for forma in formas_pagamento:
-            forma['tipo_nome'] = VALID_TIPOS.get(forma['tipo'], forma['tipo'])
+            if 'tipo' not in forma or forma['tipo'] is None:
+                forma['tipo'] = ''
+                forma['tipo_nome'] = ''
+            else:
+                forma['tipo_nome'] = VALID_TIPOS.get(forma['tipo'], forma['tipo'])
         
         return render_template('caixa/lista.html', formas_pagamento=formas_pagamento, tipos=VALID_TIPOS)
     except Exception as e:
@@ -83,12 +87,13 @@ def novo():
         tipo = request.form.get('tipo', '')
         ativo = request.form.get('ativo', '1')
 
-        # Validate input
-        is_valid, validation_errors = validate_forma_pagamento_input(nome, tipo)
+        # Basic validation for nome only (tipo might not exist in schema)
+        if not nome:
+            flash('Nome é obrigatório e não pode conter apenas espaços em branco.', 'danger')
+            return render_template('caixa/novo.html', nome=nome, tipo=tipo, ativo=ativo, tipos=VALID_TIPOS)
         
-        if not is_valid:
-            for message in validation_errors:
-                flash(message, 'danger')
+        if len(nome) > MAX_NOME_LENGTH:
+            flash(f'Nome deve ter no máximo {MAX_NOME_LENGTH} caracteres.', 'danger')
             return render_template('caixa/novo.html', nome=nome, tipo=tipo, ativo=ativo, tipos=VALID_TIPOS)
 
         conn = None
@@ -96,10 +101,25 @@ def novo():
         try:
             conn = get_db_connection()
             cursor = conn.cursor()
-            cursor.execute("""
-                INSERT INTO formas_pagamento_caixa (nome, tipo, ativo)
-                VALUES (%s, %s, %s)
-            """, (nome, tipo, int(ativo)))
+            
+            # Check if tipo column exists in the table
+            cursor.execute("DESCRIBE formas_pagamento_caixa")
+            columns = [col[0] for col in cursor.fetchall()]
+            has_tipo = 'tipo' in columns
+            
+            if has_tipo and tipo:
+                # Insert with tipo if column exists and tipo is provided
+                cursor.execute("""
+                    INSERT INTO formas_pagamento_caixa (nome, tipo, ativo)
+                    VALUES (%s, %s, %s)
+                """, (nome, tipo, int(ativo)))
+            else:
+                # Insert without tipo if column doesn't exist
+                cursor.execute("""
+                    INSERT INTO formas_pagamento_caixa (nome, ativo)
+                    VALUES (%s, %s)
+                """, (nome, int(ativo)))
+            
             conn.commit()
             flash('Forma de pagamento cadastrada com sucesso!', 'success')
             return redirect(url_for('caixa.lista'))
@@ -133,23 +153,42 @@ def editar(id):
             tipo = request.form.get('tipo', '')
             ativo = request.form.get('ativo', '1')
 
-            # Validate input
-            is_valid, validation_errors = validate_forma_pagamento_input(nome, tipo)
+            # Basic validation for nome only
+            if not nome:
+                flash('Nome é obrigatório e não pode conter apenas espaços em branco.', 'danger')
+                cursor.execute("SELECT * FROM formas_pagamento_caixa WHERE id = %s", (id,))
+                forma_pagamento = cursor.fetchone()
+                return render_template('caixa/editar.html', forma_pagamento=forma_pagamento, tipos=VALID_TIPOS)
             
-            if not is_valid:
-                for message in validation_errors:
-                    flash(message, 'danger')
+            if len(nome) > MAX_NOME_LENGTH:
+                flash(f'Nome deve ter no máximo {MAX_NOME_LENGTH} caracteres.', 'danger')
                 cursor.execute("SELECT * FROM formas_pagamento_caixa WHERE id = %s", (id,))
                 forma_pagamento = cursor.fetchone()
                 return render_template('caixa/editar.html', forma_pagamento=forma_pagamento, tipos=VALID_TIPOS)
 
-            cursor.execute("""
-                UPDATE formas_pagamento_caixa 
-                SET nome = %s,
-                    tipo = %s,
-                    ativo = %s
-                WHERE id = %s
-            """, (nome, tipo, int(ativo), id))
+            # Check if tipo column exists in the table
+            cursor.execute("DESCRIBE formas_pagamento_caixa")
+            columns = [col[0] for col in cursor.fetchall()]
+            has_tipo = 'tipo' in columns
+            
+            if has_tipo and tipo:
+                # Update with tipo if column exists and tipo is provided
+                cursor.execute("""
+                    UPDATE formas_pagamento_caixa 
+                    SET nome = %s,
+                        tipo = %s,
+                        ativo = %s
+                    WHERE id = %s
+                """, (nome, tipo, int(ativo), id))
+            else:
+                # Update without tipo if column doesn't exist
+                cursor.execute("""
+                    UPDATE formas_pagamento_caixa 
+                    SET nome = %s,
+                        ativo = %s
+                    WHERE id = %s
+                """, (nome, int(ativo), id))
+            
             conn.commit()
             flash('Forma de pagamento atualizada com sucesso!', 'success')
             return redirect(url_for('caixa.lista'))
@@ -160,6 +199,10 @@ def editar(id):
         if not forma_pagamento:
             flash('Forma de pagamento não encontrada!', 'danger')
             return redirect(url_for('caixa.lista'))
+        
+        # Add tipo field if it doesn't exist (for compatibility)
+        if 'tipo' not in forma_pagamento:
+            forma_pagamento['tipo'] = ''
         
         return render_template('caixa/editar.html', forma_pagamento=forma_pagamento, tipos=VALID_TIPOS)
     except Exception as e:

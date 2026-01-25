@@ -39,7 +39,11 @@
                             <td style="font-size: 0.85rem;">{{ forma.id }}</td>
                             <td style="font-size: 0.85rem;">{{ forma.nome }}</td>
                             <td style="font-size: 0.85rem;">
+                                {% if forma.tipo_nome %}
                                 <span class="badge bg-info">{{ forma.tipo_nome }}</span>
+                                {% else %}
+                                <span class="text-muted">-</span>
+                                {% endif %}
                             </td>
                             <td style="font-size: 0.85rem;">
                                 {% if forma.ativo %}

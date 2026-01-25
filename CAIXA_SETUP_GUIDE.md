@@ -8,13 +8,21 @@ O sistema de Fechamento de Caixa foi adicionado ao sistema NH Transportes. Este 
 
 ### Passo 1: Executar a Migration
 
-Execute o arquivo de migration SQL no seu banco de dados:
+**Se você ainda NÃO tem as tabelas criadas**, execute o arquivo de migration SQL no seu banco de dados:
 
 ```bash
 mysql -u seu_usuario -p seu_banco_de_dados < migrations/20260121_add_caixa_tables.sql
 ```
 
-Ou execute manualmente o conteúdo do arquivo `migrations/20260121_add_caixa_tables.sql` no seu cliente MySQL.
+**Se você JÁ tem as tabelas criadas mas está com erro "Unknown column 'tipo'"**, execute a migration de compatibilidade:
+
+```bash
+mysql -u seu_usuario -p seu_banco_de_dados < migrations/20260125_alter_formas_pagamento_add_tipo.sql
+```
+
+Esta migration adiciona a coluna `tipo` à tabela existente sem perder seus dados.
+
+Ou execute manualmente o conteúdo dos arquivos no seu cliente MySQL.
 
 ### Tabelas Criadas
 
@@ -117,6 +125,14 @@ Se você vai registrar despesas no fechamento:
 - Faça backup do banco de dados antes de executar a migration
 
 ## 🆘 Solução de Problemas
+
+### Erro: "Unknown column 'tipo' in 'order clause'"
+- **Causa**: A tabela `formas_pagamento_caixa` foi criada sem a coluna `tipo`
+- **Solução**: Execute a migration de compatibilidade:
+  ```bash
+  mysql -u seu_usuario -p seu_banco_de_dados < migrations/20260125_alter_formas_pagamento_add_tipo.sql
+  ```
+  Esta migration adiciona a coluna `tipo` sem perder seus dados existentes.
 
 ### Erro: "Table doesn't exist"
 - **Causa**: Migration não foi executada
