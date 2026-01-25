@@ -130,6 +130,74 @@ def lista():
             conn.close()
 
 
+@bp.route('/api/vendas_dia', methods=['GET'])
+@login_required
+def get_vendas_dia():
+    """API endpoint to get sales totals for a specific date and client"""
+    conn = None
+    cursor = None
+    
+    try:
+        cliente_id = request.args.get('cliente_id')
+        data = request.args.get('data')
+        
+        if not cliente_id or not data:
+            return jsonify({'error': 'cliente_id e data são obrigatórios'}), 400
+        
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+        
+        result = {
+            'vendas_posto': 0,
+            'arla': 0,
+            'lubrificantes': 0
+        }
+        
+        # Get Vendas Posto total
+        cursor.execute("""
+            SELECT COALESCE(SUM(valor_total), 0) as total
+            FROM vendas_posto
+            WHERE cliente_id = %s AND data_movimento = %s
+        """, (cliente_id, data))
+        vendas_posto = cursor.fetchone()
+        if vendas_posto:
+            result['vendas_posto'] = float(vendas_posto['total'])
+        
+        # Get ARLA total (quantidade_vendida * preco_venda_aplicado)
+        cursor.execute("""
+            SELECT COALESCE(SUM(quantidade_vendida * preco_venda_aplicado), 0) as total
+            FROM arla_lancamentos
+            WHERE cliente_id = %s AND data = %s
+        """, (cliente_id, data))
+        arla = cursor.fetchone()
+        if arla:
+            result['arla'] = float(arla['total'])
+        
+        # Get Lubrificantes total (check if lubrificantes_lancamentos exists)
+        try:
+            cursor.execute("""
+                SELECT COALESCE(SUM(quantidade * preco_venda), 0) as total
+                FROM lubrificantes_lancamentos
+                WHERE cliente_id = %s AND data = %s
+            """, (cliente_id, data))
+            lubr = cursor.fetchone()
+            if lubr:
+                result['lubrificantes'] = float(lubr['total'])
+        except:
+            # Table doesn't exist or has different structure, leave as 0
+            pass
+        
+        return jsonify(result)
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+    finally:
+        if cursor is not None:
+            cursor.close()
+        if conn is not None:
+            conn.close()
+
+
 @bp.route('/novo', methods=['GET', 'POST'])
 @login_required
 @admin_required
@@ -155,6 +223,7 @@ def novo():
         if request.method == 'POST':
             # Get main data
             data = request.form.get('data', '')
+            cliente_id = request.form.get('cliente_id', '')
             observacao = request.form.get('observacao', '').strip()
             
             # Get receitas (left side) - JSON encoded
@@ -170,6 +239,10 @@ def novo():
                 flash('Data é obrigatória!', 'danger')
                 raise ValueError('Data não fornecida')
             
+            if not cliente_id:
+                flash('Cliente é obrigatório!', 'danger')
+                raise ValueError('Cliente não fornecido')
+            
             # Calculate totals
             total_receitas = sum(parse_brazilian_currency(r.get('valor', 0)) for r in receitas)
             total_comprovacao = sum(parse_brazilian_currency(c.get('valor', 0)) for c in comprovacoes)
@@ -178,9 +251,9 @@ def novo():
             # Insert lancamento_caixa
             cursor.execute("""
                 INSERT INTO lancamentos_caixa 
-                (data, usuario_id, observacao, total_receitas, total_comprovacao, diferenca, status)
-                VALUES (%s, %s, %s, %s, %s, %s, 'ABERTO')
-            """, (data, current_user.id, observacao if observacao else None, 
+                (data, cliente_id, usuario_id, observacao, total_receitas, total_comprovacao, diferenca, status)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, 'ABERTO')
+            """, (data, int(cliente_id), current_user.id, observacao if observacao else None, 
                   float(total_receitas), float(total_comprovacao), float(diferenca)))
             
             lancamento_id = cursor.lastrowid
@@ -217,19 +290,40 @@ def novo():
             return redirect(url_for('lancamentos_caixa.lista'))
 
         # GET request - load data for dropdown
+        # Get active clients
+        cursor.execute("SELECT id, nome_fantasia FROM clientes WHERE ativo = 1 ORDER BY nome_fantasia")
+        clientes = cursor.fetchall()
+        
+        # Get payment methods
         cursor.execute("SELECT * FROM formas_pagamento_caixa WHERE ativo = 1 ORDER BY nome")
         formas_pagamento = cursor.fetchall()
         
+        # Get card brands
         cursor.execute("SELECT * FROM bandeiras_cartao WHERE ativo = 1 ORDER BY nome")
         cartoes = cursor.fetchall()
         
-        # Default to today's date
-        hoje = datetime.now().strftime('%Y-%m-%d')
+        # Get last closure date to suggest next date
+        cursor.execute("""
+            SELECT MAX(data) as ultima_data 
+            FROM lancamentos_caixa
+        """)
+        ultima_data_row = cursor.fetchone()
+        
+        # Suggest next date
+        if ultima_data_row and ultima_data_row['ultima_data']:
+            from datetime import timedelta
+            ultima_data = ultima_data_row['ultima_data']
+            proxima_data = (ultima_data + timedelta(days=1)).strftime('%Y-%m-%d')
+        else:
+            # Default to today's date
+            proxima_data = datetime.now().strftime('%Y-%m-%d')
+        
         return render_template('lancamentos_caixa/novo.html', 
+                             clientes=clientes,
                              formas_pagamento=formas_pagamento,
                              cartoes=cartoes,
                              tipos_receita=TIPOS_RECEITA,
-                             data=hoje)
+                             data=proxima_data)
         
     except Exception as e:
         if conn:
@@ -237,11 +331,14 @@ def novo():
         flash(f'Erro ao cadastrar lançamento de caixa: {str(e)}', 'danger')
         # Try to get data for re-rendering form
         try:
+            cursor.execute("SELECT id, nome_fantasia FROM clientes WHERE ativo = 1 ORDER BY nome_fantasia")
+            clientes = cursor.fetchall()
             cursor.execute("SELECT * FROM formas_pagamento_caixa WHERE ativo = 1 ORDER BY nome")
             formas_pagamento = cursor.fetchall()
             cursor.execute("SELECT * FROM bandeiras_cartao WHERE ativo = 1 ORDER BY nome")
             cartoes = cursor.fetchall()
             return render_template('lancamentos_caixa/novo.html', 
+                                 clientes=clientes,
                                  formas_pagamento=formas_pagamento,
                                  cartoes=cartoes,
                                  tipos_receita=TIPOS_RECEITA)

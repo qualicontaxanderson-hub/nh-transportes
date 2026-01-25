@@ -20,12 +20,21 @@
             </div>
             <div class="card-body" style="padding: 1rem;">
                 <div class="row">
+                    <div class="col-md-4 mb-3">
+                        <label class="form-label" style="font-size: 0.85rem;">Cliente *</label>
+                        <select name="cliente_id" id="cliente_id" class="form-select form-select-sm" required onchange="loadVendasDia()">
+                            <option value="">Selecione o cliente...</option>
+                            {% for cliente in clientes %}
+                            <option value="{{ cliente.id }}">{{ cliente.nome_fantasia }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
                     <div class="col-md-3 mb-3">
                         <label class="form-label" style="font-size: 0.85rem;">Data *</label>
                         <input type="date" name="data" id="data" class="form-control form-control-sm" required 
-                               value="{{ data if data else '' }}">
+                               value="{{ data if data else '' }}" onchange="loadVendasDia()">
                     </div>
-                    <div class="col-md-9 mb-3">
+                    <div class="col-md-5 mb-3">
                         <label class="form-label" style="font-size: 0.85rem;">Observação</label>
                         <input type="text" name="observacao" class="form-control form-control-sm" 
                                placeholder="Observações sobre o fechamento do caixa">
@@ -157,6 +166,9 @@ const tiposReceita = {{ tipos_receita|tojson }};
 const formasPagamento = {{ formas_pagamento|tojson }};
 const cartoes = {{ cartoes|tojson }};
 
+// Track auto-filled receitas
+const autoFilledTypes = ['VENDAS_POSTO', 'ARLA', 'LUBRIFICANTES'];
+
 function formatCurrency(value) {
     return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
 }
@@ -175,6 +187,105 @@ function parseCurrency(value) {
     }
     
     return parseFloat(cleanValue) || 0;
+}
+
+function loadVendasDia() {
+    const clienteId = document.getElementById('cliente_id').value;
+    const data = document.getElementById('data').value;
+    
+    if (!clienteId || !data) {
+        return;
+    }
+    
+    // Show loading indicator
+    const container = document.getElementById('receitas-container');
+    const loadingMsg = document.createElement('div');
+    loadingMsg.id = 'loading-vendas';
+    loadingMsg.className = 'alert alert-info';
+    loadingMsg.innerHTML = '<i class="bi bi-hourglass-split"></i> Carregando vendas do dia...';
+    container.insertBefore(loadingMsg, container.firstChild);
+    
+    // Fetch vendas data
+    fetch(`{{ url_for('lancamentos_caixa.get_vendas_dia') }}?cliente_id=${clienteId}&data=${data}`)
+        .then(response => response.json())
+        .then(data => {
+            // Remove loading indicator
+            const loading = document.getElementById('loading-vendas');
+            if (loading) loading.remove();
+            
+            // Clear existing auto-filled items
+            document.querySelectorAll('.receita-item').forEach(item => {
+                const tipoSelect = item.querySelector('.receita-tipo');
+                if (tipoSelect && autoFilledTypes.includes(tipoSelect.value)) {
+                    item.remove();
+                }
+            });
+            
+            // Add Vendas Posto if > 0
+            if (data.vendas_posto > 0) {
+                addReceitaAutoFilled('VENDAS_POSTO', 'Vendas do Posto', data.vendas_posto);
+            }
+            
+            // Add ARLA if > 0
+            if (data.arla > 0) {
+                addReceitaAutoFilled('ARLA', 'ARLA', data.arla);
+            }
+            
+            // Add Lubrificantes if > 0
+            if (data.lubrificantes > 0) {
+                addReceitaAutoFilled('LUBRIFICANTES', 'Lubrificantes', data.lubrificantes);
+            }
+            
+            calcularTotais();
+        })
+        .catch(error => {
+            const loading = document.getElementById('loading-vendas');
+            if (loading) loading.remove();
+            console.error('Erro ao carregar vendas:', error);
+        });
+}
+
+function addReceitaAutoFilled(tipo, descricao, valor) {
+    const container = document.getElementById('receitas-container');
+    const item = document.createElement('div');
+    item.className = 'receita-item receita-auto-filled';
+    item.id = `receita-${receitaIndex}`;
+    
+    let tiposOptions = '<option value="">Selecione...</option>';
+    for (const [key, value] of Object.entries(tiposReceita)) {
+        const selected = key === tipo ? 'selected' : '';
+        tiposOptions += `<option value="${key}" ${selected}>${value}</option>`;
+    }
+    
+    const valorFormatted = formatCurrency(valor);
+    
+    item.innerHTML = `
+        <div class="row">
+            <div class="col-md-4 mb-2">
+                <label class="form-label" style="font-size: 0.75rem;">Tipo</label>
+                <select class="form-select form-select-sm receita-tipo" data-index="${receitaIndex}" disabled>
+                    ${tiposOptions}
+                </select>
+                <input type="hidden" class="receita-tipo-hidden" data-index="${receitaIndex}" value="${tipo}">
+            </div>
+            <div class="col-md-5 mb-2">
+                <label class="form-label" style="font-size: 0.75rem;">Descrição</label>
+                <input type="text" class="form-control form-control-sm receita-descricao" data-index="${receitaIndex}" 
+                       value="${descricao}" readonly>
+            </div>
+            <div class="col-md-2 mb-2">
+                <label class="form-label" style="font-size: 0.75rem;">Valor</label>
+                <input type="text" class="form-control form-control-sm receita-valor" data-index="${receitaIndex}" 
+                       value="${valorFormatted}" readonly style="background-color: #e9ecef;">
+            </div>
+            <div class="col-md-1 mb-2 d-flex align-items-end">
+                <span class="badge bg-info">Auto</span>
+            </div>
+        </div>
+    `;
+    
+    container.appendChild(item);
+    receitaIndex++;
 }
 
 function addReceita() {
@@ -233,7 +344,7 @@ function addComprovacao() {
     
     let formasOptions = '<option value="">Selecione...</option>';
     formasPagamento.forEach(forma => {
-        formasOptions += `<option value="${forma.id}">${forma.nome}</option>`;
+        formasOptions += `<option value="${forma.id}" data-tipo="${forma.tipo || ''}">${forma.nome}</option>`;
     });
     
     let cartoesOptions = '<option value="">Nenhum</option>';
@@ -241,31 +352,39 @@ function addComprovacao() {
         cartoesOptions += `<option value="${cartao.id}">${cartao.nome} (${cartao.tipo})</option>`;
     });
     
+    const currentIndex = comprovacaoIndex;
+    
     item.innerHTML = `
         <div class="row">
-            <div class="col-md-4 mb-2">
-                <label class="form-label" style="font-size: 0.75rem;">Forma Pagamento</label>
-                <select class="form-select form-select-sm comprovacao-forma" data-index="${comprovacaoIndex}">
+            <div class="col-md-3 mb-2">
+                <label class="form-label" style="font-size: 0.75rem;">
+                    Forma Pagamento
+                    <a href="{{ url_for('caixa.novo') }}" target="_blank" class="text-primary" title="Adicionar nova forma de pagamento">
+                        <i class="bi bi-plus-circle-fill"></i>
+                    </a>
+                </label>
+                <select class="form-select form-select-sm comprovacao-forma" data-index="${currentIndex}" 
+                        onchange="toggleCartaoField(${currentIndex})">
                     ${formasOptions}
                 </select>
             </div>
-            <div class="col-md-3 mb-2">
+            <div class="col-md-3 mb-2 cartao-field" id="cartao-field-${currentIndex}" style="display: none;">
                 <label class="form-label" style="font-size: 0.75rem;">Cartão</label>
-                <select class="form-select form-select-sm comprovacao-cartao" data-index="${comprovacaoIndex}">
+                <select class="form-select form-select-sm comprovacao-cartao" data-index="${currentIndex}">
                     ${cartoesOptions}
                 </select>
             </div>
             <div class="col-md-2 mb-2">
                 <label class="form-label" style="font-size: 0.75rem;">Valor</label>
-                <input type="text" class="form-control form-control-sm comprovacao-valor" data-index="${comprovacaoIndex}" 
+                <input type="text" class="form-control form-control-sm comprovacao-valor" data-index="${currentIndex}" 
                        placeholder="0,00" onchange="calcularTotais()">
             </div>
-            <div class="col-md-2 mb-2">
+            <div class="col-md-3 mb-2">
                 <label class="form-label" style="font-size: 0.75rem;">Descrição</label>
-                <input type="text" class="form-control form-control-sm comprovacao-descricao" data-index="${comprovacaoIndex}">
+                <input type="text" class="form-control form-control-sm comprovacao-descricao" data-index="${currentIndex}">
             </div>
             <div class="col-md-1 mb-2 d-flex align-items-end">
-                <button type="button" class="btn btn-danger btn-sm" onclick="removeComprovacao(${comprovacaoIndex})">
+                <button type="button" class="btn btn-danger btn-sm" onclick="removeComprovacao(${currentIndex})">
                     <i class="bi bi-trash"></i>
                 </button>
             </div>
@@ -274,6 +393,26 @@ function addComprovacao() {
     
     container.appendChild(item);
     comprovacaoIndex++;
+}
+
+function toggleCartaoField(index) {
+    const formaSelect = document.querySelector(`.comprovacao-forma[data-index="${index}"]`);
+    const cartaoField = document.getElementById(`cartao-field-${index}`);
+    
+    if (!formaSelect || !cartaoField) return;
+    
+    const selectedOption = formaSelect.options[formaSelect.selectedIndex];
+    const tipo = selectedOption.getAttribute('data-tipo') || '';
+    
+    // Show cartao field only if tipo contains 'CARTAO' or is related to cards
+    const isCartao = tipo && (
+        tipo.toUpperCase().includes('CARTAO') || 
+        tipo.toUpperCase().includes('CART') || 
+        tipo.toUpperCase().includes('DEBITO') || 
+        tipo.toUpperCase().includes('CREDITO')
+    );
+    
+    cartaoField.style.display = isCartao ? 'block' : 'none';
 }
 
 function removeComprovacao(index) {
@@ -319,11 +458,21 @@ function calcularTotais() {
 }
 
 document.getElementById('formCaixa').addEventListener('submit', function(e) {
-    // Collect receitas
+    // Collect receitas (including auto-filled ones)
     const receitas = [];
     document.querySelectorAll('.receita-item').forEach(item => {
-        const index = item.querySelector('.receita-tipo').dataset.index;
-        const tipo = item.querySelector('.receita-tipo').value;
+        const index = item.querySelector('.receita-tipo, .receita-tipo-hidden').dataset.index;
+        let tipo = '';
+        
+        // Check if it's an auto-filled item (has hidden input)
+        const hiddenInput = item.querySelector('.receita-tipo-hidden');
+        if (hiddenInput) {
+            tipo = hiddenInput.value;
+        } else {
+            const tipoSelect = item.querySelector('.receita-tipo');
+            if (tipoSelect) tipo = tipoSelect.value;
+        }
+        
         const descricao = item.querySelector('.receita-descricao').value;
         const valor = item.querySelector('.receita-valor').value;
         
@@ -337,7 +486,8 @@ document.getElementById('formCaixa').addEventListener('submit', function(e) {
     document.querySelectorAll('.comprovacao-item').forEach(item => {
         const index = item.querySelector('.comprovacao-forma').dataset.index;
         const forma_pagamento_id = item.querySelector('.comprovacao-forma').value;
-        const bandeira_cartao_id = item.querySelector('.comprovacao-cartao').value;
+        const bandeira_cartao_id = item.querySelector('.comprovacao-cartao') ? 
+                                     item.querySelector('.comprovacao-cartao').value : '';
         const valor = item.querySelector('.comprovacao-valor').value;
         const descricao = item.querySelector('.comprovacao-descricao').value;
         
