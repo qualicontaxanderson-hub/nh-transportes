@@ -1,5 +1,5 @@
 from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify
-from database import get_db_connection
+from utils.db import get_db_connection
 import traceback
 
 # Create blueprint
