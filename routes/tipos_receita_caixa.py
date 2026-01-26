@@ -2,9 +2,11 @@ from flask import Blueprint, render_template, request, redirect, url_for, flash,
 from database import get_db_connection
 import traceback
 
-tipos_receita_caixa_bp = Blueprint('tipos_receita_caixa', __name__, url_prefix='/tipos_receita_caixa')
+# Create blueprint
+bp = Blueprint('tipos_receita_caixa', __name__, url_prefix='/tipos_receita_caixa')
+tipos_receita_caixa_bp = bp  # Alias for compatibility
 
-@tipos_receita_caixa_bp.route('/')
+@bp.route('/')
 def lista():
     """Lista todos os tipos de receita de caixa"""
     try:
@@ -30,7 +32,7 @@ def lista():
         return render_template('tipos_receita_caixa/lista.html', tipos_receita=[], error=error_msg)
 
 
-@tipos_receita_caixa_bp.route('/novo', methods=['GET', 'POST'])
+@bp.route('/novo', methods=['GET', 'POST'])
 def novo():
     """Cria um novo tipo de receita de caixa"""
     if request.method == 'POST':
@@ -68,7 +70,7 @@ def novo():
     return render_template('tipos_receita_caixa/novo.html')
 
 
-@tipos_receita_caixa_bp.route('/editar/<int:id>', methods=['GET', 'POST'])
+@bp.route('/editar/<int:id>', methods=['GET', 'POST'])
 def editar(id):
     """Edita um tipo de receita de caixa existente"""
     if request.method == 'POST':
@@ -131,7 +133,7 @@ def editar(id):
         return redirect(url_for('tipos_receita_caixa.lista'))
 
 
-@tipos_receita_caixa_bp.route('/toggle/<int:id>', methods=['POST'])
+@bp.route('/toggle/<int:id>', methods=['POST'])
 def toggle(id):
     """Ativa/desativa um tipo de receita de caixa"""
     try:
