@@ -166,8 +166,8 @@ const tiposReceita = {{ tipos_receita|tojson }};
 const formasPagamento = {{ formas_pagamento|tojson }};
 const cartoes = {{ cartoes|tojson }};
 
-// Track auto-filled receitas
-const autoFilledTypes = ['VENDAS_POSTO', 'ARLA', 'LUBRIFICANTES'];
+// Track auto-filled receitas - using database names (with spaces)
+const autoFilledTypes = ['VENDAS POSTO', 'ARLA', 'LUBRIFICANTES'];
 
 function formatCurrency(value) {
     return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
@@ -223,7 +223,7 @@ function loadVendasDia() {
             
             // Add Vendas Posto if > 0
             if (data.vendas_posto > 0) {
-                addReceitaAutoFilled('VENDAS_POSTO', 'Vendas do Posto', data.vendas_posto);
+                addReceitaAutoFilled('VENDAS POSTO', 'Vendas do Posto', data.vendas_posto);
             }
             
             // Add ARLA if > 0
@@ -252,9 +252,9 @@ function addReceitaAutoFilled(tipo, descricao, valor) {
     item.id = `receita-${receitaIndex}`;
     
     let tiposOptions = '<option value="">Selecione...</option>';
-    for (const [key, value] of Object.entries(tiposReceita)) {
-        const selected = key === tipo ? 'selected' : '';
-        tiposOptions += `<option value="${key}" ${selected}>${value}</option>`;
+    for (const tipoReceita of tiposReceita) {
+        const selected = tipoReceita.nome === tipo ? 'selected' : '';
+        tiposOptions += `<option value="${tipoReceita.nome}" ${selected}>${tipoReceita.nome}</option>`;
     }
     
     const valorFormatted = formatCurrency(valor);
@@ -295,8 +295,8 @@ function addReceita() {
     item.id = `receita-${receitaIndex}`;
     
     let tiposOptions = '<option value="">Selecione...</option>';
-    for (const [key, value] of Object.entries(tiposReceita)) {
-        tiposOptions += `<option value="${key}">${value}</option>`;
+    for (const tipoReceita of tiposReceita) {
+        tiposOptions += `<option value="${tipoReceita.nome}">${tipoReceita.nome}</option>`;
     }
     
     item.innerHTML = `

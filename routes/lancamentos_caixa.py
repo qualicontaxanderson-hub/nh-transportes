@@ -8,16 +8,6 @@ import json
 
 bp = Blueprint('lancamentos_caixa', __name__, url_prefix='/lancamentos_caixa')
 
-# Constants for revenue types
-TIPOS_RECEITA = {
-    'VENDAS_POSTO': 'Vendas do Posto',
-    'LUBRIFICANTES': 'Lubrificantes',
-    'ARLA': 'ARLA',
-    'TROCO_PIX': 'Troco PIX',
-    'EMPRESTIMOS': 'Empréstimos',
-    'OUTROS': 'Outros'
-}
-
 
 def parse_brazilian_currency(value_str):
     """
@@ -308,6 +298,10 @@ def novo():
         cursor.execute("SELECT * FROM bandeiras_cartao WHERE ativo = 1 ORDER BY nome")
         cartoes = cursor.fetchall()
         
+        # Get receipt types from database
+        cursor.execute("SELECT * FROM tipos_receita_caixa WHERE ativo = 1 ORDER BY nome")
+        tipos_receita = cursor.fetchall()
+        
         # Get last closure date to suggest next date
         cursor.execute("""
             SELECT MAX(data) as ultima_data 
@@ -328,7 +322,7 @@ def novo():
                              clientes=clientes,
                              formas_pagamento=formas_pagamento,
                              cartoes=cartoes,
-                             tipos_receita=TIPOS_RECEITA,
+                             tipos_receita=tipos_receita,
                              data=proxima_data)
         
     except Exception as e:
@@ -349,11 +343,13 @@ def novo():
             formas_pagamento = cursor.fetchall()
             cursor.execute("SELECT * FROM bandeiras_cartao WHERE ativo = 1 ORDER BY nome")
             cartoes = cursor.fetchall()
+            cursor.execute("SELECT * FROM tipos_receita_caixa WHERE ativo = 1 ORDER BY nome")
+            tipos_receita = cursor.fetchall()
             return render_template('lancamentos_caixa/novo.html', 
                                  clientes=clientes,
                                  formas_pagamento=formas_pagamento,
                                  cartoes=cartoes,
-                                 tipos_receita=TIPOS_RECEITA)
+                                 tipos_receita=tipos_receita)
         except:
             return redirect(url_for('lancamentos_caixa.lista'))
     finally:
