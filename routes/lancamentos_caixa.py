@@ -176,9 +176,9 @@ def get_vendas_dia():
         # Get Lubrificantes total (check if lubrificantes_lancamentos exists)
         try:
             cursor.execute("""
-                SELECT COALESCE(SUM(quantidade * preco_venda), 0) as total
+                SELECT COALESCE(SUM(valor_total), 0) as total
                 FROM lubrificantes_lancamentos
-                WHERE cliente_id = %s AND data = %s
+                WHERE clienteid = %s AND data = %s
             """, (cliente_id, data))
             lubr = cursor.fetchone()
             if lubr:
@@ -290,8 +290,14 @@ def novo():
             return redirect(url_for('lancamentos_caixa.lista'))
 
         # GET request - load data for dropdown
-        # Get all clients
-        cursor.execute("SELECT id, razao_social FROM clientes ORDER BY razao_social")
+        # Get clients with "Produtos Posto" configured
+        cursor.execute("""
+            SELECT DISTINCT c.id, c.razao_social 
+            FROM clientes c
+            INNER JOIN cliente_produtos cp ON c.id = cp.cliente_id
+            WHERE cp.ativo = 1
+            ORDER BY c.razao_social
+        """)
         clientes = cursor.fetchall()
         
         # Get payment methods
@@ -331,7 +337,13 @@ def novo():
         flash(f'Erro ao cadastrar lançamento de caixa: {str(e)}', 'danger')
         # Try to get data for re-rendering form
         try:
-            cursor.execute("SELECT id, razao_social FROM clientes ORDER BY razao_social")
+            cursor.execute("""
+                SELECT DISTINCT c.id, c.razao_social 
+                FROM clientes c
+                INNER JOIN cliente_produtos cp ON c.id = cp.cliente_id
+                WHERE cp.ativo = 1
+                ORDER BY c.razao_social
+            """)
             clientes = cursor.fetchall()
             cursor.execute("SELECT * FROM formas_pagamento_caixa WHERE ativo = 1 ORDER BY nome")
             formas_pagamento = cursor.fetchall()
