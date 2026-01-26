@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+
+{% block title %}Nova Forma de Recebimento Caixa{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="row justify-content-center">
+        <div class="col-md-8">
+            <div class="card">
+                <div class="card-header bg-success text-white">
+                    <h4 class="mb-0"><i class="bi bi-plus-circle"></i> Nova Forma de Recebimento Caixa</h4>
+                </div>
+                <div class="card-body">
+                    <form method="POST" action="{{ url_for('tipos_receita_caixa.novo') }}">
+                        <div class="mb-3">
+                            <label for="nome" class="form-label">Nome <span class="text-danger">*</span></label>
+                            <input type="text" 
+                                   class="form-control" 
+                                   id="nome" 
+                                   name="nome" 
+                                   required
+                                   maxlength="100"
+                                   placeholder="Digite o nome (será convertido para MAIÚSCULAS)"
+                                   style="text-transform: uppercase;">
+                            <small class="text-muted">O nome será automaticamente convertido para MAIÚSCULAS</small>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="tipo" class="form-label">Tipo</label>
+                            <select class="form-select" id="tipo" name="tipo">
+                                <option value="">Selecione...</option>
+                                <option value="AUTO">AUTO (Auto-preenchido)</option>
+                                <option value="MANUAL">MANUAL (Preenchimento manual)</option>
+                            </select>
+                            <small class="text-muted">
+                                AUTO: Valores preenchidos automaticamente (ex: VENDAS POSTO, ARLA)<br>
+                                MANUAL: Valores preenchidos manualmente (ex: TROCO PIX, EMPRÉSTIMOS)
+                            </small>
+                        </div>
+
+                        <div class="mb-3">
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" 
+                                       type="checkbox" 
+                                       id="ativo" 
+                                       name="ativo" 
+                                       value="1" 
+                                       checked>
+                                <label class="form-check-label" for="ativo">
+                                    Ativo
+                                </label>
+                            </div>
+                        </div>
+
+                        <div class="d-grid gap-2 d-md-flex justify-content-md-end">
+                            <a href="{{ url_for('tipos_receita_caixa.lista') }}" class="btn btn-secondary">
+                                <i class="bi bi-x-circle"></i> Cancelar
+                            </a>
+                            <button type="submit" class="btn btn-success">
+                                <i class="bi bi-check-circle"></i> Salvar
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <div class="mt-4">
+                <div class="alert alert-info">
+                    <h6><i class="bi bi-info-circle"></i> Exemplos de Formas de Recebimento:</h6>
+                    <ul class="mb-0">
+                        <li><strong>VENDAS POSTO</strong> (Tipo: AUTO) - Preenchido automaticamente do sistema de vendas</li>
+                        <li><strong>ARLA</strong> (Tipo: AUTO) - Preenchido automaticamente dos lançamentos de ARLA</li>
+                        <li><strong>LUBRIFICANTES</strong> (Tipo: AUTO) - Preenchido automaticamente das vendas de lubrificantes</li>
+                        <li><strong>TROCO PIX</strong> (Tipo: MANUAL) - Preenchimento manual no fechamento</li>
+                        <li><strong>EMPRÉSTIMOS</strong> (Tipo: MANUAL) - Preenchimento manual no fechamento</li>
+                        <li><strong>OUTROS</strong> (Tipo: MANUAL) - Para outras receitas diversas</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
