@@ -53,11 +53,8 @@
                     </div>
                     <div class="card-body" style="padding: 1rem;">
                         <div id="receitas-container">
-                            <!-- Receitas will be added here dynamically -->
+                            <!-- Fixed receipt types will be added here dynamically on page load -->
                         </div>
-                        <button type="button" class="btn btn-success btn-sm" onclick="addReceita()">
-                            <i class="bi bi-plus-circle"></i> Adicionar Receita
-                        </button>
                         <hr>
                         <div class="d-flex justify-content-between align-items-center">
                             <strong>Total Receitas:</strong>
@@ -166,8 +163,23 @@ const tiposReceita = {{ tipos_receita|tojson }};
 const formasPagamento = {{ formas_pagamento|tojson }};
 const cartoes = {{ cartoes|tojson }};
 
-// Track auto-filled receitas - using database names (with spaces)
-const autoFilledTypes = ['VENDAS POSTO', 'ARLA', 'LUBRIFICANTES'];
+// Define the fixed order of receipt types
+const fixedOrder = [
+    'VENDAS POSTO',
+    'ARLA',
+    'LUBRIFICANTES',
+    'RECEBIMENTOS',
+    'ACRÉSCIMOS GERAIS',
+    'ACRÉSCIMOS CADASTROS',
+    'EMPRESTIMOS',
+    'OUTROS'
+];
+
+// Create a map of receipt types by name for easy lookup
+const tiposMap = {};
+for (const tipo of tiposReceita) {
+    tiposMap[tipo.nome] = tipo;
+}
 
 function formatCurrency(value) {
     return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
@@ -187,6 +199,68 @@ function parseCurrency(value) {
     }
     
     return parseFloat(cleanValue) || 0;
+}
+
+function initializeReceitas() {
+    const container = document.getElementById('receitas-container');
+    container.innerHTML = ''; // Clear any existing content
+    
+    // Add all receipt types in fixed order
+    for (const nomeTipo of fixedOrder) {
+        const tipoInfo = tiposMap[nomeTipo];
+        
+        // Skip if the type doesn't exist in the database
+        if (!tipoInfo) continue;
+        
+        const isAuto = tipoInfo.tipo === 'AUTO';
+        const item = document.createElement('div');
+        item.className = 'receita-item';
+        item.id = `receita-${receitaIndex}`;
+        item.dataset.tipoNome = nomeTipo;
+        
+        if (isAuto) {
+            // AUTO type - will be filled by loadVendasDia
+            item.innerHTML = `
+                <div class="row">
+                    <div class="col-md-5 mb-2">
+                        <label class="form-label" style="font-size: 0.75rem; font-weight: 600;">${nomeTipo}</label>
+                        <input type="hidden" class="receita-tipo" data-index="${receitaIndex}" value="${nomeTipo}">
+                    </div>
+                    <div class="col-md-5 mb-2">
+                        <label class="form-label" style="font-size: 0.75rem;">Valor</label>
+                        <input type="text" class="form-control form-control-sm receita-valor" data-index="${receitaIndex}" 
+                               value="R$ 0,00" readonly style="background-color: #e9ecef;">
+                    </div>
+                    <div class="col-md-2 mb-2 d-flex align-items-end">
+                        <span class="badge bg-info">Auto</span>
+                    </div>
+                </div>
+            `;
+        } else {
+            // MANUAL type - user can fill in
+            item.innerHTML = `
+                <div class="row">
+                    <div class="col-md-5 mb-2">
+                        <label class="form-label" style="font-size: 0.75rem; font-weight: 600;">${nomeTipo}</label>
+                        <input type="hidden" class="receita-tipo" data-index="${receitaIndex}" value="${nomeTipo}">
+                    </div>
+                    <div class="col-md-5 mb-2">
+                        <label class="form-label" style="font-size: 0.75rem;">Valor</label>
+                        <input type="text" class="form-control form-control-sm receita-valor" data-index="${receitaIndex}" 
+                               placeholder="0,00" onchange="calcularTotais()">
+                    </div>
+                    <div class="col-md-2 mb-2">
+                        <label class="form-label" style="font-size: 0.75rem;">Descrição</label>
+                        <input type="text" class="form-control form-control-sm receita-descricao" data-index="${receitaIndex}" 
+                               placeholder="Opcional">
+                    </div>
+                </div>
+            `;
+        }
+        
+        container.appendChild(item);
+        receitaIndex++;
+    }
 }
 
 function loadVendasDia() {
@@ -213,28 +287,19 @@ function loadVendasDia() {
             const loading = document.getElementById('loading-vendas');
             if (loading) loading.remove();
             
-            // Clear existing auto-filled items
+            // Update AUTO fields with values
             document.querySelectorAll('.receita-item').forEach(item => {
-                const tipoSelect = item.querySelector('.receita-tipo');
-                if (tipoSelect && autoFilledTypes.includes(tipoSelect.value)) {
-                    item.remove();
+                const tipoNome = item.dataset.tipoNome;
+                const valorInput = item.querySelector('.receita-valor');
+                
+                if (tipoNome === 'VENDAS POSTO' && data.vendas_posto > 0) {
+                    valorInput.value = formatCurrency(data.vendas_posto);
+                } else if (tipoNome === 'ARLA' && data.arla > 0) {
+                    valorInput.value = formatCurrency(data.arla);
+                } else if (tipoNome === 'LUBRIFICANTES' && data.lubrificantes > 0) {
+                    valorInput.value = formatCurrency(data.lubrificantes);
                 }
             });
-            
-            // Add Vendas Posto if > 0
-            if (data.vendas_posto > 0) {
-                addReceitaAutoFilled('VENDAS POSTO', 'Vendas do Posto', data.vendas_posto);
-            }
-            
-            // Add ARLA if > 0
-            if (data.arla > 0) {
-                addReceitaAutoFilled('ARLA', 'ARLA', data.arla);
-            }
-            
-            // Add Lubrificantes if > 0
-            if (data.lubrificantes > 0) {
-                addReceitaAutoFilled('LUBRIFICANTES', 'Lubrificantes', data.lubrificantes);
-            }
             
             calcularTotais();
         })
@@ -243,97 +308,6 @@ function loadVendasDia() {
             if (loading) loading.remove();
             console.error('Erro ao carregar vendas:', error);
         });
-}
-
-function addReceitaAutoFilled(tipo, descricao, valor) {
-    const container = document.getElementById('receitas-container');
-    const item = document.createElement('div');
-    item.className = 'receita-item receita-auto-filled';
-    item.id = `receita-${receitaIndex}`;
-    
-    let tiposOptions = '<option value="">Selecione...</option>';
-    for (const tipoReceita of tiposReceita) {
-        const selected = tipoReceita.nome === tipo ? 'selected' : '';
-        tiposOptions += `<option value="${tipoReceita.nome}" ${selected}>${tipoReceita.nome}</option>`;
-    }
-    
-    const valorFormatted = formatCurrency(valor);
-    
-    item.innerHTML = `
-        <div class="row">
-            <div class="col-md-4 mb-2">
-                <label class="form-label" style="font-size: 0.75rem;">Tipo</label>
-                <select class="form-select form-select-sm receita-tipo" data-index="${receitaIndex}" disabled>
-                    ${tiposOptions}
-                </select>
-                <input type="hidden" class="receita-tipo-hidden" data-index="${receitaIndex}" value="${tipo}">
-            </div>
-            <div class="col-md-5 mb-2">
-                <label class="form-label" style="font-size: 0.75rem;">Descrição</label>
-                <input type="text" class="form-control form-control-sm receita-descricao" data-index="${receitaIndex}" 
-                       value="${descricao}" readonly>
-            </div>
-            <div class="col-md-2 mb-2">
-                <label class="form-label" style="font-size: 0.75rem;">Valor</label>
-                <input type="text" class="form-control form-control-sm receita-valor" data-index="${receitaIndex}" 
-                       value="${valorFormatted}" readonly style="background-color: #e9ecef;">
-            </div>
-            <div class="col-md-1 mb-2 d-flex align-items-end">
-                <span class="badge bg-info">Auto</span>
-            </div>
-        </div>
-    `;
-    
-    container.appendChild(item);
-    receitaIndex++;
-}
-
-function addReceita() {
-    const container = document.getElementById('receitas-container');
-    const item = document.createElement('div');
-    item.className = 'receita-item';
-    item.id = `receita-${receitaIndex}`;
-    
-    let tiposOptions = '<option value="">Selecione...</option>';
-    for (const tipoReceita of tiposReceita) {
-        tiposOptions += `<option value="${tipoReceita.nome}">${tipoReceita.nome}</option>`;
-    }
-    
-    item.innerHTML = `
-        <div class="row">
-            <div class="col-md-4 mb-2">
-                <label class="form-label" style="font-size: 0.75rem;">Tipo</label>
-                <select class="form-select form-select-sm receita-tipo" data-index="${receitaIndex}">
-                    ${tiposOptions}
-                </select>
-            </div>
-            <div class="col-md-5 mb-2">
-                <label class="form-label" style="font-size: 0.75rem;">Descrição</label>
-                <input type="text" class="form-control form-control-sm receita-descricao" data-index="${receitaIndex}">
-            </div>
-            <div class="col-md-2 mb-2">
-                <label class="form-label" style="font-size: 0.75rem;">Valor</label>
-                <input type="text" class="form-control form-control-sm receita-valor" data-index="${receitaIndex}" 
-                       placeholder="0,00" onchange="calcularTotais()">
-            </div>
-            <div class="col-md-1 mb-2 d-flex align-items-end">
-                <button type="button" class="btn btn-danger btn-sm" onclick="removeReceita(${receitaIndex})">
-                    <i class="bi bi-trash"></i>
-                </button>
-            </div>
-        </div>
-    `;
-    
-    container.appendChild(item);
-    receitaIndex++;
-}
-
-function removeReceita(index) {
-    const item = document.getElementById(`receita-${index}`);
-    if (item) {
-        item.remove();
-        calcularTotais();
-    }
 }
 
 function addComprovacao() {
@@ -458,25 +432,17 @@ function calcularTotais() {
 }
 
 document.getElementById('formCaixa').addEventListener('submit', function(e) {
-    // Collect receitas (including auto-filled ones)
+    // Collect receitas (only non-zero values)
     const receitas = [];
     document.querySelectorAll('.receita-item').forEach(item => {
-        const index = item.querySelector('.receita-tipo, .receita-tipo-hidden').dataset.index;
-        let tipo = '';
+        const tipo = item.querySelector('.receita-tipo').value;
+        const valorInput = item.querySelector('.receita-valor');
+        const valor = valorInput ? valorInput.value : '';
+        const descricaoInput = item.querySelector('.receita-descricao');
+        const descricao = descricaoInput ? descricaoInput.value : '';
         
-        // Check if it's an auto-filled item (has hidden input)
-        const hiddenInput = item.querySelector('.receita-tipo-hidden');
-        if (hiddenInput) {
-            tipo = hiddenInput.value;
-        } else {
-            const tipoSelect = item.querySelector('.receita-tipo');
-            if (tipoSelect) tipo = tipoSelect.value;
-        }
-        
-        const descricao = item.querySelector('.receita-descricao').value;
-        const valor = item.querySelector('.receita-valor').value;
-        
-        if (tipo && valor) {
+        // Only include if tipo exists and value is not 0
+        if (tipo && valor && parseCurrency(valor) > 0) {
             receitas.push({ tipo, descricao, valor });
         }
     });
@@ -484,7 +450,6 @@ document.getElementById('formCaixa').addEventListener('submit', function(e) {
     // Collect comprovacoes
     const comprovacoes = [];
     document.querySelectorAll('.comprovacao-item').forEach(item => {
-        const index = item.querySelector('.comprovacao-forma').dataset.index;
         const forma_pagamento_id = item.querySelector('.comprovacao-forma').value;
         const bandeira_cartao_id = item.querySelector('.comprovacao-cartao') ? 
                                      item.querySelector('.comprovacao-cartao').value : '';
@@ -501,8 +466,10 @@ document.getElementById('formCaixa').addEventListener('submit', function(e) {
     document.getElementById('comprovacoes-json').value = JSON.stringify(comprovacoes);
 });
 
-// Add initial items
-addReceita();
-addComprovacao();
+// Initialize receipt types on page load
+document.addEventListener('DOMContentLoaded', function() {
+    initializeReceitas();
+    addComprovacao();
+});
 </script>
 {% endblock %}
