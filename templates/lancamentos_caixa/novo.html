@@ -130,7 +130,15 @@
 </div>
 
 <style>
-    .receita-item, .comprovacao-item {
+    .receita-item {
+        border: 1px solid #dee2e6;
+        border-radius: 0.25rem;
+        padding: 0.5rem;
+        margin-bottom: 0.5rem;
+        background-color: #f8f9fa;
+    }
+    
+    .comprovacao-item {
         border: 1px solid #dee2e6;
         border-radius: 0.25rem;
         padding: 0.75rem;
@@ -201,6 +209,25 @@ function parseCurrency(value) {
     return parseFloat(cleanValue) || 0;
 }
 
+function formatNumberInput(input) {
+    // Get only numbers from input
+    let value = input.value.replace(/\D/g, '');
+    
+    if (value === '') {
+        input.value = '';
+        return;
+    }
+    
+    // Convert to number and divide by 100 to get decimal places
+    let numValue = parseInt(value, 10) / 100;
+    
+    // Format as Brazilian currency (without R$ symbol)
+    input.value = numValue.toLocaleString('pt-BR', {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+    });
+}
+
 function initializeReceitas() {
     const container = document.getElementById('receitas-container');
     container.innerHTML = ''; // Clear any existing content
@@ -247,7 +274,7 @@ function initializeReceitas() {
                     <div class="col-md-5 mb-2">
                         <label class="form-label" style="font-size: 0.75rem;">Valor</label>
                         <input type="text" class="form-control form-control-sm receita-valor" data-index="${receitaIndex}" 
-                               placeholder="0,00" onchange="calcularTotais()">
+                               placeholder="0,00" oninput="formatNumberInput(this)" onchange="calcularTotais()">
                     </div>
                     <div class="col-md-2 mb-2">
                         <label class="form-label" style="font-size: 0.75rem;">Descrição</label>
@@ -351,7 +378,7 @@ function addComprovacao() {
             <div class="col-md-2 mb-2">
                 <label class="form-label" style="font-size: 0.75rem;">Valor</label>
                 <input type="text" class="form-control form-control-sm comprovacao-valor" data-index="${currentIndex}" 
-                       placeholder="0,00" onchange="calcularTotais()">
+                       placeholder="0,00" oninput="formatNumberInput(this)" onchange="calcularTotais()">
             </div>
             <div class="col-md-3 mb-2">
                 <label class="form-label" style="font-size: 0.75rem;">Descrição</label>
