@@ -25,7 +25,7 @@
                         <select name="cliente_id" id="cliente_id" class="form-select form-select-sm" required onchange="loadVendasDia()">
                             <option value="">Selecione o cliente...</option>
                             {% for cliente in clientes %}
-                            <option value="{{ cliente.id }}">{{ cliente.nome_fantasia }}</option>
+                            <option value="{{ cliente.id }}">{{ cliente.razao_social }}</option>
                             {% endfor %}
                         </select>
                     </div>
