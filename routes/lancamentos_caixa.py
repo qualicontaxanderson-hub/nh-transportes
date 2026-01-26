@@ -290,8 +290,8 @@ def novo():
             return redirect(url_for('lancamentos_caixa.lista'))
 
         # GET request - load data for dropdown
-        # Get active clients
-        cursor.execute("SELECT id, nome_fantasia FROM clientes WHERE ativo = 1 ORDER BY nome_fantasia")
+        # Get all clients
+        cursor.execute("SELECT id, nome_fantasia FROM clientes ORDER BY nome_fantasia")
         clientes = cursor.fetchall()
         
         # Get payment methods
@@ -331,7 +331,7 @@ def novo():
         flash(f'Erro ao cadastrar lançamento de caixa: {str(e)}', 'danger')
         # Try to get data for re-rendering form
         try:
-            cursor.execute("SELECT id, nome_fantasia FROM clientes WHERE ativo = 1 ORDER BY nome_fantasia")
+            cursor.execute("SELECT id, nome_fantasia FROM clientes ORDER BY nome_fantasia")
             clientes = cursor.fetchall()
             cursor.execute("SELECT * FROM formas_pagamento_caixa WHERE ativo = 1 ORDER BY nome")
             formas_pagamento = cursor.fetchall()
