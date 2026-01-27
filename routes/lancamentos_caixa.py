@@ -751,7 +751,6 @@ def editar(id):
         
         # PRE-SERIALIZE to JSON strings on the server side to avoid Jinja2 tojson filter issues
         # This bypasses any Jinja2 serialization problems completely
-        import json
         lancamento_json = json.dumps(lancamento_clean)
         receitas_json = json.dumps(receitas_clean)
         comprovacoes_json = json.dumps(comprovacoes_clean)
