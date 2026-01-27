@@ -834,52 +834,38 @@ document.addEventListener('DOMContentLoaded', function() {
             // Calculate totals for both debit and credit (the function will handle which one)
             calcularTotaisCartao('DEBITO');
             calcularTotaisCartao('CREDITO');
-        } else if (tipo === 'DEPOSITO') {
-            // Deposits - distinguished by descricao field
-            // DB has tipo='DEPOSITO', but HTML inputs have data-comprovacao-forma='DEPOSITO_ESPECIE', etc.
-            console.log(`Found ${comps.length} deposits of tipo DEPOSITO`);
+        } else if (tipo === 'DEPOSITO_ESPECIE' || tipo === 'DEPOSITO_CHEQUE_VISTA' || tipo === 'DEPOSITO_CHEQUE_PRAZO') {
+            // Deposits - tipo directly tells us which deposit type it is
+            console.log(`Found ${comps.length} deposits of tipo ${tipo}`);
             
             for (const comp of comps) {
-                const descricao = (comp.descricao || '').toLowerCase();
-                console.log(`Setting deposit: ${descricao}, valor: ${comp.valor}`);
+                console.log(`Adding deposit entry for ${tipo}, valor: ${comp.valor}`);
                 
-                let dataForma = '';
-                if (descricao.includes('especie') || descricao.includes('espécie')) {
-                    dataForma = 'DEPOSITO_ESPECIE';
-                } else if (descricao.includes('vista') || descricao.includes('à vista')) {
-                    dataForma = 'DEPOSITO_CHEQUE_VISTA';
-                } else if (descricao.includes('prazo') || descricao.includes('a prazo')) {
-                    dataForma = 'DEPOSITO_CHEQUE_PRAZO';
-                }
-                
-                if (dataForma) {
-                    console.log(`Looking for deposit input with data-comprovacao-forma='${dataForma}'`);
-                    // Find the "add" button for this deposit type and click it to create an entry
-                    const addButton = document.querySelector(`button[onclick*="addDeposito"][onclick*="${dataForma}"]`);
-                    if (addButton) {
-                        console.log(`Found add button for ${dataForma}, clicking it`);
-                        addButton.click();
+                // Find the "add" button for this deposit type and click it to create an entry
+                const addButton = document.querySelector(`button[onclick*="addDeposito"][onclick*="${tipo}"]`);
+                if (addButton) {
+                    console.log(`Found add button for ${tipo}, clicking it`);
+                    addButton.click();
+                    
+                    // Wait a bit for the new input to be created
+                    setTimeout(() => {
+                        // Find the last (most recently added) input for this deposit type
+                        const container = addButton.closest('.comprovacao-item');
+                        const inputs = container.querySelectorAll('input[type="number"]');
+                        const lastInput = inputs[inputs.length - 1];
                         
-                        // Wait a bit for the new input to be created
-                        setTimeout(() => {
-                            // Find the last (most recently added) input for this deposit type
-                            const container = addButton.closest('.comprovacao-item');
-                            const inputs = container.querySelectorAll('input[type="number"]');
-                            const lastInput = inputs[inputs.length - 1];
-                            
-                            if (lastInput) {
-                                lastInput.value = parseFloat(comp.valor).toLocaleString('pt-BR', {
-                                    minimumFractionDigits: 2,
-                                    maximumFractionDigits: 2
-                                });
-                                console.log(`Set deposit ${dataForma} to ${lastInput.value}`);
-                            }
-                        }, 100);
-                    } else {
-                        console.log(`Add button NOT FOUND for ${dataForma}`);
-                    }
+                        if (lastInput) {
+                            lastInput.value = parseFloat(comp.valor).toLocaleString('pt-BR', {
+                                minimumFractionDigits: 2,
+                                maximumFractionDigits: 2
+                            });
+                            console.log(`Set deposit ${tipo} to ${lastInput.value}`);
+                        } else {
+                            console.log(`Could not find input in container for ${tipo}`);
+                        }
+                    }, 100);
                 } else {
-                    console.log(`Could not determine deposit type from descricao: ${descricao}`);
+                    console.log(`Add button NOT FOUND for ${tipo}`);
                 }
             }
             
