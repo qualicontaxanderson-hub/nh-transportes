@@ -133,8 +133,8 @@
     .receita-item {
         border: 1px solid #dee2e6;
         border-radius: 0.25rem;
-        padding: 0.5rem;
-        margin-bottom: 0.5rem;
+        padding: 0.4rem 0.6rem;
+        margin-bottom: 0.4rem;
         background-color: #f8f9fa;
     }
     
@@ -248,17 +248,16 @@ function initializeReceitas() {
         if (isAuto) {
             // AUTO type - will be filled by loadVendasDia
             item.innerHTML = `
-                <div class="row">
-                    <div class="col-md-5 mb-2">
-                        <label class="form-label" style="font-size: 0.75rem; font-weight: 600;">${nomeTipo}</label>
+                <div class="row align-items-center">
+                    <div class="col-md-5">
+                        <label class="form-label mb-0" style="font-size: 0.75rem; font-weight: 600;">${nomeTipo}</label>
                         <input type="hidden" class="receita-tipo" data-index="${receitaIndex}" value="${nomeTipo}">
                     </div>
-                    <div class="col-md-5 mb-2">
-                        <label class="form-label" style="font-size: 0.75rem;">Valor</label>
+                    <div class="col-md-4">
                         <input type="text" class="form-control form-control-sm receita-valor" data-index="${receitaIndex}" 
                                value="R$ 0,00" readonly style="background-color: #e9ecef;">
                     </div>
-                    <div class="col-md-2 mb-2 d-flex align-items-end">
+                    <div class="col-md-3 text-end">
                         <span class="badge bg-info">Auto</span>
                     </div>
                 </div>
@@ -266,20 +265,18 @@ function initializeReceitas() {
         } else {
             // MANUAL type - user can fill in
             item.innerHTML = `
-                <div class="row">
-                    <div class="col-md-5 mb-2">
-                        <label class="form-label" style="font-size: 0.75rem; font-weight: 600;">${nomeTipo}</label>
+                <div class="row align-items-center">
+                    <div class="col-md-4">
+                        <label class="form-label mb-0" style="font-size: 0.75rem; font-weight: 600;">${nomeTipo}</label>
                         <input type="hidden" class="receita-tipo" data-index="${receitaIndex}" value="${nomeTipo}">
                     </div>
-                    <div class="col-md-5 mb-2">
-                        <label class="form-label" style="font-size: 0.75rem;">Valor</label>
+                    <div class="col-md-3">
                         <input type="text" class="form-control form-control-sm receita-valor" data-index="${receitaIndex}" 
                                placeholder="0,00" oninput="formatNumberInput(this)" onchange="calcularTotais()">
                     </div>
-                    <div class="col-md-2 mb-2">
-                        <label class="form-label" style="font-size: 0.75rem;">Descrição</label>
+                    <div class="col-md-5">
                         <input type="text" class="form-control form-control-sm receita-descricao" data-index="${receitaIndex}" 
-                               placeholder="Opcional">
+                               placeholder="Descrição (opcional)">
                     </div>
                 </div>
             `;
