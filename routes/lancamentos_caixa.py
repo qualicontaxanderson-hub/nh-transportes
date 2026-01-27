@@ -671,7 +671,6 @@ def editar(id):
         cursor.execute("""
             SELECT c.id, c.razao_social
             FROM clientes c
-            WHERE c.ativo = 1
             ORDER BY c.razao_social
         """)
         clientes = cursor.fetchall()
