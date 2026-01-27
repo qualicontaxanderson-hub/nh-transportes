@@ -538,3 +538,190 @@ def excluir(id):
             conn.close()
     
     return redirect(url_for('lancamentos_caixa.lista'))
+
+
+@bp.route('/editar/<int:id>', methods=['GET', 'POST'])
+@login_required
+@admin_required
+def editar(id):
+    """Edit a cash closure entry"""
+    conn = None
+    cursor = None
+    
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+        
+        # Check which columns exist in the table
+        cursor.execute("DESCRIBE lancamentos_caixa")
+        describe_results = cursor.fetchall()
+        columns = [col['Field'] for col in describe_results]
+        has_new_schema = 'usuario_id' in columns and 'data' in columns and 'total_receitas' in columns
+        
+        if not has_new_schema:
+            flash('Esta funcionalidade requer a execução da migration SQL. O schema atual do banco não é compatível com o sistema de Fechamento de Caixa.', 'warning')
+            return redirect(url_for('lancamentos_caixa.lista'))
+        
+        if request.method == 'POST':
+            # Get main data
+            data = request.form.get('data', '')
+            cliente_id = request.form.get('cliente_id', '')
+            observacao = request.form.get('observacao', '').strip()
+            
+            # Get receitas (left side) - JSON encoded
+            receitas_json = request.form.get('receitas', '[]')
+            receitas = json.loads(receitas_json)
+            
+            # Get comprovacoes (right side) - JSON encoded
+            comprovacoes_json = request.form.get('comprovacoes', '[]')
+            comprovacoes = json.loads(comprovacoes_json)
+            
+            # Validate
+            if not data:
+                flash('Data é obrigatória!', 'danger')
+                raise ValueError('Data não fornecida')
+            
+            if not cliente_id:
+                flash('Cliente é obrigatório!', 'danger')
+                raise ValueError('Cliente não fornecido')
+            
+            # Calculate totals: Diferença = Total Comprovação - Total Receitas
+            total_receitas = sum(parse_brazilian_currency(r.get('valor', 0)) for r in receitas)
+            total_comprovacao = sum(parse_brazilian_currency(c.get('valor', 0)) for c in comprovacoes)
+            diferenca = total_comprovacao - total_receitas
+            
+            # Update lancamento_caixa
+            cursor.execute("""
+                UPDATE lancamentos_caixa 
+                SET data = %s, cliente_id = %s, observacao = %s, 
+                    total_receitas = %s, total_comprovacao = %s, diferenca = %s
+                WHERE id = %s
+            """, (data, int(cliente_id), observacao if observacao else None, 
+                  float(total_receitas), float(total_comprovacao), float(diferenca), id))
+            
+            # Delete old receitas and comprovacoes
+            cursor.execute("DELETE FROM lancamentos_caixa_receitas WHERE lancamento_caixa_id = %s", (id,))
+            cursor.execute("DELETE FROM lancamentos_caixa_comprovacao WHERE lancamento_caixa_id = %s", (id,))
+            
+            # Insert new receitas
+            for receita in receitas:
+                if receita.get('tipo') and receita.get('valor'):
+                    cursor.execute("""
+                        INSERT INTO lancamentos_caixa_receitas 
+                        (lancamento_caixa_id, tipo, descricao, valor)
+                        VALUES (%s, %s, %s, %s)
+                    """, (id, receita['tipo'], 
+                          receita.get('descricao', ''), 
+                          float(parse_brazilian_currency(receita['valor']))))
+            
+            # Insert new comprovacoes
+            for comprovacao in comprovacoes:
+                if comprovacao.get('forma_pagamento_id') and comprovacao.get('valor'):
+                    forma_id = comprovacao['forma_pagamento_id']
+                    cartao_id = comprovacao.get('bandeira_cartao_id')
+                    
+                    cursor.execute("""
+                        INSERT INTO lancamentos_caixa_comprovacao 
+                        (lancamento_caixa_id, forma_pagamento_id, bandeira_cartao_id, descricao, valor)
+                        VALUES (%s, %s, %s, %s, %s)
+                    """, (id, 
+                          int(forma_id) if forma_id and forma_id != '' else None,
+                          int(cartao_id) if cartao_id and cartao_id != '' else None,
+                          comprovacao.get('descricao', ''),
+                          float(parse_brazilian_currency(comprovacao['valor']))))
+            
+            conn.commit()
+            flash('Lançamento de caixa atualizado com sucesso!', 'success')
+            return redirect(url_for('lancamentos_caixa.lista'))
+        
+        # GET request - load existing data
+        # Get lancamento
+        cursor.execute("""
+            SELECT lc.*, c.razao_social as cliente_nome
+            FROM lancamentos_caixa lc
+            LEFT JOIN clientes c ON lc.cliente_id = c.id
+            WHERE lc.id = %s
+        """, (id,))
+        lancamento = cursor.fetchone()
+        
+        if not lancamento:
+            flash('Lançamento de caixa não encontrado!', 'danger')
+            return redirect(url_for('lancamentos_caixa.lista'))
+        
+        # Get receitas
+        cursor.execute("""
+            SELECT * FROM lancamentos_caixa_receitas
+            WHERE lancamento_caixa_id = %s
+            ORDER BY id
+        """, (id,))
+        receitas = cursor.fetchall()
+        
+        # Get comprovacoes
+        cursor.execute("""
+            SELECT lcc.*, fp.nome as forma_pagamento_nome, bc.nome as cartao_nome
+            FROM lancamentos_caixa_comprovacao lcc
+            LEFT JOIN formas_pagamento_caixa fp ON lcc.forma_pagamento_id = fp.id
+            LEFT JOIN bandeiras_cartao bc ON lcc.bandeira_cartao_id = bc.id
+            WHERE lcc.lancamento_caixa_id = %s
+            ORDER BY lcc.id
+        """, (id,))
+        comprovacoes = cursor.fetchall()
+        
+        # Get clients with "Produtos Posto" configured
+        cursor.execute("""
+            SELECT c.id, c.razao_social
+            FROM clientes c
+            INNER JOIN clientes_produtos cp ON c.id = cp.cliente_id
+            INNER JOIN produtos p ON cp.produto_id = p.id
+            WHERE p.nome = 'Produtos Posto' AND c.ativo = 1
+            ORDER BY c.razao_social
+        """)
+        clientes = cursor.fetchall()
+        
+        # Get payment methods
+        cursor.execute("""
+            SELECT id, nome, tipo
+            FROM formas_pagamento_caixa
+            WHERE ativo = 1
+            ORDER BY nome
+        """)
+        formas_pagamento = cursor.fetchall()
+        
+        # Get card brands
+        cursor.execute("""
+            SELECT id, nome, tipo
+            FROM bandeiras_cartao
+            WHERE ativo = 1
+            ORDER BY nome
+        """)
+        bandeiras_cartao = cursor.fetchall()
+        
+        # Get receipt types
+        cursor.execute("""
+            SELECT id, nome, tipo
+            FROM tipos_receita_caixa
+            WHERE ativo = 1
+            ORDER BY nome
+        """)
+        tipos_receita = cursor.fetchall()
+        
+        return render_template('lancamentos_caixa/novo.html',
+                             edit_mode=True,
+                             lancamento=lancamento,
+                             receitas=receitas,
+                             comprovacoes=comprovacoes,
+                             clientes=clientes,
+                             formas_pagamento=formas_pagamento,
+                             bandeiras_cartao=bandeiras_cartao,
+                             tipos_receita=tipos_receita)
+        
+    except Exception as e:
+        if conn:
+            conn.rollback()
+        flash(f'Erro ao editar lançamento de caixa: {str(e)}', 'danger')
+        return redirect(url_for('lancamentos_caixa.lista'))
+    finally:
+        if cursor is not None:
+            cursor.close()
+        if conn is not None:
+            conn.close()

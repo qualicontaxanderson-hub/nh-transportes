@@ -154,6 +154,9 @@
                             {% endif %}
                             <td style="font-size: 0.85rem;">
                                 {% if lanc.get('total_receitas') is not none %}
+                                <a href="{{ url_for('lancamentos_caixa.editar', id=lanc.id) }}" class="btn btn-warning btn-sm" title="Editar">
+                                    <i class="bi bi-pencil"></i>
+                                </a>
                                 <a href="{{ url_for('lancamentos_caixa.visualizar', id=lanc.id) }}" class="btn btn-info btn-sm" title="Visualizar">
                                     <i class="bi bi-eye"></i>
                                 </a>
