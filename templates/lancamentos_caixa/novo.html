@@ -701,7 +701,7 @@ document.addEventListener('DOMContentLoaded', function() {
     initializeReceitas();
     initializeComprovacoes();
     
-    {% if edit_mode and receitas %}
+    {% if edit_mode %}
     // Load existing receitas data in edit mode
     const existingReceitas = {{ receitas_json|safe }};
     for (const receita of existingReceitas) {
@@ -721,9 +721,7 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
     calculateTotalReceitas();
-    {% endif %}
     
-    {% if edit_mode and comprovacoes %}
     // Load existing comprovacoes data in edit mode
     const existingComprovacoes = {{ comprovacoes_json|safe }};
     
@@ -820,10 +818,10 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
     calculateTotalComprovacao();
-    {% endif %}
     
     // Calculate difference after loading all data
     calculateDiferenca();
+    {% endif %}
 });
 </script>
 {% endblock %}
