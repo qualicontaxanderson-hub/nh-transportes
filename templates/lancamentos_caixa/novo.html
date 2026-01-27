@@ -449,6 +449,14 @@ function addComprovacaoMultiple(container, tipo, label) {
         <div id="depositos-${tipo}" class="mb-2">
             <!-- Deposito entries will be added here -->
         </div>
+        <div class="row align-items-center" style="padding: 0.5rem 0; border-top: 2px solid #28a745; margin-top: 0.3rem; background: #f8f9fa;">
+            <div class="col-md-4" style="padding-left: 1rem;">
+                <strong style="font-size: 0.85rem;">Total ${label}:</strong>
+            </div>
+            <div class="col-md-8">
+                <strong id="total-deposito-${tipo}" class="text-success" style="font-size: 0.9rem;">R$ 0,00</strong>
+            </div>
+        </div>
     `;
     container.appendChild(item);
 }
@@ -510,7 +518,8 @@ function addDepositoEntry(tipo, label) {
             <div class="col-md-4">
                 <input type="text" class="form-control form-control-sm comprovacao-valor" 
                        data-tipo="${tipo}" placeholder="0,00" 
-                       oninput="formatNumberInput(this)" onchange="calcularTotais()">
+                       oninput="formatNumberInput(this); calcularTotaisDeposito('${tipo}')" 
+                       onchange="calcularTotais()">
             </div>
             <div class="col-md-6">
                 <input type="text" class="form-control form-control-sm comprovacao-descricao" 
@@ -531,7 +540,24 @@ function removeDepositoEntry(tipo, index) {
     const entry = document.getElementById(`deposito-${tipo}-${index}`);
     if (entry) {
         entry.remove();
+        calcularTotaisDeposito(tipo);
         calcularTotais();
+    }
+}
+
+// Calculate total for a specific deposit type
+function calcularTotaisDeposito(tipo) {
+    let total = 0;
+    const depositosContainer = document.getElementById(`depositos-${tipo}`);
+    if (depositosContainer) {
+        depositosContainer.querySelectorAll(`.comprovacao-valor[data-tipo="${tipo}"]`).forEach(input => {
+            total += parseCurrency(input.value);
+        });
+    }
+    
+    const totalElement = document.getElementById(`total-deposito-${tipo}`);
+    if (totalElement) {
+        totalElement.textContent = formatCurrency(total);
     }
 }
 
