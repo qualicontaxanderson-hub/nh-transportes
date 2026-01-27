@@ -741,6 +741,17 @@ def editar(id):
         bandeiras_cartao_clean = convert_to_plain_python(bandeiras_cartao)
         tipos_receita_clean = convert_to_plain_python(tipos_receita)
         
+        # PRE-SERIALIZE to JSON strings on the server side to avoid Jinja2 tojson filter issues
+        # This bypasses any Jinja2 serialization problems completely
+        import json
+        lancamento_json = json.dumps(lancamento_clean)
+        receitas_json = json.dumps(receitas_clean)
+        comprovacoes_json = json.dumps(comprovacoes_clean)
+        clientes_json = json.dumps(clientes_clean)
+        formas_pagamento_json = json.dumps(formas_pagamento_clean)
+        bandeiras_cartao_json = json.dumps(bandeiras_cartao_clean)
+        tipos_receita_json = json.dumps(tipos_receita_clean)
+        
         return render_template('lancamentos_caixa/novo.html',
                              edit_mode=True,
                              lancamento=lancamento_clean,
@@ -749,7 +760,15 @@ def editar(id):
                              clientes=clientes_clean,
                              formas_pagamento=formas_pagamento_clean,
                              bandeiras_cartao=bandeiras_cartao_clean,
-                             tipos_receita=tipos_receita_clean)
+                             tipos_receita=tipos_receita_clean,
+                             # Also pass JSON strings for JavaScript
+                             lancamento_json=lancamento_json,
+                             receitas_json=receitas_json,
+                             comprovacoes_json=comprovacoes_json,
+                             clientes_json=clientes_json,
+                             formas_pagamento_json=formas_pagamento_json,
+                             bandeiras_cartao_json=bandeiras_cartao_json,
+                             tipos_receita_json=tipos_receita_json)
         
     except Exception as e:
         if conn:
