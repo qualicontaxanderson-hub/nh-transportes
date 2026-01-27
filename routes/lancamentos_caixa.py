@@ -50,6 +50,20 @@ def lista():
         conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)
         
+        # Default to current month if no filters provided
+        from datetime import date
+        hoje = date.today()
+        primeiro_dia_mes = hoje.replace(day=1)
+        data_inicio_default = primeiro_dia_mes.strftime('%Y-%m-%d')
+        data_fim_default = hoje.strftime('%Y-%m-%d')
+        
+        # Get filters from query string
+        filtros = {
+            'data_inicio': request.args.get('data_inicio', data_inicio_default),
+            'data_fim': request.args.get('data_fim', data_fim_default),
+            'cliente_id': request.args.get('cliente_id', '')
+        }
+        
         # Check if table exists first and determine schema
         has_new_schema = False
         try:
@@ -66,20 +80,41 @@ def lista():
             if "doesn't exist" in str(table_error) or "1146" in str(table_error):
                 return render_template('lancamentos_caixa/lista.html', 
                                      lancamentos=[],
+                                     filtros=filtros,
+                                     clientes=[],
+                                     resumo={},
                                      has_new_schema=False,
                                      table_exists=False)
             else:
                 raise  # Re-raise if it's a different error
         
-        # Build query based on available columns
+        # Build query based on available columns with filters
         if has_new_schema:
+            # Build filter conditions
+            where_conditions = []
+            params = []
+            
+            if filtros['data_inicio']:
+                where_conditions.append("lc.data >= %s")
+                params.append(filtros['data_inicio'])
+            if filtros['data_fim']:
+                where_conditions.append("lc.data <= %s")
+                params.append(filtros['data_fim'])
+            if filtros['cliente_id']:
+                where_conditions.append("lc.cliente_id = %s")
+                params.append(int(filtros['cliente_id']))
+            
+            where_clause = "WHERE " + " AND ".join(where_conditions) if where_conditions else ""
+            
             # New schema with usuario_id and data
-            cursor.execute("""
-                SELECT lc.*, u.username as usuario_nome
+            cursor.execute(f"""
+                SELECT lc.*, u.username as usuario_nome, c.razao_social as cliente_nome
                 FROM lancamentos_caixa lc
                 LEFT JOIN usuarios u ON lc.usuario_id = u.id
+                LEFT JOIN clientes c ON lc.cliente_id = c.id
+                {where_clause}
                 ORDER BY lc.data DESC, lc.id DESC
-            """)
+            """, tuple(params))
         elif 'data_movimento' in columns:
             # Existing schema with data_movimento
             cursor.execute("""
@@ -98,8 +133,37 @@ def lista():
         
         lancamentos = cursor.fetchall()
         
+        # Calculate summary
+        resumo = {
+            'total_receitas': Decimal('0'),
+            'total_comprovacao': Decimal('0'),
+            'total_diferenca': Decimal('0')
+        }
+        
+        if has_new_schema and lancamentos:
+            for lanc in lancamentos:
+                if lanc.get('total_receitas') is not None:
+                    resumo['total_receitas'] += Decimal(str(lanc['total_receitas']))
+                if lanc.get('total_comprovacao') is not None:
+                    resumo['total_comprovacao'] += Decimal(str(lanc['total_comprovacao']))
+                if lanc.get('diferenca') is not None:
+                    resumo['total_diferenca'] += Decimal(str(lanc['diferenca']))
+        
+        # Get clients for filter
+        cursor.execute("""
+            SELECT DISTINCT c.id, c.razao_social 
+            FROM clientes c
+            INNER JOIN cliente_produtos cp ON c.id = cp.cliente_id
+            WHERE cp.ativo = 1
+            ORDER BY c.razao_social
+        """)
+        clientes = cursor.fetchall()
+        
         return render_template('lancamentos_caixa/lista.html', 
                              lancamentos=lancamentos,
+                             filtros=filtros,
+                             clientes=clientes,
+                             resumo=resumo,
                              has_new_schema=has_new_schema,
                              table_exists=True)
     except Exception as e:
@@ -111,6 +175,9 @@ def lista():
             flash(f'Erro ao carregar lançamentos de caixa: {str(e)}', 'danger')
         return render_template('lancamentos_caixa/lista.html', 
                              lancamentos=[],
+                             filtros={'data_inicio': '', 'data_fim': '', 'cliente_id': ''},
+                             clientes=[],
+                             resumo={},
                              has_new_schema=False,
                              table_exists=False)
     finally:
@@ -408,9 +475,9 @@ def visualizar(id):
         """, (id,))
         receitas = cursor.fetchall()
         
-        # Add friendly type names
+        # tipo already contains the friendly name from database
         for receita in receitas:
-            receita['tipo_nome'] = TIPOS_RECEITA.get(receita['tipo'], receita['tipo'])
+            receita['tipo_nome'] = receita['tipo']
         
         # Get comprovacoes
         cursor.execute("""

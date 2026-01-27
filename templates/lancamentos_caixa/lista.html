@@ -11,6 +11,41 @@
     
     <h2 class="mb-3" style="color:#1D63A5; font-size: 1.3rem;"><i class="bi bi-cash-stack"></i> Lançamentos de Caixa</h2>
     
+    {% if lancamentos and has_new_schema %}
+    <!-- Summary Section -->
+    <div class="card shadow-sm mb-4">
+        <div class="card-header" style="background:#1D63A5;color:white; font-size: 0.95rem; padding: 0.6rem 1rem;">
+            <h5 class="mb-0" style="font-size: 1rem;"><i class="bi bi-bar-chart-fill"></i> Resumo do Período</h5>
+        </div>
+        <div class="card-body">
+            <div class="row text-center">
+                <div class="col-md-4">
+                    <h6 style="color: #6c757d; font-size: 0.85rem; margin-bottom: 0.5rem;">Total Receitas</h6>
+                    <h4 style="color: #28a745; font-weight: 600;">R$ {{ "{:,.2f}".format(resumo.total_receitas|float).replace(',', 'X').replace('.', ',').replace('X', '.') }}</h4>
+                </div>
+                <div class="col-md-4">
+                    <h6 style="color: #6c757d; font-size: 0.85rem; margin-bottom: 0.5rem;">Total Comprovação</h6>
+                    <h4 style="color: #007bff; font-weight: 600;">R$ {{ "{:,.2f}".format(resumo.total_comprovacao|float).replace(',', 'X').replace('.', ',').replace('X', '.') }}</h4>
+                </div>
+                <div class="col-md-4">
+                    <h6 style="color: #6c757d; font-size: 0.85rem; margin-bottom: 0.5rem;">
+                        {% if resumo.total_diferenca|float < 0 %}
+                        Total Perdas (Devedor)
+                        {% elif resumo.total_diferenca|float > 0 %}
+                        Total Sobras
+                        {% else %}
+                        Diferença
+                        {% endif %}
+                    </h6>
+                    <h4 style="color: {% if resumo.total_diferenca|float < 0 %}#dc3545{% elif resumo.total_diferenca|float > 0 %}#17a2b8{% else %}#28a745{% endif %}; font-weight: 600;">
+                        {% if resumo.total_diferenca|float < 0 %}- {% endif %}R$ {{ "{:,.2f}".format(resumo.total_diferenca|float|abs).replace(',', 'X').replace('.', ',').replace('X', '.') }}
+                    </h4>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+    
     <div class="card shadow-sm">
         <div class="card-header" style="background:#ff9800;color:white; font-size: 0.95rem; padding: 0.6rem 1rem;">
             <div class="d-flex justify-content-between align-items-center">
@@ -21,6 +56,43 @@
             </div>
         </div>
         <div class="card-body" style="padding: 1rem;">
+            {% if has_new_schema %}
+            <!-- Filters -->
+            <div class="card mb-3" style="border: 1px solid #dee2e6; border-radius: 8px;">
+                <div class="card-body" style="padding: 1rem;">
+                    <form method="GET" class="row g-3">
+                        <div class="col-md-3">
+                            <label class="form-label fw-bold" style="font-size: 0.85rem;">Data Início</label>
+                            <input type="date" name="data_inicio" class="form-control form-control-sm" 
+                                   value="{{ filtros.data_inicio }}">
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label fw-bold" style="font-size: 0.85rem;">Data Fim</label>
+                            <input type="date" name="data_fim" class="form-control form-control-sm" 
+                                   value="{{ filtros.data_fim }}">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-bold" style="font-size: 0.85rem;">Cliente/Posto</label>
+                            <select name="cliente_id" class="form-select form-select-sm">
+                                <option value="">Todos os clientes</option>
+                                {% for cliente in clientes %}
+                                <option value="{{ cliente.id }}" 
+                                        {% if filtros.cliente_id == cliente.id|string %}selected{% endif %}>
+                                    {{ cliente.razao_social }}
+                                </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-2 d-flex align-items-end">
+                            <button type="submit" class="btn btn-primary btn-sm w-100" style="background:#ff9800; border-color:#ff9800;">
+                                <i class="bi bi-funnel"></i> Filtrar
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+            {% endif %}
+            
             {% if lancamentos %}
             {% if not has_new_schema %}
             <div class="alert alert-warning" role="alert">
@@ -35,10 +107,10 @@
                             <th style="font-size: 0.85rem;">ID</th>
                             <th style="font-size: 0.85rem;">Data</th>
                             {% if lancamentos[0].get('total_receitas') is defined %}
+                            <th style="font-size: 0.85rem;">Cliente</th>
                             <th style="font-size: 0.85rem;">Total Receitas</th>
                             <th style="font-size: 0.85rem;">Total Comprovação</th>
                             <th style="font-size: 0.85rem;">Diferença</th>
-                            <th style="font-size: 0.85rem;">Status</th>
                             <th style="font-size: 0.85rem;">Usuário</th>
                             {% else %}
                             <th style="font-size: 0.85rem;">Tipo</th>
@@ -62,17 +134,11 @@
                                 {% endif %}
                             </td>
                             {% if lanc.get('total_receitas') is not none %}
+                            <td style="font-size: 0.85rem;">{{ lanc.cliente_nome if lanc.cliente_nome else '-' }}</td>
                             <td style="font-size: 0.85rem;">R$ {{ "{:,.2f}".format(lanc.total_receitas|float).replace(',', 'X').replace('.', ',').replace('X', '.') }}</td>
                             <td style="font-size: 0.85rem;">R$ {{ "{:,.2f}".format(lanc.total_comprovacao|float).replace(',', 'X').replace('.', ',').replace('X', '.') }}</td>
-                            <td style="font-size: 0.85rem;" class="{% if lanc.diferenca|float < 0 %}text-danger{% elif lanc.diferenca|float > 0 %}text-warning{% else %}text-success{% endif %}">
+                            <td style="font-size: 0.85rem;" class="{% if lanc.diferenca|float < 0 %}text-danger{% elif lanc.diferenca|float > 0 %}text-info{% else %}text-success{% endif %}">
                                 {% if lanc.diferenca|float < 0 %}- {% endif %}R$ {{ "{:,.2f}".format(lanc.diferenca|float|abs).replace(',', 'X').replace('.', ',').replace('X', '.') }}
-                            </td>
-                            <td style="font-size: 0.85rem;">
-                                {% if lanc.status == 'ABERTO' %}
-                                <span class="badge bg-warning">Aberto</span>
-                                {% else %}
-                                <span class="badge bg-success">Fechado</span>
-                                {% endif %}
                             </td>
                             <td style="font-size: 0.85rem;">{{ lanc.usuario_nome if lanc.usuario_nome else '-' }}</td>
                             {% else %}
