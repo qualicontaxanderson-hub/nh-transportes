@@ -661,7 +661,7 @@ def editar(id):
         
         # Get comprovacoes
         cursor.execute("""
-            SELECT lcc.*, fp.nome as forma_pagamento_nome, bc.nome as cartao_nome
+            SELECT lcc.*, fp.nome as forma_pagamento_nome, fp.tipo as forma_pagamento_tipo, bc.nome as cartao_nome
             FROM lancamentos_caixa_comprovacao lcc
             LEFT JOIN formas_pagamento_caixa fp ON lcc.forma_pagamento_id = fp.id
             LEFT JOIN bandeiras_cartao bc ON lcc.bandeira_cartao_id = bc.id

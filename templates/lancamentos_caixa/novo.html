@@ -284,7 +284,7 @@ function initializeReceitas() {
                     </div>
                     <div class="col-md-4">
                         <input type="text" class="form-control form-control-sm receita-valor" data-index="${receitaIndex}" 
-                               value="R$ 0,00" readonly style="background-color: #e9ecef;">
+                               data-receita-tipo="${nomeTipo}" value="R$ 0,00" readonly style="background-color: #e9ecef;">
                     </div>
                     <div class="col-md-2 text-center">
                         ${navButton}
@@ -304,11 +304,11 @@ function initializeReceitas() {
                     </div>
                     <div class="col-md-3">
                         <input type="text" class="form-control form-control-sm receita-valor" data-index="${receitaIndex}" 
-                               placeholder="0,00" oninput="formatNumberInput(this)" onchange="calcularTotais()">
+                               data-receita-tipo="${nomeTipo}" placeholder="0,00" oninput="formatNumberInput(this)" onchange="calcularTotais()">
                     </div>
                     <div class="col-md-5">
                         <input type="text" class="form-control form-control-sm receita-descricao" data-index="${receitaIndex}" 
-                               placeholder="Descrição (opcional)">
+                               data-receita-tipo="${nomeTipo}" placeholder="Descrição (opcional)">
                     </div>
                 </div>
             `;
@@ -415,7 +415,7 @@ function addComprovacaoSingle(container, tipo, label) {
             </div>
             <div class="col-md-6">
                 <input type="text" class="form-control form-control-sm comprovacao-valor" 
-                       data-tipo="${tipo}" placeholder="0,00" 
+                       data-tipo="${tipo}" data-comprovacao-forma="${tipo}" placeholder="0,00" 
                        oninput="formatNumberInput(this)" onchange="calcularTotais()">
             </div>
         </div>
@@ -434,7 +434,7 @@ function addComprovacaoSingleComDescricao(container, tipo, label, defaultDescric
             </div>
             <div class="col-md-4">
                 <input type="text" class="form-control form-control-sm comprovacao-valor" 
-                       data-tipo="${tipo}" placeholder="0,00" 
+                       data-tipo="${tipo}" data-comprovacao-forma="${tipo}" placeholder="0,00" 
                        oninput="formatNumberInput(this)" onchange="calcularTotais()">
             </div>
             <div class="col-md-5">
@@ -495,7 +495,7 @@ function addComprovacaoCartoes(container, tipoCartao, label) {
                 </div>
                 <div class="col-md-6">
                     <input type="text" class="form-control form-control-sm comprovacao-cartao-valor" 
-                           data-tipo="CARTAO_${tipoCartao}" data-bandeira="${cartao.id}" 
+                           data-tipo="CARTAO_${tipoCartao}" data-comprovacao-forma="CARTAO_${tipoCartao}" data-bandeira="${cartao.id}" data-bandeira-id="${cartao.id}"
                            placeholder="0,00" oninput="formatNumberInput(this)" 
                            onchange="calcularTotaisCartao('${tipoCartao}')">
                 </div>
@@ -532,7 +532,7 @@ function addDepositoEntry(tipo, label) {
         <div class="row align-items-center">
             <div class="col-md-4">
                 <input type="text" class="form-control form-control-sm comprovacao-valor" 
-                       data-tipo="${tipo}" placeholder="0,00" 
+                       data-tipo="${tipo}" data-comprovacao-forma="${tipo}" placeholder="0,00" 
                        oninput="formatNumberInput(this); calcularTotaisDeposito('${tipo}')" 
                        onchange="calcularTotais()">
             </div>
@@ -713,43 +713,43 @@ document.addEventListener('DOMContentLoaded', function() {
                 maximumFractionDigits: 2
             });
             
-            // If there's a description field, populate it
-            const descricaoInput = valorInput.closest('.list-group-item').querySelector('input[placeholder*="Descrição"]');
+            // If there's a description field, populate it (look for sibling in same row)
+            const descricaoInput = valorInput.closest('.row').querySelector('.receita-descricao');
             if (descricaoInput && receita.descricao) {
                 descricaoInput.value = receita.descricao;
             }
         }
     }
-    calculateTotalReceitas();
+    calcularTotais();
     
     // Load existing comprovacoes data in edit mode
     const existingComprovacoes = {{ comprovacoes_json|safe }};
     
-    // Group comprovacoes by forma_pagamento_id
-    const comprovacoesByForma = {};
+    // Group comprovacoes by forma_pagamento_tipo (not ID, because we need the tipo to match inputs)
+    const comprovacoesByTipo = {};
     for (const comp of existingComprovacoes) {
-        if (!comprovacoesByForma[comp.forma_pagamento_id]) {
-            comprovacoesByForma[comp.forma_pagamento_id] = [];
+        const tipo = comp.forma_pagamento_tipo;
+        if (!tipo) continue;
+        
+        if (!comprovacoesByTipo[tipo]) {
+            comprovacoesByTipo[tipo] = [];
         }
-        comprovacoesByForma[comp.forma_pagamento_id].push(comp);
+        comprovacoesByTipo[tipo].push(comp);
     }
     
-    // Populate each forma de pagamento
-    for (const formaId in comprovacoesByForma) {
-        const comps = comprovacoesByForma[formaId];
-        const forma = formasPagamento.find(f => f.id == formaId);
-        
-        if (!forma) continue;
+    // Populate each forma de pagamento by tipo
+    for (const tipo in comprovacoesByTipo) {
+        const comps = comprovacoesByTipo[tipo];
         
         // Handle different types of formas_pagamento
-        if (forma.tipo === 'DEPOSITO_ESPECIE' || forma.tipo === 'DEPOSITO_CHEQUE_VISTA' || forma.tipo === 'DEPOSITO_CHEQUE_PRAZO') {
+        if (tipo === 'DEPOSITO_ESPECIE' || tipo === 'DEPOSITO_CHEQUE_VISTA' || tipo === 'DEPOSITO_CHEQUE_PRAZO') {
             // Multiple entries allowed - add each one
             for (let i = 0; i < comps.length; i++) {
                 const comp = comps[i];
                 if (i === 0) {
                     // Fill the first (default) entry
-                    const firstValorInput = document.querySelector(`input[data-comprovacao-forma="${forma.tipo}"]`);
-                    const firstDescInput = firstValorInput?.closest('.list-group-item').querySelector('input[placeholder*="Descrição"]');
+                    const firstValorInput = document.querySelector(`input[data-comprovacao-forma="${tipo}"]`);
+                    const firstDescInput = firstValorInput?.closest('.comprovacao-item').querySelector('input[placeholder*="Descrição"]');
                     if (firstValorInput) {
                         firstValorInput.value = parseFloat(comp.valor).toLocaleString('pt-BR', {
                             minimumFractionDigits: 2,
@@ -761,14 +761,14 @@ document.addEventListener('DOMContentLoaded', function() {
                     }
                 } else {
                     // Add additional entries
-                    const addButton = document.querySelector(`button[onclick*="addDeposito"][onclick*="${forma.tipo}"]`);
+                    const addButton = document.querySelector(`button[onclick*="addDepositoEntry"][onclick*="${tipo}"]`);
                     if (addButton) {
                         addButton.click();
                         // Wait a bit for DOM to update, then fill
                         setTimeout(() => {
-                            const allInputs = document.querySelectorAll(`input[data-comprovacao-forma="${forma.tipo}"]`);
+                            const allInputs = document.querySelectorAll(`input[data-comprovacao-forma="${tipo}"]`);
                             const lastValorInput = allInputs[allInputs.length - 1];
-                            const lastDescInput = lastValorInput?.closest('.list-group-item').querySelector('input[placeholder*="Descrição"]');
+                            const lastDescInput = lastValorInput?.closest('.comprovacao-item').querySelector('input[placeholder*="Descrição"]');
                             if (lastValorInput) {
                                 lastValorInput.value = parseFloat(comp.valor).toLocaleString('pt-BR', {
                                     minimumFractionDigits: 2,
@@ -778,18 +778,18 @@ document.addEventListener('DOMContentLoaded', function() {
                             if (lastDescInput && comp.descricao) {
                                 lastDescInput.value = comp.descricao;
                             }
-                            if (forma.tipo === 'DEPOSITO_ESPECIE') updateTotalDepositoEspecie();
-                            if (forma.tipo === 'DEPOSITO_CHEQUE_VISTA') updateTotalDepositoChequeVista();
-                            if (forma.tipo === 'DEPOSITO_CHEQUE_PRAZO') updateTotalDepositoChequePrazo();
-                            calculateTotalComprovacao();
+                            if (tipo === 'DEPOSITO_ESPECIE') calcularTotaisDeposito('DEPOSITO_ESPECIE');
+                            if (tipo === 'DEPOSITO_CHEQUE_VISTA') calcularTotaisDeposito('DEPOSITO_CHEQUE_VISTA');
+                            if (tipo === 'DEPOSITO_CHEQUE_PRAZO') calcularTotaisDeposito('DEPOSITO_CHEQUE_PRAZO');
+                            calcularTotais();
                         }, 100 * i);
                     }
                 }
             }
-        } else if (forma.tipo === 'CARTAO_DEBITO' || forma.tipo === 'CARTAO_CREDITO') {
+        } else if (tipo === 'CARTAO_DEBITO' || tipo === 'CARTAO_CREDITO') {
             // Card with bandeira - find the input by bandeira_cartao_id
             for (const comp of comps) {
-                const valorInput = document.querySelector(`input[data-comprovacao-forma="${forma.tipo}"][data-bandeira-id="${comp.bandeira_cartao_id}"]`);
+                const valorInput = document.querySelector(`input[data-comprovacao-forma="${tipo}"][data-bandeira-id="${comp.bandeira_cartao_id}"]`);
                 if (valorInput) {
                     valorInput.value = parseFloat(comp.valor).toLocaleString('pt-BR', {
                         minimumFractionDigits: 2,
@@ -797,12 +797,12 @@ document.addEventListener('DOMContentLoaded', function() {
                     });
                 }
             }
-            if (forma.tipo === 'CARTAO_DEBITO') updateTotalCartaoDebito();
-            if (forma.tipo === 'CARTAO_CREDITO') updateTotalCartaoCredito();
+            if (tipo === 'CARTAO_DEBITO') calcularTotaisCartao('DEBITO');
+            if (tipo === 'CARTAO_CREDITO') calcularTotaisCartao('CREDITO');
         } else {
             // Single entry formas - just fill the first value
             const comp = comps[0];
-            const valorInput = document.querySelector(`input[data-comprovacao-forma="${forma.tipo}"]`);
+            const valorInput = document.querySelector(`input[data-comprovacao-forma="${tipo}"]`);
             if (valorInput) {
                 valorInput.value = parseFloat(comp.valor).toLocaleString('pt-BR', {
                     minimumFractionDigits: 2,
@@ -810,17 +810,17 @@ document.addEventListener('DOMContentLoaded', function() {
                 });
                 
                 // If there's a description field, populate it
-                const descricaoInput = valorInput.closest('.list-group-item').querySelector('input[placeholder*="Descrição"]');
+                const descricaoInput = valorInput.closest('.comprovacao-item').querySelector('input[placeholder*="Descrição"]');
                 if (descricaoInput && comp.descricao) {
                     descricaoInput.value = comp.descricao;
                 }
             }
         }
     }
-    calculateTotalComprovacao();
+    calcularTotais();
     
     // Calculate difference after loading all data
-    calculateDiferenca();
+    calcularTotaisDiferenca();
     {% endif %}
 });
 </script>
