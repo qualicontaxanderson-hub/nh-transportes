@@ -813,10 +813,12 @@ document.addEventListener('DOMContentLoaded', function() {
                     }
                 }
             }
-        } else if (tipo === 'CARTAO_DEBITO' || tipo === 'CARTAO_CREDITO') {
+        } else if (tipo === 'CARTAO') {
             // Card with bandeira - find the input by bandeira_cartao_id
+            // Cards in DB have tipo='CARTAO', but in HTML they have data-tipo='CARTAO_DEBITO' or 'CARTAO_CREDITO'
             for (const comp of comps) {
-                const valorInput = document.querySelector(`input[data-comprovacao-forma="${tipo}"][data-bandeira-id="${comp.bandeira_cartao_id}"]`);
+                // Try both CARTAO_DEBITO and CARTAO_CREDITO since we don't know which one this bandeira is
+                const valorInput = document.querySelector(`input[data-bandeira-id="${comp.bandeira_cartao_id}"]`);
                 if (valorInput) {
                     valorInput.value = parseFloat(comp.valor).toLocaleString('pt-BR', {
                         minimumFractionDigits: 2,
@@ -824,8 +826,9 @@ document.addEventListener('DOMContentLoaded', function() {
                     });
                 }
             }
-            if (tipo === 'CARTAO_DEBITO') calcularTotaisCartao('DEBITO');
-            if (tipo === 'CARTAO_CREDITO') calcularTotaisCartao('CREDITO');
+            // Calculate totals for both debit and credit (the function will handle which one)
+            calcularTotaisCartao('DEBITO');
+            calcularTotaisCartao('CREDITO');
         } else {
             // Single entry formas - just fill the first value
             const comp = comps[0];
