@@ -705,28 +705,32 @@ def editar(id):
         # Convert any Decimal/None values to JSON-serializable format
         # to avoid "Object of type Undefined is not JSON serializable" error
         def clean_data(data):
-            """Helper function to clean data from MySQL"""
-            if isinstance(data, dict):
-                clean_dict = {}
-                for key, value in data.items():
-                    if value is None:
-                        clean_dict[key] = ''
-                    elif isinstance(value, Decimal):
-                        clean_dict[key] = float(value)
-                    else:
-                        clean_dict[key] = value
-                return clean_dict
-            elif isinstance(data, list):
+            """Helper function to clean data from MySQL - handles all problematic types"""
+            if data is None:
+                return ''
+            elif isinstance(data, Decimal):
+                return float(data)
+            elif isinstance(data, dict):
+                return {key: clean_data(value) for key, value in data.items()}
+            elif isinstance(data, (list, tuple)):
                 return [clean_data(item) for item in data]
-            return data
+            elif isinstance(data, (str, int, float, bool)):
+                return data
+            else:
+                # For any other type (including Undefined), convert to string or empty
+                try:
+                    return str(data) if data else ''
+                except:
+                    return ''
         
-        lancamento_clean = clean_data(dict(lancamento)) if lancamento else {}
-        receitas_clean = clean_data(receitas)
-        comprovacoes_clean = clean_data(comprovacoes)
-        clientes_clean = clean_data(clientes)
-        formas_pagamento_clean = clean_data(formas_pagamento)
-        bandeiras_cartao_clean = clean_data(bandeiras_cartao)
-        tipos_receita_clean = clean_data(tipos_receita)
+        # Clean ALL data structures
+        lancamento_clean = clean_data(dict(lancamento) if lancamento else {})
+        receitas_clean = clean_data(list(receitas) if receitas else [])
+        comprovacoes_clean = clean_data(list(comprovacoes) if comprovacoes else [])
+        clientes_clean = clean_data(list(clientes) if clientes else [])
+        formas_pagamento_clean = clean_data(list(formas_pagamento) if formas_pagamento else [])
+        bandeiras_cartao_clean = clean_data(list(bandeiras_cartao) if bandeiras_cartao else [])
+        tipos_receita_clean = clean_data(list(tipos_receita) if tipos_receita else [])
         
         return render_template('lancamentos_caixa/novo.html',
                              edit_mode=True,
