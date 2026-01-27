@@ -703,43 +703,70 @@ document.addEventListener('DOMContentLoaded', function() {
     
     {% if edit_mode %}
     // Load existing receitas data in edit mode
+    console.log('=== EDIT MODE: Loading receitas data ===');
     const existingReceitas = {{ receitas_json|safe }};
-    for (const receita of existingReceitas) {
-        const valorInput = document.querySelector(`input[data-receita-tipo="${receita.tipo}"]`);
-        if (valorInput) {
-            // Format value as Brazilian currency
-            valorInput.value = parseFloat(receita.valor).toLocaleString('pt-BR', {
-                minimumFractionDigits: 2,
-                maximumFractionDigits: 2
-            });
+    console.log('Receitas from backend:', existingReceitas);
+    console.log('Number of receitas:', existingReceitas.length);
+    
+    // Wait a moment for the page to fully initialize
+    setTimeout(() => {
+        console.log('Starting to populate receitas...');
+        for (const receita of existingReceitas) {
+            console.log(`Looking for receita tipo: ${receita.tipo}, valor: ${receita.valor}`);
+            const valorInput = document.querySelector(`input[data-receita-tipo="${receita.tipo}"]`);
+            console.log('Found input:', valorInput);
             
-            // If there's a description field, populate it (look for sibling in same row)
-            const descricaoInput = valorInput.closest('.row').querySelector('.receita-descricao');
-            if (descricaoInput && receita.descricao) {
-                descricaoInput.value = receita.descricao;
+            if (valorInput) {
+                // Format value as Brazilian currency
+                const formattedValue = parseFloat(receita.valor).toLocaleString('pt-BR', {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2
+                });
+                valorInput.value = formattedValue;
+                console.log(`Set ${receita.tipo} to ${formattedValue}`);
+                
+                // If there's a description field, populate it (look for sibling in same row)
+                const descricaoInput = valorInput.closest('.row').querySelector('.receita-descricao');
+                if (descricaoInput && receita.descricao) {
+                    descricaoInput.value = receita.descricao;
+                    console.log(`Set description for ${receita.tipo} to ${receita.descricao}`);
+                }
+            } else {
+                console.warn(`Could not find input for receita tipo: ${receita.tipo}`);
             }
         }
-    }
-    calcularTotais();
+        calcularTotais();
+        console.log('Finished loading receitas');
+    }, 500);
     
     // Load existing comprovacoes data in edit mode
-    const existingComprovacoes = {{ comprovacoes_json|safe }};
-    
-    // Group comprovacoes by forma_pagamento_tipo (not ID, because we need the tipo to match inputs)
-    const comprovacoesByTipo = {};
-    for (const comp of existingComprovacoes) {
-        const tipo = comp.forma_pagamento_tipo;
-        if (!tipo) continue;
+    setTimeout(() => {
+        console.log('=== EDIT MODE: Loading comprovacoes data ===');
+        const existingComprovacoes = {{ comprovacoes_json|safe }};
+        console.log('Comprovacoes from backend:', existingComprovacoes);
+        console.log('Number of comprovacoes:', existingComprovacoes.length);
         
-        if (!comprovacoesByTipo[tipo]) {
-            comprovacoesByTipo[tipo] = [];
+        // Group comprovacoes by forma_pagamento_tipo (not ID, because we need the tipo to match inputs)
+        const comprovacoesByTipo = {};
+        for (const comp of existingComprovacoes) {
+            const tipo = comp.forma_pagamento_tipo;
+            if (!tipo) {
+                console.warn('Comprovacao without forma_pagamento_tipo:', comp);
+                continue;
+            }
+            
+            if (!comprovacoesByTipo[tipo]) {
+                comprovacoesByTipo[tipo] = [];
+            }
+            comprovacoesByTipo[tipo].push(comp);
         }
-        comprovacoesByTipo[tipo].push(comp);
-    }
-    
-    // Populate each forma de pagamento by tipo
-    for (const tipo in comprovacoesByTipo) {
-        const comps = comprovacoesByTipo[tipo];
+        
+        console.log('Grouped comprovacoes by tipo:', comprovacoesByTipo);
+        
+        // Populate each forma de pagamento by tipo
+        for (const tipo in comprovacoesByTipo) {
+            console.log(`Processing tipo: ${tipo}`);
+            const comps = comprovacoesByTipo[tipo];
         
         // Handle different types of formas_pagamento
         if (tipo === 'DEPOSITO_ESPECIE' || tipo === 'DEPOSITO_CHEQUE_VISTA' || tipo === 'DEPOSITO_CHEQUE_PRAZO') {
@@ -821,6 +848,8 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Calculate difference after loading all data
     calcularTotaisDiferenca();
+    console.log('=== EDIT MODE: Finished loading all data ===');
+    }, 1000);  // Give more time for page to fully initialize
     {% endif %}
 });
 </script>
