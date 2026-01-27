@@ -772,50 +772,37 @@ document.addEventListener('DOMContentLoaded', function() {
         
         // Handle different types of formas_pagamento
         if (tipo === 'DEPOSITO_ESPECIE' || tipo === 'DEPOSITO_CHEQUE_VISTA' || tipo === 'DEPOSITO_CHEQUE_PRAZO') {
-            // Multiple entries allowed - add each one
+            // Multiple entries allowed - add each one by clicking the Add button
             console.log(`  Loading ${comps.length} deposits of tipo: ${tipo}`);
             for (let i = 0; i < comps.length; i++) {
                 const comp = comps[i];
                 console.log(`    Deposit ${i}: valor=${comp.valor}, descricao="${comp.descricao}"`);
-                if (i === 0) {
-                    // Fill the first (default) entry
-                    const firstValorInput = document.querySelector(`input[data-comprovacao-forma="${tipo}"]`);
-                    console.log(`    First input found:`, firstValorInput);
-                    const firstDescInput = firstValorInput?.closest('.comprovacao-item').querySelector('input[placeholder*="Descrição"]');
-                    if (firstValorInput) {
-                        firstValorInput.value = parseFloat(comp.valor).toLocaleString('pt-BR', {
-                            minimumFractionDigits: 2,
-                            maximumFractionDigits: 2
-                        });
-                    }
-                    if (firstDescInput && comp.descricao) {
-                        firstDescInput.value = comp.descricao;
-                    }
-                } else {
-                    // Add additional entries
-                    const addButton = document.querySelector(`button[onclick*="addDepositoEntry"][onclick*="${tipo}"]`);
-                    if (addButton) {
-                        addButton.click();
-                        // Wait a bit for DOM to update, then fill
-                        setTimeout(() => {
-                            const allInputs = document.querySelectorAll(`input[data-comprovacao-forma="${tipo}"]`);
-                            const lastValorInput = allInputs[allInputs.length - 1];
-                            const lastDescInput = lastValorInput?.closest('.comprovacao-item').querySelector('input[placeholder*="Descrição"]');
-                            if (lastValorInput) {
-                                lastValorInput.value = parseFloat(comp.valor).toLocaleString('pt-BR', {
-                                    minimumFractionDigits: 2,
-                                    maximumFractionDigits: 2
-                                });
-                            }
-                            if (lastDescInput && comp.descricao) {
-                                lastDescInput.value = comp.descricao;
-                            }
-                            if (tipo === 'DEPOSITO_ESPECIE') calcularTotaisDeposito('DEPOSITO_ESPECIE');
-                            if (tipo === 'DEPOSITO_CHEQUE_VISTA') calcularTotaisDeposito('DEPOSITO_CHEQUE_VISTA');
-                            if (tipo === 'DEPOSITO_CHEQUE_PRAZO') calcularTotaisDeposito('DEPOSITO_CHEQUE_PRAZO');
-                            calcularTotais();
-                        }, 100 * i);
-                    }
+                
+                // For ALL deposits (including first), click Add button to create the input
+                const addButton = document.querySelector(`button[onclick*="addDepositoEntry"][onclick*="${tipo}"]`);
+                if (addButton) {
+                    addButton.click();
+                    // Wait a bit for DOM to update, then fill
+                    setTimeout(() => {
+                        const allInputs = document.querySelectorAll(`input[data-comprovacao-forma="${tipo}"]`);
+                        const lastValorInput = allInputs[allInputs.length - 1];
+                        const lastDescInput = lastValorInput?.closest('.comprovacao-item').querySelector('input[placeholder*="Descrição"]');
+                        console.log(`    After clicking Add, found ${allInputs.length} inputs, filling last one with ${comp.valor}`);
+                        if (lastValorInput) {
+                            lastValorInput.value = parseFloat(comp.valor).toLocaleString('pt-BR', {
+                                minimumFractionDigits: 2,
+                                maximumFractionDigits: 2
+                            });
+                        }
+                        if (lastDescInput && comp.descricao) {
+                            lastDescInput.value = comp.descricao;
+                        }
+                        // Recalculate totals after filling
+                        if (tipo === 'DEPOSITO_ESPECIE') calcularTotaisDeposito('DEPOSITO_ESPECIE');
+                        if (tipo === 'DEPOSITO_CHEQUE_VISTA') calcularTotaisDeposito('DEPOSITO_CHEQUE_VISTA');
+                        if (tipo === 'DEPOSITO_CHEQUE_PRAZO') calcularTotaisDeposito('DEPOSITO_CHEQUE_PRAZO');
+                        calcularTotais();
+                    }, 100 * (i + 1)); // Add 1 to ensure first deposit also waits
                 }
             }
         } else if (tipo === 'CARTAO') {
