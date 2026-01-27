@@ -264,9 +264,19 @@ function initializeReceitas() {
         
         if (isAuto) {
             // AUTO type - will be filled by loadVendasDia
+            // Add navigation button for specific types
+            let navButton = '';
+            if (nomeTipo === 'VENDAS POSTO') {
+                navButton = '<a href="/posto/vendas" class="btn btn-sm btn-outline-primary" style="padding: 0.15rem 0.4rem; font-size: 0.75rem;" title="Ir para Vendas Posto"><i class="bi bi-box-arrow-up-right"></i></a>';
+            } else if (nomeTipo === 'ARLA') {
+                navButton = '<a href="/arla/" class="btn btn-sm btn-outline-primary" style="padding: 0.15rem 0.4rem; font-size: 0.75rem;" title="Ir para ARLA"><i class="bi bi-box-arrow-up-right"></i></a>';
+            } else if (nomeTipo === 'LUBRIFICANTES') {
+                navButton = '<a href="/lubrificantes/" class="btn btn-sm btn-outline-primary" style="padding: 0.15rem 0.4rem; font-size: 0.75rem;" title="Ir para Lubrificantes"><i class="bi bi-box-arrow-up-right"></i></a>';
+            }
+            
             item.innerHTML = `
                 <div class="row align-items-center">
-                    <div class="col-md-5">
+                    <div class="col-md-4">
                         <label class="form-label mb-0" style="font-size: 0.75rem; font-weight: 600;">${nomeTipo}</label>
                         <input type="hidden" class="receita-tipo" data-index="${receitaIndex}" value="${nomeTipo}">
                     </div>
@@ -274,7 +284,10 @@ function initializeReceitas() {
                         <input type="text" class="form-control form-control-sm receita-valor" data-index="${receitaIndex}" 
                                value="R$ 0,00" readonly style="background-color: #e9ecef;">
                     </div>
-                    <div class="col-md-3 text-end">
+                    <div class="col-md-2 text-center">
+                        ${navButton}
+                    </div>
+                    <div class="col-md-2 text-end">
                         <span class="badge bg-info">Auto</span>
                     </div>
                 </div>
@@ -592,8 +605,8 @@ function calcularTotais() {
         totalComprovacao += parseCurrency(input.value);
     });
     
-    // Calculate diferenca
-    const diferenca = totalReceitas - totalComprovacao;
+    // Calculate diferenca: Total Comprovação - Total Receitas
+    const diferenca = totalComprovacao - totalReceitas;
     
     // Update displays
     document.getElementById('total-receitas').textContent = formatCurrency(totalReceitas);
@@ -602,14 +615,16 @@ function calcularTotais() {
     document.getElementById('total-comprovacao-resumo').textContent = formatCurrency(totalComprovacao);
     
     const diferencaEl = document.getElementById('diferenca');
-    diferencaEl.textContent = formatCurrency(diferenca);
-    
+    // Show negative sign explicitly for negative values
     if (diferenca < 0) {
-        diferencaEl.className = 'text-danger';
+        diferencaEl.textContent = '- ' + formatCurrency(Math.abs(diferenca));
+        diferencaEl.className = 'text-danger fw-bold'; // Red for deficit (DEVEDOR)
     } else if (diferenca > 0) {
-        diferencaEl.className = 'text-warning';
+        diferencaEl.textContent = formatCurrency(diferenca);
+        diferencaEl.className = 'text-primary fw-bold'; // Blue for surplus (SOBRAR)
     } else {
-        diferencaEl.className = 'text-success';
+        diferencaEl.textContent = formatCurrency(diferenca);
+        diferencaEl.className = 'text-success fw-bold'; // Green for balanced
     }
 }
 

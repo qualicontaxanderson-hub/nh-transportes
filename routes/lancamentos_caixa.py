@@ -233,10 +233,10 @@ def novo():
                 flash('Cliente é obrigatório!', 'danger')
                 raise ValueError('Cliente não fornecido')
             
-            # Calculate totals
+            # Calculate totals: Diferença = Total Comprovação - Total Receitas
             total_receitas = sum(parse_brazilian_currency(r.get('valor', 0)) for r in receitas)
             total_comprovacao = sum(parse_brazilian_currency(c.get('valor', 0)) for c in comprovacoes)
-            diferenca = total_receitas - total_comprovacao
+            diferenca = total_comprovacao - total_receitas
             
             # Insert lancamento_caixa
             cursor.execute("""
