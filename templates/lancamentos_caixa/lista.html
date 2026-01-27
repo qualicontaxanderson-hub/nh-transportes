@@ -62,10 +62,10 @@
                                 {% endif %}
                             </td>
                             {% if lanc.get('total_receitas') is not none %}
-                            <td style="font-size: 0.85rem;">R$ {{ "%.2f"|format(lanc.total_receitas|float) }}</td>
-                            <td style="font-size: 0.85rem;">R$ {{ "%.2f"|format(lanc.total_comprovacao|float) }}</td>
+                            <td style="font-size: 0.85rem;">R$ {{ "{:,.2f}".format(lanc.total_receitas|float).replace(',', 'X').replace('.', ',').replace('X', '.') }}</td>
+                            <td style="font-size: 0.85rem;">R$ {{ "{:,.2f}".format(lanc.total_comprovacao|float).replace(',', 'X').replace('.', ',').replace('X', '.') }}</td>
                             <td style="font-size: 0.85rem;" class="{% if lanc.diferenca|float < 0 %}text-danger{% elif lanc.diferenca|float > 0 %}text-warning{% else %}text-success{% endif %}">
-                                R$ {{ "%.2f"|format(lanc.diferenca|float) }}
+                                {% if lanc.diferenca|float < 0 %}- {% endif %}R$ {{ "{:,.2f}".format(lanc.diferenca|float|abs).replace(',', 'X').replace('.', ',').replace('X', '.') }}
                             </td>
                             <td style="font-size: 0.85rem;">
                                 {% if lanc.status == 'ABERTO' %}
