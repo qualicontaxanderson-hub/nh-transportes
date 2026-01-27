@@ -667,13 +667,11 @@ def editar(id):
         """, (id,))
         comprovacoes = cursor.fetchall()
         
-        # Get clients with "Produtos Posto" configured
+        # Get active clients
         cursor.execute("""
             SELECT c.id, c.razao_social
             FROM clientes c
-            INNER JOIN clientes_produtos cp ON c.id = cp.cliente_id
-            INNER JOIN produtos p ON cp.produto_id = p.id
-            WHERE p.nome = 'Produtos Posto' AND c.ativo = 1
+            WHERE c.ativo = 1
             ORDER BY c.razao_social
         """)
         clientes = cursor.fetchall()

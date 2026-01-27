@@ -66,7 +66,7 @@
                             <tr>
                                 <td style="font-size: 0.85rem;">{{ receita.tipo_nome }}</td>
                                 <td style="font-size: 0.85rem;">{{ receita.descricao if receita.descricao else '-' }}</td>
-                                <td style="font-size: 0.85rem; text-align: right; font-family: 'Courier New', monospace;">R$ {{ "{:>10,.2f}".format(receita.valor|float).replace(',', 'X').replace('.', ',').replace('X', '.') }}</td>
+                                <td style="font-size: 0.85rem; text-align: right;">R$ {{ "{:,.2f}".format(receita.valor|float).replace(',', 'X').replace('.', ',').replace('X', '.') }}</td>
                             </tr>
                             {% endfor %}
                         </tbody>
@@ -77,7 +77,7 @@
                     <hr>
                     <div class="d-flex justify-content-between align-items-center">
                         <strong>Total Receitas:</strong>
-                        <strong class="text-success" style="font-family: 'Courier New', monospace;">R$ {{ "{:>10,.2f}".format(lancamento.total_receitas|float).replace(',', 'X').replace('.', ',').replace('X', '.') }}</strong>
+                        <strong class="text-success">R$ {{ "{:,.2f}".format(lancamento.total_receitas|float).replace(',', 'X').replace('.', ',').replace('X', '.') }}</strong>
                     </div>
                 </div>
             </div>
@@ -104,7 +104,7 @@
                             <tr>
                                 <td style="font-size: 0.85rem;">{{ comp.forma_pagamento_nome if comp.forma_pagamento_nome else '-' }}</td>
                                 <td style="font-size: 0.85rem;">{{ comp.cartao_nome if comp.cartao_nome else '-' }}</td>
-                                <td style="font-size: 0.85rem; text-align: right; font-family: 'Courier New', monospace;">R$ {{ "{:>10,.2f}".format(comp.valor|float).replace(',', 'X').replace('.', ',').replace('X', '.') }}</td>
+                                <td style="font-size: 0.85rem; text-align: right;">R$ {{ "{:,.2f}".format(comp.valor|float).replace(',', 'X').replace('.', ',').replace('X', '.') }}</td>
                             </tr>
                             {% endfor %}
                         </tbody>
@@ -115,7 +115,7 @@
                     <hr>
                     <div class="d-flex justify-content-between align-items-center">
                         <strong>Total Comprovação:</strong>
-                        <strong class="text-primary" style="font-family: 'Courier New', monospace;">R$ {{ "{:>10,.2f}".format(lancamento.total_comprovacao|float).replace(',', 'X').replace('.', ',').replace('X', '.') }}</strong>
+                        <strong class="text-primary">R$ {{ "{:,.2f}".format(lancamento.total_comprovacao|float).replace(',', 'X').replace('.', ',').replace('X', '.') }}</strong>
                     </div>
                 </div>
             </div>
@@ -129,20 +129,20 @@
                 <div class="col-md-4">
                     <div class="d-flex justify-content-between">
                         <strong>Total Receitas:</strong>
-                        <strong class="text-success" style="font-family: 'Courier New', monospace;">R$ {{ "{:>10,.2f}".format(lancamento.total_receitas|float).replace(',', 'X').replace('.', ',').replace('X', '.') }}</strong>
+                        <strong class="text-success">R$ {{ "{:,.2f}".format(lancamento.total_receitas|float).replace(',', 'X').replace('.', ',').replace('X', '.') }}</strong>
                     </div>
                 </div>
                 <div class="col-md-4">
                     <div class="d-flex justify-content-between">
                         <strong>Total Comprovação:</strong>
-                        <strong class="text-primary" style="font-family: 'Courier New', monospace;">R$ {{ "{:>10,.2f}".format(lancamento.total_comprovacao|float).replace(',', 'X').replace('.', ',').replace('X', '.') }}</strong>
+                        <strong class="text-primary">R$ {{ "{:,.2f}".format(lancamento.total_comprovacao|float).replace(',', 'X').replace('.', ',').replace('X', '.') }}</strong>
                     </div>
                 </div>
                 <div class="col-md-4">
                     <div class="d-flex justify-content-between">
                         <strong>Diferença:</strong>
-                        <strong class="{% if lancamento.diferenca|float < 0 %}text-danger{% elif lancamento.diferenca|float > 0 %}text-warning{% else %}text-success{% endif %}" style="font-family: 'Courier New', monospace;">
-                            {% if lancamento.diferenca|float < 0 %}- {% endif %}R$ {{ "{:>10,.2f}".format(lancamento.diferenca|float|abs).replace(',', 'X').replace('.', ',').replace('X', '.') }}
+                        <strong class="{% if lancamento.diferenca|float < 0 %}text-danger{% elif lancamento.diferenca|float > 0 %}text-warning{% else %}text-success{% endif %}">
+                            {% if lancamento.diferenca|float < 0 %}- {% endif %}R$ {{ "{:,.2f}".format(lancamento.diferenca|float|abs).replace(',', 'X').replace('.', ',').replace('X', '.') }}
                         </strong>
                     </div>
                 </div>
