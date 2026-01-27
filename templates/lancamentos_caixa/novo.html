@@ -844,10 +844,10 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         }
     }
+    
+    // Calculate totals (includes receitas, comprovacoes, and diferença)
     calcularTotais();
     
-    // Calculate difference after loading all data
-    calcularTotaisDiferenca();
     console.log('=== EDIT MODE: Finished loading all data ===');
     }, 1000);  // Give more time for page to fully initialize
     {% endif %}
