@@ -1,16 +1,16 @@
 {% extends 'base.html' %}
-{% block title %}Novo Lançamento de Caixa - NH Transportes{% endblock %}
+{% block title %}{% if edit_mode %}Editar{% else %}Novo{% endif %} Lançamento de Caixa - NH Transportes{% endblock %}
 {% block content %}
 <div class="container-fluid">
     <nav aria-label="breadcrumb" class="mt-2 mb-3">
         <ol class="breadcrumb" style="font-size: 0.85rem;">
             <li class="breadcrumb-item"><a href="/">Dashboard</a></li>
             <li class="breadcrumb-item"><a href="{{ url_for('lancamentos_caixa.lista') }}">Lançamentos de Caixa</a></li>
-            <li class="breadcrumb-item active" aria-current="page">Novo Lançamento</li>
+            <li class="breadcrumb-item active" aria-current="page">{% if edit_mode %}Editar{% else %}Novo{% endif %} Lançamento</li>
         </ol>
     </nav>
     
-    <h2 class="mb-3" style="color:#1D63A5; font-size: 1.3rem;"><i class="bi bi-cash-stack"></i> Novo Fechamento de Caixa</h2>
+    <h2 class="mb-3" style="color:#1D63A5; font-size: 1.3rem;"><i class="bi bi-cash-stack"></i> {% if edit_mode %}Editar{% else %}Novo{% endif %} Fechamento de Caixa</h2>
     
     <form id="formCaixa" method="POST">
         <!-- Main info -->
@@ -25,18 +25,19 @@
                         <select name="cliente_id" id="cliente_id" class="form-select form-select-sm" required onchange="loadVendasDia()">
                             <option value="">Selecione o cliente...</option>
                             {% for cliente in clientes %}
-                            <option value="{{ cliente.id }}">{{ cliente.razao_social }}</option>
+                            <option value="{{ cliente.id }}" {% if edit_mode and lancamento and lancamento.cliente_id == cliente.id %}selected{% endif %}>{{ cliente.razao_social }}</option>
                             {% endfor %}
                         </select>
                     </div>
                     <div class="col-md-3 mb-3">
                         <label class="form-label" style="font-size: 0.85rem;">Data *</label>
                         <input type="date" name="data" id="data" class="form-control form-control-sm" required 
-                               value="{{ data if data else '' }}" onchange="loadVendasDia()">
+                               value="{% if edit_mode and lancamento %}{{ lancamento.data }}{% elif data %}{{ data }}{% endif %}" onchange="loadVendasDia()">
                     </div>
                     <div class="col-md-5 mb-3">
                         <label class="form-label" style="font-size: 0.85rem;">Observação</label>
                         <input type="text" name="observacao" class="form-control form-control-sm" 
+                               value="{% if edit_mode and lancamento and lancamento.observacao %}{{ lancamento.observacao }}{% endif %}"
                                placeholder="Observações sobre o fechamento do caixa">
                     </div>
                 </div>
@@ -699,6 +700,130 @@ document.getElementById('formCaixa').addEventListener('submit', function(e) {
 document.addEventListener('DOMContentLoaded', function() {
     initializeReceitas();
     initializeComprovacoes();
+    
+    {% if edit_mode and receitas %}
+    // Load existing receitas data in edit mode
+    const existingReceitas = {{ receitas_json|safe }};
+    for (const receita of existingReceitas) {
+        const valorInput = document.querySelector(`input[data-receita-tipo="${receita.tipo}"]`);
+        if (valorInput) {
+            // Format value as Brazilian currency
+            valorInput.value = parseFloat(receita.valor).toLocaleString('pt-BR', {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2
+            });
+            
+            // If there's a description field, populate it
+            const descricaoInput = valorInput.closest('.list-group-item').querySelector('input[placeholder*="Descrição"]');
+            if (descricaoInput && receita.descricao) {
+                descricaoInput.value = receita.descricao;
+            }
+        }
+    }
+    calculateTotalReceitas();
+    {% endif %}
+    
+    {% if edit_mode and comprovacoes %}
+    // Load existing comprovacoes data in edit mode
+    const existingComprovacoes = {{ comprovacoes_json|safe }};
+    
+    // Group comprovacoes by forma_pagamento_id
+    const comprovacoesByForma = {};
+    for (const comp of existingComprovacoes) {
+        if (!comprovacoesByForma[comp.forma_pagamento_id]) {
+            comprovacoesByForma[comp.forma_pagamento_id] = [];
+        }
+        comprovacoesByForma[comp.forma_pagamento_id].push(comp);
+    }
+    
+    // Populate each forma de pagamento
+    for (const formaId in comprovacoesByForma) {
+        const comps = comprovacoesByForma[formaId];
+        const forma = formasPagamento.find(f => f.id == formaId);
+        
+        if (!forma) continue;
+        
+        // Handle different types of formas_pagamento
+        if (forma.tipo === 'DEPOSITO_ESPECIE' || forma.tipo === 'DEPOSITO_CHEQUE_VISTA' || forma.tipo === 'DEPOSITO_CHEQUE_PRAZO') {
+            // Multiple entries allowed - add each one
+            for (let i = 0; i < comps.length; i++) {
+                const comp = comps[i];
+                if (i === 0) {
+                    // Fill the first (default) entry
+                    const firstValorInput = document.querySelector(`input[data-comprovacao-forma="${forma.tipo}"]`);
+                    const firstDescInput = firstValorInput?.closest('.list-group-item').querySelector('input[placeholder*="Descrição"]');
+                    if (firstValorInput) {
+                        firstValorInput.value = parseFloat(comp.valor).toLocaleString('pt-BR', {
+                            minimumFractionDigits: 2,
+                            maximumFractionDigits: 2
+                        });
+                    }
+                    if (firstDescInput && comp.descricao) {
+                        firstDescInput.value = comp.descricao;
+                    }
+                } else {
+                    // Add additional entries
+                    const addButton = document.querySelector(`button[onclick*="addDeposito"][onclick*="${forma.tipo}"]`);
+                    if (addButton) {
+                        addButton.click();
+                        // Wait a bit for DOM to update, then fill
+                        setTimeout(() => {
+                            const allInputs = document.querySelectorAll(`input[data-comprovacao-forma="${forma.tipo}"]`);
+                            const lastValorInput = allInputs[allInputs.length - 1];
+                            const lastDescInput = lastValorInput?.closest('.list-group-item').querySelector('input[placeholder*="Descrição"]');
+                            if (lastValorInput) {
+                                lastValorInput.value = parseFloat(comp.valor).toLocaleString('pt-BR', {
+                                    minimumFractionDigits: 2,
+                                    maximumFractionDigits: 2
+                                });
+                            }
+                            if (lastDescInput && comp.descricao) {
+                                lastDescInput.value = comp.descricao;
+                            }
+                            if (forma.tipo === 'DEPOSITO_ESPECIE') updateTotalDepositoEspecie();
+                            if (forma.tipo === 'DEPOSITO_CHEQUE_VISTA') updateTotalDepositoChequeVista();
+                            if (forma.tipo === 'DEPOSITO_CHEQUE_PRAZO') updateTotalDepositoChequePrazo();
+                            calculateTotalComprovacao();
+                        }, 100 * i);
+                    }
+                }
+            }
+        } else if (forma.tipo === 'CARTAO_DEBITO' || forma.tipo === 'CARTAO_CREDITO') {
+            // Card with bandeira - find the input by bandeira_cartao_id
+            for (const comp of comps) {
+                const valorInput = document.querySelector(`input[data-comprovacao-forma="${forma.tipo}"][data-bandeira-id="${comp.bandeira_cartao_id}"]`);
+                if (valorInput) {
+                    valorInput.value = parseFloat(comp.valor).toLocaleString('pt-BR', {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2
+                    });
+                }
+            }
+            if (forma.tipo === 'CARTAO_DEBITO') updateTotalCartaoDebito();
+            if (forma.tipo === 'CARTAO_CREDITO') updateTotalCartaoCredito();
+        } else {
+            // Single entry formas - just fill the first value
+            const comp = comps[0];
+            const valorInput = document.querySelector(`input[data-comprovacao-forma="${forma.tipo}"]`);
+            if (valorInput) {
+                valorInput.value = parseFloat(comp.valor).toLocaleString('pt-BR', {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2
+                });
+                
+                // If there's a description field, populate it
+                const descricaoInput = valorInput.closest('.list-group-item').querySelector('input[placeholder*="Descrição"]');
+                if (descricaoInput && comp.descricao) {
+                    descricaoInput.value = comp.descricao;
+                }
+            }
+        }
+    }
+    calculateTotalComprovacao();
+    {% endif %}
+    
+    // Calculate difference after loading all data
+    calculateDiferenca();
 });
 </script>
 {% endblock %}

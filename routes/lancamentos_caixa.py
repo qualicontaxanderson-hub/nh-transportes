@@ -667,10 +667,12 @@ def editar(id):
         """, (id,))
         comprovacoes = cursor.fetchall()
         
-        # Get active clients
+        # Get clients with "Produtos Posto" configured (same as in novo route)
         cursor.execute("""
-            SELECT c.id, c.razao_social
+            SELECT DISTINCT c.id, c.razao_social 
             FROM clientes c
+            INNER JOIN cliente_produtos cp ON c.id = cp.cliente_id
+            WHERE cp.ativo = 1
             ORDER BY c.razao_social
         """)
         clientes = cursor.fetchall()
