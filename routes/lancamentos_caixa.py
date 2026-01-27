@@ -702,11 +702,40 @@ def editar(id):
         """)
         tipos_receita = cursor.fetchall()
         
+        # Convert any Decimal/None values to JSON-serializable format
+        # to avoid "Object of type Undefined is not JSON serializable" error
+        lancamento_clean = dict(lancamento) if lancamento else {}
+        for key, value in lancamento_clean.items():
+            if value is None:
+                lancamento_clean[key] = ''
+            elif isinstance(value, Decimal):
+                lancamento_clean[key] = float(value)
+        
+        receitas_clean = []
+        for receita in receitas:
+            receita_dict = dict(receita)
+            for key, value in receita_dict.items():
+                if value is None:
+                    receita_dict[key] = ''
+                elif isinstance(value, Decimal):
+                    receita_dict[key] = float(value)
+            receitas_clean.append(receita_dict)
+        
+        comprovacoes_clean = []
+        for comprovacao in comprovacoes:
+            comprovacao_dict = dict(comprovacao)
+            for key, value in comprovacao_dict.items():
+                if value is None:
+                    comprovacao_dict[key] = ''
+                elif isinstance(value, Decimal):
+                    comprovacao_dict[key] = float(value)
+            comprovacoes_clean.append(comprovacao_dict)
+        
         return render_template('lancamentos_caixa/novo.html',
                              edit_mode=True,
-                             lancamento=lancamento,
-                             receitas=receitas,
-                             comprovacoes=comprovacoes,
+                             lancamento=lancamento_clean,
+                             receitas=receitas_clean,
+                             comprovacoes=comprovacoes_clean,
                              clientes=clientes,
                              formas_pagamento=formas_pagamento,
                              bandeiras_cartao=bandeiras_cartao,
