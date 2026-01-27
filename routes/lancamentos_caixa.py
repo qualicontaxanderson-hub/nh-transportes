@@ -760,14 +760,16 @@ def editar(id):
                              clientes=clientes_clean,
                              formas_pagamento=formas_pagamento_clean,
                              bandeiras_cartao=bandeiras_cartao_clean,
+                             cartoes=bandeiras_cartao_clean,  # Alias for template compatibility
                              tipos_receita=tipos_receita_clean,
-                             # Also pass JSON strings for JavaScript
+                             # Pass JSON strings for JavaScript (use these instead of tojson filter)
                              lancamento_json=lancamento_json,
                              receitas_json=receitas_json,
                              comprovacoes_json=comprovacoes_json,
                              clientes_json=clientes_json,
                              formas_pagamento_json=formas_pagamento_json,
                              bandeiras_cartao_json=bandeiras_cartao_json,
+                             cartoes_json=bandeiras_cartao_json,  # Alias for template compatibility  
                              tipos_receita_json=tipos_receita_json)
         
     except Exception as e:

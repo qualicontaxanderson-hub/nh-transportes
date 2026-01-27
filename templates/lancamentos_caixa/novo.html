@@ -164,9 +164,10 @@
 let receitaIndex = 0;
 let comprovacaoIndex = 0;
 
-const tiposReceita = {{ tipos_receita|tojson }};
-const formasPagamento = {{ formas_pagamento|tojson }};
-const cartoes = {{ cartoes|tojson }};
+// Use pre-serialized JSON strings to avoid Jinja2 serialization issues
+const tiposReceita = {{ tipos_receita_json|safe }};
+const formasPagamento = {{ formas_pagamento_json|safe }};
+const cartoes = {{ cartoes_json|safe }};
 
 // Define preferred order for known types (AUTO types first, then specific MANUAL types)
 const preferredOrder = ['VENDAS POSTO', 'ARLA', 'LUBRIFICANTES', 'RECEBIMENTOS', 'ACRÉSCIMOS GERAIS', 'ACRÉSCIMOS CADASTROS', 'EMPRESTIMOS', 'OUTROS'];
