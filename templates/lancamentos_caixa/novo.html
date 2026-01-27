@@ -70,13 +70,10 @@
                     <div class="card-header" style="background:#007bff;color:white; font-size: 0.95rem; padding: 0.6rem 1rem;">
                         <h5 class="mb-0" style="font-size: 1rem;"><i class="bi bi-check-circle"></i> Comprovação para Fechamento</h5>
                     </div>
-                    <div class="card-body" style="padding: 1rem;">
+                    <div class="card-body" style="padding: 1rem; max-height: 70vh; overflow-y: auto;">
                         <div id="comprovacoes-container">
-                            <!-- Comprovacoes will be added here dynamically -->
+                            <!-- Fixed payment types will be added here dynamically on page load -->
                         </div>
-                        <button type="button" class="btn btn-primary btn-sm" onclick="addComprovacao()">
-                            <i class="bi bi-plus-circle"></i> Adicionar Comprovação
-                        </button>
                         <hr>
                         <div class="d-flex justify-content-between align-items-center">
                             <strong>Total Comprovação:</strong>
@@ -199,6 +196,18 @@ const sortedTiposReceita = [...tiposReceita].sort((a, b) => {
 const tiposMap = {};
 for (const tipo of tiposReceita) {
     tiposMap[tipo.nome] = tipo;
+}
+
+// Create a map of formas_pagamento by tipo for easy lookup
+const formasPagamentoMap = {};
+for (const forma of formasPagamento) {
+    formasPagamentoMap[forma.tipo] = forma;
+}
+
+// Helper function to get forma_pagamento_id from tipo string
+function getFormaPagamentoIdByTipo(tipo) {
+    const forma = formasPagamentoMap[tipo];
+    return forma ? forma.id : null;
 }
 
 function formatCurrency(value) {
@@ -345,91 +354,196 @@ function loadVendasDia() {
         });
 }
 
-function addComprovacao() {
+// Initialize fixed comprovação structure
+function initializeComprovacoes() {
     const container = document.getElementById('comprovacoes-container');
+    container.innerHTML = '';
+    
+    // 1. PRAZO - single field
+    addComprovacaoSingle(container, 'PRAZO', 'Prazo');
+    
+    // 2. DEPÓSITOS EM ESPÉCIE - multiple entries
+    addComprovacaoMultiple(container, 'DEPOSITO_ESPECIE', 'Depósitos em Espécie');
+    
+    // 3. DEPÓSITOS EM CHEQUES À VISTA - multiple entries
+    addComprovacaoMultiple(container, 'DEPOSITO_CHEQUE_VISTA', 'Depósitos em Cheques À Vista');
+    
+    // 4. DEPÓSITOS EM CHEQUES A PRAZO - multiple entries
+    addComprovacaoMultiple(container, 'DEPOSITO_CHEQUE_PRAZO', 'Depósitos em Cheques A Prazo');
+    
+    // 5. RECEBIMENTOS PIX - single field
+    addComprovacaoSingle(container, 'PIX', 'Recebimentos PIX');
+    
+    // 6. CARTÃO DE DÉBITO - lines for each brand + total
+    addComprovacaoCartoes(container, 'DEBITO', 'Cartão de Débito');
+    
+    // 7. CARTÃO DE CRÉDITO - lines for each brand + total
+    addComprovacaoCartoes(container, 'CREDITO', 'Cartão de Crédito');
+    
+    // 8-12: Other payment types (will use RETIRADA_PAGAMENTO as fallback)
+    // These will be saved with descriptions to differentiate them
+    addComprovacaoSingleComDescricao(container, 'RETIRADA_PAGAMENTO', 'Descontos Cadastros', 'Desconto Cadastros');
+    addComprovacaoSingleComDescricao(container, 'RETIRADA_PAGAMENTO', 'Descontos Gerais', 'Desconto Gerais');
+    addComprovacaoSingleComDescricao(container, 'RETIRADA_PAGAMENTO', 'Empréstimos Entre Funcionários', 'Empréstimo Funcionários');
+    addComprovacaoSingleComDescricao(container, 'RETIRADA_PAGAMENTO', 'Retiradas para Aluguel', 'Retirada Aluguel');
+    addComprovacaoSingleComDescricao(container, 'RETIRADA_PAGAMENTO', 'Retiradas para Pagamento');
+}
+
+// Add single field comprovação (like PRAZO, PIX, etc.)
+function addComprovacaoSingle(container, tipo, label) {
     const item = document.createElement('div');
     item.className = 'comprovacao-item';
-    item.id = `comprovacao-${comprovacaoIndex}`;
+    item.innerHTML = `
+        <div class="row align-items-center">
+            <div class="col-md-6">
+                <label class="form-label mb-0" style="font-size: 0.85rem; font-weight: 600;">${label}</label>
+            </div>
+            <div class="col-md-6">
+                <input type="text" class="form-control form-control-sm comprovacao-valor" 
+                       data-tipo="${tipo}" placeholder="0,00" 
+                       oninput="formatNumberInput(this)" onchange="calcularTotais()">
+            </div>
+        </div>
+    `;
+    container.appendChild(item);
+}
+
+// Add single field with description (like RETIRADA_PAGAMENTO)
+function addComprovacaoSingleComDescricao(container, tipo, label, defaultDescricao = '') {
+    const item = document.createElement('div');
+    item.className = 'comprovacao-item';
+    item.innerHTML = `
+        <div class="row align-items-center">
+            <div class="col-md-3">
+                <label class="form-label mb-0" style="font-size: 0.85rem; font-weight: 600;">${label}</label>
+            </div>
+            <div class="col-md-4">
+                <input type="text" class="form-control form-control-sm comprovacao-valor" 
+                       data-tipo="${tipo}" placeholder="0,00" 
+                       oninput="formatNumberInput(this)" onchange="calcularTotais()">
+            </div>
+            <div class="col-md-5">
+                <input type="text" class="form-control form-control-sm comprovacao-descricao" 
+                       data-tipo="${tipo}" placeholder="Descrição" value="${defaultDescricao}">
+            </div>
+        </div>
+    `;
+    container.appendChild(item);
+}
+
+// Add multiple entries section (like DEPOSITO_ESPECIE, DEPOSITO_CHEQUE_VISTA, etc.)
+function addComprovacaoMultiple(container, tipo, label) {
+    const sectionId = `section-${tipo}`;
+    const item = document.createElement('div');
+    item.className = 'comprovacao-section';
+    item.id = sectionId;
+    item.innerHTML = `
+        <div style="background: #e9ecef; padding: 0.5rem; border-radius: 0.25rem; margin-bottom: 0.5rem;">
+            <div class="d-flex justify-content-between align-items-center">
+                <strong style="font-size: 0.85rem;">${label}</strong>
+                <button type="button" class="btn btn-sm btn-success" onclick="addDepositoEntry('${tipo}', '${label}')">
+                    <i class="bi bi-plus-circle"></i> Adicionar
+                </button>
+            </div>
+        </div>
+        <div id="depositos-${tipo}" class="mb-2">
+            <!-- Deposito entries will be added here -->
+        </div>
+    `;
+    container.appendChild(item);
+}
+
+// Add cartões section (Débito or Crédito)
+function addComprovacaoCartoes(container, tipoCartao, label) {
+    const sectionId = `section-cartao-${tipoCartao}`;
+    const item = document.createElement('div');
+    item.className = 'comprovacao-section';
+    item.id = sectionId;
     
-    let formasOptions = '<option value="">Selecione...</option>';
-    formasPagamento.forEach(forma => {
-        formasOptions += `<option value="${forma.id}" data-tipo="${forma.tipo || ''}">${forma.nome}</option>`;
+    // Filter cartões by type (DEBITO or CREDITO)
+    const cartoesDoTipo = cartoes.filter(c => c.tipo && c.tipo.toUpperCase() === tipoCartao);
+    
+    let bandeirasList = '';
+    cartoesDoTipo.forEach(cartao => {
+        bandeirasList += `
+            <div class="row align-items-center mb-1" style="padding: 0.3rem 0;">
+                <div class="col-md-6" style="padding-left: 1.5rem;">
+                    <label class="form-label mb-0" style="font-size: 0.8rem;">${cartao.nome}</label>
+                </div>
+                <div class="col-md-6">
+                    <input type="text" class="form-control form-control-sm comprovacao-cartao-valor" 
+                           data-tipo="CARTAO_${tipoCartao}" data-bandeira="${cartao.id}" 
+                           placeholder="0,00" oninput="formatNumberInput(this)" 
+                           onchange="calcularTotaisCartao('${tipoCartao}')">
+                </div>
+            </div>
+        `;
     });
-    
-    let cartoesOptions = '<option value="">Nenhum</option>';
-    cartoes.forEach(cartao => {
-        cartoesOptions += `<option value="${cartao.id}">${cartao.nome} (${cartao.tipo})</option>`;
-    });
-    
-    const currentIndex = comprovacaoIndex;
     
     item.innerHTML = `
-        <div class="row">
-            <div class="col-md-3 mb-2">
-                <label class="form-label" style="font-size: 0.75rem;">
-                    Forma Pagamento
-                    <a href="{{ url_for('caixa.novo') }}" target="_blank" class="text-primary" title="Adicionar nova forma de pagamento">
-                        <i class="bi bi-plus-circle-fill"></i>
-                    </a>
-                </label>
-                <select class="form-select form-select-sm comprovacao-forma" data-index="${currentIndex}" 
-                        onchange="toggleCartaoField(${currentIndex})">
-                    ${formasOptions}
-                </select>
+        <div style="background: #e9ecef; padding: 0.5rem; border-radius: 0.25rem; margin-bottom: 0.3rem;">
+            <strong style="font-size: 0.85rem;">${label}</strong>
+        </div>
+        ${bandeirasList}
+        <div class="row align-items-center" style="padding: 0.5rem 0; border-top: 2px solid #007bff; margin-top: 0.3rem;">
+            <div class="col-md-6" style="padding-left: 1.5rem;">
+                <strong style="font-size: 0.85rem;">Total ${label}:</strong>
             </div>
-            <div class="col-md-3 mb-2 cartao-field" id="cartao-field-${currentIndex}" style="display: none;">
-                <label class="form-label" style="font-size: 0.75rem;">Cartão</label>
-                <select class="form-select form-select-sm comprovacao-cartao" data-index="${currentIndex}">
-                    ${cartoesOptions}
-                </select>
+            <div class="col-md-6">
+                <strong id="total-cartao-${tipoCartao}" class="text-primary" style="font-size: 0.9rem;">R$ 0,00</strong>
             </div>
-            <div class="col-md-2 mb-2">
-                <label class="form-label" style="font-size: 0.75rem;">Valor</label>
-                <input type="text" class="form-control form-control-sm comprovacao-valor" data-index="${currentIndex}" 
-                       placeholder="0,00" oninput="formatNumberInput(this)" onchange="calcularTotais()">
+        </div>
+    `;
+    container.appendChild(item);
+}
+
+// Add a new deposito entry
+function addDepositoEntry(tipo, label) {
+    const depositosContainer = document.getElementById(`depositos-${tipo}`);
+    const entryIndex = comprovacaoIndex++;
+    
+    const entry = document.createElement('div');
+    entry.className = 'comprovacao-item';
+    entry.id = `deposito-${tipo}-${entryIndex}`;
+    entry.innerHTML = `
+        <div class="row align-items-center">
+            <div class="col-md-4">
+                <input type="text" class="form-control form-control-sm comprovacao-valor" 
+                       data-tipo="${tipo}" placeholder="0,00" 
+                       oninput="formatNumberInput(this)" onchange="calcularTotais()">
             </div>
-            <div class="col-md-3 mb-2">
-                <label class="form-label" style="font-size: 0.75rem;">Descrição</label>
-                <input type="text" class="form-control form-control-sm comprovacao-descricao" data-index="${currentIndex}">
+            <div class="col-md-6">
+                <input type="text" class="form-control form-control-sm comprovacao-descricao" 
+                       data-tipo="${tipo}" placeholder="Descrição">
             </div>
-            <div class="col-md-1 mb-2 d-flex align-items-end">
-                <button type="button" class="btn btn-danger btn-sm" onclick="removeComprovacao(${currentIndex})">
+            <div class="col-md-2">
+                <button type="button" class="btn btn-danger btn-sm" onclick="removeDepositoEntry('${tipo}', ${entryIndex})">
                     <i class="bi bi-trash"></i>
                 </button>
             </div>
         </div>
     `;
-    
-    container.appendChild(item);
-    comprovacaoIndex++;
+    depositosContainer.appendChild(entry);
 }
 
-function toggleCartaoField(index) {
-    const formaSelect = document.querySelector(`.comprovacao-forma[data-index="${index}"]`);
-    const cartaoField = document.getElementById(`cartao-field-${index}`);
-    
-    if (!formaSelect || !cartaoField) return;
-    
-    const selectedOption = formaSelect.options[formaSelect.selectedIndex];
-    const tipo = selectedOption.getAttribute('data-tipo') || '';
-    
-    // Show cartao field only if tipo contains 'CARTAO' or is related to cards
-    const isCartao = tipo && (
-        tipo.toUpperCase().includes('CARTAO') || 
-        tipo.toUpperCase().includes('CART') || 
-        tipo.toUpperCase().includes('DEBITO') || 
-        tipo.toUpperCase().includes('CREDITO')
-    );
-    
-    cartaoField.style.display = isCartao ? 'block' : 'none';
-}
-
-function removeComprovacao(index) {
-    const item = document.getElementById(`comprovacao-${index}`);
-    if (item) {
-        item.remove();
+// Remove a deposito entry
+function removeDepositoEntry(tipo, index) {
+    const entry = document.getElementById(`deposito-${tipo}-${index}`);
+    if (entry) {
+        entry.remove();
         calcularTotais();
     }
+}
+
+// Calculate total for a specific card type (DEBITO or CREDITO)
+function calcularTotaisCartao(tipoCartao) {
+    let total = 0;
+    document.querySelectorAll(`.comprovacao-cartao-valor[data-tipo="CARTAO_${tipoCartao}"]`).forEach(input => {
+        total += parseCurrency(input.value);
+    });
+    
+    document.getElementById(`total-cartao-${tipoCartao}`).textContent = formatCurrency(total);
+    calcularTotais();
 }
 
 function calcularTotais() {
@@ -439,9 +553,16 @@ function calcularTotais() {
         totalReceitas += parseCurrency(input.value);
     });
     
-    // Calculate comprovacoes total
+    // Calculate comprovacoes total (includes single fields, multiple deposits, and card values)
     let totalComprovacao = 0;
+    
+    // Add single field values
     document.querySelectorAll('.comprovacao-valor').forEach(input => {
+        totalComprovacao += parseCurrency(input.value);
+    });
+    
+    // Add card values (already included in comprovacao-cartao-valor which also has comprovacao-valor-like behavior)
+    document.querySelectorAll('.comprovacao-cartao-valor').forEach(input => {
         totalComprovacao += parseCurrency(input.value);
     });
     
@@ -482,17 +603,48 @@ document.getElementById('formCaixa').addEventListener('submit', function(e) {
         }
     });
     
-    // Collect comprovacoes
+    // Collect comprovacoes (new fixed structure)
     const comprovacoes = [];
-    document.querySelectorAll('.comprovacao-item').forEach(item => {
-        const forma_pagamento_id = item.querySelector('.comprovacao-forma').value;
-        const bandeira_cartao_id = item.querySelector('.comprovacao-cartao') ? 
-                                     item.querySelector('.comprovacao-cartao').value : '';
-        const valor = item.querySelector('.comprovacao-valor').value;
-        const descricao = item.querySelector('.comprovacao-descricao').value;
+    
+    // Collect single field values (PRAZO, PIX, DESCONTOS, EMPRESTIMOS, RETIRADAS, etc.)
+    document.querySelectorAll('.comprovacao-valor').forEach(input => {
+        const tipo = input.getAttribute('data-tipo');
+        const valor = input.value;
         
-        if (forma_pagamento_id && valor) {
-            comprovacoes.push({ forma_pagamento_id, bandeira_cartao_id, valor, descricao });
+        if (tipo && valor && parseCurrency(valor) > 0) {
+            // Check if this field has an associated description
+            const descricaoInput = input.parentElement.parentElement.querySelector('.comprovacao-descricao');
+            const descricao = descricaoInput ? descricaoInput.value : '';
+            
+            // Map tipo to forma_pagamento_id
+            const formaId = getFormaPagamentoIdByTipo(tipo);
+            
+            comprovacoes.push({
+                forma_pagamento_id: formaId,
+                valor: valor,
+                descricao: descricao,
+                bandeira_cartao_id: null
+            });
+        }
+    });
+    
+    // Collect card values (DEBITO and CREDITO)
+    document.querySelectorAll('.comprovacao-cartao-valor').forEach(input => {
+        const tipo = input.getAttribute('data-tipo');  // CARTAO_DEBITO or CARTAO_CREDITO
+        const bandeiraId = input.getAttribute('data-bandeira');
+        const valor = input.value;
+        
+        if (valor && parseCurrency(valor) > 0) {
+            // Map CARTAO_DEBITO or CARTAO_CREDITO to forma_pagamento_id
+            // Both map to CARTAO type
+            const formaId = getFormaPagamentoIdByTipo('CARTAO');
+            
+            comprovacoes.push({
+                forma_pagamento_id: formaId,
+                valor: valor,
+                descricao: '',
+                bandeira_cartao_id: bandeiraId
+            });
         }
     });
     
@@ -504,7 +656,7 @@ document.getElementById('formCaixa').addEventListener('submit', function(e) {
 // Initialize receipt types on page load
 document.addEventListener('DOMContentLoaded', function() {
     initializeReceitas();
-    addComprovacao();
+    initializeComprovacoes();
 });
 </script>
 {% endblock %}
