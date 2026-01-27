@@ -702,35 +702,44 @@ def editar(id):
         """)
         tipos_receita = cursor.fetchall()
         
-        # Convert any Decimal/None values to JSON-serializable format
-        # to avoid "Object of type Undefined is not JSON serializable" error
-        def clean_data(data):
-            """Helper function to clean data from MySQL - handles all problematic types"""
-            if data is None:
+        # Convert cursor results to plain Python dicts/lists immediately
+        # This avoids any special MySQL connector types that can't be serialized
+        def convert_to_plain_python(obj):
+            """Convert MySQL cursor results to plain Python types"""
+            if obj is None:
                 return ''
-            elif isinstance(data, Decimal):
-                return float(data)
-            elif isinstance(data, dict):
-                return {key: clean_data(value) for key, value in data.items()}
-            elif isinstance(data, (list, tuple)):
-                return [clean_data(item) for item in data]
-            elif isinstance(data, (str, int, float, bool)):
-                return data
+            elif isinstance(obj, Decimal):
+                return float(obj)
+            elif isinstance(obj, dict):
+                # Force conversion to plain dict and clean each value
+                result = {}
+                for key, value in obj.items():
+                    result[str(key)] = convert_to_plain_python(value)
+                return result
+            elif isinstance(obj, (list, tuple)):
+                # Force conversion to plain list and clean each item
+                return [convert_to_plain_python(item) for item in obj]
+            elif isinstance(obj, (str, int, float, bool)):
+                return obj
+            elif isinstance(obj, bytes):
+                return obj.decode('utf-8', errors='replace')
             else:
-                # For any other type (including Undefined), convert to string or empty
+                # For ANY other type, convert to string or return empty
                 try:
-                    return str(data) if data else ''
+                    str_val = str(obj)
+                    # If it's empty or "None" string, return empty string
+                    return '' if str_val in ('None', '', 'null') else str_val
                 except:
                     return ''
         
-        # Clean ALL data structures
-        lancamento_clean = clean_data(dict(lancamento) if lancamento else {})
-        receitas_clean = clean_data(list(receitas) if receitas else [])
-        comprovacoes_clean = clean_data(list(comprovacoes) if comprovacoes else [])
-        clientes_clean = clean_data(list(clientes) if clientes else [])
-        formas_pagamento_clean = clean_data(list(formas_pagamento) if formas_pagamento else [])
-        bandeiras_cartao_clean = clean_data(list(bandeiras_cartao) if bandeiras_cartao else [])
-        tipos_receita_clean = clean_data(list(tipos_receita) if tipos_receita else [])
+        # Convert ALL cursor results immediately to plain Python types
+        lancamento_clean = convert_to_plain_python(lancamento)
+        receitas_clean = convert_to_plain_python(receitas)
+        comprovacoes_clean = convert_to_plain_python(comprovacoes)
+        clientes_clean = convert_to_plain_python(clientes)
+        formas_pagamento_clean = convert_to_plain_python(formas_pagamento)
+        bandeiras_cartao_clean = convert_to_plain_python(bandeiras_cartao)
+        tipos_receita_clean = convert_to_plain_python(tipos_receita)
         
         return render_template('lancamentos_caixa/novo.html',
                              edit_mode=True,
