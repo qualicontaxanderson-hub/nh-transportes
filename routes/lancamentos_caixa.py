@@ -655,6 +655,9 @@ def editar(id):
             ORDER BY id
         """, (id,))
         receitas = cursor.fetchall()
+        print(f"DEBUG: Loaded {len(receitas)} receitas for lancamento_caixa_id={id}")
+        for r in receitas:
+            print(f"  - Receita: {r}")
         
         # Get comprovacoes
         cursor.execute("""
@@ -666,6 +669,9 @@ def editar(id):
             ORDER BY lcc.id
         """, (id,))
         comprovacoes = cursor.fetchall()
+        print(f"DEBUG: Loaded {len(comprovacoes)} comprovacoes for lancamento_caixa_id={id}")
+        for c in comprovacoes:
+            print(f"  - Comprovacao: {c}")
         
         # Get clients with "Produtos Posto" configured (same as in novo route)
         cursor.execute("""
@@ -753,6 +759,9 @@ def editar(id):
         formas_pagamento_json = json.dumps(formas_pagamento_clean)
         bandeiras_cartao_json = json.dumps(bandeiras_cartao_clean)
         tipos_receita_json = json.dumps(tipos_receita_clean)
+        
+        print(f"DEBUG: Passing to template - receitas_json={receitas_json}")
+        print(f"DEBUG: Passing to template - comprovacoes_json={comprovacoes_json}")
         
         return render_template('lancamentos_caixa/novo.html',
                              edit_mode=True,
