@@ -369,6 +369,11 @@ def novo():
         cursor.execute("SELECT * FROM tipos_receita_caixa WHERE ativo = 1 ORDER BY nome")
         tipos_receita = cursor.fetchall()
         
+        # PRE-SERIALIZE to JSON strings to avoid Jinja2 serialization issues
+        tipos_receita_json = json.dumps(list(tipos_receita))
+        formas_pagamento_json = json.dumps(list(formas_pagamento))
+        cartoes_json = json.dumps(list(cartoes))
+        
         # Get last closure date to suggest next date
         cursor.execute("""
             SELECT MAX(data) as ultima_data 
@@ -390,6 +395,9 @@ def novo():
                              formas_pagamento=formas_pagamento,
                              cartoes=cartoes,
                              tipos_receita=tipos_receita,
+                             tipos_receita_json=tipos_receita_json,
+                             formas_pagamento_json=formas_pagamento_json,
+                             cartoes_json=cartoes_json,
                              data=proxima_data)
         
     except Exception as e:
@@ -412,11 +420,20 @@ def novo():
             cartoes = cursor.fetchall()
             cursor.execute("SELECT * FROM tipos_receita_caixa WHERE ativo = 1 ORDER BY nome")
             tipos_receita = cursor.fetchall()
+            
+            # PRE-SERIALIZE to JSON strings
+            tipos_receita_json = json.dumps(list(tipos_receita))
+            formas_pagamento_json = json.dumps(list(formas_pagamento))
+            cartoes_json = json.dumps(list(cartoes))
+            
             return render_template('lancamentos_caixa/novo.html', 
                                  clientes=clientes,
                                  formas_pagamento=formas_pagamento,
                                  cartoes=cartoes,
-                                 tipos_receita=tipos_receita)
+                                 tipos_receita=tipos_receita,
+                                 tipos_receita_json=tipos_receita_json,
+                                 formas_pagamento_json=formas_pagamento_json,
+                                 cartoes_json=cartoes_json)
         except:
             return redirect(url_for('lancamentos_caixa.lista'))
     finally:
