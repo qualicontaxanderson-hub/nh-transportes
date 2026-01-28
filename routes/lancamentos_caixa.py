@@ -479,9 +479,13 @@ def visualizar(id):
         for receita in receitas:
             receita['tipo_nome'] = receita['tipo']
         
-        # Get comprovacoes
+        # Get comprovacoes with forma tipo and cartao tipo
         cursor.execute("""
-            SELECT lcc.*, fpc.nome as forma_pagamento_nome, bc.nome as cartao_nome
+            SELECT lcc.*, 
+                   fpc.nome as forma_pagamento_nome, 
+                   fpc.tipo as forma_tipo,
+                   bc.nome as cartao_nome,
+                   bc.tipo as cartao_tipo
             FROM lancamentos_caixa_comprovacao lcc
             LEFT JOIN formas_pagamento_caixa fpc ON lcc.forma_pagamento_id = fpc.id
             LEFT JOIN bandeiras_cartao bc ON lcc.bandeira_cartao_id = bc.id

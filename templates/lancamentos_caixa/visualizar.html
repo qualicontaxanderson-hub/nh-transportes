@@ -95,18 +95,112 @@
                         <thead style="background:#f8f9fa;">
                             <tr>
                                 <th style="font-size: 0.85rem;">Forma Pagamento</th>
-                                <th style="font-size: 0.85rem;">Cartão</th>
+                                <th style="font-size: 0.85rem;">Detalhes</th>
                                 <th style="font-size: 0.85rem; text-align: right;">Valor</th>
                             </tr>
                         </thead>
                         <tbody>
+                            {# Group by forma_tipo for better organization #}
+                            {% set processed_tipos = [] %}
+                            
+                            {# Process non-card payments first (PRAZO, PIX, RETIRADA_PAGAMENTO) #}
                             {% for comp in comprovacoes %}
-                            <tr>
-                                <td style="font-size: 0.85rem;">{{ comp.forma_pagamento_nome if comp.forma_pagamento_nome else '-' }}</td>
-                                <td style="font-size: 0.85rem;">{{ comp.cartao_nome if comp.cartao_nome else '-' }}</td>
-                                <td style="font-size: 0.85rem; text-align: right;">R$ {{ "{:,.2f}".format(comp.valor|float).replace(',', 'X').replace('.', ',').replace('X', '.') }}</td>
-                            </tr>
+                                {% if comp.forma_tipo and comp.forma_tipo not in ['CARTAO', 'DEPOSITO_ESPECIE', 'DEPOSITO_CHEQUE_VISTA', 'DEPOSITO_CHEQUE_PRAZO'] %}
+                                    {% if comp.forma_tipo not in processed_tipos %}
+                                        {% set _ = processed_tipos.append(comp.forma_tipo) %}
+                                        <tr>
+                                            <td style="font-size: 0.85rem;">{{ comp.forma_pagamento_nome }}</td>
+                                            <td style="font-size: 0.85rem;">{{ comp.descricao if comp.descricao else '-' }}</td>
+                                            <td style="font-size: 0.85rem; text-align: right;">R$ {{ "{:,.2f}".format(comp.valor|float).replace(',', 'X').replace('.', ',').replace('X', '.') }}</td>
+                                        </tr>
+                                    {% endif %}
+                                {% endif %}
                             {% endfor %}
+                            
+                            {# Process DEPOSITO_ESPECIE #}
+                            {% set depositos_especie = comprovacoes|selectattr('forma_tipo', 'equalto', 'DEPOSITO_ESPECIE')|list %}
+                            {% if depositos_especie|length > 0 %}
+                                {% set total_especie = depositos_especie|map(attribute='valor')|map('float')|sum %}
+                                <tr style="background:#e8f5e9;">
+                                    <td colspan="2" style="font-size: 0.85rem;"><strong>Depósitos em Espécie ({{ depositos_especie|length }})</strong></td>
+                                    <td style="font-size: 0.85rem; text-align: right;"><strong>R$ {{ "{:,.2f}".format(total_especie).replace(',', 'X').replace('.', ',').replace('X', '.') }}</strong></td>
+                                </tr>
+                                {% for dep in depositos_especie %}
+                                <tr>
+                                    <td style="font-size: 0.85rem; padding-left: 2rem;">└ Depósito #{{ loop.index }}</td>
+                                    <td style="font-size: 0.85rem;">{{ dep.descricao if dep.descricao else '-' }}</td>
+                                    <td style="font-size: 0.85rem; text-align: right;">R$ {{ "{:,.2f}".format(dep.valor|float).replace(',', 'X').replace('.', ',').replace('X', '.') }}</td>
+                                </tr>
+                                {% endfor %}
+                            {% endif %}
+                            
+                            {# Process DEPOSITO_CHEQUE_VISTA #}
+                            {% set depositos_vista = comprovacoes|selectattr('forma_tipo', 'equalto', 'DEPOSITO_CHEQUE_VISTA')|list %}
+                            {% if depositos_vista|length > 0 %}
+                                {% set total_vista = depositos_vista|map(attribute='valor')|map('float')|sum %}
+                                <tr style="background:#e8f5e9;">
+                                    <td colspan="2" style="font-size: 0.85rem;"><strong>Depósitos em Cheques À Vista ({{ depositos_vista|length }})</strong></td>
+                                    <td style="font-size: 0.85rem; text-align: right;"><strong>R$ {{ "{:,.2f}".format(total_vista).replace(',', 'X').replace('.', ',').replace('X', '.') }}</strong></td>
+                                </tr>
+                                {% for dep in depositos_vista %}
+                                <tr>
+                                    <td style="font-size: 0.85rem; padding-left: 2rem;">└ Cheque #{{ loop.index }}</td>
+                                    <td style="font-size: 0.85rem;">{{ dep.descricao if dep.descricao else '-' }}</td>
+                                    <td style="font-size: 0.85rem; text-align: right;">R$ {{ "{:,.2f}".format(dep.valor|float).replace(',', 'X').replace('.', ',').replace('X', '.') }}</td>
+                                </tr>
+                                {% endfor %}
+                            {% endif %}
+                            
+                            {# Process DEPOSITO_CHEQUE_PRAZO #}
+                            {% set depositos_prazo = comprovacoes|selectattr('forma_tipo', 'equalto', 'DEPOSITO_CHEQUE_PRAZO')|list %}
+                            {% if depositos_prazo|length > 0 %}
+                                {% set total_prazo = depositos_prazo|map(attribute='valor')|map('float')|sum %}
+                                <tr style="background:#e8f5e9;">
+                                    <td colspan="2" style="font-size: 0.85rem;"><strong>Depósitos em Cheques A Prazo ({{ depositos_prazo|length }})</strong></td>
+                                    <td style="font-size: 0.85rem; text-align: right;"><strong>R$ {{ "{:,.2f}".format(total_prazo).replace(',', 'X').replace('.', ',').replace('X', '.') }}</strong></td>
+                                </tr>
+                                {% for dep in depositos_prazo %}
+                                <tr>
+                                    <td style="font-size: 0.85rem; padding-left: 2rem;">└ Cheque #{{ loop.index }}</td>
+                                    <td style="font-size: 0.85rem;">{{ dep.descricao if dep.descricao else '-' }}</td>
+                                    <td style="font-size: 0.85rem; text-align: right;">R$ {{ "{:,.2f}".format(dep.valor|float).replace(',', 'X').replace('.', ',').replace('X', '.') }}</td>
+                                </tr>
+                                {% endfor %}
+                            {% endif %}
+                            
+                            {# Process CARTAO DEBITO #}
+                            {% set cartoes_debito = comprovacoes|selectattr('forma_tipo', 'equalto', 'CARTAO')|selectattr('cartao_tipo', 'equalto', 'DEBITO')|list %}
+                            {% if cartoes_debito|length > 0 %}
+                                {% set total_debito = cartoes_debito|map(attribute='valor')|map('float')|sum %}
+                                <tr style="background:#e3f2fd;">
+                                    <td colspan="2" style="font-size: 0.85rem;"><strong>Cartão Débito</strong></td>
+                                    <td style="font-size: 0.85rem; text-align: right;"><strong>R$ {{ "{:,.2f}".format(total_debito).replace(',', 'X').replace('.', ',').replace('X', '.') }}</strong></td>
+                                </tr>
+                                {% for cartao in cartoes_debito %}
+                                <tr>
+                                    <td style="font-size: 0.85rem; padding-left: 2rem;">└ {{ cartao.cartao_nome }}</td>
+                                    <td style="font-size: 0.85rem;">{{ cartao.descricao if cartao.descricao else '-' }}</td>
+                                    <td style="font-size: 0.85rem; text-align: right;">R$ {{ "{:,.2f}".format(cartao.valor|float).replace(',', 'X').replace('.', ',').replace('X', '.') }}</td>
+                                </tr>
+                                {% endfor %}
+                            {% endif %}
+                            
+                            {# Process CARTAO CREDITO #}
+                            {% set cartoes_credito = comprovacoes|selectattr('forma_tipo', 'equalto', 'CARTAO')|selectattr('cartao_tipo', 'equalto', 'CREDITO')|list %}
+                            {% if cartoes_credito|length > 0 %}
+                                {% set total_credito = cartoes_credito|map(attribute='valor')|map('float')|sum %}
+                                <tr style="background:#fff3e0;">
+                                    <td colspan="2" style="font-size: 0.85rem;"><strong>Cartão Crédito</strong></td>
+                                    <td style="font-size: 0.85rem; text-align: right;"><strong>R$ {{ "{:,.2f}".format(total_credito).replace(',', 'X').replace('.', ',').replace('X', '.') }}</strong></td>
+                                </tr>
+                                {% for cartao in cartoes_credito %}
+                                <tr>
+                                    <td style="font-size: 0.85rem; padding-left: 2rem;">└ {{ cartao.cartao_nome }}</td>
+                                    <td style="font-size: 0.85rem;">{{ cartao.descricao if cartao.descricao else '-' }}</td>
+                                    <td style="font-size: 0.85rem; text-align: right;">R$ {{ "{:,.2f}".format(cartao.valor|float).replace(',', 'X').replace('.', ',').replace('X', '.') }}</td>
+                                </tr>
+                                {% endfor %}
+                            {% endif %}
                         </tbody>
                     </table>
                     {% else %}
