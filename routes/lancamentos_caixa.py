@@ -369,10 +369,42 @@ def novo():
         cursor.execute("SELECT * FROM tipos_receita_caixa WHERE ativo = 1 ORDER BY nome")
         tipos_receita = cursor.fetchall()
         
+        # Convert cursor results to plain Python types to avoid serialization issues
+        def convert_to_plain_python(obj):
+            """Convert MySQL cursor results to plain Python types"""
+            if obj is None:
+                return ''
+            elif isinstance(obj, Decimal):
+                return float(obj)
+            elif isinstance(obj, datetime):
+                return obj.strftime('%Y-%m-%d %H:%M:%S')
+            elif isinstance(obj, dict):
+                result = {}
+                for key, value in obj.items():
+                    result[str(key)] = convert_to_plain_python(value)
+                return result
+            elif isinstance(obj, (list, tuple)):
+                return [convert_to_plain_python(item) for item in obj]
+            elif isinstance(obj, (str, int, float, bool)):
+                return obj
+            elif isinstance(obj, bytes):
+                return obj.decode('utf-8', errors='replace')
+            else:
+                try:
+                    str_val = str(obj)
+                    return '' if str_val in ('None', '', 'null') else str_val
+                except:
+                    return ''
+        
+        # Clean all data before JSON serialization
+        tipos_receita_clean = convert_to_plain_python(list(tipos_receita))
+        formas_pagamento_clean = convert_to_plain_python(list(formas_pagamento))
+        cartoes_clean = convert_to_plain_python(list(cartoes))
+        
         # PRE-SERIALIZE to JSON strings to avoid Jinja2 serialization issues
-        tipos_receita_json = json.dumps(list(tipos_receita))
-        formas_pagamento_json = json.dumps(list(formas_pagamento))
-        cartoes_json = json.dumps(list(cartoes))
+        tipos_receita_json = json.dumps(tipos_receita_clean)
+        formas_pagamento_json = json.dumps(formas_pagamento_clean)
+        cartoes_json = json.dumps(cartoes_clean)
         
         # Get last closure date to suggest next date
         cursor.execute("""
@@ -421,10 +453,42 @@ def novo():
             cursor.execute("SELECT * FROM tipos_receita_caixa WHERE ativo = 1 ORDER BY nome")
             tipos_receita = cursor.fetchall()
             
+            # Convert to plain Python types before JSON serialization
+            def convert_to_plain_python(obj):
+                """Convert MySQL cursor results to plain Python types"""
+                if obj is None:
+                    return ''
+                elif isinstance(obj, Decimal):
+                    return float(obj)
+                elif isinstance(obj, datetime):
+                    return obj.strftime('%Y-%m-%d %H:%M:%S')
+                elif isinstance(obj, dict):
+                    result = {}
+                    for key, value in obj.items():
+                        result[str(key)] = convert_to_plain_python(value)
+                    return result
+                elif isinstance(obj, (list, tuple)):
+                    return [convert_to_plain_python(item) for item in obj]
+                elif isinstance(obj, (str, int, float, bool)):
+                    return obj
+                elif isinstance(obj, bytes):
+                    return obj.decode('utf-8', errors='replace')
+                else:
+                    try:
+                        str_val = str(obj)
+                        return '' if str_val in ('None', '', 'null') else str_val
+                    except:
+                        return ''
+            
+            # Clean data before JSON serialization
+            tipos_receita_clean = convert_to_plain_python(list(tipos_receita))
+            formas_pagamento_clean = convert_to_plain_python(list(formas_pagamento))
+            cartoes_clean = convert_to_plain_python(list(cartoes))
+            
             # PRE-SERIALIZE to JSON strings
-            tipos_receita_json = json.dumps(list(tipos_receita))
-            formas_pagamento_json = json.dumps(list(formas_pagamento))
-            cartoes_json = json.dumps(list(cartoes))
+            tipos_receita_json = json.dumps(tipos_receita_clean)
+            formas_pagamento_json = json.dumps(formas_pagamento_clean)
+            cartoes_json = json.dumps(cartoes_clean)
             
             return render_template('lancamentos_caixa/novo.html', 
                                  clientes=clientes,
