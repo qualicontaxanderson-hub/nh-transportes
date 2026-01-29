@@ -1,8 +1,8 @@
--- Migration: Add TROCO PIX system tables
--- Date: 2026-01-29
--- Description: Creates tables for PIX change management system
+-- Migração: Adicionar tabelas do sistema TROCO PIX
+-- Data: 2026-01-29
+-- Descrição: Cria tabelas para o sistema de gerenciamento de troco PIX
 
--- Table for PIX customers (people who receive PIX change)
+-- Tabela de clientes PIX (pessoas que recebem troco via PIX)
 CREATE TABLE IF NOT EXISTS troco_pix_clientes (
     id INT AUTO_INCREMENT PRIMARY KEY,
     nome_completo VARCHAR(200) NOT NULL,
@@ -15,53 +15,53 @@ CREATE TABLE IF NOT EXISTS troco_pix_clientes (
     INDEX idx_ativo (ativo)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- Main TROCO PIX transactions table
+-- Tabela principal de transações TROCO PIX
 CREATE TABLE IF NOT EXISTS troco_pix (
     id INT AUTO_INCREMENT PRIMARY KEY,
-    cliente_id INT NOT NULL COMMENT 'ID from clientes table (gas station)',
+    cliente_id INT NOT NULL COMMENT 'ID da tabela clientes (posto de gasolina)',
     data DATE NOT NULL,
     
-    -- Sale details (VENDA)
+    -- Detalhes da venda (VENDA)
     venda_abastecimento DECIMAL(10,2) DEFAULT 0.00,
     venda_arla DECIMAL(10,2) DEFAULT 0.00,
     venda_produtos DECIMAL(10,2) DEFAULT 0.00,
     venda_total DECIMAL(10,2) GENERATED ALWAYS AS (venda_abastecimento + venda_arla + venda_produtos) STORED,
     
-    -- Check details (CHEQUE)
+    -- Detalhes do cheque (CHEQUE)
     cheque_tipo ENUM('A_VISTA', 'A_PRAZO') NOT NULL,
-    cheque_data_vencimento DATE NULL COMMENT 'Only for A_PRAZO checks',
+    cheque_data_vencimento DATE NULL COMMENT 'Somente para cheques A_PRAZO',
     cheque_valor DECIMAL(10,2) NOT NULL,
     
-    -- Change details (TROCO)
+    -- Detalhes do troco (TROCO)
     troco_especie DECIMAL(10,2) DEFAULT 0.00,
     troco_pix DECIMAL(10,2) DEFAULT 0.00,
     troco_credito_vda_programada DECIMAL(10,2) DEFAULT 0.00,
     troco_total DECIMAL(10,2) GENERATED ALWAYS AS (troco_especie + troco_pix + troco_credito_vda_programada) STORED,
     
-    -- PIX recipient
-    troco_pix_cliente_id INT NOT NULL COMMENT 'ID from troco_pix_clientes table',
+    -- Destinatário do PIX
+    troco_pix_cliente_id INT NOT NULL COMMENT 'ID da tabela troco_pix_clientes',
     
-    -- Attendant who processed the transaction
-    funcionario_id INT NOT NULL COMMENT 'ID from funcionarios table',
+    -- Frentista que processou a transação
+    funcionario_id INT NOT NULL COMMENT 'ID da tabela funcionarios',
     
-    -- Status and tracking
+    -- Status e rastreamento
     status ENUM('PENDENTE', 'PROCESSADO', 'CANCELADO') DEFAULT 'PENDENTE',
-    importado_lancamento_caixa BOOLEAN DEFAULT FALSE COMMENT 'Auto-imported to cash closure',
-    lancamento_caixa_id INT NULL COMMENT 'Reference to lancamentos_caixa if imported',
+    importado_lancamento_caixa BOOLEAN DEFAULT FALSE COMMENT 'Auto-importado para fechamento de caixa',
+    lancamento_caixa_id INT NULL COMMENT 'Referência ao lancamentos_caixa se importado',
     
-    -- Audit fields
-    criado_por INT NOT NULL COMMENT 'User ID who created',
+    -- Campos de auditoria
+    criado_por INT NOT NULL COMMENT 'ID do usuário que criou',
     criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     atualizado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    atualizado_por INT NULL COMMENT 'User ID who last updated',
+    atualizado_por INT NULL COMMENT 'ID do usuário que atualizou',
     
-    -- Foreign keys
+    -- Chaves estrangeiras
     FOREIGN KEY (cliente_id) REFERENCES clientes(id),
     FOREIGN KEY (troco_pix_cliente_id) REFERENCES troco_pix_clientes(id),
     FOREIGN KEY (funcionario_id) REFERENCES funcionarios(id),
     FOREIGN KEY (lancamento_caixa_id) REFERENCES lancamentos_caixa(id) ON DELETE SET NULL,
     
-    -- Indexes
+    -- Índices
     INDEX idx_cliente (cliente_id),
     INDEX idx_data (data),
     INDEX idx_status (status),
@@ -70,6 +70,6 @@ CREATE TABLE IF NOT EXISTS troco_pix (
     INDEX idx_troco_pix_cliente (troco_pix_cliente_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- Add comment to tables
-ALTER TABLE troco_pix_clientes COMMENT = 'Customers who receive PIX change';
-ALTER TABLE troco_pix COMMENT = 'PIX change transactions from gas station attendants';
+-- Adicionar comentários às tabelas
+ALTER TABLE troco_pix_clientes COMMENT = 'Clientes que recebem troco via PIX';
+ALTER TABLE troco_pix COMMENT = 'Transações de troco PIX dos frentistas do posto';
