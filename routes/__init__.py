@@ -47,6 +47,7 @@ _produtos_mod = _safe_import_module('produtos')
 _arla_mod = _safe_import_module('arla')
 _pedidos_mod = _safe_import_module('pedidos')
 _posto_mod = _safe_import_module('posto')  # ← ADICIONADO
+_tipos_receita_caixa_mod = _safe_import_module('tipos_receita_caixa')
 
 # blueprint objects (or None)
 clientes_bp = _safe_get_bp(_clientes_mod)
@@ -62,6 +63,7 @@ produtos_bp = _safe_get_bp(_produtos_mod)
 arla_bp = _safe_get_bp(_arla_mod)
 pedidos_bp = _safe_get_bp(_pedidos_mod)
 posto_bp = _safe_get_bp(_posto_mod, attr='posto_bp')  # ← ADICIONADO
+tipos_receita_caixa_bp = _safe_get_bp(_tipos_receita_caixa_mod)
 
 # --- Aliases para compatibilidade com import direto de módulos -------------
 # Mantém: from routes import clientes, pedidos, ...
@@ -78,6 +80,7 @@ relatorios = _relatorios_mod
 arla = _arla_mod
 pedidos = _pedidos_mod
 posto = _posto_mod  # ← ADICIONADO
+tipos_receita_caixa = _tipos_receita_caixa_mod
 
 
 # --- Função de registro central --------------------------------------------
@@ -90,7 +93,8 @@ def init_app(app):
     bps = [
         clientes_bp, fornecedores_bp, veiculos_bp, motoristas_bp,
         fretes_bp, relatorios_bp, rotas_bp, origens_destinos_bp,
-        quilometragem_bp, produtos_bp, arla_bp, pedidos_bp, posto_bp  # ← ADICIONADO posto_bp
+        quilometragem_bp, produtos_bp, arla_bp, pedidos_bp, posto_bp,
+        tipos_receita_caixa_bp
     ]
     
     # evitar double-register
@@ -115,9 +119,10 @@ __all__ = [
     # blueprints
     'clientes_bp', 'motoristas_bp', 'veiculos_bp', 'fornecedores_bp',
     'fretes_bp', 'relatorios_bp', 'rotas_bp', 'origens_destinos_bp',
-    'quilometragem_bp', 'produtos_bp', 'arla_bp', 'pedidos_bp', 'posto_bp',  # ← ADICIONADO posto_bp
+    'quilometragem_bp', 'produtos_bp', 'arla_bp', 'pedidos_bp', 'posto_bp',
+    'tipos_receita_caixa_bp',
     # module aliases
     'clientes', 'fornecedores', 'veiculos', 'motoristas', 'fretes',
     'rotas', 'origens_destinos', 'quilometragem', 'produtos', 'relatorios',
-    'arla', 'pedidos', 'posto'  # ← ADICIONADO posto
+    'arla', 'pedidos', 'posto', 'tipos_receita_caixa'
 ]
