@@ -10,10 +10,7 @@ from datetime import datetime, timedelta
 import json
 
 # Importar função de conexão do banco de dados
-import sys
-import os
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from database import get_db_connection
+from utils.db import get_db_connection
 
 # Criar blueprint
 troco_pix_bp = Blueprint('troco_pix', __name__, url_prefix='/troco_pix')
