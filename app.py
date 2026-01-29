@@ -143,7 +143,13 @@ def create_app():
             return None
 
     # Registrar automaticamente todos os blueprints dentro de routes/
+    app.logger.info("="*60)
+    app.logger.info("Iniciando registro automático de blueprints...")
+    app.logger.info("="*60)
     register_blueprints_from_routes(app)
+    app.logger.info("="*60)
+    app.logger.info("Registro de blueprints concluído!")
+    app.logger.info("="*60)
 
     # Registrar filtro e helpers de template
     app.jinja_env.filters['formatar_moeda'] = formatar_moeda
