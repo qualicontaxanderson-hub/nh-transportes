@@ -1,0 +1,265 @@
+{% extends "base.html" %}
+
+{% block title %}Visualizar Troco PIX #{{ transacao.id }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row mb-3">
+        <div class="col-md-12">
+            <h2><i class="bi bi-eye"></i> Visualizar Solicitação de Troco PIX #{{ transacao.id }}</h2>
+            <nav aria-label="breadcrumb">
+                <ol class="breadcrumb">
+                    <li class="breadcrumb-item"><a href="{{ url_for('troco_pix.listar') }}">Troco PIX</a></li>
+                    <li class="breadcrumb-item active">Visualizar #{{ transacao.id }}</li>
+                </ol>
+            </nav>
+        </div>
+    </div>
+
+    <!-- Botões de ação -->
+    <div class="row mb-3">
+        <div class="col-md-12">
+            <a href="{{ url_for('troco_pix.editar', id=transacao.id) }}" class="btn btn-warning">
+                <i class="bi bi-pencil"></i> Editar
+            </a>
+            <a href="{{ url_for('troco_pix.listar') }}" class="btn btn-secondary">
+                <i class="bi bi-arrow-left"></i> Voltar
+            </a>
+        </div>
+    </div>
+
+    <!-- Informações Gerais -->
+    <div class="card mb-3">
+        <div class="card-header bg-primary text-white">
+            <i class="bi bi-info-circle"></i> Informações Gerais
+        </div>
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-6">
+                    <table class="table table-borderless">
+                        <tr>
+                            <th width="40%">Data:</th>
+                            <td>{{ transacao.data.strftime('%d/%m/%Y') if transacao.data else '-' }}</td>
+                        </tr>
+                        <tr>
+                            <th>Posto/Cliente:</th>
+                            <td>{{ transacao.cliente_nome or '-' }}</td>
+                        </tr>
+                        <tr>
+                            <th>Status:</th>
+                            <td>
+                                {% if transacao.status == 'PENDENTE' %}
+                                    <span class="badge bg-warning">Pendente</span>
+                                {% elif transacao.status == 'PROCESSADO' %}
+                                    <span class="badge bg-success">Processado</span>
+                                {% elif transacao.status == 'CANCELADO' %}
+                                    <span class="badge bg-danger">Cancelado</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                    </table>
+                </div>
+                <div class="col-md-6">
+                    <table class="table table-borderless">
+                        <tr>
+                            <th width="40%">Frentista:</th>
+                            <td>{{ transacao.funcionario_nome or '-' }}</td>
+                        </tr>
+                        <tr>
+                            <th>Importado:</th>
+                            <td>
+                                {% if transacao.importado_lancamento_caixa %}
+                                    <span class="badge bg-success">Sim</span>
+                                    {% if transacao.lancamento_caixa_id %}
+                                        (Lançamento #{{ transacao.lancamento_caixa_id }})
+                                    {% endif %}
+                                {% else %}
+                                    <span class="badge bg-secondary">Não</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        <tr>
+                            <th>Criado em:</th>
+                            <td>{{ transacao.criado_em.strftime('%d/%m/%Y %H:%M') if transacao.criado_em else '-' }}</td>
+                        </tr>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- VENDA -->
+    <div class="card mb-3">
+        <div class="card-header bg-success text-white">
+            <i class="bi bi-cart"></i> VENDA
+        </div>
+        <div class="card-body">
+            <table class="table table-striped">
+                <thead>
+                    <tr>
+                        <th>Descrição</th>
+                        <th class="text-end">Valor</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>Abastecimento</td>
+                        <td class="text-end">R$ {{ "%.2f"|format(transacao.venda_abastecimento or 0)|replace('.', ',') }}</td>
+                    </tr>
+                    <tr>
+                        <td>Arla</td>
+                        <td class="text-end">R$ {{ "%.2f"|format(transacao.venda_arla or 0)|replace('.', ',') }}</td>
+                    </tr>
+                    <tr>
+                        <td>Produtos</td>
+                        <td class="text-end">R$ {{ "%.2f"|format(transacao.venda_produtos or 0)|replace('.', ',') }}</td>
+                    </tr>
+                    <tr class="table-success">
+                        <th>TOTAL</th>
+                        <th class="text-end">R$ {{ "%.2f"|format(transacao.venda_total or 0)|replace('.', ',') }}</th>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- CHEQUE -->
+    <div class="card mb-3">
+        <div class="card-header bg-warning">
+            <i class="bi bi-wallet2"></i> CHEQUE
+        </div>
+        <div class="card-body">
+            <table class="table table-borderless">
+                <tr>
+                    <th width="30%">Tipo:</th>
+                    <td>
+                        {% if transacao.cheque_tipo == 'A_VISTA' %}
+                            À Vista
+                        {% elif transacao.cheque_tipo == 'A_PRAZO' %}
+                            A Prazo
+                        {% else %}
+                            -
+                        {% endif %}
+                    </td>
+                </tr>
+                {% if transacao.cheque_tipo == 'A_PRAZO' and transacao.cheque_data_vencimento %}
+                <tr>
+                    <th>Data de Vencimento:</th>
+                    <td>{{ transacao.cheque_data_vencimento.strftime('%d/%m/%Y') }}</td>
+                </tr>
+                {% endif %}
+                <tr>
+                    <th>Valor do Cheque:</th>
+                    <td class="text-end" style="font-size: 1.2em; font-weight: bold;">
+                        R$ {{ "%.2f"|format(transacao.cheque_valor or 0)|replace('.', ',') }}
+                    </td>
+                </tr>
+            </table>
+        </div>
+    </div>
+
+    <!-- TROCO -->
+    <div class="card mb-3">
+        <div class="card-header bg-info text-white">
+            <i class="bi bi-arrow-left-right"></i> TROCO
+        </div>
+        <div class="card-body">
+            <table class="table table-striped">
+                <thead>
+                    <tr>
+                        <th>Tipo de Troco</th>
+                        <th class="text-end">Valor</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>Troco em Espécie</td>
+                        <td class="text-end">R$ {{ "%.2f"|format(transacao.troco_especie or 0)|replace('.', ',') }}</td>
+                    </tr>
+                    <tr>
+                        <td>Troco PIX</td>
+                        <td class="text-end">R$ {{ "%.2f"|format(transacao.troco_pix or 0)|replace('.', ',') }}</td>
+                    </tr>
+                    <tr>
+                        <td>Crédito Vda Programada</td>
+                        <td class="text-end">R$ {{ "%.2f"|format(transacao.troco_credito_vda_programada or 0)|replace('.', ',') }}</td>
+                    </tr>
+                    <tr class="table-info">
+                        <th>TOTAL</th>
+                        <th class="text-end">R$ {{ "%.2f"|format(transacao.troco_total or 0)|replace('.', ',') }}</th>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- DESTINATÁRIO PIX -->
+    <div class="card mb-3">
+        <div class="card-header bg-secondary text-white">
+            <i class="bi bi-person"></i> Destinatário do PIX
+        </div>
+        <div class="card-body">
+            <table class="table table-borderless">
+                <tr>
+                    <th width="30%">Nome Completo:</th>
+                    <td>{{ transacao.troco_pix_cliente_nome or '-' }}</td>
+                </tr>
+                <tr>
+                    <th>Tipo de Chave PIX:</th>
+                    <td>{{ transacao.tipo_chave_pix or '-' }}</td>
+                </tr>
+                <tr>
+                    <th>Chave PIX:</th>
+                    <td style="font-family: monospace; font-size: 1.1em;">{{ transacao.chave_pix or '-' }}</td>
+                </tr>
+            </table>
+        </div>
+    </div>
+
+    <!-- RESUMO FINANCEIRO -->
+    <div class="card mb-3">
+        <div class="card-header bg-dark text-white">
+            <i class="bi bi-calculator"></i> Resumo Financeiro
+        </div>
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-4">
+                    <div class="card text-white bg-success mb-3">
+                        <div class="card-body text-center">
+                            <h5>Total Venda</h5>
+                            <h3>R$ {{ "%.2f"|format(transacao.venda_total or 0)|replace('.', ',') }}</h3>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="card text-white bg-warning mb-3">
+                        <div class="card-body text-center">
+                            <h5>Valor Cheque</h5>
+                            <h3>R$ {{ "%.2f"|format(transacao.cheque_valor or 0)|replace('.', ',') }}</h3>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="card text-white bg-info mb-3">
+                        <div class="card-body text-center">
+                            <h5>Total Troco</h5>
+                            <h3>R$ {{ "%.2f"|format(transacao.troco_total or 0)|replace('.', ',') }}</h3>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            {% set diferenca = (transacao.cheque_valor or 0) - (transacao.venda_total or 0) %}
+            <div class="alert {% if diferenca == (transacao.troco_total or 0) %}alert-success{% else %}alert-danger{% endif %}">
+                <strong>Verificação:</strong>
+                Diferença (Cheque - Venda) = R$ {{ "%.2f"|format(diferenca)|replace('.', ',') }}
+                {% if diferenca == (transacao.troco_total or 0) %}
+                    <i class="bi bi-check-circle"></i> Valores conferem!
+                {% else %}
+                    <i class="bi bi-exclamation-triangle"></i> Valores não conferem!
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

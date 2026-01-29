@@ -1,0 +1,189 @@
+{% extends "base.html" %}
+
+{% block title %}Troco PIX - Administrativo{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row mb-3">
+        <div class="col-md-12">
+            <h2><i class="bi bi-cash-coin"></i> Troco PIX - Administrativo</h2>
+            <p class="text-muted">Gerenciamento de solicitações de troco via PIX</p>
+        </div>
+    </div>
+
+    <!-- Botões de ação -->
+    <div class="row mb-3">
+        <div class="col-md-12">
+            <a href="{{ url_for('troco_pix.novo') }}" class="btn btn-primary">
+                <i class="bi bi-plus-circle"></i> Nova Solicitação de Troco
+            </a>
+            <a href="{{ url_for('troco_pix.clientes') }}" class="btn btn-info">
+                <i class="bi bi-people"></i> Gerenciar Clientes PIX
+            </a>
+        </div>
+    </div>
+
+    <!-- Resumo de Status -->
+    <div class="row mb-3">
+        <div class="col-md-3">
+            <div class="card text-white bg-warning">
+                <div class="card-body">
+                    <h5 class="card-title">Pendentes</h5>
+                    <h3>{{ resumo.pendentes or 0 }}</h3>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-white bg-success">
+                <div class="card-body">
+                    <h5 class="card-title">Processados</h5>
+                    <h3>{{ resumo.processados or 0 }}</h3>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-white bg-danger">
+                <div class="card-body">
+                    <h5 class="card-title">Cancelados</h5>
+                    <h3>{{ resumo.cancelados or 0 }}</h3>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-white bg-info">
+                <div class="card-body">
+                    <h5 class="card-title">Total Hoje</h5>
+                    <h3>R$ {{ total_dia|default('0,00') }}</h3>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Filtros -->
+    <div class="card mb-3">
+        <div class="card-header">
+            <i class="bi bi-funnel"></i> Filtros
+        </div>
+        <div class="card-body">
+            <form method="GET" action="{{ url_for('troco_pix.listar') }}">
+                <div class="row">
+                    <div class="col-md-3">
+                        <label for="data_inicio">Data Início</label>
+                        <input type="date" class="form-control" id="data_inicio" name="data_inicio" 
+                               value="{{ request.args.get('data_inicio', '') }}">
+                    </div>
+                    <div class="col-md-3">
+                        <label for="data_fim">Data Fim</label>
+                        <input type="date" class="form-control" id="data_fim" name="data_fim" 
+                               value="{{ request.args.get('data_fim', '') }}">
+                    </div>
+                    <div class="col-md-3">
+                        <label for="status">Status</label>
+                        <select class="form-control" id="status" name="status">
+                            <option value="">Todos</option>
+                            <option value="PENDENTE" {% if request.args.get('status') == 'PENDENTE' %}selected{% endif %}>Pendente</option>
+                            <option value="PROCESSADO" {% if request.args.get('status') == 'PROCESSADO' %}selected{% endif %}>Processado</option>
+                            <option value="CANCELADO" {% if request.args.get('status') == 'CANCELADO' %}selected{% endif %}>Cancelado</option>
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label for="cliente_id">Posto/Cliente</label>
+                        <select class="form-control" id="cliente_id" name="cliente_id">
+                            <option value="">Todos</option>
+                            {% for cliente in clientes %}
+                            <option value="{{ cliente.id }}" {% if request.args.get('cliente_id') == cliente.id|string %}selected{% endif %}>
+                                {{ cliente.razao_social }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+                <div class="row mt-3">
+                    <div class="col-md-12">
+                        <button type="submit" class="btn btn-primary">
+                            <i class="bi bi-search"></i> Filtrar
+                        </button>
+                        <a href="{{ url_for('troco_pix.listar') }}" class="btn btn-secondary">
+                            <i class="bi bi-x-circle"></i> Limpar
+                        </a>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Lista de Transações -->
+    <div class="card">
+        <div class="card-header">
+            <i class="bi bi-list-ul"></i> Lista de Solicitações de Troco PIX
+        </div>
+        <div class="card-body">
+            {% if transacoes %}
+            <div class="table-responsive">
+                <table class="table table-striped table-hover">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Data</th>
+                            <th>Posto/Cliente</th>
+                            <th>Cliente PIX</th>
+                            <th>Venda Total</th>
+                            <th>Cheque</th>
+                            <th>Troco Total</th>
+                            <th>Status</th>
+                            <th>Ações</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for t in transacoes %}
+                        <tr>
+                            <td>{{ t.id }}</td>
+                            <td>{{ t.data.strftime('%d/%m/%Y') if t.data else '-' }}</td>
+                            <td>{{ t.cliente_nome or '-' }}</td>
+                            <td>{{ t.troco_pix_cliente_nome or '-' }}</td>
+                            <td class="text-end">R$ {{ "%.2f"|format(t.venda_total or 0)|replace('.', ',') }}</td>
+                            <td class="text-end">R$ {{ "%.2f"|format(t.cheque_valor or 0)|replace('.', ',') }}</td>
+                            <td class="text-end">R$ {{ "%.2f"|format(t.troco_total or 0)|replace('.', ',') }}</td>
+                            <td>
+                                {% if t.status == 'PENDENTE' %}
+                                    <span class="badge bg-warning">Pendente</span>
+                                {% elif t.status == 'PROCESSADO' %}
+                                    <span class="badge bg-success">Processado</span>
+                                {% elif t.status == 'CANCELADO' %}
+                                    <span class="badge bg-danger">Cancelado</span>
+                                {% endif %}
+                                {% if t.importado_lancamento_caixa %}
+                                    <span class="badge bg-info">Importado</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <a href="{{ url_for('troco_pix.visualizar', id=t.id) }}" 
+                                   class="btn btn-sm btn-info" title="Visualizar">
+                                    <i class="bi bi-eye"></i>
+                                </a>
+                                <a href="{{ url_for('troco_pix.editar', id=t.id) }}" 
+                                   class="btn btn-sm btn-warning" title="Editar">
+                                    <i class="bi bi-pencil"></i>
+                                </a>
+                                <form method="POST" action="{{ url_for('troco_pix.excluir', id=t.id) }}" 
+                                      style="display:inline;" 
+                                      onsubmit="return confirm('Tem certeza que deseja excluir esta transação?');">
+                                    <button type="submit" class="btn btn-sm btn-danger" title="Excluir">
+                                        <i class="bi bi-trash"></i>
+                                    </button>
+                                </form>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="alert alert-info">
+                <i class="bi bi-info-circle"></i> Nenhuma transação encontrada.
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,136 @@
+{% extends 'base.html' %}
+{% block title %}Formas Recebimento Caixa - NH Transportes{% endblock %}
+{% block content %}
+<div class="container-fluid">
+    <nav aria-label="breadcrumb" class="mt-2 mb-3">
+        <ol class="breadcrumb" style="font-size: 0.85rem;">
+            <li class="breadcrumb-item"><a href="/">Dashboard</a></li>
+            <li class="breadcrumb-item active" aria-current="page">Formas Recebimento Caixa</li>
+        </ol>
+    </nav>
+    
+    <h2 class="mb-3" style="color:#1D63A5; font-size: 1.3rem;"><i class="bi bi-cash-coin"></i> Formas Recebimento Caixa</h2>
+    
+    {% if error %}
+    <div class="alert alert-danger alert-dismissible fade show" role="alert">
+        <strong>Erro:</strong> {{ error }}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+    {% endif %}
+    
+    <div class="card shadow-sm">
+        <div class="card-header" style="background:#4caf50;color:white; font-size: 0.95rem; padding: 0.6rem 1rem;">
+            <div class="d-flex justify-content-between align-items-center">
+                <h5 class="mb-0" style="font-size: 1rem;">Lista de Formas de Recebimento</h5>
+                <a href="{{ url_for('tipos_receita_caixa.novo') }}" class="btn btn-light btn-sm">
+                    <i class="bi bi-plus-circle"></i> Nova Forma de Recebimento
+                </a>
+            </div>
+        </div>
+        <div class="card-body" style="padding: 1rem;">
+            {% if tipos_receita %}
+            <div class="table-responsive">
+                <table class="table table-hover table-sm">
+                    <thead style="background:#f8f9fa;">
+                        <tr>
+                            <th style="font-size: 0.85rem;">ID</th>
+                            <th style="font-size: 0.85rem;">Nome</th>
+                            <th style="font-size: 0.85rem;">Tipo</th>
+                            <th style="font-size: 0.85rem;">Status</th>
+                            <th style="font-size: 0.85rem;">Criado em</th>
+                            <th style="font-size: 0.85rem;">Ações</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for tipo in tipos_receita %}
+                        <tr>
+                            <td style="font-size: 0.85rem;">{{ tipo.id }}</td>
+                            <td style="font-size: 0.85rem;">{{ tipo.nome }}</td>
+                            <td style="font-size: 0.85rem;">
+                                {% if tipo.tipo == 'AUTO' %}
+                                <span class="badge bg-info">AUTO</span>
+                                {% elif tipo.tipo == 'MANUAL' %}
+                                <span class="badge bg-secondary">MANUAL</span>
+                                {% else %}
+                                <span class="text-muted">-</span>
+                                {% endif %}
+                            </td>
+                            <td style="font-size: 0.85rem;">
+                                {% if tipo.ativo == 1 %}
+                                <span class="badge bg-success">Ativo</span>
+                                {% else %}
+                                <span class="badge bg-danger">Inativo</span>
+                                {% endif %}
+                            </td>
+                            <td style="font-size: 0.85rem;">{{ tipo.criado_em.strftime('%d/%m/%Y %H:%M') if tipo.criado_em else '-' }}</td>
+                            <td style="font-size: 0.85rem;">
+                                <a href="{{ url_for('tipos_receita_caixa.editar', id=tipo.id) }}" class="btn btn-primary btn-sm" title="Editar">
+                                    <i class="bi bi-pencil"></i>
+                                </a>
+                                <button type="button" 
+                                        class="btn btn-warning btn-sm toggle-status"
+                                        data-id="{{ tipo.id }}"
+                                        data-nome="{{ tipo.nome }}"
+                                        data-status="{{ tipo.ativo }}"
+                                        title="{% if tipo.ativo == 1 %}Bloquear{% else %}Desbloquear{% endif %}">
+                                    <i class="bi bi-{% if tipo.ativo == 1 %}lock{% else %}unlock{% endif %}"></i>
+                                </button>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <p class="text-center text-muted" style="margin: 2rem 0;">Nenhuma forma de recebimento cadastrada.</p>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<style>
+    .table th, .table td {
+        vertical-align: middle;
+    }
+    
+    @media (max-width: 768px) {
+        h2 {
+            font-size: 1.1rem !important;
+        }
+    }
+</style>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Toggle status buttons
+    document.querySelectorAll('.toggle-status').forEach(button => {
+        button.addEventListener('click', function() {
+            const id = this.dataset.id;
+            const nome = this.dataset.nome;
+            const statusAtual = parseInt(this.dataset.status);
+            const acao = statusAtual === 1 ? 'desativar' : 'ativar';
+            
+            if (confirm(`Deseja ${acao} a forma de recebimento "${nome}"?`)) {
+                fetch(`{{ url_for('tipos_receita_caixa.toggle', id=0) }}`.replace('/0', `/${id}`), {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    }
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        location.reload();
+                    } else {
+                        alert('Erro: ' + data.message);
+                    }
+                })
+                .catch(error => {
+                    alert('Erro ao alterar status: ' + error);
+                });
+            }
+        });
+    });
+});
+</script>
+{% endblock %}

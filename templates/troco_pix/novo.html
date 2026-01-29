@@ -1,0 +1,404 @@
+{% extends "base.html" %}
+
+{% block title %}{{ 'Editar' if edit_mode else 'Nova' }} Solicitação de Troco PIX{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row mb-3">
+        <div class="col-md-12">
+            <h2>
+                <i class="bi bi-cash-coin"></i> 
+                {{ 'Editar' if edit_mode else 'Nova' }} Solicitação de Troco PIX
+            </h2>
+            <nav aria-label="breadcrumb">
+                <ol class="breadcrumb">
+                    <li class="breadcrumb-item"><a href="{{ url_for('troco_pix.listar') }}">Troco PIX</a></li>
+                    <li class="breadcrumb-item active">{{ 'Editar' if edit_mode else 'Nova Solicitação' }}</li>
+                </ol>
+            </nav>
+        </div>
+    </div>
+
+    <form method="POST" action="{{ url_for('troco_pix.editar', id=transacao.id) if edit_mode else url_for('troco_pix.novo') }}">
+        <!-- Informações Gerais -->
+        <div class="card mb-3">
+            <div class="card-header bg-primary text-white">
+                <i class="bi bi-info-circle"></i> Informações Gerais
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="mb-3">
+                            <label for="cliente_id" class="form-label">Posto/Cliente *</label>
+                            <select class="form-control" id="cliente_id" name="cliente_id" required>
+                                <option value="">Selecione...</option>
+                                {% for cliente in clientes %}
+                                <option value="{{ cliente.id }}" 
+                                        {% if edit_mode and transacao.cliente_id == cliente.id %}selected{% endif %}>
+                                    {{ cliente.razao_social }}
+                                </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="mb-3">
+                            <label for="data" class="form-label">Data *</label>
+                            <input type="date" class="form-control" id="data" name="data" required
+                                   value="{{ transacao.data.strftime('%Y-%m-%d') if edit_mode and transacao.data else '' }}">
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- VENDA -->
+        <div class="card mb-3">
+            <div class="card-header bg-success text-white">
+                <i class="bi bi-cart"></i> VENDA
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-4">
+                        <div class="mb-3">
+                            <label for="venda_abastecimento" class="form-label">Abastecimento</label>
+                            <div class="input-group">
+                                <span class="input-group-text">R$</span>
+                                <input type="number" step="0.01" class="form-control venda-input" 
+                                       id="venda_abastecimento" name="venda_abastecimento"
+                                       value="{{ '%.2f'|format(transacao.venda_abastecimento or 0) if edit_mode else '0.00' }}">
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="mb-3">
+                            <label for="venda_arla" class="form-label">Arla</label>
+                            <div class="input-group">
+                                <span class="input-group-text">R$</span>
+                                <input type="number" step="0.01" class="form-control venda-input" 
+                                       id="venda_arla" name="venda_arla"
+                                       value="{{ '%.2f'|format(transacao.venda_arla or 0) if edit_mode else '0.00' }}">
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="mb-3">
+                            <label for="venda_produtos" class="form-label">Produtos</label>
+                            <div class="input-group">
+                                <span class="input-group-text">R$</span>
+                                <input type="number" step="0.01" class="form-control venda-input" 
+                                       id="venda_produtos" name="venda_produtos"
+                                       value="{{ '%.2f'|format(transacao.venda_produtos or 0) if edit_mode else '0.00' }}">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="col-md-12">
+                        <div class="alert alert-success">
+                            <strong>TOTAL DA VENDA: R$ <span id="venda_total_display">0,00</span></strong>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- CHEQUE -->
+        <div class="card mb-3">
+            <div class="card-header bg-warning">
+                <i class="bi bi-wallet2"></i> CHEQUE
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-4">
+                        <div class="mb-3">
+                            <label for="cheque_tipo" class="form-label">Tipo de Cheque *</label>
+                            <select class="form-control" id="cheque_tipo" name="cheque_tipo" required>
+                                <option value="">Selecione...</option>
+                                <option value="A_VISTA" {% if edit_mode and transacao.cheque_tipo == 'A_VISTA' %}selected{% endif %}>À Vista</option>
+                                <option value="A_PRAZO" {% if edit_mode and transacao.cheque_tipo == 'A_PRAZO' %}selected{% endif %}>A Prazo</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="col-md-4" id="data_vencimento_group" style="display:none;">
+                        <div class="mb-3">
+                            <label for="cheque_data_vencimento" class="form-label">Data de Vencimento</label>
+                            <input type="date" class="form-control" id="cheque_data_vencimento" name="cheque_data_vencimento"
+                                   value="{{ transacao.cheque_data_vencimento.strftime('%Y-%m-%d') if edit_mode and transacao.cheque_data_vencimento else '' }}">
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="mb-3">
+                            <label for="cheque_valor" class="form-label">Valor do Cheque *</label>
+                            <div class="input-group">
+                                <span class="input-group-text">R$</span>
+                                <input type="number" step="0.01" class="form-control" 
+                                       id="cheque_valor" name="cheque_valor" required
+                                       value="{{ '%.2f'|format(transacao.cheque_valor or 0) if edit_mode else '' }}">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- TROCO -->
+        <div class="card mb-3">
+            <div class="card-header bg-info text-white">
+                <i class="bi bi-arrow-left-right"></i> TROCO
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-4">
+                        <div class="mb-3">
+                            <label for="troco_especie" class="form-label">Troco em Espécie</label>
+                            <div class="input-group">
+                                <span class="input-group-text">R$</span>
+                                <input type="number" step="0.01" class="form-control troco-input" 
+                                       id="troco_especie" name="troco_especie"
+                                       value="{{ '%.2f'|format(transacao.troco_especie or 0) if edit_mode else '0.00' }}">
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="mb-3">
+                            <label for="troco_pix" class="form-label">Troco PIX</label>
+                            <div class="input-group">
+                                <span class="input-group-text">R$</span>
+                                <input type="number" step="0.01" class="form-control troco-input" 
+                                       id="troco_pix" name="troco_pix"
+                                       value="{{ '%.2f'|format(transacao.troco_pix or 0) if edit_mode else '0.00' }}">
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="mb-3">
+                            <label for="troco_credito_vda_programada" class="form-label">Crédito Vda Programada</label>
+                            <div class="input-group">
+                                <span class="input-group-text">R$</span>
+                                <input type="number" step="0.01" class="form-control troco-input" 
+                                       id="troco_credito_vda_programada" name="troco_credito_vda_programada"
+                                       value="{{ '%.2f'|format(transacao.troco_credito_vda_programada or 0) if edit_mode else '0.00' }}">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="col-md-12">
+                        <div class="alert alert-info">
+                            <strong>TOTAL DO TROCO: R$ <span id="troco_total_display">0,00</span></strong>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- DADOS DO DESTINATÁRIO PIX -->
+        <div class="card mb-3">
+            <div class="card-header bg-secondary text-white">
+                <i class="bi bi-person"></i> Destinatário do PIX
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-12">
+                        <div class="mb-3">
+                            <label for="troco_pix_cliente_id" class="form-label">Cliente PIX *</label>
+                            <div class="input-group">
+                                <select class="form-control" id="troco_pix_cliente_id" name="troco_pix_cliente_id" required>
+                                    <option value="">Selecione...</option>
+                                    {% for cliente_pix in clientes_pix %}
+                                    <option value="{{ cliente_pix.id }}" 
+                                            data-tipo="{{ cliente_pix.tipo_chave_pix }}"
+                                            data-chave="{{ cliente_pix.chave_pix }}"
+                                            {% if edit_mode and transacao.troco_pix_cliente_id == cliente_pix.id %}selected{% endif %}>
+                                        {{ cliente_pix.nome_completo }} - {{ cliente_pix.tipo_chave_pix }}: {{ cliente_pix.chave_pix }}
+                                    </option>
+                                    {% endfor %}
+                                </select>
+                                <a href="{{ url_for('troco_pix.cliente_novo') }}" class="btn btn-outline-secondary" target="_blank">
+                                    <i class="bi bi-plus"></i> Novo Cliente PIX
+                                </a>
+                            </div>
+                            <small class="form-text text-muted">
+                                Se não encontrar o cliente, clique em "Novo Cliente PIX" para cadastrar.
+                            </small>
+                        </div>
+                    </div>
+                </div>
+                <div class="row" id="pix_info" style="display:none;">
+                    <div class="col-md-6">
+                        <div class="alert alert-light">
+                            <strong>Tipo de Chave:</strong> <span id="pix_tipo"></span>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="alert alert-light">
+                            <strong>Chave PIX:</strong> <span id="pix_chave"></span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- FRENTISTA -->
+        <div class="card mb-3">
+            <div class="card-header bg-dark text-white">
+                <i class="bi bi-person-badge"></i> Frentista
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-12">
+                        <div class="mb-3">
+                            <label for="funcionario_id" class="form-label">Frentista *</label>
+                            <select class="form-control" id="funcionario_id" name="funcionario_id" required>
+                                <option value="">Selecione...</option>
+                                {% for funcionario in funcionarios %}
+                                <option value="{{ funcionario.id }}"
+                                        {% if edit_mode and transacao.funcionario_id == funcionario.id %}selected{% endif %}>
+                                    {{ funcionario.nome }}
+                                </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- STATUS (apenas em modo edição) -->
+        {% if edit_mode %}
+        <div class="card mb-3">
+            <div class="card-header">
+                <i class="bi bi-flag"></i> Status
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-12">
+                        <div class="mb-3">
+                            <label for="status" class="form-label">Status</label>
+                            <select class="form-control" id="status" name="status">
+                                <option value="PENDENTE" {% if transacao.status == 'PENDENTE' %}selected{% endif %}>Pendente</option>
+                                <option value="PROCESSADO" {% if transacao.status == 'PROCESSADO' %}selected{% endif %}>Processado</option>
+                                <option value="CANCELADO" {% if transacao.status == 'CANCELADO' %}selected{% endif %}>Cancelado</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Botões -->
+        <div class="row mb-5">
+            <div class="col-md-12">
+                <button type="submit" class="btn btn-primary btn-lg">
+                    <i class="bi bi-save"></i> {{ 'Atualizar' if edit_mode else 'Salvar' }}
+                </button>
+                <a href="{{ url_for('troco_pix.listar') }}" class="btn btn-secondary btn-lg">
+                    <i class="bi bi-x-circle"></i> Cancelar
+                </a>
+            </div>
+        </div>
+    </form>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Função para formatar valor em Real Brasileiro
+    function formatarReal(valor) {
+        return valor.toFixed(2).replace('.', ',').replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+    }
+
+    // Função para calcular total de venda
+    function calcularTotalVenda() {
+        const abastecimento = parseFloat(document.getElementById('venda_abastecimento').value) || 0;
+        const arla = parseFloat(document.getElementById('venda_arla').value) || 0;
+        const produtos = parseFloat(document.getElementById('venda_produtos').value) || 0;
+        
+        const total = abastecimento + arla + produtos;
+        document.getElementById('venda_total_display').textContent = formatarReal(total);
+    }
+
+    // Função para calcular total de troco
+    function calcularTotalTroco() {
+        const especie = parseFloat(document.getElementById('troco_especie').value) || 0;
+        const pix = parseFloat(document.getElementById('troco_pix').value) || 0;
+        const credito = parseFloat(document.getElementById('troco_credito_vda_programada').value) || 0;
+        
+        const total = especie + pix + credito;
+        document.getElementById('troco_total_display').textContent = formatarReal(total);
+    }
+
+    // Adicionar listeners para campos de venda
+    document.querySelectorAll('.venda-input').forEach(input => {
+        input.addEventListener('input', calcularTotalVenda);
+    });
+
+    // Adicionar listeners para campos de troco
+    document.querySelectorAll('.troco-input').forEach(input => {
+        input.addEventListener('input', calcularTotalTroco);
+    });
+
+    // Mostrar/ocultar campo de data de vencimento baseado no tipo de cheque
+    const chequeTipo = document.getElementById('cheque_tipo');
+    const dataVencimentoGroup = document.getElementById('data_vencimento_group');
+    const dataVencimentoInput = document.getElementById('cheque_data_vencimento');
+    
+    chequeTipo.addEventListener('change', function() {
+        if (this.value === 'A_PRAZO') {
+            dataVencimentoGroup.style.display = 'block';
+            dataVencimentoInput.required = true;
+        } else {
+            dataVencimentoGroup.style.display = 'none';
+            dataVencimentoInput.required = false;
+            dataVencimentoInput.value = '';
+        }
+    });
+
+    // Mostrar informações do cliente PIX selecionado
+    const clientePixSelect = document.getElementById('troco_pix_cliente_id');
+    const pixInfo = document.getElementById('pix_info');
+    const pixTipo = document.getElementById('pix_tipo');
+    const pixChave = document.getElementById('pix_chave');
+    
+    clientePixSelect.addEventListener('change', function() {
+        const selectedOption = this.options[this.selectedIndex];
+        if (this.value) {
+            const tipo = selectedOption.getAttribute('data-tipo');
+            const chave = selectedOption.getAttribute('data-chave');
+            pixTipo.textContent = tipo;
+            pixChave.textContent = chave;
+            pixInfo.style.display = 'flex';
+        } else {
+            pixInfo.style.display = 'none';
+        }
+    });
+
+    // Pré-preencher data com hoje se não estiver em modo edição
+    {% if not edit_mode %}
+    const dataInput = document.getElementById('data');
+    if (!dataInput.value) {
+        const today = new Date().toISOString().split('T')[0];
+        dataInput.value = today;
+    }
+    {% endif %}
+
+    // Calcular totais iniciais (em modo edição)
+    calcularTotalVenda();
+    calcularTotalTroco();
+    
+    // Verificar tipo de cheque inicial (em modo edição)
+    if (chequeTipo.value === 'A_PRAZO') {
+        dataVencimentoGroup.style.display = 'block';
+        dataVencimentoInput.required = true;
+    }
+    
+    // Mostrar info PIX se já tiver cliente selecionado
+    if (clientePixSelect.value) {
+        clientePixSelect.dispatchEvent(new Event('change'));
+    }
+});
+</script>
+{% endblock %}
