@@ -146,20 +146,47 @@ def create_app():
     # REGISTRO MANUAL DE BLUEPRINTS CRÍTICOS (antes do auto-discover)
     # ========================================================================
     # Blueprint TROCO PIX - Registrado manualmente para garantir carregamento
+    print("="*60)
+    print("🔄 TENTANDO REGISTRAR BLUEPRINT TROCO PIX...")
+    print("="*60)
+    import sys
+    import os
+    print(f"📁 Python Path: {sys.path}")
+    print(f"📁 Current Dir: {os.getcwd()}")
+    print(f"📁 App Root: {app.root_path}")
+    
     try:
+        print("📦 Importando routes.troco_pix...")
         from routes.troco_pix import troco_pix_bp
+        print(f"✅ Import bem-sucedido! Blueprint: {troco_pix_bp}")
+        print(f"   Nome: {troco_pix_bp.name}")
+        print(f"   URL Prefix: {troco_pix_bp.url_prefix}")
+        
+        print("📌 Registrando blueprint no app...")
         app.register_blueprint(troco_pix_bp)
-        app.logger.info("="*60)
-        app.logger.info("✅ BLUEPRINT TROCO PIX REGISTRADO MANUALMENTE!")
-        app.logger.info(f"   URL Prefix: {troco_pix_bp.url_prefix}")
-        app.logger.info(f"   Name: {troco_pix_bp.name}")
-        app.logger.info("="*60)
+        print("="*60)
+        print("🎉 ✅ BLUEPRINT TROCO PIX REGISTRADO COM SUCESSO!")
+        print(f"   URL Final: {troco_pix_bp.url_prefix}")
+        print("="*60)
+        app.logger.info("✅ Blueprint troco_pix registrado com sucesso!")
+    except ImportError as e:
+        print("="*60)
+        print("❌ ERRO DE IMPORT!")
+        print(f"   Tipo: ImportError")
+        print(f"   Mensagem: {str(e)}")
+        print("="*60)
+        import traceback
+        traceback.print_exc()
+        app.logger.error(f"Erro de import troco_pix: {e}", exc_info=True)
     except Exception as e:
-        app.logger.error("="*60)
-        app.logger.error("❌ ERRO AO REGISTRAR BLUEPRINT TROCO PIX!")
-        app.logger.error(f"   Erro: {str(e)}")
-        app.logger.error("="*60)
-        app.logger.exception("Detalhes do erro:")
+        print("="*60)
+        print("❌ ERRO AO REGISTRAR BLUEPRINT TROCO PIX!")
+        print(f"   Tipo: {type(e).__name__}")
+        print(f"   Mensagem: {str(e)}")
+        print("="*60)
+        import traceback
+        traceback.print_exc()
+        app.logger.error(f"Erro ao registrar troco_pix: {e}", exc_info=True)
     # ========================================================================
 
     # Registrar automaticamente todos os blueprints dentro de routes/
