@@ -1,0 +1,13 @@
+# Arquivo de trigger para forçar redeploy
+# Data: 2026-01-29 14:47:45
+# Motivo: Garantir que blueprint troco_pix seja carregado
+# 
+# Este arquivo foi criado para forçar o Render a fazer redeploy
+# e reiniciar o servidor com o novo código do sistema TROCO PIX.
+#
+# O blueprint troco_pix_bp está definido em routes/troco_pix.py
+# e será carregado automaticamente pelo sistema de auto-discover.
+
+DEPLOY_TIMESTAMP=2026-01-29T14:47:45Z
+REASON=Load troco_pix blueprint
+VERSION=1.0.0
