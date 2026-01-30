@@ -271,6 +271,7 @@
 <script>
 document.addEventListener('DOMContentLoaded', function() {
     const btnCopyWhatsApp = document.getElementById('btnCopyWhatsApp');
+    const FEEDBACK_TIMEOUT = 2000; // milliseconds
     
     if (btnCopyWhatsApp) {
         btnCopyWhatsApp.addEventListener('click', function() {
@@ -285,24 +286,38 @@ document.addEventListener('DOMContentLoaded', function() {
                 return num.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2});
             }
             
-            // Get transaction data
+            // Function to show success feedback
+            function showSuccessFeedback() {
+                const originalText = btnCopyWhatsApp.innerHTML;
+                btnCopyWhatsApp.innerHTML = '<i class="bi bi-check-circle"></i> Copiado!';
+                btnCopyWhatsApp.classList.remove('btn-success');
+                btnCopyWhatsApp.classList.add('btn-info');
+                
+                setTimeout(function() {
+                    btnCopyWhatsApp.innerHTML = originalText;
+                    btnCopyWhatsApp.classList.remove('btn-info');
+                    btnCopyWhatsApp.classList.add('btn-success');
+                }, FEEDBACK_TIMEOUT);
+            }
+            
+            // Get transaction data - using tojson for safe escaping
             const data = {
-                data: '{{ transacao.data.strftime("%d/%m/%Y") if transacao.data else "" }}',
+                data: {{ transacao.data.strftime("%d/%m/%Y")|tojson if transacao.data else '""'|safe }},
                 venda_abastecimento: {{ transacao.venda_abastecimento or 0 }},
                 venda_arla: {{ transacao.venda_arla or 0 }},
                 venda_produtos: {{ transacao.venda_produtos or 0 }},
                 venda_total: {{ transacao.venda_total or 0 }},
-                cheque_tipo: '{{ transacao.cheque_tipo or "" }}',
-                cheque_data_vencimento: '{{ transacao.cheque_data_vencimento.strftime("%d/%m/%Y") if transacao.cheque_data_vencimento else "" }}',
+                cheque_tipo: {{ transacao.cheque_tipo|tojson if transacao.cheque_tipo else '""'|safe }},
+                cheque_data_vencimento: {{ transacao.cheque_data_vencimento.strftime("%d/%m/%Y")|tojson if transacao.cheque_data_vencimento else '""'|safe }},
                 cheque_valor: {{ transacao.cheque_valor or 0 }},
                 troco_especie: {{ transacao.troco_especie or 0 }},
                 troco_pix: {{ transacao.troco_pix or 0 }},
                 troco_credito: {{ transacao.troco_credito_vda_programada or 0 }},
                 troco_total: {{ transacao.troco_total or 0 }},
-                cliente_pix_nome: '{{ transacao.cliente_pix_nome or "" }}',
-                tipo_chave_pix: '{{ transacao.tipo_chave_pix or "" }}',
-                chave_pix: '{{ transacao.chave_pix or "" }}',
-                frentista_nome: '{{ transacao.frentista_nome or "" }}'
+                cliente_pix_nome: {{ transacao.cliente_pix_nome|tojson if transacao.cliente_pix_nome else '""'|safe }},
+                tipo_chave_pix: {{ transacao.tipo_chave_pix|tojson if transacao.tipo_chave_pix else '""'|safe }},
+                chave_pix: {{ transacao.chave_pix|tojson if transacao.chave_pix else '""'|safe }},
+                frentista_nome: {{ transacao.frentista_nome|tojson if transacao.frentista_nome else '""'|safe }}
             };
             
             // Build WhatsApp message
@@ -328,30 +343,25 @@ document.addEventListener('DOMContentLoaded', function() {
             message += 'Valor do cheque: ' + formatCurrency(data.cheque_valor) + '\n\n';
             
             message += 'TROCO\n';
-            message += 'Troco em Especie: ' + (formatCurrency(data.troco_especie) || '') + '\n';
+            message += 'Troco em Espécie: ' + (formatCurrency(data.troco_especie) || '') + '\n';
             message += 'Credito Vda Programada: ' + (formatCurrency(data.troco_credito) || '') + '\n';
             message += 'TOTAL = ' + formatCurrency(data.troco_total) + '\n\n';
             
             message += 'TROCO PIX = ' + formatCurrency(data.troco_pix) + '\n';
-            message += 'Chave Pix: ' + (data.tipo_chave_pix ? data.tipo_chave_pix + ' - ' : '') + data.chave_pix + '\n';
-            message += 'Nome do Cliente: ' + data.cliente_pix_nome + '\n\n';
+            // Only show chave info if there's actual data
+            if (data.chave_pix) {
+                message += 'Chave Pix: ' + (data.tipo_chave_pix ? data.tipo_chave_pix + ' - ' : '') + data.chave_pix + '\n';
+            } else {
+                message += 'Chave Pix: \n';
+            }
+            message += 'Nome do Cliente: ' + (data.cliente_pix_nome || '') + '\n\n';
             
-            message += 'Frentista: ' + data.frentista_nome;
+            message += 'Frentista: ' + (data.frentista_nome || '');
             
             // Copy to clipboard
             if (navigator.clipboard && navigator.clipboard.writeText) {
                 navigator.clipboard.writeText(message).then(function() {
-                    // Success feedback
-                    const originalText = btnCopyWhatsApp.innerHTML;
-                    btnCopyWhatsApp.innerHTML = '<i class="bi bi-check-circle"></i> Copiado!';
-                    btnCopyWhatsApp.classList.remove('btn-success');
-                    btnCopyWhatsApp.classList.add('btn-info');
-                    
-                    setTimeout(function() {
-                        btnCopyWhatsApp.innerHTML = originalText;
-                        btnCopyWhatsApp.classList.remove('btn-info');
-                        btnCopyWhatsApp.classList.add('btn-success');
-                    }, 2000);
+                    showSuccessFeedback();
                 }).catch(function(err) {
                     alert('Erro ao copiar: ' + err);
                 });
@@ -365,16 +375,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 textArea.select();
                 try {
                     document.execCommand('copy');
-                    const originalText = btnCopyWhatsApp.innerHTML;
-                    btnCopyWhatsApp.innerHTML = '<i class="bi bi-check-circle"></i> Copiado!';
-                    btnCopyWhatsApp.classList.remove('btn-success');
-                    btnCopyWhatsApp.classList.add('btn-info');
-                    
-                    setTimeout(function() {
-                        btnCopyWhatsApp.innerHTML = originalText;
-                        btnCopyWhatsApp.classList.remove('btn-info');
-                        btnCopyWhatsApp.classList.add('btn-success');
-                    }, 2000);
+                    showSuccessFeedback();
                 } catch (err) {
                     alert('Erro ao copiar: ' + err);
                 }
