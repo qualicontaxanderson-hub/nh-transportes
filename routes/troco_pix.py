@@ -254,7 +254,8 @@ def novo():
                                  postos_json=postos_json,
                                  clientes_pix=clientes_pix,
                                  clientes_pix_json=clientes_pix_json,
-                                 frentistas=frentistas,
+                                 funcionarios=frentistas,  # Template usa 'funcionarios'
+                                 frentistas=frentistas,  # Mantido para compatibilidade
                                  frentistas_json=frentistas_json,
                                  edit_mode=False,
                                  titulo='Novo TROCO PIX')
@@ -429,7 +430,8 @@ def editar(troco_pix_id):
                                  postos_json=postos_json,
                                  clientes_pix=clientes_pix,
                                  clientes_pix_json=clientes_pix_json,
-                                 frentistas=frentistas,
+                                 funcionarios=frentistas,  # Template usa 'funcionarios'
+                                 frentistas=frentistas,  # Mantido para compatibilidade
                                  frentistas_json=frentistas_json,
                                  edit_mode=True,
                                  troco_pix_id=troco_pix_id,
