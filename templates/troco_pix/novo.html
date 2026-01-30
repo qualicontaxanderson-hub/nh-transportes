@@ -430,11 +430,12 @@ document.addEventListener('DOMContentLoaded', function() {
             const optionClienteId = option.getAttribute('data-cliente-id');
             
             // Incluir se o frentista está vinculado ao cliente OU não tem cliente vinculado
-            if (optionClienteId === clienteId || optionClienteId === '' || optionClienteId === 'None') {
+            // Converter ambos para string para garantir comparação correta
+            if (String(optionClienteId) === String(clienteId) || optionClienteId === '' || optionClienteId === 'None') {
                 const newOption = option.cloneNode(true);
                 frentistaSelect.appendChild(newOption);
                 
-                if (optionClienteId === clienteId) {
+                if (String(optionClienteId) === String(clienteId)) {
                     frentistasVinculados++;
                 } else {
                     frentistasGerais++;
