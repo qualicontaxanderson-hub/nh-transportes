@@ -189,12 +189,12 @@ def novo():
             cursor = conn.cursor(dictionary=True)
             
             # Buscar postos (clientes) que têm produtos configurados
-            # Se não houver cliente_produtos configurado, mostra todos os clientes ativos
+            # Mostra APENAS clientes que têm produtos ativos configurados
             cursor.execute("""
                 SELECT DISTINCT c.id, c.razao_social 
                 FROM clientes c
-                LEFT JOIN cliente_produtos cp ON c.id = cp.cliente_id
-                WHERE (cp.ativo = 1 OR cp.id IS NULL)
+                INNER JOIN cliente_produtos cp ON c.id = cp.cliente_id
+                WHERE cp.ativo = 1
                 ORDER BY c.razao_social
             """)
             postos = cursor.fetchall()
@@ -362,12 +362,12 @@ def editar(troco_pix_id):
                     return redirect(url_for('troco_pix.visualizar', troco_pix_id=troco_pix_id))
             
             # Buscar dados para o formulário
-            # Se não houver cliente_produtos configurado, mostra todos os clientes
+            # Mostra APENAS clientes que têm produtos ativos configurados
             cursor.execute("""
                 SELECT DISTINCT c.id, c.razao_social 
                 FROM clientes c
-                LEFT JOIN cliente_produtos cp ON c.id = cp.cliente_id
-                WHERE (cp.ativo = 1 OR cp.id IS NULL)
+                INNER JOIN cliente_produtos cp ON c.id = cp.cliente_id
+                WHERE cp.ativo = 1
                 ORDER BY c.razao_social
             """)
             postos = cursor.fetchall()
