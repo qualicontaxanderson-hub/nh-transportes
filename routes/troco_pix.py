@@ -89,7 +89,11 @@ def listar():
         
     except Exception as e:
         flash(f'Erro ao carregar transações: {str(e)}', 'danger')
-        return redirect(url_for('troco_pix.listar'))
+        # Redireciona para index para evitar loop infinito em caso de erro persistente
+        try:
+            return redirect(url_for('fretes.lista'))
+        except Exception:
+            return redirect(url_for('index'))
 
 @troco_pix_bp.route('/visualizar/<int:troco_pix_id>')
 @login_required
@@ -660,4 +664,8 @@ def pista():
         
     except Exception as e:
         flash(f'Erro ao carregar transações: {str(e)}', 'danger')
-        return redirect(url_for('troco_pix.pista'))
+        # Redireciona para index para evitar loop infinito em caso de erro persistente
+        try:
+            return redirect(url_for('fretes.lista'))
+        except Exception:
+            return redirect(url_for('index'))
