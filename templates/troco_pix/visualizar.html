@@ -43,7 +43,7 @@
                         </tr>
                         <tr>
                             <th>Posto/Cliente:</th>
-                            <td>{{ transacao.cliente_nome or '-' }}</td>
+                            <td>{{ transacao.posto_nome or '-' }}</td>
                         </tr>
                         <tr>
                             <th>Status:</th>
@@ -63,7 +63,7 @@
                     <table class="table table-borderless">
                         <tr>
                             <th width="40%">Frentista:</th>
-                            <td>{{ transacao.funcionario_nome or '-' }}</td>
+                            <td>{{ transacao.frentista_nome or '-' }}</td>
                         </tr>
                         <tr>
                             <th>Importado:</th>
@@ -202,7 +202,7 @@
             <table class="table table-borderless">
                 <tr>
                     <th width="30%">Nome Completo:</th>
-                    <td>{{ transacao.troco_pix_cliente_nome or '-' }}</td>
+                    <td>{{ transacao.cliente_pix_nome or '-' }}</td>
                 </tr>
                 <tr>
                     <th>Tipo de Chave PIX:</th>

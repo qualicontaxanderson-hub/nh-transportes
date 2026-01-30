@@ -127,9 +127,9 @@
                             <th>Data</th>
                             <th>Posto/Cliente</th>
                             <th>Cliente PIX</th>
-                            <th>Venda Total</th>
-                            <th>Cheque</th>
-                            <th>Troco Total</th>
+                            <th class="text-center">Venda Total</th>
+                            <th class="text-center">Cheque</th>
+                            <th class="text-center">Troco Total</th>
                             <th>Status</th>
                             <th>Ações</th>
                         </tr>
@@ -139,11 +139,11 @@
                         <tr>
                             <td>{{ t.id }}</td>
                             <td>{{ t.data.strftime('%d/%m/%Y') if t.data else '-' }}</td>
-                            <td>{{ t.cliente_nome or '-' }}</td>
-                            <td>{{ t.troco_pix_cliente_nome or '-' }}</td>
-                            <td class="text-end">R$ {{ "%.2f"|format(t.venda_total or 0)|replace('.', ',') }}</td>
-                            <td class="text-end">R$ {{ "%.2f"|format(t.cheque_valor or 0)|replace('.', ',') }}</td>
-                            <td class="text-end">R$ {{ "%.2f"|format(t.troco_total or 0)|replace('.', ',') }}</td>
+                            <td>{{ t.posto_nome or '-' }}</td>
+                            <td>{{ t.cliente_pix_nome or '-' }}</td>
+                            <td class="text-center">R$ {{ "%.2f"|format(t.venda_total or 0)|replace('.', ',') }}</td>
+                            <td class="text-center">R$ {{ "%.2f"|format(t.cheque_valor or 0)|replace('.', ',') }}</td>
+                            <td class="text-center">R$ {{ "%.2f"|format(t.troco_total or 0)|replace('.', ',') }}</td>
                             <td>
                                 {% if t.status == 'PENDENTE' %}
                                     <span class="badge bg-warning">Pendente</span>
