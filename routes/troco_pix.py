@@ -208,14 +208,33 @@ def novo():
             """)
             clientes_pix = cursor.fetchall()
             
-            # Buscar frentistas ativos (incluindo cliente_id para filtro)
-            cursor.execute("""
-                SELECT id, nome, clienteid
-                FROM funcionarios
-                WHERE ativo = 1
-                ORDER BY nome
-            """)
-            frentistas = cursor.fetchall()
+            # Buscar frentistas ativos (incluindo cliente_id para filtro se a coluna existir)
+            try:
+                cursor.execute("""
+                    SELECT id, nome, clienteid
+                    FROM funcionarios
+                    WHERE ativo = 1
+                    ORDER BY nome
+                """)
+                frentistas = cursor.fetchall()
+            except Exception as col_error:
+                # Se a coluna clienteid não existir, buscar sem ela
+                if '1054' in str(col_error) or 'Unknown column' in str(col_error):
+                    cursor.execute("""
+                        SELECT id, nome
+                        FROM funcionarios
+                        WHERE ativo = 1
+                        ORDER BY nome
+                    """)
+                    frentistas_temp = cursor.fetchall()
+                    # Adicionar clienteid=None manualmente para compatibilidade
+                    frentistas = []
+                    for f in frentistas_temp:
+                        f_dict = dict(f)
+                        f_dict['clienteid'] = None
+                        frentistas.append(f_dict)
+                else:
+                    raise col_error
             
             # Limpar dados antes de serializar
             postos_clean = convert_to_plain_python(list(postos))
@@ -361,13 +380,33 @@ def editar(troco_pix_id):
             """)
             clientes_pix = cursor.fetchall()
             
-            cursor.execute("""
-                SELECT id, nome, clienteid
-                FROM funcionarios
-                WHERE ativo = 1
-                ORDER BY nome
-            """)
-            frentistas = cursor.fetchall()
+            # Buscar frentistas ativos (incluindo cliente_id para filtro se a coluna existir)
+            try:
+                cursor.execute("""
+                    SELECT id, nome, clienteid
+                    FROM funcionarios
+                    WHERE ativo = 1
+                    ORDER BY nome
+                """)
+                frentistas = cursor.fetchall()
+            except Exception as col_error:
+                # Se a coluna clienteid não existir, buscar sem ela
+                if '1054' in str(col_error) or 'Unknown column' in str(col_error):
+                    cursor.execute("""
+                        SELECT id, nome
+                        FROM funcionarios
+                        WHERE ativo = 1
+                        ORDER BY nome
+                    """)
+                    frentistas_temp = cursor.fetchall()
+                    # Adicionar clienteid=None manualmente para compatibilidade
+                    frentistas = []
+                    for f in frentistas_temp:
+                        f_dict = dict(f)
+                        f_dict['clienteid'] = None
+                        frentistas.append(f_dict)
+                else:
+                    raise col_error
             
             # Limpar e serializar dados
             transacao_clean = convert_to_plain_python(transacao)
