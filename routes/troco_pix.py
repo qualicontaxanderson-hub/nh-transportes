@@ -21,7 +21,7 @@ def login_required(f):
     def decorated_function(*args, **kwargs):
         if 'user_id' not in session:
             flash('Você precisa estar logado para acessar esta página.', 'warning')
-            return redirect(url_for('login'))
+            return redirect(url_for('auth.login'))
         return f(*args, **kwargs)
     return decorated_function
 
@@ -89,7 +89,7 @@ def listar():
         
     except Exception as e:
         flash(f'Erro ao carregar transações: {str(e)}', 'danger')
-        return redirect(url_for('dashboard'))
+        return redirect(url_for('troco_pix.listar'))
 
 @troco_pix_bp.route('/visualizar/<int:troco_pix_id>')
 @login_required
@@ -660,4 +660,4 @@ def pista():
         
     except Exception as e:
         flash(f'Erro ao carregar transações: {str(e)}', 'danger')
-        return redirect(url_for('dashboard'))
+        return redirect(url_for('troco_pix.pista'))
