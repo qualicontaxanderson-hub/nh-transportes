@@ -88,13 +88,13 @@ document.addEventListener('DOMContentLoaded', function () {
         });
         const j = await r.json();
         if (r.ok && j.success) {
-          alert('Vencimento atualizado');
+          alert('Vencimento atualizado com sucesso');
           location.reload();
         } else {
-          alert('Falha: ' + (j.error || JSON.stringify(j)));
+          alert('Falha ao atualizar vencimento: ' + (j.error || JSON.stringify(j)));
         }
       } catch (err) {
-        alert('Erro: ' + err);
+        alert('Erro ao atualizar vencimento: ' + err);
       }
     });
   });
@@ -116,10 +116,10 @@ document.addEventListener('DOMContentLoaded', function () {
           alert('Boleto reemitido com sucesso');
           location.reload();
         } else {
-          alert('Falha: ' + (j.error || JSON.stringify(j)));
+          alert('Falha ao reemitir boleto: ' + (j.error || JSON.stringify(j)));
         }
       } catch (err) {
-        alert('Erro: ' + err);
+        alert('Erro ao reemitir boleto: ' + err);
       }
     });
   });

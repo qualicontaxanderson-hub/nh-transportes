@@ -76,11 +76,11 @@ function aplicarFormatacaoMonetaria(el, casas) {
         }
       }
     } catch (e) {
-      console.error('Erro ao sincronizar hidden raw:', e);
+      console.error('Erro ao sincronizar campo hidden raw:', e);
     }
 
   } catch (e) {
-    console.error('aplicarFormatacaoMonetaria error', e);
+    console.error('Erro em aplicarFormatacaoMonetaria:', e);
   }
 }
 
@@ -235,20 +235,20 @@ window.initFretesFixes = initFretesFixes;
 document.addEventListener('DOMContentLoaded', function(){
   try {
     if (typeof initFretesFixes === 'function') initFretesFixes();
-  } catch (e) { console.error('initFretesFixes erro', e); }
+  } catch (e) { console.error('Erro em initFretesFixes:', e); }
 
-  // Wait a bit for all scripts to load, then try to call calcularTudo
-  // This ensures fretes_calculos.js has loaded since it's the last script in the template
+  // Aguardar um pouco para todos os scripts carregarem, então tentar chamar calcularTudo
+  // Isso garante que fretes_calculos.js foi carregado já que é o último script no template
   setTimeout(function() {
     try {
       if (typeof calcularTudo === 'function') {
         calcularTudo();
-        console.log('[INIT] calcularTudo called on page load');
+        console.log('[INIT] calcularTudo chamado no carregamento da página');
       } else {
-        console.warn('[INIT] calcularTudo not defined yet');
+        console.warn('[INIT] calcularTudo ainda não definido');
       }
     } catch (e) { 
-      console.error('[INIT] Error calling calcularTudo:', e);
+      console.error('[INIT] Erro ao chamar calcularTudo:', e);
     }
   }, 100);
 });

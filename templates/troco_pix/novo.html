@@ -32,10 +32,10 @@
                             <label for="cliente_id" class="form-label">Posto/Cliente *</label>
                             <select class="form-control" id="cliente_id" name="cliente_id" required>
                                 <option value="">Selecione...</option>
-                                {% for cliente in clientes %}
-                                <option value="{{ cliente.id }}" 
-                                        {% if edit_mode and transacao.cliente_id == cliente.id %}selected{% endif %}>
-                                    {{ cliente.razao_social }}
+                                {% for posto in postos %}
+                                <option value="{{ posto.id }}" 
+                                        {% if edit_mode and transacao.cliente_id == posto.id %}selected{% endif %}>
+                                    {{ posto.razao_social }}
                                 </option>
                                 {% endfor %}
                             </select>
@@ -64,9 +64,10 @@
                             <label for="venda_abastecimento" class="form-label">Abastecimento</label>
                             <div class="input-group">
                                 <span class="input-group-text">R$</span>
-                                <input type="number" step="0.01" class="form-control venda-input" 
+                                <input type="text" class="form-control venda-input money-input" 
                                        id="venda_abastecimento" name="venda_abastecimento"
-                                       value="{{ '%.2f'|format(transacao.venda_abastecimento or 0) if edit_mode else '0.00' }}">
+                                       value="{{ '%.2f'|format(transacao.venda_abastecimento or 0) if edit_mode else '0,00' }}"
+                                       data-raw-value="{{ transacao.venda_abastecimento or 0 if edit_mode else 0 }}">
                             </div>
                         </div>
                     </div>
@@ -75,9 +76,10 @@
                             <label for="venda_arla" class="form-label">Arla</label>
                             <div class="input-group">
                                 <span class="input-group-text">R$</span>
-                                <input type="number" step="0.01" class="form-control venda-input" 
+                                <input type="text" class="form-control venda-input money-input" 
                                        id="venda_arla" name="venda_arla"
-                                       value="{{ '%.2f'|format(transacao.venda_arla or 0) if edit_mode else '0.00' }}">
+                                       value="{{ '%.2f'|format(transacao.venda_arla or 0) if edit_mode else '0,00' }}"
+                                       data-raw-value="{{ transacao.venda_arla or 0 if edit_mode else 0 }}">
                             </div>
                         </div>
                     </div>
@@ -86,9 +88,10 @@
                             <label for="venda_produtos" class="form-label">Produtos</label>
                             <div class="input-group">
                                 <span class="input-group-text">R$</span>
-                                <input type="number" step="0.01" class="form-control venda-input" 
+                                <input type="text" class="form-control venda-input money-input" 
                                        id="venda_produtos" name="venda_produtos"
-                                       value="{{ '%.2f'|format(transacao.venda_produtos or 0) if edit_mode else '0.00' }}">
+                                       value="{{ '%.2f'|format(transacao.venda_produtos or 0) if edit_mode else '0,00' }}"
+                                       data-raw-value="{{ transacao.venda_produtos or 0 if edit_mode else 0 }}">
                             </div>
                         </div>
                     </div>
@@ -132,9 +135,10 @@
                             <label for="cheque_valor" class="form-label">Valor do Cheque *</label>
                             <div class="input-group">
                                 <span class="input-group-text">R$</span>
-                                <input type="number" step="0.01" class="form-control" 
+                                <input type="text" class="form-control money-input" 
                                        id="cheque_valor" name="cheque_valor" required
-                                       value="{{ '%.2f'|format(transacao.cheque_valor or 0) if edit_mode else '' }}">
+                                       value="{{ '%.2f'|format(transacao.cheque_valor or 0) if edit_mode else '' }}"
+                                       data-raw-value="{{ transacao.cheque_valor or 0 if edit_mode else 0 }}">
                             </div>
                         </div>
                     </div>
@@ -154,21 +158,25 @@
                             <label for="troco_especie" class="form-label">Troco em Espécie</label>
                             <div class="input-group">
                                 <span class="input-group-text">R$</span>
-                                <input type="number" step="0.01" class="form-control troco-input" 
+                                <input type="text" class="form-control troco-input money-input" 
                                        id="troco_especie" name="troco_especie"
-                                       value="{{ '%.2f'|format(transacao.troco_especie or 0) if edit_mode else '0.00' }}">
+                                       value="{{ '%.2f'|format(transacao.troco_especie or 0) if edit_mode else '0,00' }}"
+                                       data-raw-value="{{ transacao.troco_especie or 0 if edit_mode else 0 }}">
                             </div>
                         </div>
                     </div>
                     <div class="col-md-4">
                         <div class="mb-3">
-                            <label for="troco_pix" class="form-label">Troco PIX</label>
+                            <label for="troco_pix" class="form-label">Troco PIX <span class="badge bg-secondary">Calculado</span></label>
                             <div class="input-group">
                                 <span class="input-group-text">R$</span>
-                                <input type="number" step="0.01" class="form-control troco-input" 
-                                       id="troco_pix" name="troco_pix"
-                                       value="{{ '%.2f'|format(transacao.troco_pix or 0) if edit_mode else '0.00' }}">
+                                <input type="text" class="form-control troco-input money-input" 
+                                       id="troco_pix" name="troco_pix" readonly
+                                       value="{{ '%.2f'|format(transacao.troco_pix or 0) if edit_mode else '0,00' }}"
+                                       data-raw-value="{{ transacao.troco_pix or 0 if edit_mode else 0 }}"
+                                       style="background-color: #e9ecef;">
                             </div>
+                            <small class="form-text text-muted">Calculado automaticamente</small>
                         </div>
                     </div>
                     <div class="col-md-4">
@@ -176,9 +184,10 @@
                             <label for="troco_credito_vda_programada" class="form-label">Crédito Vda Programada</label>
                             <div class="input-group">
                                 <span class="input-group-text">R$</span>
-                                <input type="number" step="0.01" class="form-control troco-input" 
+                                <input type="text" class="form-control troco-input money-input" 
                                        id="troco_credito_vda_programada" name="troco_credito_vda_programada"
-                                       value="{{ '%.2f'|format(transacao.troco_credito_vda_programada or 0) if edit_mode else '0.00' }}">
+                                       value="{{ '%.2f'|format(transacao.troco_credito_vda_programada or 0) if edit_mode else '0,00' }}"
+                                       data-raw-value="{{ transacao.troco_credito_vda_programada or 0 if edit_mode else 0 }}">
                             </div>
                         </div>
                     </div>
@@ -251,14 +260,16 @@
                         <div class="mb-3">
                             <label for="funcionario_id" class="form-label">Frentista *</label>
                             <select class="form-control" id="funcionario_id" name="funcionario_id" required>
-                                <option value="">Selecione...</option>
+                                <option value="">Selecione primeiro o Posto/Cliente...</option>
                                 {% for funcionario in funcionarios %}
                                 <option value="{{ funcionario.id }}"
+                                        data-cliente-id="{{ funcionario.clienteid or '' }}"
                                         {% if edit_mode and transacao.funcionario_id == funcionario.id %}selected{% endif %}>
                                     {{ funcionario.nome }}
                                 </option>
                                 {% endfor %}
                             </select>
+                            <small class="form-text text-muted" id="frentista-info"></small>
                         </div>
                     </div>
                 </div>
@@ -306,26 +317,104 @@
 {% block scripts %}
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-    // Função para formatar valor em Real Brasileiro
+    // ==================== FORMATAÇÃO MONETÁRIA ====================
+    
+    // Função para formatar valor em Real Brasileiro (visual)
     function formatarReal(valor) {
         return valor.toFixed(2).replace('.', ',').replace(/\B(?=(\d{3})+(?!\d))/g, '.');
     }
-
+    
+    // Função para converter string formatada para número
+    function desformatarReal(valor) {
+        if (!valor) return 0;
+        // Remove pontos de milhar e substitui vírgula por ponto
+        return parseFloat(valor.replace(/\./g, '').replace(',', '.')) || 0;
+    }
+    
+    // Função para aplicar máscara monetária em tempo real
+    function aplicarMascaraMonetaria(input) {
+        let valor = input.value.replace(/\D/g, ''); // Remove tudo que não é dígito
+        
+        if (!valor || valor === '0') {
+            input.value = '0,00';
+            input.setAttribute('data-raw-value', '0');
+            return;
+        }
+        
+        // Converte para centavos
+        let centavos = parseInt(valor, 10);
+        let reais = centavos / 100;
+        
+        // Atualiza o valor formatado
+        input.value = formatarReal(reais);
+        input.setAttribute('data-raw-value', reais.toFixed(2));
+    }
+    
+    // Adicionar evento de input para todos os campos monetários
+    document.querySelectorAll('.money-input').forEach(input => {
+        // Formatar valor inicial
+        if (input.value) {
+            let valorInicial = desformatarReal(input.value);
+            input.value = formatarReal(valorInicial);
+            input.setAttribute('data-raw-value', valorInicial.toFixed(2));
+        }
+        
+        // Evento de input para formatação em tempo real
+        input.addEventListener('input', function(e) {
+            aplicarMascaraMonetaria(this);
+            
+            // Disparar evento de change para recalcular totais
+            this.dispatchEvent(new Event('change', { bubbles: true }));
+        });
+        
+        // Ao focar, selecionar todo o texto
+        input.addEventListener('focus', function() {
+            this.select();
+        });
+    });
+    
+    // ==================== CÁLCULOS ====================
+    
     // Função para calcular total de venda
     function calcularTotalVenda() {
-        const abastecimento = parseFloat(document.getElementById('venda_abastecimento').value) || 0;
-        const arla = parseFloat(document.getElementById('venda_arla').value) || 0;
-        const produtos = parseFloat(document.getElementById('venda_produtos').value) || 0;
+        const abastecimento = desformatarReal(document.getElementById('venda_abastecimento').value);
+        const arla = desformatarReal(document.getElementById('venda_arla').value);
+        const produtos = desformatarReal(document.getElementById('venda_produtos').value);
         
         const total = abastecimento + arla + produtos;
         document.getElementById('venda_total_display').textContent = formatarReal(total);
+        
+        // Recalcular Troco PIX quando venda mudar
+        calcularTrocoPix();
+    }
+
+    // Função para calcular Troco PIX automaticamente
+    function calcularTrocoPix() {
+        // Pegar valores dos campos
+        const chequeValor = desformatarReal(document.getElementById('cheque_valor').value);
+        const abastecimento = desformatarReal(document.getElementById('venda_abastecimento').value);
+        const arla = desformatarReal(document.getElementById('venda_arla').value);
+        const produtos = desformatarReal(document.getElementById('venda_produtos').value);
+        const trocoEspecie = desformatarReal(document.getElementById('troco_especie').value);
+        const creditoVdaProgramada = desformatarReal(document.getElementById('troco_credito_vda_programada').value);
+        
+        // Fórmula: Troco PIX = Cheque - Abastecimento - Arla - Produtos - Troco Espécie - Crédito Vda Programada
+        const trocoPix = chequeValor - abastecimento - arla - produtos - trocoEspecie - creditoVdaProgramada;
+        
+        // Atualizar campo
+        const trocoPixInput = document.getElementById('troco_pix');
+        trocoPixInput.value = formatarReal(trocoPix);
+        trocoPixInput.setAttribute('data-raw-value', trocoPix);
+        
+        // Recalcular total do troco
+        calcularTotalTroco();
     }
 
     // Função para calcular total de troco
     function calcularTotalTroco() {
-        const especie = parseFloat(document.getElementById('troco_especie').value) || 0;
-        const pix = parseFloat(document.getElementById('troco_pix').value) || 0;
-        const credito = parseFloat(document.getElementById('troco_credito_vda_programada').value) || 0;
+        const especie = desformatarReal(document.getElementById('troco_especie').value);
+        const pix = desformatarReal(document.getElementById('troco_pix').value);
+        const credito = desformatarReal(document.getElementById('troco_credito_vda_programada').value);
         
         const total = especie + pix + credito;
         document.getElementById('troco_total_display').textContent = formatarReal(total);
@@ -333,13 +422,89 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Adicionar listeners para campos de venda
     document.querySelectorAll('.venda-input').forEach(input => {
-        input.addEventListener('input', calcularTotalVenda);
+        input.addEventListener('change', calcularTotalVenda);
+        input.addEventListener('input', calcularTotalVenda); // Calcular em tempo real
     });
 
-    // Adicionar listeners para campos de troco
-    document.querySelectorAll('.troco-input').forEach(input => {
-        input.addEventListener('input', calcularTotalTroco);
+    // Adicionar listeners para campos que afetam Troco PIX
+    const camposCalculo = [
+        'cheque_valor',
+        'venda_abastecimento',
+        'venda_arla',
+        'venda_produtos',
+        'troco_especie',
+        'troco_credito_vda_programada'
+    ];
+    
+    camposCalculo.forEach(campoId => {
+        const campo = document.getElementById(campoId);
+        if (campo) {
+            campo.addEventListener('change', calcularTrocoPix);
+            campo.addEventListener('input', calcularTrocoPix); // Calcular em tempo real
+        }
     });
+
+    // Adicionar listener apenas para troco em espécie e crédito (Troco PIX já é calculado)
+    document.getElementById('troco_especie').addEventListener('change', calcularTotalTroco);
+    document.getElementById('troco_credito_vda_programada').addEventListener('change', calcularTotalTroco);
+
+    // ==================== FILTRO DE FRENTISTAS POR POSTO ====================
+    
+    const clienteSelect = document.getElementById('cliente_id');
+    const frentistaSelect = document.getElementById('funcionario_id');
+    const frentistaInfo = document.getElementById('frentista-info');
+    const todasOpcoesFrentistas = Array.from(frentistaSelect.options).slice(1); // Excluir primeira opção
+    
+    function filtrarFrentistas() {
+        const clienteId = clienteSelect.value;
+        
+        // Limpar select mantendo apenas a primeira opção
+        frentistaSelect.innerHTML = '<option value="">Selecione...</option>';
+        
+        if (!clienteId) {
+            frentistaSelect.innerHTML = '<option value="">Selecione primeiro o Posto/Cliente...</option>';
+            frentistaInfo.textContent = '';
+            return;
+        }
+        
+        // Filtrar frentistas pelo cliente selecionado
+        let frentistasVinculados = 0;
+        let frentistasGerais = 0;
+        
+        todasOpcoesFrentistas.forEach(option => {
+            const optionClienteId = option.getAttribute('data-cliente-id');
+            
+            // Incluir se o frentista está vinculado ao cliente OU não tem cliente vinculado
+            // Converter ambos para string para garantir comparação correta
+            if (String(optionClienteId) === String(clienteId) || optionClienteId === '' || optionClienteId === 'None') {
+                const newOption = option.cloneNode(true);
+                frentistaSelect.appendChild(newOption);
+                
+                if (String(optionClienteId) === String(clienteId)) {
+                    frentistasVinculados++;
+                } else {
+                    frentistasGerais++;
+                }
+            }
+        });
+        
+        // Atualizar mensagem informativa
+        if (frentistasVinculados === 0 && frentistasGerais === 0) {
+            frentistaInfo.textContent = 'Nenhum frentista disponível para este posto.';
+            frentistaInfo.className = 'form-text text-danger';
+        } else if (frentistasVinculados > 0) {
+            frentistaInfo.textContent = `${frentistasVinculados} frentista(s) vinculado(s) a este posto`;
+            frentistaInfo.className = 'form-text text-success';
+        } else {
+            frentistaInfo.textContent = `${frentistasGerais} frentista(s) disponível(is) (não vinculados especificamente)`;
+            frentistaInfo.className = 'form-text text-info';
+        }
+    }
+    
+    // Adicionar listener para mudança de cliente
+    clienteSelect.addEventListener('change', filtrarFrentistas);
+    
+    // ==================== OUTROS COMPORTAMENTOS ====================
 
     // Mostrar/ocultar campo de data de vencimento baseado no tipo de cheque
     const chequeTipo = document.getElementById('cheque_tipo');
@@ -376,6 +541,8 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
 
+    // ==================== INICIALIZAÇÃO ====================
+
     // Pré-preencher data com hoje se não estiver em modo edição
     {% if not edit_mode %}
     const dataInput = document.getElementById('data');
@@ -385,7 +552,8 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     {% endif %}
 
-    // Calcular totais iniciais (em modo edição)
+    // Calcular totais e Troco PIX iniciais (em modo edição)
+    calcularTrocoPix();  // Calcular Troco PIX primeiro
     calcularTotalVenda();
     calcularTotalTroco();
     
@@ -399,6 +567,33 @@ document.addEventListener('DOMContentLoaded', function() {
     if (clientePixSelect.value) {
         clientePixSelect.dispatchEvent(new Event('change'));
     }
+    
+    // Filtrar frentistas se já tiver cliente selecionado (modo edição)
+    {% if edit_mode %}
+    if (clienteSelect.value) {
+        filtrarFrentistas();
+    }
+    {% endif %}
+    
+    // ==================== ANTES DE ENVIAR O FORM ====================
+    
+    // Converter valores formatados para formato numérico antes de enviar
+    document.querySelector('form').addEventListener('submit', function(e) {
+        document.querySelectorAll('.money-input').forEach(input => {
+            const rawValue = input.getAttribute('data-raw-value') || '0';
+            // Criar um input hidden com o valor numérico
+            const hiddenInput = document.createElement('input');
+            hiddenInput.type = 'hidden';
+            hiddenInput.name = input.name;
+            hiddenInput.value = rawValue;
+            
+            // Remover o name do input original para não enviar o valor formatado
+            input.removeAttribute('name');
+            
+            // Adicionar o hidden input ao form
+            this.appendChild(hiddenInput);
+        });
+    });
 });
 </script>
 {% endblock %}

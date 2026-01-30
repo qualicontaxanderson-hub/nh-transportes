@@ -72,6 +72,14 @@ def listar():
         cursor.execute(query)
         transacoes = cursor.fetchall()
         
+        # Buscar lista de clientes para filtro
+        cursor.execute("""
+            SELECT DISTINCT c.id, c.razao_social 
+            FROM clientes c
+            ORDER BY c.razao_social
+        """)
+        clientes = cursor.fetchall()
+        
         cursor.close()
         conn.close()
         
@@ -108,6 +116,7 @@ def listar():
         
         return render_template('troco_pix/listar.html', 
                              transacoes=transacoes,
+                             clientes=clientes,
                              resumo=resumo,
                              total_dia=total_dia_formatado,
                              titulo='TROCO PIX - Administração')
@@ -180,12 +189,12 @@ def novo():
             cursor = conn.cursor(dictionary=True)
             
             # Buscar postos (clientes) que têm produtos configurados
-            # Se não houver cliente_produtos configurado, mostra todos os clientes ativos
+            # Mostra APENAS clientes que têm produtos ativos configurados
             cursor.execute("""
                 SELECT DISTINCT c.id, c.razao_social 
                 FROM clientes c
-                LEFT JOIN cliente_produtos cp ON c.id = cp.cliente_id
-                WHERE (cp.ativo = 1 OR cp.id IS NULL)
+                INNER JOIN cliente_produtos cp ON c.id = cp.cliente_id
+                WHERE cp.ativo = 1
                 ORDER BY c.razao_social
             """)
             postos = cursor.fetchall()
@@ -199,14 +208,33 @@ def novo():
             """)
             clientes_pix = cursor.fetchall()
             
-            # Buscar frentistas ativos
-            cursor.execute("""
-                SELECT id, nome
-                FROM funcionarios
-                WHERE ativo = 1
-                ORDER BY nome
-            """)
-            frentistas = cursor.fetchall()
+            # Buscar frentistas ativos (incluindo cliente_id para filtro se a coluna existir)
+            try:
+                cursor.execute("""
+                    SELECT id, nome, clienteid
+                    FROM funcionarios
+                    WHERE ativo = 1
+                    ORDER BY nome
+                """)
+                frentistas = cursor.fetchall()
+            except Exception as col_error:
+                # Se a coluna clienteid não existir, buscar sem ela
+                if '1054' in str(col_error) or 'Unknown column' in str(col_error):
+                    cursor.execute("""
+                        SELECT id, nome
+                        FROM funcionarios
+                        WHERE ativo = 1
+                        ORDER BY nome
+                    """)
+                    frentistas_temp = cursor.fetchall()
+                    # Adicionar clienteid=None manualmente para compatibilidade
+                    frentistas = []
+                    for f in frentistas_temp:
+                        f_dict = dict(f)
+                        f_dict['clienteid'] = None
+                        frentistas.append(f_dict)
+                else:
+                    raise col_error
             
             # Limpar dados antes de serializar
             postos_clean = convert_to_plain_python(list(postos))
@@ -226,7 +254,8 @@ def novo():
                                  postos_json=postos_json,
                                  clientes_pix=clientes_pix,
                                  clientes_pix_json=clientes_pix_json,
-                                 frentistas=frentistas,
+                                 funcionarios=frentistas,  # Template usa 'funcionarios'
+                                 frentistas=frentistas,  # Mantido para compatibilidade
                                  frentistas_json=frentistas_json,
                                  edit_mode=False,
                                  titulo='Novo TROCO PIX')
@@ -334,12 +363,12 @@ def editar(troco_pix_id):
                     return redirect(url_for('troco_pix.visualizar', troco_pix_id=troco_pix_id))
             
             # Buscar dados para o formulário
-            # Se não houver cliente_produtos configurado, mostra todos os clientes
+            # Mostra APENAS clientes que têm produtos ativos configurados
             cursor.execute("""
                 SELECT DISTINCT c.id, c.razao_social 
                 FROM clientes c
-                LEFT JOIN cliente_produtos cp ON c.id = cp.cliente_id
-                WHERE (cp.ativo = 1 OR cp.id IS NULL)
+                INNER JOIN cliente_produtos cp ON c.id = cp.cliente_id
+                WHERE cp.ativo = 1
                 ORDER BY c.razao_social
             """)
             postos = cursor.fetchall()
@@ -352,13 +381,33 @@ def editar(troco_pix_id):
             """)
             clientes_pix = cursor.fetchall()
             
-            cursor.execute("""
-                SELECT id, nome
-                FROM funcionarios
-                WHERE ativo = 1
-                ORDER BY nome
-            """)
-            frentistas = cursor.fetchall()
+            # Buscar frentistas ativos (incluindo cliente_id para filtro se a coluna existir)
+            try:
+                cursor.execute("""
+                    SELECT id, nome, clienteid
+                    FROM funcionarios
+                    WHERE ativo = 1
+                    ORDER BY nome
+                """)
+                frentistas = cursor.fetchall()
+            except Exception as col_error:
+                # Se a coluna clienteid não existir, buscar sem ela
+                if '1054' in str(col_error) or 'Unknown column' in str(col_error):
+                    cursor.execute("""
+                        SELECT id, nome
+                        FROM funcionarios
+                        WHERE ativo = 1
+                        ORDER BY nome
+                    """)
+                    frentistas_temp = cursor.fetchall()
+                    # Adicionar clienteid=None manualmente para compatibilidade
+                    frentistas = []
+                    for f in frentistas_temp:
+                        f_dict = dict(f)
+                        f_dict['clienteid'] = None
+                        frentistas.append(f_dict)
+                else:
+                    raise col_error
             
             # Limpar e serializar dados
             transacao_clean = convert_to_plain_python(transacao)
@@ -381,7 +430,8 @@ def editar(troco_pix_id):
                                  postos_json=postos_json,
                                  clientes_pix=clientes_pix,
                                  clientes_pix_json=clientes_pix_json,
-                                 frentistas=frentistas,
+                                 funcionarios=frentistas,  # Template usa 'funcionarios'
+                                 frentistas=frentistas,  # Mantido para compatibilidade
                                  frentistas_json=frentistas_json,
                                  edit_mode=True,
                                  troco_pix_id=troco_pix_id,

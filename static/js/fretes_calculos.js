@@ -128,40 +128,40 @@ function calcularValorCTeViaRotas(quantidade) {
   }
   
   var key = origem + '|' + destino;
-  console.log('CTe calculation: Looking for route', key, 'quantidade:', quantidade);
+  console.log('Cálculo CTe: Buscando rota', key, 'quantidade:', quantidade);
   
   try {
-    // Check if ROTAS is defined and not empty
+    // Verificar se ROTAS está definido e não vazio
     if (typeof ROTAS === 'undefined') {
-      console.error('CTe calculation: ROTAS dictionary is undefined!');
+      console.error('Cálculo CTe: Dicionário ROTAS não está definido!');
       return 0;
     }
     
     if (!ROTAS || Object.keys(ROTAS).length === 0) {
-      console.error('CTe calculation: ROTAS dictionary is empty!');
+      console.error('Cálculo CTe: Dicionário ROTAS está vazio!');
       return 0;
     }
     
-    console.log('CTe calculation: ROTAS available routes:', Object.keys(ROTAS));
+    console.log('Cálculo CTe: ROTAS rotas disponíveis:', Object.keys(ROTAS));
     
-    // Try exact string match first
+    // Tentar correspondência exata primeiro
     if (ROTAS[key]) {
       var result = Number(ROTAS[key]) * Number(quantidade || 0);
-      console.log('CTe calculation: Found route', key, '=', ROTAS[key], 'result:', result);
+      console.log('Cálculo CTe: Rota encontrada', key, '=', ROTAS[key], 'resultado:', result);
       return result;
     }
     
-    // Try numeric-key fallback
+    // Tentar fallback com chave numérica
     var numericKey = parseInt(origem,10) + '|' + parseInt(destino,10);
     if (ROTAS[numericKey]) {
       var result = Number(ROTAS[numericKey]) * Number(quantidade || 0);
-      console.log('CTe calculation: Found route with numeric key', numericKey, '=', ROTAS[numericKey], 'result:', result);
+      console.log('Cálculo CTe: Rota encontrada com chave numérica', numericKey, '=', ROTAS[numericKey], 'resultado:', result);
       return result;
     }
     
-    console.warn('CTe calculation: Route not found for', key, 'or', numericKey, 'in ROTAS');
+    console.warn('Cálculo CTe: Rota não encontrada para', key, 'ou', numericKey, 'em ROTAS');
   } catch (e) { 
-    console.error('CTe calculation error:', e); 
+    console.error('Erro no cálculo CTe:', e); 
   }
   return 0;
 }
@@ -305,38 +305,38 @@ function calcularTudo() {
   if (hLucro) hLucro.value = (Math.round((lucro + Number.EPSILON) * 100) / 100);
   if (hComissaoMotorista) hComissaoMotorista.value = (Math.round((comissaoMotorista + Number.EPSILON) * 100) / 100);
   } catch (e) {
-    console.error('ERROR at end of calcularTudo:', e);
-    alert('ERRO no final do calcularTudo: ' + e.message);
+    console.error('ERRO no final do calcularTudo:', e);
+    alert('ERRO no cálculo final: ' + e.message);
     throw e;
   }
 }
 
-// Expose calcularTudo and utility functions globally
+// Expor calcularTudo e funções utilitárias globalmente
 window.calcularTudo = calcularTudo;
 window.parseBoolean = parseBoolean;
 
-// Log ROTAS content on script load
-console.log('[INIT] ROTAS dictionary loaded:', typeof ROTAS !== 'undefined' ? ROTAS : 'ROTAS is undefined');
-console.log('[INIT] ROTAS keys:', typeof ROTAS !== 'undefined' ? Object.keys(ROTAS) : 'N/A');
-console.log('[INIT] ROTAS count:', typeof ROTAS !== 'undefined' ? Object.keys(ROTAS).length : 0);
+// Registrar conteúdo de ROTAS no carregamento do script
+console.log('[INIT] Dicionário ROTAS carregado:', typeof ROTAS !== 'undefined' ? ROTAS : 'ROTAS não definido');
+console.log('[INIT] Chaves ROTAS:', typeof ROTAS !== 'undefined' ? Object.keys(ROTAS) : 'N/A');
+console.log('[INIT] Total ROTAS:', typeof ROTAS !== 'undefined' ? Object.keys(ROTAS).length : 0);
 
-// Auto-run calcularTudo when this script loads (it's the last script in the template)
-// This ensures all DOM elements and other scripts are ready
+// Auto-executar calcularTudo quando este script carregar (é o último script no template)
+// Isso garante que todos os elementos DOM e outros scripts estão prontos
 if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', function() {
-    console.log('[INIT] fretes_calculos.js: DOMContentLoaded, calling calcularTudo');
+    console.log('[INIT] fretes_calculos.js: DOMContentLoaded, chamando calcularTudo');
     try {
       calcularTudo();
     } catch (e) {
-      console.error('[INIT] Error in initial calcularTudo:', e);
+      console.error('[INIT] Erro no calcularTudo inicial:', e);
     }
   });
 } else {
-  // DOM already loaded, call immediately
-  console.log('[INIT] fretes_calculos.js: DOM already ready, calling calcularTudo');
+  // DOM já carregado, chamar imediatamente
+  console.log('[INIT] fretes_calculos.js: DOM já pronto, chamando calcularTudo');
   try {
     calcularTudo();
   } catch (e) {
-    console.error('[INIT] Error in initial calcularTudo:', e);
+    console.error('[INIT] Erro no calcularTudo inicial:', e);
   }
 }
