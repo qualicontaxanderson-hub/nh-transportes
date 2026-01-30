@@ -141,9 +141,9 @@
                             <td>{{ t.data.strftime('%d/%m/%Y') if t.data else '-' }}</td>
                             <td>{{ t.posto_nome or '-' }}</td>
                             <td>{{ t.cliente_pix_nome or '-' }}</td>
-                            <td class="text-center">R$ {{ "%.2f"|format(t.venda_total or 0)|replace('.', ',') }}</td>
-                            <td class="text-center">R$ {{ "%.2f"|format(t.cheque_valor or 0)|replace('.', ',') }}</td>
-                            <td class="text-center">R$ {{ "%.2f"|format(t.troco_total or 0)|replace('.', ',') }}</td>
+                            <td class="text-center">{{ (t.venda_total or 0)|formatar_moeda }}</td>
+                            <td class="text-center">{{ (t.cheque_valor or 0)|formatar_moeda }}</td>
+                            <td class="text-center">{{ (t.troco_total or 0)|formatar_moeda }}</td>
                             <td>
                                 {% if t.status == 'PENDENTE' %}
                                     <span class="badge bg-warning">Pendente</span>

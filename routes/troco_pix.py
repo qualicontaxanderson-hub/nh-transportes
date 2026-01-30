@@ -72,10 +72,12 @@ def listar():
         cursor.execute(query)
         transacoes = cursor.fetchall()
         
-        # Buscar lista de clientes para filtro
+        # Buscar lista de clientes para filtro (apenas com produtos cadastrados)
         cursor.execute("""
             SELECT DISTINCT c.id, c.razao_social 
             FROM clientes c
+            INNER JOIN cliente_produtos cp ON c.id = cp.cliente_id
+            WHERE cp.ativo = 1
             ORDER BY c.razao_social
         """)
         clientes = cursor.fetchall()
