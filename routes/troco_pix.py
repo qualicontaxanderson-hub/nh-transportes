@@ -179,12 +179,13 @@ def novo():
             conn = get_db_connection()
             cursor = conn.cursor(dictionary=True)
             
-            # Buscar postos (clientes) ativos
+            # Buscar postos (clientes) que têm produtos configurados
             cursor.execute("""
-                SELECT id, razao_social 
-                FROM clientes 
-                WHERE ativo = 1
-                ORDER BY razao_social
+                SELECT DISTINCT c.id, c.razao_social 
+                FROM clientes c
+                INNER JOIN cliente_produtos cp ON c.id = cp.cliente_id
+                WHERE cp.ativo = 1
+                ORDER BY c.razao_social
             """)
             postos = cursor.fetchall()
             
@@ -333,10 +334,11 @@ def editar(troco_pix_id):
             
             # Buscar dados para o formulário
             cursor.execute("""
-                SELECT id, razao_social 
-                FROM clientes 
-                WHERE ativo = 1
-                ORDER BY razao_social
+                SELECT DISTINCT c.id, c.razao_social 
+                FROM clientes c
+                INNER JOIN cliente_produtos cp ON c.id = cp.cliente_id
+                WHERE cp.ativo = 1
+                ORDER BY c.razao_social
             """)
             postos = cursor.fetchall()
             
