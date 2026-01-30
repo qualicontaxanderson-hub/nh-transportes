@@ -4,6 +4,7 @@ Rotas para o sistema TROCO PIX
 Gerencia transações de troco via PIX para frentistas
 """
 from flask import Blueprint, render_template, request, redirect, url_for, flash, session
+from flask_login import login_required, current_user
 from functools import wraps
 from decimal import Decimal
 from datetime import datetime, timedelta
@@ -14,16 +15,6 @@ from utils.db import get_db_connection
 
 # Criar blueprint
 troco_pix_bp = Blueprint('troco_pix', __name__, url_prefix='/troco_pix')
-
-# Decorator para verificar se usuário está logado
-def login_required(f):
-    @wraps(f)
-    def decorated_function(*args, **kwargs):
-        if 'user_id' not in session:
-            flash('Você precisa estar logado para acessar esta página.', 'warning')
-            return redirect(url_for('auth.login'))
-        return f(*args, **kwargs)
-    return decorated_function
 
 # Helper function para converter dados do MySQL para Python
 def convert_to_plain_python(obj):
@@ -228,7 +219,7 @@ def novo():
         troco_credito = request.form.get('troco_credito_vda_programada', 0)
         troco_pix_cliente_id = request.form.get('troco_pix_cliente_id')
         funcionario_id = request.form.get('funcionario_id')
-        user_id = session.get('user_id')
+        user_id = current_user.id
         
         # Validações
         if not all([cliente_id, data, cheque_tipo, cheque_valor, troco_pix_cliente_id, funcionario_id]):
@@ -296,7 +287,7 @@ def editar(troco_pix_id):
                 return redirect(url_for('troco_pix.listar'))
             
             # Verificar permissão de edição (15 minutos para frentistas)
-            user_id = session.get('user_id')
+            user_id = current_user.id
             is_admin = session.get('is_admin', False)  # Assumindo que existe esta flag
             
             if not is_admin:
@@ -377,7 +368,7 @@ def editar(troco_pix_id):
             conn.close()
             return redirect(url_for('troco_pix.listar'))
         
-        user_id = session.get('user_id')
+        user_id = current_user.id
         is_admin = session.get('is_admin', False)
         
         if not is_admin:
@@ -632,7 +623,7 @@ def pista():
     try:
         # Buscar cliente_id do usuário logado
         # (Assumindo que existe uma tabela/campo que associa usuário a cliente)
-        user_id = session.get('user_id')
+        user_id = current_user.id
         
         conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)
