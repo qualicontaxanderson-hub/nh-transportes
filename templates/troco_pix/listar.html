@@ -157,15 +157,15 @@
                                 {% endif %}
                             </td>
                             <td>
-                                <a href="{{ url_for('troco_pix.visualizar', id=t.id) }}" 
+                                <a href="{{ url_for('troco_pix.visualizar', troco_pix_id=t.id) }}" 
                                    class="btn btn-sm btn-info" title="Visualizar">
                                     <i class="bi bi-eye"></i>
                                 </a>
-                                <a href="{{ url_for('troco_pix.editar', id=t.id) }}" 
+                                <a href="{{ url_for('troco_pix.editar', troco_pix_id=t.id) }}" 
                                    class="btn btn-sm btn-warning" title="Editar">
                                     <i class="bi bi-pencil"></i>
                                 </a>
-                                <form method="POST" action="{{ url_for('troco_pix.excluir', id=t.id) }}" 
+                                <form method="POST" action="{{ url_for('troco_pix.excluir', troco_pix_id=t.id) }}" 
                                       style="display:inline;" 
                                       onsubmit="return confirm('Tem certeza que deseja excluir esta transação?');">
                                     <button type="submit" class="btn btn-sm btn-danger" title="Excluir">

@@ -69,12 +69,12 @@
                                 {% endif %}
                             </td>
                             <td>
-                                <a href="{{ url_for('troco_pix.visualizar', id=t.id) }}" 
+                                <a href="{{ url_for('troco_pix.visualizar', troco_pix_id=t.id) }}" 
                                    class="btn btn-sm btn-info" title="Visualizar">
                                     <i class="bi bi-eye"></i>
                                 </a>
                                 {% if pode_editar(t) %}
-                                <a href="{{ url_for('troco_pix.editar', id=t.id) }}" 
+                                <a href="{{ url_for('troco_pix.editar', troco_pix_id=t.id) }}" 
                                    class="btn btn-sm btn-warning" title="Editar">
                                     <i class="bi bi-pencil"></i>
                                 </a>
@@ -177,7 +177,7 @@
                                 {% endif %}
                             </td>
                             <td>
-                                <a href="{{ url_for('troco_pix.visualizar', id=t.id) }}" 
+                                <a href="{{ url_for('troco_pix.visualizar', troco_pix_id=t.id) }}" 
                                    class="btn btn-sm btn-info" title="Visualizar">
                                     <i class="bi bi-eye"></i>
                                 </a>

@@ -19,7 +19,7 @@
         </div>
     </div>
 
-    <form method="POST" action="{{ url_for('troco_pix.editar', id=transacao.id) if edit_mode else url_for('troco_pix.novo') }}">
+    <form method="POST" action="{{ url_for('troco_pix.editar', troco_pix_id=transacao.id) if edit_mode else url_for('troco_pix.novo') }}">
         <!-- Informações Gerais -->
         <div class="card mb-3">
             <div class="card-header bg-primary text-white">
