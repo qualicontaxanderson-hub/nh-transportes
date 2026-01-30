@@ -288,7 +288,9 @@ def editar(troco_pix_id):
             
             # Verificar permissão de edição (15 minutos para frentistas)
             user_id = current_user.id
-            is_admin = session.get('is_admin', False)  # Assumindo que existe esta flag
+            # TODO: Implementar verificação de admin baseado em current_user.nivel
+            # Por exemplo: is_admin = (current_user.nivel == 'ADMIN')
+            is_admin = session.get('is_admin', False)
             
             if not is_admin:
                 tempo_decorrido = datetime.now() - transacao['criado_em']
@@ -369,6 +371,8 @@ def editar(troco_pix_id):
             return redirect(url_for('troco_pix.listar'))
         
         user_id = current_user.id
+        # TODO: Implementar verificação de admin baseado em current_user.nivel
+        # Por exemplo: is_admin = (current_user.nivel == 'ADMIN')
         is_admin = session.get('is_admin', False)
         
         if not is_admin:
@@ -433,7 +437,8 @@ def editar(troco_pix_id):
 def excluir(troco_pix_id):
     """Exclui transação TROCO PIX (apenas Admin)"""
     try:
-        # Verificar se é admin (você pode adicionar verificação real aqui)
+        # TODO: Implementar verificação de admin baseado em current_user.nivel
+        # Por exemplo: is_admin = (current_user.nivel == 'ADMIN')
         is_admin = session.get('is_admin', False)
         if not is_admin:
             flash('Apenas administradores podem excluir transações.', 'danger')
