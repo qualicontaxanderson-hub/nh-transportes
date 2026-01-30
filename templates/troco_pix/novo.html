@@ -410,8 +410,16 @@ document.addEventListener('DOMContentLoaded', function() {
     const frentistaInfo = document.getElementById('frentista-info');
     const todasOpcoesFrentistas = Array.from(frentistaSelect.options).slice(1); // Excluir primeira opção
     
+    // Debug: Log para verificar quantos frentistas foram carregados
+    console.log('[DEBUG] Total de frentistas carregados:', todasOpcoesFrentistas.length);
+    todasOpcoesFrentistas.forEach((opt, idx) => {
+        console.log(`[DEBUG] Frentista ${idx}:`, opt.text, '- clienteid:', opt.getAttribute('data-cliente-id'));
+    });
+    
     function filtrarFrentistas() {
         const clienteId = clienteSelect.value;
+        
+        console.log('[DEBUG] filtrarFrentistas chamado - clienteId:', clienteId);
         
         // Limpar select mantendo apenas a primeira opção
         frentistaSelect.innerHTML = '<option value="">Selecione...</option>';
@@ -426,12 +434,22 @@ document.addEventListener('DOMContentLoaded', function() {
         let frentistasVinculados = 0;
         let frentistasGerais = 0;
         
-        todasOpcoesFrentistas.forEach(option => {
+        console.log('[DEBUG] Iniciando filtragem - Total de opções a verificar:', todasOpcoesFrentistas.length);
+        
+        todasOpcoesFrentistas.forEach((option, idx) => {
             const optionClienteId = option.getAttribute('data-cliente-id');
+            
+            console.log(`[DEBUG] Verificando frentista ${idx}:`, option.text);
+            console.log(`[DEBUG]   - optionClienteId:`, optionClienteId, '(tipo:', typeof optionClienteId, ')');
+            console.log(`[DEBUG]   - clienteId:`, clienteId, '(tipo:', typeof clienteId, ')');
+            console.log(`[DEBUG]   - String(optionClienteId) === String(clienteId):`, String(optionClienteId) === String(clienteId));
+            console.log(`[DEBUG]   - optionClienteId === "":`, optionClienteId === '');
+            console.log(`[DEBUG]   - optionClienteId === "None":`, optionClienteId === 'None');
             
             // Incluir se o frentista está vinculado ao cliente OU não tem cliente vinculado
             // Converter ambos para string para garantir comparação correta
             if (String(optionClienteId) === String(clienteId) || optionClienteId === '' || optionClienteId === 'None') {
+                console.log(`[DEBUG]   - ✅ Incluindo frentista:`, option.text);
                 const newOption = option.cloneNode(true);
                 frentistaSelect.appendChild(newOption);
                 
@@ -440,8 +458,15 @@ document.addEventListener('DOMContentLoaded', function() {
                 } else {
                     frentistasGerais++;
                 }
+            } else {
+                console.log(`[DEBUG]   - ❌ Excluindo frentista:`, option.text);
             }
         });
+        
+        console.log('[DEBUG] Resultado da filtragem:');
+        console.log('[DEBUG]   - Vinculados:', frentistasVinculados);
+        console.log('[DEBUG]   - Gerais:', frentistasGerais);
+        console.log('[DEBUG]   - Total no select:', frentistaSelect.options.length - 1);
         
         // Atualizar mensagem informativa
         if (frentistasVinculados === 0 && frentistasGerais === 0) {
