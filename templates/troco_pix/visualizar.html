@@ -302,22 +302,22 @@ document.addEventListener('DOMContentLoaded', function() {
             
             // Get transaction data - using tojson for safe escaping
             const data = {
-                data: {{ transacao.data.strftime("%d/%m/%Y")|tojson if transacao.data else '""'|safe }},
+                data: {{ (transacao.data.strftime("%d/%m/%Y") if transacao.data else "")|tojson }},
                 venda_abastecimento: {{ transacao.venda_abastecimento or 0 }},
                 venda_arla: {{ transacao.venda_arla or 0 }},
                 venda_produtos: {{ transacao.venda_produtos or 0 }},
                 venda_total: {{ transacao.venda_total or 0 }},
-                cheque_tipo: {{ transacao.cheque_tipo|tojson if transacao.cheque_tipo else '""'|safe }},
-                cheque_data_vencimento: {{ transacao.cheque_data_vencimento.strftime("%d/%m/%Y")|tojson if transacao.cheque_data_vencimento else '""'|safe }},
+                cheque_tipo: {{ (transacao.cheque_tipo or "")|tojson }},
+                cheque_data_vencimento: {{ (transacao.cheque_data_vencimento.strftime("%d/%m/%Y") if transacao.cheque_data_vencimento else "")|tojson }},
                 cheque_valor: {{ transacao.cheque_valor or 0 }},
                 troco_especie: {{ transacao.troco_especie or 0 }},
                 troco_pix: {{ transacao.troco_pix or 0 }},
                 troco_credito: {{ transacao.troco_credito_vda_programada or 0 }},
                 troco_total: {{ transacao.troco_total or 0 }},
-                cliente_pix_nome: {{ transacao.cliente_pix_nome|tojson if transacao.cliente_pix_nome else '""'|safe }},
-                tipo_chave_pix: {{ transacao.tipo_chave_pix|tojson if transacao.tipo_chave_pix else '""'|safe }},
-                chave_pix: {{ transacao.chave_pix|tojson if transacao.chave_pix else '""'|safe }},
-                frentista_nome: {{ transacao.frentista_nome|tojson if transacao.frentista_nome else '""'|safe }}
+                cliente_pix_nome: {{ (transacao.cliente_pix_nome or "")|tojson }},
+                tipo_chave_pix: {{ (transacao.tipo_chave_pix or "")|tojson }},
+                chave_pix: {{ (transacao.chave_pix or "")|tojson }},
+                frentista_nome: {{ (transacao.frentista_nome or "")|tojson }}
             };
             
             // Build WhatsApp message
@@ -330,21 +330,23 @@ document.addEventListener('DOMContentLoaded', function() {
             message += 'Produtos: ' + (formatCurrency(data.venda_produtos) || '') + '\n';
             message += 'TOTAL = ' + formatCurrency(data.venda_total) + '\n\n';
             
-            // CHEQUE section
-            if (data.cheque_tipo === 'A_VISTA') {
-                message += 'CHEQUE A VISTA\n';
-            } else if (data.cheque_tipo === 'A_PRAZO') {
-                message += 'CHEQUE A PRAZO';
-                if (data.cheque_data_vencimento) {
-                    message += ' - Data: ' + data.cheque_data_vencimento;
+            // CHEQUE section - only if there's cheque data
+            if (data.cheque_tipo || data.cheque_valor > 0) {
+                if (data.cheque_tipo === 'A_VISTA') {
+                    message += 'CHEQUE A VISTA\n';
+                } else if (data.cheque_tipo === 'A_PRAZO') {
+                    message += 'CHEQUE A PRAZO';
+                    if (data.cheque_data_vencimento) {
+                        message += ' - Data: ' + data.cheque_data_vencimento;
+                    }
+                    message += '\n';
                 }
-                message += '\n';
+                message += 'Valor do cheque: ' + formatCurrency(data.cheque_valor) + '\n\n';
             }
-            message += 'Valor do cheque: ' + formatCurrency(data.cheque_valor) + '\n\n';
             
             message += 'TROCO\n';
             message += 'Troco em Espécie: ' + (formatCurrency(data.troco_especie) || '') + '\n';
-            message += 'Credito Vda Programada: ' + (formatCurrency(data.troco_credito) || '') + '\n';
+            message += 'Crédito Vda Programada: ' + (formatCurrency(data.troco_credito) || '') + '\n';
             message += 'TOTAL = ' + formatCurrency(data.troco_total) + '\n\n';
             
             message += 'TROCO PIX = ' + formatCurrency(data.troco_pix) + '\n';
