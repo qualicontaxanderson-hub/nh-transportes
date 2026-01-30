@@ -12,6 +12,7 @@ import json
 
 # Importar função de conexão do banco de dados
 from utils.db import get_db_connection
+from utils.formatadores import formatar_moeda
 
 # Criar blueprint
 troco_pix_bp = Blueprint('troco_pix', __name__, url_prefix='/troco_pix')
@@ -74,8 +75,39 @@ def listar():
         cursor.close()
         conn.close()
         
+        # Calcular resumo por status
+        resumo = {
+            'pendentes': 0,
+            'processados': 0,
+            'cancelados': 0
+        }
+        total_dia = 0
+        data_hoje = datetime.now().date()
+        
+        for t in transacoes:
+            status = t.get('status', '').upper()
+            if status == 'PENDENTE':
+                resumo['pendentes'] += 1
+            elif status == 'PROCESSADO':
+                resumo['processados'] += 1
+            elif status == 'CANCELADO':
+                resumo['cancelados'] += 1
+            
+            # Calcular total do dia
+            data_transacao = t.get('data')
+            if data_transacao:
+                # Se data_transacao é um objeto date, comparar diretamente
+                if hasattr(data_transacao, 'year'):
+                    if data_transacao == data_hoje:
+                        total_dia += float(t.get('troco_pix', 0) or 0)
+        
+        # Formatar total do dia para exibição
+        total_dia_formatado = formatar_moeda(total_dia)
+        
         return render_template('troco_pix/listar.html', 
                              transacoes=transacoes,
+                             resumo=resumo,
+                             total_dia=total_dia_formatado,
                              titulo='TROCO PIX - Administração')
         
     except Exception as e:
