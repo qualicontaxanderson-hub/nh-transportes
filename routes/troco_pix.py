@@ -208,9 +208,9 @@ def novo():
             """)
             clientes_pix = cursor.fetchall()
             
-            # Buscar frentistas ativos
+            # Buscar frentistas ativos (incluindo cliente_id para filtro)
             cursor.execute("""
-                SELECT id, nome
+                SELECT id, nome, clienteid
                 FROM funcionarios
                 WHERE ativo = 1
                 ORDER BY nome
@@ -362,7 +362,7 @@ def editar(troco_pix_id):
             clientes_pix = cursor.fetchall()
             
             cursor.execute("""
-                SELECT id, nome
+                SELECT id, nome, clienteid
                 FROM funcionarios
                 WHERE ativo = 1
                 ORDER BY nome
