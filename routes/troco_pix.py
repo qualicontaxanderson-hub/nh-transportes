@@ -93,13 +93,15 @@ def listar():
             elif status == 'CANCELADO':
                 resumo['cancelados'] += 1
             
-            # Calcular total do dia
+            # Calcular total do dia (apenas transações não canceladas)
             data_transacao = t.get('data')
-            if data_transacao:
-                # Se data_transacao é um objeto date, comparar diretamente
-                if hasattr(data_transacao, 'year'):
-                    if data_transacao == data_hoje:
-                        total_dia += float(t.get('troco_pix', 0) or 0)
+            if data_transacao and status != 'CANCELADO':
+                # Converter datetime para date se necessário
+                if isinstance(data_transacao, datetime):
+                    data_transacao = data_transacao.date()
+                
+                if data_transacao == data_hoje:
+                    total_dia += float(t.get('troco_pix', 0) or 0)
         
         # Formatar total do dia para exibição
         total_dia_formatado = formatar_moeda(total_dia)
