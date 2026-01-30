@@ -32,10 +32,10 @@
                             <label for="cliente_id" class="form-label">Posto/Cliente *</label>
                             <select class="form-control" id="cliente_id" name="cliente_id" required>
                                 <option value="">Selecione...</option>
-                                {% for cliente in clientes %}
-                                <option value="{{ cliente.id }}" 
-                                        {% if edit_mode and transacao.cliente_id == cliente.id %}selected{% endif %}>
-                                    {{ cliente.razao_social }}
+                                {% for posto in postos %}
+                                <option value="{{ posto.id }}" 
+                                        {% if edit_mode and transacao.cliente_id == posto.id %}selected{% endif %}>
+                                    {{ posto.razao_social }}
                                 </option>
                                 {% endfor %}
                             </select>

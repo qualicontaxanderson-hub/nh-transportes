@@ -72,6 +72,14 @@ def listar():
         cursor.execute(query)
         transacoes = cursor.fetchall()
         
+        # Buscar lista de clientes para filtro
+        cursor.execute("""
+            SELECT DISTINCT c.id, c.razao_social 
+            FROM clientes c
+            ORDER BY c.razao_social
+        """)
+        clientes = cursor.fetchall()
+        
         cursor.close()
         conn.close()
         
@@ -108,6 +116,7 @@ def listar():
         
         return render_template('troco_pix/listar.html', 
                              transacoes=transacoes,
+                             clientes=clientes,
                              resumo=resumo,
                              total_dia=total_dia_formatado,
                              titulo='TROCO PIX - Administração')
