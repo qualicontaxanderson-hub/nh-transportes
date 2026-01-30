@@ -61,12 +61,12 @@
                             </td>
                             <td>{{ cliente.criado_em.strftime('%d/%m/%Y') if cliente.criado_em else '-' }}</td>
                             <td>
-                                <a href="{{ url_for('troco_pix.cliente_editar', id=cliente.id) }}" 
+                                <a href="{{ url_for('troco_pix.cliente_editar', cliente_id=cliente.id) }}" 
                                    class="btn btn-sm btn-warning" title="Editar">
                                     <i class="bi bi-pencil"></i>
                                 </a>
                                 {% if cliente.ativo %}
-                                <form method="POST" action="{{ url_for('troco_pix.cliente_excluir', id=cliente.id) }}" 
+                                <form method="POST" action="{{ url_for('troco_pix.cliente_excluir', cliente_id=cliente.id) }}" 
                                       style="display:inline;" 
                                       onsubmit="return confirm('Tem certeza que deseja desativar este cliente PIX?');">
                                     <button type="submit" class="btn btn-sm btn-danger" title="Desativar">

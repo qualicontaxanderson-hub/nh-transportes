@@ -4,29 +4,18 @@ Rotas para o sistema TROCO PIX
 Gerencia transações de troco via PIX para frentistas
 """
 from flask import Blueprint, render_template, request, redirect, url_for, flash, session
+from flask_login import login_required, current_user
 from functools import wraps
 from decimal import Decimal
 from datetime import datetime, timedelta
 import json
 
 # Importar função de conexão do banco de dados
-import sys
-import os
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from database import get_db_connection
+from utils.db import get_db_connection
+from utils.formatadores import formatar_moeda
 
 # Criar blueprint
 troco_pix_bp = Blueprint('troco_pix', __name__, url_prefix='/troco_pix')
-
-# Decorator para verificar se usuário está logado
-def login_required(f):
-    @wraps(f)
-    def decorated_function(*args, **kwargs):
-        if 'user_id' not in session:
-            flash('Você precisa estar logado para acessar esta página.', 'warning')
-            return redirect(url_for('login'))
-        return f(*args, **kwargs)
-    return decorated_function
 
 # Helper function para converter dados do MySQL para Python
 def convert_to_plain_python(obj):
@@ -86,13 +75,50 @@ def listar():
         cursor.close()
         conn.close()
         
+        # Calcular resumo por status
+        resumo = {
+            'pendentes': 0,
+            'processados': 0,
+            'cancelados': 0
+        }
+        total_dia = 0
+        data_hoje = datetime.now().date()
+        
+        for t in transacoes:
+            status = t.get('status', '').upper()
+            if status == 'PENDENTE':
+                resumo['pendentes'] += 1
+            elif status == 'PROCESSADO':
+                resumo['processados'] += 1
+            elif status == 'CANCELADO':
+                resumo['cancelados'] += 1
+            
+            # Calcular total do dia (apenas transações não canceladas)
+            data_transacao = t.get('data')
+            if data_transacao and status != 'CANCELADO':
+                # Converter datetime para date se necessário
+                if isinstance(data_transacao, datetime):
+                    data_transacao = data_transacao.date()
+                
+                if data_transacao == data_hoje:
+                    total_dia += float(t.get('troco_pix', 0) or 0)
+        
+        # Formatar total do dia para exibição
+        total_dia_formatado = formatar_moeda(total_dia)
+        
         return render_template('troco_pix/listar.html', 
                              transacoes=transacoes,
+                             resumo=resumo,
+                             total_dia=total_dia_formatado,
                              titulo='TROCO PIX - Administração')
         
     except Exception as e:
         flash(f'Erro ao carregar transações: {str(e)}', 'danger')
-        return redirect(url_for('dashboard'))
+        # Redireciona para index para evitar loop infinito em caso de erro persistente
+        try:
+            return redirect(url_for('fretes.lista'))
+        except Exception:
+            return redirect(url_for('index'))
 
 @troco_pix_bp.route('/visualizar/<int:troco_pix_id>')
 @login_required
@@ -153,12 +179,13 @@ def novo():
             conn = get_db_connection()
             cursor = conn.cursor(dictionary=True)
             
-            # Buscar postos (clientes)
+            # Buscar postos (clientes) que têm produtos configurados
+            # Se não houver cliente_produtos configurado, mostra todos os clientes ativos
             cursor.execute("""
                 SELECT DISTINCT c.id, c.razao_social 
                 FROM clientes c
-                INNER JOIN clientes_produtos cp ON c.id = cp.cliente_id
-                WHERE cp.produto_id = 1
+                LEFT JOIN cliente_produtos cp ON c.id = cp.cliente_id
+                WHERE (cp.ativo = 1 OR cp.id IS NULL)
                 ORDER BY c.razao_social
             """)
             postos = cursor.fetchall()
@@ -227,7 +254,7 @@ def novo():
         troco_credito = request.form.get('troco_credito_vda_programada', 0)
         troco_pix_cliente_id = request.form.get('troco_pix_cliente_id')
         funcionario_id = request.form.get('funcionario_id')
-        user_id = session.get('user_id')
+        user_id = current_user.id
         
         # Validações
         if not all([cliente_id, data, cheque_tipo, cheque_valor, troco_pix_cliente_id, funcionario_id]):
@@ -295,8 +322,10 @@ def editar(troco_pix_id):
                 return redirect(url_for('troco_pix.listar'))
             
             # Verificar permissão de edição (15 minutos para frentistas)
-            user_id = session.get('user_id')
-            is_admin = session.get('is_admin', False)  # Assumindo que existe esta flag
+            user_id = current_user.id
+            # TODO: Implementar verificação de admin baseado em current_user.nivel
+            # Por exemplo: is_admin = (current_user.nivel == 'ADMIN')
+            is_admin = session.get('is_admin', False)
             
             if not is_admin:
                 tempo_decorrido = datetime.now() - transacao['criado_em']
@@ -305,11 +334,12 @@ def editar(troco_pix_id):
                     return redirect(url_for('troco_pix.visualizar', troco_pix_id=troco_pix_id))
             
             # Buscar dados para o formulário
+            # Se não houver cliente_produtos configurado, mostra todos os clientes
             cursor.execute("""
                 SELECT DISTINCT c.id, c.razao_social 
                 FROM clientes c
-                INNER JOIN clientes_produtos cp ON c.id = cp.cliente_id
-                WHERE cp.produto_id = 1
+                LEFT JOIN cliente_produtos cp ON c.id = cp.cliente_id
+                WHERE (cp.ativo = 1 OR cp.id IS NULL)
                 ORDER BY c.razao_social
             """)
             postos = cursor.fetchall()
@@ -376,7 +406,9 @@ def editar(troco_pix_id):
             conn.close()
             return redirect(url_for('troco_pix.listar'))
         
-        user_id = session.get('user_id')
+        user_id = current_user.id
+        # TODO: Implementar verificação de admin baseado em current_user.nivel
+        # Por exemplo: is_admin = (current_user.nivel == 'ADMIN')
         is_admin = session.get('is_admin', False)
         
         if not is_admin:
@@ -441,7 +473,8 @@ def editar(troco_pix_id):
 def excluir(troco_pix_id):
     """Exclui transação TROCO PIX (apenas Admin)"""
     try:
-        # Verificar se é admin (você pode adicionar verificação real aqui)
+        # TODO: Implementar verificação de admin baseado em current_user.nivel
+        # Por exemplo: is_admin = (current_user.nivel == 'ADMIN')
         is_admin = session.get('is_admin', False)
         if not is_admin:
             flash('Apenas administradores podem excluir transações.', 'danger')
@@ -631,7 +664,7 @@ def pista():
     try:
         # Buscar cliente_id do usuário logado
         # (Assumindo que existe uma tabela/campo que associa usuário a cliente)
-        user_id = session.get('user_id')
+        user_id = current_user.id
         
         conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)
@@ -663,4 +696,8 @@ def pista():
         
     except Exception as e:
         flash(f'Erro ao carregar transações: {str(e)}', 'danger')
-        return redirect(url_for('dashboard'))
+        # Redireciona para index para evitar loop infinito em caso de erro persistente
+        try:
+            return redirect(url_for('fretes.lista'))
+        except Exception:
+            return redirect(url_for('index'))
