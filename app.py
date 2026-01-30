@@ -34,12 +34,17 @@ def register_blueprints_from_routes(app):
             # Primeiro tenta 'bp' padrão
             bp = getattr(module, "bp", None)
             if bp is not None:
-                try:
-                    app.register_blueprint(bp)
-                    app.logger.info("Blueprint '%s' registrado a partir de %s", getattr(bp, "name", str(bp)), modname)
+                bp_name = getattr(bp, "name", None)
+                if bp_name and bp_name in app.blueprints:
+                    app.logger.debug("Blueprint '%s' já registrado; ignorando duplicação de %s", bp_name, modname)
                     blueprint_found = True
-                except Exception:
-                    app.logger.exception("Falha ao registrar blueprint vindo de %s", modname)
+                else:
+                    try:
+                        app.register_blueprint(bp)
+                        app.logger.info("Blueprint '%s' registrado a partir de %s", getattr(bp, "name", str(bp)), modname)
+                        blueprint_found = True
+                    except Exception:
+                        app.logger.exception("Falha ao registrar blueprint vindo de %s", modname)
             
             # Se não encontrou 'bp', procura por variáveis terminadas em '_bp'
             if not blueprint_found:
@@ -47,6 +52,12 @@ def register_blueprints_from_routes(app):
                     if attr_name.endswith('_bp') and not attr_name.startswith('_'):
                         bp_candidate = getattr(module, attr_name, None)
                         if bp_candidate is not None and hasattr(bp_candidate, 'name'):
+                            bp_name = getattr(bp_candidate, "name", None)
+                            if bp_name and bp_name in app.blueprints:
+                                app.logger.debug("Blueprint '%s' já registrado; ignorando duplicação de %s (variável: %s)", 
+                                               bp_name, modname, attr_name)
+                                blueprint_found = True
+                                break
                             try:
                                 app.register_blueprint(bp_candidate)
                                 app.logger.info("Blueprint '%s' registrado a partir de %s (variável: %s)", 
