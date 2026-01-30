@@ -19,6 +19,9 @@
     <!-- Botões de ação -->
     <div class="row mb-3">
         <div class="col-md-12">
+            <button type="button" class="btn btn-success" id="btnCopyWhatsApp">
+                <i class="bi bi-whatsapp"></i> Copiar para WhatsApp
+            </button>
             <a href="{{ url_for('troco_pix.editar', troco_pix_id=transacao.id) }}" class="btn btn-warning">
                 <i class="bi bi-pencil"></i> Editar
             </a>
@@ -262,4 +265,123 @@
         </div>
     </div>
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const btnCopyWhatsApp = document.getElementById('btnCopyWhatsApp');
+    
+    if (btnCopyWhatsApp) {
+        btnCopyWhatsApp.addEventListener('click', function() {
+            // Helper function to format currency values
+            function formatCurrency(value) {
+                if (!value || value === 0 || value === '0') {
+                    return '';
+                }
+                // Convert to number if string
+                let num = typeof value === 'string' ? parseFloat(value) : value;
+                // Format with thousand separator (.) and decimal (,)
+                return num.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+            }
+            
+            // Get transaction data
+            const data = {
+                data: '{{ transacao.data.strftime("%d/%m/%Y") if transacao.data else "" }}',
+                venda_abastecimento: {{ transacao.venda_abastecimento or 0 }},
+                venda_arla: {{ transacao.venda_arla or 0 }},
+                venda_produtos: {{ transacao.venda_produtos or 0 }},
+                venda_total: {{ transacao.venda_total or 0 }},
+                cheque_tipo: '{{ transacao.cheque_tipo or "" }}',
+                cheque_data_vencimento: '{{ transacao.cheque_data_vencimento.strftime("%d/%m/%Y") if transacao.cheque_data_vencimento else "" }}',
+                cheque_valor: {{ transacao.cheque_valor or 0 }},
+                troco_especie: {{ transacao.troco_especie or 0 }},
+                troco_pix: {{ transacao.troco_pix or 0 }},
+                troco_credito: {{ transacao.troco_credito_vda_programada or 0 }},
+                troco_total: {{ transacao.troco_total or 0 }},
+                cliente_pix_nome: '{{ transacao.cliente_pix_nome or "" }}',
+                tipo_chave_pix: '{{ transacao.tipo_chave_pix or "" }}',
+                chave_pix: '{{ transacao.chave_pix or "" }}',
+                frentista_nome: '{{ transacao.frentista_nome or "" }}'
+            };
+            
+            // Build WhatsApp message
+            let message = 'TROCO PIX\n';
+            message += 'DATA: ' + data.data + '\n\n';
+            
+            message += 'VENDA\n';
+            message += 'Abastecimento: ' + (formatCurrency(data.venda_abastecimento) || '') + '\n';
+            message += 'Arla: ' + (formatCurrency(data.venda_arla) || '') + '\n';
+            message += 'Produtos: ' + (formatCurrency(data.venda_produtos) || '') + '\n';
+            message += 'TOTAL = ' + formatCurrency(data.venda_total) + '\n\n';
+            
+            // CHEQUE section
+            if (data.cheque_tipo === 'A_VISTA') {
+                message += 'CHEQUE A VISTA\n';
+            } else if (data.cheque_tipo === 'A_PRAZO') {
+                message += 'CHEQUE A PRAZO';
+                if (data.cheque_data_vencimento) {
+                    message += ' - Data: ' + data.cheque_data_vencimento;
+                }
+                message += '\n';
+            }
+            message += 'Valor do cheque: ' + formatCurrency(data.cheque_valor) + '\n\n';
+            
+            message += 'TROCO\n';
+            message += 'Troco em Especie: ' + (formatCurrency(data.troco_especie) || '') + '\n';
+            message += 'Credito Vda Programada: ' + (formatCurrency(data.troco_credito) || '') + '\n';
+            message += 'TOTAL = ' + formatCurrency(data.troco_total) + '\n\n';
+            
+            message += 'TROCO PIX = ' + formatCurrency(data.troco_pix) + '\n';
+            message += 'Chave Pix: ' + (data.tipo_chave_pix ? data.tipo_chave_pix + ' - ' : '') + data.chave_pix + '\n';
+            message += 'Nome do Cliente: ' + data.cliente_pix_nome + '\n\n';
+            
+            message += 'Frentista: ' + data.frentista_nome;
+            
+            // Copy to clipboard
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(message).then(function() {
+                    // Success feedback
+                    const originalText = btnCopyWhatsApp.innerHTML;
+                    btnCopyWhatsApp.innerHTML = '<i class="bi bi-check-circle"></i> Copiado!';
+                    btnCopyWhatsApp.classList.remove('btn-success');
+                    btnCopyWhatsApp.classList.add('btn-info');
+                    
+                    setTimeout(function() {
+                        btnCopyWhatsApp.innerHTML = originalText;
+                        btnCopyWhatsApp.classList.remove('btn-info');
+                        btnCopyWhatsApp.classList.add('btn-success');
+                    }, 2000);
+                }).catch(function(err) {
+                    alert('Erro ao copiar: ' + err);
+                });
+            } else {
+                // Fallback for older browsers
+                const textArea = document.createElement('textarea');
+                textArea.value = message;
+                textArea.style.position = 'fixed';
+                textArea.style.left = '-999999px';
+                document.body.appendChild(textArea);
+                textArea.select();
+                try {
+                    document.execCommand('copy');
+                    const originalText = btnCopyWhatsApp.innerHTML;
+                    btnCopyWhatsApp.innerHTML = '<i class="bi bi-check-circle"></i> Copiado!';
+                    btnCopyWhatsApp.classList.remove('btn-success');
+                    btnCopyWhatsApp.classList.add('btn-info');
+                    
+                    setTimeout(function() {
+                        btnCopyWhatsApp.innerHTML = originalText;
+                        btnCopyWhatsApp.classList.remove('btn-info');
+                        btnCopyWhatsApp.classList.add('btn-success');
+                    }, 2000);
+                } catch (err) {
+                    alert('Erro ao copiar: ' + err);
+                }
+                document.body.removeChild(textArea);
+            }
+        });
+    }
+});
+</script>
 {% endblock %}
