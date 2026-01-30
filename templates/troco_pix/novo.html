@@ -167,14 +167,16 @@
                     </div>
                     <div class="col-md-4">
                         <div class="mb-3">
-                            <label for="troco_pix" class="form-label">Troco PIX</label>
+                            <label for="troco_pix" class="form-label">Troco PIX <span class="badge bg-secondary">Calculado</span></label>
                             <div class="input-group">
                                 <span class="input-group-text">R$</span>
                                 <input type="text" class="form-control troco-input money-input" 
-                                       id="troco_pix" name="troco_pix"
+                                       id="troco_pix" name="troco_pix" readonly
                                        value="{{ '%.2f'|format(transacao.troco_pix or 0) if edit_mode else '0,00' }}"
-                                       data-raw-value="{{ transacao.troco_pix or 0 if edit_mode else 0 }}">
+                                       data-raw-value="{{ transacao.troco_pix or 0 if edit_mode else 0 }}"
+                                       style="background-color: #e9ecef;">
                             </div>
+                            <small class="form-text text-muted">Calculado automaticamente</small>
                         </div>
                     </div>
                     <div class="col-md-4">
@@ -381,6 +383,31 @@ document.addEventListener('DOMContentLoaded', function() {
         
         const total = abastecimento + arla + produtos;
         document.getElementById('venda_total_display').textContent = formatarReal(total);
+        
+        // Recalcular Troco PIX quando venda mudar
+        calcularTrocoPix();
+    }
+
+    // Função para calcular Troco PIX automaticamente
+    function calcularTrocoPix() {
+        // Pegar valores dos campos
+        const chequeValor = desformatarReal(document.getElementById('cheque_valor').value);
+        const abastecimento = desformatarReal(document.getElementById('venda_abastecimento').value);
+        const arla = desformatarReal(document.getElementById('venda_arla').value);
+        const produtos = desformatarReal(document.getElementById('venda_produtos').value);
+        const trocoEspecie = desformatarReal(document.getElementById('troco_especie').value);
+        const creditoVdaProgramada = desformatarReal(document.getElementById('troco_credito_vda_programada').value);
+        
+        // Fórmula: Troco PIX = Cheque - Abastecimento - Arla - Produtos - Troco Espécie - Crédito Vda Programada
+        const trocoPix = chequeValor - abastecimento - arla - produtos - trocoEspecie - creditoVdaProgramada;
+        
+        // Atualizar campo
+        const trocoPixInput = document.getElementById('troco_pix');
+        trocoPixInput.value = formatarReal(trocoPix);
+        trocoPixInput.setAttribute('data-raw-value', trocoPix);
+        
+        // Recalcular total do troco
+        calcularTotalTroco();
     }
 
     // Função para calcular total de troco
@@ -396,12 +423,30 @@ document.addEventListener('DOMContentLoaded', function() {
     // Adicionar listeners para campos de venda
     document.querySelectorAll('.venda-input').forEach(input => {
         input.addEventListener('change', calcularTotalVenda);
+        input.addEventListener('input', calcularTotalVenda); // Calcular em tempo real
     });
 
-    // Adicionar listeners para campos de troco
-    document.querySelectorAll('.troco-input').forEach(input => {
-        input.addEventListener('change', calcularTotalTroco);
+    // Adicionar listeners para campos que afetam Troco PIX
+    const camposCalculo = [
+        'cheque_valor',
+        'venda_abastecimento',
+        'venda_arla',
+        'venda_produtos',
+        'troco_especie',
+        'troco_credito_vda_programada'
+    ];
+    
+    camposCalculo.forEach(campoId => {
+        const campo = document.getElementById(campoId);
+        if (campo) {
+            campo.addEventListener('change', calcularTrocoPix);
+            campo.addEventListener('input', calcularTrocoPix); // Calcular em tempo real
+        }
     });
+
+    // Adicionar listener apenas para troco em espécie e crédito (Troco PIX já é calculado)
+    document.getElementById('troco_especie').addEventListener('change', calcularTotalTroco);
+    document.getElementById('troco_credito_vda_programada').addEventListener('change', calcularTotalTroco);
 
     // ==================== FILTRO DE FRENTISTAS POR POSTO ====================
     
@@ -507,7 +552,8 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     {% endif %}
 
-    // Calcular totais iniciais (em modo edição)
+    // Calcular totais e Troco PIX iniciais (em modo edição)
+    calcularTrocoPix();  // Calcular Troco PIX primeiro
     calcularTotalVenda();
     calcularTotalTroco();
     
