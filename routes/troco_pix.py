@@ -711,8 +711,20 @@ def cliente_excluir(cliente_id):
 def pista():
     """Visão de frentistas - Mostra apenas transações do posto associado ao usuário"""
     try:
+        from datetime import date
+        
         # Buscar cliente_id do usuário logado
         user_id = current_user.id
+        
+        # Pegar filtros de data da URL (se existirem)
+        data_inicio = request.args.get('data_inicio')
+        data_fim = request.args.get('data_fim')
+        
+        # Se não tem filtro, usar data de hoje por padrão
+        if not data_inicio and not data_fim:
+            data_hoje = date.today()
+            data_inicio = data_hoje.strftime('%Y-%m-%d')
+            data_fim = data_hoje.strftime('%Y-%m-%d')
         
         conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)
@@ -728,31 +740,45 @@ def pista():
             LEFT JOIN clientes c ON tp.cliente_id = c.id
             LEFT JOIN troco_pix_clientes tpc ON tp.troco_pix_cliente_id = tpc.id
             LEFT JOIN funcionarios f ON tp.funcionario_id = f.id
+            WHERE 1=1
         """
+        
+        params = []
         
         # Filtrar por posto se usuário é PISTA
         if hasattr(current_user, 'nivel') and current_user.nivel == 'PISTA':
             if hasattr(current_user, 'cliente_id') and current_user.cliente_id:
-                query += " WHERE tp.cliente_id = %s"
-                query += " ORDER BY tp.data DESC, tp.criado_em DESC"
-                cursor.execute(query, (current_user.cliente_id,))
+                query += " AND tp.cliente_id = %s"
+                params.append(current_user.cliente_id)
             else:
                 # Usuário PISTA sem cliente_id associado - não mostrar nada
-                query += " WHERE 1=0"
-                query += " ORDER BY tp.data DESC, tp.criado_em DESC"
-                cursor.execute(query)
-        else:
-            # Admin ou outros níveis veem tudo
-            query += " ORDER BY tp.data DESC, tp.criado_em DESC"
-            cursor.execute(query)
+                query += " AND 1=0"
         
+        # Filtrar por data
+        if data_inicio:
+            query += " AND tp.data >= %s"
+            params.append(data_inicio)
+        if data_fim:
+            query += " AND tp.data <= %s"
+            params.append(data_fim)
+        
+        query += " ORDER BY tp.data DESC, tp.criado_em DESC"
+        
+        cursor.execute(query, params)
         transacoes = cursor.fetchall()
+        
+        # Calcular transações de hoje e total
+        data_hoje = date.today()
+        transacoes_hoje = [t for t in transacoes if t.get('data') == data_hoje]
+        total_troco_pix_hoje = sum(t.get('troco_pix', 0) or 0 for t in transacoes_hoje)
         
         cursor.close()
         conn.close()
         
         return render_template('troco_pix/pista.html', 
                              transacoes=transacoes,
+                             transacoes_hoje=transacoes_hoje,
+                             total_troco_pix_hoje=total_troco_pix_hoje,
                              titulo='TROCO PIX - Pista')
         
     except Exception as e:

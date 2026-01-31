@@ -52,12 +52,12 @@
                         {% for t in transacoes_hoje %}
                         <tr>
                             <td>{{ t.criado_em.strftime('%H:%M') if t.criado_em else '-' }}</td>
-                            <td>{{ t.troco_pix_cliente_nome or '-' }}</td>
-                            <td class="text-end">R$ {{ "%.2f"|format(t.venda_total or 0)|replace('.', ',') }}</td>
-                            <td class="text-end">R$ {{ "%.2f"|format(t.cheque_valor or 0)|replace('.', ',') }}</td>
-                            <td class="text-end">R$ {{ "%.2f"|format(t.troco_total or 0)|replace('.', ',') }}</td>
+                            <td>{{ t.cliente_pix_nome or '-' }}</td>
+                            <td class="text-end">{{ t.venda_total|formatar_moeda }}</td>
+                            <td class="text-end">{{ t.cheque_valor|formatar_moeda }}</td>
+                            <td class="text-end">{{ t.troco_total|formatar_moeda }}</td>
                             <td class="text-end">
-                                <strong>R$ {{ "%.2f"|format(t.troco_pix or 0)|replace('.', ',') }}</strong>
+                                <strong>{{ t.troco_pix|formatar_moeda }}</strong>
                             </td>
                             <td>
                                 {% if t.status == 'PENDENTE' %}
@@ -90,7 +90,7 @@
                     <tfoot>
                         <tr class="table-info">
                             <th colspan="5" class="text-end">TOTAL TROCO PIX HOJE:</th>
-                            <th class="text-end">R$ {{ "%.2f"|format(total_troco_pix_hoje or 0)|replace('.', ',') }}</th>
+                            <th class="text-end">{{ total_troco_pix_hoje|formatar_moeda }}</th>
                             <th colspan="2"></th>
                         </tr>
                     </tfoot>
@@ -143,7 +143,7 @@
             <i class="bi bi-calendar-range"></i> Solicitações do Período
         </div>
         <div class="card-body">
-            {% if transacoes_periodo %}
+            {% if transacoes %}
             <div class="table-responsive">
                 <table class="table table-striped table-hover">
                     <thead>
@@ -158,14 +158,14 @@
                         </tr>
                     </thead>
                     <tbody>
-                        {% for t in transacoes_periodo %}
+                        {% for t in transacoes %}
                         <tr>
                             <td>{{ t.data.strftime('%d/%m/%Y') if t.data else '-' }}</td>
-                            <td>{{ t.troco_pix_cliente_nome or '-' }}</td>
-                            <td class="text-end">R$ {{ "%.2f"|format(t.venda_total or 0)|replace('.', ',') }}</td>
-                            <td class="text-end">R$ {{ "%.2f"|format(t.cheque_valor or 0)|replace('.', ',') }}</td>
+                            <td>{{ t.cliente_pix_nome or '-' }}</td>
+                            <td class="text-end">{{ t.venda_total|formatar_moeda }}</td>
+                            <td class="text-end">{{ t.cheque_valor|formatar_moeda }}</td>
                             <td class="text-end">
-                                <strong>R$ {{ "%.2f"|format(t.troco_pix or 0)|replace('.', ',') }}</strong>
+                                <strong>{{ t.troco_pix|formatar_moeda }}</strong>
                             </td>
                             <td>
                                 {% if t.status == 'PENDENTE' %}
@@ -181,6 +181,16 @@
                                    class="btn btn-sm btn-info" title="Visualizar">
                                     <i class="bi bi-eye"></i>
                                 </a>
+                                {% if pode_editar(t) %}
+                                <a href="{{ url_for('troco_pix.editar', troco_pix_id=t.id) }}" 
+                                   class="btn btn-sm btn-warning" title="Editar">
+                                    <i class="bi bi-pencil"></i>
+                                </a>
+                                {% else %}
+                                <button class="btn btn-sm btn-secondary" disabled title="Prazo de edição expirado">
+                                    <i class="bi bi-lock"></i>
+                                </button>
+                                {% endif %}
                             </td>
                         </tr>
                         {% endfor %}
