@@ -354,9 +354,8 @@ def editar(troco_pix_id):
             
             # Verificar permissão de edição (15 minutos para frentistas)
             user_id = current_user.id
-            # TODO: Implementar verificação de admin baseado em current_user.nivel
-            # Por exemplo: is_admin = (current_user.nivel == 'ADMIN')
-            is_admin = session.get('is_admin', False)
+            # Verificar se usuário é administrador
+            is_admin = (current_user.nivel == 'ADMIN')
             
             if not is_admin:
                 tempo_decorrido = datetime.now() - transacao['criado_em']
@@ -459,9 +458,8 @@ def editar(troco_pix_id):
             return redirect(url_for('troco_pix.listar'))
         
         user_id = current_user.id
-        # TODO: Implementar verificação de admin baseado em current_user.nivel
-        # Por exemplo: is_admin = (current_user.nivel == 'ADMIN')
-        is_admin = session.get('is_admin', False)
+        # Verificar se usuário é administrador
+        is_admin = (current_user.nivel == 'ADMIN')
         
         if not is_admin:
             tempo_decorrido = datetime.now() - result['criado_em']
@@ -525,9 +523,8 @@ def editar(troco_pix_id):
 def excluir(troco_pix_id):
     """Exclui transação TROCO PIX (apenas Admin)"""
     try:
-        # TODO: Implementar verificação de admin baseado em current_user.nivel
-        # Por exemplo: is_admin = (current_user.nivel == 'ADMIN')
-        is_admin = session.get('is_admin', False)
+        # Verificar se usuário é administrador
+        is_admin = (current_user.nivel == 'ADMIN')
         if not is_admin:
             flash('Apenas administradores podem excluir transações.', 'danger')
             return redirect(url_for('troco_pix.visualizar', troco_pix_id=troco_pix_id))
@@ -715,14 +712,12 @@ def pista():
     """Visão de frentistas - Mostra apenas transações do posto associado ao usuário"""
     try:
         # Buscar cliente_id do usuário logado
-        # (Assumindo que existe uma tabela/campo que associa usuário a cliente)
         user_id = current_user.id
         
         conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)
         
-        # TODO: Implementar lógica de associação usuário-cliente
-        # Por enquanto, mostrar todas as transações
+        # Construir query base
         query = """
             SELECT 
                 tp.*,
@@ -733,10 +728,24 @@ def pista():
             LEFT JOIN clientes c ON tp.cliente_id = c.id
             LEFT JOIN troco_pix_clientes tpc ON tp.troco_pix_cliente_id = tpc.id
             LEFT JOIN funcionarios f ON tp.funcionario_id = f.id
-            ORDER BY tp.data DESC, tp.criado_em DESC
         """
         
-        cursor.execute(query)
+        # Filtrar por posto se usuário é PISTA
+        if hasattr(current_user, 'nivel') and current_user.nivel == 'PISTA':
+            if hasattr(current_user, 'cliente_id') and current_user.cliente_id:
+                query += " WHERE tp.cliente_id = %s"
+                query += " ORDER BY tp.data DESC, tp.criado_em DESC"
+                cursor.execute(query, (current_user.cliente_id,))
+            else:
+                # Usuário PISTA sem cliente_id associado - não mostrar nada
+                query += " WHERE 1=0"
+                query += " ORDER BY tp.data DESC, tp.criado_em DESC"
+                cursor.execute(query)
+        else:
+            # Admin ou outros níveis veem tudo
+            query += " ORDER BY tp.data DESC, tp.criado_em DESC"
+            cursor.execute(query)
+        
         transacoes = cursor.fetchall()
         
         cursor.close()
@@ -753,3 +762,63 @@ def pista():
             return redirect(url_for('fretes.lista'))
         except Exception:
             return redirect(url_for('index'))
+
+
+# ==================== CONTEXT PROCESSOR ====================
+
+@troco_pix_bp.app_context_processor
+def utility_processor():
+    """
+    Adiciona funções utilitárias aos templates do blueprint TROCO PIX
+    
+    Funções disponíveis nos templates:
+    - pode_editar(transacao): Verifica se usuário pode editar uma transação
+    """
+    
+    def pode_editar(transacao):
+        """
+        Verifica se o usuário atual pode editar a transação
+        
+        Regras de negócio:
+        - Administradores (nivel='ADMIN') podem sempre editar
+        - Frentistas (nivel='PISTA') podem editar apenas:
+          * Transações do mesmo posto (cliente_id)
+          * Até 15 minutos após a criação
+        
+        Args:
+            transacao (dict): Dicionário com dados da transação incluindo:
+                - cliente_id: ID do posto/cliente
+                - criado_em: Timestamp de criação
+        
+        Returns:
+            bool: True se pode editar, False caso contrário
+        """
+        try:
+            # Administradores podem sempre editar
+            if hasattr(current_user, 'nivel') and current_user.nivel == 'ADMIN':
+                return True
+            
+            # Para frentistas (PISTA), verificar posto e tempo
+            if hasattr(current_user, 'nivel') and current_user.nivel == 'PISTA':
+                # Verificar se é do mesmo posto
+                if hasattr(current_user, 'cliente_id') and current_user.cliente_id:
+                    if current_user.cliente_id != transacao.get('cliente_id'):
+                        return False
+                
+                # Verificar tempo (15 minutos)
+                if transacao.get('criado_em'):
+                    tempo_decorrido = datetime.now() - transacao['criado_em']
+                    return tempo_decorrido <= timedelta(minutes=15)
+                
+                # Se não tem criado_em, não pode editar por segurança
+                return False
+            
+            # Por padrão, não permitir edição
+            return False
+            
+        except Exception as e:
+            # Em caso de erro, não permitir edição por segurança
+            print(f"Erro ao verificar permissão de edição: {e}")
+            return False
+    
+    return dict(pode_editar=pode_editar)
