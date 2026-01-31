@@ -348,7 +348,7 @@ document.addEventListener('DOMContentLoaded', function() {
             
             message += '💸 *TROCO*\n';
             message += '├ Em Espécie: ' + (formatCurrency(data.troco_especie) || '—') + '\n';
-            message += '├ Crédito Vda Prog.: ' + (formatCurrency(data.troco_credito) || '—') + '\n';
+            message += '├ Crédito Vda. Programada: ' + (formatCurrency(data.troco_credito) || '—') + '\n';
             message += '└ *TOTAL:* ' + formatCurrency(data.troco_total) + '\n\n';
             
             message += '🔑 *TROCO PIX:* ' + formatCurrency(data.troco_pix) + '\n';
@@ -361,7 +361,7 @@ document.addEventListener('DOMContentLoaded', function() {
             }
             message += '👤 Cliente: ' + (data.cliente_pix_nome ? '*' + data.cliente_pix_nome + '*' : '—') + '\n\n';
             
-            message += '👨‍💼 Frentista: ' + (data.frentista_nome ? '*' + data.frentista_nome + '*' : '—');
+            message += '⛽ Frentista: ' + (data.frentista_nome ? '*' + data.frentista_nome + '*' : '—');
             
             
             // Copy to clipboard
