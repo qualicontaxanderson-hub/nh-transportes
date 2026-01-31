@@ -43,6 +43,56 @@ def convert_to_plain_python(obj):
         except:
             return ''
 
+def gerar_numero_troco_pix(data_transacao):
+    """
+    Gera número sequencial para TROCO PIX no formato: PIX-DD-MM-YYYY-N1
+    
+    Args:
+        data_transacao: data da transação (string YYYY-MM-DD ou datetime)
+    
+    Returns:
+        String no formato PIX-31-01-2026-N1, PIX-31-01-2026-N2, etc.
+    """
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    
+    # Converter data para string no formato esperado se necessário
+    if isinstance(data_transacao, str):
+        data_obj = datetime.strptime(data_transacao, '%Y-%m-%d')
+    else:
+        data_obj = data_transacao
+    
+    data_formatada = data_obj.strftime('%d-%m-%Y')
+    prefixo = f"PIX-{data_formatada}"
+    
+    # Buscar último número sequencial do dia
+    cursor.execute("""
+        SELECT numero_sequencial 
+        FROM troco_pix 
+        WHERE data = %s 
+        ORDER BY numero_sequencial DESC 
+        LIMIT 1
+    """, (data_obj.strftime('%Y-%m-%d'),))
+    
+    ultimo = cursor.fetchone()
+    cursor.close()
+    conn.close()
+    
+    if ultimo and ultimo.get('numero_sequencial'):
+        # Extrair número da sequência (ex: PIX-31-01-2026-N1 -> 1)
+        try:
+            partes = ultimo['numero_sequencial'].split('-N')
+            if len(partes) == 2:
+                num = int(partes[1]) + 1
+            else:
+                num = 1
+        except:
+            num = 1
+    else:
+        num = 1
+    
+    return f"{prefixo}-N{num}"
+
 # ==================== ROTAS DE LISTAGEM ====================
 
 @troco_pix_bp.route('/')
@@ -72,10 +122,12 @@ def listar():
         cursor.execute(query)
         transacoes = cursor.fetchall()
         
-        # Buscar lista de clientes para filtro
+        # Buscar lista de clientes para filtro (apenas com produtos cadastrados)
         cursor.execute("""
             SELECT DISTINCT c.id, c.razao_social 
             FROM clientes c
+            INNER JOIN cliente_produtos cp ON c.id = cp.cliente_id
+            WHERE cp.ativo = 1
             ORDER BY c.razao_social
         """)
         clientes = cursor.fetchall()
@@ -294,22 +346,25 @@ def novo():
             flash('Para cheque A PRAZO, a data de vencimento é obrigatória.', 'warning')
             return redirect(url_for('troco_pix.novo'))
         
+        # Gerar número sequencial
+        numero_sequencial = gerar_numero_troco_pix(data)
+        
         # Inserir transação
         query = """
             INSERT INTO troco_pix (
-                cliente_id, data, 
+                numero_sequencial, cliente_id, data, 
                 venda_abastecimento, venda_arla, venda_produtos,
                 cheque_tipo, cheque_data_vencimento, cheque_valor,
                 troco_especie, troco_pix, troco_credito_vda_programada,
                 troco_pix_cliente_id, funcionario_id,
                 status, criado_por
             ) VALUES (
-                %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'PENDENTE', %s
+                %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'PENDENTE', %s
             )
         """
         
         cursor.execute(query, (
-            cliente_id, data,
+            numero_sequencial, cliente_id, data,
             venda_abastecimento, venda_arla, venda_produtos,
             cheque_tipo, cheque_data_vencimento, cheque_valor,
             troco_especie, troco_pix, troco_credito,
@@ -323,11 +378,14 @@ def novo():
         conn.close()
         
         flash('TROCO PIX cadastrado com sucesso!', 'success')
-        return redirect(url_for('troco_pix.visualizar', troco_pix_id=troco_pix_id))
+        # Preservar origem no redirect
+        origem = request.args.get('origem') or request.form.get('origem')
+        return redirect(url_for('troco_pix.visualizar', troco_pix_id=troco_pix_id, origem=origem))
         
     except Exception as e:
         flash(f'Erro ao cadastrar TROCO PIX: {str(e)}', 'danger')
-        return redirect(url_for('troco_pix.novo'))
+        origem = request.args.get('origem') or request.form.get('origem')
+        return redirect(url_for('troco_pix.novo', origem=origem))
 
 # ==================== ROTAS DE EDIÇÃO ====================
 
@@ -352,9 +410,8 @@ def editar(troco_pix_id):
             
             # Verificar permissão de edição (15 minutos para frentistas)
             user_id = current_user.id
-            # TODO: Implementar verificação de admin baseado em current_user.nivel
-            # Por exemplo: is_admin = (current_user.nivel == 'ADMIN')
-            is_admin = session.get('is_admin', False)
+            # Verificar se usuário é administrador
+            is_admin = (current_user.nivel == 'ADMIN')
             
             if not is_admin:
                 tempo_decorrido = datetime.now() - transacao['criado_em']
@@ -457,9 +514,8 @@ def editar(troco_pix_id):
             return redirect(url_for('troco_pix.listar'))
         
         user_id = current_user.id
-        # TODO: Implementar verificação de admin baseado em current_user.nivel
-        # Por exemplo: is_admin = (current_user.nivel == 'ADMIN')
-        is_admin = session.get('is_admin', False)
+        # Verificar se usuário é administrador
+        is_admin = (current_user.nivel == 'ADMIN')
         
         if not is_admin:
             tempo_decorrido = datetime.now() - result['criado_em']
@@ -467,7 +523,8 @@ def editar(troco_pix_id):
                 flash('Tempo limite de edição excedido (15 minutos).', 'warning')
                 cursor.close()
                 conn.close()
-                return redirect(url_for('troco_pix.visualizar', troco_pix_id=troco_pix_id))
+                origem = request.args.get('origem') or request.form.get('origem')
+                return redirect(url_for('troco_pix.visualizar', troco_pix_id=troco_pix_id, origem=origem))
         
         # Obter dados do formulário
         cliente_id = request.form.get('cliente_id')
@@ -510,11 +567,17 @@ def editar(troco_pix_id):
         conn.close()
         
         flash('TROCO PIX atualizado com sucesso!', 'success')
-        return redirect(url_for('troco_pix.visualizar', troco_pix_id=troco_pix_id))
+        # Preservar origem no redirect
+        origem = request.args.get('origem') or request.form.get('origem')
+        if origem == 'pista':
+            return redirect(url_for('troco_pix.pista'))
+        else:
+            return redirect(url_for('troco_pix.visualizar', troco_pix_id=troco_pix_id, origem=origem))
         
     except Exception as e:
         flash(f'Erro ao atualizar TROCO PIX: {str(e)}', 'danger')
-        return redirect(url_for('troco_pix.editar', troco_pix_id=troco_pix_id))
+        origem = request.args.get('origem') or request.form.get('origem')
+        return redirect(url_for('troco_pix.editar', troco_pix_id=troco_pix_id, origem=origem))
 
 # ==================== ROTA DE EXCLUSÃO ====================
 
@@ -523,9 +586,8 @@ def editar(troco_pix_id):
 def excluir(troco_pix_id):
     """Exclui transação TROCO PIX (apenas Admin)"""
     try:
-        # TODO: Implementar verificação de admin baseado em current_user.nivel
-        # Por exemplo: is_admin = (current_user.nivel == 'ADMIN')
-        is_admin = session.get('is_admin', False)
+        # Verificar se usuário é administrador
+        is_admin = (current_user.nivel == 'ADMIN')
         if not is_admin:
             flash('Apenas administradores podem excluir transações.', 'danger')
             return redirect(url_for('troco_pix.visualizar', troco_pix_id=troco_pix_id))
@@ -712,15 +774,25 @@ def cliente_excluir(cliente_id):
 def pista():
     """Visão de frentistas - Mostra apenas transações do posto associado ao usuário"""
     try:
+        from datetime import date
+        
         # Buscar cliente_id do usuário logado
-        # (Assumindo que existe uma tabela/campo que associa usuário a cliente)
         user_id = current_user.id
+        
+        # Pegar filtros de data da URL (se existirem)
+        data_inicio = request.args.get('data_inicio')
+        data_fim = request.args.get('data_fim')
+        
+        # Se não tem filtro, usar data de hoje por padrão
+        if not data_inicio and not data_fim:
+            data_hoje = date.today()
+            data_inicio = data_hoje.strftime('%Y-%m-%d')
+            data_fim = data_hoje.strftime('%Y-%m-%d')
         
         conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)
         
-        # TODO: Implementar lógica de associação usuário-cliente
-        # Por enquanto, mostrar todas as transações
+        # Construir query base
         query = """
             SELECT 
                 tp.*,
@@ -731,17 +803,45 @@ def pista():
             LEFT JOIN clientes c ON tp.cliente_id = c.id
             LEFT JOIN troco_pix_clientes tpc ON tp.troco_pix_cliente_id = tpc.id
             LEFT JOIN funcionarios f ON tp.funcionario_id = f.id
-            ORDER BY tp.data DESC, tp.criado_em DESC
+            WHERE 1=1
         """
         
-        cursor.execute(query)
+        params = []
+        
+        # Filtrar por posto se usuário é PISTA
+        if hasattr(current_user, 'nivel') and current_user.nivel == 'PISTA':
+            if hasattr(current_user, 'cliente_id') and current_user.cliente_id:
+                query += " AND tp.cliente_id = %s"
+                params.append(current_user.cliente_id)
+            else:
+                # Usuário PISTA sem cliente_id associado - não mostrar nada
+                query += " AND 1=0"
+        
+        # Filtrar por data
+        if data_inicio:
+            query += " AND tp.data >= %s"
+            params.append(data_inicio)
+        if data_fim:
+            query += " AND tp.data <= %s"
+            params.append(data_fim)
+        
+        query += " ORDER BY tp.data DESC, tp.criado_em DESC"
+        
+        cursor.execute(query, params)
         transacoes = cursor.fetchall()
+        
+        # Calcular transações de hoje e total
+        data_hoje = date.today()
+        transacoes_hoje = [t for t in transacoes if t.get('data') == data_hoje]
+        total_troco_pix_hoje = sum(t.get('troco_pix', 0) or 0 for t in transacoes_hoje)
         
         cursor.close()
         conn.close()
         
         return render_template('troco_pix/pista.html', 
                              transacoes=transacoes,
+                             transacoes_hoje=transacoes_hoje,
+                             total_troco_pix_hoje=total_troco_pix_hoje,
                              titulo='TROCO PIX - Pista')
         
     except Exception as e:
@@ -751,3 +851,63 @@ def pista():
             return redirect(url_for('fretes.lista'))
         except Exception:
             return redirect(url_for('index'))
+
+
+# ==================== CONTEXT PROCESSOR ====================
+
+@troco_pix_bp.app_context_processor
+def utility_processor():
+    """
+    Adiciona funções utilitárias aos templates do blueprint TROCO PIX
+    
+    Funções disponíveis nos templates:
+    - pode_editar(transacao): Verifica se usuário pode editar uma transação
+    """
+    
+    def pode_editar(transacao):
+        """
+        Verifica se o usuário atual pode editar a transação
+        
+        Regras de negócio:
+        - Administradores (nivel='ADMIN') podem sempre editar
+        - Frentistas (nivel='PISTA') podem editar apenas:
+          * Transações do mesmo posto (cliente_id)
+          * Até 15 minutos após a criação
+        
+        Args:
+            transacao (dict): Dicionário com dados da transação incluindo:
+                - cliente_id: ID do posto/cliente
+                - criado_em: Timestamp de criação
+        
+        Returns:
+            bool: True se pode editar, False caso contrário
+        """
+        try:
+            # Administradores podem sempre editar
+            if hasattr(current_user, 'nivel') and current_user.nivel == 'ADMIN':
+                return True
+            
+            # Para frentistas (PISTA), verificar posto e tempo
+            if hasattr(current_user, 'nivel') and current_user.nivel == 'PISTA':
+                # Verificar se é do mesmo posto
+                if hasattr(current_user, 'cliente_id') and current_user.cliente_id:
+                    if current_user.cliente_id != transacao.get('cliente_id'):
+                        return False
+                
+                # Verificar tempo (15 minutos)
+                if transacao.get('criado_em'):
+                    tempo_decorrido = datetime.now() - transacao['criado_em']
+                    return tempo_decorrido <= timedelta(minutes=15)
+                
+                # Se não tem criado_em, não pode editar por segurança
+                return False
+            
+            # Por padrão, não permitir edição
+            return False
+            
+        except Exception as e:
+            # Em caso de erro, não permitir edição por segurança
+            print(f"Erro ao verificar permissão de edição: {e}")
+            return False
+    
+    return dict(pode_editar=pode_editar)
