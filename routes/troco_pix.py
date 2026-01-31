@@ -378,11 +378,14 @@ def novo():
         conn.close()
         
         flash('TROCO PIX cadastrado com sucesso!', 'success')
-        return redirect(url_for('troco_pix.visualizar', troco_pix_id=troco_pix_id))
+        # Preservar origem no redirect
+        origem = request.args.get('origem') or request.form.get('origem')
+        return redirect(url_for('troco_pix.visualizar', troco_pix_id=troco_pix_id, origem=origem))
         
     except Exception as e:
         flash(f'Erro ao cadastrar TROCO PIX: {str(e)}', 'danger')
-        return redirect(url_for('troco_pix.novo'))
+        origem = request.args.get('origem') or request.form.get('origem')
+        return redirect(url_for('troco_pix.novo', origem=origem))
 
 # ==================== ROTAS DE EDIÇÃO ====================
 
@@ -520,7 +523,8 @@ def editar(troco_pix_id):
                 flash('Tempo limite de edição excedido (15 minutos).', 'warning')
                 cursor.close()
                 conn.close()
-                return redirect(url_for('troco_pix.visualizar', troco_pix_id=troco_pix_id))
+                origem = request.args.get('origem') or request.form.get('origem')
+                return redirect(url_for('troco_pix.visualizar', troco_pix_id=troco_pix_id, origem=origem))
         
         # Obter dados do formulário
         cliente_id = request.form.get('cliente_id')
@@ -563,11 +567,17 @@ def editar(troco_pix_id):
         conn.close()
         
         flash('TROCO PIX atualizado com sucesso!', 'success')
-        return redirect(url_for('troco_pix.visualizar', troco_pix_id=troco_pix_id))
+        # Preservar origem no redirect
+        origem = request.args.get('origem') or request.form.get('origem')
+        if origem == 'pista':
+            return redirect(url_for('troco_pix.pista'))
+        else:
+            return redirect(url_for('troco_pix.visualizar', troco_pix_id=troco_pix_id, origem=origem))
         
     except Exception as e:
         flash(f'Erro ao atualizar TROCO PIX: {str(e)}', 'danger')
-        return redirect(url_for('troco_pix.editar', troco_pix_id=troco_pix_id))
+        origem = request.args.get('origem') or request.form.get('origem')
+        return redirect(url_for('troco_pix.editar', troco_pix_id=troco_pix_id, origem=origem))
 
 # ==================== ROTA DE EXCLUSÃO ====================
 

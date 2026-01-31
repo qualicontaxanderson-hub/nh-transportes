@@ -12,7 +12,11 @@
             </h2>
             <nav aria-label="breadcrumb">
                 <ol class="breadcrumb">
+                    {% if request.args.get('origem') == 'pista' %}
+                    <li class="breadcrumb-item"><a href="{{ url_for('troco_pix.pista') }}">Troco PIX Pista</a></li>
+                    {% else %}
                     <li class="breadcrumb-item"><a href="{{ url_for('troco_pix.listar') }}">Troco PIX</a></li>
+                    {% endif %}
                     <li class="breadcrumb-item active">{{ 'Editar' if edit_mode else 'Nova Solicitação' }}</li>
                 </ol>
             </nav>
@@ -27,7 +31,7 @@
     </div>
     {% endif %}
 
-    <form method="POST" action="{{ url_for('troco_pix.editar', troco_pix_id=transacao.id) if edit_mode else url_for('troco_pix.novo') }}">
+    <form method="POST" action="{{ url_for('troco_pix.editar', troco_pix_id=transacao.id, origem=request.args.get('origem')) if edit_mode else url_for('troco_pix.novo', origem=request.args.get('origem')) }}">
         <!-- Informações Gerais -->
         <div class="card mb-3">
             <div class="card-header bg-primary text-white">
@@ -313,9 +317,15 @@
                 <button type="submit" class="btn btn-primary btn-lg">
                     <i class="bi bi-save"></i> {{ 'Atualizar' if edit_mode else 'Salvar' }}
                 </button>
+                {% if request.args.get('origem') == 'pista' %}
+                <a href="{{ url_for('troco_pix.pista') }}" class="btn btn-secondary btn-lg">
+                    <i class="bi bi-x-circle"></i> Cancelar
+                </a>
+                {% else %}
                 <a href="{{ url_for('troco_pix.listar') }}" class="btn btn-secondary btn-lg">
                     <i class="bi bi-x-circle"></i> Cancelar
                 </a>
+                {% endif %}
             </div>
         </div>
     </form>

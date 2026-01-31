@@ -9,7 +9,11 @@
             <h2><i class="bi bi-eye"></i> Visualizar Solicitação de Troco PIX #{{ transacao.id }}</h2>
             <nav aria-label="breadcrumb">
                 <ol class="breadcrumb">
+                    {% if request.args.get('origem') == 'pista' %}
+                    <li class="breadcrumb-item"><a href="{{ url_for('troco_pix.pista') }}">Troco PIX Pista</a></li>
+                    {% else %}
                     <li class="breadcrumb-item"><a href="{{ url_for('troco_pix.listar') }}">Troco PIX</a></li>
+                    {% endif %}
                     <li class="breadcrumb-item active">Visualizar #{{ transacao.id }}</li>
                 </ol>
             </nav>
@@ -22,12 +26,18 @@
             <button type="button" class="btn btn-success" id="btnCopyWhatsApp">
                 <i class="bi bi-whatsapp"></i> Copiar para WhatsApp
             </button>
-            <a href="{{ url_for('troco_pix.editar', troco_pix_id=transacao.id) }}" class="btn btn-warning">
+            <a href="{{ url_for('troco_pix.editar', troco_pix_id=transacao.id, origem=request.args.get('origem')) }}" class="btn btn-warning">
                 <i class="bi bi-pencil"></i> Editar
             </a>
+            {% if request.args.get('origem') == 'pista' %}
+            <a href="{{ url_for('troco_pix.pista') }}" class="btn btn-secondary">
+                <i class="bi bi-arrow-left"></i> Voltar
+            </a>
+            {% else %}
             <a href="{{ url_for('troco_pix.listar') }}" class="btn btn-secondary">
                 <i class="bi bi-arrow-left"></i> Voltar
             </a>
+            {% endif %}
         </div>
     </div>
 
