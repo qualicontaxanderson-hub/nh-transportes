@@ -19,6 +19,14 @@
         </div>
     </div>
 
+    <!-- Info about sequential number -->
+    {% if not edit_mode %}
+    <div class="alert alert-info">
+        <i class="bi bi-info-circle"></i>
+        <strong>Número Sequencial:</strong> Um número sequencial será gerado automaticamente ao salvar (formato: PIX-DD-MM-AAAA-N1, PIX-DD-MM-AAAA-N2, etc.)
+    </div>
+    {% endif %}
+
     <form method="POST" action="{{ url_for('troco_pix.editar', troco_pix_id=transacao.id) if edit_mode else url_for('troco_pix.novo') }}">
         <!-- Informações Gerais -->
         <div class="card mb-3">

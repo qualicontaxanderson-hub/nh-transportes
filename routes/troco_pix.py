@@ -43,6 +43,56 @@ def convert_to_plain_python(obj):
         except:
             return ''
 
+def gerar_numero_troco_pix(data_transacao):
+    """
+    Gera número sequencial para TROCO PIX no formato: PIX-DD-MM-YYYY-N1
+    
+    Args:
+        data_transacao: data da transação (string YYYY-MM-DD ou datetime)
+    
+    Returns:
+        String no formato PIX-31-01-2026-N1, PIX-31-01-2026-N2, etc.
+    """
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    
+    # Converter data para string no formato esperado se necessário
+    if isinstance(data_transacao, str):
+        data_obj = datetime.strptime(data_transacao, '%Y-%m-%d')
+    else:
+        data_obj = data_transacao
+    
+    data_formatada = data_obj.strftime('%d-%m-%Y')
+    prefixo = f"PIX-{data_formatada}"
+    
+    # Buscar último número sequencial do dia
+    cursor.execute("""
+        SELECT numero_sequencial 
+        FROM troco_pix 
+        WHERE data = %s 
+        ORDER BY numero_sequencial DESC 
+        LIMIT 1
+    """, (data_obj.strftime('%Y-%m-%d'),))
+    
+    ultimo = cursor.fetchone()
+    cursor.close()
+    conn.close()
+    
+    if ultimo and ultimo.get('numero_sequencial'):
+        # Extrair número da sequência (ex: PIX-31-01-2026-N1 -> 1)
+        try:
+            partes = ultimo['numero_sequencial'].split('-N')
+            if len(partes) == 2:
+                num = int(partes[1]) + 1
+            else:
+                num = 1
+        except:
+            num = 1
+    else:
+        num = 1
+    
+    return f"{prefixo}-N{num}"
+
 # ==================== ROTAS DE LISTAGEM ====================
 
 @troco_pix_bp.route('/')
@@ -296,22 +346,25 @@ def novo():
             flash('Para cheque A PRAZO, a data de vencimento é obrigatória.', 'warning')
             return redirect(url_for('troco_pix.novo'))
         
+        # Gerar número sequencial
+        numero_sequencial = gerar_numero_troco_pix(data)
+        
         # Inserir transação
         query = """
             INSERT INTO troco_pix (
-                cliente_id, data, 
+                numero_sequencial, cliente_id, data, 
                 venda_abastecimento, venda_arla, venda_produtos,
                 cheque_tipo, cheque_data_vencimento, cheque_valor,
                 troco_especie, troco_pix, troco_credito_vda_programada,
                 troco_pix_cliente_id, funcionario_id,
                 status, criado_por
             ) VALUES (
-                %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'PENDENTE', %s
+                %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'PENDENTE', %s
             )
         """
         
         cursor.execute(query, (
-            cliente_id, data,
+            numero_sequencial, cliente_id, data,
             venda_abastecimento, venda_arla, venda_produtos,
             cheque_tipo, cheque_data_vencimento, cheque_valor,
             troco_especie, troco_pix, troco_credito,

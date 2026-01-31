@@ -41,6 +41,10 @@
                 <div class="col-md-6">
                     <table class="table table-borderless">
                         <tr>
+                            <th width="40%">Número:</th>
+                            <td><strong>{{ transacao.numero_sequencial or '-' }}</strong></td>
+                        </tr>
+                        <tr>
                             <th width="40%">Data:</th>
                             <td>{{ transacao.data.strftime('%d/%m/%Y') if transacao.data else '-' }}</td>
                         </tr>
@@ -302,6 +306,7 @@ document.addEventListener('DOMContentLoaded', function() {
             
             // Get transaction data - using tojson for safe escaping
             const data = {
+                numero_sequencial: {{ (transacao.numero_sequencial or "")|tojson }},
                 data: {{ (transacao.data.strftime("%d/%m/%Y") if transacao.data else "")|tojson }},
                 venda_abastecimento: {{ transacao.venda_abastecimento or 0 }},
                 venda_arla: {{ transacao.venda_arla or 0 }},
@@ -321,7 +326,14 @@ document.addEventListener('DOMContentLoaded', function() {
             };
             
             // Build WhatsApp message with bold formatting and icons
-            let message = '💰 *TROCO PIX* 💰\n';
+            let message = '';
+            
+            // Add sequential number if available
+            if (data.numero_sequencial) {
+                message += '🔢 *' + data.numero_sequencial + '*\n\n';
+            }
+            
+            message += '💰 *TROCO PIX* 💰\n';
             message += '━━━━━━━━━━━━━━━━━━━━\n';
             message += '📅 *Data:* ' + data.data + '\n\n';
             
