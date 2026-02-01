@@ -2,9 +2,13 @@ from flask import Blueprint, render_template, request, redirect, url_for, flash
 from flask_login import login_user, logout_user, login_required, current_user
 from functools import wraps
 from utils.db import get_db_connection
+import logging
 
 # Model Usuario - existe em models/usuario.py
 from models.usuario import Usuario
+
+# Configurar logger
+logger = logging.getLogger(__name__)
 
 bp = Blueprint('auth', __name__, url_prefix='/auth')
 
