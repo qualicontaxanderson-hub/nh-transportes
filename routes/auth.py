@@ -26,8 +26,10 @@ def admin_required(f):
         nivel = getattr(current_user, 'nivel', '')
         nivel_stripped = nivel.strip() if isinstance(nivel, str) else str(nivel)
         
-        # Log detalhado para debug
-        logger.info(f"Verificação admin_required: usuário={getattr(current_user, 'username', 'N/A')}, nivel='{nivel}', tipo={type(nivel)}, stripped='{nivel_stripped}'")
+        # Log detalhado para debug (simplificado para evitar erros de formatação)
+        username = getattr(current_user, 'username', 'N/A')
+        print(f"[DEBUG ADMIN] Usuario: {username}, Nivel: {nivel}, Stripped: {nivel_stripped}")
+        logger.info(f"Verificação admin_required: usuário={username}, nivel='{nivel}', stripped='{nivel_stripped}'")
         
         # Aceitar variações comuns (case-insensitive e com trim)
         niveis_aceitos = ['ADMIN', 'Administrador', 'admin', 'administrador']
@@ -142,8 +144,13 @@ def criar_usuario():
 @admin_required
 def editar_usuario(user_id):
     """Edita um usuário existente"""
+    # Print statements para garantir visibilidade mesmo se logging falhar
+    print(f"[DEBUG EDITAR] Função editar_usuario chamada para user_id={user_id}")
+    print(f"[DEBUG EDITAR] Request method: {request.method}")
+    
     # WRAPPER GLOBAL - Captura QUALQUER erro na função
     try:
+        print(f"[DEBUG EDITAR] Dentro do try block, iniciando edição")
         logger.info(f"[EDITAR] Iniciando edição do usuário {user_id}")
         
         # Buscar dados do usuário
@@ -221,6 +228,8 @@ def editar_usuario(user_id):
     
     except Exception as e:
         # WRAPPER GLOBAL - Captura QUALQUER erro não tratado
+        print(f"[DEBUG EDITAR] ERRO FATAL CAPTURADO: {str(e)}")
+        print(f"[DEBUG EDITAR] Tipo do erro: {type(e).__name__}")
         logger.error(f"[EDITAR] ERRO FATAL na função editar_usuario: {str(e)}", exc_info=True)
         flash(f'Erro fatal ao editar usuário: {str(e)}', 'danger')
         return redirect(url_for('auth.listar_usuarios'))
