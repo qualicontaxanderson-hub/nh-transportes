@@ -36,9 +36,17 @@
                             <label for="nivel" class="form-label">Nível de Acesso *</label>
                             <select class="form-select" id="nivel" name="nivel" required onchange="toggleClienteField()">
                                 <option value="">Selecione...</option>
-                                <option value="ADMIN">ADMIN - Acesso Total</option>
-                                <option value="PISTA">PISTA - Acesso Limitado ao Posto</option>
+                                <option value="ADMIN">ADMIN - Acesso Total ao Sistema</option>
+                                <option value="GERENTE">GERENTE - Gestão de Múltiplos Postos</option>
+                                <option value="SUPERVISOR">SUPERVISOR - Supervisão de Posto(s)</option>
+                                <option value="PISTA">PISTA - Operação de Posto (Limitado)</option>
                             </select>
+                            <small class="form-text text-muted">
+                                <strong>ADMIN:</strong> Todas as permissões<br>
+                                <strong>GERENTE:</strong> Gerenciar usuários, ver todos os postos, sem restrição de tempo<br>
+                                <strong>SUPERVISOR:</strong> Ver e editar posto(s) associado(s), sem restrição de tempo<br>
+                                <strong>PISTA:</strong> Operação básica, apenas seu posto, limite 15 min para edição
+                            </small>
                         </div>
 
                         <div class="mb-3" id="cliente_field" style="display:none;">
@@ -49,7 +57,10 @@
                                 <option value="{{ cliente.id }}">{{ cliente.razao_social }}</option>
                                 {% endfor %}
                             </select>
-                            <small class="form-text text-muted">Usuários PISTA só veem dados do posto associado</small>
+                            <small class="form-text text-muted">
+                                <strong>SUPERVISOR/PISTA:</strong> Associe a um posto específico<br>
+                                <strong>GERENTE:</strong> Deixe em branco para acesso a todos os postos
+                            </small>
                         </div>
 
                         <hr>
@@ -87,9 +98,14 @@ function toggleClienteField() {
     var clienteField = document.getElementById('cliente_field');
     var clienteSelect = document.getElementById('cliente_id');
     
-    if (nivel === 'PISTA') {
+    // SUPERVISOR e PISTA precisam de posto associado
+    // GERENTE é opcional (pode ter ou não)
+    if (nivel === 'PISTA' || nivel === 'SUPERVISOR') {
         clienteField.style.display = 'block';
         clienteSelect.required = true;
+    } else if (nivel === 'GERENTE') {
+        clienteField.style.display = 'block';
+        clienteSelect.required = false;  // Opcional para gerente
     } else {
         clienteField.style.display = 'none';
         clienteSelect.required = false;

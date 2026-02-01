@@ -50,10 +50,16 @@
                                     <td><strong>{{ usuario.username }}</strong></td>
                                     <td>{{ usuario.nome_completo }}</td>
                                     <td>
-                                        {% if usuario.nivel == 'ADMIN' %}
+                                        {% if usuario.nivel == 'ADMIN' or usuario.nivel == 'admin' or usuario.nivel == 'Administrador' %}
                                             <span class="badge bg-danger">ADMIN</span>
+                                        {% elif usuario.nivel == 'GERENTE' %}
+                                            <span class="badge bg-warning text-dark">GERENTE</span>
+                                        {% elif usuario.nivel == 'SUPERVISOR' %}
+                                            <span class="badge bg-primary">SUPERVISOR</span>
+                                        {% elif usuario.nivel == 'PISTA' %}
+                                            <span class="badge bg-info">PISTA</span>
                                         {% else %}
-                                            <span class="badge bg-info">{{ usuario.nivel }}</span>
+                                            <span class="badge bg-secondary">{{ usuario.nivel }}</span>
                                         {% endif %}
                                     </td>
                                     <td>

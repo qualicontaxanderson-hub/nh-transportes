@@ -36,13 +36,21 @@
                             <label for="nivel" class="form-label">Nível de Acesso *</label>
                             <select class="form-select" id="nivel" name="nivel" required onchange="toggleClienteField()">
                                 <option value="">Selecione...</option>
-                                <option value="ADMIN" {% if usuario.nivel == 'ADMIN' %}selected{% endif %}>ADMIN - Acesso Total</option>
-                                <option value="PISTA" {% if usuario.nivel == 'PISTA' %}selected{% endif %}>PISTA - Acesso Limitado ao Posto</option>
+                                <option value="ADMIN" {% if usuario.nivel == 'ADMIN' or usuario.nivel == 'admin' or usuario.nivel == 'Administrador' %}selected{% endif %}>ADMIN - Acesso Total ao Sistema</option>
+                                <option value="GERENTE" {% if usuario.nivel == 'GERENTE' %}selected{% endif %}>GERENTE - Gestão de Múltiplos Postos</option>
+                                <option value="SUPERVISOR" {% if usuario.nivel == 'SUPERVISOR' %}selected{% endif %}>SUPERVISOR - Supervisão de Posto(s)</option>
+                                <option value="PISTA" {% if usuario.nivel == 'PISTA' %}selected{% endif %}>PISTA - Operação de Posto (Limitado)</option>
                             </select>
+                            <small class="form-text text-muted">
+                                <strong>ADMIN:</strong> Todas as permissões |
+                                <strong>GERENTE:</strong> Gestão sem restrição |
+                                <strong>SUPERVISOR:</strong> Supervisão sem limite de tempo |
+                                <strong>PISTA:</strong> Operação com limite 15 min
+                            </small>
                         </div>
 
-                        <div class="mb-3" id="cliente_field" style="display:{% if usuario.nivel == 'PISTA' %}block{% else %}none{% endif %};">
-                            <label for="cliente_id" class="form-label">Posto/Cliente Associado *</label>
+                        <div class="mb-3" id="cliente_field" style="display:{% if usuario.nivel == 'PISTA' or usuario.nivel == 'SUPERVISOR' or usuario.nivel == 'GERENTE' %}block{% else %}none{% endif %};">
+                            <label for="cliente_id" class="form-label">Posto/Cliente Associado</label>
                             <select class="form-select" id="cliente_id" name="cliente_id">
                                 <option value="">Selecione o posto...</option>
                                 {% for cliente in clientes %}
@@ -94,9 +102,14 @@ function toggleClienteField() {
     var clienteField = document.getElementById('cliente_field');
     var clienteSelect = document.getElementById('cliente_id');
     
-    if (nivel === 'PISTA') {
+    // SUPERVISOR e PISTA precisam de posto associado
+    // GERENTE é opcional (pode ter ou não)
+    if (nivel === 'PISTA' || nivel === 'SUPERVISOR') {
         clienteField.style.display = 'block';
         clienteSelect.required = true;
+    } else if (nivel === 'GERENTE') {
+        clienteField.style.display = 'block';
+        clienteSelect.required = false;  // Opcional para gerente
     } else {
         clienteField.style.display = 'none';
         clienteSelect.required = false;
