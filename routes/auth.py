@@ -102,6 +102,13 @@ def login():
         if user:
             login_user(user)
             flash('Autenticado com sucesso.', 'success')
+            
+            # Redirecionar usuários PISTA diretamente para sua página
+            nivel = getattr(user, 'nivel', '').strip().upper()
+            if nivel in ['PISTA', 'SUPERVISOR']:
+                # Usuários PISTA e SUPERVISOR vão direto para o Troco Pix Pista
+                return redirect(url_for('troco_pix.pista'))
+            
             next_url = request.args.get('next') or url_for('index')
             return redirect(next_url)
         else:

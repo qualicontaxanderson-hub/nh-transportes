@@ -1,4 +1,5 @@
 from flask import Blueprint, render_template, current_app, url_for, jsonify, request, redirect
+from flask_login import login_required, current_user
 from utils.db import get_db_connection
 
 bp = Blueprint('bases', __name__)
@@ -18,7 +19,14 @@ def safe_url(endpoint, **values):
 
 
 @bp.route('/', methods=['GET'])
+@login_required
 def index():
+    # Redirecionar usuários PISTA para sua página específica
+    if current_user.is_authenticated:
+        nivel = getattr(current_user, 'nivel', '').strip().upper()
+        if nivel in ['PISTA', 'SUPERVISOR']:
+            return redirect(url_for('troco_pix.pista'))
+    
     # coletar métricas simples do banco (fallback para 0 em caso de erro)
     totals = {
         'total_clientes': 0,
