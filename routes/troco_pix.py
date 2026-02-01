@@ -590,7 +590,7 @@ def excluir(troco_pix_id):
         is_admin = (current_user.nivel == 'ADMIN')
         if not is_admin:
             flash('Apenas administradores podem excluir transações.', 'danger')
-            return redirect(url_for('troco_pix.visualizar', troco_pix_id=troco_pix_id))
+            return redirect(url_for('troco_pix.listar'))
         
         conn = get_db_connection()
         cursor = conn.cursor()
@@ -621,7 +621,7 @@ def excluir(troco_pix_id):
         
     except Exception as e:
         flash(f'Erro ao excluir TROCO PIX: {str(e)}', 'danger')
-        return redirect(url_for('troco_pix.visualizar', troco_pix_id=troco_pix_id))
+        return redirect(url_for('troco_pix.listar'))
 
 # ==================== ROTAS DE GESTÃO DE CLIENTES PIX ====================
 
