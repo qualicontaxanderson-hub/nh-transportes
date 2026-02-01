@@ -1,0 +1,74 @@
+{% extends 'base.html' %}
+
+{% block title %}Alterar Senha - NH Transportes{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row mb-4">
+        <div class="col-12">
+            <h2><i class="bi bi-key"></i> Alterar Minha Senha</h2>
+            <p class="text-muted">Atualize sua senha de acesso</p>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-lg-6 col-md-8">
+            <div class="card shadow-sm">
+                <div class="card-header bg-warning">
+                    <h5 class="mb-0">Alterar Senha</h5>
+                </div>
+                <div class="card-body">
+                    <form method="POST">
+                        <div class="mb-3">
+                            <label for="senha_atual" class="form-label">Senha Atual *</label>
+                            <input type="password" class="form-control" id="senha_atual" name="senha_atual" required
+                                   placeholder="Digite sua senha atual">
+                        </div>
+
+                        <hr>
+
+                        <div class="mb-3">
+                            <label for="nova_senha" class="form-label">Nova Senha *</label>
+                            <input type="password" class="form-control" id="nova_senha" name="nova_senha" required
+                                   minlength="4" placeholder="Mínimo 4 caracteres">
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="confirmar_senha" class="form-label">Confirmar Nova Senha *</label>
+                            <input type="password" class="form-control" id="confirmar_senha" name="confirmar_senha" required
+                                   minlength="4" placeholder="Digite a nova senha novamente">
+                        </div>
+
+                        <div class="alert alert-info">
+                            <i class="bi bi-info-circle"></i> Sua senha deve ter no mínimo 4 caracteres.
+                        </div>
+
+                        <div class="d-grid gap-2 d-md-flex justify-content-md-end mt-4">
+                            <a href="{{ url_for('auth.perfil') }}" class="btn btn-secondary">
+                                <i class="bi bi-x-circle"></i> Cancelar
+                            </a>
+                            <button type="submit" class="btn btn-warning">
+                                <i class="bi bi-check-circle"></i> Alterar Senha
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// Validar senhas antes de enviar
+document.querySelector('form').addEventListener('submit', function(e) {
+    var novaSenha = document.getElementById('nova_senha').value;
+    var confirmar = document.getElementById('confirmar_senha').value;
+    
+    if (novaSenha !== confirmar) {
+        e.preventDefault();
+        alert('As novas senhas não coincidem!');
+        return false;
+    }
+});
+</script>
+{% endblock %}

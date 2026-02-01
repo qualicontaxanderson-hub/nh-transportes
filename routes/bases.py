@@ -82,11 +82,12 @@ def index():
         'motoristas_lista_url': safe_url('motoristas.lista'),
         'fretes_lista_url': safe_url('fretes.lista'),
         'pedidos_index_url': safe_url('pedidos.index') or safe_url('pedidos.lista') or '#',
-        'alterar_senha_url': safe_url('alterar_senha'),
-        'logout_url': safe_url('logout'),
-        'listar_usuarios_url': safe_url('listar_usuarios'),
-        'cadastro_url': safe_url('cadastro'),
+        'alterar_senha_url': safe_url('auth.alterar_senha'),
+        'logout_url': safe_url('auth.logout'),
+        'listar_usuarios_url': safe_url('auth.listar_usuarios'),
+        'cadastro_url': safe_url('auth.criar_usuario'),
         'relatorios_index_url': safe_url('relatorios.index'),
+        'perfil_url': safe_url('auth.perfil'),
     }
 
     context = {}

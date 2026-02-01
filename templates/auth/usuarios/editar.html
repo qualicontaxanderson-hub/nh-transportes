@@ -1,0 +1,120 @@
+{% extends 'base.html' %}
+
+{% block title %}Editar Usuário - NH Transportes{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row mb-4">
+        <div class="col-12">
+            <h2><i class="bi bi-pencil"></i> Editar Usuário</h2>
+            <p class="text-muted">Atualize os dados do usuário <strong>{{ usuario.username }}</strong></p>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-lg-8 col-md-10">
+            <div class="card shadow-sm">
+                <div class="card-header bg-warning">
+                    <h5 class="mb-0">Dados do Usuário</h5>
+                </div>
+                <div class="card-body">
+                    <form method="POST">
+                        <div class="mb-3">
+                            <label for="username" class="form-label">Username *</label>
+                            <input type="text" class="form-control" id="username" name="username" required
+                                   value="{{ usuario.username }}" placeholder="Ex: joao.silva">
+                            <small class="form-text text-muted">Nome de usuário para login (único)</small>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="nome_completo" class="form-label">Nome Completo *</label>
+                            <input type="text" class="form-control" id="nome_completo" name="nome_completo" required
+                                   value="{{ usuario.nome_completo }}" placeholder="Ex: João Silva">
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="nivel" class="form-label">Nível de Acesso *</label>
+                            <select class="form-select" id="nivel" name="nivel" required onchange="toggleClienteField()">
+                                <option value="">Selecione...</option>
+                                <option value="ADMIN" {% if usuario.nivel == 'ADMIN' %}selected{% endif %}>ADMIN - Acesso Total</option>
+                                <option value="PISTA" {% if usuario.nivel == 'PISTA' %}selected{% endif %}>PISTA - Acesso Limitado ao Posto</option>
+                            </select>
+                        </div>
+
+                        <div class="mb-3" id="cliente_field" style="display:{% if usuario.nivel == 'PISTA' %}block{% else %}none{% endif %};">
+                            <label for="cliente_id" class="form-label">Posto/Cliente Associado *</label>
+                            <select class="form-select" id="cliente_id" name="cliente_id">
+                                <option value="">Selecione o posto...</option>
+                                {% for cliente in clientes %}
+                                <option value="{{ cliente.id }}" 
+                                        {% if usuario.cliente_id == cliente.id %}selected{% endif %}>
+                                    {{ cliente.razao_social }}
+                                </option>
+                                {% endfor %}
+                            </select>
+                            <small class="form-text text-muted">Usuários PISTA só veem dados do posto associado</small>
+                        </div>
+
+                        <hr>
+
+                        <div class="alert alert-info">
+                            <i class="bi bi-info-circle"></i> Deixe os campos de senha em branco se não quiser alterá-la.
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="senha" class="form-label">Nova Senha (opcional)</label>
+                            <input type="password" class="form-control" id="senha" name="senha"
+                                   minlength="4" placeholder="Deixe em branco para manter a atual">
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="confirmar_senha" class="form-label">Confirmar Nova Senha</label>
+                            <input type="password" class="form-control" id="confirmar_senha" name="confirmar_senha"
+                                   minlength="4" placeholder="Digite a senha novamente">
+                        </div>
+
+                        <div class="d-grid gap-2 d-md-flex justify-content-md-end mt-4">
+                            <a href="{{ url_for('auth.listar_usuarios') }}" class="btn btn-secondary">
+                                <i class="bi bi-x-circle"></i> Cancelar
+                            </a>
+                            <button type="submit" class="btn btn-warning">
+                                <i class="bi bi-check-circle"></i> Atualizar Usuário
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function toggleClienteField() {
+    var nivel = document.getElementById('nivel').value;
+    var clienteField = document.getElementById('cliente_field');
+    var clienteSelect = document.getElementById('cliente_id');
+    
+    if (nivel === 'PISTA') {
+        clienteField.style.display = 'block';
+        clienteSelect.required = true;
+    } else {
+        clienteField.style.display = 'none';
+        clienteSelect.required = false;
+        clienteSelect.value = '';
+    }
+}
+
+// Validar senhas antes de enviar
+document.querySelector('form').addEventListener('submit', function(e) {
+    var senha = document.getElementById('senha').value;
+    var confirmar = document.getElementById('confirmar_senha').value;
+    
+    // Se forneceu senha, validar
+    if (senha && senha !== confirmar) {
+        e.preventDefault();
+        alert('As senhas não coincidem!');
+        return false;
+    }
+});
+</script>
+{% endblock %}

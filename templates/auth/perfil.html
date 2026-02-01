@@ -1,0 +1,72 @@
+{% extends 'base.html' %}
+
+{% block title %}Meu Perfil - NH Transportes{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row mb-4">
+        <div class="col-12">
+            <h2><i class="bi bi-person-circle"></i> Meu Perfil</h2>
+            <p class="text-muted">Informações da sua conta</p>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-lg-6 col-md-8">
+            <div class="card shadow-sm">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="mb-0">Dados Pessoais</h5>
+                </div>
+                <div class="card-body">
+                    <dl class="row">
+                        <dt class="col-sm-4">Username:</dt>
+                        <dd class="col-sm-8"><strong>{{ usuario.username }}</strong></dd>
+
+                        <dt class="col-sm-4">Nome Completo:</dt>
+                        <dd class="col-sm-8">{{ usuario.nome_completo }}</dd>
+
+                        <dt class="col-sm-4">Nível de Acesso:</dt>
+                        <dd class="col-sm-8">
+                            {% if usuario.nivel == 'ADMIN' %}
+                                <span class="badge bg-danger">ADMIN - Administrador</span>
+                            {% else %}
+                                <span class="badge bg-info">{{ usuario.nivel }}</span>
+                            {% endif %}
+                        </dd>
+
+                        {% if usuario.cliente_nome %}
+                        <dt class="col-sm-4">Posto Associado:</dt>
+                        <dd class="col-sm-8">{{ usuario.cliente_nome }}</dd>
+                        {% endif %}
+
+                        <dt class="col-sm-4">Status:</dt>
+                        <dd class="col-sm-8">
+                            {% if usuario.ativo %}
+                                <span class="badge bg-success">Ativo</span>
+                            {% else %}
+                                <span class="badge bg-secondary">Inativo</span>
+                            {% endif %}
+                        </dd>
+                    </dl>
+                </div>
+            </div>
+
+            <div class="card shadow-sm mt-4">
+                <div class="card-header bg-secondary text-white">
+                    <h5 class="mb-0">Ações</h5>
+                </div>
+                <div class="card-body">
+                    <div class="d-grid gap-2">
+                        <a href="{{ url_for('auth.alterar_senha') }}" class="btn btn-warning">
+                            <i class="bi bi-key"></i> Alterar Minha Senha
+                        </a>
+                        <a href="{{ url_for('index') }}" class="btn btn-outline-secondary">
+                            <i class="bi bi-arrow-left"></i> Voltar ao Dashboard
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
