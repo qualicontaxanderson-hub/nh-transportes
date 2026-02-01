@@ -41,6 +41,7 @@
                             <select class="form-control" id="tipo_chave_pix" name="tipo_chave_pix" required>
                                 <option value="">Selecione...</option>
                                 <option value="CPF" {% if edit_mode and cliente.tipo_chave_pix == 'CPF' %}selected{% endif %}>CPF</option>
+                                <option value="CNPJ" {% if edit_mode and cliente.tipo_chave_pix == 'CNPJ' %}selected{% endif %}>CNPJ</option>
                                 <option value="EMAIL" {% if edit_mode and cliente.tipo_chave_pix == 'EMAIL' %}selected{% endif %}>E-mail</option>
                                 <option value="TELEFONE" {% if edit_mode and cliente.tipo_chave_pix == 'TELEFONE' %}selected{% endif %}>Telefone</option>
                                 <option value="CHAVE_ALEATORIA" {% if edit_mode and cliente.tipo_chave_pix == 'CHAVE_ALEATORIA' %}selected{% endif %}>Chave Aleatória</option>
@@ -89,6 +90,7 @@
                 <div class="card-body">
                     <ul>
                         <li><strong>CPF:</strong> Deve conter apenas números (11 dígitos). Ex: 12345678901</li>
+                        <li><strong>CNPJ:</strong> Deve conter apenas números (14 dígitos). Ex: 12345678000123</li>
                         <li><strong>E-mail:</strong> Endereço de e-mail válido. Ex: usuario@exemplo.com</li>
                         <li><strong>Telefone:</strong> Número com DDD (11 dígitos). Ex: 62999887766</li>
                         <li><strong>Chave Aleatória:</strong> Código gerado pelo banco. Ex: 123e4567-e89b-12d3-a456-426614174000</li>
@@ -114,6 +116,10 @@ document.addEventListener('DOMContentLoaded', function() {
                 chaveInput.placeholder = 'Ex: 12345678901';
                 chaveHint.textContent = 'Digite apenas números (11 dígitos)';
                 break;
+            case 'CNPJ':
+                chaveInput.placeholder = 'Ex: 12345678000123';
+                chaveHint.textContent = 'Digite apenas números (14 dígitos)';
+                break;
             case 'EMAIL':
                 chaveInput.placeholder = 'Ex: usuario@exemplo.com';
                 chaveHint.textContent = 'Digite um e-mail válido';
@@ -132,9 +138,9 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
 
-    // Validação básica de CPF (apenas números)
+    // Validação básica de CPF e CNPJ (apenas números)
     chaveInput.addEventListener('input', function() {
-        if (tipoChaveSelect.value === 'CPF' || tipoChaveSelect.value === 'TELEFONE') {
+        if (tipoChaveSelect.value === 'CPF' || tipoChaveSelect.value === 'CNPJ' || tipoChaveSelect.value === 'TELEFONE') {
             // Remove tudo que não é número
             this.value = this.value.replace(/\D/g, '');
         }
