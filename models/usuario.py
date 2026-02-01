@@ -130,18 +130,34 @@ class Usuario(UserMixin):
     @staticmethod
     def get_by_id_completo(user_id):
         """Busca usuário com informações completas incluindo cliente"""
-        conn = get_db_connection()
-        cursor = conn.cursor(dictionary=True)
-        cursor.execute("""
-            SELECT u.*, c.razao_social as cliente_nome
-            FROM usuarios u
-            LEFT JOIN clientes c ON u.cliente_id = c.id
-            WHERE u.id = %s
-        """, (user_id,))
-        user_data = cursor.fetchone()
-        cursor.close()
-        conn.close()
-        return user_data
+        try:
+            conn = get_db_connection()
+            cursor = conn.cursor(dictionary=True)
+            
+            # Tentar query com cliente_id primeiro
+            try:
+                cursor.execute("""
+                    SELECT u.*, c.razao_social as cliente_nome
+                    FROM usuarios u
+                    LEFT JOIN clientes c ON u.cliente_id = c.id
+                    WHERE u.id = %s
+                """, (user_id,))
+            except Exception as e:
+                # Se falhar (campo cliente_id não existe), tentar sem ele
+                logger.warning(f"Campo cliente_id não existe, buscando sem ele: {str(e)}")
+                cursor.execute("""
+                    SELECT u.*, NULL as cliente_nome
+                    FROM usuarios u
+                    WHERE u.id = %s
+                """, (user_id,))
+            
+            user_data = cursor.fetchone()
+            cursor.close()
+            conn.close()
+            return user_data
+        except Exception as e:
+            logger.error(f"Erro ao buscar usuário completo {user_id}: {str(e)}")
+            return None
 
     def atualizar(self, username=None, nome_completo=None, nivel=None, cliente_id=None):
         """Atualiza os dados do usuário"""

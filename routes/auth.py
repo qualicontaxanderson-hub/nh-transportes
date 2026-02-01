@@ -142,9 +142,14 @@ def criar_usuario():
 @admin_required
 def editar_usuario(user_id):
     """Edita um usuário existente"""
-    user_data = Usuario.get_by_id_completo(user_id)
-    if not user_data:
-        flash('Usuário não encontrado.', 'danger')
+    try:
+        user_data = Usuario.get_by_id_completo(user_id)
+        if not user_data:
+            flash('Usuário não encontrado.', 'danger')
+            return redirect(url_for('auth.listar_usuarios'))
+    except Exception as e:
+        logger.error(f"Erro ao buscar usuário para edição {user_id}: {str(e)}")
+        flash(f'Erro ao carregar dados do usuário: {str(e)}', 'danger')
         return redirect(url_for('auth.listar_usuarios'))
     
     if request.method == 'POST':
@@ -182,15 +187,20 @@ def editar_usuario(user_id):
                     flash(f'Usuário {username} atualizado com sucesso!', 'success')
                     return redirect(url_for('auth.listar_usuarios'))
             except Exception as e:
+                logger.error(f"Erro ao atualizar usuário {user_id}: {str(e)}")
                 flash(f'Erro ao atualizar usuário: {str(e)}', 'danger')
     
     # Buscar lista de clientes para o dropdown
-    conn = get_db_connection()
-    cursor = conn.cursor(dictionary=True)
-    cursor.execute("SELECT id, razao_social FROM clientes WHERE ativo = 1 ORDER BY razao_social")
-    clientes = cursor.fetchall()
-    cursor.close()
-    conn.close()
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute("SELECT id, razao_social FROM clientes WHERE ativo = 1 ORDER BY razao_social")
+        clientes = cursor.fetchall()
+        cursor.close()
+        conn.close()
+    except Exception as e:
+        logger.error(f"Erro ao buscar clientes: {str(e)}")
+        clientes = []
     
     return render_template('auth/usuarios/editar.html', usuario=user_data, clientes=clientes)
 
