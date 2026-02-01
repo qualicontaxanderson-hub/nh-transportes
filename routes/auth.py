@@ -13,7 +13,14 @@ def admin_required(f):
     @wraps(f)
     @login_required
     def decorated_function(*args, **kwargs):
-        if current_user.nivel != 'ADMIN':
+        # Verificar se o atributo nivel existe
+        if not hasattr(current_user, 'nivel'):
+            flash('Você não tem permissão para acessar esta página.', 'danger')
+            return redirect(url_for('index'))
+        
+        # Aceitar tanto "ADMIN" quanto "Administrador" (compatibilidade)
+        nivel = getattr(current_user, 'nivel', '')
+        if nivel not in ['ADMIN', 'Administrador']:
             flash('Você não tem permissão para acessar esta página.', 'danger')
             return redirect(url_for('index'))
         return f(*args, **kwargs)
