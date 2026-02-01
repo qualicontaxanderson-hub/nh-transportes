@@ -176,7 +176,7 @@ def criar_usuario():
     # Buscar lista de clientes para o dropdown
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
-    cursor.execute("SELECT id, razao_social FROM clientes WHERE ativo = 1 ORDER BY razao_social")
+    cursor.execute("SELECT id, razao_social FROM clientes ORDER BY razao_social")
     clientes = cursor.fetchall()
     cursor.close()
     conn.close()
@@ -252,7 +252,7 @@ def editar_usuario(user_id):
             logger.info("[EDITAR] Buscando lista de clientes...")
             conn = get_db_connection()
             cursor = conn.cursor(dictionary=True)
-            cursor.execute("SELECT id, razao_social FROM clientes WHERE ativo = 1 ORDER BY razao_social")
+            cursor.execute("SELECT id, razao_social FROM clientes ORDER BY razao_social")
             clientes = cursor.fetchall()
             cursor.close()
             conn.close()
