@@ -142,77 +142,87 @@ def criar_usuario():
 @admin_required
 def editar_usuario(user_id):
     """Edita um usuário existente"""
+    # WRAPPER GLOBAL - Captura QUALQUER erro na função
     try:
-        logger.info(f"Iniciando edição do usuário {user_id}")
-        user_data = Usuario.get_by_id_completo(user_id)
-        logger.info(f"Dados do usuário carregados: {user_data is not None}")
+        logger.info(f"[EDITAR] Iniciando edição do usuário {user_id}")
         
-        if not user_data:
-            flash('Usuário não encontrado.', 'danger')
+        # Buscar dados do usuário
+        try:
+            user_data = Usuario.get_by_id_completo(user_id)
+            logger.info(f"[EDITAR] Dados do usuário carregados: {user_data is not None}")
+            
+            if not user_data:
+                flash('Usuário não encontrado.', 'danger')
+                return redirect(url_for('auth.listar_usuarios'))
+        except Exception as e:
+            logger.error(f"[EDITAR] Erro ao buscar usuário {user_id}: {str(e)}", exc_info=True)
+            flash(f'Erro ao carregar dados do usuário: {str(e)}', 'danger')
             return redirect(url_for('auth.listar_usuarios'))
-    except Exception as e:
-        logger.error(f"Erro ao buscar usuário para edição {user_id}: {str(e)}", exc_info=True)
-        flash(f'Erro ao carregar dados do usuário: {str(e)}', 'danger')
-        return redirect(url_for('auth.listar_usuarios'))
-    
-    if request.method == 'POST':
-        username = request.form.get('username', '').strip()
-        nome_completo = request.form.get('nome_completo', '').strip()
-        nivel = request.form.get('nivel', 'PISTA')
-        cliente_id = request.form.get('cliente_id')
-        senha = request.form.get('senha')
-        confirmar_senha = request.form.get('confirmar_senha')
         
-        # Validações
-        if not username or not nome_completo:
-            flash('Usuário e nome completo são obrigatórios.', 'danger')
-        elif Usuario.username_existe(username, excluir_id=user_id):
-            flash('Este nome de usuário já existe.', 'danger')
-        elif nivel == 'PISTA' and not cliente_id:
-            flash('Usuários PISTA devem ter um posto/cliente associado.', 'danger')
-        elif senha and senha != confirmar_senha:
-            flash('As senhas não coincidem.', 'danger')
-        else:
-            try:
-                # Se não é PISTA, cliente_id deve ser None
-                if nivel != 'PISTA':
-                    cliente_id = None
-                
-                user = Usuario.get_by_id(user_id)
-                if user:
-                    user.atualizar(username=username, nome_completo=nome_completo, 
-                                 nivel=nivel, cliente_id=cliente_id)
+        if request.method == 'POST':
+            username = request.form.get('username', '').strip()
+            nome_completo = request.form.get('nome_completo', '').strip()
+            nivel = request.form.get('nivel', 'PISTA')
+            cliente_id = request.form.get('cliente_id')
+            senha = request.form.get('senha')
+            confirmar_senha = request.form.get('confirmar_senha')
+            
+            # Validações
+            if not username or not nome_completo:
+                flash('Usuário e nome completo são obrigatórios.', 'danger')
+            elif Usuario.username_existe(username, excluir_id=user_id):
+                flash('Este nome de usuário já existe.', 'danger')
+            elif nivel == 'PISTA' and not cliente_id:
+                flash('Usuários PISTA devem ter um posto/cliente associado.', 'danger')
+            elif senha and senha != confirmar_senha:
+                flash('As senhas não coincidem.', 'danger')
+            else:
+                try:
+                    # Se não é PISTA, cliente_id deve ser None
+                    if nivel != 'PISTA':
+                        cliente_id = None
                     
-                    # Se forneceu senha, atualiza
-                    if senha:
-                        user.alterar_senha(senha)
-                    
-                    flash(f'Usuário {username} atualizado com sucesso!', 'success')
-                    return redirect(url_for('auth.listar_usuarios'))
-            except Exception as e:
-                logger.error(f"Erro ao atualizar usuário {user_id}: {str(e)}")
-                flash(f'Erro ao atualizar usuário: {str(e)}', 'danger')
+                    user = Usuario.get_by_id(user_id)
+                    if user:
+                        user.atualizar(username=username, nome_completo=nome_completo, 
+                                     nivel=nivel, cliente_id=cliente_id)
+                        
+                        # Se forneceu senha, atualiza
+                        if senha:
+                            user.alterar_senha(senha)
+                        
+                        flash(f'Usuário {username} atualizado com sucesso!', 'success')
+                        return redirect(url_for('auth.listar_usuarios'))
+                except Exception as e:
+                    logger.error(f"[EDITAR] Erro ao atualizar usuário {user_id}: {str(e)}")
+                    flash(f'Erro ao atualizar usuário: {str(e)}', 'danger')
+        
+        # Buscar lista de clientes para o dropdown
+        try:
+            logger.info("[EDITAR] Buscando lista de clientes...")
+            conn = get_db_connection()
+            cursor = conn.cursor(dictionary=True)
+            cursor.execute("SELECT id, razao_social FROM clientes WHERE ativo = 1 ORDER BY razao_social")
+            clientes = cursor.fetchall()
+            cursor.close()
+            conn.close()
+            logger.info(f"[EDITAR] Clientes carregados: {len(clientes)}")
+        except Exception as e:
+            logger.error(f"[EDITAR] Erro ao buscar clientes: {str(e)}", exc_info=True)
+            clientes = []
+        
+        try:
+            logger.info("[EDITAR] Renderizando template de edição...")
+            return render_template('auth/usuarios/editar.html', usuario=user_data, clientes=clientes)
+        except Exception as e:
+            logger.error(f"[EDITAR] Erro ao renderizar template: {str(e)}", exc_info=True)
+            flash(f'Erro ao carregar página de edição: {str(e)}', 'danger')
+            return redirect(url_for('auth.listar_usuarios'))
     
-    # Buscar lista de clientes para o dropdown
-    try:
-        logger.info("Buscando lista de clientes...")
-        conn = get_db_connection()
-        cursor = conn.cursor(dictionary=True)
-        cursor.execute("SELECT id, razao_social FROM clientes WHERE ativo = 1 ORDER BY razao_social")
-        clientes = cursor.fetchall()
-        cursor.close()
-        conn.close()
-        logger.info(f"Clientes carregados: {len(clientes)}")
     except Exception as e:
-        logger.error(f"Erro ao buscar clientes: {str(e)}", exc_info=True)
-        clientes = []
-    
-    try:
-        logger.info("Renderizando template de edição...")
-        return render_template('auth/usuarios/editar.html', usuario=user_data, clientes=clientes)
-    except Exception as e:
-        logger.error(f"Erro ao renderizar template: {str(e)}", exc_info=True)
-        flash(f'Erro ao carregar página de edição: {str(e)}', 'danger')
+        # WRAPPER GLOBAL - Captura QUALQUER erro não tratado
+        logger.error(f"[EDITAR] ERRO FATAL na função editar_usuario: {str(e)}", exc_info=True)
+        flash(f'Erro fatal ao editar usuário: {str(e)}', 'danger')
         return redirect(url_for('auth.listar_usuarios'))
 
 @bp.route('/usuarios/<int:user_id>/desativar', methods=['POST'])
