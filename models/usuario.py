@@ -1,6 +1,9 @@
 from flask_login import UserMixin
 from utils.db import get_db_connection
 from werkzeug.security import check_password_hash, generate_password_hash
+import logging
+
+logger = logging.getLogger(__name__)
 
 class Usuario(UserMixin):
     def __init__(self, id, username, nome_completo, nivel, ativo=True, senha_hash=None):
@@ -131,6 +134,7 @@ class Usuario(UserMixin):
     def get_by_id_completo(user_id):
         """Busca usuário com informações completas incluindo cliente"""
         try:
+            logger.info(f"Buscando usuário completo ID: {user_id}")
             conn = get_db_connection()
             cursor = conn.cursor(dictionary=True)
             
@@ -142,6 +146,7 @@ class Usuario(UserMixin):
                     LEFT JOIN clientes c ON u.cliente_id = c.id
                     WHERE u.id = %s
                 """, (user_id,))
+                logger.info("Query com cliente_id executada com sucesso")
             except Exception as e:
                 # Se falhar (campo cliente_id não existe), tentar sem ele
                 logger.warning(f"Campo cliente_id não existe, buscando sem ele: {str(e)}")
@@ -154,9 +159,15 @@ class Usuario(UserMixin):
             user_data = cursor.fetchone()
             cursor.close()
             conn.close()
+            
+            if user_data:
+                logger.info(f"Usuário encontrado: {user_data.get('username', 'N/A')}")
+            else:
+                logger.warning(f"Usuário {user_id} não encontrado")
+            
             return user_data
         except Exception as e:
-            logger.error(f"Erro ao buscar usuário completo {user_id}: {str(e)}")
+            logger.error(f"Erro ao buscar usuário completo {user_id}: {str(e)}", exc_info=True)
             return None
 
     def atualizar(self, username=None, nome_completo=None, nivel=None, cliente_id=None):
@@ -183,7 +194,8 @@ class Usuario(UserMixin):
             params.append(nivel)
             self.nivel = nivel
         
-        if cliente_id is not None or cliente_id == '':
+        # Atualizar cliente_id (pode ser None para remover associação)
+        if cliente_id is not None:
             updates.append("cliente_id = %s")
             params.append(cliente_id if cliente_id else None)
         

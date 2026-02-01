@@ -143,12 +143,15 @@ def criar_usuario():
 def editar_usuario(user_id):
     """Edita um usuário existente"""
     try:
+        logger.info(f"Iniciando edição do usuário {user_id}")
         user_data = Usuario.get_by_id_completo(user_id)
+        logger.info(f"Dados do usuário carregados: {user_data is not None}")
+        
         if not user_data:
             flash('Usuário não encontrado.', 'danger')
             return redirect(url_for('auth.listar_usuarios'))
     except Exception as e:
-        logger.error(f"Erro ao buscar usuário para edição {user_id}: {str(e)}")
+        logger.error(f"Erro ao buscar usuário para edição {user_id}: {str(e)}", exc_info=True)
         flash(f'Erro ao carregar dados do usuário: {str(e)}', 'danger')
         return redirect(url_for('auth.listar_usuarios'))
     
@@ -192,17 +195,25 @@ def editar_usuario(user_id):
     
     # Buscar lista de clientes para o dropdown
     try:
+        logger.info("Buscando lista de clientes...")
         conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)
         cursor.execute("SELECT id, razao_social FROM clientes WHERE ativo = 1 ORDER BY razao_social")
         clientes = cursor.fetchall()
         cursor.close()
         conn.close()
+        logger.info(f"Clientes carregados: {len(clientes)}")
     except Exception as e:
-        logger.error(f"Erro ao buscar clientes: {str(e)}")
+        logger.error(f"Erro ao buscar clientes: {str(e)}", exc_info=True)
         clientes = []
     
-    return render_template('auth/usuarios/editar.html', usuario=user_data, clientes=clientes)
+    try:
+        logger.info("Renderizando template de edição...")
+        return render_template('auth/usuarios/editar.html', usuario=user_data, clientes=clientes)
+    except Exception as e:
+        logger.error(f"Erro ao renderizar template: {str(e)}", exc_info=True)
+        flash(f'Erro ao carregar página de edição: {str(e)}', 'danger')
+        return redirect(url_for('auth.listar_usuarios'))
 
 @bp.route('/usuarios/<int:user_id>/desativar', methods=['POST'])
 @admin_required
