@@ -13,16 +13,30 @@ def admin_required(f):
     @wraps(f)
     @login_required
     def decorated_function(*args, **kwargs):
+        import logging
+        logger = logging.getLogger(__name__)
+        
         # Verificar se o atributo nivel existe
         if not hasattr(current_user, 'nivel'):
+            logger.error(f"Usuário {current_user.username if hasattr(current_user, 'username') else 'desconhecido'} não tem atributo 'nivel'")
             flash('Você não tem permissão para acessar esta página.', 'danger')
             return redirect(url_for('index'))
         
         # Aceitar tanto "ADMIN" quanto "Administrador" (compatibilidade)
         nivel = getattr(current_user, 'nivel', '')
-        if nivel not in ['ADMIN', 'Administrador']:
+        nivel_stripped = nivel.strip() if isinstance(nivel, str) else str(nivel)
+        
+        # Log detalhado para debug
+        logger.info(f"Verificação admin_required: usuário={getattr(current_user, 'username', 'N/A')}, nivel='{nivel}', tipo={type(nivel)}, stripped='{nivel_stripped}'")
+        
+        # Aceitar variações comuns (case-insensitive e com trim)
+        niveis_aceitos = ['ADMIN', 'Administrador', 'admin', 'administrador']
+        if nivel_stripped not in niveis_aceitos:
+            logger.warning(f"Acesso negado para usuário {getattr(current_user, 'username', 'N/A')} com nivel='{nivel}' (stripped='{nivel_stripped}')")
             flash('Você não tem permissão para acessar esta página.', 'danger')
             return redirect(url_for('index'))
+        
+        logger.info(f"Acesso permitido para {getattr(current_user, 'username', 'N/A')}")
         return f(*args, **kwargs)
     return decorated_function
 
