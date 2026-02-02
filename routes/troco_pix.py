@@ -255,12 +255,26 @@ def novo():
             
             # Buscar nome do posto para usuários PISTA/SUPERVISOR
             cliente_nome = None
+            # Debug logging
+            print(f"[DEBUG TROCO PIX] Usuario: {current_user.username}")
+            print(f"[DEBUG TROCO PIX] Nivel: {getattr(current_user, 'nivel', 'NAO TEM ATRIBUTO')}")
+            print(f"[DEBUG TROCO PIX] cliente_id: {getattr(current_user, 'cliente_id', 'NAO TEM ATRIBUTO')}")
+            
             if hasattr(current_user, 'nivel') and current_user.nivel.upper() in ['PISTA', 'SUPERVISOR']:
+                print(f"[DEBUG TROCO PIX] Usuario eh PISTA/SUPERVISOR")
                 if hasattr(current_user, 'cliente_id') and current_user.cliente_id:
+                    print(f"[DEBUG TROCO PIX] Tem cliente_id: {current_user.cliente_id}")
                     cursor.execute("SELECT razao_social FROM clientes WHERE id = %s", (current_user.cliente_id,))
                     result = cursor.fetchone()
                     if result:
                         cliente_nome = result['razao_social']
+                        print(f"[DEBUG TROCO PIX] Nome do posto encontrado: {cliente_nome}")
+                    else:
+                        print(f"[DEBUG TROCO PIX] Posto nao encontrado para cliente_id: {current_user.cliente_id}")
+                else:
+                    print(f"[DEBUG TROCO PIX] NAO tem cliente_id ou eh None/vazio")
+            else:
+                print(f"[DEBUG TROCO PIX] Usuario NAO eh PISTA/SUPERVISOR")
             
             # Buscar clientes PIX ativos (com SEM PIX no topo)
             cursor.execute("""
