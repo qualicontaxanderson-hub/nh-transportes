@@ -14,6 +14,8 @@
     <!-- Main nav -->
     <div class="collapse navbar-collapse" id="mainNavbar">
       <ul class="navbar-nav me-auto mb-2 mb-lg-0" style="margin-left:8px;">
+        {% set nivel_usuario = current_user.nivel|upper if current_user.nivel else '' %}
+        {% if nivel_usuario not in ['PISTA', 'SUPERVISOR'] %}
         <!-- Cadastros (dropdown) -->
         <li class="nav-item dropdown">
           <a class="nav-link dropdown-toggle text-white" href="#" id="navCadastros" role="button" data-bs-toggle="dropdown" aria-expanded="false" style="font-weight:600;">
@@ -56,6 +58,7 @@
             <li><a class="dropdown-item" href="/lancamentos_receitas/"><i class="bi bi-cash-stack" style="color: #9c27b0;"></i> Receitas</a></li>
             <li><a class="dropdown-item" href="/lancamentos_caixa/"><i class="bi bi-calculator" style="color: #ff9800;"></i> Fechamento de Caixa</a></li>
             <li><a class="dropdown-item" href="/troco_pix/"><i class="bi bi-currency-exchange" style="color: #17a2b8;"></i> Troco PIX</a></li>
+            <li><a class="dropdown-item" href="/troco_pix/pista"><i class="bi bi-fuel-pump-fill" style="color: #20c997;"></i> Troco PIX Pista</a></li>
             <li><hr class="dropdown-divider"></li>
             <li><a class="dropdown-item" href="/lancamentos-funcionarios/"><i class="bi bi-calendar-check" style="color: #0d6efd;"></i> Lançamentos Funcionários</a></li>
             <li><a class="dropdown-item" href="/emprestimos/"><i class="bi bi-cash-coin" style="color: #fd7e14;"></i> Empréstimos</a></li>
@@ -88,6 +91,14 @@
             <li><a class="dropdown-item" href="/relatorios/fretes_produtos"><i class="bi bi-box-seam" style="color: #fd7e14;"></i> Produtos</a></li>
           </ul>
         </li>
+        {% else %}
+        <!-- Menu simplificado para PISTA/SUPERVISOR -->
+        <li class="nav-item">
+          <a class="nav-link text-white" href="/troco_pix/pista" style="font-weight:600;">
+            <i class="bi bi-fuel-pump-fill"></i> Troco PIX Pista
+          </a>
+        </li>
+        {% endif %}
       </ul>
 
       <!-- Right: user / actions -->
@@ -102,10 +113,10 @@
             <i class="bi bi-person-circle"></i> {{ current_user.username or current_user.name or 'Usuário' }}
           </a>
           <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="navUser">
-            <li><a class="dropdown-item" href="/auth/profile"><i class="bi bi-person"></i> Perfil</a></li>
-            <li><a class="dropdown-item" href="/auth/settings"><i class="bi bi-gear-fill"></i> Configurações</a></li>
+            <li><a class="dropdown-item" href="{{ url_for('auth.perfil') }}"><i class="bi bi-person"></i> Meu Perfil</a></li>
+            <li><a class="dropdown-item" href="{{ url_for('auth.alterar_senha') }}"><i class="bi bi-key"></i> Alterar Senha</a></li>
             <li><hr class="dropdown-divider"></li>
-            <li><a class="dropdown-item text-danger" href="/auth/logout"><i class="bi bi-box-arrow-right"></i> Sair</a></li>
+            <li><a class="dropdown-item text-danger" href="{{ url_for('auth.logout') }}"><i class="bi bi-box-arrow-right"></i> Sair</a></li>
           </ul>
         </li>
         {% else %}

@@ -7,5 +7,6 @@ gunicorn==21.2.0
 Flask-SQLAlchemy==3.0.5
 pymysql
 efipay
+pytz
 
 # Force rebuild 2026-01-29T16:02 - Ensure troco_pix blueprint loads

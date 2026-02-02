@@ -9,7 +9,11 @@
             <h2><i class="bi bi-eye"></i> Visualizar Solicitação de Troco PIX #{{ transacao.id }}</h2>
             <nav aria-label="breadcrumb">
                 <ol class="breadcrumb">
+                    {% if request.args.get('origem') == 'pista' %}
+                    <li class="breadcrumb-item"><a href="{{ url_for('troco_pix.pista') }}">Troco PIX Pista</a></li>
+                    {% else %}
                     <li class="breadcrumb-item"><a href="{{ url_for('troco_pix.listar') }}">Troco PIX</a></li>
+                    {% endif %}
                     <li class="breadcrumb-item active">Visualizar #{{ transacao.id }}</li>
                 </ol>
             </nav>
@@ -19,12 +23,21 @@
     <!-- Botões de ação -->
     <div class="row mb-3">
         <div class="col-md-12">
-            <a href="{{ url_for('troco_pix.editar', id=transacao.id) }}" class="btn btn-warning">
+            <button type="button" class="btn btn-success" id="btnCopyWhatsApp">
+                <i class="bi bi-whatsapp"></i> Copiar para WhatsApp
+            </button>
+            <a href="{{ url_for('troco_pix.editar', troco_pix_id=transacao.id, origem=request.args.get('origem')) }}" class="btn btn-warning">
                 <i class="bi bi-pencil"></i> Editar
             </a>
+            {% if request.args.get('origem') == 'pista' %}
+            <a href="{{ url_for('troco_pix.pista') }}" class="btn btn-secondary">
+                <i class="bi bi-arrow-left"></i> Voltar
+            </a>
+            {% else %}
             <a href="{{ url_for('troco_pix.listar') }}" class="btn btn-secondary">
                 <i class="bi bi-arrow-left"></i> Voltar
             </a>
+            {% endif %}
         </div>
     </div>
 
@@ -38,12 +51,16 @@
                 <div class="col-md-6">
                     <table class="table table-borderless">
                         <tr>
+                            <th width="40%">Número:</th>
+                            <td><strong>{{ transacao.numero_sequencial or '-' }}</strong></td>
+                        </tr>
+                        <tr>
                             <th width="40%">Data:</th>
                             <td>{{ transacao.data.strftime('%d/%m/%Y') if transacao.data else '-' }}</td>
                         </tr>
                         <tr>
                             <th>Posto/Cliente:</th>
-                            <td>{{ transacao.cliente_nome or '-' }}</td>
+                            <td>{{ transacao.posto_nome or '-' }}</td>
                         </tr>
                         <tr>
                             <th>Status:</th>
@@ -63,7 +80,7 @@
                     <table class="table table-borderless">
                         <tr>
                             <th width="40%">Frentista:</th>
-                            <td>{{ transacao.funcionario_nome or '-' }}</td>
+                            <td>{{ transacao.frentista_nome or '-' }}</td>
                         </tr>
                         <tr>
                             <th>Importado:</th>
@@ -104,19 +121,19 @@
                 <tbody>
                     <tr>
                         <td>Abastecimento</td>
-                        <td class="text-end">R$ {{ "%.2f"|format(transacao.venda_abastecimento or 0)|replace('.', ',') }}</td>
+                        <td class="text-end">{{ (transacao.venda_abastecimento or 0)|formatar_moeda }}</td>
                     </tr>
                     <tr>
                         <td>Arla</td>
-                        <td class="text-end">R$ {{ "%.2f"|format(transacao.venda_arla or 0)|replace('.', ',') }}</td>
+                        <td class="text-end">{{ (transacao.venda_arla or 0)|formatar_moeda }}</td>
                     </tr>
                     <tr>
                         <td>Produtos</td>
-                        <td class="text-end">R$ {{ "%.2f"|format(transacao.venda_produtos or 0)|replace('.', ',') }}</td>
+                        <td class="text-end">{{ (transacao.venda_produtos or 0)|formatar_moeda }}</td>
                     </tr>
                     <tr class="table-success">
                         <th>TOTAL</th>
-                        <th class="text-end">R$ {{ "%.2f"|format(transacao.venda_total or 0)|replace('.', ',') }}</th>
+                        <th class="text-end">{{ (transacao.venda_total or 0)|formatar_moeda }}</th>
                     </tr>
                 </tbody>
             </table>
@@ -151,7 +168,7 @@
                 <tr>
                     <th>Valor do Cheque:</th>
                     <td class="text-end" style="font-size: 1.2em; font-weight: bold;">
-                        R$ {{ "%.2f"|format(transacao.cheque_valor or 0)|replace('.', ',') }}
+                        {{ (transacao.cheque_valor or 0)|formatar_moeda }}
                     </td>
                 </tr>
             </table>
@@ -174,19 +191,19 @@
                 <tbody>
                     <tr>
                         <td>Troco em Espécie</td>
-                        <td class="text-end">R$ {{ "%.2f"|format(transacao.troco_especie or 0)|replace('.', ',') }}</td>
+                        <td class="text-end">{{ (transacao.troco_especie or 0)|formatar_moeda }}</td>
                     </tr>
                     <tr>
                         <td>Troco PIX</td>
-                        <td class="text-end">R$ {{ "%.2f"|format(transacao.troco_pix or 0)|replace('.', ',') }}</td>
+                        <td class="text-end">{{ (transacao.troco_pix or 0)|formatar_moeda }}</td>
                     </tr>
                     <tr>
                         <td>Crédito Vda Programada</td>
-                        <td class="text-end">R$ {{ "%.2f"|format(transacao.troco_credito_vda_programada or 0)|replace('.', ',') }}</td>
+                        <td class="text-end">{{ (transacao.troco_credito_vda_programada or 0)|formatar_moeda }}</td>
                     </tr>
                     <tr class="table-info">
                         <th>TOTAL</th>
-                        <th class="text-end">R$ {{ "%.2f"|format(transacao.troco_total or 0)|replace('.', ',') }}</th>
+                        <th class="text-end">{{ (transacao.troco_total or 0)|formatar_moeda }}</th>
                     </tr>
                 </tbody>
             </table>
@@ -202,7 +219,7 @@
             <table class="table table-borderless">
                 <tr>
                     <th width="30%">Nome Completo:</th>
-                    <td>{{ transacao.troco_pix_cliente_nome or '-' }}</td>
+                    <td>{{ transacao.cliente_pix_nome or '-' }}</td>
                 </tr>
                 <tr>
                     <th>Tipo de Chave PIX:</th>
@@ -227,7 +244,7 @@
                     <div class="card text-white bg-success mb-3">
                         <div class="card-body text-center">
                             <h5>Total Venda</h5>
-                            <h3>R$ {{ "%.2f"|format(transacao.venda_total or 0)|replace('.', ',') }}</h3>
+                            <h3>{{ (transacao.venda_total or 0)|formatar_moeda }}</h3>
                         </div>
                     </div>
                 </div>
@@ -235,7 +252,7 @@
                     <div class="card text-white bg-warning mb-3">
                         <div class="card-body text-center">
                             <h5>Valor Cheque</h5>
-                            <h3>R$ {{ "%.2f"|format(transacao.cheque_valor or 0)|replace('.', ',') }}</h3>
+                            <h3>{{ (transacao.cheque_valor or 0)|formatar_moeda }}</h3>
                         </div>
                     </div>
                 </div>
@@ -243,7 +260,7 @@
                     <div class="card text-white bg-info mb-3">
                         <div class="card-body text-center">
                             <h5>Total Troco</h5>
-                            <h3>R$ {{ "%.2f"|format(transacao.troco_total or 0)|replace('.', ',') }}</h3>
+                            <h3>{{ (transacao.troco_total or 0)|formatar_moeda }}</h3>
                         </div>
                     </div>
                 </div>
@@ -252,7 +269,7 @@
             {% set diferenca = (transacao.cheque_valor or 0) - (transacao.venda_total or 0) %}
             <div class="alert {% if diferenca == (transacao.troco_total or 0) %}alert-success{% else %}alert-danger{% endif %}">
                 <strong>Verificação:</strong>
-                Diferença (Cheque - Venda) = R$ {{ "%.2f"|format(diferenca)|replace('.', ',') }}
+                Diferença (Cheque - Venda) = {{ diferenca|formatar_moeda }}
                 {% if diferenca == (transacao.troco_total or 0) %}
                     <i class="bi bi-check-circle"></i> Valores conferem!
                 {% else %}
@@ -262,4 +279,152 @@
         </div>
     </div>
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const btnCopyWhatsApp = document.getElementById('btnCopyWhatsApp');
+    const FEEDBACK_TIMEOUT = 2000; // milliseconds
+    
+    if (btnCopyWhatsApp) {
+        btnCopyWhatsApp.addEventListener('click', function() {
+            // Helper function to format currency values
+            function formatCurrency(value) {
+                if (!value || value === 0 || value === '0') {
+                    return '';
+                }
+                // Convert to number if string
+                let num = typeof value === 'string' ? parseFloat(value) : value;
+                // Format with thousand separator (.) and decimal (,)
+                return num.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+            }
+            
+            // Function to show success feedback
+            function showSuccessFeedback() {
+                const originalText = btnCopyWhatsApp.innerHTML;
+                btnCopyWhatsApp.innerHTML = '<i class="bi bi-check-circle"></i> Copiado!';
+                btnCopyWhatsApp.classList.remove('btn-success');
+                btnCopyWhatsApp.classList.add('btn-info');
+                
+                setTimeout(function() {
+                    btnCopyWhatsApp.innerHTML = originalText;
+                    btnCopyWhatsApp.classList.remove('btn-info');
+                    btnCopyWhatsApp.classList.add('btn-success');
+                }, FEEDBACK_TIMEOUT);
+            }
+            
+            // Get transaction data - using tojson for safe escaping
+            const data = {
+                numero_sequencial: {{ (transacao.numero_sequencial or "")|tojson }},
+                data: {{ (transacao.data.strftime("%d/%m/%Y") if transacao.data else "")|tojson }},
+                venda_abastecimento: {{ transacao.venda_abastecimento or 0 }},
+                venda_arla: {{ transacao.venda_arla or 0 }},
+                venda_produtos: {{ transacao.venda_produtos or 0 }},
+                venda_total: {{ transacao.venda_total or 0 }},
+                cheque_tipo: {{ (transacao.cheque_tipo or "")|tojson }},
+                cheque_data_vencimento: {{ (transacao.cheque_data_vencimento.strftime("%d/%m/%Y") if transacao.cheque_data_vencimento else "")|tojson }},
+                cheque_valor: {{ transacao.cheque_valor or 0 }},
+                troco_especie: {{ transacao.troco_especie or 0 }},
+                troco_pix: {{ transacao.troco_pix or 0 }},
+                troco_credito: {{ transacao.troco_credito_vda_programada or 0 }},
+                troco_total: {{ transacao.troco_total or 0 }},
+                cliente_pix_nome: {{ (transacao.cliente_pix_nome or "")|tojson }},
+                tipo_chave_pix: {{ (transacao.tipo_chave_pix or "")|tojson }},
+                chave_pix: {{ (transacao.chave_pix or "")|tojson }},
+                frentista_nome: {{ (transacao.frentista_nome or "")|tojson }}
+            };
+            
+            // Build WhatsApp message with bold formatting and icons
+            let message = '';
+            
+            // Check if this is a "SEM PIX" transaction
+            const isSemPix = data.cliente_pix_nome === 'SEM PIX';
+            
+            // Add sequential number if available
+            if (data.numero_sequencial) {
+                message += '🔢 *' + data.numero_sequencial + '*\n\n';
+            }
+            
+            // Different title for SEM PIX transactions
+            if (isSemPix) {
+                message += '💰 *VENDA EM CHEQUE* 💰\n';
+            } else {
+                message += '💰 *TROCO PIX* 💰\n';
+            }
+            message += '━━━━━━━━━━━━━━━━━━━━\n';
+            message += '📅 *Data:* ' + data.data + '\n\n';
+            
+            message += '🏪 *VENDA*\n';
+            message += '├ Abastecimento: ' + (formatCurrency(data.venda_abastecimento) || '—') + '\n';
+            message += '├ Arla: ' + (formatCurrency(data.venda_arla) || '—') + '\n';
+            message += '├ Produtos: ' + (formatCurrency(data.venda_produtos) || '—') + '\n';
+            message += '└ *TOTAL:* ' + formatCurrency(data.venda_total) + '\n\n';
+            
+            // CHEQUE section - only if there's cheque data
+            if (data.cheque_tipo || data.cheque_valor > 0) {
+                message += '💵 *CHEQUE*\n';
+                if (data.cheque_tipo === 'A_VISTA') {
+                    message += '├ Tipo: À Vista\n';
+                } else if (data.cheque_tipo === 'A_PRAZO') {
+                    message += '├ Tipo: A Prazo';
+                    if (data.cheque_data_vencimento) {
+                        message += ' (Venc: ' + data.cheque_data_vencimento + ')';
+                    }
+                    message += '\n';
+                }
+                message += '└ *Valor:* ' + formatCurrency(data.cheque_valor) + '\n\n';
+            }
+            
+            message += '💸 *TROCO*\n';
+            message += '├ Em Espécie: ' + (formatCurrency(data.troco_especie) || '—') + '\n';
+            message += '├ Crédito Vda. Programada: ' + (formatCurrency(data.troco_credito) || '—') + '\n';
+            message += '└ *TOTAL:* ' + formatCurrency(data.troco_total) + '\n';
+            
+            // Only show PIX details if NOT "SEM PIX"
+            if (!isSemPix) {
+                message += '\n🔑 *TROCO PIX:* ' + formatCurrency(data.troco_pix) + '\n';
+                message += '━━━━━━━━━━━━━━━━━━━━\n';
+                // Only show chave info if there's actual data
+                if (data.chave_pix) {
+                    message += '📱 Chave Pix: ' + (data.tipo_chave_pix ? '*' + data.tipo_chave_pix + '*' + ' - ' : '') + data.chave_pix + '\n';
+                } else {
+                    message += '📱 Chave Pix: —\n';
+                }
+                message += '👤 Cliente: ' + (data.cliente_pix_nome ? '*' + data.cliente_pix_nome + '*' : '—') + '\n\n';
+            } else {
+                // For SEM PIX, just add the separator line
+                message += '━━━━━━━━━━━━━━━━━━━━\n';
+            }
+            
+            message += '⛽ Frentista: ' + (data.frentista_nome ? '*' + data.frentista_nome + '*' : '—');
+            
+            
+            // Copy to clipboard
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(message).then(function() {
+                    showSuccessFeedback();
+                }).catch(function(err) {
+                    alert('Erro ao copiar: ' + err);
+                });
+            } else {
+                // Fallback for older browsers
+                const textArea = document.createElement('textarea');
+                textArea.value = message;
+                textArea.style.position = 'fixed';
+                textArea.style.left = '-999999px';
+                document.body.appendChild(textArea);
+                textArea.select();
+                try {
+                    document.execCommand('copy');
+                    showSuccessFeedback();
+                } catch (err) {
+                    alert('Erro ao copiar: ' + err);
+                }
+                document.body.removeChild(textArea);
+            }
+        });
+    }
+});
+</script>
 {% endblock %}

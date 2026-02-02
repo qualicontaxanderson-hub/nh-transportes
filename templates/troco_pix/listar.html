@@ -70,12 +70,12 @@
                     <div class="col-md-3">
                         <label for="data_inicio">Data Início</label>
                         <input type="date" class="form-control" id="data_inicio" name="data_inicio" 
-                               value="{{ request.args.get('data_inicio', '') }}">
+                               value="{{ data_inicio }}">
                     </div>
                     <div class="col-md-3">
                         <label for="data_fim">Data Fim</label>
                         <input type="date" class="form-control" id="data_fim" name="data_fim" 
-                               value="{{ request.args.get('data_fim', '') }}">
+                               value="{{ data_fim }}">
                     </div>
                     <div class="col-md-3">
                         <label for="status">Status</label>
@@ -127,9 +127,9 @@
                             <th>Data</th>
                             <th>Posto/Cliente</th>
                             <th>Cliente PIX</th>
-                            <th>Venda Total</th>
-                            <th>Cheque</th>
-                            <th>Troco Total</th>
+                            <th class="text-center">Venda Total</th>
+                            <th class="text-center">Cheque</th>
+                            <th class="text-center">Troco Total</th>
                             <th>Status</th>
                             <th>Ações</th>
                         </tr>
@@ -139,11 +139,11 @@
                         <tr>
                             <td>{{ t.id }}</td>
                             <td>{{ t.data.strftime('%d/%m/%Y') if t.data else '-' }}</td>
-                            <td>{{ t.cliente_nome or '-' }}</td>
-                            <td>{{ t.troco_pix_cliente_nome or '-' }}</td>
-                            <td class="text-end">R$ {{ "%.2f"|format(t.venda_total or 0)|replace('.', ',') }}</td>
-                            <td class="text-end">R$ {{ "%.2f"|format(t.cheque_valor or 0)|replace('.', ',') }}</td>
-                            <td class="text-end">R$ {{ "%.2f"|format(t.troco_total or 0)|replace('.', ',') }}</td>
+                            <td>{{ t.posto_nome or '-' }}</td>
+                            <td>{{ t.cliente_pix_nome or '-' }}</td>
+                            <td class="text-center">{{ (t.venda_total or 0)|formatar_moeda }}</td>
+                            <td class="text-center">{{ (t.cheque_valor or 0)|formatar_moeda }}</td>
+                            <td class="text-center">{{ (t.troco_total or 0)|formatar_moeda }}</td>
                             <td>
                                 {% if t.status == 'PENDENTE' %}
                                     <span class="badge bg-warning">Pendente</span>
@@ -157,15 +157,15 @@
                                 {% endif %}
                             </td>
                             <td>
-                                <a href="{{ url_for('troco_pix.visualizar', id=t.id) }}" 
+                                <a href="{{ url_for('troco_pix.visualizar', troco_pix_id=t.id) }}" 
                                    class="btn btn-sm btn-info" title="Visualizar">
                                     <i class="bi bi-eye"></i>
                                 </a>
-                                <a href="{{ url_for('troco_pix.editar', id=t.id) }}" 
+                                <a href="{{ url_for('troco_pix.editar', troco_pix_id=t.id) }}" 
                                    class="btn btn-sm btn-warning" title="Editar">
                                     <i class="bi bi-pencil"></i>
                                 </a>
-                                <form method="POST" action="{{ url_for('troco_pix.excluir', id=t.id) }}" 
+                                <form method="POST" action="{{ url_for('troco_pix.excluir', troco_pix_id=t.id) }}" 
                                       style="display:inline;" 
                                       onsubmit="return confirm('Tem certeza que deseja excluir esta transação?');">
                                     <button type="submit" class="btn btn-sm btn-danger" title="Excluir">

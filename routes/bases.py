@@ -1,4 +1,5 @@
 from flask import Blueprint, render_template, current_app, url_for, jsonify, request, redirect
+from flask_login import login_required, current_user
 from utils.db import get_db_connection
 
 bp = Blueprint('bases', __name__)
@@ -18,7 +19,14 @@ def safe_url(endpoint, **values):
 
 
 @bp.route('/', methods=['GET'])
+@login_required
 def index():
+    # Redirecionar usuários PISTA para sua página específica
+    if current_user.is_authenticated:
+        nivel = getattr(current_user, 'nivel', '').strip().upper()
+        if nivel in ['PISTA', 'SUPERVISOR']:
+            return redirect(url_for('troco_pix.pista'))
+    
     # coletar métricas simples do banco (fallback para 0 em caso de erro)
     totals = {
         'total_clientes': 0,
@@ -82,11 +90,12 @@ def index():
         'motoristas_lista_url': safe_url('motoristas.lista'),
         'fretes_lista_url': safe_url('fretes.lista'),
         'pedidos_index_url': safe_url('pedidos.index') or safe_url('pedidos.lista') or '#',
-        'alterar_senha_url': safe_url('alterar_senha'),
-        'logout_url': safe_url('logout'),
-        'listar_usuarios_url': safe_url('listar_usuarios'),
-        'cadastro_url': safe_url('cadastro'),
+        'alterar_senha_url': safe_url('auth.alterar_senha'),
+        'logout_url': safe_url('auth.logout'),
+        'listar_usuarios_url': safe_url('auth.listar_usuarios'),
+        'cadastro_url': safe_url('auth.criar_usuario'),
         'relatorios_index_url': safe_url('relatorios.index'),
+        'perfil_url': safe_url('auth.perfil'),
     }
 
     context = {}

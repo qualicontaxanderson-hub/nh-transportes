@@ -1,0 +1,120 @@
+{% extends 'base.html' %}
+
+{% block title %}Gerenciar Usuários - NH Transportes{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row mb-4">
+        <div class="col-12">
+            <h2><i class="bi bi-people"></i> Gerenciar Usuários</h2>
+            <p class="text-muted">Gerencie todos os usuários do sistema</p>
+        </div>
+    </div>
+
+    <div class="row mb-3">
+        <div class="col-12">
+            <a href="{{ url_for('auth.criar_usuario') }}" class="btn btn-success">
+                <i class="bi bi-person-plus"></i> Criar Novo Usuário
+            </a>
+            <a href="{{ url_for('index') }}" class="btn btn-secondary">
+                <i class="bi bi-arrow-left"></i> Voltar ao Dashboard
+            </a>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-12">
+            <div class="card shadow-sm">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="mb-0"><i class="bi bi-list-ul"></i> Lista de Usuários</h5>
+                </div>
+                <div class="card-body">
+                    {% if usuarios %}
+                    <div class="table-responsive">
+                        <table class="table table-striped table-hover">
+                            <thead>
+                                <tr>
+                                    <th>ID</th>
+                                    <th>Username</th>
+                                    <th>Nome Completo</th>
+                                    <th>Nível</th>
+                                    <th>Posto/Cliente</th>
+                                    <th>Status</th>
+                                    <th>Ações</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for usuario in usuarios %}
+                                <tr {% if not usuario.ativo %}class="table-secondary"{% endif %}>
+                                    <td>{{ usuario.id }}</td>
+                                    <td><strong>{{ usuario.username }}</strong></td>
+                                    <td>{{ usuario.nome_completo }}</td>
+                                    <td>
+                                        {% if usuario.nivel == 'ADMIN' or usuario.nivel == 'admin' or usuario.nivel == 'Administrador' %}
+                                            <span class="badge bg-danger">ADMIN</span>
+                                        {% elif usuario.nivel == 'GERENTE' %}
+                                            <span class="badge bg-warning text-dark">GERENTE</span>
+                                        {% elif usuario.nivel == 'SUPERVISOR' %}
+                                            <span class="badge bg-primary">SUPERVISOR</span>
+                                        {% elif usuario.nivel == 'PISTA' %}
+                                            <span class="badge bg-info">PISTA</span>
+                                        {% else %}
+                                            <span class="badge bg-secondary">{{ usuario.nivel }}</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if usuario.cliente_nome %}
+                                            <small>{{ usuario.cliente_nome }}</small>
+                                        {% else %}
+                                            <span class="text-muted">-</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if usuario.ativo %}
+                                            <span class="badge bg-success">Ativo</span>
+                                        {% else %}
+                                            <span class="badge bg-secondary">Inativo</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <div class="btn-group btn-group-sm" role="group">
+                                            <a href="{{ url_for('auth.editar_usuario', user_id=usuario.id) }}" 
+                                               class="btn btn-warning" title="Editar">
+                                                <i class="bi bi-pencil"></i>
+                                            </a>
+                                            {% if usuario.ativo %}
+                                                {% if usuario.id != current_user.id %}
+                                                <form method="POST" action="{{ url_for('auth.desativar_usuario', user_id=usuario.id) }}" 
+                                                      style="display:inline;" 
+                                                      onsubmit="return confirm('Deseja realmente desativar este usuário?');">
+                                                    <button type="submit" class="btn btn-danger" title="Desativar">
+                                                        <i class="bi bi-x-circle"></i>
+                                                    </button>
+                                                </form>
+                                                {% endif %}
+                                            {% else %}
+                                                <form method="POST" action="{{ url_for('auth.ativar_usuario', user_id=usuario.id) }}" 
+                                                      style="display:inline;">
+                                                    <button type="submit" class="btn btn-success" title="Ativar">
+                                                        <i class="bi bi-check-circle"></i>
+                                                    </button>
+                                                </form>
+                                            {% endif %}
+                                        </div>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <div class="alert alert-info">
+                        <i class="bi bi-info-circle"></i> Nenhum usuário encontrado.
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
