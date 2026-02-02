@@ -6,7 +6,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 class Usuario(UserMixin):
-    def __init__(self, id, username, nome_completo, nivel, ativo=True, senha_hash=None):
+    def __init__(self, id, username, nome_completo, nivel, ativo=True, senha_hash=None, cliente_id=None):
         self.id = id
         self.username = username
         self.nome_completo = nome_completo
@@ -16,6 +16,7 @@ class Usuario(UserMixin):
         self.senha_hash = senha_hash
         self.password = senha_hash  # Alias para compatibilidade
         self.email = ''  # Campo vazio para compatibilidade
+        self.cliente_id = cliente_id  # Cliente/Posto vinculado (para PISTA)
 
     @staticmethod
     def get_by_id(user_id):
@@ -32,7 +33,8 @@ class Usuario(UserMixin):
                 nome_completo=user_data['nome_completo'],
                 nivel=user_data['nivel'],
                 ativo=user_data['ativo'],
-                senha_hash=user_data['password_hash']
+                senha_hash=user_data['password_hash'],
+                cliente_id=user_data.get('cliente_id')  # Incluir cliente_id
             )
         return None
 
@@ -52,7 +54,8 @@ class Usuario(UserMixin):
                 nome_completo=user_data['nome_completo'],
                 nivel=user_data['nivel'],
                 ativo=user_data['ativo'],
-                senha_hash=user_data['password_hash']
+                senha_hash=user_data['password_hash'],
+                cliente_id=user_data.get('cliente_id')  # Incluir cliente_id
             )
         return None
 
@@ -71,7 +74,8 @@ class Usuario(UserMixin):
                 nome_completo=user_data['nome_completo'],
                 nivel=user_data['nivel'],
                 ativo=user_data['ativo'],
-                senha_hash=user_data['password_hash']
+                senha_hash=user_data['password_hash'],
+                cliente_id=user_data.get('cliente_id')  # Incluir cliente_id
             )
         return None
 
