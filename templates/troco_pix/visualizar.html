@@ -338,12 +338,20 @@ document.addEventListener('DOMContentLoaded', function() {
             // Build WhatsApp message with bold formatting and icons
             let message = '';
             
+            // Check if this is a "SEM PIX" transaction
+            const isSemPix = data.cliente_pix_nome === 'SEM PIX';
+            
             // Add sequential number if available
             if (data.numero_sequencial) {
                 message += '🔢 *' + data.numero_sequencial + '*\n\n';
             }
             
-            message += '💰 *TROCO PIX* 💰\n';
+            // Different title for SEM PIX transactions
+            if (isSemPix) {
+                message += '💰 *VENDA EM CHEQUE* 💰\n';
+            } else {
+                message += '💰 *TROCO PIX* 💰\n';
+            }
             message += '━━━━━━━━━━━━━━━━━━━━\n';
             message += '📅 *Data:* ' + data.data + '\n\n';
             
@@ -371,17 +379,23 @@ document.addEventListener('DOMContentLoaded', function() {
             message += '💸 *TROCO*\n';
             message += '├ Em Espécie: ' + (formatCurrency(data.troco_especie) || '—') + '\n';
             message += '├ Crédito Vda. Programada: ' + (formatCurrency(data.troco_credito) || '—') + '\n';
-            message += '└ *TOTAL:* ' + formatCurrency(data.troco_total) + '\n\n';
+            message += '└ *TOTAL:* ' + formatCurrency(data.troco_total) + '\n';
             
-            message += '🔑 *TROCO PIX:* ' + formatCurrency(data.troco_pix) + '\n';
-            message += '━━━━━━━━━━━━━━━━━━━━\n';
-            // Only show chave info if there's actual data
-            if (data.chave_pix) {
-                message += '📱 Chave Pix: ' + (data.tipo_chave_pix ? '*' + data.tipo_chave_pix + '*' + ' - ' : '') + data.chave_pix + '\n';
+            // Only show PIX details if NOT "SEM PIX"
+            if (!isSemPix) {
+                message += '\n🔑 *TROCO PIX:* ' + formatCurrency(data.troco_pix) + '\n';
+                message += '━━━━━━━━━━━━━━━━━━━━\n';
+                // Only show chave info if there's actual data
+                if (data.chave_pix) {
+                    message += '📱 Chave Pix: ' + (data.tipo_chave_pix ? '*' + data.tipo_chave_pix + '*' + ' - ' : '') + data.chave_pix + '\n';
+                } else {
+                    message += '📱 Chave Pix: —\n';
+                }
+                message += '👤 Cliente: ' + (data.cliente_pix_nome ? '*' + data.cliente_pix_nome + '*' : '—') + '\n\n';
             } else {
-                message += '📱 Chave Pix: —\n';
+                // For SEM PIX, just add the separator line
+                message += '━━━━━━━━━━━━━━━━━━━━\n';
             }
-            message += '👤 Cliente: ' + (data.cliente_pix_nome ? '*' + data.cliente_pix_nome + '*' : '—') + '\n\n';
             
             message += '⛽ Frentista: ' + (data.frentista_nome ? '*' + data.frentista_nome + '*' : '—');
             
