@@ -8,6 +8,7 @@ from flask_login import login_required, current_user
 from functools import wraps
 from decimal import Decimal
 from datetime import datetime, timedelta
+import pytz
 import json
 
 # Importar função de conexão do banco de dados
@@ -892,6 +893,20 @@ def pista():
         
         cursor.execute(query, params)
         transacoes = cursor.fetchall()
+        
+        # Converter timestamps para timezone de Brasília
+        brasilia_tz = pytz.timezone('America/Sao_Paulo')
+        for t in transacoes:
+            if t.get('criado_em'):
+                # Se timestamp está em UTC, converte para Brasília
+                if t['criado_em'].tzinfo is None:
+                    # Assume UTC se não tem timezone
+                    utc_time = pytz.utc.localize(t['criado_em'])
+                else:
+                    utc_time = t['criado_em']
+                t['criado_em_br'] = utc_time.astimezone(brasilia_tz)
+            else:
+                t['criado_em_br'] = None
         
         # Calcular transações de hoje e total
         data_hoje = date.today()

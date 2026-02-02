@@ -51,7 +51,7 @@
                     <tbody>
                         {% for t in transacoes_hoje %}
                         <tr>
-                            <td>{{ t.criado_em.strftime('%H:%M') if t.criado_em else '-' }}</td>
+                            <td>{{ t.criado_em_br.strftime('%H:%M') if t.criado_em_br else '-' }}</td>
                             <td>{{ t.cliente_pix_nome or '-' }}</td>
                             <td class="text-center">{{ t.venda_total|formatar_moeda }}</td>
                             <td class="text-center">{{ t.cheque_valor|formatar_moeda }}</td>
