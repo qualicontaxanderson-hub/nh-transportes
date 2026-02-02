@@ -47,10 +47,11 @@
                                 <!-- Campo hidden com cliente_id do usuário -->
                                 <input type="hidden" name="cliente_id" value="{{ current_user.cliente_id }}">
                                 
-                                <!-- Mostra nome do posto (readonly) -->
+                                <!-- Mostra nome do posto (readonly) com destaque visual -->
                                 <input type="text" class="form-control" 
+                                       style="background-color: #fff3cd; border-color: #ffc107; font-weight: 500;" 
                                        value="{{ cliente_nome or 'Posto vinculado' }}" readonly>
-                                <small class="text-muted">Posto vinculado ao seu usuário (não pode ser alterado)</small>
+                                <small class="text-warning"><i class="bi bi-lock-fill"></i> Posto vinculado ao seu usuário (não pode ser alterado)</small>
                             {% else %}
                                 <!-- Dropdown para ADMIN/GERENTE -->
                                 <select class="form-control" id="cliente_id" name="cliente_id" required>
@@ -70,10 +71,11 @@
                             <label for="data" class="form-label">Data *</label>
                             {% set nivel_usuario = current_user.nivel|upper if current_user.nivel else '' %}
                             {% if nivel_usuario in ['PISTA', 'SUPERVISOR'] %}
-                                <!-- Data fixa para PISTA/SUPERVISOR -->
+                                <!-- Data fixa para PISTA/SUPERVISOR com destaque visual -->
                                 <input type="date" class="form-control" id="data" name="data" 
+                                       style="background-color: #fff3cd; border-color: #ffc107; font-weight: 500;" 
                                        value="{{ data_hoje }}" readonly required>
-                                <small class="text-muted">Data fixa: hoje (não pode ser alterada)</small>
+                                <small class="text-warning"><i class="bi bi-lock-fill"></i> Data fixa: hoje (não pode ser alterada)</small>
                             {% else %}
                                 <!-- Data editável para ADMIN/GERENTE -->
                                 <input type="date" class="form-control" id="data" name="data" required
