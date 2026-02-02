@@ -26,7 +26,12 @@
                     <i class="bi bi-person-badge"></i> Dados do Cliente PIX
                 </div>
                 <div class="card-body">
-                    <form method="POST" action="{{ url_for('troco_pix.cliente_editar', cliente_id=cliente.id) if edit_mode else url_for('troco_pix.cliente_novo') }}">
+                    <form method="POST" action="{{ url_for('troco_pix.cliente_editar', cliente_id=cliente.id, return_to=return_to) if edit_mode else url_for('troco_pix.cliente_novo', return_to=return_to) }}">
+                        <!-- Campo hidden para retornar à página de origem -->
+                        {% if return_to %}
+                        <input type="hidden" name="return_to" value="{{ return_to }}">
+                        {% endif %}
+                        
                         <div class="mb-3">
                             <label for="nome_completo" class="form-label">Nome Completo *</label>
                             <input type="text" class="form-control" id="nome_completo" name="nome_completo" 

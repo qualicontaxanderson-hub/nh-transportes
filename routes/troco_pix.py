@@ -703,9 +703,11 @@ def clientes():
 def cliente_novo():
     """Cria novo cliente PIX"""
     if request.method == 'GET':
+        return_to = request.args.get('return_to')
         return render_template('troco_pix/cliente_form.html',
                              edit_mode=False,
-                             titulo='Novo Cliente PIX')
+                             titulo='Novo Cliente PIX',
+                             return_to=return_to)
     
     # POST - Criar cliente
     try:
@@ -731,6 +733,12 @@ def cliente_novo():
         conn.close()
         
         flash('Cliente PIX cadastrado com sucesso!', 'success')
+        
+        # Redirecionar para a página de origem se especificada
+        return_to = request.form.get('return_to') or request.args.get('return_to')
+        if return_to:
+            return redirect(return_to)
+        
         return redirect(url_for('troco_pix.clientes'))
         
     except Exception as e:
@@ -756,10 +764,12 @@ def cliente_editar(cliente_id):
                 flash('Cliente não encontrado.', 'warning')
                 return redirect(url_for('troco_pix.clientes'))
             
+            return_to = request.args.get('return_to')
             return render_template('troco_pix/cliente_form.html',
                                  cliente=cliente,
                                  edit_mode=True,
-                                 titulo='Editar Cliente PIX')
+                                 titulo='Editar Cliente PIX',
+                                 return_to=return_to)
         
         except Exception as e:
             flash(f'Erro ao carregar cliente: {str(e)}', 'danger')
@@ -786,6 +796,12 @@ def cliente_editar(cliente_id):
         conn.close()
         
         flash('Cliente PIX atualizado com sucesso!', 'success')
+        
+        # Redirecionar para a página de origem se especificada
+        return_to = request.form.get('return_to') or request.args.get('return_to')
+        if return_to:
+            return redirect(return_to)
+        
         return redirect(url_for('troco_pix.clientes'))
         
     except Exception as e:

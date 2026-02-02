@@ -259,7 +259,7 @@
                                     </option>
                                     {% endfor %}
                                 </select>
-                                <a href="{{ url_for('troco_pix.cliente_novo') }}" class="btn btn-outline-secondary" target="_blank">
+                                <a href="{{ url_for('troco_pix.cliente_novo', return_to=request.url) }}" class="btn btn-outline-secondary" target="_blank">
                                     <i class="bi bi-plus"></i> Novo Cliente PIX
                                 </a>
                             </div>
