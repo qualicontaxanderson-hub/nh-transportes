@@ -94,6 +94,267 @@ def gerar_numero_troco_pix(data_transacao):
     
     return f"{prefixo}-N{num}"
 
+
+def criar_lancamento_caixa_automatico(troco_pix_id, cliente_id, data, valor_troco_pix, 
+                                       cheque_tipo, valor_cheque, usuario_id):
+    """
+    Cria automaticamente um lançamento de caixa ao salvar Troco PIX.
+    
+    Args:
+        troco_pix_id: ID do Troco PIX
+        cliente_id: ID do posto/cliente
+        data: Data da transação
+        valor_troco_pix: Valor do troco PIX (vai para Receitas)
+        cheque_tipo: 'À Vista' ou 'A Prazo'
+        valor_cheque: Valor do cheque (vai para Comprovações)
+        usuario_id: ID do usuário que criou
+    
+    Returns:
+        int: ID do lançamento de caixa criado, ou None em caso de erro
+    """
+    conn = None
+    cursor = None
+    
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+        
+        # Verificar se já existe um lançamento para este Troco PIX
+        cursor.execute("""
+            SELECT lancamento_caixa_id 
+            FROM troco_pix 
+            WHERE id = %s AND lancamento_caixa_id IS NOT NULL
+        """, (troco_pix_id,))
+        
+        existing = cursor.fetchone()
+        if existing and existing.get('lancamento_caixa_id'):
+            # Já existe, vamos atualizar
+            return atualizar_lancamento_caixa_automatico(
+                existing['lancamento_caixa_id'], 
+                valor_troco_pix, 
+                cheque_tipo, 
+                valor_cheque,
+                cursor,
+                conn
+            )
+        
+        # Buscar forma de pagamento para cheque
+        if cheque_tipo == 'À Vista':
+            forma_tipo = 'DEPOSITO_CHEQUE_VISTA'
+        else:  # A Prazo
+            forma_tipo = 'DEPOSITO_CHEQUE_PRAZO'
+        
+        cursor.execute("""
+            SELECT id FROM formas_pagamento_caixa 
+            WHERE tipo = %s AND ativo = 1
+            LIMIT 1
+        """, (forma_tipo,))
+        
+        forma_pagamento = cursor.fetchone()
+        if not forma_pagamento:
+            print(f"[AVISO] Forma de pagamento {forma_tipo} não encontrada")
+            return None
+        
+        forma_pagamento_id = forma_pagamento['id']
+        
+        # Converter valores para Decimal
+        from decimal import Decimal
+        valor_troco_pix_decimal = Decimal(str(valor_troco_pix)) if valor_troco_pix else Decimal('0')
+        valor_cheque_decimal = Decimal(str(valor_cheque)) if valor_cheque else Decimal('0')
+        
+        # Calcular totais
+        total_receitas = valor_troco_pix_decimal
+        total_comprovacao = valor_cheque_decimal
+        diferenca = total_comprovacao - total_receitas
+        
+        # Inserir lancamento_caixa principal
+        cursor.execute("""
+            INSERT INTO lancamentos_caixa 
+            (data, cliente_id, usuario_id, observacao, total_receitas, total_comprovacao, diferenca, status)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, 'ABERTO')
+        """, (
+            data, 
+            cliente_id, 
+            usuario_id, 
+            f'Lançamento automático - Troco PIX #{troco_pix_id}',
+            float(total_receitas),
+            float(total_comprovacao),
+            float(diferenca)
+        ))
+        
+        lancamento_caixa_id = cursor.lastrowid
+        
+        # Inserir receita TROCO_PIX (tipo AUTO)
+        if valor_troco_pix_decimal > 0:
+            cursor.execute("""
+                INSERT INTO lancamentos_caixa_receitas 
+                (lancamento_caixa_id, tipo, descricao, valor)
+                VALUES (%s, %s, %s, %s)
+            """, (
+                lancamento_caixa_id,
+                'TROCO_PIX',
+                f'AUTO - Troco PIX #{troco_pix_id}',
+                float(valor_troco_pix_decimal)
+            ))
+        
+        # Inserir comprovação CHEQUE
+        if valor_cheque_decimal > 0:
+            cursor.execute("""
+                INSERT INTO lancamentos_caixa_comprovacao 
+                (lancamento_caixa_id, forma_pagamento_id, descricao, valor)
+                VALUES (%s, %s, %s, %s)
+            """, (
+                lancamento_caixa_id,
+                forma_pagamento_id,
+                f'AUTO - Cheque {cheque_tipo} - Troco PIX #{troco_pix_id}',
+                float(valor_cheque_decimal)
+            ))
+        
+        # Atualizar troco_pix com referência ao lançamento
+        cursor.execute("""
+            UPDATE troco_pix 
+            SET lancamento_caixa_id = %s 
+            WHERE id = %s
+        """, (lancamento_caixa_id, troco_pix_id))
+        
+        conn.commit()
+        
+        print(f"[INFO] Lançamento de caixa #{lancamento_caixa_id} criado automaticamente para Troco PIX #{troco_pix_id}")
+        
+        return lancamento_caixa_id
+        
+    except Exception as e:
+        print(f"[ERRO] Falha ao criar lançamento automático: {str(e)}")
+        if conn:
+            conn.rollback()
+        return None
+    finally:
+        if cursor:
+            cursor.close()
+        if conn:
+            conn.close()
+
+
+def atualizar_lancamento_caixa_automatico(lancamento_caixa_id, valor_troco_pix, 
+                                          cheque_tipo, valor_cheque, cursor, conn):
+    """
+    Atualiza um lançamento de caixa existente.
+    
+    Args:
+        lancamento_caixa_id: ID do lançamento a atualizar
+        valor_troco_pix: Novo valor do troco PIX
+        cheque_tipo: Tipo do cheque
+        valor_cheque: Novo valor do cheque
+        cursor: Cursor do banco (já aberto)
+        conn: Conexão do banco (já aberta)
+    
+    Returns:
+        int: ID do lançamento atualizado
+    """
+    try:
+        from decimal import Decimal
+        
+        # Converter valores
+        valor_troco_pix_decimal = Decimal(str(valor_troco_pix)) if valor_troco_pix else Decimal('0')
+        valor_cheque_decimal = Decimal(str(valor_cheque)) if valor_cheque else Decimal('0')
+        
+        # Calcular totais
+        total_receitas = valor_troco_pix_decimal
+        total_comprovacao = valor_cheque_decimal
+        diferenca = total_comprovacao - total_receitas
+        
+        # Atualizar totais no lancamento principal
+        cursor.execute("""
+            UPDATE lancamentos_caixa 
+            SET total_receitas = %s, total_comprovacao = %s, diferenca = %s
+            WHERE id = %s
+        """, (float(total_receitas), float(total_comprovacao), float(diferenca), lancamento_caixa_id))
+        
+        # Atualizar receita TROCO_PIX
+        cursor.execute("""
+            UPDATE lancamentos_caixa_receitas 
+            SET valor = %s 
+            WHERE lancamento_caixa_id = %s AND tipo = 'TROCO_PIX'
+        """, (float(valor_troco_pix_decimal), lancamento_caixa_id))
+        
+        # Buscar forma de pagamento
+        if cheque_tipo == 'À Vista':
+            forma_tipo = 'DEPOSITO_CHEQUE_VISTA'
+        else:
+            forma_tipo = 'DEPOSITO_CHEQUE_PRAZO'
+        
+        cursor.execute("""
+            SELECT id FROM formas_pagamento_caixa 
+            WHERE tipo = %s AND ativo = 1
+            LIMIT 1
+        """, (forma_tipo,))
+        
+        forma_pagamento = cursor.fetchone()
+        if forma_pagamento:
+            # Atualizar comprovação
+            cursor.execute("""
+                UPDATE lancamentos_caixa_comprovacao 
+                SET valor = %s, forma_pagamento_id = %s
+                WHERE lancamento_caixa_id = %s
+            """, (float(valor_cheque_decimal), forma_pagamento['id'], lancamento_caixa_id))
+        
+        conn.commit()
+        
+        print(f"[INFO] Lançamento de caixa #{lancamento_caixa_id} atualizado automaticamente")
+        
+        return lancamento_caixa_id
+        
+    except Exception as e:
+        print(f"[ERRO] Falha ao atualizar lançamento automático: {str(e)}")
+        if conn:
+            conn.rollback()
+        return None
+
+
+def excluir_lancamento_caixa_automatico(lancamento_caixa_id):
+    """
+    Exclui um lançamento de caixa automático.
+    
+    Args:
+        lancamento_caixa_id: ID do lançamento a excluir
+    
+    Returns:
+        bool: True se excluído com sucesso, False caso contrário
+    """
+    if not lancamento_caixa_id:
+        return True  # Nada para excluir
+    
+    conn = None
+    cursor = None
+    
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        # Excluir lançamento (CASCADE vai excluir receitas e comprovações)
+        cursor.execute("""
+            DELETE FROM lancamentos_caixa 
+            WHERE id = %s
+        """, (lancamento_caixa_id,))
+        
+        conn.commit()
+        
+        print(f"[INFO] Lançamento de caixa #{lancamento_caixa_id} excluído automaticamente")
+        
+        return True
+        
+    except Exception as e:
+        print(f"[ERRO] Falha ao excluir lançamento automático: {str(e)}")
+        if conn:
+            conn.rollback()
+        return False
+    finally:
+        if cursor:
+            cursor.close()
+        if conn:
+            conn.close()
+
+
 # ==================== ROTAS DE LISTAGEM ====================
 
 @troco_pix_bp.route('/')
@@ -437,7 +698,24 @@ def novo():
         cursor.close()
         conn.close()
         
-        flash('TROCO PIX cadastrado com sucesso!', 'success')
+        # Criar lançamento de caixa automático
+        try:
+            lancamento_id = criar_lancamento_caixa_automatico(
+                troco_pix_id=troco_pix_id,
+                cliente_id=cliente_id,
+                data=data_transacao,
+                valor_troco_pix=troco_pix,
+                cheque_tipo=cheque_tipo,
+                valor_cheque=cheque_valor,
+                usuario_id=user_id
+            )
+            if lancamento_id:
+                flash('TROCO PIX e Lançamento de Caixa cadastrados com sucesso!', 'success')
+            else:
+                flash('TROCO PIX cadastrado com sucesso! (Lançamento de Caixa não pôde ser criado automaticamente)', 'warning')
+        except Exception as e:
+            print(f"[ERRO] Falha na integração com Lançamento de Caixa: {str(e)}")
+            flash('TROCO PIX cadastrado com sucesso! (Erro ao criar Lançamento de Caixa automático)', 'warning')
         # Preservar origem no redirect
         origem = request.args.get('origem') or request.form.get('origem')
         return redirect(url_for('troco_pix.visualizar', troco_pix_id=troco_pix_id, origem=origem))
@@ -626,7 +904,24 @@ def editar(troco_pix_id):
         cursor.close()
         conn.close()
         
-        flash('TROCO PIX atualizado com sucesso!', 'success')
+        # Atualizar ou criar lançamento de caixa automático
+        try:
+            lancamento_id = criar_lancamento_caixa_automatico(
+                troco_pix_id=troco_pix_id,
+                cliente_id=cliente_id,
+                data=data,
+                valor_troco_pix=troco_pix,
+                cheque_tipo=cheque_tipo,
+                valor_cheque=cheque_valor,
+                usuario_id=user_id
+            )
+            if lancamento_id:
+                flash('TROCO PIX e Lançamento de Caixa atualizados com sucesso!', 'success')
+            else:
+                flash('TROCO PIX atualizado com sucesso! (Lançamento de Caixa não pôde ser atualizado automaticamente)', 'warning')
+        except Exception as e:
+            print(f"[ERRO] Falha na integração com Lançamento de Caixa: {str(e)}")
+            flash('TROCO PIX atualizado com sucesso! (Erro ao atualizar Lançamento de Caixa automático)', 'warning')
         # Preservar origem no redirect
         origem = request.args.get('origem') or request.form.get('origem')
         if origem == 'pista':
@@ -653,21 +948,17 @@ def excluir(troco_pix_id):
             return redirect(url_for('troco_pix.listar'))
         
         conn = get_db_connection()
-        cursor = conn.cursor()
+        cursor = conn.cursor(dictionary=True)
         
-        # Verificar se transação foi importada para caixa
+        # Buscar informações da transação antes de excluir
         cursor.execute("""
-            SELECT importado_lancamento_caixa, lancamento_caixa_id 
+            SELECT lancamento_caixa_id 
             FROM troco_pix 
             WHERE id = %s
         """, (troco_pix_id,))
         
         result = cursor.fetchone()
-        if result and result[0]:  # importado_lancamento_caixa = True
-            flash('Esta transação foi importada para o fechamento de caixa e não pode ser excluída. Cancele primeiro no fechamento de caixa.', 'warning')
-            cursor.close()
-            conn.close()
-            return redirect(url_for('troco_pix.visualizar', troco_pix_id=troco_pix_id))
+        lancamento_caixa_id = result.get('lancamento_caixa_id') if result else None
         
         # Excluir transação
         cursor.execute("DELETE FROM troco_pix WHERE id = %s", (troco_pix_id,))
@@ -676,7 +967,16 @@ def excluir(troco_pix_id):
         cursor.close()
         conn.close()
         
-        flash('TROCO PIX excluído com sucesso!', 'success')
+        # Excluir lançamento de caixa automático se existir
+        if lancamento_caixa_id:
+            try:
+                excluir_lancamento_caixa_automatico(lancamento_caixa_id)
+                flash('TROCO PIX e Lançamento de Caixa excluídos com sucesso!', 'success')
+            except Exception as e:
+                print(f"[ERRO] Falha ao excluir Lançamento de Caixa: {str(e)}")
+                flash('TROCO PIX excluído com sucesso! (Erro ao excluir Lançamento de Caixa automático)', 'warning')
+        else:
+            flash('TROCO PIX excluído com sucesso!', 'success')
         return redirect(url_for('troco_pix.listar'))
         
     except Exception as e:
