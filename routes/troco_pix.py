@@ -632,12 +632,12 @@ def editar(troco_pix_id):
 @troco_pix_bp.route('/excluir/<int:troco_pix_id>', methods=['POST'])
 @login_required
 def excluir(troco_pix_id):
-    """Exclui transação TROCO PIX (apenas Admin)"""
+    """Exclui transação TROCO PIX (apenas Admin e Gerente)"""
     try:
-        # Verificar se usuário é administrador
-        is_admin = (current_user.nivel == 'ADMIN')
+        # Verificar se usuário é administrador ou gerente
+        is_admin = (current_user.nivel.upper() in ['ADMIN', 'GERENTE'])
         if not is_admin:
-            flash('Apenas administradores podem excluir transações.', 'danger')
+            flash('Apenas administradores e gerentes podem excluir transações.', 'danger')
             return redirect(url_for('troco_pix.listar'))
         
         conn = get_db_connection()
