@@ -237,6 +237,8 @@ def novo():
     """Cria nova transação TROCO PIX"""
     if request.method == 'GET':
         try:
+            from datetime import date
+            
             conn = get_db_connection()
             cursor = conn.cursor(dictionary=True)
             
@@ -251,12 +253,23 @@ def novo():
             """)
             postos = cursor.fetchall()
             
-            # Buscar clientes PIX ativos
+            # Buscar nome do posto para usuários PISTA/SUPERVISOR
+            cliente_nome = None
+            if hasattr(current_user, 'nivel') and current_user.nivel.upper() in ['PISTA', 'SUPERVISOR']:
+                if hasattr(current_user, 'cliente_id') and current_user.cliente_id:
+                    cursor.execute("SELECT razao_social FROM clientes WHERE id = %s", (current_user.cliente_id,))
+                    result = cursor.fetchone()
+                    if result:
+                        cliente_nome = result['razao_social']
+            
+            # Buscar clientes PIX ativos (com SEM PIX no topo)
             cursor.execute("""
                 SELECT id, nome_completo, tipo_chave_pix, chave_pix
                 FROM troco_pix_clientes
                 WHERE ativo = 1
-                ORDER BY nome_completo
+                ORDER BY 
+                    CASE WHEN nome_completo = 'SEM PIX' THEN 0 ELSE 1 END,
+                    nome_completo
             """)
             clientes_pix = cursor.fetchall()
             
@@ -301,6 +314,9 @@ def novo():
             cursor.close()
             conn.close()
             
+            # Data de hoje
+            data_hoje = date.today().strftime('%Y-%m-%d')
+            
             return render_template('troco_pix/novo.html',
                                  postos=postos,
                                  postos_json=postos_json,
@@ -309,6 +325,8 @@ def novo():
                                  funcionarios=frentistas,  # Template usa 'funcionarios'
                                  frentistas=frentistas,  # Mantido para compatibilidade
                                  frentistas_json=frentistas_json,
+                                 cliente_nome=cliente_nome,
+                                 data_hoje=data_hoje,
                                  edit_mode=False,
                                  titulo='Novo TROCO PIX')
         
@@ -318,12 +336,27 @@ def novo():
     
     # POST - Criar transação
     try:
+        from datetime import date
+        
         conn = get_db_connection()
         cursor = conn.cursor()
         
         # Obter dados do formulário
         cliente_id = request.form.get('cliente_id')
-        data = request.form.get('data')
+        data_transacao = request.form.get('data')
+        
+        # Validação de segurança para usuários PISTA/SUPERVISOR
+        if hasattr(current_user, 'nivel') and current_user.nivel.upper() in ['PISTA', 'SUPERVISOR']:
+            # PISTA só pode criar para seu cliente vinculado
+            if hasattr(current_user, 'cliente_id') and current_user.cliente_id:
+                cliente_id = current_user.cliente_id
+            else:
+                flash('Usuário PISTA deve ter um posto vinculado.', 'danger')
+                return redirect(url_for('troco_pix.novo', origem=request.args.get('origem')))
+            
+            # PISTA só pode criar transações para a data de hoje
+            data_transacao = date.today().strftime('%Y-%m-%d')
+        
         venda_abastecimento = request.form.get('venda_abastecimento', 0)
         venda_arla = request.form.get('venda_arla', 0)
         venda_produtos = request.form.get('venda_produtos', 0)
@@ -338,7 +371,7 @@ def novo():
         user_id = current_user.id
         
         # Validações
-        if not all([cliente_id, data, cheque_tipo, cheque_valor, troco_pix_cliente_id, funcionario_id]):
+        if not all([cliente_id, data_transacao, cheque_tipo, cheque_valor, troco_pix_cliente_id, funcionario_id]):
             flash('Por favor, preencha todos os campos obrigatórios.', 'warning')
             return redirect(url_for('troco_pix.novo'))
         
@@ -347,7 +380,7 @@ def novo():
             return redirect(url_for('troco_pix.novo'))
         
         # Gerar número sequencial
-        numero_sequencial = gerar_numero_troco_pix(data)
+        numero_sequencial = gerar_numero_troco_pix(data_transacao)
         
         # Inserir transação
         query = """
@@ -364,7 +397,7 @@ def novo():
         """
         
         cursor.execute(query, (
-            numero_sequencial, cliente_id, data,
+            numero_sequencial, cliente_id, data_transacao,
             venda_abastecimento, venda_arla, venda_produtos,
             cheque_tipo, cheque_data_vencimento, cheque_valor,
             troco_especie, troco_pix, troco_credito,

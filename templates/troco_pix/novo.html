@@ -42,22 +42,43 @@
                     <div class="col-md-6">
                         <div class="mb-3">
                             <label for="cliente_id" class="form-label">Posto/Cliente *</label>
-                            <select class="form-control" id="cliente_id" name="cliente_id" required>
-                                <option value="">Selecione...</option>
-                                {% for posto in postos %}
-                                <option value="{{ posto.id }}" 
-                                        {% if edit_mode and transacao.cliente_id == posto.id %}selected{% endif %}>
-                                    {{ posto.razao_social }}
-                                </option>
-                                {% endfor %}
-                            </select>
+                            {% set nivel_usuario = current_user.nivel|upper if current_user.nivel else '' %}
+                            {% if nivel_usuario in ['PISTA', 'SUPERVISOR'] and current_user.cliente_id %}
+                                <!-- Campo hidden com cliente_id do usuário -->
+                                <input type="hidden" name="cliente_id" value="{{ current_user.cliente_id }}">
+                                
+                                <!-- Mostra nome do posto (readonly) -->
+                                <input type="text" class="form-control" 
+                                       value="{{ cliente_nome or 'Posto vinculado' }}" readonly>
+                                <small class="text-muted">Posto vinculado ao seu usuário (não pode ser alterado)</small>
+                            {% else %}
+                                <!-- Dropdown para ADMIN/GERENTE -->
+                                <select class="form-control" id="cliente_id" name="cliente_id" required>
+                                    <option value="">Selecione...</option>
+                                    {% for posto in postos %}
+                                    <option value="{{ posto.id }}" 
+                                            {% if edit_mode and transacao.cliente_id == posto.id %}selected{% endif %}>
+                                        {{ posto.razao_social }}
+                                    </option>
+                                    {% endfor %}
+                                </select>
+                            {% endif %}
                         </div>
                     </div>
                     <div class="col-md-6">
                         <div class="mb-3">
                             <label for="data" class="form-label">Data *</label>
-                            <input type="date" class="form-control" id="data" name="data" required
-                                   value="{{ transacao.data.strftime('%Y-%m-%d') if edit_mode and transacao.data else '' }}">
+                            {% set nivel_usuario = current_user.nivel|upper if current_user.nivel else '' %}
+                            {% if nivel_usuario in ['PISTA', 'SUPERVISOR'] %}
+                                <!-- Data fixa para PISTA/SUPERVISOR -->
+                                <input type="date" class="form-control" id="data" name="data" 
+                                       value="{{ data_hoje }}" readonly required>
+                                <small class="text-muted">Data fixa: hoje (não pode ser alterada)</small>
+                            {% else %}
+                                <!-- Data editável para ADMIN/GERENTE -->
+                                <input type="date" class="form-control" id="data" name="data" required
+                                       value="{{ transacao.data.strftime('%Y-%m-%d') if edit_mode and transacao.data else data_hoje }}">
+                            {% endif %}
                         </div>
                     </div>
                 </div>
@@ -474,7 +495,16 @@ document.addEventListener('DOMContentLoaded', function() {
     const todasOpcoesFrentistas = Array.from(frentistaSelect.options).slice(1); // Excluir primeira opção
     
     function filtrarFrentistas() {
-        const clienteId = clienteSelect.value;
+        // Pegar cliente_id do select ou do hidden input (PISTA)
+        let clienteId = clienteSelect ? clienteSelect.value : null;
+        
+        // Se não tem select (PISTA), buscar do hidden input
+        if (!clienteId) {
+            const hiddenClienteId = document.querySelector('input[name="cliente_id"]');
+            if (hiddenClienteId) {
+                clienteId = hiddenClienteId.value;
+            }
+        }
         
         // Limpar select mantendo apenas a primeira opção
         frentistaSelect.innerHTML = '<option value="">Selecione...</option>';
@@ -519,8 +549,15 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
     
-    // Adicionar listener para mudança de cliente
-    clienteSelect.addEventListener('change', filtrarFrentistas);
+    // Adicionar listener para mudança de cliente (se existir select)
+    if (clienteSelect) {
+        clienteSelect.addEventListener('change', filtrarFrentistas);
+    }
+    
+    // Para PISTA (campo hidden), executar filtro imediatamente
+    if (!clienteSelect || clienteSelect.tagName !== 'SELECT') {
+        filtrarFrentistas();
+    }
     
     // ==================== OUTROS COMPORTAMENTOS ====================
 
@@ -561,10 +598,10 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // ==================== INICIALIZAÇÃO ====================
 
-    // Pré-preencher data com hoje se não estiver em modo edição
+    // Pré-preencher data com hoje se não estiver em modo edição E se não for PISTA
     {% if not edit_mode %}
     const dataInput = document.getElementById('data');
-    if (!dataInput.value) {
+    if (dataInput && !dataInput.value && !dataInput.readOnly) {
         const today = new Date().toISOString().split('T')[0];
         dataInput.value = today;
     }
