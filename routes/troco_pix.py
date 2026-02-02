@@ -101,6 +101,16 @@ def gerar_numero_troco_pix(data_transacao):
 def listar():
     """Lista todas as transações TROCO PIX (visão Admin)"""
     try:
+        from datetime import date
+        
+        # Calcular datas padrão (primeiro dia do mês e hoje)
+        hoje = date.today()
+        primeiro_dia_mes = date(hoje.year, hoje.month, 1)
+        
+        # Usar datas dos parâmetros ou padrão
+        data_inicio = request.args.get('data_inicio', primeiro_dia_mes.strftime('%Y-%m-%d'))
+        data_fim = request.args.get('data_fim', hoje.strftime('%Y-%m-%d'))
+        
         conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)
         
@@ -172,6 +182,8 @@ def listar():
                              clientes=clientes,
                              resumo=resumo,
                              total_dia=total_dia_formatado,
+                             data_inicio=data_inicio,
+                             data_fim=data_fim,
                              titulo='TROCO PIX - Administração')
         
     except Exception as e:
