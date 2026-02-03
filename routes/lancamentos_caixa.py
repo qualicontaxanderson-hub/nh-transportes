@@ -314,11 +314,12 @@ def get_funcionarios_por_cliente(cliente_id):
     cursor = None
     
     try:
+        print(f"[DEBUG] Buscando funcionários para cliente_id: {cliente_id}")
         conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)
         
         # Buscar funcionários ativos vinculados ao cliente
-        cursor.execute("""
+        query = """
             SELECT 
                 f.id,
                 f.nome,
@@ -328,9 +329,12 @@ def get_funcionarios_por_cliente(cliente_id):
             WHERE f.clienteid = %s 
               AND f.ativo = 1
             ORDER BY f.nome
-        """, (cliente_id,))
+        """
+        print(f"[DEBUG] Executando query com cliente_id: {cliente_id}")
+        cursor.execute(query, (cliente_id,))
         
         funcionarios = cursor.fetchall()
+        print(f"[DEBUG] Encontrados {len(funcionarios)} funcionários")
         
         # Converter para formato JSON amigável
         result = []
@@ -342,10 +346,14 @@ def get_funcionarios_por_cliente(cliente_id):
                 'cpf': func.get('cpf', '')
             })
         
+        print(f"[DEBUG] Retornando {len(result)} funcionários")
         return jsonify(result)
         
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        print(f"[ERRO] Erro ao buscar funcionários: {type(e).__name__}: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': f'{type(e).__name__}: {str(e)}'}), 500
     finally:
         if cursor is not None:
             cursor.close()
