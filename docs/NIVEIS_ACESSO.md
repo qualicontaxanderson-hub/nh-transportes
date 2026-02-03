@@ -9,31 +9,53 @@
 - Sem restrições
 
 ### 2. GERENTE - Gerente de Operações (🟡)
-- Gestão de múltiplos postos
-- Pode gerenciar PISTA e SUPERVISOR
-- Edita sem limite de tempo
-- Não pode excluir transações
+- Gestão de múltiplos postos (acesso a todos ou posto específico opcional)
+- Pode gerenciar usuários PISTA e SUPERVISOR (criar, editar, desativar)
+- Edita transações sem limite de tempo
+- Pode excluir transações
+- Não pode criar/editar usuários ADMIN ou GERENTE
 
 ### 3. SUPERVISOR - Supervisor de Posto (🔵)
 - Supervisão de posto(s) específico(s)
-- Edita sem limite de tempo
-- Não gerencia usuários
-- Precisa de posto associado
+- Edita transações sem limite de tempo
+- Visualiza apenas dados dos postos associados
+- Não pode gerenciar usuários
+- Não pode excluir transações
+- Requer posto associado obrigatoriamente
 
 ### 4. PISTA - Operador (🔵 claro)
-- Operação básica
-- Edita apenas 15 minutos
-- Um posto específico
-- Acesso limitado
+- Operação básica de posto
+- Edita transações apenas até 15 minutos após criação
+- Visualiza apenas dados do seu posto específico
+- Cria transações apenas para a data atual
+- Não pode gerenciar usuários
+- Não pode excluir transações
+- Requer posto associado obrigatoriamente
 
-## 📊 Comparativo
+## 📊 Comparativo Detalhado
 
 | Permissão | ADMIN | GERENTE | SUPERVISOR | PISTA |
 |-----------|-------|---------|------------|-------|
-| Criar Usuários | ✅ | Limitado | ❌ | ❌ |
-| Ver Todos Postos | ✅ | ✅ | ❌ | ❌ |
-| Editar Sem Limite | ✅ | ✅ | ✅ | ❌ |
-| Excluir | ✅ | ❌ | ❌ | ❌ |
+| **Gerenciar Usuários** | ✅ Todos | ⚠️ PISTA e SUPERVISOR | ❌ Não | ❌ Não |
+| **Ver Todos Postos** | ✅ Sim | ✅ Sim | ❌ Apenas associados | ❌ Apenas o seu |
+| **Editar Transações** | ✅ Sem limite | ✅ Sem limite | ✅ Sem limite | ⏱️ Até 15 minutos |
+| **Excluir Transações** | ✅ Sim | ✅ Sim | ❌ Não | ❌ Não |
+| **Posto Associado** | ➖ Não necessário | 🔄 Opcional | ✅ Obrigatório | ✅ Obrigatório |
+| **Criar Transações** | ✅ Qualquer data | ✅ Qualquer data | ✅ Qualquer data | 📅 Apenas data atual |
+
+## 🔑 Principais Diferenças
+
+### GERENTE vs SUPERVISOR
+- **GERENTE** pode gerenciar usuários (criar/editar PISTA e SUPERVISOR), **SUPERVISOR** não pode
+- **GERENTE** pode excluir transações, **SUPERVISOR** não pode
+- **GERENTE** tem acesso a todos os postos (mesmo sem associação), **SUPERVISOR** só vê postos associados
+- Ambos editam transações sem limite de tempo
+
+### SUPERVISOR vs PISTA
+- **SUPERVISOR** edita sem limite de tempo, **PISTA** tem 15 minutos
+- **SUPERVISOR** pode criar transações com qualquer data, **PISTA** só data atual
+- Ambos precisam de posto associado obrigatoriamente
+- Ambos não podem gerenciar usuários nem excluir transações
 
 ## 🔧 Como Usar
 
