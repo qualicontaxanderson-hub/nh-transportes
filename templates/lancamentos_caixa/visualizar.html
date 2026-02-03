@@ -418,13 +418,21 @@ function copiarParaWhatsApp() {
     {% set cartoes_debito = comprovacoes|selectattr('forma_tipo', 'equalto', 'CARTAO')|selectattr('cartao_tipo', 'equalto', 'DEBITO')|list %}
     {% if cartoes_debito|length > 0 %}
     {% set total_debito = cartoes_debito|map(attribute='valor')|map('float')|sum %}
-    texto += `• Cartão Débito: R$ {{ "{:,.2f}".format(total_debito).replace(',', 'X').replace('.', ',').replace('X', '.') }}\n`;
+    texto += `• Cartão Débito:\n`;
+    {% for cartao in cartoes_debito %}
+    texto += `  - {{ cartao.cartao_nome }}: R$ {{ "{:,.2f}".format(cartao.valor|float).replace(',', 'X').replace('.', ',').replace('X', '.') }}\n`;
+    {% endfor %}
+    texto += `  Subtotal: R$ {{ "{:,.2f}".format(total_debito).replace(',', 'X').replace('.', ',').replace('X', '.') }}\n`;
     {% endif %}
     
     {% set cartoes_credito = comprovacoes|selectattr('forma_tipo', 'equalto', 'CARTAO')|selectattr('cartao_tipo', 'equalto', 'CREDITO')|list %}
     {% if cartoes_credito|length > 0 %}
     {% set total_credito = cartoes_credito|map(attribute='valor')|map('float')|sum %}
-    texto += `• Cartão Crédito: R$ {{ "{:,.2f}".format(total_credito).replace(',', 'X').replace('.', ',').replace('X', '.') }}\n`;
+    texto += `• Cartão Crédito:\n`;
+    {% for cartao in cartoes_credito %}
+    texto += `  - {{ cartao.cartao_nome }}: R$ {{ "{:,.2f}".format(cartao.valor|float).replace(',', 'X').replace('.', ',').replace('X', '.') }}\n`;
+    {% endfor %}
+    texto += `  Subtotal: R$ {{ "{:,.2f}".format(total_credito).replace(',', 'X').replace('.', ',').replace('X', '.') }}\n`;
     {% endif %}
     
     {% if perdas_funcionarios and perdas_funcionarios|length > 0 %}

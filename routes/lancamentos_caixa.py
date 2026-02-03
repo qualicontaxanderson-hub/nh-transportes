@@ -94,6 +94,9 @@ def lista():
             where_conditions = []
             params = []
             
+            # SEMPRE filtrar apenas lançamentos FECHADOS (não mostrar automáticos de Troco PIX)
+            where_conditions.append("lc.status = 'FECHADO'")
+            
             if filtros['data_inicio']:
                 where_conditions.append("lc.data >= %s")
                 params.append(filtros['data_inicio'])
