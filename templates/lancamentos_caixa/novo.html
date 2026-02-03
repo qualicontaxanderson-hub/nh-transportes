@@ -350,10 +350,14 @@ function loadVendasDia() {
             const loading = document.getElementById('loading-vendas');
             if (loading) loading.remove();
             
+            console.log('Dados recebidos do get_vendas_dia:', data);
+            
             // Update AUTO fields with values (always set, even if 0)
             document.querySelectorAll('.receita-item').forEach(item => {
                 const tipoNome = item.dataset.tipoNome;
                 const valorInput = item.querySelector('.receita-valor');
+                
+                console.log(`Verificando receita: tipoNome="${tipoNome}", readonly=${valorInput.readOnly}`);
                 
                 // Only update AUTO type fields (those that are readonly)
                 if (!valorInput.readOnly) return;
@@ -365,6 +369,7 @@ function loadVendasDia() {
                 } else if (tipoNome === 'LUBRIFICANTES') {
                     valorInput.value = formatCurrency(data.lubrificantes || 0);
                 } else if (tipoNome === 'TROCO PIX (AUTO)' || tipoNome === 'TROCO PIX') {
+                    console.log(`Atualizando TROCO PIX: tipoNome="${tipoNome}", valor=${data.troco_pix || 0}`);
                     valorInput.value = formatCurrency(data.troco_pix || 0);
                 }
             });
