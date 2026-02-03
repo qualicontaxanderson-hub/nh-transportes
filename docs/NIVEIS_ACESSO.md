@@ -23,7 +23,7 @@
 - Não pode excluir transações
 - Requer posto associado obrigatoriamente
 
-### 4. PISTA - Operador (🔵 claro)
+### 4. PISTA - Operador (⚪)
 - Operação básica de posto
 - Edita transações apenas até 15 minutos após criação
 - Visualiza apenas dados do seu posto específico
