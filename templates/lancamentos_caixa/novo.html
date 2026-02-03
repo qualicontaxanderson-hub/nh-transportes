@@ -170,43 +170,43 @@ const tiposReceita = {{ tipos_receita_json|safe }};
 const formasPagamento = {{ formas_pagamento_json|safe }};
 const cartoes = {{ cartoes_json|safe }};
 
-// Define preferred order for known types (AUTO types first, then specific MANUAL types)
+// Definir ordem preferida para tipos conhecidos (tipos AUTO primeiro, depois tipos MANUAL específicos)
 const preferredOrder = ['VENDAS POSTO', 'ARLA', 'LUBRIFICANTES', 'TROCO PIX (AUTO)', 'RECEBIMENTOS', 'ACRÉSCIMOS GERAIS', 'ACRÉSCIMOS CADASTROS', 'TROCO PIX (MANUAL)', 'EMPRESTIMOS', 'OUTROS'];
 
-// Sort receipt types: preferred types in order, then any others alphabetically
+// Ordenar tipos de receita: tipos preferidos em ordem, depois outros alfabeticamente
 const sortedTiposReceita = [...tiposReceita].sort((a, b) => {
     const aIndex = preferredOrder.indexOf(a.nome);
     const bIndex = preferredOrder.indexOf(b.nome);
     
-    // Both are in preferred list
+    // Ambos estão na lista preferida
     if (aIndex !== -1 && bIndex !== -1) {
         return aIndex - bIndex;
     }
-    // Only a is in preferred list
+    // Apenas a está na lista preferida
     if (aIndex !== -1) {
         return -1;
     }
-    // Only b is in preferred list
+    // Apenas b está na lista preferida
     if (bIndex !== -1) {
         return 1;
     }
-    // Neither in preferred list - sort alphabetically
+    // Nenhum está na lista preferida - ordenar alfabeticamente
     return a.nome.localeCompare(b.nome);
 });
 
-// Create a map of receipt types by name for easy lookup
+// Criar um mapa de tipos de receita por nome para busca rápida
 const tiposMap = {};
 for (const tipo of tiposReceita) {
     tiposMap[tipo.nome] = tipo;
 }
 
-// Create a map of formas_pagamento by tipo for easy lookup
+// Criar um mapa de formas_pagamento por tipo para busca rápida
 const formasPagamentoMap = {};
 for (const forma of formasPagamento) {
     formasPagamentoMap[forma.tipo] = forma;
 }
 
-// Helper function to get forma_pagamento_id from tipo string
+// Função auxiliar para obter forma_pagamento_id a partir de string tipo
 function getFormaPagamentoIdByTipo(tipo) {
     const forma = formasPagamentoMap[tipo];
     return forma ? forma.id : null;
@@ -253,9 +253,9 @@ function formatNumberInput(input) {
 
 function initializeReceitas() {
     const container = document.getElementById('receitas-container');
-    container.innerHTML = ''; // Clear any existing content
+    container.innerHTML = ''; // Limpar qualquer conteúdo existente
     
-    // Add all receipt types from database (sorted with preferred order)
+    // Adicionar todos os tipos de receita do banco de dados (ordenados com ordem preferida)
     for (const tipoInfo of sortedTiposReceita) {
         const nomeTipo = tipoInfo.nome;
         const isAuto = tipoInfo.tipo === 'AUTO';
@@ -265,8 +265,8 @@ function initializeReceitas() {
         item.dataset.tipoNome = nomeTipo;
         
         if (isAuto) {
-            // AUTO type - will be filled by loadVendasDia
-            // Add navigation button for specific types
+            // Tipo AUTO - será preenchido por loadVendasDia
+            // Adicionar botão de navegação para tipos específicos
             let navButton = '';
             if (nomeTipo === 'VENDAS POSTO') {
                 navButton = '<a href="/posto/vendas" class="btn btn-sm btn-outline-primary" style="padding: 0.15rem 0.4rem; font-size: 0.75rem;" title="Ir para Vendas Posto"><i class="bi bi-box-arrow-up-right"></i></a>';
@@ -297,7 +297,7 @@ function initializeReceitas() {
                 </div>
             `;
         } else {
-            // MANUAL type - user can fill in
+            // Tipo MANUAL - usuário pode preencher
             item.innerHTML = `
                 <div class="row align-items-center">
                     <div class="col-md-4">
@@ -329,12 +329,12 @@ function loadVendasDia() {
         return;
     }
     
-    // Remove existing AUTO check entries before loading new ones
+    // Remover entradas AUTO de cheques existentes antes de carregar novas
     document.querySelectorAll('.comprovacao-item-auto').forEach(item => {
         item.remove();
     });
     
-    // Show loading indicator
+    // Mostrar indicador de carregamento
     const container = document.getElementById('receitas-container');
     const loadingMsg = document.createElement('div');
     loadingMsg.id = 'loading-vendas';
@@ -342,24 +342,24 @@ function loadVendasDia() {
     loadingMsg.innerHTML = '<i class="bi bi-hourglass-split"></i> Carregando vendas do dia...';
     container.insertBefore(loadingMsg, container.firstChild);
     
-    // Fetch vendas data
+    // Buscar dados de vendas
     fetch(`{{ url_for('lancamentos_caixa.get_vendas_dia') }}?cliente_id=${clienteId}&data=${data}`)
         .then(response => response.json())
         .then(data => {
-            // Remove loading indicator
+            // Remover indicador de carregamento
             const loading = document.getElementById('loading-vendas');
             if (loading) loading.remove();
             
             console.log('Dados recebidos do get_vendas_dia:', data);
             
-            // Update AUTO fields with values (always set, even if 0)
+            // Atualizar campos AUTO com valores (sempre define, mesmo se 0)
             document.querySelectorAll('.receita-item').forEach(item => {
                 const tipoNome = item.dataset.tipoNome;
                 const valorInput = item.querySelector('.receita-valor');
                 
                 console.log(`Verificando receita: tipoNome="${tipoNome}", readonly=${valorInput.readOnly}`);
                 
-                // Only update AUTO type fields (those that are readonly)
+                // Atualizar apenas campos do tipo AUTO (aqueles que são readonly)
                 if (!valorInput.readOnly) return;
                 
                 if (tipoNome === 'VENDAS POSTO') {
@@ -374,7 +374,7 @@ function loadVendasDia() {
                 }
             });
             
-            // Add CHEQUES AUTO to comprovações
+            // Adicionar CHEQUES AUTO às comprovações
             if (data.cheques_auto && data.cheques_auto.length > 0) {
                 data.cheques_auto.forEach(cheque => {
                     const tipo = cheque.tipo === 'A_VISTA' ? 'DEPOSITO_CHEQUE_VISTA' : 'DEPOSITO_CHEQUE_PRAZO';
