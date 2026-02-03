@@ -207,7 +207,9 @@ def get_vendas_dia():
         result = {
             'vendas_posto': 0,
             'arla': 0,
-            'lubrificantes': 0
+            'lubrificantes': 0,
+            'troco_pix': 0,
+            'cheques_auto': []
         }
         
         # Get Vendas Posto total
@@ -242,6 +244,55 @@ def get_vendas_dia():
                 result['lubrificantes'] = float(lubr['total'])
         except:
             # Table doesn't exist or has different structure, leave as 0
+            pass
+        
+        # Get Troco PIX total (check if troco_pix exists)
+        try:
+            cursor.execute("""
+                SELECT COALESCE(SUM(troco_pix), 0) as total
+                FROM troco_pix
+                WHERE cliente_id = %s AND data = %s
+            """, (cliente_id, data))
+            troco = cursor.fetchone()
+            if troco:
+                result['troco_pix'] = float(troco['total'])
+        except:
+            # Table doesn't exist or has different structure, leave as 0
+            pass
+        
+        # Get CHEQUES AUTO from TROCO PIX transactions
+        try:
+            cursor.execute("""
+                SELECT 
+                    tp.id as troco_pix_id,
+                    tp.cheque_tipo,
+                    tp.cheque_valor,
+                    tp.cheque_data_vencimento,
+                    CONCAT('AUTO - Cheque ', 
+                           CASE 
+                               WHEN tp.cheque_tipo = 'A_VISTA' THEN 'À Vista'
+                               WHEN tp.cheque_tipo = 'A_PRAZO' THEN 'A Prazo'
+                           END,
+                           ' - Troco PIX #', tp.id) as descricao
+                FROM troco_pix tp
+                WHERE tp.cliente_id = %s 
+                  AND tp.data = %s
+                  AND tp.cheque_valor > 0
+                ORDER BY tp.id
+            """, (cliente_id, data))
+            cheques = cursor.fetchall()
+            if cheques:
+                for cheque in cheques:
+                    result['cheques_auto'].append({
+                        'troco_pix_id': cheque['troco_pix_id'],
+                        'tipo': cheque['cheque_tipo'],
+                        'valor': float(cheque['cheque_valor']),
+                        'data_vencimento': cheque['cheque_data_vencimento'].isoformat() if cheque['cheque_data_vencimento'] else None,
+                        'descricao': cheque['descricao']
+                    })
+        except Exception as e:
+            # Table doesn't exist or has different structure, leave empty
+            print(f"[AVISO] Erro ao buscar cheques AUTO: {e}")
             pass
         
         return jsonify(result)
