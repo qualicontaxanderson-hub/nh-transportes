@@ -318,20 +318,50 @@ def get_funcionarios_por_cliente(cliente_id):
         conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)
         
-        # Buscar funcionários ativos vinculados ao cliente
-        query = """
-            SELECT 
-                f.id,
-                f.nome,
-                f.cargo,
-                f.cpf
-            FROM funcionarios f
-            WHERE f.clienteid = %s 
-              AND f.ativo = 1
-            ORDER BY f.nome
-        """
-        print(f"[DEBUG] Executando query com cliente_id: {cliente_id}")
-        cursor.execute(query, (cliente_id,))
+        # Primeiro, tentar descobrir qual coluna existe na tabela
+        cursor.execute("DESCRIBE funcionarios")
+        columns = [col['Field'] for col in cursor.fetchall()]
+        print(f"[DEBUG] Colunas da tabela funcionarios: {columns}")
+        
+        # Determinar qual nome de coluna usar
+        cliente_column = None
+        if 'clienteid' in columns:
+            cliente_column = 'clienteid'
+        elif 'cliente_id' in columns:
+            cliente_column = 'cliente_id'
+        elif 'id_cliente' in columns:
+            cliente_column = 'id_cliente'
+        
+        if not cliente_column:
+            print(f"[AVISO] Coluna de cliente não encontrada. Retornando todos os funcionários ativos.")
+            # Se não há coluna de cliente, retornar todos os funcionários ativos
+            query = """
+                SELECT 
+                    f.id,
+                    f.nome,
+                    f.cargo,
+                    f.cpf
+                FROM funcionarios f
+                WHERE f.ativo = 1
+                ORDER BY f.nome
+            """
+            cursor.execute(query)
+        else:
+            print(f"[DEBUG] Usando coluna: {cliente_column}")
+            # Buscar funcionários ativos vinculados ao cliente
+            query = f"""
+                SELECT 
+                    f.id,
+                    f.nome,
+                    f.cargo,
+                    f.cpf
+                FROM funcionarios f
+                WHERE f.{cliente_column} = %s 
+                  AND f.ativo = 1
+                ORDER BY f.nome
+            """
+            print(f"[DEBUG] Executando query com cliente_id: {cliente_id}")
+            cursor.execute(query, (cliente_id,))
         
         funcionarios = cursor.fetchall()
         print(f"[DEBUG] Encontrados {len(funcionarios)} funcionários")
