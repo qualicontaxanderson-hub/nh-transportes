@@ -33,7 +33,12 @@
                         </div>
 
                         <div class="mb-3">
-                            <label for="nivel" class="form-label">Nível de Acesso *</label>
+                            <label for="nivel" class="form-label">
+                                Nível de Acesso *
+                                <button type="button" class="btn btn-sm btn-outline-info ms-2" data-bs-toggle="collapse" data-bs-target="#permissoesDetalhadas" aria-expanded="false">
+                                    <i class="bi bi-info-circle"></i> Ver Comparativo de Permissões
+                                </button>
+                            </label>
                             <select class="form-select" id="nivel" name="nivel" required onchange="toggleClienteField()">
                                 <option value="">Selecione...</option>
                                 <option value="ADMIN" {% if usuario.nivel == 'ADMIN' or usuario.nivel == 'admin' or usuario.nivel == 'Administrador' %}selected{% endif %}>ADMIN - Acesso Total ao Sistema</option>
@@ -41,12 +46,78 @@
                                 <option value="SUPERVISOR" {% if usuario.nivel == 'SUPERVISOR' %}selected{% endif %}>SUPERVISOR - Supervisão de Posto(s)</option>
                                 <option value="PISTA" {% if usuario.nivel == 'PISTA' %}selected{% endif %}>PISTA - Operação de Posto (Limitado)</option>
                             </select>
+                            
+                            <!-- Descrições resumidas -->
                             <small class="form-text text-muted">
-                                <strong>ADMIN:</strong> Todas as permissões |
-                                <strong>GERENTE:</strong> Gestão sem restrição |
-                                <strong>SUPERVISOR:</strong> Supervisão sem limite de tempo |
-                                <strong>PISTA:</strong> Operação com limite 15 min
+                                <strong>ADMIN:</strong> Todas as permissões<br>
+                                <strong>GERENTE:</strong> Gerencia usuários PISTA/SUPERVISOR, acesso a todos os postos, pode excluir transações<br>
+                                <strong>SUPERVISOR:</strong> Supervisiona posto(s) específico(s), edita sem limite de tempo, não gerencia usuários<br>
+                                <strong>PISTA:</strong> Operação básica, apenas seu posto, limite 15 min para edição
                             </small>
+                            
+                            <!-- Seção expansível com comparativo detalhado -->
+                            <div class="collapse mt-3" id="permissoesDetalhadas">
+                                <div class="card card-body bg-light">
+                                    <h6 class="mb-3"><i class="bi bi-table"></i> Comparativo Detalhado de Permissões</h6>
+                                    <div class="table-responsive">
+                                        <table class="table table-sm table-bordered">
+                                            <thead class="table-secondary">
+                                                <tr>
+                                                    <th>Permissão</th>
+                                                    <th class="text-center">🔴 ADMIN</th>
+                                                    <th class="text-center">🟡 GERENTE</th>
+                                                    <th class="text-center">🔵 SUPERVISOR</th>
+                                                    <th class="text-center">🔵 PISTA</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                <tr>
+                                                    <td><strong>Gerenciar Usuários</strong></td>
+                                                    <td class="text-center">✅ Todos</td>
+                                                    <td class="text-center">⚠️ Apenas PISTA e SUPERVISOR</td>
+                                                    <td class="text-center">❌ Não</td>
+                                                    <td class="text-center">❌ Não</td>
+                                                </tr>
+                                                <tr>
+                                                    <td><strong>Visualizar Todos os Postos</strong></td>
+                                                    <td class="text-center">✅ Sim</td>
+                                                    <td class="text-center">✅ Sim</td>
+                                                    <td class="text-center">❌ Apenas associados</td>
+                                                    <td class="text-center">❌ Apenas o seu</td>
+                                                </tr>
+                                                <tr>
+                                                    <td><strong>Editar Transações</strong></td>
+                                                    <td class="text-center">✅ Sem limite</td>
+                                                    <td class="text-center">✅ Sem limite</td>
+                                                    <td class="text-center">✅ Sem limite</td>
+                                                    <td class="text-center">⏱️ Até 15 minutos</td>
+                                                </tr>
+                                                <tr>
+                                                    <td><strong>Excluir Transações</strong></td>
+                                                    <td class="text-center">✅ Sim</td>
+                                                    <td class="text-center">✅ Sim</td>
+                                                    <td class="text-center">❌ Não</td>
+                                                    <td class="text-center">❌ Não</td>
+                                                </tr>
+                                                <tr>
+                                                    <td><strong>Posto Associado</strong></td>
+                                                    <td class="text-center">➖ Não necessário</td>
+                                                    <td class="text-center">🔄 Opcional</td>
+                                                    <td class="text-center">✅ Obrigatório</td>
+                                                    <td class="text-center">✅ Obrigatório</td>
+                                                </tr>
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                    <div class="mt-2">
+                                        <small class="text-muted">
+                                            <i class="bi bi-info-circle"></i> 
+                                            Para mais detalhes, consulte a 
+                                            <a href="{{ url_for('static', filename='../docs/NIVEIS_ACESSO.md') }}" target="_blank">documentação completa de níveis de acesso</a>.
+                                        </small>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
 
                         <div class="mb-3" id="cliente_field" style="display:{% if usuario.nivel == 'PISTA' or usuario.nivel == 'SUPERVISOR' or usuario.nivel == 'GERENTE' %}block{% else %}none{% endif %};">
