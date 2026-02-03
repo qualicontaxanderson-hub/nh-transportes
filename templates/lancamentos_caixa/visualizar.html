@@ -74,6 +74,35 @@
                     {% else %}
                     <p class="text-muted">Nenhuma receita lançada.</p>
                     {% endif %}
+                    
+                    {# Sobras de Caixa por Funcionário #}
+                    {% if sobras_funcionarios and sobras_funcionarios|length > 0 %}
+                    <hr>
+                    <h6 class="mt-3 mb-2" style="color: #28a745; font-size: 0.9rem;"><i class="bi bi-people-fill"></i> Sobras de Caixa por Funcionário</h6>
+                    <table class="table table-sm table-bordered">
+                        <thead style="background:#e8f5e9;">
+                            <tr>
+                                <th style="font-size: 0.85rem;">Funcionário</th>
+                                <th style="font-size: 0.85rem;">Observação</th>
+                                <th style="font-size: 0.85rem; text-align: right;">Valor</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for sobra in sobras_funcionarios %}
+                            <tr>
+                                <td style="font-size: 0.85rem;">{{ sobra.funcionario_nome }}</td>
+                                <td style="font-size: 0.85rem;">{{ sobra.observacao if sobra.observacao else '-' }}</td>
+                                <td style="font-size: 0.85rem; text-align: right;">R$ {{ "{:,.2f}".format(sobra.valor|float).replace(',', 'X').replace('.', ',').replace('X', '.') }}</td>
+                            </tr>
+                            {% endfor %}
+                            <tr style="background:#c8e6c9; font-weight: bold;">
+                                <td colspan="2" style="font-size: 0.85rem;">Total Sobras</td>
+                                <td style="font-size: 0.85rem; text-align: right;">R$ {{ "{:,.2f}".format(sobras_funcionarios|map(attribute='valor')|map('float')|sum).replace(',', 'X').replace('.', ',').replace('X', '.') }}</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                    {% endif %}
+                    
                     <hr>
                     <div class="d-flex justify-content-between align-items-center">
                         <strong>Total Receitas:</strong>
@@ -206,6 +235,63 @@
                     {% else %}
                     <p class="text-muted">Nenhuma comprovação lançada.</p>
                     {% endif %}
+                    
+                    {# Perdas de Caixa por Funcionário #}
+                    {% if perdas_funcionarios and perdas_funcionarios|length > 0 %}
+                    <hr>
+                    <h6 class="mt-3 mb-2" style="color: #ffc107; font-size: 0.9rem;"><i class="bi bi-exclamation-triangle-fill"></i> Perdas de Caixa por Funcionário</h6>
+                    <table class="table table-sm table-bordered">
+                        <thead style="background:#fff3cd;">
+                            <tr>
+                                <th style="font-size: 0.85rem;">Funcionário</th>
+                                <th style="font-size: 0.85rem;">Observação</th>
+                                <th style="font-size: 0.85rem; text-align: right;">Valor</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for perda in perdas_funcionarios %}
+                            <tr>
+                                <td style="font-size: 0.85rem;">{{ perda.funcionario_nome }}</td>
+                                <td style="font-size: 0.85rem;">{{ perda.observacao if perda.observacao else '-' }}</td>
+                                <td style="font-size: 0.85rem; text-align: right;">R$ {{ "{:,.2f}".format(perda.valor|float).replace(',', 'X').replace('.', ',').replace('X', '.') }}</td>
+                            </tr>
+                            {% endfor %}
+                            <tr style="background:#ffe082; font-weight: bold;">
+                                <td colspan="2" style="font-size: 0.85rem;">Total Perdas</td>
+                                <td style="font-size: 0.85rem; text-align: right;">R$ {{ "{:,.2f}".format(perdas_funcionarios|map(attribute='valor')|map('float')|sum).replace(',', 'X').replace('.', ',').replace('X', '.') }}</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                    {% endif %}
+                    
+                    {# Vales de Quebras por Funcionário #}
+                    {% if vales_funcionarios and vales_funcionarios|length > 0 %}
+                    <hr>
+                    <h6 class="mt-3 mb-2" style="color: #dc3545; font-size: 0.9rem;"><i class="bi bi-file-text-fill"></i> Vales de Quebras de Caixa por Funcionário</h6>
+                    <table class="table table-sm table-bordered">
+                        <thead style="background:#f8d7da;">
+                            <tr>
+                                <th style="font-size: 0.85rem;">Funcionário</th>
+                                <th style="font-size: 0.85rem;">Observação</th>
+                                <th style="font-size: 0.85rem; text-align: right;">Valor</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for vale in vales_funcionarios %}
+                            <tr>
+                                <td style="font-size: 0.85rem;">{{ vale.funcionario_nome }}</td>
+                                <td style="font-size: 0.85rem;">{{ vale.observacao if vale.observacao else '-' }}</td>
+                                <td style="font-size: 0.85rem; text-align: right;">R$ {{ "{:,.2f}".format(vale.valor|float).replace(',', 'X').replace('.', ',').replace('X', '.') }}</td>
+                            </tr>
+                            {% endfor %}
+                            <tr style="background:#f5c6cb; font-weight: bold;">
+                                <td colspan="2" style="font-size: 0.85rem;">Total Vales</td>
+                                <td style="font-size: 0.85rem; text-align: right;">R$ {{ "{:,.2f}".format(vales_funcionarios|map(attribute='valor')|map('float')|sum).replace(',', 'X').replace('.', ',').replace('X', '.') }}</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                    {% endif %}
+                    
                     <hr>
                     <div class="d-flex justify-content-between align-items-center">
                         <strong>Total Comprovação:</strong>
@@ -249,8 +335,158 @@
         <a href="{{ url_for('lancamentos_caixa.lista') }}" class="btn btn-secondary btn-sm">
             <i class="bi bi-arrow-left"></i> Voltar
         </a>
+        <button onclick="copiarParaWhatsApp()" class="btn btn-success btn-sm">
+            <i class="bi bi-whatsapp"></i> Copiar para WhatsApp
+        </button>
     </div>
 </div>
+
+<script>
+function copiarParaWhatsApp() {
+    // Formatar data
+    const data = '{{ lancamento.data.strftime("%d/%m/%Y") if lancamento.data else "" }}';
+    
+    // Montar texto
+    let texto = `📊 *FECHAMENTO DE CAIXA #{{ lancamento.id }}*\n`;
+    texto += `📅 Data: ${data}\n`;
+    texto += `👤 Usuário: {{ lancamento.usuario_nome if lancamento.usuario_nome else "-" }}\n`;
+    {% if lancamento.observacao %}
+    texto += `📝 Obs: {{ lancamento.observacao }}\n`;
+    {% endif %}
+    texto += `\n`;
+    
+    // RECEITAS E ENTRADAS
+    texto += `💰 *RECEITAS E ENTRADAS*\n`;
+    texto += `━━━━━━━━━━━━━━━━━━━━\n`;
+    {% for receita in receitas %}
+    texto += `• {{ receita.tipo_nome }}: R$ {{ "{:,.2f}".format(receita.valor|float).replace(',', 'X').replace('.', ',').replace('X', '.') }}\n`;
+    {% if receita.descricao %}
+    texto += `  └ {{ receita.descricao }}\n`;
+    {% endif %}
+    {% endfor %}
+    
+    {% if sobras_funcionarios and sobras_funcionarios|length > 0 %}
+    texto += `\n✨ *Sobras de Caixa por Funcionário:*\n`;
+    {% for sobra in sobras_funcionarios %}
+    texto += `  • {{ sobra.funcionario_nome }}: R$ {{ "{:,.2f}".format(sobra.valor|float).replace(',', 'X').replace('.', ',').replace('X', '.') }}\n`;
+    {% if sobra.observacao %}
+    texto += `    └ {{ sobra.observacao }}\n`;
+    {% endif %}
+    {% endfor %}
+    {% set total_sobras = sobras_funcionarios|map(attribute='valor')|map('float')|sum %}
+    texto += `  *Total Sobras:* R$ {{ "{:,.2f}".format(total_sobras).replace(',', 'X').replace('.', ',').replace('X', '.') }}\n`;
+    {% endif %}
+    
+    texto += `\n*Total Receitas: R$ {{ "{:,.2f}".format(lancamento.total_receitas|float).replace(',', 'X').replace('.', ',').replace('X', '.') }}*\n`;
+    texto += `\n`;
+    
+    // COMPROVAÇÕES
+    texto += `✅ *COMPROVAÇÃO PARA FECHAMENTO*\n`;
+    texto += `━━━━━━━━━━━━━━━━━━━━\n`;
+    
+    {% set processed_tipos = [] %}
+    {% for comp in comprovacoes %}
+        {% if comp.forma_tipo and comp.forma_tipo not in ['CARTAO', 'DEPOSITO_ESPECIE', 'DEPOSITO_CHEQUE_VISTA', 'DEPOSITO_CHEQUE_PRAZO'] %}
+            {% if comp.forma_tipo not in processed_tipos %}
+                {% set _ = processed_tipos.append(comp.forma_tipo) %}
+    texto += `• {{ comp.forma_pagamento_nome }}: R$ {{ "{:,.2f}".format(comp.valor|float).replace(',', 'X').replace('.', ',').replace('X', '.') }}\n`;
+    {% if comp.descricao %}
+    texto += `  └ {{ comp.descricao }}\n`;
+    {% endif %}
+            {% endif %}
+        {% endif %}
+    {% endfor %}
+    
+    {% set depositos_especie = comprovacoes|selectattr('forma_tipo', 'equalto', 'DEPOSITO_ESPECIE')|list %}
+    {% if depositos_especie|length > 0 %}
+    {% set total_especie = depositos_especie|map(attribute='valor')|map('float')|sum %}
+    texto += `• Depósitos em Espécie ({{ depositos_especie|length }}): R$ {{ "{:,.2f}".format(total_especie).replace(',', 'X').replace('.', ',').replace('X', '.') }}\n`;
+    {% endif %}
+    
+    {% set depositos_vista = comprovacoes|selectattr('forma_tipo', 'equalto', 'DEPOSITO_CHEQUE_VISTA')|list %}
+    {% if depositos_vista|length > 0 %}
+    {% set total_vista = depositos_vista|map(attribute='valor')|map('float')|sum %}
+    texto += `• Depósitos em Cheques À Vista ({{ depositos_vista|length }}): R$ {{ "{:,.2f}".format(total_vista).replace(',', 'X').replace('.', ',').replace('X', '.') }}\n`;
+    {% endif %}
+    
+    {% set depositos_prazo = comprovacoes|selectattr('forma_tipo', 'equalto', 'DEPOSITO_CHEQUE_PRAZO')|list %}
+    {% if depositos_prazo|length > 0 %}
+    {% set total_prazo = depositos_prazo|map(attribute='valor')|map('float')|sum %}
+    texto += `• Depósitos em Cheques A Prazo ({{ depositos_prazo|length }}): R$ {{ "{:,.2f}".format(total_prazo).replace(',', 'X').replace('.', ',').replace('X', '.') }}\n`;
+    {% endif %}
+    
+    {% set cartoes_debito = comprovacoes|selectattr('forma_tipo', 'equalto', 'CARTAO')|selectattr('cartao_tipo', 'equalto', 'DEBITO')|list %}
+    {% if cartoes_debito|length > 0 %}
+    {% set total_debito = cartoes_debito|map(attribute='valor')|map('float')|sum %}
+    texto += `• Cartão Débito: R$ {{ "{:,.2f}".format(total_debito).replace(',', 'X').replace('.', ',').replace('X', '.') }}\n`;
+    {% endif %}
+    
+    {% set cartoes_credito = comprovacoes|selectattr('forma_tipo', 'equalto', 'CARTAO')|selectattr('cartao_tipo', 'equalto', 'CREDITO')|list %}
+    {% if cartoes_credito|length > 0 %}
+    {% set total_credito = cartoes_credito|map(attribute='valor')|map('float')|sum %}
+    texto += `• Cartão Crédito: R$ {{ "{:,.2f}".format(total_credito).replace(',', 'X').replace('.', ',').replace('X', '.') }}\n`;
+    {% endif %}
+    
+    {% if perdas_funcionarios and perdas_funcionarios|length > 0 %}
+    texto += `\n⚠️ *Perdas de Caixa por Funcionário:*\n`;
+    {% for perda in perdas_funcionarios %}
+    texto += `  • {{ perda.funcionario_nome }}: R$ {{ "{:,.2f}".format(perda.valor|float).replace(',', 'X').replace('.', ',').replace('X', '.') }}\n`;
+    {% if perda.observacao %}
+    texto += `    └ {{ perda.observacao }}\n`;
+    {% endif %}
+    {% endfor %}
+    {% set total_perdas = perdas_funcionarios|map(attribute='valor')|map('float')|sum %}
+    texto += `  *Total Perdas:* R$ {{ "{:,.2f}".format(total_perdas).replace(',', 'X').replace('.', ',').replace('X', '.') }}\n`;
+    {% endif %}
+    
+    {% if vales_funcionarios and vales_funcionarios|length > 0 %}
+    texto += `\n📄 *Vales de Quebras por Funcionário:*\n`;
+    {% for vale in vales_funcionarios %}
+    texto += `  • {{ vale.funcionario_nome }}: R$ {{ "{:,.2f}".format(vale.valor|float).replace(',', 'X').replace('.', ',').replace('X', '.') }}\n`;
+    {% if vale.observacao %}
+    texto += `    └ {{ vale.observacao }}\n`;
+    {% endif %}
+    {% endfor %}
+    {% set total_vales = vales_funcionarios|map(attribute='valor')|map('float')|sum %}
+    texto += `  *Total Vales:* R$ {{ "{:,.2f}".format(total_vales).replace(',', 'X').replace('.', ',').replace('X', '.') }}\n`;
+    {% endif %}
+    
+    texto += `\n*Total Comprovação: R$ {{ "{:,.2f}".format(lancamento.total_comprovacao|float).replace(',', 'X').replace('.', ',').replace('X', '.') }}*\n`;
+    texto += `\n`;
+    
+    // RESUMO FINAL
+    texto += `📊 *RESUMO FINAL*\n`;
+    texto += `━━━━━━━━━━━━━━━━━━━━\n`;
+    texto += `Total Receitas: R$ {{ "{:,.2f}".format(lancamento.total_receitas|float).replace(',', 'X').replace('.', ',').replace('X', '.') }}\n`;
+    texto += `Total Comprovação: R$ {{ "{:,.2f}".format(lancamento.total_comprovacao|float).replace(',', 'X').replace('.', ',').replace('X', '.') }}\n`;
+    {% set diferenca_abs = lancamento.diferenca|float|abs %}
+    {% if lancamento.diferenca|float < 0 %}
+    texto += `❌ *Diferença: -R$ {{ "{:,.2f}".format(diferenca_abs).replace(',', 'X').replace('.', ',').replace('X', '.') }}*\n`;
+    {% elif lancamento.diferenca|float > 0 %}
+    texto += `⚠️ *Diferença: +R$ {{ "{:,.2f}".format(diferenca_abs).replace(',', 'X').replace('.', ',').replace('X', '.') }}*\n`;
+    {% else %}
+    texto += `✅ *Diferença: R$ 0,00* (Fechamento OK)\n`;
+    {% endif %}
+    
+    // Copiar para clipboard
+    navigator.clipboard.writeText(texto).then(function() {
+        // Mostrar mensagem de sucesso
+        const btn = event.target.closest('button');
+        const originalHTML = btn.innerHTML;
+        btn.innerHTML = '<i class="bi bi-check-circle"></i> Copiado!';
+        btn.classList.remove('btn-success');
+        btn.classList.add('btn-primary');
+        
+        setTimeout(function() {
+            btn.innerHTML = originalHTML;
+            btn.classList.remove('btn-primary');
+            btn.classList.add('btn-success');
+        }, 2000);
+    }).catch(function(err) {
+        alert('Erro ao copiar para clipboard: ' + err);
+    });
+}
+</script>
 
 <style>
     .form-label {

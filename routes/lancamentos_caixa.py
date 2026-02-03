@@ -2,7 +2,7 @@ from flask import Blueprint, render_template, request, redirect, url_for, flash,
 from flask_login import login_required, current_user
 from utils.db import get_db_connection
 from utils.decorators import admin_required
-from datetime import datetime
+from datetime import datetime, timedelta
 from decimal import Decimal
 import json
 
@@ -50,11 +50,11 @@ def lista():
         conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)
         
-        # Default to current month if no filters provided
+        # Default to 45 days before today if no filters provided
         from datetime import date
         hoje = date.today()
-        primeiro_dia_mes = hoje.replace(day=1)
-        data_inicio_default = primeiro_dia_mes.strftime('%Y-%m-%d')
+        data_45_dias_atras = hoje - timedelta(days=45)
+        data_inicio_default = data_45_dias_atras.strftime('%Y-%m-%d')
         data_fim_default = hoje.strftime('%Y-%m-%d')
         
         # Get filters from query string
@@ -767,10 +767,43 @@ def visualizar(id):
         """, (id,))
         comprovacoes = cursor.fetchall()
         
+        # Get sobras de funcionários (receitas)
+        cursor.execute("""
+            SELECT s.*, f.nome as funcionario_nome
+            FROM lancamentos_caixa_sobras_funcionarios s
+            LEFT JOIN funcionarios f ON s.funcionario_id = f.id
+            WHERE s.lancamento_caixa_id = %s
+            ORDER BY f.nome
+        """, (id,))
+        sobras_funcionarios = cursor.fetchall()
+        
+        # Get perdas de funcionários (comprovações)
+        cursor.execute("""
+            SELECT p.*, f.nome as funcionario_nome
+            FROM lancamentos_caixa_perdas_funcionarios p
+            LEFT JOIN funcionarios f ON p.funcionario_id = f.id
+            WHERE p.lancamento_caixa_id = %s
+            ORDER BY f.nome
+        """, (id,))
+        perdas_funcionarios = cursor.fetchall()
+        
+        # Get vales de funcionários (comprovações)
+        cursor.execute("""
+            SELECT v.*, f.nome as funcionario_nome
+            FROM lancamentos_caixa_vales_funcionarios v
+            LEFT JOIN funcionarios f ON v.funcionario_id = f.id
+            WHERE v.lancamento_caixa_id = %s
+            ORDER BY f.nome
+        """, (id,))
+        vales_funcionarios = cursor.fetchall()
+        
         return render_template('lancamentos_caixa/visualizar.html', 
                              lancamento=lancamento, 
                              receitas=receitas,
-                             comprovacoes=comprovacoes)
+                             comprovacoes=comprovacoes,
+                             sobras_funcionarios=sobras_funcionarios,
+                             perdas_funcionarios=perdas_funcionarios,
+                             vales_funcionarios=vales_funcionarios)
     except Exception as e:
         flash(f'Erro ao visualizar lançamento: {str(e)}', 'danger')
         return redirect(url_for('lancamentos_caixa.lista'))
