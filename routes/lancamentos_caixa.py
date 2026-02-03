@@ -853,6 +853,18 @@ def editar(id):
             comprovacoes_json = request.form.get('comprovacoes', '[]')
             comprovacoes = json.loads(comprovacoes_json)
             
+            # Get sobras de funcionários (receitas) - JSON encoded
+            sobras_json = request.form.get('sobras_funcionarios', '[]')
+            sobras_funcionarios = json.loads(sobras_json)
+            
+            # Get perdas de funcionários (comprovações) - JSON encoded
+            perdas_json = request.form.get('perdas_funcionarios', '[]')
+            perdas_funcionarios = json.loads(perdas_json)
+            
+            # Get vales de funcionários (comprovações) - JSON encoded
+            vales_json = request.form.get('vales_funcionarios', '[]')
+            vales_funcionarios = json.loads(vales_json)
+            
             # Validate
             if not data:
                 flash('Data é obrigatória!', 'danger')
@@ -863,8 +875,16 @@ def editar(id):
                 raise ValueError('Cliente não fornecido')
             
             # Calculate totals: Diferença = Total Comprovação - Total Receitas
+            # Include sobras in receitas and perdas+vales in comprovações
             total_receitas = sum(parse_brazilian_currency(r.get('valor', 0)) for r in receitas)
+            total_sobras = sum(parse_brazilian_currency(s.get('valor', 0)) for s in sobras_funcionarios)
+            total_receitas += total_sobras
+            
             total_comprovacao = sum(parse_brazilian_currency(c.get('valor', 0)) for c in comprovacoes)
+            total_perdas = sum(parse_brazilian_currency(p.get('valor', 0)) for p in perdas_funcionarios)
+            total_vales = sum(parse_brazilian_currency(v.get('valor', 0)) for v in vales_funcionarios)
+            total_comprovacao += total_perdas + total_vales
+            
             diferenca = total_comprovacao - total_receitas
             
             # Update lancamento_caixa
@@ -879,6 +899,11 @@ def editar(id):
             # Delete old receitas and comprovacoes
             cursor.execute("DELETE FROM lancamentos_caixa_receitas WHERE lancamento_caixa_id = %s", (id,))
             cursor.execute("DELETE FROM lancamentos_caixa_comprovacao WHERE lancamento_caixa_id = %s", (id,))
+            
+            # Delete old sobras/perdas/vales
+            cursor.execute("DELETE FROM lancamentos_caixa_sobras_funcionarios WHERE lancamento_caixa_id = %s", (id,))
+            cursor.execute("DELETE FROM lancamentos_caixa_perdas_funcionarios WHERE lancamento_caixa_id = %s", (id,))
+            cursor.execute("DELETE FROM lancamentos_caixa_vales_funcionarios WHERE lancamento_caixa_id = %s", (id,))
             
             # Insert new receitas
             for receita in receitas:
@@ -906,6 +931,42 @@ def editar(id):
                           int(cartao_id) if cartao_id and cartao_id != '' else None,
                           comprovacao.get('descricao', ''),
                           float(parse_brazilian_currency(comprovacao['valor']))))
+            
+            # Insert sobras de funcionários (receitas)
+            for sobra in sobras_funcionarios:
+                if sobra.get('funcionario_id') and sobra.get('valor'):
+                    valor = parse_brazilian_currency(sobra['valor'])
+                    if valor > 0:  # Só inserir se tiver valor
+                        cursor.execute("""
+                            INSERT INTO lancamentos_caixa_sobras_funcionarios 
+                            (lancamento_caixa_id, funcionario_id, valor, observacao)
+                            VALUES (%s, %s, %s, %s)
+                        """, (id, int(sobra['funcionario_id']), 
+                              float(valor), sobra.get('observacao', '')))
+            
+            # Insert perdas de funcionários (comprovações)
+            for perda in perdas_funcionarios:
+                if perda.get('funcionario_id') and perda.get('valor'):
+                    valor = parse_brazilian_currency(perda['valor'])
+                    if valor > 0:  # Só inserir se tiver valor
+                        cursor.execute("""
+                            INSERT INTO lancamentos_caixa_perdas_funcionarios 
+                            (lancamento_caixa_id, funcionario_id, valor, observacao)
+                            VALUES (%s, %s, %s, %s)
+                        """, (id, int(perda['funcionario_id']), 
+                              float(valor), perda.get('observacao', '')))
+            
+            # Insert vales de funcionários (comprovações)
+            for vale in vales_funcionarios:
+                if vale.get('funcionario_id') and vale.get('valor'):
+                    valor = parse_brazilian_currency(vale['valor'])
+                    if valor > 0:  # Só inserir se tiver valor
+                        cursor.execute("""
+                            INSERT INTO lancamentos_caixa_vales_funcionarios 
+                            (lancamento_caixa_id, funcionario_id, valor, observacao)
+                            VALUES (%s, %s, %s, %s)
+                        """, (id, int(vale['funcionario_id']), 
+                              float(valor), vale.get('observacao', '')))
             
             conn.commit()
             flash('Lançamento de caixa atualizado com sucesso!', 'success')
@@ -949,6 +1010,39 @@ def editar(id):
         print(f"DEBUG: Loaded {len(comprovacoes)} comprovacoes for lancamento_caixa_id={id}")
         for c in comprovacoes:
             print(f"  - Comprovacao: {c}")
+        
+        # Get sobras de funcionários
+        cursor.execute("""
+            SELECT s.*, f.nome as funcionario_nome
+            FROM lancamentos_caixa_sobras_funcionarios s
+            LEFT JOIN funcionarios f ON s.funcionario_id = f.id
+            WHERE s.lancamento_caixa_id = %s
+            ORDER BY s.id
+        """, (id,))
+        sobras_funcionarios = cursor.fetchall()
+        print(f"DEBUG: Loaded {len(sobras_funcionarios)} sobras for lancamento_caixa_id={id}")
+        
+        # Get perdas de funcionários
+        cursor.execute("""
+            SELECT p.*, f.nome as funcionario_nome
+            FROM lancamentos_caixa_perdas_funcionarios p
+            LEFT JOIN funcionarios f ON p.funcionario_id = f.id
+            WHERE p.lancamento_caixa_id = %s
+            ORDER BY p.id
+        """, (id,))
+        perdas_funcionarios = cursor.fetchall()
+        print(f"DEBUG: Loaded {len(perdas_funcionarios)} perdas for lancamento_caixa_id={id}")
+        
+        # Get vales de funcionários
+        cursor.execute("""
+            SELECT v.*, f.nome as funcionario_nome
+            FROM lancamentos_caixa_vales_funcionarios v
+            LEFT JOIN funcionarios f ON v.funcionario_id = f.id
+            WHERE v.lancamento_caixa_id = %s
+            ORDER BY v.id
+        """, (id,))
+        vales_funcionarios = cursor.fetchall()
+        print(f"DEBUG: Loaded {len(vales_funcionarios)} vales for lancamento_caixa_id={id}")
         
         # Get clients with "Produtos Posto" configured (same as in novo route)
         cursor.execute("""
@@ -1021,6 +1115,9 @@ def editar(id):
         lancamento_clean = convert_to_plain_python(lancamento)
         receitas_clean = convert_to_plain_python(receitas)
         comprovacoes_clean = convert_to_plain_python(comprovacoes)
+        sobras_clean = convert_to_plain_python(sobras_funcionarios)
+        perdas_clean = convert_to_plain_python(perdas_funcionarios)
+        vales_clean = convert_to_plain_python(vales_funcionarios)
         clientes_clean = convert_to_plain_python(clientes)
         formas_pagamento_clean = convert_to_plain_python(formas_pagamento)
         bandeiras_cartao_clean = convert_to_plain_python(bandeiras_cartao)
@@ -1031,6 +1128,9 @@ def editar(id):
         lancamento_json = json.dumps(lancamento_clean)
         receitas_json = json.dumps(receitas_clean)
         comprovacoes_json = json.dumps(comprovacoes_clean)
+        sobras_json = json.dumps(sobras_clean)
+        perdas_json = json.dumps(perdas_clean)
+        vales_json = json.dumps(vales_clean)
         clientes_json = json.dumps(clientes_clean)
         formas_pagamento_json = json.dumps(formas_pagamento_clean)
         bandeiras_cartao_json = json.dumps(bandeiras_cartao_clean)
@@ -1038,12 +1138,18 @@ def editar(id):
         
         print(f"DEBUG: Passing to template - receitas_json={receitas_json}")
         print(f"DEBUG: Passing to template - comprovacoes_json={comprovacoes_json}")
+        print(f"DEBUG: Passing to template - sobras_json={sobras_json}")
+        print(f"DEBUG: Passing to template - perdas_json={perdas_json}")
+        print(f"DEBUG: Passing to template - vales_json={vales_json}")
         
         return render_template('lancamentos_caixa/novo.html',
                              edit_mode=True,
                              lancamento=lancamento_clean,
                              receitas=receitas_clean,
                              comprovacoes=comprovacoes_clean,
+                             sobras_funcionarios=sobras_clean,
+                             perdas_funcionarios=perdas_clean,
+                             vales_funcionarios=vales_clean,
                              clientes=clientes_clean,
                              formas_pagamento=formas_pagamento_clean,
                              bandeiras_cartao=bandeiras_cartao_clean,
@@ -1053,6 +1159,9 @@ def editar(id):
                              lancamento_json=lancamento_json,
                              receitas_json=receitas_json,
                              comprovacoes_json=comprovacoes_json,
+                             sobras_json=sobras_json,
+                             perdas_json=perdas_json,
+                             vales_json=vales_json,
                              clientes_json=clientes_json,
                              formas_pagamento_json=formas_pagamento_json,
                              bandeiras_cartao_json=bandeiras_cartao_json,

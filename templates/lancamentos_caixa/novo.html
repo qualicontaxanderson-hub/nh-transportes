@@ -1203,6 +1203,53 @@ document.addEventListener('DOMContentLoaded', function() {
     // Calculate totals (includes receitas, comprovacoes, and diferença)
     calcularTotais();
     
+    // Load sobras/perdas/vales data in edit mode
+    {% if edit_mode and sobras_json %}
+    console.log('=== EDIT MODE: Loading sobras/perdas/vales ===');
+    
+    // Load sobras
+    const sobrasData = {{ sobras_json|safe }};
+    console.log('Sobras data:', sobrasData);
+    if (sobrasData && sobrasData.length > 0) {
+        dadosSobras = sobrasData.map(s => ({
+            funcionario_id: s.funcionario_id,
+            valor: s.valor,
+            observacao: s.observacao || ''
+        }));
+        atualizarResumoSobras();
+        console.log(`Loaded ${dadosSobras.length} sobras`);
+    }
+    
+    // Load perdas
+    const perdasData = {{ perdas_json|safe }};
+    console.log('Perdas data:', perdasData);
+    if (perdasData && perdasData.length > 0) {
+        dadosPerdas = perdasData.map(p => ({
+            funcionario_id: p.funcionario_id,
+            valor: p.valor,
+            observacao: p.observacao || ''
+        }));
+        atualizarResumoPerdas();
+        console.log(`Loaded ${dadosPerdas.length} perdas`);
+    }
+    
+    // Load vales
+    const valesData = {{ vales_json|safe }};
+    console.log('Vales data:', valesData);
+    if (valesData && valesData.length > 0) {
+        dadosVales = valesData.map(v => ({
+            funcionario_id: v.funcionario_id,
+            valor: v.valor,
+            observacao: v.observacao || ''
+        }));
+        atualizarResumoVales();
+        console.log(`Loaded ${dadosVales.length} vales`);
+    }
+    
+    // Recalculate totals to include sobras/perdas/vales
+    calcularTotais();
+    {% endif %}
+    
     console.log('=== EDIT MODE: Finished loading all data ===');
     }, 1000);  // Give more time for page to fully initialize
     {% endif %}
