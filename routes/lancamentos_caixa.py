@@ -207,7 +207,8 @@ def get_vendas_dia():
         result = {
             'vendas_posto': 0,
             'arla': 0,
-            'lubrificantes': 0
+            'lubrificantes': 0,
+            'troco_pix': 0
         }
         
         # Get Vendas Posto total
@@ -240,6 +241,20 @@ def get_vendas_dia():
             lubr = cursor.fetchone()
             if lubr:
                 result['lubrificantes'] = float(lubr['total'])
+        except:
+            # Table doesn't exist or has different structure, leave as 0
+            pass
+        
+        # Get Troco PIX total (check if troco_pix exists)
+        try:
+            cursor.execute("""
+                SELECT COALESCE(SUM(troco_pix), 0) as total
+                FROM troco_pix
+                WHERE cliente_id = %s AND data = %s
+            """, (cliente_id, data))
+            troco = cursor.fetchone()
+            if troco:
+                result['troco_pix'] = float(troco['total'])
         except:
             # Table doesn't exist or has different structure, leave as 0
             pass
