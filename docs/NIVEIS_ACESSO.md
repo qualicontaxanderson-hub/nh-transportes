@@ -62,4 +62,3 @@
 1. Dashboard → Gerenciar Usuários → Criar
 2. Selecione o nível desejado
 3. Configure posto se necessário
-
