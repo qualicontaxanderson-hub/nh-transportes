@@ -329,6 +329,11 @@ function loadVendasDia() {
         return;
     }
     
+    // Remove existing AUTO check entries before loading new ones
+    document.querySelectorAll('.comprovacao-item-auto').forEach(item => {
+        item.remove();
+    });
+    
     // Show loading indicator
     const container = document.getElementById('receitas-container');
     const loadingMsg = document.createElement('div');
@@ -363,6 +368,14 @@ function loadVendasDia() {
                     valorInput.value = formatCurrency(data.troco_pix || 0);
                 }
             });
+            
+            // Add CHEQUES AUTO to comprovações
+            if (data.cheques_auto && data.cheques_auto.length > 0) {
+                data.cheques_auto.forEach(cheque => {
+                    const tipo = cheque.tipo === 'A_VISTA' ? 'DEPOSITO_CHEQUE_VISTA' : 'DEPOSITO_CHEQUE_PRAZO';
+                    addDepositoEntryAuto(tipo, cheque.valor, cheque.descricao);
+                });
+            }
             
             calcularTotais();
         })
@@ -552,6 +565,40 @@ function addDepositoEntry(tipo, label) {
         </div>
     `;
     depositosContainer.appendChild(entry);
+}
+
+// Add a new deposito entry AUTO (from TROCO PIX - readonly)
+function addDepositoEntryAuto(tipo, valor, descricao) {
+    const depositosContainer = document.getElementById(`depositos-${tipo}`);
+    const entryIndex = comprovacaoIndex++;
+    
+    const entry = document.createElement('div');
+    entry.className = 'comprovacao-item comprovacao-item-auto';
+    entry.id = `deposito-${tipo}-${entryIndex}`;
+    entry.innerHTML = `
+        <div class="row align-items-center" style="background: #e8f5e9; padding: 0.3rem; border-radius: 0.25rem; margin-bottom: 0.2rem;">
+            <div class="col-md-4">
+                <input type="text" class="form-control form-control-sm comprovacao-valor" 
+                       data-tipo="${tipo}" data-comprovacao-forma="${tipo}" placeholder="0,00" 
+                       value="${formatCurrency(valor)}" readonly
+                       style="background-color: #f1f8e9; font-weight: bold;"
+                       oninput="formatNumberInput(this); calcularTotaisDeposito('${tipo}')" 
+                       onchange="calcularTotais()">
+            </div>
+            <div class="col-md-6">
+                <input type="text" class="form-control form-control-sm comprovacao-descricao" 
+                       data-tipo="${tipo}" value="${descricao}" readonly
+                       style="background-color: #f1f8e9; font-weight: bold;">
+            </div>
+            <div class="col-md-2 text-center">
+                <span class="badge bg-success" style="font-size: 0.7rem;">AUTO</span>
+            </div>
+        </div>
+    `;
+    depositosContainer.appendChild(entry);
+    
+    // Recalculate totals after adding
+    calcularTotaisDeposito(tipo);
 }
 
 // Remove a deposito entry
