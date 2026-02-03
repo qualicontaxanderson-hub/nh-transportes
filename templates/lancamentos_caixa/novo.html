@@ -56,6 +56,19 @@
                         <div id="receitas-container">
                             <!-- Fixed receipt types will be added here dynamically on page load -->
                         </div>
+                        
+                        <!-- Botão Sobras de Caixa -->
+                        <div class="mt-3 mb-2">
+                            <button type="button" class="btn btn-success btn-sm w-100" onclick="abrirModalFuncionarios('sobras')">
+                                <i class="bi bi-plus-circle"></i> Sobras de Caixa
+                            </button>
+                            <div id="sobras-resumo" class="mt-2" style="display:none;">
+                                <small class="text-muted">
+                                    <strong>Total Sobras:</strong> <span id="total-sobras">R$ 0,00</span>
+                                </small>
+                            </div>
+                        </div>
+                        
                         <hr>
                         <div class="d-flex justify-content-between align-items-center">
                             <strong>Total Receitas:</strong>
@@ -75,6 +88,28 @@
                         <div id="comprovacoes-container">
                             <!-- Fixed payment types will be added here dynamically on page load -->
                         </div>
+                        
+                        <!-- Botões Perdas e Vales -->
+                        <div class="mt-3 mb-2">
+                            <button type="button" class="btn btn-warning btn-sm w-100 mb-2" onclick="abrirModalFuncionarios('perdas')">
+                                <i class="bi bi-dash-circle"></i> Perdas de Caixas
+                            </button>
+                            <div id="perdas-resumo" class="mb-2" style="display:none;">
+                                <small class="text-muted">
+                                    <strong>Total Perdas:</strong> <span id="total-perdas">R$ 0,00</span>
+                                </small>
+                            </div>
+                            
+                            <button type="button" class="btn btn-danger btn-sm w-100" onclick="abrirModalFuncionarios('vales')">
+                                <i class="bi bi-receipt"></i> Vales de Quebras de Caixas
+                            </button>
+                            <div id="vales-resumo" class="mt-2" style="display:none;">
+                                <small class="text-muted">
+                                    <strong>Total Vales:</strong> <span id="total-vales">R$ 0,00</span>
+                                </small>
+                            </div>
+                        </div>
+                        
                         <hr>
                         <div class="d-flex justify-content-between align-items-center">
                             <strong>Total Comprovação:</strong>
@@ -114,6 +149,9 @@
         <!-- Hidden inputs for JSON data -->
         <input type="hidden" name="receitas" id="receitas-json">
         <input type="hidden" name="comprovacoes" id="comprovacoes-json">
+        <input type="hidden" name="sobras_funcionarios" id="sobras-json">
+        <input type="hidden" name="perdas_funcionarios" id="perdas-json">
+        <input type="hidden" name="vales_funcionarios" id="vales-json">
 
         <!-- Actions -->
         <div class="d-flex justify-content-between mb-3">
@@ -125,6 +163,43 @@
             </button>
         </div>
     </form>
+</div>
+
+<!-- Modal para Sobras/Perdas/Vales por Funcionário -->
+<div class="modal fade" id="modalFuncionarios" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="modal-title">Lançamento por Funcionário</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div id="funcionarios-lista" class="mb-3">
+                    <p class="text-muted">Selecione um cliente e data primeiro...</p>
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-sm" id="tabela-funcionarios" style="display:none;">
+                        <thead>
+                            <tr>
+                                <th>Funcionário</th>
+                                <th style="width: 150px;">Valor (R$)</th>
+                                <th style="width: 200px;">Observação</th>
+                            </tr>
+                        </thead>
+                        <tbody id="funcionarios-tbody">
+                        </tbody>
+                    </table>
+                </div>
+                <div class="mt-3">
+                    <strong>Total: <span id="modal-total">R$ 0,00</span></strong>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-primary" onclick="salvarDadosFuncionarios()">Salvar</button>
+            </div>
+        </div>
+    </div>
 </div>
 
 <style>
@@ -164,6 +239,15 @@
 <script>
 let receitaIndex = 0;
 let comprovacaoIndex = 0;
+
+// Dados de sobras/perdas/vales por funcionário
+let dadosSobras = [];
+let dadosPerdas = [];
+let dadosVales = [];
+let tipoModalAtual = ''; // 'sobras', 'perdas', ou 'vales'
+let funcionariosCache = [];
+
+// Carregar funcionários do cliente
 
 // Use pre-serialized JSON strings to avoid Jinja2 serialization issues
 const tiposReceita = {{ tipos_receita_json|safe }};
@@ -394,6 +478,168 @@ function loadVendasDia() {
             if (loading) loading.remove();
             console.error('Erro ao carregar vendas:', error);
         });
+}
+
+// ===== FUNÇÕES PARA SOBRAS/PERDAS/VALES =====
+
+// Carregar funcionários do cliente
+async function carregarFuncionarios(clienteId) {
+    if (!clienteId) return [];
+    
+    try {
+        const response = await fetch(`{{ url_for('lancamentos_caixa.get_funcionarios_por_cliente', cliente_id=0) }}`.replace('/0', `/${clienteId}`));
+        const funcionarios = await response.json();
+        funcionariosCache = funcionarios;
+        return funcionarios;
+    } catch (error) {
+        console.error('Erro ao carregar funcionários:', error);
+        return [];
+    }
+}
+
+// Abrir modal para lançamento por funcionário
+async function abrirModalFuncionarios(tipo) {
+    const clienteId = document.getElementById('cliente_id').value;
+    
+    if (!clienteId) {
+        alert('Selecione um cliente primeiro!');
+        return;
+    }
+    
+    tipoModalAtual = tipo;
+    
+    // Definir título do modal
+    let titulo = '';
+    if (tipo === 'sobras') {
+        titulo = 'Sobras de Caixa por Funcionário';
+    } else if (tipo === 'perdas') {
+        titulo = 'Perdas de Caixas por Funcionário';
+    } else if (tipo === 'vales') {
+        titulo = 'Vales de Quebras de Caixas por Funcionário';
+    }
+    document.getElementById('modal-title').textContent = titulo;
+    
+    // Carregar funcionários
+    const funcionarios = await carregarFuncionarios(clienteId);
+    
+    if (funcionarios.length === 0) {
+        document.getElementById('funcionarios-lista').innerHTML = 
+            '<div class="alert alert-warning">Nenhum funcionário encontrado para este cliente.</div>';
+        document.getElementById('tabela-funcionarios').style.display = 'none';
+    } else {
+        document.getElementById('funcionarios-lista').innerHTML = '';
+        document.getElementById('tabela-funcionarios').style.display = 'table';
+        
+        // Preencher tabela
+        const tbody = document.getElementById('funcionarios-tbody');
+        tbody.innerHTML = '';
+        
+        // Obter dados existentes
+        let dadosExistentes = [];
+        if (tipo === 'sobras') dadosExistentes = dadosSobras;
+        else if (tipo === 'perdas') dadosExistentes = dadosPerdas;
+        else if (tipo === 'vales') dadosExistentes = dadosVales;
+        
+        funcionarios.forEach(func => {
+            const dadoExistente = dadosExistentes.find(d => d.funcionario_id === func.id);
+            const valor = dadoExistente ? dadoExistente.valor : '';
+            const obs = dadoExistente ? dadoExistente.observacao : '';
+            
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td>
+                    <strong>${func.nome}</strong>
+                    ${func.cargo ? `<br><small class="text-muted">${func.cargo}</small>` : ''}
+                </td>
+                <td>
+                    <input type="text" class="form-control form-control-sm valor-func" 
+                           data-func-id="${func.id}" 
+                           value="${valor}" 
+                           placeholder="0,00"
+                           oninput="formatNumberInput(this); calcularTotalModal()">
+                </td>
+                <td>
+                    <input type="text" class="form-control form-control-sm obs-func" 
+                           data-func-id="${func.id}" 
+                           value="${obs}" 
+                           placeholder="Opcional">
+                </td>
+            `;
+            tbody.appendChild(tr);
+        });
+    }
+    
+    calcularTotalModal();
+    
+    // Mostrar modal
+    const modal = new bootstrap.Modal(document.getElementById('modalFuncionarios'));
+    modal.show();
+}
+
+// Calcular total no modal
+function calcularTotalModal() {
+    let total = 0;
+    document.querySelectorAll('.valor-func').forEach(input => {
+        const valor = parseCurrency(input.value);
+        total += valor;
+    });
+    document.getElementById('modal-total').textContent = formatCurrency(total);
+}
+
+// Salvar dados do modal
+function salvarDadosFuncionarios() {
+    const dados = [];
+    
+    document.querySelectorAll('.valor-func').forEach(input => {
+        const funcId = input.getAttribute('data-func-id');
+        const valor = parseCurrency(input.value);
+        
+        if (valor > 0) {
+            const obsInput = document.querySelector(`.obs-func[data-func-id="${funcId}"]`);
+            dados.push({
+                funcionario_id: funcId,
+                valor: valor,
+                observacao: obsInput ? obsInput.value : ''
+            });
+        }
+    });
+    
+    // Salvar nos arrays apropriados
+    if (tipoModalAtual === 'sobras') {
+        dadosSobras = dados;
+        atualizarResumoSobras();
+    } else if (tipoModalAtual === 'perdas') {
+        dadosPerdas = dados;
+        atualizarResumoPerdas();
+    } else if (tipoModalAtual === 'vales') {
+        dadosVales = dados;
+        atualizarResumoVales();
+    }
+    
+    // Recalcular totais
+    calcularTotais();
+    
+    // Fechar modal
+    bootstrap.Modal.getInstance(document.getElementById('modalFuncionarios')).hide();
+}
+
+// Atualizar resumos
+function atualizarResumoSobras() {
+    const total = dadosSobras.reduce((sum, d) => sum + parseFloat(d.valor), 0);
+    document.getElementById('total-sobras').textContent = formatCurrency(total);
+    document.getElementById('sobras-resumo').style.display = total > 0 ? 'block' : 'none';
+}
+
+function atualizarResumoPerdas() {
+    const total = dadosPerdas.reduce((sum, d) => sum + parseFloat(d.valor), 0);
+    document.getElementById('total-perdas').textContent = formatCurrency(total);
+    document.getElementById('perdas-resumo').style.display = total > 0 ? 'block' : 'none';
+}
+
+function atualizarResumoVales() {
+    const total = dadosVales.reduce((sum, d) => sum + parseFloat(d.valor), 0);
+    document.getElementById('total-vales').textContent = formatCurrency(total);
+    document.getElementById('vales-resumo').style.display = total > 0 ? 'block' : 'none';
 }
 
 // Initialize fixed comprovação structure
@@ -655,6 +901,10 @@ function calcularTotais() {
         totalReceitas += parseCurrency(input.value);
     });
     
+    // Add sobras to receitas
+    const totalSobras = dadosSobras.reduce((sum, d) => sum + parseFloat(d.valor), 0);
+    totalReceitas += totalSobras;
+    
     // Calculate comprovacoes total (includes single fields, multiple deposits, and card values)
     let totalComprovacao = 0;
     
@@ -667,6 +917,11 @@ function calcularTotais() {
     document.querySelectorAll('.comprovacao-cartao-valor').forEach(input => {
         totalComprovacao += parseCurrency(input.value);
     });
+    
+    // Add perdas and vales to comprovacoes
+    const totalPerdas = dadosPerdas.reduce((sum, d) => sum + parseFloat(d.valor), 0);
+    const totalVales = dadosVales.reduce((sum, d) => sum + parseFloat(d.valor), 0);
+    totalComprovacao += totalPerdas + totalVales;
     
     // Calculate diferenca: Total Comprovação - Total Receitas
     const diferenca = totalComprovacao - totalReceitas;
@@ -755,6 +1010,9 @@ document.getElementById('formCaixa').addEventListener('submit', function(e) {
     // Set JSON values
     document.getElementById('receitas-json').value = JSON.stringify(receitas);
     document.getElementById('comprovacoes-json').value = JSON.stringify(comprovacoes);
+    document.getElementById('sobras-json').value = JSON.stringify(dadosSobras);
+    document.getElementById('perdas-json').value = JSON.stringify(dadosPerdas);
+    document.getElementById('vales-json').value = JSON.stringify(dadosVales);
 });
 
 // Initialize receipt types on page load
