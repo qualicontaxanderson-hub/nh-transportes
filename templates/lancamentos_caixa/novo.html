@@ -364,7 +364,7 @@ function loadVendasDia() {
                     valorInput.value = formatCurrency(data.arla || 0);
                 } else if (tipoNome === 'LUBRIFICANTES') {
                     valorInput.value = formatCurrency(data.lubrificantes || 0);
-                } else if (tipoNome === 'TROCO PIX (AUTO)') {
+                } else if (tipoNome === 'TROCO PIX (AUTO)' || tipoNome === 'TROCO PIX') {
                     valorInput.value = formatCurrency(data.troco_pix || 0);
                 }
             });
