@@ -35,7 +35,7 @@
                         <div class="mb-3">
                             <label for="nivel" class="form-label">
                                 Nível de Acesso *
-                                <button type="button" class="btn btn-sm btn-outline-info ms-2" data-bs-toggle="collapse" data-bs-target="#permissoesDetalhadas" aria-expanded="false" aria-controls="permissoesDetalhadas">
+                                <button type="button" class="btn btn-sm btn-outline-info ms-2" data-bs-toggle="collapse" data-bs-target="#permissoesDetalhadas" aria-expanded="false" aria-controls="permissoesDetalhadas" aria-label="Ver ou ocultar comparativo detalhado de permissões">
                                     <i class="bi bi-info-circle"></i> Ver Comparativo de Permissões
                                 </button>
                             </label>
@@ -64,10 +64,10 @@
                                             <thead class="table-secondary">
                                                 <tr>
                                                     <th>Permissão</th>
-                                                    <th class="text-center">🔴 ADMIN</th>
-                                                    <th class="text-center">🟡 GERENTE</th>
-                                                    <th class="text-center">🔵 SUPERVISOR</th>
-                                                    <th class="text-center">🔵 PISTA</th>
+                                                    <th class="text-center"><span aria-label="ADMIN - Administrador">🔴 ADMIN</span></th>
+                                                    <th class="text-center"><span aria-label="GERENTE - Gerente de Operações">🟡 GERENTE</span></th>
+                                                    <th class="text-center"><span aria-label="SUPERVISOR - Supervisor de Posto">🔵 SUPERVISOR</span></th>
+                                                    <th class="text-center"><span aria-label="PISTA - Operador">🔵 PISTA</span></th>
                                                 </tr>
                                             </thead>
                                             <tbody>
