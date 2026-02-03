@@ -306,6 +306,53 @@ def get_vendas_dia():
             conn.close()
 
 
+@bp.route('/api/funcionarios/<int:cliente_id>', methods=['GET'])
+@login_required
+def get_funcionarios_por_cliente(cliente_id):
+    """API endpoint para buscar funcionários vinculados a um cliente"""
+    conn = None
+    cursor = None
+    
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+        
+        # Buscar funcionários ativos vinculados ao cliente
+        cursor.execute("""
+            SELECT 
+                f.id,
+                f.nome,
+                f.cargo,
+                f.cpf
+            FROM funcionarios f
+            WHERE f.clienteid = %s 
+              AND f.ativo = 1
+            ORDER BY f.nome
+        """, (cliente_id,))
+        
+        funcionarios = cursor.fetchall()
+        
+        # Converter para formato JSON amigável
+        result = []
+        for func in funcionarios:
+            result.append({
+                'id': func['id'],
+                'nome': func['nome'],
+                'cargo': func.get('cargo', ''),
+                'cpf': func.get('cpf', '')
+            })
+        
+        return jsonify(result)
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+    finally:
+        if cursor is not None:
+            cursor.close()
+        if conn is not None:
+            conn.close()
+
+
 @bp.route('/novo', methods=['GET', 'POST'])
 @login_required
 @admin_required
@@ -342,6 +389,18 @@ def novo():
             comprovacoes_json = request.form.get('comprovacoes', '[]')
             comprovacoes = json.loads(comprovacoes_json)
             
+            # Get sobras de funcionários (receitas) - JSON encoded
+            sobras_json = request.form.get('sobras_funcionarios', '[]')
+            sobras_funcionarios = json.loads(sobras_json)
+            
+            # Get perdas de funcionários (comprovações) - JSON encoded
+            perdas_json = request.form.get('perdas_funcionarios', '[]')
+            perdas_funcionarios = json.loads(perdas_json)
+            
+            # Get vales de funcionários (comprovações) - JSON encoded
+            vales_json = request.form.get('vales_funcionarios', '[]')
+            vales_funcionarios = json.loads(vales_json)
+            
             # Validate
             if not data:
                 flash('Data é obrigatória!', 'danger')
@@ -352,8 +411,16 @@ def novo():
                 raise ValueError('Cliente não fornecido')
             
             # Calculate totals: Diferença = Total Comprovação - Total Receitas
+            # Include sobras in receitas and perdas+vales in comprovações
             total_receitas = sum(parse_brazilian_currency(r.get('valor', 0)) for r in receitas)
+            total_sobras = sum(parse_brazilian_currency(s.get('valor', 0)) for s in sobras_funcionarios)
+            total_receitas += total_sobras
+            
             total_comprovacao = sum(parse_brazilian_currency(c.get('valor', 0)) for c in comprovacoes)
+            total_perdas = sum(parse_brazilian_currency(p.get('valor', 0)) for p in perdas_funcionarios)
+            total_vales = sum(parse_brazilian_currency(v.get('valor', 0)) for v in vales_funcionarios)
+            total_comprovacao += total_perdas + total_vales
+            
             diferenca = total_comprovacao - total_receitas
             
             # Insert lancamento_caixa
@@ -392,6 +459,42 @@ def novo():
                           int(cartao_id) if cartao_id and cartao_id != '' else None,
                           comprovacao.get('descricao', ''),
                           float(parse_brazilian_currency(comprovacao['valor']))))
+            
+            # Insert sobras de funcionários (receitas)
+            for sobra in sobras_funcionarios:
+                if sobra.get('funcionario_id') and sobra.get('valor'):
+                    valor = parse_brazilian_currency(sobra['valor'])
+                    if valor > 0:  # Só inserir se tiver valor
+                        cursor.execute("""
+                            INSERT INTO lancamentos_caixa_sobras_funcionarios 
+                            (lancamento_caixa_id, funcionario_id, valor, observacao)
+                            VALUES (%s, %s, %s, %s)
+                        """, (lancamento_id, int(sobra['funcionario_id']), 
+                              float(valor), sobra.get('observacao', '')))
+            
+            # Insert perdas de funcionários (comprovações)
+            for perda in perdas_funcionarios:
+                if perda.get('funcionario_id') and perda.get('valor'):
+                    valor = parse_brazilian_currency(perda['valor'])
+                    if valor > 0:  # Só inserir se tiver valor
+                        cursor.execute("""
+                            INSERT INTO lancamentos_caixa_perdas_funcionarios 
+                            (lancamento_caixa_id, funcionario_id, valor, observacao)
+                            VALUES (%s, %s, %s, %s)
+                        """, (lancamento_id, int(perda['funcionario_id']), 
+                              float(valor), perda.get('observacao', '')))
+            
+            # Insert vales de funcionários (comprovações)
+            for vale in vales_funcionarios:
+                if vale.get('funcionario_id') and vale.get('valor'):
+                    valor = parse_brazilian_currency(vale['valor'])
+                    if valor > 0:  # Só inserir se tiver valor
+                        cursor.execute("""
+                            INSERT INTO lancamentos_caixa_vales_funcionarios 
+                            (lancamento_caixa_id, funcionario_id, valor, observacao)
+                            VALUES (%s, %s, %s, %s)
+                        """, (lancamento_id, int(vale['funcionario_id']), 
+                              float(valor), vale.get('observacao', '')))
             
             conn.commit()
             flash('Lançamento de caixa cadastrado com sucesso!', 'success')
