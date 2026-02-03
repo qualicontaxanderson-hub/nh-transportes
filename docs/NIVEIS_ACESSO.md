@@ -23,6 +23,20 @@
 - Não pode excluir transações
 - Requer posto associado obrigatoriamente
 
+**Acesso a Módulos de Cadastro:**
+- ✅ Cartões
+- ✅ Formas Pagamento Caixa
+- ✅ Formas Recebimento Caixa
+- ✅ Lubrificantes (produtos)
+
+**Acesso a Módulos de Lançamentos:**
+- ✅ ARLA
+- ✅ Lubrificantes
+- ✅ Vendas Posto
+- ✅ Fechamento de Caixa
+- ✅ Troco PIX
+- ✅ Troco PIX Pista
+
 ### 4. PISTA - Operador (⚪)
 - Operação básica de posto
 - Edita transações apenas até 15 minutos após criação

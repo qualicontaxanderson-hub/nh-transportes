@@ -1,7 +1,7 @@
 from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify
 from flask_login import login_required, current_user
 from utils.db import get_db_connection
-from utils.decorators import admin_required
+from utils.decorators import admin_required, nivel_required
 from datetime import datetime
 from decimal import Decimal
 import json
@@ -308,7 +308,7 @@ def get_vendas_dia():
 
 @bp.route('/novo', methods=['GET', 'POST'])
 @login_required
-@admin_required
+@nivel_required(['ADMIN', 'GERENTE', 'SUPERVISOR'])
 def novo():
     """Create a new cash closure entry"""
     conn = None
@@ -642,7 +642,7 @@ def visualizar(id):
 
 @bp.route('/excluir/<int:id>', methods=['POST'])
 @login_required
-@admin_required
+@nivel_required(['ADMIN', 'GERENTE'])
 def excluir(id):
     """Delete a cash closure entry"""
     conn = None
@@ -678,7 +678,7 @@ def excluir(id):
 
 @bp.route('/editar/<int:id>', methods=['GET', 'POST'])
 @login_required
-@admin_required
+@nivel_required(['ADMIN', 'GERENTE', 'SUPERVISOR'])
 def editar(id):
     """Edit a cash closure entry"""
     conn = None
