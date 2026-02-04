@@ -146,46 +146,7 @@
                                 {% endif %}
                             {% endfor %}
                             
-                            {# Process RETIRADA_PAGAMENTO - Show ALL items with friendly names and custom order #}
-                            {% set retiradas = comprovacoes|selectattr('forma_tipo', 'equalto', 'RETIRADA_PAGAMENTO')|list %}
-                            {% if retiradas|length > 0 %}
-                                {# Define friendly names mapping #}
-                                {% set nomes_retiradas = {
-                                    'DESCONTO CADASTROS': 'Descontos Cadastro',
-                                    'DESCONTO GERAIS': 'Descontos Gerais',
-                                    'EMPRÉSTIMO FUNCIONÁRIOS': 'Empréstimos Funcionários',
-                                    'RETIRADA ALUGUEL': 'Aluguel'
-                                } %}
-                                
-                                {# Define order for sorting #}
-                                {% set ordem_retiradas = {
-                                    'DESCONTO CADASTROS': 1,
-                                    'DESCONTO GERAIS': 2,
-                                    'EMPRÉSTIMO FUNCIONÁRIOS': 3,
-                                    'RETIRADA ALUGUEL': 4
-                                } %}
-                                
-                                {# Sort retiradas by custom order #}
-                                {% set retiradas_sorted = [] %}
-                                {% for ret in retiradas %}
-                                    {% set desc_upper = ret.descricao.upper() if ret.descricao else '' %}
-                                    {% set ordem = ordem_retiradas.get(desc_upper, 999) %}
-                                    {% set _ = retiradas_sorted.append((ordem, ret)) %}
-                                {% endfor %}
-                                {% set retiradas_sorted = retiradas_sorted|sort %}
-                                
-                                {# Render with friendly names #}
-                                {% for ordem, ret in retiradas_sorted %}
-                                    {% set desc_upper = ret.descricao.upper() if ret.descricao else '' %}
-                                    {% set nome_amigavel = nomes_retiradas.get(desc_upper, 'Retiradas para Pagamentos') %}
-                                <tr>
-                                    <td style="font-size: 0.85rem;">{{ nome_amigavel }}</td>
-                                    <td style="font-size: 0.85rem;">{{ ret.descricao if ret.descricao else '-' }}</td>
-                                    <td style="font-size: 0.85rem; text-align: right;">R$ {{ "{:,.2f}".format(ret.valor|float).replace(',', 'X').replace('.', ',').replace('X', '.') }}</td>
-                                </tr>
-                                {% endfor %}
-                            {% endif %}
-                            
+
                             {# Process DEPOSITO_ESPECIE #}
                             {% set depositos_especie = comprovacoes|selectattr('forma_tipo', 'equalto', 'DEPOSITO_ESPECIE')|list %}
                             {% if depositos_especie|length > 0 %}
@@ -267,6 +228,46 @@
                                     <td style="font-size: 0.85rem; padding-left: 2rem;">└ {{ cartao.cartao_nome }}</td>
                                     <td style="font-size: 0.85rem;">{{ cartao.descricao if cartao.descricao else '-' }}</td>
                                     <td style="font-size: 0.85rem; text-align: right;">R$ {{ "{:,.2f}".format(cartao.valor|float).replace(',', 'X').replace('.', ',').replace('X', '.') }}</td>
+                                </tr>
+                                {% endfor %}
+                            {% endif %}
+                            
+                            {# Process RETIRADA_PAGAMENTO - Show ALL items with friendly names and custom order #}
+                            {% set retiradas = comprovacoes|selectattr('forma_tipo', 'equalto', 'RETIRADA_PAGAMENTO')|list %}
+                            {% if retiradas|length > 0 %}
+                                {# Define friendly names mapping #}
+                                {% set nomes_retiradas = {
+                                    'DESCONTO CADASTROS': 'Descontos Cadastro',
+                                    'DESCONTO GERAIS': 'Descontos Gerais',
+                                    'EMPRÉSTIMO FUNCIONÁRIOS': 'Empréstimos Funcionários',
+                                    'RETIRADA ALUGUEL': 'Aluguel'
+                                } %}
+                                
+                                {# Define order for sorting #}
+                                {% set ordem_retiradas = {
+                                    'DESCONTO CADASTROS': 1,
+                                    'DESCONTO GERAIS': 2,
+                                    'EMPRÉSTIMO FUNCIONÁRIOS': 3,
+                                    'RETIRADA ALUGUEL': 4
+                                } %}
+                                
+                                {# Sort retiradas by custom order #}
+                                {% set retiradas_sorted = [] %}
+                                {% for ret in retiradas %}
+                                    {% set desc_upper = ret.descricao.upper() if ret.descricao else '' %}
+                                    {% set ordem = ordem_retiradas.get(desc_upper, 999) %}
+                                    {% set _ = retiradas_sorted.append((ordem, ret)) %}
+                                {% endfor %}
+                                {% set retiradas_sorted = retiradas_sorted|sort %}
+                                
+                                {# Render with friendly names #}
+                                {% for ordem, ret in retiradas_sorted %}
+                                    {% set desc_upper = ret.descricao.upper() if ret.descricao else '' %}
+                                    {% set nome_amigavel = nomes_retiradas.get(desc_upper, 'Retiradas para Pagamentos') %}
+                                <tr>
+                                    <td style="font-size: 0.85rem;">{{ nome_amigavel }}</td>
+                                    <td style="font-size: 0.85rem;">{{ ret.descricao if ret.descricao else '-' }}</td>
+                                    <td style="font-size: 0.85rem; text-align: right;">R$ {{ "{:,.2f}".format(ret.valor|float).replace(',', 'X').replace('.', ',').replace('X', '.') }}</td>
                                 </tr>
                                 {% endfor %}
                             {% endif %}
