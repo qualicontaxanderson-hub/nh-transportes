@@ -114,6 +114,19 @@ def lista():
             
             where_clause = "WHERE " + " AND ".join(where_conditions) if where_conditions else ""
             
+            # DEBUG: Primeiro, ver TODOS os lançamentos sem filtro de status
+            print(f"[DEBUG DIAGNOSTICO] Buscando TODOS os lançamentos no período (sem filtro de status/observação)...")
+            cursor.execute("""
+                SELECT id, data, status, SUBSTRING(observacao, 1, 80) as obs_preview
+                FROM lancamentos_caixa 
+                WHERE data >= %s AND data <= %s
+                ORDER BY data DESC, id DESC
+            """, (data_inicio, data_fim))
+            todos_lancamentos = cursor.fetchall()
+            print(f"[DEBUG DIAGNOSTICO] Total de lançamentos no período: {len(todos_lancamentos)}")
+            for i, lanc in enumerate(todos_lancamentos):
+                print(f"[DEBUG DIAGNOSTICO] #{i+1}: id={lanc['id']}, data={lanc['data']}, status={lanc['status']}, obs={lanc['obs_preview']}")
+            
             # DEBUG: Log da query e parâmetros
             query_completa = f"""
                 SELECT lc.*, u.username as usuario_nome, c.razao_social as cliente_nome
