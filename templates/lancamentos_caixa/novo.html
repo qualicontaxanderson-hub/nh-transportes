@@ -1082,8 +1082,10 @@ document.addEventListener('DOMContentLoaded', function() {
     }, 500);
     
     // Load existing comprovacoes data in edit mode
+    // Increase timeout to ensure DOM is ready, especially after save redirect
     setTimeout(() => {
         console.log('=== EDIT MODE: Loading comprovacoes data ===');
+        console.log('[CARREGAMENTO] DOM readyState:', document.readyState);
         const existingComprovacoes = {{ comprovacoes_json|safe }};
         console.log('Comprovacoes from backend:', existingComprovacoes);
         console.log('Number of comprovacoes:', existingComprovacoes.length);
@@ -1309,6 +1311,66 @@ document.addEventListener('DOMContentLoaded', function() {
     {% endif %}
     
     console.log('=== EDIT MODE: Finished loading all data ===');
+        
+        // Verificar se campos RETIRADA_PAGAMENTO foram preenchidos corretamente
+        setTimeout(() => {
+            console.log('[VERIFICACAO] Verificando se campos RETIRADA_PAGAMENTO foram preenchidos...');
+            const retiradasInputs = document.querySelectorAll('input[data-comprovacao-forma="RETIRADA_PAGAMENTO"]');
+            console.log('[VERIFICACAO] Encontrados', retiradasInputs.length, 'campos RETIRADA_PAGAMENTO');
+            
+            // Verificar se algum campo foi preenchido
+            let algumPreenchido = false;
+            let camposVazios = [];
+            
+            for (const input of retiradasInputs) {
+                const valor = input.value || '';
+                const descInput = input.closest('.comprovacao-item').querySelector('.comprovacao-descricao');
+                const desc = descInput ? descInput.value : 'sem descrição';
+                
+                console.log('[VERIFICACAO] Campo:', desc, '= "' + valor + '"');
+                
+                if (valor && valor !== '0,00' && valor !== '0' && valor !== '') {
+                    algumPreenchido = true;
+                } else if (desc) {
+                    camposVazios.push(desc);
+                }
+            }
+            
+            // Se temos comprovações RETIRADA_PAGAMENTO no banco mas nenhum campo foi preenchido, fazer retry
+            const temRetiradasNoBanco = existingComprovacoes.some(c => c.forma_pagamento_tipo === 'RETIRADA_PAGAMENTO');
+            
+            if (temRetiradasNoBanco && !algumPreenchido) {
+                console.warn('[VERIFICACAO] ⚠️ Campos RETIRADA_PAGAMENTO no banco mas nenhum preenchido! Tentando novamente...');
+                console.warn('[VERIFICACAO] Campos vazios:', camposVazios);
+                
+                // Retry: reprocessar RETIRADA_PAGAMENTO
+                const retiradasComps = existingComprovacoes.filter(c => c.forma_pagamento_tipo === 'RETIRADA_PAGAMENTO');
+                for (const comp of retiradasComps) {
+                    console.log('[RETRY] Reprocessando:', comp.descricao, '=', comp.valor);
+                    
+                    const allInputs = document.querySelectorAll('input[data-comprovacao-forma="RETIRADA_PAGAMENTO"]');
+                    for (const valorInput of allInputs) {
+                        const descricaoInput = valorInput.closest('.comprovacao-item').querySelector('.comprovacao-descricao');
+                        if (descricaoInput && descricaoInput.value === comp.descricao) {
+                            valorInput.value = parseFloat(comp.valor).toLocaleString('pt-BR', {
+                                minimumFractionDigits: 2,
+                                maximumFractionDigits: 2
+                            });
+                            console.log('[RETRY] ✓ Preenchido:', comp.descricao, '=', valorInput.value);
+                            break;
+                        }
+                    }
+                }
+                
+                // Recalcular totais
+                calcularTotais();
+                console.log('[RETRY] Retry concluído');
+            } else if (algumPreenchido) {
+                console.log('[VERIFICACAO] ✓ Campos RETIRADA_PAGAMENTO preenchidos corretamente');
+            } else {
+                console.log('[VERIFICACAO] Sem dados RETIRADA_PAGAMENTO no banco, ok');
+            }
+        }, 500); // Esperar mais 500ms após o carregamento inicial
     }, 1000);  // Give more time for page to fully initialize
     {% endif %}
     
