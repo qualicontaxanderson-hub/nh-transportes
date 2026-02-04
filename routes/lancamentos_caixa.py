@@ -96,10 +96,11 @@ def lista():
             
             # Filtrar para ocultar APENAS lançamentos automáticos de Troco PIX
             # Mostrar: FECHADO, NULL, ou ABERTO que não seja automático
+            # IMPORTANTE: Adicionar IS NULL porque NULL NOT LIKE retorna NULL (não TRUE)
             where_conditions.append("""(
                 lc.status = 'FECHADO' 
                 OR lc.status IS NULL 
-                OR (lc.status = 'ABERTO' AND lc.observacao NOT LIKE 'Lançamento automático - Troco PIX%')
+                OR (lc.status = 'ABERTO' AND (lc.observacao IS NULL OR lc.observacao NOT LIKE 'Lançamento automático - Troco PIX%'))
             )""")
             
             if filtros['data_inicio']:
