@@ -94,8 +94,13 @@ def lista():
             where_conditions = []
             params = []
             
-            # SEMPRE filtrar apenas lançamentos FECHADOS (não mostrar automáticos de Troco PIX)
-            where_conditions.append("lc.status = 'FECHADO'")
+            # Filtrar para ocultar APENAS lançamentos automáticos de Troco PIX
+            # Mostrar: FECHADO, NULL, ou ABERTO que não seja automático
+            where_conditions.append("""(
+                lc.status = 'FECHADO' 
+                OR lc.status IS NULL 
+                OR (lc.status = 'ABERTO' AND lc.observacao NOT LIKE 'Lançamento automático - Troco PIX%')
+            )""")
             
             if filtros['data_inicio']:
                 where_conditions.append("lc.data >= %s")
