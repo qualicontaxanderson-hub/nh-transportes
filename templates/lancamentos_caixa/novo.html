@@ -1204,6 +1204,41 @@ document.addEventListener('DOMContentLoaded', function() {
                 calcularTotaisDeposito('DEPOSITO_CHEQUE_VISTA');
                 calcularTotaisDeposito('DEPOSITO_CHEQUE_PRAZO');
             }, 200);
+        } else if (tipo === 'RETIRADA_PAGAMENTO') {
+            // RETIRADA_PAGAMENTO has multiple fields with same tipo but different descriptions
+            // Need to match by description to fill the correct field
+            console.log(`  Processing RETIRADA_PAGAMENTO with ${comps.length} entries`);
+            
+            for (const comp of comps) {
+                console.log(`    Looking for field with description: "${comp.descricao}"`);
+                
+                // Find all inputs with this tipo
+                const allInputs = document.querySelectorAll(`input[data-comprovacao-forma="${tipo}"]`);
+                console.log(`    Found ${allInputs.length} inputs with tipo RETIRADA_PAGAMENTO`);
+                
+                // Find the one with matching description
+                let found = false;
+                for (const valorInput of allInputs) {
+                    const descricaoInput = valorInput.closest('.comprovacao-item').querySelector('.comprovacao-descricao');
+                    if (descricaoInput) {
+                        console.log(`      Checking input with description: "${descricaoInput.value}"`);
+                        if (descricaoInput.value === comp.descricao) {
+                            // Found matching field by description
+                            valorInput.value = parseFloat(comp.valor).toLocaleString('pt-BR', {
+                                minimumFractionDigits: 2,
+                                maximumFractionDigits: 2
+                            });
+                            console.log(`      ✓ Matched! Set value to ${valorInput.value}`);
+                            found = true;
+                            break;
+                        }
+                    }
+                }
+                
+                if (!found) {
+                    console.warn(`    ✗ Could not find field for description: "${comp.descricao}"`);
+                }
+            }
         } else {
             // Single entry formas - just fill the first value
             const comp = comps[0];
