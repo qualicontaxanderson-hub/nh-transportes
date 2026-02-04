@@ -271,13 +271,6 @@ def editar_usuario(user_id):
                             # Se mudou de SUPERVISOR para outro nível, limpar associações
                             Usuario.set_empresas_usuario(user_id, [])
                         
-                        # Se é SUPERVISOR, atualizar empresas associadas
-                        if nivel == 'SUPERVISOR':
-                            Usuario.set_empresas_usuario(user_id, empresas_ids)
-                        else:
-                            # Se mudou de SUPERVISOR para outro nível, limpar associações
-                            Usuario.set_empresas_usuario(user_id, [])
-                        
                         # Se forneceu senha, atualiza
                         if senha:
                             user.alterar_senha(senha)
@@ -301,13 +294,6 @@ def editar_usuario(user_id):
         except Exception as e:
             logger.error(f"[EDITAR] Erro ao buscar clientes: {str(e)}", exc_info=True)
             clientes = []
-        
-        # Buscar empresas com produtos posto (SUPERVISOR)
-        empresas_posto = Usuario.get_clientes_produtos_posto()
-        
-        # Buscar empresas já associadas ao usuário SUPERVISOR
-        empresas_selecionadas = Usuario.get_empresas_usuario(user_id)
-        empresas_selecionadas_ids = [e['id'] for e in empresas_selecionadas]
         
         # Buscar empresas com produtos posto (SUPERVISOR)
         empresas_posto = Usuario.get_clientes_produtos_posto()
