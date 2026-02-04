@@ -1263,3 +1263,323 @@ def editar(id):
             cursor.close()
         if conn is not None:
             conn.close()
+
+
+# ============================================================================
+# CONTROLE DE DEPÓSITOS DE CHEQUES
+# ============================================================================
+
+@bp.route('/<int:lancamento_id>/depositos_cheques', methods=['GET'])
+@login_required
+def get_depositos_cheques(lancamento_id):
+    """Get all check deposits for a specific cash closure"""
+    conn = None
+    cursor = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+        
+        query = """
+            SELECT 
+                id, lancamento_caixa_id, tipo, valor_lancado,
+                valor_depositado, diferenca, data_deposito,
+                depositado_por, observacao, criado_em, criado_por,
+                atualizado_em, atualizado_por
+            FROM lancamentos_caixa_depositos_cheques
+            WHERE lancamento_caixa_id = %s
+            ORDER BY tipo, criado_em
+        """
+        
+        cursor.execute(query, (lancamento_id,))
+        depositos = cursor.fetchall()
+        
+        # Convert Decimal to float for JSON serialization
+        for deposito in depositos:
+            for key in ['valor_lancado', 'valor_depositado', 'diferenca']:
+                if deposito.get(key) is not None:
+                    deposito[key] = float(deposito[key])
+            # Convert dates to string
+            if deposito.get('data_deposito'):
+                deposito['data_deposito'] = deposito['data_deposito'].strftime('%Y-%m-%d')
+            if deposito.get('criado_em'):
+                deposito['criado_em'] = deposito['criado_em'].strftime('%Y-%m-%d %H:%M:%S')
+            if deposito.get('atualizado_em'):
+                deposito['atualizado_em'] = deposito['atualizado_em'].strftime('%Y-%m-%d %H:%M:%S')
+        
+        return jsonify({
+            'success': True,
+            'depositos': depositos
+        })
+        
+    except Exception as e:
+        print(f"[ERROR] Erro ao buscar depósitos de cheques: {str(e)}")
+        return jsonify({
+            'success': False,
+            'message': f'Erro ao buscar depósitos: {str(e)}'
+        }), 500
+    finally:
+        if cursor is not None:
+            cursor.close()
+        if conn is not None:
+            conn.close()
+
+
+@bp.route('/<int:lancamento_id>/depositos_cheques', methods=['POST'])
+@login_required
+def registrar_deposito_cheque(lancamento_id):
+    """Register a check deposit"""
+    conn = None
+    cursor = None
+    try:
+        data = request.get_json()
+        
+        tipo = data.get('tipo')  # 'VISTA' ou 'PRAZO'
+        valor_lancado = data.get('valor_lancado')
+        valor_depositado = data.get('valor_depositado')
+        data_deposito = data.get('data_deposito')
+        depositado_por = data.get('depositado_por', '').strip()
+        observacao = data.get('observacao', '').strip()
+        
+        # Validações
+        if not tipo or tipo not in ['VISTA', 'PRAZO']:
+            return jsonify({
+                'success': False,
+                'message': 'Tipo inválido. Use VISTA ou PRAZO.'
+            }), 400
+        
+        if not valor_lancado:
+            return jsonify({
+                'success': False,
+                'message': 'Valor lançado é obrigatório.'
+            }), 400
+        
+        # Convert to Decimal
+        try:
+            valor_lancado = Decimal(str(valor_lancado))
+            if valor_depositado:
+                valor_depositado = Decimal(str(valor_depositado))
+        except:
+            return jsonify({
+                'success': False,
+                'message': 'Valores inválidos.'
+            }), 400
+        
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+        
+        # Verificar se o lançamento existe
+        cursor.execute("SELECT id FROM lancamentos_caixa WHERE id = %s", (lancamento_id,))
+        if not cursor.fetchone():
+            return jsonify({
+                'success': False,
+                'message': 'Lançamento de caixa não encontrado.'
+            }), 404
+        
+        # Inserir depósito
+        insert_query = """
+            INSERT INTO lancamentos_caixa_depositos_cheques 
+            (lancamento_caixa_id, tipo, valor_lancado, valor_depositado, 
+             data_deposito, depositado_por, observacao, criado_por)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+        """
+        
+        cursor.execute(insert_query, (
+            lancamento_id, tipo, valor_lancado, valor_depositado,
+            data_deposito if data_deposito else None,
+            depositado_por if depositado_por else None,
+            observacao if observacao else None,
+            current_user.id
+        ))
+        
+        deposito_id = cursor.lastrowid
+        conn.commit()
+        
+        # Buscar o depósito criado
+        cursor.execute("""
+            SELECT 
+                id, lancamento_caixa_id, tipo, valor_lancado,
+                valor_depositado, diferenca, data_deposito,
+                depositado_por, observacao
+            FROM lancamentos_caixa_depositos_cheques
+            WHERE id = %s
+        """, (deposito_id,))
+        
+        deposito = cursor.fetchone()
+        
+        # Convert for JSON
+        for key in ['valor_lancado', 'valor_depositado', 'diferenca']:
+            if deposito.get(key) is not None:
+                deposito[key] = float(deposito[key])
+        if deposito.get('data_deposito'):
+            deposito['data_deposito'] = deposito['data_deposito'].strftime('%Y-%m-%d')
+        
+        return jsonify({
+            'success': True,
+            'message': 'Depósito registrado com sucesso!',
+            'deposito': deposito
+        })
+        
+    except Exception as e:
+        if conn:
+            conn.rollback()
+        print(f"[ERROR] Erro ao registrar depósito: {str(e)}")
+        return jsonify({
+            'success': False,
+            'message': f'Erro ao registrar depósito: {str(e)}'
+        }), 500
+    finally:
+        if cursor is not None:
+            cursor.close()
+        if conn is not None:
+            conn.close()
+
+
+@bp.route('/<int:lancamento_id>/depositos_cheques/<int:deposito_id>', methods=['PUT'])
+@login_required
+def atualizar_deposito_cheque(lancamento_id, deposito_id):
+    """Update a check deposit"""
+    conn = None
+    cursor = None
+    try:
+        data = request.get_json()
+        
+        valor_depositado = data.get('valor_depositado')
+        data_deposito = data.get('data_deposito')
+        depositado_por = data.get('depositado_por', '').strip()
+        observacao = data.get('observacao', '').strip()
+        
+        # Convert to Decimal
+        if valor_depositado:
+            try:
+                valor_depositado = Decimal(str(valor_depositado))
+            except:
+                return jsonify({
+                    'success': False,
+                    'message': 'Valor depositado inválido.'
+                }), 400
+        
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+        
+        # Verificar se o depósito existe e pertence ao lançamento
+        cursor.execute("""
+            SELECT id FROM lancamentos_caixa_depositos_cheques
+            WHERE id = %s AND lancamento_caixa_id = %s
+        """, (deposito_id, lancamento_id))
+        
+        if not cursor.fetchone():
+            return jsonify({
+                'success': False,
+                'message': 'Depósito não encontrado.'
+            }), 404
+        
+        # Atualizar depósito
+        update_query = """
+            UPDATE lancamentos_caixa_depositos_cheques 
+            SET valor_depositado = %s,
+                data_deposito = %s,
+                depositado_por = %s,
+                observacao = %s,
+                atualizado_por = %s
+            WHERE id = %s
+        """
+        
+        cursor.execute(update_query, (
+            valor_depositado,
+            data_deposito if data_deposito else None,
+            depositado_por if depositado_por else None,
+            observacao if observacao else None,
+            current_user.id,
+            deposito_id
+        ))
+        
+        conn.commit()
+        
+        # Buscar depósito atualizado
+        cursor.execute("""
+            SELECT 
+                id, lancamento_caixa_id, tipo, valor_lancado,
+                valor_depositado, diferenca, data_deposito,
+                depositado_por, observacao
+            FROM lancamentos_caixa_depositos_cheques
+            WHERE id = %s
+        """, (deposito_id,))
+        
+        deposito = cursor.fetchone()
+        
+        # Convert for JSON
+        for key in ['valor_lancado', 'valor_depositado', 'diferenca']:
+            if deposito.get(key) is not None:
+                deposito[key] = float(deposito[key])
+        if deposito.get('data_deposito'):
+            deposito['data_deposito'] = deposito['data_deposito'].strftime('%Y-%m-%d')
+        
+        return jsonify({
+            'success': True,
+            'message': 'Depósito atualizado com sucesso!',
+            'deposito': deposito
+        })
+        
+    except Exception as e:
+        if conn:
+            conn.rollback()
+        print(f"[ERROR] Erro ao atualizar depósito: {str(e)}")
+        return jsonify({
+            'success': False,
+            'message': f'Erro ao atualizar depósito: {str(e)}'
+        }), 500
+    finally:
+        if cursor is not None:
+            cursor.close()
+        if conn is not None:
+            conn.close()
+
+
+@bp.route('/<int:lancamento_id>/depositos_cheques/<int:deposito_id>', methods=['DELETE'])
+@login_required
+def deletar_deposito_cheque(lancamento_id, deposito_id):
+    """Delete a check deposit"""
+    conn = None
+    cursor = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+        
+        # Verificar se o depósito existe e pertence ao lançamento
+        cursor.execute("""
+            SELECT id FROM lancamentos_caixa_depositos_cheques
+            WHERE id = %s AND lancamento_caixa_id = %s
+        """, (deposito_id, lancamento_id))
+        
+        if not cursor.fetchone():
+            return jsonify({
+                'success': False,
+                'message': 'Depósito não encontrado.'
+            }), 404
+        
+        # Deletar depósito
+        cursor.execute("""
+            DELETE FROM lancamentos_caixa_depositos_cheques
+            WHERE id = %s
+        """, (deposito_id,))
+        
+        conn.commit()
+        
+        return jsonify({
+            'success': True,
+            'message': 'Depósito deletado com sucesso!'
+        })
+        
+    except Exception as e:
+        if conn:
+            conn.rollback()
+        print(f"[ERROR] Erro ao deletar depósito: {str(e)}")
+        return jsonify({
+            'success': False,
+            'message': f'Erro ao deletar depósito: {str(e)}'
+        }), 500
+    finally:
+        if cursor is not None:
+            cursor.close()
+        if conn is not None:
+            conn.close()
