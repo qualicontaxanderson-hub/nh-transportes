@@ -9,12 +9,12 @@ bp = Blueprint('debug', __name__, url_prefix='/debug')
 def index():
     # SEGURANÇA: Rota de debug só disponível em modo desenvolvimento
     if not current_app.debug:
-        return jsonify({"error": "Debug route is only available in development mode"}), 403
+        return jsonify({"error": "Rota de debug disponível apenas em modo de desenvolvimento"}), 403
     
     conn = get_db_connection()
     cursor = conn.cursor()
     
-    # Get all tables
+    # Obter todas as tabelas
     cursor.execute("SHOW TABLES")
     tables = cursor.fetchall()
     
