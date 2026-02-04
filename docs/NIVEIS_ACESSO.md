@@ -30,6 +30,7 @@
 - ✅ Lubrificantes (produtos)
 
 **Acesso a Módulos de Lançamentos:**
+- ✅ Quilometragem
 - ✅ ARLA
 - ✅ Lubrificantes
 - ✅ Vendas Posto

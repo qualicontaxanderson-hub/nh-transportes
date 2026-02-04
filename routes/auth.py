@@ -181,9 +181,16 @@ def criar_usuario():
                 flash(f'Erro ao criar usuário: {str(e)}', 'danger')
     
     # Buscar lista de clientes para o dropdown
+    # Apenas clientes que têm produtos configurados em Config. Produtos Posto
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
-    cursor.execute("SELECT id, razao_social FROM clientes ORDER BY razao_social")
+    cursor.execute("""
+        SELECT DISTINCT c.id, c.razao_social 
+        FROM clientes c
+        INNER JOIN cliente_produtos cp ON c.id = cp.cliente_id
+        WHERE cp.ativo = 1
+        ORDER BY c.razao_social
+    """)
     clientes = cursor.fetchall()
     cursor.close()
     conn.close()
@@ -259,7 +266,13 @@ def editar_usuario(user_id):
             logger.info("[EDITAR] Buscando lista de clientes...")
             conn = get_db_connection()
             cursor = conn.cursor(dictionary=True)
-            cursor.execute("SELECT id, razao_social FROM clientes ORDER BY razao_social")
+            cursor.execute("""
+                SELECT DISTINCT c.id, c.razao_social 
+                FROM clientes c
+                INNER JOIN cliente_produtos cp ON c.id = cp.cliente_id
+                WHERE cp.ativo = 1
+                ORDER BY c.razao_social
+            """)
             clientes = cursor.fetchall()
             cursor.close()
             conn.close()
