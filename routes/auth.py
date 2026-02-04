@@ -155,7 +155,8 @@ def criar_usuario():
         username = request.form.get('username', '').strip()
         nome_completo = request.form.get('nome_completo', '').strip()
         nivel = request.form.get('nivel', 'PISTA')
-        cliente_id = request.form.get('cliente_id')
+        # Mudança: agora recebe múltiplos IDs
+        cliente_ids = request.form.getlist('cliente_ids')  # getlist para múltiplos valores
         senha = request.form.get('senha')
         confirmar_senha = request.form.get('confirmar_senha')
         
@@ -166,15 +167,26 @@ def criar_usuario():
             flash('Este nome de usuário já existe.', 'danger')
         elif senha != confirmar_senha:
             flash('As senhas não coincidem.', 'danger')
-        elif nivel == 'PISTA' and not cliente_id:
+        elif nivel == 'PISTA' and not cliente_ids:
             flash('Usuários PISTA devem ter um posto/cliente associado.', 'danger')
+        elif nivel == 'PISTA' and len(cliente_ids) > 1:
+            flash('Usuários PISTA devem ter apenas UM posto associado.', 'danger')
+        elif nivel in ['SUPERVISOR', 'GERENTE'] and not cliente_ids:
+            flash('Usuários SUPERVISOR e GERENTE devem ter pelo menos um posto associado.', 'danger')
         else:
             try:
-                # Se não é PISTA, cliente_id deve ser None
-                if nivel != 'PISTA':
-                    cliente_id = None
+                # Para PISTA, usar o primeiro (e único) cliente_id
+                cliente_id_unico = cliente_ids[0] if cliente_ids and nivel == 'PISTA' else None
                 
-                Usuario.criar_usuario(username, nome_completo, nivel, senha, cliente_id)
+                # Criar usuário
+                user_id = Usuario.criar_usuario(username, nome_completo, nivel, senha, cliente_id_unico)
+                
+                # Se for GERENTE ou SUPERVISOR com múltiplos clientes, usar a nova função
+                if nivel in ['SUPERVISOR', 'GERENTE'] and cliente_ids:
+                    # Converter IDs para inteiros
+                    cliente_ids_int = [int(cid) for cid in cliente_ids if cid]
+                    Usuario.set_clientes_usuario(user_id, cliente_ids_int)
+                
                 flash(f'Usuário {username} criado com sucesso!', 'success')
                 return redirect(url_for('auth.listar_usuarios'))
             except Exception as e:

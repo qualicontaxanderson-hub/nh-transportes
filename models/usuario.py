@@ -245,3 +245,115 @@ class Usuario(UserMixin):
         cursor.close()
         conn.close()
         return existe
+
+    @staticmethod
+    def get_clientes_usuario(usuario_id):
+        """
+        Retorna lista de IDs dos clientes associados a um usuário.
+        Funciona com ambos os sistemas: cliente_id único (PISTA) e múltiplos (GERENTE/SUPERVISOR).
+        """
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+        cliente_ids = []
+        
+        try:
+            # Primeiro, verificar se existe a tabela usuario_clientes
+            cursor.execute("SHOW TABLES LIKE 'usuario_clientes'")
+            tabela_existe = cursor.fetchone() is not None
+            
+            if tabela_existe:
+                # Buscar da tabela de junção
+                cursor.execute("""
+                    SELECT cliente_id 
+                    FROM usuario_clientes 
+                    WHERE usuario_id = %s
+                """, (usuario_id,))
+                rows = cursor.fetchall()
+                cliente_ids = [row['cliente_id'] for row in rows]
+            
+            # Se não encontrou nada na tabela de junção, buscar da coluna cliente_id
+            if not cliente_ids:
+                cursor.execute("SELECT cliente_id FROM usuarios WHERE id = %s", (usuario_id,))
+                row = cursor.fetchone()
+                if row and row['cliente_id']:
+                    cliente_ids = [row['cliente_id']]
+        
+        except Exception as e:
+            logger.error(f"Erro ao buscar clientes do usuário {usuario_id}: {e}")
+        
+        finally:
+            cursor.close()
+            conn.close()
+        
+        return cliente_ids
+
+    @staticmethod
+    def set_clientes_usuario(usuario_id, cliente_ids):
+        """
+        Define os clientes associados a um usuário.
+        
+        Args:
+            usuario_id: ID do usuário
+            cliente_ids: Lista de IDs de clientes (pode ser vazia ou None)
+        
+        Para PISTA: deve ter exatamente 1 cliente
+        Para GERENTE/SUPERVISOR: pode ter múltiplos clientes
+        """
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        try:
+            # Verificar se tabela de junção existe
+            cursor.execute("SHOW TABLES LIKE 'usuario_clientes'")
+            tabela_existe = cursor.fetchone() is not None
+            
+            if not tabela_existe:
+                # Se não existe, criar a tabela
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS usuario_clientes (
+                        id INT AUTO_INCREMENT PRIMARY KEY,
+                        usuario_id INT NOT NULL,
+                        cliente_id INT NOT NULL,
+                        criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE CASCADE,
+                        FOREIGN KEY (cliente_id) REFERENCES clientes(id) ON DELETE CASCADE,
+                        UNIQUE KEY unique_usuario_cliente (usuario_id, cliente_id)
+                    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+                """)
+                conn.commit()
+            
+            # Limpar associações existentes
+            cursor.execute("DELETE FROM usuario_clientes WHERE usuario_id = %s", (usuario_id,))
+            
+            # Adicionar novas associações
+            if cliente_ids:
+                for cliente_id in cliente_ids:
+                    if cliente_id:  # Ignorar valores None ou vazios
+                        cursor.execute("""
+                            INSERT IGNORE INTO usuario_clientes (usuario_id, cliente_id)
+                            VALUES (%s, %s)
+                        """, (usuario_id, cliente_id))
+            
+            # Para PISTA (compatibilidade), manter cliente_id na tabela usuarios
+            # Se tem apenas 1 cliente, atualizar também a coluna cliente_id
+            if cliente_ids and len(cliente_ids) == 1:
+                cursor.execute("""
+                    UPDATE usuarios SET cliente_id = %s WHERE id = %s
+                """, (cliente_ids[0], usuario_id))
+            else:
+                # Se tem 0 ou múltiplos, limpar cliente_id
+                cursor.execute("""
+                    UPDATE usuarios SET cliente_id = NULL WHERE id = %s
+                """, (usuario_id,))
+            
+            conn.commit()
+            
+        except Exception as e:
+            conn.rollback()
+            logger.error(f"Erro ao definir clientes do usuário {usuario_id}: {e}")
+            raise
+        
+        finally:
+            cursor.close()
+            conn.close()
+
