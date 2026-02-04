@@ -6,6 +6,14 @@ O PR #28 (Descargas) **NÃO atrapalhará** os PRs #37 e #38.
 
 ---
 
+## 🔄 ATUALIZAÇÃO: Nova Ordem de Merge
+
+**Decisão atualizada:** Mergear PR #28 PRIMEIRO
+
+Veja detalhes completos em: [NOVA_ORDEM_MERGE_PR28_PRIMEIRO.md](./NOVA_ORDEM_MERGE_PR28_PRIMEIRO.md)
+
+---
+
 ## 📊 RESUMO DA ANÁLISE
 
 ### Conflitos Encontrados
@@ -23,20 +31,23 @@ O PR #28 (Descargas) **NÃO atrapalhará** os PRs #37 e #38.
 
 ---
 
-## 🎯 RECOMENDAÇÃO
+## 🎯 RECOMENDAÇÃO ATUALIZADA
 
-### Ordem de Merge Ideal:
+### Ordem de Merge Ideal (ATUALIZADA):
 
 ```
-1º → PR #38 (SUPERVISOR)
-2º → PR #37 (TROCO PIX)  
-3º → PR #28 (DESCARGAS) ✅ PODE MERGEÁ-LO SEM PROBLEMAS
+1º → PR #28 (DESCARGAS) ✅ MERGEAR PRIMEIRO
+2º → PR #38 (SUPERVISOR) → Adaptar navbar (5 min)
+3º → PR #37 (TROCO PIX) → Sem mudanças necessárias
 ```
 
-### Por que esta ordem?
-- ✅ Menor número de conflitos
-- ✅ Resolução mais fácil
-- ✅ PR #28 adapta-se à estrutura final
+### Por que esta ordem agora?
+- ✅ PR #28 é pequeno e isolado (menor risco)
+- ✅ Entrega de valor mais rápida (Descargas disponível logo)
+- ✅ PR #37 não é afetado
+- 🔧 PR #38 precisa incluir linha de Descargas (5 min de trabalho)
+
+**Veja guia completo:** [NOVA_ORDEM_MERGE_PR28_PRIMEIRO.md](./NOVA_ORDEM_MERGE_PR28_PRIMEIRO.md)
 
 ---
 

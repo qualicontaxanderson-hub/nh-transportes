@@ -9,8 +9,8 @@
 # ✅ NÃO
 
 **Compatibilidade:** ALTA  
-**Conflitos:** 1 menor (2 minutos para resolver)  
-**Recomendação:** Mergear após #37 e #38
+**Conflitos:** 1 menor (5 minutos para resolver no PR #38)  
+**Decisão Atualizada:** ✅ **Mergear PR #28 PRIMEIRO**
 
 ---
 
@@ -86,15 +86,18 @@ Escolha o documento adequado para sua necessidade:
 
 ---
 
-## 🎯 ORDEM DE MERGE
+## 🎯 ORDEM DE MERGE ATUALIZADA
 
 ```
-1️⃣ PR #38 (SUPERVISOR)
+1️⃣ PR #28 (DESCARGAS) ← MERGEAR PRIMEIRO ✅
        ↓
-2️⃣ PR #37 (TROCO PIX)
+2️⃣ PR #38 (SUPERVISOR) ← Adaptar navbar (5 min)
        ↓
-3️⃣ PR #28 (DESCARGAS) ← Você está aqui
+3️⃣ PR #37 (TROCO PIX) ← Sem mudanças necessárias
 ```
+
+**⚠️ MUDANÇA:** A ordem foi atualizada por solicitação.  
+**Ver detalhes:** [NOVA_ORDEM_MERGE_PR28_PRIMEIRO.md](./NOVA_ORDEM_MERGE_PR28_PRIMEIRO.md)
 
 ---
 
