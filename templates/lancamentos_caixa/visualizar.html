@@ -63,8 +63,13 @@
                         </thead>
                         <tbody>
                             {% for receita in receitas %}
+                            {# Linha pai (categoria) #}
+                            <tr style="background:#f8f9fa;">
+                                <td colspan="3" style="font-size: 0.85rem;"><strong>{{ receita.tipo_nome }}</strong></td>
+                            </tr>
+                            {# Linha filho (item) #}
                             <tr>
-                                <td style="font-size: 0.85rem;">{{ receita.tipo_nome }}</td>
+                                <td style="font-size: 0.85rem;">└ {{ receita.tipo_nome }}</td>
                                 <td style="font-size: 0.85rem;">{{ receita.descricao if receita.descricao else '-' }}</td>
                                 <td style="font-size: 0.85rem; text-align: right;">R$ {{ "{:,.2f}".format(receita.valor|float).replace(',', 'X').replace('.', ',').replace('X', '.') }}</td>
                             </tr>
@@ -137,8 +142,13 @@
                                 {% if comp.forma_tipo and comp.forma_tipo not in ['CARTAO', 'DEPOSITO_ESPECIE', 'DEPOSITO_CHEQUE_VISTA', 'DEPOSITO_CHEQUE_PRAZO', 'RETIRADA_PAGAMENTO'] %}
                                     {% if comp.forma_tipo not in processed_tipos %}
                                         {% set _ = processed_tipos.append(comp.forma_tipo) %}
+                                        {# Linha pai (categoria) #}
+                                        <tr style="background:#f8f9fa;">
+                                            <td colspan="3" style="font-size: 0.85rem;"><strong>{{ comp.forma_pagamento_nome }}</strong></td>
+                                        </tr>
+                                        {# Linha filho (item) #}
                                         <tr>
-                                            <td style="font-size: 0.85rem;">{{ comp.forma_pagamento_nome }}</td>
+                                            <td style="font-size: 0.85rem;">└ {{ comp.forma_pagamento_nome }}</td>
                                             <td style="font-size: 0.85rem;">{{ comp.descricao if comp.descricao else '-' }}</td>
                                             <td style="font-size: 0.85rem; text-align: right;">R$ {{ "{:,.2f}".format(comp.valor|float).replace(',', 'X').replace('.', ',').replace('X', '.') }}</td>
                                         </tr>
@@ -260,15 +270,20 @@
                                 {% endfor %}
                                 {% set retiradas_sorted = retiradas_sorted|sort %}
                                 
-                                {# Render with friendly names #}
+                                {# Render with friendly names in hierarchical format #}
                                 {% for ordem, ret in retiradas_sorted %}
                                     {% set desc_upper = ret.descricao.upper() if ret.descricao else '' %}
                                     {% set nome_amigavel = nomes_retiradas.get(desc_upper, 'Retiradas para Pagamentos') %}
-                                <tr>
-                                    <td style="font-size: 0.85rem;">{{ nome_amigavel }}</td>
-                                    <td style="font-size: 0.85rem;">{{ ret.descricao if ret.descricao else '-' }}</td>
-                                    <td style="font-size: 0.85rem; text-align: right;">R$ {{ "{:,.2f}".format(ret.valor|float).replace(',', 'X').replace('.', ',').replace('X', '.') }}</td>
-                                </tr>
+                                    {# Linha pai (categoria) #}
+                                    <tr style="background:#f8f9fa;">
+                                        <td colspan="3" style="font-size: 0.85rem;"><strong>{{ nome_amigavel }}</strong></td>
+                                    </tr>
+                                    {# Linha filho (item) #}
+                                    <tr>
+                                        <td style="font-size: 0.85rem;">└ {{ ret.descricao if ret.descricao else nome_amigavel }}</td>
+                                        <td style="font-size: 0.85rem;">-</td>
+                                        <td style="font-size: 0.85rem; text-align: right;">R$ {{ "{:,.2f}".format(ret.valor|float).replace(',', 'X').replace('.', ',').replace('X', '.') }}</td>
+                                    </tr>
                                 {% endfor %}
                             {% endif %}
                         </tbody>
