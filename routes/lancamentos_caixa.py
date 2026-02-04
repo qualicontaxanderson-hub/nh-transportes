@@ -2,7 +2,7 @@ from flask import Blueprint, render_template, request, redirect, url_for, flash,
 from flask_login import login_required, current_user
 from utils.db import get_db_connection
 from utils.decorators import admin_required
-from datetime import datetime
+from datetime import datetime, timedelta
 from decimal import Decimal
 import json
 
@@ -50,11 +50,11 @@ def lista():
         conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)
         
-        # Default to current month if no filters provided
+        # Default to 45 days before today if no filters provided
         from datetime import date
         hoje = date.today()
-        primeiro_dia_mes = hoje.replace(day=1)
-        data_inicio_default = primeiro_dia_mes.strftime('%Y-%m-%d')
+        data_45_dias_atras = hoje - timedelta(days=45)
+        data_inicio_default = data_45_dias_atras.strftime('%Y-%m-%d')
         data_fim_default = hoje.strftime('%Y-%m-%d')
         
         # Get filters from query string
@@ -94,6 +94,15 @@ def lista():
             where_conditions = []
             params = []
             
+            # Filtrar para ocultar APENAS lançamentos automáticos de Troco PIX
+            # Mostrar: FECHADO, NULL, ou ABERTO que não seja automático
+            # IMPORTANTE: Adicionar IS NULL porque NULL NOT LIKE retorna NULL (não TRUE)
+            where_conditions.append("""(
+                lc.status = 'FECHADO' 
+                OR lc.status IS NULL 
+                OR (lc.status = 'ABERTO' AND (lc.observacao IS NULL OR lc.observacao NOT LIKE 'Lançamento automático - Troco PIX%'))
+            )""")
+            
             if filtros['data_inicio']:
                 where_conditions.append("lc.data >= %s")
                 params.append(filtros['data_inicio'])
@@ -106,15 +115,34 @@ def lista():
             
             where_clause = "WHERE " + " AND ".join(where_conditions) if where_conditions else ""
             
-            # New schema with usuario_id and data
-            cursor.execute(f"""
+            # DEBUG: Primeiro, ver TODOS os lançamentos sem filtro de status
+            print(f"[DEBUG DIAGNOSTICO] Buscando TODOS os lançamentos no período (sem filtro de status/observação)...")
+            cursor.execute("""
+                SELECT id, data, status, SUBSTRING(observacao, 1, 80) as obs_preview
+                FROM lancamentos_caixa 
+                WHERE data >= %s AND data <= %s
+                ORDER BY data DESC, id DESC
+            """, (filtros['data_inicio'], filtros['data_fim']))
+            todos_lancamentos = cursor.fetchall()
+            print(f"[DEBUG DIAGNOSTICO] Total de lançamentos no período: {len(todos_lancamentos)}")
+            for i, lanc in enumerate(todos_lancamentos):
+                print(f"[DEBUG DIAGNOSTICO] #{i+1}: id={lanc['id']}, data={lanc['data']}, status={lanc['status']}, obs={lanc['obs_preview']}")
+            
+            # DEBUG: Log da query e parâmetros
+            query_completa = f"""
                 SELECT lc.*, u.username as usuario_nome, c.razao_social as cliente_nome
                 FROM lancamentos_caixa lc
                 LEFT JOIN usuarios u ON lc.usuario_id = u.id
                 LEFT JOIN clientes c ON lc.cliente_id = c.id
                 {where_clause}
                 ORDER BY lc.data DESC, lc.id DESC
-            """, tuple(params))
+            """
+            print(f"[DEBUG] Query completa: {query_completa}")
+            print(f"[DEBUG] Parâmetros: {params}")
+            print(f"[DEBUG] Filtros recebidos: {filtros}")
+            
+            # New schema with usuario_id and data
+            cursor.execute(query_completa, tuple(params))
         elif 'data_movimento' in columns:
             # Existing schema with data_movimento
             cursor.execute("""
@@ -132,6 +160,11 @@ def lista():
             """)
         
         lancamentos = cursor.fetchall()
+        
+        # DEBUG: Log dos resultados
+        print(f"[DEBUG] Número de lançamentos encontrados: {len(lancamentos)}")
+        for i, lanc in enumerate(lancamentos[:5]):  # Mostrar primeiros 5
+            print(f"[DEBUG] Lançamento {i+1}: id={lanc.get('id')}, data={lanc.get('data')}, status={lanc.get('status')}, observacao={(lanc.get('observacao') or '')[:50]}")
         
         # Calculate summary
         resumo = {
@@ -306,6 +339,91 @@ def get_vendas_dia():
             conn.close()
 
 
+@bp.route('/api/funcionarios/<int:cliente_id>', methods=['GET'])
+@login_required
+def get_funcionarios_por_cliente(cliente_id):
+    """API endpoint para buscar funcionários vinculados a um cliente"""
+    conn = None
+    cursor = None
+    
+    try:
+        print(f"[DEBUG] Buscando funcionários para cliente_id: {cliente_id}")
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+        
+        # Primeiro, tentar descobrir qual coluna existe na tabela
+        cursor.execute("DESCRIBE funcionarios")
+        columns = [col['Field'] for col in cursor.fetchall()]
+        print(f"[DEBUG] Colunas da tabela funcionarios: {columns}")
+        
+        # Determinar qual nome de coluna usar
+        cliente_column = None
+        if 'clienteid' in columns:
+            cliente_column = 'clienteid'
+        elif 'cliente_id' in columns:
+            cliente_column = 'cliente_id'
+        elif 'id_cliente' in columns:
+            cliente_column = 'id_cliente'
+        
+        if not cliente_column:
+            print(f"[AVISO] Coluna de cliente não encontrada. Retornando todos os funcionários ativos.")
+            # Se não há coluna de cliente, retornar todos os funcionários ativos
+            query = """
+                SELECT 
+                    f.id,
+                    f.nome,
+                    f.cargo,
+                    f.cpf
+                FROM funcionarios f
+                WHERE f.ativo = 1
+                ORDER BY f.nome
+            """
+            cursor.execute(query)
+        else:
+            print(f"[DEBUG] Usando coluna: {cliente_column}")
+            # Buscar funcionários ativos vinculados ao cliente
+            query = f"""
+                SELECT 
+                    f.id,
+                    f.nome,
+                    f.cargo,
+                    f.cpf
+                FROM funcionarios f
+                WHERE f.{cliente_column} = %s 
+                  AND f.ativo = 1
+                ORDER BY f.nome
+            """
+            print(f"[DEBUG] Executando query com cliente_id: {cliente_id}")
+            cursor.execute(query, (cliente_id,))
+        
+        funcionarios = cursor.fetchall()
+        print(f"[DEBUG] Encontrados {len(funcionarios)} funcionários")
+        
+        # Converter para formato JSON amigável
+        result = []
+        for func in funcionarios:
+            result.append({
+                'id': func['id'],
+                'nome': func['nome'],
+                'cargo': func.get('cargo', ''),
+                'cpf': func.get('cpf', '')
+            })
+        
+        print(f"[DEBUG] Retornando {len(result)} funcionários")
+        return jsonify(result)
+        
+    except Exception as e:
+        print(f"[ERRO] Erro ao buscar funcionários: {type(e).__name__}: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': f'{type(e).__name__}: {str(e)}'}), 500
+    finally:
+        if cursor is not None:
+            cursor.close()
+        if conn is not None:
+            conn.close()
+
+
 @bp.route('/novo', methods=['GET', 'POST'])
 @login_required
 @admin_required
@@ -342,6 +460,18 @@ def novo():
             comprovacoes_json = request.form.get('comprovacoes', '[]')
             comprovacoes = json.loads(comprovacoes_json)
             
+            # Get sobras de funcionários (receitas) - JSON encoded
+            sobras_json = request.form.get('sobras_funcionarios', '[]')
+            sobras_funcionarios = json.loads(sobras_json)
+            
+            # Get perdas de funcionários (comprovações) - JSON encoded
+            perdas_json = request.form.get('perdas_funcionarios', '[]')
+            perdas_funcionarios = json.loads(perdas_json)
+            
+            # Get vales de funcionários (comprovações) - JSON encoded
+            vales_json = request.form.get('vales_funcionarios', '[]')
+            vales_funcionarios = json.loads(vales_json)
+            
             # Validate
             if not data:
                 flash('Data é obrigatória!', 'danger')
@@ -352,8 +482,16 @@ def novo():
                 raise ValueError('Cliente não fornecido')
             
             # Calculate totals: Diferença = Total Comprovação - Total Receitas
+            # Include sobras in receitas and perdas+vales in comprovações
             total_receitas = sum(parse_brazilian_currency(r.get('valor', 0)) for r in receitas)
+            total_sobras = sum(parse_brazilian_currency(s.get('valor', 0)) for s in sobras_funcionarios)
+            total_receitas += total_sobras
+            
             total_comprovacao = sum(parse_brazilian_currency(c.get('valor', 0)) for c in comprovacoes)
+            total_perdas = sum(parse_brazilian_currency(p.get('valor', 0)) for p in perdas_funcionarios)
+            total_vales = sum(parse_brazilian_currency(v.get('valor', 0)) for v in vales_funcionarios)
+            total_comprovacao += total_perdas + total_vales
+            
             diferenca = total_comprovacao - total_receitas
             
             # Insert lancamento_caixa
@@ -392,6 +530,42 @@ def novo():
                           int(cartao_id) if cartao_id and cartao_id != '' else None,
                           comprovacao.get('descricao', ''),
                           float(parse_brazilian_currency(comprovacao['valor']))))
+            
+            # Insert sobras de funcionários (receitas)
+            for sobra in sobras_funcionarios:
+                if sobra.get('funcionario_id') and sobra.get('valor'):
+                    valor = parse_brazilian_currency(sobra['valor'])
+                    if valor > 0:  # Só inserir se tiver valor
+                        cursor.execute("""
+                            INSERT INTO lancamentos_caixa_sobras_funcionarios 
+                            (lancamento_caixa_id, funcionario_id, valor, observacao)
+                            VALUES (%s, %s, %s, %s)
+                        """, (lancamento_id, int(sobra['funcionario_id']), 
+                              float(valor), sobra.get('observacao', '')))
+            
+            # Insert perdas de funcionários (comprovações)
+            for perda in perdas_funcionarios:
+                if perda.get('funcionario_id') and perda.get('valor'):
+                    valor = parse_brazilian_currency(perda['valor'])
+                    if valor > 0:  # Só inserir se tiver valor
+                        cursor.execute("""
+                            INSERT INTO lancamentos_caixa_perdas_funcionarios 
+                            (lancamento_caixa_id, funcionario_id, valor, observacao)
+                            VALUES (%s, %s, %s, %s)
+                        """, (lancamento_id, int(perda['funcionario_id']), 
+                              float(valor), perda.get('observacao', '')))
+            
+            # Insert vales de funcionários (comprovações)
+            for vale in vales_funcionarios:
+                if vale.get('funcionario_id') and vale.get('valor'):
+                    valor = parse_brazilian_currency(vale['valor'])
+                    if valor > 0:  # Só inserir se tiver valor
+                        cursor.execute("""
+                            INSERT INTO lancamentos_caixa_vales_funcionarios 
+                            (lancamento_caixa_id, funcionario_id, valor, observacao)
+                            VALUES (%s, %s, %s, %s)
+                        """, (lancamento_id, int(vale['funcionario_id']), 
+                              float(valor), vale.get('observacao', '')))
             
             conn.commit()
             flash('Lançamento de caixa cadastrado com sucesso!', 'success')
@@ -626,10 +800,55 @@ def visualizar(id):
         """, (id,))
         comprovacoes = cursor.fetchall()
         
+        # Get sobras de funcionários (receitas)
+        cursor.execute("""
+            SELECT s.*, f.nome as funcionario_nome
+            FROM lancamentos_caixa_sobras_funcionarios s
+            LEFT JOIN funcionarios f ON s.funcionario_id = f.id
+            WHERE s.lancamento_caixa_id = %s
+            ORDER BY f.nome
+        """, (id,))
+        sobras_funcionarios = cursor.fetchall()
+        
+        # Get perdas de funcionários (comprovações)
+        cursor.execute("""
+            SELECT p.*, f.nome as funcionario_nome
+            FROM lancamentos_caixa_perdas_funcionarios p
+            LEFT JOIN funcionarios f ON p.funcionario_id = f.id
+            WHERE p.lancamento_caixa_id = %s
+            ORDER BY f.nome
+        """, (id,))
+        perdas_funcionarios = cursor.fetchall()
+        
+        # Get vales de funcionários (comprovações)
+        cursor.execute("""
+            SELECT v.*, f.nome as funcionario_nome
+            FROM lancamentos_caixa_vales_funcionarios v
+            LEFT JOIN funcionarios f ON v.funcionario_id = f.id
+            WHERE v.lancamento_caixa_id = %s
+            ORDER BY f.nome
+        """, (id,))
+        vales_funcionarios = cursor.fetchall()
+        
+        # Get depósitos de cheques
+        cursor.execute("""
+            SELECT id, lancamento_caixa_id, tipo, valor_lancado,
+                   valor_depositado, diferenca, data_deposito,
+                   depositado_por, observacao, criado_em
+            FROM lancamentos_caixa_depositos_cheques
+            WHERE lancamento_caixa_id = %s
+            ORDER BY tipo, criado_em
+        """, (id,))
+        depositos_cheques = cursor.fetchall()
+        
         return render_template('lancamentos_caixa/visualizar.html', 
                              lancamento=lancamento, 
                              receitas=receitas,
-                             comprovacoes=comprovacoes)
+                             comprovacoes=comprovacoes,
+                             sobras_funcionarios=sobras_funcionarios,
+                             perdas_funcionarios=perdas_funcionarios,
+                             vales_funcionarios=vales_funcionarios,
+                             depositos_cheques=depositos_cheques)
     except Exception as e:
         flash(f'Erro ao visualizar lançamento: {str(e)}', 'danger')
         return redirect(url_for('lancamentos_caixa.lista'))
@@ -712,6 +931,18 @@ def editar(id):
             comprovacoes_json = request.form.get('comprovacoes', '[]')
             comprovacoes = json.loads(comprovacoes_json)
             
+            # Get sobras de funcionários (receitas) - JSON encoded
+            sobras_json = request.form.get('sobras_funcionarios', '[]')
+            sobras_funcionarios = json.loads(sobras_json)
+            
+            # Get perdas de funcionários (comprovações) - JSON encoded
+            perdas_json = request.form.get('perdas_funcionarios', '[]')
+            perdas_funcionarios = json.loads(perdas_json)
+            
+            # Get vales de funcionários (comprovações) - JSON encoded
+            vales_json = request.form.get('vales_funcionarios', '[]')
+            vales_funcionarios = json.loads(vales_json)
+            
             # Validate
             if not data:
                 flash('Data é obrigatória!', 'danger')
@@ -722,22 +953,54 @@ def editar(id):
                 raise ValueError('Cliente não fornecido')
             
             # Calculate totals: Diferença = Total Comprovação - Total Receitas
+            # Include sobras in receitas and perdas+vales in comprovações
             total_receitas = sum(parse_brazilian_currency(r.get('valor', 0)) for r in receitas)
+            total_sobras = sum(parse_brazilian_currency(s.get('valor', 0)) for s in sobras_funcionarios)
+            total_receitas += total_sobras
+            
             total_comprovacao = sum(parse_brazilian_currency(c.get('valor', 0)) for c in comprovacoes)
+            total_perdas = sum(parse_brazilian_currency(p.get('valor', 0)) for p in perdas_funcionarios)
+            total_vales = sum(parse_brazilian_currency(v.get('valor', 0)) for v in vales_funcionarios)
+            total_comprovacao += total_perdas + total_vales
+            
             diferenca = total_comprovacao - total_receitas
             
+            # Limpar observação se for de Troco PIX automático
+            # Quando editamos manualmente, não deve manter o texto automático
+            if observacao and observacao.startswith('Lançamento automático - Troco PIX'):
+                print(f"[DEBUG EDIT] Limpando observação automática de Troco PIX")
+                observacao = None  # Limpar observação automática
+            
             # Update lancamento_caixa
+            # Quando editamos, o lançamento passa a ser um fechamento completo (FECHADO)
+            print(f"[DEBUG EDIT] Atualizando lançamento id={id}")
+            print(f"[DEBUG EDIT] Valores: data={data}, cliente_id={cliente_id}, status=FECHADO")
+            print(f"[DEBUG EDIT] observacao={observacao}, totais={total_receitas}/{total_comprovacao}/{diferenca}")
+            
             cursor.execute("""
                 UPDATE lancamentos_caixa 
                 SET data = %s, cliente_id = %s, observacao = %s, 
-                    total_receitas = %s, total_comprovacao = %s, diferenca = %s
+                    total_receitas = %s, total_comprovacao = %s, diferenca = %s,
+                    status = 'FECHADO'
                 WHERE id = %s
             """, (data, int(cliente_id), observacao if observacao else None, 
                   float(total_receitas), float(total_comprovacao), float(diferenca), id))
             
+            print(f"[DEBUG EDIT] Linhas afetadas pelo UPDATE: {cursor.rowcount}")
+            
+            # Verificar se foi atualizado
+            cursor.execute("SELECT status, observacao FROM lancamentos_caixa WHERE id = %s", (id,))
+            resultado = cursor.fetchone()
+            print(f"[DEBUG EDIT] Após UPDATE - status={resultado['status']}, observacao={resultado.get('observacao', 'NULL')[:50] if resultado.get('observacao') else 'NULL'}")
+            
             # Delete old receitas and comprovacoes
             cursor.execute("DELETE FROM lancamentos_caixa_receitas WHERE lancamento_caixa_id = %s", (id,))
             cursor.execute("DELETE FROM lancamentos_caixa_comprovacao WHERE lancamento_caixa_id = %s", (id,))
+            
+            # Delete old sobras/perdas/vales
+            cursor.execute("DELETE FROM lancamentos_caixa_sobras_funcionarios WHERE lancamento_caixa_id = %s", (id,))
+            cursor.execute("DELETE FROM lancamentos_caixa_perdas_funcionarios WHERE lancamento_caixa_id = %s", (id,))
+            cursor.execute("DELETE FROM lancamentos_caixa_vales_funcionarios WHERE lancamento_caixa_id = %s", (id,))
             
             # Insert new receitas
             for receita in receitas:
@@ -765,6 +1028,42 @@ def editar(id):
                           int(cartao_id) if cartao_id and cartao_id != '' else None,
                           comprovacao.get('descricao', ''),
                           float(parse_brazilian_currency(comprovacao['valor']))))
+            
+            # Insert sobras de funcionários (receitas)
+            for sobra in sobras_funcionarios:
+                if sobra.get('funcionario_id') and sobra.get('valor'):
+                    valor = parse_brazilian_currency(sobra['valor'])
+                    if valor > 0:  # Só inserir se tiver valor
+                        cursor.execute("""
+                            INSERT INTO lancamentos_caixa_sobras_funcionarios 
+                            (lancamento_caixa_id, funcionario_id, valor, observacao)
+                            VALUES (%s, %s, %s, %s)
+                        """, (id, int(sobra['funcionario_id']), 
+                              float(valor), sobra.get('observacao', '')))
+            
+            # Insert perdas de funcionários (comprovações)
+            for perda in perdas_funcionarios:
+                if perda.get('funcionario_id') and perda.get('valor'):
+                    valor = parse_brazilian_currency(perda['valor'])
+                    if valor > 0:  # Só inserir se tiver valor
+                        cursor.execute("""
+                            INSERT INTO lancamentos_caixa_perdas_funcionarios 
+                            (lancamento_caixa_id, funcionario_id, valor, observacao)
+                            VALUES (%s, %s, %s, %s)
+                        """, (id, int(perda['funcionario_id']), 
+                              float(valor), perda.get('observacao', '')))
+            
+            # Insert vales de funcionários (comprovações)
+            for vale in vales_funcionarios:
+                if vale.get('funcionario_id') and vale.get('valor'):
+                    valor = parse_brazilian_currency(vale['valor'])
+                    if valor > 0:  # Só inserir se tiver valor
+                        cursor.execute("""
+                            INSERT INTO lancamentos_caixa_vales_funcionarios 
+                            (lancamento_caixa_id, funcionario_id, valor, observacao)
+                            VALUES (%s, %s, %s, %s)
+                        """, (id, int(vale['funcionario_id']), 
+                              float(valor), vale.get('observacao', '')))
             
             conn.commit()
             flash('Lançamento de caixa atualizado com sucesso!', 'success')
@@ -808,6 +1107,39 @@ def editar(id):
         print(f"DEBUG: Loaded {len(comprovacoes)} comprovacoes for lancamento_caixa_id={id}")
         for c in comprovacoes:
             print(f"  - Comprovacao: {c}")
+        
+        # Get sobras de funcionários
+        cursor.execute("""
+            SELECT s.*, f.nome as funcionario_nome
+            FROM lancamentos_caixa_sobras_funcionarios s
+            LEFT JOIN funcionarios f ON s.funcionario_id = f.id
+            WHERE s.lancamento_caixa_id = %s
+            ORDER BY s.id
+        """, (id,))
+        sobras_funcionarios = cursor.fetchall()
+        print(f"DEBUG: Loaded {len(sobras_funcionarios)} sobras for lancamento_caixa_id={id}")
+        
+        # Get perdas de funcionários
+        cursor.execute("""
+            SELECT p.*, f.nome as funcionario_nome
+            FROM lancamentos_caixa_perdas_funcionarios p
+            LEFT JOIN funcionarios f ON p.funcionario_id = f.id
+            WHERE p.lancamento_caixa_id = %s
+            ORDER BY p.id
+        """, (id,))
+        perdas_funcionarios = cursor.fetchall()
+        print(f"DEBUG: Loaded {len(perdas_funcionarios)} perdas for lancamento_caixa_id={id}")
+        
+        # Get vales de funcionários
+        cursor.execute("""
+            SELECT v.*, f.nome as funcionario_nome
+            FROM lancamentos_caixa_vales_funcionarios v
+            LEFT JOIN funcionarios f ON v.funcionario_id = f.id
+            WHERE v.lancamento_caixa_id = %s
+            ORDER BY v.id
+        """, (id,))
+        vales_funcionarios = cursor.fetchall()
+        print(f"DEBUG: Loaded {len(vales_funcionarios)} vales for lancamento_caixa_id={id}")
         
         # Get clients with "Produtos Posto" configured (same as in novo route)
         cursor.execute("""
@@ -880,6 +1212,9 @@ def editar(id):
         lancamento_clean = convert_to_plain_python(lancamento)
         receitas_clean = convert_to_plain_python(receitas)
         comprovacoes_clean = convert_to_plain_python(comprovacoes)
+        sobras_clean = convert_to_plain_python(sobras_funcionarios)
+        perdas_clean = convert_to_plain_python(perdas_funcionarios)
+        vales_clean = convert_to_plain_python(vales_funcionarios)
         clientes_clean = convert_to_plain_python(clientes)
         formas_pagamento_clean = convert_to_plain_python(formas_pagamento)
         bandeiras_cartao_clean = convert_to_plain_python(bandeiras_cartao)
@@ -890,6 +1225,9 @@ def editar(id):
         lancamento_json = json.dumps(lancamento_clean)
         receitas_json = json.dumps(receitas_clean)
         comprovacoes_json = json.dumps(comprovacoes_clean)
+        sobras_json = json.dumps(sobras_clean)
+        perdas_json = json.dumps(perdas_clean)
+        vales_json = json.dumps(vales_clean)
         clientes_json = json.dumps(clientes_clean)
         formas_pagamento_json = json.dumps(formas_pagamento_clean)
         bandeiras_cartao_json = json.dumps(bandeiras_cartao_clean)
@@ -897,12 +1235,18 @@ def editar(id):
         
         print(f"DEBUG: Passing to template - receitas_json={receitas_json}")
         print(f"DEBUG: Passing to template - comprovacoes_json={comprovacoes_json}")
+        print(f"DEBUG: Passing to template - sobras_json={sobras_json}")
+        print(f"DEBUG: Passing to template - perdas_json={perdas_json}")
+        print(f"DEBUG: Passing to template - vales_json={vales_json}")
         
         return render_template('lancamentos_caixa/novo.html',
                              edit_mode=True,
                              lancamento=lancamento_clean,
                              receitas=receitas_clean,
                              comprovacoes=comprovacoes_clean,
+                             sobras_funcionarios=sobras_clean,
+                             perdas_funcionarios=perdas_clean,
+                             vales_funcionarios=vales_clean,
                              clientes=clientes_clean,
                              formas_pagamento=formas_pagamento_clean,
                              bandeiras_cartao=bandeiras_cartao_clean,
@@ -912,6 +1256,9 @@ def editar(id):
                              lancamento_json=lancamento_json,
                              receitas_json=receitas_json,
                              comprovacoes_json=comprovacoes_json,
+                             sobras_json=sobras_json,
+                             perdas_json=perdas_json,
+                             vales_json=vales_json,
                              clientes_json=clientes_json,
                              formas_pagamento_json=formas_pagamento_json,
                              bandeiras_cartao_json=bandeiras_cartao_json,
@@ -923,6 +1270,326 @@ def editar(id):
             conn.rollback()
         flash(f'Erro ao editar lançamento de caixa: {str(e)}', 'danger')
         return redirect(url_for('lancamentos_caixa.lista'))
+    finally:
+        if cursor is not None:
+            cursor.close()
+        if conn is not None:
+            conn.close()
+
+
+# ============================================================================
+# CONTROLE DE DEPÓSITOS DE CHEQUES
+# ============================================================================
+
+@bp.route('/<int:lancamento_id>/depositos_cheques', methods=['GET'])
+@login_required
+def get_depositos_cheques(lancamento_id):
+    """Get all check deposits for a specific cash closure"""
+    conn = None
+    cursor = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+        
+        query = """
+            SELECT 
+                id, lancamento_caixa_id, tipo, valor_lancado,
+                valor_depositado, diferenca, data_deposito,
+                depositado_por, observacao, criado_em, criado_por,
+                atualizado_em, atualizado_por
+            FROM lancamentos_caixa_depositos_cheques
+            WHERE lancamento_caixa_id = %s
+            ORDER BY tipo, criado_em
+        """
+        
+        cursor.execute(query, (lancamento_id,))
+        depositos = cursor.fetchall()
+        
+        # Convert Decimal to float for JSON serialization
+        for deposito in depositos:
+            for key in ['valor_lancado', 'valor_depositado', 'diferenca']:
+                if deposito.get(key) is not None:
+                    deposito[key] = float(deposito[key])
+            # Convert dates to string
+            if deposito.get('data_deposito'):
+                deposito['data_deposito'] = deposito['data_deposito'].strftime('%Y-%m-%d')
+            if deposito.get('criado_em'):
+                deposito['criado_em'] = deposito['criado_em'].strftime('%Y-%m-%d %H:%M:%S')
+            if deposito.get('atualizado_em'):
+                deposito['atualizado_em'] = deposito['atualizado_em'].strftime('%Y-%m-%d %H:%M:%S')
+        
+        return jsonify({
+            'success': True,
+            'depositos': depositos
+        })
+        
+    except Exception as e:
+        print(f"[ERROR] Erro ao buscar depósitos de cheques: {str(e)}")
+        return jsonify({
+            'success': False,
+            'message': f'Erro ao buscar depósitos: {str(e)}'
+        }), 500
+    finally:
+        if cursor is not None:
+            cursor.close()
+        if conn is not None:
+            conn.close()
+
+
+@bp.route('/<int:lancamento_id>/depositos_cheques', methods=['POST'])
+@login_required
+def registrar_deposito_cheque(lancamento_id):
+    """Register a check deposit"""
+    conn = None
+    cursor = None
+    try:
+        data = request.get_json()
+        
+        tipo = data.get('tipo')  # 'VISTA' ou 'PRAZO'
+        valor_lancado = data.get('valor_lancado')
+        valor_depositado = data.get('valor_depositado')
+        data_deposito = data.get('data_deposito')
+        depositado_por = data.get('depositado_por', '').strip()
+        observacao = data.get('observacao', '').strip()
+        
+        # Validações
+        if not tipo or tipo not in ['VISTA', 'PRAZO']:
+            return jsonify({
+                'success': False,
+                'message': 'Tipo inválido. Use VISTA ou PRAZO.'
+            }), 400
+        
+        if not valor_lancado:
+            return jsonify({
+                'success': False,
+                'message': 'Valor lançado é obrigatório.'
+            }), 400
+        
+        # Convert to Decimal
+        try:
+            valor_lancado = Decimal(str(valor_lancado))
+            if valor_depositado:
+                valor_depositado = Decimal(str(valor_depositado))
+        except:
+            return jsonify({
+                'success': False,
+                'message': 'Valores inválidos.'
+            }), 400
+        
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+        
+        # Verificar se o lançamento existe
+        cursor.execute("SELECT id FROM lancamentos_caixa WHERE id = %s", (lancamento_id,))
+        if not cursor.fetchone():
+            return jsonify({
+                'success': False,
+                'message': 'Lançamento de caixa não encontrado.'
+            }), 404
+        
+        # Inserir depósito
+        insert_query = """
+            INSERT INTO lancamentos_caixa_depositos_cheques 
+            (lancamento_caixa_id, tipo, valor_lancado, valor_depositado, 
+             data_deposito, depositado_por, observacao, criado_por)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+        """
+        
+        cursor.execute(insert_query, (
+            lancamento_id, tipo, valor_lancado, valor_depositado,
+            data_deposito if data_deposito else None,
+            depositado_por if depositado_por else None,
+            observacao if observacao else None,
+            current_user.id
+        ))
+        
+        deposito_id = cursor.lastrowid
+        conn.commit()
+        
+        # Buscar o depósito criado
+        cursor.execute("""
+            SELECT 
+                id, lancamento_caixa_id, tipo, valor_lancado,
+                valor_depositado, diferenca, data_deposito,
+                depositado_por, observacao
+            FROM lancamentos_caixa_depositos_cheques
+            WHERE id = %s
+        """, (deposito_id,))
+        
+        deposito = cursor.fetchone()
+        
+        # Convert for JSON
+        for key in ['valor_lancado', 'valor_depositado', 'diferenca']:
+            if deposito.get(key) is not None:
+                deposito[key] = float(deposito[key])
+        if deposito.get('data_deposito'):
+            deposito['data_deposito'] = deposito['data_deposito'].strftime('%Y-%m-%d')
+        
+        return jsonify({
+            'success': True,
+            'message': 'Depósito registrado com sucesso!',
+            'deposito': deposito
+        })
+        
+    except Exception as e:
+        if conn:
+            conn.rollback()
+        print(f"[ERROR] Erro ao registrar depósito: {str(e)}")
+        return jsonify({
+            'success': False,
+            'message': f'Erro ao registrar depósito: {str(e)}'
+        }), 500
+    finally:
+        if cursor is not None:
+            cursor.close()
+        if conn is not None:
+            conn.close()
+
+
+@bp.route('/<int:lancamento_id>/depositos_cheques/<int:deposito_id>', methods=['PUT'])
+@login_required
+def atualizar_deposito_cheque(lancamento_id, deposito_id):
+    """Update a check deposit"""
+    conn = None
+    cursor = None
+    try:
+        data = request.get_json()
+        
+        valor_depositado = data.get('valor_depositado')
+        data_deposito = data.get('data_deposito')
+        depositado_por = data.get('depositado_por', '').strip()
+        observacao = data.get('observacao', '').strip()
+        
+        # Convert to Decimal
+        if valor_depositado:
+            try:
+                valor_depositado = Decimal(str(valor_depositado))
+            except:
+                return jsonify({
+                    'success': False,
+                    'message': 'Valor depositado inválido.'
+                }), 400
+        
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+        
+        # Verificar se o depósito existe e pertence ao lançamento
+        cursor.execute("""
+            SELECT id FROM lancamentos_caixa_depositos_cheques
+            WHERE id = %s AND lancamento_caixa_id = %s
+        """, (deposito_id, lancamento_id))
+        
+        if not cursor.fetchone():
+            return jsonify({
+                'success': False,
+                'message': 'Depósito não encontrado.'
+            }), 404
+        
+        # Atualizar depósito
+        update_query = """
+            UPDATE lancamentos_caixa_depositos_cheques 
+            SET valor_depositado = %s,
+                data_deposito = %s,
+                depositado_por = %s,
+                observacao = %s,
+                atualizado_por = %s
+            WHERE id = %s
+        """
+        
+        cursor.execute(update_query, (
+            valor_depositado,
+            data_deposito if data_deposito else None,
+            depositado_por if depositado_por else None,
+            observacao if observacao else None,
+            current_user.id,
+            deposito_id
+        ))
+        
+        conn.commit()
+        
+        # Buscar depósito atualizado
+        cursor.execute("""
+            SELECT 
+                id, lancamento_caixa_id, tipo, valor_lancado,
+                valor_depositado, diferenca, data_deposito,
+                depositado_por, observacao
+            FROM lancamentos_caixa_depositos_cheques
+            WHERE id = %s
+        """, (deposito_id,))
+        
+        deposito = cursor.fetchone()
+        
+        # Convert for JSON
+        for key in ['valor_lancado', 'valor_depositado', 'diferenca']:
+            if deposito.get(key) is not None:
+                deposito[key] = float(deposito[key])
+        if deposito.get('data_deposito'):
+            deposito['data_deposito'] = deposito['data_deposito'].strftime('%Y-%m-%d')
+        
+        return jsonify({
+            'success': True,
+            'message': 'Depósito atualizado com sucesso!',
+            'deposito': deposito
+        })
+        
+    except Exception as e:
+        if conn:
+            conn.rollback()
+        print(f"[ERROR] Erro ao atualizar depósito: {str(e)}")
+        return jsonify({
+            'success': False,
+            'message': f'Erro ao atualizar depósito: {str(e)}'
+        }), 500
+    finally:
+        if cursor is not None:
+            cursor.close()
+        if conn is not None:
+            conn.close()
+
+
+@bp.route('/<int:lancamento_id>/depositos_cheques/<int:deposito_id>', methods=['DELETE'])
+@login_required
+def deletar_deposito_cheque(lancamento_id, deposito_id):
+    """Delete a check deposit"""
+    conn = None
+    cursor = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+        
+        # Verificar se o depósito existe e pertence ao lançamento
+        cursor.execute("""
+            SELECT id FROM lancamentos_caixa_depositos_cheques
+            WHERE id = %s AND lancamento_caixa_id = %s
+        """, (deposito_id, lancamento_id))
+        
+        if not cursor.fetchone():
+            return jsonify({
+                'success': False,
+                'message': 'Depósito não encontrado.'
+            }), 404
+        
+        # Deletar depósito
+        cursor.execute("""
+            DELETE FROM lancamentos_caixa_depositos_cheques
+            WHERE id = %s
+        """, (deposito_id,))
+        
+        conn.commit()
+        
+        return jsonify({
+            'success': True,
+            'message': 'Depósito deletado com sucesso!'
+        })
+        
+    except Exception as e:
+        if conn:
+            conn.rollback()
+        print(f"[ERROR] Erro ao deletar depósito: {str(e)}")
+        return jsonify({
+            'success': False,
+            'message': f'Erro ao deletar depósito: {str(e)}'
+        }), 500
     finally:
         if cursor is not None:
             cursor.close()

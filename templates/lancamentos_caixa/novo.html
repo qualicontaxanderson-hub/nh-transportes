@@ -56,6 +56,19 @@
                         <div id="receitas-container">
                             <!-- Fixed receipt types will be added here dynamically on page load -->
                         </div>
+                        
+                        <!-- Botão Sobras de Caixa -->
+                        <div class="mt-3 mb-2">
+                            <button type="button" class="btn btn-success btn-sm w-100" onclick="abrirModalFuncionarios('sobras')">
+                                <i class="bi bi-plus-circle"></i> Sobras de Caixa
+                            </button>
+                            <div id="sobras-resumo" class="mt-2" style="display:none;">
+                                <small class="text-muted">
+                                    <strong>Total Sobras:</strong> <span id="total-sobras">R$ 0,00</span>
+                                </small>
+                            </div>
+                        </div>
+                        
                         <hr>
                         <div class="d-flex justify-content-between align-items-center">
                             <strong>Total Receitas:</strong>
@@ -75,6 +88,28 @@
                         <div id="comprovacoes-container">
                             <!-- Fixed payment types will be added here dynamically on page load -->
                         </div>
+                        
+                        <!-- Botões Perdas e Vales -->
+                        <div class="mt-3 mb-2">
+                            <button type="button" class="btn btn-warning btn-sm w-100 mb-2" onclick="abrirModalFuncionarios('perdas')">
+                                <i class="bi bi-dash-circle"></i> Perdas de Caixas
+                            </button>
+                            <div id="perdas-resumo" class="mb-2" style="display:none;">
+                                <small class="text-muted">
+                                    <strong>Total Perdas:</strong> <span id="total-perdas">R$ 0,00</span>
+                                </small>
+                            </div>
+                            
+                            <button type="button" class="btn btn-danger btn-sm w-100" onclick="abrirModalFuncionarios('vales')">
+                                <i class="bi bi-receipt"></i> Vales de Quebras de Caixas
+                            </button>
+                            <div id="vales-resumo" class="mt-2" style="display:none;">
+                                <small class="text-muted">
+                                    <strong>Total Vales:</strong> <span id="total-vales">R$ 0,00</span>
+                                </small>
+                            </div>
+                        </div>
+                        
                         <hr>
                         <div class="d-flex justify-content-between align-items-center">
                             <strong>Total Comprovação:</strong>
@@ -114,6 +149,9 @@
         <!-- Hidden inputs for JSON data -->
         <input type="hidden" name="receitas" id="receitas-json">
         <input type="hidden" name="comprovacoes" id="comprovacoes-json">
+        <input type="hidden" name="sobras_funcionarios" id="sobras-json">
+        <input type="hidden" name="perdas_funcionarios" id="perdas-json">
+        <input type="hidden" name="vales_funcionarios" id="vales-json">
 
         <!-- Actions -->
         <div class="d-flex justify-content-between mb-3">
@@ -125,6 +163,43 @@
             </button>
         </div>
     </form>
+</div>
+
+<!-- Modal para Sobras/Perdas/Vales por Funcionário -->
+<div class="modal fade" id="modalFuncionarios" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="modal-title">Lançamento por Funcionário</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div id="funcionarios-lista" class="mb-3">
+                    <p class="text-muted">Selecione um cliente e data primeiro...</p>
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-sm" id="tabela-funcionarios" style="display:none;">
+                        <thead>
+                            <tr>
+                                <th>Funcionário</th>
+                                <th style="width: 150px;">Valor (R$)</th>
+                                <th style="width: 200px;">Observação</th>
+                            </tr>
+                        </thead>
+                        <tbody id="funcionarios-tbody">
+                        </tbody>
+                    </table>
+                </div>
+                <div class="mt-3">
+                    <strong>Total: <span id="modal-total">R$ 0,00</span></strong>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-primary" onclick="salvarDadosFuncionarios()">Salvar</button>
+            </div>
+        </div>
+    </div>
 </div>
 
 <style>
@@ -165,48 +240,57 @@
 let receitaIndex = 0;
 let comprovacaoIndex = 0;
 
+// Dados de sobras/perdas/vales por funcionário
+let dadosSobras = [];
+let dadosPerdas = [];
+let dadosVales = [];
+let tipoModalAtual = ''; // 'sobras', 'perdas', ou 'vales'
+let funcionariosCache = [];
+
+// Carregar funcionários do cliente
+
 // Use pre-serialized JSON strings to avoid Jinja2 serialization issues
 const tiposReceita = {{ tipos_receita_json|safe }};
 const formasPagamento = {{ formas_pagamento_json|safe }};
 const cartoes = {{ cartoes_json|safe }};
 
-// Define preferred order for known types (AUTO types first, then specific MANUAL types)
+// Definir ordem preferida para tipos conhecidos (tipos AUTO primeiro, depois tipos MANUAL específicos)
 const preferredOrder = ['VENDAS POSTO', 'ARLA', 'LUBRIFICANTES', 'TROCO PIX (AUTO)', 'RECEBIMENTOS', 'ACRÉSCIMOS GERAIS', 'ACRÉSCIMOS CADASTROS', 'TROCO PIX (MANUAL)', 'EMPRESTIMOS', 'OUTROS'];
 
-// Sort receipt types: preferred types in order, then any others alphabetically
+// Ordenar tipos de receita: tipos preferidos em ordem, depois outros alfabeticamente
 const sortedTiposReceita = [...tiposReceita].sort((a, b) => {
     const aIndex = preferredOrder.indexOf(a.nome);
     const bIndex = preferredOrder.indexOf(b.nome);
     
-    // Both are in preferred list
+    // Ambos estão na lista preferida
     if (aIndex !== -1 && bIndex !== -1) {
         return aIndex - bIndex;
     }
-    // Only a is in preferred list
+    // Apenas a está na lista preferida
     if (aIndex !== -1) {
         return -1;
     }
-    // Only b is in preferred list
+    // Apenas b está na lista preferida
     if (bIndex !== -1) {
         return 1;
     }
-    // Neither in preferred list - sort alphabetically
+    // Nenhum está na lista preferida - ordenar alfabeticamente
     return a.nome.localeCompare(b.nome);
 });
 
-// Create a map of receipt types by name for easy lookup
+// Criar um mapa de tipos de receita por nome para busca rápida
 const tiposMap = {};
 for (const tipo of tiposReceita) {
     tiposMap[tipo.nome] = tipo;
 }
 
-// Create a map of formas_pagamento by tipo for easy lookup
+// Criar um mapa de formas_pagamento por tipo para busca rápida
 const formasPagamentoMap = {};
 for (const forma of formasPagamento) {
     formasPagamentoMap[forma.tipo] = forma;
 }
 
-// Helper function to get forma_pagamento_id from tipo string
+// Função auxiliar para obter forma_pagamento_id a partir de string tipo
 function getFormaPagamentoIdByTipo(tipo) {
     const forma = formasPagamentoMap[tipo];
     return forma ? forma.id : null;
@@ -253,9 +337,9 @@ function formatNumberInput(input) {
 
 function initializeReceitas() {
     const container = document.getElementById('receitas-container');
-    container.innerHTML = ''; // Clear any existing content
+    container.innerHTML = ''; // Limpar qualquer conteúdo existente
     
-    // Add all receipt types from database (sorted with preferred order)
+    // Adicionar todos os tipos de receita do banco de dados (ordenados com ordem preferida)
     for (const tipoInfo of sortedTiposReceita) {
         const nomeTipo = tipoInfo.nome;
         const isAuto = tipoInfo.tipo === 'AUTO';
@@ -265,8 +349,8 @@ function initializeReceitas() {
         item.dataset.tipoNome = nomeTipo;
         
         if (isAuto) {
-            // AUTO type - will be filled by loadVendasDia
-            // Add navigation button for specific types
+            // Tipo AUTO - será preenchido por loadVendasDia
+            // Adicionar botão de navegação para tipos específicos
             let navButton = '';
             if (nomeTipo === 'VENDAS POSTO') {
                 navButton = '<a href="/posto/vendas" class="btn btn-sm btn-outline-primary" style="padding: 0.15rem 0.4rem; font-size: 0.75rem;" title="Ir para Vendas Posto"><i class="bi bi-box-arrow-up-right"></i></a>';
@@ -297,7 +381,7 @@ function initializeReceitas() {
                 </div>
             `;
         } else {
-            // MANUAL type - user can fill in
+            // Tipo MANUAL - usuário pode preencher
             item.innerHTML = `
                 <div class="row align-items-center">
                     <div class="col-md-4">
@@ -329,12 +413,12 @@ function loadVendasDia() {
         return;
     }
     
-    // Remove existing AUTO check entries before loading new ones
+    // Remover entradas AUTO de cheques existentes antes de carregar novas
     document.querySelectorAll('.comprovacao-item-auto').forEach(item => {
         item.remove();
     });
     
-    // Show loading indicator
+    // Mostrar indicador de carregamento
     const container = document.getElementById('receitas-container');
     const loadingMsg = document.createElement('div');
     loadingMsg.id = 'loading-vendas';
@@ -342,20 +426,26 @@ function loadVendasDia() {
     loadingMsg.innerHTML = '<i class="bi bi-hourglass-split"></i> Carregando vendas do dia...';
     container.insertBefore(loadingMsg, container.firstChild);
     
-    // Fetch vendas data
+    // Buscar dados de vendas
     fetch(`{{ url_for('lancamentos_caixa.get_vendas_dia') }}?cliente_id=${clienteId}&data=${data}`)
         .then(response => response.json())
         .then(data => {
-            // Remove loading indicator
+            // Remover indicador de carregamento
             const loading = document.getElementById('loading-vendas');
             if (loading) loading.remove();
             
-            // Update AUTO fields with values (always set, even if 0)
+            console.log('Dados recebidos do get_vendas_dia:', data);
+            console.log('Valor específico de troco_pix:', data.troco_pix);
+            console.log('Cheques AUTO:', data.cheques_auto);
+            
+            // Atualizar campos AUTO com valores (sempre define, mesmo se 0)
             document.querySelectorAll('.receita-item').forEach(item => {
                 const tipoNome = item.dataset.tipoNome;
                 const valorInput = item.querySelector('.receita-valor');
                 
-                // Only update AUTO type fields (those that are readonly)
+                console.log(`Verificando receita: tipoNome="${tipoNome}", readonly=${valorInput.readOnly}`);
+                
+                // Atualizar apenas campos do tipo AUTO (aqueles que são readonly)
                 if (!valorInput.readOnly) return;
                 
                 if (tipoNome === 'VENDAS POSTO') {
@@ -364,12 +454,16 @@ function loadVendasDia() {
                     valorInput.value = formatCurrency(data.arla || 0);
                 } else if (tipoNome === 'LUBRIFICANTES') {
                     valorInput.value = formatCurrency(data.lubrificantes || 0);
-                } else if (tipoNome === 'TROCO PIX (AUTO)') {
-                    valorInput.value = formatCurrency(data.troco_pix || 0);
+                } else if (tipoNome === 'TROCO PIX (AUTO)' || tipoNome === 'TROCO PIX') {
+                    console.log(`Atualizando TROCO PIX: tipoNome="${tipoNome}", valor=${data.troco_pix || 0}`);
+                    const valorFormatado = formatCurrency(data.troco_pix || 0);
+                    console.log(`Valor formatado: ${valorFormatado}`);
+                    valorInput.value = valorFormatado;
+                    console.log(`Valor atribuído ao input: ${valorInput.value}`);
                 }
             });
             
-            // Add CHEQUES AUTO to comprovações
+            // Adicionar CHEQUES AUTO às comprovações
             if (data.cheques_auto && data.cheques_auto.length > 0) {
                 data.cheques_auto.forEach(cheque => {
                     const tipo = cheque.tipo === 'A_VISTA' ? 'DEPOSITO_CHEQUE_VISTA' : 'DEPOSITO_CHEQUE_PRAZO';
@@ -384,6 +478,168 @@ function loadVendasDia() {
             if (loading) loading.remove();
             console.error('Erro ao carregar vendas:', error);
         });
+}
+
+// ===== FUNÇÕES PARA SOBRAS/PERDAS/VALES =====
+
+// Carregar funcionários do cliente
+async function carregarFuncionarios(clienteId) {
+    if (!clienteId) return [];
+    
+    try {
+        const response = await fetch(`{{ url_for('lancamentos_caixa.get_funcionarios_por_cliente', cliente_id=0) }}`.replace('/0', `/${clienteId}`));
+        const funcionarios = await response.json();
+        funcionariosCache = funcionarios;
+        return funcionarios;
+    } catch (error) {
+        console.error('Erro ao carregar funcionários:', error);
+        return [];
+    }
+}
+
+// Abrir modal para lançamento por funcionário
+async function abrirModalFuncionarios(tipo) {
+    const clienteId = document.getElementById('cliente_id').value;
+    
+    if (!clienteId) {
+        alert('Selecione um cliente primeiro!');
+        return;
+    }
+    
+    tipoModalAtual = tipo;
+    
+    // Definir título do modal
+    let titulo = '';
+    if (tipo === 'sobras') {
+        titulo = 'Sobras de Caixa por Funcionário';
+    } else if (tipo === 'perdas') {
+        titulo = 'Perdas de Caixas por Funcionário';
+    } else if (tipo === 'vales') {
+        titulo = 'Vales de Quebras de Caixas por Funcionário';
+    }
+    document.getElementById('modal-title').textContent = titulo;
+    
+    // Carregar funcionários
+    const funcionarios = await carregarFuncionarios(clienteId);
+    
+    if (funcionarios.length === 0) {
+        document.getElementById('funcionarios-lista').innerHTML = 
+            '<div class="alert alert-warning">Nenhum funcionário encontrado para este cliente.</div>';
+        document.getElementById('tabela-funcionarios').style.display = 'none';
+    } else {
+        document.getElementById('funcionarios-lista').innerHTML = '';
+        document.getElementById('tabela-funcionarios').style.display = 'table';
+        
+        // Preencher tabela
+        const tbody = document.getElementById('funcionarios-tbody');
+        tbody.innerHTML = '';
+        
+        // Obter dados existentes
+        let dadosExistentes = [];
+        if (tipo === 'sobras') dadosExistentes = dadosSobras;
+        else if (tipo === 'perdas') dadosExistentes = dadosPerdas;
+        else if (tipo === 'vales') dadosExistentes = dadosVales;
+        
+        funcionarios.forEach(func => {
+            const dadoExistente = dadosExistentes.find(d => d.funcionario_id === func.id);
+            const valor = dadoExistente ? dadoExistente.valor : '';
+            const obs = dadoExistente ? dadoExistente.observacao : '';
+            
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td>
+                    <strong>${func.nome}</strong>
+                    ${func.cargo ? `<br><small class="text-muted">${func.cargo}</small>` : ''}
+                </td>
+                <td>
+                    <input type="text" class="form-control form-control-sm valor-func" 
+                           data-func-id="${func.id}" 
+                           value="${valor}" 
+                           placeholder="0,00"
+                           oninput="formatNumberInput(this); calcularTotalModal()">
+                </td>
+                <td>
+                    <input type="text" class="form-control form-control-sm obs-func" 
+                           data-func-id="${func.id}" 
+                           value="${obs}" 
+                           placeholder="Opcional">
+                </td>
+            `;
+            tbody.appendChild(tr);
+        });
+    }
+    
+    calcularTotalModal();
+    
+    // Mostrar modal
+    const modal = new bootstrap.Modal(document.getElementById('modalFuncionarios'));
+    modal.show();
+}
+
+// Calcular total no modal
+function calcularTotalModal() {
+    let total = 0;
+    document.querySelectorAll('.valor-func').forEach(input => {
+        const valor = parseCurrency(input.value);
+        total += valor;
+    });
+    document.getElementById('modal-total').textContent = formatCurrency(total);
+}
+
+// Salvar dados do modal
+function salvarDadosFuncionarios() {
+    const dados = [];
+    
+    document.querySelectorAll('.valor-func').forEach(input => {
+        const funcId = input.getAttribute('data-func-id');
+        const valor = parseCurrency(input.value);
+        
+        if (valor > 0) {
+            const obsInput = document.querySelector(`.obs-func[data-func-id="${funcId}"]`);
+            dados.push({
+                funcionario_id: funcId,
+                valor: valor,
+                observacao: obsInput ? obsInput.value : ''
+            });
+        }
+    });
+    
+    // Salvar nos arrays apropriados
+    if (tipoModalAtual === 'sobras') {
+        dadosSobras = dados;
+        atualizarResumoSobras();
+    } else if (tipoModalAtual === 'perdas') {
+        dadosPerdas = dados;
+        atualizarResumoPerdas();
+    } else if (tipoModalAtual === 'vales') {
+        dadosVales = dados;
+        atualizarResumoVales();
+    }
+    
+    // Recalcular totais
+    calcularTotais();
+    
+    // Fechar modal
+    bootstrap.Modal.getInstance(document.getElementById('modalFuncionarios')).hide();
+}
+
+// Atualizar resumos
+function atualizarResumoSobras() {
+    const total = dadosSobras.reduce((sum, d) => sum + parseFloat(d.valor), 0);
+    document.getElementById('total-sobras').textContent = formatCurrency(total);
+    document.getElementById('sobras-resumo').style.display = total > 0 ? 'block' : 'none';
+}
+
+function atualizarResumoPerdas() {
+    const total = dadosPerdas.reduce((sum, d) => sum + parseFloat(d.valor), 0);
+    document.getElementById('total-perdas').textContent = formatCurrency(total);
+    document.getElementById('perdas-resumo').style.display = total > 0 ? 'block' : 'none';
+}
+
+function atualizarResumoVales() {
+    const total = dadosVales.reduce((sum, d) => sum + parseFloat(d.valor), 0);
+    document.getElementById('total-vales').textContent = formatCurrency(total);
+    document.getElementById('vales-resumo').style.display = total > 0 ? 'block' : 'none';
 }
 
 // Initialize fixed comprovação structure
@@ -469,18 +725,41 @@ function addComprovacaoMultiple(container, tipo, label) {
     const item = document.createElement('div');
     item.className = 'comprovacao-section';
     item.id = sectionId;
+    
+    // Determinar se é uma seção de cheques
+    const isCheque = tipo.includes('CHEQUE');
+    const depositoTipo = tipo === 'DEPOSITO_CHEQUE_VISTA' ? 'VISTA' : (tipo === 'DEPOSITO_CHEQUE_PRAZO' ? 'PRAZO' : null);
+    
+    // Botão de registrar depósito apenas para cheques
+    const btnRegistrarDeposito = isCheque ? `
+        <button type="button" class="btn btn-sm btn-danger ms-2" onclick="abrirModalDeposito('${depositoTipo}', '${label}')" title="Registrar depósito realizado">
+            📍 Registrar Depósito
+        </button>
+    ` : '';
+    
     item.innerHTML = `
         <div style="background: #e9ecef; padding: 0.5rem; border-radius: 0.25rem; margin-bottom: 0.5rem;">
             <div class="d-flex justify-content-between align-items-center">
                 <strong style="font-size: 0.85rem;">${label}</strong>
-                <button type="button" class="btn btn-sm btn-success" onclick="addDepositoEntry('${tipo}', '${label}')">
-                    <i class="bi bi-plus-circle"></i> Adicionar
-                </button>
+                <div>
+                    <button type="button" class="btn btn-sm btn-success" onclick="addDepositoEntry('${tipo}', '${label}')">
+                        <i class="bi bi-plus-circle"></i> Adicionar
+                    </button>
+                    ${btnRegistrarDeposito}
+                </div>
             </div>
         </div>
         <div id="depositos-${tipo}" class="mb-2">
             <!-- Deposito entries will be added here -->
         </div>
+        ${isCheque ? `
+        <div id="lista-depositos-${depositoTipo}" class="mb-2" style="background: #fff3cd; padding: 0.5rem; border-radius: 0.25rem; display: none;">
+            <strong style="font-size: 0.85rem;">📋 Depósitos Registrados:</strong>
+            <div id="depositos-registrados-${depositoTipo}">
+                <!-- Lista de depósitos registrados aparece aqui -->
+            </div>
+        </div>
+        ` : ''}
         <div class="row align-items-center" style="padding: 0.5rem 0; border-top: 2px solid #28a745; margin-top: 0.3rem; background: #f8f9fa;">
             <div class="col-md-4" style="padding-left: 1rem;">
                 <strong style="font-size: 0.85rem;">Total ${label}:</strong>
@@ -645,6 +924,10 @@ function calcularTotais() {
         totalReceitas += parseCurrency(input.value);
     });
     
+    // Add sobras to receitas
+    const totalSobras = dadosSobras.reduce((sum, d) => sum + parseFloat(d.valor), 0);
+    totalReceitas += totalSobras;
+    
     // Calculate comprovacoes total (includes single fields, multiple deposits, and card values)
     let totalComprovacao = 0;
     
@@ -657,6 +940,11 @@ function calcularTotais() {
     document.querySelectorAll('.comprovacao-cartao-valor').forEach(input => {
         totalComprovacao += parseCurrency(input.value);
     });
+    
+    // Add perdas and vales to comprovacoes
+    const totalPerdas = dadosPerdas.reduce((sum, d) => sum + parseFloat(d.valor), 0);
+    const totalVales = dadosVales.reduce((sum, d) => sum + parseFloat(d.valor), 0);
+    totalComprovacao += totalPerdas + totalVales;
     
     // Calculate diferenca: Total Comprovação - Total Receitas
     const diferenca = totalComprovacao - totalReceitas;
@@ -745,6 +1033,9 @@ document.getElementById('formCaixa').addEventListener('submit', function(e) {
     // Set JSON values
     document.getElementById('receitas-json').value = JSON.stringify(receitas);
     document.getElementById('comprovacoes-json').value = JSON.stringify(comprovacoes);
+    document.getElementById('sobras-json').value = JSON.stringify(dadosSobras);
+    document.getElementById('perdas-json').value = JSON.stringify(dadosPerdas);
+    document.getElementById('vales-json').value = JSON.stringify(dadosVales);
 });
 
 // Initialize receipt types on page load
@@ -791,8 +1082,10 @@ document.addEventListener('DOMContentLoaded', function() {
     }, 500);
     
     // Load existing comprovacoes data in edit mode
+    // Increase timeout to ensure DOM is ready, especially after save redirect
     setTimeout(() => {
         console.log('=== EDIT MODE: Loading comprovacoes data ===');
+        console.log('[CARREGAMENTO] DOM readyState:', document.readyState);
         const existingComprovacoes = {{ comprovacoes_json|safe }};
         console.log('Comprovacoes from backend:', existingComprovacoes);
         console.log('Number of comprovacoes:', existingComprovacoes.length);
@@ -913,6 +1206,41 @@ document.addEventListener('DOMContentLoaded', function() {
                 calcularTotaisDeposito('DEPOSITO_CHEQUE_VISTA');
                 calcularTotaisDeposito('DEPOSITO_CHEQUE_PRAZO');
             }, 200);
+        } else if (tipo === 'RETIRADA_PAGAMENTO') {
+            // RETIRADA_PAGAMENTO has multiple fields with same tipo but different descriptions
+            // Need to match by description to fill the correct field
+            console.log(`  Processing RETIRADA_PAGAMENTO with ${comps.length} entries`);
+            
+            for (const comp of comps) {
+                console.log(`    Looking for field with description: "${comp.descricao}"`);
+                
+                // Find all inputs with this tipo
+                const allInputs = document.querySelectorAll(`input[data-comprovacao-forma="${tipo}"]`);
+                console.log(`    Found ${allInputs.length} inputs with tipo RETIRADA_PAGAMENTO`);
+                
+                // Find the one with matching description
+                let found = false;
+                for (const valorInput of allInputs) {
+                    const descricaoInput = valorInput.closest('.comprovacao-item').querySelector('.comprovacao-descricao');
+                    if (descricaoInput) {
+                        console.log(`      Checking input with description: "${descricaoInput.value}"`);
+                        if (descricaoInput.value.toUpperCase() === comp.descricao.toUpperCase()) {
+                            // Found matching field by description (case-insensitive)
+                            valorInput.value = parseFloat(comp.valor).toLocaleString('pt-BR', {
+                                minimumFractionDigits: 2,
+                                maximumFractionDigits: 2
+                            });
+                            console.log(`      ✓ Matched! Set value to ${valorInput.value}`);
+                            found = true;
+                            break;
+                        }
+                    }
+                }
+                
+                if (!found) {
+                    console.warn(`    ✗ Could not find field for description: "${comp.descricao}"`);
+                }
+            }
         } else {
             // Single entry formas - just fill the first value
             const comp = comps[0];
@@ -935,9 +1263,459 @@ document.addEventListener('DOMContentLoaded', function() {
     // Calculate totals (includes receitas, comprovacoes, and diferença)
     calcularTotais();
     
+    // Load sobras/perdas/vales data in edit mode
+    {% if edit_mode and sobras_json %}
+    console.log('=== EDIT MODE: Loading sobras/perdas/vales ===');
+    
+    // Load sobras
+    const sobrasData = {{ sobras_json|safe }};
+    console.log('Sobras data:', sobrasData);
+    if (sobrasData && sobrasData.length > 0) {
+        dadosSobras = sobrasData.map(s => ({
+            funcionario_id: s.funcionario_id,
+            valor: s.valor,
+            observacao: s.observacao || ''
+        }));
+        atualizarResumoSobras();
+        console.log(`Loaded ${dadosSobras.length} sobras`);
+    }
+    
+    // Load perdas
+    const perdasData = {{ perdas_json|safe }};
+    console.log('Perdas data:', perdasData);
+    if (perdasData && perdasData.length > 0) {
+        dadosPerdas = perdasData.map(p => ({
+            funcionario_id: p.funcionario_id,
+            valor: p.valor,
+            observacao: p.observacao || ''
+        }));
+        atualizarResumoPerdas();
+        console.log(`Loaded ${dadosPerdas.length} perdas`);
+    }
+    
+    // Load vales
+    const valesData = {{ vales_json|safe }};
+    console.log('Vales data:', valesData);
+    if (valesData && valesData.length > 0) {
+        dadosVales = valesData.map(v => ({
+            funcionario_id: v.funcionario_id,
+            valor: v.valor,
+            observacao: v.observacao || ''
+        }));
+        atualizarResumoVales();
+        console.log(`Loaded ${dadosVales.length} vales`);
+    }
+    
+    // Recalculate totals to include sobras/perdas/vales
+    calcularTotais();
+    {% endif %}
+    
     console.log('=== EDIT MODE: Finished loading all data ===');
+        
+        // Verificar se campos RETIRADA_PAGAMENTO foram preenchidos corretamente
+        setTimeout(() => {
+            console.log('[VERIFICACAO] Verificando se campos RETIRADA_PAGAMENTO foram preenchidos...');
+            const retiradasInputs = document.querySelectorAll('input[data-comprovacao-forma="RETIRADA_PAGAMENTO"]');
+            console.log('[VERIFICACAO] Encontrados', retiradasInputs.length, 'campos RETIRADA_PAGAMENTO');
+            
+            // Verificar se algum campo foi preenchido
+            let algumPreenchido = false;
+            let camposVazios = [];
+            
+            for (const input of retiradasInputs) {
+                const valor = input.value || '';
+                const descInput = input.closest('.comprovacao-item').querySelector('.comprovacao-descricao');
+                const desc = descInput ? descInput.value : 'sem descrição';
+                
+                console.log('[VERIFICACAO] Campo:', desc, '= "' + valor + '"');
+                
+                if (valor && valor !== '0,00' && valor !== '0' && valor !== '') {
+                    algumPreenchido = true;
+                } else if (desc) {
+                    camposVazios.push(desc);
+                }
+            }
+            
+            // Se temos comprovações RETIRADA_PAGAMENTO no banco mas nenhum campo foi preenchido, fazer retry
+            const temRetiradasNoBanco = existingComprovacoes.some(c => c.forma_pagamento_tipo === 'RETIRADA_PAGAMENTO');
+            
+            if (temRetiradasNoBanco && !algumPreenchido) {
+                console.warn('[VERIFICACAO] ⚠️ Campos RETIRADA_PAGAMENTO no banco mas nenhum preenchido! Tentando novamente...');
+                console.warn('[VERIFICACAO] Campos vazios:', camposVazios);
+                
+                // Retry: reprocessar RETIRADA_PAGAMENTO
+                const retiradasComps = existingComprovacoes.filter(c => c.forma_pagamento_tipo === 'RETIRADA_PAGAMENTO');
+                for (const comp of retiradasComps) {
+                    console.log('[RETRY] Reprocessando:', comp.descricao, '=', comp.valor);
+                    
+                    const allInputs = document.querySelectorAll('input[data-comprovacao-forma="RETIRADA_PAGAMENTO"]');
+                    for (const valorInput of allInputs) {
+                        const descricaoInput = valorInput.closest('.comprovacao-item').querySelector('.comprovacao-descricao');
+                        if (descricaoInput && descricaoInput.value.toUpperCase() === comp.descricao.toUpperCase()) {
+                            valorInput.value = parseFloat(comp.valor).toLocaleString('pt-BR', {
+                                minimumFractionDigits: 2,
+                                maximumFractionDigits: 2
+                            });
+                            console.log('[RETRY] ✓ Preenchido:', comp.descricao, '=', valorInput.value);
+                            break;
+                        }
+                    }
+                }
+                
+                // Recalcular totais
+                calcularTotais();
+                console.log('[RETRY] Retry concluído');
+            } else if (algumPreenchido) {
+                console.log('[VERIFICACAO] ✓ Campos RETIRADA_PAGAMENTO preenchidos corretamente');
+            } else {
+                console.log('[VERIFICACAO] Sem dados RETIRADA_PAGAMENTO no banco, ok');
+            }
+        }, 500); // Esperar mais 500ms após o carregamento inicial
     }, 1000);  // Give more time for page to fully initialize
     {% endif %}
+    
+    // Carregar depósitos em modo de edição
+    {% if edit_mode and lancamento %}
+    carregarDepositos({{ lancamento.id }});
+    {% endif %}
 });
+
+// ========== FUNÇÕES PARA CONTROLE DE DEPÓSITOS DE CHEQUES ==========
+
+let depositoEmEdicao = null;
+
+// Abrir modal para registrar depósito
+function abrirModalDeposito(tipo, label) {
+    depositoEmEdicao = null;
+    document.getElementById('depositoTipo').value = tipo;
+    document.getElementById('depositoLabel').value = label;
+    document.getElementById('modalDepositoTitle').textContent = `Registrar Depósito - ${label}`;
+    
+    // Calcular total de cheques (AUTO + Manuais)
+    const tipoDeposito = tipo === 'VISTA' ? 'DEPOSITO_CHEQUE_VISTA' : 'DEPOSITO_CHEQUE_PRAZO';
+    let totalCheques = 0;
+    const depositosContainer = document.getElementById(`depositos-${tipoDeposito}`);
+    if (depositosContainer) {
+        depositosContainer.querySelectorAll(`.comprovacao-valor[data-tipo="${tipoDeposito}"]`).forEach(input => {
+            totalCheques += parseCurrency(input.value);
+        });
+    }
+    
+    // Preencher valor lançado automaticamente
+    const valorLancadoInput = document.getElementById('depositoValorLancado');
+    valorLancadoInput.value = totalCheques.toLocaleString('pt-BR', {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+    });
+    valorLancadoInput.setAttribute('readonly', 'readonly');
+    valorLancadoInput.style.backgroundColor = '#e9ecef';
+    
+    document.getElementById('depositoValorDepositado').value = '';
+    document.getElementById('depositoDataDeposito').value = '';
+    document.getElementById('depositoDepositadoPor').value = '';
+    document.getElementById('depositoObservacao').value = '';
+    document.getElementById('depositoDiferenca').textContent = 'R$ 0,00';
+    document.getElementById('depositoDiferencaBadge').className = 'badge bg-secondary';
+    
+    const modal = new bootstrap.Modal(document.getElementById('modalDeposito'));
+    modal.show();
+}
+
+// Calcular diferença automaticamente
+function calcularDiferencaDeposito() {
+    const valorLancado = parseFloat(document.getElementById('depositoValorLancado').value.replace(/\./g, '').replace(',', '.')) || 0;
+    const valorDepositado = parseFloat(document.getElementById('depositoValorDepositado').value.replace(/\./g, '').replace(',', '.')) || 0;
+    const diferenca = valorLancado - valorDepositado;
+    
+    const diferencaElem = document.getElementById('depositoDiferenca');
+    const badgeElem = document.getElementById('depositoDiferencaBadge');
+    
+    diferencaElem.textContent = diferenca.toLocaleString('pt-BR', {
+        style: 'currency',
+        currency: 'BRL'
+    });
+    
+    if (diferenca > 0.01) {
+        badgeElem.className = 'badge bg-warning';
+    } else if (diferenca < -0.01) {
+        badgeElem.className = 'badge bg-info';
+    } else {
+        badgeElem.className = 'badge bg-success';
+    }
+}
+
+// Salvar depósito
+async function salvarDeposito() {
+    const tipo = document.getElementById('depositoTipo').value;
+    const valorLancado = parseFloat(document.getElementById('depositoValorLancado').value.replace(/\./g, '').replace(',', '.'));
+    const valorDepositado = document.getElementById('depositoValorDepositado').value.replace(/\./g, '').replace(',', '.');
+    const dataDeposito = document.getElementById('depositoDataDeposito').value;
+    const depositadoPor = document.getElementById('depositoDepositadoPor').value;
+    const observacao = document.getElementById('depositoObservacao').value;
+    
+    if (!valorLancado || valorLancado <= 0) {
+        alert('Informe o valor lançado!');
+        return;
+    }
+    
+    {% if edit_mode and lancamento %}
+    const lancamentoId = {{ lancamento.id }};
+    {% else %}
+    // Em modo de criação, precisamos salvar o lançamento primeiro
+    alert('Salve o lançamento primeiro antes de registrar depósitos.');
+    return;
+    {% endif %}
+    
+    const dados = {
+        tipo: tipo,
+        valor_lancado: valorLancado,
+        valor_depositado: valorDepositado ? parseFloat(valorDepositado) : null,
+        data_deposito: dataDeposito || null,
+        depositado_por: depositadoPor || null,
+        observacao: observacao || null
+    };
+    
+    try {
+        const url = depositoEmEdicao 
+            ? `/lancamentos_caixa/${lancamentoId}/depositos_cheques/${depositoEmEdicao}`
+            : `/lancamentos_caixa/${lancamentoId}/depositos_cheques`;
+        const method = depositoEmEdicao ? 'PUT' : 'POST';
+        
+        const response = await fetch(url, {
+            method: method,
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(dados)
+        });
+        
+        if (response.ok) {
+            bootstrap.Modal.getInstance(document.getElementById('modalDeposito')).hide();
+            carregarDepositos(lancamentoId);
+            alert(depositoEmEdicao ? 'Depósito atualizado com sucesso!' : 'Depósito registrado com sucesso!');
+        } else {
+            const error = await response.json();
+            alert('Erro ao salvar depósito: ' + (error.error || 'Erro desconhecido'));
+        }
+    } catch (error) {
+        console.error('Erro:', error);
+        alert('Erro ao salvar depósito: ' + error.message);
+    }
+}
+
+// Carregar lista de depósitos
+async function carregarDepositos(lancamentoId) {
+    try {
+        const response = await fetch(`/lancamentos_caixa/${lancamentoId}/depositos_cheques`);
+        if (response.ok) {
+            const depositos = await response.json();
+            
+            // Separar por tipo
+            const depositosVista = depositos.filter(d => d.tipo === 'VISTA');
+            const depositosPrazo = depositos.filter(d => d.tipo === 'PRAZO');
+            
+            // Atualizar listas
+            atualizarListaDepositos('VISTA', depositosVista);
+            atualizarListaDepositos('PRAZO', depositosPrazo);
+        }
+    } catch (error) {
+        console.error('Erro ao carregar depósitos:', error);
+    }
+}
+
+// Atualizar lista visual de depósitos
+function atualizarListaDepositos(tipo, depositos) {
+    const listaDiv = document.getElementById(`lista-depositos-${tipo}`);
+    const registradosDiv = document.getElementById(`depositos-registrados-${tipo}`);
+    
+    if (!registradosDiv) return;
+    
+    if (depositos.length === 0) {
+        listaDiv.style.display = 'none';
+        return;
+    }
+    
+    listaDiv.style.display = 'block';
+    registradosDiv.innerHTML = '';
+    
+    depositos.forEach(deposito => {
+        const valorLancado = parseFloat(deposito.valor_lancado);
+        const valorDepositado = parseFloat(deposito.valor_depositado) || 0;
+        const diferenca = valorLancado - valorDepositado;
+        
+        let statusBadge, statusTexto;
+        if (!deposito.valor_depositado) {
+            statusBadge = 'bg-secondary';
+            statusTexto = '⏳ Aguardando depósito';
+        } else if (Math.abs(diferenca) < 0.01) {
+            statusBadge = 'bg-success';
+            statusTexto = '✅ Conferido OK';
+        } else if (diferenca > 0.01) {
+            statusBadge = 'bg-warning text-dark';
+            statusTexto = `⚠️ Falta: ${diferenca.toLocaleString('pt-BR', {style: 'currency', currency: 'BRL'})}`;
+        } else {
+            statusBadge = 'bg-info';
+            statusTexto = `ℹ️ Sobra: ${Math.abs(diferenca).toLocaleString('pt-BR', {style: 'currency', currency: 'BRL'})}`;
+        }
+        
+        const item = document.createElement('div');
+        item.className = 'border rounded p-2 mb-2';
+        item.style.background = '#fff';
+        item.innerHTML = `
+            <div class="d-flex justify-content-between align-items-start">
+                <div class="flex-grow-1">
+                    <div class="mb-1">
+                        <strong>Lançado:</strong> ${valorLancado.toLocaleString('pt-BR', {style: 'currency', currency: 'BRL'})}
+                        ${deposito.valor_depositado ? `<br><strong>Depositado:</strong> ${valorDepositado.toLocaleString('pt-BR', {style: 'currency', currency: 'BRL'})}` : ''}
+                    </div>
+                    <div class="mb-1">
+                        <span class="badge ${statusBadge}">${statusTexto}</span>
+                    </div>
+                    ${deposito.data_deposito ? `<div class="small text-muted">Data: ${new Date(deposito.data_deposito + 'T00:00:00').toLocaleDateString('pt-BR')}</div>` : ''}
+                    ${deposito.depositado_por ? `<div class="small text-muted">Por: ${deposito.depositado_por}</div>` : ''}
+                    ${deposito.observacao ? `<div class="small text-muted">Obs: ${deposito.observacao}</div>` : ''}
+                </div>
+                <div class="btn-group-vertical btn-group-sm">
+                    <button type="button" class="btn btn-outline-primary btn-sm" onclick="editarDeposito(${deposito.id}, '${tipo}')" title="Editar">
+                        ✏️
+                    </button>
+                    <button type="button" class="btn btn-outline-danger btn-sm" onclick="excluirDeposito(${deposito.id}, '${tipo}')" title="Excluir">
+                        🗑️
+                    </button>
+                </div>
+            </div>
+        `;
+        registradosDiv.appendChild(item);
+    });
+}
+
+// Editar depósito
+async function editarDeposito(depositoId, tipo) {
+    {% if edit_mode and lancamento %}
+    const lancamentoId = {{ lancamento.id }};
+    {% else %}
+    alert('Salve o lançamento primeiro.');
+    return;
+    {% endif %}
+    
+    try {
+        const response = await fetch(`/lancamentos_caixa/${lancamentoId}/depositos_cheques`);
+        if (response.ok) {
+            const depositos = await response.json();
+            const deposito = depositos.find(d => d.id === depositoId);
+            
+            if (deposito) {
+                depositoEmEdicao = depositoId;
+                document.getElementById('depositoTipo').value = deposito.tipo;
+                const label = deposito.tipo === 'VISTA' ? 'Depósitos em Cheques À Vista' : 'Depósitos em Cheques A Prazo';
+                document.getElementById('depositoLabel').value = label;
+                document.getElementById('modalDepositoTitle').textContent = `Editar Depósito - ${label}`;
+                document.getElementById('depositoValorLancado').value = deposito.valor_lancado.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+                document.getElementById('depositoValorDepositado').value = deposito.valor_depositado ? deposito.valor_depositado.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2}) : '';
+                document.getElementById('depositoDataDeposito').value = deposito.data_deposito || '';
+                document.getElementById('depositoDepositadoPor').value = deposito.depositado_por || '';
+                document.getElementById('depositoObservacao').value = deposito.observacao || '';
+                calcularDiferencaDeposito();
+                
+                const modal = new bootstrap.Modal(document.getElementById('modalDeposito'));
+                modal.show();
+            }
+        }
+    } catch (error) {
+        console.error('Erro ao carregar depósito:', error);
+        alert('Erro ao carregar depósito');
+    }
+}
+
+// Excluir depósito
+async function excluirDeposito(depositoId, tipo) {
+    if (!confirm('Tem certeza que deseja excluir este depósito?')) {
+        return;
+    }
+    
+    {% if edit_mode and lancamento %}
+    const lancamentoId = {{ lancamento.id }};
+    {% else %}
+    alert('Salve o lançamento primeiro.');
+    return;
+    {% endif %}
+    
+    try {
+        const response = await fetch(`/lancamentos_caixa/${lancamentoId}/depositos_cheques/${depositoId}`, {
+            method: 'DELETE'
+        });
+        
+        if (response.ok) {
+            carregarDepositos(lancamentoId);
+            alert('Depósito excluído com sucesso!');
+        } else {
+            alert('Erro ao excluir depósito');
+        }
+    } catch (error) {
+        console.error('Erro:', error);
+        alert('Erro ao excluir depósito: ' + error.message);
+    }
+}
+
 </script>
+
+<!-- Modal para Registrar/Editar Depósito -->
+<div class="modal fade" id="modalDeposito" tabindex="-1" aria-labelledby="modalDepositoTitle" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="modalDepositoTitle">Registrar Depósito de Cheque</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="depositoTipo">
+                <input type="hidden" id="depositoLabel">
+                
+                <div class="mb-3">
+                    <label for="depositoValorLancado" class="form-label">Valor Lançado *</label>
+                    <input type="text" class="form-control" id="depositoValorLancado" 
+                           placeholder="0,00" oninput="calcularDiferencaDeposito()" required>
+                    <small class="text-muted">Valor total dos cheques lançados</small>
+                </div>
+                
+                <div class="mb-3">
+                    <label for="depositoValorDepositado" class="form-label">Valor Depositado</label>
+                    <input type="text" class="form-control" id="depositoValorDepositado" 
+                           placeholder="0,00" oninput="calcularDiferencaDeposito()">
+                    <small class="text-muted">Valor que foi efetivamente depositado (deixe vazio se ainda não depositou)</small>
+                </div>
+                
+                <div class="mb-3">
+                    <div class="alert alert-info py-2">
+                        <strong>Diferença:</strong> 
+                        <span id="depositoDiferenca" class="fs-5">R$ 0,00</span>
+                        <span id="depositoDiferencaBadge" class="badge bg-secondary ms-2">-</span>
+                    </div>
+                </div>
+                
+                <div class="mb-3">
+                    <label for="depositoDataDeposito" class="form-label">Data do Depósito</label>
+                    <input type="date" class="form-control" id="depositoDataDeposito">
+                </div>
+                
+                <div class="mb-3">
+                    <label for="depositoDepositadoPor" class="form-label">Responsável pelo Depósito</label>
+                    <input type="text" class="form-control" id="depositoDepositadoPor" 
+                           placeholder="Nome da pessoa que fez o depósito">
+                </div>
+                
+                <div class="mb-3">
+                    <label for="depositoObservacao" class="form-label">Observação</label>
+                    <textarea class="form-control" id="depositoObservacao" rows="2" 
+                              placeholder="Ex: Cheque para 10/02/2026, Depósito parcial, etc."></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-primary" onclick="salvarDeposito()">Salvar</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 {% endblock %}
