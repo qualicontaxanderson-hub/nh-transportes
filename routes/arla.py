@@ -1,19 +1,14 @@
 from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify
 from flask_login import login_required
-import mysql.connector
+from utils.db import get_db_connection
 from datetime import datetime, date, timedelta
 from calendar import monthrange
 
 bp = Blueprint('arla', __name__, url_prefix='/arla')
 
 def get_db():
-    return mysql.connector.connect(
-        host='centerbeam.proxy.rlwy.net',
-        port=56026,
-        user='root',
-        password='CYTzzRYLVmEJGDexxXpgepWgpvebdSrV',
-        database='railway'
-    )
+    """Usa a conexão centralizada com credenciais seguras"""
+    return get_db_connection()
 
 # =============================================
 # PÁGINA PRINCIPAL / RESUMO ARLA

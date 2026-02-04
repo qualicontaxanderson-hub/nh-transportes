@@ -3,3 +3,6 @@
 *.log
 .venv/
 venv/
+.env
+.env.local
+.env.*.local

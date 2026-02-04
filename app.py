@@ -153,21 +153,6 @@ def create_app():
             app.logger.debug('load_user: models.usuario.Usuario não disponível ou falha ao carregar', exc_info=True)
             return None
 
-    # ========================================================================
-    # REGISTRO MANUAL DE BLUEPRINTS CRÍTICOS (antes do auto-discover)
-    # ========================================================================
-    # Blueprint TROCO PIX - Registrado manualmente para garantir carregamento
-    try:
-        app.logger.info("Tentando registrar blueprint troco_pix manualmente...")
-        from routes.troco_pix import troco_pix_bp
-        app.register_blueprint(troco_pix_bp)
-        app.logger.info("✅ Blueprint troco_pix registrado com sucesso! URL: /troco_pix")
-    except ImportError as e:
-        app.logger.warning(f"Blueprint troco_pix não encontrado: {e}")
-    except Exception as e:
-        app.logger.error(f"Erro ao registrar blueprint troco_pix: {e}")
-    # ========================================================================
-
     # Registrar automaticamente todos os blueprints dentro de routes/
     app.logger.info("="*60)
     app.logger.info("Iniciando registro automático de blueprints...")
