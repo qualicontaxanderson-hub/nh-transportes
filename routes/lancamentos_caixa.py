@@ -121,7 +121,7 @@ def lista():
                 FROM lancamentos_caixa 
                 WHERE data >= %s AND data <= %s
                 ORDER BY data DESC, id DESC
-            """, (data_inicio, data_fim))
+            """, (filtros['data_inicio'], filtros['data_fim']))
             todos_lancamentos = cursor.fetchall()
             print(f"[DEBUG DIAGNOSTICO] Total de lançamentos no período: {len(todos_lancamentos)}")
             for i, lanc in enumerate(todos_lancamentos):
