@@ -415,7 +415,7 @@ function copiarParaWhatsApp(event) {
     texto += `💰 *RECEITAS E ENTRADAS*\n`;
     texto += `━━━━━━━━━━━━━━━━━━━━\n`;
     {% for receita in receitas %}
-    texto += `• {{ receita.tipo_nome|upper }}: R$ {{ "{:,.2f}".format(receita.valor|float).replace(',', 'X').replace('.', ',').replace('X', '.') }}\n`;
+    texto += `• *{{ receita.tipo_nome|upper }}: R$ {{ "{:,.2f}".format(receita.valor|float).replace(',', 'X').replace('.', ',').replace('X', '.') }}*\n`;
     texto += `  └ {{ receita.tipo_nome|title }}\n`;
     {% if receita.descricao and receita.descricao != '-' %}
     texto += `    └ {{ receita.descricao }}\n`;
@@ -446,7 +446,7 @@ function copiarParaWhatsApp(event) {
         {% if comp.forma_tipo and comp.forma_tipo not in ['CARTAO', 'DEPOSITO_ESPECIE', 'DEPOSITO_CHEQUE_VISTA', 'DEPOSITO_CHEQUE_PRAZO', 'RETIRADA_PAGAMENTO'] %}
             {% if comp.forma_tipo not in processed_tipos %}
                 {% set _ = processed_tipos.append(comp.forma_tipo) %}
-    texto += `• {{ comp.forma_pagamento_nome|upper }}: R$ {{ "{:,.2f}".format(comp.valor|float).replace(',', 'X').replace('.', ',').replace('X', '.') }}\n`;
+    texto += `• *{{ comp.forma_pagamento_nome|upper }}: R$ {{ "{:,.2f}".format(comp.valor|float).replace(',', 'X').replace('.', ',').replace('X', '.') }}*\n`;
     texto += `  └ {{ comp.forma_pagamento_nome|title }}\n`;
             {% endif %}
         {% endif %}
@@ -455,19 +455,19 @@ function copiarParaWhatsApp(event) {
     {% set depositos_especie = comprovacoes|selectattr('forma_tipo', 'equalto', 'DEPOSITO_ESPECIE')|list %}
     {% if depositos_especie|length > 0 %}
     {% set total_especie = depositos_especie|map(attribute='valor')|map('float')|sum %}
-    texto += `• Depósitos em Espécie ({{ depositos_especie|length }}): R$ {{ "{:,.2f}".format(total_especie).replace(',', 'X').replace('.', ',').replace('X', '.') }}\n`;
+    texto += `• *Depósitos em Espécie ({{ depositos_especie|length }}): R$ {{ "{:,.2f}".format(total_especie).replace(',', 'X').replace('.', ',').replace('X', '.') }}*\n`;
     {% endif %}
     
     {% set depositos_vista = comprovacoes|selectattr('forma_tipo', 'equalto', 'DEPOSITO_CHEQUE_VISTA')|list %}
     {% if depositos_vista|length > 0 %}
     {% set total_vista = depositos_vista|map(attribute='valor')|map('float')|sum %}
-    texto += `• Depósitos em Cheques À Vista ({{ depositos_vista|length }}): R$ {{ "{:,.2f}".format(total_vista).replace(',', 'X').replace('.', ',').replace('X', '.') }}\n`;
+    texto += `• *Depósitos em Cheques À Vista ({{ depositos_vista|length }}): R$ {{ "{:,.2f}".format(total_vista).replace(',', 'X').replace('.', ',').replace('X', '.') }}*\n`;
     {% endif %}
     
     {% set depositos_prazo = comprovacoes|selectattr('forma_tipo', 'equalto', 'DEPOSITO_CHEQUE_PRAZO')|list %}
     {% if depositos_prazo|length > 0 %}
     {% set total_prazo = depositos_prazo|map(attribute='valor')|map('float')|sum %}
-    texto += `• Depósitos em Cheques A Prazo ({{ depositos_prazo|length }}): R$ {{ "{:,.2f}".format(total_prazo).replace(',', 'X').replace('.', ',').replace('X', '.') }}\n`;
+    texto += `• *Depósitos em Cheques A Prazo ({{ depositos_prazo|length }}): R$ {{ "{:,.2f}".format(total_prazo).replace(',', 'X').replace('.', ',').replace('X', '.') }}*\n`;
     {% endif %}
     
     {% if depositos_cheques and depositos_cheques|length > 0 %}
@@ -538,21 +538,21 @@ function copiarParaWhatsApp(event) {
     {% set cartoes_debito = comprovacoes|selectattr('forma_tipo', 'equalto', 'CARTAO')|selectattr('cartao_tipo', 'equalto', 'DEBITO')|list %}
     {% if cartoes_debito|length > 0 %}
     {% set total_debito = cartoes_debito|map(attribute='valor')|map('float')|sum %}
-    texto += `• Cartão Débito:\n`;
+    texto += `• *Cartão Débito:*\n`;
     {% for cartao in cartoes_debito %}
     texto += `  - {{ cartao.cartao_nome }}: R$ {{ "{:,.2f}".format(cartao.valor|float).replace(',', 'X').replace('.', ',').replace('X', '.') }}\n`;
     {% endfor %}
-    texto += `  Subtotal: R$ {{ "{:,.2f}".format(total_debito).replace(',', 'X').replace('.', ',').replace('X', '.') }}\n`;
+    texto += `  *Subtotal: R$ {{ "{:,.2f}".format(total_debito).replace(',', 'X').replace('.', ',').replace('X', '.') }}*\n`;
     {% endif %}
     
     {% set cartoes_credito = comprovacoes|selectattr('forma_tipo', 'equalto', 'CARTAO')|selectattr('cartao_tipo', 'equalto', 'CREDITO')|list %}
     {% if cartoes_credito|length > 0 %}
     {% set total_credito = cartoes_credito|map(attribute='valor')|map('float')|sum %}
-    texto += `• Cartão Crédito:\n`;
+    texto += `• *Cartão Crédito:*\n`;
     {% for cartao in cartoes_credito %}
     texto += `  - {{ cartao.cartao_nome }}: R$ {{ "{:,.2f}".format(cartao.valor|float).replace(',', 'X').replace('.', ',').replace('X', '.') }}\n`;
     {% endfor %}
-    texto += `  Subtotal: R$ {{ "{:,.2f}".format(total_credito).replace(',', 'X').replace('.', ',').replace('X', '.') }}\n`;
+    texto += `  *Subtotal: R$ {{ "{:,.2f}".format(total_credito).replace(',', 'X').replace('.', ',').replace('X', '.') }}*\n`;
     {% endif %}
     
     {# Process RETIRADA_PAGAMENTO in WhatsApp with friendly names #}
@@ -584,7 +584,7 @@ function copiarParaWhatsApp(event) {
         {% for ordem, ret in retiradas_wa_sorted %}
             {% set desc_upper = ret.descricao.upper() if ret.descricao else '' %}
             {% set nome_amigavel = nomes_retiradas_wa.get(desc_upper, 'Retiradas para Pagamentos') %}
-    texto += `• {{ nome_amigavel|upper }}: R$ {{ "{:,.2f}".format(ret.valor|float).replace(',', 'X').replace('.', ',').replace('X', '.') }}\n`;
+    texto += `• *{{ nome_amigavel|upper }}: R$ {{ "{:,.2f}".format(ret.valor|float).replace(',', 'X').replace('.', ',').replace('X', '.') }}*\n`;
     texto += `  └ {{ (ret.descricao if ret.descricao else '-')|title }}\n`;
         {% endfor %}
     {% endif %}
