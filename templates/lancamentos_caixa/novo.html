@@ -1293,7 +1293,26 @@ function abrirModalDeposito(tipo, label) {
     document.getElementById('depositoTipo').value = tipo;
     document.getElementById('depositoLabel').value = label;
     document.getElementById('modalDepositoTitle').textContent = `Registrar Depósito - ${label}`;
-    document.getElementById('depositoValorLancado').value = '';
+    
+    // Calcular total de cheques (AUTO + Manuais)
+    const tipoDeposito = tipo === 'VISTA' ? 'DEPOSITO_CHEQUE_VISTA' : 'DEPOSITO_CHEQUE_PRAZO';
+    let totalCheques = 0;
+    const depositosContainer = document.getElementById(`depositos-${tipoDeposito}`);
+    if (depositosContainer) {
+        depositosContainer.querySelectorAll(`.comprovacao-valor[data-tipo="${tipoDeposito}"]`).forEach(input => {
+            totalCheques += parseCurrency(input.value);
+        });
+    }
+    
+    // Preencher valor lançado automaticamente
+    const valorLancadoInput = document.getElementById('depositoValorLancado');
+    valorLancadoInput.value = totalCheques.toLocaleString('pt-BR', {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+    });
+    valorLancadoInput.setAttribute('readonly', 'readonly');
+    valorLancadoInput.style.backgroundColor = '#e9ecef';
+    
     document.getElementById('depositoValorDepositado').value = '';
     document.getElementById('depositoDataDeposito').value = '';
     document.getElementById('depositoDepositadoPor').value = '';
