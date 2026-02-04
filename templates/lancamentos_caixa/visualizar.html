@@ -335,14 +335,14 @@
         <a href="{{ url_for('lancamentos_caixa.lista') }}" class="btn btn-secondary btn-sm">
             <i class="bi bi-arrow-left"></i> Voltar
         </a>
-        <button onclick="copiarParaWhatsApp()" class="btn btn-success btn-sm">
+        <button onclick="copiarParaWhatsApp(event)" class="btn btn-success btn-sm">
             <i class="bi bi-whatsapp"></i> Copiar para WhatsApp
         </button>
     </div>
 </div>
 
 <script>
-function copiarParaWhatsApp() {
+function copiarParaWhatsApp(event) {
     // Formatar data
     const data = '{{ lancamento.data.strftime("%d/%m/%Y") if lancamento.data else "" }}';
     
