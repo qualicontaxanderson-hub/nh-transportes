@@ -164,7 +164,7 @@ def lista():
         # DEBUG: Log dos resultados
         print(f"[DEBUG] Número de lançamentos encontrados: {len(lancamentos)}")
         for i, lanc in enumerate(lancamentos[:5]):  # Mostrar primeiros 5
-            print(f"[DEBUG] Lançamento {i+1}: id={lanc.get('id')}, data={lanc.get('data')}, status={lanc.get('status')}, observacao={lanc.get('observacao', '')[:50]}")
+            print(f"[DEBUG] Lançamento {i+1}: id={lanc.get('id')}, data={lanc.get('data')}, status={lanc.get('status')}, observacao={(lanc.get('observacao') or '')[:50]}")
         
         # Calculate summary
         resumo = {
