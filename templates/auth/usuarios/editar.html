@@ -120,17 +120,20 @@
                         </div>
 
                         <div class="mb-3" id="cliente_field" style="display:{% if usuario.nivel == 'PISTA' or usuario.nivel == 'SUPERVISOR' or usuario.nivel == 'GERENTE' %}block{% else %}none{% endif %};">
-                            <label for="cliente_id" class="form-label">Posto/Cliente Associado</label>
-                            <select class="form-select" id="cliente_id" name="cliente_id">
-                                <option value="">Selecione o posto...</option>
+                            <label for="cliente_ids" class="form-label">Posto/Cliente Associado</label>
+                            <select class="form-select" id="cliente_ids" name="cliente_ids" multiple size="5">
                                 {% for cliente in clientes %}
                                 <option value="{{ cliente.id }}" 
-                                        {% if usuario.cliente_id == cliente.id %}selected{% endif %}>
+                                        {% if cliente.id in usuario.cliente_ids %}selected{% endif %}>
                                     {{ cliente.razao_social }}
                                 </option>
                                 {% endfor %}
                             </select>
-                            <small class="form-text text-muted">Usuários PISTA só veem dados do posto associado</small>
+                            <small class="form-text text-muted">
+                                <strong>PISTA:</strong> Selecione UM posto específico (obrigatório)<br>
+                                <strong>SUPERVISOR/GERENTE:</strong> Selecione um ou mais postos (use Ctrl/Cmd + clique para múltiplos)<br>
+                                <strong>Dica:</strong> Para selecionar múltiplos, segure Ctrl (Windows/Linux) ou Cmd (Mac) e clique
+                            </small>
                         </div>
 
                         <hr>
@@ -170,20 +173,19 @@
 function toggleClienteField() {
     var nivel = document.getElementById('nivel').value;
     var clienteField = document.getElementById('cliente_field');
-    var clienteSelect = document.getElementById('cliente_id');
+    var clienteSelect = document.getElementById('cliente_ids');
     
-    // SUPERVISOR e PISTA precisam de posto associado
-    // GERENTE é opcional (pode ter ou não)
-    if (nivel === 'PISTA' || nivel === 'SUPERVISOR') {
+    // SUPERVISOR, GERENTE e PISTA precisam de posto associado
+    if (nivel === 'PISTA' || nivel === 'SUPERVISOR' || nivel === 'GERENTE') {
         clienteField.style.display = 'block';
         clienteSelect.required = true;
-    } else if (nivel === 'GERENTE') {
-        clienteField.style.display = 'block';
-        clienteSelect.required = false;  // Opcional para gerente
     } else {
         clienteField.style.display = 'none';
         clienteSelect.required = false;
-        clienteSelect.value = '';
+        // Limpar seleções
+        for (var i = 0; i < clienteSelect.options.length; i++) {
+            clienteSelect.options[i].selected = false;
+        }
     }
 }
 
@@ -196,6 +198,23 @@ document.querySelector('form').addEventListener('submit', function(e) {
     if (senha && senha !== confirmar) {
         e.preventDefault();
         alert('As senhas não coincidem!');
+        return false;
+    }
+    
+    // Validar seleção de clientes
+    var nivel = document.getElementById('nivel').value;
+    var clienteSelect = document.getElementById('cliente_ids');
+    var selectedOptions = Array.from(clienteSelect.selectedOptions);
+    
+    if (nivel === 'PISTA' && selectedOptions.length > 1) {
+        e.preventDefault();
+        alert('Usuários PISTA devem ter apenas UM posto associado. Você selecionou ' + selectedOptions.length + ' postos.');
+        return false;
+    }
+    
+    if ((nivel === 'PISTA' || nivel === 'SUPERVISOR' || nivel === 'GERENTE') && selectedOptions.length === 0) {
+        e.preventDefault();
+        alert('Selecione pelo menos um posto/cliente para este nível de usuário.');
         return false;
     }
 });
