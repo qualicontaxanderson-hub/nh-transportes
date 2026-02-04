@@ -1224,8 +1224,8 @@ document.addEventListener('DOMContentLoaded', function() {
                     const descricaoInput = valorInput.closest('.comprovacao-item').querySelector('.comprovacao-descricao');
                     if (descricaoInput) {
                         console.log(`      Checking input with description: "${descricaoInput.value}"`);
-                        if (descricaoInput.value === comp.descricao) {
-                            // Found matching field by description
+                        if (descricaoInput.value.toUpperCase() === comp.descricao.toUpperCase()) {
+                            // Found matching field by description (case-insensitive)
                             valorInput.value = parseFloat(comp.valor).toLocaleString('pt-BR', {
                                 minimumFractionDigits: 2,
                                 maximumFractionDigits: 2
@@ -1351,7 +1351,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     const allInputs = document.querySelectorAll('input[data-comprovacao-forma="RETIRADA_PAGAMENTO"]');
                     for (const valorInput of allInputs) {
                         const descricaoInput = valorInput.closest('.comprovacao-item').querySelector('.comprovacao-descricao');
-                        if (descricaoInput && descricaoInput.value === comp.descricao) {
+                        if (descricaoInput && descricaoInput.value.toUpperCase() === comp.descricao.toUpperCase()) {
                             valorInput.value = parseFloat(comp.valor).toLocaleString('pt-BR', {
                                 minimumFractionDigits: 2,
                                 maximumFractionDigits: 2
