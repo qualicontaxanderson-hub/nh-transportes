@@ -415,6 +415,71 @@ function copiarParaWhatsApp(event) {
     texto += `• Depósitos em Cheques A Prazo ({{ depositos_prazo|length }}): R$ {{ "{:,.2f}".format(total_prazo).replace(',', 'X').replace('.', ',').replace('X', '.') }}\n`;
     {% endif %}
     
+    {% if depositos_cheques and depositos_cheques|length > 0 %}
+    texto += `\n💳 *CONTROLE DE DEPÓSITOS DE CHEQUES:*\n`;
+    {% set depositos_vista_ctrl = depositos_cheques|selectattr('tipo', 'equalto', 'VISTA')|list %}
+    {% if depositos_vista_ctrl|length > 0 %}
+    texto += `\n📍 *Cheques À Vista:*\n`;
+    {% for dep in depositos_vista_ctrl %}
+    texto += `  • Lançado: R$ {{ "{:,.2f}".format(dep.valor_lancado|float).replace(',', 'X').replace('.', ',').replace('X', '.') }}\n`;
+    {% if dep.valor_depositado %}
+    texto += `    Depositado: R$ {{ "{:,.2f}".format(dep.valor_depositado|float).replace(',', 'X').replace('.', ',').replace('X', '.') }}\n`;
+    {% if dep.diferenca and dep.diferenca|float != 0 %}
+    {% if dep.diferenca|float > 0 %}
+    texto += `    ⚠️ Falta: R$ {{ "{:,.2f}".format(dep.diferenca|float).replace(',', 'X').replace('.', ',').replace('X', '.') }}\n`;
+    {% else %}
+    texto += `    ✅ Sobra: R$ {{ "{:,.2f}".format(dep.diferenca|float|abs).replace(',', 'X').replace('.', ',').replace('X', '.') }}\n`;
+    {% endif %}
+    {% else %}
+    texto += `    ✅ Conferido - OK\n`;
+    {% endif %}
+    {% if dep.data_deposito %}
+    texto += `    Data: {{ dep.data_deposito.strftime("%d/%m/%Y") }}\n`;
+    {% endif %}
+    {% if dep.depositado_por %}
+    texto += `    Por: {{ dep.depositado_por }}\n`;
+    {% endif %}
+    {% else %}
+    texto += `    ⏳ Aguardando depósito\n`;
+    {% endif %}
+    {% if dep.observacao %}
+    texto += `    Obs: {{ dep.observacao }}\n`;
+    {% endif %}
+    {% endfor %}
+    {% endif %}
+    
+    {% set depositos_prazo_ctrl = depositos_cheques|selectattr('tipo', 'equalto', 'PRAZO')|list %}
+    {% if depositos_prazo_ctrl|length > 0 %}
+    texto += `\n📍 *Cheques A Prazo:*\n`;
+    {% for dep in depositos_prazo_ctrl %}
+    texto += `  • Lançado: R$ {{ "{:,.2f}".format(dep.valor_lancado|float).replace(',', 'X').replace('.', ',').replace('X', '.') }}\n`;
+    {% if dep.valor_depositado %}
+    texto += `    Depositado: R$ {{ "{:,.2f}".format(dep.valor_depositado|float).replace(',', 'X').replace('.', ',').replace('X', '.') }}\n`;
+    {% if dep.diferenca and dep.diferenca|float != 0 %}
+    {% if dep.diferenca|float > 0 %}
+    texto += `    ⚠️ Falta: R$ {{ "{:,.2f}".format(dep.diferenca|float).replace(',', 'X').replace('.', ',').replace('X', '.') }}\n`;
+    {% else %}
+    texto += `    ✅ Sobra: R$ {{ "{:,.2f}".format(dep.diferenca|float|abs).replace(',', 'X').replace('.', ',').replace('X', '.') }}\n`;
+    {% endif %}
+    {% else %}
+    texto += `    ✅ Conferido - OK\n`;
+    {% endif %}
+    {% if dep.data_deposito %}
+    texto += `    Data: {{ dep.data_deposito.strftime("%d/%m/%Y") }}\n`;
+    {% endif %}
+    {% if dep.depositado_por %}
+    texto += `    Por: {{ dep.depositado_por }}\n`;
+    {% endif %}
+    {% else %}
+    texto += `    ⏳ Aguardando depósito\n`;
+    {% endif %}
+    {% if dep.observacao %}
+    texto += `    Obs: {{ dep.observacao }}\n`;
+    {% endif %}
+    {% endfor %}
+    {% endif %}
+    {% endif %}
+    
     {% set cartoes_debito = comprovacoes|selectattr('forma_tipo', 'equalto', 'CARTAO')|selectattr('cartao_tipo', 'equalto', 'DEBITO')|list %}
     {% if cartoes_debito|length > 0 %}
     {% set total_debito = cartoes_debito|map(attribute='valor')|map('float')|sum %}

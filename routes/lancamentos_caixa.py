@@ -830,13 +830,25 @@ def visualizar(id):
         """, (id,))
         vales_funcionarios = cursor.fetchall()
         
+        # Get depósitos de cheques
+        cursor.execute("""
+            SELECT id, lancamento_caixa_id, tipo, valor_lancado,
+                   valor_depositado, diferenca, data_deposito,
+                   depositado_por, observacao, criado_em
+            FROM lancamentos_caixa_depositos_cheques
+            WHERE lancamento_caixa_id = %s
+            ORDER BY tipo, criado_em
+        """, (id,))
+        depositos_cheques = cursor.fetchall()
+        
         return render_template('lancamentos_caixa/visualizar.html', 
                              lancamento=lancamento, 
                              receitas=receitas,
                              comprovacoes=comprovacoes,
                              sobras_funcionarios=sobras_funcionarios,
                              perdas_funcionarios=perdas_funcionarios,
-                             vales_funcionarios=vales_funcionarios)
+                             vales_funcionarios=vales_funcionarios,
+                             depositos_cheques=depositos_cheques)
     except Exception as e:
         flash(f'Erro ao visualizar lançamento: {str(e)}', 'danger')
         return redirect(url_for('lancamentos_caixa.lista'))
