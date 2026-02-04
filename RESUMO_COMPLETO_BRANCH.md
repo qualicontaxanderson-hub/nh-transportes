@@ -4,10 +4,10 @@
 
 Esta branch contém **múltiplas correções e funcionalidades** implementadas para o sistema de Fechamento de Caixa NH Transportes.
 
-**Total de Commits:** 30+  
+**Total de Commits:** 35+  
 **Arquivos Modificados:** 10+  
-**Documentação Criada:** 12 arquivos  
-**Linhas de Código:** 3000+
+**Documentação Criada:** 14 arquivos  
+**Linhas de Código:** 3500+
 
 ---
 
@@ -48,6 +48,24 @@ Esta branch contém **múltiplas correções e funcionalidades** implementadas p
 - **Solução:** Filtrar WHERE status='FECHADO' na lista
 - **Arquivos:** `routes/lancamentos_caixa.py`
 - **Docs:** `CORRECAO_STATUS_FECHADO_E_CARTOES_DETALHADOS.md`
+
+### 7. ✅ Cartões não detalhados no WhatsApp
+- **Problema:** Mostrava apenas totais de débito/crédito
+- **Solução:** Detalhar cada bandeira individualmente
+- **Arquivos:** `templates/lancamentos_caixa/visualizar.html`
+- **Docs:** `CORRECAO_STATUS_FECHADO_E_CARTOES_DETALHADOS.md`
+
+### 8. ✅ Lançamentos editados sumiam da lista
+- **Problema:** Status não era atualizado ao editar
+- **Solução:** UPDATE status='FECHADO' ao editar
+- **Arquivos:** `routes/lancamentos_caixa.py`
+- **Docs:** `CORRECAO_STATUS_EDITAR_LANCAMENTO.md`
+
+### 9. ✅ Lista completamente vazia após filtro
+- **Problema:** Filtro muito restritivo excluía tudo
+- **Solução:** Filtro inteligente baseado em status + observacao
+- **Arquivos:** `routes/lancamentos_caixa.py`
+- **Docs:** `CORRECAO_FILTRO_LISTA_LANCAMENTOS.md`
 
 ### 7. ✅ Cartões não detalhados no WhatsApp
 - **Problema:** Mostrava total genérico
@@ -154,7 +172,7 @@ templates/lancamentos_caixa/
       - Cartões detalhados
 ```
 
-### Documentação (12 arquivos)
+### Documentação (14 arquivos)
 ```
 Correções e Debug:
   ├─ CORRECAO_TROCO_PIX_AUTO_CARREGAMENTO.md
@@ -163,7 +181,8 @@ Correções e Debug:
   ├─ CORRECAO_ERRO_FUNCIONARIOS.md
   ├─ CORRECAO_EDITAR_SOBRAS_PERDAS_VALES.md
   ├─ CORRECAO_STATUS_FECHADO_E_CARTOES_DETALHADOS.md
-  └─ CORRECAO_STATUS_EDITAR_LANCAMENTO.md
+  ├─ CORRECAO_STATUS_EDITAR_LANCAMENTO.md
+  └─ CORRECAO_FILTRO_LISTA_LANCAMENTOS.md ⭐ (novo)
 
 Funcionalidades:
   ├─ FUNCIONALIDADE_SOBRAS_PERDAS_VALES.md
@@ -175,7 +194,7 @@ Validação:
   └─ VALIDAR_SOBRAS_PERDAS_VALES.sql
 
 Resumo:
-  └─ RESUMO_COMPLETO_BRANCH.md (este arquivo)
+  └─ RESUMO_COMPLETO_BRANCH.md (este arquivo - atualizado)
 ```
 
 ---
@@ -392,10 +411,11 @@ Resumo:
 ✅ **Código testado e funcional**
 
 ### Documentação
-✅ **12 arquivos de documentação criados**  
+✅ **14 arquivos de documentação criados**  
 ✅ **Português BR completo**  
 ✅ **Exemplos práticos incluídos**  
-✅ **Queries SQL fornecidas**
+✅ **Queries SQL fornecidas**  
+✅ **~130.000 caracteres de documentação**
 
 ### Qualidade
 ✅ **Código limpo e organizado**  
@@ -423,4 +443,4 @@ Para dúvidas sobre implementações específicas, consultar:
 **Branch:** copilot/fix-troco-pix-auto-error  
 **Status:** ✅ Completo e Pronto para Merge  
 **Data:** 2026-02-04  
-**Versão:** 2.0
+**Versão:** 2.1 (atualizado com correção do filtro)
