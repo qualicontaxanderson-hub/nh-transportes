@@ -939,8 +939,18 @@ def editar(id):
             
             diferenca = total_comprovacao - total_receitas
             
+            # Limpar observação se for de Troco PIX automático
+            # Quando editamos manualmente, não deve manter o texto automático
+            if observacao and observacao.startswith('Lançamento automático - Troco PIX'):
+                print(f"[DEBUG EDIT] Limpando observação automática de Troco PIX")
+                observacao = None  # Limpar observação automática
+            
             # Update lancamento_caixa
             # Quando editamos, o lançamento passa a ser um fechamento completo (FECHADO)
+            print(f"[DEBUG EDIT] Atualizando lançamento id={id}")
+            print(f"[DEBUG EDIT] Valores: data={data}, cliente_id={cliente_id}, status=FECHADO")
+            print(f"[DEBUG EDIT] observacao={observacao}, totais={total_receitas}/{total_comprovacao}/{diferenca}")
+            
             cursor.execute("""
                 UPDATE lancamentos_caixa 
                 SET data = %s, cliente_id = %s, observacao = %s, 
@@ -949,6 +959,13 @@ def editar(id):
                 WHERE id = %s
             """, (data, int(cliente_id), observacao if observacao else None, 
                   float(total_receitas), float(total_comprovacao), float(diferenca), id))
+            
+            print(f"[DEBUG EDIT] Linhas afetadas pelo UPDATE: {cursor.rowcount}")
+            
+            # Verificar se foi atualizado
+            cursor.execute("SELECT status, observacao FROM lancamentos_caixa WHERE id = %s", (id,))
+            resultado = cursor.fetchone()
+            print(f"[DEBUG EDIT] Após UPDATE - status={resultado['status']}, observacao={resultado.get('observacao', 'NULL')[:50] if resultado.get('observacao') else 'NULL'}")
             
             # Delete old receitas and comprovacoes
             cursor.execute("DELETE FROM lancamentos_caixa_receitas WHERE lancamento_caixa_id = %s", (id,))
