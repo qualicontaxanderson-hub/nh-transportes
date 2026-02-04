@@ -438,40 +438,6 @@ function copiarParaWhatsApp(event) {
         {% endif %}
     {% endfor %}
     
-    {# Process RETIRADA_PAGAMENTO in WhatsApp with friendly names #}
-    {% set retiradas_wa = comprovacoes|selectattr('forma_tipo', 'equalto', 'RETIRADA_PAGAMENTO')|list %}
-    {% if retiradas_wa|length > 0 %}
-        {# Define friendly names #}
-        {% set nomes_retiradas_wa = {
-            'DESCONTO CADASTROS': 'Descontos Cadastro',
-            'DESCONTO GERAIS': 'Descontos Gerais',
-            'EMPRÉSTIMO FUNCIONÁRIOS': 'Empréstimos Funcionários',
-            'RETIRADA ALUGUEL': 'Aluguel'
-        } %}
-        {# Define order #}
-        {% set ordem_retiradas_wa = {
-            'DESCONTO CADASTROS': 1,
-            'DESCONTO GERAIS': 2,
-            'EMPRÉSTIMO FUNCIONÁRIOS': 3,
-            'RETIRADA ALUGUEL': 4
-        } %}
-        {# Sort retiradas #}
-        {% set retiradas_wa_sorted = [] %}
-        {% for ret in retiradas_wa %}
-            {% set desc_upper = ret.descricao.upper() if ret.descricao else '' %}
-            {% set ordem = ordem_retiradas_wa.get(desc_upper, 999) %}
-            {% set _ = retiradas_wa_sorted.append((ordem, ret)) %}
-        {% endfor %}
-        {% set retiradas_wa_sorted = retiradas_wa_sorted|sort %}
-        {# Output with friendly names #}
-        {% for ordem, ret in retiradas_wa_sorted %}
-            {% set desc_upper = ret.descricao.upper() if ret.descricao else '' %}
-            {% set nome_amigavel = nomes_retiradas_wa.get(desc_upper, 'Retiradas para Pagamentos') %}
-    texto += `• {{ nome_amigavel }}: R$ {{ "{:,.2f}".format(ret.valor|float).replace(',', 'X').replace('.', ',').replace('X', '.') }}\n`;
-    texto += `  └ {{ ret.descricao if ret.descricao else '-' }}\n`;
-        {% endfor %}
-    {% endif %}
-    
     {% set depositos_especie = comprovacoes|selectattr('forma_tipo', 'equalto', 'DEPOSITO_ESPECIE')|list %}
     {% if depositos_especie|length > 0 %}
     {% set total_especie = depositos_especie|map(attribute='valor')|map('float')|sum %}
@@ -573,6 +539,40 @@ function copiarParaWhatsApp(event) {
     texto += `  - {{ cartao.cartao_nome }}: R$ {{ "{:,.2f}".format(cartao.valor|float).replace(',', 'X').replace('.', ',').replace('X', '.') }}\n`;
     {% endfor %}
     texto += `  Subtotal: R$ {{ "{:,.2f}".format(total_credito).replace(',', 'X').replace('.', ',').replace('X', '.') }}\n`;
+    {% endif %}
+    
+    {# Process RETIRADA_PAGAMENTO in WhatsApp with friendly names #}
+    {% set retiradas_wa = comprovacoes|selectattr('forma_tipo', 'equalto', 'RETIRADA_PAGAMENTO')|list %}
+    {% if retiradas_wa|length > 0 %}
+        {# Define friendly names #}
+        {% set nomes_retiradas_wa = {
+            'DESCONTO CADASTROS': 'Descontos Cadastro',
+            'DESCONTO GERAIS': 'Descontos Gerais',
+            'EMPRÉSTIMO FUNCIONÁRIOS': 'Empréstimos Funcionários',
+            'RETIRADA ALUGUEL': 'Aluguel'
+        } %}
+        {# Define order #}
+        {% set ordem_retiradas_wa = {
+            'DESCONTO CADASTROS': 1,
+            'DESCONTO GERAIS': 2,
+            'EMPRÉSTIMO FUNCIONÁRIOS': 3,
+            'RETIRADA ALUGUEL': 4
+        } %}
+        {# Sort retiradas #}
+        {% set retiradas_wa_sorted = [] %}
+        {% for ret in retiradas_wa %}
+            {% set desc_upper = ret.descricao.upper() if ret.descricao else '' %}
+            {% set ordem = ordem_retiradas_wa.get(desc_upper, 999) %}
+            {% set _ = retiradas_wa_sorted.append((ordem, ret)) %}
+        {% endfor %}
+        {% set retiradas_wa_sorted = retiradas_wa_sorted|sort %}
+        {# Output with friendly names #}
+        {% for ordem, ret in retiradas_wa_sorted %}
+            {% set desc_upper = ret.descricao.upper() if ret.descricao else '' %}
+            {% set nome_amigavel = nomes_retiradas_wa.get(desc_upper, 'Retiradas para Pagamentos') %}
+    texto += `• {{ nome_amigavel }}: R$ {{ "{:,.2f}".format(ret.valor|float).replace(',', 'X').replace('.', ',').replace('X', '.') }}\n`;
+    texto += `  └ {{ ret.descricao if ret.descricao else '-' }}\n`;
+        {% endfor %}
     {% endif %}
     
     {% if perdas_funcionarios and perdas_funcionarios|length > 0 %}
