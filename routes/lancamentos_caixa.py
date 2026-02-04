@@ -924,10 +924,12 @@ def editar(id):
             diferenca = total_comprovacao - total_receitas
             
             # Update lancamento_caixa
+            # Quando editamos, o lançamento passa a ser um fechamento completo (FECHADO)
             cursor.execute("""
                 UPDATE lancamentos_caixa 
                 SET data = %s, cliente_id = %s, observacao = %s, 
-                    total_receitas = %s, total_comprovacao = %s, diferenca = %s
+                    total_receitas = %s, total_comprovacao = %s, diferenca = %s,
+                    status = 'FECHADO'
                 WHERE id = %s
             """, (data, int(cliente_id), observacao if observacao else None, 
                   float(total_receitas), float(total_comprovacao), float(diferenca), id))
