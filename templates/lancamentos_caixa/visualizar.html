@@ -65,11 +65,11 @@
                             {% for receita in receitas %}
                             {# Linha pai (categoria) #}
                             <tr style="background:#f8f9fa;">
-                                <td colspan="3" style="font-size: 0.85rem;"><strong>{{ receita.tipo_nome }}</strong></td>
+                                <td colspan="3" style="font-size: 0.85rem;"><strong>{{ receita.tipo_nome|upper }}</strong></td>
                             </tr>
                             {# Linha filho (item) #}
                             <tr>
-                                <td style="font-size: 0.85rem;">└ {{ receita.tipo_nome }}</td>
+                                <td style="font-size: 0.85rem;">└ {{ receita.tipo_nome|title }}</td>
                                 <td style="font-size: 0.85rem;">{{ receita.descricao if receita.descricao else '-' }}</td>
                                 <td style="font-size: 0.85rem; text-align: right;">R$ {{ "{:,.2f}".format(receita.valor|float).replace(',', 'X').replace('.', ',').replace('X', '.') }}</td>
                             </tr>
@@ -144,11 +144,11 @@
                                         {% set _ = processed_tipos.append(comp.forma_tipo) %}
                                         {# Linha pai (categoria) #}
                                         <tr style="background:#f8f9fa;">
-                                            <td colspan="3" style="font-size: 0.85rem;"><strong>{{ comp.forma_pagamento_nome }}</strong></td>
+                                            <td colspan="3" style="font-size: 0.85rem;"><strong>{{ comp.forma_pagamento_nome|upper }}</strong></td>
                                         </tr>
                                         {# Linha filho (item) #}
                                         <tr>
-                                            <td style="font-size: 0.85rem;">└ {{ comp.forma_pagamento_nome }}</td>
+                                            <td style="font-size: 0.85rem;">└ {{ comp.forma_pagamento_nome|title }}</td>
                                             <td style="font-size: 0.85rem;">{{ comp.descricao if comp.descricao else '-' }}</td>
                                             <td style="font-size: 0.85rem; text-align: right;">R$ {{ "{:,.2f}".format(comp.valor|float).replace(',', 'X').replace('.', ',').replace('X', '.') }}</td>
                                         </tr>
@@ -276,11 +276,11 @@
                                     {% set nome_amigavel = nomes_retiradas.get(desc_upper, 'Retiradas para Pagamentos') %}
                                     {# Linha pai (categoria) #}
                                     <tr style="background:#f8f9fa;">
-                                        <td colspan="3" style="font-size: 0.85rem;"><strong>{{ nome_amigavel }}</strong></td>
+                                        <td colspan="3" style="font-size: 0.85rem;"><strong>{{ nome_amigavel|upper }}</strong></td>
                                     </tr>
                                     {# Linha filho (item) #}
                                     <tr>
-                                        <td style="font-size: 0.85rem;">└ {{ ret.descricao if ret.descricao else nome_amigavel }}</td>
+                                        <td style="font-size: 0.85rem;">└ {{ (ret.descricao if ret.descricao else nome_amigavel)|title }}</td>
                                         <td style="font-size: 0.85rem;">-</td>
                                         <td style="font-size: 0.85rem; text-align: right;">R$ {{ "{:,.2f}".format(ret.valor|float).replace(',', 'X').replace('.', ',').replace('X', '.') }}</td>
                                     </tr>
@@ -415,9 +415,10 @@ function copiarParaWhatsApp(event) {
     texto += `💰 *RECEITAS E ENTRADAS*\n`;
     texto += `━━━━━━━━━━━━━━━━━━━━\n`;
     {% for receita in receitas %}
-    texto += `• {{ receita.tipo_nome }}: R$ {{ "{:,.2f}".format(receita.valor|float).replace(',', 'X').replace('.', ',').replace('X', '.') }}\n`;
-    {% if receita.descricao %}
-    texto += `  └ {{ receita.descricao }}\n`;
+    texto += `• {{ receita.tipo_nome|upper }}: R$ {{ "{:,.2f}".format(receita.valor|float).replace(',', 'X').replace('.', ',').replace('X', '.') }}\n`;
+    texto += `  └ {{ receita.tipo_nome|title }}\n`;
+    {% if receita.descricao and receita.descricao != '-' %}
+    texto += `    └ {{ receita.descricao }}\n`;
     {% endif %}
     {% endfor %}
     
@@ -445,10 +446,8 @@ function copiarParaWhatsApp(event) {
         {% if comp.forma_tipo and comp.forma_tipo not in ['CARTAO', 'DEPOSITO_ESPECIE', 'DEPOSITO_CHEQUE_VISTA', 'DEPOSITO_CHEQUE_PRAZO', 'RETIRADA_PAGAMENTO'] %}
             {% if comp.forma_tipo not in processed_tipos %}
                 {% set _ = processed_tipos.append(comp.forma_tipo) %}
-    texto += `• {{ comp.forma_pagamento_nome }}: R$ {{ "{:,.2f}".format(comp.valor|float).replace(',', 'X').replace('.', ',').replace('X', '.') }}\n`;
-    {% if comp.descricao %}
-    texto += `  └ {{ comp.descricao }}\n`;
-    {% endif %}
+    texto += `• {{ comp.forma_pagamento_nome|upper }}: R$ {{ "{:,.2f}".format(comp.valor|float).replace(',', 'X').replace('.', ',').replace('X', '.') }}\n`;
+    texto += `  └ {{ comp.forma_pagamento_nome|title }}\n`;
             {% endif %}
         {% endif %}
     {% endfor %}
@@ -585,8 +584,8 @@ function copiarParaWhatsApp(event) {
         {% for ordem, ret in retiradas_wa_sorted %}
             {% set desc_upper = ret.descricao.upper() if ret.descricao else '' %}
             {% set nome_amigavel = nomes_retiradas_wa.get(desc_upper, 'Retiradas para Pagamentos') %}
-    texto += `• {{ nome_amigavel }}: R$ {{ "{:,.2f}".format(ret.valor|float).replace(',', 'X').replace('.', ',').replace('X', '.') }}\n`;
-    texto += `  └ {{ ret.descricao if ret.descricao else '-' }}\n`;
+    texto += `• {{ nome_amigavel|upper }}: R$ {{ "{:,.2f}".format(ret.valor|float).replace(',', 'X').replace('.', ',').replace('X', '.') }}\n`;
+    texto += `  └ {{ (ret.descricao if ret.descricao else '-')|title }}\n`;
         {% endfor %}
     {% endif %}
     
