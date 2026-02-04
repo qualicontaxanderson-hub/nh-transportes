@@ -132,9 +132,9 @@
                             {# Group by forma_tipo for better organization #}
                             {% set processed_tipos = [] %}
                             
-                            {# Process non-card payments first (PRAZO, PIX, RETIRADA_PAGAMENTO) #}
+                            {# Process non-card payments first (PRAZO, PIX) #}
                             {% for comp in comprovacoes %}
-                                {% if comp.forma_tipo and comp.forma_tipo not in ['CARTAO', 'DEPOSITO_ESPECIE', 'DEPOSITO_CHEQUE_VISTA', 'DEPOSITO_CHEQUE_PRAZO'] %}
+                                {% if comp.forma_tipo and comp.forma_tipo not in ['CARTAO', 'DEPOSITO_ESPECIE', 'DEPOSITO_CHEQUE_VISTA', 'DEPOSITO_CHEQUE_PRAZO', 'RETIRADA_PAGAMENTO'] %}
                                     {% if comp.forma_tipo not in processed_tipos %}
                                         {% set _ = processed_tipos.append(comp.forma_tipo) %}
                                         <tr>
@@ -145,6 +145,18 @@
                                     {% endif %}
                                 {% endif %}
                             {% endfor %}
+                            
+                            {# Process RETIRADA_PAGAMENTO - Show ALL items #}
+                            {% set retiradas = comprovacoes|selectattr('forma_tipo', 'equalto', 'RETIRADA_PAGAMENTO')|list %}
+                            {% if retiradas|length > 0 %}
+                                {% for ret in retiradas %}
+                                <tr>
+                                    <td style="font-size: 0.85rem;">{{ ret.forma_pagamento_nome }}</td>
+                                    <td style="font-size: 0.85rem;">{{ ret.descricao if ret.descricao else '-' }}</td>
+                                    <td style="font-size: 0.85rem; text-align: right;">R$ {{ "{:,.2f}".format(ret.valor|float).replace(',', 'X').replace('.', ',').replace('X', '.') }}</td>
+                                </tr>
+                                {% endfor %}
+                            {% endif %}
                             
                             {# Process DEPOSITO_ESPECIE #}
                             {% set depositos_especie = comprovacoes|selectattr('forma_tipo', 'equalto', 'DEPOSITO_ESPECIE')|list %}
