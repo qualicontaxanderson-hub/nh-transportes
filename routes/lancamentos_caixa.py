@@ -114,15 +114,21 @@ def lista():
             
             where_clause = "WHERE " + " AND ".join(where_conditions) if where_conditions else ""
             
-            # New schema with usuario_id and data
-            cursor.execute(f"""
+            # DEBUG: Log da query e parâmetros
+            query_completa = f"""
                 SELECT lc.*, u.username as usuario_nome, c.razao_social as cliente_nome
                 FROM lancamentos_caixa lc
                 LEFT JOIN usuarios u ON lc.usuario_id = u.id
                 LEFT JOIN clientes c ON lc.cliente_id = c.id
                 {where_clause}
                 ORDER BY lc.data DESC, lc.id DESC
-            """, tuple(params))
+            """
+            print(f"[DEBUG] Query completa: {query_completa}")
+            print(f"[DEBUG] Parâmetros: {params}")
+            print(f"[DEBUG] Filtros recebidos: {filtros}")
+            
+            # New schema with usuario_id and data
+            cursor.execute(query_completa, tuple(params))
         elif 'data_movimento' in columns:
             # Existing schema with data_movimento
             cursor.execute("""
@@ -140,6 +146,11 @@ def lista():
             """)
         
         lancamentos = cursor.fetchall()
+        
+        # DEBUG: Log dos resultados
+        print(f"[DEBUG] Número de lançamentos encontrados: {len(lancamentos)}")
+        for i, lanc in enumerate(lancamentos[:5]):  # Mostrar primeiros 5
+            print(f"[DEBUG] Lançamento {i+1}: id={lanc.get('id')}, data={lanc.get('data')}, status={lanc.get('status')}, observacao={lanc.get('observacao', '')[:50]}")
         
         # Calculate summary
         resumo = {
