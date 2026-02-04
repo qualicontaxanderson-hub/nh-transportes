@@ -1,5 +1,7 @@
 from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify
+from flask_login import login_required
 from utils.db import get_db_connection
+from utils.decorators import supervisor_or_admin_required
 import traceback
 
 # Create blueprint
@@ -7,6 +9,7 @@ bp = Blueprint('tipos_receita_caixa', __name__, url_prefix='/tipos_receita_caixa
 tipos_receita_caixa_bp = bp  # Alias for compatibility
 
 @bp.route('/')
+@login_required
 def lista():
     """Lista todos os tipos de receita de caixa"""
     try:
@@ -31,8 +34,9 @@ def lista():
         flash(error_msg, 'danger')
         return render_template('tipos_receita_caixa/lista.html', tipos_receita=[], error=error_msg)
 
-
 @bp.route('/novo', methods=['GET', 'POST'])
+@login_required
+@supervisor_or_admin_required
 def novo():
     """Cria um novo tipo de receita de caixa"""
     if request.method == 'POST':
@@ -71,6 +75,8 @@ def novo():
 
 
 @bp.route('/editar/<int:id>', methods=['GET', 'POST'])
+@login_required
+@supervisor_or_admin_required
 def editar(id):
     """Edita um tipo de receita de caixa existente"""
     if request.method == 'POST':

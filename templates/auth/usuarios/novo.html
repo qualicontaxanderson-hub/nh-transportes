@@ -58,8 +58,25 @@
                                 {% endfor %}
                             </select>
                             <small class="form-text text-muted">
-                                <strong>SUPERVISOR/PISTA:</strong> Associe a um posto específico<br>
-                                <strong>GERENTE:</strong> Deixe em branco para acesso a todos os postos
+                                <strong>PISTA:</strong> Associe a um posto específico para operação restrita
+                            </small>
+                        </div>
+
+                        <div class="mb-3" id="empresas_field" style="display:none;">
+                            <label for="empresas_ids" class="form-label">Empresas com Acesso * (SUPERVISOR)</label>
+                            <div style="max-height: 300px; overflow-y: auto; border: 1px solid #dee2e6; border-radius: 0.25rem; padding: 0.5rem;">
+                                {% for empresa in empresas_posto %}
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" name="empresas_ids[]" 
+                                           value="{{ empresa.id }}" id="empresa_{{ empresa.id }}">
+                                    <label class="form-check-label" for="empresa_{{ empresa.id }}">
+                                        {{ empresa.razao_social }}
+                                    </label>
+                                </div>
+                                {% endfor %}
+                            </div>
+                            <small class="form-text text-muted">
+                                <strong>SUPERVISOR:</strong> Selecione uma ou mais empresas que o usuário terá acesso. Empresas listadas são aquelas com produtos de posto configurados.
                             </small>
                         </div>
 
@@ -97,31 +114,56 @@ function toggleClienteField() {
     var nivel = document.getElementById('nivel').value;
     var clienteField = document.getElementById('cliente_field');
     var clienteSelect = document.getElementById('cliente_id');
+    var empresasField = document.getElementById('empresas_field');
     
-    // SUPERVISOR e PISTA precisam de posto associado
-    // GERENTE é opcional (pode ter ou não)
-    if (nivel === 'PISTA' || nivel === 'SUPERVISOR') {
+    // PISTA precisa de posto associado (um único)
+    if (nivel === 'PISTA') {
         clienteField.style.display = 'block';
         clienteSelect.required = true;
-    } else if (nivel === 'GERENTE') {
-        clienteField.style.display = 'block';
-        clienteSelect.required = false;  // Opcional para gerente
-    } else {
+        empresasField.style.display = 'none';
+    } 
+    // SUPERVISOR precisa de empresas (múltiplas)
+    else if (nivel === 'SUPERVISOR') {
         clienteField.style.display = 'none';
         clienteSelect.required = false;
         clienteSelect.value = '';
+        empresasField.style.display = 'block';
+    } 
+    // GERENTE é opcional (pode ter ou não)
+    else if (nivel === 'GERENTE') {
+        clienteField.style.display = 'block';
+        clienteSelect.required = false;  // Opcional para gerente
+        empresasField.style.display = 'none';
+    } 
+    // ADMIN não precisa de associação
+    else {
+        clienteField.style.display = 'none';
+        clienteSelect.required = false;
+        clienteSelect.value = '';
+        empresasField.style.display = 'none';
     }
 }
 
-// Validar senhas antes de enviar
+// Validar senhas e empresas antes de enviar
 document.querySelector('form').addEventListener('submit', function(e) {
     var senha = document.getElementById('senha').value;
     var confirmar = document.getElementById('confirmar_senha').value;
+    var nivel = document.getElementById('nivel').value;
     
     if (senha !== confirmar) {
         e.preventDefault();
         alert('As senhas não coincidem!');
         return false;
+    }
+    
+    // Validar que SUPERVISOR tem pelo menos uma empresa selecionada
+    if (nivel === 'SUPERVISOR') {
+        var empresasSelecionadas = document.querySelectorAll('input[name="empresas_ids[]"]:checked');
+        if (empresasSelecionadas.length === 0) {
+            e.preventDefault();
+            alert('SUPERVISOR deve ter pelo menos uma empresa selecionada!');
+            return false;
+        }
     }
 });
 </script>
