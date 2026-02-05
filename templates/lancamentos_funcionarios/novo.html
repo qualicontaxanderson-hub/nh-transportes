@@ -431,16 +431,15 @@ function createTotalsRow() {
 }
 
 function calculateTotals() {
-    // Calculate total for each funcionario
-    const funcionariosIds = [...new Set(
-        Array.from(document.querySelectorAll('.valor-input')).map(i => i.dataset.funcionario)
-    )];
+    // Get all rows in the tbody
+    const tbody = document.getElementById('funcionarios-tbody');
+    const rows = tbody.querySelectorAll('tr');
     
-    console.log('[DEBUG calculateTotals] funcionariosIds:', funcionariosIds);
+    console.log('[DEBUG calculateTotals] Found', rows.length, 'rows');
     
     let grandTotalProventos = 0;
     let grandTotalDescontos = 0;
-    let totalFuncionarios = funcionariosIds.length;
+    let totalFuncionarios = rows.length;
     
     // Initialize column totals
     const rubricaTotals = {};
@@ -448,10 +447,13 @@ function calculateTotals() {
         rubricaTotals[rubrica.nome] = 0;
     });
     
-    funcionariosIds.forEach(funcId => {
-        console.log(`[DEBUG] Processing funcId: ${funcId}`);
-        const inputs = document.querySelectorAll(`.valor-input[data-funcionario="${funcId}"]`);
-        console.log(`[DEBUG] Found ${inputs.length} inputs for funcId ${funcId}`);
+    // Process each row
+    rows.forEach((row, rowIndex) => {
+        // Get all inputs in this row
+        const inputs = row.querySelectorAll('.valor-input');
+        const funcId = inputs.length > 0 ? inputs[0].dataset.funcionario : null;
+        
+        console.log(`[DEBUG] Row ${rowIndex}: funcId=${funcId}, inputs=${inputs.length}`);
         
         let totalProventos = 0;
         let totalDescontos = 0;
@@ -483,16 +485,17 @@ function calculateTotals() {
         });
         
         const totalLiquido = totalProventos - totalDescontos;
-        console.log(`[DEBUG] funcId ${funcId}: proventos=${totalProventos}, descontos=${totalDescontos}, liquido=${totalLiquido}`);
+        console.log(`[DEBUG] Row ${rowIndex} funcId ${funcId}: proventos=${totalProventos}, descontos=${totalDescontos}, liquido=${totalLiquido}`);
         
-        const totalElement = document.querySelector(`.total-funcionario[data-funcionario="${funcId}"]`);
-        console.log(`[DEBUG] totalElement for funcId ${funcId}:`, totalElement);
+        // Find the total element in THIS row
+        const totalElement = row.querySelector('.total-funcionario');
+        console.log(`[DEBUG] totalElement in row ${rowIndex}:`, totalElement);
         
         if (totalElement) {
             totalElement.textContent = `R$ ${totalLiquido.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
             totalElement.style.color = totalLiquido < 0 ? 'red' : 'green';
         } else {
-            console.error(`[ERROR] Could not find totalElement for funcId ${funcId}`);
+            console.error(`[ERROR] Could not find totalElement in row ${rowIndex}`);
         }
         
         grandTotalProventos += totalProventos;
