@@ -103,12 +103,19 @@ def login():
             login_user(user)
             flash('Autenticado com sucesso.', 'success')
             
-            # Redirecionar usuários PISTA diretamente para sua página
+            # Redirecionar usuários conforme o nível
             nivel = getattr(user, 'nivel', '').strip().upper()
-            if nivel in ['PISTA', 'SUPERVISOR']:
-                # Usuários PISTA e SUPERVISOR vão direto para o Troco Pix Pista
+            
+            # PISTA vai direto para Troco Pix Pista (funcionalidade limitada)
+            if nivel == 'PISTA':
                 return redirect(url_for('troco_pix.pista'))
             
+            # SUPERVISOR vai para a página inicial (acesso a múltiplas seções)
+            # Pode acessar: caixa, cartões, tipos_receita, quilometragem, arla, posto, troco_pix, etc.
+            if nivel == 'SUPERVISOR':
+                return redirect(url_for('index'))
+            
+            # ADMIN, GERENTE e outros vão para página solicitada ou index
             next_url = request.args.get('next') or url_for('index')
             return redirect(next_url)
         else:
