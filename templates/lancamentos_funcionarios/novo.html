@@ -435,8 +435,6 @@ function calculateTotals() {
     const tbody = document.getElementById('funcionarios-tbody');
     const rows = tbody.querySelectorAll('tr');
     
-    console.log('[DEBUG calculateTotals] Found', rows.length, 'rows');
-    
     let grandTotalProventos = 0;
     let grandTotalDescontos = 0;
     let totalFuncionarios = rows.length;
@@ -448,26 +446,19 @@ function calculateTotals() {
     });
     
     // Process each row
-    rows.forEach((row, rowIndex) => {
+    rows.forEach((row) => {
         // Get all inputs in this row
         const inputs = row.querySelectorAll('.valor-input');
-        const funcId = inputs.length > 0 ? inputs[0].dataset.funcionario : null;
-        
-        console.log(`[DEBUG] Row ${rowIndex}: funcId=${funcId}, inputs=${inputs.length}`);
         
         let totalProventos = 0;
         let totalDescontos = 0;
         
-        inputs.forEach((input, index) => {
+        inputs.forEach((input) => {
             // Get raw value from data attribute (in cents)
             const rawValue = parseFloat(input.dataset.rawValue) || 0;
             const valor = rawValue / 100; // Convert cents to reais
             const rubricaTipo = input.dataset.rubricaTipo;
             const rubricaNome = input.dataset.rubricaNome;
-            
-            if (valor > 0) {
-                console.log(`[DEBUG]   Input ${index}: rubrica="${rubricaNome}", tipo="${rubricaTipo}", valor=${valor}`);
-            }
             
             // Add to column total
             if (rubricaNome && rubricaTotals.hasOwnProperty(rubricaNome)) {
@@ -485,17 +476,13 @@ function calculateTotals() {
         });
         
         const totalLiquido = totalProventos - totalDescontos;
-        console.log(`[DEBUG] Row ${rowIndex} funcId ${funcId}: proventos=${totalProventos}, descontos=${totalDescontos}, liquido=${totalLiquido}`);
         
         // Find the total element in THIS row
         const totalElement = row.querySelector('.total-funcionario');
-        console.log(`[DEBUG] totalElement in row ${rowIndex}:`, totalElement);
         
         if (totalElement) {
             totalElement.textContent = `R$ ${totalLiquido.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
             totalElement.style.color = totalLiquido < 0 ? 'red' : 'green';
-        } else {
-            console.error(`[ERROR] Could not find totalElement in row ${rowIndex}`);
         }
         
         grandTotalProventos += totalProventos;
