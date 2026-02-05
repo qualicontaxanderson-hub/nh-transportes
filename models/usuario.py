@@ -298,29 +298,25 @@ class Usuario(UserMixin):
 
     @staticmethod
     def get_clientes_produtos_posto():
-        """Retorna lista de clientes que têm produtos de posto configurados"""
+        """Retorna lista de clientes disponíveis para seleção
+        
+        Originalmente deveria filtrar por clientes com produtos posto,
+        mas como a tabela clientes_produtos não existe e a coluna ativo
+        também não existe na tabela clientes, retornamos todos os clientes.
+        """
         conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)
         try:
             cursor.execute("""
-                SELECT DISTINCT c.id, c.razao_social, c.nome_fantasia
-                FROM clientes c
-                INNER JOIN clientes_produtos cp ON c.id = cp.cliente_id
-                WHERE cp.ativo = 1
-                ORDER BY c.razao_social
+                SELECT id, razao_social, nome_fantasia
+                FROM clientes
+                ORDER BY razao_social
             """)
             clientes = cursor.fetchall()
             return clientes
         except Exception as e:
-            logger.warning(f"Erro ao buscar clientes com produtos posto: {str(e)}")
-            # Fallback: retornar todos os clientes ativos
-            cursor.execute("""
-                SELECT id, razao_social, nome_fantasia
-                FROM clientes
-                WHERE ativo = 1
-                ORDER BY razao_social
-            """)
-            return cursor.fetchall()
+            logger.error(f"Erro ao buscar clientes: {str(e)}")
+            return []
         finally:
             cursor.close()
             conn.close()
