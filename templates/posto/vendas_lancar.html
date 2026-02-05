@@ -378,6 +378,45 @@
 document.addEventListener('DOMContentLoaded', function() {
   const produtosCards = document.querySelectorAll('.produto-card');
   
+  // Função para atualizar totais de lançamentos (definida antes do forEach para estar acessível)
+  function atualizarTotais() {
+    const quantidades = document.querySelectorAll('.input-quantidade-edit');
+    const valores = document.querySelectorAll('.input-valor-edit');
+    const runningTotals = document.getElementById('running-totals');
+    
+    let totalLitros = 0;
+    let totalReais = 0;
+    let temValores = false;
+
+    quantidades.forEach(input => {
+      const qtdStr = input.value.replace(/\./g, '').replace(',', '.');
+      const qtd = parseFloat(qtdStr) || 0;
+      if (qtd > 0) {
+        totalLitros += qtd;
+        temValores = true;
+      }
+    });
+
+    valores.forEach(input => {
+      const valorStr = input.value.replace(/[^\d,]/g, '').replace(',', '.');
+      const valor = parseFloat(valorStr) || 0;
+      if (valor > 0) {
+        totalReais += valor;
+      }
+    });
+
+    // Show/hide totals card
+    if (temValores) {
+      runningTotals.style.display = 'block';
+      document.getElementById('total-litros').textContent = 
+        totalLitros.toFixed(3).replace('.', ',').replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+      document.getElementById('total-reais').textContent = 
+        'R$ ' + totalReais.toFixed(2).replace('.', ',').replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+    } else {
+      runningTotals.style.display = 'none';
+    }
+  }
+  
   produtosCards.forEach(card => {
     const inputEstoque = card.querySelector('.input-estoque-edit');
     const inputQtd = card.querySelector('.input-quantidade-edit');
@@ -456,45 +495,6 @@ document.addEventListener('DOMContentLoaded', function() {
     // Calcular inicialmente
     calcularPrecoMedio();
   });
-  
-  // Função para atualizar totais de lançamentos
-  function atualizarTotais() {
-    const quantidades = document.querySelectorAll('.input-quantidade-edit');
-    const valores = document.querySelectorAll('.input-valor-edit');
-    const runningTotals = document.getElementById('running-totals');
-    
-    let totalLitros = 0;
-    let totalReais = 0;
-    let temValores = false;
-
-    quantidades.forEach(input => {
-      const qtdStr = input.value.replace(/\./g, '').replace(',', '.');
-      const qtd = parseFloat(qtdStr) || 0;
-      if (qtd > 0) {
-        totalLitros += qtd;
-        temValores = true;
-      }
-    });
-
-    valores.forEach(input => {
-      const valorStr = input.value.replace(/[^\d,]/g, '').replace(',', '.');
-      const valor = parseFloat(valorStr) || 0;
-      if (valor > 0) {
-        totalReais += valor;
-      }
-    });
-
-    // Show/hide totals card
-    if (temValores) {
-      runningTotals.style.display = 'block';
-      document.getElementById('total-litros').textContent = 
-        totalLitros.toFixed(3).replace('.', ',').replace(/\B(?=(\d{3})+(?!\d))/g, '.');
-      document.getElementById('total-reais').textContent = 
-        'R$ ' + totalReais.toFixed(2).replace('.', ',').replace(/\B(?=(\d{3})+(?!\d))/g, '.');
-    } else {
-      runningTotals.style.display = 'none';
-    }
-  }
   
   // Calcular totais inicialmente
   atualizarTotais();
