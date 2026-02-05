@@ -158,38 +158,4 @@
     </div>
 </div>
 
-<!-- Seção de Administração (Apenas para Admin) -->
-{% if current_user.nivel == 'admin' %}
-<div class="row mt-4">
-    <div class="col-12">
-        <div class="card border-danger shadow-sm">
-            <div class="card-header bg-danger text-white">
-                <h5 class="card-title mb-0">
-                    <i class="bi bi-shield-lock"></i> Administração do Sistema
-                </h5>
-            </div>
-            <div class="card-body">
-                <div class="row g-3">
-                    <div class="col-md-4">
-                        <a href="{{ listar_usuarios_url }}" class="btn btn-outline-danger w-100">
-                            <i class="bi bi-people"></i> Gerenciar Usuários
-                        </a>
-                    </div>
-                    <div class="col-md-4">
-                        <a href="{{ cadastro_url }}" class="btn btn-outline-danger w-100">
-                            <i class="bi bi-person-plus"></i> Criar Novo Usuário
-                        </a>
-                    </div>
-                    <div class="col-md-4">
-                        <a href="{{ relatorios_index_url }}" class="btn btn-outline-danger w-100">
-                            <i class="bi bi-graph-up"></i> Relatórios Gerenciais
-                        </a>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-</div>
-{% endif %}
-
 {% endblock %}
