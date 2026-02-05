@@ -110,10 +110,10 @@ def login():
             if nivel == 'PISTA':
                 return redirect(url_for('troco_pix.pista'))
             
-            # SUPERVISOR vai para a página inicial (acesso a múltiplas seções)
+            # SUPERVISOR vai direto para Lançamentos de Caixa (seu módulo principal)
             # Pode acessar: caixa, cartões, tipos_receita, quilometragem, arla, posto, troco_pix, etc.
             if nivel == 'SUPERVISOR':
-                return redirect(url_for('index'))
+                return redirect(url_for('lancamentos_caixa.lista'))
             
             # ADMIN, GERENTE e outros vão para página solicitada ou index
             next_url = request.args.get('next') or url_for('index')
