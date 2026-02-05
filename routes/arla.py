@@ -19,15 +19,12 @@ def index():
     conn = get_db()
     cursor = conn.cursor(dictionary=True)
     
-    # Filtros de data - PADRÃO: mês/ano atual
+    # Filtros de data - PADRÃO: últimos 45 dias
     hoje = date.today()
-    primeiro_dia_mes = date(hoje.year, hoje.month, 1)
-    # Calcula último dia do mês usando monthrange
-    ultimo_dia = monthrange(hoje.year, hoje.month)[1]
-    ultimo_dia_mes = date(hoje.year, hoje.month, ultimo_dia)
+    data_inicio_45_dias = hoje - timedelta(days=45)
     
-    data_inicio = request.args.get('data_inicio', primeiro_dia_mes.strftime('%Y-%m-%d'))
-    data_fim = request.args.get('data_fim', ultimo_dia_mes.strftime('%Y-%m-%d'))
+    data_inicio = request.args.get('data_inicio', data_inicio_45_dias.strftime('%Y-%m-%d'))
+    data_fim = request.args.get('data_fim', hoje.strftime('%Y-%m-%d'))
     
     # Filtro de cliente
     cliente_id = request.args.get('cliente_id', '')
