@@ -108,6 +108,9 @@ def novo():
                                 clienteid, funcionarioid, mes, rubricaid, valor, 
                                 statuslancamento
                             ) VALUES (%s, %s, %s, %s, %s, %s)
+                            ON DUPLICATE KEY UPDATE 
+                                valor = VALUES(valor),
+                                atualizadoem = CURRENT_TIMESTAMP
                         """, (
                             clienteid,
                             func_id,
@@ -120,7 +123,7 @@ def novo():
         conn.commit()
         cursor.close()
         conn.close()
-        flash('Lançamentos criados com sucesso!', 'success')
+        flash('Lançamentos salvos com sucesso! Valores existentes foram atualizados.', 'success')
         return redirect(url_for('lancamentos_funcionarios.lista'))
     
     # GET request - show form
