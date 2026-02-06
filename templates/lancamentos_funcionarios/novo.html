@@ -309,7 +309,8 @@ function checkAndLoadFuncionarios() {
                             defaultValue = func.salario_base;
                         }
                         // Auto-fill commission for motoristas (readonly)
-                        else if (rubrica.nome === 'Comissão / Aj. Custo' && isMotorista) {
+                        // Accept both old name 'Comissão' and new name 'Comissão / Aj. Custo'
+                        else if ((rubrica.nome === 'Comissão' || rubrica.nome === 'Comissão / Aj. Custo') && isMotorista) {
                             if (comissaoValue) {
                                 // Convert from float to cents for formatCurrency (multiply by 100)
                                 defaultValue = Math.round(comissaoValue * 100);
@@ -317,7 +318,8 @@ function checkAndLoadFuncionarios() {
                             isReadonly = true; // Motoristas cannot edit commission
                         }
                         // Auto-fill loans (Empréstimos) - readonly
-                        else if (rubrica.nome === 'Empréstimos' && loanData) {
+                        // Accept both old name 'EMPRÉSTIMOS' and new name 'Empréstimos'
+                        else if ((rubrica.nome === 'EMPRÉSTIMOS' || rubrica.nome === 'Empréstimos') && loanData) {
                             // loanData.valor is already a float with correct decimal places
                             // Convert to cents by multiplying by 100 for formatCurrency
                             defaultValue = Math.round(loanData.valor * 100);
