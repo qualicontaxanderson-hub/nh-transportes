@@ -78,7 +78,7 @@
                                     {% for rubrica in rubricas %}
                                     <th style="min-width: 120px;">{{ rubrica.nome }}</th>
                                     {% endfor %}
-                                    <th style="min-width: 120px;">TOTAL</th>
+                                    <th style="min-width: 120px;">Total</th>
                                 </tr>
                             </thead>
                             <tbody id="funcionarios-tbody">
@@ -309,15 +309,15 @@ function checkAndLoadFuncionarios() {
                             defaultValue = func.salario_base;
                         }
                         // Auto-fill commission for motoristas (readonly)
-                        else if (rubrica.nome === 'Comissão' && isMotorista) {
+                        else if (rubrica.nome === 'Comissão / Aj. Custo' && isMotorista) {
                             if (comissaoValue) {
                                 // Convert from float to cents for formatCurrency (multiply by 100)
                                 defaultValue = Math.round(comissaoValue * 100);
                             }
                             isReadonly = true; // Motoristas cannot edit commission
                         }
-                        // Auto-fill loans (EMPRÉSTIMOS) - readonly
-                        else if (rubrica.nome === 'EMPRÉSTIMOS' && loanData) {
+                        // Auto-fill loans (Empréstimos) - readonly
+                        else if (rubrica.nome === 'Empréstimos' && loanData) {
                             // loanData.valor is already a float with correct decimal places
                             // Convert to cents by multiplying by 100 for formatCurrency
                             defaultValue = Math.round(loanData.valor * 100);
@@ -410,7 +410,7 @@ function createTotalsRow() {
     
     // First cell: "TOTAIS" label
     row.innerHTML = `
-        <td colspan="2" class="text-end"><strong>TOTAIS:</strong></td>
+        <td colspan="2" class="text-end"><strong>Totais:</strong></td>
     `;
     
     // Add a total cell for each rubrica
