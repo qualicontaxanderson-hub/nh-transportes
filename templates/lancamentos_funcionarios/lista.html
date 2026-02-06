@@ -86,6 +86,9 @@
                                 <a href="{{ url_for('lancamentos_funcionarios.detalhe', mes=lanc.mes, cliente_id=lanc.clienteid) }}" class="btn btn-sm btn-info" title="Ver Detalhes">
                                     <i class="bi bi-eye"></i> Detalhe
                                 </a>
+                                <a href="{{ url_for('lancamentos_funcionarios.editar', mes=lanc.mes, cliente_id=lanc.clienteid) }}" class="btn btn-sm btn-warning" title="Editar Lançamento">
+                                    <i class="bi bi-pencil"></i> Editar
+                                </a>
                             </td>
                         </tr>
                         {% else %}

@@ -307,19 +307,21 @@ def detalhe(mes, cliente_id):
     cursor = conn.cursor(dictionary=True)
     
     # Get all lancamentos for this month and client
+    # Using LEFT JOINs to handle both funcionarios and motoristas
     cursor.execute("""
         SELECT 
             l.*,
-            f.nome as funcionario_nome,
+            COALESCE(f.nome, m.nome) as funcionario_nome,
             r.nome as rubrica_nome,
             r.tipo as rubrica_tipo,
             v.caminhao
         FROM lancamentosfuncionarios_v2 l
-        INNER JOIN funcionarios f ON l.funcionarioid = f.id
+        LEFT JOIN funcionarios f ON l.funcionarioid = f.id
+        LEFT JOIN motoristas m ON l.funcionarioid = m.id
         INNER JOIN rubricas r ON l.rubricaid = r.id
         LEFT JOIN veiculos v ON l.caminhaoid = v.id
         WHERE l.mes = %s AND l.clienteid = %s
-        ORDER BY f.nome, r.ordem
+        ORDER BY COALESCE(f.nome, m.nome), r.ordem
     """, (mes, cliente_id))
     lancamentos = cursor.fetchall()
     
@@ -352,3 +354,95 @@ def detalhe(mes, cliente_id):
                          mes=mes,
                          cliente=cliente,
                          funcionarios_data=funcionarios_data)
+
+@bp.route('/editar/<mes>/<int:cliente_id>', methods=['GET', 'POST'])
+@login_required
+@admin_required
+def editar(mes, cliente_id):
+    """Edit existing payroll entries for a specific month and client"""
+    if request.method == 'POST':
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        mes_form = request.form.get('mes')
+        clienteid = request.form.get('clienteid')
+        
+        # Process each employee's data
+        funcionarios_ids = request.form.getlist('funcionarioid[]')
+        
+        for func_id in funcionarios_ids:
+            # Get all rubrica values for this employee
+            rubricas = request.form.getlist(f'rubrica_{func_id}[]')
+            valores = request.form.getlist(f'valor_{func_id}[]')
+            
+            for i, rubricaid in enumerate(rubricas):
+                if rubricaid and valores[i]:
+                    valor = float(valores[i]) if valores[i] else 0
+                    if valor != 0:
+                        cursor.execute("""
+                            INSERT INTO lancamentosfuncionarios_v2 (
+                                clienteid, funcionarioid, mes, rubricaid, valor, 
+                                statuslancamento
+                            ) VALUES (%s, %s, %s, %s, %s, %s)
+                            ON DUPLICATE KEY UPDATE 
+                                valor = VALUES(valor),
+                                atualizadoem = CURRENT_TIMESTAMP
+                        """, (
+                            clienteid,
+                            func_id,
+                            mes_form,
+                            rubricaid,
+                            valor,
+                            'PENDENTE'
+                        ))
+        
+        conn.commit()
+        cursor.close()
+        conn.close()
+        flash('Lançamentos atualizados com sucesso!', 'success')
+        return redirect(url_for('lancamentos_funcionarios.lista'))
+    
+    # GET request - show form with existing data
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    
+    # Get clientes - only those with products configured
+    cursor.execute("""
+        SELECT DISTINCT c.id, c.razao_social as nome 
+        FROM clientes c
+        INNER JOIN cliente_produtos cp ON c.id = cp.cliente_id
+        WHERE cp.ativo = 1
+        ORDER BY c.razao_social
+    """)
+    clientes = cursor.fetchall()
+    
+    # Get all rubricas
+    cursor.execute("SELECT * FROM rubricas WHERE ativo = 1 ORDER BY ordem, nome")
+    rubricas = cursor.fetchall()
+    
+    # Get existing lancamentos for this month and client
+    cursor.execute("""
+        SELECT funcionarioid, rubricaid, valor
+        FROM lancamentosfuncionarios_v2
+        WHERE mes = %s AND clienteid = %s
+    """, (mes, cliente_id))
+    lancamentos_existentes = cursor.fetchall()
+    
+    # Convert to dict for easy lookup: {funcionario_id: {rubrica_id: valor}}
+    valores_existentes = {}
+    for lanc in lancamentos_existentes:
+        func_id = lanc['funcionarioid']
+        if func_id not in valores_existentes:
+            valores_existentes[func_id] = {}
+        valores_existentes[func_id][lanc['rubricaid']] = float(lanc['valor'])
+    
+    cursor.close()
+    conn.close()
+    
+    return render_template('lancamentos_funcionarios/novo.html', 
+                         mes_padrao=mes,
+                         cliente_selecionado=cliente_id,
+                         clientes=clientes,
+                         rubricas=rubricas,
+                         valores_existentes=valores_existentes,
+                         modo_edicao=True)
