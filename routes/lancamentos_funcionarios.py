@@ -303,6 +303,9 @@ def get_veiculos(funcionario_id):
 @login_required
 def detalhe(mes, cliente_id):
     """Show detailed view of payroll entries for a specific month and client"""
+    # Convert mes from URL format (01-2026) to database format (01/2026)
+    mes = mes.replace('-', '/')
+    
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
     
@@ -360,6 +363,9 @@ def detalhe(mes, cliente_id):
 @admin_required
 def editar(mes, cliente_id):
     """Edit existing payroll entries for a specific month and client"""
+    # Convert mes from URL format (01-2026) to database format (01/2026)
+    mes = mes.replace('-', '/')
+    
     if request.method == 'POST':
         conn = get_db_connection()
         cursor = conn.cursor()
