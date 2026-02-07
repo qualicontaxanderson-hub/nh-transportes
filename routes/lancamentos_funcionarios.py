@@ -532,3 +532,51 @@ def editar(mes, cliente_id):
                          rubricas=rubricas,
                          valores_existentes=valores_existentes,
                          modo_edicao=True)
+
+
+@bp.route('/admin/limpar-comissoes-frentistas', methods=['POST'])
+@login_required
+@admin_required
+def limpar_comissoes_frentistas():
+    """
+    Rota administrativa para limpar comissões incorretas de frentistas do banco de dados.
+    Remove todos os lançamentos de comissões para funcionários que não são motoristas.
+    """
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+        
+        # First, count how many will be affected
+        cursor.execute("""
+            SELECT COUNT(*) as total
+            FROM lancamentosfuncionarios_v2
+            WHERE rubricaid IN (SELECT id FROM rubricas WHERE nome IN ('Comissão', 'Comissão / Aj. Custo'))
+            AND funcionarioid NOT IN (SELECT id FROM motoristas)
+        """)
+        count_before = cursor.fetchone()['total']
+        
+        # Delete commissions for non-motoristas
+        cursor.execute("""
+            DELETE FROM lancamentosfuncionarios_v2
+            WHERE rubricaid IN (SELECT id FROM rubricas WHERE nome IN ('Comissão', 'Comissão / Aj. Custo'))
+            AND funcionarioid NOT IN (SELECT id FROM motoristas)
+        """)
+        
+        conn.commit()
+        deleted_count = cursor.rowcount
+        
+        cursor.close()
+        conn.close()
+        
+        return jsonify({
+            'success': True,
+            'message': f'Limpeza concluída com sucesso!',
+            'registros_esperados': count_before,
+            'registros_deletados': deleted_count
+        }), 200
+        
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
