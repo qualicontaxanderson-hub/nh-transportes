@@ -466,9 +466,13 @@ def editar(mes, cliente_id):
             valores = request.form.getlist(f'valor_{func_id}[]')
             
             for i, rubricaid in enumerate(rubricas):
-                if rubricaid and valores[i]:
-                    valor = float(valores[i]) if valores[i] else 0
+                if rubricaid:
+                    # Convert valor to float, treating empty string as 0
+                    valor_str = valores[i] if i < len(valores) else ''
+                    valor = float(valor_str) if valor_str else 0
+                    
                     if valor != 0:
+                        # Insert or update the value
                         cursor.execute("""
                             INSERT INTO lancamentosfuncionarios_v2 (
                                 clienteid, funcionarioid, mes, rubricaid, valor, 
@@ -484,6 +488,20 @@ def editar(mes, cliente_id):
                             rubricaid,
                             valor,
                             'PENDENTE'
+                        ))
+                    else:
+                        # If valor is 0 or empty, DELETE the record to truly remove it
+                        cursor.execute("""
+                            DELETE FROM lancamentosfuncionarios_v2
+                            WHERE clienteid = %s 
+                              AND funcionarioid = %s 
+                              AND mes = %s 
+                              AND rubricaid = %s
+                        """, (
+                            clienteid,
+                            func_id,
+                            mes_form,
+                            rubricaid
                         ))
         
         conn.commit()
