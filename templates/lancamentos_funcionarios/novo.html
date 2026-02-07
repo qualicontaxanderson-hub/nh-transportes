@@ -309,25 +309,18 @@ function checkAndLoadFuncionarios() {
                         let cellContent = '';
                         let isReadonly = false;
                         
-                        // Check for existing values in edit mode
-                        if (modoEdicao && valoresExistentes[func.id] && valoresExistentes[func.id][rubrica.id]) {
-                            // Convert from float to cents for formatCurrency (multiply by 100)
-                            defaultValue = Math.round(valoresExistentes[func.id][rubrica.id] * 100);
-                        }
-                        // Auto-fill salary base
-                        else if (rubrica.nome === 'SALÁRIO BASE' && func.salario_base) {
-                            defaultValue = func.salario_base;
-                        }
-                        // Auto-fill commission for motoristas (readonly)
+                        // PRIORITY 1: Auto-fill commission for motoristas (readonly)
+                        // Always recalculate from comissoesData, even in edit mode
                         // Accept both old name 'Comissão' and new name 'Comissão / Aj. Custo'
-                        else if ((rubrica.nome === 'Comissão' || rubrica.nome === 'Comissão / Aj. Custo') && isMotorista) {
+                        if ((rubrica.nome === 'Comissão' || rubrica.nome === 'Comissão / Aj. Custo') && isMotorista) {
                             if (comissaoValue) {
                                 // Convert from float to cents for formatCurrency (multiply by 100)
                                 defaultValue = Math.round(comissaoValue * 100);
                             }
                             isReadonly = true; // Motoristas cannot edit commission
                         }
-                        // Auto-fill loans (Empréstimos) - readonly
+                        // PRIORITY 2: Auto-fill loans (Empréstimos) - readonly
+                        // Always recalculate from emprestimosData, even in edit mode
                         // Accept both old name 'EMPRÉSTIMOS' and new name 'Empréstimos'
                         else if ((rubrica.nome === 'EMPRÉSTIMOS' || rubrica.nome === 'Empréstimos') && loanData) {
                             // loanData.valor is already a float with correct decimal places
@@ -335,6 +328,15 @@ function checkAndLoadFuncionarios() {
                             defaultValue = Math.round(loanData.valor * 100);
                             cellContent = `<small class="text-muted d-block">Parcela: ${loanData.info}</small>`;
                             isReadonly = true; // Loans are always readonly (calculated from emprestimos)
+                        }
+                        // PRIORITY 3: Check for existing values in edit mode (for other rubricas)
+                        else if (modoEdicao && valoresExistentes[func.id] && valoresExistentes[func.id][rubrica.id]) {
+                            // Convert from float to cents for formatCurrency (multiply by 100)
+                            defaultValue = Math.round(valoresExistentes[func.id][rubrica.id] * 100);
+                        }
+                        // PRIORITY 4: Auto-fill salary base
+                        else if (rubrica.nome === 'SALÁRIO BASE' && func.salario_base) {
+                            defaultValue = func.salario_base;
                         }
                         
                         return `
