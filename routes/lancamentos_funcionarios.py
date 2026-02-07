@@ -541,25 +541,30 @@ def limpar_comissoes_frentistas():
     """
     Rota administrativa para limpar comissões incorretas de frentistas do banco de dados.
     Remove todos os lançamentos de comissões para funcionários que não são motoristas.
+    
+    IMPORTANTE: Funcionários estão na tabela 'funcionarios', motoristas na tabela 'motoristas'.
+    Comissões devem existir APENAS para IDs que estão na tabela 'motoristas'.
     """
     try:
         conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)
         
         # First, count how many will be affected
+        # Query corrigida: verifica se funcionarioid está na tabela 'funcionarios'
         cursor.execute("""
             SELECT COUNT(*) as total
             FROM lancamentosfuncionarios_v2
             WHERE rubricaid IN (SELECT id FROM rubricas WHERE nome IN ('Comissão', 'Comissão / Aj. Custo'))
-            AND funcionarioid NOT IN (SELECT id FROM motoristas)
+            AND funcionarioid IN (SELECT id FROM funcionarios)
         """)
         count_before = cursor.fetchone()['total']
         
-        # Delete commissions for non-motoristas
+        # Delete commissions for funcionarios (non-motoristas)
+        # Query corrigida: deleta se funcionarioid está na tabela 'funcionarios'
         cursor.execute("""
             DELETE FROM lancamentosfuncionarios_v2
             WHERE rubricaid IN (SELECT id FROM rubricas WHERE nome IN ('Comissão', 'Comissão / Aj. Custo'))
-            AND funcionarioid NOT IN (SELECT id FROM motoristas)
+            AND funcionarioid IN (SELECT id FROM funcionarios)
         """)
         
         conn.commit()
