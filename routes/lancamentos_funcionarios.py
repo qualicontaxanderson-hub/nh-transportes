@@ -328,9 +328,13 @@ def detalhe(mes, cliente_id):
     """, (mes, cliente_id))
     lancamentos = cursor.fetchall()
     
-    # Get list of motorista IDs (to filter commissions)
-    cursor.execute("SELECT id FROM motoristas")
-    motorista_ids = {row['id'] for row in cursor.fetchall()}
+    # Get list of motoristas with their info
+    cursor.execute("SELECT id, nome FROM motoristas")
+    motoristas = {row['id']: row['nome'] for row in cursor.fetchall()}
+    
+    # Get commission rubrica
+    cursor.execute("SELECT id, nome FROM rubricas WHERE nome IN ('Comissão', 'Comissão / Aj. Custo') LIMIT 1")
+    rubrica_comissao = cursor.fetchone()
     
     # Get client name
     cursor.execute("SELECT razao_social as nome FROM clientes WHERE id = %s", (cliente_id,))
@@ -341,16 +345,70 @@ def detalhe(mes, cliente_id):
     
     # Filter out commissions for non-motoristas
     lancamentos_filtrados = []
+    motoristas_com_lancamentos = set()
+    
     for lanc in lancamentos:
+        func_id = lanc['funcionarioid']
+        motoristas_com_lancamentos.add(func_id)
+        
         # Check if this is a commission rubrica
         rubrica_nome = lanc.get('rubrica_nome', '')
         is_comissao = rubrica_nome in ['Comissão', 'Comissão / Aj. Custo']
         
         # Only exclude if it's a commission AND funcionario is not a motorista
-        if is_comissao and lanc['funcionarioid'] not in motorista_ids:
-            continue  # Skip this lancamento
+        if is_comissao and func_id not in motoristas:
+            continue  # Skip this lancamento (commission for non-motorista)
         
         lancamentos_filtrados.append(lanc)
+    
+    # Add commission entries for motoristas that don't have any lancamentos yet
+    # This handles the case where motoristas should have commissions but they weren't saved
+    if rubrica_comissao:
+        # Get commissions from API
+        try:
+            from datetime import datetime
+            mes_date = datetime.strptime(mes, '%m/%Y')
+            mes_formatted = mes_date.strftime('%m/%Y')
+            
+            # Import here to avoid circular dependency
+            import requests
+            from flask import url_for, request
+            
+            # Build API URL
+            api_url = url_for('lancamentos_funcionarios.get_comissoes_motoristas', 
+                            cliente_id=cliente_id, mes=mes_formatted, _external=False)
+            
+            # Get base URL from request
+            base_url = request.url_root.rstrip('/')
+            full_url = base_url + api_url
+            
+            response = requests.get(full_url)
+            if response.status_code == 200:
+                comissoes_data = response.json()
+                
+                # Add commission entries for motoristas not in lancamentos
+                for motorista_id, comissao_valor in comissoes_data.items():
+                    motorista_id_int = int(motorista_id)
+                    if motorista_id_int not in motoristas_com_lancamentos and comissao_valor > 0:
+                        # Create a lancamento entry for this commission
+                        lancamento_comissao = {
+                            'funcionarioid': motorista_id_int,
+                            'funcionario_nome': motoristas.get(motorista_id_int, f'Motorista {motorista_id}'),
+                            'rubricaid': rubrica_comissao['id'],
+                            'rubrica_nome': rubrica_comissao['nome'],
+                            'rubrica_tipo': 'PROVENTO',
+                            'valor': comissao_valor,
+                            'mes': mes,
+                            'clienteid': cliente_id,
+                            'statuslancamento': 'PENDENTE',
+                            'caminhao': None,
+                            'caminhaoid': None
+                        }
+                        lancamentos_filtrados.append(lancamento_comissao)
+        except Exception as e:
+            # If API call fails, just continue with filtered lancamentos
+            print(f"Warning: Could not fetch commissions from API: {e}")
+            pass
     
     lancamentos = lancamentos_filtrados
     
