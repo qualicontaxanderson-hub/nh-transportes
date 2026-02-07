@@ -328,12 +328,31 @@ def detalhe(mes, cliente_id):
     """, (mes, cliente_id))
     lancamentos = cursor.fetchall()
     
+    # Get list of motorista IDs (to filter commissions)
+    cursor.execute("SELECT id FROM motoristas")
+    motorista_ids = {row['id'] for row in cursor.fetchall()}
+    
     # Get client name
     cursor.execute("SELECT razao_social as nome FROM clientes WHERE id = %s", (cliente_id,))
     cliente = cursor.fetchone()
     
     cursor.close()
     conn.close()
+    
+    # Filter out commissions for non-motoristas
+    lancamentos_filtrados = []
+    for lanc in lancamentos:
+        # Check if this is a commission rubrica
+        rubrica_nome = lanc.get('rubrica_nome', '')
+        is_comissao = rubrica_nome in ['Comissão', 'Comissão / Aj. Custo']
+        
+        # Only exclude if it's a commission AND funcionario is not a motorista
+        if is_comissao and lanc['funcionarioid'] not in motorista_ids:
+            continue  # Skip this lancamento
+        
+        lancamentos_filtrados.append(lanc)
+    
+    lancamentos = lancamentos_filtrados
     
     # Group by employee
     funcionarios_data = {}
