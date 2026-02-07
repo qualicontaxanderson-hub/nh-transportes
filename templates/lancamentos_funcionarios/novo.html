@@ -330,9 +330,17 @@ function checkAndLoadFuncionarios() {
                             isReadonly = true; // Loans are always readonly (calculated from emprestimos)
                         }
                         // PRIORITY 3: Check for existing values in edit mode (for other rubricas)
+                        // IMPORTANT: Skip commission and loans - they are handled in PRIORITY 1 and 2
                         else if (modoEdicao && valoresExistentes[func.id] && valoresExistentes[func.id][rubrica.id]) {
-                            // Convert from float to cents for formatCurrency (multiply by 100)
-                            defaultValue = Math.round(valoresExistentes[func.id][rubrica.id] * 100);
+                            // Check if this is commission or loan rubrica
+                            const isComissao = (rubrica.nome === 'Comissão' || rubrica.nome === 'Comissão / Aj. Custo');
+                            const isEmprestimo = (rubrica.nome === 'EMPRÉSTIMOS' || rubrica.nome === 'Empréstimos');
+                            
+                            // Only use existing values for regular rubricas (not commission or loans)
+                            if (!isComissao && !isEmprestimo) {
+                                // Convert from float to cents for formatCurrency (multiply by 100)
+                                defaultValue = Math.round(valoresExistentes[func.id][rubrica.id] * 100);
+                            }
                         }
                         // PRIORITY 4: Auto-fill salary base
                         else if (rubrica.nome === 'SALÁRIO BASE' && func.salario_base) {
