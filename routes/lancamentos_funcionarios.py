@@ -349,7 +349,6 @@ def detalhe(mes, cliente_id):
     
     for lanc in lancamentos:
         func_id = lanc['funcionarioid']
-        motoristas_com_lancamentos.add(func_id)
         
         # Check if this is a commission rubrica
         rubrica_nome = lanc.get('rubrica_nome', '')
@@ -358,6 +357,10 @@ def detalhe(mes, cliente_id):
         # Only exclude if it's a commission AND funcionario is not a motorista
         if is_comissao and func_id not in motoristas:
             continue  # Skip this lancamento (commission for non-motorista)
+        
+        # Track motoristas that already have lancamentos (only motoristas!)
+        if func_id in motoristas:
+            motoristas_com_lancamentos.add(func_id)
         
         lancamentos_filtrados.append(lanc)
     
