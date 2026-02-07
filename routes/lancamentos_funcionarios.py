@@ -378,7 +378,7 @@ def detalhe(mes, cliente_id):
             from flask import url_for, request
             
             # Build API URL
-            api_url = url_for('lancamentos_funcionarios.get_comissoes_motoristas', 
+            api_url = url_for('lancamentos_funcionarios.get_comissoes', 
                             cliente_id=cliente_id, mes=mes_formatted, _external=False)
             
             # Get base URL from request
