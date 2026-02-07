@@ -415,6 +415,10 @@ def detalhe(mes, cliente_id):
     
     lancamentos = lancamentos_filtrados
     
+    # Sort lancamentos by funcionarioid for consistent ordering
+    # This ensures that each employee's data is grouped correctly
+    lancamentos.sort(key=lambda x: x['funcionarioid'])
+    
     # Group by employee
     funcionarios_data = {}
     for lanc in lancamentos:

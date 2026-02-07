@@ -330,14 +330,19 @@ function checkAndLoadFuncionarios() {
                             isReadonly = true; // Loans are always readonly (calculated from emprestimos)
                         }
                         // PRIORITY 3: Check for existing values in edit mode (for other rubricas)
-                        // IMPORTANT: Skip commission and loans - they are handled in PRIORITY 1 and 2
+                        // IMPORTANT: Skip commission for motoristas and loans - they are handled in PRIORITY 1 and 2
                         else if (modoEdicao && valoresExistentes[func.id] && valoresExistentes[func.id][rubrica.id]) {
                             // Check if this is commission or loan rubrica
                             const isComissao = (rubrica.nome === 'Comissão' || rubrica.nome === 'Comissão / Aj. Custo');
                             const isEmprestimo = (rubrica.nome === 'EMPRÉSTIMOS' || rubrica.nome === 'Empréstimos');
                             
-                            // Only use existing values for regular rubricas (not commission or loans)
-                            if (!isComissao && !isEmprestimo) {
+                            // For commission: allow for non-motoristas (manual commission), block for motoristas (auto-calculated)
+                            if (isComissao && !isMotorista) {
+                                // Allow manual commission for non-motoristas
+                                defaultValue = Math.round(valoresExistentes[func.id][rubrica.id] * 100);
+                            }
+                            // For other rubricas: always allow (except loans which are in PRIORITY 2)
+                            else if (!isComissao && !isEmprestimo) {
                                 // Convert from float to cents for formatCurrency (multiply by 100)
                                 defaultValue = Math.round(valoresExistentes[func.id][rubrica.id] * 100);
                             }
