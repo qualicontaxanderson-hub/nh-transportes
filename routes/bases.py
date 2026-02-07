@@ -21,11 +21,14 @@ def safe_url(endpoint, **values):
 @bp.route('/', methods=['GET'])
 @login_required
 def index():
-    # Redirecionar usuários PISTA para sua página específica
+    # Redirecionar usuários PISTA e SUPERVISOR para suas páginas específicas
+    # SUPERVISOR não deve acessar a página inicial, vai direto para lançamentos_caixa
     if current_user.is_authenticated:
         nivel = getattr(current_user, 'nivel', '').strip().upper()
-        if nivel in ['PISTA', 'SUPERVISOR']:
+        if nivel == 'PISTA':
             return redirect(url_for('troco_pix.pista'))
+        if nivel == 'SUPERVISOR':
+            return redirect(url_for('lancamentos_caixa.lista'))
     
     # coletar métricas simples do banco (fallback para 0 em caso de erro)
     totals = {

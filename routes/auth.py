@@ -103,12 +103,19 @@ def login():
             login_user(user)
             flash('Autenticado com sucesso.', 'success')
             
-            # Redirecionar usuários PISTA diretamente para sua página
+            # Redirecionar usuários conforme o nível
             nivel = getattr(user, 'nivel', '').strip().upper()
-            if nivel in ['PISTA', 'SUPERVISOR']:
-                # Usuários PISTA e SUPERVISOR vão direto para o Troco Pix Pista
+            
+            # PISTA vai direto para Troco Pix Pista (funcionalidade limitada)
+            if nivel == 'PISTA':
                 return redirect(url_for('troco_pix.pista'))
             
+            # SUPERVISOR vai direto para Lançamentos de Caixa (seu módulo principal)
+            # Pode acessar: caixa, cartões, tipos_receita, quilometragem, arla, posto, troco_pix, etc.
+            if nivel == 'SUPERVISOR':
+                return redirect(url_for('lancamentos_caixa.lista'))
+            
+            # ADMIN, GERENTE e outros vão para página solicitada ou index
             next_url = request.args.get('next') or url_for('index')
             return redirect(next_url)
         else:
@@ -159,6 +166,9 @@ def criar_usuario():
         senha = request.form.get('senha')
         confirmar_senha = request.form.get('confirmar_senha')
         
+        # Para SUPERVISOR, pegar múltiplas empresas
+        empresas_ids = request.form.getlist('empresas_ids[]') if nivel == 'SUPERVISOR' else []
+        
         # Validações
         if not username or not nome_completo or not senha:
             flash('Todos os campos obrigatórios devem ser preenchidos.', 'danger')
@@ -168,19 +178,26 @@ def criar_usuario():
             flash('As senhas não coincidem.', 'danger')
         elif nivel == 'PISTA' and not cliente_id:
             flash('Usuários PISTA devem ter um posto/cliente associado.', 'danger')
+        elif nivel == 'SUPERVISOR' and not empresas_ids:
+            flash('Usuários SUPERVISOR devem ter pelo menos uma empresa associada.', 'danger')
         else:
             try:
                 # Se não é PISTA, cliente_id deve ser None
                 if nivel != 'PISTA':
                     cliente_id = None
                 
-                Usuario.criar_usuario(username, nome_completo, nivel, senha, cliente_id)
+                user_id = Usuario.criar_usuario(username, nome_completo, nivel, senha, cliente_id)
+                
+                # Se é SUPERVISOR, associar empresas
+                if nivel == 'SUPERVISOR' and empresas_ids:
+                    Usuario.set_empresas_usuario(user_id, empresas_ids)
+                
                 flash(f'Usuário {username} criado com sucesso!', 'success')
                 return redirect(url_for('auth.listar_usuarios'))
             except Exception as e:
                 flash(f'Erro ao criar usuário: {str(e)}', 'danger')
     
-    # Buscar lista de clientes para o dropdown
+    # Buscar lista de clientes para o dropdown (PISTA)
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
     cursor.execute("SELECT id, razao_social FROM clientes ORDER BY razao_social")
@@ -188,7 +205,12 @@ def criar_usuario():
     cursor.close()
     conn.close()
     
-    return render_template('auth/usuarios/novo.html', clientes=clientes)
+    # Buscar empresas com produtos posto (SUPERVISOR)
+    empresas_posto = Usuario.get_clientes_produtos_posto()
+    
+    return render_template('auth/usuarios/novo.html', 
+                         clientes=clientes, 
+                         empresas_posto=empresas_posto)
 
 @bp.route('/usuarios/<int:user_id>/editar', methods=['GET', 'POST'])
 @admin_required
@@ -224,6 +246,9 @@ def editar_usuario(user_id):
             senha = request.form.get('senha')
             confirmar_senha = request.form.get('confirmar_senha')
             
+            # Para SUPERVISOR, pegar múltiplas empresas
+            empresas_ids = request.form.getlist('empresas_ids[]') if nivel == 'SUPERVISOR' else []
+            
             # Validações
             if not username or not nome_completo:
                 flash('Usuário e nome completo são obrigatórios.', 'danger')
@@ -231,6 +256,8 @@ def editar_usuario(user_id):
                 flash('Este nome de usuário já existe.', 'danger')
             elif nivel == 'PISTA' and not cliente_id:
                 flash('Usuários PISTA devem ter um posto/cliente associado.', 'danger')
+            elif nivel == 'SUPERVISOR' and not empresas_ids:
+                flash('Usuários SUPERVISOR devem ter pelo menos uma empresa associada.', 'danger')
             elif senha and senha != confirmar_senha:
                 flash('As senhas não coincidem.', 'danger')
             else:
@@ -243,6 +270,13 @@ def editar_usuario(user_id):
                     if user:
                         user.atualizar(username=username, nome_completo=nome_completo, 
                                      nivel=nivel, cliente_id=cliente_id)
+                        
+                        # Se é SUPERVISOR, atualizar empresas associadas
+                        if nivel == 'SUPERVISOR':
+                            Usuario.set_empresas_usuario(user_id, empresas_ids)
+                        else:
+                            # Se mudou de SUPERVISOR para outro nível, limpar associações
+                            Usuario.set_empresas_usuario(user_id, [])
                         
                         # Se forneceu senha, atualiza
                         if senha:
@@ -268,9 +302,20 @@ def editar_usuario(user_id):
             logger.error(f"[EDITAR] Erro ao buscar clientes: {str(e)}", exc_info=True)
             clientes = []
         
+        # Buscar empresas com produtos posto (SUPERVISOR)
+        empresas_posto = Usuario.get_clientes_produtos_posto()
+        
+        # Buscar empresas já associadas ao usuário SUPERVISOR
+        empresas_selecionadas = Usuario.get_empresas_usuario(user_id)
+        empresas_selecionadas_ids = [e['id'] for e in empresas_selecionadas]
+        
         try:
             logger.info("[EDITAR] Renderizando template de edição...")
-            return render_template('auth/usuarios/editar.html', usuario=user_data, clientes=clientes)
+            return render_template('auth/usuarios/editar.html', 
+                                 usuario=user_data, 
+                                 clientes=clientes,
+                                 empresas_posto=empresas_posto,
+                                 empresas_selecionadas_ids=empresas_selecionadas_ids)
         except Exception as e:
             logger.error(f"[EDITAR] Erro ao renderizar template: {str(e)}", exc_info=True)
             flash(f'Erro ao carregar página de edição: {str(e)}', 'danger')

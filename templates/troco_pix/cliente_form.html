@@ -113,6 +113,8 @@ document.addEventListener('DOMContentLoaded', function() {
     const tipoChaveSelect = document.getElementById('tipo_chave_pix');
     const chaveInput = document.getElementById('chave_pix');
     const chaveHint = document.getElementById('chave_hint');
+    const nomeInput = document.getElementById('nome_completo');
+    const form = document.querySelector('form');
 
     // Atualizar placeholder e dica baseado no tipo de chave
     tipoChaveSelect.addEventListener('change', function() {
@@ -148,6 +150,32 @@ document.addEventListener('DOMContentLoaded', function() {
         if (tipoChaveSelect.value === 'CPF' || tipoChaveSelect.value === 'CNPJ' || tipoChaveSelect.value === 'TELEFONE') {
             // Remove tudo que não é número
             this.value = this.value.replace(/\D/g, '');
+        }
+    });
+
+    // Remover espaços em branco no início e final antes de submeter
+    form.addEventListener('submit', function(e) {
+        // Remove espaços do nome completo
+        if (nomeInput.value) {
+            nomeInput.value = nomeInput.value.trim();
+        }
+        
+        // Remove espaços da chave PIX
+        if (chaveInput.value) {
+            chaveInput.value = chaveInput.value.trim();
+        }
+    });
+
+    // Remover espaços ao perder o foco (blur) - feedback imediato
+    nomeInput.addEventListener('blur', function() {
+        if (this.value) {
+            this.value = this.value.trim();
+        }
+    });
+
+    chaveInput.addEventListener('blur', function() {
+        if (this.value) {
+            this.value = this.value.trim();
         }
     });
 });

@@ -108,6 +108,9 @@ def novo():
                                 clienteid, funcionarioid, mes, rubricaid, valor, 
                                 statuslancamento
                             ) VALUES (%s, %s, %s, %s, %s, %s)
+                            ON DUPLICATE KEY UPDATE 
+                                valor = VALUES(valor),
+                                atualizadoem = CURRENT_TIMESTAMP
                         """, (
                             clienteid,
                             func_id,
@@ -120,7 +123,7 @@ def novo():
         conn.commit()
         cursor.close()
         conn.close()
-        flash('Lançamentos criados com sucesso!', 'success')
+        flash('Lançamentos salvos com sucesso! Valores existentes foram atualizados.', 'success')
         return redirect(url_for('lancamentos_funcionarios.lista'))
     
     # GET request - show form
@@ -300,25 +303,38 @@ def get_veiculos(funcionario_id):
 @login_required
 def detalhe(mes, cliente_id):
     """Show detailed view of payroll entries for a specific month and client"""
+    # Convert mes from URL format (01-2026) to database format (01/2026)
+    mes = mes.replace('-', '/')
+    
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
     
     # Get all lancamentos for this month and client
+    # Using LEFT JOINs to handle both funcionarios and motoristas
     cursor.execute("""
         SELECT 
             l.*,
-            f.nome as funcionario_nome,
+            COALESCE(f.nome, m.nome) as funcionario_nome,
             r.nome as rubrica_nome,
             r.tipo as rubrica_tipo,
             v.caminhao
         FROM lancamentosfuncionarios_v2 l
-        INNER JOIN funcionarios f ON l.funcionarioid = f.id
+        LEFT JOIN funcionarios f ON l.funcionarioid = f.id
+        LEFT JOIN motoristas m ON l.funcionarioid = m.id
         INNER JOIN rubricas r ON l.rubricaid = r.id
         LEFT JOIN veiculos v ON l.caminhaoid = v.id
         WHERE l.mes = %s AND l.clienteid = %s
-        ORDER BY f.nome, r.ordem
+        ORDER BY COALESCE(f.nome, m.nome), r.ordem
     """, (mes, cliente_id))
     lancamentos = cursor.fetchall()
+    
+    # Get list of motoristas with their info
+    cursor.execute("SELECT id, nome FROM motoristas")
+    motoristas = {row['id']: row['nome'] for row in cursor.fetchall()}
+    
+    # Get commission rubrica
+    cursor.execute("SELECT id, nome FROM rubricas WHERE nome IN ('Comissão', 'Comissão / Aj. Custo') LIMIT 1")
+    rubrica_comissao = cursor.fetchone()
     
     # Get client name
     cursor.execute("SELECT razao_social as nome FROM clientes WHERE id = %s", (cliente_id,))
@@ -326,6 +342,82 @@ def detalhe(mes, cliente_id):
     
     cursor.close()
     conn.close()
+    
+    # Filter out commissions for non-motoristas
+    lancamentos_filtrados = []
+    motoristas_com_lancamentos = set()
+    
+    for lanc in lancamentos:
+        func_id = lanc['funcionarioid']
+        
+        # Check if this is a commission rubrica
+        rubrica_nome = lanc.get('rubrica_nome', '')
+        is_comissao = rubrica_nome in ['Comissão', 'Comissão / Aj. Custo']
+        
+        # Only exclude if it's a commission AND funcionario is not a motorista
+        if is_comissao and func_id not in motoristas:
+            continue  # Skip this lancamento (commission for non-motorista)
+        
+        # Track motoristas that already have lancamentos (only motoristas!)
+        if func_id in motoristas:
+            motoristas_com_lancamentos.add(func_id)
+        
+        lancamentos_filtrados.append(lanc)
+    
+    # Add commission entries for motoristas that don't have any lancamentos yet
+    # This handles the case where motoristas should have commissions but they weren't saved
+    if rubrica_comissao:
+        # Get commissions from API
+        try:
+            from datetime import datetime
+            mes_date = datetime.strptime(mes, '%m/%Y')
+            mes_formatted = mes_date.strftime('%m/%Y')
+            
+            # Import here to avoid circular dependency
+            import requests
+            from flask import url_for, request
+            
+            # Build API URL
+            api_url = url_for('lancamentos_funcionarios.get_comissoes', 
+                            cliente_id=cliente_id, mes=mes_formatted, _external=False)
+            
+            # Get base URL from request
+            base_url = request.url_root.rstrip('/')
+            full_url = base_url + api_url
+            
+            response = requests.get(full_url)
+            if response.status_code == 200:
+                comissoes_data = response.json()
+                
+                # Add commission entries for motoristas not in lancamentos
+                for motorista_id, comissao_valor in comissoes_data.items():
+                    motorista_id_int = int(motorista_id)
+                    if motorista_id_int not in motoristas_com_lancamentos and comissao_valor > 0:
+                        # Create a lancamento entry for this commission
+                        lancamento_comissao = {
+                            'funcionarioid': motorista_id_int,
+                            'funcionario_nome': motoristas.get(motorista_id_int, f'Motorista {motorista_id}'),
+                            'rubricaid': rubrica_comissao['id'],
+                            'rubrica_nome': rubrica_comissao['nome'],
+                            'rubrica_tipo': 'PROVENTO',
+                            'valor': comissao_valor,
+                            'mes': mes,
+                            'clienteid': cliente_id,
+                            'statuslancamento': 'PENDENTE',
+                            'caminhao': None,
+                            'caminhaoid': None
+                        }
+                        lancamentos_filtrados.append(lancamento_comissao)
+        except Exception as e:
+            # If API call fails, just continue with filtered lancamentos
+            print(f"Warning: Could not fetch commissions from API: {e}")
+            pass
+    
+    lancamentos = lancamentos_filtrados
+    
+    # Sort lancamentos by funcionarioid for consistent ordering
+    # This ensures that each employee's data is grouped correctly
+    lancamentos.sort(key=lambda x: x['funcionarioid'])
     
     # Group by employee
     funcionarios_data = {}
@@ -349,3 +441,169 @@ def detalhe(mes, cliente_id):
                          mes=mes,
                          cliente=cliente,
                          funcionarios_data=funcionarios_data)
+
+@bp.route('/editar/<mes>/<int:cliente_id>', methods=['GET', 'POST'])
+@login_required
+@admin_required
+def editar(mes, cliente_id):
+    """Edit existing payroll entries for a specific month and client"""
+    # Convert mes from URL format (01-2026) to database format (01/2026)
+    mes = mes.replace('-', '/')
+    
+    if request.method == 'POST':
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        mes_form = request.form.get('mes')
+        clienteid = request.form.get('clienteid')
+        
+        # Process each employee's data
+        funcionarios_ids = request.form.getlist('funcionarioid[]')
+        
+        for func_id in funcionarios_ids:
+            # Get all rubrica values for this employee
+            rubricas = request.form.getlist(f'rubrica_{func_id}[]')
+            valores = request.form.getlist(f'valor_{func_id}[]')
+            
+            for i, rubricaid in enumerate(rubricas):
+                if rubricaid:
+                    # Convert valor to float, treating empty string as 0
+                    valor_str = valores[i] if i < len(valores) else ''
+                    valor = float(valor_str) if valor_str else 0
+                    
+                    if valor != 0:
+                        # Insert or update the value
+                        cursor.execute("""
+                            INSERT INTO lancamentosfuncionarios_v2 (
+                                clienteid, funcionarioid, mes, rubricaid, valor, 
+                                statuslancamento
+                            ) VALUES (%s, %s, %s, %s, %s, %s)
+                            ON DUPLICATE KEY UPDATE 
+                                valor = VALUES(valor),
+                                atualizadoem = CURRENT_TIMESTAMP
+                        """, (
+                            clienteid,
+                            func_id,
+                            mes_form,
+                            rubricaid,
+                            valor,
+                            'PENDENTE'
+                        ))
+                    else:
+                        # If valor is 0 or empty, DELETE the record to truly remove it
+                        cursor.execute("""
+                            DELETE FROM lancamentosfuncionarios_v2
+                            WHERE clienteid = %s 
+                              AND funcionarioid = %s 
+                              AND mes = %s 
+                              AND rubricaid = %s
+                        """, (
+                            clienteid,
+                            func_id,
+                            mes_form,
+                            rubricaid
+                        ))
+        
+        conn.commit()
+        cursor.close()
+        conn.close()
+        flash('Lançamentos atualizados com sucesso!', 'success')
+        return redirect(url_for('lancamentos_funcionarios.lista'))
+    
+    # GET request - show form with existing data
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    
+    # Get clientes - only those with products configured
+    cursor.execute("""
+        SELECT DISTINCT c.id, c.razao_social as nome 
+        FROM clientes c
+        INNER JOIN cliente_produtos cp ON c.id = cp.cliente_id
+        WHERE cp.ativo = 1
+        ORDER BY c.razao_social
+    """)
+    clientes = cursor.fetchall()
+    
+    # Get all rubricas
+    cursor.execute("SELECT * FROM rubricas WHERE ativo = 1 ORDER BY ordem, nome")
+    rubricas = cursor.fetchall()
+    
+    # Get existing lancamentos for this month and client
+    cursor.execute("""
+        SELECT funcionarioid, rubricaid, valor
+        FROM lancamentosfuncionarios_v2
+        WHERE mes = %s AND clienteid = %s
+    """, (mes, cliente_id))
+    lancamentos_existentes = cursor.fetchall()
+    
+    # Convert to dict for easy lookup: {funcionario_id: {rubrica_id: valor}}
+    valores_existentes = {}
+    for lanc in lancamentos_existentes:
+        func_id = lanc['funcionarioid']
+        if func_id not in valores_existentes:
+            valores_existentes[func_id] = {}
+        valores_existentes[func_id][lanc['rubricaid']] = float(lanc['valor'])
+    
+    cursor.close()
+    conn.close()
+    
+    return render_template('lancamentos_funcionarios/novo.html', 
+                         mes_padrao=mes,
+                         cliente_selecionado=cliente_id,
+                         clientes=clientes,
+                         rubricas=rubricas,
+                         valores_existentes=valores_existentes,
+                         modo_edicao=True)
+
+
+@bp.route('/admin/limpar-comissoes-frentistas', methods=['POST'])
+@login_required
+@admin_required
+def limpar_comissoes_frentistas():
+    """
+    Rota administrativa para limpar comissões incorretas de frentistas do banco de dados.
+    Remove todos os lançamentos de comissões para funcionários que não são motoristas.
+    
+    IMPORTANTE: Funcionários estão na tabela 'funcionarios', motoristas na tabela 'motoristas'.
+    Comissões devem existir APENAS para IDs que estão na tabela 'motoristas'.
+    """
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+        
+        # First, count how many will be affected
+        # Query corrigida: verifica se funcionarioid está na tabela 'funcionarios'
+        cursor.execute("""
+            SELECT COUNT(*) as total
+            FROM lancamentosfuncionarios_v2
+            WHERE rubricaid IN (SELECT id FROM rubricas WHERE nome IN ('Comissão', 'Comissão / Aj. Custo'))
+            AND funcionarioid IN (SELECT id FROM funcionarios)
+        """)
+        count_before = cursor.fetchone()['total']
+        
+        # Delete commissions for funcionarios (non-motoristas)
+        # Query corrigida: deleta se funcionarioid está na tabela 'funcionarios'
+        cursor.execute("""
+            DELETE FROM lancamentosfuncionarios_v2
+            WHERE rubricaid IN (SELECT id FROM rubricas WHERE nome IN ('Comissão', 'Comissão / Aj. Custo'))
+            AND funcionarioid IN (SELECT id FROM funcionarios)
+        """)
+        
+        conn.commit()
+        deleted_count = cursor.rowcount
+        
+        cursor.close()
+        conn.close()
+        
+        return jsonify({
+            'success': True,
+            'message': f'Limpeza concluída com sucesso!',
+            'registros_esperados': count_before,
+            'registros_deletados': deleted_count
+        }), 200
+        
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
