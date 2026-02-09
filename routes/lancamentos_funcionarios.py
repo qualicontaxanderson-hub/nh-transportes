@@ -32,17 +32,24 @@ def lista():
     mes_filtro = request.args.get('mes')
     cliente_filtro = request.args.get('clienteid')
     
-    # Build query
+    # Build query - now separated by category (FRENTISTAS vs MOTORISTAS)
     query = """
         SELECT 
             l.mes,
             l.clienteid,
             c.razao_social as cliente_nome,
+            CASE 
+                WHEN f.id IS NOT NULL THEN 'FRENTISTAS'
+                WHEN m.id IS NOT NULL THEN 'MOTORISTAS'
+                ELSE 'OUTROS'
+            END as categoria,
             COUNT(DISTINCT l.funcionarioid) as total_funcionarios,
             SUM(l.valor) as total_valor,
             l.statuslancamento
         FROM lancamentosfuncionarios_v2 l
         LEFT JOIN clientes c ON l.clienteid = c.id
+        LEFT JOIN funcionarios f ON l.funcionarioid = f.id
+        LEFT JOIN motoristas m ON l.funcionarioid = m.id
         WHERE 1=1
     """
     params = []
@@ -55,7 +62,7 @@ def lista():
         query += " AND l.clienteid = %s"
         params.append(cliente_filtro)
     
-    query += " GROUP BY l.mes, l.clienteid, l.statuslancamento ORDER BY l.mes DESC, c.razao_social"
+    query += " GROUP BY l.mes, l.clienteid, categoria, l.statuslancamento ORDER BY l.mes DESC, c.razao_social, categoria"
     
     cursor.execute(query, params)
     lancamentos = cursor.fetchall()
