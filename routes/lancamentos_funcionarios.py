@@ -39,8 +39,8 @@ def lista():
             l.clienteid,
             c.razao_social as cliente_nome,
             CASE 
-                WHEN MAX(f.id) IS NOT NULL THEN 'FRENTISTAS'
                 WHEN MAX(m.id) IS NOT NULL THEN 'MOTORISTAS'
+                WHEN MAX(f.id) IS NOT NULL THEN 'FRENTISTAS'
                 ELSE 'OUTROS'
             END as categoria,
             COUNT(DISTINCT l.funcionarioid) as total_funcionarios,
