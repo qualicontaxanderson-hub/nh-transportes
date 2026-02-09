@@ -33,36 +33,52 @@ def lista():
     cliente_filtro = request.args.get('clienteid')
     
     # Build query - now separated by category (FRENTISTAS vs MOTORISTAS)
-    query = """
-        SELECT 
-            l.mes,
-            l.clienteid,
-            c.razao_social as cliente_nome,
-            CASE 
-                WHEN MAX(m.id) IS NOT NULL THEN 'MOTORISTAS'
-                WHEN MAX(f.id) IS NOT NULL THEN 'FRENTISTAS'
-                ELSE 'OUTROS'
-            END as categoria,
-            COUNT(DISTINCT l.funcionarioid) as total_funcionarios,
-            SUM(l.valor) as total_valor,
-            l.statuslancamento
-        FROM lancamentosfuncionarios_v2 l
-        LEFT JOIN clientes c ON l.clienteid = c.id
-        LEFT JOIN funcionarios f ON l.funcionarioid = f.id
-        LEFT JOIN motoristas m ON l.funcionarioid = m.id
-        WHERE 1=1
-    """
+    # Build WHERE clause for subquery
+    where_conditions = ["1=1"]
     params = []
     
     if mes_filtro:
-        query += " AND l.mes = %s"
+        where_conditions.append("l.mes = %s")
         params.append(mes_filtro)
     
     if cliente_filtro:
-        query += " AND l.clienteid = %s"
+        where_conditions.append("l.clienteid = %s")
         params.append(cliente_filtro)
     
-    query += " GROUP BY l.mes, l.clienteid, categoria, l.statuslancamento ORDER BY l.mes DESC, c.razao_social, categoria"
+    where_clause = " AND ".join(where_conditions)
+    
+    # Use subquery to classify each employee individually BEFORE grouping
+    query = f"""
+        SELECT 
+            sub.mes,
+            sub.clienteid,
+            sub.cliente_nome,
+            sub.categoria,
+            COUNT(DISTINCT sub.funcionarioid) as total_funcionarios,
+            SUM(sub.valor) as total_valor,
+            sub.statuslancamento
+        FROM (
+            SELECT 
+                l.mes,
+                l.clienteid,
+                c.razao_social as cliente_nome,
+                l.funcionarioid,
+                CASE 
+                    WHEN m.id IS NOT NULL THEN 'MOTORISTAS'
+                    WHEN f.id IS NOT NULL THEN 'FRENTISTAS'
+                    ELSE 'OUTROS'
+                END as categoria,
+                l.valor,
+                l.statuslancamento
+            FROM lancamentosfuncionarios_v2 l
+            LEFT JOIN clientes c ON l.clienteid = c.id
+            LEFT JOIN funcionarios f ON l.funcionarioid = f.id
+            LEFT JOIN motoristas m ON l.funcionarioid = m.id
+            WHERE {where_clause}
+        ) as sub
+        GROUP BY sub.mes, sub.clienteid, sub.cliente_nome, sub.categoria, sub.statuslancamento
+        ORDER BY sub.mes DESC, sub.cliente_nome, sub.categoria
+    """
     
     cursor.execute(query, params)
     lancamentos = cursor.fetchall()
