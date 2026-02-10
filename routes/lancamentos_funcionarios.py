@@ -64,9 +64,8 @@ def lista():
                 c.razao_social as cliente_nome,
                 l.funcionarioid,
                 CASE 
-                    WHEN f.id IS NOT NULL AND f.categoria IS NOT NULL THEN f.categoria
+                    WHEN f.id IS NOT NULL THEN COALESCE(f.categoria, 'FRENTISTAS')
                     WHEN m.id IS NOT NULL THEN 'MOTORISTAS'
-                    WHEN f.id IS NOT NULL THEN 'FRENTISTAS'
                     ELSE 'OUTROS'
                 END as categoria,
                 l.valor,
