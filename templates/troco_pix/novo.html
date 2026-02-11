@@ -395,15 +395,14 @@ document.addEventListener('DOMContentLoaded', function() {
     document.querySelectorAll('.money-input').forEach(input => {
         // Formatar valor inicial APENAS se não estiver em modo de edição ou se o valor não tiver vírgula
         // Em modo de edição, os valores já vêm formatados do servidor
-        if (input.value && input.value.indexOf(',') === -1) {
-            // Valor não formatado (modo novo ou valor sem vírgula)
-            let valorInicial = desformatarReal(input.value);
-            input.value = formatarReal(valorInicial);
-            input.setAttribute('data-raw-value', valorInicial.toFixed(2));
-        } else if (input.value) {
-            // Valor já formatado (modo edição) - apenas salvar o valor bruto
+        if (input.value) {
             let valorInicial = desformatarReal(input.value);
             input.setAttribute('data-raw-value', valorInicial.toFixed(2));
+            
+            // Reformatar apenas se não tiver vírgula (modo novo)
+            if (!input.value.includes(',')) {
+                input.value = formatarReal(valorInicial);
+            }
         }
         
         // Evento de input para formatação em tempo real
