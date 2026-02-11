@@ -63,17 +63,12 @@ def lista():
                 l.clienteid,
                 c.razao_social as cliente_nome,
                 l.funcionarioid,
-                CASE 
-                    WHEN f.id IS NOT NULL THEN COALESCE(f.categoria, 'FRENTISTAS')
-                    WHEN m.id IS NOT NULL THEN 'MOTORISTAS'
-                    ELSE 'OUTROS'
-                END as categoria,
+                COALESCE(f.categoria, 'OUTROS') as categoria,
                 l.valor,
                 l.statuslancamento
             FROM lancamentosfuncionarios_v2 l
             LEFT JOIN clientes c ON l.clienteid = c.id
             LEFT JOIN funcionarios f ON l.funcionarioid = f.id
-            LEFT JOIN motoristas m ON l.funcionarioid = m.id
             WHERE {where_clause}
         ) as sub
         GROUP BY sub.mes, sub.clienteid, sub.cliente_nome, sub.categoria, sub.statuslancamento
