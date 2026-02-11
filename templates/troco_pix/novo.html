@@ -101,7 +101,7 @@
                                 <span class="input-group-text">R$</span>
                                 <input type="text" class="form-control venda-input money-input" 
                                        id="venda_abastecimento" name="venda_abastecimento"
-                                       value="{{ '%.2f'|format(transacao.venda_abastecimento or 0) if edit_mode else '0,00' }}"
+                                       value="{{ ('{:.2f}'.format(transacao.venda_abastecimento or 0).replace('.', ',')) if edit_mode else '0,00' }}"
                                        data-raw-value="{{ transacao.venda_abastecimento or 0 if edit_mode else 0 }}">
                             </div>
                         </div>
@@ -113,7 +113,7 @@
                                 <span class="input-group-text">R$</span>
                                 <input type="text" class="form-control venda-input money-input" 
                                        id="venda_arla" name="venda_arla"
-                                       value="{{ '%.2f'|format(transacao.venda_arla or 0) if edit_mode else '0,00' }}"
+                                       value="{{ ('{:.2f}'.format(transacao.venda_arla or 0).replace('.', ',')) if edit_mode else '0,00' }}"
                                        data-raw-value="{{ transacao.venda_arla or 0 if edit_mode else 0 }}">
                             </div>
                         </div>
@@ -125,7 +125,7 @@
                                 <span class="input-group-text">R$</span>
                                 <input type="text" class="form-control venda-input money-input" 
                                        id="venda_produtos" name="venda_produtos"
-                                       value="{{ '%.2f'|format(transacao.venda_produtos or 0) if edit_mode else '0,00' }}"
+                                       value="{{ ('{:.2f}'.format(transacao.venda_produtos or 0).replace('.', ',')) if edit_mode else '0,00' }}"
                                        data-raw-value="{{ transacao.venda_produtos or 0 if edit_mode else 0 }}">
                             </div>
                         </div>
@@ -172,7 +172,7 @@
                                 <span class="input-group-text">R$</span>
                                 <input type="text" class="form-control money-input" 
                                        id="cheque_valor" name="cheque_valor" required
-                                       value="{{ '%.2f'|format(transacao.cheque_valor or 0) if edit_mode else '' }}"
+                                       value="{{ ('{:.2f}'.format(transacao.cheque_valor or 0).replace('.', ',')) if edit_mode else '' }}"
                                        data-raw-value="{{ transacao.cheque_valor or 0 if edit_mode else 0 }}">
                             </div>
                         </div>
@@ -195,7 +195,7 @@
                                 <span class="input-group-text">R$</span>
                                 <input type="text" class="form-control troco-input money-input" 
                                        id="troco_especie" name="troco_especie"
-                                       value="{{ '%.2f'|format(transacao.troco_especie or 0) if edit_mode else '0,00' }}"
+                                       value="{{ ('{:.2f}'.format(transacao.troco_especie or 0).replace('.', ',')) if edit_mode else '0,00' }}"
                                        data-raw-value="{{ transacao.troco_especie or 0 if edit_mode else 0 }}">
                             </div>
                         </div>
@@ -207,7 +207,7 @@
                                 <span class="input-group-text">R$</span>
                                 <input type="text" class="form-control troco-input money-input" 
                                        id="troco_pix" name="troco_pix" readonly
-                                       value="{{ '%.2f'|format(transacao.troco_pix or 0) if edit_mode else '0,00' }}"
+                                       value="{{ ('{:.2f}'.format(transacao.troco_pix or 0).replace('.', ',')) if edit_mode else '0,00' }}"
                                        data-raw-value="{{ transacao.troco_pix or 0 if edit_mode else 0 }}"
                                        style="background-color: #e9ecef;">
                             </div>
@@ -221,7 +221,7 @@
                                 <span class="input-group-text">R$</span>
                                 <input type="text" class="form-control troco-input money-input" 
                                        id="troco_credito_vda_programada" name="troco_credito_vda_programada"
-                                       value="{{ '%.2f'|format(transacao.troco_credito_vda_programada or 0) if edit_mode else '0,00' }}"
+                                       value="{{ ('{:.2f}'.format(transacao.troco_credito_vda_programada or 0).replace('.', ',')) if edit_mode else '0,00' }}"
                                        data-raw-value="{{ transacao.troco_credito_vda_programada or 0 if edit_mode else 0 }}">
                             </div>
                         </div>
@@ -393,10 +393,16 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Adicionar evento de input para todos os campos monetários
     document.querySelectorAll('.money-input').forEach(input => {
-        // Formatar valor inicial
-        if (input.value) {
+        // Formatar valor inicial APENAS se não estiver em modo de edição ou se o valor não tiver vírgula
+        // Em modo de edição, os valores já vêm formatados do servidor
+        if (input.value && input.value.indexOf(',') === -1) {
+            // Valor não formatado (modo novo ou valor sem vírgula)
             let valorInicial = desformatarReal(input.value);
             input.value = formatarReal(valorInicial);
+            input.setAttribute('data-raw-value', valorInicial.toFixed(2));
+        } else if (input.value) {
+            // Valor já formatado (modo edição) - apenas salvar o valor bruto
+            let valorInicial = desformatarReal(input.value);
             input.setAttribute('data-raw-value', valorInicial.toFixed(2));
         }
         
