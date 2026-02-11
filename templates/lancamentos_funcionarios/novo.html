@@ -1,20 +1,20 @@
 {% extends 'base.html' %}
-{% block title %}Novo Lançamento de Funcionários - {{ app_name }}{% endblock %}
+{% block title %}{% if modo_edicao %}Editar{% else %}Novo{% endif %} Lançamento de Funcionários - {{ app_name }}{% endblock %}
 {% block content %}
 <div class="container-fluid">
     <nav aria-label="breadcrumb" class="mt-2 mb-3">
         <ol class="breadcrumb" style="font-size: 0.85rem;">
             <li class="breadcrumb-item"><a href="{{ url_for('index') }}">Dashboard</a></li>
             <li class="breadcrumb-item"><a href="{{ url_for('lancamentos_funcionarios.lista') }}">Lançamentos</a></li>
-            <li class="breadcrumb-item active" aria-current="page">Novo Lançamento</li>
+            <li class="breadcrumb-item active" aria-current="page">{% if modo_edicao %}Editar{% else %}Novo{% endif %} Lançamento</li>
         </ol>
     </nav>
     
-    <h2 class="mb-3" style="color:#1D63A5; font-size: 1.3rem;"><i class="bi bi-calendar-plus"></i> Novo Lançamento de Funcionários</h2>
+    <h2 class="mb-3" style="color:#1D63A5; font-size: 1.3rem;"><i class="bi bi-{% if modo_edicao %}pencil{% else %}calendar-plus{% endif %}"></i> {% if modo_edicao %}Editar{% else %}Novo{% endif %} Lançamento de Funcionários</h2>
     
     <div class="card shadow-sm">
-        <div class="card-header" style="background:#ff9800;color:white; font-size: 0.95rem; padding: 0.6rem 1rem;">
-            <h5 class="mb-0" style="font-size: 1rem;">Lançamento Mensal</h5>
+        <div class="card-header" style="background:{% if modo_edicao %}#ffc107{% else %}#ff9800{% endif %};color:white; font-size: 0.95rem; padding: 0.6rem 1rem;">
+            <h5 class="mb-0" style="font-size: 1rem;">{% if modo_edicao %}Editar {% endif %}Lançamento Mensal</h5>
         </div>
         <div class="card-body" style="padding: 1rem;">
             <form method="POST" id="lancamentoForm">
@@ -22,17 +22,20 @@
                 <div class="row mb-4">
                     <div class="col-md-3 mb-2">
                         <label class="form-label fw-bold" style="font-size: 0.85rem;">Mês/Ano de Referência *</label>
-                        <input type="text" name="mes" id="mes" class="form-control form-control-sm" value="{{ mes_padrao }}" placeholder="01/2026" required pattern="\d{2}/\d{4}" maxlength="7">
+                        <input type="text" name="mes" id="mes" class="form-control form-control-sm" value="{{ mes_padrao }}" placeholder="01/2026" required pattern="\d{2}/\d{4}" maxlength="7" {% if modo_edicao %}readonly{% endif %}>
                         <small class="text-muted">Digite: MMAAAA (ex: 012026)</small>
                     </div>
                     <div class="col-md-9 mb-2">
                         <label class="form-label fw-bold" style="font-size: 0.85rem;">Cliente/Empresa *</label>
-                        <select name="clienteid" id="clienteid" class="form-select form-select-sm" required>
+                        <select name="clienteid" id="clienteid" class="form-select form-select-sm" required {% if modo_edicao %}disabled{% endif %}>
                             <option value="">Selecione o cliente...</option>
                             {% for cliente in clientes %}
-                            <option value="{{ cliente.id }}">{{ cliente.nome }}</option>
+                            <option value="{{ cliente.id }}" {% if cliente_selecionado == cliente.id %}selected{% endif %}>{{ cliente.nome }}</option>
                             {% endfor %}
                         </select>
+                        {% if modo_edicao %}
+                        <input type="hidden" name="clienteid" value="{{ cliente_selecionado }}">
+                        {% endif %}
                     </div>
                 </div>
 
@@ -78,7 +81,7 @@
                                     {% for rubrica in rubricas %}
                                     <th style="min-width: 120px;">{{ rubrica.nome }}</th>
                                     {% endfor %}
-                                    <th style="min-width: 120px;">TOTAL</th>
+                                    <th style="min-width: 120px;">Total</th>
                                 </tr>
                             </thead>
                             <tbody id="funcionarios-tbody">
@@ -124,6 +127,8 @@
 
 <script>
 const rubricas = {{ rubricas|tojson|safe }};
+const valoresExistentes = {{ valores_existentes|tojson|safe if valores_existentes else '{}' }};
+const modoEdicao = {{ 'true' if modo_edicao else 'false' }};
 let comissoesData = {};
 let emprestimosData = {};
 
@@ -304,25 +309,47 @@ function checkAndLoadFuncionarios() {
                         let cellContent = '';
                         let isReadonly = false;
                         
-                        // Auto-fill salary base
-                        if (rubrica.nome === 'SALÁRIO BASE' && func.salario_base) {
-                            defaultValue = func.salario_base;
-                        }
-                        // Auto-fill commission for motoristas (readonly)
-                        else if (rubrica.nome === 'Comissão' && isMotorista) {
+                        // PRIORITY 1: Auto-fill commission for motoristas (readonly)
+                        // Always recalculate from comissoesData, even in edit mode
+                        // Accept both old name 'Comissão' and new name 'Comissão / Aj. Custo'
+                        if ((rubrica.nome === 'Comissão' || rubrica.nome === 'Comissão / Aj. Custo') && isMotorista) {
                             if (comissaoValue) {
                                 // Convert from float to cents for formatCurrency (multiply by 100)
                                 defaultValue = Math.round(comissaoValue * 100);
                             }
                             isReadonly = true; // Motoristas cannot edit commission
                         }
-                        // Auto-fill loans (EMPRÉSTIMOS) - readonly
-                        else if (rubrica.nome === 'EMPRÉSTIMOS' && loanData) {
+                        // PRIORITY 2: Auto-fill loans (Empréstimos) - readonly
+                        // Always recalculate from emprestimosData, even in edit mode
+                        // Accept both old name 'EMPRÉSTIMOS' and new name 'Empréstimos'
+                        else if ((rubrica.nome === 'EMPRÉSTIMOS' || rubrica.nome === 'Empréstimos') && loanData) {
                             // loanData.valor is already a float with correct decimal places
                             // Convert to cents by multiplying by 100 for formatCurrency
                             defaultValue = Math.round(loanData.valor * 100);
                             cellContent = `<small class="text-muted d-block">Parcela: ${loanData.info}</small>`;
                             isReadonly = true; // Loans are always readonly (calculated from emprestimos)
+                        }
+                        // PRIORITY 3: Check for existing values in edit mode (for other rubricas)
+                        // IMPORTANT: Skip commission for motoristas and loans - they are handled in PRIORITY 1 and 2
+                        else if (modoEdicao && valoresExistentes[func.id] && valoresExistentes[func.id][rubrica.id]) {
+                            // Check if this is commission or loan rubrica
+                            const isComissao = (rubrica.nome === 'Comissão' || rubrica.nome === 'Comissão / Aj. Custo');
+                            const isEmprestimo = (rubrica.nome === 'EMPRÉSTIMOS' || rubrica.nome === 'Empréstimos');
+                            
+                            // For commission: allow for non-motoristas (manual commission), block for motoristas (auto-calculated)
+                            if (isComissao && !isMotorista) {
+                                // Allow manual commission for non-motoristas
+                                defaultValue = Math.round(valoresExistentes[func.id][rubrica.id] * 100);
+                            }
+                            // For other rubricas: always allow (except loans which are in PRIORITY 2)
+                            else if (!isComissao && !isEmprestimo) {
+                                // Convert from float to cents for formatCurrency (multiply by 100)
+                                defaultValue = Math.round(valoresExistentes[func.id][rubrica.id] * 100);
+                            }
+                        }
+                        // PRIORITY 4: Auto-fill salary base
+                        else if (rubrica.nome === 'SALÁRIO BASE' && func.salario_base) {
+                            defaultValue = func.salario_base;
                         }
                         
                         return `
@@ -402,6 +429,14 @@ function checkAndLoadFuncionarios() {
 document.getElementById('clienteid').addEventListener('change', checkAndLoadFuncionarios);
 document.getElementById('mes').addEventListener('change', checkAndLoadFuncionarios);
 
+// In edit mode, automatically load funcionarios
+if (modoEdicao) {
+    const clienteSelect = document.getElementById('clienteid');
+    if (clienteSelect.value) {
+        checkAndLoadFuncionarios();
+    }
+}
+
 function createTotalsRow() {
     const tfoot = document.getElementById('funcionarios-tfoot');
     tfoot.innerHTML = '';
@@ -410,7 +445,7 @@ function createTotalsRow() {
     
     // First cell: "TOTAIS" label
     row.innerHTML = `
-        <td colspan="2" class="text-end"><strong>TOTAIS:</strong></td>
+        <td colspan="2" class="text-end"><strong>Totais:</strong></td>
     `;
     
     // Add a total cell for each rubrica
@@ -431,14 +466,13 @@ function createTotalsRow() {
 }
 
 function calculateTotals() {
-    // Calculate total for each funcionario
-    const funcionariosIds = [...new Set(
-        Array.from(document.querySelectorAll('.valor-input')).map(i => i.dataset.funcionario)
-    )];
+    // Get all rows in the tbody
+    const tbody = document.getElementById('funcionarios-tbody');
+    const rows = tbody.querySelectorAll('tr');
     
     let grandTotalProventos = 0;
     let grandTotalDescontos = 0;
-    let totalFuncionarios = funcionariosIds.length;
+    let totalFuncionarios = rows.length;
     
     // Initialize column totals
     const rubricaTotals = {};
@@ -446,8 +480,11 @@ function calculateTotals() {
         rubricaTotals[rubrica.nome] = 0;
     });
     
-    funcionariosIds.forEach(funcId => {
-        const inputs = document.querySelectorAll(`.valor-input[data-funcionario="${funcId}"]`);
+    // Process each row
+    rows.forEach((row) => {
+        // Get all inputs in this row
+        const inputs = row.querySelectorAll('.valor-input');
+        
         let totalProventos = 0;
         let totalDescontos = 0;
         
@@ -475,7 +512,9 @@ function calculateTotals() {
         
         const totalLiquido = totalProventos - totalDescontos;
         
-        const totalElement = document.querySelector(`.total-funcionario[data-funcionario="${funcId}"]`);
+        // Find the total element in THIS row
+        const totalElement = row.querySelector('.total-funcionario');
+        
         if (totalElement) {
             totalElement.textContent = `R$ ${totalLiquido.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
             totalElement.style.color = totalLiquido < 0 ? 'red' : 'green';

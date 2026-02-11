@@ -245,3 +245,80 @@ class Usuario(UserMixin):
         cursor.close()
         conn.close()
         return existe
+
+    @staticmethod
+    def get_empresas_usuario(user_id):
+        """Retorna lista de empresas (clientes) associadas ao usuário SUPERVISOR"""
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+        try:
+            cursor.execute("""
+                SELECT c.id, c.razao_social, c.nome_fantasia
+                FROM usuario_empresas ue
+                INNER JOIN clientes c ON ue.cliente_id = c.id
+                WHERE ue.usuario_id = %s
+                ORDER BY c.razao_social
+            """, (user_id,))
+            empresas = cursor.fetchall()
+            return empresas
+        except Exception as e:
+            logger.warning(f"Erro ao buscar empresas do usuário {user_id}: {str(e)}")
+            return []
+        finally:
+            cursor.close()
+            conn.close()
+
+    @staticmethod
+    def set_empresas_usuario(user_id, empresa_ids):
+        """Define as empresas associadas ao usuário SUPERVISOR"""
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        try:
+            # Remove associações antigas
+            cursor.execute("DELETE FROM usuario_empresas WHERE usuario_id = %s", (user_id,))
+            
+            # Adiciona novas associações
+            if empresa_ids:
+                for empresa_id in empresa_ids:
+                    if empresa_id:  # Ignora valores vazios
+                        cursor.execute("""
+                            INSERT INTO usuario_empresas (usuario_id, cliente_id)
+                            VALUES (%s, %s)
+                        """, (user_id, empresa_id))
+            
+            conn.commit()
+            logger.info(f"Empresas atualizadas para usuário {user_id}: {empresa_ids}")
+        except Exception as e:
+            conn.rollback()
+            logger.error(f"Erro ao atualizar empresas do usuário {user_id}: {str(e)}")
+            raise
+        finally:
+            cursor.close()
+            conn.close()
+
+    @staticmethod
+    def get_clientes_produtos_posto():
+        """Retorna lista de clientes que têm produtos configurados
+        
+        Filtra apenas clientes que possuem pelo menos um produto ativo
+        na tabela cliente_produtos. Isso garante que apenas empresas
+        configuradas apareçam na seleção de SUPERVISOR.
+        """
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+        try:
+            cursor.execute("""
+                SELECT DISTINCT c.id, c.razao_social, c.nome_fantasia
+                FROM clientes c
+                INNER JOIN cliente_produtos cp ON c.id = cp.cliente_id
+                WHERE cp.ativo = 1
+                ORDER BY c.razao_social
+            """)
+            clientes = cursor.fetchall()
+            return clientes
+        except Exception as e:
+            logger.error(f"Erro ao buscar clientes com produtos: {str(e)}")
+            return []
+        finally:
+            cursor.close()
+            conn.close()

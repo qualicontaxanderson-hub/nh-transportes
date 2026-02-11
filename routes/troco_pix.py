@@ -1027,9 +1027,9 @@ def cliente_novo():
         conn = get_db_connection()
         cursor = conn.cursor()
         
-        nome_completo = request.form.get('nome_completo')
+        nome_completo = request.form.get('nome_completo', '').strip()
         tipo_chave_pix = request.form.get('tipo_chave_pix')
-        chave_pix = request.form.get('chave_pix')
+        chave_pix = request.form.get('chave_pix', '').strip()
         ativo = request.form.get('ativo', '1')
         
         if not all([nome_completo, tipo_chave_pix, chave_pix]):
@@ -1093,9 +1093,9 @@ def cliente_editar(cliente_id):
         conn = get_db_connection()
         cursor = conn.cursor()
         
-        nome_completo = request.form.get('nome_completo')
+        nome_completo = request.form.get('nome_completo', '').strip()
         tipo_chave_pix = request.form.get('tipo_chave_pix')
-        chave_pix = request.form.get('chave_pix')
+        chave_pix = request.form.get('chave_pix', '').strip()
         ativo = request.form.get('ativo', '1')
         
         cursor.execute("""

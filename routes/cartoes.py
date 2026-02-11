@@ -1,7 +1,7 @@
 from flask import Blueprint, render_template, request, redirect, url_for, flash
 from flask_login import login_required
 from utils.db import get_db_connection
-from utils.decorators import admin_required
+from utils.decorators import admin_required, supervisor_or_admin_required
 from utils.text_utils import normalize_text_field
 
 bp = Blueprint('cartoes', __name__, url_prefix='/cartoes')
@@ -61,7 +61,7 @@ def lista():
 
 @bp.route('/novo', methods=['GET', 'POST'])
 @login_required
-@admin_required
+@supervisor_or_admin_required
 def novo():
     """Create a new card brand"""
     if request.method == 'POST':
@@ -104,7 +104,7 @@ def novo():
 
 @bp.route('/editar/<int:id>', methods=['GET', 'POST'])
 @login_required
-@admin_required
+@supervisor_or_admin_required
 def editar(id):
     """Edit an existing card brand"""
     conn = None
@@ -161,7 +161,7 @@ def editar(id):
 
 @bp.route('/bloquear/<int:id>', methods=['POST'])
 @login_required
-@admin_required
+@supervisor_or_admin_required
 def bloquear(id):
     """Block/unblock a card brand (toggle ativo status)"""
     conn = None

@@ -1,38 +1,32 @@
 from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify
 from flask_login import login_required
-import mysql.connector
+from utils.db import get_db_connection
+from utils.decorators import supervisor_or_admin_required
 from datetime import datetime, date, timedelta
 from calendar import monthrange
 
 bp = Blueprint('lubrificantes', __name__, url_prefix='/lubrificantes')
 
 def get_db():
-    return mysql.connector.connect(
-        host='centerbeam.proxy.rlwy.net',
-        port=56026,
-        user='root',
-        password='CYTzzRYLVmEJGDexxXpgepWgpvebdSrV',
-        database='railway'
-    )
+    """Usa a conexão centralizada com credenciais seguras"""
+    return get_db_connection()
 
 # =============================================
 # PÁGINA PRINCIPAL / RESUMO LUBRIFICANTES
 # =============================================
 @bp.route('/')
 @login_required
+@supervisor_or_admin_required
 def index():
     conn = get_db()
     cursor = conn.cursor(dictionary=True)
     
-    # Filtros de data - PADRÃO: mês/ano atual
+    # Filtros de data - PADRÃO: últimos 45 dias
     hoje = date.today()
-    primeiro_dia_mes = date(hoje.year, hoje.month, 1)
-    # Calcula último dia do mês usando monthrange
-    ultimo_dia = monthrange(hoje.year, hoje.month)[1]
-    ultimo_dia_mes = date(hoje.year, hoje.month, ultimo_dia)
+    data_inicio_45_dias = hoje - timedelta(days=45)
     
-    data_inicio = request.args.get('data_inicio', primeiro_dia_mes.strftime('%Y-%m-%d'))
-    data_fim = request.args.get('data_fim', ultimo_dia_mes.strftime('%Y-%m-%d'))
+    data_inicio = request.args.get('data_inicio', data_inicio_45_dias.strftime('%Y-%m-%d'))
+    data_fim = request.args.get('data_fim', hoje.strftime('%Y-%m-%d'))
     
     # Filtro de cliente
     cliente_id = request.args.get('cliente_id', '')
@@ -622,6 +616,7 @@ def editar_lancamento(id):
 # =============================================
 @bp.route('/produtos')
 @login_required
+@supervisor_or_admin_required
 def produtos():
     conn = get_db()
     cursor = conn.cursor(dictionary=True)

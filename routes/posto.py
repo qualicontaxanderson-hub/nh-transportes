@@ -210,10 +210,10 @@ def vendas_lista():
         from collections import defaultdict
         from datetime import date
         
-        # Default to current month if no filters provided
+        # Default to last 45 days if no filters provided
         hoje = date.today()
-        primeiro_dia_mes = hoje.replace(day=1)
-        data_inicio_default = primeiro_dia_mes.strftime('%Y-%m-%d')
+        data_inicio_45_dias = hoje - timedelta(days=45)
+        data_inicio_default = data_inicio_45_dias.strftime('%Y-%m-%d')
         data_fim_default = hoje.strftime('%Y-%m-%d')
         
         # Obter filtros da query string

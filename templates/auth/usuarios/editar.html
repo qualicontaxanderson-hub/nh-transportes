@@ -49,7 +49,7 @@
                             </small>
                         </div>
 
-                        <div class="mb-3" id="cliente_field" style="display:{% if usuario.nivel == 'PISTA' or usuario.nivel == 'SUPERVISOR' or usuario.nivel == 'GERENTE' %}block{% else %}none{% endif %};">
+                        <div class="mb-3" id="cliente_field" style="display:{% if usuario.nivel == 'PISTA' or usuario.nivel == 'GERENTE' %}block{% else %}none{% endif %};">
                             <label for="cliente_id" class="form-label">Posto/Cliente Associado</label>
                             <select class="form-select" id="cliente_id" name="cliente_id">
                                 <option value="">Selecione o posto...</option>
@@ -60,7 +60,28 @@
                                 </option>
                                 {% endfor %}
                             </select>
-                            <small class="form-text text-muted">Usuários PISTA só veem dados do posto associado</small>
+                            <small class="form-text text-muted">
+                                <strong>PISTA:</strong> Associe a um posto específico para operação restrita
+                            </small>
+                        </div>
+
+                        <div class="mb-3" id="empresas_field" style="display:{% if usuario.nivel == 'SUPERVISOR' %}block{% else %}none{% endif %};">
+                            <label for="empresas_ids" class="form-label">Empresas com Acesso * (SUPERVISOR)</label>
+                            <div style="max-height: 300px; overflow-y: auto; border: 1px solid #dee2e6; border-radius: 0.25rem; padding: 0.5rem;">
+                                {% for empresa in empresas_posto %}
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" name="empresas_ids[]" 
+                                           value="{{ empresa.id }}" id="empresa_{{ empresa.id }}"
+                                           {% if empresa.id in empresas_selecionadas_ids %}checked{% endif %}>
+                                    <label class="form-check-label" for="empresa_{{ empresa.id }}">
+                                        {{ empresa.razao_social }}
+                                    </label>
+                                </div>
+                                {% endfor %}
+                            </div>
+                            <small class="form-text text-muted">
+                                <strong>SUPERVISOR:</strong> Selecione uma ou mais empresas que o usuário terá acesso. Empresas listadas são aquelas com produtos de posto configurados.
+                            </small>
                         </div>
 
                         <hr>
@@ -101,32 +122,57 @@ function toggleClienteField() {
     var nivel = document.getElementById('nivel').value;
     var clienteField = document.getElementById('cliente_field');
     var clienteSelect = document.getElementById('cliente_id');
+    var empresasField = document.getElementById('empresas_field');
     
-    // SUPERVISOR e PISTA precisam de posto associado
-    // GERENTE é opcional (pode ter ou não)
-    if (nivel === 'PISTA' || nivel === 'SUPERVISOR') {
+    // PISTA precisa de posto associado (um único)
+    if (nivel === 'PISTA') {
         clienteField.style.display = 'block';
         clienteSelect.required = true;
-    } else if (nivel === 'GERENTE') {
-        clienteField.style.display = 'block';
-        clienteSelect.required = false;  // Opcional para gerente
-    } else {
+        empresasField.style.display = 'none';
+    } 
+    // SUPERVISOR precisa de empresas (múltiplas)
+    else if (nivel === 'SUPERVISOR') {
         clienteField.style.display = 'none';
         clienteSelect.required = false;
         clienteSelect.value = '';
+        empresasField.style.display = 'block';
+    } 
+    // GERENTE é opcional (pode ter ou não)
+    else if (nivel === 'GERENTE') {
+        clienteField.style.display = 'block';
+        clienteSelect.required = false;  // Opcional para gerente
+        empresasField.style.display = 'none';
+    } 
+    // ADMIN não precisa de associação
+    else {
+        clienteField.style.display = 'none';
+        clienteSelect.required = false;
+        clienteSelect.value = '';
+        empresasField.style.display = 'none';
     }
 }
 
-// Validar senhas antes de enviar
+// Validar senhas e empresas antes de enviar
 document.querySelector('form').addEventListener('submit', function(e) {
     var senha = document.getElementById('senha').value;
     var confirmar = document.getElementById('confirmar_senha').value;
+    var nivel = document.getElementById('nivel').value;
     
     // Se forneceu senha, validar
     if (senha && senha !== confirmar) {
         e.preventDefault();
         alert('As senhas não coincidem!');
         return false;
+    }
+    
+    // Validar que SUPERVISOR tem pelo menos uma empresa selecionada
+    if (nivel === 'SUPERVISOR') {
+        var empresasSelecionadas = document.querySelectorAll('input[name="empresas_ids[]"]:checked');
+        if (empresasSelecionadas.length === 0) {
+            e.preventDefault();
+            alert('SUPERVISOR deve ter pelo menos uma empresa selecionada!');
+            return false;
+        }
     }
 });
 </script>

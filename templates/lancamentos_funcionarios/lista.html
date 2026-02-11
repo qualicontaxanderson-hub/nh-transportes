@@ -58,6 +58,7 @@
                         <tr>
                             <th>Mês</th>
                             <th>Cliente</th>
+                            <th>Categoria</th>
                             <th>Total de Funcionários</th>
                             <th>Valor Total</th>
                             <th>Status</th>
@@ -69,28 +70,40 @@
                         <tr>
                             <td><strong>{{ lanc.mes }}</strong></td>
                             <td>{{ lanc.cliente_nome or 'N/A' }}</td>
+                            <td>
+                                {% if lanc.categoria == 'FRENTISTAS' %}
+                                    <span class="badge bg-primary">{{ lanc.categoria }}</span>
+                                {% elif lanc.categoria == 'MOTORISTAS' %}
+                                    <span class="badge bg-success">{{ lanc.categoria }}</span>
+                                {% else %}
+                                    <span class="badge bg-secondary">{{ lanc.categoria }}</span>
+                                {% endif %}
+                            </td>
                             <td>{{ lanc.total_funcionarios }}</td>
                             <td>{{ lanc.total_valor|formatar_moeda }}</td>
                             <td>
-                                {% if lanc.status_lancamento == 'PENDENTE' %}
+                                {% if lanc.statuslancamento == 'PENDENTE' %}
                                     <span class="badge bg-warning">Pendente</span>
-                                {% elif lanc.status_lancamento == 'PROCESSADO' %}
+                                {% elif lanc.statuslancamento == 'PROCESSADO' %}
                                     <span class="badge bg-info">Processado</span>
-                                {% elif lanc.status_lancamento == 'PAGO' %}
+                                {% elif lanc.statuslancamento == 'PAGO' %}
                                     <span class="badge bg-success">Pago</span>
-                                {% elif lanc.status_lancamento == 'CANCELADO' %}
+                                {% elif lanc.statuslancamento == 'CANCELADO' %}
                                     <span class="badge bg-danger">Cancelado</span>
                                 {% endif %}
                             </td>
                             <td>
-                                <a href="{{ url_for('lancamentos_funcionarios.detalhe', mes=lanc.mes, cliente_id=lanc.clienteid) }}" class="btn btn-sm btn-info" title="Ver Detalhes">
+                                <a href="{{ url_for('lancamentos_funcionarios.detalhe', mes=lanc.mes|replace('/', '-'), cliente_id=lanc.clienteid) }}" class="btn btn-sm btn-info" title="Ver Detalhes">
                                     <i class="bi bi-eye"></i> Detalhe
+                                </a>
+                                <a href="{{ url_for('lancamentos_funcionarios.editar', mes=lanc.mes|replace('/', '-'), cliente_id=lanc.clienteid) }}" class="btn btn-sm btn-warning" title="Editar Lançamento">
+                                    <i class="bi bi-pencil"></i> Editar
                                 </a>
                             </td>
                         </tr>
                         {% else %}
                         <tr>
-                            <td colspan="6" class="text-center">Nenhum lançamento encontrado</td>
+                            <td colspan="7" class="text-center">Nenhum lançamento encontrado</td>
                         </tr>
                         {% endfor %}
                     </tbody>
