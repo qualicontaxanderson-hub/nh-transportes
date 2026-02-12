@@ -34,10 +34,10 @@ INSERT INTO categorias_despesas (titulo_id, nome, ordem, ativo) VALUES
 (@titulo_operacionais, 'MECANICO', 17, TRUE),
 (@titulo_operacionais, 'SERVIÇOS DE ELETRICISTAS', 18, TRUE),
 (@titulo_operacionais, 'SERVIÇOS DE PINTURAS', 19, TRUE),
-(@titulo_operacionais, 'SERVIÇOS RE REFORMAS', 20, TRUE),
+(@titulo_operacionais, 'SERVIÇOS DE REFORMAS', 20, TRUE),
 (@titulo_operacionais, 'SERVIÇOS DE SERRALHERIA', 21, TRUE),
 (@titulo_operacionais, 'SEGUROS EMPRESARIAIS', 22, TRUE),
-(@titulo_operacionais, 'TELEFONE MOVÉL', 23, TRUE),
+(@titulo_operacionais, 'TELEFONE MÓVEL', 23, TRUE),
 (@titulo_operacionais, 'PROPAGANDAS', 24, TRUE);
 
 -- IMPOSTOS (12 items)
