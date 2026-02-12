@@ -17,9 +17,9 @@ document.addEventListener('DOMContentLoaded', function () {
       const freteId = btn.getAttribute('data-frete-id');
       if (btn.disabled) return;
       modalFreteId.value = freteId;
-      // default vencimento: +7 dias
+      // default vencimento: +3 dias
       const d = new Date();
-      d.setDate(d.getDate() + 7);
+      d.setDate(d.getDate() + 3);
       modalVenc.value = d.toISOString().slice(0,10);
       feedback.style.display = 'none';
       showModal();

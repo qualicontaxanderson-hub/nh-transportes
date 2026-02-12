@@ -294,7 +294,7 @@ document.addEventListener('DOMContentLoaded', function () {
       const emitted = btn.getAttribute('data-emitted') === '1';
       if (emitted) return;
       inputFrete.value = freteId || '';
-      inputVenc.value = defaultVencimento(7);
+      inputVenc.value = defaultVencimento(3);
       feedback.style.display = 'none';
       // mark as single
       modal.dataset.multiple = '';
@@ -315,7 +315,7 @@ document.addEventListener('DOMContentLoaded', function () {
       modal.dataset.multiple = '1';
       modal.dataset.selectedIds = JSON.stringify(ids);
       inputFrete.value = ''; // clear single id
-      inputVenc.value = defaultVencimento(7);
+      inputVenc.value = defaultVencimento(3);
       feedback.style.display = 'none';
       showModal(modal);
     });
@@ -324,7 +324,7 @@ document.addEventListener('DOMContentLoaded', function () {
   // Preencher default date quando abrir
   function defaultVencimento(offsetDays){
     const d = new Date();
-    d.setDate(d.getDate() + (offsetDays||7));
+    d.setDate(d.getDate() + (offsetDays||3));
     const yyyy = d.getFullYear();
     const mm = ('0' + (d.getMonth()+1)).slice(-2);
     const dd = ('0' + d.getDate()).slice(-2);
