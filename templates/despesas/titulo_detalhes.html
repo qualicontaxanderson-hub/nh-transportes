@@ -14,7 +14,7 @@
         <h2 style="color:#1D63A5; font-size: 1.3rem;">
             <i class="bi bi-folder-fill"></i> {{ titulo.nome }}
         </h2>
-        {% if current_user.nivel in ['ADMIN', 'GERENTE'] %}
+        {% if current_user.nivel in ['ADMIN'] %}
         <a href="{{ url_for('despesas.nova_categoria', titulo_id=titulo.id) }}" class="btn btn-primary btn-sm">
             <i class="bi bi-plus-circle"></i> Nova Categoria
         </a>
@@ -62,7 +62,7 @@
                                    title="Ver Detalhes">
                                     <i class="bi bi-eye"></i>
                                 </a>
-                                {% if current_user.nivel in ['ADMIN', 'GERENTE'] %}
+                                {% if current_user.nivel in ['ADMIN'] %}
                                 <a href="{{ url_for('despesas.editar_categoria', id=categoria.id) }}" 
                                    class="btn btn-sm btn-warning" 
                                    title="Editar">
@@ -88,7 +88,7 @@
             {% else %}
             <div class="alert alert-info mb-0">
                 <i class="bi bi-info-circle"></i> Nenhuma categoria cadastrada ainda.
-                {% if current_user.nivel in ['ADMIN', 'GERENTE'] %}
+                {% if current_user.nivel in ['ADMIN'] %}
                 <a href="{{ url_for('despesas.nova_categoria', titulo_id=titulo.id) }}">Clique aqui para criar a primeira categoria</a>.
                 {% endif %}
             </div>

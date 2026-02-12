@@ -70,7 +70,9 @@
             <li><a class="dropdown-item" href="/veiculos/"><i class="bi bi-truck" style="color: #dc3545;"></i> Veículos</a></li>
             <li><a class="dropdown-item" href="/origens_destinos/"><i class="bi bi-geo-alt" style="color: #17a2b8;"></i> Origens/Destinos</a></li>
             <li><hr class="dropdown-divider"></li>
+            {% if nivel_usuario == 'ADMIN' %}
             <li><a class="dropdown-item" href="/despesas/"><i class="bi bi-wallet2" style="color: #dc3545;"></i> Despesas</a></li>
+            {% endif %}
             <li><a class="dropdown-item" href="/funcionarios/"><i class="bi bi-people" style="color: #0d6efd;"></i> Funcionários</a></li>
             <li><a class="dropdown-item" href="/categorias-funcionarios/"><i class="bi bi-tags" style="color: #6610f2;"></i> Categorias Funcionários</a></li>
             <li><a class="dropdown-item" href="/rubricas/"><i class="bi bi-list-check" style="color: #d63384;"></i> Rubricas</a></li>

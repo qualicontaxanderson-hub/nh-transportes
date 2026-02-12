@@ -11,7 +11,7 @@
     
     <div class="d-flex justify-content-between align-items-center mb-3">
         <h2 style="color:#1D63A5; font-size: 1.3rem;"><i class="bi bi-wallet2"></i> Gestão de Despesas</h2>
-        {% if current_user.nivel in ['ADMIN', 'GERENTE'] %}
+        {% if current_user.nivel in ['ADMIN'] %}
         <a href="{{ url_for('despesas.novo_titulo') }}" class="btn btn-primary btn-sm">
             <i class="bi bi-plus-circle"></i> Novo Título
         </a>
@@ -32,7 +32,7 @@
                                 <h5 class="card-title text-primary mb-0" style="font-size: 1rem;">
                                     <i class="bi bi-folder-fill"></i> {{ titulo.nome }}
                                 </h5>
-                                {% if current_user.nivel in ['ADMIN', 'GERENTE'] %}
+                                {% if current_user.nivel in ['ADMIN'] %}
                                 <div class="btn-group btn-group-sm">
                                     <a href="{{ url_for('despesas.editar_titulo', id=titulo.id) }}" 
                                        class="btn btn-outline-warning btn-sm" 
@@ -71,7 +71,7 @@
                 <div class="col-12">
                     <div class="alert alert-info">
                         <i class="bi bi-info-circle"></i> Nenhum título de despesa cadastrado ainda.
-                        {% if current_user.nivel in ['ADMIN', 'GERENTE'] %}
+                        {% if current_user.nivel in ['ADMIN'] %}
                         <a href="{{ url_for('despesas.novo_titulo') }}">Clique aqui para criar o primeiro título</a>.
                         {% endif %}
                     </div>

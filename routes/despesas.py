@@ -7,6 +7,7 @@ bp = Blueprint('despesas', __name__, url_prefix='/despesas')
 
 @bp.route('/')
 @login_required
+@admin_required
 def index():
     """Lista todos os títulos de despesas"""
     conn = get_db_connection()
@@ -31,6 +32,7 @@ def index():
 
 @bp.route('/titulo/<int:titulo_id>')
 @login_required
+@admin_required
 def titulo_detalhes(titulo_id):
     """Mostra categorias de um título específico"""
     conn = get_db_connection()
@@ -64,6 +66,7 @@ def titulo_detalhes(titulo_id):
 
 @bp.route('/categoria/<int:categoria_id>')
 @login_required
+@admin_required
 def categoria_detalhes(categoria_id):
     """Mostra subcategorias de uma categoria específica"""
     conn = get_db_connection()
