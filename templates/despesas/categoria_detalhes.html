@@ -1,0 +1,90 @@
+{% extends 'base.html' %}
+{% block title %}{{ categoria.nome }} - Despesas - {{ app_name }}{% endblock %}
+{% block content %}
+<div class="container-fluid">
+    <nav aria-label="breadcrumb" class="mt-2 mb-3">
+        <ol class="breadcrumb" style="font-size: 0.85rem;">
+            <li class="breadcrumb-item"><a href="{{ url_for('index') }}">Dashboard</a></li>
+            <li class="breadcrumb-item"><a href="{{ url_for('despesas.index') }}">Despesas</a></li>
+            {% if categoria.titulo_id %}
+            <li class="breadcrumb-item"><a href="{{ url_for('despesas.titulo_detalhes', titulo_id=categoria.titulo_id) }}">{{ categoria.titulo_nome }}</a></li>
+            {% endif %}
+            <li class="breadcrumb-item active" aria-current="page">{{ categoria.nome }}</li>
+        </ol>
+    </nav>
+    
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h2 style="color:#1D63A5; font-size: 1.3rem;">
+            <i class="bi bi-folder"></i> {{ categoria.nome }}
+        </h2>
+        {% if current_user.nivel in ['ADMIN', 'GERENTE'] %}
+        <a href="{{ url_for('despesas.nova_subcategoria', categoria_id=categoria.id) }}" class="btn btn-primary btn-sm">
+            <i class="bi bi-plus-circle"></i> Nova Subcategoria
+        </a>
+        {% endif %}
+    </div>
+    
+    <div class="card shadow-sm">
+        <div class="card-header" style="background:#1D63A5;color:white; font-size: 0.95rem; padding: 0.6rem 1rem;">
+            <h5 class="mb-0" style="font-size: 1rem;">Subcategorias</h5>
+        </div>
+        <div class="card-body" style="padding: 1rem;">
+            {% if subcategorias %}
+            <div class="table-responsive">
+                <table class="table table-hover table-sm">
+                    <thead>
+                        <tr>
+                            <th>Nome</th>
+                            <th class="text-center">Ordem</th>
+                            <th class="text-center">Ações</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for subcategoria in subcategorias %}
+                        <tr>
+                            <td>
+                                <i class="bi bi-tag"></i> {{ subcategoria.nome }}
+                            </td>
+                            <td class="text-center">{{ subcategoria.ordem }}</td>
+                            <td class="text-center">
+                                {% if current_user.nivel in ['ADMIN', 'GERENTE'] %}
+                                <a href="{{ url_for('despesas.editar_subcategoria', id=subcategoria.id) }}" 
+                                   class="btn btn-sm btn-warning" 
+                                   title="Editar">
+                                    <i class="bi bi-pencil"></i>
+                                </a>
+                                <form method="POST" 
+                                      action="{{ url_for('despesas.excluir_subcategoria', id=subcategoria.id) }}" 
+                                      style="display:inline;" 
+                                      onsubmit="return confirm('Tem certeza que deseja desativar esta subcategoria?');">
+                                    <button type="submit" 
+                                            class="btn btn-sm btn-danger" 
+                                            title="Desativar">
+                                        <i class="bi bi-trash"></i>
+                                    </button>
+                                </form>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="alert alert-info mb-0">
+                <i class="bi bi-info-circle"></i> Nenhuma subcategoria cadastrada ainda.
+                {% if current_user.nivel in ['ADMIN', 'GERENTE'] %}
+                <a href="{{ url_for('despesas.nova_subcategoria', categoria_id=categoria.id) }}">Clique aqui para criar a primeira subcategoria</a>.
+                {% endif %}
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<style>
+    .table-sm {
+        font-size: 0.9rem;
+    }
+</style>
+{% endblock %}

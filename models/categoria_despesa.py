@@ -12,12 +12,14 @@ class CategoriaDespesa(db.Model):
     __tablename__ = "categorias_despesas"
     
     id = db.Column(db.Integer, primary_key=True)
+    titulo_id = db.Column(db.Integer, db.ForeignKey('titulos_despesas.id'), nullable=True)
     nome = db.Column(db.String(100), nullable=False)
+    ordem = db.Column(db.Integer, nullable=False, default=0)
     ativo = db.Column(db.Boolean, nullable=False, default=True)
     criado_em = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     
     # Relacionamento com subcategorias
-    subcategorias = db.relationship('SubcategoriaDespesa', backref='categoria', lazy=True)
+    subcategorias = db.relationship('SubcategoriaDespesa', backref='categoria', lazy=True, order_by='SubcategoriaDespesa.ordem')
     
     def __repr__(self):
         return f"<CategoriaDespesa {self.id} - {self.nome}>"

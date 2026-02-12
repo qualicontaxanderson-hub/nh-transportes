@@ -14,6 +14,7 @@ class SubcategoriaDespesa(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     categoria_id = db.Column(db.Integer, db.ForeignKey('categorias_despesas.id'), nullable=False)
     nome = db.Column(db.String(100), nullable=False)
+    ordem = db.Column(db.Integer, nullable=False, default=0)
     ativo = db.Column(db.Boolean, nullable=False, default=True)
     criado_em = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     
