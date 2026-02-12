@@ -17,11 +17,21 @@
         <h2 style="color:#1D63A5; font-size: 1.3rem;">
             <i class="bi bi-folder"></i> {{ categoria.nome }}
         </h2>
-        {% if current_user.nivel in ['ADMIN'] %}
-        <a href="{{ url_for('despesas.nova_subcategoria', categoria_id=categoria.id) }}" class="btn btn-primary btn-sm">
-            <i class="bi bi-plus-circle"></i> Nova Subcategoria
-        </a>
-        {% endif %}
+        <div class="btn-group" role="group">
+            {% if categoria.titulo_id %}
+            <a href="{{ url_for('despesas.titulo_detalhes', titulo_id=categoria.titulo_id) }}" class="btn btn-secondary btn-sm">
+                <i class="bi bi-arrow-left"></i> Voltar
+            </a>
+            {% endif %}
+            {% if current_user.nivel in ['ADMIN'] %}
+            <a href="{{ url_for('despesas.editar_categoria', id=categoria.id) }}" class="btn btn-warning btn-sm">
+                <i class="bi bi-pencil"></i> Editar Categoria
+            </a>
+            <a href="{{ url_for('despesas.nova_subcategoria', categoria_id=categoria.id) }}" class="btn btn-primary btn-sm">
+                <i class="bi bi-plus-circle"></i> Cadastrar Subcategoria
+            </a>
+            {% endif %}
+        </div>
     </div>
     
     <div class="card shadow-sm">
@@ -48,21 +58,23 @@
                             <td class="text-center">{{ subcategoria.ordem }}</td>
                             <td class="text-center">
                                 {% if current_user.nivel in ['ADMIN'] %}
-                                <a href="{{ url_for('despesas.editar_subcategoria', id=subcategoria.id) }}" 
-                                   class="btn btn-sm btn-warning" 
-                                   title="Editar">
-                                    <i class="bi bi-pencil"></i>
-                                </a>
-                                <form method="POST" 
-                                      action="{{ url_for('despesas.excluir_subcategoria', id=subcategoria.id) }}" 
-                                      style="display:inline;" 
-                                      onsubmit="return confirm('Tem certeza que deseja desativar esta subcategoria?');">
-                                    <button type="submit" 
-                                            class="btn btn-sm btn-danger" 
-                                            title="Desativar">
-                                        <i class="bi bi-trash"></i>
-                                    </button>
-                                </form>
+                                <div class="btn-group btn-group-sm" role="group">
+                                    <a href="{{ url_for('despesas.editar_subcategoria', id=subcategoria.id) }}" 
+                                       class="btn btn-warning" 
+                                       title="Editar">
+                                        <i class="bi bi-pencil"></i> Editar
+                                    </a>
+                                    <form method="POST" 
+                                          action="{{ url_for('despesas.excluir_subcategoria', id=subcategoria.id) }}" 
+                                          style="display:inline;" 
+                                          onsubmit="return confirm('Tem certeza que deseja desativar esta subcategoria?');">
+                                        <button type="submit" 
+                                                class="btn btn-danger" 
+                                                title="Desativar">
+                                            <i class="bi bi-trash"></i> Desativar
+                                        </button>
+                                    </form>
+                                </div>
                                 {% endif %}
                             </td>
                         </tr>

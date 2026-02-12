@@ -12,9 +12,11 @@
     <div class="d-flex justify-content-between align-items-center mb-3">
         <h2 style="color:#1D63A5; font-size: 1.3rem;"><i class="bi bi-wallet2"></i> Gestão de Despesas</h2>
         {% if current_user.nivel in ['ADMIN'] %}
-        <a href="{{ url_for('despesas.novo_titulo') }}" class="btn btn-primary btn-sm">
-            <i class="bi bi-plus-circle"></i> Novo Título
-        </a>
+        <div class="btn-group" role="group">
+            <a href="{{ url_for('despesas.novo_titulo') }}" class="btn btn-primary btn-sm">
+                <i class="bi bi-plus-circle"></i> Cadastrar Título
+            </a>
+        </div>
         {% endif %}
     </div>
     
@@ -34,6 +36,11 @@
                                 </h5>
                                 {% if current_user.nivel in ['ADMIN'] %}
                                 <div class="btn-group btn-group-sm">
+                                    <a href="{{ url_for('despesas.titulo_detalhes', titulo_id=titulo.id) }}" 
+                                       class="btn btn-outline-info btn-sm" 
+                                       title="Ver Categorias">
+                                        <i class="bi bi-eye"></i>
+                                    </a>
                                     <a href="{{ url_for('despesas.editar_titulo', id=titulo.id) }}" 
                                        class="btn btn-outline-warning btn-sm" 
                                        title="Editar">
