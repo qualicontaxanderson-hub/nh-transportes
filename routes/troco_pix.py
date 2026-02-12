@@ -749,7 +749,7 @@ def editar(troco_pix_id):
             # Verificar permissão de edição (15 minutos para frentistas)
             user_id = current_user.id
             # Verificar se usuário é administrador
-            is_admin = (current_user.nivel == 'ADMIN')
+            is_admin = (current_user.nivel.upper() in ['ADMIN', 'GERENTE', 'SUPERVISOR'])
             
             if not is_admin:
                 tempo_decorrido = datetime.now() - transacao['criado_em']
@@ -853,7 +853,7 @@ def editar(troco_pix_id):
         
         user_id = current_user.id
         # Verificar se usuário é administrador
-        is_admin = (current_user.nivel == 'ADMIN')
+        is_admin = (current_user.nivel.upper() in ['ADMIN', 'GERENTE', 'SUPERVISOR'])
         
         if not is_admin:
             tempo_decorrido = datetime.now() - result['criado_em']
@@ -1274,7 +1274,7 @@ def utility_processor():
         """
         try:
             # Administradores podem sempre editar
-            if hasattr(current_user, 'nivel') and current_user.nivel == 'ADMIN':
+            if hasattr(current_user, 'nivel') and current_user.nivel.upper() in ['ADMIN', 'GERENTE', 'SUPERVISOR']:
                 return True
             
             # Para frentistas (PISTA), verificar posto e tempo

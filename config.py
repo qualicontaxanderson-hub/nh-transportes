@@ -13,6 +13,10 @@ class Config:
     DB_PASSWORD = os.environ.get('DB_PASSWORD', 'CYTzzRYLVmEJGDexxXpgepWgpvebdSrV')
     DB_NAME = os.environ.get('DB_NAME', 'railway')
     
+    # Configurações de Pool de Conexões
+    DB_POOL_SIZE = int(os.environ.get('DB_POOL_SIZE', 10))  # Número máximo de conexões no pool
+    DB_CONNECT_TIMEOUT = int(os.environ.get('DB_CONNECT_TIMEOUT', 10))  # Timeout de conexão em segundos
+    
     # URI do Banco de Dados
     SQLALCHEMY_DATABASE_URI = os.environ.get('DATABASE_URL') or f'mysql+mysqlconnector://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}'
     

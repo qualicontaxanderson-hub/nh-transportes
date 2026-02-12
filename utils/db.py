@@ -1,11 +1,75 @@
 import mysql.connector
+from mysql.connector import pooling, Error
 from config import Config
+import logging
+
+# Configure logging
+logger = logging.getLogger(__name__)
+
+# Connection pool configuration
+_connection_pool = None
+
+# Reconnection constants
+RECONNECT_ATTEMPTS = 3
+RECONNECT_DELAY = 1  # seconds
+
+# Shared connection parameters for pool and fallback connections
+CONNECTION_PARAMS = {
+    'host': Config.DB_HOST,
+    'port': Config.DB_PORT,
+    'user': Config.DB_USER,
+    'password': Config.DB_PASSWORD,
+    'database': Config.DB_NAME,
+    'autocommit': False,  # Explicit transaction control
+    'connect_timeout': Config.DB_CONNECT_TIMEOUT,
+    'charset': 'utf8mb4',
+    'use_unicode': True,
+}
+
+def _get_connection_pool():
+    """
+    Get or create the MySQL connection pool.
+    Uses singleton pattern to ensure only one pool exists.
+    """
+    global _connection_pool
+    
+    if _connection_pool is None:
+        try:
+            pool_config = {
+                'pool_name': 'nh_transportes_pool',
+                'pool_size': Config.DB_POOL_SIZE,
+                'pool_reset_session': True,  # Reset session variables on connection return
+                **CONNECTION_PARAMS
+            }
+            _connection_pool = pooling.MySQLConnectionPool(**pool_config)
+            logger.info(f"MySQL connection pool created successfully (size: {Config.DB_POOL_SIZE})")
+        except Error as e:
+            logger.error(f"Error creating connection pool: {e}")
+            raise
+    
+    return _connection_pool
 
 def get_db_connection():
-    return mysql.connector.connect(
-        host=Config.DB_HOST,
-        port=Config.DB_PORT,
-        user=Config.DB_USER,
-        password=Config.DB_PASSWORD,
-        database=Config.DB_NAME
-    )
+    """
+    Get a database connection from the pool.
+    
+    Returns:
+        mysql.connector.connection: A database connection from the pool
+        
+    Raises:
+        Error: If unable to get connection from pool
+    """
+    try:
+        pool = _get_connection_pool()
+        connection = pool.get_connection()
+        
+        # Test connection and reconnect if necessary
+        if not connection.is_connected():
+            connection.reconnect(attempts=RECONNECT_ATTEMPTS, delay=RECONNECT_DELAY)
+            
+        return connection
+    except Error as e:
+        logger.error(f"Error getting connection from pool: {e}")
+        # Fallback to direct connection if pool fails
+        logger.warning("Falling back to direct connection")
+        return mysql.connector.connect(**CONNECTION_PARAMS)
