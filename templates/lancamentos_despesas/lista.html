@@ -1,0 +1,178 @@
+{% extends "base.html" %}
+
+{% block title %}Lançamentos de Despesas - {{ app_name }}{% endblock %}
+
+{% block content %}
+{% set nivel_usuario = current_user.nivel|upper if current_user.nivel else '' %}
+<div class="container-fluid">
+    <nav aria-label="breadcrumb" class="mt-2 mb-3">
+        <ol class="breadcrumb" style="font-size: 0.85rem;">
+            <li class="breadcrumb-item"><a href="{{ url_for('index') }}">Dashboard</a></li>
+            <li class="breadcrumb-item active" aria-current="page">Lançamentos de Despesas</li>
+        </ol>
+    </nav>
+    
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h2 style="color:#1D63A5; font-size: 1.3rem;">
+            <i class="bi bi-cash-coin"></i> Lançamentos de Despesas
+        </h2>
+        {% if nivel_usuario in ['ADMIN', 'ADMINISTRADOR'] %}
+        <a href="{{ url_for('lancamentos_despesas.novo') }}" class="btn btn-primary btn-sm">
+            <i class="bi bi-plus-circle"></i> Novo Lançamento
+        </a>
+        {% endif %}
+    </div>
+
+    <!-- Filtros -->
+    <div class="card mb-3">
+        <div class="card-header" style="background:#1D63A5;color:white; font-size: 0.95rem; padding: 0.6rem 1rem;">
+            <h5 class="mb-0" style="font-size: 1rem;">
+                <i class="bi bi-funnel"></i> Filtros
+            </h5>
+        </div>
+        <div class="card-body" style="padding: 1rem;">
+            <form method="GET" action="{{ url_for('lancamentos_despesas.lista') }}">
+                <div class="row">
+                    <div class="col-md-3 mb-2">
+                        <label for="data_inicio" class="form-label" style="font-size: 0.85rem;">Data Início</label>
+                        <input type="date" class="form-control form-control-sm" id="data_inicio" name="data_inicio" 
+                               value="{{ filtros.data_inicio }}">
+                    </div>
+                    <div class="col-md-3 mb-2">
+                        <label for="data_fim" class="form-label" style="font-size: 0.85rem;">Data Fim</label>
+                        <input type="date" class="form-control form-control-sm" id="data_fim" name="data_fim" 
+                               value="{{ filtros.data_fim }}">
+                    </div>
+                    <div class="col-md-3 mb-2">
+                        <label for="titulo_id" class="form-label" style="font-size: 0.85rem;">Título</label>
+                        <select class="form-select form-select-sm" id="titulo_id" name="titulo_id" 
+                                onchange="this.form.submit()">
+                            <option value="">Todos</option>
+                            {% for titulo in titulos %}
+                            <option value="{{ titulo.id }}" {% if filtros.titulo_id|string == titulo.id|string %}selected{% endif %}>
+                                {{ titulo.nome }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-3 mb-2">
+                        <label for="categoria_id" class="form-label" style="font-size: 0.85rem;">Categoria</label>
+                        <select class="form-select form-select-sm" id="categoria_id" name="categoria_id">
+                            <option value="">Todas</option>
+                            {% for categoria in categorias %}
+                            <option value="{{ categoria.id }}" {% if filtros.categoria_id|string == categoria.id|string %}selected{% endif %}>
+                                {{ categoria.nome }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="col-12">
+                        <button type="submit" class="btn btn-primary btn-sm">
+                            <i class="bi bi-search"></i> Filtrar
+                        </button>
+                        <a href="{{ url_for('lancamentos_despesas.lista') }}" class="btn btn-secondary btn-sm">
+                            <i class="bi bi-x-circle"></i> Limpar
+                        </a>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Tabela de Lançamentos -->
+    <div class="card shadow-sm">
+        <div class="card-header" style="background:#1D63A5;color:white; font-size: 0.95rem; padding: 0.6rem 1rem;">
+            <div class="d-flex justify-content-between align-items-center">
+                <h5 class="mb-0" style="font-size: 1rem;">
+                    <i class="bi bi-list"></i> Lista de Lançamentos
+                </h5>
+                <span style="font-size: 0.9rem; font-weight: 600;">
+                    Total: {{ "R$ {:,.2f}".format(total).replace(',', 'X').replace('.', ',').replace('X', '.') }}
+                </span>
+            </div>
+        </div>
+        <div class="card-body" style="padding: 0.5rem;">
+            <div class="table-responsive">
+                <table class="table table-hover table-striped table-sm mb-0">
+                    <thead style="background:#4A90E2;color:#000;font-weight:700;font-size:0.85rem;">
+                        <tr>
+                            <th>ID</th>
+                            <th>Data</th>
+                            <th>Título</th>
+                            <th>Categoria</th>
+                            <th>Subcategoria</th>
+                            <th>Fornecedor</th>
+                            <th class="text-end">Valor</th>
+                            <th>Observação</th>
+                            {% if nivel_usuario in ['ADMIN', 'ADMINISTRADOR'] %}
+                            <th class="text-center">Ações</th>
+                            {% endif %}
+                        </tr>
+                    </thead>
+                    <tbody style="font-size: 0.85rem;">
+                        {% if lancamentos %}
+                            {% for lanc in lancamentos %}
+                            <tr>
+                                <td><strong>{{ lanc.id }}</strong></td>
+                                <td>{{ lanc.data.strftime('%d/%m/%Y') if lanc.data else '-' }}</td>
+                                <td>{{ lanc.titulo_nome }}</td>
+                                <td>{{ lanc.categoria_nome }}</td>
+                                <td>{{ lanc.subcategoria_nome or '-' }}</td>
+                                <td>{{ lanc.fornecedor or '-' }}</td>
+                                <td class="text-end"><strong>{{ "R$ {:,.2f}".format(lanc.valor).replace(',', 'X').replace('.', ',').replace('X', '.') }}</strong></td>
+                                <td>{{ lanc.observacao[:30] + '...' if lanc.observacao and lanc.observacao|length > 30 else (lanc.observacao or '-') }}</td>
+                                {% if nivel_usuario in ['ADMIN', 'ADMINISTRADOR'] %}
+                                <td class="text-center">
+                                    <div class="btn-group btn-group-sm" role="group">
+                                        <a href="{{ url_for('lancamentos_despesas.editar', id=lanc.id) }}" 
+                                           class="btn btn-warning" 
+                                           title="Editar">
+                                            <i class="bi bi-pencil"></i>
+                                        </a>
+                                        <form method="POST" 
+                                              action="{{ url_for('lancamentos_despesas.excluir', id=lanc.id) }}" 
+                                              style="display:inline;" 
+                                              onsubmit="return confirm('Tem certeza que deseja excluir este lançamento?');">
+                                            <button type="submit" 
+                                                    class="btn btn-danger" 
+                                                    title="Excluir">
+                                                <i class="bi bi-trash"></i>
+                                            </button>
+                                        </form>
+                                    </div>
+                                </td>
+                                {% endif %}
+                            </tr>
+                            {% endfor %}
+                        {% else %}
+                            <tr>
+                                <td colspan="{% if nivel_usuario in ['ADMIN', 'ADMINISTRADOR'] %}9{% else %}8{% endif %}" 
+                                    class="text-center text-muted py-3" 
+                                    style="font-size: 0.9rem;">
+                                    <i class="bi bi-inbox" style="font-size:1.5rem;"></i><br>
+                                    Nenhum lançamento encontrado
+                                    {% if nivel_usuario in ['ADMIN', 'ADMINISTRADOR'] %}
+                                    <br><a href="{{ url_for('lancamentos_despesas.novo') }}">Clique aqui para criar o primeiro lançamento</a>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                        {% endif %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    .table-sm th, .table-sm td {
+        padding: 0.4rem;
+    }
+    .btn-group-sm > .btn {
+        padding: 0.2rem 0.4rem;
+        font-size: 0.8rem;
+    }
+</style>
+{% endblock %}

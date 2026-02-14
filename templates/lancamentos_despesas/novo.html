@@ -1,0 +1,210 @@
+{% extends "base.html" %}
+
+{% block title %}Novo Lançamento - {{ app_name }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <nav aria-label="breadcrumb" class="mt-2 mb-3">
+        <ol class="breadcrumb" style="font-size: 0.85rem;">
+            <li class="breadcrumb-item"><a href="{{ url_for('index') }}">Dashboard</a></li>
+            <li class="breadcrumb-item"><a href="{{ url_for('lancamentos_despesas.lista') }}">Lançamentos de Despesas</a></li>
+            <li class="breadcrumb-item active" aria-current="page">Novo Lançamento</li>
+        </ol>
+    </nav>
+    
+    <div class="card shadow-sm">
+        <div class="card-header" style="background:#1D63A5;color:white; font-size: 0.95rem; padding: 0.6rem 1rem;">
+            <h5 class="mb-0" style="font-size: 1rem;">
+                <i class="bi bi-plus-circle"></i> Novo Lançamento de Despesa
+            </h5>
+        </div>
+        <div class="card-body" style="padding: 1.5rem;">
+            <form method="POST">
+                <div class="row">
+                    <div class="col-md-3 mb-3">
+                        <label for="data" class="form-label">Data <span class="text-danger">*</span></label>
+                        <input type="date" 
+                               class="form-control" 
+                               id="data" 
+                               name="data" 
+                               value="{{ data_hoje }}" 
+                               required>
+                    </div>
+                    
+                    <div class="col-md-3 mb-3">
+                        <label for="titulo_id" class="form-label">Título <span class="text-danger">*</span></label>
+                        <select class="form-select" 
+                                id="titulo_id" 
+                                name="titulo_id" 
+                                required
+                                onchange="loadCategorias()">
+                            <option value="">Selecione...</option>
+                            {% for titulo in titulos %}
+                            <option value="{{ titulo.id }}">{{ titulo.nome }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    
+                    <div class="col-md-3 mb-3">
+                        <label for="categoria_id" class="form-label">Categoria <span class="text-danger">*</span></label>
+                        <select class="form-select" 
+                                id="categoria_id" 
+                                name="categoria_id" 
+                                required
+                                onchange="loadSubcategorias()"
+                                disabled>
+                            <option value="">Selecione o título primeiro</option>
+                        </select>
+                    </div>
+                    
+                    <div class="col-md-3 mb-3">
+                        <label for="subcategoria_id" class="form-label">Subcategoria</label>
+                        <select class="form-select" 
+                                id="subcategoria_id" 
+                                name="subcategoria_id"
+                                disabled>
+                            <option value="">Selecione a categoria primeiro</option>
+                        </select>
+                        <small class="form-text text-muted">Opcional</small>
+                    </div>
+                </div>
+                
+                <div class="row">
+                    <div class="col-md-4 mb-3">
+                        <label for="valor" class="form-label">Valor <span class="text-danger">*</span></label>
+                        <input type="text" 
+                               class="form-control" 
+                               id="valor" 
+                               name="valor" 
+                               placeholder="0,00"
+                               required>
+                        <small class="form-text text-muted">Formato: 1.500,00</small>
+                    </div>
+                    
+                    <div class="col-md-8 mb-3">
+                        <label for="fornecedor" class="form-label">Fornecedor</label>
+                        <input type="text" 
+                               class="form-control" 
+                               id="fornecedor" 
+                               name="fornecedor" 
+                               maxlength="255"
+                               placeholder="Nome do fornecedor ou prestador de serviço">
+                    </div>
+                </div>
+                
+                <div class="mb-3">
+                    <label for="observacao" class="form-label">Observação</label>
+                    <textarea class="form-control" 
+                              id="observacao" 
+                              name="observacao" 
+                              rows="3"
+                              placeholder="Detalhes adicionais sobre esta despesa"></textarea>
+                </div>
+                
+                <div class="d-flex justify-content-between">
+                    <a href="{{ url_for('lancamentos_despesas.lista') }}" class="btn btn-secondary">
+                        <i class="bi bi-arrow-left"></i> Voltar
+                    </a>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="bi bi-save"></i> Salvar
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+// Load categorias when titulo is selected
+function loadCategorias() {
+    const tituloId = document.getElementById('titulo_id').value;
+    const categoriaSelect = document.getElementById('categoria_id');
+    const subcategoriaSelect = document.getElementById('subcategoria_id');
+    
+    // Reset categoria and subcategoria
+    categoriaSelect.innerHTML = '<option value="">Carregando...</option>';
+    categoriaSelect.disabled = true;
+    subcategoriaSelect.innerHTML = '<option value="">Selecione a categoria primeiro</option>';
+    subcategoriaSelect.disabled = true;
+    
+    if (!tituloId) {
+        categoriaSelect.innerHTML = '<option value="">Selecione o título primeiro</option>';
+        return;
+    }
+    
+    // Fetch categorias
+    fetch(`/lancamentos_despesas/api/categorias/${tituloId}`)
+        .then(response => response.json())
+        .then(data => {
+            categoriaSelect.innerHTML = '<option value="">Selecione...</option>';
+            data.forEach(cat => {
+                const option = document.createElement('option');
+                option.value = cat.id;
+                option.textContent = cat.nome;
+                categoriaSelect.appendChild(option);
+            });
+            categoriaSelect.disabled = false;
+        })
+        .catch(error => {
+            console.error('Erro ao carregar categorias:', error);
+            categoriaSelect.innerHTML = '<option value="">Erro ao carregar</option>';
+        });
+}
+
+// Load subcategorias when categoria is selected
+function loadSubcategorias() {
+    const categoriaId = document.getElementById('categoria_id').value;
+    const subcategoriaSelect = document.getElementById('subcategoria_id');
+    
+    // Reset subcategoria
+    subcategoriaSelect.innerHTML = '<option value="">Carregando...</option>';
+    subcategoriaSelect.disabled = true;
+    
+    if (!categoriaId) {
+        subcategoriaSelect.innerHTML = '<option value="">Selecione a categoria primeiro</option>';
+        return;
+    }
+    
+    // Fetch subcategorias
+    fetch(`/lancamentos_despesas/api/subcategorias/${categoriaId}`)
+        .then(response => response.json())
+        .then(data => {
+            subcategoriaSelect.innerHTML = '<option value="">Nenhuma</option>';
+            data.forEach(sub => {
+                const option = document.createElement('option');
+                option.value = sub.id;
+                option.textContent = sub.nome;
+                subcategoriaSelect.appendChild(option);
+            });
+            subcategoriaSelect.disabled = false;
+        })
+        .catch(error => {
+            console.error('Erro ao carregar subcategorias:', error);
+            subcategoriaSelect.innerHTML = '<option value="">Erro ao carregar</option>';
+        });
+}
+
+// Format currency input
+document.getElementById('valor').addEventListener('blur', function(e) {
+    let value = e.target.value;
+    
+    // Remove all non-numeric characters except comma and dot
+    value = value.replace(/[^\d,\.]/g, '');
+    
+    // If empty, set to 0,00
+    if (!value) {
+        e.target.value = '0,00';
+        return;
+    }
+    
+    // Convert to decimal
+    value = value.replace('.', '').replace(',', '.');
+    const decimal = parseFloat(value);
+    
+    if (!isNaN(decimal)) {
+        // Format as Brazilian currency
+        e.target.value = decimal.toFixed(2).replace('.', ',');
+    }
+});
+</script>
+{% endblock %}
