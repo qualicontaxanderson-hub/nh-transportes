@@ -17,9 +17,14 @@
             <i class="bi bi-cash-coin"></i> Lançamentos de Despesas
         </h2>
         {% if nivel_usuario in ['ADMIN', 'ADMINISTRADOR'] %}
-        <a href="{{ url_for('lancamentos_despesas.novo') }}" class="btn btn-primary btn-sm">
-            <i class="bi bi-plus-circle"></i> Novo Lançamento
-        </a>
+        <div class="btn-group" role="group">
+            <a href="{{ url_for('lancamentos_despesas.novo') }}" class="btn btn-primary btn-sm">
+                <i class="bi bi-plus-circle"></i> Lançamento Individual
+            </a>
+            <a href="{{ url_for('lancamentos_despesas.mensal') }}" class="btn btn-success btn-sm">
+                <i class="bi bi-calendar-month"></i> Lançamento Mensal
+            </a>
+        </div>
         {% endif %}
     </div>
 
@@ -33,15 +38,26 @@
         <div class="card-body" style="padding: 1rem;">
             <form method="GET" action="{{ url_for('lancamentos_despesas.lista') }}">
                 <div class="row">
-                    <div class="col-md-3 mb-2">
+                    <div class="col-md-2 mb-2">
                         <label for="data_inicio" class="form-label" style="font-size: 0.85rem;">Data Início</label>
                         <input type="date" class="form-control form-control-sm" id="data_inicio" name="data_inicio" 
                                value="{{ filtros.data_inicio }}">
                     </div>
-                    <div class="col-md-3 mb-2">
+                    <div class="col-md-2 mb-2">
                         <label for="data_fim" class="form-label" style="font-size: 0.85rem;">Data Fim</label>
                         <input type="date" class="form-control form-control-sm" id="data_fim" name="data_fim" 
                                value="{{ filtros.data_fim }}">
+                    </div>
+                    <div class="col-md-3 mb-2">
+                        <label for="cliente_id" class="form-label" style="font-size: 0.85rem;">Empresa</label>
+                        <select class="form-select form-select-sm" id="cliente_id" name="cliente_id">
+                            <option value="">Todas</option>
+                            {% for cliente in clientes %}
+                            <option value="{{ cliente.id }}" {% if filtros.cliente_id|string == cliente.id|string %}selected{% endif %}>
+                                {{ cliente.razao_social }}
+                            </option>
+                            {% endfor %}
+                        </select>
                     </div>
                     <div class="col-md-3 mb-2">
                         <label for="titulo_id" class="form-label" style="font-size: 0.85rem;">Título</label>
@@ -55,7 +71,7 @@
                             {% endfor %}
                         </select>
                     </div>
-                    <div class="col-md-3 mb-2">
+                    <div class="col-md-2 mb-2">
                         <label for="categoria_id" class="form-label" style="font-size: 0.85rem;">Categoria</label>
                         <select class="form-select form-select-sm" id="categoria_id" name="categoria_id">
                             <option value="">Todas</option>
@@ -100,6 +116,7 @@
                         <tr>
                             <th>ID</th>
                             <th>Data</th>
+                            <th>Empresa</th>
                             <th>Título</th>
                             <th>Categoria</th>
                             <th>Subcategoria</th>
@@ -117,6 +134,7 @@
                             <tr>
                                 <td><strong>{{ lanc.id }}</strong></td>
                                 <td>{{ lanc.data.strftime('%d/%m/%Y') if lanc.data else '-' }}</td>
+                                <td>{{ lanc.cliente_nome or '-' }}</td>
                                 <td>{{ lanc.titulo_nome }}</td>
                                 <td>{{ lanc.categoria_nome }}</td>
                                 <td>{{ lanc.subcategoria_nome or '-' }}</td>

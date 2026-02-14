@@ -1,0 +1,228 @@
+{% extends "base.html" %}
+
+{% block title %}Lançamento Mensal de Despesas - {{ app_name }}{% endblock %}
+
+{% block content %}
+{% set nivel_usuario = current_user.nivel|upper if current_user.nivel else '' %}
+<div class="container-fluid">
+    <nav aria-label="breadcrumb" class="mt-2 mb-3">
+        <ol class="breadcrumb" style="font-size: 0.85rem;">
+            <li class="breadcrumb-item"><a href="{{ url_for('index') }}">Dashboard</a></li>
+            <li class="breadcrumb-item"><a href="{{ url_for('lancamentos_despesas.lista') }}">Lançamentos de Despesas</a></li>
+            <li class="breadcrumb-item active" aria-current="page">Lançamento Mensal</li>
+        </ol>
+    </nav>
+    
+    <div class="card shadow-sm mb-4">
+        <div class="card-header" style="background:#1D63A5;color:white; font-size: 0.95rem; padding: 0.6rem 1rem;">
+            <h5 class="mb-0" style="font-size: 1rem;">
+                <i class="bi bi-calendar-month"></i> Lançamento Mensal de Despesas
+            </h5>
+        </div>
+        <div class="card-body" style="padding: 1.5rem;">
+            <div class="alert alert-info" role="alert">
+                <i class="bi bi-info-circle"></i> <strong>Lançamento em Batch:</strong> 
+                Preencha apenas as despesas que ocorreram no mês. Deixe em branco ou zerado as que não tiveram movimento.
+            </div>
+            
+            <form method="POST" id="mensalForm">
+                <!-- Seleção de Empresa e Mês/Ano -->
+                <div class="row mb-4">
+                    <div class="col-md-6">
+                        <label for="cliente_id" class="form-label">Empresa <span class="text-danger">*</span></label>
+                        <select class="form-select" id="cliente_id" name="cliente_id" required>
+                            <option value="">Selecione a empresa...</option>
+                            {% for cliente in clientes %}
+                            <option value="{{ cliente.id }}">{{ cliente.razao_social }}</option>
+                            {% endfor %}
+                        </select>
+                        <small class="form-text text-muted">Apenas empresas com produtos configurados</small>
+                    </div>
+                    <div class="col-md-6">
+                        <label for="mes_ano" class="form-label">Mês/Ano <span class="text-danger">*</span></label>
+                        <input type="month" 
+                               class="form-control" 
+                               id="mes_ano" 
+                               name="mes_ano" 
+                               value="{{ mes_ano_atual }}" 
+                               required>
+                        <small class="form-text text-muted">Ex: Fevereiro de 2026</small>
+                    </div>
+                </div>
+                
+                <hr>
+                
+                <!-- Despesas por Título -->
+                {% for titulo in titulos %}
+                <div class="card mb-3">
+                    <div class="card-header" style="background:#4A90E2;color:#000;font-weight:600;">
+                        <h6 class="mb-0">{{ titulo.nome }}</h6>
+                    </div>
+                    <div class="card-body p-0">
+                        <div class="table-responsive">
+                            <table class="table table-sm table-hover mb-0" style="font-size: 0.85rem;">
+                                <thead style="background:#f8f9fa;">
+                                    <tr>
+                                        <th style="width: 25%;">Categoria</th>
+                                        <th style="width: 20%;">Subcategoria</th>
+                                        <th style="width: 20%;">Fornecedor</th>
+                                        <th style="width: 15%;">Valor (R$)</th>
+                                        <th style="width: 20%;">Observação</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for categoria in titulo.categorias %}
+                                        {% if categoria.subcategorias %}
+                                            {% for subcategoria in categoria.subcategorias %}
+                                            <tr>
+                                                <td>
+                                                    {% if loop.first %}
+                                                    <strong>{{ categoria.nome }}</strong>
+                                                    {% endif %}
+                                                </td>
+                                                <td>{{ subcategoria.nome }}</td>
+                                                <td>
+                                                    <input type="text" 
+                                                           class="form-control form-control-sm" 
+                                                           name="fornecedor_{{ categoria.id }}_{{ subcategoria.id }}"
+                                                           placeholder="Fornecedor...">
+                                                </td>
+                                                <td>
+                                                    <input type="text" 
+                                                           class="form-control form-control-sm valor-input" 
+                                                           name="valor_{{ categoria.id }}_{{ subcategoria.id }}"
+                                                           placeholder="0,00"
+                                                           data-titulo="{{ titulo.id }}">
+                                                </td>
+                                                <td>
+                                                    <input type="text" 
+                                                           class="form-control form-control-sm" 
+                                                           name="observacao_{{ categoria.id }}_{{ subcategoria.id }}"
+                                                           placeholder="Detalhes...">
+                                                </td>
+                                            </tr>
+                                            {% endfor %}
+                                        {% else %}
+                                            <tr>
+                                                <td><strong>{{ categoria.nome }}</strong></td>
+                                                <td>-</td>
+                                                <td>
+                                                    <input type="text" 
+                                                           class="form-control form-control-sm" 
+                                                           name="fornecedor_{{ categoria.id }}_None"
+                                                           placeholder="Fornecedor...">
+                                                </td>
+                                                <td>
+                                                    <input type="text" 
+                                                           class="form-control form-control-sm valor-input" 
+                                                           name="valor_{{ categoria.id }}_None"
+                                                           placeholder="0,00"
+                                                           data-titulo="{{ titulo.id }}">
+                                                </td>
+                                                <td>
+                                                    <input type="text" 
+                                                           class="form-control form-control-sm" 
+                                                           name="observacao_{{ categoria.id }}_None"
+                                                           placeholder="Detalhes...">
+                                                </td>
+                                            </tr>
+                                        {% endif %}
+                                    {% endfor %}
+                                </tbody>
+                                <tfoot style="background:#f8f9fa;font-weight:600;">
+                                    <tr>
+                                        <td colspan="3" class="text-end">Total {{ titulo.nome }}:</td>
+                                        <td id="total_titulo_{{ titulo.id }}">R$ 0,00</td>
+                                        <td></td>
+                                    </tr>
+                                </tfoot>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+                
+                <!-- Total Geral -->
+                <div class="card mb-3" style="border: 2px solid #1D63A5;">
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-8 text-end">
+                                <h5 style="color:#1D63A5;">TOTAL GERAL:</h5>
+                            </div>
+                            <div class="col-md-4">
+                                <h5 id="total_geral" style="color:#1D63A5;">R$ 0,00</h5>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Botões -->
+                <div class="d-flex justify-content-between">
+                    <a href="{{ url_for('lancamentos_despesas.lista') }}" class="btn btn-secondary">
+                        <i class="bi bi-arrow-left"></i> Voltar
+                    </a>
+                    <button type="submit" class="btn btn-primary btn-lg">
+                        <i class="bi bi-check-circle"></i> Salvar Lançamentos
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+// Format valor inputs as Brazilian currency
+document.querySelectorAll('.valor-input').forEach(input => {
+    input.addEventListener('input', function(e) {
+        let value = e.target.value.replace(/\D/g, '');
+        if (value) {
+            value = (parseInt(value) / 100).toFixed(2);
+            value = value.replace('.', ',');
+            value = value.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+            e.target.value = value;
+        }
+        calculateTotals();
+    });
+});
+
+function parseValor(str) {
+    if (!str) return 0;
+    // Remove pontos e substitui vírgula por ponto
+    str = str.replace(/\./g, '').replace(',', '.');
+    return parseFloat(str) || 0;
+}
+
+function formatValor(num) {
+    return 'R$ ' + num.toFixed(2).replace('.', ',').replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+}
+
+function calculateTotals() {
+    // Calculate total per titulo
+    const tituloTotals = {};
+    document.querySelectorAll('.valor-input').forEach(input => {
+        const tituloId = input.getAttribute('data-titulo');
+        const valor = parseValor(input.value);
+        if (!tituloTotals[tituloId]) {
+            tituloTotals[tituloId] = 0;
+        }
+        tituloTotals[tituloId] += valor;
+    });
+    
+    // Update titulo totals
+    let totalGeral = 0;
+    for (const [tituloId, total] of Object.entries(tituloTotals)) {
+        const elem = document.getElementById('total_titulo_' + tituloId);
+        if (elem) {
+            elem.textContent = formatValor(total);
+        }
+        totalGeral += total;
+    }
+    
+    // Update general total
+    document.getElementById('total_geral').textContent = formatValor(totalGeral);
+}
+
+// Initialize totals on page load
+calculateTotals();
+</script>
+{% endblock %}
