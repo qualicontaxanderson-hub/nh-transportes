@@ -8,38 +8,6 @@ from decimal import Decimal
 bp = Blueprint('lancamentos_despesas', __name__, url_prefix='/lancamentos_despesas')
 
 
-def get_clientes_com_produtos():
-    """
-    Get list of clientes (companies) that have products configured.
-    Only shows clientes with at least one active product in cliente_produtos.
-    
-    Returns:
-        list: List of cliente dictionaries
-    """
-    conn = None
-    cursor = None
-    try:
-        conn = get_db_connection()
-        cursor = conn.cursor(dictionary=True)
-        
-        cursor.execute("""
-            SELECT DISTINCT c.id, c.razao_social, c.nome_fantasia
-            FROM clientes c
-            INNER JOIN cliente_produtos cp ON c.id = cp.cliente_id
-            WHERE cp.ativo = 1
-            ORDER BY c.razao_social
-        """)
-        
-        return cursor.fetchall()
-    except:
-        return []
-    finally:
-        if cursor:
-            cursor.close()
-        if conn:
-            conn.close()
-
-
 def parse_brazilian_currency(value_str):
     """
     Convert Brazilian currency format to Decimal.
@@ -135,7 +103,6 @@ def lista():
         # Get filter parameters
         data_inicio = request.args.get('data_inicio', '')
         data_fim = request.args.get('data_fim', '')
-        cliente_id = request.args.get('cliente_id', '')
         titulo_id = request.args.get('titulo_id', '')
         categoria_id = request.args.get('categoria_id', '')
         
@@ -144,13 +111,11 @@ def lista():
             SELECT ld.*, 
                    t.nome as titulo_nome,
                    c.nome as categoria_nome,
-                   s.nome as subcategoria_nome,
-                   cl.razao_social as cliente_nome
+                   s.nome as subcategoria_nome
             FROM lancamentos_despesas ld
             INNER JOIN titulos_despesas t ON ld.titulo_id = t.id
             INNER JOIN categorias_despesas c ON ld.categoria_id = c.id
             LEFT JOIN subcategorias_despesas s ON ld.subcategoria_id = s.id
-            LEFT JOIN clientes cl ON ld.cliente_id = cl.id
             WHERE 1=1
         """
         params = []
@@ -163,10 +128,6 @@ def lista():
         if data_fim:
             query += " AND ld.data <= %s"
             params.append(data_fim)
-        
-        if cliente_id:
-            query += " AND ld.cliente_id = %s"
-            params.append(cliente_id)
         
         if titulo_id:
             query += " AND ld.titulo_id = %s"
@@ -183,9 +144,6 @@ def lista():
         
         # Calculate total
         total = sum(lanc['valor'] for lanc in lancamentos) if lancamentos else Decimal('0')
-        
-        # Get clientes with products for filter
-        clientes = get_clientes_com_produtos()
         
         # Get titulos for filter
         cursor.execute("""
@@ -210,13 +168,11 @@ def lista():
         return render_template('lancamentos_despesas/lista.html', 
                              lancamentos=lancamentos,
                              total=total,
-                             clientes=clientes,
                              titulos=titulos,
                              categorias=categorias,
                              filtros={
                                  'data_inicio': data_inicio,
                                  'data_fim': data_fim,
-                                 'cliente_id': cliente_id,
                                  'titulo_id': titulo_id,
                                  'categoria_id': categoria_id
                              })
@@ -225,7 +181,6 @@ def lista():
         return render_template('lancamentos_despesas/lista.html', 
                              lancamentos=[],
                              total=Decimal('0'),
-                             clientes=[],
                              titulos=[],
                              categorias=[],
                              filtros={})
@@ -248,7 +203,6 @@ def novo():
         try:
             # Get form data
             data = request.form.get('data')
-            cliente_id = request.form.get('cliente_id')
             titulo_id = request.form.get('titulo_id')
             categoria_id = request.form.get('categoria_id')
             subcategoria_id = request.form.get('subcategoria_id')
@@ -267,8 +221,7 @@ def novo():
             # Parse valor
             valor_decimal = parse_brazilian_currency(valor)
             
-            # Convert empty values to None
-            cliente_id = int(cliente_id) if cliente_id and cliente_id.strip() else None
+            # Convert empty subcategoria to None
             subcategoria_id = int(subcategoria_id) if subcategoria_id and subcategoria_id.strip() else None
             
             # Insert
@@ -277,9 +230,9 @@ def novo():
             
             cursor.execute("""
                 INSERT INTO lancamentos_despesas 
-                (data, cliente_id, titulo_id, categoria_id, subcategoria_id, valor, fornecedor, observacao)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-            """, (data, cliente_id, titulo_id, categoria_id, subcategoria_id, valor_decimal, fornecedor, observacao))
+                (data, titulo_id, categoria_id, subcategoria_id, valor, fornecedor, observacao)
+                VALUES (%s, %s, %s, %s, %s, %s, %s)
+            """, (data, titulo_id, categoria_id, subcategoria_id, valor_decimal, fornecedor, observacao))
             
             conn.commit()
             
@@ -302,9 +255,6 @@ def novo():
         conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)
         
-        # Get clientes with products
-        clientes = get_clientes_com_produtos()
-        
         # Get titulos
         cursor.execute("""
             SELECT id, nome 
@@ -318,7 +268,6 @@ def novo():
         data_hoje = datetime.now().strftime('%Y-%m-%d')
         
         return render_template('lancamentos_despesas/novo.html', 
-                             clientes=clientes,
                              titulos=titulos,
                              data_hoje=data_hoje)
     except Exception as e:
@@ -343,7 +292,6 @@ def editar(id):
         try:
             # Get form data
             data = request.form.get('data')
-            cliente_id = request.form.get('cliente_id')
             titulo_id = request.form.get('titulo_id')
             categoria_id = request.form.get('categoria_id')
             subcategoria_id = request.form.get('subcategoria_id')
@@ -362,8 +310,7 @@ def editar(id):
             # Parse valor
             valor_decimal = parse_brazilian_currency(valor)
             
-            # Convert empty values to None
-            cliente_id = int(cliente_id) if cliente_id and cliente_id.strip() else None
+            # Convert empty subcategoria to None
             subcategoria_id = int(subcategoria_id) if subcategoria_id and subcategoria_id.strip() else None
             
             # Update
@@ -373,7 +320,6 @@ def editar(id):
             cursor.execute("""
                 UPDATE lancamentos_despesas 
                 SET data = %s, 
-                    cliente_id = %s,
                     titulo_id = %s, 
                     categoria_id = %s, 
                     subcategoria_id = %s, 
@@ -381,7 +327,7 @@ def editar(id):
                     fornecedor = %s, 
                     observacao = %s
                 WHERE id = %s
-            """, (data, cliente_id, titulo_id, categoria_id, subcategoria_id, valor_decimal, fornecedor, observacao, id))
+            """, (data, titulo_id, categoria_id, subcategoria_id, valor_decimal, fornecedor, observacao, id))
             
             conn.commit()
             
@@ -409,13 +355,11 @@ def editar(id):
             SELECT ld.*,
                    t.nome as titulo_nome,
                    c.nome as categoria_nome,
-                   s.nome as subcategoria_nome,
-                   cl.razao_social as cliente_nome
+                   s.nome as subcategoria_nome
             FROM lancamentos_despesas ld
             INNER JOIN titulos_despesas t ON ld.titulo_id = t.id
             INNER JOIN categorias_despesas c ON ld.categoria_id = c.id
             LEFT JOIN subcategorias_despesas s ON ld.subcategoria_id = s.id
-            LEFT JOIN clientes cl ON ld.cliente_id = cl.id
             WHERE ld.id = %s
         """, (id,))
         lancamento = cursor.fetchone()
@@ -423,9 +367,6 @@ def editar(id):
         if not lancamento:
             flash('Lançamento não encontrado!', 'danger')
             return redirect(url_for('lancamentos_despesas.lista'))
-        
-        # Get clientes with products
-        clientes = get_clientes_com_produtos()
         
         # Get titulos
         cursor.execute("""
@@ -456,7 +397,6 @@ def editar(id):
         
         return render_template('lancamentos_despesas/editar.html', 
                              lancamento=lancamento,
-                             clientes=clientes,
                              titulos=titulos,
                              categorias=categorias,
                              subcategorias=subcategorias)
@@ -496,163 +436,6 @@ def excluir(id):
             conn.close()
     
     return redirect(url_for('lancamentos_despesas.lista'))
-
-
-@bp.route('/mensal', methods=['GET', 'POST'])
-@login_required
-@admin_required
-def mensal():
-    """Monthly batch posting of expenses"""
-    conn = None
-    cursor = None
-    
-    if request.method == 'POST':
-        try:
-            # Get form data
-            cliente_id = request.form.get('cliente_id')
-            mes_ano = request.form.get('mes_ano')  # Format: YYYY-MM
-            
-            if not cliente_id:
-                flash('Empresa é obrigatória!', 'danger')
-                return redirect(url_for('lancamentos_despesas.mensal'))
-            
-            if not mes_ano:
-                flash('Mês/Ano é obrigatório!', 'danger')
-                return redirect(url_for('lancamentos_despesas.mensal'))
-            
-            # Parse mes_ano to get first day of month
-            try:
-                ano, mes = mes_ano.split('-')
-                data_lancamento = f"{ano}-{mes}-01"
-                datetime.strptime(data_lancamento, '%Y-%m-%d')  # Validate date
-            except:
-                flash('Mês/Ano inválido!', 'danger')
-                return redirect(url_for('lancamentos_despesas.mensal'))
-            
-            conn = get_db_connection()
-            cursor = conn.cursor()
-            
-            lancamentos_criados = 0
-            
-            # Process each row submitted
-            # Form fields are named: valor_CAT_ID_SUBCAT_ID, fornecedor_CAT_ID_SUBCAT_ID, observacao_CAT_ID_SUBCAT_ID
-            for key in request.form.keys():
-                if key.startswith('valor_'):
-                    # Extract categoria_id and subcategoria_id from field name
-                    parts = key.replace('valor_', '').split('_')
-                    categoria_id = parts[0]
-                    subcategoria_id = parts[1] if len(parts) > 1 and parts[1] != 'None' else None
-                    
-                    # Get corresponding values
-                    valor_str = request.form.get(key, '').strip()
-                    fornecedor = request.form.get(f'fornecedor_{parts[0]}_{parts[1] if len(parts) > 1 else "None"}', '').strip()
-                    observacao = request.form.get(f'observacao_{parts[0]}_{parts[1] if len(parts) > 1 else "None"}', '').strip()
-                    
-                    # Skip if valor is empty or zero
-                    if not valor_str:
-                        continue
-                    
-                    try:
-                        valor_decimal = parse_brazilian_currency(valor_str)
-                        if valor_decimal <= 0:
-                            continue
-                    except:
-                        continue
-                    
-                    # Get titulo_id for this categoria
-                    cursor.execute("SELECT titulo_id FROM categorias_despesas WHERE id = %s", (categoria_id,))
-                    result = cursor.fetchone()
-                    if not result:
-                        continue
-                    titulo_id = result[0]
-                    
-                    # Insert lancamento
-                    cursor.execute("""
-                        INSERT INTO lancamentos_despesas 
-                        (data, cliente_id, titulo_id, categoria_id, subcategoria_id, valor, fornecedor, observacao)
-                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-                    """, (data_lancamento, cliente_id, titulo_id, categoria_id, 
-                          subcategoria_id if subcategoria_id and subcategoria_id != 'None' else None,
-                          valor_decimal, fornecedor, observacao))
-                    
-                    lancamentos_criados += 1
-            
-            conn.commit()
-            
-            if lancamentos_criados > 0:
-                flash(f'✅ {lancamentos_criados} lançamento(s) criado(s) com sucesso!', 'success')
-            else:
-                flash('⚠️ Nenhum lançamento foi criado. Preencha ao menos um valor.', 'warning')
-            
-            return redirect(url_for('lancamentos_despesas.lista'))
-            
-        except Exception as e:
-            if conn:
-                conn.rollback()
-            flash(f'Erro ao criar lançamentos: {str(e)}', 'danger')
-            return redirect(url_for('lancamentos_despesas.mensal'))
-        finally:
-            if cursor:
-                cursor.close()
-            if conn:
-                conn.close()
-    
-    # GET - Show form
-    try:
-        conn = get_db_connection()
-        cursor = conn.cursor(dictionary=True)
-        
-        # Get clientes with products
-        clientes = get_clientes_com_produtos()
-        
-        # Get all titulos with their categorias and subcategorias
-        cursor.execute("""
-            SELECT id, nome, ordem
-            FROM titulos_despesas 
-            WHERE ativo = 1 
-            ORDER BY ordem, nome
-        """)
-        titulos = cursor.fetchall()
-        
-        # For each titulo, get categorias and subcategorias
-        titulos_completos = []
-        for titulo in titulos:
-            cursor.execute("""
-                SELECT id, nome, titulo_id, ordem
-                FROM categorias_despesas 
-                WHERE titulo_id = %s AND ativo = 1 
-                ORDER BY ordem, nome
-            """, (titulo['id'],))
-            categorias = cursor.fetchall()
-            
-            # For each categoria, get subcategorias
-            for categoria in categorias:
-                cursor.execute("""
-                    SELECT id, nome, categoria_id, ordem
-                    FROM subcategorias_despesas 
-                    WHERE categoria_id = %s AND ativo = 1 
-                    ORDER BY ordem, nome
-                """, (categoria['id'],))
-                categoria['subcategorias'] = cursor.fetchall()
-            
-            titulo['categorias'] = categorias
-            titulos_completos.append(titulo)
-        
-        # Get current month for default value
-        mes_ano_atual = datetime.now().strftime('%Y-%m')
-        
-        return render_template('lancamentos_despesas/mensal.html', 
-                             clientes=clientes,
-                             titulos=titulos_completos,
-                             mes_ano_atual=mes_ano_atual)
-    except Exception as e:
-        flash(f'Erro ao carregar formulário: {str(e)}', 'danger')
-        return redirect(url_for('lancamentos_despesas.lista'))
-    finally:
-        if cursor:
-            cursor.close()
-        if conn:
-            conn.close()
 
 
 # API endpoints for dynamic form loading

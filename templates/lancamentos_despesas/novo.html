@@ -32,6 +32,19 @@
                     </div>
                     
                     <div class="col-md-3 mb-3">
+                        <label for="cliente_id" class="form-label">Empresa</label>
+                        <select class="form-select" 
+                                id="cliente_id" 
+                                name="cliente_id">
+                            <option value="">Selecione...</option>
+                            {% for cliente in clientes %}
+                            <option value="{{ cliente.id }}">{{ cliente.razao_social }}</option>
+                            {% endfor %}
+                        </select>
+                        <small class="form-text text-muted">Opcional - apenas empresas com produtos</small>
+                    </div>
+                    
+                    <div class="col-md-3 mb-3">
                         <label for="titulo_id" class="form-label">Título <span class="text-danger">*</span></label>
                         <select class="form-select" 
                                 id="titulo_id" 
@@ -56,8 +69,10 @@
                             <option value="">Selecione o título primeiro</option>
                         </select>
                     </div>
-                    
-                    <div class="col-md-3 mb-3">
+                </div>
+                
+                <div class="row">
+                    <div class="col-md-4 mb-3">
                         <label for="subcategoria_id" class="form-label">Subcategoria</label>
                         <select class="form-select" 
                                 id="subcategoria_id" 
@@ -67,9 +82,7 @@
                         </select>
                         <small class="form-text text-muted">Opcional</small>
                     </div>
-                </div>
-                
-                <div class="row">
+                    
                     <div class="col-md-4 mb-3">
                         <label for="valor" class="form-label">Valor <span class="text-danger">*</span></label>
                         <input type="text" 
