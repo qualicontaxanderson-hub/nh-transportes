@@ -82,10 +82,20 @@
                                                 </td>
                                                 <td>{{ subcategoria.nome }}</td>
                                                 <td>
-                                                    <input type="text" 
-                                                           class="form-control form-control-sm" 
-                                                           name="fornecedor_{{ categoria.id }}_{{ subcategoria.id }}"
-                                                           placeholder="Fornecedor...">
+                                                    <div class="input-group input-group-sm">
+                                                        <select class="form-select form-select-sm fornecedor-select" 
+                                                                name="fornecedor_{{ categoria.id }}_{{ subcategoria.id }}"
+                                                                data-categoria-id="{{ categoria.id }}">
+                                                            <option value="">Selecione...</option>
+                                                        </select>
+                                                        <button class="btn btn-outline-primary btn-sm add-fornecedor-btn" 
+                                                                type="button" 
+                                                                data-categoria-id="{{ categoria.id }}"
+                                                                data-categoria-nome="{{ categoria.nome }}"
+                                                                title="Adicionar fornecedor">
+                                                            <i class="bi bi-plus-circle"></i>
+                                                        </button>
+                                                    </div>
                                                 </td>
                                                 <td>
                                                     <input type="text" 
@@ -107,10 +117,20 @@
                                                 <td><strong>{{ categoria.nome }}</strong></td>
                                                 <td>-</td>
                                                 <td>
-                                                    <input type="text" 
-                                                           class="form-control form-control-sm" 
-                                                           name="fornecedor_{{ categoria.id }}_None"
-                                                           placeholder="Fornecedor...">
+                                                    <div class="input-group input-group-sm">
+                                                        <select class="form-select form-select-sm fornecedor-select" 
+                                                                name="fornecedor_{{ categoria.id }}_None"
+                                                                data-categoria-id="{{ categoria.id }}">
+                                                            <option value="">Selecione...</option>
+                                                        </select>
+                                                        <button class="btn btn-outline-primary btn-sm add-fornecedor-btn" 
+                                                                type="button" 
+                                                                data-categoria-id="{{ categoria.id }}"
+                                                                data-categoria-nome="{{ categoria.nome }}"
+                                                                title="Adicionar fornecedor">
+                                                            <i class="bi bi-plus-circle"></i>
+                                                        </button>
+                                                    </div>
                                                 </td>
                                                 <td>
                                                     <input type="text" 
@@ -224,5 +244,98 @@ function calculateTotals() {
 
 // Initialize totals on page load
 calculateTotals();
+
+// ===== FORNECEDORES MANAGEMENT =====
+
+// Load fornecedores for each categoria on page load
+document.addEventListener('DOMContentLoaded', function() {
+    loadAllFornecedores();
+});
+
+function loadAllFornecedores() {
+    const selects = document.querySelectorAll('.fornecedor-select');
+    const categoriaIds = new Set();
+    
+    // Get unique categoria IDs
+    selects.forEach(select => {
+        const categoriaId = select.getAttribute('data-categoria-id');
+        if (categoriaId) {
+            categoriaIds.add(categoriaId);
+        }
+    });
+    
+    // Load fornecedores for each categoria
+    categoriaIds.forEach(categoriaId => {
+        loadFornecedoresPorCategoria(categoriaId);
+    });
+}
+
+function loadFornecedoresPorCategoria(categoriaId) {
+    fetch(`/despesas/fornecedores/api/por-categoria/${categoriaId}`)
+        .then(response => response.json())
+        .then(fornecedores => {
+            // Update all selects for this categoria
+            const selects = document.querySelectorAll(`.fornecedor-select[data-categoria-id="${categoriaId}"]`);
+            selects.forEach(select => {
+                // Clear existing options except first
+                while (select.options.length > 1) {
+                    select.remove(1);
+                }
+                
+                // Add fornecedores
+                fornecedores.forEach(fornecedor => {
+                    const option = new Option(fornecedor.nome, fornecedor.nome);
+                    select.add(option);
+                });
+            });
+        })
+        .catch(error => {
+            console.error('Erro ao carregar fornecedores:', error);
+        });
+}
+
+// Handle "Add Fornecedor" button clicks
+document.querySelectorAll('.add-fornecedor-btn').forEach(btn => {
+    btn.addEventListener('click', function() {
+        const categoriaId = this.getAttribute('data-categoria-id');
+        const categoriaNome = this.getAttribute('data-categoria-nome');
+        showAddFornecedorModal(categoriaId, categoriaNome);
+    });
+});
+
+function showAddFornecedorModal(categoriaId, categoriaNome) {
+    const nome = prompt(`Adicionar novo fornecedor para "${categoriaNome}":\n\nDigite o nome do fornecedor:`);
+    
+    if (nome && nome.trim()) {
+        createFornecedor(categoriaId, nome.trim());
+    }
+}
+
+function createFornecedor(categoriaId, nome) {
+    fetch('/despesas/fornecedores/api/criar-rapido', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+            categoria_id: categoriaId,
+            nome: nome
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert(data.message);
+            // Reload fornecedores for this categoria
+            loadFornecedoresPorCategoria(categoriaId);
+        } else {
+            alert('Erro: ' + data.message);
+        }
+    })
+    .catch(error => {
+        console.error('Erro ao criar fornecedor:', error);
+        alert('Erro ao criar fornecedor. Tente novamente.');
+    });
+}
 </script>
 {% endblock %}
