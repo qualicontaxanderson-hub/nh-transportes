@@ -96,12 +96,22 @@
                     
                     <div class="col-md-8 mb-3">
                         <label for="fornecedor" class="form-label">Fornecedor</label>
-                        <input type="text" 
-                               class="form-control" 
-                               id="fornecedor" 
-                               name="fornecedor" 
-                               maxlength="255"
-                               placeholder="Nome do fornecedor ou prestador de serviço">
+                        <div class="input-group">
+                            <select class="form-select" 
+                                    id="fornecedor" 
+                                    name="fornecedor"
+                                    disabled>
+                                <option value="">Selecione a categoria primeiro</option>
+                            </select>
+                            <button class="btn btn-outline-primary" 
+                                    type="button" 
+                                    id="add-fornecedor-btn"
+                                    disabled
+                                    title="Adicionar novo fornecedor">
+                                <i class="bi bi-plus-circle"></i> Novo Fornecedor
+                            </button>
+                        </div>
+                        <small class="form-text text-muted">Selecione um fornecedor cadastrado ou crie um novo</small>
                     </div>
                 </div>
                 
@@ -195,6 +205,95 @@ function loadSubcategorias() {
             console.error('Erro ao carregar subcategorias:', error);
             subcategoriaSelect.innerHTML = '<option value="">Erro ao carregar</option>';
         });
+    
+    // Load fornecedores for this categoria
+    loadFornecedores(categoriaId);
+}
+
+// Load fornecedores when categoria is selected
+function loadFornecedores(categoriaId) {
+    const fornecedorSelect = document.getElementById('fornecedor');
+    const addBtn = document.getElementById('add-fornecedor-btn');
+    
+    if (!categoriaId) {
+        fornecedorSelect.innerHTML = '<option value="">Selecione a categoria primeiro</option>';
+        fornecedorSelect.disabled = true;
+        addBtn.disabled = true;
+        return;
+    }
+    
+    // Reset fornecedor
+    fornecedorSelect.innerHTML = '<option value="">Carregando...</option>';
+    fornecedorSelect.disabled = true;
+    
+    // Update button with current categoria
+    addBtn.setAttribute('data-categoria-id', categoriaId);
+    addBtn.disabled = false;
+    
+    // Fetch fornecedores for this categoria
+    fetch(`/despesas/fornecedores/api/por-categoria/${categoriaId}`)
+        .then(response => response.json())
+        .then(fornecedores => {
+            fornecedorSelect.innerHTML = '<option value="">Selecione...</option>';
+            fornecedores.forEach(f => {
+                const option = document.createElement('option');
+                option.value = f.nome;
+                option.textContent = f.nome;
+                fornecedorSelect.appendChild(option);
+            });
+            fornecedorSelect.disabled = false;
+        })
+        .catch(error => {
+            console.error('Erro ao carregar fornecedores:', error);
+            fornecedorSelect.innerHTML = '<option value="">Erro ao carregar</option>';
+            fornecedorSelect.disabled = false;
+        });
+}
+
+// Handle "Add Fornecedor" button click
+document.getElementById('add-fornecedor-btn').addEventListener('click', function() {
+    const categoriaId = this.getAttribute('data-categoria-id');
+    const categoriaSelect = document.getElementById('categoria_id');
+    const categoriaNome = categoriaSelect.options[categoriaSelect.selectedIndex].text;
+    
+    if (!categoriaId) {
+        alert('Por favor, selecione uma categoria primeiro.');
+        return;
+    }
+    
+    const nome = prompt(`Adicionar novo fornecedor para "${categoriaNome}":\n\nDigite o nome do fornecedor:`);
+    
+    if (nome && nome.trim()) {
+        createFornecedor(categoriaId, nome.trim());
+    }
+});
+
+// Create new fornecedor via API
+function createFornecedor(categoriaId, nome) {
+    fetch('/despesas/fornecedores/api/criar-rapido', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+            categoria_id: categoriaId,
+            nome: nome
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert(data.message);
+            // Reload fornecedores for this categoria
+            loadFornecedores(categoriaId);
+        } else {
+            alert('Erro: ' + data.message);
+        }
+    })
+    .catch(error => {
+        console.error('Erro ao criar fornecedor:', error);
+        alert('Erro ao criar fornecedor. Tente novamente.');
+    });
 }
 
 // Format currency input
