@@ -1,0 +1,322 @@
+{% extends "base.html" %}
+
+{% block title %}Novo Lançamento - {{ app_name }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <nav aria-label="breadcrumb" class="mt-2 mb-3">
+        <ol class="breadcrumb" style="font-size: 0.85rem;">
+            <li class="breadcrumb-item"><a href="{{ url_for('index') }}">Dashboard</a></li>
+            <li class="breadcrumb-item"><a href="{{ url_for('lancamentos_despesas.lista') }}">Lançamentos de Despesas</a></li>
+            <li class="breadcrumb-item active" aria-current="page">Novo Lançamento</li>
+        </ol>
+    </nav>
+    
+    <div class="card shadow-sm">
+        <div class="card-header" style="background:#1D63A5;color:white; font-size: 0.95rem; padding: 0.6rem 1rem;">
+            <h5 class="mb-0" style="font-size: 1rem;">
+                <i class="bi bi-plus-circle"></i> Novo Lançamento de Despesa
+            </h5>
+        </div>
+        <div class="card-body" style="padding: 1.5rem;">
+            <form method="POST">
+                <div class="row">
+                    <div class="col-md-3 mb-3">
+                        <label for="data" class="form-label">Data <span class="text-danger">*</span></label>
+                        <input type="date" 
+                               class="form-control" 
+                               id="data" 
+                               name="data" 
+                               value="{{ data_hoje }}" 
+                               required>
+                    </div>
+                    
+                    <div class="col-md-3 mb-3">
+                        <label for="cliente_id" class="form-label">Empresa</label>
+                        <select class="form-select" 
+                                id="cliente_id" 
+                                name="cliente_id">
+                            <option value="">Selecione...</option>
+                            {% for cliente in clientes %}
+                            <option value="{{ cliente.id }}">{{ cliente.razao_social }}</option>
+                            {% endfor %}
+                        </select>
+                        <small class="form-text text-muted">Opcional - apenas empresas com produtos</small>
+                    </div>
+                    
+                    <div class="col-md-3 mb-3">
+                        <label for="titulo_id" class="form-label">Título <span class="text-danger">*</span></label>
+                        <select class="form-select" 
+                                id="titulo_id" 
+                                name="titulo_id" 
+                                required
+                                onchange="loadCategorias()">
+                            <option value="">Selecione...</option>
+                            {% for titulo in titulos %}
+                            <option value="{{ titulo.id }}">{{ titulo.nome }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    
+                    <div class="col-md-3 mb-3">
+                        <label for="categoria_id" class="form-label">Categoria <span class="text-danger">*</span></label>
+                        <select class="form-select" 
+                                id="categoria_id" 
+                                name="categoria_id" 
+                                required
+                                onchange="loadSubcategorias()"
+                                disabled>
+                            <option value="">Selecione o título primeiro</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <div class="row">
+                    <div class="col-md-4 mb-3">
+                        <label for="subcategoria_id" class="form-label">Subcategoria</label>
+                        <select class="form-select" 
+                                id="subcategoria_id" 
+                                name="subcategoria_id"
+                                disabled>
+                            <option value="">Selecione a categoria primeiro</option>
+                        </select>
+                        <small class="form-text text-muted">Opcional</small>
+                    </div>
+                    
+                    <div class="col-md-4 mb-3">
+                        <label for="valor" class="form-label">Valor <span class="text-danger">*</span></label>
+                        <input type="text" 
+                               class="form-control" 
+                               id="valor" 
+                               name="valor" 
+                               placeholder="0,00"
+                               required>
+                        <small class="form-text text-muted">Formato: 1.500,00</small>
+                    </div>
+                    
+                    <div class="col-md-8 mb-3">
+                        <label for="fornecedor" class="form-label">Fornecedor</label>
+                        <div class="input-group">
+                            <select class="form-select" 
+                                    id="fornecedor" 
+                                    name="fornecedor"
+                                    disabled>
+                                <option value="">Selecione a categoria primeiro</option>
+                            </select>
+                            <button class="btn btn-outline-primary" 
+                                    type="button" 
+                                    id="add-fornecedor-btn"
+                                    disabled
+                                    title="Adicionar novo fornecedor">
+                                <i class="bi bi-plus-circle"></i> Novo Fornecedor
+                            </button>
+                        </div>
+                        <small class="form-text text-muted">Selecione um fornecedor cadastrado ou crie um novo</small>
+                    </div>
+                </div>
+                
+                <div class="mb-3">
+                    <label for="observacao" class="form-label">Observação</label>
+                    <textarea class="form-control" 
+                              id="observacao" 
+                              name="observacao" 
+                              rows="3"
+                              placeholder="Detalhes adicionais sobre esta despesa"></textarea>
+                </div>
+                
+                <div class="d-flex justify-content-between">
+                    <a href="{{ url_for('lancamentos_despesas.lista') }}" class="btn btn-secondary">
+                        <i class="bi bi-arrow-left"></i> Voltar
+                    </a>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="bi bi-save"></i> Salvar
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+// Load categorias when titulo is selected
+function loadCategorias() {
+    const tituloId = document.getElementById('titulo_id').value;
+    const categoriaSelect = document.getElementById('categoria_id');
+    const subcategoriaSelect = document.getElementById('subcategoria_id');
+    
+    // Reset categoria and subcategoria
+    categoriaSelect.innerHTML = '<option value="">Carregando...</option>';
+    categoriaSelect.disabled = true;
+    subcategoriaSelect.innerHTML = '<option value="">Selecione a categoria primeiro</option>';
+    subcategoriaSelect.disabled = true;
+    
+    if (!tituloId) {
+        categoriaSelect.innerHTML = '<option value="">Selecione o título primeiro</option>';
+        return;
+    }
+    
+    // Fetch categorias
+    fetch(`/lancamentos_despesas/api/categorias/${tituloId}`)
+        .then(response => response.json())
+        .then(data => {
+            categoriaSelect.innerHTML = '<option value="">Selecione...</option>';
+            data.forEach(cat => {
+                const option = document.createElement('option');
+                option.value = cat.id;
+                option.textContent = cat.nome;
+                categoriaSelect.appendChild(option);
+            });
+            categoriaSelect.disabled = false;
+        })
+        .catch(error => {
+            console.error('Erro ao carregar categorias:', error);
+            categoriaSelect.innerHTML = '<option value="">Erro ao carregar</option>';
+        });
+}
+
+// Load subcategorias when categoria is selected
+function loadSubcategorias() {
+    const categoriaId = document.getElementById('categoria_id').value;
+    const subcategoriaSelect = document.getElementById('subcategoria_id');
+    
+    // Reset subcategoria
+    subcategoriaSelect.innerHTML = '<option value="">Carregando...</option>';
+    subcategoriaSelect.disabled = true;
+    
+    if (!categoriaId) {
+        subcategoriaSelect.innerHTML = '<option value="">Selecione a categoria primeiro</option>';
+        return;
+    }
+    
+    // Fetch subcategorias
+    fetch(`/lancamentos_despesas/api/subcategorias/${categoriaId}`)
+        .then(response => response.json())
+        .then(data => {
+            subcategoriaSelect.innerHTML = '<option value="">Nenhuma</option>';
+            data.forEach(sub => {
+                const option = document.createElement('option');
+                option.value = sub.id;
+                option.textContent = sub.nome;
+                subcategoriaSelect.appendChild(option);
+            });
+            subcategoriaSelect.disabled = false;
+        })
+        .catch(error => {
+            console.error('Erro ao carregar subcategorias:', error);
+            subcategoriaSelect.innerHTML = '<option value="">Erro ao carregar</option>';
+        });
+    
+    // Load fornecedores for this categoria
+    loadFornecedores(categoriaId);
+}
+
+// Load fornecedores when categoria is selected
+function loadFornecedores(categoriaId) {
+    const fornecedorSelect = document.getElementById('fornecedor');
+    const addBtn = document.getElementById('add-fornecedor-btn');
+    
+    if (!categoriaId) {
+        fornecedorSelect.innerHTML = '<option value="">Selecione a categoria primeiro</option>';
+        fornecedorSelect.disabled = true;
+        addBtn.disabled = true;
+        return;
+    }
+    
+    // Reset fornecedor
+    fornecedorSelect.innerHTML = '<option value="">Carregando...</option>';
+    fornecedorSelect.disabled = true;
+    
+    // Update button with current categoria
+    addBtn.setAttribute('data-categoria-id', categoriaId);
+    addBtn.disabled = false;
+    
+    // Fetch fornecedores for this categoria
+    fetch(`/despesas/fornecedores/api/por-categoria/${categoriaId}`)
+        .then(response => response.json())
+        .then(fornecedores => {
+            fornecedorSelect.innerHTML = '<option value="">Selecione...</option>';
+            fornecedores.forEach(f => {
+                const option = document.createElement('option');
+                option.value = f.nome;
+                option.textContent = f.nome;
+                fornecedorSelect.appendChild(option);
+            });
+            fornecedorSelect.disabled = false;
+        })
+        .catch(error => {
+            console.error('Erro ao carregar fornecedores:', error);
+            fornecedorSelect.innerHTML = '<option value="">Erro ao carregar</option>';
+            fornecedorSelect.disabled = false;
+        });
+}
+
+// Handle "Add Fornecedor" button click
+document.getElementById('add-fornecedor-btn').addEventListener('click', function() {
+    const categoriaId = this.getAttribute('data-categoria-id');
+    const categoriaSelect = document.getElementById('categoria_id');
+    const categoriaNome = categoriaSelect.options[categoriaSelect.selectedIndex].text;
+    
+    if (!categoriaId) {
+        alert('Por favor, selecione uma categoria primeiro.');
+        return;
+    }
+    
+    const nome = prompt(`Adicionar novo fornecedor para "${categoriaNome}":\n\nDigite o nome do fornecedor:`);
+    
+    if (nome && nome.trim()) {
+        createFornecedor(categoriaId, nome.trim());
+    }
+});
+
+// Create new fornecedor via API
+function createFornecedor(categoriaId, nome) {
+    fetch('/despesas/fornecedores/api/criar-rapido', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+            categoria_id: categoriaId,
+            nome: nome
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert(data.message);
+            // Reload fornecedores for this categoria
+            loadFornecedores(categoriaId);
+        } else {
+            alert('Erro: ' + data.message);
+        }
+    })
+    .catch(error => {
+        console.error('Erro ao criar fornecedor:', error);
+        alert('Erro ao criar fornecedor. Tente novamente.');
+    });
+}
+
+// Format currency input
+document.getElementById('valor').addEventListener('blur', function(e) {
+    let value = e.target.value;
+    
+    // Remove all non-numeric characters except comma and dot
+    value = value.replace(/[^\d,\.]/g, '');
+    
+    // If empty, set to 0,00
+    if (!value) {
+        e.target.value = '0,00';
+        return;
+    }
+    
+    // Convert to decimal
+    value = value.replace('.', '').replace(',', '.');
+    const decimal = parseFloat(value);
+    
+    if (!isNaN(decimal)) {
+        // Format as Brazilian currency
+        e.target.value = decimal.toFixed(2).replace('.', ',');
+    }
+});
+</script>
+{% endblock %}

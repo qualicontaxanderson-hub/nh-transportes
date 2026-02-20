@@ -1,0 +1,74 @@
+{% extends 'base.html' %}
+{% block title %}{{ 'Editar' if subcategoria else 'Nova' }} Subcategoria - Despesas - {{ app_name }}{% endblock %}
+{% block content %}
+<div class="container-fluid">
+    <nav aria-label="breadcrumb" class="mt-2 mb-3">
+        <ol class="breadcrumb" style="font-size: 0.85rem;">
+            <li class="breadcrumb-item"><a href="{{ url_for('index') }}">Dashboard</a></li>
+            <li class="breadcrumb-item"><a href="{{ url_for('despesas.index') }}">Despesas</a></li>
+            <li class="breadcrumb-item active" aria-current="page">{{ 'Editar' if subcategoria else 'Nova' }} Subcategoria</li>
+        </ol>
+    </nav>
+    
+    <div class="card shadow-sm">
+        <div class="card-header" style="background:#1D63A5;color:white; font-size: 0.95rem; padding: 0.6rem 1rem;">
+            <h5 class="mb-0" style="font-size: 1rem;">
+                <i class="bi bi-tag"></i> {{ 'Editar' if subcategoria else 'Nova' }} Subcategoria de Despesa
+            </h5>
+        </div>
+        <div class="card-body" style="padding: 1.5rem;">
+            {% if categoria_pre %}
+            <div class="alert alert-info mb-3">
+                <i class="bi bi-info-circle"></i> Criando subcategoria para: 
+                <strong>{{ categoria_pre.titulo_nome }} > {{ categoria_pre.nome }}</strong>
+            </div>
+            {% endif %}
+            
+            <form method="POST">
+                <div class="mb-3">
+                    <label for="categoria_id" class="form-label">Categoria <span class="text-danger">*</span></label>
+                    <select class="form-select" id="categoria_id" name="categoria_id" required>
+                        <option value="">Selecione uma categoria...</option>
+                        {% for cat in categorias %}
+                        <option value="{{ cat.id }}" 
+                                {% if (subcategoria and subcategoria.categoria_id == cat.id) or (categoria_pre and categoria_pre.id == cat.id) %}selected{% endif %}>
+                            {{ cat.titulo_nome }} > {{ cat.nome }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="row">
+                    <div class="col-md-8 mb-3">
+                        <label for="nome" class="form-label">Nome da Subcategoria <span class="text-danger">*</span></label>
+                        <input type="text" 
+                               class="form-control" 
+                               id="nome" 
+                               name="nome" 
+                               value="{{ subcategoria.nome if subcategoria else '' }}" 
+                               required>
+                    </div>
+                    <div class="col-md-4 mb-3">
+                        <label for="ordem" class="form-label">Ordem</label>
+                        <input type="number" 
+                               class="form-control" 
+                               id="ordem" 
+                               name="ordem" 
+                               value="{{ subcategoria.ordem if subcategoria else 0 }}" 
+                               min="0">
+                        <small class="form-text text-muted">Ordem de exibição</small>
+                    </div>
+                </div>
+                <div class="d-flex justify-content-between">
+                    <a href="{{ url_for('despesas.categoria_detalhes', categoria_id=subcategoria.categoria_id) if subcategoria else (url_for('despesas.categoria_detalhes', categoria_id=categoria_pre.id) if categoria_pre else url_for('despesas.index')) }}" 
+                       class="btn btn-secondary">
+                        <i class="bi bi-arrow-left"></i> Voltar
+                    </a>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="bi bi-save"></i> Salvar
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

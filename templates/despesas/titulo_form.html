@@ -1,0 +1,61 @@
+{% extends 'base.html' %}
+{% block title %}{{ 'Editar' if titulo else 'Novo' }} Título - Despesas - {{ app_name }}{% endblock %}
+{% block content %}
+<div class="container-fluid">
+    <nav aria-label="breadcrumb" class="mt-2 mb-3">
+        <ol class="breadcrumb" style="font-size: 0.85rem;">
+            <li class="breadcrumb-item"><a href="{{ url_for('index') }}">Dashboard</a></li>
+            <li class="breadcrumb-item"><a href="{{ url_for('despesas.index') }}">Despesas</a></li>
+            <li class="breadcrumb-item active" aria-current="page">{{ 'Editar' if titulo else 'Novo' }} Título</li>
+        </ol>
+    </nav>
+    
+    <div class="card shadow-sm">
+        <div class="card-header" style="background:#1D63A5;color:white; font-size: 0.95rem; padding: 0.6rem 1rem;">
+            <h5 class="mb-0" style="font-size: 1rem;">
+                <i class="bi bi-folder-fill"></i> {{ 'Editar' if titulo else 'Novo' }} Título de Despesa
+            </h5>
+        </div>
+        <div class="card-body" style="padding: 1.5rem;">
+            <form method="POST">
+                <div class="row">
+                    <div class="col-md-8 mb-3">
+                        <label for="nome" class="form-label">Nome do Título <span class="text-danger">*</span></label>
+                        <input type="text" 
+                               class="form-control" 
+                               id="nome" 
+                               name="nome" 
+                               value="{{ titulo.nome if titulo else '' }}" 
+                               required>
+                    </div>
+                    <div class="col-md-4 mb-3">
+                        <label for="ordem" class="form-label">Ordem</label>
+                        <input type="number" 
+                               class="form-control" 
+                               id="ordem" 
+                               name="ordem" 
+                               value="{{ titulo.ordem if titulo else 0 }}" 
+                               min="0">
+                        <small class="form-text text-muted">Ordem de exibição (menor primeiro)</small>
+                    </div>
+                </div>
+                <div class="mb-3">
+                    <label for="descricao" class="form-label">Descrição</label>
+                    <textarea class="form-control" 
+                              id="descricao" 
+                              name="descricao" 
+                              rows="3">{{ titulo.descricao if titulo else '' }}</textarea>
+                </div>
+                <div class="d-flex justify-content-between">
+                    <a href="{{ url_for('despesas.index') }}" class="btn btn-secondary">
+                        <i class="bi bi-arrow-left"></i> Voltar
+                    </a>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="bi bi-save"></i> Salvar
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

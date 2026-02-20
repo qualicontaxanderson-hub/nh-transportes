@@ -25,6 +25,7 @@ from models.lancamento_funcionario import LancamentoFuncionario
 from models.forma_pagamento_caixa import FormaPagamentoCaixa
 from models.categoria_despesa import CategoriaDespesa
 from models.subcategoria_despesa import SubcategoriaDespesa
+from models.titulo_despesa import TituloDespesa
 from models.lancamento_caixa import LancamentoCaixa
 
 __all__ = [
@@ -51,6 +52,7 @@ __all__ = [
     'FormaPagamentoCaixa',
     'CategoriaDespesa',
     'SubcategoriaDespesa',
+    'TituloDespesa',
     'LancamentoCaixa',
     'db',
 ]

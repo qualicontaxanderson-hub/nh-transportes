@@ -70,6 +70,10 @@
             <li><a class="dropdown-item" href="/veiculos/"><i class="bi bi-truck" style="color: #dc3545;"></i> Veículos</a></li>
             <li><a class="dropdown-item" href="/origens_destinos/"><i class="bi bi-geo-alt" style="color: #17a2b8;"></i> Origens/Destinos</a></li>
             <li><hr class="dropdown-divider"></li>
+            {% if nivel_usuario == 'ADMIN' %}
+            <li><a class="dropdown-item" href="/despesas/"><i class="bi bi-wallet2" style="color: #dc3545;"></i> Despesas</a></li>
+            <li><a class="dropdown-item" href="/despesas/fornecedores/"><i class="bi bi-building" style="color: #ff5722;"></i> Despesas Fornecedor</a></li>
+            {% endif %}
             <li><a class="dropdown-item" href="/funcionarios/"><i class="bi bi-people" style="color: #0d6efd;"></i> Funcionários</a></li>
             <li><a class="dropdown-item" href="/categorias-funcionarios/"><i class="bi bi-tags" style="color: #6610f2;"></i> Categorias Funcionários</a></li>
             <li><a class="dropdown-item" href="/rubricas/"><i class="bi bi-list-check" style="color: #d63384;"></i> Rubricas</a></li>
@@ -100,6 +104,9 @@
             <li><a class="dropdown-item" href="/lubrificantes/"><i class="bi bi-droplet" style="color: #ff6b6b;"></i> Lubrificantes</a></li>
             <li><a class="dropdown-item" href="/posto/vendas"><i class="bi bi-fuel-pump" style="color: #28a745;"></i> Vendas Posto</a></li>
             <li><a class="dropdown-item" href="/lancamentos_receitas/"><i class="bi bi-cash-stack" style="color: #9c27b0;"></i> Receitas</a></li>
+            {% if nivel_usuario == 'ADMIN' %}
+            <li><a class="dropdown-item" href="/lancamentos_despesas/"><i class="bi bi-cash-coin" style="color: #dc3545;"></i> Despesas</a></li>
+            {% endif %}
             <li><a class="dropdown-item" href="/lancamentos_caixa/"><i class="bi bi-calculator" style="color: #ff9800;"></i> Fechamento de Caixa</a></li>
             <li><a class="dropdown-item" href="/troco_pix/"><i class="bi bi-currency-exchange" style="color: #17a2b8;"></i> Troco PIX</a></li>
             <li><a class="dropdown-item" href="/troco_pix/pista"><i class="bi bi-fuel-pump-fill" style="color: #20c997;"></i> Troco PIX Pista</a></li>

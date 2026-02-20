@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+
+{% block title %}Novo Fornecedor - {{ app_name }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <nav aria-label="breadcrumb" class="mt-2 mb-3">
+        <ol class="breadcrumb" style="font-size: 0.85rem;">
+            <li class="breadcrumb-item"><a href="{{ url_for('index') }}">Dashboard</a></li>
+            <li class="breadcrumb-item"><a href="{{ url_for('despesas.index') }}">Despesas</a></li>
+            <li class="breadcrumb-item"><a href="{{ url_for('despesas_fornecedores.lista') }}">Fornecedores</a></li>
+            <li class="breadcrumb-item active" aria-current="page">Novo</li>
+        </ol>
+    </nav>
+    
+    <div class="card shadow-sm mb-4">
+        <div class="card-header" style="background:#1D63A5;color:white; font-size: 0.95rem; padding: 0.6rem 1rem;">
+            <h5 class="mb-0" style="font-size: 1rem;">
+                <i class="bi bi-plus-circle"></i> Cadastrar Novo Fornecedor
+            </h5>
+        </div>
+        <div class="card-body" style="padding: 1.5rem;">
+            <div class="alert alert-info" role="alert" style="font-size: 0.9rem;">
+                <i class="bi bi-info-circle"></i> <strong>Atenção:</strong> O fornecedor será vinculado a uma categoria específica e aparecerá apenas nos lançamentos dessa categoria.
+            </div>
+            
+            <form method="POST" id="formFornecedor">
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="mb-3">
+                            <label for="nome" class="form-label">Nome do Fornecedor <span class="text-danger">*</span></label>
+                            <input type="text" 
+                                   class="form-control" 
+                                   id="nome" 
+                                   name="nome" 
+                                   required 
+                                   placeholder="Ex: Escritório Silva Advogados"
+                                   maxlength="200">
+                            <small class="form-text text-muted">Nome completo ou razão social do fornecedor</small>
+                        </div>
+                    </div>
+                    
+                    <div class="col-md-6">
+                        <div class="mb-3">
+                            <label for="categoria_id" class="form-label">Categoria <span class="text-danger">*</span></label>
+                            <select class="form-select" id="categoria_id" name="categoria_id" required>
+                                <option value="">Selecione a categoria...</option>
+                                {% for titulo_id, titulo_data in titulos_dict.items() %}
+                                <optgroup label="{{ titulo_data.nome }}">
+                                    {% for categoria in titulo_data.categorias %}
+                                    <option value="{{ categoria.id }}">{{ categoria.categoria_nome }}</option>
+                                    {% endfor %}
+                                </optgroup>
+                                {% endfor %}
+                            </select>
+                            <small class="form-text text-muted">Este fornecedor aparecerá apenas nesta categoria</small>
+                        </div>
+                    </div>
+                </div>
+                
+                <hr>
+                
+                <div class="d-flex justify-content-between">
+                    <a href="{{ url_for('despesas_fornecedores.lista') }}" class="btn btn-secondary">
+                        <i class="bi bi-arrow-left"></i> Voltar
+                    </a>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="bi bi-check-circle"></i> Salvar Fornecedor
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

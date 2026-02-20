@@ -1,0 +1,121 @@
+{% extends 'base.html' %}
+{% block title %}{{ titulo.nome }} - Despesas - {{ app_name }}{% endblock %}
+{% block content %}
+{% set nivel_usuario = current_user.nivel|upper if current_user.nivel else '' %}
+<div class="container-fluid">
+    <nav aria-label="breadcrumb" class="mt-2 mb-3">
+        <ol class="breadcrumb" style="font-size: 0.85rem;">
+            <li class="breadcrumb-item"><a href="{{ url_for('index') }}">Dashboard</a></li>
+            <li class="breadcrumb-item"><a href="{{ url_for('despesas.index') }}">Despesas</a></li>
+            <li class="breadcrumb-item active" aria-current="page">{{ titulo.nome }}</li>
+        </ol>
+    </nav>
+    
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h2 style="color:#1D63A5; font-size: 1.3rem;">
+            <i class="bi bi-folder-fill"></i> {{ titulo.nome }}
+        </h2>
+        <div class="btn-group" role="group">
+            <a href="{{ url_for('despesas.index') }}" class="btn btn-secondary btn-sm">
+                <i class="bi bi-arrow-left"></i> Voltar
+            </a>
+            {% if nivel_usuario in ['ADMIN', 'ADMINISTRADOR'] %}
+            <a href="{{ url_for('despesas.editar_titulo', id=titulo.id) }}" class="btn btn-warning btn-sm">
+                <i class="bi bi-pencil"></i> Editar Título
+            </a>
+            <a href="{{ url_for('despesas.nova_categoria', titulo_id=titulo.id) }}" class="btn btn-primary btn-sm">
+                <i class="bi bi-plus-circle"></i> Cadastrar Categoria
+            </a>
+            {% endif %}
+        </div>
+    </div>
+    
+    {% if titulo.descricao %}
+    <div class="alert alert-info mb-3">
+        {{ titulo.descricao }}
+    </div>
+    {% endif %}
+    
+    <div class="card shadow-sm">
+        <div class="card-header" style="background:#1D63A5;color:white; font-size: 0.95rem; padding: 0.6rem 1rem;">
+            <h5 class="mb-0" style="font-size: 1rem;">Categorias</h5>
+        </div>
+        <div class="card-body" style="padding: 1rem;">
+            {% if categorias %}
+            <div class="table-responsive">
+                <table class="table table-hover table-sm">
+                    <thead>
+                        <tr>
+                            <th>Nome</th>
+                            <th class="text-center">Subcategorias</th>
+                            <th class="text-center">Ordem</th>
+                            <th class="text-center">Ações</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for categoria in categorias %}
+                        <tr>
+                            <td>
+                                <a href="{{ url_for('despesas.categoria_detalhes', categoria_id=categoria.id) }}" 
+                                   class="text-decoration-none">
+                                    <i class="bi bi-folder"></i> {{ categoria.nome }}
+                                </a>
+                            </td>
+                            <td class="text-center">
+                                <span class="badge bg-secondary">{{ categoria.total_subcategorias or 0 }}</span>
+                            </td>
+                            <td class="text-center">{{ categoria.ordem }}</td>
+                            <td class="text-center">
+                                <div class="btn-group btn-group-sm" role="group">
+                                    <a href="{{ url_for('despesas.categoria_detalhes', categoria_id=categoria.id) }}" 
+                                       class="btn btn-info" 
+                                       title="Ver Detalhes">
+                                        <i class="bi bi-eye"></i>
+                                    </a>
+                                    {% if nivel_usuario in ['ADMIN', 'ADMINISTRADOR'] %}
+                                    <a href="{{ url_for('despesas.nova_subcategoria', categoria_id=categoria.id) }}" 
+                                       class="btn btn-success" 
+                                       title="Adicionar Subcategoria">
+                                        <i class="bi bi-plus"></i>
+                                    </a>
+                                    <a href="{{ url_for('despesas.editar_categoria', id=categoria.id) }}" 
+                                       class="btn btn-warning" 
+                                       title="Editar">
+                                        <i class="bi bi-pencil"></i>
+                                    </a>
+                                    <form method="POST" 
+                                          action="{{ url_for('despesas.excluir_categoria', id=categoria.id) }}" 
+                                          style="display:inline;" 
+                                          onsubmit="return confirm('Tem certeza que deseja desativar esta categoria?');">
+                                        <button type="submit" 
+                                                class="btn btn-danger" 
+                                                title="Desativar">
+                                            <i class="bi bi-trash"></i>
+                                        </button>
+                                    </form>
+                                    {% endif %}
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="alert alert-info mb-0">
+                <i class="bi bi-info-circle"></i> Nenhuma categoria cadastrada ainda.
+                {% if nivel_usuario in ['ADMIN', 'ADMINISTRADOR'] %}
+                <a href="{{ url_for('despesas.nova_categoria', titulo_id=titulo.id) }}">Clique aqui para criar a primeira categoria</a>.
+                {% endif %}
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<style>
+    .table-sm {
+        font-size: 0.9rem;
+    }
+</style>
+{% endblock %}

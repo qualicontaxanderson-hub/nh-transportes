@@ -14,7 +14,14 @@ def admin_required(f):
             return redirect(url_for('auth.login'))
         
         # Verifica se o usuário tem nível admin
-        if not hasattr(current_user, 'nivel') or current_user.nivel != 'admin':
+        if not hasattr(current_user, 'nivel'):
+            flash('Acesso negado. Esta área é restrita a administradores.', 'danger')
+            return redirect(url_for('index'))
+        
+        nivel = current_user.nivel.strip().upper()
+        
+        # Permitir apenas ADMIN (e variações)
+        if nivel not in ['ADMIN', 'ADMINISTRADOR']:
             flash('Acesso negado. Esta área é restrita a administradores.', 'danger')
             return redirect(url_for('index'))
         
