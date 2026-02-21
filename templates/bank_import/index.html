@@ -39,7 +39,7 @@
     </div>
 
     <!-- Summary cards -->
-    <div class="row g-3 mb-4">
+    <div class="row g-3 mb-3">
         <div class="col-sm-4">
             <div class="card border-0 shadow-sm text-center">
                 <div class="card-body py-3">
@@ -65,6 +65,32 @@
             </div>
         </div>
     </div>
+
+    <!-- Empresa filter -->
+    {% if clientes %}
+    <form method="GET" action="{{ url_for('bank_import.index') }}" class="row g-2 align-items-end mb-3">
+        <div class="col-sm-5">
+            <label class="form-label fw-semibold mb-1" style="font-size:0.88rem;">
+                <i class="bi bi-building"></i> Filtrar por Empresa:
+            </label>
+            <select name="empresa_id" class="form-select form-select-sm" onchange="this.form.submit()">
+                <option value="">— Todas as Empresas —</option>
+                {% for c in clientes %}
+                <option value="{{ c.id }}" {% if cliente_id_filter == c.id %}selected{% endif %}>
+                    {{ c.razao_social }}{% if c.nome_fantasia and c.nome_fantasia != c.razao_social %} ({{ c.nome_fantasia }}){% endif %}
+                </option>
+                {% endfor %}
+            </select>
+        </div>
+        {% if cliente_id_filter %}
+        <div class="col-auto">
+            <a href="{{ url_for('bank_import.index') }}" class="btn btn-sm btn-outline-secondary">
+                <i class="bi bi-x-circle"></i> Limpar filtro
+            </a>
+        </div>
+        {% endif %}
+    </form>
+    {% endif %}
 
     <div class="row g-4">
         <!-- Upload card -->
@@ -99,7 +125,7 @@
                             <select name="account_id" class="form-select" required>
                                 <option value="">Selecione a conta...</option>
                                 {% for conta in contas %}
-                                <option value="{{ conta.id }}">{{ conta.apelido or conta.banco_nome }}{% if conta.agencia %} – Ag {{ conta.agencia }}{% endif %}{% if conta.conta %} / {{ conta.conta }}{% endif %}</option>
+                                <option value="{{ conta.id }}">{{ conta.apelido or conta.banco_nome }}{% if conta.agencia %} – Ag {{ conta.agencia }}{% endif %}{% if conta.conta %} / {{ conta.conta }}{% endif %}{% if conta.empresa_nome %} [{{ conta.empresa_nome }}]{% endif %}</option>
                                 {% endfor %}
                             </select>
                             {% else %}
@@ -212,7 +238,7 @@
                             <select id="inboxAccountId" class="form-select form-select-sm">
                                 <option value="">Selecione a conta...</option>
                                 {% for conta in contas %}
-                                <option value="{{ conta.id }}">{{ conta.apelido or conta.banco_nome }}{% if conta.agencia %} – Ag {{ conta.agencia }}{% endif %}{% if conta.conta %} / {{ conta.conta }}{% endif %}</option>
+                                <option value="{{ conta.id }}">{{ conta.apelido or conta.banco_nome }}{% if conta.agencia %} – Ag {{ conta.agencia }}{% endif %}{% if conta.conta %} / {{ conta.conta }}{% endif %}{% if conta.empresa_nome %} [{{ conta.empresa_nome }}]{% endif %}</option>
                                 {% endfor %}
                             </select>
                         </div>
@@ -242,8 +268,20 @@
             </div>
             <div class="modal-body">
                 <div class="mb-3">
+                    <label class="form-label fw-semibold">Empresa *</label>
+                    <select id="nc_cliente_id" class="form-select" required>
+                        <option value="">Selecione a empresa...</option>
+                        {% for c in clientes %}
+                        <option value="{{ c.id }}">{{ c.razao_social }}{% if c.nome_fantasia and c.nome_fantasia != c.razao_social %} ({{ c.nome_fantasia }}){% endif %}</option>
+                        {% endfor %}
+                    </select>
+                    <div class="invalid-feedback">Selecione a empresa.</div>
+                    <div class="form-text">Apenas empresas com produtos cadastrados aparecem aqui.</div>
+                </div>
+                <div class="mb-3">
                     <label class="form-label">Nome do Banco *</label>
                     <input type="text" id="nc_banco" class="form-control" placeholder="Ex: Banco do Brasil">
+                    <div class="invalid-feedback">Informe o nome do banco.</div>
                 </div>
                 <div class="row g-2">
                     <div class="col-6">
@@ -320,7 +358,14 @@
     // Save new account
     function salvarConta() {
         const banco_nome = document.getElementById('nc_banco').value.trim();
-        if (!banco_nome) { alert('Informe o nome do banco.'); return; }
+        const clienteSel = document.getElementById('nc_cliente_id');
+        const cliente_id = clienteSel.value;
+
+        // Inline validation
+        clienteSel.classList.toggle('is-invalid', !cliente_id);
+        document.getElementById('nc_banco').classList.toggle('is-invalid', !banco_nome);
+        if (!cliente_id || !banco_nome) return;
+
         fetch('{{ url_for("bank_import.api_criar_conta") }}', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -329,6 +374,7 @@
                 agencia: document.getElementById('nc_agencia').value.trim(),
                 conta: document.getElementById('nc_conta').value.trim(),
                 apelido: document.getElementById('nc_apelido').value.trim(),
+                cliente_id: parseInt(cliente_id),
             })
         })
         .then(r => r.json())
@@ -375,11 +421,21 @@
 
     function verificarPasta() {
         const listDiv = document.getElementById('inboxFileList');
-        listDiv.innerHTML = '<div class="text-center py-3"><div class="spinner-border spinner-border-sm text-purple"></div> Verificando pasta...</div>';
+        listDiv.innerHTML = '<div class="text-center py-3"><div class="spinner-border spinner-border-sm"></div> Verificando pasta...</div>';
 
         fetch('{{ url_for("bank_import.api_inbox_files") }}')
-            .then(r => r.json())
+            .then(r => {
+                // Guard: if the server returned HTML instead of JSON (e.g. redirect to login),
+                // show a friendly error instead of a confusing SyntaxError.
+                const ct = r.headers.get('content-type') || '';
+                if (!r.ok || !ct.includes('application/json')) {
+                    listDiv.innerHTML = '<div class="alert alert-warning py-2">Não foi possível verificar a pasta (resposta inesperada do servidor). Tente recarregar a página.</div>';
+                    return null;
+                }
+                return r.json();
+            })
             .then(data => {
+                if (!data) return;
                 if (data.pasta) {
                     document.getElementById('inboxPath').textContent = data.pasta;
                 }

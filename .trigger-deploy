@@ -1,28 +1,14 @@
 # Arquivo de trigger para forçar redeploy
-# Data: 2026-02-21 15:01:50
-# Motivo: Deploy completo do sistema de Importação Bancária OFX
+# Data: 2026-02-21 15:14:13
+# Motivo: Multi-empresa + fix JS error na pagina /banco/
 #
-# Inclui todas as funcionalidades implementadas:
-#   - routes/bank_import.py  (blueprint /banco/)
-#   - integrations/ofx_parser.py
-#   - models/bank_models.py
-#   - templates/bank_import/ (index, conciliar, relatorio)
-#   - Link no navbar (Financeiro → Importação Bancária OFX)
-#   - Pasta de entrada OFX (watch-folder) com upload pelo navegador
-#   - Configurações OFX_INBOX_DIR / OFX_PROCESSED_DIR
-#   - Instruções claras de uso no Render / Railway
-#
-# Banco de dados (Railway) já atualizado com:
-#   - bank_accounts, bank_transactions, bank_supplier_mapping
-#   - vw_bank_summary_by_supplier, vw_bank_pending_reconciliation
-#   - sp_auto_reconcile_transactions, tr_learn_supplier_mapping
-#
-# Fluxo de uso no Render / Railway:
-#   1. Acesse /banco/ no navegador
-#   2. Selecione a conta bancária
-#   3. Selecione o arquivo .ofx do seu computador
-#   4. Clique em "Importar Extrato" — transações vão para o banco de dados (Railway)
+# Alterações:
+#   - bank_accounts agora tem cliente_id (empresa vinculada)
+#   - Cadastro de conta bancária exige selecionar a empresa (apenas as com produtos)
+#   - Filtro por empresa na página /banco/
+#   - Correção do erro JS "Unexpected token '<'" no verificarPasta()
+#   - Migration: migrations/20260221_bank_accounts_add_cliente.sql
 
-DEPLOY_TIMESTAMP=2026-02-21T15:01:50Z
-REASON=Deploy completo sistema importacao bancaria OFX com instrucoes Render Railway
-VERSION=3.0.0
+DEPLOY_TIMESTAMP=2026-02-21T15:14:13Z
+REASON=Multi-empresa bank accounts + fix inbox JS error
+VERSION=4.0.0

@@ -12,9 +12,37 @@ bp = Blueprint('bank_import', __name__, url_prefix='/banco')
 # Helper utilities
 # ---------------------------------------------------------------------------
 
-def _get_accounts(cursor):
+def _get_accounts(cursor, cliente_id=None):
+    if cliente_id:
+        cursor.execute(
+            """SELECT ba.id, ba.banco_nome, ba.agencia, ba.conta, ba.apelido,
+                      ba.cliente_id, c.razao_social AS empresa_nome
+               FROM bank_accounts ba
+               LEFT JOIN clientes c ON c.id = ba.cliente_id
+               WHERE ba.ativo = 1 AND ba.cliente_id = %s
+               ORDER BY ba.apelido, ba.banco_nome""",
+            (cliente_id,),
+        )
+    else:
+        cursor.execute(
+            """SELECT ba.id, ba.banco_nome, ba.agencia, ba.conta, ba.apelido,
+                      ba.cliente_id, c.razao_social AS empresa_nome
+               FROM bank_accounts ba
+               LEFT JOIN clientes c ON c.id = ba.cliente_id
+               WHERE ba.ativo = 1
+               ORDER BY ba.apelido, ba.banco_nome"""
+        )
+    return cursor.fetchall()
+
+
+def _get_clientes_com_produtos(cursor):
+    """Return clientes that have at least one active product (same pattern as other routes)."""
     cursor.execute(
-        "SELECT id, banco_nome, agencia, conta, apelido FROM bank_accounts WHERE ativo = 1 ORDER BY apelido, banco_nome"
+        """SELECT DISTINCT c.id, c.razao_social, c.nome_fantasia
+           FROM clientes c
+           INNER JOIN cliente_produtos cp ON c.id = cp.cliente_id
+           WHERE cp.ativo = 1
+           ORDER BY c.razao_social"""
     )
     return cursor.fetchall()
 
@@ -37,7 +65,12 @@ def index():
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
 
-    contas = _get_accounts(cursor)
+    # Filter: only companies with active products
+    clientes = _get_clientes_com_produtos(cursor)
+
+    # Optional: filter accounts by selected empresa
+    cliente_id_filter = request.args.get('empresa_id', type=int)
+    contas = _get_accounts(cursor, cliente_id=cliente_id_filter)
 
     # Summary counts
     cursor.execute("SELECT COUNT(*) AS total FROM bank_transactions WHERE status = 'pendente'")
@@ -53,6 +86,8 @@ def index():
     return render_template(
         'bank_import/index.html',
         contas=contas,
+        clientes=clientes,
+        cliente_id_filter=cliente_id_filter,
         pendentes=pendentes,
         conciliados=conciliados,
         total=total,
@@ -392,7 +427,8 @@ def api_contas():
     """API: lista contas bancárias cadastradas."""
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
-    contas = _get_accounts(cursor)
+    cliente_id = request.args.get('cliente_id', type=int)
+    contas = _get_accounts(cursor, cliente_id=cliente_id)
     cursor.close()
     conn.close()
     return jsonify(contas)
@@ -401,19 +437,27 @@ def api_contas():
 @bp.route('/api/contas', methods=['POST'])
 @login_required
 def api_criar_conta():
-    """API: cria uma nova conta bancária."""
+    """API: cria uma nova conta bancária vinculada a uma empresa."""
     data = request.get_json() or {}
     banco_nome = (data.get('banco_nome') or '').strip()
     if not banco_nome:
         return jsonify({'success': False, 'message': 'banco_nome é obrigatório'}), 400
 
+    # cliente_id is optional but strongly recommended – links the account to a company with products
+    cliente_id = data.get('cliente_id') or None
+    if cliente_id is not None:
+        try:
+            cliente_id = int(cliente_id)
+        except (ValueError, TypeError):
+            return jsonify({'success': False, 'message': 'cliente_id inválido'}), 400
+
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
 
     cursor.execute(
-        """INSERT INTO bank_accounts (banco_nome, agencia, conta, apelido)
-           VALUES (%s, %s, %s, %s)""",
-        (banco_nome, data.get('agencia'), data.get('conta'), data.get('apelido')),
+        """INSERT INTO bank_accounts (banco_nome, agencia, conta, apelido, cliente_id)
+           VALUES (%s, %s, %s, %s, %s)""",
+        (banco_nome, data.get('agencia'), data.get('conta'), data.get('apelido'), cliente_id),
     )
     conn.commit()
     new_id = cursor.lastrowid
