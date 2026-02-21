@@ -27,3 +27,11 @@ class Config:
     APP_NAME = "NH Transportes"
     DEBUG = os.environ.get('FLASK_DEBUG', '0') == '1'
     ITEMS_PER_PAGE = 20
+
+    # Pasta de entrada para arquivos OFX (watch-folder)
+    # Configure OFX_INBOX_DIR no ambiente para apontar para qualquer pasta acessível ao servidor.
+    # Padrão: <raiz_do_projeto>/ofx_inbox/
+    OFX_INBOX_DIR = os.environ.get(
+        'OFX_INBOX_DIR',
+        os.path.join(os.path.dirname(os.path.abspath(__file__)), 'ofx_inbox')
+    )

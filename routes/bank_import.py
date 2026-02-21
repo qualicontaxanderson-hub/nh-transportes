@@ -1,3 +1,4 @@
+import os
 import datetime as _dt
 
 from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify
@@ -420,3 +421,186 @@ def api_criar_conta():
     conn.close()
 
     return jsonify({'success': True, 'id': new_id}), 201
+
+
+# ---------------------------------------------------------------------------
+# Watch-folder / OFX inbox endpoints
+# ---------------------------------------------------------------------------
+
+def _get_inbox_dir() -> str:
+    """Return the configured OFX inbox directory, creating it if absent."""
+    from config import Config
+    inbox = Config.OFX_INBOX_DIR
+    os.makedirs(inbox, exist_ok=True)
+    os.makedirs(os.path.join(inbox, 'processados'), exist_ok=True)
+    return inbox
+
+
+@bp.route('/api/inbox-files')
+@login_required
+def api_inbox_files():
+    """API: lista arquivos OFX encontrados na pasta de entrada."""
+    import os as _os
+
+    inbox = _get_inbox_dir()
+    files = []
+    try:
+        for name in sorted(_os.listdir(inbox)):
+            if not name.lower().endswith('.ofx'):
+                continue
+            full = _os.path.join(inbox, name)
+            if not _os.path.isfile(full):
+                continue
+            stat = _os.stat(full)
+            files.append({
+                'nome': name,
+                'tamanho': stat.st_size,
+                'modificado': _dt.datetime.fromtimestamp(stat.st_mtime).strftime('%d/%m/%Y %H:%M'),
+            })
+    except OSError as exc:
+        return jsonify({'success': False, 'message': str(exc), 'files': []}), 500
+
+    return jsonify({'success': True, 'pasta': inbox, 'files': files})
+
+
+@bp.route('/scan-inbox', methods=['POST'])
+@login_required
+def scan_inbox():
+    """
+    Processa um arquivo OFX da pasta de entrada.
+
+    Parâmetros POST (form ou JSON):
+        account_id  – ID da conta bancária destino
+        nome_arquivo – nome do arquivo dentro da pasta de entrada
+    """
+    import os as _os
+
+    # Accept both form-data and JSON
+    if request.is_json:
+        data = request.get_json() or {}
+    else:
+        data = request.form
+
+    account_id = data.get('account_id')
+    nome_arquivo = (data.get('nome_arquivo') or '').strip()
+
+    if not account_id:
+        if request.is_json:
+            return jsonify({'success': False, 'message': 'account_id é obrigatório'}), 400
+        flash('Selecione uma conta bancária.', 'warning')
+        return redirect(url_for('bank_import.index'))
+
+    if not nome_arquivo:
+        if request.is_json:
+            return jsonify({'success': False, 'message': 'nome_arquivo é obrigatório'}), 400
+        flash('Nenhum arquivo especificado.', 'warning')
+        return redirect(url_for('bank_import.index'))
+
+    # Security: only plain file names allowed – block any path traversal attempt
+    if _os.sep in nome_arquivo or '/' in nome_arquivo or '\\' in nome_arquivo or '..' in nome_arquivo:
+        if request.is_json:
+            return jsonify({'success': False, 'message': 'Nome de arquivo inválido'}), 400
+        flash('Nome de arquivo inválido.', 'danger')
+        return redirect(url_for('bank_import.index'))
+
+    inbox = _get_inbox_dir()
+    filepath = _os.path.join(inbox, nome_arquivo)
+
+    if not _os.path.isfile(filepath):
+        if request.is_json:
+            return jsonify({'success': False, 'message': f'Arquivo não encontrado: {nome_arquivo}'}), 404
+        flash(f'Arquivo não encontrado: {nome_arquivo}', 'danger')
+        return redirect(url_for('bank_import.index'))
+
+    # Read and parse.
+    # OFX v1.x (SGML) files commonly use Latin-1 / ISO-8859-1 encoding.
+    # Using 'latin-1' with errors='replace' is the safest universal choice:
+    # it maps all 256 byte values, so no byte is ever undecodable.
+    try:
+        with open(filepath, 'r', encoding='latin-1', errors='replace') as fh:
+            content = fh.read()
+    except OSError as exc:
+        if request.is_json:
+            return jsonify({'success': False, 'message': str(exc)}), 500
+        flash(f'Erro ao ler arquivo: {exc}', 'danger')
+        return redirect(url_for('bank_import.index'))
+
+    from integrations.ofx_parser import OFXParser
+    transactions = OFXParser(content).get_transactions()
+
+    if not transactions:
+        if request.is_json:
+            return jsonify({'success': False, 'message': 'Nenhuma transação encontrada no arquivo OFX.'}), 422
+        flash('Nenhuma transação encontrada no arquivo OFX.', 'warning')
+        return redirect(url_for('bank_import.index'))
+
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    inseridos = 0
+    duplicados = 0
+
+    for tx in transactions:
+        cursor.execute(
+            "SELECT id FROM bank_transactions WHERE hash_dedup = %s",
+            (tx['hash_dedup'],),
+        )
+        if cursor.fetchone():
+            duplicados += 1
+            continue
+
+        fornecedor_id = None
+        status = 'pendente'
+        if tx.get('cnpj_cpf'):
+            cursor.execute(
+                "SELECT fornecedor_id FROM bank_supplier_mapping WHERE cnpj_cpf = %s",
+                (tx['cnpj_cpf'],),
+            )
+            mapping = cursor.fetchone()
+            if mapping:
+                fornecedor_id = mapping['fornecedor_id']
+                status = 'conciliado'
+
+        cursor.execute(
+            """INSERT INTO bank_transactions
+               (account_id, hash_dedup, data_transacao, tipo, valor, descricao,
+                cnpj_cpf, memo, fitid, status, fornecedor_id, conciliado_em, conciliado_por)
+               VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
+            (
+                account_id,
+                tx['hash_dedup'],
+                tx['data_transacao'],
+                tx['tipo'],
+                tx['valor'],
+                tx['descricao'],
+                tx.get('cnpj_cpf'),
+                tx.get('memo'),
+                tx.get('fitid'),
+                status,
+                fornecedor_id,
+                None if status == 'pendente' else _dt.datetime.now(),
+                None if status == 'pendente' else 'auto',
+            ),
+        )
+        inseridos += 1
+
+    conn.commit()
+    cursor.close()
+    conn.close()
+
+    # Move file to processados/
+    dest = _os.path.join(inbox, 'processados', nome_arquivo)
+    # Avoid collision: prefix with timestamp if destination already exists
+    if _os.path.exists(dest):
+        ts = _dt.datetime.now().strftime('%Y%m%d%H%M%S_')
+        dest = _os.path.join(inbox, 'processados', ts + nome_arquivo)
+    try:
+        _os.rename(filepath, dest)
+    except OSError:
+        pass  # Non-fatal – file processed even if move fails
+
+    msg = f'{nome_arquivo}: {inseridos} transação(ões) importada(s), {duplicados} duplicata(s) ignorada(s).'
+    if request.is_json:
+        return jsonify({'success': True, 'message': msg, 'inseridos': inseridos, 'duplicados': duplicados})
+    flash(msg, 'success')
+    return redirect(url_for('bank_import.index'))
+

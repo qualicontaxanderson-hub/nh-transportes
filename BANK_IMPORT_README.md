@@ -56,12 +56,46 @@ curl -X POST /banco/api/contas \
 
 ## Uso
 
-### Importar extrato
+### Importar extrato manualmente (upload)
 
 1. Acesse `/banco/`
 2. Selecione a conta bancária
 3. Faça upload do arquivo `.ofx`
 4. O sistema deduplica e importa automaticamente
+
+### Pasta de Entrada OFX (Watch-Folder)
+
+O sistema monitora uma pasta no servidor onde você pode simplesmente **copiar arquivos OFX** sem precisar fazer upload pelo navegador.
+
+#### Configuração
+
+A pasta padrão é `ofx_inbox/` dentro da raiz do projeto. Para apontar para outro local, defina a variável de ambiente:
+
+```bash
+OFX_INBOX_DIR=/caminho/para/sua/pasta
+```
+
+No Railway, adicione isso em **Settings → Variables → Add Variable**.
+
+#### Estrutura de pastas
+
+```
+ofx_inbox/
+├── extrato_20260220.ofx    ← coloque seus arquivos aqui
+├── extrato_20260221.ofx
+└── processados/            ← arquivos já importados são movidos aqui
+    └── extrato_20260219.ofx
+```
+
+#### Como usar
+
+1. Copie o arquivo `.ofx` para a pasta `ofx_inbox/` (via FTP, SCP, compartilhamento de rede, etc.)
+2. Acesse `/banco/` — a página escaneia a pasta automaticamente ao carregar
+3. Selecione a conta bancária no seletor da seção **"Pasta de Entrada OFX"**
+4. Clique em **Importar** ao lado do arquivo desejado
+5. O arquivo é processado e movido para `ofx_inbox/processados/` automaticamente
+
+O botão **"Verificar Pasta"** atualiza a lista de arquivos sem recarregar a página.
 
 ### Conciliar transações
 
@@ -121,6 +155,8 @@ bank_supplier_mapping (id, fornecedor_id, cnpj_cpf, tipo_chave, total_conciliaco
 | `POST` | `/banco/api/auto-reconcile` | Força auto-conciliação |
 | `GET` | `/banco/api/contas` | JSON: contas cadastradas |
 | `POST` | `/banco/api/contas` | Cria nova conta bancária |
+| `GET` | `/banco/api/inbox-files` | JSON: lista arquivos OFX na pasta de entrada |
+| `POST` | `/banco/scan-inbox` | Importa arquivo da pasta de entrada e move para `processados/` |
 
 ---
 
@@ -131,10 +167,12 @@ bank_supplier_mapping (id, fornecedor_id, cnpj_cpf, tipo_chave, total_conciliaco
 | `integrations/ofx_parser.py` | Parser OFX — extrai transações e CNPJ/CPF |
 | `models/bank_models.py` | Modelos SQLAlchemy: BankAccount, BankTransaction, BankSupplierMapping |
 | `routes/bank_import.py` | Blueprint Flask com todas as rotas |
-| `templates/bank_import/index.html` | Dashboard + upload drag-and-drop |
+| `templates/bank_import/index.html` | Dashboard + upload drag-and-drop + pasta de entrada OFX |
 | `templates/bank_import/conciliar.html` | Interface de conciliação manual |
 | `templates/bank_import/relatorio.html` | Relatório com filtros |
 | `migrations/20260220_add_bank_import_tables.sql` | DDL completo |
+| `ofx_inbox/` | Pasta de entrada para arquivos OFX (watch-folder) |
+| `ofx_inbox/processados/` | Arquivos OFX já processados são movidos aqui |
 
 ---
 

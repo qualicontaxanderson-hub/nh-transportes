@@ -112,6 +112,58 @@
             </div>
         </div>
     </div>
+
+    <!-- OFX Inbox (watch-folder) -->
+    <div class="row mt-4">
+        <div class="col-12">
+            <div class="card shadow-sm">
+                <div class="card-header d-flex justify-content-between align-items-center"
+                     style="background:#6f42c1;color:white;">
+                    <h5 class="mb-0">
+                        <i class="bi bi-folder-check"></i> Pasta de Entrada OFX
+                        <small class="fw-normal ms-2" style="font-size:0.78rem;opacity:0.85;">
+                            Coloque arquivos .ofx na pasta do servidor e clique em Verificar
+                        </small>
+                    </h5>
+                    <button class="btn btn-sm btn-light" onclick="verificarPasta()">
+                        <i class="bi bi-arrow-clockwise"></i> Verificar Pasta
+                    </button>
+                </div>
+                <div class="card-body">
+                    <!-- Pasta configurada -->
+                    <div class="alert alert-light border py-2 mb-3" style="font-size:0.82rem;">
+                        <i class="bi bi-folder2-open text-purple"></i>
+                        <strong>Pasta monitorada:</strong>
+                        <code id="inboxPath">carregando...</code>
+                        <span class="text-muted ms-2">(configure via variável de ambiente <code>OFX_INBOX_DIR</code>)</span>
+                    </div>
+
+                    <!-- Account selector for inbox imports -->
+                    {% if contas %}
+                    <div class="row g-2 align-items-end mb-3">
+                        <div class="col-sm-5">
+                            <label class="form-label fw-semibold mb-1" style="font-size:0.88rem;">Conta para importar arquivos da pasta:</label>
+                            <select id="inboxAccountId" class="form-select form-select-sm">
+                                <option value="">Selecione a conta...</option>
+                                {% for conta in contas %}
+                                <option value="{{ conta.id }}">{{ conta.apelido or conta.banco_nome }}{% if conta.agencia %} – Ag {{ conta.agencia }}{% endif %}{% if conta.conta %} / {{ conta.conta }}{% endif %}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                    </div>
+                    {% endif %}
+
+                    <!-- File list -->
+                    <div id="inboxFileList">
+                        <div class="text-muted text-center py-3">
+                            <i class="bi bi-folder2 fs-2"></i>
+                            <p class="mt-1 mb-0">Clique em <strong>Verificar Pasta</strong> para listar os arquivos OFX encontrados.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
 </div>
 
 <!-- Modal: Nova Conta -->
@@ -219,5 +271,124 @@
             else { alert('Erro: ' + data.message); }
         });
     }
+
+    // ---------------------------------------------------------------
+    // OFX Inbox / watch-folder
+    // ---------------------------------------------------------------
+    function verificarPasta() {
+        const listDiv = document.getElementById('inboxFileList');
+        listDiv.innerHTML = '<div class="text-center py-3"><div class="spinner-border spinner-border-sm text-purple"></div> Verificando pasta...</div>';
+
+        fetch('{{ url_for("bank_import.api_inbox_files") }}')
+            .then(r => r.json())
+            .then(data => {
+                if (data.pasta) {
+                    document.getElementById('inboxPath').textContent = data.pasta;
+                }
+                if (!data.success) {
+                    listDiv.innerHTML = `<div class="alert alert-danger py-2">${data.message}</div>`;
+                    return;
+                }
+                if (!data.files || data.files.length === 0) {
+                    listDiv.innerHTML = `
+                        <div class="alert alert-info py-2 mb-0">
+                            <i class="bi bi-info-circle"></i>
+                            Nenhum arquivo <code>.ofx</code> encontrado na pasta.
+                            Coloque arquivos OFX em: <code>${data.pasta}</code>
+                        </div>`;
+                    return;
+                }
+                renderInboxFiles(data.files);
+            })
+            .catch(err => {
+                listDiv.innerHTML = `<div class="alert alert-danger py-2">Erro ao verificar pasta: ${err}</div>`;
+            });
+    }
+
+    function renderInboxFiles(files) {
+        const listDiv = document.getElementById('inboxFileList');
+        const table = document.createElement('div');
+
+        const header = document.createElement('div');
+        header.className = 'alert alert-success py-2 mb-3';
+        header.innerHTML = `<i class="bi bi-check-circle"></i> <strong>${files.length}</strong> arquivo(s) OFX encontrado(s) na pasta.`;
+        table.appendChild(header);
+
+        const wrap = document.createElement('div');
+        wrap.className = 'table-responsive';
+        const t = document.createElement('table');
+        t.className = 'table table-sm table-hover';
+        t.style.fontSize = '0.88rem';
+        t.innerHTML = `<thead class="table-light"><tr><th>Arquivo</th><th>Modificado</th><th>Tamanho</th><th class="text-center">Ação</th></tr></thead>`;
+        const tbody = document.createElement('tbody');
+
+        files.forEach(f => {
+            const kb = (f.tamanho / 1024).toFixed(1);
+            const tr = document.createElement('tr');
+
+            const tdNome = document.createElement('td');
+            tdNome.innerHTML = '<i class="bi bi-file-earmark-text text-primary"></i> ';
+            const strong = document.createElement('strong');
+            strong.textContent = f.nome;
+            tdNome.appendChild(strong);
+
+            const tdMod = document.createElement('td');
+            tdMod.textContent = f.modificado;
+
+            const tdSize = document.createElement('td');
+            tdSize.textContent = kb + ' KB';
+
+            const tdAcao = document.createElement('td');
+            tdAcao.className = 'text-center';
+            const btn = document.createElement('button');
+            btn.className = 'btn btn-sm btn-success';
+            btn.dataset.nomeArquivo = f.nome;   // raw filename, no HTML escaping
+            btn.innerHTML = '<i class="bi bi-cloud-upload"></i> Importar';
+            btn.addEventListener('click', function() {
+                importarArquivoInbox(this.dataset.nomeArquivo);
+            });
+            tdAcao.appendChild(btn);
+
+            tr.appendChild(tdNome);
+            tr.appendChild(tdMod);
+            tr.appendChild(tdSize);
+            tr.appendChild(tdAcao);
+            tbody.appendChild(tr);
+        });
+
+        t.appendChild(tbody);
+        wrap.appendChild(t);
+        table.appendChild(wrap);
+        listDiv.innerHTML = '';
+        listDiv.appendChild(table);
+    }
+
+    function importarArquivoInbox(nomeArquivo) {
+        const accountId = document.getElementById('inboxAccountId') ? document.getElementById('inboxAccountId').value : '';
+        if (!accountId) {
+            alert('Selecione uma conta bancária antes de importar.');
+            return;
+        }
+        if (!confirm(`Importar "${nomeArquivo}" para a conta selecionada?`)) return;
+
+        fetch('{{ url_for("bank_import.scan_inbox") }}', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ account_id: accountId, nome_arquivo: nomeArquivo })
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.success) {
+                alert(data.message);
+                location.reload();  // refresh counters and file list together
+            } else {
+                alert('Erro: ' + data.message);
+            }
+        })
+        .catch(() => alert('Erro ao processar arquivo.'));
+    }
+
+    // Auto-scan inbox on page load
+    verificarPasta();
 </script>
 {% endblock %}

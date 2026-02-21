@@ -6,3 +6,9 @@ venv/
 .env
 .env.local
 .env.*.local
+
+# OFX inbox – ignore actual OFX files but keep the folder structure
+ofx_inbox/*.ofx
+ofx_inbox/*.OFX
+ofx_inbox/processados/*.ofx
+ofx_inbox/processados/*.OFX
