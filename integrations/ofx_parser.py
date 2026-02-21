@@ -102,6 +102,18 @@ class OFXParser:
             self._body,
             re.DOTALL | re.IGNORECASE,
         )
+        if not stmttrn_blocks:
+            # Fallback for SGML OFX v1.x files that omit the closing </STMTTRN> tag.
+            # Split on each <STMTTRN> opening and take content up to the next
+            # aggregate boundary or end-of-list marker.
+            raw_parts = re.split(r'<STMTTRN>', self._body, flags=re.IGNORECASE)
+            for part in raw_parts[1:]:  # skip everything before the first <STMTTRN>
+                end_m = re.search(
+                    r'</BANKTRANLIST>|</STMTTRNRS>|</STMTTRN>|</OFX>',
+                    part,
+                    re.IGNORECASE,
+                )
+                stmttrn_blocks.append(part[:end_m.start()] if end_m else part)
         for block in stmttrn_blocks:
             tx = self._parse_transaction_block(block)
             if tx:
@@ -165,12 +177,21 @@ class OFXParser:
         """Parse a single <STMTTRN> block and return a transaction dict."""
 
         def tag(name):
+            # Primary: XML / normalized SGML (closing tag present)
             m = re.search(
                 rf'<{re.escape(name)}>(.*?)</{re.escape(name)}>',
                 block,
                 re.IGNORECASE | re.DOTALL,
             )
-            return m.group(1).strip() if m else ''
+            if m:
+                return m.group(1).strip()
+            # Fallback: raw SGML leaf tag (value ends at next tag or line break)
+            m2 = re.search(
+                rf'<{re.escape(name)}>\s*([^<\r\n]+)',
+                block,
+                re.IGNORECASE,
+            )
+            return m2.group(1).strip() if m2 else ''
 
         trntype = tag('TRNTYPE').upper()
         dtposted = tag('DTPOSTED') or tag('DTUSER') or ''

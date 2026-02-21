@@ -84,7 +84,10 @@ def index():
     conn.close()
 
     from config import Config
-    inbox_is_tmp = not os.environ.get('OFX_INBOX_DIR')  # True when using the /tmp default
+    _ofx_dir_env = os.environ.get('OFX_INBOX_DIR', '')
+    # True when no custom dir is configured OR the dir is under /tmp (cloud default).
+    # In both cases the watch-folder isn't useful (server /tmp ≠ user's local files).
+    inbox_is_tmp = not _ofx_dir_env or _ofx_dir_env.startswith('/tmp')
 
     return render_template(
         'bank_import/index.html',

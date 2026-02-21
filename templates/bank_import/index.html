@@ -415,8 +415,9 @@
     }
 
     // ---------------------------------------------------------------
-    // OFX Inbox / watch-folder
+    // OFX Inbox / watch-folder — only rendered when inbox_is_tmp=False
     // ---------------------------------------------------------------
+    {% if not inbox_is_tmp %}
 
     // Upload-to-inbox (save without processing)
     document.getElementById('inboxUploadInput').addEventListener('change', function() {
@@ -575,7 +576,6 @@
         .catch(() => alert('Erro ao processar arquivo.'));
     }
 
-    // Auto-scan inbox on page load
-    verificarPasta();
+    {% endif %}
 </script>
 {% endblock %}
