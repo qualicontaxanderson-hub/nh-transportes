@@ -1,19 +1,28 @@
 # Arquivo de trigger para forçar redeploy
-# Data: 2026-02-21 11:36:39
-# Motivo: Deploy do sistema de Importação Bancária OFX
+# Data: 2026-02-21 15:01:50
+# Motivo: Deploy completo do sistema de Importação Bancária OFX
 #
-# Inclui:
+# Inclui todas as funcionalidades implementadas:
 #   - routes/bank_import.py  (blueprint /banco/)
 #   - integrations/ofx_parser.py
 #   - models/bank_models.py
-#   - templates/bank_import/
+#   - templates/bank_import/ (index, conciliar, relatorio)
 #   - Link no navbar (Financeiro → Importação Bancária OFX)
+#   - Pasta de entrada OFX (watch-folder) com upload pelo navegador
+#   - Configurações OFX_INBOX_DIR / OFX_PROCESSED_DIR
+#   - Instruções claras de uso no Render / Railway
 #
-# O banco de dados (Railway) já foi atualizado manualmente com:
+# Banco de dados (Railway) já atualizado com:
 #   - bank_accounts, bank_transactions, bank_supplier_mapping
 #   - vw_bank_summary_by_supplier, vw_bank_pending_reconciliation
 #   - sp_auto_reconcile_transactions, tr_learn_supplier_mapping
+#
+# Fluxo de uso no Render / Railway:
+#   1. Acesse /banco/ no navegador
+#   2. Selecione a conta bancária
+#   3. Selecione o arquivo .ofx do seu computador
+#   4. Clique em "Importar Extrato" — transações vão para o banco de dados (Railway)
 
-DEPLOY_TIMESTAMP=2026-02-21T11:36:39Z
-REASON=Deploy sistema importacao bancaria OFX
-VERSION=2.0.0
+DEPLOY_TIMESTAMP=2026-02-21T15:01:50Z
+REASON=Deploy completo sistema importacao bancaria OFX com instrucoes Render Railway
+VERSION=3.0.0

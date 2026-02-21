@@ -11,6 +11,33 @@
         </ol>
     </nav>
 
+    <!-- Architecture explanation banner -->
+    <div class="alert border-0 shadow-sm mb-4 p-0 overflow-hidden">
+        <div class="d-flex">
+            <div class="flex-shrink-0 d-flex align-items-center justify-content-center px-3"
+                 style="background:#1D63A5;min-width:56px;">
+                <i class="bi bi-diagram-3-fill text-white fs-3"></i>
+            </div>
+            <div class="p-3">
+                <strong>Como funciona no Render / Railway:</strong>
+                O arquivo OFX está no <strong>seu computador</strong>. O servidor (Render/Railway) <strong>não consegue acessar pastas locais</strong>.
+                O caminho correto é:
+                <span class="text-primary fw-semibold">seu computador</span>
+                <i class="bi bi-arrow-right"></i>
+                <span class="text-primary fw-semibold">navegador</span>
+                <i class="bi bi-arrow-right"></i>
+                <span class="text-primary fw-semibold">Render/Railway</span>
+                <i class="bi bi-arrow-right"></i>
+                <span class="text-success fw-semibold">banco de dados (Railway)</span>.
+                <br>
+                <span class="text-muted" style="font-size:0.87rem;">
+                    Selecione o arquivo OFX no card abaixo (<strong>"Importar Extrato OFX"</strong>) e clique em <strong>"Importar Extrato"</strong>.
+                    Não é necessário configurar variáveis de ambiente para este fluxo.
+                </span>
+            </div>
+        </div>
+    </div>
+
     <!-- Summary cards -->
     <div class="row g-3 mb-4">
         <div class="col-sm-4">
@@ -42,11 +69,29 @@
     <div class="row g-4">
         <!-- Upload card -->
         <div class="col-lg-6">
-            <div class="card shadow-sm">
+            <div class="card shadow-sm border-primary">
                 <div class="card-header" style="background:#1D63A5;color:white;">
-                    <h5 class="mb-0"><i class="bi bi-cloud-upload"></i> Importar Extrato OFX</h5>
+                    <h5 class="mb-0">
+                        <i class="bi bi-cloud-upload"></i> Importar Extrato OFX
+                        <span class="badge bg-warning text-dark ms-2" style="font-size:0.72rem;">PASSO A PASSO</span>
+                    </h5>
                 </div>
                 <div class="card-body">
+                    <!-- Step-by-step guide -->
+                    <ol class="list-group list-group-numbered list-group-flush mb-3" style="font-size:0.87rem;">
+                        <li class="list-group-item px-0 py-1 border-0">
+                            Exporte o extrato OFX no <strong>site/app do seu banco</strong>
+                        </li>
+                        <li class="list-group-item px-0 py-1 border-0">
+                            Selecione a <strong>Conta Bancária</strong> abaixo
+                        </li>
+                        <li class="list-group-item px-0 py-1 border-0">
+                            Clique na área pontilhada e selecione o arquivo <strong>.ofx</strong> do seu computador
+                        </li>
+                        <li class="list-group-item px-0 py-1 border-0">
+                            Clique em <strong>"Importar Extrato"</strong> — pronto! ✅
+                        </li>
+                    </ol>
                     <form method="POST" action="{{ url_for('bank_import.upload') }}" enctype="multipart/form-data" id="uploadForm">
                         <div class="mb-3">
                             <label class="form-label fw-semibold">Conta Bancária</label>
