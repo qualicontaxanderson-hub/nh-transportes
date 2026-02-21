@@ -63,13 +63,13 @@ curl -X POST /banco/api/contas \
 3. Faça upload do arquivo `.ofx`
 4. O sistema deduplica e importa automaticamente
 
-### Pasta de Entrada OFX (Watch-Folder) — funciona no Railway sem configuração extra
+### Pasta de Entrada OFX (Watch-Folder) — funciona no Render e Railway sem configuração extra
 
 O sistema possui uma **pasta de entrada** onde você pode depositar arquivos OFX. Eles ficam aguardando e você pode importar cada um no momento que quiser, sem que o processo seja imediato como no upload direto.
 
-#### Railway (recomendado — sem configuração extra)
+#### Render / Railway (recomendado — sem configuração extra)
 
-No Railway (e em qualquer cloud com container efêmero), o fluxo é feito **100% pelo navegador**:
+No **Render**, no **Railway** e em qualquer cloud com container efêmero, o fluxo é feito **100% pelo navegador**:
 
 1. Acesse `/banco/`
 2. Na seção **"Pasta de Entrada OFX"**, clique em **"Enviar OFX para Pasta"**
@@ -78,7 +78,7 @@ No Railway (e em qualquer cloud com container efêmero), o fluxo é feito **100%
 5. Selecione a conta bancária e clique **Importar** ao lado do arquivo
 6. O arquivo é processado e movido para `ofx_inbox/processados/` automaticamente
 
-> **Nota sobre o Railway:** O filesystem de containers Railway é efêmero (reseta a cada deploy). Os arquivos salvos na inbox sobrevivem durante o uptime do container mas são perdidos no redeploy. Para persistência permanente, use um **Railway Volume** (veja abaixo).
+> **Nota sobre Render e Railway:** O filesystem de containers cloud é efêmero (reseta a cada novo deploy). Os arquivos salvos na inbox sobrevivem durante o uptime do container mas são perdidos ao redeployar. Para persistência permanente, use um Disk/Volume (veja abaixo).
 
 #### Servidor próprio / VPS (Linux, FTP, NFS)
 
@@ -95,7 +95,7 @@ OFX_PROCESSED_DIR=/mnt/nfs/extratos_bancarios/importados
 
 #### Windows com Dropbox (executando localmente)
 
-Se a aplicação roda **localmente no Windows** (não no Railway), configure no arquivo `.env`:
+Se a aplicação roda **localmente no Windows** (não no Render/Railway), configure no arquivo `.env`:
 
 ```dotenv
 OFX_INBOX_DIR=C:\Users\User\Dropbox\BANCOS\OFX\NOVO
@@ -107,6 +107,17 @@ Fluxo:
 2. Acesse `/banco/` no navegador
 3. O arquivo aparece na seção **"Pasta de Entrada OFX"** com o caminho NOVO configurado
 4. Clique em **Importar** → o arquivo é processado e movido automaticamente para a pasta IMPORTADOS
+
+#### Render com Disk (persistência entre deploys)
+
+1. No Render, vá em **seu serviço → Disks → Add Disk**
+2. Monte o disk em `/data`
+3. Adicione as variáveis de ambiente em **Environment**:
+   ```
+   OFX_INBOX_DIR=/data/ofx_inbox
+   OFX_PROCESSED_DIR=/data/ofx_importados
+   ```
+4. Faça redeploy — agora os arquivos persistem entre deploys
 
 #### Railway com Volume (persistência entre deploys)
 
