@@ -1,0 +1,223 @@
+{% extends "base.html" %}
+
+{% block title %}Importação Bancária OFX - NH Transportes{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <nav aria-label="breadcrumb" class="mt-2 mb-3">
+        <ol class="breadcrumb" style="font-size:0.85rem;">
+            <li class="breadcrumb-item"><a href="{{ url_for('index') }}">Dashboard</a></li>
+            <li class="breadcrumb-item active">Importação Bancária</li>
+        </ol>
+    </nav>
+
+    <!-- Summary cards -->
+    <div class="row g-3 mb-4">
+        <div class="col-sm-4">
+            <div class="card border-0 shadow-sm text-center">
+                <div class="card-body py-3">
+                    <div class="display-6 fw-bold text-primary">{{ total }}</div>
+                    <div class="text-muted small">Total Importado</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-sm-4">
+            <div class="card border-0 shadow-sm text-center">
+                <div class="card-body py-3">
+                    <div class="display-6 fw-bold text-warning">{{ pendentes }}</div>
+                    <div class="text-muted small">Pendentes</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-sm-4">
+            <div class="card border-0 shadow-sm text-center">
+                <div class="card-body py-3">
+                    <div class="display-6 fw-bold text-success">{{ conciliados }}</div>
+                    <div class="text-muted small">Conciliados</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-4">
+        <!-- Upload card -->
+        <div class="col-lg-6">
+            <div class="card shadow-sm">
+                <div class="card-header" style="background:#1D63A5;color:white;">
+                    <h5 class="mb-0"><i class="bi bi-cloud-upload"></i> Importar Extrato OFX</h5>
+                </div>
+                <div class="card-body">
+                    <form method="POST" action="{{ url_for('bank_import.upload') }}" enctype="multipart/form-data" id="uploadForm">
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold">Conta Bancária</label>
+                            {% if contas %}
+                            <select name="account_id" class="form-select" required>
+                                <option value="">Selecione a conta...</option>
+                                {% for conta in contas %}
+                                <option value="{{ conta.id }}">{{ conta.apelido or conta.banco_nome }}{% if conta.agencia %} – Ag {{ conta.agencia }}{% endif %}{% if conta.conta %} / {{ conta.conta }}{% endif %}</option>
+                                {% endfor %}
+                            </select>
+                            {% else %}
+                            <div class="alert alert-warning py-2 mb-0">
+                                <i class="bi bi-exclamation-triangle"></i>
+                                Nenhuma conta cadastrada.
+                                <a href="#" data-bs-toggle="modal" data-bs-target="#modalNovaConta">Cadastre uma conta</a>.
+                            </div>
+                            {% endif %}
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold">Arquivo OFX</label>
+                            <div id="dropZone"
+                                 class="border rounded p-4 text-center"
+                                 style="border-style:dashed!important;cursor:pointer;background:#f8f9fa;"
+                                 onclick="document.getElementById('ofxFile').click()">
+                                <i class="bi bi-file-earmark-arrow-up fs-2 text-primary"></i>
+                                <p class="mb-0 mt-2">Clique ou arraste o arquivo OFX aqui</p>
+                                <small class="text-muted">Formatos aceitos: .ofx, .OFX</small>
+                            </div>
+                            <input type="file" id="ofxFile" name="ofx_file" accept=".ofx,.OFX" class="d-none" required>
+                            <div id="fileInfo" class="mt-2 text-success d-none">
+                                <i class="bi bi-check-circle"></i> <span id="fileName"></span>
+                            </div>
+                        </div>
+                        <button type="submit" class="btn btn-primary w-100" {% if not contas %}disabled{% endif %}>
+                            <i class="bi bi-upload"></i> Importar Extrato
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- Quick links card -->
+        <div class="col-lg-6">
+            <div class="card shadow-sm h-100">
+                <div class="card-header" style="background:#28a745;color:white;">
+                    <h5 class="mb-0"><i class="bi bi-lightning-charge"></i> Ações Rápidas</h5>
+                </div>
+                <div class="card-body d-flex flex-column gap-3">
+                    <a href="{{ url_for('bank_import.conciliar') }}" class="btn btn-outline-warning">
+                        <i class="bi bi-arrow-left-right"></i> Conciliar Transações Pendentes
+                        {% if pendentes %}<span class="badge bg-warning text-dark ms-1">{{ pendentes }}</span>{% endif %}
+                    </a>
+                    <a href="{{ url_for('bank_import.relatorio') }}" class="btn btn-outline-info">
+                        <i class="bi bi-bar-chart-line"></i> Relatório de Transações
+                    </a>
+                    <button class="btn btn-outline-secondary" onclick="autoReconcile()">
+                        <i class="bi bi-magic"></i> Executar Auto-Conciliação
+                    </button>
+                    <button class="btn btn-outline-primary" data-bs-toggle="modal" data-bs-target="#modalNovaConta">
+                        <i class="bi bi-bank"></i> Cadastrar Nova Conta
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal: Nova Conta -->
+<div class="modal fade" id="modalNovaConta" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="bi bi-bank"></i> Nova Conta Bancária</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <label class="form-label">Nome do Banco *</label>
+                    <input type="text" id="nc_banco" class="form-control" placeholder="Ex: Banco do Brasil">
+                </div>
+                <div class="row g-2">
+                    <div class="col-6">
+                        <label class="form-label">Agência</label>
+                        <input type="text" id="nc_agencia" class="form-control" placeholder="0001">
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label">Conta</label>
+                        <input type="text" id="nc_conta" class="form-control" placeholder="12345-6">
+                    </div>
+                </div>
+                <div class="mt-3">
+                    <label class="form-label">Apelido</label>
+                    <input type="text" id="nc_apelido" class="form-control" placeholder="Ex: Conta Corrente Principal">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-primary" onclick="salvarConta()">
+                    <i class="bi bi-check-lg"></i> Salvar
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // Drag-and-drop / file picker
+    const dropZone = document.getElementById('dropZone');
+    const fileInput = document.getElementById('ofxFile');
+    const fileInfo = document.getElementById('fileInfo');
+    const fileNameSpan = document.getElementById('fileName');
+
+    function showFile(file) {
+        fileNameSpan.textContent = file.name;
+        fileInfo.classList.remove('d-none');
+        dropZone.style.borderColor = '#28a745';
+    }
+
+    fileInput.addEventListener('change', () => {
+        if (fileInput.files[0]) showFile(fileInput.files[0]);
+    });
+
+    ['dragover', 'dragenter'].forEach(evt =>
+        dropZone.addEventListener(evt, e => { e.preventDefault(); dropZone.style.background = '#e8f4fd'; })
+    );
+    ['dragleave', 'drop'].forEach(evt =>
+        dropZone.addEventListener(evt, e => { e.preventDefault(); dropZone.style.background = '#f8f9fa'; })
+    );
+    dropZone.addEventListener('drop', e => {
+        const file = e.dataTransfer.files[0];
+        if (file) {
+            const dt = new DataTransfer();
+            dt.items.add(file);
+            fileInput.files = dt.files;
+            showFile(file);
+        }
+    });
+
+    // Auto-reconcile
+    function autoReconcile() {
+        if (!confirm('Executar auto-conciliação nas transações pendentes?')) return;
+        fetch('{{ url_for("bank_import.api_auto_reconcile") }}', { method: 'POST' })
+            .then(r => r.json())
+            .then(data => {
+                alert(`Auto-conciliação: ${data.conciliados} transação(ões) conciliada(s).`);
+                location.reload();
+            })
+            .catch(() => alert('Erro ao executar auto-conciliação.'));
+    }
+
+    // Save new account
+    function salvarConta() {
+        const banco_nome = document.getElementById('nc_banco').value.trim();
+        if (!banco_nome) { alert('Informe o nome do banco.'); return; }
+        fetch('{{ url_for("bank_import.api_criar_conta") }}', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                banco_nome,
+                agencia: document.getElementById('nc_agencia').value.trim(),
+                conta: document.getElementById('nc_conta').value.trim(),
+                apelido: document.getElementById('nc_apelido').value.trim(),
+            })
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.success) { location.reload(); }
+            else { alert('Erro: ' + data.message); }
+        });
+    }
+</script>
+{% endblock %}

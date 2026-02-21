@@ -27,6 +27,7 @@ from models.categoria_despesa import CategoriaDespesa
 from models.subcategoria_despesa import SubcategoriaDespesa
 from models.titulo_despesa import TituloDespesa
 from models.lancamento_caixa import LancamentoCaixa
+from models.bank_models import BankAccount, BankTransaction, BankSupplierMapping
 
 __all__ = [
     'Usuario',
@@ -54,5 +55,8 @@ __all__ = [
     'SubcategoriaDespesa',
     'TituloDespesa',
     'LancamentoCaixa',
+    'BankAccount',
+    'BankTransaction',
+    'BankSupplierMapping',
     'db',
 ]

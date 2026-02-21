@@ -1,0 +1,192 @@
+{% extends "base.html" %}
+
+{% block title %}Conciliação Bancária - NH Transportes{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <nav aria-label="breadcrumb" class="mt-2 mb-3">
+        <ol class="breadcrumb" style="font-size:0.85rem;">
+            <li class="breadcrumb-item"><a href="{{ url_for('index') }}">Dashboard</a></li>
+            <li class="breadcrumb-item"><a href="{{ url_for('bank_import.index') }}">Importação Bancária</a></li>
+            <li class="breadcrumb-item active">Conciliação</li>
+        </ol>
+    </nav>
+
+    <div class="card shadow-sm mb-4">
+        <div class="card-header d-flex justify-content-between align-items-center"
+             style="background:#1D63A5;color:white;">
+            <h5 class="mb-0"><i class="bi bi-arrow-left-right"></i> Transações Pendentes de Conciliação</h5>
+            <span class="badge bg-warning text-dark fs-6">{{ total }} pendente(s)</span>
+        </div>
+        <div class="card-body p-0">
+            {% if transacoes %}
+            <div class="table-responsive">
+                <table class="table table-hover table-sm mb-0" style="font-size:0.88rem;">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Data</th>
+                            <th>Tipo</th>
+                            <th>Valor</th>
+                            <th>Descrição</th>
+                            <th>CNPJ/CPF</th>
+                            <th>Conta</th>
+                            <th class="text-center">Ações</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for tx in transacoes %}
+                        <tr>
+                            <td>{{ tx.data_transacao.strftime('%d/%m/%Y') if tx.data_transacao else '-' }}</td>
+                            <td>
+                                {% if tx.tipo == 'DEBIT' %}
+                                <span class="badge bg-danger">Débito</span>
+                                {% else %}
+                                <span class="badge bg-success">Crédito</span>
+                                {% endif %}
+                            </td>
+                            <td class="fw-semibold">{{ tx.valor | formatar_moeda }}</td>
+                            <td>{{ tx.descricao or '-' }}</td>
+                            <td>
+                                {% if tx.cnpj_cpf %}
+                                <code>{{ tx.cnpj_cpf }}</code>
+                                {% else %}
+                                <span class="text-muted">—</span>
+                                {% endif %}
+                            </td>
+                            <td>{{ tx.conta_apelido or tx.banco_nome }}</td>
+                            <td class="text-center">
+                                <button class="btn btn-sm btn-outline-primary btn-conciliar"
+                                        data-tx-id="{{ tx.id }}"
+                                        data-tx-desc="{{ tx.descricao | e }}"
+                                        data-tx-valor="{{ tx.valor }}"
+                                        data-tx-cnpj="{{ tx.cnpj_cpf or '' }}">
+                                </button>
+                                <form method="POST" style="display:inline;">
+                                    <input type="hidden" name="transaction_id" value="{{ tx.id }}">
+                                    <input type="hidden" name="acao" value="ignorar">
+                                    <button type="submit" class="btn btn-sm btn-outline-secondary"
+                                            onclick="return confirm('Ignorar esta transação?')">
+                                        <i class="bi bi-x-circle"></i>
+                                    </button>
+                                </form>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Pagination -->
+            {% if total_pages > 1 %}
+            <div class="d-flex justify-content-center py-3">
+                <nav>
+                    <ul class="pagination pagination-sm mb-0">
+                        {% if page > 1 %}
+                        <li class="page-item">
+                            <a class="page-link" href="?page={{ page - 1 }}">‹</a>
+                        </li>
+                        {% endif %}
+                        {% for p in range(1, total_pages + 1) %}
+                        <li class="page-item {% if p == page %}active{% endif %}">
+                            <a class="page-link" href="?page={{ p }}">{{ p }}</a>
+                        </li>
+                        {% endfor %}
+                        {% if page < total_pages %}
+                        <li class="page-item">
+                            <a class="page-link" href="?page={{ page + 1 }}">›</a>
+                        </li>
+                        {% endif %}
+                    </ul>
+                </nav>
+            </div>
+            {% endif %}
+
+            {% else %}
+            <div class="p-4 text-center text-muted">
+                <i class="bi bi-check2-all fs-1 text-success"></i>
+                <p class="mt-2 mb-0">Nenhuma transação pendente de conciliação.</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <a href="{{ url_for('bank_import.index') }}" class="btn btn-secondary">
+        <i class="bi bi-arrow-left"></i> Voltar
+    </a>
+</div>
+
+<!-- Modal: Conciliar -->
+<div class="modal fade" id="modalConciliar" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="bi bi-link-45deg"></i> Conciliar Transação</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form method="POST">
+                <div class="modal-body">
+                    <input type="hidden" name="transaction_id" id="modal_tx_id">
+                    <input type="hidden" name="acao" value="conciliar">
+                    <div class="alert alert-info py-2" id="modal_tx_info"></div>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Buscar Fornecedor</label>
+                        <input type="text" id="buscaFornecedor" class="form-control mb-2"
+                               placeholder="Digite o nome do fornecedor..." oninput="filtrarFornecedores()">
+                        <select name="fornecedor_id" id="selectFornecedor" class="form-select" size="6" required>
+                            {% for f in fornecedores %}
+                            <option value="{{ f.id }}" data-nome="{{ f.razao_social|lower }}">{{ f.razao_social }}{% if f.cnpj %} – {{ f.cnpj }}{% endif %}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="bi bi-check-lg"></i> Confirmar Conciliação
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    document.querySelectorAll('.btn-conciliar').forEach(btn => {
+        btn.addEventListener('click', function() {
+            abrirModal(
+                this.dataset.txId,
+                this.dataset.txDesc,
+                this.dataset.txValor,
+                this.dataset.txCnpj
+            );
+        });
+    });
+
+    function abrirModal(id, descricao, valor, cnpj) {
+        document.getElementById('modal_tx_id').value = id;
+        const info = document.getElementById('modal_tx_info');
+        info.textContent = '';
+        const strong = document.createElement('strong');
+        strong.textContent = 'Transação #' + id;
+        info.appendChild(strong);
+        info.appendChild(document.createTextNode(' — ' + (descricao || '(sem descrição)') + ' | Valor: R$ ' + valor));
+        if (cnpj) {
+            const code = document.createElement('code');
+            code.textContent = cnpj;
+            info.appendChild(document.createTextNode(' | CNPJ/CPF: '));
+            info.appendChild(code);
+        }
+        const modal = new bootstrap.Modal(document.getElementById('modalConciliar'));
+        modal.show();
+    }
+
+    function filtrarFornecedores() {
+        const termo = document.getElementById('buscaFornecedor').value.toLowerCase();
+        document.querySelectorAll('#selectFornecedor option').forEach(opt => {
+            opt.style.display = opt.dataset.nome.includes(termo) ? '' : 'none';
+        });
+    }
+</script>
+{% endblock %}
