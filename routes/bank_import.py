@@ -463,6 +463,41 @@ def api_inbox_files():
     return jsonify({'success': True, 'pasta': inbox, 'files': files})
 
 
+@bp.route('/api/inbox-upload', methods=['POST'])
+@login_required
+def api_inbox_upload():
+    """
+    Salva um arquivo OFX na pasta de entrada SEM processar imediatamente.
+
+    Útil no Railway (container efêmero): o usuário faz upload pelo navegador,
+    o arquivo fica na pasta inbox aguardando, e pode ser importado depois
+    clicando em "Importar" na seção "Pasta de Entrada OFX".
+    """
+    arquivo = request.files.get('ofx_file')
+    if not arquivo or not arquivo.filename:
+        return jsonify({'success': False, 'message': 'Nenhum arquivo enviado'}), 400
+
+    nome = os.path.basename(arquivo.filename)
+    if not nome.lower().endswith('.ofx'):
+        return jsonify({'success': False, 'message': 'Apenas arquivos .ofx são aceitos'}), 400
+
+    inbox = _get_inbox_dir()
+    dest = os.path.join(inbox, nome)
+
+    # Avoid overwriting an existing file – prefix with timestamp
+    if os.path.exists(dest):
+        ts = _dt.datetime.now().strftime('%Y%m%d%H%M%S_')
+        nome = ts + nome
+        dest = os.path.join(inbox, nome)
+
+    try:
+        arquivo.save(dest)
+    except OSError as exc:
+        return jsonify({'success': False, 'message': f'Erro ao salvar arquivo: {exc}'}), 500
+
+    return jsonify({'success': True, 'nome': nome, 'message': f'Arquivo "{nome}" salvo na pasta de entrada.'})
+
+
 @bp.route('/scan-inbox', methods=['POST'])
 @login_required
 def scan_inbox():

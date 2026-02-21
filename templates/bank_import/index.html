@@ -122,7 +122,7 @@
                     <h5 class="mb-0">
                         <i class="bi bi-folder-check"></i> Pasta de Entrada OFX
                         <small class="fw-normal ms-2" style="font-size:0.78rem;opacity:0.85;">
-                            Coloque arquivos .ofx na pasta do servidor e clique em Verificar
+                            Envie arquivos OFX para a pasta e importe quando quiser
                         </small>
                     </h5>
                     <button class="btn btn-sm btn-light" onclick="verificarPasta()">
@@ -130,12 +130,26 @@
                     </button>
                 </div>
                 <div class="card-body">
+                    <!-- Railway info banner -->
+                    <div class="alert alert-info py-2 mb-3" style="font-size:0.83rem;">
+                        <i class="bi bi-info-circle-fill"></i>
+                        <strong>Como usar no Railway:</strong>
+                        Use o botão <strong>"Enviar OFX para Pasta"</strong> abaixo para fazer upload do arquivo para a pasta de entrada. O arquivo ficará aguardando e você poderá importá-lo quando quiser.
+                        Não é necessário configurar nenhuma variável de ambiente.
+                    </div>
+
                     <!-- Pasta configurada -->
-                    <div class="alert alert-light border py-2 mb-3" style="font-size:0.82rem;">
-                        <i class="bi bi-folder2-open text-purple"></i>
-                        <strong>Pasta monitorada:</strong>
-                        <code id="inboxPath">carregando...</code>
-                        <span class="text-muted ms-2">(configure via variável de ambiente <code>OFX_INBOX_DIR</code>)</span>
+                    <div class="d-flex gap-2 align-items-center mb-3">
+                        <div class="alert alert-light border py-2 mb-0 flex-grow-1" style="font-size:0.82rem;">
+                            <i class="bi bi-folder2-open"></i>
+                            <strong>Pasta monitorada:</strong>
+                            <code id="inboxPath">carregando...</code>
+                        </div>
+                        <!-- Upload-to-inbox button -->
+                        <button class="btn btn-outline-primary btn-sm" onclick="document.getElementById('inboxUploadInput').click()">
+                            <i class="bi bi-folder-plus"></i> Enviar OFX para Pasta
+                        </button>
+                        <input type="file" id="inboxUploadInput" accept=".ofx,.OFX" class="d-none">
                     </div>
 
                     <!-- Account selector for inbox imports -->
@@ -275,6 +289,38 @@
     // ---------------------------------------------------------------
     // OFX Inbox / watch-folder
     // ---------------------------------------------------------------
+
+    // Upload-to-inbox (save without processing)
+    document.getElementById('inboxUploadInput').addEventListener('change', function() {
+        const file = this.files[0];
+        if (!file) return;
+        if (!file.name.toLowerCase().endsWith('.ofx')) {
+            alert('Apenas arquivos .ofx são aceitos.');
+            this.value = '';
+            return;
+        }
+        const formData = new FormData();
+        formData.append('ofx_file', file);
+        const btn = document.querySelector('button[onclick*="inboxUploadInput"]');
+        if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Enviando...'; }
+
+        fetch('{{ url_for("bank_import.api_inbox_upload") }}', { method: 'POST', body: formData })
+            .then(r => r.json())
+            .then(data => {
+                if (data.success) {
+                    verificarPasta();
+                    alert(data.message);
+                } else {
+                    alert('Erro: ' + data.message);
+                }
+            })
+            .catch(() => alert('Erro ao enviar arquivo para a pasta.'))
+            .finally(() => {
+                this.value = '';
+                if (btn) { btn.disabled = false; btn.innerHTML = '<i class="bi bi-folder-plus"></i> Enviar OFX para Pasta'; }
+            });
+    });
+
     function verificarPasta() {
         const listDiv = document.getElementById('inboxFileList');
         listDiv.innerHTML = '<div class="text-center py-3"><div class="spinner-border spinner-border-sm text-purple"></div> Verificando pasta...</div>';

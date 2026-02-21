@@ -63,39 +63,54 @@ curl -X POST /banco/api/contas \
 3. Faça upload do arquivo `.ofx`
 4. O sistema deduplica e importa automaticamente
 
-### Pasta de Entrada OFX (Watch-Folder)
+### Pasta de Entrada OFX (Watch-Folder) — funciona no Railway sem configuração extra
 
-O sistema monitora uma pasta no servidor onde você pode simplesmente **copiar arquivos OFX** sem precisar fazer upload pelo navegador.
+O sistema possui uma **pasta de entrada** onde você pode depositar arquivos OFX. Eles ficam aguardando e você pode importar cada um no momento que quiser, sem que o processo seja imediato como no upload direto.
 
-#### Configuração
+#### Railway (recomendado — sem configuração extra)
 
-A pasta padrão é `ofx_inbox/` dentro da raiz do projeto. Para apontar para outro local, defina a variável de ambiente:
+No Railway (e em qualquer cloud com container efêmero), o fluxo é feito **100% pelo navegador**:
+
+1. Acesse `/banco/`
+2. Na seção **"Pasta de Entrada OFX"**, clique em **"Enviar OFX para Pasta"**
+3. Selecione o arquivo `.ofx` no seu computador — ele é salvo na pasta `ofx_inbox/` do servidor
+4. O arquivo aparece na lista da pasta de entrada
+5. Selecione a conta bancária e clique **Importar** ao lado do arquivo
+6. O arquivo é processado e movido para `ofx_inbox/processados/` automaticamente
+
+> **Nota sobre o Railway:** O filesystem de containers Railway é efêmero (reseta a cada deploy). Os arquivos salvos na inbox sobrevivem durante o uptime do container mas são perdidos no redeploy. Para persistência permanente, use um **Railway Volume** (veja abaixo).
+
+#### Servidor próprio / VPS (Linux, FTP, NFS)
+
+Se você tem acesso direto ao servidor, pode copiar arquivos para a pasta diretamente:
 
 ```bash
-OFX_INBOX_DIR=/caminho/para/sua/pasta
+# Copiar via SCP
+scp extrato_20260220.ofx usuario@servidor:/app/ofx_inbox/
+
+# Ou configurar outra pasta via variável de ambiente
+OFX_INBOX_DIR=/mnt/nfs/extratos_bancarios
 ```
 
-No Railway, adicione isso em **Settings → Variables → Add Variable**.
+#### Railway com Volume (persistência entre deploys)
+
+1. No Railway, vá em **seu serviço → Settings → Add Volume**
+2. Monte o volume em `/data`
+3. Adicione a variável de ambiente:
+   ```
+   OFX_INBOX_DIR=/data/ofx_inbox
+   ```
+4. Faça redeploy — agora os arquivos persistem entre deploys
 
 #### Estrutura de pastas
 
 ```
 ofx_inbox/
-├── extrato_20260220.ofx    ← coloque seus arquivos aqui
+├── extrato_20260220.ofx    ← arquivos aguardando importação
 ├── extrato_20260221.ofx
 └── processados/            ← arquivos já importados são movidos aqui
     └── extrato_20260219.ofx
 ```
-
-#### Como usar
-
-1. Copie o arquivo `.ofx` para a pasta `ofx_inbox/` (via FTP, SCP, compartilhamento de rede, etc.)
-2. Acesse `/banco/` — a página escaneia a pasta automaticamente ao carregar
-3. Selecione a conta bancária no seletor da seção **"Pasta de Entrada OFX"**
-4. Clique em **Importar** ao lado do arquivo desejado
-5. O arquivo é processado e movido para `ofx_inbox/processados/` automaticamente
-
-O botão **"Verificar Pasta"** atualiza a lista de arquivos sem recarregar a página.
 
 ### Conciliar transações
 
@@ -156,6 +171,7 @@ bank_supplier_mapping (id, fornecedor_id, cnpj_cpf, tipo_chave, total_conciliaco
 | `GET` | `/banco/api/contas` | JSON: contas cadastradas |
 | `POST` | `/banco/api/contas` | Cria nova conta bancária |
 | `GET` | `/banco/api/inbox-files` | JSON: lista arquivos OFX na pasta de entrada |
+| `POST` | `/banco/api/inbox-upload` | Salva arquivo OFX na pasta de entrada (sem importar) |
 | `POST` | `/banco/scan-inbox` | Importa arquivo da pasta de entrada e move para `processados/` |
 
 ---
