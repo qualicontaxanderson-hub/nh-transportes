@@ -11,7 +11,7 @@ bp = Blueprint('bank_import', __name__, url_prefix='/banco')
 
 
 # ---------------------------------------------------------------------------
-# Helper utilities
+# Funções auxiliares
 # ---------------------------------------------------------------------------
 
 def _get_accounts(cursor, cliente_id=None):
@@ -38,7 +38,7 @@ def _get_accounts(cursor, cliente_id=None):
 
 
 def _get_clientes_com_produtos(cursor):
-    """Return clientes that have at least one active product (same pattern as other routes)."""
+    """Retorna clientes que possuem ao menos um produto ativo (mesmo padrão das outras rotas)."""
     cursor.execute(
         """SELECT DISTINCT c.id, c.razao_social, c.nome_fantasia
            FROM clientes c
@@ -58,21 +58,21 @@ def _get_fornecedores(cursor):
 
 def _save_transactions(cursor, conn, account_id, transactions):
     """
-    Batch-insert *transactions* (output of OFXParser.get_transactions()) into
-    bank_transactions for the given *account_id*.
+    Insere em lote as *transactions* (saída de OFXParser.get_transactions()) na tabela
+    bank_transactions para o *account_id* informado.
 
-    Strategy:
-      1. Batch dedup check – one IN query for all hashes.
-      2. Batch supplier-mapping lookup – one IN query for all CNPJs.
-      3. Single executemany INSERT for all new rows.
-      4. Retry up to 3 times on MySQL deadlock (errno 1213).
+    Estratégia:
+      1. Verificação de duplicatas em lote – uma query IN para todos os hashes.
+      2. Busca de mapeamento de fornecedores em lote – uma query IN para todos os CNPJs.
+      3. INSERT único com executemany para todas as novas linhas.
+      4. Até 3 tentativas em caso de deadlock MySQL (errno 1213).
 
-    Returns (inseridos, duplicados).
+    Retorna (inseridos, duplicados).
     """
     if not transactions:
         return 0, 0
 
-    # 1. Batch dedup
+    # 1. Verificação de duplicatas em lote
     hashes = [tx['hash_dedup'] for tx in transactions]
     placeholders = ','.join(['%s'] * len(hashes))
     cursor.execute(
@@ -81,7 +81,7 @@ def _save_transactions(cursor, conn, account_id, transactions):
     )
     existing_hashes = {row['hash_dedup'] for row in cursor.fetchall()}
 
-    # 2. Batch supplier mapping
+    # 2. Busca de mapeamento de fornecedores em lote
     cnpj_list = list({tx['cnpj_cpf'] for tx in transactions if tx.get('cnpj_cpf')})
     mapping = {}
     if cnpj_list:
@@ -136,13 +136,10 @@ def _save_transactions(cursor, conn, account_id, transactions):
                     conn.rollback()
                     time.sleep(0.3 * (attempt + 1))
                     continue
-                raise
-
-    return inseridos, duplicados
-
+                raise    return inseridos, duplicados
 
 # ---------------------------------------------------------------------------
-# Pages
+# Páginas
 # ---------------------------------------------------------------------------
 
 @bp.route('/')
@@ -152,14 +149,14 @@ def index():
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
 
-    # Filter: only companies with active products
+    # Apenas empresas com produtos ativos
     clientes = _get_clientes_com_produtos(cursor)
 
-    # Optional: filter accounts by selected empresa
+    # Filtro opcional: contas por empresa selecionada
     cliente_id_filter = request.args.get('empresa_id', type=int)
     contas = _get_accounts(cursor, cliente_id=cliente_id_filter)
 
-    # Summary counts
+    # Contadores do resumo
     cursor.execute("SELECT COUNT(*) AS total FROM bank_transactions WHERE status = 'pendente'")
     pendentes = cursor.fetchone()['total']
     cursor.execute("SELECT COUNT(*) AS total FROM bank_transactions WHERE status = 'conciliado'")
@@ -172,8 +169,8 @@ def index():
 
     from config import Config
     _ofx_dir_env = os.environ.get('OFX_INBOX_DIR', '')
-    # True when no custom dir is configured OR the dir is under /tmp (cloud default).
-    # In both cases the watch-folder isn't useful (server /tmp ≠ user's local files).
+    # True quando nenhum diretório personalizado está configurado OU fica em /tmp (padrão nuvem).
+    # Em ambos os casos a pasta monitorada não é útil (o /tmp do servidor ≠ arquivos locais do usuário).
     inbox_is_tmp = not _ofx_dir_env or _ofx_dir_env.startswith('/tmp')
 
     return render_template(
@@ -201,7 +198,7 @@ def upload():
         return render_template('bank_import/index.html',
                                contas=contas, pendentes=0, conciliados=0, total=0)
 
-    # POST – process uploaded file
+    # POST – processa o arquivo enviado
     arquivo = request.files.get('ofx_file')
     account_id = request.form.get('account_id')
 
@@ -269,7 +266,7 @@ def conciliar():
                        WHERE id=%s""",
                     (fornecedor_id, _dt.datetime.now(), current_user.email if hasattr(current_user, 'email') else 'manual', tx_id),
                 )
-                # Learn the mapping if CNPJ is known
+                # Aprende o mapeamento se o CNPJ for conhecido
                 cursor.execute("SELECT cnpj_cpf FROM bank_transactions WHERE id=%s", (tx_id,))
                 row = cursor.fetchone()
                 if row and row.get('cnpj_cpf'):
@@ -284,7 +281,7 @@ def conciliar():
             else:
                 flash('Selecione um fornecedor para conciliar.', 'warning')
 
-    # List pending transactions
+    # Lista transações pendentes
     page = request.args.get('page', 1, type=int)
     per_page = 20
     offset = (page - 1) * per_page
@@ -329,14 +326,14 @@ def relatorio():
 
     contas = _get_accounts(cursor)
 
-    # Filters
+    # Filtros
     account_id = request.args.get('account_id', '')
     status = request.args.get('status', '')
     data_ini = request.args.get('data_ini', '')
     data_fim = request.args.get('data_fim', '')
 
-    # Build safe parameterized query using only hardcoded clause strings
-    # (user values go into the params list, never into the SQL string itself)
+    # Monta query parametrizada segura usando apenas cláusulas fixas no SQL
+    # (os valores do usuário vão para a lista de params, nunca diretamente na string SQL)
     _ALLOWED_STATUSES = {'pendente', 'conciliado', 'ignorado'}
     base_where = 'WHERE 1=1'
     extra_clauses = []
@@ -370,7 +367,7 @@ def relatorio():
     )
     transacoes = cursor.fetchall()
 
-    # Totals
+    # Totais
     cursor.execute(
         """SELECT
                SUM(CASE WHEN tipo='DEBIT' THEN valor ELSE 0 END) AS total_debitos,
@@ -401,7 +398,7 @@ def relatorio():
 
 
 # ---------------------------------------------------------------------------
-# REST API endpoints
+# Endpoints da API REST
 # ---------------------------------------------------------------------------
 
 @bp.route('/api/transacoes-pendentes')
@@ -425,7 +422,7 @@ def api_transacoes_pendentes():
     cursor.close()
     conn.close()
 
-    # Convert date objects to ISO strings for JSON serialisation
+    # Converte objetos de data para strings ISO para serialização JSON
     for row in rows:
         if row.get('data_transacao'):
             row['data_transacao'] = str(row['data_transacao'])
@@ -489,7 +486,7 @@ def api_criar_conta():
     if not banco_nome:
         return jsonify({'success': False, 'message': 'banco_nome é obrigatório'}), 400
 
-    # cliente_id is optional but strongly recommended – links the account to a company with products
+    # cliente_id é opcional mas recomendado – vincula a conta a uma empresa com produtos
     cliente_id = data.get('cliente_id') or None
     if cliente_id is not None:
         try:
@@ -572,7 +569,7 @@ def api_excluir_conta(conta_id):
     """API: desativa (soft-delete) uma conta bancária."""
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
-    # Check for linked transactions first
+    # Verifica transações vinculadas antes de desativar
     cursor.execute(
         "SELECT COUNT(*) AS total FROM bank_transactions WHERE account_id = %s", (conta_id,)
     )
@@ -595,13 +592,13 @@ def api_excluir_conta(conta_id):
 
 def _get_inbox_dirs() -> tuple:
     """
-    Return (inbox_dir, processed_dir), creating both if absent.
+    Retorna (inbox_dir, processed_dir), criando ambos se não existirem.
 
-    Falls back to /tmp/ofx_inbox when the configured path is not writable
-    (e.g. Render/Railway read-only app directory after build).
+    Usa /tmp/ofx_inbox como fallback quando o caminho configurado não é gravável
+    (ex.: diretório da aplicação somente leitura após o build no Render/Railway).
 
-    processed_dir is OFX_PROCESSED_DIR if configured, otherwise
-    <inbox_dir>/processados/ (backward-compatible default).
+    processed_dir é OFX_PROCESSED_DIR se configurado, caso contrário
+    <inbox_dir>/processados/ (padrão compatível com versões anteriores).
     """
     from config import Config
     inbox = Config.OFX_INBOX_DIR
@@ -614,11 +611,11 @@ def _get_inbox_dirs() -> tuple:
         except OSError:
             return False
 
-    # Primary attempt
+    # Tentativa principal
     if _try_makedirs(inbox) and _try_makedirs(processed):
         return inbox, processed
 
-    # Fallback to /tmp – always writable on Render/Railway/Docker
+    # Fallback para /tmp – sempre gravável no Render/Railway/Docker
     tmp_inbox = os.path.join('/tmp', 'ofx_inbox')
     tmp_processed = os.path.join(tmp_inbox, 'processados')
     _try_makedirs(tmp_inbox)
@@ -627,7 +624,7 @@ def _get_inbox_dirs() -> tuple:
 
 
 def _get_inbox_dir() -> str:
-    """Return the inbox directory (backward-compatible helper)."""
+    """Retorna o diretório de entrada (auxiliar compatível com versões anteriores)."""
     inbox, _ = _get_inbox_dirs()
     return inbox
 
@@ -678,7 +675,7 @@ def api_inbox_upload():
     inbox = _get_inbox_dir()
     dest = os.path.join(inbox, nome)
 
-    # Avoid overwriting an existing file – prefix with timestamp
+    # Evita sobrescrever arquivo existente – prefixa com timestamp
     if os.path.exists(dest):
         ts = _dt.datetime.now().strftime('%Y%m%d%H%M%S_')
         nome = ts + nome
@@ -702,7 +699,7 @@ def scan_inbox():
         account_id  – ID da conta bancária destino
         nome_arquivo – nome do arquivo dentro da pasta de entrada
     """
-    # Accept both form-data and JSON
+    # Aceita form-data e JSON
     if request.is_json:
         data = request.get_json() or {}
     else:
@@ -723,7 +720,7 @@ def scan_inbox():
         flash('Nenhum arquivo especificado.', 'warning')
         return redirect(url_for('bank_import.index'))
 
-    # Security: only plain file names allowed – block any path traversal attempt
+    # Segurança: apenas nomes simples de arquivo são aceitos – bloqueia tentativas de path traversal
     if os.sep in nome_arquivo or '/' in nome_arquivo or '\\' in nome_arquivo or '..' in nome_arquivo:
         if request.is_json:
             return jsonify({'success': False, 'message': 'Nome de arquivo inválido'}), 400
@@ -739,10 +736,10 @@ def scan_inbox():
         flash(f'Arquivo não encontrado: {nome_arquivo}', 'danger')
         return redirect(url_for('bank_import.index'))
 
-    # Read and parse.
-    # OFX v1.x (SGML) files commonly use Latin-1 / ISO-8859-1 encoding.
-    # Using 'latin-1' with errors='replace' is the safest universal choice:
-    # it maps all 256 byte values, so no byte is ever undecodable.
+    # Leitura e parse do arquivo.
+    # Arquivos OFX v1.x (SGML) geralmente usam codificação Latin-1 / ISO-8859-1.
+    # Usar 'latin-1' com errors='replace' é a opção mais segura e universal:
+    # todos os 256 valores de byte têm mapeamento, portanto nenhum byte causa erro.
     try:
         with open(filepath, 'r', encoding='latin-1', errors='replace') as fh:
             content = fh.read()
@@ -769,16 +766,16 @@ def scan_inbox():
     cursor.close()
     conn.close()
 
-    # Move file to the configured processed directory (OFX_PROCESSED_DIR)
+    # Move o arquivo para o diretório de processados (OFX_PROCESSED_DIR)
     dest = os.path.join(processed, nome_arquivo)
-    # Avoid collision: prefix with timestamp if a file with the same name exists
+    # Evita colisão: prefixa com timestamp se já existir arquivo com o mesmo nome
     if os.path.exists(dest):
         ts = _dt.datetime.now().strftime('%Y%m%d%H%M%S_')
         dest = os.path.join(processed, ts + nome_arquivo)
     try:
         os.rename(filepath, dest)
     except OSError:
-        pass  # Non-fatal – file processed even if move fails
+        pass  # Não crítico – arquivo processado mesmo se a movimentação falhar
 
     msg = f'{nome_arquivo}: {inseridos} transação(ões) importada(s), {duplicados} duplicata(s) ignorada(s).'
     if request.is_json:

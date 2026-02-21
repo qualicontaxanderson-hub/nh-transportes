@@ -209,8 +209,7 @@
     }
 
     // ---- Nova Conta ----
-    function salvarNovaConta() {
-        const banco_nome = document.getElementById('nc_banco').value.trim();
+    function salvarNovaConta() {        const banco_nome = document.getElementById('nc_banco').value.trim();
         document.getElementById('nc_banco').classList.toggle('is-invalid', !banco_nome);
         if (!banco_nome) return;
 
@@ -234,8 +233,7 @@
     }
 
     // ---- Editar ----
-    function abrirEditar(id, banco, agencia, conta, apelido, clienteId) {
-        document.getElementById('ed_id').value = id;
+    function abrirEditar(id, banco, agencia, conta, apelido, clienteId) {        document.getElementById('ed_id').value = id;
         document.getElementById('ed_banco').value = banco;
         document.getElementById('ed_agencia').value = agencia;
         document.getElementById('ed_conta').value = conta;
@@ -271,8 +269,7 @@
     }
 
     // ---- Excluir / Desativar ----
-    function excluirConta(id, nome) {
-        if (!confirm(`Desativar a conta "${nome}"? As transações vinculadas não serão excluídas.`)) return;
+    function excluirConta(id, nome) {        if (!confirm(`Desativar a conta "${nome}"? As transações vinculadas não serão excluídas.`)) return;
         fetch(`/banco/api/contas/${id}/excluir`, { method: 'POST' })
         .then(r => r.json())
         .then(d => {

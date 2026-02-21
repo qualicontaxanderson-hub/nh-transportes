@@ -60,6 +60,7 @@
                                         data-tx-desc="{{ tx.descricao | e }}"
                                         data-tx-valor="{{ tx.valor }}"
                                         data-tx-cnpj="{{ tx.cnpj_cpf or '' }}">
+                                    <i class="bi bi-link-45deg"></i> Conciliar
                                 </button>
                                 <form method="POST" style="display:inline;">
                                     <input type="hidden" name="transaction_id" value="{{ tx.id }}">

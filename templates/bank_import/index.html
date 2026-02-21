@@ -341,7 +341,7 @@
 
 {% block scripts %}
 <script>
-    // Drag-and-drop / file picker
+    // Arrastar e soltar / seleção de arquivo
     const dropZone = document.getElementById('dropZone');
     const fileInput = document.getElementById('ofxFile');
     const fileInfo = document.getElementById('fileInfo');
@@ -373,7 +373,7 @@
         }
     });
 
-    // Auto-reconcile
+    // Auto-conciliação
     function autoReconcile() {
         if (!confirm('Executar auto-conciliação nas transações pendentes?')) return;
         fetch('{{ url_for("bank_import.api_auto_reconcile") }}', { method: 'POST' })
@@ -385,7 +385,7 @@
             .catch(() => alert('Erro ao executar auto-conciliação.'));
     }
 
-    // Save new account
+    // Salvar nova conta
     function salvarConta() {
         const banco_nome = document.getElementById('nc_banco').value.trim();
         const clienteSel = document.getElementById('nc_cliente_id');
@@ -415,11 +415,11 @@
     }
 
     // ---------------------------------------------------------------
-    // OFX Inbox / watch-folder — only rendered when inbox_is_tmp=False
+    // Pasta de Entrada OFX – renderizado apenas quando inbox_is_tmp=False
     // ---------------------------------------------------------------
     {% if not inbox_is_tmp %}
 
-    // Upload-to-inbox (save without processing)
+    // Enviar para a pasta (salvar sem processar)
     document.getElementById('inboxUploadInput').addEventListener('change', function() {
         const file = this.files[0];
         if (!file) return;
@@ -456,8 +456,8 @@
 
         fetch('{{ url_for("bank_import.api_inbox_files") }}')
             .then(r => {
-                // Guard: if the server returned HTML instead of JSON (e.g. redirect to login),
-                // show a friendly error instead of a confusing SyntaxError.
+                // Proteção: se o servidor retornou HTML em vez de JSON (ex.: redirecionamento para login),
+                // mostra mensagem amigável em vez de um SyntaxError confuso.
                 const ct = r.headers.get('content-type') || '';
                 if (!r.ok || !ct.includes('application/json')) {
                     listDiv.innerHTML = '<div class="alert alert-warning py-2">Não foi possível verificar a pasta (resposta inesperada do servidor). Tente recarregar a página.</div>';
@@ -530,7 +530,7 @@
             tdAcao.className = 'text-center';
             const btn = document.createElement('button');
             btn.className = 'btn btn-sm btn-success';
-            btn.dataset.nomeArquivo = f.nome;   // raw filename, no HTML escaping
+            btn.dataset.nomeArquivo = f.nome;   // nome do arquivo sem escape HTML
             btn.innerHTML = '<i class="bi bi-cloud-upload"></i> Importar';
             btn.addEventListener('click', function() {
                 importarArquivoInbox(this.dataset.nomeArquivo);

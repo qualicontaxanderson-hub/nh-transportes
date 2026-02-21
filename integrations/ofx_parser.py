@@ -3,45 +3,45 @@ import hashlib
 from datetime import datetime
 
 
-# Regex patterns for CNPJ and CPF extraction
+# Expressões regulares para extração de CNPJ e CPF
 _RE_CNPJ = re.compile(r'\b(\d{2}[\.\s]?\d{3}[\.\s]?\d{3}[\/\s]?\d{4}[\-\s]?\d{2})\b')
 _RE_CPF = re.compile(r'\b(\d{3}[\.\s]?\d{3}[\.\s]?\d{3}[\-\s]?\d{2})\b')
 
 
 def _digits_only(value: str) -> str:
-    """Return only digit characters from *value*."""
+    """Retorna apenas os dígitos numéricos de *value*."""
     return re.sub(r'\D', '', value)
 
 
 def _validate_cnpj(cnpj: str) -> bool:
-    """Basic structural CNPJ validation (length only)."""
+    """Validação estrutural básica de CNPJ (verifica apenas o comprimento)."""
     digits = _digits_only(cnpj)
     return len(digits) == 14 and not digits == digits[0] * 14
 
 
 def _validate_cpf(cpf: str) -> bool:
-    """Basic structural CPF validation (length only)."""
+    """Validação estrutural básica de CPF (verifica apenas o comprimento)."""
     digits = _digits_only(cpf)
     return len(digits) == 11 and not digits == digits[0] * 11
 
 
 def _extract_cnpj_cpf(text: str):
     """
-    Extract the first valid CNPJ or CPF from *text*.
+    Extrai o primeiro CNPJ ou CPF válido encontrado em *text*.
 
-    Returns a tuple (value_digits_only, type_str) where type_str is 'cnpj'
-    or 'cpf', or (None, None) if nothing was found.
+    Retorna uma tupla (valor_somente_digitos, tipo_str) onde tipo_str é 'cnpj'
+    ou 'cpf', ou (None, None) caso nada seja encontrado.
     """
     if not text:
         return None, None
 
-    # Try CNPJ first (more specific)
+    # Tenta CNPJ primeiro (mais específico)
     for match in _RE_CNPJ.finditer(text):
         candidate = _digits_only(match.group(1))
         if _validate_cnpj(candidate):
             return candidate, 'cnpj'
 
-    # Fallback to CPF
+    # Fallback para CPF
     for match in _RE_CPF.finditer(text):
         candidate = _digits_only(match.group(1))
         if _validate_cpf(candidate):
@@ -52,26 +52,26 @@ def _extract_cnpj_cpf(text: str):
 
 class OFXParser:
     """
-    Parser for OFX (Open Financial Exchange) bank statement files.
+    Parser para arquivos de extrato bancário no formato OFX (Open Financial Exchange).
 
-    Supports both SGML-style OFX (v1.x) and XML-style OFX (v2.x).
+    Suporta tanto o formato SGML (OFX v1.x) quanto o formato XML (OFX v2.x).
     """
 
     def __init__(self, content: str):
         """
-        Initialise the parser with the raw OFX file content.
+        Inicializa o parser com o conteúdo bruto do arquivo OFX.
 
-        :param content: Raw string content of the OFX file.
+        :param content: Conteúdo textual bruto do arquivo OFX.
         """
         self._raw = content
         self._body = self._extract_body(content)
 
     # ------------------------------------------------------------------
-    # Public API
+    # API pública
     # ------------------------------------------------------------------
 
     def get_account_info(self) -> dict:
-        """Return a dict with basic account information from the OFX header."""
+        """Retorna um dicionário com informações básicas da conta extraídas do cabeçalho OFX."""
         return {
             'banco_nome': self._find_tag('FI>ORG') or self._find_tag('ORG') or '',
             'banco_id': self._find_tag('FI>FID') or self._find_tag('BANKID') or '',
@@ -83,13 +83,13 @@ class OFXParser:
 
     def get_transactions(self) -> list:
         """
-        Parse and return a list of transaction dicts.
+        Faz o parse e retorna uma lista de dicionários de transações.
 
-        Each dict contains:
+        Cada dicionário contém:
             - fitid (str)
-            - tipo  ('DEBIT' or 'CREDIT')
+            - tipo  ('DEBIT' ou 'CREDIT')
             - data_transacao (datetime.date)
-            - valor (float, always positive)
+            - valor (float, sempre positivo)
             - descricao (str)
             - memo (str)
             - cnpj_cpf (str | None)
@@ -103,11 +103,11 @@ class OFXParser:
             re.DOTALL | re.IGNORECASE,
         )
         if not stmttrn_blocks:
-            # Fallback for SGML OFX v1.x files that omit the closing </STMTTRN> tag.
-            # Split on each <STMTTRN> opening and take content up to the next
-            # aggregate boundary or end-of-list marker.
+            # Fallback para arquivos SGML OFX v1.x que omitem a tag de fechamento </STMTTRN>.
+            # Divide pelo marcador de abertura <STMTTRN> e captura o conteúdo até
+            # o próximo delimitador de bloco ou marcador de fim de lista.
             raw_parts = re.split(r'<STMTTRN>', self._body, flags=re.IGNORECASE)
-            for part in raw_parts[1:]:  # skip everything before the first <STMTTRN>
+            for part in raw_parts[1:]:  # ignora tudo antes do primeiro <STMTTRN>
                 end_m = re.search(
                     r'</BANKTRANLIST>|</STMTTRNRS>|</STMTTRN>|</OFX>',
                     part,
@@ -121,39 +121,39 @@ class OFXParser:
         return transactions
 
     # ------------------------------------------------------------------
-    # Internal helpers
+    # Auxiliares internos
     # ------------------------------------------------------------------
 
     @staticmethod
     def _extract_body(content: str) -> str:
         """
-        Strip OFX v1.x headers (everything before the first '<') and return
-        the XML-like body, normalising self-closing SGML tags to XML.
+        Remove o cabeçalho OFX v1.x (tudo antes do primeiro '<') e retorna
+        o corpo no formato XML, normalizando tags SGML auto-fechadas para XML.
         """
-        # Find the start of the XML body
+        # Localiza o início do corpo XML
         idx = content.find('<')
         if idx == -1:
             return content
         body = content[idx:]
 
-        # Normalise Windows CRLF / stray CR so a bare \r cannot be mistaken for
-        # a tag value, which would cause <STMTTRN>\r to become <STMTTRN>\r</STMTTRN>
-        # and break transaction extraction.
+        # Normaliza CRLF do Windows e CR soltos para que um \r não seja confundido
+        # com valor de tag, o que causaria <STMTTRN>\r → <STMTTRN>\r</STMTTRN>
+        # e quebraria a extração de transações.
         body = body.replace('\r\n', '\n').replace('\r', '\n')
 
-        # Convert SGML self-closing tags: <TAG>value → <TAG>value</TAG>
-        # Only when the closing tag is NOT already present immediately after.
+        # Converte tags SGML auto-fechadas: <TAG>valor → <TAG>valor</TAG>
+        # Apenas quando a tag de fechamento NÃO já estiver presente logo após.
         def _maybe_close(m):
             tag = m.group(1)
             value = m.group(2).strip()
             close_tag = f'</{tag}>'
-            # Check whether the original body already has the closing tag right after this match
+            # Verifica se o corpo original já possui a tag de fechamento após este trecho
             after = body[m.end():]
             if after.lower().startswith(close_tag.lower()):
-                return m.group(0)  # closing tag already present – leave unchanged
+                return m.group(0)  # tag de fechamento já presente – mantém sem alteração
             return f'<{tag}>{value}{close_tag}'
 
-        # [^<\r\n]+ – exclude CR so Windows line endings don't sneak in as values
+        # [^<\r\n]+ – exclui CR para que quebras de linha do Windows não entrem como valores
         body = re.sub(
             r'<([A-Z0-9.]+)>([^<\r\n]+)',
             _maybe_close,
@@ -163,8 +163,8 @@ class OFXParser:
 
     def _find_tag(self, tag_path: str) -> str:
         """
-        Find the text content of a (possibly nested) tag in the OFX body.
-        *tag_path* uses '>' as a separator for nested lookups (best-effort).
+        Localiza o conteúdo textual de uma tag (possivelmente aninhada) no corpo OFX.
+        *tag_path* usa '>' como separador para buscas aninhadas (melhor esforço).
         """
         parts = tag_path.split('>')
         search = self._body
@@ -180,10 +180,10 @@ class OFXParser:
         return search.strip()
 
     def _parse_transaction_block(self, block: str) -> dict | None:
-        """Parse a single <STMTTRN> block and return a transaction dict."""
+        """Faz o parse de um bloco <STMTTRN> e retorna um dicionário de transação."""
 
         def tag(name):
-            # Primary: XML / normalized SGML (closing tag present)
+            # Primário: XML / SGML normalizado (tag de fechamento presente)
             m = re.search(
                 rf'<{re.escape(name)}>(.*?)</{re.escape(name)}>',
                 block,
@@ -191,7 +191,7 @@ class OFXParser:
             )
             if m:
                 return m.group(1).strip()
-            # Fallback: raw SGML leaf tag (value ends at next tag or line break)
+            # Fallback: tag SGML folha bruta (valor termina na próxima tag ou quebra de linha)
             m2 = re.search(
                 rf'<{re.escape(name)}>\s*([^<\r\n]+)',
                 block,
@@ -206,13 +206,13 @@ class OFXParser:
         name = tag('NAME')
         memo = tag('MEMO')
 
-        # Parse amount
+        # Converte o valor para float
         try:
             amount = float(trnamt.replace(',', '.'))
         except (ValueError, AttributeError):
             return None
 
-        # Determine DEBIT / CREDIT
+        # Determina DÉBITO / CRÉDITO
         if trntype in ('DEBIT', 'CHECK', 'PAYMENT', 'CASH', 'ATM', 'FEE', 'SRVCHG'):
             tipo = 'DEBIT'
             valor = abs(amount)
@@ -220,24 +220,24 @@ class OFXParser:
             tipo = 'CREDIT'
             valor = abs(amount)
         else:
-            # Fallback: negative amount → debit, positive → credit
+            # Fallback: valor negativo → débito, positivo → crédito
             tipo = 'DEBIT' if amount < 0 else 'CREDIT'
             valor = abs(amount)
 
-        # Parse date
+        # Converte a data
         try:
             data_transacao = self._parse_date(dtposted)
         except ValueError:
             return None
 
-        # Description: prefer NAME, fall back to MEMO
+        # Descrição: prefere NAME, usa MEMO como alternativa
         descricao = name or memo or ''
 
-        # Extract CNPJ / CPF from description + memo
+        # Extrai CNPJ / CPF da descrição + memo
         combined = f'{descricao} {memo}'
         cnpj_cpf, tipo_chave = _extract_cnpj_cpf(combined)
 
-        # Generate deduplication hash
+        # Gera o hash para deduplicação
         hash_dedup = self._make_hash(fitid, dtposted, trnamt, descricao)
 
         return {
@@ -255,10 +255,10 @@ class OFXParser:
     @staticmethod
     def _parse_date(dtstring: str):
         """
-        Parse OFX date strings such as 20231215, 20231215120000,
-        20231215120000[-3:BRT] into a datetime.date object.
+        Converte strings de data OFX como 20231215, 20231215120000,
+        20231215120000[-3:BRT] em um objeto datetime.date.
         """
-        # Strip timezone suffix like [-3:BRT]
+        # Remove o sufixo de fuso horário como [-3:BRT]
         dtstring = re.sub(r'\[.*\]', '', dtstring).strip()
         _fmt_lengths = {'%Y%m%d%H%M%S': 14, '%Y%m%d%H%M': 12, '%Y%m%d': 8}
         for fmt, n in _fmt_lengths.items():
@@ -266,10 +266,10 @@ class OFXParser:
                 return datetime.strptime(dtstring[:n], fmt).date()
             except ValueError:
                 continue
-        raise ValueError(f'Cannot parse OFX date: {dtstring!r}')
+        raise ValueError(f'Não foi possível converter a data OFX: {dtstring!r}')
 
     @staticmethod
     def _make_hash(fitid: str, dtposted: str, trnamt: str, descricao: str) -> str:
-        """Generate a SHA-256 hex digest for deduplication."""
+        """Gera um digest SHA-256 em hexadecimal para deduplicação."""
         raw = f'{fitid}|{dtposted}|{trnamt}|{descricao}'
         return hashlib.sha256(raw.encode('utf-8')).hexdigest()
