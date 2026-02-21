@@ -83,6 +83,9 @@ def index():
     cursor.close()
     conn.close()
 
+    from config import Config
+    inbox_is_tmp = not os.environ.get('OFX_INBOX_DIR')  # True when using the /tmp default
+
     return render_template(
         'bank_import/index.html',
         contas=contas,
@@ -91,6 +94,7 @@ def index():
         pendentes=pendentes,
         conciliados=conciliados,
         total=total,
+        inbox_is_tmp=inbox_is_tmp,
     )
 
 

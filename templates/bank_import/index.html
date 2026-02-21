@@ -16,23 +16,22 @@
         <div class="d-flex">
             <div class="flex-shrink-0 d-flex align-items-center justify-content-center px-3"
                  style="background:#1D63A5;min-width:56px;">
-                <i class="bi bi-diagram-3-fill text-white fs-3"></i>
+                <i class="bi bi-cloud-upload-fill text-white fs-3"></i>
             </div>
             <div class="p-3">
-                <strong>Como funciona no Render / Railway:</strong>
-                O arquivo OFX está no <strong>seu computador</strong>. O servidor (Render/Railway) <strong>não consegue acessar pastas locais</strong>.
-                O caminho correto é:
-                <span class="text-primary fw-semibold">seu computador</span>
-                <i class="bi bi-arrow-right"></i>
-                <span class="text-primary fw-semibold">navegador</span>
-                <i class="bi bi-arrow-right"></i>
-                <span class="text-primary fw-semibold">Render/Railway</span>
-                <i class="bi bi-arrow-right"></i>
-                <span class="text-success fw-semibold">banco de dados (Railway)</span>.
+                <strong>Como importar no Render / Railway:</strong>
+                O arquivo OFX está no <strong>seu computador</strong>. Basta selecionar o arquivo no card
+                <strong class="text-success">"Importar Extrato OFX"</strong> abaixo e clicar em
+                <strong class="text-success">"Importar Extrato"</strong>. Pronto — as transações irão direto para o banco de dados.
                 <br>
                 <span class="text-muted" style="font-size:0.87rem;">
-                    Selecione o arquivo OFX no card abaixo (<strong>"Importar Extrato OFX"</strong>) e clique em <strong>"Importar Extrato"</strong>.
-                    Não é necessário configurar variáveis de ambiente para este fluxo.
+                    <i class="bi bi-laptop"></i> Seu computador
+                    <i class="bi bi-arrow-right mx-1"></i>
+                    <i class="bi bi-globe"></i> Navegador (upload)
+                    <i class="bi bi-arrow-right mx-1"></i>
+                    <i class="bi bi-cloud"></i> Render/Railway
+                    <i class="bi bi-arrow-right mx-1"></i>
+                    <i class="bi bi-database-fill-check text-success"></i> Banco de dados (Railway)
                 </span>
             </div>
         </div>
@@ -190,6 +189,41 @@
     <!-- OFX Inbox (watch-folder) -->
     <div class="row mt-4">
         <div class="col-12">
+            {% if inbox_is_tmp %}
+            {# Cloud deployment (Render/Railway) with no custom OFX_INBOX_DIR configured.
+               The watch-folder is NOT useful here — the server /tmp is on a remote machine,
+               not the user's local computer. Show an explanation instead. #}
+            <div class="card shadow-sm border-warning">
+                <div class="card-header d-flex align-items-center gap-2"
+                     style="background:#fff3cd;">
+                    <i class="bi bi-folder-x text-warning fs-5"></i>
+                    <h5 class="mb-0 text-warning-emphasis">Pasta de Entrada OFX — não disponível nesta instalação</h5>
+                </div>
+                <div class="card-body">
+                    <div class="alert alert-warning mb-3">
+                        <strong><i class="bi bi-exclamation-triangle-fill"></i> A funcionalidade de Pasta de Entrada é para instalação local (Windows/Linux rodando no mesmo computador dos arquivos).</strong>
+                        <hr class="my-2">
+                        No Render/Railway o servidor está em um datacenter — ele <strong>não consegue ler arquivos do seu computador</strong>,
+                        mesmo que estejam numa pasta do Dropbox, OneDrive ou em outro lugar.
+                        A pasta <code>/tmp/ofx_inbox</code> que aparece existe no servidor remoto, não no seu Windows.
+                    </div>
+                    <p class="mb-2"><strong>✅ Como importar no Render/Railway (correto):</strong></p>
+                    <ol class="mb-3">
+                        <li>Vá até o card <strong>"Importar Extrato OFX"</strong> no topo desta página</li>
+                        <li>Selecione o arquivo <code>.ofx</code> do seu computador</li>
+                        <li>Escolha a conta bancária</li>
+                        <li>Clique em <strong>"Importar Extrato"</strong></li>
+                    </ol>
+                    <p class="text-muted small mb-0">
+                        <i class="bi bi-info-circle"></i>
+                        Para usar a Pasta de Entrada configure a variável de ambiente
+                        <code>OFX_INBOX_DIR</code> apontando para uma pasta compartilhada acessível
+                        ao servidor (ex: disco montado via NFS/SMB, ou instalação local).
+                    </p>
+                </div>
+            </div>
+            {% else %}
+            {# Local / custom-configured installation: show the real watch-folder UI #}
             <div class="card shadow-sm">
                 <div class="card-header d-flex justify-content-between align-items-center"
                      style="background:#6f42c1;color:white;">
@@ -204,16 +238,6 @@
                     </button>
                 </div>
                 <div class="card-body">
-                    <!-- Render / Railway info banner -->
-                    <div class="alert alert-info py-2 mb-3" style="font-size:0.83rem;">
-                        <i class="bi bi-info-circle-fill"></i>
-                        <strong>Como usar no Render / Railway:</strong>
-                        Use o botão <strong>"Enviar OFX para Pasta"</strong> abaixo para fazer upload do arquivo para a pasta de entrada. O arquivo ficará aguardando e você poderá importá-lo quando quiser.
-                        Não é necessário configurar nenhuma variável de ambiente.
-                        <br><small class="text-muted"><i class="bi bi-exclamation-triangle"></i>
-                        No Render/Railway os arquivos são salvos em <code>/tmp</code> (memória temporária) e são apagados a cada novo deploy. Importe logo após enviar.</small>
-                    </div>
-
                     <!-- Pasta configurada -->
                     <div class="d-flex gap-2 align-items-center mb-3">
                         <div class="flex-grow-1">
@@ -259,6 +283,7 @@
                     </div>
                 </div>
             </div>
+            {% endif %}
         </div>
     </div>
 </div>
