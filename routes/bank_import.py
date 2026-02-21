@@ -427,12 +427,24 @@ def api_criar_conta():
 # Watch-folder / OFX inbox endpoints
 # ---------------------------------------------------------------------------
 
-def _get_inbox_dir() -> str:
-    """Return the configured OFX inbox directory, creating it if absent."""
+def _get_inbox_dirs() -> tuple:
+    """
+    Return (inbox_dir, processed_dir), creating both if absent.
+
+    processed_dir is OFX_PROCESSED_DIR if configured, otherwise
+    <inbox_dir>/processados/ (backward-compatible default).
+    """
     from config import Config
     inbox = Config.OFX_INBOX_DIR
+    processed = Config.OFX_PROCESSED_DIR or os.path.join(inbox, 'processados')
     os.makedirs(inbox, exist_ok=True)
-    os.makedirs(os.path.join(inbox, 'processados'), exist_ok=True)
+    os.makedirs(processed, exist_ok=True)
+    return inbox, processed
+
+
+def _get_inbox_dir() -> str:
+    """Return the inbox directory (backward-compatible helper)."""
+    inbox, _ = _get_inbox_dirs()
     return inbox
 
 
@@ -440,18 +452,16 @@ def _get_inbox_dir() -> str:
 @login_required
 def api_inbox_files():
     """API: lista arquivos OFX encontrados na pasta de entrada."""
-    import os as _os
-
-    inbox = _get_inbox_dir()
+    inbox, processed = _get_inbox_dirs()
     files = []
     try:
-        for name in sorted(_os.listdir(inbox)):
+        for name in sorted(os.listdir(inbox)):
             if not name.lower().endswith('.ofx'):
                 continue
-            full = _os.path.join(inbox, name)
-            if not _os.path.isfile(full):
+            full = os.path.join(inbox, name)
+            if not os.path.isfile(full):
                 continue
-            stat = _os.stat(full)
+            stat = os.stat(full)
             files.append({
                 'nome': name,
                 'tamanho': stat.st_size,
@@ -460,7 +470,7 @@ def api_inbox_files():
     except OSError as exc:
         return jsonify({'success': False, 'message': str(exc), 'files': []}), 500
 
-    return jsonify({'success': True, 'pasta': inbox, 'files': files})
+    return jsonify({'success': True, 'pasta': inbox, 'pasta_processados': processed, 'files': files})
 
 
 @bp.route('/api/inbox-upload', methods=['POST'])
@@ -508,8 +518,6 @@ def scan_inbox():
         account_id  – ID da conta bancária destino
         nome_arquivo – nome do arquivo dentro da pasta de entrada
     """
-    import os as _os
-
     # Accept both form-data and JSON
     if request.is_json:
         data = request.get_json() or {}
@@ -532,16 +540,16 @@ def scan_inbox():
         return redirect(url_for('bank_import.index'))
 
     # Security: only plain file names allowed – block any path traversal attempt
-    if _os.sep in nome_arquivo or '/' in nome_arquivo or '\\' in nome_arquivo or '..' in nome_arquivo:
+    if os.sep in nome_arquivo or '/' in nome_arquivo or '\\' in nome_arquivo or '..' in nome_arquivo:
         if request.is_json:
             return jsonify({'success': False, 'message': 'Nome de arquivo inválido'}), 400
         flash('Nome de arquivo inválido.', 'danger')
         return redirect(url_for('bank_import.index'))
 
-    inbox = _get_inbox_dir()
-    filepath = _os.path.join(inbox, nome_arquivo)
+    inbox, processed = _get_inbox_dirs()
+    filepath = os.path.join(inbox, nome_arquivo)
 
-    if not _os.path.isfile(filepath):
+    if not os.path.isfile(filepath):
         if request.is_json:
             return jsonify({'success': False, 'message': f'Arquivo não encontrado: {nome_arquivo}'}), 404
         flash(f'Arquivo não encontrado: {nome_arquivo}', 'danger')
@@ -622,14 +630,14 @@ def scan_inbox():
     cursor.close()
     conn.close()
 
-    # Move file to processados/
-    dest = _os.path.join(inbox, 'processados', nome_arquivo)
-    # Avoid collision: prefix with timestamp if destination already exists
-    if _os.path.exists(dest):
+    # Move file to the configured processed directory (OFX_PROCESSED_DIR)
+    dest = os.path.join(processed, nome_arquivo)
+    # Avoid collision: prefix with timestamp if a file with the same name exists
+    if os.path.exists(dest):
         ts = _dt.datetime.now().strftime('%Y%m%d%H%M%S_')
-        dest = _os.path.join(inbox, 'processados', ts + nome_arquivo)
+        dest = os.path.join(processed, ts + nome_arquivo)
     try:
-        _os.rename(filepath, dest)
+        os.rename(filepath, dest)
     except OSError:
         pass  # Non-fatal – file processed even if move fails
 

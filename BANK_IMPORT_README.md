@@ -90,15 +90,32 @@ scp extrato_20260220.ofx usuario@servidor:/app/ofx_inbox/
 
 # Ou configurar outra pasta via variável de ambiente
 OFX_INBOX_DIR=/mnt/nfs/extratos_bancarios
+OFX_PROCESSED_DIR=/mnt/nfs/extratos_bancarios/importados
 ```
+
+#### Windows com Dropbox (executando localmente)
+
+Se a aplicação roda **localmente no Windows** (não no Railway), configure no arquivo `.env`:
+
+```dotenv
+OFX_INBOX_DIR=C:\Users\User\Dropbox\BANCOS\OFX\NOVO
+OFX_PROCESSED_DIR=C:\Users\User\Dropbox\BANCOS\OFX\IMPORTADOS
+```
+
+Fluxo:
+1. Salve o arquivo OFX exportado do banco dentro de `C:\Users\User\Dropbox\BANCOS\OFX\NOVO`
+2. Acesse `/banco/` no navegador
+3. O arquivo aparece na seção **"Pasta de Entrada OFX"** com o caminho NOVO configurado
+4. Clique em **Importar** → o arquivo é processado e movido automaticamente para a pasta IMPORTADOS
 
 #### Railway com Volume (persistência entre deploys)
 
 1. No Railway, vá em **seu serviço → Settings → Add Volume**
 2. Monte o volume em `/data`
-3. Adicione a variável de ambiente:
+3. Adicione as variáveis de ambiente:
    ```
    OFX_INBOX_DIR=/data/ofx_inbox
+   OFX_PROCESSED_DIR=/data/ofx_importados
    ```
 4. Faça redeploy — agora os arquivos persistem entre deploys
 

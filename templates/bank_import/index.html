@@ -140,13 +140,20 @@
 
                     <!-- Pasta configurada -->
                     <div class="d-flex gap-2 align-items-center mb-3">
-                        <div class="alert alert-light border py-2 mb-0 flex-grow-1" style="font-size:0.82rem;">
-                            <i class="bi bi-folder2-open"></i>
-                            <strong>Pasta monitorada:</strong>
-                            <code id="inboxPath">carregando...</code>
+                        <div class="flex-grow-1">
+                            <div class="alert alert-light border py-2 mb-1" style="font-size:0.82rem;">
+                                <i class="bi bi-folder2-open text-primary"></i>
+                                <strong>Pasta NOVO (leitura):</strong>
+                                <code id="inboxPath">carregando...</code>
+                            </div>
+                            <div class="alert alert-light border py-2 mb-0" style="font-size:0.82rem;">
+                                <i class="bi bi-folder-check text-success"></i>
+                                <strong>Pasta IMPORTADOS (após importar):</strong>
+                                <code id="inboxProcessedPath">carregando...</code>
+                            </div>
                         </div>
                         <!-- Upload-to-inbox button -->
-                        <button class="btn btn-outline-primary btn-sm" onclick="document.getElementById('inboxUploadInput').click()">
+                        <button class="btn btn-outline-primary btn-sm align-self-center" onclick="document.getElementById('inboxUploadInput').click()">
                             <i class="bi bi-folder-plus"></i> Enviar OFX para Pasta
                         </button>
                         <input type="file" id="inboxUploadInput" accept=".ofx,.OFX" class="d-none">
@@ -330,6 +337,9 @@
             .then(data => {
                 if (data.pasta) {
                     document.getElementById('inboxPath').textContent = data.pasta;
+                }
+                if (data.pasta_processados) {
+                    document.getElementById('inboxProcessedPath').textContent = data.pasta_processados;
                 }
                 if (!data.success) {
                     listDiv.innerHTML = `<div class="alert alert-danger py-2">${data.message}</div>`;
