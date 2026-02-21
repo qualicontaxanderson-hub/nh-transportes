@@ -1,6 +1,8 @@
 import os
+import time
 import datetime as _dt
 
+import mysql.connector
 from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify
 from flask_login import login_required, current_user
 from utils.db import get_db_connection
@@ -52,6 +54,91 @@ def _get_fornecedores(cursor):
         "SELECT id, razao_social, cnpj FROM fornecedores ORDER BY razao_social"
     )
     return cursor.fetchall()
+
+
+def _save_transactions(cursor, conn, account_id, transactions):
+    """
+    Batch-insert *transactions* (output of OFXParser.get_transactions()) into
+    bank_transactions for the given *account_id*.
+
+    Strategy:
+      1. Batch dedup check – one IN query for all hashes.
+      2. Batch supplier-mapping lookup – one IN query for all CNPJs.
+      3. Single executemany INSERT for all new rows.
+      4. Retry up to 3 times on MySQL deadlock (errno 1213).
+
+    Returns (inseridos, duplicados).
+    """
+    if not transactions:
+        return 0, 0
+
+    # 1. Batch dedup
+    hashes = [tx['hash_dedup'] for tx in transactions]
+    placeholders = ','.join(['%s'] * len(hashes))
+    cursor.execute(
+        f'SELECT hash_dedup FROM bank_transactions WHERE hash_dedup IN ({placeholders})',
+        hashes,
+    )
+    existing_hashes = {row['hash_dedup'] for row in cursor.fetchall()}
+
+    # 2. Batch supplier mapping
+    cnpj_list = list({tx['cnpj_cpf'] for tx in transactions if tx.get('cnpj_cpf')})
+    mapping = {}
+    if cnpj_list:
+        ph2 = ','.join(['%s'] * len(cnpj_list))
+        cursor.execute(
+            f'SELECT cnpj_cpf, fornecedor_id FROM bank_supplier_mapping WHERE cnpj_cpf IN ({ph2})',
+            cnpj_list,
+        )
+        for row in cursor.fetchall():
+            mapping[row['cnpj_cpf']] = row['fornecedor_id']
+
+    now = _dt.datetime.now()
+    rows = []
+    duplicados = 0
+    for tx in transactions:
+        if tx['hash_dedup'] in existing_hashes:
+            duplicados += 1
+            continue
+        fid = mapping.get(tx.get('cnpj_cpf') or '')
+        status = 'conciliado' if fid else 'pendente'
+        rows.append((
+            account_id,
+            tx['hash_dedup'],
+            tx['data_transacao'],
+            tx['tipo'],
+            tx['valor'],
+            tx['descricao'],
+            tx.get('cnpj_cpf'),
+            tx.get('memo'),
+            tx.get('fitid'),
+            status,
+            fid,
+            now if fid else None,
+            'auto' if fid else None,
+        ))
+
+    inseridos = len(rows)
+    if rows:
+        for attempt in range(3):
+            try:
+                cursor.executemany(
+                    """INSERT INTO bank_transactions
+                       (account_id, hash_dedup, data_transacao, tipo, valor, descricao,
+                        cnpj_cpf, memo, fitid, status, fornecedor_id, conciliado_em, conciliado_por)
+                       VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
+                    rows,
+                )
+                conn.commit()
+                break
+            except mysql.connector.errors.InternalError as exc:
+                if getattr(exc, 'errno', None) == 1213 and attempt < 2:
+                    conn.rollback()
+                    time.sleep(0.3 * (attempt + 1))
+                    continue
+                raise
+
+    return inseridos, duplicados
 
 
 # ---------------------------------------------------------------------------
@@ -143,56 +230,8 @@ def upload():
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
 
-    inseridos = 0
-    duplicados = 0
+    inseridos, duplicados = _save_transactions(cursor, conn, account_id, transactions)
 
-    for tx in transactions:
-        # Check deduplication
-        cursor.execute(
-            "SELECT id FROM bank_transactions WHERE hash_dedup = %s",
-            (tx['hash_dedup'],),
-        )
-        if cursor.fetchone():
-            duplicados += 1
-            continue
-
-        # Check for existing mapping to auto-reconcile
-        fornecedor_id = None
-        status = 'pendente'
-        if tx.get('cnpj_cpf'):
-            cursor.execute(
-                "SELECT fornecedor_id FROM bank_supplier_mapping WHERE cnpj_cpf = %s",
-                (tx['cnpj_cpf'],),
-            )
-            mapping = cursor.fetchone()
-            if mapping:
-                fornecedor_id = mapping['fornecedor_id']
-                status = 'conciliado'
-
-        cursor.execute(
-            """INSERT INTO bank_transactions
-               (account_id, hash_dedup, data_transacao, tipo, valor, descricao,
-                cnpj_cpf, memo, fitid, status, fornecedor_id, conciliado_em, conciliado_por)
-               VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
-            (
-                account_id,
-                tx['hash_dedup'],
-                tx['data_transacao'],
-                tx['tipo'],
-                tx['valor'],
-                tx['descricao'],
-                tx.get('cnpj_cpf'),
-                tx.get('memo'),
-                tx.get('fitid'),
-                status,
-                fornecedor_id,
-                None if status == 'pendente' else _dt.datetime.now(),
-                None if status == 'pendente' else 'auto',
-            ),
-        )
-        inseridos += 1
-
-    conn.commit()
     cursor.close()
     conn.close()
 
@@ -724,54 +763,9 @@ def scan_inbox():
 
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
-    inseridos = 0
-    duplicados = 0
 
-    for tx in transactions:
-        cursor.execute(
-            "SELECT id FROM bank_transactions WHERE hash_dedup = %s",
-            (tx['hash_dedup'],),
-        )
-        if cursor.fetchone():
-            duplicados += 1
-            continue
+    inseridos, duplicados = _save_transactions(cursor, conn, account_id, transactions)
 
-        fornecedor_id = None
-        status = 'pendente'
-        if tx.get('cnpj_cpf'):
-            cursor.execute(
-                "SELECT fornecedor_id FROM bank_supplier_mapping WHERE cnpj_cpf = %s",
-                (tx['cnpj_cpf'],),
-            )
-            mapping = cursor.fetchone()
-            if mapping:
-                fornecedor_id = mapping['fornecedor_id']
-                status = 'conciliado'
-
-        cursor.execute(
-            """INSERT INTO bank_transactions
-               (account_id, hash_dedup, data_transacao, tipo, valor, descricao,
-                cnpj_cpf, memo, fitid, status, fornecedor_id, conciliado_em, conciliado_por)
-               VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
-            (
-                account_id,
-                tx['hash_dedup'],
-                tx['data_transacao'],
-                tx['tipo'],
-                tx['valor'],
-                tx['descricao'],
-                tx.get('cnpj_cpf'),
-                tx.get('memo'),
-                tx.get('fitid'),
-                status,
-                fornecedor_id,
-                None if status == 'pendente' else _dt.datetime.now(),
-                None if status == 'pendente' else 'auto',
-            ),
-        )
-        inseridos += 1
-
-    conn.commit()
     cursor.close()
     conn.close()
 

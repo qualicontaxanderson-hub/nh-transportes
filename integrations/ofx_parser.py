@@ -136,6 +136,11 @@ class OFXParser:
             return content
         body = content[idx:]
 
+        # Normalise Windows CRLF / stray CR so a bare \r cannot be mistaken for
+        # a tag value, which would cause <STMTTRN>\r to become <STMTTRN>\r</STMTTRN>
+        # and break transaction extraction.
+        body = body.replace('\r\n', '\n').replace('\r', '\n')
+
         # Convert SGML self-closing tags: <TAG>value → <TAG>value</TAG>
         # Only when the closing tag is NOT already present immediately after.
         def _maybe_close(m):
@@ -148,8 +153,9 @@ class OFXParser:
                 return m.group(0)  # closing tag already present – leave unchanged
             return f'<{tag}>{value}{close_tag}'
 
+        # [^<\r\n]+ – exclude CR so Windows line endings don't sneak in as values
         body = re.sub(
-            r'<([A-Z0-9.]+)>([^<\n]+)',
+            r'<([A-Z0-9.]+)>([^<\r\n]+)',
             _maybe_close,
             body,
         )
