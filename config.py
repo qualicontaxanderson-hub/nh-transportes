@@ -30,14 +30,14 @@ class Config:
 
     # Pasta de entrada para arquivos OFX (watch-folder)
     # Configure OFX_INBOX_DIR no ambiente para apontar para qualquer pasta acessível ao servidor.
-    # Padrão: <raiz_do_projeto>/ofx_inbox/
+    # Padrão: /tmp/ofx_inbox  (sempre gravável no Render/Railway/Docker)
     #
     # Exemplo Windows/Dropbox (executando localmente):
     #   OFX_INBOX_DIR=C:\Users\User\Dropbox\BANCOS\OFX\NOVO
     #   OFX_PROCESSED_DIR=C:\Users\User\Dropbox\BANCOS\OFX\IMPORTADOS
     OFX_INBOX_DIR = os.environ.get(
         'OFX_INBOX_DIR',
-        os.path.join(os.path.dirname(os.path.abspath(__file__)), 'ofx_inbox')
+        '/tmp/ofx_inbox'
     )
 
     # Pasta de destino para arquivos OFX já importados.

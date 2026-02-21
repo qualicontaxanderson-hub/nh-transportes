@@ -551,15 +551,33 @@ def _get_inbox_dirs() -> tuple:
     """
     Return (inbox_dir, processed_dir), creating both if absent.
 
+    Falls back to /tmp/ofx_inbox when the configured path is not writable
+    (e.g. Render/Railway read-only app directory after build).
+
     processed_dir is OFX_PROCESSED_DIR if configured, otherwise
     <inbox_dir>/processados/ (backward-compatible default).
     """
     from config import Config
     inbox = Config.OFX_INBOX_DIR
     processed = Config.OFX_PROCESSED_DIR or os.path.join(inbox, 'processados')
-    os.makedirs(inbox, exist_ok=True)
-    os.makedirs(processed, exist_ok=True)
-    return inbox, processed
+
+    def _try_makedirs(path):
+        try:
+            os.makedirs(path, exist_ok=True)
+            return True
+        except OSError:
+            return False
+
+    # Primary attempt
+    if _try_makedirs(inbox) and _try_makedirs(processed):
+        return inbox, processed
+
+    # Fallback to /tmp – always writable on Render/Railway/Docker
+    tmp_inbox = os.path.join('/tmp', 'ofx_inbox')
+    tmp_processed = os.path.join(tmp_inbox, 'processados')
+    _try_makedirs(tmp_inbox)
+    _try_makedirs(tmp_processed)
+    return tmp_inbox, tmp_processed
 
 
 def _get_inbox_dir() -> str:
