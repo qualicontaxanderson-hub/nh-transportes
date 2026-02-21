@@ -1,14 +1,16 @@
 # Arquivo de trigger para forçar redeploy
-# Data: 2026-02-21 15:14:13
-# Motivo: Multi-empresa + fix JS error na pagina /banco/
+# Data: 2026-02-21 15:34:59
+# Motivo: Bank account management page + financeiro/contas route
 #
 # Alterações:
-#   - bank_accounts agora tem cliente_id (empresa vinculada)
-#   - Cadastro de conta bancária exige selecionar a empresa (apenas as com produtos)
-#   - Filtro por empresa na página /banco/
-#   - Correção do erro JS "Unexpected token '<'" no verificarPasta()
-#   - Migration: migrations/20260221_bank_accounts_add_cliente.sql
+#   - GET /banco/contas — página de gerenciamento (lista, edita, desativa contas)
+#   - PUT /banco/api/contas/<id> — editar conta
+#   - POST /banco/api/contas/<id>/excluir — desativar conta (soft-delete)
+#   - GET /financeiro/contas/ — página de visualização (link no navbar já existia)
+#   - templates/bank_import/contas.html — nova página de gerenciamento
+#   - templates/financeiro/contas.html — nova página de visualização
+#   - Botão "Gerenciar Contas" no dashboard /banco/
 
-DEPLOY_TIMESTAMP=2026-02-21T15:14:13Z
-REASON=Multi-empresa bank accounts + fix inbox JS error
-VERSION=4.0.0
+DEPLOY_TIMESTAMP=2026-02-21T15:34:59Z
+REASON=Bank account management edit delete + financeiro contas route
+VERSION=5.0.0

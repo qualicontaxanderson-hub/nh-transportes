@@ -859,3 +859,24 @@ def consultar_status_efi(charge_id):
             "success": False, 
             "error": f"Erro ao consultar status: {str(e)}"
         }), 500
+
+
+@financeiro_bp.route('/contas/')
+@login_required
+def contas():
+    """Lista as contas bancárias cadastradas no sistema de importação OFX."""
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    cursor.execute(
+        """SELECT ba.id, ba.banco_nome, ba.agencia, ba.conta, ba.apelido,
+                  ba.ativo, ba.criado_em, ba.cliente_id,
+                  c.razao_social AS empresa_nome,
+                  (SELECT COUNT(*) FROM bank_transactions bt WHERE bt.account_id = ba.id) AS total_transacoes
+           FROM bank_accounts ba
+           LEFT JOIN clientes c ON c.id = ba.cliente_id
+           ORDER BY ba.ativo DESC, ba.apelido, ba.banco_nome"""
+    )
+    contas_list = cursor.fetchall()
+    cursor.close()
+    conn.close()
+    return render_template('financeiro/contas.html', contas=contas_list)

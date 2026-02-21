@@ -1,0 +1,284 @@
+{% extends "base.html" %}
+
+{% block title %}Contas Bancárias - NH Transportes{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <nav aria-label="breadcrumb" class="mt-2 mb-3">
+        <ol class="breadcrumb" style="font-size:0.85rem;">
+            <li class="breadcrumb-item"><a href="{{ url_for('index') }}">Dashboard</a></li>
+            <li class="breadcrumb-item"><a href="{{ url_for('bank_import.index') }}">Importação Bancária</a></li>
+            <li class="breadcrumb-item active">Contas Bancárias</li>
+        </ol>
+    </nav>
+
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h4 style="color:#1D63A5;"><i class="bi bi-bank2"></i> Gerenciar Contas Bancárias</h4>
+        <button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#modalNovaConta">
+            <i class="bi bi-plus-lg"></i> Nova Conta
+        </button>
+    </div>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+    {% for category, message in messages %}
+    <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
+        {{ message }}<button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+    {% endfor %}
+    {% endwith %}
+
+    <div id="alertBox"></div>
+
+    <div class="card shadow-sm">
+        <div class="card-body p-0">
+            {% if contas %}
+            <div class="table-responsive">
+                <table class="table table-hover table-sm mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Apelido / Banco</th>
+                            <th>Agência</th>
+                            <th>Conta</th>
+                            <th>Empresa</th>
+                            <th class="text-center">Transações</th>
+                            <th class="text-center">Status</th>
+                            <th class="text-end">Ações</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for c in contas %}
+                        <tr class="{{ 'table-secondary text-muted' if not c.ativo else '' }}">
+                            <td>
+                                <strong>{{ c.apelido or c.banco_nome }}</strong>
+                                {% if c.apelido and c.apelido != c.banco_nome %}
+                                <br><small class="text-muted">{{ c.banco_nome }}</small>
+                                {% endif %}
+                            </td>
+                            <td>{{ c.agencia or '—' }}</td>
+                            <td>{{ c.conta or '—' }}</td>
+                            <td>
+                                {% if c.empresa_nome %}{{ c.empresa_nome }}{% else %}<span class="text-muted">—</span>{% endif %}
+                            </td>
+                            <td class="text-center">
+                                <span class="badge bg-secondary">{{ c.total_transacoes }}</span>
+                            </td>
+                            <td class="text-center">
+                                {% if c.ativo %}
+                                <span class="badge bg-success">Ativa</span>
+                                {% else %}
+                                <span class="badge bg-secondary">Inativa</span>
+                                {% endif %}
+                            </td>
+                            <td class="text-end">
+                                <button class="btn btn-sm btn-outline-primary me-1"
+                                        onclick="abrirEditar({{ c.id }}, '{{ c.banco_nome|e }}', '{{ (c.agencia or '')|e }}', '{{ (c.conta or '')|e }}', '{{ (c.apelido or '')|e }}', {{ c.cliente_id or 'null' }})"
+                                        title="Editar">
+                                    <i class="bi bi-pencil"></i>
+                                </button>
+                                {% if c.ativo %}
+                                <button class="btn btn-sm btn-outline-danger"
+                                        onclick="excluirConta({{ c.id }}, '{{ (c.apelido or c.banco_nome)|e }}')"
+                                        title="Desativar">
+                                    <i class="bi bi-trash"></i>
+                                </button>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="alert alert-info m-3">
+                <i class="bi bi-info-circle"></i> Nenhuma conta bancária cadastrada ainda.
+                <a href="#" data-bs-toggle="modal" data-bs-target="#modalNovaConta">Cadastre a primeira conta.</a>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- Modal: Nova Conta -->
+<div class="modal fade" id="modalNovaConta" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="bi bi-bank"></i> Nova Conta Bancária</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <label class="form-label fw-semibold">Empresa</label>
+                    <select id="nc_cliente_id" class="form-select">
+                        <option value="">— Sem empresa vinculada —</option>
+                        {% for cl in clientes %}
+                        <option value="{{ cl.id }}">{{ cl.razao_social }}{% if cl.nome_fantasia and cl.nome_fantasia != cl.razao_social %} ({{ cl.nome_fantasia }}){% endif %}</option>
+                        {% endfor %}
+                    </select>
+                    <div class="form-text">Apenas empresas com produtos cadastrados aparecem aqui.</div>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Nome do Banco *</label>
+                    <input type="text" id="nc_banco" class="form-control" placeholder="Ex: Banco do Brasil">
+                    <div class="invalid-feedback">Informe o nome do banco.</div>
+                </div>
+                <div class="row g-2">
+                    <div class="col-6">
+                        <label class="form-label">Agência</label>
+                        <input type="text" id="nc_agencia" class="form-control" placeholder="0001">
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label">Conta</label>
+                        <input type="text" id="nc_conta" class="form-control" placeholder="12345-6">
+                    </div>
+                </div>
+                <div class="mt-3">
+                    <label class="form-label">Apelido</label>
+                    <input type="text" id="nc_apelido" class="form-control" placeholder="Ex: Conta Corrente Principal">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-primary" onclick="salvarNovaConta()">
+                    <i class="bi bi-check-lg"></i> Salvar
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal: Editar Conta -->
+<div class="modal fade" id="modalEditarConta" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="bi bi-pencil"></i> Editar Conta Bancária</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="ed_id">
+                <div class="mb-3">
+                    <label class="form-label fw-semibold">Empresa</label>
+                    <select id="ed_cliente_id" class="form-select">
+                        <option value="">— Sem empresa vinculada —</option>
+                        {% for cl in clientes %}
+                        <option value="{{ cl.id }}">{{ cl.razao_social }}{% if cl.nome_fantasia and cl.nome_fantasia != cl.razao_social %} ({{ cl.nome_fantasia }}){% endif %}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Nome do Banco *</label>
+                    <input type="text" id="ed_banco" class="form-control">
+                    <div class="invalid-feedback">Informe o nome do banco.</div>
+                </div>
+                <div class="row g-2">
+                    <div class="col-6">
+                        <label class="form-label">Agência</label>
+                        <input type="text" id="ed_agencia" class="form-control">
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label">Conta</label>
+                        <input type="text" id="ed_conta" class="form-control">
+                    </div>
+                </div>
+                <div class="mt-3">
+                    <label class="form-label">Apelido</label>
+                    <input type="text" id="ed_apelido" class="form-control">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-primary" onclick="salvarEdicao()">
+                    <i class="bi bi-check-lg"></i> Salvar Alterações
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    const BASE = '{{ url_for("bank_import.api_contas") }}';
+
+    function showAlert(msg, type) {
+        const box = document.getElementById('alertBox');
+        box.innerHTML = `<div class="alert alert-${type} alert-dismissible fade show" role="alert">
+            ${msg}<button type="button" class="btn-close" data-bs-dismiss="alert"></button></div>`;
+        setTimeout(() => box.innerHTML = '', 5000);
+    }
+
+    // ---- Nova Conta ----
+    function salvarNovaConta() {
+        const banco_nome = document.getElementById('nc_banco').value.trim();
+        document.getElementById('nc_banco').classList.toggle('is-invalid', !banco_nome);
+        if (!banco_nome) return;
+
+        const cliente_id_raw = document.getElementById('nc_cliente_id').value;
+        fetch(BASE, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                banco_nome,
+                agencia: document.getElementById('nc_agencia').value.trim(),
+                conta: document.getElementById('nc_conta').value.trim(),
+                apelido: document.getElementById('nc_apelido').value.trim(),
+                cliente_id: cliente_id_raw ? parseInt(cliente_id_raw) : null,
+            })
+        })
+        .then(r => r.json())
+        .then(d => {
+            if (d.success) { location.reload(); }
+            else { showAlert('Erro: ' + d.message, 'danger'); }
+        });
+    }
+
+    // ---- Editar ----
+    function abrirEditar(id, banco, agencia, conta, apelido, clienteId) {
+        document.getElementById('ed_id').value = id;
+        document.getElementById('ed_banco').value = banco;
+        document.getElementById('ed_agencia').value = agencia;
+        document.getElementById('ed_conta').value = conta;
+        document.getElementById('ed_apelido').value = apelido;
+        const sel = document.getElementById('ed_cliente_id');
+        sel.value = clienteId !== null ? String(clienteId) : '';
+        new bootstrap.Modal(document.getElementById('modalEditarConta')).show();
+    }
+
+    function salvarEdicao() {
+        const id = document.getElementById('ed_id').value;
+        const banco_nome = document.getElementById('ed_banco').value.trim();
+        document.getElementById('ed_banco').classList.toggle('is-invalid', !banco_nome);
+        if (!banco_nome) return;
+
+        const cliente_id_raw = document.getElementById('ed_cliente_id').value;
+        fetch(`/banco/api/contas/${id}`, {
+            method: 'PUT',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                banco_nome,
+                agencia: document.getElementById('ed_agencia').value.trim(),
+                conta: document.getElementById('ed_conta').value.trim(),
+                apelido: document.getElementById('ed_apelido').value.trim(),
+                cliente_id: cliente_id_raw ? parseInt(cliente_id_raw) : null,
+            })
+        })
+        .then(r => r.json())
+        .then(d => {
+            if (d.success) { location.reload(); }
+            else { showAlert('Erro: ' + d.message, 'danger'); }
+        });
+    }
+
+    // ---- Excluir / Desativar ----
+    function excluirConta(id, nome) {
+        if (!confirm(`Desativar a conta "${nome}"? As transações vinculadas não serão excluídas.`)) return;
+        fetch(`/banco/api/contas/${id}/excluir`, { method: 'POST' })
+        .then(r => r.json())
+        .then(d => {
+            if (d.success) { location.reload(); }
+            else { showAlert(d.message, 'danger'); }
+        });
+    }
+</script>
+{% endblock %}

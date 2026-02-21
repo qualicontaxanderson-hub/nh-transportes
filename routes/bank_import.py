@@ -467,9 +467,85 @@ def api_criar_conta():
     return jsonify({'success': True, 'id': new_id}), 201
 
 
-# ---------------------------------------------------------------------------
-# Watch-folder / OFX inbox endpoints
-# ---------------------------------------------------------------------------
+@bp.route('/contas')
+@login_required
+def gerenciar_contas():
+    """Página de gerenciamento de contas bancárias (lista, edita, exclui)."""
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    cursor.execute(
+        """SELECT ba.id, ba.banco_nome, ba.agencia, ba.conta, ba.apelido,
+                  ba.ativo, ba.cliente_id, ba.criado_em,
+                  c.razao_social AS empresa_nome,
+                  (SELECT COUNT(*) FROM bank_transactions bt WHERE bt.account_id = ba.id) AS total_transacoes
+           FROM bank_accounts ba
+           LEFT JOIN clientes c ON c.id = ba.cliente_id
+           ORDER BY ba.ativo DESC, ba.apelido, ba.banco_nome"""
+    )
+    contas = cursor.fetchall()
+    clientes = _get_clientes_com_produtos(cursor)
+    cursor.close()
+    conn.close()
+    return render_template('bank_import/contas.html', contas=contas, clientes=clientes)
+
+
+@bp.route('/api/contas/<int:conta_id>', methods=['PUT'])
+@login_required
+def api_editar_conta(conta_id):
+    """API: edita dados de uma conta bancária."""
+    data = request.get_json() or {}
+    banco_nome = (data.get('banco_nome') or '').strip()
+    if not banco_nome:
+        return jsonify({'success': False, 'message': 'banco_nome é obrigatório'}), 400
+
+    cliente_id = data.get('cliente_id') or None
+    if cliente_id is not None:
+        try:
+            cliente_id = int(cliente_id)
+        except (ValueError, TypeError):
+            return jsonify({'success': False, 'message': 'cliente_id inválido'}), 400
+
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    cursor.execute(
+        """UPDATE bank_accounts
+           SET banco_nome=%s, agencia=%s, conta=%s, apelido=%s, cliente_id=%s
+           WHERE id=%s""",
+        (banco_nome, data.get('agencia') or None, data.get('conta') or None,
+         data.get('apelido') or None, cliente_id, conta_id),
+    )
+    conn.commit()
+    cursor.close()
+    conn.close()
+    return jsonify({'success': True})
+
+
+@bp.route('/api/contas/<int:conta_id>/excluir', methods=['POST'])
+@login_required
+def api_excluir_conta(conta_id):
+    """API: desativa (soft-delete) uma conta bancária."""
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    # Check for linked transactions first
+    cursor.execute(
+        "SELECT COUNT(*) AS total FROM bank_transactions WHERE account_id = %s", (conta_id,)
+    )
+    total = cursor.fetchone()['total']
+    if total > 0:
+        cursor.close()
+        conn.close()
+        return jsonify({
+            'success': False,
+            'message': f'Esta conta possui {total} transação(ões) vinculada(s). Remova as transações antes de desativar.'
+        }), 409
+
+    cursor.execute("UPDATE bank_accounts SET ativo = 0 WHERE id = %s", (conta_id,))
+    conn.commit()
+    cursor.close()
+    conn.close()
+    return jsonify({'success': True})
+
+
 
 def _get_inbox_dirs() -> tuple:
     """
