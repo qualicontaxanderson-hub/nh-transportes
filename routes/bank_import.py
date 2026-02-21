@@ -136,7 +136,8 @@ def _save_transactions(cursor, conn, account_id, transactions):
                     conn.rollback()
                     time.sleep(0.3 * (attempt + 1))
                     continue
-                raise    return inseridos, duplicados
+                raise
+    return inseridos, duplicados
 
 # ---------------------------------------------------------------------------
 # Páginas
