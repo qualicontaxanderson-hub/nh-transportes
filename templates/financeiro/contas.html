@@ -13,6 +13,18 @@
         </a>
     </div>
 
+    <div class="alert alert-light border d-flex align-items-center gap-2 py-2 mb-3" style="font-size:0.85rem;">
+        <i class="bi bi-database text-secondary fs-5"></i>
+        <span>
+            Tabela no banco de dados:
+            <code class="fw-bold">bank_accounts</code>
+            &nbsp;·&nbsp; Transações importadas:
+            <code class="fw-bold">bank_transactions</code>
+            &nbsp;·&nbsp; Mapeamento fornecedor/CNPJ:
+            <code class="fw-bold">bank_supplier_mapping</code>
+        </span>
+    </div>
+
     {% with messages = get_flashed_messages(with_categories=true) %}
     {% for category, message in messages %}
     <div class="alert alert-{{ category }} alert-dismissible fade show">
