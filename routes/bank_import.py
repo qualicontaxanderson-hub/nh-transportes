@@ -170,9 +170,15 @@ def index():
 
     from config import Config
     _ofx_dir_env = os.environ.get('OFX_INBOX_DIR', '')
-    # True quando nenhum diretório personalizado está configurado OU fica em /tmp (padrão nuvem).
-    # Em ambos os casos a pasta monitorada não é útil (o /tmp do servidor ≠ arquivos locais do usuário).
-    inbox_is_tmp = not _ofx_dir_env or _ofx_dir_env.startswith('/tmp')
+    # Mostra aviso (em vez da UI de pasta) quando:
+    #  1. Nenhum OFX_INBOX_DIR foi configurado
+    #  2. O caminho aponta para /tmp (padrão nuvem – remoto, não local do usuário)
+    #  3. O caminho configurado não existe no servidor (ex: caminho Windows C:\ no Render Linux)
+    inbox_is_tmp = (
+        not _ofx_dir_env
+        or _ofx_dir_env.startswith('/tmp')
+        or not os.path.isdir(_ofx_dir_env)
+    )
 
     return render_template(
         'bank_import/index.html',
@@ -183,6 +189,7 @@ def index():
         conciliados=conciliados,
         total=total,
         inbox_is_tmp=inbox_is_tmp,
+        ofx_dir_configured=_ofx_dir_env,
     )
 
 
