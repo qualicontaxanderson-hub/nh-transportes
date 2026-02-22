@@ -1,5 +1,27 @@
 # Sistema de Importação e Conciliação de Extrato Bancário (OFX)
 
+## Arquitetura — Render vs Railway
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│  RENDER  →  Aplicação Flask (o site, as telas, toda a lógica)       │
+│  RAILWAY →  Banco de dados MySQL (só armazena os dados)             │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+### Onde configurar cada variável de ambiente
+
+| Variável | Onde configurar | Motivo |
+|---|---|---|
+| `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME` | **Render** | O app Flask (Render) precisa saber como conectar no MySQL (Railway) |
+| `SECRET_KEY`, `FLASK_DEBUG`, `PORT` | **Render** | Configurações do app Flask |
+| `DROPBOX_TOKEN`, `DROPBOX_OFX_INBOX`, `DROPBOX_OFX_PROCESSED` | **Render** | O app Flask faz o download do Dropbox |
+| `OFX_INBOX_DIR`, `OFX_PROCESSED_DIR` | **Render** (só se tiver Disk) | Pastas locais do servidor Render |
+
+> **Railway não precisa de nenhuma variável adicional.** O Railway gerencia automaticamente as variáveis internas do MySQL. Você só copia as credenciais de conexão do Railway e cola no Render.
+
+---
+
 ## Visão Geral
 
 Este módulo adiciona ao sistema NH Transportes a capacidade de importar extratos bancários no formato OFX (Open Financial Exchange), analisar automaticamente as transações, extrair dados de CNPJ/CPF e conciliar as movimentações com fornecedores já cadastrados.

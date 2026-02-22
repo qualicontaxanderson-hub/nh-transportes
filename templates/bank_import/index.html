@@ -203,6 +203,9 @@
                         <small class="fw-normal ms-2" style="font-size:0.78rem;opacity:0.9;">
                             Coloque o OFX em <code style="background:rgba(255,255,255,0.2);padding:1px 5px;border-radius:3px;">{{ dropbox_inbox }}</code> e importe aqui
                         </small>
+                        <span class="badge bg-warning text-dark ms-2" style="font-size:0.7rem;">
+                            <i class="bi bi-info-circle"></i> Variável configurada somente no Render
+                        </span>
                     </h5>
                     <button class="btn btn-sm btn-light" onclick="verificarDropbox()">
                         <i class="bi bi-arrow-clockwise"></i> Verificar Dropbox
@@ -265,7 +268,8 @@
                     <i class="bi bi-info-circle"></i>
                     <strong>Pasta de Entrada OFX</strong> não configurada.
                     Use o card <strong>"Importar Extrato OFX"</strong> acima para importar diretamente do seu computador.
-                    <br><small>Para importação automática via Dropbox, configure <code>DROPBOX_TOKEN</code> nas variáveis de ambiente.</small>
+                    <br><small>Para importação automática via Dropbox: configure <code>DROPBOX_TOKEN</code>, <code>DROPBOX_OFX_INBOX</code> e <code>DROPBOX_OFX_PROCESSED</code>
+                    <strong>somente no Render</strong> (não no Railway — o Railway é só banco de dados).</small>
                 </div>
             </div>
             {% endif %}
@@ -286,7 +290,8 @@
                         e não tem acesso a pastas do seu computador (Dropbox, OneDrive, etc.).
                         <br><br>
                         <strong>Solução A (recomendada):</strong> Configure a integração Dropbox adicionando
-                        <code>DROPBOX_TOKEN</code> nas variáveis de ambiente do Render.<br>
+                        <code>DROPBOX_TOKEN</code>, <code>DROPBOX_OFX_INBOX</code> e <code>DROPBOX_OFX_PROCESSED</code>
+                        nas variáveis de ambiente do <strong>Render</strong> (não do Railway — o Railway é só banco de dados).<br>
                         <strong>Solução B:</strong> Remova a variável <code>OFX_INBOX_DIR</code> do Render
                         e use o upload direto pelo navegador.
                     </div>
