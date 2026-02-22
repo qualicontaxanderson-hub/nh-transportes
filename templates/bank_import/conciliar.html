@@ -368,7 +368,7 @@ document.getElementById('btnSelecionarTodos')?.addEventListener('click', functio
 function ignorarSelecionados() {
   const ids = [...document.querySelectorAll('.tx-check:checked')].map(c => c.value);
   if (!ids.length) return;
-  if (!confirm('Ignorar ' + ids.length + ' transacao(oes)?')) return;
+  if (!confirm('Ignorar ' + ids.length + ' transação(ões)?')) return;
   const form = document.getElementById('formConciliacaoLote');
   const inp = document.createElement('input');
   inp.type = 'hidden'; inp.name = 'acao'; inp.value = 'ignorar';
@@ -378,7 +378,7 @@ function ignorarSelecionados() {
 
 document.querySelectorAll('.btn-ignorar').forEach(btn => {
   btn.addEventListener('click', function() {
-    if (!confirm('Ignorar esta transacao?')) return;
+    if (!confirm('Ignorar esta transação?')) return;
     const f = document.createElement('form');
     f.method = 'POST';
     const i1 = document.createElement('input');
@@ -398,10 +398,10 @@ document.querySelectorAll('.btn-conciliar').forEach(btn => {
     const info = document.getElementById('modal_tx_info');
     info.innerHTML = '';
     const strong = document.createElement('strong');
-    strong.textContent = 'Transacao #' + this.dataset.txId;
+    strong.textContent = 'Transação #' + this.dataset.txId;
     info.appendChild(strong);
     info.appendChild(document.createTextNode(
-      ' — ' + (this.dataset.txDesc || '(sem descricao)') + ' | Valor: R$ ' + this.dataset.txValor
+      ' — ' + (this.dataset.txDesc || '(sem descrição)') + ' | Valor: R$ ' + this.dataset.txValor
     ));
     if (this.dataset.txCnpj) {
       const code = document.createElement('code');
@@ -450,15 +450,15 @@ function abrirModalLote() {
   const creditos = checks.filter(c => c.dataset.tipo === 'CREDIT').length;
   const debitos  = checks.filter(c => c.dataset.tipo === 'DEBIT').length;
   const li = document.getElementById('lote_info');
-  if (li) li.textContent = checks.length + ' transacao(oes) selecionada(s): ' + creditos + ' credito(s), ' + debitos + ' debito(s).';
+  if (li) li.textContent = checks.length + ' transação(ões) selecionada(s): ' + creditos + ' crédito(s), ' + debitos + ' débito(s).';
   new bootstrap.Modal(document.getElementById('modalLote')).show();
 }
 
 function submeterLote(tipo) {
   const checks = [...document.querySelectorAll('.tx-check:checked')].filter(c => c.dataset.tipo === tipo);
-  if (!checks.length) { alert('Nenhum ' + (tipo === 'CREDIT' ? 'credito' : 'debito') + ' selecionado.'); return; }
+  if (!checks.length) { alert('Nenhum ' + (tipo === 'CREDIT' ? 'crédito' : 'débito') + ' selecionado.'); return; }
   const sel = tipo === 'CREDIT' ? document.getElementById('selectFormaLote') : document.getElementById('selectFornLote');
-  if (!sel.value) { alert('Selecione uma opcao antes de confirmar.'); return; }
+  if (!sel.value) { alert('Selecione uma opção antes de confirmar.'); return; }
   const form = document.createElement('form');
   form.method = 'POST';
   checks.forEach(c => {

@@ -465,7 +465,7 @@ def conciliar():
         page=page,
         total_pages=total_pages,
         total=total,
-        # filtros actuais para manter na paginação
+        # filtros atuais para manter na paginação
         f_cliente=f_cliente,
         f_tipo=f_tipo,
         f_data_ini=f_data_ini,
