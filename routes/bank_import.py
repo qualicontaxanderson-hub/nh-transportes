@@ -189,6 +189,11 @@ def index():
     #   (ex: /data/ofx_inbox precisa de um Render Disk montado em /data)
     inbox_dir_missing = _is_valid_linux_path and not _inbox_dir_exists
 
+    # Verifica se a integração Dropbox está configurada
+    from integrations.dropbox_ofx import is_configured as dropbox_is_configured, get_inbox_paths as dropbox_paths
+    _dropbox_ok = dropbox_is_configured()
+    _dbx_inbox, _dbx_processed = dropbox_paths()
+
     return render_template(
         'bank_import/index.html',
         contas=contas,
@@ -201,6 +206,9 @@ def index():
         inbox_dir_missing=inbox_dir_missing,
         ofx_dir_configured=_ofx_dir_env,
         is_windows_path=_is_windows_path,
+        dropbox_configured=_dropbox_ok,
+        dropbox_inbox=_dbx_inbox,
+        dropbox_processed=_dbx_processed,
     )
 
 
@@ -797,6 +805,89 @@ def scan_inbox():
         pass  # Não crítico – arquivo processado mesmo se a movimentação falhar
 
     msg = f'{nome_arquivo}: {inseridos} transação(ões) importada(s), {duplicados} duplicata(s) ignorada(s).'
+    if request.is_json:
+        return jsonify({'success': True, 'message': msg, 'inseridos': inseridos, 'duplicados': duplicados})
+    flash(msg, 'success')
+    return redirect(url_for('bank_import.index'))
+
+
+# ---------------------------------------------------------------------------
+# Integração Dropbox API
+# ---------------------------------------------------------------------------
+
+@bp.route('/api/dropbox-files')
+@login_required
+def api_dropbox_files():
+    """API: lista arquivos .ofx na pasta Dropbox configurada."""
+    from integrations.dropbox_ofx import listar_arquivos_ofx, get_inbox_paths
+    try:
+        arquivos = listar_arquivos_ofx()
+        inbox, processed = get_inbox_paths()
+        return jsonify({
+            'success': True,
+            'files': arquivos,
+            'pasta': inbox,
+            'pasta_processados': processed,
+        })
+    except RuntimeError as exc:
+        return jsonify({'success': False, 'message': str(exc), 'files': []}), 400
+
+
+@bp.route('/importar-dropbox', methods=['POST'])
+@login_required
+def importar_dropbox():
+    """
+    Baixa um arquivo OFX do Dropbox, importa as transações e move o arquivo
+    para a pasta DROPBOX_OFX_PROCESSED.
+    """
+    if request.is_json:
+        data = request.get_json() or {}
+    else:
+        data = request.form
+
+    account_id = data.get('account_id')
+    nome_arquivo = (data.get('nome_arquivo') or '').strip()
+
+    if not account_id:
+        if request.is_json:
+            return jsonify({'success': False, 'message': 'account_id é obrigatório'}), 400
+        flash('Selecione uma conta bancária.', 'warning')
+        return redirect(url_for('bank_import.index'))
+
+    if not nome_arquivo:
+        if request.is_json:
+            return jsonify({'success': False, 'message': 'nome_arquivo é obrigatório'}), 400
+        flash('Nenhum arquivo especificado.', 'warning')
+        return redirect(url_for('bank_import.index'))
+
+    from integrations.dropbox_ofx import baixar_arquivo, mover_para_processados
+    try:
+        content = baixar_arquivo(nome_arquivo)
+    except RuntimeError as exc:
+        if request.is_json:
+            return jsonify({'success': False, 'message': str(exc)}), 400
+        flash(f'Erro ao baixar arquivo do Dropbox: {exc}', 'danger')
+        return redirect(url_for('bank_import.index'))
+
+    from integrations.ofx_parser import OFXParser
+    transactions = OFXParser(content).get_transactions()
+
+    if not transactions:
+        if request.is_json:
+            return jsonify({'success': False, 'message': 'Nenhuma transação encontrada no arquivo OFX.'}), 422
+        flash('Nenhuma transação encontrada no arquivo OFX.', 'warning')
+        return redirect(url_for('bank_import.index'))
+
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    inseridos, duplicados = _save_transactions(cursor, conn, account_id, transactions)
+    cursor.close()
+    conn.close()
+
+    # Move para pasta de processados no Dropbox (não crítico)
+    mover_para_processados(nome_arquivo)
+
+    msg = f'Dropbox "{nome_arquivo}": {inseridos} transação(ões) importada(s), {duplicados} duplicata(s) ignorada(s).'
     if request.is_json:
         return jsonify({'success': True, 'message': msg, 'inseridos': inseridos, 'duplicados': duplicados})
     flash(msg, 'success')

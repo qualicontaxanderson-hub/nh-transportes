@@ -190,15 +190,85 @@
     <div class="row mt-4">
         <div class="col-12">
 
+            {# ── Dropbox: sempre aparece quando configurado ── #}
+            {% if dropbox_configured %}
+            <div class="card shadow-sm mb-4" style="border-left:4px solid #0061FE;">
+                <div class="card-header d-flex justify-content-between align-items-center"
+                     style="background:#0061FE;color:white;">
+                    <h5 class="mb-0">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 40 40" fill="white" class="me-2" style="vertical-align:-4px">
+                            <path d="M20 7.5L10 13.75 20 20 10 26.25 20 32.5 30 26.25 20 20 30 13.75 20 7.5zM10 26.25L0 20l10-6.25L0 7.5 10 1.25 20 7.5 10 13.75 20 20l-10 6.25zM30 1.25L40 7.5 30 13.75 40 20 30 26.25 20 20l10-6.25L20 7.5 30 1.25z"/>
+                        </svg>
+                        Dropbox — Pasta Automática
+                        <small class="fw-normal ms-2" style="font-size:0.78rem;opacity:0.9;">
+                            Coloque o OFX em <code style="background:rgba(255,255,255,0.2);padding:1px 5px;border-radius:3px;">{{ dropbox_inbox }}</code> e importe aqui
+                        </small>
+                    </h5>
+                    <button class="btn btn-sm btn-light" onclick="verificarDropbox()">
+                        <i class="bi bi-arrow-clockwise"></i> Verificar Dropbox
+                    </button>
+                </div>
+                <div class="card-body">
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <div class="alert alert-light border py-2 mb-1" style="font-size:0.82rem;">
+                                <i class="bi bi-folder2-open text-primary"></i>
+                                <strong>Pasta NOVO (Dropbox):</strong>
+                                <code>{{ dropbox_inbox }}</code>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="alert alert-light border py-2 mb-1" style="font-size:0.82rem;">
+                                <i class="bi bi-folder-check text-success"></i>
+                                <strong>Pasta IMPORTADOS (Dropbox):</strong>
+                                <code>{{ dropbox_processed }}</code>
+                            </div>
+                        </div>
+                    </div>
+
+                    {% if contas %}
+                    <div class="row g-2 align-items-end mb-3">
+                        <div class="col-sm-5">
+                            <label class="form-label fw-semibold mb-1" style="font-size:0.88rem;">
+                                Conta bancária destino:
+                            </label>
+                            <select id="dbxAccountId" class="form-select form-select-sm">
+                                <option value="">Selecione a conta...</option>
+                                {% for conta in contas %}
+                                <option value="{{ conta.id }}">
+                                    {{ conta.apelido or conta.banco_nome }}
+                                    {%- if conta.agencia %} – Ag {{ conta.agencia }}{% endif %}
+                                    {%- if conta.conta %} / {{ conta.conta }}{% endif %}
+                                    {%- if conta.empresa_nome %} [{{ conta.empresa_nome }}]{% endif %}
+                                </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                    </div>
+                    {% endif %}
+
+                    <div id="dbxFileList">
+                        <div class="text-muted text-center py-3">
+                            <i class="bi bi-cloud fs-2 text-primary"></i>
+                            <p class="mt-1 mb-0">Clique em <strong>Verificar Dropbox</strong> para ver os arquivos disponíveis.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+
             {# ── Estado A: sem config ou /tmp ── use upload direto #}
             {% if inbox_is_tmp and not is_windows_path %}
+            {% if not dropbox_configured %}
             <div class="card shadow-sm border-0 bg-light">
                 <div class="card-body py-3 text-center text-muted" style="font-size:0.9rem;">
                     <i class="bi bi-info-circle"></i>
                     <strong>Pasta de Entrada OFX</strong> não configurada.
                     Use o card <strong>"Importar Extrato OFX"</strong> acima para importar diretamente do seu computador.
+                    <br><small>Para importação automática via Dropbox, configure <code>DROPBOX_TOKEN</code> nas variáveis de ambiente.</small>
                 </div>
             </div>
+            {% endif %}
 
             {# ── Estado B: caminho Windows (ex: C:\Users\...) ── erro de configuração #}
             {% elif is_windows_path %}
@@ -215,12 +285,13 @@
                         Este é um caminho <strong>Windows</strong> — o servidor roda <strong>Linux</strong> no Render/Railway
                         e não tem acesso a pastas do seu computador (Dropbox, OneDrive, etc.).
                         <br><br>
-                        <strong>Solução:</strong> Remova a variável <code>OFX_INBOX_DIR</code> do Render
-                        ou configure um caminho Linux válido como <code>/data/ofx_inbox</code>
-                        (requer um Render Disk montado em <code>/data</code>).
+                        <strong>Solução A (recomendada):</strong> Configure a integração Dropbox adicionando
+                        <code>DROPBOX_TOKEN</code> nas variáveis de ambiente do Render.<br>
+                        <strong>Solução B:</strong> Remova a variável <code>OFX_INBOX_DIR</code> do Render
+                        e use o upload direto pelo navegador.
                     </div>
                     <div class="alert alert-success mb-0">
-                        <strong><i class="bi bi-check-circle-fill"></i> Como importar agora:</strong>
+                        <strong><i class="bi bi-check-circle-fill"></i> Como importar agora (upload direto):</strong>
                         <ol class="mb-0 mt-2">
                             <li>Role para cima até o card <strong>"Importar Extrato OFX"</strong></li>
                             <li>Selecione a conta e o arquivo <code>.ofx</code> do seu computador</li>
@@ -263,7 +334,7 @@
                 </div>
             </div>
 
-            {# ── Estado D: caminho existe — UI completa de pasta #}
+            {# ── Estado D: caminho existe — UI completa de pasta local #}
             {% else %}
             <div class="card shadow-sm">
                 <div class="card-header d-flex justify-content-between align-items-center"
@@ -333,6 +404,7 @@
         </div>
     </div>
 </div>
+
 
 <!-- Modal: Nova Conta -->
 <div class="modal fade" id="modalNovaConta" tabindex="-1">
@@ -620,6 +692,132 @@
             }
         })
         .catch(() => alert('Erro ao processar arquivo.'));
+    }
+
+    {% endif %}
+
+    // ---------------------------------------------------------------
+    // Integração Dropbox API
+    // ---------------------------------------------------------------
+    {% if dropbox_configured %}
+
+    function verificarDropbox() {
+        const listDiv = document.getElementById('dbxFileList');
+        listDiv.innerHTML = '<div class="text-center py-3"><div class="spinner-border spinner-border-sm" style="color:#0061FE;"></div> Verificando Dropbox...</div>';
+
+        fetch('{{ url_for("bank_import.api_dropbox_files") }}')
+            .then(r => {
+                const ct = r.headers.get('content-type') || '';
+                if (!r.ok || !ct.includes('application/json')) {
+                    listDiv.innerHTML = '<div class="alert alert-warning py-2">Resposta inesperada do servidor. Tente recarregar a página.</div>';
+                    return null;
+                }
+                return r.json();
+            })
+            .then(data => {
+                if (!data) return;
+                if (!data.success) {
+                    listDiv.innerHTML = `<div class="alert alert-danger py-2"><i class="bi bi-exclamation-triangle"></i> ${data.message}</div>`;
+                    return;
+                }
+                if (!data.files || data.files.length === 0) {
+                    listDiv.innerHTML = `
+                        <div class="alert alert-info py-2 mb-0">
+                            <i class="bi bi-info-circle"></i>
+                            Nenhum arquivo <code>.ofx</code> encontrado em <code>{{ dropbox_inbox }}</code>.
+                            Coloque um arquivo OFX nessa pasta do Dropbox e clique em Verificar.
+                        </div>`;
+                    return;
+                }
+                renderDropboxFiles(data.files);
+            })
+            .catch(err => {
+                listDiv.innerHTML = `<div class="alert alert-danger py-2">Erro ao verificar Dropbox: ${err}</div>`;
+            });
+    }
+
+    function renderDropboxFiles(files) {
+        const listDiv = document.getElementById('dbxFileList');
+        const wrap = document.createElement('div');
+
+        const header = document.createElement('div');
+        header.className = 'alert alert-success py-2 mb-3';
+        header.innerHTML = `<i class="bi bi-check-circle"></i> <strong>${files.length}</strong> arquivo(s) OFX encontrado(s) no Dropbox.`;
+        wrap.appendChild(header);
+
+        const tableWrap = document.createElement('div');
+        tableWrap.className = 'table-responsive';
+        const t = document.createElement('table');
+        t.className = 'table table-sm table-hover';
+        t.style.fontSize = '0.88rem';
+        t.innerHTML = `<thead class="table-light"><tr><th>Arquivo</th><th>Modificado</th><th>Tamanho</th><th class="text-center">Ação</th></tr></thead>`;
+        const tbody = document.createElement('tbody');
+
+        files.forEach(f => {
+            const kb = (f.tamanho / 1024).toFixed(1);
+            const tr = document.createElement('tr');
+
+            const tdNome = document.createElement('td');
+            tdNome.innerHTML = '<i class="bi bi-file-earmark-text" style="color:#0061FE;"></i> ';
+            const strong = document.createElement('strong');
+            strong.textContent = f.nome;
+            tdNome.appendChild(strong);
+
+            const tdMod = document.createElement('td');
+            tdMod.textContent = f.modificado;
+
+            const tdSize = document.createElement('td');
+            tdSize.textContent = kb + ' KB';
+
+            const tdAcao = document.createElement('td');
+            tdAcao.className = 'text-center';
+            const btn = document.createElement('button');
+            btn.className = 'btn btn-sm btn-success';
+            btn.dataset.nomeArquivo = f.nome;
+            btn.innerHTML = '<i class="bi bi-cloud-download"></i> Importar do Dropbox';
+            btn.addEventListener('click', function() {
+                importarDropbox(this.dataset.nomeArquivo);
+            });
+            tdAcao.appendChild(btn);
+
+            tr.appendChild(tdNome);
+            tr.appendChild(tdMod);
+            tr.appendChild(tdSize);
+            tr.appendChild(tdAcao);
+            tbody.appendChild(tr);
+        });
+
+        t.appendChild(tbody);
+        tableWrap.appendChild(t);
+        wrap.appendChild(tableWrap);
+        listDiv.innerHTML = '';
+        listDiv.appendChild(wrap);
+    }
+
+    function importarDropbox(nomeArquivo) {
+        const sel = document.getElementById('dbxAccountId');
+        const accountId = sel ? sel.value : '';
+        if (!accountId) {
+            alert('Selecione uma conta bancária antes de importar.');
+            return;
+        }
+        if (!confirm(`Importar "${nomeArquivo}" do Dropbox para a conta selecionada?\n\nO arquivo será movido para a pasta IMPORTADOS do Dropbox após a importação.`)) return;
+
+        fetch('{{ url_for("bank_import.importar_dropbox") }}', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ account_id: accountId, nome_arquivo: nomeArquivo })
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.success) {
+                alert(data.message);
+                location.reload();
+            } else {
+                alert('Erro: ' + data.message);
+            }
+        })
+        .catch(() => alert('Erro ao importar do Dropbox.'));
     }
 
     {% endif %}
