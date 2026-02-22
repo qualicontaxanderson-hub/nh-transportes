@@ -189,47 +189,82 @@
     <!-- OFX Inbox (watch-folder) -->
     <div class="row mt-4">
         <div class="col-12">
-            {% if inbox_is_tmp %}
-            {# Nuvem (Render/Railway) sem pasta personalizada acessível ao servidor.
-               A pasta no servidor ≠ pasta no computador do usuário. Mostra explicação. #}
+
+            {# ── Estado A: sem config ou /tmp ── use upload direto #}
+            {% if inbox_is_tmp and not is_windows_path %}
+            <div class="card shadow-sm border-0 bg-light">
+                <div class="card-body py-3 text-center text-muted" style="font-size:0.9rem;">
+                    <i class="bi bi-info-circle"></i>
+                    <strong>Pasta de Entrada OFX</strong> não configurada.
+                    Use o card <strong>"Importar Extrato OFX"</strong> acima para importar diretamente do seu computador.
+                </div>
+            </div>
+
+            {# ── Estado B: caminho Windows (ex: C:\Users\...) ── erro de configuração #}
+            {% elif is_windows_path %}
             <div class="card shadow-sm border-danger">
-                <div class="card-header d-flex align-items-center gap-2"
-                     style="background:#f8d7da;">
+                <div class="card-header d-flex align-items-center gap-2" style="background:#f8d7da;">
                     <i class="bi bi-exclamation-octagon-fill text-danger fs-5"></i>
-                    <h5 class="mb-0 text-danger">Pasta de Entrada OFX — não funciona no Render/Railway</h5>
+                    <h5 class="mb-0 text-danger">Pasta de Entrada OFX — caminho Windows inválido</h5>
                 </div>
                 <div class="card-body">
-                    {% if ofx_dir_configured and not ofx_dir_configured.startswith('/tmp') %}
                     <div class="alert alert-danger mb-3">
                         <strong><i class="bi bi-x-circle-fill"></i>
                         Caminho configurado: <code>{{ ofx_dir_configured }}</code></strong>
                         <hr class="my-2">
-                        Este caminho <strong>não existe no servidor</strong> (o servidor é Linux no Render, não seu Windows).
-                        Caminhos do tipo <code>C:\Users\...</code> ou <code>Dropbox\...</code> são pastas do seu computador —
-                        o Render <strong>não tem acesso a elas</strong>.
+                        Este é um caminho <strong>Windows</strong> — o servidor roda <strong>Linux</strong> no Render/Railway
+                        e não tem acesso a pastas do seu computador (Dropbox, OneDrive, etc.).
+                        <br><br>
+                        <strong>Solução:</strong> Remova a variável <code>OFX_INBOX_DIR</code> do Render
+                        ou configure um caminho Linux válido como <code>/data/ofx_inbox</code>
+                        (requer um Render Disk montado em <code>/data</code>).
                     </div>
-                    {% else %}
-                    <div class="alert alert-danger mb-3">
-                        <strong><i class="bi bi-x-circle-fill"></i> O servidor Render/Railway não consegue ler arquivos do seu computador.</strong>
-                        <hr class="my-2">
-                        Mesmo que o arquivo esteja no Dropbox, OneDrive ou em qualquer outra pasta local,
-                        o servidor remoto <strong>não tem acesso</strong> a essas pastas.
-                    </div>
-                    {% endif %}
-
                     <div class="alert alert-success mb-0">
-                        <strong><i class="bi bi-check-circle-fill"></i> Como importar corretamente no Render/Railway:</strong>
+                        <strong><i class="bi bi-check-circle-fill"></i> Como importar agora:</strong>
                         <ol class="mb-0 mt-2">
-                            <li>Role a página para cima até o card <strong class="text-success">"Importar Extrato OFX"</strong></li>
-                            <li>Selecione a <strong>Conta Bancária</strong></li>
-                            <li>Clique na área pontilhada e escolha o arquivo <code>.ofx</code> do seu computador</li>
-                            <li>Clique em <strong>"Importar Extrato"</strong> — pronto! ✅</li>
+                            <li>Role para cima até o card <strong>"Importar Extrato OFX"</strong></li>
+                            <li>Selecione a conta e o arquivo <code>.ofx</code> do seu computador</li>
+                            <li>Clique em <strong>"Importar Extrato"</strong> ✅</li>
                         </ol>
                     </div>
                 </div>
             </div>
+
+            {# ── Estado C: caminho Linux válido mas diretório não existe no servidor ── precisa de Render Disk #}
+            {% elif inbox_dir_missing %}
+            <div class="card shadow-sm border-warning">
+                <div class="card-header d-flex justify-content-between align-items-center"
+                     style="background:#fff3cd;">
+                    <h5 class="mb-0 text-warning">
+                        <i class="bi bi-folder-x"></i> Pasta de Entrada OFX —
+                        <small class="fw-normal">diretório ainda não existe no servidor</small>
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="alert alert-warning mb-3">
+                        <strong><i class="bi bi-exclamation-triangle-fill"></i>
+                        Caminho configurado: <code>{{ ofx_dir_configured }}</code></strong>
+                        <hr class="my-2">
+                        Este diretório <strong>não existe no servidor</strong>.
+                        Para usá-lo no Render você precisa adicionar um <strong>Render Disk</strong>:
+                        <ol class="mb-0 mt-2">
+                            <li>No painel Render, vá em seu serviço → aba <strong>Disks</strong></li>
+                            <li>Clique em <strong>Add Disk</strong></li>
+                            <li>Configure <strong>Mount Path:</strong> <code>/data</code></li>
+                            <li>Clique em <strong>Save</strong> e aguarde o redeploy</li>
+                            <li>O diretório <code>{{ ofx_dir_configured }}</code> será criado automaticamente</li>
+                        </ol>
+                        <hr class="my-2">
+                        <span class="text-muted" style="font-size:0.85rem;">
+                            Enquanto o Disk não for adicionado, use o card <strong>"Importar Extrato OFX"</strong>
+                            acima para importar diretamente do navegador.
+                        </span>
+                    </div>
+                </div>
+            </div>
+
+            {# ── Estado D: caminho existe — UI completa de pasta #}
             {% else %}
-            {# Local / custom-configured installation: show the real watch-folder UI #}
             <div class="card shadow-sm">
                 <div class="card-header d-flex justify-content-between align-items-center"
                      style="background:#6f42c1;color:white;">
@@ -244,7 +279,6 @@
                     </button>
                 </div>
                 <div class="card-body">
-                    <!-- Pasta configurada -->
                     <div class="d-flex gap-2 align-items-center mb-3">
                         <div class="flex-grow-1">
                             <div class="alert alert-light border py-2 mb-1" style="font-size:0.82rem;">
@@ -258,38 +292,44 @@
                                 <code id="inboxProcessedPath">carregando...</code>
                             </div>
                         </div>
-                        <!-- Upload-to-inbox button -->
-                        <button class="btn btn-outline-primary btn-sm align-self-center" onclick="document.getElementById('inboxUploadInput').click()">
+                        <button class="btn btn-outline-primary btn-sm align-self-center"
+                                onclick="document.getElementById('inboxUploadInput').click()">
                             <i class="bi bi-folder-plus"></i> Enviar OFX para Pasta
                         </button>
                         <input type="file" id="inboxUploadInput" accept=".ofx,.OFX" class="d-none">
                     </div>
 
-                    <!-- Account selector for inbox imports -->
                     {% if contas %}
                     <div class="row g-2 align-items-end mb-3">
                         <div class="col-sm-5">
-                            <label class="form-label fw-semibold mb-1" style="font-size:0.88rem;">Conta para importar arquivos da pasta:</label>
+                            <label class="form-label fw-semibold mb-1" style="font-size:0.88rem;">
+                                Conta para importar arquivos da pasta:
+                            </label>
                             <select id="inboxAccountId" class="form-select form-select-sm">
                                 <option value="">Selecione a conta...</option>
                                 {% for conta in contas %}
-                                <option value="{{ conta.id }}">{{ conta.apelido or conta.banco_nome }}{% if conta.agencia %} – Ag {{ conta.agencia }}{% endif %}{% if conta.conta %} / {{ conta.conta }}{% endif %}{% if conta.empresa_nome %} [{{ conta.empresa_nome }}]{% endif %}</option>
+                                <option value="{{ conta.id }}">
+                                    {{ conta.apelido or conta.banco_nome }}
+                                    {%- if conta.agencia %} – Ag {{ conta.agencia }}{% endif %}
+                                    {%- if conta.conta %} / {{ conta.conta }}{% endif %}
+                                    {%- if conta.empresa_nome %} [{{ conta.empresa_nome }}]{% endif %}
+                                </option>
                                 {% endfor %}
                             </select>
                         </div>
                     </div>
                     {% endif %}
 
-                    <!-- File list -->
                     <div id="inboxFileList">
                         <div class="text-muted text-center py-3">
                             <i class="bi bi-folder2 fs-2"></i>
-                            <p class="mt-1 mb-0">Clique em <strong>Verificar Pasta</strong> para listar os arquivos OFX encontrados.</p>
+                            <p class="mt-1 mb-0">Clique em <strong>Verificar Pasta</strong> para listar os arquivos OFX.</p>
                         </div>
                     </div>
                 </div>
             </div>
             {% endif %}
+
         </div>
     </div>
 </div>
@@ -421,9 +461,9 @@
     }
 
     // ---------------------------------------------------------------
-    // Pasta de Entrada OFX – renderizado apenas quando inbox_is_tmp=False
+    // Pasta de Entrada OFX – renderizado apenas quando o diretório existe (Estado D)
     // ---------------------------------------------------------------
-    {% if not inbox_is_tmp %}
+    {% if not inbox_is_tmp and not inbox_dir_missing and not is_windows_path %}
 
     // Enviar para a pasta (salvar sem processar)
     document.getElementById('inboxUploadInput').addEventListener('change', function() {

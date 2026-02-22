@@ -168,17 +168,26 @@ def index():
     cursor.close()
     conn.close()
 
-    from config import Config
     _ofx_dir_env = os.environ.get('OFX_INBOX_DIR', '')
-    # Mostra aviso (em vez da UI de pasta) quando:
-    #  1. Nenhum OFX_INBOX_DIR foi configurado
-    #  2. O caminho aponta para /tmp (padrão nuvem – remoto, não local do usuário)
-    #  3. O caminho configurado não existe no servidor (ex: caminho Windows C:\ no Render Linux)
-    inbox_is_tmp = (
-        not _ofx_dir_env
-        or _ofx_dir_env.startswith('/tmp')
-        or not os.path.isdir(_ofx_dir_env)
+
+    # Detecta tipo de caminho configurado
+    # Caminho Windows: contém \ ou letra de unidade (ex: C:\Users\ ou Dropbox\...)
+    _is_windows_path = bool(_ofx_dir_env) and (
+        '\\' in _ofx_dir_env
+        or (len(_ofx_dir_env) >= 2 and _ofx_dir_env[1] == ':')
     )
+    # Caminho /tmp ou sem configuração → usar upload direto
+    _is_tmp_or_unset = not _ofx_dir_env or _ofx_dir_env.startswith('/tmp')
+    # Caminho Linux válido (ex: /data/ofx_inbox)
+    _is_valid_linux_path = bool(_ofx_dir_env) and not _is_windows_path and not _is_tmp_or_unset
+    # Verifica se o diretório já existe no servidor
+    _inbox_dir_exists = _is_valid_linux_path and os.path.isdir(_ofx_dir_env)
+
+    # inbox_is_tmp=True → oculta UI de pasta, mostra card de "use upload direto"
+    inbox_is_tmp = _is_tmp_or_unset or _is_windows_path
+    # inbox_dir_missing=True → caminho Linux válido mas diretório ainda não existe
+    #   (ex: /data/ofx_inbox precisa de um Render Disk montado em /data)
+    inbox_dir_missing = _is_valid_linux_path and not _inbox_dir_exists
 
     return render_template(
         'bank_import/index.html',
@@ -189,7 +198,9 @@ def index():
         conciliados=conciliados,
         total=total,
         inbox_is_tmp=inbox_is_tmp,
+        inbox_dir_missing=inbox_dir_missing,
         ofx_dir_configured=_ofx_dir_env,
+        is_windows_path=_is_windows_path,
     )
 
 
