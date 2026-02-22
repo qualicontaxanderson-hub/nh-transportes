@@ -266,81 +266,213 @@ def upload():
     return redirect(url_for('bank_import.index'))
 
 
+def _get_formas_recebimento(cursor):
+    """Retorna formas de recebimento ativas para uso na conciliação."""
+    cursor.execute(
+        "SELECT id, nome FROM formas_recebimento WHERE ativo=1 ORDER BY nome"
+    )
+    return cursor.fetchall()
+
+
+def _conciliar_tx(cursor, conn, tx_id, acao, tipo_tx,
+                  fornecedor_id, forma_recebimento_id, usuario):
+    """Concilia (ou ignora) uma única transação e aprende mapeamentos."""
+    if acao == 'ignorar':
+        cursor.execute(
+            "UPDATE bank_transactions SET status='ignorado' WHERE id=%s", (tx_id,)
+        )
+        conn.commit()
+        return
+
+    agora = _dt.datetime.now()
+
+    if tipo_tx == 'CREDIT':
+        # Crédito → Forma de Recebimento
+        if not forma_recebimento_id:
+            return
+        cursor.execute(
+            """UPDATE bank_transactions
+               SET status='conciliado', forma_recebimento_id=%s,
+                   conciliado_em=%s, conciliado_por=%s
+               WHERE id=%s""",
+            (forma_recebimento_id, agora, usuario, tx_id),
+        )
+        # Aprende: CNPJ → forma de recebimento
+        cursor.execute("SELECT cnpj_cpf FROM bank_transactions WHERE id=%s", (tx_id,))
+        row = cursor.fetchone()
+        if row and row.get('cnpj_cpf'):
+            cursor.execute(
+                """INSERT INTO bank_supplier_mapping
+                       (fornecedor_id, cnpj_cpf, tipo_chave, total_conciliacoes, forma_recebimento_id)
+                   VALUES (NULL, %s, 'cnpj', 1, %s)
+                   ON DUPLICATE KEY UPDATE
+                       forma_recebimento_id=%s,
+                       total_conciliacoes=total_conciliacoes+1,
+                       atualizado_em=NOW()""",
+                (row['cnpj_cpf'], forma_recebimento_id, forma_recebimento_id),
+            )
+    else:
+        # Débito → Fornecedor
+        if not fornecedor_id:
+            return
+        cursor.execute(
+            """UPDATE bank_transactions
+               SET status='conciliado', fornecedor_id=%s,
+                   conciliado_em=%s, conciliado_por=%s
+               WHERE id=%s""",
+            (fornecedor_id, agora, usuario, tx_id),
+        )
+        cursor.execute("SELECT cnpj_cpf FROM bank_transactions WHERE id=%s", (tx_id,))
+        row = cursor.fetchone()
+        if row and row.get('cnpj_cpf'):
+            cursor.execute(
+                """INSERT INTO bank_supplier_mapping
+                       (fornecedor_id, cnpj_cpf, tipo_chave, total_conciliacoes)
+                   VALUES (%s, %s, 'cnpj', 1)
+                   ON DUPLICATE KEY UPDATE
+                       fornecedor_id=%s,
+                       total_conciliacoes=total_conciliacoes+1,
+                       atualizado_em=NOW()""",
+                (fornecedor_id, row['cnpj_cpf'], fornecedor_id),
+            )
+
+    conn.commit()
+
+
 @bp.route('/conciliar', methods=['GET', 'POST'])
 @login_required
 def conciliar():
-    """Interface de conciliação manual de transações pendentes."""
+    """Interface de conciliação manual com filtros, multi-seleção e memória."""
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
+    usuario = current_user.email if hasattr(current_user, 'email') else 'manual'
 
+    # ------------------------------------------------------------------
+    # POST: processa conciliação (individual ou em lote)
+    # ------------------------------------------------------------------
     if request.method == 'POST':
-        tx_id = request.form.get('transaction_id')
-        fornecedor_id = request.form.get('fornecedor_id')
         acao = request.form.get('acao', 'conciliar')
+        # Multi-seleção: tx_ids é lista separada por vírgula ou campo repetido
+        tx_ids_raw = request.form.getlist('transaction_id') or []
+        if not tx_ids_raw:
+            tx_ids_raw = [request.form.get('transaction_id', '')]
+        tx_ids = [t for t in tx_ids_raw if t]
 
-        if tx_id:
-            if acao == 'ignorar':
-                cursor.execute(
-                    "UPDATE bank_transactions SET status='ignorado' WHERE id=%s", (tx_id,)
-                )
-                conn.commit()
-                flash('Transação marcada como ignorada.', 'info')
-            elif fornecedor_id:
-                cursor.execute(
-                    """UPDATE bank_transactions
-                       SET status='conciliado', fornecedor_id=%s,
-                           conciliado_em=%s, conciliado_por=%s
-                       WHERE id=%s""",
-                    (fornecedor_id, _dt.datetime.now(), current_user.email if hasattr(current_user, 'email') else 'manual', tx_id),
-                )
-                # Aprende o mapeamento se o CNPJ for conhecido
-                cursor.execute("SELECT cnpj_cpf FROM bank_transactions WHERE id=%s", (tx_id,))
-                row = cursor.fetchone()
-                if row and row.get('cnpj_cpf'):
-                    cursor.execute(
-                        """INSERT INTO bank_supplier_mapping (fornecedor_id, cnpj_cpf, tipo_chave, total_conciliacoes)
-                           VALUES (%s, %s, 'cnpj', 1)
-                           ON DUPLICATE KEY UPDATE fornecedor_id=%s, total_conciliacoes=total_conciliacoes+1, atualizado_em=NOW()""",
-                        (fornecedor_id, row['cnpj_cpf'], fornecedor_id),
-                    )
-                conn.commit()
-                flash('Transação conciliada com sucesso!', 'success')
-            else:
-                flash('Selecione um fornecedor para conciliar.', 'warning')
+        fornecedor_id = request.form.get('fornecedor_id') or None
+        forma_recebimento_id = request.form.get('forma_recebimento_id') or None
+        tipo_tx = request.form.get('tipo_tx', 'DEBIT')
 
-    # Lista transações pendentes
-    page = request.args.get('page', 1, type=int)
-    per_page = 20
-    offset = (page - 1) * per_page
+        ok = 0
+        for tx_id in tx_ids:
+            _conciliar_tx(cursor, conn, tx_id, acao, tipo_tx,
+                          fornecedor_id, forma_recebimento_id, usuario)
+            ok += 1
+
+        if acao == 'ignorar':
+            flash(f'{ok} transação(ões) ignorada(s).', 'info')
+        else:
+            flash(f'{ok} transação(ões) conciliada(s) com sucesso!', 'success')
+
+        # Mantém filtros após POST
+        return redirect(request.url)
+
+    # ------------------------------------------------------------------
+    # GET: filtros
+    # ------------------------------------------------------------------
+    f_cliente   = request.args.get('cliente_id', '')
+    f_tipo      = request.args.get('tipo', '')           # CREDIT / DEBIT
+    f_data_ini  = request.args.get('data_ini', '')
+    f_data_fim  = request.args.get('data_fim', '')
+    f_descricao = request.args.get('descricao', '')
+    f_cnpj      = request.args.get('cnpj_cpf', '')
+    f_conta     = request.args.get('account_id', '')
+
+    page     = request.args.get('page', 1, type=int)
+    per_page = 50
+    offset   = (page - 1) * per_page
+
+    _TIPOS_OK = {'CREDIT', 'DEBIT'}
+    where  = ["bt.status = 'pendente'"]
+    params = []
+
+    if f_cliente:
+        where.append("ba.cliente_id = %s")
+        params.append(f_cliente)
+    if f_tipo and f_tipo in _TIPOS_OK:
+        where.append("bt.tipo = %s")
+        params.append(f_tipo)
+    if f_data_ini:
+        where.append("bt.data_transacao >= %s")
+        params.append(f_data_ini)
+    if f_data_fim:
+        where.append("bt.data_transacao <= %s")
+        params.append(f_data_fim)
+    if f_descricao:
+        where.append("bt.descricao LIKE %s")
+        params.append(f'%{f_descricao}%')
+    if f_cnpj:
+        where.append("bt.cnpj_cpf LIKE %s")
+        params.append(f'%{f_cnpj}%')
+    if f_conta:
+        where.append("bt.account_id = %s")
+        params.append(f_conta)
+
+    where_sql = 'WHERE ' + ' AND '.join(where)
 
     cursor.execute(
-        """SELECT bt.*, ba.apelido AS conta_apelido, ba.banco_nome
-           FROM bank_transactions bt
-           INNER JOIN bank_accounts ba ON bt.account_id = ba.id
-           WHERE bt.status = 'pendente'
-           ORDER BY bt.data_transacao DESC
-           LIMIT %s OFFSET %s""",
-        (per_page, offset),
+        f"""SELECT bt.*, ba.apelido AS conta_apelido, ba.banco_nome,
+                   bsm.fornecedor_id AS sugestao_fornecedor_id,
+                   bsm.forma_recebimento_id AS sugestao_forma_id,
+                   fr.nome AS sugestao_forma_nome,
+                   fs.razao_social AS sugestao_fornecedor_nome
+            FROM bank_transactions bt
+            INNER JOIN bank_accounts ba ON bt.account_id = ba.id
+            LEFT JOIN bank_supplier_mapping bsm ON bsm.cnpj_cpf = bt.cnpj_cpf
+            LEFT JOIN formas_recebimento fr ON fr.id = bsm.forma_recebimento_id
+            LEFT JOIN fornecedores fs ON fs.id = bsm.fornecedor_id
+            {where_sql}
+            ORDER BY bt.data_transacao DESC
+            LIMIT %s OFFSET %s""",
+        params + [per_page, offset],
     )
     transacoes = cursor.fetchall()
 
-    cursor.execute("SELECT COUNT(*) AS total FROM bank_transactions WHERE status='pendente'")
+    cursor.execute(
+        f"SELECT COUNT(*) AS total FROM bank_transactions bt "
+        f"INNER JOIN bank_accounts ba ON bt.account_id = ba.id "
+        f"{where_sql}",
+        params,
+    )
     total = cursor.fetchone()['total']
 
-    fornecedores = _get_fornecedores(cursor)
+    fornecedores       = _get_fornecedores(cursor)
+    formas_recebimento = _get_formas_recebimento(cursor)
+    contas             = _get_accounts(cursor)
+    clientes           = _get_clientes_com_produtos(cursor)
 
     cursor.close()
     conn.close()
 
-    total_pages = (total + per_page - 1) // per_page
+    total_pages = max(1, (total + per_page - 1) // per_page)
 
     return render_template(
         'bank_import/conciliar.html',
         transacoes=transacoes,
         fornecedores=fornecedores,
+        formas_recebimento=formas_recebimento,
+        contas=contas,
+        clientes=clientes,
         page=page,
         total_pages=total_pages,
         total=total,
+        # filtros actuais para manter na paginação
+        f_cliente=f_cliente,
+        f_tipo=f_tipo,
+        f_data_ini=f_data_ini,
+        f_data_fim=f_data_fim,
+        f_descricao=f_descricao,
+        f_cnpj=f_cnpj,
+        f_conta=f_conta,
     )
 
 

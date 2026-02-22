@@ -1,0 +1,97 @@
+{% extends 'base.html' %}
+{% block title %}Formas de Recebimento - NH Transportes{% endblock %}
+{% block content %}
+<div class="container-fluid">
+  <nav aria-label="breadcrumb" class="mt-2 mb-3">
+    <ol class="breadcrumb" style="font-size:0.85rem;">
+      <li class="breadcrumb-item"><a href="/">Dashboard</a></li>
+      <li class="breadcrumb-item active">Formas de Recebimento</li>
+    </ol>
+  </nav>
+
+  <h2 class="mb-3" style="color:#1D63A5;font-size:1.3rem;">
+    <i class="bi bi-wallet-fill"></i> Formas de Recebimento
+  </h2>
+
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% for cat, msg in messages %}
+    <div class="alert alert-{{ cat }} alert-dismissible fade show py-2" role="alert">
+      {{ msg }}<button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+    {% endfor %}
+  {% endwith %}
+
+  <div class="card shadow-sm">
+    <div class="card-header d-flex justify-content-between align-items-center"
+         style="background:#1D63A5;color:white;font-size:0.95rem;padding:0.6rem 1rem;">
+      <h5 class="mb-0" style="font-size:1rem;">Lista de Formas de Recebimento</h5>
+      <a href="{{ url_for('formas_recebimento.novo') }}" class="btn btn-light btn-sm">
+        <i class="bi bi-plus-circle"></i> Nova Forma
+      </a>
+    </div>
+    <div class="card-body p-0">
+      {% if formas %}
+      <div class="table-responsive">
+        <table class="table table-hover table-sm mb-0" style="font-size:0.88rem;">
+          <thead class="table-light">
+            <tr>
+              <th>#</th>
+              <th>Nome</th>
+              <th>Descrição</th>
+              <th>Status</th>
+              <th>Criado em</th>
+              <th class="text-center">Ações</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for f in formas %}
+            <tr>
+              <td>{{ f.id }}</td>
+              <td class="fw-semibold">{{ f.nome }}</td>
+              <td class="text-muted">{{ f.descricao or '—' }}</td>
+              <td>
+                {% if f.ativo %}
+                <span class="badge bg-success">Ativo</span>
+                {% else %}
+                <span class="badge bg-secondary">Inativo</span>
+                {% endif %}
+              </td>
+              <td>{{ f.criado_em.strftime('%d/%m/%Y') if f.criado_em else '-' }}</td>
+              <td class="text-center">
+                <a href="{{ url_for('formas_recebimento.editar', id=f.id) }}"
+                   class="btn btn-primary btn-sm" title="Editar">
+                  <i class="bi bi-pencil"></i>
+                </a>
+                <button class="btn btn-warning btn-sm btn-toggle"
+                        data-id="{{ f.id }}" data-nome="{{ f.nome | e }}"
+                        data-status="{{ f.ativo }}"
+                        title="{{ 'Desativar' if f.ativo else 'Ativar' }}">
+                  <i class="bi bi-{{ 'lock' if f.ativo else 'unlock' }}"></i>
+                </button>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <p class="text-center text-muted p-4">Nenhuma forma de recebimento cadastrada.</p>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+document.querySelectorAll('.btn-toggle').forEach(btn => {
+  btn.addEventListener('click', function() {
+    const id = this.dataset.id;
+    const nome = this.dataset.nome;
+    const st = parseInt(this.dataset.status);
+    if (!confirm((st ? 'Desativar' : 'Ativar') + ' "' + nome + '"?')) return;
+    fetch('{{ url_for("formas_recebimento.toggle", id=0) }}'.replace('/0', '/' + id), {method:'POST'})
+      .then(r => r.json()).then(d => { if (d.success) location.reload(); else alert(d.message); });
+  });
+});
+</script>
+{% endblock %}

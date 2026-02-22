@@ -1,193 +1,478 @@
 {% extends "base.html" %}
-
 {% block title %}Conciliação Bancária - NH Transportes{% endblock %}
 
 {% block content %}
 <div class="container-fluid">
-    <nav aria-label="breadcrumb" class="mt-2 mb-3">
-        <ol class="breadcrumb" style="font-size:0.85rem;">
-            <li class="breadcrumb-item"><a href="{{ url_for('index') }}">Dashboard</a></li>
-            <li class="breadcrumb-item"><a href="{{ url_for('bank_import.index') }}">Importação Bancária</a></li>
-            <li class="breadcrumb-item active">Conciliação</li>
-        </ol>
-    </nav>
+  <nav aria-label="breadcrumb" class="mt-2 mb-3">
+    <ol class="breadcrumb" style="font-size:0.85rem;">
+      <li class="breadcrumb-item"><a href="{{ url_for('index') }}">Dashboard</a></li>
+      <li class="breadcrumb-item"><a href="{{ url_for('bank_import.index') }}">Importação Bancária</a></li>
+      <li class="breadcrumb-item active">Conciliação</li>
+    </ol>
+  </nav>
 
-    <div class="card shadow-sm mb-4">
-        <div class="card-header d-flex justify-content-between align-items-center"
-             style="background:#1D63A5;color:white;">
-            <h5 class="mb-0"><i class="bi bi-arrow-left-right"></i> Transações Pendentes de Conciliação</h5>
-            <span class="badge bg-warning text-dark fs-6">{{ total }} pendente(s)</span>
-        </div>
-        <div class="card-body p-0">
-            {% if transacoes %}
-            <div class="table-responsive">
-                <table class="table table-hover table-sm mb-0" style="font-size:0.88rem;">
-                    <thead class="table-light">
-                        <tr>
-                            <th>Data</th>
-                            <th>Tipo</th>
-                            <th>Valor</th>
-                            <th>Descrição</th>
-                            <th>CNPJ/CPF</th>
-                            <th>Conta</th>
-                            <th class="text-center">Ações</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for tx in transacoes %}
-                        <tr>
-                            <td>{{ tx.data_transacao.strftime('%d/%m/%Y') if tx.data_transacao else '-' }}</td>
-                            <td>
-                                {% if tx.tipo == 'DEBIT' %}
-                                <span class="badge bg-danger">Débito</span>
-                                {% else %}
-                                <span class="badge bg-success">Crédito</span>
-                                {% endif %}
-                            </td>
-                            <td class="fw-semibold">{{ tx.valor | formatar_moeda }}</td>
-                            <td>{{ tx.descricao or '-' }}</td>
-                            <td>
-                                {% if tx.cnpj_cpf %}
-                                <code>{{ tx.cnpj_cpf }}</code>
-                                {% else %}
-                                <span class="text-muted">—</span>
-                                {% endif %}
-                            </td>
-                            <td>{{ tx.conta_apelido or tx.banco_nome }}</td>
-                            <td class="text-center">
-                                <button class="btn btn-sm btn-outline-primary btn-conciliar"
-                                        data-tx-id="{{ tx.id }}"
-                                        data-tx-desc="{{ tx.descricao | e }}"
-                                        data-tx-valor="{{ tx.valor }}"
-                                        data-tx-cnpj="{{ tx.cnpj_cpf or '' }}">
-                                    <i class="bi bi-link-45deg"></i> Conciliar
-                                </button>
-                                <form method="POST" style="display:inline;">
-                                    <input type="hidden" name="transaction_id" value="{{ tx.id }}">
-                                    <input type="hidden" name="acao" value="ignorar">
-                                    <button type="submit" class="btn btn-sm btn-outline-secondary"
-                                            onclick="return confirm('Ignorar esta transação?')">
-                                        <i class="bi bi-x-circle"></i>
-                                    </button>
-                                </form>
-                            </td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
-
-            <!-- Pagination -->
-            {% if total_pages > 1 %}
-            <div class="d-flex justify-content-center py-3">
-                <nav>
-                    <ul class="pagination pagination-sm mb-0">
-                        {% if page > 1 %}
-                        <li class="page-item">
-                            <a class="page-link" href="?page={{ page - 1 }}">‹</a>
-                        </li>
-                        {% endif %}
-                        {% for p in range(1, total_pages + 1) %}
-                        <li class="page-item {% if p == page %}active{% endif %}">
-                            <a class="page-link" href="?page={{ p }}">{{ p }}</a>
-                        </li>
-                        {% endfor %}
-                        {% if page < total_pages %}
-                        <li class="page-item">
-                            <a class="page-link" href="?page={{ page + 1 }}">›</a>
-                        </li>
-                        {% endif %}
-                    </ul>
-                </nav>
-            </div>
-            {% endif %}
-
-            {% else %}
-            <div class="p-4 text-center text-muted">
-                <i class="bi bi-check2-all fs-1 text-success"></i>
-                <p class="mt-2 mb-0">Nenhuma transação pendente de conciliação.</p>
-            </div>
-            {% endif %}
-        </div>
+  <!-- Filtros -->
+  <form method="GET" class="card shadow-sm mb-3">
+    <div class="card-header py-2" style="background:#1D63A5;color:white;">
+      <h6 class="mb-0"><i class="bi bi-funnel"></i> Filtros</h6>
     </div>
+    <div class="card-body py-2">
+      <div class="row g-2">
+        <div class="col-md-2">
+          <label class="form-label form-label-sm mb-0">Empresa</label>
+          <select name="cliente_id" class="form-select form-select-sm">
+            <option value="">Todas</option>
+            {% for c in clientes %}
+            <option value="{{ c.id }}" {% if f_cliente == c.id|string %}selected{% endif %}>
+              {{ c.nome_fantasia or c.razao_social }}
+            </option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-md-2">
+          <label class="form-label form-label-sm mb-0">Tipo</label>
+          <select name="tipo" class="form-select form-select-sm">
+            <option value="">Crédito + Débito</option>
+            <option value="CREDIT" {% if f_tipo == 'CREDIT' %}selected{% endif %}>Crédito</option>
+            <option value="DEBIT"  {% if f_tipo == 'DEBIT'  %}selected{% endif %}>Débito</option>
+          </select>
+        </div>
+        <div class="col-md-2">
+          <label class="form-label form-label-sm mb-0">Conta Bancária</label>
+          <select name="account_id" class="form-select form-select-sm">
+            <option value="">Todas</option>
+            {% for c in contas %}
+            <option value="{{ c.id }}" {% if f_conta == c.id|string %}selected{% endif %}>
+              {{ c.apelido or c.banco_nome }}
+            </option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-md-2">
+          <label class="form-label form-label-sm mb-0">Data início</label>
+          <input type="date" name="data_ini" class="form-control form-control-sm" value="{{ f_data_ini }}">
+        </div>
+        <div class="col-md-2">
+          <label class="form-label form-label-sm mb-0">Data fim</label>
+          <input type="date" name="data_fim" class="form-control form-control-sm" value="{{ f_data_fim }}">
+        </div>
+        <div class="col-md-2">
+          <label class="form-label form-label-sm mb-0">Descrição</label>
+          <input type="text" name="descricao" class="form-control form-control-sm"
+                 placeholder="parte da descrição" value="{{ f_descricao }}">
+        </div>
+        <div class="col-md-2">
+          <label class="form-label form-label-sm mb-0">CNPJ/CPF</label>
+          <input type="text" name="cnpj_cpf" class="form-control form-control-sm"
+                 placeholder="parte do CNPJ" value="{{ f_cnpj }}">
+        </div>
+        <div class="col-md-2 d-flex align-items-end gap-1">
+          <button type="submit" class="btn btn-primary btn-sm flex-fill">
+            <i class="bi bi-search"></i> Filtrar
+          </button>
+          <a href="{{ url_for('bank_import.conciliar') }}" class="btn btn-outline-secondary btn-sm">
+            <i class="bi bi-x"></i>
+          </a>
+        </div>
+      </div>
+    </div>
+  </form>
 
-    <a href="{{ url_for('bank_import.index') }}" class="btn btn-secondary">
-        <i class="bi bi-arrow-left"></i> Voltar
-    </a>
+  <!-- Tabela principal -->
+  <div class="card shadow-sm">
+    <div class="card-header d-flex justify-content-between align-items-center py-2"
+         style="background:#1D63A5;color:white;">
+      <h6 class="mb-0"><i class="bi bi-arrow-left-right"></i> Transações Pendentes</h6>
+      <span class="badge bg-warning text-dark">{{ total }} pendente(s)</span>
+    </div>
+    <div class="card-body p-0">
+      {% if transacoes %}
+      <form method="POST" id="formConciliacaoLote">
+        <div class="d-flex gap-2 p-2 bg-light border-bottom" style="font-size:0.85rem;">
+          <button type="button" class="btn btn-outline-primary btn-sm" id="btnSelecionarTodos">
+            <i class="bi bi-check-all"></i> Selecionar Todos
+          </button>
+          <button type="button" class="btn btn-success btn-sm" id="btnConciliarSelecionados"
+                  disabled onclick="abrirModalLote()">
+            <i class="bi bi-link-45deg"></i> Conciliar Selecionados
+            (<span id="contadorSelecionados">0</span>)
+          </button>
+          <button type="button" class="btn btn-outline-secondary btn-sm" id="btnIgnorarSelecionados"
+                  disabled onclick="ignorarSelecionados()">
+            <i class="bi bi-x-circle"></i> Ignorar Selecionados
+          </button>
+        </div>
+
+        <div class="table-responsive">
+          <table class="table table-hover table-sm mb-0" style="font-size:0.83rem;">
+            <thead class="table-light">
+              <tr>
+                <th style="width:32px;"><input type="checkbox" id="checkAll" title="Selecionar todos"></th>
+                <th>Data</th>
+                <th>Tipo</th>
+                <th>Valor</th>
+                <th>Descrição</th>
+                <th>CNPJ/CPF</th>
+                <th>Conta</th>
+                <th>Sugestão</th>
+                <th class="text-center">Ações</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for tx in transacoes %}
+              <tr data-tipo="{{ tx.tipo }}">
+                <td>
+                  <input type="checkbox" name="transaction_id" value="{{ tx.id }}"
+                         class="tx-check"
+                         data-tipo="{{ tx.tipo }}"
+                         data-sugestao-forma="{{ tx.sugestao_forma_id or '' }}"
+                         data-sugestao-fornecedor="{{ tx.sugestao_fornecedor_id or '' }}">
+                </td>
+                <td>{{ tx.data_transacao.strftime('%d/%m/%Y') if tx.data_transacao else '-' }}</td>
+                <td>
+                  {% if tx.tipo == 'DEBIT' %}
+                  <span class="badge bg-danger">Débito</span>
+                  {% else %}
+                  <span class="badge bg-success">Crédito</span>
+                  {% endif %}
+                </td>
+                <td class="fw-semibold">{{ tx.valor | formatar_moeda }}</td>
+                <td style="max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"
+                    title="{{ tx.descricao or '' }}">
+                  {{ tx.descricao or '—' }}
+                </td>
+                <td>
+                  {% if tx.cnpj_cpf %}<code style="font-size:0.78rem;">{{ tx.cnpj_cpf }}</code>
+                  {% else %}<span class="text-muted">—</span>{% endif %}
+                </td>
+                <td>{{ tx.conta_apelido or tx.banco_nome }}</td>
+                <td style="max-width:140px;">
+                  {% if tx.tipo == 'CREDIT' and tx.sugestao_forma_id %}
+                    <span class="badge bg-info text-dark" style="font-size:0.72rem;"
+                          title="Sugestão com base no CNPJ anterior">
+                      ✨ {{ tx.sugestao_forma_nome }}
+                    </span>
+                  {% elif tx.tipo == 'DEBIT' and tx.sugestao_fornecedor_id %}
+                    <span class="badge bg-secondary" style="font-size:0.72rem;"
+                          title="Sugestão com base no CNPJ anterior">
+                      ✨ {{ tx.sugestao_fornecedor_nome }}
+                    </span>
+                  {% else %}
+                    <span class="text-muted">—</span>
+                  {% endif %}
+                </td>
+                <td class="text-center text-nowrap">
+                  <button type="button" class="btn btn-sm btn-outline-primary btn-conciliar"
+                          data-tx-id="{{ tx.id }}"
+                          data-tx-desc="{{ tx.descricao | e }}"
+                          data-tx-valor="{{ tx.valor }}"
+                          data-tx-cnpj="{{ tx.cnpj_cpf or '' }}"
+                          data-tx-tipo="{{ tx.tipo }}"
+                          data-sugestao-forma="{{ tx.sugestao_forma_id or '' }}"
+                          data-sugestao-fornecedor="{{ tx.sugestao_fornecedor_id or '' }}">
+                    <i class="bi bi-link-45deg"></i> Conciliar
+                  </button>
+                  <button type="button" class="btn btn-sm btn-outline-secondary btn-ignorar"
+                          data-tx-id="{{ tx.id }}" title="Ignorar">
+                    <i class="bi bi-x-circle"></i>
+                  </button>
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </form>
+
+      {% if total_pages > 1 %}
+      <div class="d-flex justify-content-center py-3">
+        <nav>
+          <ul class="pagination pagination-sm mb-0">
+            {% if page > 1 %}
+            <li class="page-item">
+              <a class="page-link" href="?page={{ page-1 }}&cliente_id={{ f_cliente }}&tipo={{ f_tipo }}&account_id={{ f_conta }}&data_ini={{ f_data_ini }}&data_fim={{ f_data_fim }}&descricao={{ f_descricao }}&cnpj_cpf={{ f_cnpj }}">&#8249;</a>
+            </li>
+            {% endif %}
+            {% for p in range(1, total_pages+1) %}
+            <li class="page-item {% if p == page %}active{% endif %}">
+              <a class="page-link" href="?page={{ p }}&cliente_id={{ f_cliente }}&tipo={{ f_tipo }}&account_id={{ f_conta }}&data_ini={{ f_data_ini }}&data_fim={{ f_data_fim }}&descricao={{ f_descricao }}&cnpj_cpf={{ f_cnpj }}">{{ p }}</a>
+            </li>
+            {% endfor %}
+            {% if page < total_pages %}
+            <li class="page-item">
+              <a class="page-link" href="?page={{ page+1 }}&cliente_id={{ f_cliente }}&tipo={{ f_tipo }}&account_id={{ f_conta }}&data_ini={{ f_data_ini }}&data_fim={{ f_data_fim }}&descricao={{ f_descricao }}&cnpj_cpf={{ f_cnpj }}">&#8250;</a>
+            </li>
+            {% endif %}
+          </ul>
+        </nav>
+      </div>
+      {% endif %}
+
+      {% else %}
+      <div class="p-4 text-center text-muted">
+        <i class="bi bi-check2-all fs-1 text-success"></i>
+        <p class="mt-2 mb-0">Nenhuma transação pendente.</p>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+
+  <a href="{{ url_for('bank_import.index') }}" class="btn btn-secondary mt-3">
+    <i class="bi bi-arrow-left"></i> Voltar
+  </a>
 </div>
 
-<!-- Modal: Conciliar -->
+<!-- Modal: Conciliar individual -->
 <div class="modal fade" id="modalConciliar" tabindex="-1">
-    <div class="modal-dialog">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title"><i class="bi bi-link-45deg"></i> Conciliar Transação</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-            </div>
-            <form method="POST">
-                <div class="modal-body">
-                    <input type="hidden" name="transaction_id" id="modal_tx_id">
-                    <input type="hidden" name="acao" value="conciliar">
-                    <div class="alert alert-info py-2" id="modal_tx_info"></div>
-                    <div class="mb-3">
-                        <label class="form-label fw-semibold">Buscar Fornecedor</label>
-                        <input type="text" id="buscaFornecedor" class="form-control mb-2"
-                               placeholder="Digite o nome do fornecedor..." oninput="filtrarFornecedores()">
-                        <select name="fornecedor_id" id="selectFornecedor" class="form-select" size="6" required>
-                            {% for f in fornecedores %}
-                            <option value="{{ f.id }}" data-nome="{{ f.razao_social|lower }}">{{ f.razao_social }}{% if f.cnpj %} – {{ f.cnpj }}{% endif %}</option>
-                            {% endfor %}
-                        </select>
-                    </div>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-                    <button type="submit" class="btn btn-primary">
-                        <i class="bi bi-check-lg"></i> Confirmar Conciliação
-                    </button>
-                </div>
-            </form>
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header" style="background:#1D63A5;color:white;">
+        <h5 class="modal-title"><i class="bi bi-link-45deg"></i> Conciliar Transação</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <form method="POST" id="formConciliar">
+        <div class="modal-body">
+          <input type="hidden" name="transaction_id" id="modal_tx_id">
+          <input type="hidden" name="acao" value="conciliar">
+          <input type="hidden" name="tipo_tx" id="modal_tipo_tx">
+          <div class="alert alert-light border py-2 mb-3" id="modal_tx_info" style="font-size:0.88rem;"></div>
+          <div id="secao_credito" style="display:none;">
+            <label class="form-label fw-semibold">
+              <i class="bi bi-wallet-fill text-success"></i> Forma de Recebimento (Crédito)
+            </label>
+            <input type="text" id="buscaForma" class="form-control form-control-sm mb-1"
+                   placeholder="Buscar forma de recebimento..." oninput="filtrarFormas()">
+            <select name="forma_recebimento_id" id="selectForma" class="form-select" size="7">
+              {% for f in formas_recebimento %}
+              <option value="{{ f.id }}" data-nome="{{ f.nome|lower }}">{{ f.nome }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div id="secao_debito" style="display:none;">
+            <label class="form-label fw-semibold">
+              <i class="bi bi-building text-danger"></i> Fornecedor (Débito)
+            </label>
+            <input type="text" id="buscaFornecedor" class="form-control form-control-sm mb-1"
+                   placeholder="Buscar fornecedor..." oninput="filtrarFornecedores()">
+            <select name="fornecedor_id" id="selectFornecedor" class="form-select" size="7">
+              {% for f in fornecedores %}
+              <option value="{{ f.id }}" data-nome="{{ f.razao_social|lower }}">
+                {{ f.razao_social }}{% if f.cnpj %} – {{ f.cnpj }}{% endif %}
+              </option>
+              {% endfor %}
+            </select>
+          </div>
         </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+          <button type="submit" class="btn btn-primary">
+            <i class="bi bi-check-lg"></i> Confirmar
+          </button>
+        </div>
+      </form>
     </div>
+  </div>
+</div>
+
+<!-- Modal: Conciliar em lote -->
+<div class="modal fade" id="modalLote" tabindex="-1">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header" style="background:#198754;color:white;">
+        <h5 class="modal-title"><i class="bi bi-check-all"></i> Conciliar em Lote</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <p class="text-muted" style="font-size:0.88rem;" id="lote_info"></p>
+        <ul class="nav nav-tabs mb-3">
+          <li class="nav-item">
+            <button class="nav-link active" data-bs-toggle="tab" data-bs-target="#tabLoteCredito">
+              <i class="bi bi-wallet-fill text-success"></i> Créditos
+            </button>
+          </li>
+          <li class="nav-item">
+            <button class="nav-link" data-bs-toggle="tab" data-bs-target="#tabLoteDebito">
+              <i class="bi bi-building text-danger"></i> Débitos
+            </button>
+          </li>
+        </ul>
+        <div class="tab-content">
+          <div class="tab-pane fade show active" id="tabLoteCredito">
+            <p class="small text-muted mb-1">Forma de recebimento para os <strong>créditos</strong> selecionados:</p>
+            <input type="text" id="buscaFormaLote" class="form-control form-control-sm mb-1"
+                   placeholder="Buscar..." oninput="filtrarFormasLote()">
+            <select id="selectFormaLote" class="form-select" size="7">
+              {% for f in formas_recebimento %}
+              <option value="{{ f.id }}" data-nome="{{ f.nome|lower }}">{{ f.nome }}</option>
+              {% endfor %}
+            </select>
+            <button class="btn btn-success btn-sm mt-2" onclick="submeterLote('CREDIT')">
+              <i class="bi bi-check-lg"></i> Conciliar Créditos
+            </button>
+          </div>
+          <div class="tab-pane fade" id="tabLoteDebito">
+            <p class="small text-muted mb-1">Fornecedor para os <strong>débitos</strong> selecionados:</p>
+            <input type="text" id="buscaFornLote" class="form-control form-control-sm mb-1"
+                   placeholder="Buscar..." oninput="filtrarFornLote()">
+            <select id="selectFornLote" class="form-select" size="7">
+              {% for f in fornecedores %}
+              <option value="{{ f.id }}" data-nome="{{ f.razao_social|lower }}">
+                {{ f.razao_social }}{% if f.cnpj %} – {{ f.cnpj }}{% endif %}
+              </option>
+              {% endfor %}
+            </select>
+            <button class="btn btn-danger btn-sm mt-2" onclick="submeterLote('DEBIT')">
+              <i class="bi bi-check-lg"></i> Conciliar Débitos
+            </button>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fechar</button>
+      </div>
+    </div>
+  </div>
 </div>
 {% endblock %}
 
 {% block scripts %}
 <script>
-    document.querySelectorAll('.btn-conciliar').forEach(btn => {
-        btn.addEventListener('click', function() {
-            abrirModal(
-                this.dataset.txId,
-                this.dataset.txDesc,
-                this.dataset.txValor,
-                this.dataset.txCnpj
-            );
-        });
-    });
+const checkAll = document.getElementById('checkAll');
+const btnConciliarSel = document.getElementById('btnConciliarSelecionados');
+const btnIgnorarSel   = document.getElementById('btnIgnorarSelecionados');
+const contador        = document.getElementById('contadorSelecionados');
 
-    function abrirModal(id, descricao, valor, cnpj) {
-        document.getElementById('modal_tx_id').value = id;
-        const info = document.getElementById('modal_tx_info');
-        info.textContent = '';
-        const strong = document.createElement('strong');
-        strong.textContent = 'Transação #' + id;
-        info.appendChild(strong);
-        info.appendChild(document.createTextNode(' — ' + (descricao || '(sem descrição)') + ' | Valor: R$ ' + valor));
-        if (cnpj) {
-            const code = document.createElement('code');
-            code.textContent = cnpj;
-            info.appendChild(document.createTextNode(' | CNPJ/CPF: '));
-            info.appendChild(code);
-        }
-        const modal = new bootstrap.Modal(document.getElementById('modalConciliar'));
-        modal.show();
-    }
+function atualizarBotoes() {
+  const n = document.querySelectorAll('.tx-check:checked').length;
+  if (contador) contador.textContent = n;
+  if (btnConciliarSel) btnConciliarSel.disabled = n === 0;
+  if (btnIgnorarSel)   btnIgnorarSel.disabled   = n === 0;
+}
 
-    function filtrarFornecedores() {
-        const termo = document.getElementById('buscaFornecedor').value.toLowerCase();
-        document.querySelectorAll('#selectFornecedor option').forEach(opt => {
-            opt.style.display = opt.dataset.nome.includes(termo) ? '' : 'none';
-        });
+if (checkAll) {
+  checkAll.addEventListener('change', function() {
+    document.querySelectorAll('.tx-check').forEach(c => c.checked = this.checked);
+    atualizarBotoes();
+  });
+}
+document.querySelectorAll('.tx-check').forEach(c => c.addEventListener('change', atualizarBotoes));
+
+document.getElementById('btnSelecionarTodos')?.addEventListener('click', function() {
+  const all = document.querySelectorAll('.tx-check');
+  const algumDesmarcado = [...all].some(c => !c.checked);
+  all.forEach(c => c.checked = algumDesmarcado);
+  if (checkAll) checkAll.checked = algumDesmarcado;
+  atualizarBotoes();
+});
+
+function ignorarSelecionados() {
+  const ids = [...document.querySelectorAll('.tx-check:checked')].map(c => c.value);
+  if (!ids.length) return;
+  if (!confirm('Ignorar ' + ids.length + ' transacao(oes)?')) return;
+  const form = document.getElementById('formConciliacaoLote');
+  const inp = document.createElement('input');
+  inp.type = 'hidden'; inp.name = 'acao'; inp.value = 'ignorar';
+  form.appendChild(inp);
+  form.submit();
+}
+
+document.querySelectorAll('.btn-ignorar').forEach(btn => {
+  btn.addEventListener('click', function() {
+    if (!confirm('Ignorar esta transacao?')) return;
+    const f = document.createElement('form');
+    f.method = 'POST';
+    const i1 = document.createElement('input');
+    i1.type = 'hidden'; i1.name = 'transaction_id'; i1.value = this.dataset.txId;
+    const i2 = document.createElement('input');
+    i2.type = 'hidden'; i2.name = 'acao'; i2.value = 'ignorar';
+    f.appendChild(i1); f.appendChild(i2);
+    document.body.appendChild(f); f.submit();
+  });
+});
+
+document.querySelectorAll('.btn-conciliar').forEach(btn => {
+  btn.addEventListener('click', function() {
+    const tipo = this.dataset.txTipo;
+    document.getElementById('modal_tx_id').value = this.dataset.txId;
+    document.getElementById('modal_tipo_tx').value = tipo;
+    const info = document.getElementById('modal_tx_info');
+    info.innerHTML = '';
+    const strong = document.createElement('strong');
+    strong.textContent = 'Transacao #' + this.dataset.txId;
+    info.appendChild(strong);
+    info.appendChild(document.createTextNode(
+      ' — ' + (this.dataset.txDesc || '(sem descricao)') + ' | Valor: R$ ' + this.dataset.txValor
+    ));
+    if (this.dataset.txCnpj) {
+      const code = document.createElement('code');
+      code.textContent = ' ' + this.dataset.txCnpj;
+      info.appendChild(code);
     }
+    document.getElementById('secao_credito').style.display = tipo === 'CREDIT' ? '' : 'none';
+    document.getElementById('secao_debito').style.display  = tipo === 'DEBIT'  ? '' : 'none';
+    if (tipo === 'CREDIT' && this.dataset.sugestaoForma) {
+      document.getElementById('selectForma').value = this.dataset.sugestaoForma;
+    }
+    if (tipo === 'DEBIT' && this.dataset.sugestaoFornecedor) {
+      document.getElementById('selectFornecedor').value = this.dataset.sugestaoFornecedor;
+    }
+    new bootstrap.Modal(document.getElementById('modalConciliar')).show();
+  });
+});
+
+function filtrarFormas() {
+  const t = document.getElementById('buscaForma').value.toLowerCase();
+  document.querySelectorAll('#selectForma option').forEach(o => {
+    o.style.display = o.dataset.nome.includes(t) ? '' : 'none';
+  });
+}
+function filtrarFornecedores() {
+  const t = document.getElementById('buscaFornecedor').value.toLowerCase();
+  document.querySelectorAll('#selectFornecedor option').forEach(o => {
+    o.style.display = o.dataset.nome.includes(t) ? '' : 'none';
+  });
+}
+function filtrarFormasLote() {
+  const t = document.getElementById('buscaFormaLote').value.toLowerCase();
+  document.querySelectorAll('#selectFormaLote option').forEach(o => {
+    o.style.display = o.dataset.nome.includes(t) ? '' : 'none';
+  });
+}
+function filtrarFornLote() {
+  const t = document.getElementById('buscaFornLote').value.toLowerCase();
+  document.querySelectorAll('#selectFornLote option').forEach(o => {
+    o.style.display = o.dataset.nome.includes(t) ? '' : 'none';
+  });
+}
+
+function abrirModalLote() {
+  const checks = [...document.querySelectorAll('.tx-check:checked')];
+  const creditos = checks.filter(c => c.dataset.tipo === 'CREDIT').length;
+  const debitos  = checks.filter(c => c.dataset.tipo === 'DEBIT').length;
+  const li = document.getElementById('lote_info');
+  if (li) li.textContent = checks.length + ' transacao(oes) selecionada(s): ' + creditos + ' credito(s), ' + debitos + ' debito(s).';
+  new bootstrap.Modal(document.getElementById('modalLote')).show();
+}
+
+function submeterLote(tipo) {
+  const checks = [...document.querySelectorAll('.tx-check:checked')].filter(c => c.dataset.tipo === tipo);
+  if (!checks.length) { alert('Nenhum ' + (tipo === 'CREDIT' ? 'credito' : 'debito') + ' selecionado.'); return; }
+  const sel = tipo === 'CREDIT' ? document.getElementById('selectFormaLote') : document.getElementById('selectFornLote');
+  if (!sel.value) { alert('Selecione uma opcao antes de confirmar.'); return; }
+  const form = document.createElement('form');
+  form.method = 'POST';
+  checks.forEach(c => {
+    const inp = document.createElement('input');
+    inp.type = 'hidden'; inp.name = 'transaction_id'; inp.value = c.value;
+    form.appendChild(inp);
+  });
+  const add = (n, v) => { const i = document.createElement('input'); i.type='hidden'; i.name=n; i.value=v; form.appendChild(i); };
+  add('acao', 'conciliar');
+  add('tipo_tx', tipo);
+  if (tipo === 'CREDIT') add('forma_recebimento_id', sel.value);
+  else add('fornecedor_id', sel.value);
+  document.body.appendChild(form);
+  form.submit();
+}
 </script>
 {% endblock %}
