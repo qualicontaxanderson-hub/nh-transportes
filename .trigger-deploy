@@ -1,16 +1,17 @@
 # Arquivo de trigger para forçar redeploy
-# Data: 2026-02-21 15:34:59
-# Motivo: Bank account management page + financeiro/contas route
+# Data: 2026-02-22 20:39:41
+# Motivo: Deploy completo — integração Dropbox + correções OFX + multi-empresa
 #
-# Alterações:
-#   - GET /banco/contas — página de gerenciamento (lista, edita, desativa contas)
-#   - PUT /banco/api/contas/<id> — editar conta
-#   - POST /banco/api/contas/<id>/excluir — desativar conta (soft-delete)
-#   - GET /financeiro/contas/ — página de visualização (link no navbar já existia)
-#   - templates/bank_import/contas.html — nova página de gerenciamento
-#   - templates/financeiro/contas.html — nova página de visualização
-#   - Botão "Gerenciar Contas" no dashboard /banco/
+# Todas as alterações incluídas neste deploy:
+#   - Integração Dropbox API (DROPBOX_TOKEN, DROPBOX_OFX_INBOX, DROPBOX_OFX_PROCESSED)
+#   - Correção parser OFX CRLF (arquivos Windows)
+#   - Correção deadlock MySQL (batch inserts + retry)
+#   - Multi-empresa nas contas bancárias (cliente_id)
+#   - Gerenciamento de contas (editar/desativar)
+#   - /financeiro/contas/ corrigido
+#   - Detecção inteligente de pasta OFX (Render Disk, Windows, /tmp, Dropbox)
+#   - Todos os textos traduzidos para português
 
-DEPLOY_TIMESTAMP=2026-02-21T15:34:59Z
-REASON=Bank account management edit delete + financeiro contas route
-VERSION=5.0.0
+DEPLOY_TIMESTAMP=2026-02-22T20:39:41Z
+REASON=Deploy completo com Dropbox API + correcoes OFX + multi-empresa
+VERSION=6.0.0
