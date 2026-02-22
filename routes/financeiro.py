@@ -861,6 +861,114 @@ def consultar_status_efi(charge_id):
         }), 500
 
 
+def _get_bank_transactions(tipo, request_args):
+    """Busca transações bancárias filtradas por tipo (CREDIT ou DEBIT) com filtros opcionais."""
+    from datetime import date
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+
+    conta_id = request_args.get('conta_id', '').strip()
+    status = request_args.get('status', '').strip()
+    data_inicio = request_args.get('data_inicio', '').strip()
+    data_fim = request_args.get('data_fim', '').strip()
+
+    # Filtros dinâmicos
+    where = ["bt.tipo = %s"]
+    params = [tipo]
+    if conta_id:
+        where.append("bt.account_id = %s")
+        params.append(conta_id)
+    if status:
+        where.append("bt.status = %s")
+        params.append(status)
+    if data_inicio:
+        where.append("bt.data_transacao >= %s")
+        params.append(data_inicio)
+    if data_fim:
+        where.append("bt.data_transacao <= %s")
+        params.append(data_fim)
+
+    where_sql = " AND ".join(where)
+
+    cursor.execute(
+        f"""SELECT bt.id, bt.data_transacao, bt.tipo, bt.valor, bt.descricao,
+                   bt.cnpj_cpf, bt.memo, bt.status, bt.fornecedor_id,
+                   ba.apelido AS conta_apelido, ba.banco_nome,
+                   f.razao_social AS fornecedor_nome
+            FROM bank_transactions bt
+            INNER JOIN bank_accounts ba ON bt.account_id = ba.id
+            LEFT JOIN fornecedores f ON bt.fornecedor_id = f.id
+            WHERE {where_sql}
+            ORDER BY bt.data_transacao DESC
+            LIMIT 500""",
+        params
+    )
+    transacoes = cursor.fetchall()
+
+    # Totais
+    cursor.execute(
+        f"""SELECT SUM(bt.valor) AS total,
+                   SUM(CASE WHEN bt.status='conciliado' THEN 1 ELSE 0 END) AS conciliados,
+                   SUM(CASE WHEN bt.status='pendente' THEN 1 ELSE 0 END) AS pendentes
+            FROM bank_transactions bt
+            WHERE {where_sql}""",
+        params
+    )
+    totais = cursor.fetchone() or {}
+
+    # Lista de contas para o filtro
+    cursor.execute(
+        """SELECT ba.id, ba.apelido, ba.banco_nome, c.razao_social AS empresa_nome
+           FROM bank_accounts ba
+           LEFT JOIN clientes c ON c.id = ba.cliente_id
+           WHERE ba.ativo = 1
+           ORDER BY ba.apelido, ba.banco_nome"""
+    )
+    contas = cursor.fetchall()
+    cursor.close()
+    conn.close()
+
+    return transacoes, totais, contas
+
+
+@financeiro_bp.route('/recebimento/')
+@login_required
+def recebimento():
+    """Exibe os créditos bancários importados via OFX."""
+    transacoes, totais, contas = _get_bank_transactions('CREDIT', request.args)
+    return render_template(
+        'financeiro/recebimento.html',
+        transacoes=transacoes,
+        total_creditos=totais.get('total') or 0,
+        total_conciliados=totais.get('conciliados') or 0,
+        total_pendentes=totais.get('pendentes') or 0,
+        contas=contas,
+        conta_id_filter=request.args.get('conta_id', ''),
+        status_filter=request.args.get('status', ''),
+        data_inicio=request.args.get('data_inicio', ''),
+        data_fim=request.args.get('data_fim', ''),
+    )
+
+
+@financeiro_bp.route('/pagamentos/')
+@login_required
+def pagamentos():
+    """Exibe os débitos bancários importados via OFX."""
+    transacoes, totais, contas = _get_bank_transactions('DEBIT', request.args)
+    return render_template(
+        'financeiro/pagamentos.html',
+        transacoes=transacoes,
+        total_debitos=totais.get('total') or 0,
+        total_conciliados=totais.get('conciliados') or 0,
+        total_pendentes=totais.get('pendentes') or 0,
+        contas=contas,
+        conta_id_filter=request.args.get('conta_id', ''),
+        status_filter=request.args.get('status', ''),
+        data_inicio=request.args.get('data_inicio', ''),
+        data_fim=request.args.get('data_fim', ''),
+    )
+
+
 @financeiro_bp.route('/contas/')
 @login_required
 def contas():
