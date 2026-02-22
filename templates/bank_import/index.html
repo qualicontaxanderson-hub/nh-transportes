@@ -713,7 +713,8 @@
         fetch('{{ url_for("bank_import.api_dropbox_files") }}')
             .then(r => {
                 const ct = r.headers.get('content-type') || '';
-                if (!r.ok || !ct.includes('application/json')) {
+                // Parseia JSON mesmo em status 4xx (endpoint retorna JSON com 'message' em erros)
+                if (!ct.includes('application/json')) {
                     listDiv.innerHTML = '<div class="alert alert-warning py-2">Resposta inesperada do servidor. Tente recarregar a página.</div>';
                     return null;
                 }
@@ -722,7 +723,8 @@
             .then(data => {
                 if (!data) return;
                 if (!data.success) {
-                    listDiv.innerHTML = `<div class="alert alert-danger py-2"><i class="bi bi-exclamation-triangle"></i> ${data.message}</div>`;
+                    const msg = data.message || 'Erro desconhecido.';
+                    listDiv.innerHTML = `<div class="alert alert-danger py-2"><i class="bi bi-exclamation-triangle"></i> ${msg}</div>`;
                     return;
                 }
                 if (!data.files || data.files.length === 0) {

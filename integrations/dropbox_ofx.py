@@ -35,16 +35,39 @@ except ImportError:
     _DROPBOX_AVAILABLE = False
 
 
+def _normalizar_caminho(caminho: str) -> str:
+    """
+    Normaliza um caminho para o formato Dropbox API (barra inicial, barras Linux).
+
+    Suporta:
+    - Caminhos Dropbox relativos: "BANCOS/OFX/NOVO" → "/BANCOS/OFX/NOVO"
+    - Caminhos Windows completos: "C:\\Users\\user\\Dropbox\\BANCOS\\OFX\\NOVO"
+      → extrai a parte após "Dropbox\\" → "/BANCOS/OFX/NOVO"
+    """
+    if not caminho:
+        return caminho
+    # Normaliza separadores Windows para Linux
+    caminho = caminho.replace('\\', '/')
+    # Se for caminho Windows completo contendo "/Dropbox/", extrai a parte relativa
+    idx = caminho.lower().find('/dropbox/')
+    if idx != -1:
+        caminho = caminho[idx + len('/dropbox'):]
+    # Remove barra final e garante barra inicial
+    caminho = caminho.rstrip('/')
+    if caminho and not caminho.startswith('/'):
+        caminho = '/' + caminho
+    return caminho
+
+
 def _get_config():
     """Retorna (token, inbox_path, processed_path) a partir das variáveis de ambiente."""
     token = os.environ.get('DROPBOX_TOKEN', '').strip()
-    inbox = (os.environ.get('DROPBOX_OFX_INBOX', '/BANCOS/OFX/NOVO') or '').rstrip('/')
-    processed = (os.environ.get('DROPBOX_OFX_PROCESSED', '/BANCOS/OFX/IMPORTADOS') or '').rstrip('/')
-    # Garante barra inicial (padrão Dropbox API)
-    if inbox and not inbox.startswith('/'):
-        inbox = '/' + inbox
-    if processed and not processed.startswith('/'):
-        processed = '/' + processed
+    inbox = _normalizar_caminho(
+        (os.environ.get('DROPBOX_OFX_INBOX', '/BANCOS/OFX/NOVO') or '').strip()
+    )
+    processed = _normalizar_caminho(
+        (os.environ.get('DROPBOX_OFX_PROCESSED', '/BANCOS/OFX/IMPORTADOS') or '').strip()
+    )
     return token, inbox, processed
 
 
@@ -83,6 +106,14 @@ def listar_arquivos_ofx() -> list:
     except AuthError:
         raise RuntimeError('Token Dropbox inválido ou expirado. Gere um novo token no Dropbox App Console.')
     except ApiError as exc:
+        erro_str = str(exc).lower()
+        if 'not_found' in erro_str or 'path' in erro_str:
+            raise RuntimeError(
+                f'Pasta não encontrada no Dropbox: "{inbox}". '
+                f'Verifique se a pasta existe no seu Dropbox e se o valor de '
+                f'DROPBOX_OFX_INBOX está correto (use apenas o caminho relativo, '
+                f'ex: /BANCOS/OFX/NOVO — sem "C:\\\\Users\\\\..." na frente).'
+            )
         raise RuntimeError(f'Erro ao acessar pasta Dropbox "{inbox}": {exc}')
 
     arquivos = []
