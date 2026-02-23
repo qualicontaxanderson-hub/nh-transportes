@@ -301,10 +301,11 @@ def _conciliar_tx(cursor, conn, tx_id, acao, tipo_tx,
         cursor.execute("SELECT cnpj_cpf FROM bank_transactions WHERE id=%s", (tx_id,))
         row = cursor.fetchone()
         if row and row.get('cnpj_cpf'):
+            # Insere sem fornecedor_id (crédito → forma de recebimento apenas)
             cursor.execute(
                 """INSERT INTO bank_supplier_mapping
-                       (fornecedor_id, cnpj_cpf, tipo_chave, total_conciliacoes, forma_recebimento_id)
-                   VALUES (NULL, %s, 'cnpj', 1, %s)
+                       (cnpj_cpf, tipo_chave, total_conciliacoes, forma_recebimento_id)
+                   VALUES (%s, 'cnpj', 1, %s)
                    ON DUPLICATE KEY UPDATE
                        forma_recebimento_id=%s,
                        total_conciliacoes=total_conciliacoes+1,
