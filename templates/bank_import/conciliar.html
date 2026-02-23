@@ -162,6 +162,16 @@
                   {% endif %}
                 </td>
                 <td class="text-center text-nowrap">
+                  {% if (tx.tipo == 'CREDIT' and tx.sugestao_forma_id) or (tx.tipo == 'DEBIT' and tx.sugestao_fornecedor_id) %}
+                  <button type="button" class="btn btn-sm btn-success btn-aprovar"
+                          data-tx-id="{{ tx.id }}"
+                          data-tx-tipo="{{ tx.tipo }}"
+                          data-sugestao-forma="{{ tx.sugestao_forma_id or '' }}"
+                          data-sugestao-fornecedor="{{ tx.sugestao_fornecedor_id or '' }}"
+                          title="Aprovar sugestão com 1 clique">
+                    ✅ Aprovar
+                  </button>
+                  {% endif %}
                   <button type="button" class="btn btn-sm btn-outline-primary btn-conciliar"
                           data-tx-id="{{ tx.id }}"
                           data-tx-desc="{{ tx.descricao | e }}"
@@ -170,7 +180,7 @@
                           data-tx-tipo="{{ tx.tipo }}"
                           data-sugestao-forma="{{ tx.sugestao_forma_id or '' }}"
                           data-sugestao-fornecedor="{{ tx.sugestao_fornecedor_id or '' }}">
-                    <i class="bi bi-link-45deg"></i> Conciliar
+                    <i class="bi bi-link-45deg"></i> {% if (tx.tipo == 'CREDIT' and tx.sugestao_forma_id) or (tx.tipo == 'DEBIT' and tx.sugestao_fornecedor_id) %}Alterar{% else %}Conciliar{% endif %}
                   </button>
                   <button type="button" class="btn btn-sm btn-outline-secondary btn-ignorar"
                           data-tx-id="{{ tx.id }}" title="Ignorar">
@@ -474,5 +484,25 @@ function submeterLote(tipo) {
   document.body.appendChild(form);
   form.submit();
 }
+
+// Aprovar sugestão com 1 clique
+document.querySelectorAll('.btn-aprovar').forEach(btn => {
+  btn.addEventListener('click', function() {
+    const txId   = this.dataset.txId;
+    const tipo   = this.dataset.txTipo;
+    const forma  = this.dataset.sugestaoForma;
+    const forn   = this.dataset.sugestaoFornecedor;
+    const form   = document.createElement('form');
+    form.method  = 'POST';
+    const add    = (n, v) => { const i = document.createElement('input'); i.type='hidden'; i.name=n; i.value=v; form.appendChild(i); };
+    add('transaction_id', txId);
+    add('acao', 'conciliar');
+    add('tipo_tx', tipo);
+    if (tipo === 'CREDIT') add('forma_recebimento_id', forma);
+    else add('fornecedor_id', forn);
+    document.body.appendChild(form);
+    form.submit();
+  });
+});
 </script>
 {% endblock %}

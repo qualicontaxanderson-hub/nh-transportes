@@ -81,17 +81,17 @@ def _save_transactions(cursor, conn, account_id, transactions):
     )
     existing_hashes = {row['hash_dedup'] for row in cursor.fetchall()}
 
-    # 2. Busca de mapeamento de fornecedores em lote
+    # 2. Busca de mapeamento de fornecedores/formas em lote (por CNPJ)
     cnpj_list = list({tx['cnpj_cpf'] for tx in transactions if tx.get('cnpj_cpf')})
-    mapping = {}
+    mapping = {}  # cnpj -> {'fornecedor_id': ..., 'forma_recebimento_id': ...}
     if cnpj_list:
         ph2 = ','.join(['%s'] * len(cnpj_list))
         cursor.execute(
-            f'SELECT cnpj_cpf, fornecedor_id FROM bank_supplier_mapping WHERE cnpj_cpf IN ({ph2})',
+            f'SELECT cnpj_cpf, fornecedor_id, forma_recebimento_id FROM bank_supplier_mapping WHERE cnpj_cpf IN ({ph2})',
             cnpj_list,
         )
         for row in cursor.fetchall():
-            mapping[row['cnpj_cpf']] = row['fornecedor_id']
+            mapping[row['cnpj_cpf']] = row
 
     now = _dt.datetime.now()
     rows = []
@@ -100,8 +100,19 @@ def _save_transactions(cursor, conn, account_id, transactions):
         if tx['hash_dedup'] in existing_hashes:
             duplicados += 1
             continue
-        fid = mapping.get(tx.get('cnpj_cpf') or '')
-        status = 'conciliado' if fid else 'pendente'
+        m = mapping.get(tx.get('cnpj_cpf') or '')
+        if tx['tipo'] == 'CREDIT':
+            frec_id = m['forma_recebimento_id'] if m else None
+            forn_id = None
+            status = 'conciliado' if frec_id else 'pendente'
+            conciliado_em = now if frec_id else None
+            conciliado_por = 'auto' if frec_id else None
+        else:
+            forn_id = m['fornecedor_id'] if m else None
+            frec_id = None
+            status = 'conciliado' if forn_id else 'pendente'
+            conciliado_em = now if forn_id else None
+            conciliado_por = 'auto' if forn_id else None
         rows.append((
             account_id,
             tx['hash_dedup'],
@@ -113,9 +124,10 @@ def _save_transactions(cursor, conn, account_id, transactions):
             tx.get('memo'),
             tx.get('fitid'),
             status,
-            fid,
-            now if fid else None,
-            'auto' if fid else None,
+            forn_id,
+            frec_id,
+            conciliado_em,
+            conciliado_por,
         ))
 
     inseridos = len(rows)
@@ -125,8 +137,9 @@ def _save_transactions(cursor, conn, account_id, transactions):
                 cursor.executemany(
                     """INSERT INTO bank_transactions
                        (account_id, hash_dedup, data_transacao, tipo, valor, descricao,
-                        cnpj_cpf, memo, fitid, status, fornecedor_id, conciliado_em, conciliado_por)
-                       VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
+                        cnpj_cpf, memo, fitid, status, fornecedor_id, forma_recebimento_id,
+                        conciliado_em, conciliado_por)
+                       VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
                     rows,
                 )
                 conn.commit()
@@ -137,7 +150,82 @@ def _save_transactions(cursor, conn, account_id, transactions):
                     time.sleep(0.3 * (attempt + 1))
                     continue
                 raise
+    # 4. Auto-conciliação imediata por regras de descrição (para os que ficaram pendentes)
+    _auto_conciliar_por_regras(cursor, conn, account_id)
     return inseridos, duplicados
+
+
+def _auto_conciliar_por_regras(cursor, conn, account_id=None):
+    """
+    Aplica bank_conciliacao_regras às transações pendentes do account_id (ou todas).
+    Retorna quantas foram auto-conciliadas.
+    """
+    # Carrega regras ativas
+    cursor.execute(
+        """SELECT * FROM bank_conciliacao_regras WHERE ativo=1 ORDER BY id"""
+    )
+    regras = cursor.fetchall()
+    if not regras:
+        return 0
+
+    # Busca transações ainda pendentes
+    if account_id:
+        cursor.execute(
+            """SELECT id, descricao, tipo, cnpj_cpf FROM bank_transactions
+               WHERE status='pendente' AND account_id=%s""",
+            (account_id,),
+        )
+    else:
+        cursor.execute(
+            """SELECT id, descricao, tipo, cnpj_cpf FROM bank_transactions
+               WHERE status='pendente'"""
+        )
+    pendentes = cursor.fetchall()
+    if not pendentes:
+        return 0
+
+    agora = _dt.datetime.now()
+    aplicadas = 0
+    for tx in pendentes:
+        descricao = (tx.get('descricao') or '').upper()
+        tipo = tx.get('tipo') or ''
+        for regra in regras:
+            # Filtra por tipo de transação
+            tipo_regra = regra.get('tipo_transacao', 'AMBOS')
+            if tipo_regra != 'AMBOS' and tipo_regra != tipo:
+                continue
+            padrao = (regra.get('padrao_descricao') or '').upper()
+            tipo_match = regra.get('tipo_match', 'contem')
+            if tipo_match == 'exato':
+                match = descricao == padrao
+            else:
+                match = padrao in descricao
+            if not match:
+                continue
+            # Aplica regra
+            forma_id = regra.get('forma_recebimento_id')
+            forn_id = regra.get('fornecedor_id')
+            cursor.execute(
+                """UPDATE bank_transactions
+                   SET status='conciliado',
+                       forma_recebimento_id=%s,
+                       fornecedor_id=%s,
+                       conciliado_em=%s,
+                       conciliado_por='auto-regra'
+                   WHERE id=%s""",
+                (forma_id, forn_id, agora, tx['id']),
+            )
+            cursor.execute(
+                """UPDATE bank_conciliacao_regras
+                   SET total_aplicacoes=total_aplicacoes+1 WHERE id=%s""",
+                (regra['id'],),
+            )
+            aplicadas += 1
+            break  # primeira regra que bate
+
+    if aplicadas:
+        conn.commit()
+    return aplicadas
 
 # ---------------------------------------------------------------------------
 # Páginas
@@ -633,33 +721,49 @@ def api_transacoes_pendentes():
 @bp.route('/api/auto-reconcile', methods=['POST'])
 @login_required
 def api_auto_reconcile():
-    """API: força a auto-conciliação de transações pendentes com mapeamento."""
+    """API: força a auto-conciliação de transações pendentes (por CNPJ e por regras)."""
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
 
+    # 1. Auto-conciliação por CNPJ (mapeamentos salvos anteriormente)
     cursor.execute(
-        """SELECT bt.id, bsm.fornecedor_id
+        """SELECT bt.id, bt.tipo, bsm.fornecedor_id, bsm.forma_recebimento_id
            FROM bank_transactions bt
            INNER JOIN bank_supplier_mapping bsm ON bt.cnpj_cpf = bsm.cnpj_cpf
            WHERE bt.status = 'pendente' AND bt.cnpj_cpf IS NOT NULL AND bt.cnpj_cpf != ''"""
     )
     rows = cursor.fetchall()
 
+    agora = _dt.datetime.now()
     updated = 0
     for row in rows:
-        cursor.execute(
-            """UPDATE bank_transactions
-               SET status='conciliado', fornecedor_id=%s, conciliado_em=%s, conciliado_por='auto'
-               WHERE id=%s""",
-            (row['fornecedor_id'], _dt.datetime.now(), row['id']),
-        )
+        if row['tipo'] == 'CREDIT':
+            cursor.execute(
+                """UPDATE bank_transactions
+                   SET status='conciliado', forma_recebimento_id=%s,
+                       conciliado_em=%s, conciliado_por='auto'
+                   WHERE id=%s""",
+                (row['forma_recebimento_id'], agora, row['id']),
+            )
+        else:
+            cursor.execute(
+                """UPDATE bank_transactions
+                   SET status='conciliado', fornecedor_id=%s,
+                       conciliado_em=%s, conciliado_por='auto'
+                   WHERE id=%s""",
+                (row['fornecedor_id'], agora, row['id']),
+            )
         updated += 1
 
     conn.commit()
+
+    # 2. Auto-conciliação por regras de descrição
+    por_regras = _auto_conciliar_por_regras(cursor, conn)
+
     cursor.close()
     conn.close()
 
-    return jsonify({'success': True, 'conciliados': updated})
+    return jsonify({'success': True, 'conciliados': updated + por_regras})
 
 
 @bp.route('/api/contas', methods=['GET'])
