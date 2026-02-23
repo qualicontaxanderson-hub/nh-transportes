@@ -374,9 +374,14 @@ def index():
     inbox_dir_missing = _is_valid_linux_path and not _inbox_dir_exists
 
     # Verifica se a integração Dropbox está configurada
-    from integrations.dropbox_ofx import is_configured as dropbox_is_configured, get_inbox_paths as dropbox_paths
+    from integrations.dropbox_ofx import (
+        is_configured as dropbox_is_configured,
+        get_inbox_paths as dropbox_paths,
+        usa_oauth2 as dropbox_usa_oauth2,
+    )
     _dropbox_ok = dropbox_is_configured()
     _dbx_inbox, _dbx_processed = dropbox_paths()
+    _dropbox_oauth2 = dropbox_usa_oauth2()
 
     return render_template(
         'bank_import/index.html',
@@ -391,6 +396,7 @@ def index():
         ofx_dir_configured=_ofx_dir_env,
         is_windows_path=_is_windows_path,
         dropbox_configured=_dropbox_ok,
+        dropbox_oauth2=_dropbox_oauth2,
         dropbox_inbox=_dbx_inbox,
         dropbox_processed=_dbx_processed,
     )
@@ -1477,4 +1483,76 @@ def importar_dropbox():
         return jsonify({'success': True, 'message': msg, 'inseridos': inseridos, 'duplicados': duplicados})
     flash(msg, 'success')
     return redirect(url_for('bank_import.index'))
+
+
+# ---------------------------------------------------------------------------
+# Dropbox OAuth2 — fluxo de autorização para obter refresh token permanente
+# ---------------------------------------------------------------------------
+
+@bp.route('/api/dropbox-oauth-url')
+@login_required
+def api_dropbox_oauth_url():
+    """Gera a URL de autorização Dropbox (OAuth2 offline) para o usuário clicar."""
+    try:
+        import dropbox
+        app_key = os.environ.get('DROPBOX_APP_KEY', '').strip()
+        if not app_key:
+            return jsonify({'ok': False, 'erro': 'DROPBOX_APP_KEY não configurado no Render.'})
+
+        auth_flow = dropbox.DropboxOAuth2FlowNoRedirect(
+            app_key,
+            use_pkce=True,
+            token_access_type='offline',
+        )
+        url = auth_flow.start()
+        # Guarda o verifier na sessão para usar na troca
+        from flask import session
+        session['dbx_pkce_verifier'] = auth_flow.flow_result.pkce_verifier
+        return jsonify({'ok': True, 'url': url})
+    except Exception as exc:
+        return jsonify({'ok': False, 'erro': str(exc)})
+
+
+@bp.route('/api/dropbox-oauth-token')
+@login_required
+def api_dropbox_oauth_token():
+    """
+    Troca o código de autorização pelo refresh token permanente.
+    Parâmetro GET: code (colado pelo usuário após autorizar no Dropbox).
+    """
+    try:
+        import dropbox
+        from flask import session
+        code = (request.args.get('code') or '').strip()
+        if not code:
+            return jsonify({'ok': False, 'erro': 'Parâmetro "code" é obrigatório.'})
+
+        app_key    = os.environ.get('DROPBOX_APP_KEY', '').strip()
+        app_secret = os.environ.get('DROPBOX_APP_SECRET', '').strip()
+        if not app_key or not app_secret:
+            return jsonify({'ok': False, 'erro': 'DROPBOX_APP_KEY e DROPBOX_APP_SECRET devem estar configurados.'})
+
+        pkce_verifier = session.pop('dbx_pkce_verifier', None)
+        auth_flow = dropbox.DropboxOAuth2FlowNoRedirect(
+            app_key,
+            consumer_secret=app_secret,
+            use_pkce=True,
+            token_access_type='offline',
+        )
+        if pkce_verifier:
+            auth_flow.flow_result.pkce_verifier = pkce_verifier
+
+        oauth_result = auth_flow.finish(code)
+        refresh_token = oauth_result.refresh_token
+
+        return jsonify({
+            'ok': True,
+            'refresh_token': refresh_token,
+            'instrucao': (
+                f'Copie o valor abaixo e configure como variável de ambiente '
+                f'DROPBOX_REFRESH_TOKEN no Render. Depois disso o token nunca mais vai expirar.'
+            ),
+        })
+    except Exception as exc:
+        return jsonify({'ok': False, 'erro': f'Erro ao trocar código: {exc}'})
 

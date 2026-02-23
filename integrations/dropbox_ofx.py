@@ -71,10 +71,59 @@ def _get_config():
     return token, inbox, processed
 
 
+def _criar_dbx():
+    """
+    Cria e retorna um objeto Dropbox autenticado.
+
+    Prioridade:
+    1. OAuth2 com refresh token (DROPBOX_APP_KEY + DROPBOX_APP_SECRET + DROPBOX_REFRESH_TOKEN)
+       → token renovado automaticamente, nunca expira.
+    2. Token de acesso direto (DROPBOX_TOKEN)
+       → expira em ~4 horas, precisa ser renovado manualmente.
+
+    Lança RuntimeError se nenhuma credencial estiver configurada.
+    """
+    if not _DROPBOX_AVAILABLE:
+        raise RuntimeError('Pacote "dropbox" não instalado. Execute: pip install dropbox')
+
+    app_key     = os.environ.get('DROPBOX_APP_KEY', '').strip()
+    app_secret  = os.environ.get('DROPBOX_APP_SECRET', '').strip()
+    refresh_tok = os.environ.get('DROPBOX_REFRESH_TOKEN', '').strip()
+
+    if app_key and app_secret and refresh_tok:
+        # OAuth2 offline — token renovado automaticamente
+        return dropbox.Dropbox(
+            oauth2_refresh_token=refresh_tok,
+            app_key=app_key,
+            app_secret=app_secret,
+        )
+
+    token, _, _ = _get_config()
+    if token:
+        # Token de curta duração — expira em ~4 horas
+        return dropbox.Dropbox(token)
+
+    raise RuntimeError(
+        'Dropbox não configurado. Configure DROPBOX_APP_KEY + DROPBOX_APP_SECRET + '
+        'DROPBOX_REFRESH_TOKEN (recomendado) ou DROPBOX_TOKEN no Render.'
+    )
+
+
+def usa_oauth2() -> bool:
+    """Retorna True quando está usando OAuth2 com refresh token (método permanente)."""
+    return bool(
+        os.environ.get('DROPBOX_APP_KEY', '').strip() and
+        os.environ.get('DROPBOX_APP_SECRET', '').strip() and
+        os.environ.get('DROPBOX_REFRESH_TOKEN', '').strip()
+    )
+
+
 def is_configured() -> bool:
-    """Retorna True se DROPBOX_TOKEN estiver definido e o pacote dropbox instalado."""
+    """Retorna True se alguma credencial Dropbox estiver definida e o pacote instalado."""
     if not _DROPBOX_AVAILABLE:
         return False
+    if usa_oauth2():
+        return True
     token, _, _ = _get_config()
     return bool(token)
 
@@ -95,16 +144,26 @@ def listar_arquivos_ofx() -> list:
     if not _DROPBOX_AVAILABLE:
         raise RuntimeError('Pacote "dropbox" não instalado. Execute: pip install dropbox==12.0.2')
 
-    token, inbox, _ = _get_config()
-    if not token:
-        raise RuntimeError('DROPBOX_TOKEN não configurado.')
+    _, inbox, _ = _get_config()
 
-    dbx = dropbox.Dropbox(token)
+    try:
+        dbx = _criar_dbx()
+    except RuntimeError:
+        raise
 
     try:
         result = dbx.files_list_folder(inbox)
     except AuthError:
-        raise RuntimeError('Token Dropbox inválido ou expirado. Gere um novo token no Dropbox App Console.')
+        if usa_oauth2():
+            raise RuntimeError(
+                'Erro de autenticação Dropbox (OAuth2). Verifique se DROPBOX_APP_KEY, '
+                'DROPBOX_APP_SECRET e DROPBOX_REFRESH_TOKEN estão corretos no Render.'
+            )
+        raise RuntimeError(
+            'Token Dropbox inválido ou expirado. '
+            'Configure OAuth2 com refresh token para não precisar renovar manualmente: '
+            'adicione DROPBOX_APP_KEY, DROPBOX_APP_SECRET e DROPBOX_REFRESH_TOKEN no Render.'
+        )
     except ApiError as exc:
         erro_str = str(exc).lower()
         if 'not_found' in erro_str or 'path' in erro_str:
@@ -143,25 +202,16 @@ def listar_arquivos_ofx() -> list:
 def baixar_arquivo(nome_arquivo: str) -> str:
     """
     Baixa o conteúdo de um arquivo OFX do Dropbox e retorna como string (latin-1).
-
-    Parâmetros:
-        nome_arquivo – nome simples do arquivo (sem caminho), ex: "extrato_jan.ofx"
-
-    Lança RuntimeError em caso de falha ou arquivo não encontrado.
     """
     if not _DROPBOX_AVAILABLE:
         raise RuntimeError('Pacote "dropbox" não instalado.')
 
-    # Segurança: apenas nomes simples
     nome_arquivo = os.path.basename(nome_arquivo)
     if not nome_arquivo.lower().endswith('.ofx'):
         raise RuntimeError('Apenas arquivos .ofx são aceitos.')
 
-    token, inbox, _ = _get_config()
-    if not token:
-        raise RuntimeError('DROPBOX_TOKEN não configurado.')
-
-    dbx = dropbox.Dropbox(token)
+    _, inbox, _ = _get_config()
+    dbx = _criar_dbx()
     caminho = f'{inbox}/{nome_arquivo}'
 
     try:
@@ -175,23 +225,18 @@ def baixar_arquivo(nome_arquivo: str) -> str:
 def mover_para_processados(nome_arquivo: str) -> None:
     """
     Move um arquivo OFX de DROPBOX_OFX_INBOX para DROPBOX_OFX_PROCESSED.
-
-    Adiciona prefixo de timestamp caso o arquivo já exista no destino.
-    Erros de movimentação são ignorados (não críticos — o arquivo já foi importado).
+    Erros são ignorados (não críticos — o arquivo já foi importado).
     """
     if not _DROPBOX_AVAILABLE:
         return
 
     nome_arquivo = os.path.basename(nome_arquivo)
-    token, inbox, processed = _get_config()
-    if not token:
-        return
-
-    dbx = dropbox.Dropbox(token)
-    origem = f'{inbox}/{nome_arquivo}'
-    destino = f'{processed}/{nome_arquivo}'
+    _, inbox, processed = _get_config()
 
     try:
+        dbx = _criar_dbx()
+        origem = f'{inbox}/{nome_arquivo}'
+        destino = f'{processed}/{nome_arquivo}'
         dbx.files_move_v2(origem, destino, autorename=True)
     except Exception:
         pass  # Não crítico – o arquivo foi importado com sucesso
