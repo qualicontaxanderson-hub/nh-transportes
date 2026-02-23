@@ -896,7 +896,11 @@ def _get_bank_transactions(tipo, request_args):
                    bt.forma_recebimento_id,
                    ba.apelido AS conta_apelido, ba.banco_nome,
                    f.razao_social AS fornecedor_nome,
-                   fr.nome AS forma_recebimento_nome
+                   fr.nome AS forma_recebimento_nome,
+                   (bt.status='conciliado'
+                    AND bt.fornecedor_id IS NULL
+                    AND bt.forma_recebimento_id IS NULL
+                    AND bt.tipo='DEBIT') AS is_despesa
             FROM bank_transactions bt
             INNER JOIN bank_accounts ba ON bt.account_id = ba.id
             LEFT JOIN fornecedores f ON bt.fornecedor_id = f.id

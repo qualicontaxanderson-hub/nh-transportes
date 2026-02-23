@@ -7,12 +7,15 @@
     <h2 class="mb-3" style="color:#dc3545">
         <i class="bi bi-arrow-up-circle"></i> Pagamentos (Débitos Bancários)
     </h2>
-    <div class="alert alert-info py-2 mb-3" role="alert">
-        <i class="bi bi-info-circle"></i>
-        <strong>Automático:</strong> Os dados abaixo são buscados diretamente de <code>bank_transactions</code>
-        (tipo <code>DEBIT</code>) pelo sistema. <strong>Não é necessário criar nenhuma query ou view no banco.</strong>
-        Os valores aparecem aqui assim que o extrato OFX for importado em <a href="/banco/">Importação Bancária</a>.
+    <div class="alert alert-light border py-2 mb-3" role="alert">
+        <strong>📋 Como funciona:</strong>
+        <ul class="mb-0 mt-1">
+            <li><strong>Débito → Fornecedor:</strong> Aparece aqui com o nome do fornecedor. Não cria lançamento extra.</li>
+            <li><strong>Débito → Despesa:</strong> Aparece aqui com badge <span class="badge bg-primary">Despesa</span> <em>e</em> cria lançamento em <a href="/lancamentos_despesas/">Lançamentos de Despesas</a> (pode ser split em 2 ou 3 despesas).</li>
+            <li><strong>Pendente:</strong> Ainda não conciliado — acesse <a href="/banco/conciliar?tipo=DEBIT">Conciliar Pagamentos</a>.</li>
+        </ul>
     </div>
+
 
     <!-- RESUMO -->
     <div class="row mb-3">
@@ -115,7 +118,7 @@
                             <th>Descrição</th>
                             <th>Conta</th>
                             <th>CNPJ/CPF</th>
-                            <th>Fornecedor</th>
+                            <th>Vinculado a</th>
                             <th class="text-end">Valor (R$)</th>
                             <th class="text-center">Status</th>
                         </tr>
@@ -129,7 +132,15 @@
                             </td>
                             <td>{{ t.conta_apelido or t.banco_nome or '—' }}</td>
                             <td>{{ t.cnpj_cpf or '—' }}</td>
-                            <td>{{ t.fornecedor_nome or '—' }}</td>
+                            <td>
+                                {% if t.fornecedor_nome %}
+                                    {{ t.fornecedor_nome }}
+                                {% elif t.is_despesa %}
+                                    <a href="/lancamentos_despesas/" class="badge bg-primary text-decoration-none">Despesa ↗</a>
+                                {% else %}
+                                    —
+                                {% endif %}
+                            </td>
                             <td class="text-end" style="color:#dc3545;font-weight:600;">
                                 {{ "{:,.2f}".format(t.valor).replace(',','X').replace('.',',').replace('X','.') }}
                             </td>
