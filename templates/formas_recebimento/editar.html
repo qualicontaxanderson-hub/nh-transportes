@@ -30,9 +30,21 @@
                  value="{{ forma.nome }}">
         </div>
         <div class="mb-3">
-          <label class="form-label fw-semibold">Descrição</label>
-          <input type="text" name="descricao" class="form-control" maxlength="255"
-                 value="{{ forma.descricao or '' }}">
+          <div class="form-check">
+            <input class="form-check-input" type="checkbox" name="eh_cartao" value="1"
+                   id="chkCartao" onchange="toggleTipoCartao(this)"
+                   {% if forma.eh_cartao %}checked{% endif %}>
+            <label class="form-check-label fw-semibold" for="chkCartao">É Cartão?</label>
+          </div>
+        </div>
+        <div class="mb-3" id="divTipoCartao"
+             style="display:{{ '' if forma.eh_cartao else 'none' }};">
+          <label class="form-label fw-semibold">Tipo do Cartão</label>
+          <select name="tipo_cartao" class="form-select">
+            <option value="">— Selecione —</option>
+            <option value="DEBITO" {% if forma.tipo_cartao == 'DEBITO' %}selected{% endif %}>Débito</option>
+            <option value="CREDITO" {% if forma.tipo_cartao == 'CREDITO' %}selected{% endif %}>Crédito</option>
+          </select>
         </div>
         <div class="mb-3">
           <label class="form-label fw-semibold">Status</label>
@@ -51,4 +63,11 @@
     </div>
   </div>
 </div>
+{% endblock %}
+{% block scripts %}
+<script>
+function toggleTipoCartao(chk) {
+  document.getElementById('divTipoCartao').style.display = chk.checked ? '' : 'none';
+}
+</script>
 {% endblock %}

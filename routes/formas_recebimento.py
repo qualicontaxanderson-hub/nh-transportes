@@ -13,7 +13,7 @@ def lista():
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
     cursor.execute(
-        "SELECT id, nome, descricao, ativo, criado_em FROM formas_recebimento ORDER BY nome"
+        "SELECT id, nome, eh_cartao, tipo_cartao, ativo FROM formas_recebimento ORDER BY nome"
     )
     formas = cursor.fetchall()
     cursor.close()
@@ -28,7 +28,10 @@ def novo():
     """Cria nova forma de recebimento."""
     if request.method == 'POST':
         nome = request.form.get('nome', '').strip()
-        descricao = request.form.get('descricao', '').strip() or None
+        eh_cartao = 1 if request.form.get('eh_cartao') == '1' else 0
+        tipo_cartao = request.form.get('tipo_cartao') or None
+        if not eh_cartao:
+            tipo_cartao = None
         if not nome:
             flash('Nome é obrigatório.', 'danger')
             return redirect(url_for('formas_recebimento.novo'))
@@ -36,8 +39,8 @@ def novo():
         cursor = conn.cursor()
         try:
             cursor.execute(
-                "INSERT INTO formas_recebimento (nome, descricao) VALUES (%s, %s)",
-                (nome, descricao),
+                "INSERT INTO formas_recebimento (nome, eh_cartao, tipo_cartao) VALUES (%s, %s, %s)",
+                (nome, eh_cartao, tipo_cartao),
             )
             conn.commit()
             flash(f'Forma de recebimento "{nome}" criada com sucesso!', 'success')
@@ -68,14 +71,17 @@ def editar(id):
 
     if request.method == 'POST':
         nome = request.form.get('nome', '').strip()
-        descricao = request.form.get('descricao', '').strip() or None
+        eh_cartao = 1 if request.form.get('eh_cartao') == '1' else 0
+        tipo_cartao = request.form.get('tipo_cartao') or None
+        if not eh_cartao:
+            tipo_cartao = None
         ativo = 1 if request.form.get('ativo') == '1' else 0
         if not nome:
             flash('Nome é obrigatório.', 'danger')
         else:
             cursor.execute(
-                "UPDATE formas_recebimento SET nome=%s, descricao=%s, ativo=%s WHERE id=%s",
-                (nome, descricao, ativo, id),
+                "UPDATE formas_recebimento SET nome=%s, eh_cartao=%s, tipo_cartao=%s, ativo=%s WHERE id=%s",
+                (nome, eh_cartao, tipo_cartao, ativo, id),
             )
             conn.commit()
             flash('Atualizado com sucesso!', 'success')
