@@ -1009,11 +1009,14 @@ def transferencias():
     f_data_fim = request.args.get('data_fim', '').strip()
     f_conta    = request.args.get('account_id', '').strip()
 
-    # COALESCE: quando hash_dedup é NULL, usa o id numérico (mesmo comportamento do Python:
-    # hash_destino = (tx.get('hash_dedup') or str(tx_id)) + '_transfer')
-    _hash_expr = "CONCAT(COALESCE(bt.hash_dedup, CAST(bt.id AS CHAR)), '_transfer')"
+    # A query parte do lado CREDIT (hash_dedup = 'TRANSFER_<id>') e junta
+    # o DEBIT de origem via  CONCAT('TRANSFER_', bt_orig.id).
+    # Isso é robusto: não depende do hash SHA-256 da tx de origem (que já usa
+    # os 64 chars do VARCHAR(64), causando overflow se adicionarmos '_transfer').
 
-    where = ["bt.status = 'conciliado'", "bt.tipo = 'DEBIT'"]
+    where = ["bt.tipo = 'CREDIT'",
+             "bt.status = 'conciliado'",
+             "bt.hash_dedup LIKE 'TRANSFER\\_%'"]
     params = []
     if f_data_ini:
         where.append("bt.data_transacao >= %s")
@@ -1022,24 +1025,25 @@ def transferencias():
         where.append("bt.data_transacao <= %s")
         params.append(f_data_fim)
     if f_conta:
-        where.append("(bt.account_id = %s OR bt_dest.account_id = %s)")
+        where.append("(bt.account_id = %s OR bt_orig.account_id = %s)")
         params += [f_conta, f_conta]
 
     where_sql = ' AND '.join(where)
 
     cursor.execute(
-        f"""SELECT bt.id, bt.data_transacao, bt.valor, bt.descricao,
-                   ba_orig.apelido AS conta_orig_apelido, ba_orig.banco_nome AS banco_orig,
-                   co.razao_social AS empresa_orig,
-                   ba_dest.apelido AS conta_dest_apelido, ba_dest.banco_nome AS banco_dest,
-                   cd.razao_social AS empresa_dest
+        f"""SELECT bt.id AS id_credit, bt_orig.id AS id,
+                   bt.data_transacao, bt.valor, bt_orig.descricao AS descricao,
+                   ba_orig.apelido  AS conta_orig_apelido, ba_orig.banco_nome AS banco_orig,
+                   co.razao_social  AS empresa_orig,
+                   ba_dest.apelido  AS conta_dest_apelido, ba_dest.banco_nome AS banco_dest,
+                   cd.razao_social  AS empresa_dest
             FROM bank_transactions bt
-            INNER JOIN bank_transactions bt_dest
-                   ON bt_dest.hash_dedup = {_hash_expr}
-            INNER JOIN bank_accounts ba_orig ON ba_orig.id = bt.account_id
-            LEFT  JOIN clientes co ON co.id = ba_orig.cliente_id
-            INNER JOIN bank_accounts ba_dest ON ba_dest.id = bt_dest.account_id
+            LEFT  JOIN bank_transactions bt_orig
+                   ON bt_orig.id = CAST(SUBSTRING(bt.hash_dedup, 10) AS UNSIGNED)
+            INNER JOIN bank_accounts ba_dest ON ba_dest.id = bt.account_id
             LEFT  JOIN clientes cd ON cd.id = ba_dest.cliente_id
+            LEFT  JOIN bank_accounts ba_orig ON ba_orig.id = bt_orig.account_id
+            LEFT  JOIN clientes co ON co.id = ba_orig.cliente_id
             WHERE {where_sql}
             ORDER BY bt.data_transacao DESC
             LIMIT 500""",
@@ -1051,8 +1055,8 @@ def transferencias():
     cursor.execute(
         f"""SELECT SUM(bt.valor) AS total_valor, COUNT(*) AS total_qtd
             FROM bank_transactions bt
-            INNER JOIN bank_transactions bt_dest
-                   ON bt_dest.hash_dedup = {_hash_expr}
+            LEFT  JOIN bank_transactions bt_orig
+                   ON bt_orig.id = CAST(SUBSTRING(bt.hash_dedup, 10) AS UNSIGNED)
             WHERE {where_sql}""",
         params,
     )

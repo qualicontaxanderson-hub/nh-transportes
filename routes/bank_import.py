@@ -516,8 +516,11 @@ def _conciliar_transferencia(cursor, conn, tx_id, conta_destino_id, usuario):
            WHERE id=%s""",
         (agora, usuario, tx_id),
     )
-    # Cria CREDIT na conta destino (complementar da transferência)
-    hash_destino = (tx.get('hash_dedup') or str(tx_id)) + '_transfer'
+    # Cria CREDIT na conta destino (complementar da transferência).
+    # Usa TRANSFER_<id> para garantir que cabe em VARCHAR(64) mesmo quando
+    # hash_dedup já tem 64 chars (SHA-256) — adicionar '_transfer' causaria
+    # overflow silenciado pelo INSERT IGNORE, impedindo a criação do CREDIT.
+    hash_destino = f'TRANSFER_{tx_id}'
     descricao_dest = f"TRANSFERÊNCIA RECEBIDA - {tx.get('descricao') or ''}"[:500]
     cursor.execute(
         """INSERT IGNORE INTO bank_transactions
