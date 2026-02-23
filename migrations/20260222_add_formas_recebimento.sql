@@ -6,10 +6,10 @@
 -- 1. Tabela principal de formas de recebimento bancário
 CREATE TABLE IF NOT EXISTS formas_recebimento (
     id          INT AUTO_INCREMENT PRIMARY KEY,
-    nome        VARCHAR(100)  NOT NULL,
-    descricao   VARCHAR(255)  NULL,
-    ativo       TINYINT(1)    NOT NULL DEFAULT 1,
-    criado_em   DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    nome        VARCHAR(100)                    NOT NULL,
+    eh_cartao   TINYINT(1)                      NOT NULL DEFAULT 0,
+    tipo_cartao ENUM('DEBITO','CREDITO')         NULL,
+    ativo       TINYINT(1)                      NOT NULL DEFAULT 1,
     UNIQUE KEY uq_formas_recebimento_nome (nome)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
