@@ -1,8 +1,11 @@
 """CRUD de regras de conciliação automática (bank_conciliacao_regras)."""
 
+import logging
 from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify
 from flask_login import login_required, current_user
 from utils.db import get_db_connection
+
+logger = logging.getLogger(__name__)
 
 bp = Blueprint('conciliacao_regras', __name__, url_prefix='/banco/regras')
 
@@ -99,6 +102,8 @@ def novo():
         if not padrao:
             flash('Padrão de descrição é obrigatório.', 'warning')
         else:
+            inserted = False
+            # Tentativa 1: todos os campos (migration completa aplicada)
             try:
                 cursor.execute(
                     """INSERT INTO bank_conciliacao_regras
@@ -110,7 +115,27 @@ def novo():
                      forma_id, fornecedor_id, cliente_id, titulo_id,
                      categoria_id, subcategoria_id, account_id),
                 )
-            except Exception:
+                inserted = True
+            except Exception as e1:
+                logger.warning("INSERT regra (completo) falhou: %s — tentando sem subcategoria/account", e1)
+                conn.rollback()
+            # Tentativa 2: sem subcategoria_id e account_id (migration parcial)
+            if not inserted:
+                try:
+                    cursor.execute(
+                        """INSERT INTO bank_conciliacao_regras
+                           (padrao_descricao, padrao_secundario, tipo_match, tipo_transacao,
+                            forma_recebimento_id, fornecedor_id, cliente_id, titulo_id, categoria_id)
+                           VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
+                        (padrao, padrao2, tipo_match, tipo_transacao,
+                         forma_id, fornecedor_id, cliente_id, titulo_id, categoria_id),
+                    )
+                    inserted = True
+                except Exception as e2:
+                    logger.warning("INSERT regra (sem subcat/account) falhou: %s — usando mínimo", e2)
+                    conn.rollback()
+            # Tentativa 3: colunas mínimas (banco sem nenhuma migration nova)
+            if not inserted:
                 cursor.execute(
                     """INSERT INTO bank_conciliacao_regras
                        (padrao_descricao, tipo_match, tipo_transacao,
@@ -168,6 +193,8 @@ def editar(regra_id):
         if not padrao:
             flash('Padrão de descrição é obrigatório.', 'warning')
         else:
+            updated = False
+            # Tentativa 1: todos os campos (migration completa aplicada)
             try:
                 cursor.execute(
                     """UPDATE bank_conciliacao_regras
@@ -180,7 +207,29 @@ def editar(regra_id):
                      forma_id, fornecedor_id, cliente_id, titulo_id,
                      categoria_id, subcategoria_id, account_id, regra_id),
                 )
-            except Exception:
+                updated = True
+            except Exception as e1:
+                logger.warning("UPDATE regra (completo) falhou: %s — tentando sem subcategoria/account", e1)
+                conn.rollback()
+            # Tentativa 2: sem subcategoria_id e account_id
+            if not updated:
+                try:
+                    cursor.execute(
+                        """UPDATE bank_conciliacao_regras
+                           SET padrao_descricao=%s, padrao_secundario=%s, tipo_match=%s,
+                               tipo_transacao=%s, forma_recebimento_id=%s, fornecedor_id=%s,
+                               cliente_id=%s, titulo_id=%s, categoria_id=%s
+                           WHERE id=%s""",
+                        (padrao, padrao2, tipo_match, tipo_transacao,
+                         forma_id, fornecedor_id, cliente_id, titulo_id,
+                         categoria_id, regra_id),
+                    )
+                    updated = True
+                except Exception as e2:
+                    logger.warning("UPDATE regra (sem subcat/account) falhou: %s — usando mínimo", e2)
+                    conn.rollback()
+            # Tentativa 3: colunas mínimas (banco sem nenhuma migration nova)
+            if not updated:
                 cursor.execute(
                     """UPDATE bank_conciliacao_regras
                        SET padrao_descricao=%s, tipo_match=%s, tipo_transacao=%s,
