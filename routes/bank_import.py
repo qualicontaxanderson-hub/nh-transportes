@@ -496,6 +496,39 @@ def _get_titulos_despesas(cursor):
     return result
 
 
+def _conciliar_transferencia(cursor, conn, tx_id, conta_destino_id, usuario):
+    """Registra transferência entre contas: concilia a origem e cria um CREDIT na conta destino."""
+    agora = _dt.datetime.now()
+    cursor.execute(
+        """SELECT id, data_transacao, valor, descricao, hash_unico
+           FROM bank_transactions WHERE id=%s""",
+        (tx_id,),
+    )
+    tx = cursor.fetchone()
+    if not tx:
+        return
+    # Marca a tx de origem como conciliada
+    cursor.execute(
+        """UPDATE bank_transactions
+           SET status='conciliado', conciliado_em=%s, conciliado_por=%s
+           WHERE id=%s""",
+        (agora, usuario, tx_id),
+    )
+    # Cria CREDIT na conta destino (complementar da transferência)
+    hash_destino = (tx.get('hash_unico') or str(tx_id)) + '_transfer'
+    descricao_dest = f"TRANSFERÊNCIA RECEBIDA - {tx.get('descricao') or ''}"[:500]
+    cursor.execute(
+        """INSERT IGNORE INTO bank_transactions
+               (account_id, data_transacao, tipo, valor, descricao, hash_unico,
+                status, conciliado_em, conciliado_por)
+           VALUES (%s, %s, 'CREDIT', %s, %s, %s,
+                   'conciliado', %s, %s)""",
+        (conta_destino_id, tx['data_transacao'], tx['valor'],
+         descricao_dest, hash_destino, agora, usuario),
+    )
+    conn.commit()
+
+
 def _conciliar_tx(cursor, conn, tx_id, acao, tipo_tx,
                   fornecedor_id, forma_recebimento_id, usuario,
                   tipo_debito=None, despesas=None):
@@ -640,7 +673,7 @@ def conciliar():
         fornecedor_id        = request.form.get('fornecedor_id') or None
         forma_recebimento_id = request.form.get('forma_recebimento_id') or None
         tipo_tx              = request.form.get('tipo_tx', 'DEBIT')
-        tipo_debito          = request.form.get('tipo_debito', 'fornecedor')  # 'fornecedor' | 'despesa'
+        tipo_debito          = request.form.get('tipo_debito', 'fornecedor')  # 'fornecedor' | 'despesa' | 'transferencia'
 
         # Despesas (até 3 linhas de split)
         despesas = []
@@ -660,11 +693,16 @@ def conciliar():
                 except (ValueError, TypeError):
                     pass
 
+        conta_destino_id = request.form.get('conta_destino_id') or None
+
         ok = 0
         for tx_id in tx_ids:
-            _conciliar_tx(cursor, conn, tx_id, acao, tipo_tx,
-                          fornecedor_id, forma_recebimento_id, usuario,
-                          tipo_debito=tipo_debito, despesas=despesas or None)
+            if tipo_debito == 'transferencia' and conta_destino_id:
+                _conciliar_transferencia(cursor, conn, tx_id, conta_destino_id, usuario)
+            else:
+                _conciliar_tx(cursor, conn, tx_id, acao, tipo_tx,
+                              fornecedor_id, forma_recebimento_id, usuario,
+                              tipo_debito=tipo_debito, despesas=despesas or None)
             ok += 1
 
         if acao == 'ignorar':
@@ -802,6 +840,16 @@ def conciliar():
     contas             = _get_accounts(cursor)
     clientes           = _get_clientes_com_produtos(cursor)
 
+    # Todas as contas de todas as empresas (para transferência entre contas)
+    cursor.execute(
+        """SELECT ba.id, ba.apelido, ba.banco_nome, c.nome_fantasia AS empresa_nome
+           FROM bank_accounts ba
+           LEFT JOIN clientes c ON c.id = ba.cliente_id
+           WHERE ba.ativo = 1
+           ORDER BY empresa_nome, ba.banco_nome, ba.apelido"""
+    )
+    todas_contas = cursor.fetchall()
+
     cursor.close()
     conn.close()
 
@@ -815,6 +863,7 @@ def conciliar():
         titulos_despesas=titulos_despesas,
         contas=contas,
         clientes=clientes,
+        todas_contas=todas_contas,
         page=page,
         total_pages=total_pages,
         total=total,

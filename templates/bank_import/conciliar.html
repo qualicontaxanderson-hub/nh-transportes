@@ -289,7 +289,7 @@
           </div>
           <div id="secao_debito" style="display:none;">
             <input type="hidden" name="tipo_debito" id="modal_tipo_debito" value="fornecedor">
-            <!-- Abas Fornecedor / Despesa -->
+            <!-- Abas Fornecedor / Despesa / Transferência -->
             <ul class="nav nav-tabs mb-2" id="debitoTabs">
               <li class="nav-item">
                 <button type="button" class="nav-link active" id="tab_forn_btn"
@@ -301,6 +301,12 @@
                 <button type="button" class="nav-link" id="tab_desp_btn"
                         onclick="alternarAbaDebito('despesa')">
                   <i class="bi bi-receipt"></i> Despesa
+                </button>
+              </li>
+              <li class="nav-item">
+                <button type="button" class="nav-link" id="tab_transf_btn"
+                        onclick="alternarAbaDebito('transferencia')">
+                  <i class="bi bi-arrow-left-right"></i> Transferência
                 </button>
               </li>
             </ul>
@@ -357,9 +363,13 @@
                   </div>
                   <div class="row g-1 mt-1">
                     <div class="col-md-4">
-                      <label class="form-label form-label-sm mb-0">Valor R$</label>
-                      <input type="text" name="desp_1_valor" class="form-control form-control-sm inp-valor"
-                             placeholder="0,00" inputmode="numeric">
+                      <label class="form-label form-label-sm mb-0">Valor R$
+                        <span id="labelValorTotal" class="text-muted ms-1" style="font-size:0.75rem;"></span>
+                      </label>
+                      <input type="text" name="desp_1_valor" id="desp_1_valor"
+                             class="form-control form-control-sm inp-valor"
+                             placeholder="0,00" inputmode="numeric" readonly
+                             style="background:#f8f9fa;">
                     </div>
                     <div class="col-md-4">
                       <label class="form-label form-label-sm mb-0">Fornecedor (opt.)</label>
@@ -381,10 +391,43 @@
                   </div>
                 </div>
               </div>
+              <div id="avisoSoma" class="alert alert-warning py-1 px-2 small mb-1" style="display:none;">
+                ⚠️ Soma atual: <strong id="spanSomaAtual">R$ 0,00</strong> de <strong id="spanSomaTotal"></strong>
+              </div>
               <button type="button" class="btn btn-outline-secondary btn-sm mb-1" onclick="adicionarLinhaDespesa()"
                       id="btnAdicionarDesp">
                 <i class="bi bi-plus-circle"></i> Dividir em mais uma despesa
               </button>
+            </div>
+
+            <!-- Aba Transferência -->
+            <div id="aba_transferencia" style="display:none;">
+              <div class="alert alert-info py-2 px-3 small mb-2">
+                <i class="bi bi-arrow-left-right"></i>
+                <strong>Transferência entre contas</strong> — o valor sairá desta conta e entrará como
+                crédito na conta selecionada abaixo.
+              </div>
+              <div class="mb-2">
+                <label class="form-label form-label-sm mb-1">Conta de Destino</label>
+                <select name="conta_destino_id" class="form-select">
+                  <option value="">— Selecione a conta destino —</option>
+                  {% set emp_atual = namespace(nome='') %}
+                  {% for c in todas_contas %}
+                    {% if c.empresa_nome != emp_atual.nome %}
+                      {% if emp_atual.nome %}</optgroup>{% endif %}
+                      <optgroup label="{{ c.empresa_nome or 'Sem empresa' }}">
+                      {% set emp_atual.nome = c.empresa_nome %}
+                    {% endif %}
+                    <option value="{{ c.id }}">{{ c.banco_nome }} – {{ c.apelido }}</option>
+                  {% endfor %}
+                  {% if todas_contas %}</optgroup>{% endif %}
+                </select>
+              </div>
+              <div class="mb-2">
+                <label class="form-label form-label-sm mb-1">Observação (opt.)</label>
+                <input type="text" name="transf_observacao" class="form-control form-control-sm"
+                       placeholder="Ex: Aporte de capital, transferência mensal...">
+              </div>
             </div>
           </div>
         </div>
@@ -535,10 +578,40 @@ document.querySelectorAll('.btn-conciliar').forEach(btn => {
     }
     document.getElementById('secao_credito').style.display = tipo === 'CREDIT' ? '' : 'none';
     document.getElementById('secao_debito').style.display  = tipo === 'DEBIT'  ? '' : 'none';
+    // Guarda valor bruto no modal para cálculo de soma
+    const modalEl = document.getElementById('modalConciliar');
+    if (modalEl) modalEl.dataset.txValorRaw = this.dataset.txValor || '0';
     if (tipo === 'CREDIT' && this.dataset.sugestaoForma) {
       document.getElementById('selectForma').value = this.dataset.sugestaoForma;
     }
     if (tipo === 'DEBIT') {
+      // Sempre pre-preenche o campo de valor da linha 1 com o total da transação
+      const inp1 = document.getElementById('desp_1_valor');
+      if (inp1) {
+        const raw = this.dataset.txValor || '';
+        if (raw) {
+          const num = Math.round(parseFloat(raw) * 100);
+          inp1.value = String(num);
+          mascaraMoeda({ target: inp1 });
+        }
+        // Reset: readonly e fundo cinza (ainda não dividido)
+        inp1.setAttribute('readonly', '');
+        inp1.style.background = '#f8f9fa';
+        inp1.dataset.somaListener = '';
+      }
+      // Reset aviso de soma e índice de linhas
+      const aviso = document.getElementById('avisoSoma');
+      if (aviso) aviso.style.display = 'none';
+      // Remove linhas extras (deixa só a linha 1)
+      document.querySelectorAll('#linhas_despesa .linha-desp:not([data-idx="1"])').forEach(l => l.remove());
+      _linhaDespIdx = 1;
+      document.getElementById('btnAdicionarDesp').style.display = '';
+      // Label com valor total
+      const lbl = document.getElementById('labelValorTotal');
+      if (lbl && this.dataset.txValor) {
+        const v = parseFloat(this.dataset.txValor);
+        lbl.textContent = '(Total: R$ ' + v.toLocaleString('pt-BR', {minimumFractionDigits:2}) + ')';
+      }
       if (this.dataset.sugestaoTitulo) {
         // Pre-preenche aba Despesa com sugestão
         alternarAbaDebito('despesa');
@@ -566,19 +639,6 @@ document.querySelectorAll('.btn-conciliar').forEach(btn => {
                 }
               }, 10);
             }
-          }
-          // Pre-preenche valor com total da transação e aplica máscara
-          const inpValor = linha.querySelector('.inp-valor');
-          if (inpValor) {
-            // Converte "2003.70" → "2.003,70" para exibição
-            const raw = this.dataset.txValor || '';
-            if (raw) {
-              const num = Math.round(parseFloat(raw) * 100);
-              const e = { target: inpValor };
-              inpValor.value = String(num);
-              mascaraMoeda(e);
-            }
-            aplicarMascaraMoeda(inpValor);
           }
         }
       } else {
@@ -632,10 +692,12 @@ function valorMascaraParaFloat(str) {
 // ---- Abas Débito (Fornecedor / Despesa) ----
 function alternarAbaDebito(aba) {
   document.getElementById('modal_tipo_debito').value = aba;
-  document.getElementById('aba_fornecedor').style.display = aba === 'fornecedor' ? '' : 'none';
-  document.getElementById('aba_despesa').style.display    = aba === 'despesa'    ? '' : 'none';
+  document.getElementById('aba_fornecedor').style.display    = aba === 'fornecedor'    ? '' : 'none';
+  document.getElementById('aba_despesa').style.display       = aba === 'despesa'       ? '' : 'none';
+  document.getElementById('aba_transferencia').style.display = aba === 'transferencia' ? '' : 'none';
   document.getElementById('tab_forn_btn').classList.toggle('active', aba === 'fornecedor');
   document.getElementById('tab_desp_btn').classList.toggle('active', aba === 'despesa');
+  document.getElementById('tab_transf_btn').classList.toggle('active', aba === 'transferencia');
 }
 
 function carregarCategorias(selectTitulo, nomeCampoCategoria) {
@@ -745,6 +807,16 @@ function criarFornecedorRapido(btn) {
 let _linhaDespIdx = 1;
 function adicionarLinhaDespesa() {
   if (_linhaDespIdx >= 3) { alert('Máximo de 3 despesas por transação.'); return; }
+  // Ao adicionar a primeira linha extra, desbloqueia o valor da linha 1 e mostra aviso de soma
+  if (_linhaDespIdx === 1) {
+    const inp1 = document.getElementById('desp_1_valor');
+    if (inp1) {
+      inp1.removeAttribute('readonly');
+      inp1.style.background = '';
+    }
+    const aviso = document.getElementById('avisoSoma');
+    if (aviso) aviso.style.display = '';
+  }
   _linhaDespIdx++;
   const i = _linhaDespIdx;
   // Busca opções de título para copiar
@@ -781,7 +853,7 @@ function adicionarLinhaDespesa() {
     <div class="row g-1 mt-1">
       <div class="col-md-4">
         <label class="form-label form-label-sm mb-0">Valor R$</label>
-        <input type="text" name="desp_${i}_valor" class="form-control form-control-sm inp-valor" placeholder="0,00" inputmode="numeric">
+        <input type="text" name="desp_${i}_valor" class="form-control form-control-sm inp-valor" placeholder="0,00" inputmode="numeric" oninput="atualizarSoma()">
       </div>
       <div class="col-md-4">
         <label class="form-label form-label-sm mb-0">Fornecedor (opt.)</label>
@@ -804,7 +876,29 @@ function adicionarLinhaDespesa() {
   // Aplica máscara de moeda no novo input de valor
   const novoInpValor = div.querySelector('.inp-valor');
   if (novoInpValor) aplicarMascaraMoeda(novoInpValor);
+  // Também adiciona listener de soma à linha 1
+  const inp1 = document.getElementById('desp_1_valor');
+  if (inp1 && !inp1.dataset.somaListener) {
+    inp1.addEventListener('input', atualizarSoma);
+    inp1.dataset.somaListener = '1';
+  }
+  atualizarSoma();
   if (_linhaDespIdx >= 3) document.getElementById('btnAdicionarDesp').style.display = 'none';
+}
+
+function atualizarSoma() {
+  const total = parseFloat(document.getElementById('modalConciliar')?.dataset?.txValorRaw || '0');
+  let soma = 0;
+  document.querySelectorAll('#linhas_despesa .inp-valor').forEach(inp => {
+    const v = valorMascaraParaFloat(inp.value);
+    soma += parseFloat(v) || 0;
+  });
+  const spanAtual = document.getElementById('spanSomaAtual');
+  const spanTot   = document.getElementById('spanSomaTotal');
+  if (spanAtual) spanAtual.textContent = 'R$ ' + soma.toLocaleString('pt-BR', {minimumFractionDigits:2, maximumFractionDigits:2});
+  if (spanTot)   spanTot.textContent   = 'R$ ' + total.toLocaleString('pt-BR', {minimumFractionDigits:2, maximumFractionDigits:2});
+  const aviso = document.getElementById('avisoSoma');
+  if (aviso) aviso.className = 'alert py-1 px-2 small mb-1 alert-' + (Math.abs(soma - total) < 0.01 ? 'success' : 'warning');
 }
 
 function removerLinha(btn) {
