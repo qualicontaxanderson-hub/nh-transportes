@@ -942,48 +942,138 @@ def api_transacoes_pendentes():
 @login_required
 def api_auto_reconcile():
     """API: força a auto-conciliação de transações pendentes (por CNPJ e por regras)."""
+    import logging
+    logger = logging.getLogger(__name__)
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
+    try:
+        # 1. Auto-conciliação por CNPJ (mapeamentos salvos anteriormente)
+        cursor.execute(
+            """SELECT bt.id, bt.tipo, bsm.fornecedor_id, bsm.forma_recebimento_id
+               FROM bank_transactions bt
+               INNER JOIN bank_supplier_mapping bsm ON bt.cnpj_cpf = bsm.cnpj_cpf
+               WHERE bt.status = 'pendente' AND bt.cnpj_cpf IS NOT NULL AND bt.cnpj_cpf != ''"""
+        )
+        rows = cursor.fetchall()
 
-    # 1. Auto-conciliação por CNPJ (mapeamentos salvos anteriormente)
-    cursor.execute(
-        """SELECT bt.id, bt.tipo, bsm.fornecedor_id, bsm.forma_recebimento_id
-           FROM bank_transactions bt
-           INNER JOIN bank_supplier_mapping bsm ON bt.cnpj_cpf = bsm.cnpj_cpf
-           WHERE bt.status = 'pendente' AND bt.cnpj_cpf IS NOT NULL AND bt.cnpj_cpf != ''"""
-    )
-    rows = cursor.fetchall()
+        agora = _dt.datetime.now()
+        updated = 0
+        for row in rows:
+            if row['tipo'] == 'CREDIT':
+                cursor.execute(
+                    """UPDATE bank_transactions
+                       SET status='conciliado', forma_recebimento_id=%s,
+                           conciliado_em=%s, conciliado_por='auto'
+                       WHERE id=%s""",
+                    (row['forma_recebimento_id'], agora, row['id']),
+                )
+            else:
+                cursor.execute(
+                    """UPDATE bank_transactions
+                       SET status='conciliado', fornecedor_id=%s,
+                           conciliado_em=%s, conciliado_por='auto'
+                       WHERE id=%s""",
+                    (row['fornecedor_id'], agora, row['id']),
+                )
+            updated += 1
 
-    agora = _dt.datetime.now()
-    updated = 0
-    for row in rows:
-        if row['tipo'] == 'CREDIT':
-            cursor.execute(
-                """UPDATE bank_transactions
-                   SET status='conciliado', forma_recebimento_id=%s,
-                       conciliado_em=%s, conciliado_por='auto'
-                   WHERE id=%s""",
-                (row['forma_recebimento_id'], agora, row['id']),
-            )
-        else:
-            cursor.execute(
-                """UPDATE bank_transactions
-                   SET status='conciliado', fornecedor_id=%s,
-                       conciliado_em=%s, conciliado_por='auto'
-                   WHERE id=%s""",
-                (row['fornecedor_id'], agora, row['id']),
-            )
-        updated += 1
+        conn.commit()
 
-    conn.commit()
+        # 2. Auto-conciliação por regras de descrição
+        por_regras = _auto_conciliar_por_regras(cursor, conn)
 
-    # 2. Auto-conciliação por regras de descrição
-    por_regras = _auto_conciliar_por_regras(cursor, conn)
+        cursor.close()
+        conn.close()
+        return jsonify({'success': True, 'conciliados': updated + por_regras,
+                        'por_cnpj': updated, 'por_regras': por_regras})
+    except Exception as e:
+        logger.exception("Erro em api_auto_reconcile: %s", e)
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        try:
+            cursor.close()
+            conn.close()
+        except Exception:
+            pass
+        return jsonify({'success': False, 'erro': str(e), 'conciliados': 0}), 200
 
-    cursor.close()
-    conn.close()
 
-    return jsonify({'success': True, 'conciliados': updated + por_regras})
+@bp.route('/api/diagnostico-regras')
+@login_required
+def api_diagnostico_regras():
+    """Diagnóstico: mostra regras e o que cada uma encontraria (sem fazer alterações)."""
+    import logging
+    logger = logging.getLogger(__name__)
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        cursor.execute("SELECT * FROM bank_conciliacao_regras WHERE ativo=1 ORDER BY id")
+        regras = cursor.fetchall()
+
+        cursor.execute(
+            """SELECT bt.id, bt.descricao, bt.tipo, bt.cnpj_cpf,
+                      bt.data_transacao, bt.valor, bt.account_id
+               FROM bank_transactions bt
+               WHERE bt.status='pendente'
+               LIMIT 200"""
+        )
+        pendentes = cursor.fetchall()
+
+        resultado = {
+            'total_regras': len(regras),
+            'total_pendentes': len(pendentes),
+            'regras': [],
+            'matches': []
+        }
+
+        for r in regras:
+            resultado['regras'].append({
+                'id': r['id'],
+                'padrao': r.get('padrao_descricao'),
+                'padrao2': r.get('padrao_secundario'),
+                'tipo_match': r.get('tipo_match'),
+                'tipo_transacao': r.get('tipo_transacao'),
+                'titulo_id': r.get('titulo_id'),
+                'categoria_id': r.get('categoria_id'),
+                'forma_id': r.get('forma_recebimento_id'),
+                'forn_id': r.get('fornecedor_id'),
+            })
+
+        for tx in pendentes:
+            descricao = (tx.get('descricao') or '').upper()
+            tipo = tx.get('tipo') or ''
+            for regra in regras:
+                tipo_regra = regra.get('tipo_transacao', 'AMBOS')
+                if tipo_regra != 'AMBOS' and tipo_regra != tipo:
+                    continue
+                padrao = (regra.get('padrao_descricao') or '').upper()
+                tipo_match = regra.get('tipo_match', 'contem')
+                match = (descricao == padrao) if tipo_match == 'exato' else (padrao in descricao)
+                if not match:
+                    continue
+                padrao2 = (regra.get('padrao_secundario') or '').upper()
+                if padrao2 and padrao2 not in descricao:
+                    continue
+                resultado['matches'].append({
+                    'tx_id': tx['id'],
+                    'tx_descricao': tx.get('descricao'),
+                    'tx_tipo': tipo,
+                    'tx_valor': str(tx.get('valor')),
+                    'regra_id': regra['id'],
+                    'regra_padrao': regra.get('padrao_descricao'),
+                    'titulo_id': regra.get('titulo_id'),
+                    'categoria_id': regra.get('categoria_id'),
+                })
+                break
+
+        cursor.close()
+        conn.close()
+        return jsonify(resultado)
+    except Exception as e:
+        logger.exception("Erro em diagnostico_regras: %s", e)
+        return jsonify({'erro': str(e)}), 500
 
 
 @bp.route('/api/contas', methods=['GET'])

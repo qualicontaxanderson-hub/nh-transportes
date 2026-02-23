@@ -78,6 +78,17 @@
     </div>
   </form>
 
+  <!-- Botão Auto-Conciliar -->
+  <div class="d-flex gap-2 mb-2 align-items-center">
+    <button class="btn btn-success btn-sm" onclick="autoConciliarAqui(this)">
+      <i class="bi bi-magic"></i> Executar Auto-Conciliação
+    </button>
+    <a href="{{ url_for('conciliacao_regras.lista') }}" class="btn btn-outline-primary btn-sm">
+      <i class="bi bi-funnel-fill"></i> Gerenciar Regras
+    </a>
+    <span id="msgAutoConciliar" class="small text-muted"></span>
+  </div>
+
   <!-- Tabela principal -->
   <div class="card shadow-sm">
     <div class="card-header d-flex justify-content-between align-items-center py-2"
@@ -904,5 +915,36 @@ document.getElementById('formConciliar').addEventListener('submit', function() {
 
 // Aplica máscara ao inp-valor da linha 1 (estática) ao carregar a página
 document.querySelectorAll('.inp-valor').forEach(aplicarMascaraMoeda);
+
+// Auto-Conciliação diretamente da página de conciliação
+function autoConciliarAqui(btn) {
+  if (!confirm('Executar auto-conciliação nas transações pendentes?')) return;
+  btn.disabled = true;
+  btn.innerHTML = '<i class="bi bi-hourglass-split"></i> Executando...';
+  var msg = document.getElementById('msgAutoConciliar');
+  msg.textContent = '';
+  fetch('{{ url_for("bank_import.api_auto_reconcile") }}', {method:'POST'})
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+      btn.disabled = false;
+      btn.innerHTML = '<i class="bi bi-magic"></i> Executar Auto-Conciliação';
+      if (d.success) {
+        var det = '';
+        if (d.por_cnpj !== undefined) det = ' (CNPJ: ' + d.por_cnpj + ', Regras: ' + d.por_regras + ')';
+        msg.className = 'small text-success fw-bold';
+        msg.textContent = '✅ ' + d.conciliados + ' transação(ões) conciliada(s)' + det + '. Recarregue para atualizar.';
+        if (d.conciliados > 0) setTimeout(function(){ location.reload(); }, 2000);
+      } else {
+        msg.className = 'small text-danger fw-bold';
+        msg.textContent = '❌ Erro: ' + (d.erro || 'Verifique os logs do servidor.');
+      }
+    })
+    .catch(function(e){
+      btn.disabled = false;
+      btn.innerHTML = '<i class="bi bi-magic"></i> Executar Auto-Conciliação';
+      msg.className = 'small text-danger';
+      msg.textContent = '❌ Erro de comunicação: ' + e.message;
+    });
+}
 </script>
 {% endblock %}

@@ -4,10 +4,16 @@
 <div class="container-fluid mt-4">
   <div class="d-flex justify-content-between align-items-center mb-3">
     <h4><i class="bi bi-funnel-fill text-primary"></i> Regras de Conciliação Automática</h4>
-    <a href="{{ url_for('conciliacao_regras.novo') }}" class="btn btn-primary btn-sm">
-      <i class="bi bi-plus-circle"></i> Nova Regra
-    </a>
+    <div class="d-flex gap-2">
+      <button class="btn btn-outline-info btn-sm" onclick="diagnosticarRegras(this)">
+        <i class="bi bi-bug"></i> Diagnóstico
+      </button>
+      <a href="{{ url_for('conciliacao_regras.novo') }}" class="btn btn-primary btn-sm">
+        <i class="bi bi-plus-circle"></i> Nova Regra
+      </a>
+    </div>
   </div>
+  <div id="divDiagnostico" class="d-none mb-3"></div>
 
   <div class="alert alert-info py-2">
     <i class="bi bi-info-circle"></i>
@@ -135,4 +141,55 @@
     </a>
   </div>
 </div>
+
+<script>
+function diagnosticarRegras(btn) {
+  btn.disabled = true;
+  btn.innerHTML = '<i class="bi bi-hourglass-split"></i> Verificando...';
+  fetch('/banco/api/diagnostico-regras')
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+      btn.disabled = false;
+      btn.innerHTML = '<i class="bi bi-bug"></i> Diagnóstico';
+      var div = document.getElementById('divDiagnostico');
+      div.classList.remove('d-none');
+      if (d.erro) {
+        div.innerHTML = '<div class="alert alert-danger">Erro: ' + d.erro + '</div>';
+        return;
+      }
+      var html = '<div class="alert alert-' + (d.matches.length > 0 ? 'success' : 'warning') + '">';
+      html += '<strong>Diagnóstico:</strong> ' + d.total_regras + ' regra(s) ativa(s), ';
+      html += d.total_pendentes + ' transação(ões) pendente(s), ';
+      html += '<strong>' + d.matches.length + ' correspondência(s) encontrada(s)</strong>.';
+      if (d.matches.length === 0 && d.total_pendentes > 0) {
+        html += '<br><em>Nenhuma transação pendente corresponde às regras ativas. ';
+        html += 'Verifique se o padrão está correto e se a transação tem status "pendente".</em>';
+      }
+      html += '</div>';
+      if (d.matches.length > 0) {
+        html += '<div class="table-responsive"><table class="table table-sm table-bordered small">';
+        html += '<thead class="table-light"><tr><th>Tx ID</th><th>Tipo</th><th>Valor</th><th>Descrição</th><th>Regra</th><th>Título ID</th><th>Categoria ID</th></tr></thead><tbody>';
+        d.matches.forEach(function(m){
+          html += '<tr><td>#' + m.tx_id + '</td><td>' + m.tx_tipo + '</td><td>R$ ' + m.tx_valor + '</td>';
+          html += '<td style="max-width:250px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + m.tx_descricao + '">' + m.tx_descricao + '</td>';
+          html += '<td><em>' + m.regra_padrao + '</em></td>';
+          html += '<td>' + (m.titulo_id || '<span class="text-danger">NULL</span>') + '</td>';
+          html += '<td>' + (m.categoria_id || '<span class="text-danger">NULL ← PROBLEMA!</span>') + '</td></tr>';
+        });
+        html += '</tbody></table></div>';
+        if (d.matches.some(function(m){ return !m.titulo_id || !m.categoria_id; })) {
+          html += '<div class="alert alert-danger"><strong>⚠️ Regra sem Título/Categoria:</strong> A regra foi salva sem a categoria da despesa. ';
+          html += 'Edite a regra, selecione o Título, aguarde as categorias carregarem e selecione a Categoria antes de salvar.</div>';
+        }
+      }
+      div.innerHTML = html;
+    })
+    .catch(function(e){
+      btn.disabled = false;
+      btn.innerHTML = '<i class="bi bi-bug"></i> Diagnóstico';
+      document.getElementById('divDiagnostico').classList.remove('d-none');
+      document.getElementById('divDiagnostico').innerHTML = '<div class="alert alert-danger">Erro de comunicação: ' + e.message + '</div>';
+    });
+}
+</script>
 {% endblock %}

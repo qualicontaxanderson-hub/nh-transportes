@@ -19,7 +19,7 @@
     {% endfor %}
   {% endwith %}
 
-  <form method="post">
+  <form method="post" id="formRegra" onsubmit="return validarFormRegra()">
     <div class="card shadow-sm mb-3">
       <div class="card-header fw-bold bg-light">Padrão de Descrição</div>
       <div class="card-body">
@@ -179,15 +179,39 @@ var _tituloAtual    = {{ regra.titulo_id    if regra and regra.get('titulo_id') 
 var _categoriaAtual = {{ regra.categoria_id if regra and regra.get('categoria_id') else 'null' }};
 var _subcatAtual    = {{ regra.subcategoria_id if regra and regra.get('subcategoria_id') else 'null' }};
 
+// Flag para saber se o AJAX de categorias ainda está em andamento
+var _categoriasCarregando = false;
+
+function validarFormRegra() {
+  var tituloSel = document.getElementById('selTituloRegra');
+  var catSel    = document.getElementById('selCategoriaRegra');
+  if (_categoriasCarregando) {
+    alert('Aguarde as categorias carregarem antes de salvar.');
+    return false;
+  }
+  if (tituloSel.value && !catSel.value) {
+    alert('Você selecionou um Título de Despesa mas não selecionou a Categoria. Por favor selecione a Categoria antes de salvar.');
+    catSel.focus();
+    return false;
+  }
+  return true;
+}
+
 function carregarCategoriasRegra(tituloId, preSelectCat, preSelectSubcat) {
   var catSel  = document.getElementById('selCategoriaRegra');
   var subcSel = document.getElementById('selSubcategoriaRegra');
+  var btnSave = document.querySelector('#formRegra [type=submit]');
   catSel.innerHTML  = '<option value="">— Selecione —</option>';
   subcSel.innerHTML = '<option value="">— Selecione uma categoria —</option>';
   if (!tituloId) return;
+  // Mostra loading e bloqueia botão Salvar enquanto AJAX carrega
+  catSel.innerHTML = '<option value="">⏳ Carregando...</option>';
+  _categoriasCarregando = true;
+  if (btnSave) btnSave.disabled = true;
   fetch('/banco/regras/api/categorias/' + tituloId)
     .then(function(r){ return r.json(); })
     .then(function(cats){
+      catSel.innerHTML = '<option value="">— Selecione —</option>';
       cats.forEach(function(c){
         var o = document.createElement('option');
         o.value = c.id;
@@ -199,6 +223,11 @@ function carregarCategoriasRegra(tituloId, preSelectCat, preSelectSubcat) {
         catSel.value = preSelectCat;
         carregarSubcategoriasRegra(preSelectCat, preSelectSubcat);
       }
+    })
+    .catch(function(){ catSel.innerHTML = '<option value="">Erro ao carregar</option>'; })
+    .finally(function(){
+      _categoriasCarregando = false;
+      if (btnSave) btnSave.disabled = false;
     });
 }
 
