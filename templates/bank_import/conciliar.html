@@ -352,8 +352,15 @@
                     </div>
                     <div class="col-md-4">
                       <label class="form-label form-label-sm mb-0">Fornecedor (opt.)</label>
-                      <input type="text" name="desp_1_fornecedor" class="form-control form-control-sm inp-fornecedor"
-                             placeholder="Nome do fornecedor...">
+                      <div class="input-group input-group-sm">
+                        <select name="desp_1_fornecedor" class="form-select form-select-sm sel-fornecedor" disabled>
+                          <option value="">— Selecione a categoria primeiro —</option>
+                        </select>
+                        <button type="button" class="btn btn-outline-primary btn-sm btn-novo-forn" disabled
+                                onclick="criarFornecedorRapido(this)" title="Novo fornecedor">
+                          <i class="bi bi-plus-circle"></i>
+                        </button>
+                      </div>
                     </div>
                     <div class="col-md-4">
                       <label class="form-label form-label-sm mb-0">Observação (opt.)</label>
@@ -622,7 +629,74 @@ function carregarSubcategorias(selCategoria) {
     o.value = s.id; o.textContent = s.nome;
     selSub.appendChild(o);
   });
+  // Também carrega fornecedores desta categoria
+  carregarFornecedoresDespesa(selCategoria);
 }
+
+function carregarFornecedoresDespesa(selCategoria) {
+  const linha = selCategoria.closest('.linha-desp');
+  if (!linha) return;
+  const selForn = linha.querySelector('.sel-fornecedor');
+  const btnForn = linha.querySelector('.btn-novo-forn');
+  if (!selForn) return;
+  const categoriaId = selCategoria.value;
+  if (!categoriaId) {
+    selForn.innerHTML = '<option value="">— Selecione a categoria primeiro —</option>';
+    selForn.disabled = true;
+    if (btnForn) btnForn.disabled = true;
+    return;
+  }
+  selForn.innerHTML = '<option value="">Carregando...</option>';
+  selForn.disabled = true;
+  fetch(`/despesas/fornecedores/api/por-categoria/${categoriaId}`)
+    .then(r => r.json())
+    .then(lista => {
+      selForn.innerHTML = '<option value="">— Nenhum —</option>';
+      lista.forEach(f => {
+        const o = document.createElement('option');
+        o.value = f.nome; o.textContent = f.nome;
+        o.dataset.id = f.id;
+        selForn.appendChild(o);
+      });
+      selForn.disabled = false;
+      if (btnForn) { btnForn.disabled = false; btnForn.dataset.categoriaId = categoriaId; }
+    })
+    .catch(() => {
+      selForn.innerHTML = '<option value="">Erro ao carregar</option>';
+      selForn.disabled = false;
+    });
+}
+
+function criarFornecedorRapido(btn) {
+  const linha = btn.closest('.linha-desp');
+  const selForn = linha ? linha.querySelector('.sel-fornecedor') : null;
+  const categoriaId = btn.dataset.categoriaId;
+  if (!selForn || !categoriaId) { alert('Selecione uma categoria primeiro.'); return; }
+  const nome = prompt('Adicionar novo fornecedor:\n\nDigite o nome:');
+  if (!nome || !nome.trim()) return;
+  fetch('/despesas/fornecedores/api/criar-rapido', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({nome: nome.trim(), categoria_id: parseInt(categoriaId)})
+  })
+    .then(r => r.json())
+    .then(d => {
+      if (d.success) {
+        // Adiciona opção e seleciona
+        let opt = Array.from(selForn.options).find(o => o.value === d.nome);
+        if (!opt) {
+          opt = document.createElement('option');
+          opt.value = d.nome; opt.textContent = d.nome; opt.dataset.id = d.id;
+          selForn.appendChild(opt);
+        }
+        selForn.value = d.nome;
+      } else {
+        alert('Erro: ' + (d.message || 'Não foi possível criar.'));
+      }
+    })
+    .catch(() => alert('Erro de comunicação ao criar fornecedor.'));
+}
+
 
 let _linhaDespIdx = 1;
 function adicionarLinhaDespesa() {
@@ -667,7 +741,15 @@ function adicionarLinhaDespesa() {
       </div>
       <div class="col-md-4">
         <label class="form-label form-label-sm mb-0">Fornecedor (opt.)</label>
-        <input type="text" name="desp_${i}_fornecedor" class="form-control form-control-sm inp-fornecedor" placeholder="Nome do fornecedor...">
+        <div class="input-group input-group-sm">
+          <select name="desp_${i}_fornecedor" class="form-select form-select-sm sel-fornecedor" disabled>
+            <option value="">— Selecione a categoria primeiro —</option>
+          </select>
+          <button type="button" class="btn btn-outline-primary btn-sm btn-novo-forn" disabled
+                  onclick="criarFornecedorRapido(this)" title="Novo fornecedor">
+            <i class="bi bi-plus-circle"></i>
+          </button>
+        </div>
       </div>
       <div class="col-md-4">
         <label class="form-label form-label-sm mb-0">Observação (opt.)</label>
