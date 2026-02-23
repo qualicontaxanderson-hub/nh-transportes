@@ -438,6 +438,44 @@ def conciliar():
     )
     transacoes = cursor.fetchall()
 
+    # -----------------------------------------------------------------------
+    # Aplicar regras por padrão de descrição a transações sem sugestão de CNPJ
+    # -----------------------------------------------------------------------
+    cursor.execute(
+        """SELECT r.id, r.padrao_descricao, r.tipo_match, r.tipo_transacao,
+                  r.forma_recebimento_id, fr.nome AS forma_nome,
+                  r.fornecedor_id, f.razao_social AS fornecedor_nome
+           FROM bank_conciliacao_regras r
+           LEFT JOIN formas_recebimento fr ON fr.id = r.forma_recebimento_id
+           LEFT JOIN fornecedores f ON f.id = r.fornecedor_id
+           WHERE r.ativo = 1"""
+    )
+    regras_padrao = cursor.fetchall()
+
+    for tx in transacoes:
+        if tx.get('sugestao_forma_id') or tx.get('sugestao_fornecedor_id'):
+            continue  # já tem sugestão por CNPJ
+        descricao = (tx.get('descricao') or '').upper()
+        tipo_tx_r = tx.get('tipo', '')
+        for regra in regras_padrao:
+            if regra['tipo_transacao'] != 'AMBOS' and regra['tipo_transacao'] != tipo_tx_r:
+                continue
+            padrao = (regra['padrao_descricao'] or '').upper()
+            if regra['tipo_match'] == 'exato':
+                bate = descricao == padrao
+            else:
+                bate = padrao in descricao
+            if bate:
+                if regra['forma_recebimento_id']:
+                    tx['sugestao_forma_id']   = regra['forma_recebimento_id']
+                    tx['sugestao_forma_nome'] = regra['forma_nome']
+                    tx['sugestao_regra']      = True
+                if regra['fornecedor_id']:
+                    tx['sugestao_fornecedor_id']   = regra['fornecedor_id']
+                    tx['sugestao_fornecedor_nome'] = regra['fornecedor_nome']
+                    tx['sugestao_regra']           = True
+                break  # primeira regra que bate vence
+
     cursor.execute(
         f"SELECT COUNT(*) AS total FROM bank_transactions bt "
         f"INNER JOIN bank_accounts ba ON bt.account_id = ba.id "

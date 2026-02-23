@@ -893,11 +893,14 @@ def _get_bank_transactions(tipo, request_args):
     cursor.execute(
         f"""SELECT bt.id, bt.data_transacao, bt.tipo, bt.valor, bt.descricao,
                    bt.cnpj_cpf, bt.memo, bt.status, bt.fornecedor_id,
+                   bt.forma_recebimento_id,
                    ba.apelido AS conta_apelido, ba.banco_nome,
-                   f.razao_social AS fornecedor_nome
+                   f.razao_social AS fornecedor_nome,
+                   fr.nome AS forma_recebimento_nome
             FROM bank_transactions bt
             INNER JOIN bank_accounts ba ON bt.account_id = ba.id
             LEFT JOIN fornecedores f ON bt.fornecedor_id = f.id
+            LEFT JOIN formas_recebimento fr ON fr.id = bt.forma_recebimento_id
             WHERE {where_sql}
             ORDER BY bt.data_transacao DESC
             LIMIT 500""",

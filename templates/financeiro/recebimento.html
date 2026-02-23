@@ -115,7 +115,7 @@
                             <th>Descrição</th>
                             <th>Conta</th>
                             <th>CNPJ/CPF</th>
-                            <th>Fornecedor</th>
+                            <th>Forma de Recebimento</th>
                             <th class="text-end">Valor (R$)</th>
                             <th class="text-center">Status</th>
                         </tr>
@@ -129,7 +129,15 @@
                             </td>
                             <td>{{ t.conta_apelido or t.banco_nome or '—' }}</td>
                             <td>{{ t.cnpj_cpf or '—' }}</td>
-                            <td>{{ t.fornecedor_nome or '—' }}</td>
+                            <td>
+                                {% if t.forma_recebimento_nome %}
+                                    <span class="badge bg-success">{{ t.forma_recebimento_nome }}</span>
+                                {% elif t.fornecedor_nome %}
+                                    <span class="text-muted small">{{ t.fornecedor_nome }}</span>
+                                {% else %}
+                                    <span class="text-muted">—</span>
+                                {% endif %}
+                            </td>
                             <td class="text-end" style="color:#17963c;font-weight:600;">
                                 {{ "{:,.2f}".format(t.valor).replace(',','X').replace('.',',').replace('X','.') }}
                             </td>

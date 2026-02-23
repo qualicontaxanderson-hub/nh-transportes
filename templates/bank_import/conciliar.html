@@ -149,13 +149,13 @@
                 <td style="max-width:140px;">
                   {% if tx.tipo == 'CREDIT' and tx.sugestao_forma_id %}
                     <span class="badge bg-info text-dark" style="font-size:0.72rem;"
-                          title="Sugestão com base no CNPJ anterior">
-                      ✨ {{ tx.sugestao_forma_nome }}
+                          title="{% if tx.sugestao_regra %}Sugestão por regra de descrição{% else %}Sugestão com base no CNPJ anterior{% endif %}">
+                      {% if tx.sugestao_regra %}📋{% else %}✨{% endif %} {{ tx.sugestao_forma_nome }}
                     </span>
                   {% elif tx.tipo == 'DEBIT' and tx.sugestao_fornecedor_id %}
                     <span class="badge bg-secondary" style="font-size:0.72rem;"
-                          title="Sugestão com base no CNPJ anterior">
-                      ✨ {{ tx.sugestao_fornecedor_nome }}
+                          title="{% if tx.sugestao_regra %}Sugestão por regra de descrição{% else %}Sugestão com base no CNPJ anterior{% endif %}">
+                      {% if tx.sugestao_regra %}📋{% else %}✨{% endif %} {{ tx.sugestao_fornecedor_nome }}
                     </span>
                   {% else %}
                     <span class="text-muted">—</span>
