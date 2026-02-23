@@ -223,16 +223,7 @@ def _auto_conciliar_por_regras(cursor, conn, account_id=None):
       - Regras de cliente (cliente_id para créditos de cobrança)
     Retorna quantas foram auto-conciliadas.
     """
-    # Carrega regras ativas com os novos campos (fallback se colunas ainda não existirem)
-    try:
-        cursor.execute(
-            """SELECT r.*, ba_acc.cliente_id AS _conta_cliente_id
-               FROM bank_conciliacao_regras r
-               LEFT JOIN (SELECT NULL AS id, NULL AS cliente_id) ba_acc ON FALSE
-               WHERE r.ativo=1 ORDER BY r.id"""
-        )
-    except Exception:
-        pass
+    # Carrega regras ativas (banco já possui todos os campos após migration consolidada)
     cursor.execute(
         """SELECT * FROM bank_conciliacao_regras WHERE ativo=1 ORDER BY id"""
     )
@@ -295,9 +286,9 @@ def _auto_conciliar_por_regras(cursor, conn, account_id=None):
                 # Regra de despesa → cria lancamento_despesas e concilia
                 cursor.execute(
                     """INSERT INTO lancamentos_despesas
-                       (data, cliente_id, titulo_id, categoria_id, valor, fornecedor, observacao)
-                       VALUES (%s, %s, %s, %s, %s, %s, %s)""",
-                    (tx['data_transacao'], tx.get('conta_cliente_id'),
+                       (data, titulo_id, categoria_id, valor, fornecedor, observacao)
+                       VALUES (%s, %s, %s, %s, %s, %s)""",
+                    (tx['data_transacao'],
                      titulo_id, categoria_id,
                      tx['valor'],
                      (tx.get('descricao') or '')[:255],
