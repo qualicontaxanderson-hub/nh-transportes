@@ -362,9 +362,35 @@ def _get_formas_recebimento(cursor):
     return cursor.fetchall()
 
 
+def _get_titulos_despesas(cursor):
+    """Retorna títulos de despesas ativos com suas categorias."""
+    cursor.execute(
+        """SELECT t.id AS titulo_id, t.nome AS titulo_nome,
+                  c.id AS categoria_id, c.nome AS categoria_nome
+           FROM titulos_despesas t
+           INNER JOIN categorias_despesas c ON c.titulo_id = t.id AND c.ativo = 1
+           WHERE t.ativo = 1
+           ORDER BY t.ordem, t.nome, c.ordem, c.nome"""
+    )
+    rows = cursor.fetchall()
+    # Agrupa: { titulo_id: {nome, categorias:[{id, nome}]} }
+    titulos = {}
+    for r in rows:
+        tid = r['titulo_id']
+        if tid not in titulos:
+            titulos[tid] = {'id': tid, 'nome': r['titulo_nome'], 'categorias': []}
+        titulos[tid]['categorias'].append({'id': r['categoria_id'], 'nome': r['categoria_nome']})
+    return list(titulos.values())
+
+
 def _conciliar_tx(cursor, conn, tx_id, acao, tipo_tx,
-                  fornecedor_id, forma_recebimento_id, usuario):
-    """Concilia (ou ignora) uma única transação e aprende mapeamentos."""
+                  fornecedor_id, forma_recebimento_id, usuario,
+                  tipo_debito=None, despesas=None):
+    """Concilia (ou ignora) uma única transação e aprende mapeamentos.
+
+    Para débitos com tipo_debito='despesa', *despesas* é uma lista de dicts:
+        [{'titulo_id': int, 'categoria_id': int, 'valor': float, 'observacao': str}]
+    """
     if acao == 'ignorar':
         cursor.execute(
             "UPDATE bank_transactions SET status='ignorado' WHERE id=%s", (tx_id,)
@@ -389,7 +415,6 @@ def _conciliar_tx(cursor, conn, tx_id, acao, tipo_tx,
         cursor.execute("SELECT cnpj_cpf FROM bank_transactions WHERE id=%s", (tx_id,))
         row = cursor.fetchone()
         if row and row.get('cnpj_cpf'):
-            # Insere sem fornecedor_id (crédito → forma de recebimento apenas)
             cursor.execute(
                 """INSERT INTO bank_supplier_mapping
                        (cnpj_cpf, tipo_chave, total_conciliacoes, forma_recebimento_id)
@@ -400,6 +425,41 @@ def _conciliar_tx(cursor, conn, tx_id, acao, tipo_tx,
                        atualizado_em=NOW()""",
                 (row['cnpj_cpf'], forma_recebimento_id, forma_recebimento_id),
             )
+    elif tipo_debito == 'despesa' and despesas:
+        # Débito → uma ou mais Despesas (lançamentos_despesas)
+        cursor.execute(
+            """SELECT bt.data_transacao, bt.descricao, bt.cnpj_cpf,
+                      ba.cliente_id
+               FROM bank_transactions bt
+               INNER JOIN bank_accounts ba ON ba.id = bt.account_id
+               WHERE bt.id = %s""",
+            (tx_id,),
+        )
+        tx = cursor.fetchone()
+        if not tx:
+            return
+        data_tx   = tx['data_transacao']
+        descricao = tx.get('descricao') or ''
+        cliente_id = tx.get('cliente_id')
+        for desp in despesas:
+            titulo_id    = desp.get('titulo_id')
+            categoria_id = desp.get('categoria_id')
+            valor        = desp.get('valor')
+            observacao   = desp.get('observacao') or descricao
+            if not titulo_id or not categoria_id or not valor:
+                continue
+            cursor.execute(
+                """INSERT INTO lancamentos_despesas
+                       (data, cliente_id, titulo_id, categoria_id, valor, fornecedor, observacao)
+                   VALUES (%s, %s, %s, %s, %s, %s, %s)""",
+                (data_tx, cliente_id, titulo_id, categoria_id, valor, descricao[:255], observacao),
+            )
+        cursor.execute(
+            """UPDATE bank_transactions
+               SET status='conciliado', conciliado_em=%s, conciliado_por=%s
+               WHERE id=%s""",
+            (agora, usuario, tx_id),
+        )
     else:
         # Débito → Fornecedor
         if not fornecedor_id:
@@ -447,14 +507,31 @@ def conciliar():
             tx_ids_raw = [request.form.get('transaction_id', '')]
         tx_ids = [t for t in tx_ids_raw if t]
 
-        fornecedor_id = request.form.get('fornecedor_id') or None
+        fornecedor_id        = request.form.get('fornecedor_id') or None
         forma_recebimento_id = request.form.get('forma_recebimento_id') or None
-        tipo_tx = request.form.get('tipo_tx', 'DEBIT')
+        tipo_tx              = request.form.get('tipo_tx', 'DEBIT')
+        tipo_debito          = request.form.get('tipo_debito', 'fornecedor')  # 'fornecedor' | 'despesa'
+
+        # Despesas (até 2 linhas de split)
+        despesas = []
+        for i in range(1, 4):  # suporta até 3 linhas de split
+            tid = request.form.get(f'desp_{i}_titulo_id') or None
+            cid = request.form.get(f'desp_{i}_categoria_id') or None
+            val = request.form.get(f'desp_{i}_valor') or None
+            obs = request.form.get(f'desp_{i}_observacao') or None
+            if tid and cid and val:
+                try:
+                    val_f = float(val.replace(',', '.'))
+                    despesas.append({'titulo_id': int(tid), 'categoria_id': int(cid),
+                                     'valor': val_f, 'observacao': obs})
+                except (ValueError, TypeError):
+                    pass
 
         ok = 0
         for tx_id in tx_ids:
             _conciliar_tx(cursor, conn, tx_id, acao, tipo_tx,
-                          fornecedor_id, forma_recebimento_id, usuario)
+                          fornecedor_id, forma_recebimento_id, usuario,
+                          tipo_debito=tipo_debito, despesas=despesas or None)
             ok += 1
 
         if acao == 'ignorar':
@@ -574,6 +651,7 @@ def conciliar():
 
     fornecedores       = _get_fornecedores(cursor)
     formas_recebimento = _get_formas_recebimento(cursor)
+    titulos_despesas   = _get_titulos_despesas(cursor)
     contas             = _get_accounts(cursor)
     clientes           = _get_clientes_com_produtos(cursor)
 
@@ -587,6 +665,7 @@ def conciliar():
         transacoes=transacoes,
         fornecedores=fornecedores,
         formas_recebimento=formas_recebimento,
+        titulos_despesas=titulos_despesas,
         contas=contas,
         clientes=clientes,
         page=page,
