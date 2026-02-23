@@ -157,6 +157,11 @@
                           title="{% if tx.sugestao_regra %}Sugestão por regra de descrição{% else %}Sugestão com base no CNPJ anterior{% endif %}">
                       {% if tx.sugestao_regra %}📋{% else %}✨{% endif %} {{ tx.sugestao_fornecedor_nome }}
                     </span>
+                  {% elif tx.tipo == 'DEBIT' and tx.sugestao_titulo_id %}
+                    <span class="badge bg-warning text-dark" style="font-size:0.72rem;"
+                          title="Sugestão de despesa com base no CNPJ anterior">
+                      🧾 {{ tx.sugestao_despesa_label or (tx.sugestao_titulo_nome ~ ' › ' ~ tx.sugestao_categoria_nome) }}
+                    </span>
                   {% else %}
                     <span class="text-muted">—</span>
                   {% endif %}
@@ -171,6 +176,16 @@
                           title="Aprovar sugestão com 1 clique">
                     ✅ Aprovar
                   </button>
+                  {% elif tx.tipo == 'DEBIT' and tx.sugestao_titulo_id %}
+                  <button type="button" class="btn btn-sm btn-warning btn-aprovar-despesa"
+                          data-tx-id="{{ tx.id }}"
+                          data-tx-valor="{{ tx.valor }}"
+                          data-sugestao-titulo="{{ tx.sugestao_titulo_id }}"
+                          data-sugestao-categoria="{{ tx.sugestao_categoria_id or '' }}"
+                          data-sugestao-subcategoria="{{ tx.sugestao_subcategoria_id or '' }}"
+                          title="Aprovar despesa sugerida com 1 clique">
+                    🧾 Aprovar Despesa
+                  </button>
                   {% endif %}
                   <button type="button" class="btn btn-sm btn-outline-primary btn-conciliar"
                           data-tx-id="{{ tx.id }}"
@@ -179,8 +194,11 @@
                           data-tx-cnpj="{{ tx.cnpj_cpf or '' }}"
                           data-tx-tipo="{{ tx.tipo }}"
                           data-sugestao-forma="{{ tx.sugestao_forma_id or '' }}"
-                          data-sugestao-fornecedor="{{ tx.sugestao_fornecedor_id or '' }}">
-                    <i class="bi bi-link-45deg"></i> {% if (tx.tipo == 'CREDIT' and tx.sugestao_forma_id) or (tx.tipo == 'DEBIT' and tx.sugestao_fornecedor_id) %}Alterar{% else %}Conciliar{% endif %}
+                          data-sugestao-fornecedor="{{ tx.sugestao_fornecedor_id or '' }}"
+                          data-sugestao-titulo="{{ tx.sugestao_titulo_id or '' }}"
+                          data-sugestao-categoria="{{ tx.sugestao_categoria_id or '' }}"
+                          data-sugestao-subcategoria="{{ tx.sugestao_subcategoria_id or '' }}">
+                    <i class="bi bi-link-45deg"></i> {% if (tx.tipo == 'CREDIT' and tx.sugestao_forma_id) or (tx.tipo == 'DEBIT' and (tx.sugestao_fornecedor_id or tx.sugestao_titulo_id)) %}Alterar{% else %}Conciliar{% endif %}
                   </button>
                   <button type="button" class="btn btn-sm btn-outline-secondary btn-ignorar"
                           data-tx-id="{{ tx.id }}" title="Ignorar">
@@ -300,7 +318,7 @@
                             style="display:none;font-size:0.75rem;" onclick="removerLinha(this)">✕</button>
                   </div>
                   <div class="row g-1">
-                    <div class="col-md-5">
+                    <div class="col-md-4">
                       <label class="form-label form-label-sm mb-0">Título</label>
                       <select name="desp_1_titulo_id" class="form-select form-select-sm sel-titulo"
                               onchange="carregarCategorias(this, 'desp_1_categoria_id')">
@@ -314,20 +332,34 @@
                     </div>
                     <div class="col-md-4">
                       <label class="form-label form-label-sm mb-0">Categoria</label>
-                      <select name="desp_1_categoria_id" class="form-select form-select-sm sel-categoria">
+                      <select name="desp_1_categoria_id" class="form-select form-select-sm sel-categoria"
+                              onchange="carregarSubcategorias(this)">
                         <option value="">— Primeiro o título —</option>
                       </select>
                     </div>
-                    <div class="col-md-3">
+                    <div class="col-md-4">
+                      <label class="form-label form-label-sm mb-0">Subcategoria (opt.)</label>
+                      <select name="desp_1_subcategoria_id" class="form-select form-select-sm sel-subcategoria">
+                        <option value="">— Nenhuma —</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div class="row g-1 mt-1">
+                    <div class="col-md-4">
                       <label class="form-label form-label-sm mb-0">Valor R$</label>
                       <input type="text" name="desp_1_valor" class="form-control form-control-sm inp-valor"
                              placeholder="0,00">
                     </div>
-                  </div>
-                  <div class="mt-1">
-                    <label class="form-label form-label-sm mb-0">Observação (opcional)</label>
-                    <input type="text" name="desp_1_observacao" class="form-control form-control-sm"
-                           placeholder="Observação adicional...">
+                    <div class="col-md-4">
+                      <label class="form-label form-label-sm mb-0">Fornecedor (opt.)</label>
+                      <input type="text" name="desp_1_fornecedor" class="form-control form-control-sm inp-fornecedor"
+                             placeholder="Nome do fornecedor...">
+                    </div>
+                    <div class="col-md-4">
+                      <label class="form-label form-label-sm mb-0">Observação (opt.)</label>
+                      <input type="text" name="desp_1_observacao" class="form-control form-control-sm"
+                             placeholder="Observação adicional...">
+                    </div>
                   </div>
                 </div>
               </div>
@@ -485,13 +517,49 @@ document.querySelectorAll('.btn-conciliar').forEach(btn => {
     }
     document.getElementById('secao_credito').style.display = tipo === 'CREDIT' ? '' : 'none';
     document.getElementById('secao_debito').style.display  = tipo === 'DEBIT'  ? '' : 'none';
-    // Reinicia aba para Fornecedor ao abrir
-    if (tipo === 'DEBIT') alternarAbaDebito('fornecedor');
     if (tipo === 'CREDIT' && this.dataset.sugestaoForma) {
       document.getElementById('selectForma').value = this.dataset.sugestaoForma;
     }
-    if (tipo === 'DEBIT' && this.dataset.sugestaoFornecedor) {
-      document.getElementById('selectFornecedor').value = this.dataset.sugestaoFornecedor;
+    if (tipo === 'DEBIT') {
+      if (this.dataset.sugestaoTitulo) {
+        // Pre-preenche aba Despesa com sugestão
+        alternarAbaDebito('despesa');
+        const linha = document.querySelector('.linha-desp[data-idx="1"]');
+        if (linha) {
+          const selTit = linha.querySelector('.sel-titulo');
+          if (selTit) {
+            selTit.value = this.dataset.sugestaoTitulo;
+            carregarCategorias(selTit, 'desp_1_categoria_id');
+            // Pre-seleciona categoria após carregarCategorias
+            const sugestaoCateg = this.dataset.sugestaoCategoria;
+            if (sugestaoCateg) {
+              setTimeout(() => {
+                const selCat = linha.querySelector('.sel-categoria');
+                if (selCat) {
+                  selCat.value = sugestaoCateg;
+                  carregarSubcategorias(selCat);
+                  const sugestaoSub = this.dataset.sugestaoSubcategoria;
+                  if (sugestaoSub) {
+                    setTimeout(() => {
+                      const selSub = linha.querySelector('.sel-subcategoria');
+                      if (selSub) selSub.value = sugestaoSub;
+                    }, 10);
+                  }
+                }
+              }, 10);
+            }
+          }
+          // Pre-preenche valor com total da transação
+          const inpValor = linha.querySelector('.inp-valor');
+          if (inpValor) inpValor.value = this.dataset.txValor || '';
+        }
+      } else {
+        // Reinicia aba para Fornecedor ao abrir
+        alternarAbaDebito('fornecedor');
+        if (this.dataset.sugestaoFornecedor) {
+          document.getElementById('selectFornecedor').value = this.dataset.sugestaoFornecedor;
+        }
+      }
     }
     new bootstrap.Modal(document.getElementById('modalConciliar')).show();
   });
@@ -531,7 +599,28 @@ function carregarCategorias(selectTitulo, nomeCampoCategoria) {
   cats.forEach(c => {
     const o = document.createElement('option');
     o.value = c.id; o.textContent = c.nome;
+    // Embute subcategorias para uso em carregarSubcategorias()
+    o.dataset.subcategorias = JSON.stringify(c.subcategorias || []);
     selCat.appendChild(o);
+  });
+  // Limpa subcategoria ao trocar categoria
+  const selSub = linha ? linha.querySelector('.sel-subcategoria') : null;
+  if (selSub) selSub.innerHTML = '<option value="">— Nenhuma —</option>';
+}
+
+function carregarSubcategorias(selCategoria) {
+  const linha = selCategoria.closest('.linha-desp');
+  const selSub = linha ? linha.querySelector('.sel-subcategoria') : null;
+  if (!selSub) return;
+  selSub.innerHTML = '<option value="">— Nenhuma —</option>';
+  const opt = selCategoria.options[selCategoria.selectedIndex];
+  if (!opt || !opt.value) return;
+  let subs = [];
+  try { subs = JSON.parse(opt.dataset.subcategorias || '[]'); } catch(e) {}
+  subs.forEach(s => {
+    const o = document.createElement('option');
+    o.value = s.id; o.textContent = s.nome;
+    selSub.appendChild(o);
   });
 }
 
@@ -552,25 +641,38 @@ function adicionarLinhaDespesa() {
               style="font-size:0.75rem;" onclick="removerLinha(this)">✕</button>
     </div>
     <div class="row g-1">
-      <div class="col-md-5">
+      <div class="col-md-4">
         <label class="form-label form-label-sm mb-0">Título</label>
         <select name="desp_${i}_titulo_id" class="form-select form-select-sm sel-titulo"
                 onchange="carregarCategorias(this,'desp_${i}_categoria_id')">${tituloOpts}</select>
       </div>
       <div class="col-md-4">
         <label class="form-label form-label-sm mb-0">Categoria</label>
-        <select name="desp_${i}_categoria_id" class="form-select form-select-sm sel-categoria">
+        <select name="desp_${i}_categoria_id" class="form-select form-select-sm sel-categoria"
+                onchange="carregarSubcategorias(this)">
           <option value="">— Primeiro o título —</option>
         </select>
       </div>
-      <div class="col-md-3">
+      <div class="col-md-4">
+        <label class="form-label form-label-sm mb-0">Subcategoria (opt.)</label>
+        <select name="desp_${i}_subcategoria_id" class="form-select form-select-sm sel-subcategoria">
+          <option value="">— Nenhuma —</option>
+        </select>
+      </div>
+    </div>
+    <div class="row g-1 mt-1">
+      <div class="col-md-4">
         <label class="form-label form-label-sm mb-0">Valor R$</label>
         <input type="text" name="desp_${i}_valor" class="form-control form-control-sm inp-valor" placeholder="0,00">
       </div>
-    </div>
-    <div class="mt-1">
-      <label class="form-label form-label-sm mb-0">Observação (opcional)</label>
-      <input type="text" name="desp_${i}_observacao" class="form-control form-control-sm" placeholder="Observação adicional...">
+      <div class="col-md-4">
+        <label class="form-label form-label-sm mb-0">Fornecedor (opt.)</label>
+        <input type="text" name="desp_${i}_fornecedor" class="form-control form-control-sm inp-fornecedor" placeholder="Nome do fornecedor...">
+      </div>
+      <div class="col-md-4">
+        <label class="form-label form-label-sm mb-0">Observação (opt.)</label>
+        <input type="text" name="desp_${i}_observacao" class="form-control form-control-sm" placeholder="Observação adicional...">
+      </div>
     </div>`;
   document.getElementById('linhas_despesa').appendChild(div);
   if (_linhaDespIdx >= 3) document.getElementById('btnAdicionarDesp').style.display = 'none';
@@ -644,6 +746,31 @@ document.querySelectorAll('.btn-aprovar').forEach(btn => {
     add('tipo_tx', tipo);
     if (tipo === 'CREDIT') add('forma_recebimento_id', forma);
     else add('fornecedor_id', forn);
+    document.body.appendChild(form);
+    form.submit();
+  });
+});
+
+// Aprovar sugestão de despesa com 1 clique (integral, pré-mapeada)
+document.querySelectorAll('.btn-aprovar-despesa').forEach(btn => {
+  btn.addEventListener('click', function() {
+    const txId   = this.dataset.txId;
+    const valor  = this.dataset.txValor;
+    const titulo = this.dataset.sugestaoTitulo;
+    const categ  = this.dataset.sugestaoCategoria;
+    const sub    = this.dataset.sugestaoSubcategoria || '';
+    if (!titulo || !categ) { alert('Sugestão incompleta. Use o botão Alterar para selecionar manualmente.'); return; }
+    const form = document.createElement('form');
+    form.method = 'POST';
+    const add = (n, v) => { const i = document.createElement('input'); i.type='hidden'; i.name=n; i.value=v; form.appendChild(i); };
+    add('transaction_id', txId);
+    add('acao', 'conciliar');
+    add('tipo_tx', 'DEBIT');
+    add('tipo_debito', 'despesa');
+    add('desp_1_titulo_id', titulo);
+    add('desp_1_categoria_id', categ);
+    if (sub) add('desp_1_subcategoria_id', sub);
+    add('desp_1_valor', valor);
     document.body.appendChild(form);
     form.submit();
   });

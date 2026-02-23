@@ -81,13 +81,14 @@ def _save_transactions(cursor, conn, account_id, transactions):
     )
     existing_hashes = {row['hash_dedup'] for row in cursor.fetchall()}
 
-    # 2. Busca de mapeamento de fornecedores/formas em lote (por CNPJ)
+    # 2. Busca de mapeamento de fornecedores/formas/despesas em lote (por CNPJ)
     cnpj_list = list({tx['cnpj_cpf'] for tx in transactions if tx.get('cnpj_cpf')})
-    mapping = {}  # cnpj -> {'fornecedor_id': ..., 'forma_recebimento_id': ...}
+    mapping = {}  # cnpj -> {'fornecedor_id': ..., 'forma_recebimento_id': ..., 'titulo_id': ..., ...}
     if cnpj_list:
         ph2 = ','.join(['%s'] * len(cnpj_list))
         cursor.execute(
-            f'SELECT cnpj_cpf, fornecedor_id, forma_recebimento_id FROM bank_supplier_mapping WHERE cnpj_cpf IN ({ph2})',
+            f'SELECT cnpj_cpf, fornecedor_id, forma_recebimento_id, titulo_id, categoria_id, subcategoria_id '
+            f'FROM bank_supplier_mapping WHERE cnpj_cpf IN ({ph2})',
             cnpj_list,
         )
         for row in cursor.fetchall():
@@ -110,6 +111,8 @@ def _save_transactions(cursor, conn, account_id, transactions):
         else:
             forn_id = m['fornecedor_id'] if m else None
             frec_id = None
+            # Débitos com mapeamento de despesa ficam pendentes (auto-conciliados após INSERT)
+            has_despesa_mapping = bool(m and m.get('titulo_id'))
             status = 'conciliado' if forn_id else 'pendente'
             conciliado_em = now if forn_id else None
             conciliado_por = 'auto' if forn_id else None
@@ -152,7 +155,62 @@ def _save_transactions(cursor, conn, account_id, transactions):
                 raise
     # 4. Auto-conciliação imediata por regras de descrição (para os que ficaram pendentes)
     _auto_conciliar_por_regras(cursor, conn, account_id)
+    # 5. Auto-conciliação de despesas por CNPJ (cria lancamentos_despesas automaticamente)
+    _auto_conciliar_despesas_por_cnpj(cursor, conn, account_id, mapping)
     return inseridos, duplicados
+
+
+def _auto_conciliar_despesas_por_cnpj(cursor, conn, account_id, mapping):
+    """
+    Cria lancamentos_despesas automaticamente para débitos pendentes cujo CNPJ
+    tem mapeamento de despesa integral (titulo_id+categoria_id) em bank_supplier_mapping.
+    Débitos divididos (split) nunca são auto-conciliados — ficam para o usuário.
+    """
+    despesa_mappings = {cnpj: m for cnpj, m in mapping.items() if m.get('titulo_id')}
+    if not despesa_mappings:
+        return 0
+
+    # Busca cliente_id da conta
+    cursor.execute("SELECT cliente_id FROM bank_accounts WHERE id=%s", (account_id,))
+    acc = cursor.fetchone()
+    cliente_id = acc['cliente_id'] if acc else None
+
+    cnpj_list = list(despesa_mappings.keys())
+    ph = ','.join(['%s'] * len(cnpj_list))
+    cursor.execute(
+        f"""SELECT id, data_transacao, descricao, cnpj_cpf, valor
+            FROM bank_transactions
+            WHERE account_id=%s AND tipo='DEBIT' AND status='pendente' AND cnpj_cpf IN ({ph})""",
+        [account_id] + cnpj_list,
+    )
+    pendentes = cursor.fetchall()
+    if not pendentes:
+        return 0
+
+    agora = _dt.datetime.now()
+    count = 0
+    for tx in pendentes:
+        m = despesa_mappings.get(tx['cnpj_cpf'])
+        if not m:
+            continue
+        descricao = (tx.get('descricao') or '')
+        cursor.execute(
+            """INSERT INTO lancamentos_despesas
+               (data, cliente_id, titulo_id, categoria_id, subcategoria_id, valor, fornecedor, observacao)
+               VALUES (%s, %s, %s, %s, %s, %s, %s, %s)""",
+            (tx['data_transacao'], cliente_id, m['titulo_id'], m['categoria_id'],
+             m.get('subcategoria_id'), tx['valor'], descricao[:255], descricao),
+        )
+        cursor.execute(
+            """UPDATE bank_transactions
+               SET status='conciliado', conciliado_em=%s, conciliado_por='auto'
+               WHERE id=%s""",
+            (agora, tx['id']),
+        )
+        count += 1
+    if count:
+        conn.commit()
+    return count
 
 
 def _auto_conciliar_por_regras(cursor, conn, account_id=None):
@@ -363,24 +421,35 @@ def _get_formas_recebimento(cursor):
 
 
 def _get_titulos_despesas(cursor):
-    """Retorna títulos de despesas ativos com suas categorias."""
+    """Retorna títulos de despesas ativos com suas categorias e subcategorias."""
     cursor.execute(
         """SELECT t.id AS titulo_id, t.nome AS titulo_nome,
-                  c.id AS categoria_id, c.nome AS categoria_nome
+                  c.id AS categoria_id, c.nome AS categoria_nome,
+                  s.id AS sub_id, s.nome AS sub_nome
            FROM titulos_despesas t
            INNER JOIN categorias_despesas c ON c.titulo_id = t.id AND c.ativo = 1
+           LEFT JOIN subcategorias_despesas s ON s.categoria_id = c.id AND s.ativo = 1
            WHERE t.ativo = 1
-           ORDER BY t.ordem, t.nome, c.ordem, c.nome"""
+           ORDER BY t.ordem, t.nome, c.ordem, c.nome, s.ordem, s.nome"""
     )
     rows = cursor.fetchall()
-    # Agrupa: { titulo_id: {nome, categorias:[{id, nome}]} }
+    # Agrupa: { titulo_id: {nome, categorias: { cat_id: {nome, subcategorias:[]} }} }
     titulos = {}
     for r in rows:
         tid = r['titulo_id']
         if tid not in titulos:
-            titulos[tid] = {'id': tid, 'nome': r['titulo_nome'], 'categorias': []}
-        titulos[tid]['categorias'].append({'id': r['categoria_id'], 'nome': r['categoria_nome']})
-    return list(titulos.values())
+            titulos[tid] = {'id': tid, 'nome': r['titulo_nome'], 'categorias': {}}
+        cats = titulos[tid]['categorias']
+        cid = r['categoria_id']
+        if cid not in cats:
+            cats[cid] = {'id': cid, 'nome': r['categoria_nome'], 'subcategorias': []}
+        if r['sub_id']:
+            cats[cid]['subcategorias'].append({'id': r['sub_id'], 'nome': r['sub_nome']})
+    result = []
+    for t in titulos.values():
+        result.append({'id': t['id'], 'nome': t['nome'],
+                       'categorias': list(t['categorias'].values())})
+    return result
 
 
 def _conciliar_tx(cursor, conn, tx_id, acao, tipo_tx,
@@ -438,21 +507,23 @@ def _conciliar_tx(cursor, conn, tx_id, acao, tipo_tx,
         tx = cursor.fetchone()
         if not tx:
             return
-        data_tx   = tx['data_transacao']
-        descricao = tx.get('descricao') or ''
+        data_tx    = tx['data_transacao']
+        descricao  = tx.get('descricao') or ''
         cliente_id = tx.get('cliente_id')
         for desp in despesas:
-            titulo_id    = desp.get('titulo_id')
-            categoria_id = desp.get('categoria_id')
-            valor        = desp.get('valor')
-            observacao   = desp.get('observacao') or descricao
+            titulo_id      = desp.get('titulo_id')
+            categoria_id   = desp.get('categoria_id')
+            subcategoria_id = desp.get('subcategoria_id') or None
+            fornecedor_txt = (desp.get('fornecedor') or descricao)[:255]
+            valor          = desp.get('valor')
+            observacao     = desp.get('observacao') or descricao
             if not titulo_id or not categoria_id or not valor:
                 continue
             cursor.execute(
                 """INSERT INTO lancamentos_despesas
-                       (data, cliente_id, titulo_id, categoria_id, valor, fornecedor, observacao)
-                   VALUES (%s, %s, %s, %s, %s, %s, %s)""",
-                (data_tx, cliente_id, titulo_id, categoria_id, valor, descricao[:255], observacao),
+                       (data, cliente_id, titulo_id, categoria_id, subcategoria_id, valor, fornecedor, observacao)
+                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s)""",
+                (data_tx, cliente_id, titulo_id, categoria_id, subcategoria_id, valor, fornecedor_txt, observacao),
             )
         cursor.execute(
             """UPDATE bank_transactions
@@ -460,6 +531,21 @@ def _conciliar_tx(cursor, conn, tx_id, acao, tipo_tx,
                WHERE id=%s""",
             (agora, usuario, tx_id),
         )
+        # Auto-aprender: despesa INTEGRAL (não dividida) salva mapeamento para próxima importação
+        if len(despesas) == 1 and tx.get('cnpj_cpf'):
+            d = despesas[0]
+            cursor.execute(
+                """INSERT INTO bank_supplier_mapping
+                       (cnpj_cpf, tipo_chave, total_conciliacoes, titulo_id, categoria_id, subcategoria_id)
+                   VALUES (%s, 'cnpj', 1, %s, %s, %s)
+                   ON DUPLICATE KEY UPDATE
+                       titulo_id=%s, categoria_id=%s, subcategoria_id=%s,
+                       fornecedor_id=NULL, forma_recebimento_id=NULL,
+                       total_conciliacoes=total_conciliacoes+1, atualizado_em=NOW()""",
+                (tx['cnpj_cpf'],
+                 d['titulo_id'], d['categoria_id'], d.get('subcategoria_id'),
+                 d['titulo_id'], d['categoria_id'], d.get('subcategoria_id')),
+            )
     else:
         # Débito → Fornecedor
         if not fornecedor_id:
@@ -512,18 +598,21 @@ def conciliar():
         tipo_tx              = request.form.get('tipo_tx', 'DEBIT')
         tipo_debito          = request.form.get('tipo_debito', 'fornecedor')  # 'fornecedor' | 'despesa'
 
-        # Despesas (até 2 linhas de split)
+        # Despesas (até 3 linhas de split)
         despesas = []
         for i in range(1, 4):  # suporta até 3 linhas de split
-            tid = request.form.get(f'desp_{i}_titulo_id') or None
-            cid = request.form.get(f'desp_{i}_categoria_id') or None
-            val = request.form.get(f'desp_{i}_valor') or None
-            obs = request.form.get(f'desp_{i}_observacao') or None
+            tid  = request.form.get(f'desp_{i}_titulo_id') or None
+            cid  = request.form.get(f'desp_{i}_categoria_id') or None
+            scid = request.form.get(f'desp_{i}_subcategoria_id') or None
+            val  = request.form.get(f'desp_{i}_valor') or None
+            obs  = request.form.get(f'desp_{i}_observacao') or None
+            forn = request.form.get(f'desp_{i}_fornecedor') or None
             if tid and cid and val:
                 try:
                     val_f = float(val.replace(',', '.'))
                     despesas.append({'titulo_id': int(tid), 'categoria_id': int(cid),
-                                     'valor': val_f, 'observacao': obs})
+                                     'subcategoria_id': int(scid) if scid else None,
+                                     'valor': val_f, 'observacao': obs, 'fornecedor': forn})
                 except (ValueError, TypeError):
                     pass
 
@@ -589,13 +678,20 @@ def conciliar():
         f"""SELECT bt.*, ba.apelido AS conta_apelido, ba.banco_nome,
                    bsm.fornecedor_id AS sugestao_fornecedor_id,
                    bsm.forma_recebimento_id AS sugestao_forma_id,
+                   bsm.titulo_id AS sugestao_titulo_id,
+                   bsm.categoria_id AS sugestao_categoria_id,
+                   bsm.subcategoria_id AS sugestao_subcategoria_id,
                    fr.nome AS sugestao_forma_nome,
-                   fs.razao_social AS sugestao_fornecedor_nome
+                   fs.razao_social AS sugestao_fornecedor_nome,
+                   td.nome AS sugestao_titulo_nome,
+                   cd.nome AS sugestao_categoria_nome
             FROM bank_transactions bt
             INNER JOIN bank_accounts ba ON bt.account_id = ba.id
             LEFT JOIN bank_supplier_mapping bsm ON bsm.cnpj_cpf = bt.cnpj_cpf
             LEFT JOIN formas_recebimento fr ON fr.id = bsm.forma_recebimento_id
             LEFT JOIN fornecedores fs ON fs.id = bsm.fornecedor_id
+            LEFT JOIN titulos_despesas td ON td.id = bsm.titulo_id
+            LEFT JOIN categorias_despesas cd ON cd.id = bsm.categoria_id
             {where_sql}
             ORDER BY bt.data_transacao DESC
             LIMIT %s OFFSET %s""",
@@ -618,7 +714,7 @@ def conciliar():
     regras_padrao = cursor.fetchall()
 
     for tx in transacoes:
-        if tx.get('sugestao_forma_id') or tx.get('sugestao_fornecedor_id'):
+        if tx.get('sugestao_forma_id') or tx.get('sugestao_fornecedor_id') or tx.get('sugestao_titulo_id'):
             continue  # já tem sugestão por CNPJ
         descricao = (tx.get('descricao') or '').upper()
         tipo_tx_r = tx.get('tipo', '')
@@ -640,6 +736,13 @@ def conciliar():
                     tx['sugestao_fornecedor_nome'] = regra['fornecedor_nome']
                     tx['sugestao_regra']           = True
                 break  # primeira regra que bate vence
+
+    # Enriquece badge de sugestão de despesa (CNPJ → título/categoria)
+    for tx in transacoes:
+        if tx.get('sugestao_titulo_id') and not tx.get('sugestao_forma_id') and not tx.get('sugestao_fornecedor_id'):
+            tx['sugestao_despesa_label'] = (
+                (tx.get('sugestao_titulo_nome') or '') + ' › ' + (tx.get('sugestao_categoria_nome') or '')
+            )
 
     cursor.execute(
         f"SELECT COUNT(*) AS total FROM bank_transactions bt "
