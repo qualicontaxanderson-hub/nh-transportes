@@ -12,6 +12,6 @@
 #   - Detecção inteligente de pasta OFX (Render Disk, Windows, /tmp, Dropbox)
 #   - Todos os textos traduzidos para português
 
-DEPLOY_TIMESTAMP=2026-02-22T20:39:41Z
-REASON=Deploy completo com Dropbox API + correcoes OFX + multi-empresa
-VERSION=6.0.0
+DEPLOY_TIMESTAMP=2026-02-23T16:51:38Z
+REASON=Banco completo: simplificar UPDATE/INSERT regras sem fallback + todas as colunas confirmadas
+VERSION=7.0.0
