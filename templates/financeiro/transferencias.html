@@ -1,0 +1,109 @@
+{% extends "base.html" %}
+{% block title %}Transferências entre Contas{% endblock %}
+{% block content %}
+<div class="container-fluid py-3">
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <h4 class="mb-0"><i class="bi bi-arrow-left-right text-primary"></i> Transferências entre Contas</h4>
+    <a href="/banco/conciliar" class="btn btn-sm btn-outline-primary">
+      <i class="bi bi-check2-all"></i> Conciliação
+    </a>
+  </div>
+
+  <!-- Cards de resumo -->
+  <div class="row g-3 mb-3">
+    <div class="col-sm-6 col-md-3">
+      <div class="card border-0 shadow-sm text-center py-3">
+        <div class="text-muted small">Total Transferido</div>
+        <div class="fw-bold fs-5 text-primary">R$ {{ "%.2f"|format(total_valor|float) | replace('.', ',') }}</div>
+      </div>
+    </div>
+    <div class="col-sm-6 col-md-3">
+      <div class="card border-0 shadow-sm text-center py-3">
+        <div class="text-muted small">Quantidade</div>
+        <div class="fw-bold fs-5">{{ total_qtd }}</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Filtros -->
+  <div class="card border-0 shadow-sm mb-3">
+    <div class="card-body py-2">
+      <form method="get" class="row g-2 align-items-end">
+        <div class="col-sm-3">
+          <label class="form-label small mb-1">Data início</label>
+          <input type="date" name="data_ini" class="form-control form-control-sm" value="{{ f_data_ini }}">
+        </div>
+        <div class="col-sm-3">
+          <label class="form-label small mb-1">Data fim</label>
+          <input type="date" name="data_fim" class="form-control form-control-sm" value="{{ f_data_fim }}">
+        </div>
+        <div class="col-sm-4">
+          <label class="form-label small mb-1">Conta</label>
+          <select name="account_id" class="form-select form-select-sm">
+            <option value="">Todas as contas</option>
+            {% for c in contas %}
+            <option value="{{ c.id }}" {% if f_conta == c.id|string %}selected{% endif %}>
+              {{ c.banco_nome }} — {{ c.apelido }}
+            </option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-sm-2">
+          <button type="submit" class="btn btn-sm btn-primary w-100">Filtrar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Tabela -->
+  <div class="card border-0 shadow-sm">
+    <div class="card-body p-0">
+      {% if transferencias %}
+      <div class="table-responsive">
+        <table class="table table-sm table-hover mb-0 align-middle">
+          <thead class="table-light">
+            <tr>
+              <th>Data</th>
+              <th>Valor</th>
+              <th>Descrição</th>
+              <th>Conta Origem</th>
+              <th>Empresa Origem</th>
+              <th>→ Conta Destino</th>
+              <th>Empresa Destino</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for t in transferencias %}
+            <tr>
+              <td class="text-nowrap">
+                {{ t.data_transacao.strftime('%d/%m/%Y') if t.data_transacao else '—' }}
+              </td>
+              <td class="text-end fw-bold text-primary">
+                R$ {{ "%.2f"|format(t.valor|float) | replace('.', ',') }}
+              </td>
+              <td class="text-truncate" style="max-width:220px" title="{{ t.descricao }}">
+                {{ t.descricao or '—' }}
+              </td>
+              <td>
+                <span class="badge bg-secondary">{{ t.banco_orig }} — {{ t.conta_orig_apelido }}</span>
+              </td>
+              <td class="text-muted small">{{ t.empresa_orig or '—' }}</td>
+              <td>
+                <span class="badge bg-primary">{{ t.banco_dest }} — {{ t.conta_dest_apelido }}</span>
+              </td>
+              <td class="text-muted small">{{ t.empresa_dest or '—' }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <div class="text-center py-5 text-muted">
+        <i class="bi bi-arrow-left-right fs-1 d-block mb-2 opacity-25"></i>
+        Nenhuma transferência encontrada no período.
+      </div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}

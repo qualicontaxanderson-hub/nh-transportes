@@ -995,3 +995,86 @@ def contas():
     cursor.close()
     conn.close()
     return render_template('financeiro/contas.html', contas=contas_list)
+
+
+@financeiro_bp.route('/transferencias/')
+@login_required
+def transferencias():
+    """Lista as transferências entre contas registradas via conciliação OFX."""
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+
+    # Filtros
+    f_data_ini = request.args.get('data_ini', '').strip()
+    f_data_fim = request.args.get('data_fim', '').strip()
+    f_conta    = request.args.get('account_id', '').strip()
+
+    where = ["bt.status = 'conciliado'", "bt.tipo = 'DEBIT'",
+             "bt_dest.hash_dedup = CONCAT(bt.hash_dedup, '_transfer')"]
+    params = []
+    if f_data_ini:
+        where.append("bt.data_transacao >= %s")
+        params.append(f_data_ini)
+    if f_data_fim:
+        where.append("bt.data_transacao <= %s")
+        params.append(f_data_fim)
+    if f_conta:
+        where.append("(bt.account_id = %s OR bt_dest.account_id = %s)")
+        params += [f_conta, f_conta]
+
+    where_sql = ' AND '.join(where)
+
+    cursor.execute(
+        f"""SELECT bt.id, bt.data_transacao, bt.valor, bt.descricao,
+                   ba_orig.apelido AS conta_orig_apelido, ba_orig.banco_nome AS banco_orig,
+                   co.razao_social AS empresa_orig,
+                   ba_dest.apelido AS conta_dest_apelido, ba_dest.banco_nome AS banco_dest,
+                   cd.razao_social AS empresa_dest
+            FROM bank_transactions bt
+            INNER JOIN bank_transactions bt_dest
+                   ON bt_dest.hash_dedup = CONCAT(bt.hash_dedup, '_transfer')
+            INNER JOIN bank_accounts ba_orig ON ba_orig.id = bt.account_id
+            LEFT  JOIN clientes co ON co.id = ba_orig.cliente_id
+            INNER JOIN bank_accounts ba_dest ON ba_dest.id = bt_dest.account_id
+            LEFT  JOIN clientes cd ON cd.id = ba_dest.cliente_id
+            WHERE {where_sql}
+            ORDER BY bt.data_transacao DESC
+            LIMIT 500""",
+        params,
+    )
+    lista = cursor.fetchall()
+
+    # Totais
+    cursor.execute(
+        f"""SELECT SUM(bt.valor) AS total_valor, COUNT(*) AS total_qtd
+            FROM bank_transactions bt
+            INNER JOIN bank_transactions bt_dest
+                   ON bt_dest.hash_dedup = CONCAT(bt.hash_dedup, '_transfer')
+            WHERE {where_sql}""",
+        params,
+    )
+    totais = cursor.fetchone() or {}
+
+    # Contas para o filtro
+    cursor.execute(
+        """SELECT ba.id, ba.apelido, ba.banco_nome, c.razao_social AS empresa_nome
+           FROM bank_accounts ba
+           LEFT JOIN clientes c ON c.id = ba.cliente_id
+           WHERE ba.ativo = 1
+           ORDER BY ba.apelido"""
+    )
+    contas = cursor.fetchall()
+
+    cursor.close()
+    conn.close()
+
+    return render_template(
+        'financeiro/transferencias.html',
+        transferencias=lista,
+        total_valor=totais.get('total_valor') or 0,
+        total_qtd=totais.get('total_qtd') or 0,
+        contas=contas,
+        f_data_ini=f_data_ini,
+        f_data_fim=f_data_fim,
+        f_conta=f_conta,
+    )

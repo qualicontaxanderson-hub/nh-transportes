@@ -163,6 +163,11 @@
                           title="{% if tx.sugestao_regra %}Sugestão por regra de descrição{% else %}Sugestão com base no CNPJ anterior{% endif %}">
                       {% if tx.sugestao_regra %}📋{% else %}✨{% endif %} {{ tx.sugestao_forma_nome }}
                     </span>
+                  {% elif tx.tipo == 'DEBIT' and tx.sugestao_tipo_debito == 'transferencia' and tx.sugestao_conta_destino_id %}
+                    <span class="badge bg-purple text-white" style="font-size:0.72rem;background:#6f42c1;"
+                          title="Transferência aprendida do CNPJ anterior">
+                      🔄 → {{ todas_contas_map.get(tx.sugestao_conta_destino_id, 'Conta #' ~ tx.sugestao_conta_destino_id) }}
+                    </span>
                   {% elif tx.tipo == 'DEBIT' and tx.sugestao_fornecedor_id %}
                     <span class="badge bg-secondary" style="font-size:0.72rem;"
                           title="{% if tx.sugestao_regra %}Sugestão por regra de descrição{% else %}Sugestão com base no CNPJ anterior{% endif %}">
@@ -178,7 +183,15 @@
                   {% endif %}
                 </td>
                 <td class="text-center text-nowrap">
-                  {% if (tx.tipo == 'CREDIT' and tx.sugestao_forma_id) or (tx.tipo == 'DEBIT' and tx.sugestao_fornecedor_id) %}
+                  {% if tx.tipo == 'DEBIT' and tx.sugestao_tipo_debito == 'transferencia' and tx.sugestao_conta_destino_id %}
+                  <button type="button" class="btn btn-sm btn-aprovar-transf"
+                          style="background:#6f42c1;color:#fff;"
+                          data-tx-id="{{ tx.id }}"
+                          data-conta-destino="{{ tx.sugestao_conta_destino_id }}"
+                          title="Aprovar transferência com 1 clique">
+                    🔄 Aprovar Transf.
+                  </button>
+                  {% elif (tx.tipo == 'CREDIT' and tx.sugestao_forma_id) or (tx.tipo == 'DEBIT' and tx.sugestao_fornecedor_id) %}
                   <button type="button" class="btn btn-sm btn-success btn-aprovar"
                           data-tx-id="{{ tx.id }}"
                           data-tx-tipo="{{ tx.tipo }}"
@@ -208,8 +221,10 @@
                           data-sugestao-fornecedor="{{ tx.sugestao_fornecedor_id or '' }}"
                           data-sugestao-titulo="{{ tx.sugestao_titulo_id or '' }}"
                           data-sugestao-categoria="{{ tx.sugestao_categoria_id or '' }}"
-                          data-sugestao-subcategoria="{{ tx.sugestao_subcategoria_id or '' }}">
-                    <i class="bi bi-link-45deg"></i> {% if (tx.tipo == 'CREDIT' and tx.sugestao_forma_id) or (tx.tipo == 'DEBIT' and (tx.sugestao_fornecedor_id or tx.sugestao_titulo_id)) %}Alterar{% else %}Conciliar{% endif %}
+                          data-sugestao-subcategoria="{{ tx.sugestao_subcategoria_id or '' }}"
+                          data-sugestao-tipo-debito="{{ tx.sugestao_tipo_debito or '' }}"
+                          data-sugestao-conta-destino="{{ tx.sugestao_conta_destino_id or '' }}">
+                    <i class="bi bi-link-45deg"></i> {% if (tx.tipo == 'CREDIT' and tx.sugestao_forma_id) or (tx.tipo == 'DEBIT' and (tx.sugestao_fornecedor_id or tx.sugestao_titulo_id or tx.sugestao_tipo_debito == 'transferencia')) %}Alterar{% else %}Conciliar{% endif %}
                   </button>
                   <button type="button" class="btn btn-sm btn-outline-secondary btn-ignorar"
                           data-tx-id="{{ tx.id }}" title="Ignorar">
@@ -641,6 +656,11 @@ document.querySelectorAll('.btn-conciliar').forEach(btn => {
             }
           }
         }
+      } else if (this.dataset.sugestaoTipoDebito === 'transferencia' && this.dataset.sugestaoContaDestino) {
+        // Pre-preenche aba Transferência com conta destino sugerida
+        alternarAbaDebito('transferencia');
+        const selDest = document.getElementById('selectContaDestino');
+        if (selDest) selDest.value = this.dataset.sugestaoContaDestino;
       } else {
         // Reinicia aba para Fornecedor ao abrir
         alternarAbaDebito('fornecedor');
@@ -995,6 +1015,25 @@ document.querySelectorAll('.btn-aprovar-despesa').forEach(btn => {
     if (sub) add('desp_1_subcategoria_id', sub);
     // Valor já vem em formato float (dataset.txValor) — usar diretamente
     add('desp_1_valor', valor);
+    document.body.appendChild(form);
+    form.submit();
+  });
+});
+
+// Aprovar sugestão de transferência com 1 clique
+document.querySelectorAll('.btn-aprovar-transf').forEach(btn => {
+  btn.addEventListener('click', function() {
+    const txId  = this.dataset.txId;
+    const conta = this.dataset.contaDestino;
+    if (!conta) { alert('Conta destino não identificada. Use o botão Alterar para escolher manualmente.'); return; }
+    const form = document.createElement('form');
+    form.method = 'POST';
+    const add = (n, v) => { const i = document.createElement('input'); i.type='hidden'; i.name=n; i.value=v; form.appendChild(i); };
+    add('transaction_id', txId);
+    add('acao', 'conciliar');
+    add('tipo_tx', 'DEBIT');
+    add('tipo_debito', 'transferencia');
+    add('conta_destino_id', conta);
     document.body.appendChild(form);
     form.submit();
   });

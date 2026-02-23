@@ -497,10 +497,12 @@ def _get_titulos_despesas(cursor):
 
 
 def _conciliar_transferencia(cursor, conn, tx_id, conta_destino_id, usuario):
-    """Registra transferência entre contas: concilia a origem e cria um CREDIT na conta destino."""
+    """Registra transferência entre contas: concilia a origem e cria um CREDIT na conta destino.
+    Também salva mapeamento CNPJ→conta_destino para auto-aprendizado.
+    """
     agora = _dt.datetime.now()
     cursor.execute(
-        """SELECT id, data_transacao, valor, descricao, hash_dedup
+        """SELECT id, data_transacao, valor, descricao, hash_dedup, cnpj_cpf, account_id
            FROM bank_transactions WHERE id=%s""",
         (tx_id,),
     )
@@ -526,6 +528,19 @@ def _conciliar_transferencia(cursor, conn, tx_id, conta_destino_id, usuario):
         (conta_destino_id, tx['data_transacao'], tx['valor'],
          descricao_dest, hash_destino, agora, usuario),
     )
+    # Auto-aprender: salva CNPJ→conta_destino para sugestão nas próximas importações
+    cnpj = tx.get('cnpj_cpf')
+    if cnpj:
+        try:
+            cursor.execute(
+                """INSERT INTO bank_supplier_mapping (cnpj_cpf, conta_destino_id, tipo_debito)
+                   VALUES (%s, %s, 'transferencia')
+                   ON DUPLICATE KEY UPDATE conta_destino_id=%s, tipo_debito='transferencia'""",
+                (cnpj, conta_destino_id, conta_destino_id),
+            )
+        except Exception:
+            # Coluna pode não existir ainda (migration pendente) — ignora silenciosamente
+            pass
     conn.commit()
 
 
@@ -763,6 +778,8 @@ def conciliar():
                    bsm.titulo_id AS sugestao_titulo_id,
                    bsm.categoria_id AS sugestao_categoria_id,
                    bsm.subcategoria_id AS sugestao_subcategoria_id,
+                   bsm.conta_destino_id AS sugestao_conta_destino_id,
+                   bsm.tipo_debito AS sugestao_tipo_debito,
                    fr.nome AS sugestao_forma_nome,
                    fs.razao_social AS sugestao_fornecedor_nome,
                    td.nome AS sugestao_titulo_nome,
@@ -849,6 +866,9 @@ def conciliar():
            ORDER BY empresa_nome, ba.banco_nome, ba.apelido"""
     )
     todas_contas = cursor.fetchall()
+    # Mapa id→label para exibir nome da conta sugerida no badge de transferência
+    todas_contas_map = {c['id']: f"{c.get('empresa_nome') or ''} — {c['banco_nome']} {c['apelido']}"
+                        for c in todas_contas}
 
     cursor.close()
     conn.close()
@@ -864,6 +884,7 @@ def conciliar():
         contas=contas,
         clientes=clientes,
         todas_contas=todas_contas,
+        todas_contas_map=todas_contas_map,
         page=page,
         total_pages=total_pages,
         total=total,
