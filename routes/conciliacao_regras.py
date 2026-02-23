@@ -36,6 +36,19 @@ def _get_titulos_simples(cursor):
     return cursor.fetchall()
 
 
+def _get_contas(cursor):
+    """Retorna contas bancárias ativas para o select de conta corrente."""
+    cursor.execute(
+        """SELECT ba.id, CONCAT(ba.banco_nome, ' - ', ba.apelido,
+                  ' [', IFNULL(c.razao_social,''), ']') AS label
+           FROM bank_accounts ba
+           LEFT JOIN clientes c ON c.id = ba.cliente_id
+           WHERE ba.ativo = 1
+           ORDER BY ba.banco_nome, ba.apelido"""
+    )
+    return cursor.fetchall()
+
+
 @bp.route('/')
 @login_required
 def lista():
@@ -81,6 +94,7 @@ def novo():
         titulo_id        = request.form.get('titulo_id') or None
         categoria_id     = request.form.get('categoria_id') or None
         subcategoria_id  = request.form.get('subcategoria_id') or None
+        account_id       = request.form.get('account_id') or None
 
         if not padrao:
             flash('Padrão de descrição é obrigatório.', 'warning')
@@ -90,11 +104,11 @@ def novo():
                     """INSERT INTO bank_conciliacao_regras
                        (padrao_descricao, padrao_secundario, tipo_match, tipo_transacao,
                         forma_recebimento_id, fornecedor_id, cliente_id, titulo_id,
-                        categoria_id, subcategoria_id)
-                       VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
+                        categoria_id, subcategoria_id, account_id)
+                       VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
                     (padrao, padrao2, tipo_match, tipo_transacao,
                      forma_id, fornecedor_id, cliente_id, titulo_id,
-                     categoria_id, subcategoria_id),
+                     categoria_id, subcategoria_id, account_id),
                 )
             except Exception:
                 cursor.execute(
@@ -114,12 +128,13 @@ def novo():
     fornecedores = _get_fornecedores(cursor)
     clientes     = _get_clientes(cursor)
     titulos      = _get_titulos_simples(cursor)
+    contas       = _get_contas(cursor)
     cursor.close()
     conn.close()
     return render_template('bank_import/regras/form.html',
                            regra=None, formas=formas,
                            fornecedores=fornecedores, clientes=clientes,
-                           titulos=titulos, acao='Criar')
+                           titulos=titulos, contas=contas, acao='Criar')
 
 
 @bp.route('/<int:regra_id>/editar', methods=['GET', 'POST'])
@@ -148,6 +163,7 @@ def editar(regra_id):
         titulo_id      = request.form.get('titulo_id') or None
         categoria_id   = request.form.get('categoria_id') or None
         subcategoria_id = request.form.get('subcategoria_id') or None
+        account_id     = request.form.get('account_id') or None
 
         if not padrao:
             flash('Padrão de descrição é obrigatório.', 'warning')
@@ -157,11 +173,12 @@ def editar(regra_id):
                     """UPDATE bank_conciliacao_regras
                        SET padrao_descricao=%s, padrao_secundario=%s, tipo_match=%s,
                            tipo_transacao=%s, forma_recebimento_id=%s, fornecedor_id=%s,
-                           cliente_id=%s, titulo_id=%s, categoria_id=%s, subcategoria_id=%s
+                           cliente_id=%s, titulo_id=%s, categoria_id=%s, subcategoria_id=%s,
+                           account_id=%s
                        WHERE id=%s""",
                     (padrao, padrao2, tipo_match, tipo_transacao,
                      forma_id, fornecedor_id, cliente_id, titulo_id,
-                     categoria_id, subcategoria_id, regra_id),
+                     categoria_id, subcategoria_id, account_id, regra_id),
                 )
             except Exception:
                 cursor.execute(
@@ -181,12 +198,13 @@ def editar(regra_id):
     fornecedores = _get_fornecedores(cursor)
     clientes     = _get_clientes(cursor)
     titulos      = _get_titulos_simples(cursor)
+    contas       = _get_contas(cursor)
     cursor.close()
     conn.close()
     return render_template('bank_import/regras/form.html',
                            regra=regra, formas=formas,
                            fornecedores=fornecedores, clientes=clientes,
-                           titulos=titulos, acao='Salvar')
+                           titulos=titulos, contas=contas, acao='Salvar')
 
 
 @bp.route('/<int:regra_id>/toggle', methods=['POST'])
@@ -225,6 +243,32 @@ def excluir(regra_id):
     cursor.close()
     conn.close()
     return redirect(url_for('conciliacao_regras.lista'))
+
+
+@bp.route('/api/subcategoria/criar', methods=['POST'])
+@login_required
+def api_criar_subcategoria():
+    """Cria uma subcategoria inline durante o preenchimento da regra (AJAX)."""
+    data = request.get_json(silent=True) or {}
+    categoria_id = data.get('categoria_id')
+    nome = (data.get('nome') or '').strip()
+    if not categoria_id or not nome:
+        return jsonify({'ok': False, 'msg': 'categoria_id e nome são obrigatórios'}), 400
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        cursor.execute(
+            "INSERT INTO subcategorias_despesas (categoria_id, nome, ativo) VALUES (%s,%s,1)",
+            (categoria_id, nome),
+        )
+        conn.commit()
+        novo_id = cursor.lastrowid
+        return jsonify({'ok': True, 'id': novo_id, 'nome': nome})
+    except Exception as e:
+        return jsonify({'ok': False, 'msg': str(e)}), 500
+    finally:
+        cursor.close()
+        conn.close()
 
 
 @bp.route('/api/categorias/<int:titulo_id>')
