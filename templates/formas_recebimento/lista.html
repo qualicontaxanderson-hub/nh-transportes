@@ -66,11 +66,10 @@
                    class="btn btn-primary btn-sm" title="Editar">
                   <i class="bi bi-pencil"></i>
                 </a>
-                <button class="btn btn-warning btn-sm btn-toggle"
+                <button class="btn btn-danger btn-sm btn-excluir"
                         data-id="{{ f.id }}" data-nome="{{ f.nome | e }}"
-                        data-status="{{ f.ativo }}"
-                        title="{{ 'Desativar' if f.ativo else 'Ativar' }}">
-                  <i class="bi bi-{{ 'lock' if f.ativo else 'unlock' }}"></i>
+                        title="Excluir">
+                  <i class="bi bi-trash"></i>
                 </button>
               </td>
             </tr>
@@ -87,14 +86,20 @@
 {% endblock %}
 {% block scripts %}
 <script>
-document.querySelectorAll('.btn-toggle').forEach(btn => {
+document.querySelectorAll('.btn-excluir').forEach(btn => {
   btn.addEventListener('click', function() {
     const id = this.dataset.id;
     const nome = this.dataset.nome;
-    const st = parseInt(this.dataset.status);
-    if (!confirm((st ? 'Desativar' : 'Ativar') + ' "' + nome + '"?')) return;
-    fetch('{{ url_for("formas_recebimento.toggle", id=0) }}'.replace('/0', '/' + id), {method:'POST'})
-      .then(r => r.json()).then(d => { if (d.success) location.reload(); else alert(d.message); });
+    if (!confirm('Excluir "' + nome + '"?\n\nEsta ação é irreversível.')) return;
+    fetch('{{ url_for("formas_recebimento.excluir", id=0) }}'.replace('/0', '/' + id), {method:'POST'})
+      .then(r => r.json())
+      .then(d => {
+        if (d.success) {
+          location.reload();
+        } else {
+          alert('⚠️ ' + d.message);
+        }
+      });
   });
 });
 </script>

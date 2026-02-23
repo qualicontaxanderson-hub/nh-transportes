@@ -94,25 +94,46 @@ def editar(id):
     return render_template('formas_recebimento/editar.html', forma=forma)
 
 
-@bp.route('/toggle/<int:id>', methods=['POST'])
+@bp.route('/excluir/<int:id>', methods=['POST'])
 @login_required
 @admin_required
-def toggle(id):
-    """Ativa ou desativa forma de recebimento."""
+def excluir(id):
+    """Exclui forma de recebimento se não houver vínculos."""
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
-    cursor.execute("SELECT ativo FROM formas_recebimento WHERE id=%s", (id,))
-    row = cursor.fetchone()
-    if not row:
+    # Verificar se há transações bancárias vinculadas
+    cursor.execute(
+        "SELECT COUNT(*) AS total FROM bank_transactions WHERE forma_recebimento_id = %s",
+        (id,)
+    )
+    if cursor.fetchone()['total'] > 0:
         cursor.close()
         conn.close()
-        return jsonify({'success': False, 'message': 'Não encontrado'})
-    novo_status = 0 if row['ativo'] else 1
-    cursor.execute("UPDATE formas_recebimento SET ativo=%s WHERE id=%s", (novo_status, id))
+        return jsonify({'success': False, 'message': 'Não é possível excluir: há transações bancárias vinculadas a esta forma de recebimento.'})
+    # Verificar se há mapeamentos CNPJ vinculados
+    cursor.execute(
+        "SELECT COUNT(*) AS total FROM bank_supplier_mapping WHERE forma_recebimento_id = %s",
+        (id,)
+    )
+    if cursor.fetchone()['total'] > 0:
+        cursor.close()
+        conn.close()
+        return jsonify({'success': False, 'message': 'Não é possível excluir: há mapeamentos automáticos vinculados. Edite ou remova-os primeiro.'})
+    # Verificar se há regras de conciliação vinculadas
+    cursor.execute(
+        "SELECT COUNT(*) AS total FROM bank_conciliacao_regras WHERE forma_recebimento_id = %s",
+        (id,)
+    )
+    if cursor.fetchone()['total'] > 0:
+        cursor.close()
+        conn.close()
+        return jsonify({'success': False, 'message': 'Não é possível excluir: há regras de conciliação vinculadas. Edite ou remova-as primeiro.'})
+    # Sem vínculos — pode excluir
+    cursor.execute("DELETE FROM formas_recebimento WHERE id = %s", (id,))
     conn.commit()
     cursor.close()
     conn.close()
-    return jsonify({'success': True, 'ativo': novo_status})
+    return jsonify({'success': True})
 
 
 @bp.route('/api/listar')
