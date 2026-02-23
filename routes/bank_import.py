@@ -500,7 +500,7 @@ def _conciliar_transferencia(cursor, conn, tx_id, conta_destino_id, usuario):
     """Registra transferência entre contas: concilia a origem e cria um CREDIT na conta destino."""
     agora = _dt.datetime.now()
     cursor.execute(
-        """SELECT id, data_transacao, valor, descricao, hash_unico
+        """SELECT id, data_transacao, valor, descricao, hash_dedup
            FROM bank_transactions WHERE id=%s""",
         (tx_id,),
     )
@@ -515,11 +515,11 @@ def _conciliar_transferencia(cursor, conn, tx_id, conta_destino_id, usuario):
         (agora, usuario, tx_id),
     )
     # Cria CREDIT na conta destino (complementar da transferência)
-    hash_destino = (tx.get('hash_unico') or str(tx_id)) + '_transfer'
+    hash_destino = (tx.get('hash_dedup') or str(tx_id)) + '_transfer'
     descricao_dest = f"TRANSFERÊNCIA RECEBIDA - {tx.get('descricao') or ''}"[:500]
     cursor.execute(
         """INSERT IGNORE INTO bank_transactions
-               (account_id, data_transacao, tipo, valor, descricao, hash_unico,
+               (account_id, data_transacao, tipo, valor, descricao, hash_dedup,
                 status, conciliado_em, conciliado_por)
            VALUES (%s, %s, 'CREDIT', %s, %s, %s,
                    'conciliado', %s, %s)""",
