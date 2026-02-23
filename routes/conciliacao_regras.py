@@ -28,23 +28,12 @@ def _get_clientes(cursor):
     return cursor.fetchall()
 
 
-def _get_titulos(cursor):
+def _get_titulos_simples(cursor):
+    """Retorna lista simples de títulos (sem JSON embutido — evita bug de aspas duplas)."""
     cursor.execute(
-        """SELECT t.id AS titulo_id, t.nome AS titulo_nome,
-                  c.id AS categoria_id, c.nome AS categoria_nome
-           FROM titulos_despesas t
-           INNER JOIN categorias_despesas c ON c.titulo_id = t.id AND c.ativo = 1
-           WHERE t.ativo = 1
-           ORDER BY t.ordem, t.nome, c.ordem, c.nome"""
+        "SELECT id, nome FROM titulos_despesas WHERE ativo=1 ORDER BY ordem, nome"
     )
-    rows = cursor.fetchall()
-    titulos = {}
-    for r in rows:
-        tid = r['titulo_id']
-        if tid not in titulos:
-            titulos[tid] = {'id': tid, 'nome': r['titulo_nome'], 'categorias': []}
-        titulos[tid]['categorias'].append({'id': r['categoria_id'], 'nome': r['categoria_nome']})
-    return list(titulos.values())
+    return cursor.fetchall()
 
 
 @bp.route('/')
@@ -91,22 +80,23 @@ def novo():
         cliente_id       = request.form.get('cliente_id') or None
         titulo_id        = request.form.get('titulo_id') or None
         categoria_id     = request.form.get('categoria_id') or None
+        subcategoria_id  = request.form.get('subcategoria_id') or None
 
         if not padrao:
             flash('Padrão de descrição é obrigatório.', 'warning')
         else:
-            # Verifica se a tabela já possui a coluna padrao_secundario
             try:
                 cursor.execute(
                     """INSERT INTO bank_conciliacao_regras
                        (padrao_descricao, padrao_secundario, tipo_match, tipo_transacao,
-                        forma_recebimento_id, fornecedor_id, cliente_id, titulo_id, categoria_id)
-                       VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
+                        forma_recebimento_id, fornecedor_id, cliente_id, titulo_id,
+                        categoria_id, subcategoria_id)
+                       VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
                     (padrao, padrao2, tipo_match, tipo_transacao,
-                     forma_id, fornecedor_id, cliente_id, titulo_id, categoria_id),
+                     forma_id, fornecedor_id, cliente_id, titulo_id,
+                     categoria_id, subcategoria_id),
                 )
             except Exception:
-                # Fallback para tabela sem novas colunas (antes da migration)
                 cursor.execute(
                     """INSERT INTO bank_conciliacao_regras
                        (padrao_descricao, tipo_match, tipo_transacao,
@@ -120,10 +110,10 @@ def novo():
             conn.close()
             return redirect(url_for('conciliacao_regras.lista'))
 
-    formas      = _get_formas(cursor)
+    formas       = _get_formas(cursor)
     fornecedores = _get_fornecedores(cursor)
-    clientes    = _get_clientes(cursor)
-    titulos     = _get_titulos(cursor)
+    clientes     = _get_clientes(cursor)
+    titulos      = _get_titulos_simples(cursor)
     cursor.close()
     conn.close()
     return render_template('bank_import/regras/form.html',
@@ -157,6 +147,7 @@ def editar(regra_id):
         cliente_id     = request.form.get('cliente_id') or None
         titulo_id      = request.form.get('titulo_id') or None
         categoria_id   = request.form.get('categoria_id') or None
+        subcategoria_id = request.form.get('subcategoria_id') or None
 
         if not padrao:
             flash('Padrão de descrição é obrigatório.', 'warning')
@@ -166,11 +157,11 @@ def editar(regra_id):
                     """UPDATE bank_conciliacao_regras
                        SET padrao_descricao=%s, padrao_secundario=%s, tipo_match=%s,
                            tipo_transacao=%s, forma_recebimento_id=%s, fornecedor_id=%s,
-                           cliente_id=%s, titulo_id=%s, categoria_id=%s
+                           cliente_id=%s, titulo_id=%s, categoria_id=%s, subcategoria_id=%s
                        WHERE id=%s""",
                     (padrao, padrao2, tipo_match, tipo_transacao,
-                     forma_id, fornecedor_id, cliente_id, titulo_id, categoria_id,
-                     regra_id),
+                     forma_id, fornecedor_id, cliente_id, titulo_id,
+                     categoria_id, subcategoria_id, regra_id),
                 )
             except Exception:
                 cursor.execute(
@@ -189,7 +180,7 @@ def editar(regra_id):
     formas       = _get_formas(cursor)
     fornecedores = _get_fornecedores(cursor)
     clientes     = _get_clientes(cursor)
-    titulos      = _get_titulos(cursor)
+    titulos      = _get_titulos_simples(cursor)
     cursor.close()
     conn.close()
     return render_template('bank_import/regras/form.html',
@@ -239,7 +230,7 @@ def excluir(regra_id):
 @bp.route('/api/categorias/<int:titulo_id>')
 @login_required
 def api_categorias(titulo_id):
-    """Retorna categorias de um título para o select dinâmico no formulário."""
+    """Retorna categorias de um título com subcategorias aninhadas."""
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
     cursor.execute(
@@ -247,6 +238,16 @@ def api_categorias(titulo_id):
         (titulo_id,),
     )
     cats = cursor.fetchall()
+    # Buscar subcategorias para cada categoria
+    for cat in cats:
+        try:
+            cursor.execute(
+                "SELECT id, nome FROM subcategorias_despesas WHERE categoria_id=%s AND ativo=1 ORDER BY nome",
+                (cat['id'],),
+            )
+            cat['subcategorias'] = cursor.fetchall()
+        except Exception:
+            cat['subcategorias'] = []
     cursor.close()
     conn.close()
     return jsonify(cats)

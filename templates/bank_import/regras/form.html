@@ -112,36 +112,30 @@
         <p class="text-muted small mb-2">Ou vincular a uma <strong>Despesa</strong> (para Débitos → Despesa):</p>
 
         <div class="row">
-          <div class="col-md-6 mb-3">
+          <div class="col-md-4 mb-3">
             <label class="form-label"><i class="bi bi-receipt text-warning"></i> Título da Despesa</label>
             <select name="titulo_id" class="form-select" id="selTituloRegra"
                     onchange="carregarCategoriasRegra(this.value)">
               <option value="">— Não vincular —</option>
               {% for t in titulos %}
                 <option value="{{ t.id }}"
-                  {{ 'selected' if regra and regra.get('titulo_id') == t.id }}
-                  data-categorias="{{ t.categorias | tojson }}">
+                  {{ 'selected' if regra and regra.get('titulo_id') == t.id }}>
                   {{ t.nome }}
                 </option>
               {% endfor %}
             </select>
           </div>
-          <div class="col-md-6 mb-3">
+          <div class="col-md-4 mb-3">
             <label class="form-label">Categoria da Despesa</label>
-            <select name="categoria_id" class="form-select" id="selCategoriaRegra">
-              <option value="">— Selecione um título primeiro —</option>
-              {% if regra and regra.get('titulo_id') %}
-                {% for t in titulos %}
-                  {% if t.id == regra.titulo_id %}
-                    {% for c in t.categorias %}
-                      <option value="{{ c.id }}"
-                        {{ 'selected' if c.id == regra.categoria_id }}>
-                        {{ c.nome }}
-                      </option>
-                    {% endfor %}
-                  {% endif %}
-                {% endfor %}
-              {% endif %}
+            <select name="categoria_id" class="form-select" id="selCategoriaRegra"
+                    onchange="carregarSubcategoriasRegra(this.value)">
+              <option value="">— Selecione um título —</option>
+            </select>
+          </div>
+          <div class="col-md-4 mb-3">
+            <label class="form-label">Subcategoria <span class="text-muted">(opt.)</span></label>
+            <select name="subcategoria_id" class="form-select" id="selSubcategoriaRegra">
+              <option value="">— Selecione uma categoria —</option>
             </select>
           </div>
         </div>
@@ -159,27 +153,58 @@
 </div>
 
 <script>
-function carregarCategoriasRegra(tituloId) {
-  var sel = document.getElementById('selTituloRegra');
-  var catSel = document.getElementById('selCategoriaRegra');
-  catSel.innerHTML = '<option value="">— Selecione —</option>';
+// IDs pré-selecionados quando editando (injetados pelo servidor)
+var _tituloAtual    = {{ regra.titulo_id    if regra and regra.get('titulo_id')    else 'null' }};
+var _categoriaAtual = {{ regra.categoria_id if regra and regra.get('categoria_id') else 'null' }};
+var _subcatAtual    = {{ regra.subcategoria_id if regra and regra.get('subcategoria_id') else 'null' }};
+
+function carregarCategoriasRegra(tituloId, preSelectCat, preSelectSubcat) {
+  var catSel  = document.getElementById('selCategoriaRegra');
+  var subcSel = document.getElementById('selSubcategoriaRegra');
+  catSel.innerHTML  = '<option value="">— Selecione —</option>';
+  subcSel.innerHTML = '<option value="">— Selecione uma categoria —</option>';
   if (!tituloId) return;
-  var opt = Array.from(sel.options).find(o => o.value == tituloId);
+  fetch('/banco/regras/api/categorias/' + tituloId)
+    .then(function(r){ return r.json(); })
+    .then(function(cats){
+      cats.forEach(function(c){
+        var o = document.createElement('option');
+        o.value = c.id;
+        o.textContent = c.nome;
+        o.dataset.subcats = JSON.stringify(c.subcategorias || []);
+        catSel.appendChild(o);
+      });
+      if (preSelectCat) {
+        catSel.value = preSelectCat;
+        carregarSubcategoriasRegra(preSelectCat, preSelectSubcat);
+      }
+    });
+}
+
+function carregarSubcategoriasRegra(categoriaId, preSelectSubcat) {
+  var catSel  = document.getElementById('selCategoriaRegra');
+  var subcSel = document.getElementById('selSubcategoriaRegra');
+  subcSel.innerHTML = '<option value="">(nenhuma)</option>';
+  if (!categoriaId) return;
+  var opt = Array.from(catSel.options).find(function(o){ return o.value == categoriaId; });
   if (!opt) return;
   try {
-    var cats = JSON.parse(opt.dataset.categorias || '[]');
-    cats.forEach(function(c) {
+    var subs = JSON.parse(opt.dataset.subcats || '[]');
+    subs.forEach(function(s){
       var o = document.createElement('option');
-      o.value = c.id;
-      o.textContent = c.nome;
-      catSel.appendChild(o);
+      o.value = s.id;
+      o.textContent = s.nome;
+      subcSel.appendChild(o);
     });
-  } catch (e) {}
+    if (preSelectSubcat) subcSel.value = preSelectSubcat;
+  } catch(e){}
 }
-// Inicializa categorias se estiver editando
-document.addEventListener('DOMContentLoaded', function() {
-  var sel = document.getElementById('selTituloRegra');
-  if (sel && sel.value) carregarCategoriasRegra(sel.value);
+
+document.addEventListener('DOMContentLoaded', function(){
+  if (_tituloAtual) {
+    document.getElementById('selTituloRegra').value = _tituloAtual;
+    carregarCategoriasRegra(_tituloAtual, _categoriaAtual, _subcatAtual);
+  }
 });
 </script>
 {% endblock %}
