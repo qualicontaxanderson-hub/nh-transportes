@@ -348,7 +348,7 @@
                     <div class="col-md-4">
                       <label class="form-label form-label-sm mb-0">Valor R$</label>
                       <input type="text" name="desp_1_valor" class="form-control form-control-sm inp-valor"
-                             placeholder="0,00">
+                             placeholder="0,00" inputmode="numeric">
                     </div>
                     <div class="col-md-4">
                       <label class="form-label form-label-sm mb-0">Fornecedor (opt.)</label>
@@ -556,9 +556,19 @@ document.querySelectorAll('.btn-conciliar').forEach(btn => {
               }, 10);
             }
           }
-          // Pre-preenche valor com total da transação
+          // Pre-preenche valor com total da transação e aplica máscara
           const inpValor = linha.querySelector('.inp-valor');
-          if (inpValor) inpValor.value = this.dataset.txValor || '';
+          if (inpValor) {
+            // Converte "2003.70" → "2.003,70" para exibição
+            const raw = this.dataset.txValor || '';
+            if (raw) {
+              const num = Math.round(parseFloat(raw) * 100);
+              const e = { target: inpValor };
+              inpValor.value = String(num);
+              mascaraMoeda(e);
+            }
+            aplicarMascaraMoeda(inpValor);
+          }
         }
       } else {
         // Reinicia aba para Fornecedor ao abrir
@@ -583,6 +593,29 @@ function filtrarFornecedores() {
   document.querySelectorAll('#selectFornecedor option').forEach(o => {
     o.style.display = o.dataset.nome.includes(t) ? '' : 'none';
   });
+}
+
+// Máscara de moeda: ao digitar 193590 exibe 1.935,90
+function mascaraMoeda(e) {
+  const inp = e.target;
+  // Remove tudo que não é dígito
+  let v = inp.value.replace(/\D/g, '');
+  if (!v) { inp.value = ''; return; }
+  // Converte para centavos → reais
+  let num = parseInt(v, 10);
+  let reais = Math.floor(num / 100);
+  let cents = num % 100;
+  // Formata com pontos de milhar e vírgula decimal
+  let s = reais.toLocaleString('pt-BR') + ',' + String(cents).padStart(2, '0');
+  inp.value = s;
+}
+function aplicarMascaraMoeda(inp) {
+  inp.addEventListener('input', mascaraMoeda);
+}
+// Converte "1.935,90" → "1935.90" (float para envio ao servidor)
+function valorMascaraParaFloat(str) {
+  if (!str) return '0.00';
+  return str.replace(/\./g, '').replace(',', '.');
 }
 
 // ---- Abas Débito (Fornecedor / Despesa) ----
@@ -737,7 +770,7 @@ function adicionarLinhaDespesa() {
     <div class="row g-1 mt-1">
       <div class="col-md-4">
         <label class="form-label form-label-sm mb-0">Valor R$</label>
-        <input type="text" name="desp_${i}_valor" class="form-control form-control-sm inp-valor" placeholder="0,00">
+        <input type="text" name="desp_${i}_valor" class="form-control form-control-sm inp-valor" placeholder="0,00" inputmode="numeric">
       </div>
       <div class="col-md-4">
         <label class="form-label form-label-sm mb-0">Fornecedor (opt.)</label>
@@ -757,6 +790,9 @@ function adicionarLinhaDespesa() {
       </div>
     </div>`;
   document.getElementById('linhas_despesa').appendChild(div);
+  // Aplica máscara de moeda no novo input de valor
+  const novoInpValor = div.querySelector('.inp-valor');
+  if (novoInpValor) aplicarMascaraMoeda(novoInpValor);
   if (_linhaDespIdx >= 3) document.getElementById('btnAdicionarDesp').style.display = 'none';
 }
 
@@ -852,10 +888,21 @@ document.querySelectorAll('.btn-aprovar-despesa').forEach(btn => {
     add('desp_1_titulo_id', titulo);
     add('desp_1_categoria_id', categ);
     if (sub) add('desp_1_subcategoria_id', sub);
+    // Valor já vem em formato float (dataset.txValor) — usar diretamente
     add('desp_1_valor', valor);
     document.body.appendChild(form);
     form.submit();
   });
 });
+
+// Converte valores mascarados ("1.935,90") para float ("1935.90") antes de submeter
+document.getElementById('formConciliar').addEventListener('submit', function() {
+  this.querySelectorAll('.inp-valor').forEach(function(inp) {
+    inp.value = valorMascaraParaFloat(inp.value);
+  });
+});
+
+// Aplica máscara ao inp-valor da linha 1 (estática) ao carregar a página
+document.querySelectorAll('.inp-valor').forEach(aplicarMascaraMoeda);
 </script>
 {% endblock %}
