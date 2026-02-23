@@ -216,9 +216,23 @@ def _auto_conciliar_despesas_por_cnpj(cursor, conn, account_id, mapping):
 def _auto_conciliar_por_regras(cursor, conn, account_id=None):
     """
     Aplica bank_conciliacao_regras às transações pendentes do account_id (ou todas).
+    Suporta:
+      - Match simples (padrao_descricao contém ou é exato)
+      - Match composto (padrao_descricao + padrao_secundario: ambos devem estar na descrição)
+      - Regras de despesa (titulo_id + categoria_id → cria lancamentos_despesas)
+      - Regras de cliente (cliente_id para créditos de cobrança)
     Retorna quantas foram auto-conciliadas.
     """
-    # Carrega regras ativas
+    # Carrega regras ativas com os novos campos (fallback se colunas ainda não existirem)
+    try:
+        cursor.execute(
+            """SELECT r.*, ba_acc.cliente_id AS _conta_cliente_id
+               FROM bank_conciliacao_regras r
+               LEFT JOIN (SELECT NULL AS id, NULL AS cliente_id) ba_acc ON FALSE
+               WHERE r.ativo=1 ORDER BY r.id"""
+        )
+    except Exception:
+        pass
     cursor.execute(
         """SELECT * FROM bank_conciliacao_regras WHERE ativo=1 ORDER BY id"""
     )
@@ -226,17 +240,23 @@ def _auto_conciliar_por_regras(cursor, conn, account_id=None):
     if not regras:
         return 0
 
-    # Busca transações ainda pendentes
+    # Busca transações ainda pendentes com dados da conta
     if account_id:
         cursor.execute(
-            """SELECT id, descricao, tipo, cnpj_cpf FROM bank_transactions
-               WHERE status='pendente' AND account_id=%s""",
+            """SELECT bt.id, bt.descricao, bt.tipo, bt.cnpj_cpf,
+                      bt.data_transacao, bt.valor, ba.cliente_id AS conta_cliente_id
+               FROM bank_transactions bt
+               INNER JOIN bank_accounts ba ON ba.id = bt.account_id
+               WHERE bt.status='pendente' AND bt.account_id=%s""",
             (account_id,),
         )
     else:
         cursor.execute(
-            """SELECT id, descricao, tipo, cnpj_cpf FROM bank_transactions
-               WHERE status='pendente'"""
+            """SELECT bt.id, bt.descricao, bt.tipo, bt.cnpj_cpf,
+                      bt.data_transacao, bt.valor, ba.cliente_id AS conta_cliente_id
+               FROM bank_transactions bt
+               INNER JOIN bank_accounts ba ON ba.id = bt.account_id
+               WHERE bt.status='pendente'"""
         )
     pendentes = cursor.fetchall()
     if not pendentes:
@@ -252,6 +272,7 @@ def _auto_conciliar_por_regras(cursor, conn, account_id=None):
             tipo_regra = regra.get('tipo_transacao', 'AMBOS')
             if tipo_regra != 'AMBOS' and tipo_regra != tipo:
                 continue
+            # Match principal
             padrao = (regra.get('padrao_descricao') or '').upper()
             tipo_match = regra.get('tipo_match', 'contem')
             if tipo_match == 'exato':
@@ -260,19 +281,45 @@ def _auto_conciliar_por_regras(cursor, conn, account_id=None):
                 match = padrao in descricao
             if not match:
                 continue
-            # Aplica regra
-            forma_id = regra.get('forma_recebimento_id')
-            forn_id = regra.get('fornecedor_id')
-            cursor.execute(
-                """UPDATE bank_transactions
-                   SET status='conciliado',
-                       forma_recebimento_id=%s,
-                       fornecedor_id=%s,
-                       conciliado_em=%s,
-                       conciliado_por='auto-regra'
-                   WHERE id=%s""",
-                (forma_id, forn_id, agora, tx['id']),
-            )
+            # Match secundário (composto): ex: "LIQ.COBRANCA SIMPLES" + "TRANSPORTES TREMEA"
+            padrao2 = (regra.get('padrao_secundario') or '').upper()
+            if padrao2 and padrao2 not in descricao:
+                continue
+            # Determina o que vincular
+            forma_id  = regra.get('forma_recebimento_id')
+            forn_id   = regra.get('fornecedor_id')
+            titulo_id    = regra.get('titulo_id')
+            categoria_id = regra.get('categoria_id')
+
+            if titulo_id and categoria_id and tipo == 'DEBIT':
+                # Regra de despesa → cria lancamento_despesas e concilia
+                cursor.execute(
+                    """INSERT INTO lancamentos_despesas
+                       (data, cliente_id, titulo_id, categoria_id, valor, fornecedor, observacao)
+                       VALUES (%s, %s, %s, %s, %s, %s, %s)""",
+                    (tx['data_transacao'], tx.get('conta_cliente_id'),
+                     titulo_id, categoria_id,
+                     tx['valor'],
+                     (tx.get('descricao') or '')[:255],
+                     tx.get('descricao') or ''),
+                )
+                cursor.execute(
+                    """UPDATE bank_transactions
+                       SET status='conciliado', conciliado_em=%s, conciliado_por='auto-regra'
+                       WHERE id=%s""",
+                    (agora, tx['id']),
+                )
+            else:
+                cursor.execute(
+                    """UPDATE bank_transactions
+                       SET status='conciliado',
+                           forma_recebimento_id=%s,
+                           fornecedor_id=%s,
+                           conciliado_em=%s,
+                           conciliado_por='auto-regra'
+                       WHERE id=%s""",
+                    (forma_id, forn_id, agora, tx['id']),
+                )
             cursor.execute(
                 """UPDATE bank_conciliacao_regras
                    SET total_aplicacoes=total_aplicacoes+1 WHERE id=%s""",

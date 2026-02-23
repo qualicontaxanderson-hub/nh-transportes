@@ -1,0 +1,185 @@
+{% extends "base.html" %}
+{% block title %}{{ acao }} Regra de Conciliação{% endblock %}
+{% block content %}
+<div class="container mt-4" style="max-width:720px">
+  <h4>
+    <i class="bi bi-funnel-fill text-primary"></i>
+    {{ acao }} Regra de Conciliação
+  </h4>
+
+  <div class="alert alert-info py-2 small">
+    <strong>Como funciona:</strong>
+    Quando o padrão principal (e o secundário, se informado) for encontrado na descrição da transação,
+    a regra é aplicada automaticamente e vincula a transação à forma de recebimento, fornecedor, cliente ou despesa escolhida.
+  </div>
+
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% for cat, msg in messages %}
+      <div class="alert alert-{{ cat }} py-2">{{ msg }}</div>
+    {% endfor %}
+  {% endwith %}
+
+  <form method="post">
+    <div class="card shadow-sm mb-3">
+      <div class="card-header fw-bold bg-light">Padrão de Descrição</div>
+      <div class="card-body">
+
+        <div class="mb-3">
+          <label class="form-label fw-bold">Padrão Principal <span class="text-danger">*</span></label>
+          <input type="text" name="padrao_descricao" class="form-control"
+                 value="{{ regra.padrao_descricao if regra else '' }}"
+                 placeholder="Ex: TARIFA COM R LIQUIDACAO" required>
+          <small class="text-muted">Texto que deve aparecer na descrição da transação (não diferencia maiúsculas/minúsculas).</small>
+        </div>
+
+        <div class="mb-3">
+          <label class="form-label">Padrão Secundário <span class="text-muted">(opcional)</span></label>
+          <input type="text" name="padrao_secundario" class="form-control"
+                 value="{{ regra.padrao_secundario if regra and regra.get('padrao_secundario') else '' }}"
+                 placeholder="Ex: TRANSPORTES TREMEA">
+          <small class="text-muted">
+            Se informado, a descrição deve conter AMBOS os padrões.
+            Útil para "LIQ.COBRANCA SIMPLES + TRANSPORTES TREMEA" → direcionar para esse cliente específico.
+          </small>
+        </div>
+
+        <div class="row">
+          <div class="col-md-6 mb-3">
+            <label class="form-label fw-bold">Tipo de Correspondência</label>
+            <select name="tipo_match" class="form-select">
+              <option value="contem" {{ 'selected' if not regra or regra.tipo_match == 'contem' }}>Contém (parcial)</option>
+              <option value="exato"  {{ 'selected' if regra and regra.tipo_match == 'exato' }}>Exato (texto completo)</option>
+            </select>
+            <small class="text-muted">"Contém" é o mais comum. Use "Exato" apenas se a descrição for sempre idêntica.</small>
+          </div>
+          <div class="col-md-6 mb-3">
+            <label class="form-label fw-bold">Tipo de Transação</label>
+            <select name="tipo_transacao" class="form-select">
+              <option value="AMBOS"  {{ 'selected' if not regra or regra.tipo_transacao == 'AMBOS' }}>Ambos (crédito e débito)</option>
+              <option value="CREDIT" {{ 'selected' if regra and regra.tipo_transacao == 'CREDIT' }}>Somente Crédito</option>
+              <option value="DEBIT"  {{ 'selected' if regra and regra.tipo_transacao == 'DEBIT' }}>Somente Débito</option>
+            </select>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <div class="card shadow-sm mb-3">
+      <div class="card-header fw-bold bg-light">Vincular a (preencha apenas o campo relevante)</div>
+      <div class="card-body">
+
+        <div class="mb-3">
+          <label class="form-label"><i class="bi bi-wallet2 text-success"></i> Forma de Recebimento <span class="text-muted small">(para Créditos)</span></label>
+          <select name="forma_recebimento_id" class="form-select">
+            <option value="">— Não vincular —</option>
+            {% for f in formas %}
+              <option value="{{ f.id }}"
+                {{ 'selected' if regra and regra.get('forma_recebimento_id') == f.id }}>
+                {{ f.nome }}
+              </option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div class="mb-3">
+          <label class="form-label"><i class="bi bi-building text-primary"></i> Fornecedor <span class="text-muted small">(para Débitos → Fornecedor)</span></label>
+          <select name="fornecedor_id" class="form-select">
+            <option value="">— Não vincular —</option>
+            {% for f in fornecedores %}
+              <option value="{{ f.id }}"
+                {{ 'selected' if regra and regra.get('fornecedor_id') == f.id }}>
+                {{ f.razao_social }}
+              </option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div class="mb-3">
+          <label class="form-label"><i class="bi bi-person text-info"></i> Cliente <span class="text-muted small">(para créditos de clientes como "LIQ.COBRANCA SIMPLES")</span></label>
+          <select name="cliente_id" class="form-select">
+            <option value="">— Não vincular —</option>
+            {% for c in clientes %}
+              <option value="{{ c.id }}"
+                {{ 'selected' if regra and regra.get('cliente_id') == c.id }}>
+                {{ c.razao_social }}
+              </option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <hr class="my-3">
+        <p class="text-muted small mb-2">Ou vincular a uma <strong>Despesa</strong> (para Débitos → Despesa):</p>
+
+        <div class="row">
+          <div class="col-md-6 mb-3">
+            <label class="form-label"><i class="bi bi-receipt text-warning"></i> Título da Despesa</label>
+            <select name="titulo_id" class="form-select" id="selTituloRegra"
+                    onchange="carregarCategoriasRegra(this.value)">
+              <option value="">— Não vincular —</option>
+              {% for t in titulos %}
+                <option value="{{ t.id }}"
+                  {{ 'selected' if regra and regra.get('titulo_id') == t.id }}
+                  data-categorias="{{ t.categorias | tojson }}">
+                  {{ t.nome }}
+                </option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-md-6 mb-3">
+            <label class="form-label">Categoria da Despesa</label>
+            <select name="categoria_id" class="form-select" id="selCategoriaRegra">
+              <option value="">— Selecione um título primeiro —</option>
+              {% if regra and regra.get('titulo_id') %}
+                {% for t in titulos %}
+                  {% if t.id == regra.titulo_id %}
+                    {% for c in t.categorias %}
+                      <option value="{{ c.id }}"
+                        {{ 'selected' if c.id == regra.categoria_id }}>
+                        {{ c.nome }}
+                      </option>
+                    {% endfor %}
+                  {% endif %}
+                {% endfor %}
+              {% endif %}
+            </select>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <div class="d-flex gap-2">
+      <button type="submit" class="btn btn-primary">
+        <i class="bi bi-check-circle"></i> {{ acao }}
+      </button>
+      <a href="{{ url_for('conciliacao_regras.lista') }}" class="btn btn-outline-secondary">Cancelar</a>
+    </div>
+  </form>
+</div>
+
+<script>
+function carregarCategoriasRegra(tituloId) {
+  var sel = document.getElementById('selTituloRegra');
+  var catSel = document.getElementById('selCategoriaRegra');
+  catSel.innerHTML = '<option value="">— Selecione —</option>';
+  if (!tituloId) return;
+  var opt = Array.from(sel.options).find(o => o.value == tituloId);
+  if (!opt) return;
+  try {
+    var cats = JSON.parse(opt.dataset.categorias || '[]');
+    cats.forEach(function(c) {
+      var o = document.createElement('option');
+      o.value = c.id;
+      o.textContent = c.nome;
+      catSel.appendChild(o);
+    });
+  } catch (e) {}
+}
+// Inicializa categorias se estiver editando
+document.addEventListener('DOMContentLoaded', function() {
+  var sel = document.getElementById('selTituloRegra');
+  if (sel && sel.value) carregarCategoriasRegra(sel.value);
+});
+</script>
+{% endblock %}
