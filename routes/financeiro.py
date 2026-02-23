@@ -1009,8 +1009,11 @@ def transferencias():
     f_data_fim = request.args.get('data_fim', '').strip()
     f_conta    = request.args.get('account_id', '').strip()
 
-    where = ["bt.status = 'conciliado'", "bt.tipo = 'DEBIT'",
-             "bt_dest.hash_dedup = CONCAT(bt.hash_dedup, '_transfer')"]
+    # COALESCE: quando hash_dedup é NULL, usa o id numérico (mesmo comportamento do Python:
+    # hash_destino = (tx.get('hash_dedup') or str(tx_id)) + '_transfer')
+    _hash_expr = "CONCAT(COALESCE(bt.hash_dedup, CAST(bt.id AS CHAR)), '_transfer')"
+
+    where = ["bt.status = 'conciliado'", "bt.tipo = 'DEBIT'"]
     params = []
     if f_data_ini:
         where.append("bt.data_transacao >= %s")
@@ -1032,7 +1035,7 @@ def transferencias():
                    cd.razao_social AS empresa_dest
             FROM bank_transactions bt
             INNER JOIN bank_transactions bt_dest
-                   ON bt_dest.hash_dedup = CONCAT(bt.hash_dedup, '_transfer')
+                   ON bt_dest.hash_dedup = {_hash_expr}
             INNER JOIN bank_accounts ba_orig ON ba_orig.id = bt.account_id
             LEFT  JOIN clientes co ON co.id = ba_orig.cliente_id
             INNER JOIN bank_accounts ba_dest ON ba_dest.id = bt_dest.account_id
@@ -1049,7 +1052,7 @@ def transferencias():
         f"""SELECT SUM(bt.valor) AS total_valor, COUNT(*) AS total_qtd
             FROM bank_transactions bt
             INNER JOIN bank_transactions bt_dest
-                   ON bt_dest.hash_dedup = CONCAT(bt.hash_dedup, '_transfer')
+                   ON bt_dest.hash_dedup = {_hash_expr}
             WHERE {where_sql}""",
         params,
     )
