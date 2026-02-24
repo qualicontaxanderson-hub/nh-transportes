@@ -1072,6 +1072,8 @@ def transferencias():
                    WHERE bt.tipo = 'DEBIT'
                      AND bt.status = 'conciliado'
                      AND bt.fornecedor_id IS NULL
+                     AND (bt.conciliado_por IS NULL
+                          OR bt.conciliado_por NOT IN ('auto-regra', 'auto'))
                      AND NOT EXISTS (
                          SELECT 1 FROM bank_transactions cr
                          WHERE cr.hash_dedup = CONCAT('TRANSFER_', bt.id)

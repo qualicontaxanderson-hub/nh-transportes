@@ -284,11 +284,14 @@ def _auto_conciliar_por_regras(cursor, conn, account_id=None):
 
             if titulo_id and categoria_id and tipo == 'DEBIT':
                 # Regra de despesa → cria lancamento_despesas e concilia
+                # Usa cliente_id da conta bancária para identificar a empresa
+                conta_cliente_id = tx.get('conta_cliente_id')
                 cursor.execute(
                     """INSERT INTO lancamentos_despesas
-                       (data, titulo_id, categoria_id, valor, fornecedor, observacao)
-                       VALUES (%s, %s, %s, %s, %s, %s)""",
+                       (data, cliente_id, titulo_id, categoria_id, valor, fornecedor, observacao)
+                       VALUES (%s, %s, %s, %s, %s, %s, %s)""",
                     (tx['data_transacao'],
+                     conta_cliente_id,
                      titulo_id, categoria_id,
                      tx['valor'],
                      (tx.get('descricao') or '')[:255],
