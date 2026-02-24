@@ -1062,7 +1062,8 @@ def transferencias():
         totais = cursor.fetchone() or {}
 
         # DEBITs "órfãos": conciliados como transferência mas sem CREDIT TRANSFER_<id>
-        # Query robusta: não depende de forma_recebimento_id (pode não existir)
+        # Usa bank_transaction_id em lancamentos_despesas para excluir despesas conciliadas.
+        # Se a coluna bank_transaction_id não existir ainda (migration pendente), cai no fallback.
         try:
             cursor.execute(
                 """SELECT bt.id, bt.data_transacao, bt.valor, bt.descricao, bt.cnpj_cpf,
@@ -1078,6 +1079,10 @@ def transferencias():
                          SELECT 1 FROM bank_transactions cr
                          WHERE cr.hash_dedup = CONCAT('TRANSFER_', bt.id)
                            AND cr.tipo = 'CREDIT'
+                     )
+                     AND NOT EXISTS (
+                         SELECT 1 FROM lancamentos_despesas ld
+                         WHERE ld.bank_transaction_id = bt.id
                      )
                    ORDER BY bt.data_transacao DESC
                    LIMIT 100"""

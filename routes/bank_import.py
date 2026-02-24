@@ -196,10 +196,11 @@ def _auto_conciliar_despesas_por_cnpj(cursor, conn, account_id, mapping):
         descricao = (tx.get('descricao') or '')
         cursor.execute(
             """INSERT INTO lancamentos_despesas
-               (data, cliente_id, titulo_id, categoria_id, subcategoria_id, valor, fornecedor, observacao)
-               VALUES (%s, %s, %s, %s, %s, %s, %s, %s)""",
+               (data, cliente_id, titulo_id, categoria_id, subcategoria_id,
+                valor, fornecedor, observacao, bank_transaction_id)
+               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)""",
             (tx['data_transacao'], cliente_id, m['titulo_id'], m['categoria_id'],
-             m.get('subcategoria_id'), tx['valor'], descricao[:255], descricao),
+             m.get('subcategoria_id'), tx['valor'], descricao[:255], descricao, tx['id']),
         )
         cursor.execute(
             """UPDATE bank_transactions
@@ -288,14 +289,16 @@ def _auto_conciliar_por_regras(cursor, conn, account_id=None):
                 conta_cliente_id = tx.get('conta_cliente_id')
                 cursor.execute(
                     """INSERT INTO lancamentos_despesas
-                       (data, cliente_id, titulo_id, categoria_id, valor, fornecedor, observacao)
-                       VALUES (%s, %s, %s, %s, %s, %s, %s)""",
+                       (data, cliente_id, titulo_id, categoria_id, valor,
+                        fornecedor, observacao, bank_transaction_id)
+                       VALUES (%s, %s, %s, %s, %s, %s, %s, %s)""",
                     (tx['data_transacao'],
                      conta_cliente_id,
                      titulo_id, categoria_id,
                      tx['valor'],
                      (tx.get('descricao') or '')[:255],
-                     tx.get('descricao') or ''),
+                     tx.get('descricao') or '',
+                     tx['id']),
                 )
                 cursor.execute(
                     """UPDATE bank_transactions
@@ -619,9 +622,11 @@ def _conciliar_tx(cursor, conn, tx_id, acao, tipo_tx,
                 continue
             cursor.execute(
                 """INSERT INTO lancamentos_despesas
-                       (data, cliente_id, titulo_id, categoria_id, subcategoria_id, valor, fornecedor, observacao)
-                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s)""",
-                (data_tx, cliente_id, titulo_id, categoria_id, subcategoria_id, valor, fornecedor_txt, observacao),
+                       (data, cliente_id, titulo_id, categoria_id, subcategoria_id,
+                        valor, fornecedor, observacao, bank_transaction_id)
+                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+                (data_tx, cliente_id, titulo_id, categoria_id, subcategoria_id,
+                 valor, fornecedor_txt, observacao, tx_id),
             )
         cursor.execute(
             """UPDATE bank_transactions
