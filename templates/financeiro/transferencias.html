@@ -55,6 +55,17 @@
     </div>
   </div>
 
+  {% if erro_db %}
+  <div class="alert alert-danger">
+    <strong>Erro ao consultar o banco de dados:</strong><br>
+    <code>{{ erro_db }}</code><br>
+    <small class="mt-2 d-block">
+      Se o erro mencionar "Unknown column 'cliente_id'" execute a migration
+      <code>20260223_pending_all_idempotente.sql</code> no Railway e recarregue esta página.
+    </small>
+  </div>
+  {% endif %}
+
   <!-- Tabela -->
   <div class="card border-0 shadow-sm">
     <div class="card-body p-0">
@@ -67,9 +78,7 @@
               <th>Valor</th>
               <th>Descrição</th>
               <th>Conta Origem</th>
-              <th>Empresa Origem</th>
               <th>→ Conta Destino</th>
-              <th>Empresa Destino</th>
             </tr>
           </thead>
           <tbody>
@@ -85,13 +94,11 @@
                 {{ t.descricao or '—' }}
               </td>
               <td>
-                <span class="badge bg-secondary">{{ t.banco_orig }} — {{ t.conta_orig_apelido }}</span>
+                <span class="badge bg-secondary">{{ t.banco_orig or '?' }} — {{ t.conta_orig_apelido or '?' }}</span>
               </td>
-              <td class="text-muted small">{{ t.empresa_orig or '—' }}</td>
               <td>
-                <span class="badge bg-primary">{{ t.banco_dest }} — {{ t.conta_dest_apelido }}</span>
+                <span class="badge bg-primary">{{ t.banco_dest or '?' }} — {{ t.conta_dest_apelido or '?' }}</span>
               </td>
-              <td class="text-muted small">{{ t.empresa_dest or '—' }}</td>
             </tr>
             {% endfor %}
           </tbody>
