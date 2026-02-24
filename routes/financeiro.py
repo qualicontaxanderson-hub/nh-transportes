@@ -1062,6 +1062,30 @@ def transferencias():
     )
     totais = cursor.fetchone() or {}
 
+    # DEBITs "órfãos": conciliados como transferência mas sem CREDIT TRANSFER_<id>
+    # Esses são transferências quebradas (criadas antes do fix do hash overflow).
+    # Mostramos para que o usuário possa desfazer e refazer corretamente.
+    cursor.execute(
+        """SELECT bt.id, bt.data_transacao, bt.valor, bt.descricao, bt.cnpj_cpf,
+                  ba.apelido AS conta_apelido, ba.banco_nome,
+                  c.razao_social AS empresa_nome
+           FROM bank_transactions bt
+           INNER JOIN bank_accounts ba ON ba.id = bt.account_id
+           LEFT  JOIN clientes c ON c.id = ba.cliente_id
+           WHERE bt.tipo = 'DEBIT'
+             AND bt.status = 'conciliado'
+             AND bt.fornecedor_id IS NULL
+             AND bt.forma_recebimento_id IS NULL
+             AND NOT EXISTS (
+                 SELECT 1 FROM bank_transactions cr
+                 WHERE cr.hash_dedup = CONCAT('TRANSFER_', bt.id)
+                   AND cr.tipo = 'CREDIT'
+             )
+           ORDER BY bt.data_transacao DESC
+           LIMIT 100"""
+    )
+    orfaos = cursor.fetchall()
+
     # Contas para o filtro
     cursor.execute(
         """SELECT ba.id, ba.apelido, ba.banco_nome, c.razao_social AS empresa_nome
@@ -1080,6 +1104,7 @@ def transferencias():
         transferencias=lista,
         total_valor=totais.get('total_valor') or 0,
         total_qtd=totais.get('total_qtd') or 0,
+        orfaos=orfaos,
         contas=contas,
         f_data_ini=f_data_ini,
         f_data_fim=f_data_fim,

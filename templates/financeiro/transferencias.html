@@ -105,5 +105,78 @@
       {% endif %}
     </div>
   </div>
+
+  {% if orfaos %}
+  <!-- Seção de transferências quebradas (DEBIT conciliado sem CREDIT) -->
+  <div class="card border-warning shadow-sm mt-4">
+    <div class="card-header bg-warning bg-opacity-25 text-warning-emphasis fw-semibold">
+      <i class="bi bi-exclamation-triangle-fill me-1"></i>
+      Transferências incompletas ({{ orfaos|length }}) — precisam ser refeitas
+      <small class="text-muted fw-normal ms-2">
+        O débito foi marcado como conciliado, mas a transação de crédito na conta destino não foi criada.
+        Clique em "Desfazer e Refazer" para reabrir o débito na tela de conciliação.
+      </small>
+    </div>
+    <div class="card-body p-0">
+      <div class="table-responsive">
+        <table class="table table-sm table-hover mb-0 align-middle">
+          <thead class="table-light">
+            <tr>
+              <th>Data</th><th>Valor</th><th>Descrição</th>
+              <th>Conta</th><th>Empresa</th><th>Ação</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for o in orfaos %}
+            <tr>
+              <td class="text-nowrap">
+                {{ o.data_transacao.strftime('%d/%m/%Y') if o.data_transacao else '—' }}
+              </td>
+              <td class="text-end fw-bold text-danger">
+                R$ {{ "%.2f"|format(o.valor|float) | replace('.', ',') }}
+              </td>
+              <td class="text-truncate" style="max-width:220px" title="{{ o.descricao }}">
+                {{ o.descricao or '—' }}
+              </td>
+              <td><span class="badge bg-secondary">{{ o.banco_nome }} — {{ o.conta_apelido }}</span></td>
+              <td class="text-muted small">{{ o.empresa_nome or '—' }}</td>
+              <td>
+                <button class="btn btn-sm btn-warning" onclick="desfazerTransferencia({{ o.id }}, this)">
+                  <i class="bi bi-arrow-counterclockwise"></i> Desfazer e Refazer
+                </button>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
 </div>
+
+<script>
+function desfazerTransferencia(txId, btn) {
+  if (!confirm('Desfazer esta conciliação?\nO débito voltará para "pendente" e você poderá refazer a transferência corretamente.')) return;
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+  fetch('/banco/api/desfazer-transferencia/' + txId, {method: 'POST',
+    headers: {'X-CSRFToken': document.querySelector('meta[name=csrf-token]')?.content || ''}
+  })
+  .then(r => r.json())
+  .then(d => {
+    if (d.ok) {
+      btn.closest('tr').innerHTML =
+        '<td colspan="6" class="text-success py-2"><i class="bi bi-check-circle"></i> ' +
+        d.mensagem + ' — <a href="/banco/conciliar">Ir para Conciliação</a></td>';
+    } else {
+      alert('Erro: ' + d.erro);
+      btn.disabled = false;
+      btn.innerHTML = '<i class="bi bi-arrow-counterclockwise"></i> Desfazer e Refazer';
+    }
+  })
+  .catch(e => { alert('Erro de rede: ' + e); btn.disabled = false; });
+}
+</script>
 {% endblock %}

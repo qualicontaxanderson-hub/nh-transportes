@@ -1586,6 +1586,57 @@ def api_dropbox_oauth_url():
         return jsonify({'ok': False, 'erro': str(exc)})
 
 
+@bp.route('/api/desfazer-transferencia/<int:tx_id>', methods=['POST'])
+@login_required
+def api_desfazer_transferencia(tx_id):
+    """Desfaz uma transferência entre contas:
+    - Remove o CREDIT TRANSFER_<id> se existir
+    - Redefine o DEBIT de origem para status='pendente'
+    Isso permite que o usuário refaça a conciliação.
+    """
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        # Verifica que a transação existe e é um DEBIT conciliado
+        cursor.execute(
+            "SELECT id, tipo, status FROM bank_transactions WHERE id=%s", (tx_id,)
+        )
+        tx = cursor.fetchone()
+        if not tx:
+            return jsonify({'ok': False, 'erro': 'Transação não encontrada.'}), 404
+        if tx['tipo'] != 'DEBIT':
+            return jsonify({'ok': False, 'erro': 'Apenas débitos podem ser desfeitos.'}), 400
+
+        hash_credit = f'TRANSFER_{tx_id}'
+
+        # Remove o CREDIT correspondente (se existir)
+        cursor.execute(
+            "DELETE FROM bank_transactions WHERE hash_dedup = %s AND tipo = 'CREDIT'",
+            (hash_credit,),
+        )
+        deletados = cursor.rowcount
+
+        # Reabre o DEBIT para pendente
+        cursor.execute(
+            """UPDATE bank_transactions
+               SET status='pendente', conciliado_em=NULL, conciliado_por=NULL,
+                   fornecedor_id=NULL, forma_recebimento_id=NULL
+               WHERE id=%s""",
+            (tx_id,),
+        )
+        conn.commit()
+        return jsonify({
+            'ok': True,
+            'mensagem': f'Conciliação desfeita. CREDIT removido: {deletados}. Transação reaberta para conciliação.',
+        })
+    except Exception as exc:
+        conn.rollback()
+        return jsonify({'ok': False, 'erro': str(exc)}), 500
+    finally:
+        cursor.close()
+        conn.close()
+
+
 @bp.route('/api/dropbox-oauth-token')
 @login_required
 def api_dropbox_oauth_token():
