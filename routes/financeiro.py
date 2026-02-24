@@ -1061,54 +1061,29 @@ def transferencias():
         )
         totais = cursor.fetchone() or {}
 
-        # DEBITs "órfãos": conciliados como transferência mas sem CREDIT TRANSFER_<id>.
-        # Tenta com tipo_conciliacao; se a coluna não existir ainda usa fallback estrutural.
-        _no_credit = """NOT EXISTS (
-                         SELECT 1 FROM bank_transactions cr
-                         WHERE cr.hash_dedup = CONCAT('TRANSFER_', bt.id)
-                           AND cr.tipo = 'CREDIT'
-                     )"""
+        # DEBITs "órfãos": marcados como transferência (tipo_conciliacao='transferencia')
+        # mas sem CREDIT TRANSFER_<id> correspondente.
+        # Usa SOMENTE tipo_conciliacao='transferencia' (strict) — evita incluir despesas.
         try:
             cursor.execute(
-                f"""SELECT bt.id, bt.data_transacao, bt.valor, bt.descricao, bt.cnpj_cpf,
+                """SELECT bt.id, bt.data_transacao, bt.valor, bt.descricao, bt.cnpj_cpf,
                           ba.apelido AS conta_apelido, ba.banco_nome
                    FROM bank_transactions bt
                    INNER JOIN bank_accounts ba ON ba.id = bt.account_id
                    WHERE bt.tipo = 'DEBIT'
                      AND bt.status = 'conciliado'
-                     AND (bt.tipo_conciliacao = 'transferencia'
-                          OR (bt.tipo_conciliacao IS NULL
-                              AND bt.fornecedor_id IS NULL
-                              AND bt.forma_recebimento_id IS NULL
-                              AND (bt.conciliado_por IS NULL
-                                   OR bt.conciliado_por NOT IN ('auto','auto-regra'))))
-                     AND {_no_credit}
+                     AND bt.tipo_conciliacao = 'transferencia'
+                     AND NOT EXISTS (
+                         SELECT 1 FROM bank_transactions cr
+                         WHERE cr.hash_dedup = CONCAT('TRANSFER_', bt.id)
+                           AND cr.tipo = 'CREDIT'
+                     )
                    ORDER BY bt.data_transacao DESC
                    LIMIT 100"""
             )
             orfaos = cursor.fetchall()
         except Exception:
-            try:
-                conn.rollback()
-                cursor = conn.cursor(dictionary=True)
-                # Fallback mínimo: sem depender de tipo_conciliacao ou forma_recebimento_id
-                cursor.execute(
-                    f"""SELECT bt.id, bt.data_transacao, bt.valor, bt.descricao, bt.cnpj_cpf,
-                              ba.apelido AS conta_apelido, ba.banco_nome
-                       FROM bank_transactions bt
-                       INNER JOIN bank_accounts ba ON ba.id = bt.account_id
-                       WHERE bt.tipo = 'DEBIT'
-                         AND bt.status = 'conciliado'
-                         AND bt.fornecedor_id IS NULL
-                         AND (bt.conciliado_por IS NULL
-                              OR bt.conciliado_por NOT IN ('auto','auto-regra'))
-                         AND {_no_credit}
-                       ORDER BY bt.data_transacao DESC
-                       LIMIT 100"""
-                )
-                orfaos = cursor.fetchall()
-            except Exception:
-                orfaos = []
+            orfaos = []
 
         # Contas para o filtro (sem cliente_id)
         cursor.execute(
