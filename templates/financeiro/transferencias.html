@@ -118,10 +118,10 @@
   <div class="card border-warning shadow-sm mt-4">
     <div class="card-header bg-warning bg-opacity-25 text-warning-emphasis fw-semibold">
       <i class="bi bi-exclamation-triangle-fill me-1"></i>
-      Transferências incompletas ({{ orfaos|length }}) — precisam ser refeitas
-      <small class="text-muted fw-normal ms-2">
-        O débito foi marcado como conciliado, mas a transação de crédito na conta destino não foi criada.
-        Clique em "Desfazer e Refazer" para reabrir o débito na tela de conciliação.
+      Débitos sem transferência de crédito ({{ orfaos|length }})
+      <small class="fw-normal ms-2 text-muted">
+        O débito foi conciliado mas a transação de crédito na conta destino não foi criada.
+        Se for uma transferência, clique em "Desfazer e Refazer". Se for uma despesa, ignore.
       </small>
     </div>
     <div class="card-body p-0">
@@ -130,7 +130,7 @@
           <thead class="table-light">
             <tr>
               <th>Data</th><th>Valor</th><th>Descrição</th>
-              <th>Conta</th><th>Empresa</th><th>Ação</th>
+              <th>Conta</th><th>Tipo</th><th>Ação</th>
             </tr>
           </thead>
           <tbody>
@@ -146,7 +146,13 @@
                 {{ o.descricao or '—' }}
               </td>
               <td><span class="badge bg-secondary">{{ o.banco_nome }} — {{ o.conta_apelido }}</span></td>
-              <td class="text-muted small">{{ o.empresa_nome or '—' }}</td>
+              <td>
+                {% if o.get('origem_orfao') == 'novo' %}
+                  <span class="badge bg-danger" title="Transferência confirmada — CREDIT não foi criado">Transferência</span>
+                {% else %}
+                  <span class="badge bg-warning text-dark" title="Pode ser transferência ou despesa — verifique a descrição">Verificar</span>
+                {% endif %}
+              </td>
               <td>
                 <button class="btn btn-sm btn-warning" onclick="desfazerTransferencia({{ o.id }}, this)">
                   <i class="bi bi-arrow-counterclockwise"></i> Desfazer e Refazer
