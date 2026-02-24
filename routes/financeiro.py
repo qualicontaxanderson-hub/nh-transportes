@@ -1061,9 +1061,8 @@ def transferencias():
         )
         totais = cursor.fetchone() or {}
 
-        # DEBITs "órfãos": conciliados como transferência mas sem CREDIT TRANSFER_<id>
-        # Usa bank_transaction_id em lancamentos_despesas para excluir despesas conciliadas.
-        # Se a coluna bank_transaction_id não existir ainda (migration pendente), cai no fallback.
+        # DEBITs "órfãos": tipo_conciliacao='transferencia' mas sem CREDIT TRANSFER_<id>.
+        # Se a coluna tipo_conciliacao não existir ainda (migration pendente), cai no fallback.
         try:
             cursor.execute(
                 """SELECT bt.id, bt.data_transacao, bt.valor, bt.descricao, bt.cnpj_cpf,
@@ -1072,17 +1071,11 @@ def transferencias():
                    INNER JOIN bank_accounts ba ON ba.id = bt.account_id
                    WHERE bt.tipo = 'DEBIT'
                      AND bt.status = 'conciliado'
-                     AND bt.fornecedor_id IS NULL
-                     AND (bt.conciliado_por IS NULL
-                          OR bt.conciliado_por NOT IN ('auto-regra', 'auto'))
+                     AND bt.tipo_conciliacao = 'transferencia'
                      AND NOT EXISTS (
                          SELECT 1 FROM bank_transactions cr
                          WHERE cr.hash_dedup = CONCAT('TRANSFER_', bt.id)
                            AND cr.tipo = 'CREDIT'
-                     )
-                     AND NOT EXISTS (
-                         SELECT 1 FROM lancamentos_despesas ld
-                         WHERE ld.bank_transaction_id = bt.id
                      )
                    ORDER BY bt.data_transacao DESC
                    LIMIT 100"""

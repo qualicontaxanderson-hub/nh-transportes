@@ -515,10 +515,11 @@ def _conciliar_transferencia(cursor, conn, tx_id, conta_destino_id, usuario):
     tx = cursor.fetchone()
     if not tx:
         return
-    # Marca a tx de origem como conciliada
+    # Marca a tx de origem como conciliada (tipo_conciliacao='transferencia')
     cursor.execute(
         """UPDATE bank_transactions
-           SET status='conciliado', conciliado_em=%s, conciliado_por=%s
+           SET status='conciliado', conciliado_em=%s, conciliado_por=%s,
+               tipo_conciliacao='transferencia'
            WHERE id=%s""",
         (agora, usuario, tx_id),
     )
@@ -531,9 +532,9 @@ def _conciliar_transferencia(cursor, conn, tx_id, conta_destino_id, usuario):
     cursor.execute(
         """INSERT IGNORE INTO bank_transactions
                (account_id, data_transacao, tipo, valor, descricao, hash_dedup,
-                status, conciliado_em, conciliado_por)
+                status, conciliado_em, conciliado_por, tipo_conciliacao)
            VALUES (%s, %s, 'CREDIT', %s, %s, %s,
-                   'conciliado', %s, %s)""",
+                   'conciliado', %s, %s, 'transferencia')""",
         (conta_destino_id, tx['data_transacao'], tx['valor'],
          descricao_dest, hash_destino, agora, usuario),
     )
