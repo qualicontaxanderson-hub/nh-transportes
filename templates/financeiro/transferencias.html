@@ -162,6 +162,7 @@
               <th>Descrição</th>
               <th>Conta Origem</th>
               <th>→ Conta Destino</th>
+              <th class="text-center">Ação</th>
             </tr>
           </thead>
           <tbody>
@@ -172,6 +173,11 @@
               <td class="text-truncate" style="max-width:220px" title="{{ t.descricao }}">{{ t.descricao or '—' }}</td>
               <td><span class="badge bg-secondary">{{ t.banco_orig or '?' }} — {{ t.conta_orig_apelido or '?' }}</span></td>
               <td><span class="badge bg-primary">{{ t.banco_dest or '?' }} — {{ t.conta_dest_apelido or '?' }}</span></td>
+              <td class="text-center">
+                <button class="btn btn-sm btn-outline-warning" onclick="desfazerConciliacao({{ t.id }}, this)">
+                  <i class="bi bi-arrow-counterclockwise"></i> Desfazer
+                </button>
+              </td>
             </tr>
             {% endfor %}
           </tbody>
@@ -223,7 +229,7 @@ function desfazerConciliacao(txId, btn) {
   .then(d => {
     if (d.ok) {
       btn.closest('tr').innerHTML =
-        '<td colspan="5" class="text-success py-2 px-3"><i class="bi bi-check-circle"></i> ' +
+        '<td colspan="6" class="text-success py-2 px-3"><i class="bi bi-check-circle"></i> ' +
         'Conciliação desfeita! — <a href="/banco/conciliar" class="fw-semibold">Ir para Conciliação →</a>' +
         ' (aba "🔄 Transferência")</td>';
     } else {
