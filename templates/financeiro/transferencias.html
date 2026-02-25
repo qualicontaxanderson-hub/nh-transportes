@@ -105,14 +105,44 @@
         </table>
       </div>
       {% else %}
-      <div class="text-center py-5 text-muted">
-        <i class="bi bi-arrow-left-right fs-1 d-block mb-2 opacity-25"></i>
-        <strong>Nenhuma transferência encontrada.</strong><br>
-        <small class="d-block mt-2">
-          As transferências aparecem aqui após você conciliar um débito usando a aba
-          <strong>"🔄 Transferência"</strong> na tela de
-          <a href="/banco/conciliar">Conciliação</a>.
-        </small>
+      <div class="py-4 px-4">
+        <div class="alert alert-info mb-3">
+          <h6 class="alert-heading"><i class="bi bi-info-circle-fill me-1"></i> Nenhuma transferência encontrada</h6>
+          <p class="mb-2">Há <strong>duas etapas</strong> necessárias para as transferências aparecerem aqui:</p>
+          <ol class="mb-2">
+            <li class="mb-1">
+              <strong>Execute a migration no Railway</strong> (uma única vez) —
+              copie o SQL abaixo e cole no seu cliente MySQL do Railway (Railway → seu banco → conectar → colar e executar):
+            </li>
+            <li>
+              <strong>Refaça as transferências</strong> na tela de
+              <a href="/banco/conciliar">Conciliação</a>:
+              clique em "Conciliar" em um débito → aba <strong>"🔄 Transferência"</strong> → selecione a conta destino → Salvar.
+            </li>
+          </ol>
+          <button class="btn btn-sm btn-outline-info" type="button" onclick="document.getElementById('sqlMigration').classList.toggle('d-none')">
+            <i class="bi bi-code-square me-1"></i> Ver SQL da migration (clique para expandir)
+          </button>
+          <div id="sqlMigration" class="d-none mt-3">
+            <div class="d-flex justify-content-between align-items-center mb-1">
+              <small class="text-muted fw-semibold">Cole e execute este SQL no Railway:</small>
+              <button class="btn btn-xs btn-sm btn-outline-secondary py-0" onclick="copiarSQL()">
+                <i class="bi bi-clipboard"></i> Copiar
+              </button>
+            </div>
+            <pre id="sqlText" class="bg-dark text-light p-3 rounded small" style="white-space:pre-wrap;font-size:0.75rem">ALTER TABLE bank_transactions ADD COLUMN IF NOT EXISTS tipo_conciliacao VARCHAR(20) NULL;
+ALTER TABLE bank_transactions ADD INDEX IF NOT EXISTS idx_bt_tipo_conciliacao (tipo_conciliacao);
+ALTER TABLE lancamentos_despesas ADD COLUMN IF NOT EXISTS bank_transaction_id INT NULL;
+ALTER TABLE lancamentos_despesas ADD INDEX IF NOT EXISTS idx_ld_btid (bank_transaction_id);
+ALTER TABLE bank_supplier_mapping MODIFY COLUMN fornecedor_id INT NULL;
+ALTER TABLE bank_supplier_mapping ADD COLUMN IF NOT EXISTS titulo_id INT NULL;
+ALTER TABLE bank_supplier_mapping ADD COLUMN IF NOT EXISTS categoria_id INT NULL;
+ALTER TABLE bank_supplier_mapping ADD COLUMN IF NOT EXISTS subcategoria_id INT NULL;
+ALTER TABLE bank_supplier_mapping ADD COLUMN IF NOT EXISTS conta_destino_id INT NULL;
+ALTER TABLE bank_supplier_mapping ADD COLUMN IF NOT EXISTS tipo_debito VARCHAR(20) NULL;
+SELECT 'Migration FINAL aplicada!' AS resultado;</pre>
+          </div>
+        </div>
       </div>
       {% endif %}
     </div>
@@ -195,6 +225,10 @@ function desfazerTransferencia(txId, btn) {
     }
   })
   .catch(e => { alert('Erro de rede: ' + e); btn.disabled = false; });
+}
+function copiarSQL() {
+  const txt = document.getElementById('sqlText').textContent;
+  navigator.clipboard.writeText(txt).then(() => alert('SQL copiado! Cole no seu cliente MySQL do Railway.'));
 }
 </script>
 {% endblock %}
