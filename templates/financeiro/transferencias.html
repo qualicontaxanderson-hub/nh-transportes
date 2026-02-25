@@ -63,109 +63,25 @@
   {% if erro_db %}
   <div class="alert alert-danger">
     <strong>Erro ao consultar o banco de dados:</strong><br>
-    <code>{{ erro_db }}</code><br>
-    <small class="mt-2 d-block">
-      Se o erro mencionar "Unknown column 'cliente_id'" execute a migration
-      <code>20260223_pending_all_idempotente.sql</code> no Railway e recarregue esta página.
-    </small>
+    <code>{{ erro_db }}</code>
   </div>
   {% endif %}
 
-  <!-- Tabela -->
-  <div class="card border-0 shadow-sm">
-    <div class="card-body p-0">
-      {% if transferencias %}
-      <div class="table-responsive">
-        <table class="table table-sm table-hover mb-0 align-middle">
-          <thead class="table-light">
-            <tr>
-              <th>Data</th>
-              <th>Valor</th>
-              <th>Descrição</th>
-              <th>Conta Origem</th>
-              <th>→ Conta Destino</th>
-            </tr>
-          </thead>
-          <tbody>
-            {% for t in transferencias %}
-            <tr>
-              <td class="text-nowrap">
-                {{ t.data_transacao.strftime('%d/%m/%Y') if t.data_transacao else '—' }}
-              </td>
-              <td class="text-end fw-bold text-primary">
-                R$ {{ "%.2f"|format(t.valor|float) | replace('.', ',') }}
-              </td>
-              <td class="text-truncate" style="max-width:220px" title="{{ t.descricao }}">
-                {{ t.descricao or '—' }}
-              </td>
-              <td>
-                <span class="badge bg-secondary">{{ t.banco_orig or '?' }} — {{ t.conta_orig_apelido or '?' }}</span>
-              </td>
-              <td>
-                <span class="badge bg-primary">{{ t.banco_dest or '?' }} — {{ t.conta_dest_apelido or '?' }}</span>
-              </td>
-            </tr>
-            {% endfor %}
-          </tbody>
-        </table>
-      </div>
-      {% else %}
-      <div class="py-4 px-4">
-        <div class="alert alert-info mb-3">
-          <h6 class="alert-heading"><i class="bi bi-info-circle-fill me-1"></i> Nenhuma transferência encontrada</h6>
-          <p class="mb-2">Há <strong>duas etapas</strong> necessárias para as transferências aparecerem aqui:</p>
-          <ol class="mb-2">
-            <li class="mb-1">
-              <strong>Execute a migration no Railway</strong> (uma única vez) —
-              copie o SQL abaixo e cole no seu cliente MySQL do Railway (Railway → seu banco → conectar → colar e executar):
-            </li>
-            <li>
-              <strong>Refaça as transferências</strong> na tela de
-              <a href="/banco/conciliar">Conciliação</a>:
-              clique em "Conciliar" em um débito → aba <strong>"🔄 Transferência"</strong> → selecione a conta destino → Salvar.
-            </li>
-          </ol>
-          <button class="btn btn-sm btn-outline-info" type="button" onclick="document.getElementById('sqlMigration').classList.toggle('d-none')">
-            <i class="bi bi-code-square me-1"></i> Ver SQL da migration (clique para expandir)
-          </button>
-          <div id="sqlMigration" class="d-none mt-3">
-            <div class="d-flex justify-content-between align-items-center mb-1">
-              <small class="text-muted fw-semibold">Cole e execute este SQL no Railway:</small>
-              <button class="btn btn-xs btn-sm btn-outline-secondary py-0" onclick="copiarSQL()">
-                <i class="bi bi-clipboard"></i> Copiar
-              </button>
-            </div>
-            <pre id="sqlText" class="bg-dark text-light p-3 rounded small" style="white-space:pre-wrap;font-size:0.75rem">ALTER TABLE bank_transactions ADD COLUMN IF NOT EXISTS tipo_conciliacao VARCHAR(20) NULL;
-ALTER TABLE bank_transactions ADD INDEX IF NOT EXISTS idx_bt_tipo_conciliacao (tipo_conciliacao);
-ALTER TABLE lancamentos_despesas ADD COLUMN IF NOT EXISTS bank_transaction_id INT NULL;
-ALTER TABLE lancamentos_despesas ADD INDEX IF NOT EXISTS idx_ld_btid (bank_transaction_id);
-ALTER TABLE bank_supplier_mapping MODIFY COLUMN fornecedor_id INT NULL;
-ALTER TABLE bank_supplier_mapping ADD COLUMN IF NOT EXISTS titulo_id INT NULL;
-ALTER TABLE bank_supplier_mapping ADD COLUMN IF NOT EXISTS categoria_id INT NULL;
-ALTER TABLE bank_supplier_mapping ADD COLUMN IF NOT EXISTS subcategoria_id INT NULL;
-ALTER TABLE bank_supplier_mapping ADD COLUMN IF NOT EXISTS conta_destino_id INT NULL;
-ALTER TABLE bank_supplier_mapping ADD COLUMN IF NOT EXISTS tipo_debito VARCHAR(20) NULL;
-SELECT 'Migration FINAL aplicada!' AS resultado;</pre>
-          </div>
-        </div>
-      </div>
-      {% endif %}
-    </div>
-  </div>
-
   {% if candidatos %}
-  <!-- Candidatos: DEBITs com 'Transf' na descrição, conciliados antes do recurso existir -->
-  <div class="card border-info shadow-sm mt-4">
-    <div class="card-header bg-info bg-opacity-10 fw-semibold text-info-emphasis">
+  <!-- CANDIDATOS: em destaque quando não há transferências confirmadas -->
+  <div class="card border-warning shadow-sm mb-3">
+    <div class="card-header bg-warning bg-opacity-25 text-warning-emphasis fw-semibold">
       <i class="bi bi-question-circle-fill me-1"></i>
-      Possíveis Transferências Antigas — precisam ser refeitas ({{ candidatos|length }})
-      <small class="fw-normal ms-2 text-muted">
-        Estes débitos contêm "Transf" na descrição e foram conciliados antes do recurso de Transferência existir.
-        Se for uma transferência entre contas, clique em "Desfazer e Refazer" para corrigir.
-        Se for pagamento a fornecedor, ignore.
-      </small>
+      Débitos que podem ser transferências entre contas ({{ candidatos|length }})
     </div>
     <div class="card-body p-0">
+      <div class="alert alert-warning mx-3 mt-3 mb-2 py-2 px-3 small">
+        <strong>O que fazer:</strong><br>
+        1. Identifique pelas descrições quais débitos são realmente <strong>transferências entre suas contas</strong> (ex: TED para outra conta própria).<br>
+        2. Clique <strong>"↩ Desfazer"</strong> para abrir o débito novamente.<br>
+        3. Vá em <a href="/banco/conciliar">Conciliação</a>, clique em "Conciliar" no débito, escolha a aba <strong>"🔄 Transferência"</strong> e selecione a conta destino.<br>
+        <em>Se o débito for pagamento a fornecedor (combustível, serviço, etc.), <strong>ignore</strong> — ele já está correto em Pagamentos.</em>
+      </div>
       <div class="table-responsive">
         <table class="table table-sm table-hover mb-0 align-middle">
           <thead class="table-light">
@@ -179,11 +95,11 @@ SELECT 'Migration FINAL aplicada!' AS resultado;</pre>
             <tr>
               <td class="text-nowrap">{{ c.data_transacao.strftime('%d/%m/%Y') if c.data_transacao else '—' }}</td>
               <td class="text-end fw-bold text-danger">R$ {{ "%.2f"|format(c.valor|float) | replace('.', ',') }}</td>
-              <td class="text-truncate" style="max-width:260px" title="{{ c.descricao }}">{{ c.descricao or '—' }}</td>
+              <td class="text-truncate" style="max-width:300px" title="{{ c.descricao }}">{{ c.descricao or '—' }}</td>
               <td><span class="badge bg-secondary">{{ c.banco_nome }} — {{ c.conta_apelido }}</span></td>
               <td>
-                <button class="btn btn-sm btn-outline-info" onclick="desfazerTransferencia({{ c.id }}, this)">
-                  <i class="bi bi-arrow-counterclockwise"></i> Desfazer e Refazer
+                <button class="btn btn-sm btn-outline-warning" onclick="desfazerConciliacao({{ c.id }}, this)">
+                  <i class="bi bi-arrow-counterclockwise"></i> Desfazer
                 </button>
               </td>
             </tr>
@@ -196,48 +112,29 @@ SELECT 'Migration FINAL aplicada!' AS resultado;</pre>
   {% endif %}
 
   {% if orfaos %}
-  <!-- Seção de transferências quebradas (DEBIT conciliado sem CREDIT) -->
-  <div class="card border-warning shadow-sm mt-4">
-    <div class="card-header bg-warning bg-opacity-25 text-warning-emphasis fw-semibold">
+  <!-- ÓRFÃOS: tipo_conciliacao='transferencia' mas sem CREDIT criado -->
+  <div class="card border-danger shadow-sm mb-3">
+    <div class="card-header bg-danger bg-opacity-10 text-danger-emphasis fw-semibold">
       <i class="bi bi-exclamation-triangle-fill me-1"></i>
-      Débitos sem transferência de crédito ({{ orfaos|length }})
-      <small class="fw-normal ms-2 text-muted">
-        O débito foi conciliado mas a transação de crédito na conta destino não foi criada.
-        Se for uma transferência, clique em "Desfazer e Refazer". Se for uma despesa, ignore.
-      </small>
+      Transferências com erro — CREDIT não foi criado ({{ orfaos|length }})
+      <small class="fw-normal ms-2 text-muted">Clique "Desfazer" e refaça a transferência.</small>
     </div>
     <div class="card-body p-0">
       <div class="table-responsive">
         <table class="table table-sm table-hover mb-0 align-middle">
           <thead class="table-light">
-            <tr>
-              <th>Data</th><th>Valor</th><th>Descrição</th>
-              <th>Conta</th><th>Tipo</th><th>Ação</th>
-            </tr>
+            <tr><th>Data</th><th class="text-end">Valor</th><th>Descrição</th><th>Conta</th><th>Ação</th></tr>
           </thead>
           <tbody>
             {% for o in orfaos %}
             <tr>
-              <td class="text-nowrap">
-                {{ o.data_transacao.strftime('%d/%m/%Y') if o.data_transacao else '—' }}
-              </td>
-              <td class="text-end fw-bold text-danger">
-                R$ {{ "%.2f"|format(o.valor|float) | replace('.', ',') }}
-              </td>
-              <td class="text-truncate" style="max-width:220px" title="{{ o.descricao }}">
-                {{ o.descricao or '—' }}
-              </td>
+              <td class="text-nowrap">{{ o.data_transacao.strftime('%d/%m/%Y') if o.data_transacao else '—' }}</td>
+              <td class="text-end fw-bold text-danger">R$ {{ "%.2f"|format(o.valor|float) | replace('.', ',') }}</td>
+              <td class="text-truncate" style="max-width:260px" title="{{ o.descricao }}">{{ o.descricao or '—' }}</td>
               <td><span class="badge bg-secondary">{{ o.banco_nome }} — {{ o.conta_apelido }}</span></td>
               <td>
-                {% if o.get('origem_orfao') == 'novo' %}
-                  <span class="badge bg-danger" title="Transferência confirmada — CREDIT não foi criado">Transferência</span>
-                {% else %}
-                  <span class="badge bg-warning text-dark" title="Pode ser transferência ou despesa — verifique a descrição">Verificar</span>
-                {% endif %}
-              </td>
-              <td>
-                <button class="btn btn-sm btn-warning" onclick="desfazerTransferencia({{ o.id }}, this)">
-                  <i class="bi bi-arrow-counterclockwise"></i> Desfazer e Refazer
+                <button class="btn btn-sm btn-danger" onclick="desfazerConciliacao({{ o.id }}, this)">
+                  <i class="bi bi-arrow-counterclockwise"></i> Desfazer
                 </button>
               </td>
             </tr>
@@ -249,10 +146,73 @@ SELECT 'Migration FINAL aplicada!' AS resultado;</pre>
   </div>
   {% endif %}
 
+  <!-- TABELA PRINCIPAL: transferências confirmadas -->
+  <div class="card border-0 shadow-sm">
+    <div class="card-header fw-semibold bg-primary bg-opacity-10 text-primary-emphasis">
+      <i class="bi bi-check2-circle me-1"></i> Transferências Concluídas
+    </div>
+    <div class="card-body p-0">
+      {% if transferencias %}
+      <div class="table-responsive">
+        <table class="table table-sm table-hover mb-0 align-middle">
+          <thead class="table-light">
+            <tr>
+              <th>Data</th>
+              <th class="text-end">Valor</th>
+              <th>Descrição</th>
+              <th>Conta Origem</th>
+              <th>→ Conta Destino</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for t in transferencias %}
+            <tr>
+              <td class="text-nowrap">{{ t.data_transacao.strftime('%d/%m/%Y') if t.data_transacao else '—' }}</td>
+              <td class="text-end fw-bold text-primary">R$ {{ "%.2f"|format(t.valor|float) | replace('.', ',') }}</td>
+              <td class="text-truncate" style="max-width:220px" title="{{ t.descricao }}">{{ t.descricao or '—' }}</td>
+              <td><span class="badge bg-secondary">{{ t.banco_orig or '?' }} — {{ t.conta_orig_apelido or '?' }}</span></td>
+              <td><span class="badge bg-primary">{{ t.banco_dest or '?' }} — {{ t.conta_dest_apelido or '?' }}</span></td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <div class="py-4 px-4">
+        <div class="alert alert-info mb-0">
+          <h6 class="alert-heading"><i class="bi bi-info-circle-fill me-1"></i> Nenhuma transferência concluída ainda</h6>
+          {% if not migration_aplicada %}
+          <p class="mb-2"><strong>Passo 1:</strong> Execute a migration no Railway (Railway → banco → Connect → Query):</p>
+          <button class="btn btn-sm btn-outline-info mb-2" type="button" onclick="document.getElementById('sqlMigration').classList.toggle('d-none')">
+            <i class="bi bi-code-square me-1"></i> Ver SQL da migration
+          </button>
+          <div id="sqlMigration" class="d-none mb-2">
+            <pre id="sqlText" class="bg-dark text-light p-3 rounded small" style="white-space:pre-wrap;font-size:0.75rem">ALTER TABLE bank_transactions ADD COLUMN IF NOT EXISTS tipo_conciliacao VARCHAR(20) NULL;
+ALTER TABLE bank_transactions ADD INDEX IF NOT EXISTS idx_bt_tipo_conciliacao (tipo_conciliacao);
+ALTER TABLE lancamentos_despesas ADD COLUMN IF NOT EXISTS bank_transaction_id INT NULL;
+ALTER TABLE bank_supplier_mapping MODIFY COLUMN fornecedor_id INT NULL;
+ALTER TABLE bank_supplier_mapping ADD COLUMN IF NOT EXISTS conta_destino_id INT NULL;
+ALTER TABLE bank_supplier_mapping ADD COLUMN IF NOT EXISTS tipo_debito VARCHAR(20) NULL;
+SELECT 'OK' AS resultado;</pre>
+            <button class="btn btn-sm btn-outline-secondary" onclick="copiarSQL()"><i class="bi bi-clipboard"></i> Copiar</button>
+          </div>
+          {% endif %}
+          <p class="mb-0">
+            <strong>{% if migration_aplicada %}Passo único{% else %}Passo 2{% endif %}:</strong>
+            Vá em <a href="/banco/conciliar"><strong>Conciliação</strong></a>, clique em "Conciliar" em um débito que seja
+            uma <strong>transferência entre suas contas bancárias</strong>, escolha a aba
+            <strong>"🔄 Transferência"</strong> e selecione a conta destino.
+          </p>
+        </div>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+
 </div>
 
 <script>
-function desfazerTransferencia(txId, btn) {
+function desfazerConciliacao(txId, btn) {
   if (!confirm('Desfazer esta conciliação?\nO débito voltará para "pendente" e você poderá refazer a transferência corretamente.')) return;
   btn.disabled = true;
   btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
@@ -263,19 +223,20 @@ function desfazerTransferencia(txId, btn) {
   .then(d => {
     if (d.ok) {
       btn.closest('tr').innerHTML =
-        '<td colspan="6" class="text-success py-2"><i class="bi bi-check-circle"></i> ' +
-        d.mensagem + ' — <a href="/banco/conciliar">Ir para Conciliação</a></td>';
+        '<td colspan="5" class="text-success py-2 px-3"><i class="bi bi-check-circle"></i> ' +
+        'Conciliação desfeita! — <a href="/banco/conciliar" class="fw-semibold">Ir para Conciliação →</a>' +
+        ' (aba "🔄 Transferência")</td>';
     } else {
-      alert('Erro: ' + d.erro);
+      alert('Erro: ' + (d.erro || 'desconhecido'));
       btn.disabled = false;
-      btn.innerHTML = '<i class="bi bi-arrow-counterclockwise"></i> Desfazer e Refazer';
+      btn.innerHTML = '<i class="bi bi-arrow-counterclockwise"></i> Desfazer';
     }
   })
   .catch(e => { alert('Erro de rede: ' + e); btn.disabled = false; });
 }
 function copiarSQL() {
   const txt = document.getElementById('sqlText').textContent;
-  navigator.clipboard.writeText(txt).then(() => alert('SQL copiado! Cole no seu cliente MySQL do Railway.'));
+  navigator.clipboard.writeText(txt).then(() => alert('SQL copiado!'));
 }
 </script>
 {% endblock %}

@@ -1690,14 +1690,25 @@ def api_desfazer_transferencia(tx_id):
         )
         deletados = cursor.rowcount
 
-        # Reabre o DEBIT para pendente
-        cursor.execute(
-            """UPDATE bank_transactions
-               SET status='pendente', conciliado_em=NULL, conciliado_por=NULL,
-                   fornecedor_id=NULL, forma_recebimento_id=NULL
-               WHERE id=%s""",
-            (tx_id,),
-        )
+        # Reabre o DEBIT para pendente — tenta com tipo_conciliacao (nova coluna)
+        try:
+            cursor.execute(
+                """UPDATE bank_transactions
+                   SET status='pendente', conciliado_em=NULL, conciliado_por=NULL,
+                       fornecedor_id=NULL, forma_recebimento_id=NULL,
+                       tipo_conciliacao=NULL
+                   WHERE id=%s""",
+                (tx_id,),
+            )
+        except Exception:
+            conn.rollback()
+            cursor.execute(
+                """UPDATE bank_transactions
+                   SET status='pendente', conciliado_em=NULL, conciliado_por=NULL,
+                       fornecedor_id=NULL, forma_recebimento_id=NULL
+                   WHERE id=%s""",
+                (tx_id,),
+            )
         conn.commit()
         return jsonify({
             'ok': True,

@@ -1065,6 +1065,7 @@ def transferencias():
         # DEBITs "órfãos": só DEBITs com tipo_conciliacao='transferencia' explícito
         # (coluna adicionada pela migration 20260224_add_tipo_conciliacao.sql).
         # Sem fallback — antes da migration, orfaos fica [] para não mostrar despesas.
+        migration_aplicada = False
         try:
             cursor.execute(
                 """SELECT bt.id, bt.data_transacao, bt.valor, bt.descricao, bt.cnpj_cpf,
@@ -1084,6 +1085,7 @@ def transferencias():
                    LIMIT 200"""
             )
             orfaos = cursor.fetchall()
+            migration_aplicada = True  # query com tipo_conciliacao funcionou
         except Exception:
             orfaos = []
 
@@ -1097,28 +1099,55 @@ def transferencias():
         contas = cursor.fetchall()
 
         # Candidatos: DEBITs conciliados manualmente cuja descrição contém "Transf"
-        # (antes do recurso de tipo_conciliacao existir — precisam ser refeitos)
+        # Inclui também aqueles com tipo_conciliacao='transferencia' sem CREDIT criado
         try:
             cursor.execute(
                 """SELECT bt.id, bt.data_transacao, bt.valor, bt.descricao, bt.cnpj_cpf,
-                          ba.apelido AS conta_apelido, ba.banco_nome
+                          ba.apelido AS conta_apelido, ba.banco_nome,
+                          bt.tipo_conciliacao, bt.conciliado_por
                    FROM bank_transactions bt
                    INNER JOIN bank_accounts ba ON ba.id = bt.account_id
                    WHERE bt.tipo = 'DEBIT'
                      AND bt.status = 'conciliado'
-                     AND (bt.tipo_conciliacao IS NULL OR bt.tipo_conciliacao = '')
-                     AND bt.conciliado_por NOT IN ('auto', 'auto-regra')
-                     AND bt.descricao LIKE '%Transf%'
+                     AND (
+                       bt.tipo_conciliacao = 'transferencia'
+                       OR (
+                         (bt.tipo_conciliacao IS NULL OR bt.tipo_conciliacao = '')
+                         AND bt.conciliado_por NOT IN ('auto', 'auto-regra')
+                         AND bt.descricao LIKE '%Transf%'
+                       )
+                     )
+                     AND NOT EXISTS (
+                         SELECT 1 FROM bank_transactions cr
+                         WHERE cr.hash_dedup = CONCAT('TRANSFER_', bt.id)
+                     )
                    ORDER BY bt.data_transacao DESC
                    LIMIT 200"""
             )
             candidatos = cursor.fetchall()
         except Exception:
-            candidatos = []
+            try:
+                cursor.execute(
+                    """SELECT bt.id, bt.data_transacao, bt.valor, bt.descricao, bt.cnpj_cpf,
+                              ba.apelido AS conta_apelido, ba.banco_nome,
+                              NULL AS tipo_conciliacao, bt.conciliado_por
+                       FROM bank_transactions bt
+                       INNER JOIN bank_accounts ba ON ba.id = bt.account_id
+                       WHERE bt.tipo = 'DEBIT'
+                         AND bt.status = 'conciliado'
+                         AND bt.conciliado_por NOT IN ('auto', 'auto-regra')
+                         AND bt.descricao LIKE '%Transf%'
+                       ORDER BY bt.data_transacao DESC
+                       LIMIT 200"""
+                )
+                candidatos = cursor.fetchall()
+            except Exception:
+                candidatos = []
 
     except Exception as e:
         current_app.logger.exception("Erro em /financeiro/transferencias/")
         erro_db = str(e)
+        migration_aplicada = False
     finally:
         cursor.close()
         conn.close()
@@ -1132,6 +1161,7 @@ def transferencias():
         candidatos=candidatos,
         contas=contas,
         erro_db=erro_db,
+        migration_aplicada=migration_aplicada,
         f_data_ini=f_data_ini,
         f_data_fim=f_data_fim,
         f_conta=f_conta,
