@@ -4,9 +4,14 @@
 <div class="container-fluid py-3">
   <div class="d-flex justify-content-between align-items-center mb-3">
     <h4 class="mb-0"><i class="bi bi-arrow-left-right text-primary"></i> Transferências entre Contas</h4>
-    <a href="/banco/conciliar" class="btn btn-sm btn-outline-primary">
-      <i class="bi bi-check2-all"></i> Conciliação
-    </a>
+    <div class="d-flex gap-2">
+      <a href="/banco/api/debug-transferencias" target="_blank" class="btn btn-sm btn-outline-secondary" title="Ver diagnóstico do banco de dados">
+        <i class="bi bi-bug"></i> Diagnóstico
+      </a>
+      <a href="/banco/conciliar" class="btn btn-sm btn-outline-primary">
+        <i class="bi bi-check2-all"></i> Conciliação
+      </a>
+    </div>
   </div>
 
   <!-- Cards de resumo -->

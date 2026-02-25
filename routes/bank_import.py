@@ -515,29 +515,50 @@ def _conciliar_transferencia(cursor, conn, tx_id, conta_destino_id, usuario):
     tx = cursor.fetchone()
     if not tx:
         return
-    # Marca a tx de origem como conciliada (tipo_conciliacao='transferencia')
-    cursor.execute(
-        """UPDATE bank_transactions
-           SET status='conciliado', conciliado_em=%s, conciliado_por=%s,
-               tipo_conciliacao='transferencia'
-           WHERE id=%s""",
-        (agora, usuario, tx_id),
-    )
-    # Cria CREDIT na conta destino (complementar da transferência).
-    # Usa TRANSFER_<id> para garantir que cabe em VARCHAR(64) mesmo quando
-    # hash_dedup já tem 64 chars (SHA-256) — adicionar '_transfer' causaria
-    # overflow silenciado pelo INSERT IGNORE, impedindo a criação do CREDIT.
+    # Marca a tx de origem como conciliada.
+    # Tenta com tipo_conciliacao (coluna nova); se não existir usa UPDATE básico.
+    try:
+        cursor.execute(
+            """UPDATE bank_transactions
+               SET status='conciliado', conciliado_em=%s, conciliado_por=%s,
+                   tipo_conciliacao='transferencia'
+               WHERE id=%s""",
+            (agora, usuario, tx_id),
+        )
+    except Exception:
+        conn.rollback()
+        cursor.execute(
+            """UPDATE bank_transactions
+               SET status='conciliado', conciliado_em=%s, conciliado_por=%s
+               WHERE id=%s""",
+            (agora, usuario, tx_id),
+        )
+    # Cria CREDIT na conta destino. Usa TRANSFER_<id> para garantir que cabe
+    # em VARCHAR(64) (SHA-256 = 64 chars; '_transfer' causaria overflow).
+    # Usa INSERT normal (não IGNORE) para que falhas reais propaguen erro.
     hash_destino = f'TRANSFER_{tx_id}'
-    descricao_dest = f"TRANSFERÊNCIA RECEBIDA - {tx.get('descricao') or ''}"[:500]
-    cursor.execute(
-        """INSERT IGNORE INTO bank_transactions
-               (account_id, data_transacao, tipo, valor, descricao, hash_dedup,
-                status, conciliado_em, conciliado_por, tipo_conciliacao)
-           VALUES (%s, %s, 'CREDIT', %s, %s, %s,
-                   'conciliado', %s, %s, 'transferencia')""",
-        (conta_destino_id, tx['data_transacao'], tx['valor'],
-         descricao_dest, hash_destino, agora, usuario),
-    )
+    descricao_dest = f"TRANSFERENCIA RECEBIDA - {tx.get('descricao') or ''}"[:500]
+    try:
+        cursor.execute(
+            """INSERT INTO bank_transactions
+                   (account_id, data_transacao, tipo, valor, descricao, hash_dedup,
+                    status, conciliado_em, conciliado_por, tipo_conciliacao)
+               VALUES (%s, %s, 'CREDIT', %s, %s, %s,
+                       'conciliado', %s, %s, 'transferencia')""",
+            (conta_destino_id, tx['data_transacao'], tx['valor'],
+             descricao_dest, hash_destino, agora, usuario),
+        )
+    except Exception:
+        # tipo_conciliacao não existe ainda — INSERT sem a coluna
+        cursor.execute(
+            """INSERT INTO bank_transactions
+                   (account_id, data_transacao, tipo, valor, descricao, hash_dedup,
+                    status, conciliado_em, conciliado_por)
+               VALUES (%s, %s, 'CREDIT', %s, %s, %s,
+                       'conciliado', %s, %s)""",
+            (conta_destino_id, tx['data_transacao'], tx['valor'],
+             descricao_dest, hash_destino, agora, usuario),
+        )
     # Auto-aprender: salva CNPJ→conta_destino para sugestão nas próximas importações
     cnpj = tx.get('cnpj_cpf')
     if cnpj:
@@ -1162,6 +1183,50 @@ def api_diagnostico_regras():
     except Exception as e:
         logger.exception("Erro em diagnostico_regras: %s", e)
         return jsonify({'erro': str(e)}), 500
+
+
+@bp.route('/api/debug-transferencias')
+@login_required
+def api_debug_transferencias():
+    """Debug: mostra o estado real das transferências no banco."""
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        # Verifica se coluna tipo_conciliacao existe
+        cursor.execute(
+            """SELECT COUNT(*) AS existe FROM information_schema.COLUMNS
+               WHERE TABLE_SCHEMA=DATABASE()
+                 AND TABLE_NAME='bank_transactions'
+                 AND COLUMN_NAME='tipo_conciliacao'""")
+        col_existe = cursor.fetchone()['existe'] > 0
+
+        # CREDITs com TRANSFER_
+        cursor.execute(
+            """SELECT id, account_id, data_transacao, valor, hash_dedup, status, descricao
+               FROM bank_transactions
+               WHERE hash_dedup LIKE 'TRANSFER_%'
+               ORDER BY id DESC LIMIT 20""")
+        credits = cursor.fetchall()
+
+        # DEBITs conciliados recentes
+        cursor.execute(
+            """SELECT id, account_id, data_transacao, valor, status,
+                      conciliado_por, descricao
+               FROM bank_transactions
+               WHERE tipo='DEBIT' AND status='conciliado'
+               ORDER BY id DESC LIMIT 20""")
+        debits = cursor.fetchall()
+
+        return jsonify({
+            'col_tipo_conciliacao_existe': col_existe,
+            'credits_transfer': [dict(r) for r in credits],
+            'debits_conciliados_recentes': [dict(r) for r in debits],
+        })
+    except Exception as e:
+        return jsonify({'erro': str(e)}), 500
+    finally:
+        cursor.close()
+        conn.close()
 
 
 @bp.route('/api/contas', methods=['GET'])
