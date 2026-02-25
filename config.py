@@ -27,3 +27,22 @@ class Config:
     APP_NAME = "NH Transportes"
     DEBUG = os.environ.get('FLASK_DEBUG', '0') == '1'
     ITEMS_PER_PAGE = 20
+
+    # Pasta de entrada para arquivos OFX (watch-folder)
+    # Configure OFX_INBOX_DIR no ambiente para apontar para qualquer pasta acessível ao servidor.
+    # Padrão: /tmp/ofx_inbox  (sempre gravável no Render/Railway/Docker)
+    #
+    # Exemplo Windows/Dropbox (executando localmente):
+    #   OFX_INBOX_DIR=C:\Users\User\Dropbox\BANCOS\OFX\NOVO
+    #   OFX_PROCESSED_DIR=C:\Users\User\Dropbox\BANCOS\OFX\IMPORTADOS
+    OFX_INBOX_DIR = os.environ.get(
+        'OFX_INBOX_DIR',
+        '/tmp/ofx_inbox'
+    )
+
+    # Pasta de destino para arquivos OFX já importados.
+    # Padrão: <OFX_INBOX_DIR>/processados/
+    OFX_PROCESSED_DIR = os.environ.get(
+        'OFX_PROCESSED_DIR',
+        None  # None = usa <OFX_INBOX_DIR>/processados/ (resolvido em runtime)
+    )

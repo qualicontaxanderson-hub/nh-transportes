@@ -73,6 +73,7 @@
             {% if nivel_usuario == 'ADMIN' %}
             <li><a class="dropdown-item" href="/despesas/"><i class="bi bi-wallet2" style="color: #dc3545;"></i> Despesas</a></li>
             <li><a class="dropdown-item" href="/despesas/fornecedores/"><i class="bi bi-building" style="color: #ff5722;"></i> Despesas Fornecedor</a></li>
+            <li><a class="dropdown-item" href="/formas_recebimento/"><i class="bi bi-wallet-fill" style="color: #20c997;"></i> Formas de Recebimento</a></li>
             {% endif %}
             <li><a class="dropdown-item" href="/funcionarios/"><i class="bi bi-people" style="color: #0d6efd;"></i> Funcionários</a></li>
             <li><a class="dropdown-item" href="/categorias-funcionarios/"><i class="bi bi-tags" style="color: #6610f2;"></i> Categorias Funcionários</a></li>
@@ -125,8 +126,14 @@
           </a>
           <ul class="dropdown-menu" aria-labelledby="navFinanceiro">
             <li><a class="dropdown-item" href="/financeiro/contas/"><i class="bi bi-bank" style="color: #007bff;"></i> Contas</a></li>
-            <li><a class="dropdown-item" href="/financeiro/pagamentos/"><i class="bi bi-cash-coin" style="color: #dc3545;"></i> Pagamentos</a></li>
-            <li><a class="dropdown-item" href="/financeiro/recebimentos/"><i class="bi bi-credit-card" style="color: #28a745;"></i> Recebimentos</a></li>
+            <li><a class="dropdown-item" href="/financeiro/recebimento/"><i class="bi bi-arrow-down-circle" style="color: #28a745;"></i> Recebimento</a></li>
+            <li><a class="dropdown-item" href="/financeiro/pagamentos/"><i class="bi bi-arrow-up-circle" style="color: #dc3545;"></i> Pagamentos</a></li>
+            <li><a class="dropdown-item" href="/financeiro/transferencias/"><i class="bi bi-arrow-left-right" style="color: #6f42c1;"></i> Transferências</a></li>
+            <li><a class="dropdown-item" href="/financeiro/recebimentos/"><i class="bi bi-credit-card" style="color: #17a2b8;"></i> Receb. Frete</a></li>
+            <li><hr class="dropdown-divider"></li>
+            <li><a class="dropdown-item" href="/banco/"><i class="bi bi-file-earmark-arrow-up" style="color: #1D63A5;"></i> Importação Bancária (OFX)</a></li>
+            <li><a class="dropdown-item" href="/banco/conciliar"><i class="bi bi-check2-all" style="color: #28a745;"></i> Conciliação</a></li>
+            <li><a class="dropdown-item" href="/banco/regras/"><i class="bi bi-funnel" style="color: #fd7e14;"></i> Regras de Conciliação</a></li>
           </ul>
         </li>
 

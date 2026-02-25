@@ -859,3 +859,310 @@ def consultar_status_efi(charge_id):
             "success": False, 
             "error": f"Erro ao consultar status: {str(e)}"
         }), 500
+
+
+def _get_bank_transactions(tipo, request_args):
+    """Busca transações bancárias filtradas por tipo (CREDIT ou DEBIT) com filtros opcionais."""
+    from datetime import date
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+
+    conta_id = request_args.get('conta_id', '').strip()
+    status = request_args.get('status', '').strip()
+    data_inicio = request_args.get('data_inicio', '').strip()
+    data_fim = request_args.get('data_fim', '').strip()
+
+    # Filtros dinâmicos
+    where = ["bt.tipo = %s"]
+    params = [tipo]
+    if conta_id:
+        where.append("bt.account_id = %s")
+        params.append(conta_id)
+    if status:
+        where.append("bt.status = %s")
+        params.append(status)
+    if data_inicio:
+        where.append("bt.data_transacao >= %s")
+        params.append(data_inicio)
+    if data_fim:
+        where.append("bt.data_transacao <= %s")
+        params.append(data_fim)
+
+    where_sql = " AND ".join(where)
+
+    cursor.execute(
+        f"""SELECT bt.id, bt.data_transacao, bt.tipo, bt.valor, bt.descricao,
+                   bt.cnpj_cpf, bt.memo, bt.status, bt.fornecedor_id,
+                   bt.forma_recebimento_id,
+                   ba.apelido AS conta_apelido, ba.banco_nome,
+                   f.razao_social AS fornecedor_nome,
+                   fr.nome AS forma_recebimento_nome,
+                   (bt.status='conciliado'
+                    AND bt.fornecedor_id IS NULL
+                    AND bt.forma_recebimento_id IS NULL
+                    AND bt.tipo='DEBIT') AS is_despesa
+            FROM bank_transactions bt
+            INNER JOIN bank_accounts ba ON bt.account_id = ba.id
+            LEFT JOIN fornecedores f ON bt.fornecedor_id = f.id
+            LEFT JOIN formas_recebimento fr ON fr.id = bt.forma_recebimento_id
+            WHERE {where_sql}
+            ORDER BY bt.data_transacao DESC
+            LIMIT 500""",
+        params
+    )
+    transacoes = cursor.fetchall()
+
+    # Totais
+    cursor.execute(
+        f"""SELECT SUM(bt.valor) AS total,
+                   SUM(CASE WHEN bt.status='conciliado' THEN 1 ELSE 0 END) AS conciliados,
+                   SUM(CASE WHEN bt.status='pendente' THEN 1 ELSE 0 END) AS pendentes
+            FROM bank_transactions bt
+            WHERE {where_sql}""",
+        params
+    )
+    totais = cursor.fetchone() or {}
+
+    # Lista de contas para o filtro
+    cursor.execute(
+        """SELECT ba.id, ba.apelido, ba.banco_nome, c.razao_social AS empresa_nome
+           FROM bank_accounts ba
+           LEFT JOIN clientes c ON c.id = ba.cliente_id
+           WHERE ba.ativo = 1
+           ORDER BY ba.apelido, ba.banco_nome"""
+    )
+    contas = cursor.fetchall()
+    cursor.close()
+    conn.close()
+
+    return transacoes, totais, contas
+
+
+@financeiro_bp.route('/recebimento/')
+@login_required
+def recebimento():
+    """Exibe os créditos bancários importados via OFX."""
+    transacoes, totais, contas = _get_bank_transactions('CREDIT', request.args)
+    return render_template(
+        'financeiro/recebimento.html',
+        transacoes=transacoes,
+        total_creditos=totais.get('total') or 0,
+        total_conciliados=totais.get('conciliados') or 0,
+        total_pendentes=totais.get('pendentes') or 0,
+        contas=contas,
+        conta_id_filter=request.args.get('conta_id', ''),
+        status_filter=request.args.get('status', ''),
+        data_inicio=request.args.get('data_inicio', ''),
+        data_fim=request.args.get('data_fim', ''),
+    )
+
+
+@financeiro_bp.route('/pagamentos/')
+@login_required
+def pagamentos():
+    """Exibe os débitos bancários importados via OFX."""
+    transacoes, totais, contas = _get_bank_transactions('DEBIT', request.args)
+    return render_template(
+        'financeiro/pagamentos.html',
+        transacoes=transacoes,
+        total_debitos=totais.get('total') or 0,
+        total_conciliados=totais.get('conciliados') or 0,
+        total_pendentes=totais.get('pendentes') or 0,
+        contas=contas,
+        conta_id_filter=request.args.get('conta_id', ''),
+        status_filter=request.args.get('status', ''),
+        data_inicio=request.args.get('data_inicio', ''),
+        data_fim=request.args.get('data_fim', ''),
+    )
+
+
+@financeiro_bp.route('/contas/')
+@login_required
+def contas():
+    """Lista as contas bancárias cadastradas no sistema de importação OFX."""
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    cursor.execute(
+        """SELECT ba.id, ba.banco_nome, ba.agencia, ba.conta, ba.apelido,
+                  ba.ativo, ba.criado_em, ba.cliente_id,
+                  c.razao_social AS empresa_nome,
+                  (SELECT COUNT(*) FROM bank_transactions bt WHERE bt.account_id = ba.id) AS total_transacoes
+           FROM bank_accounts ba
+           LEFT JOIN clientes c ON c.id = ba.cliente_id
+           ORDER BY ba.ativo DESC, ba.apelido, ba.banco_nome"""
+    )
+    contas_list = cursor.fetchall()
+    cursor.close()
+    conn.close()
+    return render_template('financeiro/contas.html', contas=contas_list)
+
+
+@financeiro_bp.route('/transferencias/')
+@login_required
+def transferencias():
+    """Lista as transferências entre contas registradas via conciliação OFX."""
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+
+    # Filtros
+    f_data_ini = request.args.get('data_ini', '').strip()
+    f_data_fim = request.args.get('data_fim', '').strip()
+    f_conta    = request.args.get('account_id', '').strip()
+
+    lista       = []
+    totais      = {}
+    orfaos      = []
+    candidatos  = []
+    contas      = []
+    erro_db     = None
+
+    try:
+        # Query principal: parte do lado CREDIT (hash_dedup LIKE 'TRANSFER_%')
+        # Não usa ba.cliente_id pois essa coluna pode não existir ainda
+        # (depende da migration 20260223_pending_all_idempotente.sql).
+        where = ["bt.tipo = 'CREDIT'",
+                 "bt.status = 'conciliado'",
+                 "bt.hash_dedup LIKE 'TRANSFER\\_%'"]
+        params = []
+        if f_data_ini:
+            where.append("bt.data_transacao >= %s")
+            params.append(f_data_ini)
+        if f_data_fim:
+            where.append("bt.data_transacao <= %s")
+            params.append(f_data_fim)
+        if f_conta:
+            where.append("(bt.account_id = %s OR bt_orig.account_id = %s)")
+            params += [f_conta, f_conta]
+
+        where_sql = ' AND '.join(where)
+
+        cursor.execute(
+            f"""SELECT bt.id AS id_credit, bt_orig.id AS id,
+                       bt.data_transacao, bt.valor, bt_orig.descricao AS descricao,
+                       ba_orig.apelido AS conta_orig_apelido, ba_orig.banco_nome AS banco_orig,
+                       ba_dest.apelido AS conta_dest_apelido, ba_dest.banco_nome AS banco_dest
+                FROM bank_transactions bt
+                LEFT  JOIN bank_transactions bt_orig
+                       ON bt_orig.id = CAST(SUBSTRING(bt.hash_dedup, 10) AS UNSIGNED)
+                INNER JOIN bank_accounts ba_dest ON ba_dest.id = bt.account_id
+                LEFT  JOIN bank_accounts ba_orig ON ba_orig.id = bt_orig.account_id
+                WHERE {where_sql}
+                ORDER BY bt.data_transacao DESC
+                LIMIT 500""",
+            params,
+        )
+        lista = cursor.fetchall()
+
+        # Totais
+        cursor.execute(
+            f"""SELECT SUM(bt.valor) AS total_valor, COUNT(*) AS total_qtd
+                FROM bank_transactions bt
+                WHERE {where_sql}""",
+            params,
+        )
+        totais = cursor.fetchone() or {}
+
+        # DEBITs "órfãos": só DEBITs com tipo_conciliacao='transferencia' explícito
+        # (coluna adicionada pela migration 20260224_add_tipo_conciliacao.sql).
+        # Sem fallback — antes da migration, orfaos fica [] para não mostrar despesas.
+        migration_aplicada = False
+        try:
+            cursor.execute(
+                """SELECT bt.id, bt.data_transacao, bt.valor, bt.descricao, bt.cnpj_cpf,
+                          ba.apelido AS conta_apelido, ba.banco_nome,
+                          'novo' AS origem_orfao
+                   FROM bank_transactions bt
+                   INNER JOIN bank_accounts ba ON ba.id = bt.account_id
+                   WHERE bt.tipo = 'DEBIT'
+                     AND bt.status = 'conciliado'
+                     AND bt.tipo_conciliacao = 'transferencia'
+                     AND NOT EXISTS (
+                         SELECT 1 FROM bank_transactions cr
+                         WHERE cr.hash_dedup = CONCAT('TRANSFER_', bt.id)
+                           AND cr.tipo = 'CREDIT'
+                     )
+                   ORDER BY bt.data_transacao DESC
+                   LIMIT 200"""
+            )
+            orfaos = cursor.fetchall()
+            migration_aplicada = True  # query com tipo_conciliacao funcionou
+        except Exception:
+            orfaos = []
+
+        # Contas para o filtro (sem cliente_id)
+        cursor.execute(
+            """SELECT ba.id, ba.apelido, ba.banco_nome
+               FROM bank_accounts ba
+               WHERE ba.ativo = 1
+               ORDER BY ba.apelido"""
+        )
+        contas = cursor.fetchall()
+
+        # Candidatos: DEBITs conciliados manualmente cuja descrição contém "Transf"
+        # Inclui também aqueles com tipo_conciliacao='transferencia' sem CREDIT criado
+        try:
+            cursor.execute(
+                """SELECT bt.id, bt.data_transacao, bt.valor, bt.descricao, bt.cnpj_cpf,
+                          ba.apelido AS conta_apelido, ba.banco_nome,
+                          bt.tipo_conciliacao, bt.conciliado_por
+                   FROM bank_transactions bt
+                   INNER JOIN bank_accounts ba ON ba.id = bt.account_id
+                   WHERE bt.tipo = 'DEBIT'
+                     AND bt.status = 'conciliado'
+                     AND (
+                       bt.tipo_conciliacao = 'transferencia'
+                       OR (
+                         (bt.tipo_conciliacao IS NULL OR bt.tipo_conciliacao = '')
+                         AND bt.conciliado_por NOT IN ('auto', 'auto-regra')
+                         AND bt.descricao LIKE '%Transf%'
+                       )
+                     )
+                     AND NOT EXISTS (
+                         SELECT 1 FROM bank_transactions cr
+                         WHERE cr.hash_dedup = CONCAT('TRANSFER_', bt.id)
+                     )
+                   ORDER BY bt.data_transacao DESC
+                   LIMIT 200"""
+            )
+            candidatos = cursor.fetchall()
+        except Exception:
+            try:
+                cursor.execute(
+                    """SELECT bt.id, bt.data_transacao, bt.valor, bt.descricao, bt.cnpj_cpf,
+                              ba.apelido AS conta_apelido, ba.banco_nome,
+                              NULL AS tipo_conciliacao, bt.conciliado_por
+                       FROM bank_transactions bt
+                       INNER JOIN bank_accounts ba ON ba.id = bt.account_id
+                       WHERE bt.tipo = 'DEBIT'
+                         AND bt.status = 'conciliado'
+                         AND bt.conciliado_por NOT IN ('auto', 'auto-regra')
+                         AND bt.descricao LIKE '%Transf%'
+                       ORDER BY bt.data_transacao DESC
+                       LIMIT 200"""
+                )
+                candidatos = cursor.fetchall()
+            except Exception:
+                candidatos = []
+
+    except Exception as e:
+        current_app.logger.exception("Erro em /financeiro/transferencias/")
+        erro_db = str(e)
+        migration_aplicada = False
+    finally:
+        cursor.close()
+        conn.close()
+
+    return render_template(
+        'financeiro/transferencias.html',
+        transferencias=lista,
+        total_valor=totais.get('total_valor') or 0,
+        total_qtd=totais.get('total_qtd') or 0,
+        orfaos=orfaos,
+        candidatos=candidatos,
+        contas=contas,
+        erro_db=erro_db,
+        migration_aplicada=migration_aplicada,
+        f_data_ini=f_data_ini,
+        f_data_fim=f_data_fim,
+        f_conta=f_conta,
+    )

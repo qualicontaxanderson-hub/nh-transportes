@@ -8,5 +8,6 @@ Flask-SQLAlchemy==3.0.5
 pymysql
 efipay
 pytz
+dropbox==12.0.2
 
 # Force rebuild 2026-01-29T16:02 - Ensure troco_pix blueprint loads

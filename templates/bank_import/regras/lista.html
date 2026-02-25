@@ -1,0 +1,195 @@
+{% extends "base.html" %}
+{% block title %}Regras de Conciliação{% endblock %}
+{% block content %}
+<div class="container-fluid mt-4">
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <h4><i class="bi bi-funnel-fill text-primary"></i> Regras de Conciliação Automática</h4>
+    <div class="d-flex gap-2">
+      <button class="btn btn-outline-info btn-sm" onclick="diagnosticarRegras(this)">
+        <i class="bi bi-bug"></i> Diagnóstico
+      </button>
+      <a href="{{ url_for('conciliacao_regras.novo') }}" class="btn btn-primary btn-sm">
+        <i class="bi bi-plus-circle"></i> Nova Regra
+      </a>
+    </div>
+  </div>
+  <div id="divDiagnostico" class="d-none mb-3"></div>
+
+  <div class="alert alert-info py-2">
+    <i class="bi bi-info-circle"></i>
+    As regras são aplicadas automaticamente no momento da importação OFX e ao clicar em "Auto-Conciliar".
+    <br>
+    <strong>Padrão principal</strong>: corresponde a qualquer transação cuja descrição contenha (ou seja exatamente) o texto informado.
+    <br>
+    <strong>Padrão secundário</strong>: quando informado, a descrição também deve conter este segundo texto.
+    Útil para "LIQ.COBRANCA SIMPLES" + "TRANSPORTES TREMEA" → direcionar para um cliente específico.
+  </div>
+
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% for cat, msg in messages %}
+      <div class="alert alert-{{ cat }} alert-dismissible fade show py-2" role="alert">
+        {{ msg }}<button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+      </div>
+    {% endfor %}
+  {% endwith %}
+
+  <div class="card shadow-sm">
+    <div class="card-body p-0">
+      <table class="table table-hover table-sm mb-0">
+        <thead class="table-dark">
+          <tr>
+            <th>Padrão Principal</th>
+            <th>Padrão Secundário</th>
+            <th>Tipo Match</th>
+            <th>Transação</th>
+            <th>Vincula a</th>
+            <th class="text-center">Aplicações</th>
+            <th class="text-center">Status</th>
+            <th class="text-center">Ações</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in regras %}
+          <tr class="{{ 'table-secondary text-muted' if not r.ativo else '' }}">
+            <td><code>{{ r.padrao_descricao }}</code></td>
+            <td>
+              {% if r.get('padrao_secundario') %}
+                <code class="text-info">{{ r.padrao_secundario }}</code>
+              {% else %}
+                <span class="text-muted">—</span>
+              {% endif %}
+            </td>
+            <td>
+              {% if r.tipo_match == 'exato' %}
+                <span class="badge bg-warning text-dark">Exato</span>
+              {% else %}
+                <span class="badge bg-secondary">Contém</span>
+              {% endif %}
+            </td>
+            <td>
+              {% if r.tipo_transacao == 'CREDIT' %}
+                <span class="badge bg-success">Crédito</span>
+              {% elif r.tipo_transacao == 'DEBIT' %}
+                <span class="badge bg-danger">Débito</span>
+              {% else %}
+                <span class="badge bg-secondary">Ambos</span>
+              {% endif %}
+            </td>
+            <td>
+              {% if r.get('forma_nome') %}
+                <span class="badge bg-success"><i class="bi bi-wallet2"></i> {{ r.forma_nome }}</span>
+              {% endif %}
+              {% if r.get('fornecedor_nome') %}
+                <span class="badge bg-primary"><i class="bi bi-building"></i> {{ r.fornecedor_nome }}</span>
+              {% endif %}
+              {% if r.get('cliente_nome') %}
+                <span class="badge bg-info text-dark"><i class="bi bi-person"></i> {{ r.cliente_nome }}</span>
+              {% endif %}
+              {% if r.get('titulo_nome') %}
+                <span class="badge bg-warning text-dark">
+                  <i class="bi bi-receipt"></i> {{ r.titulo_nome }}
+                  {% if r.get('categoria_nome') %} › {{ r.categoria_nome }}{% endif %}
+                </span>
+              {% endif %}
+              {% if not r.get('forma_nome') and not r.get('fornecedor_nome') and not r.get('cliente_nome') and not r.get('titulo_nome') %}
+                <span class="text-muted">—</span>
+              {% endif %}
+            </td>
+            <td class="text-center">{{ r.total_aplicacoes }}</td>
+            <td class="text-center">
+              {% if r.ativo %}
+                <span class="badge bg-success">Ativa</span>
+              {% else %}
+                <span class="badge bg-secondary">Inativa</span>
+              {% endif %}
+            </td>
+            <td class="text-center">
+              <a href="{{ url_for('conciliacao_regras.editar', regra_id=r.id) }}"
+                 class="btn btn-outline-primary btn-sm" title="Editar">
+                <i class="bi bi-pencil"></i>
+              </a>
+              <form method="post"
+                    action="{{ url_for('conciliacao_regras.toggle', regra_id=r.id) }}"
+                    class="d-inline">
+                <button class="btn btn-outline-secondary btn-sm" title="{{ 'Desativar' if r.ativo else 'Ativar' }}">
+                  <i class="bi {{ 'bi-pause-circle' if r.ativo else 'bi-play-circle' }}"></i>
+                </button>
+              </form>
+              {% if r.total_aplicacoes == 0 %}
+              <form method="post"
+                    action="{{ url_for('conciliacao_regras.excluir', regra_id=r.id) }}"
+                    class="d-inline"
+                    onsubmit="return confirm('Excluir esta regra?')">
+                <button class="btn btn-outline-danger btn-sm" title="Excluir">
+                  <i class="bi bi-trash"></i>
+                </button>
+              </form>
+              {% endif %}
+            </td>
+          </tr>
+          {% else %}
+          <tr><td colspan="8" class="text-center text-muted py-3">Nenhuma regra cadastrada. Clique em "Nova Regra" para começar.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="mt-3">
+    <a href="{{ url_for('bank_import.conciliar') }}" class="btn btn-outline-secondary btn-sm">
+      <i class="bi bi-arrow-left"></i> Voltar para Conciliação
+    </a>
+  </div>
+</div>
+
+<script>
+function diagnosticarRegras(btn) {
+  btn.disabled = true;
+  btn.innerHTML = '<i class="bi bi-hourglass-split"></i> Verificando...';
+  fetch('/banco/api/diagnostico-regras')
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+      btn.disabled = false;
+      btn.innerHTML = '<i class="bi bi-bug"></i> Diagnóstico';
+      var div = document.getElementById('divDiagnostico');
+      div.classList.remove('d-none');
+      if (d.erro) {
+        div.innerHTML = '<div class="alert alert-danger">Erro: ' + d.erro + '</div>';
+        return;
+      }
+      var html = '<div class="alert alert-' + (d.matches.length > 0 ? 'success' : 'warning') + '">';
+      html += '<strong>Diagnóstico:</strong> ' + d.total_regras + ' regra(s) ativa(s), ';
+      html += d.total_pendentes + ' transação(ões) pendente(s), ';
+      html += '<strong>' + d.matches.length + ' correspondência(s) encontrada(s)</strong>.';
+      if (d.matches.length === 0 && d.total_pendentes > 0) {
+        html += '<br><em>Nenhuma transação pendente corresponde às regras ativas. ';
+        html += 'Verifique se o padrão está correto e se a transação tem status "pendente".</em>';
+      }
+      html += '</div>';
+      if (d.matches.length > 0) {
+        html += '<div class="table-responsive"><table class="table table-sm table-bordered small">';
+        html += '<thead class="table-light"><tr><th>Tx ID</th><th>Tipo</th><th>Valor</th><th>Descrição</th><th>Regra</th><th>Título ID</th><th>Categoria ID</th></tr></thead><tbody>';
+        d.matches.forEach(function(m){
+          html += '<tr><td>#' + m.tx_id + '</td><td>' + m.tx_tipo + '</td><td>R$ ' + m.tx_valor + '</td>';
+          html += '<td style="max-width:250px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + m.tx_descricao + '">' + m.tx_descricao + '</td>';
+          html += '<td><em>' + m.regra_padrao + '</em></td>';
+          html += '<td>' + (m.titulo_id || '<span class="text-danger">NULL</span>') + '</td>';
+          html += '<td>' + (m.categoria_id || '<span class="text-danger">NULL ← PROBLEMA!</span>') + '</td></tr>';
+        });
+        html += '</tbody></table></div>';
+        if (d.matches.some(function(m){ return !m.titulo_id || !m.categoria_id; })) {
+          html += '<div class="alert alert-danger"><strong>⚠️ Regra sem Título/Categoria:</strong> A regra foi salva sem a categoria da despesa. ';
+          html += 'Edite a regra, selecione o Título, aguarde as categorias carregarem e selecione a Categoria antes de salvar.</div>';
+        }
+      }
+      div.innerHTML = html;
+    })
+    .catch(function(e){
+      btn.disabled = false;
+      btn.innerHTML = '<i class="bi bi-bug"></i> Diagnóstico';
+      document.getElementById('divDiagnostico').classList.remove('d-none');
+      document.getElementById('divDiagnostico').innerHTML = '<div class="alert alert-danger">Erro de comunicação: ' + e.message + '</div>';
+    });
+}
+</script>
+{% endblock %}

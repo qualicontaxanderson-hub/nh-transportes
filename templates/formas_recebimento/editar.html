@@ -1,0 +1,73 @@
+{% extends 'base.html' %}
+{% block title %}Editar Forma de Recebimento - NH Transportes{% endblock %}
+{% block content %}
+<div class="container-fluid">
+  <nav aria-label="breadcrumb" class="mt-2 mb-3">
+    <ol class="breadcrumb" style="font-size:0.85rem;">
+      <li class="breadcrumb-item"><a href="/">Dashboard</a></li>
+      <li class="breadcrumb-item"><a href="{{ url_for('formas_recebimento.lista') }}">Formas de Recebimento</a></li>
+      <li class="breadcrumb-item active">Editar</li>
+    </ol>
+  </nav>
+
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% for cat, msg in messages %}
+    <div class="alert alert-{{ cat }} alert-dismissible fade show py-2">
+      {{ msg }}<button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+    {% endfor %}
+  {% endwith %}
+
+  <div class="card shadow-sm" style="max-width:540px;">
+    <div class="card-header" style="background:#1D63A5;color:white;">
+      <h5 class="mb-0" style="font-size:1rem;"><i class="bi bi-pencil"></i> Editar Forma de Recebimento</h5>
+    </div>
+    <div class="card-body">
+      <form method="POST">
+        <div class="mb-3">
+          <label class="form-label fw-semibold">Nome <span class="text-danger">*</span></label>
+          <input type="text" name="nome" class="form-control" required maxlength="100"
+                 value="{{ forma.nome }}">
+        </div>
+        <div class="mb-3">
+          <div class="form-check">
+            <input class="form-check-input" type="checkbox" name="eh_cartao" value="1"
+                   id="chkCartao" onchange="toggleTipoCartao(this)"
+                   {% if forma.eh_cartao %}checked{% endif %}>
+            <label class="form-check-label fw-semibold" for="chkCartao">É Cartão?</label>
+          </div>
+        </div>
+        <div class="mb-3" id="divTipoCartao"
+             style="display:{{ '' if forma.eh_cartao else 'none' }};">
+          <label class="form-label fw-semibold">Tipo do Cartão</label>
+          <select name="tipo_cartao" class="form-select">
+            <option value="">— Selecione —</option>
+            <option value="DEBITO" {% if forma.tipo_cartao == 'DEBITO' %}selected{% endif %}>Débito</option>
+            <option value="CREDITO" {% if forma.tipo_cartao == 'CREDITO' %}selected{% endif %}>Crédito</option>
+          </select>
+        </div>
+        <div class="mb-3">
+          <label class="form-label fw-semibold">Status</label>
+          <select name="ativo" class="form-select">
+            <option value="1" {% if forma.ativo %}selected{% endif %}>Ativo</option>
+            <option value="0" {% if not forma.ativo %}selected{% endif %}>Inativo</option>
+          </select>
+        </div>
+        <div class="d-flex gap-2">
+          <button type="submit" class="btn btn-primary">
+            <i class="bi bi-check-lg"></i> Salvar
+          </button>
+          <a href="{{ url_for('formas_recebimento.lista') }}" class="btn btn-secondary">Cancelar</a>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+function toggleTipoCartao(chk) {
+  document.getElementById('divTipoCartao').style.display = chk.checked ? '' : 'none';
+}
+</script>
+{% endblock %}

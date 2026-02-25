@@ -54,7 +54,7 @@ def titulo_detalhes(titulo_id):
         LEFT JOIN subcategorias_despesas s ON c.id = s.categoria_id AND s.ativo = 1
         WHERE c.titulo_id = %s AND c.ativo = 1
         GROUP BY c.id
-        ORDER BY c.ordem, c.nome
+        ORDER BY c.nome
     """, (titulo_id,))
     categorias = cursor.fetchall()
     
@@ -89,7 +89,7 @@ def categoria_detalhes(categoria_id):
     cursor.execute("""
         SELECT * FROM subcategorias_despesas
         WHERE categoria_id = %s AND ativo = 1
-        ORDER BY ordem, nome
+        ORDER BY nome
     """, (categoria_id,))
     subcategorias = cursor.fetchall()
     

@@ -1,0 +1,295 @@
+{% extends "base.html" %}
+{% block title %}{{ acao }} Regra de Conciliação{% endblock %}
+{% block content %}
+<div class="container mt-4" style="max-width:720px">
+  <h4>
+    <i class="bi bi-funnel-fill text-primary"></i>
+    {{ acao }} Regra de Conciliação
+  </h4>
+
+  <div class="alert alert-info py-2 small">
+    <strong>Como funciona:</strong>
+    Quando o padrão principal (e o secundário, se informado) for encontrado na descrição da transação,
+    a regra é aplicada automaticamente e vincula a transação à forma de recebimento, fornecedor, cliente ou despesa escolhida.
+  </div>
+
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% for cat, msg in messages %}
+      <div class="alert alert-{{ cat }} py-2">{{ msg }}</div>
+    {% endfor %}
+  {% endwith %}
+
+  <form method="post" id="formRegra" onsubmit="return validarFormRegra()">
+    <div class="card shadow-sm mb-3">
+      <div class="card-header fw-bold bg-light">Padrão de Descrição</div>
+      <div class="card-body">
+
+        <div class="mb-3">
+          <label class="form-label fw-bold">Padrão Principal <span class="text-danger">*</span></label>
+          <input type="text" name="padrao_descricao" class="form-control"
+                 value="{{ regra.padrao_descricao if regra else '' }}"
+                 placeholder="Ex: TARIFA COM R LIQUIDACAO" required>
+          <small class="text-muted">Texto que deve aparecer na descrição da transação (não diferencia maiúsculas/minúsculas).</small>
+        </div>
+
+        <div class="mb-3">
+          <label class="form-label">Padrão Secundário <span class="text-muted">(opcional)</span></label>
+          <input type="text" name="padrao_secundario" class="form-control"
+                 value="{{ regra.padrao_secundario if regra and regra.get('padrao_secundario') else '' }}"
+                 placeholder="Ex: TRANSPORTES TREMEA">
+          <small class="text-muted">
+            Se informado, a descrição deve conter AMBOS os padrões.
+            Útil para "LIQ.COBRANCA SIMPLES + TRANSPORTES TREMEA" → direcionar para esse cliente específico.
+          </small>
+        </div>
+
+        <div class="row">
+          <div class="col-md-6 mb-3">
+            <label class="form-label fw-bold">Tipo de Correspondência</label>
+            <select name="tipo_match" class="form-select">
+              <option value="contem" {{ 'selected' if not regra or regra.tipo_match == 'contem' }}>Contém (parcial)</option>
+              <option value="exato"  {{ 'selected' if regra and regra.tipo_match == 'exato' }}>Exato (texto completo)</option>
+            </select>
+            <small class="text-muted">"Contém" é o mais comum. Use "Exato" apenas se a descrição for sempre idêntica.</small>
+          </div>
+          <div class="col-md-6 mb-3">
+            <label class="form-label fw-bold">Tipo de Transação</label>
+            <select name="tipo_transacao" class="form-select">
+              <option value="AMBOS"  {{ 'selected' if not regra or regra.tipo_transacao == 'AMBOS' }}>Ambos (crédito e débito)</option>
+              <option value="CREDIT" {{ 'selected' if regra and regra.tipo_transacao == 'CREDIT' }}>Somente Crédito</option>
+              <option value="DEBIT"  {{ 'selected' if regra and regra.tipo_transacao == 'DEBIT' }}>Somente Débito</option>
+            </select>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <div class="card shadow-sm mb-3">
+      <div class="card-header fw-bold bg-light">Vincular a (preencha apenas o campo relevante)</div>
+      <div class="card-body">
+
+        <div class="mb-3">
+          <label class="form-label"><i class="bi bi-wallet2 text-success"></i> Forma de Recebimento <span class="text-muted small">(para Créditos)</span></label>
+          <select name="forma_recebimento_id" class="form-select">
+            <option value="">— Não vincular —</option>
+            {% for f in formas %}
+              <option value="{{ f.id }}"
+                {{ 'selected' if regra and regra.get('forma_recebimento_id') == f.id }}>
+                {{ f.nome }}
+              </option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div class="mb-3">
+          <label class="form-label"><i class="bi bi-building text-primary"></i> Fornecedor <span class="text-muted small">(para Débitos → Fornecedor)</span></label>
+          <select name="fornecedor_id" class="form-select">
+            <option value="">— Não vincular —</option>
+            {% for f in fornecedores %}
+              <option value="{{ f.id }}"
+                {{ 'selected' if regra and regra.get('fornecedor_id') == f.id }}>
+                {{ f.razao_social }}
+              </option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div class="mb-3">
+          <label class="form-label"><i class="bi bi-person text-info"></i> Cliente <span class="text-muted small">(para créditos de clientes como "LIQ.COBRANCA SIMPLES")</span></label>
+          <select name="cliente_id" class="form-select">
+            <option value="">— Não vincular —</option>
+            {% for c in clientes %}
+              <option value="{{ c.id }}"
+                {{ 'selected' if regra and regra.get('cliente_id') == c.id }}>
+                {{ c.razao_social }}
+              </option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <hr class="my-3">
+        <p class="text-muted small mb-2">Ou vincular a uma <strong>Despesa</strong> (para Débitos → Despesa):</p>
+
+        <div class="row">
+          <div class="col-md-4 mb-3">
+            <label class="form-label"><i class="bi bi-receipt text-warning"></i> Título da Despesa</label>
+            <select name="titulo_id" class="form-select" id="selTituloRegra"
+                    onchange="carregarCategoriasRegra(this.value)">
+              <option value="">— Não vincular —</option>
+              {% for t in titulos %}
+                <option value="{{ t.id }}"
+                  {{ 'selected' if regra and regra.get('titulo_id') == t.id }}>
+                  {{ t.nome }}
+                </option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-md-4 mb-3">
+            <label class="form-label">Categoria da Despesa</label>
+            <select name="categoria_id" class="form-select" id="selCategoriaRegra"
+                    onchange="carregarSubcategoriasRegra(this.value)">
+              <option value="">— Selecione um título —</option>
+            </select>
+          </div>
+          <div class="col-md-4 mb-3">
+            <label class="form-label">Subcategoria <span class="text-muted">(opt.)</span></label>
+            <div class="input-group">
+              <select name="subcategoria_id" class="form-select" id="selSubcategoriaRegra">
+                <option value="">— Selecione uma categoria —</option>
+              </select>
+              <button type="button" class="btn btn-outline-success btn-sm px-2"
+                      id="btnNovaSubcat" title="Criar nova subcategoria" disabled
+                      onclick="criarSubcategoriaInline()">
+                <i class="bi bi-plus-circle"></i>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div class="mb-3">
+          <label class="form-label"><i class="bi bi-bank text-secondary"></i> Conta Corrente <span class="text-muted small">(opcional — aplica só a essa conta)</span></label>
+          <select name="account_id" class="form-select">
+            <option value="">— Todas as contas —</option>
+            {% for ba in contas %}
+              <option value="{{ ba.id }}"
+                {{ 'selected' if regra and regra.get('account_id') == ba.id }}>
+                {{ ba.label }}
+              </option>
+            {% endfor %}
+          </select>
+          <small class="text-muted">Se selecionada, a regra só se aplica a transações dessa conta bancária.</small>
+        </div>
+
+      </div>
+    </div>
+
+    <div class="d-flex gap-2">
+      <button type="submit" class="btn btn-primary">
+        <i class="bi bi-check-circle"></i> {{ acao }}
+      </button>
+      <a href="{{ url_for('conciliacao_regras.lista') }}" class="btn btn-outline-secondary">Cancelar</a>
+    </div>
+  </form>
+</div>
+
+<script>
+// IDs pré-selecionados quando editando (injetados pelo servidor)
+var _tituloAtual    = {{ regra.titulo_id    if regra and regra.get('titulo_id')    else 'null' }};
+var _categoriaAtual = {{ regra.categoria_id if regra and regra.get('categoria_id') else 'null' }};
+var _subcatAtual    = {{ regra.subcategoria_id if regra and regra.get('subcategoria_id') else 'null' }};
+
+// Flag para saber se o AJAX de categorias ainda está em andamento
+var _categoriasCarregando = false;
+
+function validarFormRegra() {
+  var tituloSel = document.getElementById('selTituloRegra');
+  var catSel    = document.getElementById('selCategoriaRegra');
+  if (_categoriasCarregando) {
+    alert('Aguarde as categorias carregarem antes de salvar.');
+    return false;
+  }
+  if (tituloSel.value && !catSel.value) {
+    alert('Você selecionou um Título de Despesa mas não selecionou a Categoria. Por favor selecione a Categoria antes de salvar.');
+    catSel.focus();
+    return false;
+  }
+  return true;
+}
+
+function carregarCategoriasRegra(tituloId, preSelectCat, preSelectSubcat) {
+  var catSel  = document.getElementById('selCategoriaRegra');
+  var subcSel = document.getElementById('selSubcategoriaRegra');
+  var btnSave = document.querySelector('#formRegra [type=submit]');
+  catSel.innerHTML  = '<option value="">— Selecione —</option>';
+  subcSel.innerHTML = '<option value="">— Selecione uma categoria —</option>';
+  if (!tituloId) return;
+  // Mostra loading e bloqueia botão Salvar enquanto AJAX carrega
+  catSel.innerHTML = '<option value="">⏳ Carregando...</option>';
+  _categoriasCarregando = true;
+  if (btnSave) btnSave.disabled = true;
+  fetch('/banco/regras/api/categorias/' + tituloId)
+    .then(function(r){ return r.json(); })
+    .then(function(cats){
+      catSel.innerHTML = '<option value="">— Selecione —</option>';
+      cats.forEach(function(c){
+        var o = document.createElement('option');
+        o.value = c.id;
+        o.textContent = c.nome;
+        o.dataset.subcats = JSON.stringify(c.subcategorias || []);
+        catSel.appendChild(o);
+      });
+      if (preSelectCat) {
+        catSel.value = preSelectCat;
+        carregarSubcategoriasRegra(preSelectCat, preSelectSubcat);
+      }
+    })
+    .catch(function(){ catSel.innerHTML = '<option value="">Erro ao carregar</option>'; })
+    .finally(function(){
+      _categoriasCarregando = false;
+      if (btnSave) btnSave.disabled = false;
+    });
+}
+
+function carregarSubcategoriasRegra(categoriaId, preSelectSubcat) {
+  var catSel  = document.getElementById('selCategoriaRegra');
+  var subcSel = document.getElementById('selSubcategoriaRegra');
+  var btnNova = document.getElementById('btnNovaSubcat');
+  subcSel.innerHTML = '<option value="">(nenhuma)</option>';
+  btnNova.disabled = true;
+  if (!categoriaId) return;
+  var opt = Array.from(catSel.options).find(function(o){ return o.value == categoriaId; });
+  if (!opt) return;
+  try {
+    var subs = JSON.parse(opt.dataset.subcats || '[]');
+    subs.forEach(function(s){
+      var o = document.createElement('option');
+      o.value = s.id;
+      o.textContent = s.nome;
+      subcSel.appendChild(o);
+    });
+    if (preSelectSubcat) subcSel.value = preSelectSubcat;
+  } catch(e){}
+  btnNova.disabled = false;
+}
+
+function criarSubcategoriaInline() {
+  var catSel  = document.getElementById('selCategoriaRegra');
+  var subcSel = document.getElementById('selSubcategoriaRegra');
+  var categoriaId = catSel.value;
+  if (!categoriaId) { alert('Selecione uma categoria primeiro.'); return; }
+  var nome = prompt('Nome da nova subcategoria:');
+  if (!nome || !nome.trim()) return;
+  fetch('/banco/regras/api/subcategoria/criar', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({categoria_id: categoriaId, nome: nome.trim()})
+  })
+  .then(function(r){ return r.json(); })
+  .then(function(d){
+    if (!d.ok) { alert('Erro: ' + d.msg); return; }
+    // Adiciona a nova opção ao select e ao dataset.subcats da opção de categoria
+    var o = document.createElement('option');
+    o.value = d.id;
+    o.textContent = d.nome;
+    subcSel.appendChild(o);
+    subcSel.value = d.id;
+    // Atualiza dataset.subcats para não perder ao navegar
+    var catOpt = Array.from(catSel.options).find(function(x){ return x.value == categoriaId; });
+    if (catOpt) {
+      var subs = JSON.parse(catOpt.dataset.subcats || '[]');
+      subs.push({id: d.id, nome: d.nome});
+      catOpt.dataset.subcats = JSON.stringify(subs);
+    }
+  })
+  .catch(function(){ alert('Erro de comunicação com o servidor.'); });
+}
+
+document.addEventListener('DOMContentLoaded', function(){
+  if (_tituloAtual) {
+    document.getElementById('selTituloRegra').value = _tituloAtual;
+    carregarCategoriasRegra(_tituloAtual, _categoriaAtual, _subcatAtual);
+  }
+});
+</script>
+{% endblock %}

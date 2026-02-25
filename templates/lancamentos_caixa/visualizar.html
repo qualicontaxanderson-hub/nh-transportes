@@ -268,7 +268,7 @@
                                     {% set ordem = ordem_retiradas.get(desc_upper, 999) %}
                                     {% set _ = retiradas_sorted.append((ordem, ret)) %}
                                 {% endfor %}
-                                {% set retiradas_sorted = retiradas_sorted|sort %}
+                                {% set retiradas_sorted = retiradas_sorted|sort(attribute='0') %}
                                 
                                 {# Render with friendly names in hierarchical format #}
                                 {% for ordem, ret in retiradas_sorted %}
@@ -579,7 +579,7 @@ function copiarParaWhatsApp(event) {
             {% set ordem = ordem_retiradas_wa.get(desc_upper, 999) %}
             {% set _ = retiradas_wa_sorted.append((ordem, ret)) %}
         {% endfor %}
-        {% set retiradas_wa_sorted = retiradas_wa_sorted|sort %}
+        {% set retiradas_wa_sorted = retiradas_wa_sorted|sort(attribute='0') %}
         {# Output with friendly names #}
         {% for ordem, ret in retiradas_wa_sorted %}
             {% set desc_upper = ret.descricao.upper() if ret.descricao else '' %}

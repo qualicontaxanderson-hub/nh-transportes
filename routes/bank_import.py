@@ -1,17 +1,1767 @@
-from flask import Blueprint, request, jsonify
+import os
+import time
+import datetime as _dt
 
-bp = Blueprint('bank_import', __name__)
+import mysql.connector
+from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify
+from flask_login import login_required, current_user
+from utils.db import get_db_connection
 
-@bp.route('/bank/import', methods=['POST'])
-def import_bank_data():
-    data = request.get_json()
-    if not data:
-        return jsonify({'error': 'No data provided'}), 400
+bp = Blueprint('bank_import', __name__, url_prefix='/banco')
 
-    # Process the bank data here
-    return jsonify({'message': 'Bank data imported successfully', 'data': data}), 201
 
-@bp.route('/bank/import/status', methods=['GET'])
-def import_status():
-    # Check the import status
-    return jsonify({'status': 'Import is in progress...'}), 200
+# ---------------------------------------------------------------------------
+# Funções auxiliares
+# ---------------------------------------------------------------------------
+
+def _get_accounts(cursor, cliente_id=None):
+    if cliente_id:
+        cursor.execute(
+            """SELECT ba.id, ba.banco_nome, ba.agencia, ba.conta, ba.apelido,
+                      ba.cliente_id, c.razao_social AS empresa_nome
+               FROM bank_accounts ba
+               LEFT JOIN clientes c ON c.id = ba.cliente_id
+               WHERE ba.ativo = 1 AND ba.cliente_id = %s
+               ORDER BY ba.apelido, ba.banco_nome""",
+            (cliente_id,),
+        )
+    else:
+        cursor.execute(
+            """SELECT ba.id, ba.banco_nome, ba.agencia, ba.conta, ba.apelido,
+                      ba.cliente_id, c.razao_social AS empresa_nome
+               FROM bank_accounts ba
+               LEFT JOIN clientes c ON c.id = ba.cliente_id
+               WHERE ba.ativo = 1
+               ORDER BY ba.apelido, ba.banco_nome"""
+        )
+    return cursor.fetchall()
+
+
+def _get_clientes_com_produtos(cursor):
+    """Retorna clientes que possuem ao menos um produto ativo (mesmo padrão das outras rotas)."""
+    cursor.execute(
+        """SELECT DISTINCT c.id, c.razao_social, c.nome_fantasia
+           FROM clientes c
+           INNER JOIN cliente_produtos cp ON c.id = cp.cliente_id
+           WHERE cp.ativo = 1
+           ORDER BY c.razao_social"""
+    )
+    return cursor.fetchall()
+
+
+def _get_fornecedores(cursor):
+    cursor.execute(
+        "SELECT id, razao_social, cnpj FROM fornecedores ORDER BY razao_social"
+    )
+    return cursor.fetchall()
+
+
+def _save_transactions(cursor, conn, account_id, transactions):
+    """
+    Insere em lote as *transactions* (saída de OFXParser.get_transactions()) na tabela
+    bank_transactions para o *account_id* informado.
+
+    Estratégia:
+      1. Verificação de duplicatas em lote – uma query IN para todos os hashes.
+      2. Busca de mapeamento de fornecedores em lote – uma query IN para todos os CNPJs.
+      3. INSERT único com executemany para todas as novas linhas.
+      4. Até 3 tentativas em caso de deadlock MySQL (errno 1213).
+
+    Retorna (inseridos, duplicados).
+    """
+    if not transactions:
+        return 0, 0
+
+    # 1. Verificação de duplicatas em lote
+    hashes = [tx['hash_dedup'] for tx in transactions]
+    placeholders = ','.join(['%s'] * len(hashes))
+    cursor.execute(
+        f'SELECT hash_dedup FROM bank_transactions WHERE hash_dedup IN ({placeholders})',
+        hashes,
+    )
+    existing_hashes = {row['hash_dedup'] for row in cursor.fetchall()}
+
+    # 2. Busca de mapeamento de fornecedores/formas/despesas em lote (por CNPJ)
+    cnpj_list = list({tx['cnpj_cpf'] for tx in transactions if tx.get('cnpj_cpf')})
+    mapping = {}  # cnpj -> {'fornecedor_id': ..., 'forma_recebimento_id': ..., 'titulo_id': ..., ...}
+    if cnpj_list:
+        ph2 = ','.join(['%s'] * len(cnpj_list))
+        cursor.execute(
+            f'SELECT cnpj_cpf, fornecedor_id, forma_recebimento_id, titulo_id, categoria_id, subcategoria_id '
+            f'FROM bank_supplier_mapping WHERE cnpj_cpf IN ({ph2})',
+            cnpj_list,
+        )
+        for row in cursor.fetchall():
+            mapping[row['cnpj_cpf']] = row
+
+    now = _dt.datetime.now()
+    rows = []
+    duplicados = 0
+    for tx in transactions:
+        if tx['hash_dedup'] in existing_hashes:
+            duplicados += 1
+            continue
+        m = mapping.get(tx.get('cnpj_cpf') or '')
+        if tx['tipo'] == 'CREDIT':
+            frec_id = m['forma_recebimento_id'] if m else None
+            forn_id = None
+            status = 'conciliado' if frec_id else 'pendente'
+            conciliado_em = now if frec_id else None
+            conciliado_por = 'auto' if frec_id else None
+        else:
+            forn_id = m['fornecedor_id'] if m else None
+            frec_id = None
+            # Débitos com mapeamento de despesa ficam pendentes (auto-conciliados após INSERT)
+            has_despesa_mapping = bool(m and m.get('titulo_id'))
+            status = 'conciliado' if forn_id else 'pendente'
+            conciliado_em = now if forn_id else None
+            conciliado_por = 'auto' if forn_id else None
+        rows.append((
+            account_id,
+            tx['hash_dedup'],
+            tx['data_transacao'],
+            tx['tipo'],
+            tx['valor'],
+            tx['descricao'],
+            tx.get('cnpj_cpf'),
+            tx.get('memo'),
+            tx.get('fitid'),
+            status,
+            forn_id,
+            frec_id,
+            conciliado_em,
+            conciliado_por,
+        ))
+
+    inseridos = len(rows)
+    if rows:
+        for attempt in range(3):
+            try:
+                cursor.executemany(
+                    """INSERT INTO bank_transactions
+                       (account_id, hash_dedup, data_transacao, tipo, valor, descricao,
+                        cnpj_cpf, memo, fitid, status, fornecedor_id, forma_recebimento_id,
+                        conciliado_em, conciliado_por)
+                       VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
+                    rows,
+                )
+                conn.commit()
+                break
+            except mysql.connector.errors.InternalError as exc:
+                if getattr(exc, 'errno', None) == 1213 and attempt < 2:
+                    conn.rollback()
+                    time.sleep(0.3 * (attempt + 1))
+                    continue
+                raise
+    # 4. Auto-conciliação imediata por regras de descrição (para os que ficaram pendentes)
+    _auto_conciliar_por_regras(cursor, conn, account_id)
+    # 5. Auto-conciliação de despesas por CNPJ (cria lancamentos_despesas automaticamente)
+    _auto_conciliar_despesas_por_cnpj(cursor, conn, account_id, mapping)
+    return inseridos, duplicados
+
+
+def _auto_conciliar_despesas_por_cnpj(cursor, conn, account_id, mapping):
+    """
+    Cria lancamentos_despesas automaticamente para débitos pendentes cujo CNPJ
+    tem mapeamento de despesa integral (titulo_id+categoria_id) em bank_supplier_mapping.
+    Débitos divididos (split) nunca são auto-conciliados — ficam para o usuário.
+    """
+    despesa_mappings = {cnpj: m for cnpj, m in mapping.items() if m.get('titulo_id')}
+    if not despesa_mappings:
+        return 0
+
+    # Busca cliente_id da conta
+    cursor.execute("SELECT cliente_id FROM bank_accounts WHERE id=%s", (account_id,))
+    acc = cursor.fetchone()
+    cliente_id = acc['cliente_id'] if acc else None
+
+    cnpj_list = list(despesa_mappings.keys())
+    ph = ','.join(['%s'] * len(cnpj_list))
+    cursor.execute(
+        f"""SELECT id, data_transacao, descricao, cnpj_cpf, valor
+            FROM bank_transactions
+            WHERE account_id=%s AND tipo='DEBIT' AND status='pendente' AND cnpj_cpf IN ({ph})""",
+        [account_id] + cnpj_list,
+    )
+    pendentes = cursor.fetchall()
+    if not pendentes:
+        return 0
+
+    agora = _dt.datetime.now()
+    count = 0
+    for tx in pendentes:
+        m = despesa_mappings.get(tx['cnpj_cpf'])
+        if not m:
+            continue
+        descricao = (tx.get('descricao') or '')
+        cursor.execute(
+            """INSERT INTO lancamentos_despesas
+               (data, cliente_id, titulo_id, categoria_id, subcategoria_id,
+                valor, fornecedor, observacao, bank_transaction_id)
+               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+            (tx['data_transacao'], cliente_id, m['titulo_id'], m['categoria_id'],
+             m.get('subcategoria_id'), tx['valor'], descricao[:255], descricao, tx['id']),
+        )
+        cursor.execute(
+            """UPDATE bank_transactions
+               SET status='conciliado', conciliado_em=%s, conciliado_por='auto'
+               WHERE id=%s""",
+            (agora, tx['id']),
+        )
+        count += 1
+    if count:
+        conn.commit()
+    return count
+
+
+def _auto_conciliar_por_regras(cursor, conn, account_id=None):
+    """
+    Aplica bank_conciliacao_regras às transações pendentes do account_id (ou todas).
+    Suporta:
+      - Match simples (padrao_descricao contém ou é exato)
+      - Match composto (padrao_descricao + padrao_secundario: ambos devem estar na descrição)
+      - Regras de despesa (titulo_id + categoria_id → cria lancamentos_despesas)
+      - Regras de cliente (cliente_id para créditos de cobrança)
+    Retorna quantas foram auto-conciliadas.
+    """
+    # Carrega regras ativas (banco já possui todos os campos após migration consolidada)
+    cursor.execute(
+        """SELECT * FROM bank_conciliacao_regras WHERE ativo=1 ORDER BY id"""
+    )
+    regras = cursor.fetchall()
+    if not regras:
+        return 0
+
+    # Busca transações ainda pendentes com dados da conta
+    if account_id:
+        cursor.execute(
+            """SELECT bt.id, bt.descricao, bt.tipo, bt.cnpj_cpf,
+                      bt.data_transacao, bt.valor, ba.cliente_id AS conta_cliente_id
+               FROM bank_transactions bt
+               INNER JOIN bank_accounts ba ON ba.id = bt.account_id
+               WHERE bt.status='pendente' AND bt.account_id=%s""",
+            (account_id,),
+        )
+    else:
+        cursor.execute(
+            """SELECT bt.id, bt.descricao, bt.tipo, bt.cnpj_cpf,
+                      bt.data_transacao, bt.valor, ba.cliente_id AS conta_cliente_id
+               FROM bank_transactions bt
+               INNER JOIN bank_accounts ba ON ba.id = bt.account_id
+               WHERE bt.status='pendente'"""
+        )
+    pendentes = cursor.fetchall()
+    if not pendentes:
+        return 0
+
+    agora = _dt.datetime.now()
+    aplicadas = 0
+    for tx in pendentes:
+        descricao = (tx.get('descricao') or '').upper()
+        tipo = tx.get('tipo') or ''
+        for regra in regras:
+            # Filtra por tipo de transação
+            tipo_regra = regra.get('tipo_transacao', 'AMBOS')
+            if tipo_regra != 'AMBOS' and tipo_regra != tipo:
+                continue
+            # Match principal
+            padrao = (regra.get('padrao_descricao') or '').upper()
+            tipo_match = regra.get('tipo_match', 'contem')
+            if tipo_match == 'exato':
+                match = descricao == padrao
+            else:
+                match = padrao in descricao
+            if not match:
+                continue
+            # Match secundário (composto): ex: "LIQ.COBRANCA SIMPLES" + "TRANSPORTES TREMEA"
+            padrao2 = (regra.get('padrao_secundario') or '').upper()
+            if padrao2 and padrao2 not in descricao:
+                continue
+            # Determina o que vincular
+            forma_id  = regra.get('forma_recebimento_id')
+            forn_id   = regra.get('fornecedor_id')
+            titulo_id    = regra.get('titulo_id')
+            categoria_id = regra.get('categoria_id')
+
+            if titulo_id and categoria_id and tipo == 'DEBIT':
+                # Regra de despesa → cria lancamento_despesas e concilia
+                # Usa cliente_id da conta bancária para identificar a empresa
+                conta_cliente_id = tx.get('conta_cliente_id')
+                cursor.execute(
+                    """INSERT INTO lancamentos_despesas
+                       (data, cliente_id, titulo_id, categoria_id, valor,
+                        fornecedor, observacao, bank_transaction_id)
+                       VALUES (%s, %s, %s, %s, %s, %s, %s, %s)""",
+                    (tx['data_transacao'],
+                     conta_cliente_id,
+                     titulo_id, categoria_id,
+                     tx['valor'],
+                     (tx.get('descricao') or '')[:255],
+                     tx.get('descricao') or '',
+                     tx['id']),
+                )
+                cursor.execute(
+                    """UPDATE bank_transactions
+                       SET status='conciliado', conciliado_em=%s, conciliado_por='auto-regra'
+                       WHERE id=%s""",
+                    (agora, tx['id']),
+                )
+            else:
+                cursor.execute(
+                    """UPDATE bank_transactions
+                       SET status='conciliado',
+                           forma_recebimento_id=%s,
+                           fornecedor_id=%s,
+                           conciliado_em=%s,
+                           conciliado_por='auto-regra'
+                       WHERE id=%s""",
+                    (forma_id, forn_id, agora, tx['id']),
+                )
+            cursor.execute(
+                """UPDATE bank_conciliacao_regras
+                   SET total_aplicacoes=total_aplicacoes+1 WHERE id=%s""",
+                (regra['id'],),
+            )
+            aplicadas += 1
+            break  # primeira regra que bate
+
+    if aplicadas:
+        conn.commit()
+    return aplicadas
+
+# ---------------------------------------------------------------------------
+# Páginas
+# ---------------------------------------------------------------------------
+
+@bp.route('/')
+@login_required
+def index():
+    """Página principal – dashboard de importação bancária."""
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+
+    # Apenas empresas com produtos ativos
+    clientes = _get_clientes_com_produtos(cursor)
+
+    # Filtro opcional: contas por empresa selecionada
+    cliente_id_filter = request.args.get('empresa_id', type=int)
+    contas = _get_accounts(cursor, cliente_id=cliente_id_filter)
+
+    # Contadores do resumo
+    cursor.execute("SELECT COUNT(*) AS total FROM bank_transactions WHERE status = 'pendente'")
+    pendentes = cursor.fetchone()['total']
+    cursor.execute("SELECT COUNT(*) AS total FROM bank_transactions WHERE status = 'conciliado'")
+    conciliados = cursor.fetchone()['total']
+    cursor.execute("SELECT COUNT(*) AS total FROM bank_transactions")
+    total = cursor.fetchone()['total']
+
+    cursor.close()
+    conn.close()
+
+    _ofx_dir_env = os.environ.get('OFX_INBOX_DIR', '')
+
+    # Detecta tipo de caminho configurado
+    # Caminho Windows: contém \ ou letra de unidade (ex: C:\Users\ ou Dropbox\...)
+    _is_windows_path = bool(_ofx_dir_env) and (
+        '\\' in _ofx_dir_env
+        or (len(_ofx_dir_env) >= 2 and _ofx_dir_env[1] == ':')
+    )
+    # Caminho /tmp ou sem configuração → usar upload direto
+    _is_tmp_or_unset = not _ofx_dir_env or _ofx_dir_env.startswith('/tmp')
+    # Caminho Linux válido (ex: /data/ofx_inbox)
+    _is_valid_linux_path = bool(_ofx_dir_env) and not _is_windows_path and not _is_tmp_or_unset
+    # Verifica se o diretório já existe no servidor
+    _inbox_dir_exists = _is_valid_linux_path and os.path.isdir(_ofx_dir_env)
+
+    # inbox_is_tmp=True → oculta UI de pasta, mostra card de "use upload direto"
+    inbox_is_tmp = _is_tmp_or_unset or _is_windows_path
+    # inbox_dir_missing=True → caminho Linux válido mas diretório ainda não existe
+    #   (ex: /data/ofx_inbox precisa de um Render Disk montado em /data)
+    inbox_dir_missing = _is_valid_linux_path and not _inbox_dir_exists
+
+    # Verifica se a integração Dropbox está configurada
+    from integrations.dropbox_ofx import (
+        is_configured as dropbox_is_configured,
+        get_inbox_paths as dropbox_paths,
+        usa_oauth2 as dropbox_usa_oauth2,
+    )
+    _dropbox_ok = dropbox_is_configured()
+    _dbx_inbox, _dbx_processed = dropbox_paths()
+    _dropbox_oauth2 = dropbox_usa_oauth2()
+
+    return render_template(
+        'bank_import/index.html',
+        contas=contas,
+        clientes=clientes,
+        cliente_id_filter=cliente_id_filter,
+        pendentes=pendentes,
+        conciliados=conciliados,
+        total=total,
+        inbox_is_tmp=inbox_is_tmp,
+        inbox_dir_missing=inbox_dir_missing,
+        ofx_dir_configured=_ofx_dir_env,
+        is_windows_path=_is_windows_path,
+        dropbox_configured=_dropbox_ok,
+        dropbox_oauth2=_dropbox_oauth2,
+        dropbox_inbox=_dbx_inbox,
+        dropbox_processed=_dbx_processed,
+    )
+
+
+@bp.route('/upload', methods=['GET', 'POST'])
+@login_required
+def upload():
+    """Upload e importação de arquivo OFX."""
+    if request.method == 'GET':
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+        contas = _get_accounts(cursor)
+        cursor.close()
+        conn.close()
+        return render_template('bank_import/index.html',
+                               contas=contas, pendentes=0, conciliados=0, total=0)
+
+    # POST – processa o arquivo enviado
+    arquivo = request.files.get('ofx_file')
+    account_id = request.form.get('account_id')
+
+    if not arquivo or not arquivo.filename:
+        flash('Nenhum arquivo selecionado.', 'warning')
+        return redirect(url_for('bank_import.index'))
+
+    if not account_id:
+        flash('Selecione uma conta bancária.', 'warning')
+        return redirect(url_for('bank_import.index'))
+
+    try:
+        content = arquivo.read().decode('latin-1', errors='replace')
+    except Exception as exc:
+        flash(f'Erro ao ler arquivo: {exc}', 'danger')
+        return redirect(url_for('bank_import.index'))
+
+    from integrations.ofx_parser import OFXParser
+    parser = OFXParser(content)
+    transactions = parser.get_transactions()
+
+    if not transactions:
+        flash('Nenhuma transação encontrada no arquivo OFX.', 'warning')
+        return redirect(url_for('bank_import.index'))
+
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+
+    inseridos, duplicados = _save_transactions(cursor, conn, account_id, transactions)
+
+    cursor.close()
+    conn.close()
+
+    flash(
+        f'Importação concluída: {inseridos} transação(ões) importada(s), {duplicados} duplicata(s) ignorada(s).',
+        'success',
+    )
+    return redirect(url_for('bank_import.index'))
+
+
+def _get_formas_recebimento(cursor):
+    """Retorna formas de recebimento ativas para uso na conciliação."""
+    cursor.execute(
+        "SELECT id, nome FROM formas_recebimento WHERE ativo=1 ORDER BY nome"
+    )
+    return cursor.fetchall()
+
+
+def _get_titulos_despesas(cursor):
+    """Retorna títulos de despesas ativos com suas categorias e subcategorias."""
+    cursor.execute(
+        """SELECT t.id AS titulo_id, t.nome AS titulo_nome,
+                  c.id AS categoria_id, c.nome AS categoria_nome,
+                  s.id AS sub_id, s.nome AS sub_nome
+           FROM titulos_despesas t
+           INNER JOIN categorias_despesas c ON c.titulo_id = t.id AND c.ativo = 1
+           LEFT JOIN subcategorias_despesas s ON s.categoria_id = c.id AND s.ativo = 1
+           WHERE t.ativo = 1
+           ORDER BY t.ordem, t.nome, c.ordem, c.nome, s.ordem, s.nome"""
+    )
+    rows = cursor.fetchall()
+    # Agrupa: { titulo_id: {nome, categorias: { cat_id: {nome, subcategorias:[]} }} }
+    titulos = {}
+    for r in rows:
+        tid = r['titulo_id']
+        if tid not in titulos:
+            titulos[tid] = {'id': tid, 'nome': r['titulo_nome'], 'categorias': {}}
+        cats = titulos[tid]['categorias']
+        cid = r['categoria_id']
+        if cid not in cats:
+            cats[cid] = {'id': cid, 'nome': r['categoria_nome'], 'subcategorias': []}
+        if r['sub_id']:
+            cats[cid]['subcategorias'].append({'id': r['sub_id'], 'nome': r['sub_nome']})
+    result = []
+    for t in titulos.values():
+        result.append({'id': t['id'], 'nome': t['nome'],
+                       'categorias': list(t['categorias'].values())})
+    return result
+
+
+def _conciliar_transferencia(cursor, conn, tx_id, conta_destino_id, usuario):
+    """Registra transferência entre contas: concilia a origem e cria um CREDIT na conta destino.
+    Também salva mapeamento CNPJ→conta_destino para auto-aprendizado.
+    """
+    agora = _dt.datetime.now()
+    cursor.execute(
+        """SELECT id, data_transacao, valor, descricao, hash_dedup, cnpj_cpf, account_id
+           FROM bank_transactions WHERE id=%s""",
+        (tx_id,),
+    )
+    tx = cursor.fetchone()
+    if not tx:
+        return
+    # Marca a tx de origem como conciliada.
+    # Tenta com tipo_conciliacao (coluna nova); se não existir usa UPDATE básico.
+    try:
+        cursor.execute(
+            """UPDATE bank_transactions
+               SET status='conciliado', conciliado_em=%s, conciliado_por=%s,
+                   tipo_conciliacao='transferencia'
+               WHERE id=%s""",
+            (agora, usuario, tx_id),
+        )
+    except Exception:
+        conn.rollback()
+        cursor.execute(
+            """UPDATE bank_transactions
+               SET status='conciliado', conciliado_em=%s, conciliado_por=%s
+               WHERE id=%s""",
+            (agora, usuario, tx_id),
+        )
+    # Cria CREDIT na conta destino. Usa TRANSFER_<id> para garantir que cabe
+    # em VARCHAR(64) (SHA-256 = 64 chars; '_transfer' causaria overflow).
+    # Usa INSERT normal (não IGNORE) para que falhas reais propaguen erro.
+    hash_destino = f'TRANSFER_{tx_id}'
+    descricao_dest = f"TRANSFERENCIA RECEBIDA - {tx.get('descricao') or ''}"[:500]
+    try:
+        cursor.execute(
+            """INSERT INTO bank_transactions
+                   (account_id, data_transacao, tipo, valor, descricao, hash_dedup,
+                    status, conciliado_em, conciliado_por, tipo_conciliacao)
+               VALUES (%s, %s, 'CREDIT', %s, %s, %s,
+                       'conciliado', %s, %s, 'transferencia')""",
+            (conta_destino_id, tx['data_transacao'], tx['valor'],
+             descricao_dest, hash_destino, agora, usuario),
+        )
+    except Exception:
+        # tipo_conciliacao não existe ainda — INSERT sem a coluna
+        cursor.execute(
+            """INSERT INTO bank_transactions
+                   (account_id, data_transacao, tipo, valor, descricao, hash_dedup,
+                    status, conciliado_em, conciliado_por)
+               VALUES (%s, %s, 'CREDIT', %s, %s, %s,
+                       'conciliado', %s, %s)""",
+            (conta_destino_id, tx['data_transacao'], tx['valor'],
+             descricao_dest, hash_destino, agora, usuario),
+        )
+    # Auto-aprender: salva CNPJ→conta_destino para sugestão nas próximas importações
+    cnpj = tx.get('cnpj_cpf')
+    if cnpj:
+        try:
+            cursor.execute(
+                """INSERT INTO bank_supplier_mapping (cnpj_cpf, conta_destino_id, tipo_debito)
+                   VALUES (%s, %s, 'transferencia')
+                   ON DUPLICATE KEY UPDATE conta_destino_id=%s, tipo_debito='transferencia'""",
+                (cnpj, conta_destino_id, conta_destino_id),
+            )
+        except Exception:
+            # Coluna pode não existir ainda (migration pendente) — ignora silenciosamente
+            pass
+    conn.commit()
+
+
+def _conciliar_tx(cursor, conn, tx_id, acao, tipo_tx,
+                  fornecedor_id, forma_recebimento_id, usuario,
+                  tipo_debito=None, despesas=None):
+    """Concilia (ou ignora) uma única transação e aprende mapeamentos.
+
+    Para débitos com tipo_debito='despesa', *despesas* é uma lista de dicts:
+        [{'titulo_id': int, 'categoria_id': int, 'valor': float, 'observacao': str}]
+    """
+    if acao == 'ignorar':
+        cursor.execute(
+            "UPDATE bank_transactions SET status='ignorado' WHERE id=%s", (tx_id,)
+        )
+        conn.commit()
+        return
+
+    agora = _dt.datetime.now()
+
+    if tipo_tx == 'CREDIT':
+        # Crédito → Forma de Recebimento
+        if not forma_recebimento_id:
+            return
+        cursor.execute(
+            """UPDATE bank_transactions
+               SET status='conciliado', forma_recebimento_id=%s,
+                   conciliado_em=%s, conciliado_por=%s
+               WHERE id=%s""",
+            (forma_recebimento_id, agora, usuario, tx_id),
+        )
+        # Aprende: CNPJ → forma de recebimento
+        cursor.execute("SELECT cnpj_cpf FROM bank_transactions WHERE id=%s", (tx_id,))
+        row = cursor.fetchone()
+        if row and row.get('cnpj_cpf'):
+            cursor.execute(
+                """INSERT INTO bank_supplier_mapping
+                       (cnpj_cpf, tipo_chave, total_conciliacoes, forma_recebimento_id)
+                   VALUES (%s, 'cnpj', 1, %s)
+                   ON DUPLICATE KEY UPDATE
+                       forma_recebimento_id=%s,
+                       total_conciliacoes=total_conciliacoes+1,
+                       atualizado_em=NOW()""",
+                (row['cnpj_cpf'], forma_recebimento_id, forma_recebimento_id),
+            )
+    elif tipo_debito == 'despesa' and despesas:
+        # Débito → uma ou mais Despesas (lançamentos_despesas)
+        cursor.execute(
+            """SELECT bt.data_transacao, bt.descricao, bt.cnpj_cpf,
+                      ba.cliente_id
+               FROM bank_transactions bt
+               INNER JOIN bank_accounts ba ON ba.id = bt.account_id
+               WHERE bt.id = %s""",
+            (tx_id,),
+        )
+        tx = cursor.fetchone()
+        if not tx:
+            return
+        data_tx    = tx['data_transacao']
+        descricao  = tx.get('descricao') or ''
+        cliente_id = tx.get('cliente_id')
+        for desp in despesas:
+            titulo_id      = desp.get('titulo_id')
+            categoria_id   = desp.get('categoria_id')
+            subcategoria_id = desp.get('subcategoria_id') or None
+            fornecedor_txt = (desp.get('fornecedor') or descricao)[:255]
+            valor          = desp.get('valor')
+            observacao     = desp.get('observacao') or descricao
+            if not titulo_id or not categoria_id or not valor:
+                continue
+            cursor.execute(
+                """INSERT INTO lancamentos_despesas
+                       (data, cliente_id, titulo_id, categoria_id, subcategoria_id,
+                        valor, fornecedor, observacao, bank_transaction_id)
+                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+                (data_tx, cliente_id, titulo_id, categoria_id, subcategoria_id,
+                 valor, fornecedor_txt, observacao, tx_id),
+            )
+        cursor.execute(
+            """UPDATE bank_transactions
+               SET status='conciliado', conciliado_em=%s, conciliado_por=%s
+               WHERE id=%s""",
+            (agora, usuario, tx_id),
+        )
+        # Auto-aprender: despesa INTEGRAL (não dividida) salva mapeamento para próxima importação
+        if len(despesas) == 1 and tx.get('cnpj_cpf'):
+            d = despesas[0]
+            cursor.execute(
+                """INSERT INTO bank_supplier_mapping
+                       (cnpj_cpf, tipo_chave, total_conciliacoes, titulo_id, categoria_id, subcategoria_id)
+                   VALUES (%s, 'cnpj', 1, %s, %s, %s)
+                   ON DUPLICATE KEY UPDATE
+                       titulo_id=%s, categoria_id=%s, subcategoria_id=%s,
+                       fornecedor_id=NULL, forma_recebimento_id=NULL,
+                       total_conciliacoes=total_conciliacoes+1, atualizado_em=NOW()""",
+                (tx['cnpj_cpf'],
+                 d['titulo_id'], d['categoria_id'], d.get('subcategoria_id'),
+                 d['titulo_id'], d['categoria_id'], d.get('subcategoria_id')),
+            )
+    else:
+        # Débito → Fornecedor
+        if not fornecedor_id:
+            return
+        cursor.execute(
+            """UPDATE bank_transactions
+               SET status='conciliado', fornecedor_id=%s,
+                   conciliado_em=%s, conciliado_por=%s
+               WHERE id=%s""",
+            (fornecedor_id, agora, usuario, tx_id),
+        )
+        cursor.execute("SELECT cnpj_cpf FROM bank_transactions WHERE id=%s", (tx_id,))
+        row = cursor.fetchone()
+        if row and row.get('cnpj_cpf'):
+            cursor.execute(
+                """INSERT INTO bank_supplier_mapping
+                       (fornecedor_id, cnpj_cpf, tipo_chave, total_conciliacoes)
+                   VALUES (%s, %s, 'cnpj', 1)
+                   ON DUPLICATE KEY UPDATE
+                       fornecedor_id=%s,
+                       total_conciliacoes=total_conciliacoes+1,
+                       atualizado_em=NOW()""",
+                (fornecedor_id, row['cnpj_cpf'], fornecedor_id),
+            )
+
+    conn.commit()
+
+
+@bp.route('/conciliar', methods=['GET', 'POST'])
+@login_required
+def conciliar():
+    """Interface de conciliação manual com filtros, multi-seleção e memória."""
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    usuario = current_user.email if hasattr(current_user, 'email') else 'manual'
+
+    # ------------------------------------------------------------------
+    # POST: processa conciliação (individual ou em lote)
+    # ------------------------------------------------------------------
+    if request.method == 'POST':
+        acao = request.form.get('acao', 'conciliar')
+        # Multi-seleção: tx_ids é lista separada por vírgula ou campo repetido
+        tx_ids_raw = request.form.getlist('transaction_id') or []
+        if not tx_ids_raw:
+            tx_ids_raw = [request.form.get('transaction_id', '')]
+        tx_ids = [t for t in tx_ids_raw if t]
+
+        fornecedor_id        = request.form.get('fornecedor_id') or None
+        forma_recebimento_id = request.form.get('forma_recebimento_id') or None
+        tipo_tx              = request.form.get('tipo_tx', 'DEBIT')
+        tipo_debito          = request.form.get('tipo_debito', 'fornecedor')  # 'fornecedor' | 'despesa' | 'transferencia'
+
+        # Despesas (até 3 linhas de split)
+        despesas = []
+        for i in range(1, 4):  # suporta até 3 linhas de split
+            tid  = request.form.get(f'desp_{i}_titulo_id') or None
+            cid  = request.form.get(f'desp_{i}_categoria_id') or None
+            scid = request.form.get(f'desp_{i}_subcategoria_id') or None
+            val  = request.form.get(f'desp_{i}_valor') or None
+            obs  = request.form.get(f'desp_{i}_observacao') or None
+            forn = request.form.get(f'desp_{i}_fornecedor') or None
+            if tid and cid and val:
+                try:
+                    val_f = float(val.replace(',', '.'))
+                    despesas.append({'titulo_id': int(tid), 'categoria_id': int(cid),
+                                     'subcategoria_id': int(scid) if scid else None,
+                                     'valor': val_f, 'observacao': obs, 'fornecedor': forn})
+                except (ValueError, TypeError):
+                    pass
+
+        conta_destino_id = request.form.get('conta_destino_id') or None
+
+        ok = 0
+        for tx_id in tx_ids:
+            if tipo_debito == 'transferencia' and conta_destino_id:
+                _conciliar_transferencia(cursor, conn, tx_id, conta_destino_id, usuario)
+            else:
+                _conciliar_tx(cursor, conn, tx_id, acao, tipo_tx,
+                              fornecedor_id, forma_recebimento_id, usuario,
+                              tipo_debito=tipo_debito, despesas=despesas or None)
+            ok += 1
+
+        if acao == 'ignorar':
+            flash(f'{ok} transação(ões) ignorada(s).', 'info')
+        else:
+            flash(f'{ok} transação(ões) conciliada(s) com sucesso!', 'success')
+
+        # Mantém filtros após POST
+        return redirect(request.url)
+
+    # ------------------------------------------------------------------
+    # GET: filtros
+    # ------------------------------------------------------------------
+    f_cliente   = request.args.get('cliente_id', '')
+    f_tipo      = request.args.get('tipo', '')           # CREDIT / DEBIT
+    f_data_ini  = request.args.get('data_ini', '')
+    f_data_fim  = request.args.get('data_fim', '')
+    f_descricao = request.args.get('descricao', '')
+    f_cnpj      = request.args.get('cnpj_cpf', '')
+    f_conta     = request.args.get('account_id', '')
+
+    page     = request.args.get('page', 1, type=int)
+    per_page = 50
+    offset   = (page - 1) * per_page
+
+    _TIPOS_OK = {'CREDIT', 'DEBIT'}
+    where  = ["bt.status = 'pendente'"]
+    params = []
+
+    if f_cliente:
+        where.append("ba.cliente_id = %s")
+        params.append(f_cliente)
+    if f_tipo and f_tipo in _TIPOS_OK:
+        where.append("bt.tipo = %s")
+        params.append(f_tipo)
+    if f_data_ini:
+        where.append("bt.data_transacao >= %s")
+        params.append(f_data_ini)
+    if f_data_fim:
+        where.append("bt.data_transacao <= %s")
+        params.append(f_data_fim)
+    if f_descricao:
+        where.append("bt.descricao LIKE %s")
+        params.append(f'%{f_descricao}%')
+    if f_cnpj:
+        where.append("bt.cnpj_cpf LIKE %s")
+        params.append(f'%{f_cnpj}%')
+    if f_conta:
+        where.append("bt.account_id = %s")
+        params.append(f_conta)
+
+    where_sql = 'WHERE ' + ' AND '.join(where)
+
+    cursor.execute(
+        f"""SELECT bt.*, ba.apelido AS conta_apelido, ba.banco_nome,
+                   bsm.fornecedor_id AS sugestao_fornecedor_id,
+                   bsm.forma_recebimento_id AS sugestao_forma_id,
+                   bsm.titulo_id AS sugestao_titulo_id,
+                   bsm.categoria_id AS sugestao_categoria_id,
+                   bsm.subcategoria_id AS sugestao_subcategoria_id,
+                   bsm.conta_destino_id AS sugestao_conta_destino_id,
+                   bsm.tipo_debito AS sugestao_tipo_debito,
+                   fr.nome AS sugestao_forma_nome,
+                   fs.razao_social AS sugestao_fornecedor_nome,
+                   td.nome AS sugestao_titulo_nome,
+                   cd.nome AS sugestao_categoria_nome
+            FROM bank_transactions bt
+            INNER JOIN bank_accounts ba ON bt.account_id = ba.id
+            LEFT JOIN bank_supplier_mapping bsm ON bsm.cnpj_cpf = bt.cnpj_cpf
+            LEFT JOIN formas_recebimento fr ON fr.id = bsm.forma_recebimento_id
+            LEFT JOIN fornecedores fs ON fs.id = bsm.fornecedor_id
+            LEFT JOIN titulos_despesas td ON td.id = bsm.titulo_id
+            LEFT JOIN categorias_despesas cd ON cd.id = bsm.categoria_id
+            {where_sql}
+            ORDER BY bt.data_transacao DESC
+            LIMIT %s OFFSET %s""",
+        params + [per_page, offset],
+    )
+    transacoes = cursor.fetchall()
+
+    # -----------------------------------------------------------------------
+    # Aplicar regras por padrão de descrição a transações sem sugestão de CNPJ
+    # -----------------------------------------------------------------------
+    cursor.execute(
+        """SELECT r.id, r.padrao_descricao, r.tipo_match, r.tipo_transacao,
+                  r.forma_recebimento_id, fr.nome AS forma_nome,
+                  r.fornecedor_id, f.razao_social AS fornecedor_nome
+           FROM bank_conciliacao_regras r
+           LEFT JOIN formas_recebimento fr ON fr.id = r.forma_recebimento_id
+           LEFT JOIN fornecedores f ON f.id = r.fornecedor_id
+           WHERE r.ativo = 1"""
+    )
+    regras_padrao = cursor.fetchall()
+
+    for tx in transacoes:
+        if tx.get('sugestao_forma_id') or tx.get('sugestao_fornecedor_id') or tx.get('sugestao_titulo_id'):
+            continue  # já tem sugestão por CNPJ
+        descricao = (tx.get('descricao') or '').upper()
+        tipo_tx_r = tx.get('tipo', '')
+        for regra in regras_padrao:
+            if regra['tipo_transacao'] != 'AMBOS' and regra['tipo_transacao'] != tipo_tx_r:
+                continue
+            padrao = (regra['padrao_descricao'] or '').upper()
+            if regra['tipo_match'] == 'exato':
+                bate = descricao == padrao
+            else:
+                bate = padrao in descricao
+            if bate:
+                if regra['forma_recebimento_id']:
+                    tx['sugestao_forma_id']   = regra['forma_recebimento_id']
+                    tx['sugestao_forma_nome'] = regra['forma_nome']
+                    tx['sugestao_regra']      = True
+                if regra['fornecedor_id']:
+                    tx['sugestao_fornecedor_id']   = regra['fornecedor_id']
+                    tx['sugestao_fornecedor_nome'] = regra['fornecedor_nome']
+                    tx['sugestao_regra']           = True
+                break  # primeira regra que bate vence
+
+    # Enriquece badge de sugestão de despesa (CNPJ → título/categoria)
+    for tx in transacoes:
+        if tx.get('sugestao_titulo_id') and not tx.get('sugestao_forma_id') and not tx.get('sugestao_fornecedor_id'):
+            tx['sugestao_despesa_label'] = (
+                (tx.get('sugestao_titulo_nome') or '') + ' › ' + (tx.get('sugestao_categoria_nome') or '')
+            )
+
+    cursor.execute(
+        f"SELECT COUNT(*) AS total FROM bank_transactions bt "
+        f"INNER JOIN bank_accounts ba ON bt.account_id = ba.id "
+        f"{where_sql}",
+        params,
+    )
+    total = cursor.fetchone()['total']
+
+    fornecedores       = _get_fornecedores(cursor)
+    formas_recebimento = _get_formas_recebimento(cursor)
+    titulos_despesas   = _get_titulos_despesas(cursor)
+    contas             = _get_accounts(cursor)
+    clientes           = _get_clientes_com_produtos(cursor)
+
+    # Todas as contas de todas as empresas (para transferência entre contas)
+    cursor.execute(
+        """SELECT ba.id, ba.apelido, ba.banco_nome, c.nome_fantasia AS empresa_nome
+           FROM bank_accounts ba
+           LEFT JOIN clientes c ON c.id = ba.cliente_id
+           WHERE ba.ativo = 1
+           ORDER BY empresa_nome, ba.banco_nome, ba.apelido"""
+    )
+    todas_contas = cursor.fetchall()
+    # Mapa id→label para exibir nome da conta sugerida no badge de transferência
+    todas_contas_map = {c['id']: f"{c.get('empresa_nome') or ''} — {c['banco_nome']} {c['apelido']}"
+                        for c in todas_contas}
+
+    cursor.close()
+    conn.close()
+
+    total_pages = max(1, (total + per_page - 1) // per_page)
+
+    return render_template(
+        'bank_import/conciliar.html',
+        transacoes=transacoes,
+        fornecedores=fornecedores,
+        formas_recebimento=formas_recebimento,
+        titulos_despesas=titulos_despesas,
+        contas=contas,
+        clientes=clientes,
+        todas_contas=todas_contas,
+        todas_contas_map=todas_contas_map,
+        page=page,
+        total_pages=total_pages,
+        total=total,
+        # filtros atuais para manter na paginação
+        f_cliente=f_cliente,
+        f_tipo=f_tipo,
+        f_data_ini=f_data_ini,
+        f_data_fim=f_data_fim,
+        f_descricao=f_descricao,
+        f_cnpj=f_cnpj,
+        f_conta=f_conta,
+    )
+
+
+@bp.route('/relatorio')
+@login_required
+def relatorio():
+    """Relatório de transações com filtros."""
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+
+    contas = _get_accounts(cursor)
+
+    # Filtros
+    account_id = request.args.get('account_id', '')
+    status = request.args.get('status', '')
+    data_ini = request.args.get('data_ini', '')
+    data_fim = request.args.get('data_fim', '')
+
+    # Monta query parametrizada segura usando apenas cláusulas fixas no SQL
+    # (os valores do usuário vão para a lista de params, nunca diretamente na string SQL)
+    _ALLOWED_STATUSES = {'pendente', 'conciliado', 'ignorado'}
+    base_where = 'WHERE 1=1'
+    extra_clauses = []
+    params = []
+
+    if account_id:
+        extra_clauses.append('AND bt.account_id = %s')
+        params.append(account_id)
+    if status and status in _ALLOWED_STATUSES:
+        extra_clauses.append('AND bt.status = %s')
+        params.append(status)
+    if data_ini:
+        extra_clauses.append('AND bt.data_transacao >= %s')
+        params.append(data_ini)
+    if data_fim:
+        extra_clauses.append('AND bt.data_transacao <= %s')
+        params.append(data_fim)
+
+    where_clauses = ' '.join([base_where] + extra_clauses)
+
+    cursor.execute(
+        """SELECT bt.*, ba.apelido AS conta_apelido, ba.banco_nome,
+                   f.razao_social AS fornecedor_nome
+            FROM bank_transactions bt
+            INNER JOIN bank_accounts ba ON bt.account_id = ba.id
+            LEFT JOIN fornecedores f ON bt.fornecedor_id = f.id
+            """
+        + where_clauses
+        + """ ORDER BY bt.data_transacao DESC LIMIT 500""",
+        params,
+    )
+    transacoes = cursor.fetchall()
+
+    # Totais
+    cursor.execute(
+        """SELECT
+               SUM(CASE WHEN tipo='DEBIT' THEN valor ELSE 0 END) AS total_debitos,
+               SUM(CASE WHEN tipo='CREDIT' THEN valor ELSE 0 END) AS total_creditos,
+               COUNT(*) AS total_transacoes
+            FROM bank_transactions bt
+            """
+        + where_clauses,
+        params,
+    )
+    totais = cursor.fetchone()
+
+    cursor.close()
+    conn.close()
+
+    return render_template(
+        'bank_import/relatorio.html',
+        transacoes=transacoes,
+        contas=contas,
+        totais=totais,
+        filtros={
+            'account_id': account_id,
+            'status': status,
+            'data_ini': data_ini,
+            'data_fim': data_fim,
+        },
+    )
+
+
+# ---------------------------------------------------------------------------
+# Endpoints da API REST
+# ---------------------------------------------------------------------------
+
+@bp.route('/api/transacoes-pendentes')
+@login_required
+def api_transacoes_pendentes():
+    """API: retorna lista JSON de transações pendentes."""
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+
+    cursor.execute(
+        """SELECT bt.id, bt.data_transacao, bt.tipo, bt.valor, bt.descricao,
+                  bt.cnpj_cpf, bt.status, ba.apelido AS conta_apelido
+           FROM bank_transactions bt
+           INNER JOIN bank_accounts ba ON bt.account_id = ba.id
+           WHERE bt.status = 'pendente'
+           ORDER BY bt.data_transacao DESC
+           LIMIT 200"""
+    )
+    rows = cursor.fetchall()
+
+    cursor.close()
+    conn.close()
+
+    # Converte objetos de data para strings ISO para serialização JSON
+    for row in rows:
+        if row.get('data_transacao'):
+            row['data_transacao'] = str(row['data_transacao'])
+        if row.get('valor') is not None:
+            row['valor'] = float(row['valor'])
+
+    return jsonify(rows)
+
+
+@bp.route('/api/auto-reconcile', methods=['POST'])
+@login_required
+def api_auto_reconcile():
+    """API: força a auto-conciliação de transações pendentes (por CNPJ e por regras)."""
+    import logging
+    logger = logging.getLogger(__name__)
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        # 1. Auto-conciliação por CNPJ (mapeamentos salvos anteriormente)
+        cursor.execute(
+            """SELECT bt.id, bt.tipo, bsm.fornecedor_id, bsm.forma_recebimento_id
+               FROM bank_transactions bt
+               INNER JOIN bank_supplier_mapping bsm ON bt.cnpj_cpf = bsm.cnpj_cpf
+               WHERE bt.status = 'pendente' AND bt.cnpj_cpf IS NOT NULL AND bt.cnpj_cpf != ''"""
+        )
+        rows = cursor.fetchall()
+
+        agora = _dt.datetime.now()
+        updated = 0
+        for row in rows:
+            if row['tipo'] == 'CREDIT':
+                cursor.execute(
+                    """UPDATE bank_transactions
+                       SET status='conciliado', forma_recebimento_id=%s,
+                           conciliado_em=%s, conciliado_por='auto'
+                       WHERE id=%s""",
+                    (row['forma_recebimento_id'], agora, row['id']),
+                )
+            else:
+                cursor.execute(
+                    """UPDATE bank_transactions
+                       SET status='conciliado', fornecedor_id=%s,
+                           conciliado_em=%s, conciliado_por='auto'
+                       WHERE id=%s""",
+                    (row['fornecedor_id'], agora, row['id']),
+                )
+            updated += 1
+
+        conn.commit()
+
+        # 2. Auto-conciliação por regras de descrição
+        por_regras = _auto_conciliar_por_regras(cursor, conn)
+
+        cursor.close()
+        conn.close()
+        return jsonify({'success': True, 'conciliados': updated + por_regras,
+                        'por_cnpj': updated, 'por_regras': por_regras})
+    except Exception as e:
+        logger.exception("Erro em api_auto_reconcile: %s", e)
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        try:
+            cursor.close()
+            conn.close()
+        except Exception:
+            pass
+        return jsonify({'success': False, 'erro': str(e), 'conciliados': 0}), 200
+
+
+@bp.route('/api/diagnostico-regras')
+@login_required
+def api_diagnostico_regras():
+    """Diagnóstico: mostra regras e o que cada uma encontraria (sem fazer alterações)."""
+    import logging
+    logger = logging.getLogger(__name__)
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        cursor.execute("SELECT * FROM bank_conciliacao_regras WHERE ativo=1 ORDER BY id")
+        regras = cursor.fetchall()
+
+        cursor.execute(
+            """SELECT bt.id, bt.descricao, bt.tipo, bt.cnpj_cpf,
+                      bt.data_transacao, bt.valor, bt.account_id
+               FROM bank_transactions bt
+               WHERE bt.status='pendente'
+               LIMIT 200"""
+        )
+        pendentes = cursor.fetchall()
+
+        resultado = {
+            'total_regras': len(regras),
+            'total_pendentes': len(pendentes),
+            'regras': [],
+            'matches': []
+        }
+
+        for r in regras:
+            resultado['regras'].append({
+                'id': r['id'],
+                'padrao': r.get('padrao_descricao'),
+                'padrao2': r.get('padrao_secundario'),
+                'tipo_match': r.get('tipo_match'),
+                'tipo_transacao': r.get('tipo_transacao'),
+                'titulo_id': r.get('titulo_id'),
+                'categoria_id': r.get('categoria_id'),
+                'forma_id': r.get('forma_recebimento_id'),
+                'forn_id': r.get('fornecedor_id'),
+            })
+
+        for tx in pendentes:
+            descricao = (tx.get('descricao') or '').upper()
+            tipo = tx.get('tipo') or ''
+            for regra in regras:
+                tipo_regra = regra.get('tipo_transacao', 'AMBOS')
+                if tipo_regra != 'AMBOS' and tipo_regra != tipo:
+                    continue
+                padrao = (regra.get('padrao_descricao') or '').upper()
+                tipo_match = regra.get('tipo_match', 'contem')
+                match = (descricao == padrao) if tipo_match == 'exato' else (padrao in descricao)
+                if not match:
+                    continue
+                padrao2 = (regra.get('padrao_secundario') or '').upper()
+                if padrao2 and padrao2 not in descricao:
+                    continue
+                resultado['matches'].append({
+                    'tx_id': tx['id'],
+                    'tx_descricao': tx.get('descricao'),
+                    'tx_tipo': tipo,
+                    'tx_valor': str(tx.get('valor')),
+                    'regra_id': regra['id'],
+                    'regra_padrao': regra.get('padrao_descricao'),
+                    'titulo_id': regra.get('titulo_id'),
+                    'categoria_id': regra.get('categoria_id'),
+                })
+                break
+
+        cursor.close()
+        conn.close()
+        return jsonify(resultado)
+    except Exception as e:
+        logger.exception("Erro em diagnostico_regras: %s", e)
+        return jsonify({'erro': str(e)}), 500
+
+
+@bp.route('/api/debug-transferencias')
+@login_required
+def api_debug_transferencias():
+    """Debug: mostra o estado real das transferências no banco."""
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        # Verifica se coluna tipo_conciliacao existe
+        cursor.execute(
+            """SELECT COUNT(*) AS existe FROM information_schema.COLUMNS
+               WHERE TABLE_SCHEMA=DATABASE()
+                 AND TABLE_NAME='bank_transactions'
+                 AND COLUMN_NAME='tipo_conciliacao'""")
+        col_existe = cursor.fetchone()['existe'] > 0
+
+        # CREDITs com TRANSFER_
+        cursor.execute(
+            """SELECT id, account_id, data_transacao, valor, hash_dedup, status, descricao
+               FROM bank_transactions
+               WHERE hash_dedup LIKE 'TRANSFER_%'
+               ORDER BY id DESC LIMIT 20""")
+        credits = cursor.fetchall()
+
+        # DEBITs conciliados recentes
+        cursor.execute(
+            """SELECT id, account_id, data_transacao, valor, status,
+                      conciliado_por, descricao
+               FROM bank_transactions
+               WHERE tipo='DEBIT' AND status='conciliado'
+               ORDER BY id DESC LIMIT 20""")
+        debits = cursor.fetchall()
+
+        return jsonify({
+            'col_tipo_conciliacao_existe': col_existe,
+            'credits_transfer': [dict(r) for r in credits],
+            'debits_conciliados_recentes': [dict(r) for r in debits],
+        })
+    except Exception as e:
+        return jsonify({'erro': str(e)}), 500
+    finally:
+        cursor.close()
+        conn.close()
+
+
+@bp.route('/api/contas', methods=['GET'])
+@login_required
+def api_contas():
+    """API: lista contas bancárias cadastradas."""
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    cliente_id = request.args.get('cliente_id', type=int)
+    contas = _get_accounts(cursor, cliente_id=cliente_id)
+    cursor.close()
+    conn.close()
+    return jsonify(contas)
+
+
+@bp.route('/api/contas', methods=['POST'])
+@login_required
+def api_criar_conta():
+    """API: cria uma nova conta bancária vinculada a uma empresa."""
+    data = request.get_json() or {}
+    banco_nome = (data.get('banco_nome') or '').strip()
+    if not banco_nome:
+        return jsonify({'success': False, 'message': 'banco_nome é obrigatório'}), 400
+
+    # cliente_id é opcional mas recomendado – vincula a conta a uma empresa com produtos
+    cliente_id = data.get('cliente_id') or None
+    if cliente_id is not None:
+        try:
+            cliente_id = int(cliente_id)
+        except (ValueError, TypeError):
+            return jsonify({'success': False, 'message': 'cliente_id inválido'}), 400
+
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+
+    cursor.execute(
+        """INSERT INTO bank_accounts (banco_nome, agencia, conta, apelido, cliente_id)
+           VALUES (%s, %s, %s, %s, %s)""",
+        (banco_nome, data.get('agencia'), data.get('conta'), data.get('apelido'), cliente_id),
+    )
+    conn.commit()
+    new_id = cursor.lastrowid
+    cursor.close()
+    conn.close()
+
+    return jsonify({'success': True, 'id': new_id}), 201
+
+
+@bp.route('/contas')
+@login_required
+def gerenciar_contas():
+    """Página de gerenciamento de contas bancárias (lista, edita, exclui)."""
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    cursor.execute(
+        """SELECT ba.id, ba.banco_nome, ba.agencia, ba.conta, ba.apelido,
+                  ba.ativo, ba.cliente_id, ba.criado_em,
+                  c.razao_social AS empresa_nome,
+                  (SELECT COUNT(*) FROM bank_transactions bt WHERE bt.account_id = ba.id) AS total_transacoes
+           FROM bank_accounts ba
+           LEFT JOIN clientes c ON c.id = ba.cliente_id
+           ORDER BY ba.ativo DESC, ba.apelido, ba.banco_nome"""
+    )
+    contas = cursor.fetchall()
+    clientes = _get_clientes_com_produtos(cursor)
+    cursor.close()
+    conn.close()
+    return render_template('bank_import/contas.html', contas=contas, clientes=clientes)
+
+
+@bp.route('/api/contas/<int:conta_id>', methods=['PUT'])
+@login_required
+def api_editar_conta(conta_id):
+    """API: edita dados de uma conta bancária."""
+    data = request.get_json() or {}
+    banco_nome = (data.get('banco_nome') or '').strip()
+    if not banco_nome:
+        return jsonify({'success': False, 'message': 'banco_nome é obrigatório'}), 400
+
+    cliente_id = data.get('cliente_id') or None
+    if cliente_id is not None:
+        try:
+            cliente_id = int(cliente_id)
+        except (ValueError, TypeError):
+            return jsonify({'success': False, 'message': 'cliente_id inválido'}), 400
+
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    cursor.execute(
+        """UPDATE bank_accounts
+           SET banco_nome=%s, agencia=%s, conta=%s, apelido=%s, cliente_id=%s
+           WHERE id=%s""",
+        (banco_nome, data.get('agencia') or None, data.get('conta') or None,
+         data.get('apelido') or None, cliente_id, conta_id),
+    )
+    conn.commit()
+    cursor.close()
+    conn.close()
+    return jsonify({'success': True})
+
+
+@bp.route('/api/contas/<int:conta_id>/excluir', methods=['POST'])
+@login_required
+def api_excluir_conta(conta_id):
+    """API: desativa (soft-delete) uma conta bancária."""
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    # Verifica transações vinculadas antes de desativar
+    cursor.execute(
+        "SELECT COUNT(*) AS total FROM bank_transactions WHERE account_id = %s", (conta_id,)
+    )
+    total = cursor.fetchone()['total']
+    if total > 0:
+        cursor.close()
+        conn.close()
+        return jsonify({
+            'success': False,
+            'message': f'Esta conta possui {total} transação(ões) vinculada(s). Remova as transações antes de desativar.'
+        }), 409
+
+    cursor.execute("UPDATE bank_accounts SET ativo = 0 WHERE id = %s", (conta_id,))
+    conn.commit()
+    cursor.close()
+    conn.close()
+    return jsonify({'success': True})
+
+
+
+def _get_inbox_dirs() -> tuple:
+    """
+    Retorna (inbox_dir, processed_dir), criando ambos se não existirem.
+
+    Usa /tmp/ofx_inbox como fallback quando o caminho configurado não é gravável
+    (ex.: diretório da aplicação somente leitura após o build no Render/Railway).
+
+    processed_dir é OFX_PROCESSED_DIR se configurado, caso contrário
+    <inbox_dir>/processados/ (padrão compatível com versões anteriores).
+    """
+    from config import Config
+    inbox = Config.OFX_INBOX_DIR
+    processed = Config.OFX_PROCESSED_DIR or os.path.join(inbox, 'processados')
+
+    def _try_makedirs(path):
+        try:
+            os.makedirs(path, exist_ok=True)
+            return True
+        except OSError:
+            return False
+
+    # Tentativa principal
+    if _try_makedirs(inbox) and _try_makedirs(processed):
+        return inbox, processed
+
+    # Fallback para /tmp – sempre gravável no Render/Railway/Docker
+    tmp_inbox = os.path.join('/tmp', 'ofx_inbox')
+    tmp_processed = os.path.join(tmp_inbox, 'processados')
+    _try_makedirs(tmp_inbox)
+    _try_makedirs(tmp_processed)
+    return tmp_inbox, tmp_processed
+
+
+def _get_inbox_dir() -> str:
+    """Retorna o diretório de entrada (auxiliar compatível com versões anteriores)."""
+    inbox, _ = _get_inbox_dirs()
+    return inbox
+
+
+@bp.route('/api/inbox-files')
+@login_required
+def api_inbox_files():
+    """API: lista arquivos OFX encontrados na pasta de entrada."""
+    inbox, processed = _get_inbox_dirs()
+    files = []
+    try:
+        for name in sorted(os.listdir(inbox)):
+            if not name.lower().endswith('.ofx'):
+                continue
+            full = os.path.join(inbox, name)
+            if not os.path.isfile(full):
+                continue
+            stat = os.stat(full)
+            files.append({
+                'nome': name,
+                'tamanho': stat.st_size,
+                'modificado': _dt.datetime.fromtimestamp(stat.st_mtime).strftime('%d/%m/%Y %H:%M'),
+            })
+    except OSError as exc:
+        return jsonify({'success': False, 'message': str(exc), 'files': []}), 500
+
+    return jsonify({'success': True, 'pasta': inbox, 'pasta_processados': processed, 'files': files})
+
+
+@bp.route('/api/inbox-upload', methods=['POST'])
+@login_required
+def api_inbox_upload():
+    """
+    Salva um arquivo OFX na pasta de entrada SEM processar imediatamente.
+
+    Útil no Railway (container efêmero): o usuário faz upload pelo navegador,
+    o arquivo fica na pasta inbox aguardando, e pode ser importado depois
+    clicando em "Importar" na seção "Pasta de Entrada OFX".
+    """
+    arquivo = request.files.get('ofx_file')
+    if not arquivo or not arquivo.filename:
+        return jsonify({'success': False, 'message': 'Nenhum arquivo enviado'}), 400
+
+    nome = os.path.basename(arquivo.filename)
+    if not nome.lower().endswith('.ofx'):
+        return jsonify({'success': False, 'message': 'Apenas arquivos .ofx são aceitos'}), 400
+
+    inbox = _get_inbox_dir()
+    dest = os.path.join(inbox, nome)
+
+    # Evita sobrescrever arquivo existente – prefixa com timestamp
+    if os.path.exists(dest):
+        ts = _dt.datetime.now().strftime('%Y%m%d%H%M%S_')
+        nome = ts + nome
+        dest = os.path.join(inbox, nome)
+
+    try:
+        arquivo.save(dest)
+    except OSError as exc:
+        return jsonify({'success': False, 'message': f'Erro ao salvar arquivo: {exc}'}), 500
+
+    return jsonify({'success': True, 'nome': nome, 'message': f'Arquivo "{nome}" salvo na pasta de entrada.'})
+
+
+@bp.route('/scan-inbox', methods=['POST'])
+@login_required
+def scan_inbox():
+    """
+    Processa um arquivo OFX da pasta de entrada.
+
+    Parâmetros POST (form ou JSON):
+        account_id  – ID da conta bancária destino
+        nome_arquivo – nome do arquivo dentro da pasta de entrada
+    """
+    # Aceita form-data e JSON
+    if request.is_json:
+        data = request.get_json() or {}
+    else:
+        data = request.form
+
+    account_id = data.get('account_id')
+    nome_arquivo = (data.get('nome_arquivo') or '').strip()
+
+    if not account_id:
+        if request.is_json:
+            return jsonify({'success': False, 'message': 'account_id é obrigatório'}), 400
+        flash('Selecione uma conta bancária.', 'warning')
+        return redirect(url_for('bank_import.index'))
+
+    if not nome_arquivo:
+        if request.is_json:
+            return jsonify({'success': False, 'message': 'nome_arquivo é obrigatório'}), 400
+        flash('Nenhum arquivo especificado.', 'warning')
+        return redirect(url_for('bank_import.index'))
+
+    # Segurança: apenas nomes simples de arquivo são aceitos – bloqueia tentativas de path traversal
+    if os.sep in nome_arquivo or '/' in nome_arquivo or '\\' in nome_arquivo or '..' in nome_arquivo:
+        if request.is_json:
+            return jsonify({'success': False, 'message': 'Nome de arquivo inválido'}), 400
+        flash('Nome de arquivo inválido.', 'danger')
+        return redirect(url_for('bank_import.index'))
+
+    inbox, processed = _get_inbox_dirs()
+    filepath = os.path.join(inbox, nome_arquivo)
+
+    if not os.path.isfile(filepath):
+        if request.is_json:
+            return jsonify({'success': False, 'message': f'Arquivo não encontrado: {nome_arquivo}'}), 404
+        flash(f'Arquivo não encontrado: {nome_arquivo}', 'danger')
+        return redirect(url_for('bank_import.index'))
+
+    # Leitura e parse do arquivo.
+    # Arquivos OFX v1.x (SGML) geralmente usam codificação Latin-1 / ISO-8859-1.
+    # Usar 'latin-1' com errors='replace' é a opção mais segura e universal:
+    # todos os 256 valores de byte têm mapeamento, portanto nenhum byte causa erro.
+    try:
+        with open(filepath, 'r', encoding='latin-1', errors='replace') as fh:
+            content = fh.read()
+    except OSError as exc:
+        if request.is_json:
+            return jsonify({'success': False, 'message': str(exc)}), 500
+        flash(f'Erro ao ler arquivo: {exc}', 'danger')
+        return redirect(url_for('bank_import.index'))
+
+    from integrations.ofx_parser import OFXParser
+    transactions = OFXParser(content).get_transactions()
+
+    if not transactions:
+        if request.is_json:
+            return jsonify({'success': False, 'message': 'Nenhuma transação encontrada no arquivo OFX.'}), 422
+        flash('Nenhuma transação encontrada no arquivo OFX.', 'warning')
+        return redirect(url_for('bank_import.index'))
+
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+
+    inseridos, duplicados = _save_transactions(cursor, conn, account_id, transactions)
+
+    cursor.close()
+    conn.close()
+
+    # Move o arquivo para o diretório de processados (OFX_PROCESSED_DIR)
+    dest = os.path.join(processed, nome_arquivo)
+    # Evita colisão: prefixa com timestamp se já existir arquivo com o mesmo nome
+    if os.path.exists(dest):
+        ts = _dt.datetime.now().strftime('%Y%m%d%H%M%S_')
+        dest = os.path.join(processed, ts + nome_arquivo)
+    try:
+        os.rename(filepath, dest)
+    except OSError:
+        pass  # Não crítico – arquivo processado mesmo se a movimentação falhar
+
+    msg = f'{nome_arquivo}: {inseridos} transação(ões) importada(s), {duplicados} duplicata(s) ignorada(s).'
+    if request.is_json:
+        return jsonify({'success': True, 'message': msg, 'inseridos': inseridos, 'duplicados': duplicados})
+    flash(msg, 'success')
+    return redirect(url_for('bank_import.index'))
+
+
+# ---------------------------------------------------------------------------
+# Integração Dropbox API
+# ---------------------------------------------------------------------------
+
+@bp.route('/api/dropbox-files')
+@login_required
+def api_dropbox_files():
+    """API: lista arquivos .ofx na pasta Dropbox configurada."""
+    from integrations.dropbox_ofx import listar_arquivos_ofx, get_inbox_paths
+    try:
+        arquivos = listar_arquivos_ofx()
+        inbox, processed = get_inbox_paths()
+        return jsonify({
+            'success': True,
+            'files': arquivos,
+            'pasta': inbox,
+            'pasta_processados': processed,
+        })
+    except RuntimeError as exc:
+        return jsonify({'success': False, 'message': str(exc), 'files': []}), 400
+
+
+@bp.route('/importar-dropbox', methods=['POST'])
+@login_required
+def importar_dropbox():
+    """
+    Baixa um arquivo OFX do Dropbox, importa as transações e move o arquivo
+    para a pasta DROPBOX_OFX_PROCESSED.
+    """
+    if request.is_json:
+        data = request.get_json() or {}
+    else:
+        data = request.form
+
+    account_id = data.get('account_id')
+    nome_arquivo = (data.get('nome_arquivo') or '').strip()
+
+    if not account_id:
+        if request.is_json:
+            return jsonify({'success': False, 'message': 'account_id é obrigatório'}), 400
+        flash('Selecione uma conta bancária.', 'warning')
+        return redirect(url_for('bank_import.index'))
+
+    if not nome_arquivo:
+        if request.is_json:
+            return jsonify({'success': False, 'message': 'nome_arquivo é obrigatório'}), 400
+        flash('Nenhum arquivo especificado.', 'warning')
+        return redirect(url_for('bank_import.index'))
+
+    from integrations.dropbox_ofx import baixar_arquivo, mover_para_processados
+    try:
+        content = baixar_arquivo(nome_arquivo)
+    except RuntimeError as exc:
+        if request.is_json:
+            return jsonify({'success': False, 'message': str(exc)}), 400
+        flash(f'Erro ao baixar arquivo do Dropbox: {exc}', 'danger')
+        return redirect(url_for('bank_import.index'))
+
+    from integrations.ofx_parser import OFXParser
+    transactions = OFXParser(content).get_transactions()
+
+    if not transactions:
+        if request.is_json:
+            return jsonify({'success': False, 'message': 'Nenhuma transação encontrada no arquivo OFX.'}), 422
+        flash('Nenhuma transação encontrada no arquivo OFX.', 'warning')
+        return redirect(url_for('bank_import.index'))
+
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    inseridos, duplicados = _save_transactions(cursor, conn, account_id, transactions)
+    cursor.close()
+    conn.close()
+
+    # Move para pasta de processados no Dropbox (não crítico)
+    mover_para_processados(nome_arquivo)
+
+    msg = f'Dropbox "{nome_arquivo}": {inseridos} transação(ões) importada(s), {duplicados} duplicata(s) ignorada(s).'
+    if request.is_json:
+        return jsonify({'success': True, 'message': msg, 'inseridos': inseridos, 'duplicados': duplicados})
+    flash(msg, 'success')
+    return redirect(url_for('bank_import.index'))
+
+
+# ---------------------------------------------------------------------------
+# Dropbox OAuth2 — fluxo de autorização para obter refresh token permanente
+# ---------------------------------------------------------------------------
+
+@bp.route('/api/dropbox-oauth-url')
+@login_required
+def api_dropbox_oauth_url():
+    """Gera a URL de autorização Dropbox (OAuth2 offline) para o usuário clicar."""
+    try:
+        import dropbox
+        app_key = os.environ.get('DROPBOX_APP_KEY', '').strip()
+        if not app_key:
+            return jsonify({'ok': False, 'erro': 'DROPBOX_APP_KEY não configurado no Render.'})
+
+        auth_flow = dropbox.DropboxOAuth2FlowNoRedirect(
+            app_key,
+            use_pkce=True,
+            token_access_type='offline',
+        )
+        url = auth_flow.start()
+        # Guarda o verifier na sessão para usar na troca
+        from flask import session
+        session['dbx_pkce_verifier'] = auth_flow.flow_result.pkce_verifier
+        return jsonify({'ok': True, 'url': url})
+    except Exception as exc:
+        return jsonify({'ok': False, 'erro': str(exc)})
+
+
+@bp.route('/api/desfazer-transferencia/<int:tx_id>', methods=['POST'])
+@login_required
+def api_desfazer_transferencia(tx_id):
+    """Desfaz uma transferência entre contas:
+    - Remove o CREDIT TRANSFER_<id> se existir
+    - Redefine o DEBIT de origem para status='pendente'
+    Isso permite que o usuário refaça a conciliação.
+    """
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        # Verifica que a transação existe e é um DEBIT conciliado
+        cursor.execute(
+            "SELECT id, tipo, status FROM bank_transactions WHERE id=%s", (tx_id,)
+        )
+        tx = cursor.fetchone()
+        if not tx:
+            return jsonify({'ok': False, 'erro': 'Transação não encontrada.'}), 404
+        if tx['tipo'] != 'DEBIT':
+            return jsonify({'ok': False, 'erro': 'Apenas débitos podem ser desfeitos.'}), 400
+
+        hash_credit = f'TRANSFER_{tx_id}'
+
+        # Remove o CREDIT correspondente (se existir)
+        cursor.execute(
+            "DELETE FROM bank_transactions WHERE hash_dedup = %s AND tipo = 'CREDIT'",
+            (hash_credit,),
+        )
+        deletados = cursor.rowcount
+
+        # Reabre o DEBIT para pendente — tenta com tipo_conciliacao (nova coluna)
+        try:
+            cursor.execute(
+                """UPDATE bank_transactions
+                   SET status='pendente', conciliado_em=NULL, conciliado_por=NULL,
+                       fornecedor_id=NULL, forma_recebimento_id=NULL,
+                       tipo_conciliacao=NULL
+                   WHERE id=%s""",
+                (tx_id,),
+            )
+        except Exception:
+            conn.rollback()
+            cursor.execute(
+                """UPDATE bank_transactions
+                   SET status='pendente', conciliado_em=NULL, conciliado_por=NULL,
+                       fornecedor_id=NULL, forma_recebimento_id=NULL
+                   WHERE id=%s""",
+                (tx_id,),
+            )
+        conn.commit()
+        return jsonify({
+            'ok': True,
+            'mensagem': f'Conciliação desfeita. CREDIT removido: {deletados}. Transação reaberta para conciliação.',
+        })
+    except Exception as exc:
+        conn.rollback()
+        return jsonify({'ok': False, 'erro': str(exc)}), 500
+    finally:
+        cursor.close()
+        conn.close()
+
+
+@bp.route('/api/dropbox-oauth-token')
+@login_required
+def api_dropbox_oauth_token():
+    """
+    Troca o código de autorização pelo refresh token permanente.
+    Parâmetro GET: code (colado pelo usuário após autorizar no Dropbox).
+    """
+    try:
+        import dropbox
+        from flask import session
+        code = (request.args.get('code') or '').strip()
+        if not code:
+            return jsonify({'ok': False, 'erro': 'Parâmetro "code" é obrigatório.'})
+
+        app_key    = os.environ.get('DROPBOX_APP_KEY', '').strip()
+        app_secret = os.environ.get('DROPBOX_APP_SECRET', '').strip()
+        if not app_key or not app_secret:
+            return jsonify({'ok': False, 'erro': 'DROPBOX_APP_KEY e DROPBOX_APP_SECRET devem estar configurados.'})
+
+        pkce_verifier = session.pop('dbx_pkce_verifier', None)
+        auth_flow = dropbox.DropboxOAuth2FlowNoRedirect(
+            app_key,
+            consumer_secret=app_secret,
+            use_pkce=True,
+            token_access_type='offline',
+        )
+        if pkce_verifier:
+            auth_flow.flow_result.pkce_verifier = pkce_verifier
+
+        oauth_result = auth_flow.finish(code)
+        refresh_token = oauth_result.refresh_token
+
+        return jsonify({
+            'ok': True,
+            'refresh_token': refresh_token,
+            'instrucao': (
+                f'Copie o valor abaixo e configure como variável de ambiente '
+                f'DROPBOX_REFRESH_TOKEN no Render. Depois disso o token nunca mais vai expirar.'
+            ),
+        })
+    except Exception as exc:
+        return jsonify({'ok': False, 'erro': f'Erro ao trocar código: {exc}'})
+

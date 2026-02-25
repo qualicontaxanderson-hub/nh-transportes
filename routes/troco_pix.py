@@ -11,6 +11,17 @@ from datetime import datetime, timedelta
 import pytz
 import json
 
+# Fuso horário de Brasília (UTC-3) — usado em todo o módulo
+_BRASILIA = pytz.timezone('America/Sao_Paulo')
+
+def _hoje_br():
+    """Retorna a data atual no horário de Brasília (evita erro de virada de dia no servidor UTC)."""
+    return datetime.now(_BRASILIA).date()
+
+def _agora_br():
+    """Retorna o datetime atual no horário de Brasília."""
+    return datetime.now(_BRASILIA)
+
 # Importar função de conexão do banco de dados
 from utils.db import get_db_connection
 from utils.formatadores import formatar_moeda
@@ -362,10 +373,9 @@ def excluir_lancamento_caixa_automatico(lancamento_caixa_id):
 def listar():
     """Lista todas as transações TROCO PIX (visão Admin)"""
     try:
+        # Calcular datas padrão (primeiro dia do mês e hoje no horário de Brasília)
+        hoje = _hoje_br()
         from datetime import date
-        
-        # Calcular datas padrão (primeiro dia do mês e hoje)
-        hoje = date.today()
         primeiro_dia_mes = date(hoje.year, hoje.month, 1)
         
         # Usar datas dos parâmetros ou padrão
@@ -414,7 +424,7 @@ def listar():
             'cancelados': 0
         }
         total_dia = 0
-        data_hoje = datetime.now().date()
+        data_hoje = _hoje_br()
         
         for t in transacoes:
             status = t.get('status', '').upper()
@@ -602,8 +612,8 @@ def novo():
             cursor.close()
             conn.close()
             
-            # Data de hoje
-            data_hoje = date.today().strftime('%Y-%m-%d')
+            # Data de hoje no horário de Brasília
+            data_hoje = _hoje_br().strftime('%Y-%m-%d')
             
             return render_template('troco_pix/novo.html',
                                  postos=postos,
@@ -642,8 +652,8 @@ def novo():
                 flash('Usuário PISTA deve ter um posto vinculado.', 'danger')
                 return redirect(url_for('troco_pix.novo', origem=request.args.get('origem')))
             
-            # PISTA só pode criar transações para a data de hoje
-            data_transacao = date.today().strftime('%Y-%m-%d')
+            # PISTA só pode criar transações para a data de hoje (horário de Brasília)
+            data_transacao = _hoje_br().strftime('%Y-%m-%d')
         
         venda_abastecimento = request.form.get('venda_abastecimento', 0)
         venda_arla = request.form.get('venda_arla', 0)
@@ -1161,7 +1171,7 @@ def pista():
         
         # Se não tem filtro, usar data de hoje por padrão
         if not data_inicio and not data_fim:
-            data_hoje = date.today()
+            data_hoje = _hoje_br()
             data_inicio = data_hoje.strftime('%Y-%m-%d')
             data_fim = data_hoje.strftime('%Y-%m-%d')
         
@@ -1220,8 +1230,8 @@ def pista():
             else:
                 t['criado_em_br'] = None
         
-        # Calcular transações de hoje e total
-        data_hoje = date.today()
+        # Calcular transações de hoje e total (usando horário de Brasília)
+        data_hoje = _hoje_br()
         transacoes_hoje = [t for t in transacoes if t.get('data') == data_hoje]
         total_troco_pix_hoje = sum(t.get('troco_pix', 0) or 0 for t in transacoes_hoje)
         
