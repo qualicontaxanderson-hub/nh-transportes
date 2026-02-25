@@ -153,6 +153,48 @@ SELECT 'Migration FINAL aplicada!' AS resultado;</pre>
     </div>
   </div>
 
+  {% if candidatos %}
+  <!-- Candidatos: DEBITs com 'Transf' na descrição, conciliados antes do recurso existir -->
+  <div class="card border-info shadow-sm mt-4">
+    <div class="card-header bg-info bg-opacity-10 fw-semibold text-info-emphasis">
+      <i class="bi bi-question-circle-fill me-1"></i>
+      Possíveis Transferências Antigas — precisam ser refeitas ({{ candidatos|length }})
+      <small class="fw-normal ms-2 text-muted">
+        Estes débitos contêm "Transf" na descrição e foram conciliados antes do recurso de Transferência existir.
+        Se for uma transferência entre contas, clique em "Desfazer e Refazer" para corrigir.
+        Se for pagamento a fornecedor, ignore.
+      </small>
+    </div>
+    <div class="card-body p-0">
+      <div class="table-responsive">
+        <table class="table table-sm table-hover mb-0 align-middle">
+          <thead class="table-light">
+            <tr>
+              <th>Data</th><th class="text-end">Valor</th><th>Descrição</th>
+              <th>Conta</th><th>Ação</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for c in candidatos %}
+            <tr>
+              <td class="text-nowrap">{{ c.data_transacao.strftime('%d/%m/%Y') if c.data_transacao else '—' }}</td>
+              <td class="text-end fw-bold text-danger">R$ {{ "%.2f"|format(c.valor|float) | replace('.', ',') }}</td>
+              <td class="text-truncate" style="max-width:260px" title="{{ c.descricao }}">{{ c.descricao or '—' }}</td>
+              <td><span class="badge bg-secondary">{{ c.banco_nome }} — {{ c.conta_apelido }}</span></td>
+              <td>
+                <button class="btn btn-sm btn-outline-info" onclick="desfazerTransferencia({{ c.id }}, this)">
+                  <i class="bi bi-arrow-counterclockwise"></i> Desfazer e Refazer
+                </button>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
   {% if orfaos %}
   <!-- Seção de transferências quebradas (DEBIT conciliado sem CREDIT) -->
   <div class="card border-warning shadow-sm mt-4">

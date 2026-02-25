@@ -1009,11 +1009,12 @@ def transferencias():
     f_data_fim = request.args.get('data_fim', '').strip()
     f_conta    = request.args.get('account_id', '').strip()
 
-    lista   = []
-    totais  = {}
-    orfaos  = []
-    contas  = []
-    erro_db = None
+    lista       = []
+    totais      = {}
+    orfaos      = []
+    candidatos  = []
+    contas      = []
+    erro_db     = None
 
     try:
         # Query principal: parte do lado CREDIT (hash_dedup LIKE 'TRANSFER_%')
@@ -1095,6 +1096,26 @@ def transferencias():
         )
         contas = cursor.fetchall()
 
+        # Candidatos: DEBITs conciliados manualmente cuja descrição contém "Transf"
+        # (antes do recurso de tipo_conciliacao existir — precisam ser refeitos)
+        try:
+            cursor.execute(
+                """SELECT bt.id, bt.data_transacao, bt.valor, bt.descricao, bt.cnpj_cpf,
+                          ba.apelido AS conta_apelido, ba.banco_nome
+                   FROM bank_transactions bt
+                   INNER JOIN bank_accounts ba ON ba.id = bt.account_id
+                   WHERE bt.tipo = 'DEBIT'
+                     AND bt.status = 'conciliado'
+                     AND (bt.tipo_conciliacao IS NULL OR bt.tipo_conciliacao = '')
+                     AND bt.conciliado_por NOT IN ('auto', 'auto-regra')
+                     AND bt.descricao LIKE '%Transf%'
+                   ORDER BY bt.data_transacao DESC
+                   LIMIT 200"""
+            )
+            candidatos = cursor.fetchall()
+        except Exception:
+            candidatos = []
+
     except Exception as e:
         current_app.logger.exception("Erro em /financeiro/transferencias/")
         erro_db = str(e)
@@ -1108,6 +1129,7 @@ def transferencias():
         total_valor=totais.get('total_valor') or 0,
         total_qtd=totais.get('total_qtd') or 0,
         orfaos=orfaos,
+        candidatos=candidatos,
         contas=contas,
         erro_db=erro_db,
         f_data_ini=f_data_ini,
