@@ -146,10 +146,10 @@
   </div>
   {% endif %}
 
-  <!-- TABELA PRINCIPAL: transferências confirmadas -->
+  <!-- TABELA PRINCIPAL: transferências -->
   <div class="card border-0 shadow-sm">
     <div class="card-header fw-semibold bg-primary bg-opacity-10 text-primary-emphasis">
-      <i class="bi bi-check2-circle me-1"></i> Transferências Concluídas
+      <i class="bi bi-check2-circle me-1"></i> Transferências Entre Contas
     </div>
     <div class="card-body p-0">
       {% if transferencias %}
@@ -167,13 +167,23 @@
           </thead>
           <tbody>
             {% for t in transferencias %}
-            <tr>
+            <tr{% if t.credit_status == 'pendente' %} class="table-warning"{% endif %}>
               <td class="text-nowrap">{{ t.data_transacao.strftime('%d/%m/%Y') if t.data_transacao else '—' }}</td>
               <td class="text-end fw-bold text-primary">R$ {{ "%.2f"|format(t.valor|float) | replace('.', ',') }}</td>
               <td class="text-truncate" style="max-width:220px" title="{{ t.descricao }}">{{ t.descricao or '—' }}</td>
               <td><span class="badge bg-secondary">{{ t.banco_orig or '?' }} — {{ t.conta_orig_apelido or '?' }}</span></td>
-              <td><span class="badge bg-primary">{{ t.banco_dest or '?' }} — {{ t.conta_dest_apelido or '?' }}</span></td>
+              <td>
+                <span class="badge bg-primary">{{ t.banco_dest or '?' }} — {{ t.conta_dest_apelido or '?' }}</span>
+                {% if t.credit_status == 'pendente' %}
+                <span class="badge text-white ms-1" style="background:#fd7e14;font-size:0.7rem;" title="Aguardando confirmação na conta destino">⏳ Aguardando</span>
+                {% endif %}
+              </td>
               <td class="text-center">
+                {% if t.credit_status == 'pendente' %}
+                <a href="/banco/conciliar?status=pendente" class="btn btn-sm btn-warning me-1" title="Confirmar recebimento na conta destino">
+                  <i class="bi bi-check2"></i> Confirmar
+                </a>
+                {% endif %}
                 <button class="btn btn-sm btn-outline-warning" onclick="desfazerConciliacao({{ t.id }}, this)">
                   <i class="bi bi-arrow-counterclockwise"></i> Desfazer
                 </button>

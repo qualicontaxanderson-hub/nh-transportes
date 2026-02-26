@@ -1059,7 +1059,7 @@ def transferencias():
         # Não usa ba.cliente_id pois essa coluna pode não existir ainda
         # (depende da migration 20260223_pending_all_idempotente.sql).
         where = ["bt.tipo = 'CREDIT'",
-                 "bt.status = 'conciliado'",
+                 "bt.status IN ('conciliado', 'pendente')",
                  "bt.hash_dedup LIKE 'TRANSFER\\_%'"]
         params = []
         if f_data_ini:
@@ -1077,6 +1077,7 @@ def transferencias():
         cursor.execute(
             f"""SELECT bt.id AS id_credit, bt_orig.id AS id,
                        bt.data_transacao, bt.valor, bt_orig.descricao AS descricao,
+                       bt.status AS credit_status,
                        ba_orig.apelido AS conta_orig_apelido, ba_orig.banco_nome AS banco_orig,
                        ba_dest.apelido AS conta_dest_apelido, ba_dest.banco_nome AS banco_dest
                 FROM bank_transactions bt
