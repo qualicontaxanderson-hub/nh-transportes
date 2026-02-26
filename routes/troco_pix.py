@@ -379,16 +379,24 @@ def listar():
         primeiro_dia_mes = date(hoje.year, hoje.month, 1)
         
         # Usar datas dos parâmetros ou padrão
-        data_inicio = request.args.get('data_inicio', primeiro_dia_mes.strftime('%Y-%m-%d'))
-        data_fim = request.args.get('data_fim', hoje.strftime('%Y-%m-%d'))
-        
+        data_inicio = (request.args.get('data_inicio') or '').strip() or primeiro_dia_mes.strftime('%Y-%m-%d')
+        data_fim    = (request.args.get('data_fim')    or '').strip() or hoje.strftime('%Y-%m-%d')
+        f_status    = (request.args.get('status')      or '').strip()
+        f_cliente   = (request.args.get('cliente_id')  or '').strip()
+
+        # Montar filtros adicionais (status e cliente são opcionais)
+        extra_where = "AND tp.status = %s" if f_status else ""
+        extra_params_status = [f_status] if f_status else []
+        extra_where2 = extra_where + (" AND tp.cliente_id = %s" if f_cliente else "")
+        extra_params = extra_params_status + ([f_cliente] if f_cliente else [])
+
         conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)
         
         # Buscar transações com joins para obter nomes
         # Tenta incluir bank_transaction_id e dados bancários (coluna pode não existir ainda)
         try:
-            query = """
+            query = f"""
                 SELECT 
                     tp.*,
                     c.razao_social as posto_nome,
@@ -406,12 +414,13 @@ def listar():
                 LEFT JOIN funcionarios f ON tp.funcionario_id = f.id
                 LEFT JOIN bank_transactions bt ON bt.id = tp.bank_transaction_id
                 LEFT JOIN bank_accounts ba ON ba.id = bt.account_id
+                WHERE tp.data BETWEEN %s AND %s {extra_where2}
                 ORDER BY tp.data DESC, tp.criado_em DESC
             """
-            cursor.execute(query)
+            cursor.execute(query, [data_inicio, data_fim] + extra_params)
         except Exception:
             # Fallback sem a coluna bank_transaction_id (migration pendente)
-            query = """
+            query = f"""
                 SELECT 
                     tp.*,
                     c.razao_social as posto_nome,
@@ -423,9 +432,10 @@ def listar():
                 LEFT JOIN clientes c ON tp.cliente_id = c.id
                 LEFT JOIN troco_pix_clientes tpc ON tp.troco_pix_cliente_id = tpc.id
                 LEFT JOIN funcionarios f ON tp.funcionario_id = f.id
+                WHERE tp.data BETWEEN %s AND %s {extra_where2}
                 ORDER BY tp.data DESC, tp.criado_em DESC
             """
-            cursor.execute(query)
+            cursor.execute(query, [data_inicio, data_fim] + extra_params)
         transacoes = cursor.fetchall()
         
         # Buscar lista de clientes para filtro (apenas com produtos cadastrados)

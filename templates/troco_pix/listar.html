@@ -130,7 +130,7 @@
                             <th class="text-center">Venda Total</th>
                             <th class="text-center">Cheque</th>
                             <th class="text-center">Troco PIX</th>
-                            <th class="text-center">Conciliação Bancária</th>
+                            <th class="text-center" style="white-space:nowrap">Conc. Bancária</th>
                             <th>Ações</th>
                         </tr>
                     </thead>
@@ -147,14 +147,10 @@
                             <td class="text-center">
                                 {% if t.troco_pix and t.troco_pix > 0 %}
                                     {% if t.get('bank_transaction_id') %}
-                                        <span class="badge bg-success" title="{{ t.get('banco_descricao') or '' }}">
+                                        <span class="badge bg-success"
+                                              title="{{ t.get('banco_descricao') or '' }}{% if t.get('banco_conta_apelido') or t.get('banco_nome') %} · {{ t.get('banco_conta_apelido') or t.get('banco_nome') }}{% endif %}">
                                             <i class="bi bi-check-circle"></i> Conciliado
                                         </span>
-                                        {% if t.get('banco_conta_apelido') or t.get('banco_nome') %}
-                                        <br><small class="text-muted" style="font-size:0.75rem;">
-                                            {{ t.get('banco_conta_apelido') or t.get('banco_nome') }}
-                                        </small>
-                                        {% endif %}
                                         <form method="POST"
                                               action="{{ url_for('troco_pix.desvincular_banco', troco_pix_id=t.id) }}"
                                               style="display:inline;"
