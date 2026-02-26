@@ -385,10 +385,10 @@ def listar():
         f_cliente   = (request.args.get('cliente_id')  or '').strip()
 
         # Montar filtros adicionais (status e cliente são opcionais)
-        extra_where = "AND tp.status = %s" if f_status else ""
-        extra_params_status = [f_status] if f_status else []
-        extra_where2 = extra_where + (" AND tp.cliente_id = %s" if f_cliente else "")
-        extra_params = extra_params_status + ([f_cliente] if f_cliente else [])
+        status_filter_clause  = "AND tp.status = %s" if f_status else ""
+        status_filter_params  = [f_status] if f_status else []
+        combined_filter_clause = status_filter_clause + (" AND tp.cliente_id = %s" if f_cliente else "")
+        combined_filter_params = status_filter_params + ([f_cliente] if f_cliente else [])
 
         conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)
@@ -414,10 +414,10 @@ def listar():
                 LEFT JOIN funcionarios f ON tp.funcionario_id = f.id
                 LEFT JOIN bank_transactions bt ON bt.id = tp.bank_transaction_id
                 LEFT JOIN bank_accounts ba ON ba.id = bt.account_id
-                WHERE tp.data BETWEEN %s AND %s {extra_where2}
+                WHERE tp.data BETWEEN %s AND %s {combined_filter_clause}
                 ORDER BY tp.data DESC, tp.criado_em DESC
             """
-            cursor.execute(query, [data_inicio, data_fim] + extra_params)
+            cursor.execute(query, [data_inicio, data_fim] + combined_filter_params)
         except Exception:
             # Fallback sem a coluna bank_transaction_id (migration pendente)
             query = f"""
@@ -432,10 +432,10 @@ def listar():
                 LEFT JOIN clientes c ON tp.cliente_id = c.id
                 LEFT JOIN troco_pix_clientes tpc ON tp.troco_pix_cliente_id = tpc.id
                 LEFT JOIN funcionarios f ON tp.funcionario_id = f.id
-                WHERE tp.data BETWEEN %s AND %s {extra_where2}
+                WHERE tp.data BETWEEN %s AND %s {combined_filter_clause}
                 ORDER BY tp.data DESC, tp.criado_em DESC
             """
-            cursor.execute(query, [data_inicio, data_fim] + extra_params)
+            cursor.execute(query, [data_inicio, data_fim] + combined_filter_params)
         transacoes = cursor.fetchall()
         
         # Buscar lista de clientes para filtro (apenas com produtos cadastrados)
