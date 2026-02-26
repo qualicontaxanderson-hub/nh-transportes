@@ -535,29 +535,27 @@ def _conciliar_transferencia(cursor, conn, tx_id, conta_destino_id, usuario):
         )
     # Cria CREDIT na conta destino. Usa TRANSFER_<id> para garantir que cabe
     # em VARCHAR(64) (SHA-256 = 64 chars; '_transfer' causaria overflow).
-    # Usa INSERT normal (não IGNORE) para que falhas reais propaguen erro.
+    # Cria como 'pendente' para que apareça na fila de conciliação da conta destino.
     hash_destino = f'TRANSFER_{tx_id}'
     descricao_dest = f"TRANSFERENCIA RECEBIDA - {tx.get('descricao') or ''}"[:500]
     try:
         cursor.execute(
             """INSERT INTO bank_transactions
                    (account_id, data_transacao, tipo, valor, descricao, hash_dedup,
-                    status, conciliado_em, conciliado_por, tipo_conciliacao)
-               VALUES (%s, %s, 'CREDIT', %s, %s, %s,
-                       'conciliado', %s, %s, 'transferencia')""",
+                    status, tipo_conciliacao)
+               VALUES (%s, %s, 'CREDIT', %s, %s, %s, 'pendente', 'transferencia')""",
             (conta_destino_id, tx['data_transacao'], tx['valor'],
-             descricao_dest, hash_destino, agora, usuario),
+             descricao_dest, hash_destino),
         )
     except Exception:
         # tipo_conciliacao não existe ainda — INSERT sem a coluna
         cursor.execute(
             """INSERT INTO bank_transactions
                    (account_id, data_transacao, tipo, valor, descricao, hash_dedup,
-                    status, conciliado_em, conciliado_por)
-               VALUES (%s, %s, 'CREDIT', %s, %s, %s,
-                       'conciliado', %s, %s)""",
+                    status)
+               VALUES (%s, %s, 'CREDIT', %s, %s, %s, 'pendente')""",
             (conta_destino_id, tx['data_transacao'], tx['valor'],
-             descricao_dest, hash_destino, agora, usuario),
+             descricao_dest, hash_destino),
         )
     # Auto-aprender: salva CNPJ→conta_destino para sugestão nas próximas importações
     cnpj = tx.get('cnpj_cpf')
@@ -594,30 +592,49 @@ def _conciliar_tx(cursor, conn, tx_id, acao, tipo_tx,
     agora = _dt.datetime.now()
 
     if tipo_tx == 'CREDIT':
-        # Crédito → Forma de Recebimento
-        if not forma_recebimento_id:
-            return
-        cursor.execute(
-            """UPDATE bank_transactions
-               SET status='conciliado', forma_recebimento_id=%s,
-                   conciliado_em=%s, conciliado_por=%s
-               WHERE id=%s""",
-            (forma_recebimento_id, agora, usuario, tx_id),
-        )
-        # Aprende: CNPJ → forma de recebimento
-        cursor.execute("SELECT cnpj_cpf FROM bank_transactions WHERE id=%s", (tx_id,))
-        row = cursor.fetchone()
-        if row and row.get('cnpj_cpf'):
+        if tipo_debito == 'transferencia':
+            # Crédito de transferência recebida — confirma a entrada e marca como conciliado
+            try:
+                cursor.execute(
+                    """UPDATE bank_transactions
+                       SET status='conciliado', conciliado_em=%s, conciliado_por=%s,
+                           tipo_conciliacao='transferencia'
+                       WHERE id=%s""",
+                    (agora, usuario, tx_id),
+                )
+            except Exception:
+                conn.rollback()
+                cursor.execute(
+                    """UPDATE bank_transactions
+                       SET status='conciliado', conciliado_em=%s, conciliado_por=%s
+                       WHERE id=%s""",
+                    (agora, usuario, tx_id),
+                )
+        else:
+            # Crédito → Forma de Recebimento
+            if not forma_recebimento_id:
+                return
             cursor.execute(
-                """INSERT INTO bank_supplier_mapping
-                       (cnpj_cpf, tipo_chave, total_conciliacoes, forma_recebimento_id)
-                   VALUES (%s, 'cnpj', 1, %s)
-                   ON DUPLICATE KEY UPDATE
-                       forma_recebimento_id=%s,
-                       total_conciliacoes=total_conciliacoes+1,
-                       atualizado_em=NOW()""",
-                (row['cnpj_cpf'], forma_recebimento_id, forma_recebimento_id),
+                """UPDATE bank_transactions
+                   SET status='conciliado', forma_recebimento_id=%s,
+                       conciliado_em=%s, conciliado_por=%s
+                   WHERE id=%s""",
+                (forma_recebimento_id, agora, usuario, tx_id),
             )
+            # Aprende: CNPJ → forma de recebimento
+            cursor.execute("SELECT cnpj_cpf FROM bank_transactions WHERE id=%s", (tx_id,))
+            row = cursor.fetchone()
+            if row and row.get('cnpj_cpf'):
+                cursor.execute(
+                    """INSERT INTO bank_supplier_mapping
+                           (cnpj_cpf, tipo_chave, total_conciliacoes, forma_recebimento_id)
+                       VALUES (%s, 'cnpj', 1, %s)
+                       ON DUPLICATE KEY UPDATE
+                           forma_recebimento_id=%s,
+                           total_conciliacoes=total_conciliacoes+1,
+                           atualizado_em=NOW()""",
+                    (row['cnpj_cpf'], forma_recebimento_id, forma_recebimento_id),
+                )
     elif tipo_debito == 'troco_pix' and troco_pix_id:
         # Débito → Troco PIX: vincula a transação bancária ao registro de troco_pix
         try:
@@ -933,6 +950,14 @@ def conciliar():
             tx['sugestao_despesa_label'] = (
                 (tx.get('sugestao_titulo_nome') or '') + ' › ' + (tx.get('sugestao_categoria_nome') or '')
             )
+
+    # Marca CREDITs que são transferências recebidas (sintéticas ou por CNPJ aprendido)
+    for tx in transacoes:
+        if tx.get('tipo') == 'CREDIT':
+            tipo_conc    = tx.get('tipo_conciliacao') or ''
+            sugestao_tip = tx.get('sugestao_tipo_debito') or ''
+            if tipo_conc == 'transferencia' or sugestao_tip == 'transferencia':
+                tx['sugestao_transferencia_recebida'] = True
 
     cursor.execute(
         f"SELECT COUNT(*) AS total FROM bank_transactions bt "

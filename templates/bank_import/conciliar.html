@@ -158,7 +158,12 @@
                 </td>
                 <td>{{ tx.conta_apelido or tx.banco_nome }}</td>
                 <td style="max-width:140px;">
-                  {% if tx.tipo == 'CREDIT' and tx.sugestao_forma_id %}
+                  {% if tx.tipo == 'CREDIT' and tx.sugestao_transferencia_recebida %}
+                    <span class="badge text-white" style="background:#6f42c1;font-size:0.72rem;"
+                          title="Transferência bancária recebida">
+                      🔄 Transf. Recebida
+                    </span>
+                  {% elif tx.tipo == 'CREDIT' and tx.sugestao_forma_id %}
                     <span class="badge bg-info text-dark" style="font-size:0.72rem;"
                           title="{% if tx.sugestao_regra %}Sugestão por regra de descrição{% else %}Sugestão com base no CNPJ anterior{% endif %}">
                       {% if tx.sugestao_regra %}📋{% else %}✨{% endif %} {{ tx.sugestao_forma_nome }}
@@ -183,7 +188,14 @@
                   {% endif %}
                 </td>
                 <td class="text-center text-nowrap">
-                  {% if tx.tipo == 'DEBIT' and tx.sugestao_tipo_debito == 'transferencia' and tx.sugestao_conta_destino_id %}
+                  {% if tx.tipo == 'CREDIT' and tx.sugestao_transferencia_recebida %}
+                  <button type="button" class="btn btn-sm btn-aprovar-transf-recebida"
+                          style="background:#6f42c1;color:#fff;"
+                          data-tx-id="{{ tx.id }}"
+                          title="Aprovar transferência recebida com 1 clique">
+                    🔄 Aprovar Receb.
+                  </button>
+                  {% elif tx.tipo == 'DEBIT' and tx.sugestao_tipo_debito == 'transferencia' and tx.sugestao_conta_destino_id %}
                   <button type="button" class="btn btn-sm btn-aprovar-transf"
                           style="background:#6f42c1;color:#fff;"
                           data-tx-id="{{ tx.id }}"
@@ -223,8 +235,9 @@
                           data-sugestao-categoria="{{ tx.sugestao_categoria_id or '' }}"
                           data-sugestao-subcategoria="{{ tx.sugestao_subcategoria_id or '' }}"
                           data-sugestao-tipo-debito="{{ tx.sugestao_tipo_debito or '' }}"
-                          data-sugestao-conta-destino="{{ tx.sugestao_conta_destino_id or '' }}">
-                    <i class="bi bi-link-45deg"></i> {% if (tx.tipo == 'CREDIT' and tx.sugestao_forma_id) or (tx.tipo == 'DEBIT' and (tx.sugestao_fornecedor_id or tx.sugestao_titulo_id or tx.sugestao_tipo_debito == 'transferencia')) %}Alterar{% else %}Conciliar{% endif %}
+                          data-sugestao-conta-destino="{{ tx.sugestao_conta_destino_id or '' }}"
+                          data-sugestao-transf-recebida="{{ '1' if tx.sugestao_transferencia_recebida else '' }}">
+                    <i class="bi bi-link-45deg"></i> {% if tx.sugestao_transferencia_recebida or (tx.tipo == 'CREDIT' and tx.sugestao_forma_id) or (tx.tipo == 'DEBIT' and (tx.sugestao_fornecedor_id or tx.sugestao_titulo_id or tx.sugestao_tipo_debito == 'transferencia')) %}Alterar{% else %}Conciliar{% endif %}
                   </button>
                   <button type="button" class="btn btn-sm btn-outline-secondary btn-ignorar"
                           data-tx-id="{{ tx.id }}" title="Ignorar">
@@ -291,16 +304,42 @@
           <input type="hidden" name="tipo_tx" id="modal_tipo_tx">
           <div class="alert alert-light border py-2 mb-3" id="modal_tx_info" style="font-size:0.88rem;"></div>
           <div id="secao_credito" style="display:none;">
-            <label class="form-label fw-semibold">
-              <i class="bi bi-wallet-fill text-success"></i> Forma de Recebimento (Crédito)
-            </label>
-            <input type="text" id="buscaForma" class="form-control form-control-sm mb-1"
-                   placeholder="Buscar forma de recebimento..." oninput="filtrarFormas()">
-            <select name="forma_recebimento_id" id="selectForma" class="form-select" size="7">
-              {% for f in formas_recebimento %}
-              <option value="{{ f.id }}" data-nome="{{ f.nome|lower }}">{{ f.nome }}</option>
-              {% endfor %}
-            </select>
+            <!-- Abas Crédito: Forma de Recebimento | Transferência Recebida -->
+            <ul class="nav nav-tabs mb-2" id="creditoTabs">
+              <li class="nav-item">
+                <button type="button" class="nav-link active" id="tab_cr_forma_btn"
+                        onclick="alternarAbaCredito('forma')">
+                  <i class="bi bi-wallet-fill text-success"></i> Forma de Recebimento
+                </button>
+              </li>
+              <li class="nav-item">
+                <button type="button" class="nav-link" id="tab_cr_transf_btn"
+                        onclick="alternarAbaCredito('transferencia')">
+                  <i class="bi bi-arrow-left-right"></i> Transferência Recebida
+                </button>
+              </li>
+            </ul>
+            <!-- Aba Forma de Recebimento -->
+            <div id="aba_cr_forma">
+              <label class="form-label fw-semibold">
+                <i class="bi bi-wallet-fill text-success"></i> Forma de Recebimento (Crédito)
+              </label>
+              <input type="text" id="buscaForma" class="form-control form-control-sm mb-1"
+                     placeholder="Buscar forma de recebimento..." oninput="filtrarFormas()">
+              <select name="forma_recebimento_id" id="selectForma" class="form-select" size="7">
+                {% for f in formas_recebimento %}
+                <option value="{{ f.id }}" data-nome="{{ f.nome|lower }}">{{ f.nome }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <!-- Aba Transferência Recebida -->
+            <div id="aba_cr_transferencia" style="display:none;">
+              <div class="alert alert-info py-2 px-3 small mb-2">
+                <i class="bi bi-arrow-left-right"></i>
+                <strong>Transferência Bancária Recebida</strong> — confirme que esta entrada é um
+                crédito proveniente de transferência entre contas bancárias.
+              </div>
+            </div>
           </div>
           <div id="secao_debito" style="display:none;">
             <input type="hidden" name="tipo_debito" id="modal_tipo_debito" value="fornecedor">
@@ -641,8 +680,15 @@ document.querySelectorAll('.btn-conciliar').forEach(btn => {
     // Guarda valor bruto no modal para cálculo de soma
     const modalEl = document.getElementById('modalConciliar');
     if (modalEl) modalEl.dataset.txValorRaw = this.dataset.txValor || '0';
-    if (tipo === 'CREDIT' && this.dataset.sugestaoForma) {
-      document.getElementById('selectForma').value = this.dataset.sugestaoForma;
+    if (tipo === 'CREDIT') {
+      if (this.dataset.sugestaoTransfRecebida === '1') {
+        alternarAbaCredito('transferencia');
+      } else {
+        alternarAbaCredito('forma');
+        if (this.dataset.sugestaoForma) {
+          document.getElementById('selectForma').value = this.dataset.sugestaoForma;
+        }
+      }
     }
     if (tipo === 'DEBIT') {
       // Sempre pre-preenche o campo de valor da linha 1 com o total da transação
@@ -808,6 +854,15 @@ function alternarAbaDebito(aba) {
   document.getElementById('tab_troco_pix_btn').classList.toggle('active', aba === 'troco_pix');
   // Ao abrir a aba Troco PIX, filtra automaticamente pelo valor da transação
   if (aba === 'troco_pix') filtrarTrocoPixPorValor();
+}
+
+// ---- Abas Crédito (Forma de Recebimento / Transferência Recebida) ----
+function alternarAbaCredito(aba) {
+  document.getElementById('modal_tipo_debito').value = aba === 'transferencia' ? 'transferencia' : '';
+  document.getElementById('aba_cr_forma').style.display        = aba === 'forma'        ? '' : 'none';
+  document.getElementById('aba_cr_transferencia').style.display = aba === 'transferencia' ? '' : 'none';
+  document.getElementById('tab_cr_forma_btn').classList.toggle('active', aba === 'forma');
+  document.getElementById('tab_cr_transf_btn').classList.toggle('active', aba === 'transferencia');
 }
 
 function carregarCategorias(selectTitulo, nomeCampoCategoria) {
@@ -1124,6 +1179,22 @@ document.querySelectorAll('.btn-aprovar-transf').forEach(btn => {
     add('tipo_tx', 'DEBIT');
     add('tipo_debito', 'transferencia');
     add('conta_destino_id', conta);
+    document.body.appendChild(form);
+    form.submit();
+  });
+});
+
+// Aprovar transferência recebida (CREDIT) com 1 clique
+document.querySelectorAll('.btn-aprovar-transf-recebida').forEach(btn => {
+  btn.addEventListener('click', function() {
+    const txId = this.dataset.txId;
+    const form = document.createElement('form');
+    form.method = 'POST';
+    const add = (n, v) => { const i = document.createElement('input'); i.type='hidden'; i.name=n; i.value=v; form.appendChild(i); };
+    add('transaction_id', txId);
+    add('acao', 'conciliar');
+    add('tipo_tx', 'CREDIT');
+    add('tipo_debito', 'transferencia');
     document.body.appendChild(form);
     form.submit();
   });
