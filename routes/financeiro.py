@@ -861,8 +861,13 @@ def consultar_status_efi(charge_id):
         }), 500
 
 
-def _get_bank_transactions(tipo, request_args):
-    """Busca transações bancárias filtradas por tipo (CREDIT ou DEBIT) com filtros opcionais."""
+def _get_bank_transactions(tipo, request_args, exclude_transfers=False):
+    """Busca transações bancárias filtradas por tipo (CREDIT ou DEBIT) com filtros opcionais.
+
+    exclude_transfers: quando True (usado na página de Pagamentos), exclui DEBITs que são
+    transferências entre contas — identificados pelo CREDIT sintético com hash_dedup
+    'TRANSFER_<id>' ou pela coluna tipo_conciliacao='transferencia'.
+    """
     from datetime import date
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
@@ -888,40 +893,73 @@ def _get_bank_transactions(tipo, request_args):
         where.append("bt.data_transacao <= %s")
         params.append(data_fim)
 
+    # Exclui transferências entre contas da página de Pagamentos.
+    # Condição 1: existe um CREDIT sintético TRANSFER_<id> (transferência concluída).
+    # Condição 2: tipo_conciliacao='transferencia' (transferência órfã ou sem CREDIT).
+    # A condição 2 usa try/except para não quebrar em BDs sem a coluna (migration pendente).
+    if exclude_transfers and tipo == 'DEBIT':
+        where.append(
+            "NOT EXISTS ("
+            "  SELECT 1 FROM bank_transactions cr"
+            "  WHERE cr.hash_dedup = CONCAT('TRANSFER_', bt.id)"
+            "  AND cr.tipo = 'CREDIT'"
+            ")"
+        )
+        # tipo_conciliacao pode não existir antes da migration; testado separadamente abaixo.
+        _tc_filter = "(bt.tipo_conciliacao IS NULL OR bt.tipo_conciliacao != 'transferencia')"
+    else:
+        _tc_filter = None
+
     where_sql = " AND ".join(where)
 
-    cursor.execute(
-        f"""SELECT bt.id, bt.data_transacao, bt.tipo, bt.valor, bt.descricao,
-                   bt.cnpj_cpf, bt.memo, bt.status, bt.fornecedor_id,
-                   bt.forma_recebimento_id,
-                   ba.apelido AS conta_apelido, ba.banco_nome,
-                   f.razao_social AS fornecedor_nome,
-                   fr.nome AS forma_recebimento_nome,
-                   (bt.status='conciliado'
-                    AND bt.fornecedor_id IS NULL
-                    AND bt.forma_recebimento_id IS NULL
-                    AND bt.tipo='DEBIT') AS is_despesa
-            FROM bank_transactions bt
-            INNER JOIN bank_accounts ba ON bt.account_id = ba.id
-            LEFT JOIN fornecedores f ON bt.fornecedor_id = f.id
-            LEFT JOIN formas_recebimento fr ON fr.id = bt.forma_recebimento_id
-            WHERE {where_sql}
-            ORDER BY bt.data_transacao DESC
-            LIMIT 500""",
-        params
-    )
-    transacoes = cursor.fetchall()
+    def _run_query(extra_filter):
+        w = (where_sql + " AND " + extra_filter) if extra_filter else where_sql
+        cursor.execute(
+            f"""SELECT bt.id, bt.data_transacao, bt.tipo, bt.valor, bt.descricao,
+                       bt.cnpj_cpf, bt.memo, bt.status, bt.fornecedor_id,
+                       bt.forma_recebimento_id,
+                       ba.apelido AS conta_apelido, ba.banco_nome,
+                       f.razao_social AS fornecedor_nome,
+                       fr.nome AS forma_recebimento_nome,
+                       (bt.status='conciliado'
+                        AND bt.fornecedor_id IS NULL
+                        AND bt.forma_recebimento_id IS NULL
+                        AND bt.tipo='DEBIT') AS is_despesa
+                FROM bank_transactions bt
+                INNER JOIN bank_accounts ba ON bt.account_id = ba.id
+                LEFT JOIN fornecedores f ON bt.fornecedor_id = f.id
+                LEFT JOIN formas_recebimento fr ON fr.id = bt.forma_recebimento_id
+                WHERE {w}
+                ORDER BY bt.data_transacao DESC
+                LIMIT 500""",
+            params,
+        )
+        return cursor.fetchall()
 
-    # Totais
-    cursor.execute(
-        f"""SELECT SUM(bt.valor) AS total,
-                   SUM(CASE WHEN bt.status='conciliado' THEN 1 ELSE 0 END) AS conciliados,
-                   SUM(CASE WHEN bt.status='pendente' THEN 1 ELSE 0 END) AS pendentes
-            FROM bank_transactions bt
-            WHERE {where_sql}""",
-        params
-    )
-    totais = cursor.fetchone() or {}
+    def _run_totais(extra_filter):
+        w = (where_sql + " AND " + extra_filter) if extra_filter else where_sql
+        cursor.execute(
+            f"""SELECT SUM(bt.valor) AS total,
+                       SUM(CASE WHEN bt.status='conciliado' THEN 1 ELSE 0 END) AS conciliados,
+                       SUM(CASE WHEN bt.status='pendente' THEN 1 ELSE 0 END) AS pendentes
+                FROM bank_transactions bt
+                WHERE {w}""",
+            params,
+        )
+        return cursor.fetchone() or {}
+
+    try:
+        transacoes = _run_query(_tc_filter)
+        totais = _run_totais(_tc_filter)
+    except Exception as exc:
+        # Fallback: tipo_conciliacao não existe (migration pendente) — usa apenas NOT EXISTS.
+        # ProgrammingError errno 1054 = Unknown column.
+        import mysql.connector
+        if not isinstance(exc, mysql.connector.errors.ProgrammingError):
+            raise
+        conn.rollback()
+        transacoes = _run_query(None)
+        totais = _run_totais(None)
 
     # Lista de contas para o filtro
     cursor.execute(
@@ -960,8 +998,8 @@ def recebimento():
 @financeiro_bp.route('/pagamentos/')
 @login_required
 def pagamentos():
-    """Exibe os débitos bancários importados via OFX."""
-    transacoes, totais, contas = _get_bank_transactions('DEBIT', request.args)
+    """Exibe os débitos bancários importados via OFX (exclui transferências entre contas)."""
+    transacoes, totais, contas = _get_bank_transactions('DEBIT', request.args, exclude_transfers=True)
     return render_template(
         'financeiro/pagamentos.html',
         transacoes=transacoes,
