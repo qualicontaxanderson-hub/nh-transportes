@@ -1,4 +1,5 @@
 import os
+import re
 import time
 import datetime as _dt
 
@@ -1638,25 +1639,165 @@ def scan_inbox():
 
 
 # ---------------------------------------------------------------------------
+# API: dias importados por conta
+# ---------------------------------------------------------------------------
+
+@bp.route('/api/dias-importados')
+@login_required
+def api_dias_importados():
+    """
+    Retorna os dias com transações importadas para uma conta (ou empresa).
+    GET params:
+      - account_id (int, opcional) — filtra por conta específica
+      - empresa_id (int, opcional) — filtra por todas as contas de uma empresa
+    Retorna lista de datas importadas e lista de datas faltando no intervalo.
+    """
+    account_id = request.args.get('account_id', type=int)
+    empresa_id = request.args.get('empresa_id', type=int)
+
+    if not account_id and not empresa_id:
+        return jsonify({'success': False, 'message': 'Informe account_id ou empresa_id'}), 400
+
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+
+    try:
+        if account_id:
+            # Busca info da conta para o título
+            cursor.execute(
+                """SELECT ba.id, ba.apelido, ba.banco_nome, ba.agencia, ba.conta,
+                          c.razao_social AS empresa_nome
+                   FROM bank_accounts ba
+                   LEFT JOIN clientes c ON c.id = ba.cliente_id
+                   WHERE ba.id = %s""",
+                (account_id,),
+            )
+            conta_info = cursor.fetchone() or {}
+            titulo = (
+                conta_info.get('apelido') or conta_info.get('banco_nome') or f'Conta #{account_id}'
+            )
+            if conta_info.get('empresa_nome'):
+                titulo += f' – {conta_info["empresa_nome"]}'
+
+            cursor.execute(
+                """SELECT DATE(data_transacao) AS dia, COUNT(*) AS qtd
+                   FROM bank_transactions
+                   WHERE account_id = %s
+                   GROUP BY DATE(data_transacao)
+                   ORDER BY dia""",
+                (account_id,),
+            )
+        else:
+            # Filtra por empresa (todas as contas dela)
+            cursor.execute(
+                "SELECT razao_social FROM clientes WHERE id = %s", (empresa_id,)
+            )
+            emp = cursor.fetchone()
+            titulo = emp['razao_social'] if emp else f'Empresa #{empresa_id}'
+
+            cursor.execute(
+                """SELECT DATE(bt.data_transacao) AS dia, COUNT(*) AS qtd
+                   FROM bank_transactions bt
+                   INNER JOIN bank_accounts ba ON ba.id = bt.account_id
+                   WHERE ba.cliente_id = %s
+                   GROUP BY DATE(bt.data_transacao)
+                   ORDER BY dia""",
+                (empresa_id,),
+            )
+
+        rows = cursor.fetchall()
+    finally:
+        cursor.close()
+        conn.close()
+
+    if not rows:
+        return jsonify({'success': True, 'titulo': titulo, 'dias': [], 'faltando': []})
+
+    # Converte para strings YYYY-MM-DD
+    dias_importados = [str(r['dia']) for r in rows]
+    qtd_por_dia = {str(r['dia']): r['qtd'] for r in rows}
+
+    # Calcula dias faltando (entre o primeiro e hoje, exceto fins de semana)
+    data_min = _dt.date.fromisoformat(dias_importados[0])
+    data_max = _dt.date.today()
+    faltando = []
+    cur = data_min
+    while cur <= data_max:
+        dia_str = cur.isoformat()
+        # Pula fins de semana (sábado=5, domingo=6)
+        if cur.weekday() < 5 and dia_str not in qtd_por_dia:
+            faltando.append(dia_str)
+        cur += _dt.timedelta(days=1)
+
+    return jsonify({
+        'success': True,
+        'titulo': titulo,
+        'dias': [{'data': d, 'qtd': qtd_por_dia[d]} for d in dias_importados],
+        'faltando': faltando,
+    })
+
+
+# ---------------------------------------------------------------------------
 # Integração Dropbox API
 # ---------------------------------------------------------------------------
 
 @bp.route('/api/dropbox-files')
 @login_required
 def api_dropbox_files():
-    """API: lista arquivos .ofx na pasta Dropbox configurada."""
+    """
+    API: lista arquivos .ofx na pasta Dropbox configurada.
+    GET param: account_id (int, opcional) — quando informado, filtra arquivos cujo nome
+    contenha o número da conta ou apelido associado à conta selecionada.
+    """
     from integrations.dropbox_ofx import listar_arquivos_ofx, get_inbox_paths
+    account_id = request.args.get('account_id', type=int)
     try:
         arquivos = listar_arquivos_ofx()
         inbox, processed = get_inbox_paths()
-        return jsonify({
-            'success': True,
-            'files': arquivos,
-            'pasta': inbox,
-            'pasta_processados': processed,
-        })
     except RuntimeError as exc:
         return jsonify({'success': False, 'message': str(exc), 'files': []}), 400
+
+    filtrado = False
+    if account_id:
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute(
+            "SELECT banco_nome, agencia, conta, apelido FROM bank_accounts WHERE id = %s",
+            (account_id,),
+        )
+        acc = cursor.fetchone()
+        cursor.close()
+        conn.close()
+        if acc:
+            # Tokens de busca: número da conta (últimos 6 dígitos) e apelido
+            tokens = set()
+            if acc.get('conta'):
+                conta_digits = re.sub(r'\D', '', acc['conta'])
+                if len(conta_digits) >= 4:
+                    tokens.add(conta_digits[-6:] if len(conta_digits) >= 6 else conta_digits)
+            if acc.get('apelido'):
+                tokens.add(acc['apelido'].lower())
+            banco_parts = (acc.get('banco_nome') or '').split()
+            if banco_parts:
+                tokens.add(banco_parts[0].lower())
+
+            if tokens:
+                matched = [
+                    f for f in arquivos
+                    if any(t in f['nome'].lower() for t in tokens)
+                ]
+                if matched:
+                    arquivos = matched
+                    filtrado = True
+                # Se nenhum arquivo bate, devolve todos (sem filtro) com aviso
+
+    return jsonify({
+        'success': True,
+        'files': arquivos,
+        'pasta': inbox,
+        'pasta_processados': processed,
+        'filtrado': filtrado,
+    })
 
 
 @bp.route('/importar-dropbox', methods=['POST'])
