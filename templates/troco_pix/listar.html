@@ -120,7 +120,7 @@
         <div class="card-body">
             {% if transacoes %}
             <div class="table-responsive">
-                <table class="table table-striped table-hover">
+                <table class="table table-striped table-hover table-sm" style="font-size:0.83rem;">
                     <thead>
                         <tr>
                             <th>ID</th>
@@ -129,7 +129,7 @@
                             <th>Cliente PIX</th>
                             <th class="text-center">Venda Total</th>
                             <th class="text-center">Cheque</th>
-                            <th class="text-center">Troco Total</th>
+                            <th class="text-center">Troco PIX</th>
                             <th>Status</th>
                             <th class="text-center">Conciliação Bancária</th>
                             <th>Ações</th>
@@ -144,7 +144,7 @@
                             <td>{{ t.cliente_pix_nome or '-' }}</td>
                             <td class="text-center">{{ (t.venda_total or 0)|formatar_moeda }}</td>
                             <td class="text-center">{{ (t.cheque_valor or 0)|formatar_moeda }}</td>
-                            <td class="text-center">{{ (t.troco_total or 0)|formatar_moeda }}</td>
+                            <td class="text-center">{{ (t.troco_pix or 0)|formatar_moeda }}</td>
                             <td>
                                 {% if t.status == 'PENDENTE' %}
                                     <span class="badge bg-warning">Pendente</span>
