@@ -1,10 +1,12 @@
+import csv
+import io
 import os
 import re
 import time
 import datetime as _dt
 
 import mysql.connector
-from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify
+from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, Response
 from flask_login import login_required, current_user
 from utils.db import get_db_connection
 
@@ -1024,80 +1026,230 @@ def conciliar():
 @bp.route('/relatorio')
 @login_required
 def relatorio():
-    """Relatório de transações com filtros."""
+    """Relatório completo de transações — ferramenta de auditoria."""
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
 
-    contas = _get_accounts(cursor)
+    contas   = _get_accounts(cursor)
+    clientes = _get_clientes_com_produtos(cursor)
 
     # Filtros
     account_id = request.args.get('account_id', '')
-    status = request.args.get('status', '')
-    data_ini = request.args.get('data_ini', '')
-    data_fim = request.args.get('data_fim', '')
+    empresa_id = request.args.get('empresa_id', '')
+    status     = request.args.get('status', '')
+    tipo       = request.args.get('tipo', '')
+    data_ini   = request.args.get('data_ini', '')
+    data_fim   = request.args.get('data_fim', '')
 
-    # Monta query parametrizada segura usando apenas cláusulas fixas no SQL
-    # (os valores do usuário vão para a lista de params, nunca diretamente na string SQL)
+    # Paginação (page >= 1 sempre)
+    page     = max(1, request.args.get('page', 1, type=int))
+    per_page = 100
+    offset   = (page - 1) * per_page
+
+    # Monta filtros seguros
     _ALLOWED_STATUSES = {'pendente', 'conciliado', 'ignorado'}
-    base_where = 'WHERE 1=1'
-    extra_clauses = []
-    params = []
+    _ALLOWED_TIPOS    = {'CREDIT', 'DEBIT'}
+    where_parts = []
+    params      = []
 
     if account_id:
-        extra_clauses.append('AND bt.account_id = %s')
+        where_parts.append('bt.account_id = %s')
         params.append(account_id)
+    if empresa_id:
+        where_parts.append('ba.cliente_id = %s')
+        params.append(empresa_id)
     if status and status in _ALLOWED_STATUSES:
-        extra_clauses.append('AND bt.status = %s')
+        where_parts.append('bt.status = %s')
         params.append(status)
+    if tipo and tipo in _ALLOWED_TIPOS:
+        where_parts.append('bt.tipo = %s')
+        params.append(tipo)
     if data_ini:
-        extra_clauses.append('AND bt.data_transacao >= %s')
+        where_parts.append('bt.data_transacao >= %s')
         params.append(data_ini)
     if data_fim:
-        extra_clauses.append('AND bt.data_transacao <= %s')
+        where_parts.append('bt.data_transacao <= %s')
         params.append(data_fim)
 
-    where_clauses = ' '.join([base_where] + extra_clauses)
+    where_sql = ('WHERE ' + ' AND '.join(where_parts)) if where_parts else ''
 
+    # Query principal: traz formas_recebimento + empresa + indica vínculos via LEFT JOIN
     cursor.execute(
-        """SELECT bt.*, ba.apelido AS conta_apelido, ba.banco_nome,
-                   f.razao_social AS fornecedor_nome
-            FROM bank_transactions bt
-            INNER JOIN bank_accounts ba ON bt.account_id = ba.id
-            LEFT JOIN fornecedores f ON bt.fornecedor_id = f.id
-            """
-        + where_clauses
-        + """ ORDER BY bt.data_transacao DESC LIMIT 500""",
-        params,
+        """SELECT bt.id, bt.data_transacao, bt.tipo, bt.valor, bt.descricao,
+                  bt.cnpj_cpf, bt.status, bt.conciliado_em, bt.conciliado_por,
+                  bt.tipo_conciliacao,
+                  ba.apelido AS conta_apelido, ba.banco_nome,
+                  c.razao_social AS empresa_nome,
+                  f.razao_social  AS fornecedor_nome,
+                  fr.nome         AS forma_recebimento_nome,
+                  CASE WHEN ld.bt_id IS NOT NULL THEN 1 ELSE 0 END AS tem_lancamento_despesa,
+                  CASE WHEN tp.bt_id IS NOT NULL THEN 1 ELSE 0 END AS tem_troco_pix
+           FROM bank_transactions bt
+           INNER JOIN bank_accounts ba ON bt.account_id = ba.id
+           LEFT JOIN clientes c ON c.id = ba.cliente_id
+           LEFT JOIN fornecedores f ON f.id = bt.fornecedor_id
+           LEFT JOIN formas_recebimento fr ON fr.id = bt.forma_recebimento_id
+           LEFT JOIN (SELECT DISTINCT bank_transaction_id AS bt_id
+                      FROM lancamentos_despesas
+                      WHERE bank_transaction_id IS NOT NULL) ld ON ld.bt_id = bt.id
+           LEFT JOIN (SELECT DISTINCT bank_transaction_id AS bt_id
+                      FROM troco_pix
+                      WHERE bank_transaction_id IS NOT NULL) tp ON tp.bt_id = bt.id
+           """
+        + where_sql
+        + ' ORDER BY bt.data_transacao DESC, bt.id DESC'
+        + ' LIMIT %s OFFSET %s',
+        params + [per_page, offset],
     )
     transacoes = cursor.fetchall()
 
-    # Totais
+    # Totais (sem paginação)
     cursor.execute(
         """SELECT
-               SUM(CASE WHEN tipo='DEBIT' THEN valor ELSE 0 END) AS total_debitos,
-               SUM(CASE WHEN tipo='CREDIT' THEN valor ELSE 0 END) AS total_creditos,
-               COUNT(*) AS total_transacoes
-            FROM bank_transactions bt
-            """
-        + where_clauses,
+               COUNT(*) AS total_transacoes,
+               SUM(CASE WHEN bt.tipo='DEBIT'  THEN bt.valor ELSE 0 END) AS total_debitos,
+               SUM(CASE WHEN bt.tipo='CREDIT' THEN bt.valor ELSE 0 END) AS total_creditos,
+               SUM(CASE WHEN bt.status='pendente'   THEN 1 ELSE 0 END) AS total_pendentes,
+               SUM(CASE WHEN bt.status='conciliado' THEN 1 ELSE 0 END) AS total_conciliados
+           FROM bank_transactions bt
+           INNER JOIN bank_accounts ba ON bt.account_id = ba.id
+           """
+        + where_sql,
         params,
     )
     totais = cursor.fetchone()
+    total_rows = totais['total_transacoes'] or 0
 
     cursor.close()
     conn.close()
+
+    total_pages = max(1, (total_rows + per_page - 1) // per_page)
 
     return render_template(
         'bank_import/relatorio.html',
         transacoes=transacoes,
         contas=contas,
+        clientes=clientes,
         totais=totais,
+        total_rows=total_rows,
+        page=page,
+        total_pages=total_pages,
+        per_page=per_page,
         filtros={
             'account_id': account_id,
-            'status': status,
-            'data_ini': data_ini,
-            'data_fim': data_fim,
+            'empresa_id': empresa_id,
+            'status':     status,
+            'tipo':       tipo,
+            'data_ini':   data_ini,
+            'data_fim':   data_fim,
         },
+    )
+
+
+@bp.route('/relatorio/exportar-csv')
+@login_required
+def relatorio_exportar_csv():
+    """Exporta o relatório completo de transações como CSV (sem limite de linhas)."""
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+
+    account_id = request.args.get('account_id', '')
+    empresa_id = request.args.get('empresa_id', '')
+    status     = request.args.get('status', '')
+    tipo       = request.args.get('tipo', '')
+    data_ini   = request.args.get('data_ini', '')
+    data_fim   = request.args.get('data_fim', '')
+
+    _ALLOWED_STATUSES = {'pendente', 'conciliado', 'ignorado'}
+    _ALLOWED_TIPOS    = {'CREDIT', 'DEBIT'}
+    where_parts = []
+    params      = []
+
+    if account_id:
+        where_parts.append('bt.account_id = %s')
+        params.append(account_id)
+    if empresa_id:
+        where_parts.append('ba.cliente_id = %s')
+        params.append(empresa_id)
+    if status and status in _ALLOWED_STATUSES:
+        where_parts.append('bt.status = %s')
+        params.append(status)
+    if tipo and tipo in _ALLOWED_TIPOS:
+        where_parts.append('bt.tipo = %s')
+        params.append(tipo)
+    if data_ini:
+        where_parts.append('bt.data_transacao >= %s')
+        params.append(data_ini)
+    if data_fim:
+        where_parts.append('bt.data_transacao <= %s')
+        params.append(data_fim)
+
+    where_sql = ('WHERE ' + ' AND '.join(where_parts)) if where_parts else ''
+
+    cursor.execute(
+        """SELECT bt.id, bt.data_transacao, bt.tipo, bt.valor, bt.descricao,
+                  bt.cnpj_cpf, bt.status, bt.conciliado_em, bt.conciliado_por,
+                  bt.tipo_conciliacao,
+                  ba.apelido AS conta_apelido, ba.banco_nome,
+                  c.razao_social AS empresa_nome,
+                  f.razao_social  AS fornecedor_nome,
+                  fr.nome         AS forma_recebimento_nome,
+                  CASE WHEN ld.bt_id IS NOT NULL THEN 1 ELSE 0 END AS tem_lancamento_despesa,
+                  CASE WHEN tp.bt_id IS NOT NULL THEN 1 ELSE 0 END AS tem_troco_pix
+           FROM bank_transactions bt
+           INNER JOIN bank_accounts ba ON bt.account_id = ba.id
+           LEFT JOIN clientes c ON c.id = ba.cliente_id
+           LEFT JOIN fornecedores f ON f.id = bt.fornecedor_id
+           LEFT JOIN formas_recebimento fr ON fr.id = bt.forma_recebimento_id
+           LEFT JOIN (SELECT DISTINCT bank_transaction_id AS bt_id
+                      FROM lancamentos_despesas
+                      WHERE bank_transaction_id IS NOT NULL) ld ON ld.bt_id = bt.id
+           LEFT JOIN (SELECT DISTINCT bank_transaction_id AS bt_id
+                      FROM troco_pix
+                      WHERE bank_transaction_id IS NOT NULL) tp ON tp.bt_id = bt.id
+           """
+        + where_sql
+        + ' ORDER BY bt.data_transacao DESC, bt.id DESC',
+        params,
+    )
+    rows = cursor.fetchall()
+    cursor.close()
+    conn.close()
+
+    output = io.StringIO()
+    writer = csv.writer(output, delimiter=';')
+    writer.writerow([
+        'ID', 'Data', 'Tipo', 'Valor', 'Descrição', 'CNPJ/CPF',
+        'Status', 'Tipo Conciliação', 'Fornecedor', 'Forma Recebimento',
+        'Conta', 'Empresa', 'Conciliado Em', 'Conciliado Por',
+        'Tem Lançamento Despesa', 'Tem Troco PIX',
+    ])
+    for r in rows:
+        valor = r['valor']
+        writer.writerow([
+            r['id'],
+            r['data_transacao'].strftime('%d/%m/%Y') if r['data_transacao'] else '',
+            'Débito' if r['tipo'] == 'DEBIT' else 'Crédito',
+            str(valor).replace('.', ',') if valor is not None else '',
+            r['descricao'] or '',
+            r['cnpj_cpf'] or '',
+            r['status'] or '',
+            r['tipo_conciliacao'] or '',
+            r['fornecedor_nome'] or '',
+            r['forma_recebimento_nome'] or '',
+            r['conta_apelido'] or r['banco_nome'] or '',
+            r['empresa_nome'] or '',
+            r['conciliado_em'].strftime('%d/%m/%Y %H:%M') if r['conciliado_em'] else '',
+            r['conciliado_por'] or '',
+            'Sim' if r['tem_lancamento_despesa'] else 'Não',
+            'Sim' if r['tem_troco_pix'] else 'Não',
+        ])
+
+    output.seek(0)
+    return Response(
+        '\ufeff' + output.getvalue(),   # BOM para Excel abrir UTF-8 corretamente
+        mimetype='text/csv',
+        headers={'Content-Disposition': 'attachment; filename="transacoes_bancarias.csv"'},
     )
 
 
