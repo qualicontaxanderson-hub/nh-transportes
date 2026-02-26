@@ -324,6 +324,12 @@
                   <i class="bi bi-arrow-left-right"></i> Transferência
                 </button>
               </li>
+              <li class="nav-item">
+                <button type="button" class="nav-link" id="tab_troco_pix_btn"
+                        onclick="alternarAbaDebito('troco_pix')">
+                  <i class="bi bi-cash-coin"></i> Troco PIX
+                </button>
+              </li>
             </ul>
 
             <!-- Aba Fornecedor -->
@@ -442,6 +448,45 @@
                 <label class="form-label form-label-sm mb-1">Observação (opt.)</label>
                 <input type="text" name="transf_observacao" class="form-control form-control-sm"
                        placeholder="Ex: Aporte de capital, transferência mensal...">
+              </div>
+            </div>
+
+            <!-- Aba Troco PIX -->
+            <div id="aba_troco_pix" style="display:none;">
+              <div class="alert alert-info py-2 px-3 small mb-2">
+                <i class="bi bi-cash-coin"></i>
+                <strong>Troco PIX</strong> — vincule esta transação bancária a um registro de Troco PIX.
+                Os registros são pré-filtrados pelo valor da transação.
+              </div>
+              <input type="text" id="buscaTrocoPix" class="form-control form-control-sm mb-1"
+                     placeholder="Buscar por número, posto ou cliente..."
+                     oninput="filtrarTrocoPix()">
+              <input type="hidden" name="troco_pix_id" id="inputTrocoPixId" value="">
+              <div id="listaTrocoPix"
+                   style="max-height:220px;overflow-y:auto;border:1px solid #dee2e6;border-radius:4px;">
+                {% for tp in troco_pix_pendentes %}
+                <div class="troco-pix-item px-2 py-1 border-bottom"
+                     style="cursor:pointer;font-size:0.83rem;"
+                     data-id="{{ tp.id }}"
+                     data-valor="{{ tp.valor_pix }}"
+                     data-busca="{{ ((tp.numero_sequencial or '') ~ ' ' ~ (tp.posto_nome or '') ~ ' ' ~ (tp.cliente_nome or ''))|lower }}"
+                     onclick="selecionarTrocoPix(this)">
+                  <strong>{{ tp.numero_sequencial or ('#' ~ tp.id) }}</strong>
+                  — {{ tp.data.strftime('%d/%m/%Y') if tp.data else '-' }}
+                  &nbsp;|&nbsp;{{ tp.posto_nome or '-' }}
+                  &nbsp;|&nbsp;{{ tp.cliente_nome or '-' }}
+                  &nbsp;|&nbsp;<span class="text-danger fw-semibold">R$ {{ tp.valor_pix | formatar_moeda }}</span>
+                </div>
+                {% else %}
+                <div class="p-3 text-muted text-center small">
+                  Nenhum Troco PIX pendente de conciliação bancária.
+                </div>
+                {% endfor %}
+              </div>
+              <div id="trocoPixSelecionado"
+                   class="alert alert-success py-1 px-2 mt-1 small mb-0"
+                   style="display:none;">
+                <strong>Selecionado:</strong> <span id="trocoPixSelecionadoLabel"></span>
               </div>
             </div>
           </div>
@@ -686,6 +731,47 @@ function filtrarFornecedores() {
   });
 }
 
+// ---- Aba Troco PIX ----
+function filtrarTrocoPix() {
+  const t = (document.getElementById('buscaTrocoPix')?.value || '').toLowerCase();
+  document.querySelectorAll('#listaTrocoPix .troco-pix-item').forEach(el => {
+    el.style.display = (!t || (el.dataset.busca || '').includes(t)) ? '' : 'none';
+  });
+}
+
+function filtrarTrocoPixPorValor() {
+  // Filtra automaticamente pelo valor bruto da transação atual no modal
+  const modal = document.getElementById('modalConciliar');
+  const txValor = parseFloat(modal?.dataset?.txValorRaw || '0');
+  document.querySelectorAll('#listaTrocoPix .troco-pix-item').forEach(el => {
+    const v = parseFloat(el.dataset.valor || '0');
+    // Destaca itens com valor exato em verde, outros em cinza mas ainda visíveis
+    const match = Math.abs(v - txValor) < 0.01;
+    el.style.background = match ? '#d4edda' : '';
+    el.style.fontWeight = match ? 'bold' : '';
+  });
+  // Limpa busca e seleção ao trocar de transação
+  const inp = document.getElementById('buscaTrocoPix');
+  if (inp) inp.value = '';
+  document.querySelectorAll('#listaTrocoPix .troco-pix-item').forEach(el => el.style.display = '');
+  document.getElementById('inputTrocoPixId').value = '';
+  const sel = document.getElementById('trocoPixSelecionado');
+  if (sel) sel.style.display = 'none';
+}
+
+function selecionarTrocoPix(el) {
+  // Remove seleção anterior
+  document.querySelectorAll('#listaTrocoPix .troco-pix-item').forEach(e => {
+    e.style.outline = '';
+  });
+  el.style.outline = '2px solid #198754';
+  document.getElementById('inputTrocoPixId').value = el.dataset.id;
+  const label = document.getElementById('trocoPixSelecionadoLabel');
+  if (label) label.textContent = el.textContent.trim();
+  const sel = document.getElementById('trocoPixSelecionado');
+  if (sel) sel.style.display = '';
+}
+
 // Máscara de moeda: ao digitar 193590 exibe 1.935,90
 function mascaraMoeda(e) {
   const inp = e.target;
@@ -715,9 +801,13 @@ function alternarAbaDebito(aba) {
   document.getElementById('aba_fornecedor').style.display    = aba === 'fornecedor'    ? '' : 'none';
   document.getElementById('aba_despesa').style.display       = aba === 'despesa'       ? '' : 'none';
   document.getElementById('aba_transferencia').style.display = aba === 'transferencia' ? '' : 'none';
+  document.getElementById('aba_troco_pix').style.display     = aba === 'troco_pix'     ? '' : 'none';
   document.getElementById('tab_forn_btn').classList.toggle('active', aba === 'fornecedor');
   document.getElementById('tab_desp_btn').classList.toggle('active', aba === 'despesa');
   document.getElementById('tab_transf_btn').classList.toggle('active', aba === 'transferencia');
+  document.getElementById('tab_troco_pix_btn').classList.toggle('active', aba === 'troco_pix');
+  // Ao abrir a aba Troco PIX, filtra automaticamente pelo valor da transação
+  if (aba === 'troco_pix') filtrarTrocoPixPorValor();
 }
 
 function carregarCategorias(selectTitulo, nomeCampoCategoria) {

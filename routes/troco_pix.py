@@ -386,22 +386,46 @@ def listar():
         cursor = conn.cursor(dictionary=True)
         
         # Buscar transações com joins para obter nomes
-        query = """
-            SELECT 
-                tp.*,
-                c.razao_social as posto_nome,
-                tpc.nome_completo as cliente_pix_nome,
-                tpc.tipo_chave_pix,
-                tpc.chave_pix,
-                f.nome as frentista_nome
-            FROM troco_pix tp
-            LEFT JOIN clientes c ON tp.cliente_id = c.id
-            LEFT JOIN troco_pix_clientes tpc ON tp.troco_pix_cliente_id = tpc.id
-            LEFT JOIN funcionarios f ON tp.funcionario_id = f.id
-            ORDER BY tp.data DESC, tp.criado_em DESC
-        """
-        
-        cursor.execute(query)
+        # Tenta incluir bank_transaction_id e dados bancários (coluna pode não existir ainda)
+        try:
+            query = """
+                SELECT 
+                    tp.*,
+                    c.razao_social as posto_nome,
+                    tpc.nome_completo as cliente_pix_nome,
+                    tpc.tipo_chave_pix,
+                    tpc.chave_pix,
+                    f.nome as frentista_nome,
+                    bt.data_transacao as banco_data_transacao,
+                    bt.descricao as banco_descricao,
+                    ba.apelido as banco_conta_apelido,
+                    ba.banco_nome as banco_nome
+                FROM troco_pix tp
+                LEFT JOIN clientes c ON tp.cliente_id = c.id
+                LEFT JOIN troco_pix_clientes tpc ON tp.troco_pix_cliente_id = tpc.id
+                LEFT JOIN funcionarios f ON tp.funcionario_id = f.id
+                LEFT JOIN bank_transactions bt ON bt.id = tp.bank_transaction_id
+                LEFT JOIN bank_accounts ba ON ba.id = bt.account_id
+                ORDER BY tp.data DESC, tp.criado_em DESC
+            """
+            cursor.execute(query)
+        except Exception:
+            # Fallback sem a coluna bank_transaction_id (migration pendente)
+            query = """
+                SELECT 
+                    tp.*,
+                    c.razao_social as posto_nome,
+                    tpc.nome_completo as cliente_pix_nome,
+                    tpc.tipo_chave_pix,
+                    tpc.chave_pix,
+                    f.nome as frentista_nome
+                FROM troco_pix tp
+                LEFT JOIN clientes c ON tp.cliente_id = c.id
+                LEFT JOIN troco_pix_clientes tpc ON tp.troco_pix_cliente_id = tpc.id
+                LEFT JOIN funcionarios f ON tp.funcionario_id = f.id
+                ORDER BY tp.data DESC, tp.criado_em DESC
+            """
+            cursor.execute(query)
         transacoes = cursor.fetchall()
         
         # Buscar lista de clientes para filtro (apenas com produtos cadastrados)
@@ -1251,6 +1275,150 @@ def pista():
             return redirect(url_for('fretes.lista'))
         except Exception:
             return redirect(url_for('index'))
+
+
+# ==================== ROTAS DE CONCILIAÇÃO BANCÁRIA ====================
+
+@troco_pix_bp.route('/vincular-banco/<int:troco_pix_id>', methods=['POST'])
+@login_required
+def vincular_banco(troco_pix_id):
+    """Vincula um Troco PIX a uma transação bancária (conciliação bancária)."""
+    bank_transaction_id = request.form.get('bank_transaction_id')
+    if not bank_transaction_id:
+        flash('Selecione uma transação bancária para vincular.', 'warning')
+        return redirect(url_for('troco_pix.listar'))
+
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        agora = datetime.now()
+        usuario = current_user.email if hasattr(current_user, 'email') else str(current_user.id)
+
+        # Vincula o registro de troco_pix à transação bancária
+        cursor.execute(
+            "UPDATE troco_pix SET bank_transaction_id=%s WHERE id=%s",
+            (bank_transaction_id, troco_pix_id),
+        )
+
+        # Marca a transação bancária como conciliada
+        try:
+            cursor.execute(
+                """UPDATE bank_transactions
+                   SET status='conciliado', conciliado_em=%s, conciliado_por=%s,
+                       tipo_conciliacao='troco_pix'
+                   WHERE id=%s""",
+                (agora, usuario, bank_transaction_id),
+            )
+        except Exception:
+            conn.rollback()
+            cursor.execute(
+                """UPDATE bank_transactions
+                   SET status='conciliado', conciliado_em=%s, conciliado_por=%s
+                   WHERE id=%s""",
+                (agora, usuario, bank_transaction_id),
+            )
+
+        conn.commit()
+        flash('Troco PIX vinculado à transação bancária com sucesso!', 'success')
+    except Exception as e:
+        conn.rollback()
+        flash(f'Erro ao vincular: {str(e)}', 'danger')
+    finally:
+        cursor.close()
+        conn.close()
+
+    return redirect(url_for('troco_pix.listar'))
+
+
+@troco_pix_bp.route('/desvincular-banco/<int:troco_pix_id>', methods=['POST'])
+@login_required
+def desvincular_banco(troco_pix_id):
+    """Remove o vínculo entre um Troco PIX e a transação bancária."""
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        cursor.execute(
+            "SELECT bank_transaction_id FROM troco_pix WHERE id=%s",
+            (troco_pix_id,),
+        )
+        row = cursor.fetchone()
+        if row and row.get('bank_transaction_id'):
+            bank_tx_id = row['bank_transaction_id']
+            cursor.execute(
+                "UPDATE troco_pix SET bank_transaction_id=NULL WHERE id=%s",
+                (troco_pix_id,),
+            )
+            # Retorna a transação bancária para pendente; limpa tipo_conciliacao se existir
+            try:
+                cursor.execute(
+                    """UPDATE bank_transactions
+                       SET status='pendente', conciliado_em=NULL, conciliado_por=NULL,
+                           tipo_conciliacao=NULL
+                       WHERE id=%s""",
+                    (bank_tx_id,),
+                )
+            except Exception:
+                conn.rollback()
+                cursor.execute(
+                    """UPDATE bank_transactions
+                       SET status='pendente', conciliado_em=NULL, conciliado_por=NULL
+                       WHERE id=%s""",
+                    (bank_tx_id,),
+                )
+            conn.commit()
+            flash('Vínculo bancário removido com sucesso!', 'success')
+        else:
+            flash('Nenhum vínculo bancário encontrado.', 'warning')
+    except Exception as e:
+        conn.rollback()
+        flash(f'Erro ao desvincular: {str(e)}', 'danger')
+    finally:
+        cursor.close()
+        conn.close()
+
+    return redirect(url_for('troco_pix.listar'))
+
+
+@troco_pix_bp.route('/api/transacoes-banco/<int:troco_pix_id>')
+@login_required
+def api_transacoes_banco(troco_pix_id):
+    """API: retorna transações bancárias DEBIT pendentes que correspondem ao valor do Troco PIX."""
+    from flask import jsonify
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        cursor.execute(
+            "SELECT data, troco_pix AS valor FROM troco_pix WHERE id=%s",
+            (troco_pix_id,),
+        )
+        tp = cursor.fetchone()
+        if not tp:
+            return jsonify([])
+
+        valor = float(tp['valor']) if tp['valor'] else 0
+        data_ref = str(tp['data'])
+
+        cursor.execute(
+            """SELECT bt.id, bt.data_transacao, bt.valor, bt.descricao,
+                      bt.cnpj_cpf, ba.apelido AS conta_apelido, ba.banco_nome
+               FROM bank_transactions bt
+               INNER JOIN bank_accounts ba ON ba.id = bt.account_id
+               WHERE bt.tipo='DEBIT' AND bt.status='pendente'
+                 AND ABS(bt.valor - %s) < 0.01
+               ORDER BY ABS(DATEDIFF(bt.data_transacao, %s)), bt.data_transacao DESC
+               LIMIT 20""",
+            (valor, data_ref),
+        )
+        rows = cursor.fetchall()
+        for r in rows:
+            if r.get('data_transacao'):
+                r['data_transacao'] = str(r['data_transacao'])
+            if r.get('valor') is not None:
+                r['valor'] = float(r['valor'])
+        return jsonify(rows)
+    finally:
+        cursor.close()
+        conn.close()
 
 
 # ==================== CONTEXT PROCESSOR ====================

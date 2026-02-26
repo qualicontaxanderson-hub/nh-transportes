@@ -131,6 +131,7 @@
                             <th class="text-center">Cheque</th>
                             <th class="text-center">Troco Total</th>
                             <th>Status</th>
+                            <th class="text-center">Conciliação Bancária</th>
                             <th>Ações</th>
                         </tr>
                     </thead>
@@ -154,6 +155,37 @@
                                 {% endif %}
                                 {% if t.importado_lancamento_caixa %}
                                     <span class="badge bg-info">Importado</span>
+                                {% endif %}
+                            </td>
+                            <td class="text-center">
+                                {% if t.get('bank_transaction_id') %}
+                                    <span class="badge bg-success" title="{{ t.get('banco_descricao') or '' }}">
+                                        <i class="bi bi-check-circle"></i> Conciliado
+                                    </span>
+                                    {% if t.get('banco_conta_apelido') or t.get('banco_nome') %}
+                                    <br><small class="text-muted" style="font-size:0.75rem;">
+                                        {{ t.get('banco_conta_apelido') or t.get('banco_nome') }}
+                                    </small>
+                                    {% endif %}
+                                    <form method="POST"
+                                          action="{{ url_for('troco_pix.desvincular_banco', troco_pix_id=t.id) }}"
+                                          style="display:inline;"
+                                          onsubmit="return confirm('Remover vínculo bancário?');">
+                                        <button type="submit" class="btn btn-xs btn-outline-secondary"
+                                                style="font-size:0.72rem;padding:1px 4px;" title="Remover vínculo">
+                                            <i class="bi bi-x"></i>
+                                        </button>
+                                    </form>
+                                {% else %}
+                                    <span class="badge bg-secondary">Não conciliado</span>
+                                    <button type="button"
+                                            class="btn btn-xs btn-outline-primary btn-vincular-banco"
+                                            style="font-size:0.72rem;padding:1px 6px;"
+                                            data-id="{{ t.id }}"
+                                            data-valor="{{ t.troco_pix or 0 }}"
+                                            title="Vincular transação bancária">
+                                        <i class="bi bi-link-45deg"></i> Vincular
+                                    </button>
                                 {% endif %}
                             </td>
                             <td>
@@ -186,4 +218,104 @@
         </div>
     </div>
 </div>
+
+<!-- Modal: Vincular Transação Bancária -->
+<div class="modal fade" id="modalVincularBanco" tabindex="-1"
+     data-url-vincular="{{ url_for('troco_pix.vincular_banco', troco_pix_id=0)|replace('/0', '/') }}"
+     data-url-api="{{ url_for('troco_pix.api_transacoes_banco', troco_pix_id=0)|replace('/0', '/') }}">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header" style="background:#1D63A5;color:white;">
+        <h5 class="modal-title"><i class="bi bi-link-45deg"></i> Vincular Transação Bancária</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <p class="text-muted small mb-2" id="vincularInfo"></p>
+        <div id="vincularLoading" class="text-center py-3" style="display:none;">
+          <div class="spinner-border spinner-border-sm"></div> Buscando transações...
+        </div>
+        <div id="vincularLista" style="max-height:320px;overflow-y:auto;border:1px solid #dee2e6;border-radius:4px;"></div>
+        <div class="mt-2 small text-muted">
+          Não encontrou? <a href="{{ url_for('bank_import.conciliar') }}">Abrir conciliação bancária</a>
+          e use a aba <strong>Troco PIX</strong> para vincular manualmente.
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fechar</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function() {
+  const modalEl = document.getElementById('modalVincularBanco');
+  const URL_VINCULAR = (modalEl?.dataset?.urlVincular || '/troco_pix/vincular-banco/');
+  const URL_API     = (modalEl?.dataset?.urlApi     || '/troco_pix/api/transacoes-banco/');
+
+  document.querySelectorAll('.btn-vincular-banco').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      const trocoPixId = this.dataset.id;
+      const valor = parseFloat(this.dataset.valor || '0');
+      const info = document.getElementById('vincularInfo');
+      const lista = document.getElementById('vincularLista');
+      const loading = document.getElementById('vincularLoading');
+
+      info.textContent = 'Troco PIX #' + trocoPixId + ' — Valor PIX: R$ ' + valor.toLocaleString('pt-BR', {minimumFractionDigits:2});
+      lista.innerHTML = '';
+      loading.style.display = '';
+
+      new bootstrap.Modal(modalEl).show();
+
+      fetch(URL_API + trocoPixId)
+        .then(function(r) { return r.json(); })
+        .then(function(rows) {
+          loading.style.display = 'none';
+          if (!rows.length) {
+            lista.innerHTML = '<div class="p-3 text-muted text-center small">Nenhuma transação bancária pendente com este valor encontrada.</div>';
+            return;
+          }
+          rows.forEach(function(tx) {
+            const div = document.createElement('div');
+            div.className = 'p-2 border-bottom d-flex justify-content-between align-items-center';
+            div.style.fontSize = '0.85rem';
+            const form = document.createElement('form');
+            form.method = 'POST';
+            form.action = URL_VINCULAR + trocoPixId;
+            form.style.display = 'inline';
+            form.style.marginLeft = '8px';
+            const inp = document.createElement('input');
+            inp.type = 'hidden'; inp.name = 'bank_transaction_id'; inp.value = tx.id;
+            form.appendChild(inp);
+            const submitBtn = document.createElement('button');
+            submitBtn.type = 'submit';
+            submitBtn.className = 'btn btn-sm btn-success';
+            submitBtn.innerHTML = '<i class="bi bi-link-45deg"></i> Vincular';
+            form.appendChild(submitBtn);
+
+            div.innerHTML =
+              '<div>' +
+              '<strong>' + (tx.data_transacao || '-') + '</strong>' +
+              ' &nbsp; ' + (tx.descricao || '-') +
+              '<br><small class="text-muted">' + (tx.conta_apelido || tx.banco_nome || '-') +
+              (tx.cnpj_cpf ? ' | ' + tx.cnpj_cpf : '') + '</small>' +
+              '</div>' +
+              '<div class="text-end">' +
+              '<span class="text-danger fw-semibold">R$ ' + parseFloat(tx.valor || 0).toLocaleString('pt-BR', {minimumFractionDigits:2}) + '</span>' +
+              '</div>';
+            div.querySelector('.text-end').appendChild(form);
+            lista.appendChild(div);
+          });
+        })
+        .catch(function() {
+          loading.style.display = 'none';
+          lista.innerHTML = '<div class="p-3 text-danger text-center small">Erro ao buscar transações.</div>';
+        });
+    });
+  });
+})();
+</script>
 {% endblock %}

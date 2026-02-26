@@ -577,11 +577,12 @@ def _conciliar_transferencia(cursor, conn, tx_id, conta_destino_id, usuario):
 
 def _conciliar_tx(cursor, conn, tx_id, acao, tipo_tx,
                   fornecedor_id, forma_recebimento_id, usuario,
-                  tipo_debito=None, despesas=None):
+                  tipo_debito=None, despesas=None, troco_pix_id=None):
     """Concilia (ou ignora) uma única transação e aprende mapeamentos.
 
     Para débitos com tipo_debito='despesa', *despesas* é uma lista de dicts:
         [{'titulo_id': int, 'categoria_id': int, 'valor': float, 'observacao': str}]
+    Para débitos com tipo_debito='troco_pix', *troco_pix_id* deve ser informado.
     """
     if acao == 'ignorar':
         cursor.execute(
@@ -617,6 +618,32 @@ def _conciliar_tx(cursor, conn, tx_id, acao, tipo_tx,
                        atualizado_em=NOW()""",
                 (row['cnpj_cpf'], forma_recebimento_id, forma_recebimento_id),
             )
+    elif tipo_debito == 'troco_pix' and troco_pix_id:
+        # Débito → Troco PIX: vincula a transação bancária ao registro de troco_pix
+        try:
+            cursor.execute(
+                """UPDATE bank_transactions
+                   SET status='conciliado', conciliado_em=%s, conciliado_por=%s,
+                       tipo_conciliacao='troco_pix'
+                   WHERE id=%s""",
+                (agora, usuario, tx_id),
+            )
+        except Exception:
+            conn.rollback()
+            cursor.execute(
+                """UPDATE bank_transactions
+                   SET status='conciliado', conciliado_em=%s, conciliado_por=%s
+                   WHERE id=%s""",
+                (agora, usuario, tx_id),
+            )
+        # Vincula o troco_pix à transação bancária (graceful: ignora se coluna não existir)
+        try:
+            cursor.execute(
+                "UPDATE troco_pix SET bank_transaction_id=%s WHERE id=%s",
+                (tx_id, troco_pix_id),
+            )
+        except Exception:
+            pass
     elif tipo_debito == 'despesa' and despesas:
         # Débito → uma ou mais Despesas (lançamentos_despesas)
         cursor.execute(
@@ -699,6 +726,35 @@ def _conciliar_tx(cursor, conn, tx_id, acao, tipo_tx,
     conn.commit()
 
 
+def _get_troco_pix_sem_banco():
+    """Retorna Troco PIX que ainda não foram vinculados a transações bancárias.
+    Graceful: se a coluna bank_transaction_id não existir ainda, retorna lista vazia.
+    """
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        cursor.execute(
+            """SELECT tp.id, tp.data, tp.troco_pix AS valor_pix,
+                      tp.numero_sequencial,
+                      c.razao_social AS posto_nome,
+                      tpc.nome_completo AS cliente_nome
+               FROM troco_pix tp
+               LEFT JOIN clientes c ON c.id = tp.cliente_id
+               LEFT JOIN troco_pix_clientes tpc ON tpc.id = tp.troco_pix_cliente_id
+               WHERE tp.bank_transaction_id IS NULL AND tp.troco_pix > 0
+               ORDER BY tp.data DESC
+               LIMIT 200"""
+        )
+        rows = cursor.fetchall()
+        return rows
+    except Exception:
+        # Coluna bank_transaction_id ainda não existe (migration pendente)
+        return []
+    finally:
+        cursor.close()
+        conn.close()
+
+
 @bp.route('/conciliar', methods=['GET', 'POST'])
 @login_required
 def conciliar():
@@ -742,6 +798,7 @@ def conciliar():
                     pass
 
         conta_destino_id = request.form.get('conta_destino_id') or None
+        troco_pix_id     = request.form.get('troco_pix_id') or None
 
         ok = 0
         for tx_id in tx_ids:
@@ -750,7 +807,8 @@ def conciliar():
             else:
                 _conciliar_tx(cursor, conn, tx_id, acao, tipo_tx,
                               fornecedor_id, forma_recebimento_id, usuario,
-                              tipo_debito=tipo_debito, despesas=despesas or None)
+                              tipo_debito=tipo_debito, despesas=despesas or None,
+                              troco_pix_id=troco_pix_id)
             ok += 1
 
         if acao == 'ignorar':
@@ -908,6 +966,10 @@ def conciliar():
 
     total_pages = max(1, (total + per_page - 1) // per_page)
 
+    # Busca Troco PIX pendentes de conciliação bancária para o modal de débitos.
+    # Graceful: se a coluna bank_transaction_id não existir ainda, retorna lista vazia.
+    troco_pix_pendentes = _get_troco_pix_sem_banco()
+
     return render_template(
         'bank_import/conciliar.html',
         transacoes=transacoes,
@@ -918,6 +980,7 @@ def conciliar():
         clientes=clientes,
         todas_contas=todas_contas,
         todas_contas_map=todas_contas_map,
+        troco_pix_pendentes=troco_pix_pendentes,
         page=page,
         total_pages=total_pages,
         total=total,
