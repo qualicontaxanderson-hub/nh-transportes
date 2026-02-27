@@ -227,9 +227,17 @@ def _auto_conciliar_por_regras(cursor, conn, account_id=None):
       - Regras de cliente (cliente_id para créditos de cobrança)
     Retorna quantas foram auto-conciliadas.
     """
-    # Carrega regras ativas (banco já possui todos os campos após migration consolidada)
+    # Carrega regras ativas ordenadas por especificidade:
+    # 1. Regras vinculadas a uma conta específica (account_id) antes das genéricas
+    # 2. Regras com padrão secundário (mais específicas) antes das que só têm padrão principal
+    # Isso garante que "DEP + DINHEIRO" é avaliada antes de "DEP" sozinho,
+    # evitando que uma regra genérica capture transações que deveriam ir para uma regra específica.
     cursor.execute(
-        """SELECT * FROM bank_conciliacao_regras WHERE ativo=1 ORDER BY id"""
+        """SELECT * FROM bank_conciliacao_regras WHERE ativo=1
+           ORDER BY
+               (account_id IS NOT NULL) DESC,
+               (padrao_secundario IS NOT NULL AND padrao_secundario <> '') DESC,
+               id"""
     )
     regras = cursor.fetchall()
     if not regras:
@@ -239,7 +247,8 @@ def _auto_conciliar_por_regras(cursor, conn, account_id=None):
     if account_id:
         cursor.execute(
             """SELECT bt.id, bt.descricao, bt.tipo, bt.cnpj_cpf,
-                      bt.data_transacao, bt.valor, ba.cliente_id AS conta_cliente_id
+                      bt.data_transacao, bt.valor, bt.account_id,
+                      ba.cliente_id AS conta_cliente_id
                FROM bank_transactions bt
                INNER JOIN bank_accounts ba ON ba.id = bt.account_id
                WHERE bt.status='pendente' AND bt.account_id=%s""",
@@ -248,7 +257,8 @@ def _auto_conciliar_por_regras(cursor, conn, account_id=None):
     else:
         cursor.execute(
             """SELECT bt.id, bt.descricao, bt.tipo, bt.cnpj_cpf,
-                      bt.data_transacao, bt.valor, ba.cliente_id AS conta_cliente_id
+                      bt.data_transacao, bt.valor, bt.account_id,
+                      ba.cliente_id AS conta_cliente_id
                FROM bank_transactions bt
                INNER JOIN bank_accounts ba ON ba.id = bt.account_id
                WHERE bt.status='pendente'"""
@@ -263,6 +273,11 @@ def _auto_conciliar_por_regras(cursor, conn, account_id=None):
         descricao = (tx.get('descricao') or '').upper()
         tipo = tx.get('tipo') or ''
         for regra in regras:
+            # Filtra por conta bancária: se a regra for específica para uma conta,
+            # só aplica a transações dessa conta
+            regra_account_id = regra.get('account_id')
+            if regra_account_id and int(regra_account_id) != int(tx['account_id']):
+                continue
             # Filtra por tipo de transação
             tipo_regra = regra.get('tipo_transacao', 'AMBOS')
             if tipo_regra != 'AMBOS' and tipo_regra != tipo:
@@ -1359,7 +1374,13 @@ def api_diagnostico_regras():
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
     try:
-        cursor.execute("SELECT * FROM bank_conciliacao_regras WHERE ativo=1 ORDER BY id")
+        cursor.execute(
+            """SELECT * FROM bank_conciliacao_regras WHERE ativo=1
+               ORDER BY
+                   (account_id IS NOT NULL) DESC,
+                   (padrao_secundario IS NOT NULL AND padrao_secundario <> '') DESC,
+                   id"""
+        )
         regras = cursor.fetchall()
 
         cursor.execute(
@@ -1395,6 +1416,9 @@ def api_diagnostico_regras():
             descricao = (tx.get('descricao') or '').upper()
             tipo = tx.get('tipo') or ''
             for regra in regras:
+                regra_account_id = regra.get('account_id')
+                if regra_account_id and int(regra_account_id) != int(tx['account_id']):
+                    continue
                 tipo_regra = regra.get('tipo_transacao', 'AMBOS')
                 if tipo_regra != 'AMBOS' and tipo_regra != tipo:
                     continue
