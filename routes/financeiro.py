@@ -973,6 +973,8 @@ def _get_bank_transactions(tipo, request_args, exclude_transfers=False):
     cursor = conn.cursor(dictionary=True)
 
     conta_id = request_args.get('conta_id', '').strip()
+    empresa_id = request_args.get('empresa_id', '').strip()
+    forma_recebimento_id = request_args.get('forma_recebimento_id', '').strip()
     status = request_args.get('status', '').strip()
     data_inicio = request_args.get('data_inicio', '').strip()
     data_fim = request_args.get('data_fim', '').strip()
@@ -983,6 +985,13 @@ def _get_bank_transactions(tipo, request_args, exclude_transfers=False):
     if conta_id:
         where.append("bt.account_id = %s")
         params.append(conta_id)
+    elif empresa_id:
+        # Filtra pelas contas que pertencem à empresa selecionada
+        where.append("ba.cliente_id = %s")
+        params.append(empresa_id)
+    if forma_recebimento_id:
+        where.append("bt.forma_recebimento_id = %s")
+        params.append(forma_recebimento_id)
     if status:
         where.append("bt.status = %s")
         params.append(status)
@@ -1043,6 +1052,7 @@ def _get_bank_transactions(tipo, request_args, exclude_transfers=False):
                        SUM(CASE WHEN bt.status='conciliado' THEN 1 ELSE 0 END) AS conciliados,
                        SUM(CASE WHEN bt.status='pendente' THEN 1 ELSE 0 END) AS pendentes
                 FROM bank_transactions bt
+                INNER JOIN bank_accounts ba ON bt.account_id = ba.id
                 WHERE {w}""",
             params,
         )
@@ -1061,26 +1071,44 @@ def _get_bank_transactions(tipo, request_args, exclude_transfers=False):
         transacoes = _run_query(None)
         totais = _run_totais(None)
 
-    # Lista de contas para o filtro
+    # Lista de contas para o filtro (inclui cliente_id para cascata empresa→conta no JS)
     cursor.execute(
-        """SELECT ba.id, ba.apelido, ba.banco_nome, c.razao_social AS empresa_nome
+        """SELECT ba.id, ba.apelido, ba.banco_nome,
+                  ba.cliente_id,
+                  c.razao_social AS empresa_nome
            FROM bank_accounts ba
            LEFT JOIN clientes c ON c.id = ba.cliente_id
            WHERE ba.ativo = 1
-           ORDER BY ba.apelido, ba.banco_nome"""
+           ORDER BY c.razao_social, ba.apelido, ba.banco_nome"""
     )
     contas = cursor.fetchall()
+
+    # Lista de empresas (clientes) que possuem contas bancárias ativas
+    cursor.execute(
+        """SELECT DISTINCT c.id, c.razao_social
+           FROM clientes c
+           INNER JOIN bank_accounts ba ON ba.cliente_id = c.id AND ba.ativo = 1
+           ORDER BY c.razao_social"""
+    )
+    empresas = cursor.fetchall()
+
+    # Lista de formas de recebimento ativas
+    cursor.execute(
+        "SELECT id, nome FROM formas_recebimento WHERE ativo = 1 ORDER BY nome"
+    )
+    formas = cursor.fetchall()
+
     cursor.close()
     conn.close()
 
-    return transacoes, totais, contas
+    return transacoes, totais, contas, empresas, formas
 
 
 @financeiro_bp.route('/recebimento/')
 @login_required
 def recebimento():
     """Exibe os créditos bancários importados via OFX."""
-    transacoes, totais, contas = _get_bank_transactions('CREDIT', request.args)
+    transacoes, totais, contas, empresas, formas = _get_bank_transactions('CREDIT', request.args)
     return render_template(
         'financeiro/recebimento.html',
         transacoes=transacoes,
@@ -1088,7 +1116,11 @@ def recebimento():
         total_conciliados=totais.get('conciliados') or 0,
         total_pendentes=totais.get('pendentes') or 0,
         contas=contas,
+        empresas=empresas,
+        formas=formas,
+        empresa_id_filter=request.args.get('empresa_id', ''),
         conta_id_filter=request.args.get('conta_id', ''),
+        forma_recebimento_id_filter=request.args.get('forma_recebimento_id', ''),
         status_filter=request.args.get('status', ''),
         data_inicio=request.args.get('data_inicio', ''),
         data_fim=request.args.get('data_fim', ''),
@@ -1099,7 +1131,7 @@ def recebimento():
 @login_required
 def pagamentos():
     """Exibe os débitos bancários importados via OFX (exclui transferências entre contas)."""
-    transacoes, totais, contas = _get_bank_transactions('DEBIT', request.args, exclude_transfers=True)
+    transacoes, totais, contas, empresas, formas = _get_bank_transactions('DEBIT', request.args, exclude_transfers=True)
     return render_template(
         'financeiro/pagamentos.html',
         transacoes=transacoes,

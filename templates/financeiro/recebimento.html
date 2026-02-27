@@ -59,19 +59,47 @@
             <i class="bi bi-funnel"></i> Filtros
         </div>
         <div class="card-body">
-            <form method="GET" class="row g-2 align-items-end">
+            <form method="GET" class="row g-2 align-items-end" id="form-filtros">
+                <!-- 1. Empresa -->
+                <div class="col-md-3">
+                    <label class="form-label mb-1">Empresa</label>
+                    <select name="empresa_id" id="sel-empresa" class="form-select form-select-sm">
+                        <option value="">— Todas as Empresas —</option>
+                        {% for e in empresas %}
+                        <option value="{{ e.id }}" {% if e.id|string == empresa_id_filter %}selected{% endif %}>
+                            {{ e.razao_social }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <!-- 2. Conta Bancária (cascata da empresa) -->
                 <div class="col-md-3">
                     <label class="form-label mb-1">Conta Bancária</label>
-                    <select name="conta_id" class="form-select form-select-sm">
+                    <select name="conta_id" id="sel-conta" class="form-select form-select-sm">
                         <option value="">— Todas as Contas —</option>
                         {% for c in contas %}
-                        <option value="{{ c.id }}" {% if c.id|string == conta_id_filter %}selected{% endif %}>
+                        <option value="{{ c.id }}"
+                                data-empresa="{{ c.cliente_id or '' }}"
+                                {% if c.id|string == conta_id_filter %}selected{% endif %}>
                             {{ c.apelido or c.banco_nome }}{% if c.empresa_nome %} [{{ c.empresa_nome }}]{% endif %}
                         </option>
                         {% endfor %}
                     </select>
                 </div>
+                <!-- 3. Forma de Recebimento -->
                 <div class="col-md-2">
+                    <label class="form-label mb-1">Forma de Recebimento</label>
+                    <select name="forma_recebimento_id" class="form-select form-select-sm">
+                        <option value="">— Todas —</option>
+                        {% for f in formas %}
+                        <option value="{{ f.id }}" {% if f.id|string == forma_recebimento_id_filter %}selected{% endif %}>
+                            {{ f.nome }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <!-- 4. Status -->
+                <div class="col-md-1">
                     <label class="form-label mb-1">Status</label>
                     <select name="status" class="form-select form-select-sm">
                         <option value="">— Todos —</option>
@@ -80,25 +108,63 @@
                         <option value="ignorado" {% if status_filter=='ignorado' %}selected{% endif %}>Ignorado</option>
                     </select>
                 </div>
-                <div class="col-md-2">
+                <!-- 5. Datas -->
+                <div class="col-md-1">
                     <label class="form-label mb-1">Data Início</label>
                     <input type="date" name="data_inicio" class="form-control form-control-sm" value="{{ data_inicio }}">
                 </div>
-                <div class="col-md-2">
+                <div class="col-md-1">
                     <label class="form-label mb-1">Data Fim</label>
                     <input type="date" name="data_fim" class="form-control form-control-sm" value="{{ data_fim }}">
                 </div>
-                <div class="col-md-3 d-flex gap-2">
+                <!-- 6. Botões -->
+                <div class="col-md-1 d-flex gap-1">
                     <button type="submit" class="btn btn-primary btn-sm">
-                        <i class="bi bi-search"></i> Filtrar
+                        <i class="bi bi-search"></i>
                     </button>
-                    <a href="/financeiro/recebimento/" class="btn btn-outline-secondary btn-sm">
-                        <i class="bi bi-x-circle"></i> Limpar
+                    <a href="/financeiro/recebimento/" class="btn btn-outline-secondary btn-sm" title="Limpar filtros">
+                        <i class="bi bi-x-circle"></i>
                     </a>
                 </div>
             </form>
         </div>
     </div>
+
+    <!-- JS: cascata Empresa → Conta Bancária -->
+    <script>
+    (function () {
+        const selEmpresa = document.getElementById('sel-empresa');
+        const selConta   = document.getElementById('sel-conta');
+        const allContas  = Array.from(selConta.options).slice(1); // ignora o primeiro "— Todas —"
+
+        function filtrarContas(empresaId) {
+            // Guarda opção selecionada antes de manipular
+            const selectedVal = selConta.value;
+            // Remove tudo exceto o primeiro item
+            while (selConta.options.length > 1) selConta.remove(1);
+
+            allContas.forEach(opt => {
+                if (!empresaId || opt.dataset.empresa === empresaId) {
+                    selConta.appendChild(opt.cloneNode(true));
+                }
+            });
+
+            // Restaura seleção se ainda válida
+            if (selectedVal) {
+                const found = Array.from(selConta.options).find(o => o.value === selectedVal);
+                if (found) selConta.value = selectedVal;
+            }
+        }
+
+        // Aplica cascata ao carregar página (caso empresa_id venha na URL)
+        filtrarContas(selEmpresa.value);
+
+        selEmpresa.addEventListener('change', function () {
+            selConta.value = '';
+            filtrarContas(this.value);
+        });
+    })();
+    </script>
 
     <!-- TABELA -->
     <div class="card">
