@@ -156,9 +156,14 @@
                             </td>
                             <td class="text-center text-nowrap">
                                 {% if t.status == 'conciliado' or t.status == 'ignorado' %}
-                                <button class="btn btn-sm btn-outline-warning" onclick="reverterPagamento({{ t.id }}, this)" title="Reverter para pendente e reconciliar">
-                                    <i class="bi bi-arrow-counterclockwise"></i> Reverter
-                                </button>
+                                <form method="POST"
+                                      action="{{ url_for('financeiro.reverter_conciliacao', tx_id=t.id) }}"
+                                      style="display:inline;"
+                                      onsubmit="return confirm('Reverter esta conciliação?\nO débito voltará para Pendente e poderá ser reconciliado corretamente.');">
+                                    <button type="submit" class="btn btn-sm btn-outline-warning" title="Reverter Conciliação">
+                                        <i class="bi bi-arrow-counterclockwise"></i> Reverter
+                                    </button>
+                                </form>
                                 {% else %}
                                 <a href="/banco/conciliar?tipo=DEBIT" class="btn btn-sm btn-outline-primary" title="Conciliar esta transação">
                                     <i class="bi bi-check2-circle"></i> Conciliar
@@ -188,28 +193,4 @@
         </a>
     </div>
 </div>
-
-<script>
-function reverterPagamento(txId, btn) {
-  if (!confirm('Reverter esta conciliação?\nO débito voltará para "pendente" e poderá ser reconciliado corretamente (como pagamento ou transferência).')) return;
-  btn.disabled = true;
-  btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
-  fetch('/banco/api/desfazer-transferencia/' + txId, {method: 'POST',
-    headers: {'X-CSRFToken': document.querySelector('meta[name=csrf-token]')?.content || ''}
-  })
-  .then(r => r.json())
-  .then(d => {
-    if (d.ok) {
-      btn.closest('tr').innerHTML =
-        '<td colspan="8" class="text-success py-2 px-3"><i class="bi bi-check-circle"></i> ' +
-        'Conciliação revertida! — <a href="/banco/conciliar?tipo=DEBIT" class="fw-semibold">Ir para Conciliação →</a></td>';
-    } else {
-      alert('Erro: ' + (d.erro || 'desconhecido'));
-      btn.disabled = false;
-      btn.innerHTML = '<i class="bi bi-arrow-counterclockwise"></i> Reverter';
-    }
-  })
-  .catch(e => { alert('Erro de rede: ' + e); btn.disabled = false; });
-}
-</script>
 {% endblock %}

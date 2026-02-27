@@ -118,6 +118,7 @@
                             <th>Forma de Recebimento</th>
                             <th class="text-end">Valor (R$)</th>
                             <th class="text-center">Status</th>
+                            <th class="text-center">Ações</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -150,10 +151,24 @@
                                     <span class="badge bg-warning text-dark">Pendente</span>
                                 {% endif %}
                             </td>
+                            <td class="text-center">
+                                {% if t.status == 'conciliado' %}
+                                <form method="POST"
+                                      action="{{ url_for('financeiro.reverter_conciliacao', tx_id=t.id) }}"
+                                      style="display:inline;"
+                                      onsubmit="return confirm('Reverter conciliação da transação #{{ t.id }}?\n\nA transação voltará ao status Pendente e poderá ser reconciliada.');">
+                                    <button type="submit" class="btn btn-sm btn-outline-warning" title="Reverter Conciliação">
+                                        <i class="bi bi-arrow-counterclockwise"></i> Reverter
+                                    </button>
+                                </form>
+                                {% else %}
+                                <span class="text-muted">—</span>
+                                {% endif %}
+                            </td>
                         </tr>
                         {% else %}
                         <tr>
-                            <td colspan="7" class="text-center text-muted py-4">
+                            <td colspan="8" class="text-center text-muted py-4">
                                 <i class="bi bi-inbox"></i> Nenhum crédito encontrado para os filtros selecionados.
                             </td>
                         </tr>

@@ -861,6 +861,106 @@ def consultar_status_efi(charge_id):
         }), 500
 
 
+@financeiro_bp.route('/reverter-conciliacao/<int:tx_id>/', methods=['POST'])
+@login_required
+def reverter_conciliacao(tx_id):
+    """Reverte a conciliação de uma transação bancária: volta para status='pendente',
+    limpa forma_recebimento_id, fornecedor_id, conciliado_em, conciliado_por e tipo_conciliacao,
+    e remove os vínculos em lancamentos_despesas e troco_pix.
+    """
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        cursor.execute(
+            "SELECT id, tipo, status, descricao FROM bank_transactions WHERE id = %s LIMIT 1",
+            (tx_id,),
+        )
+        tx = cursor.fetchone()
+        if not tx:
+            flash("Transação não encontrada.", "danger")
+            return redirect(request.referrer or url_for('financeiro.recebimento'))
+        if tx['status'] != 'conciliado':
+            flash("Apenas transações conciliadas podem ter a conciliação revertida.", "warning")
+            return redirect(request.referrer or url_for('financeiro.recebimento'))
+
+        cursor_w = conn.cursor()
+        # Desvincular lancamentos_despesas (graceful: tabela pode não ter a coluna)
+        try:
+            cursor_w.execute(
+                "UPDATE lancamentos_despesas SET bank_transaction_id = NULL WHERE bank_transaction_id = %s",
+                (tx_id,),
+            )
+        except Exception as exc_ld:
+            current_app.logger.warning("reverter_conciliacao: não foi possível desvincular lancamentos_despesas tx=%s: %s", tx_id, exc_ld)
+
+        # Desvincular troco_pix (graceful: coluna pode não existir ainda)
+        try:
+            cursor_w.execute(
+                "UPDATE troco_pix SET bank_transaction_id = NULL WHERE bank_transaction_id = %s",
+                (tx_id,),
+            )
+        except Exception as exc_tp:
+            current_app.logger.warning("reverter_conciliacao: não foi possível desvincular troco_pix tx=%s: %s", tx_id, exc_tp)
+
+        # Reverter a transação — tenta com tipo_conciliacao (migration >= 20260224)
+        try:
+            cursor_w.execute(
+                """UPDATE bank_transactions
+                   SET status = 'pendente',
+                       forma_recebimento_id = NULL,
+                       fornecedor_id        = NULL,
+                       conciliado_em        = NULL,
+                       conciliado_por       = NULL,
+                       tipo_conciliacao     = NULL
+                   WHERE id = %s""",
+                (tx_id,),
+            )
+        except Exception:
+            # Fallback: tipo_conciliacao não existe (migration pendente)
+            conn.rollback()
+            try:
+                cursor_w.execute(
+                    """UPDATE bank_transactions
+                       SET status = 'pendente',
+                           forma_recebimento_id = NULL,
+                           fornecedor_id        = NULL,
+                           conciliado_em        = NULL,
+                           conciliado_por       = NULL
+                       WHERE id = %s""",
+                    (tx_id,),
+                )
+            except Exception as exc_fb:
+                raise exc_fb
+
+        conn.commit()
+        flash(
+            f"Conciliação da transação #{tx_id} revertida com sucesso. Agora está pendente.",
+            "success",
+        )
+    except Exception as e:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        current_app.logger.exception("Erro em reverter_conciliacao tx_id=%s: %s", tx_id, e)
+        flash(f"Erro ao reverter conciliação: {e}", "danger")
+    finally:
+        try:
+            cursor.close()
+        except Exception:
+            pass
+        try:
+            conn.close()
+        except Exception:
+            pass
+
+    # Redireciona de volta à página de origem (recebimento ou pagamentos)
+    referrer = request.referrer or ''
+    if 'pagamento' in referrer:
+        return redirect(url_for('financeiro.pagamentos'))
+    return redirect(url_for('financeiro.recebimento'))
+
+
 def _get_bank_transactions(tipo, request_args, exclude_transfers=False):
     """Busca transações bancárias filtradas por tipo (CREDIT ou DEBIT) com filtros opcionais.
 
