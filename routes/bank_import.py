@@ -991,6 +991,20 @@ def conciliar():
             if tipo_conc == 'transferencia' or sugestao_tip == 'transferencia':
                 tx['sugestao_transferencia_recebida'] = True
 
+    # Reordena: dentro de cada data, lançamentos com sugestão aparecem primeiro
+    def _tem_sugestao(tx):
+        return bool(
+            tx.get('sugestao_forma_id') or
+            tx.get('sugestao_fornecedor_id') or
+            tx.get('sugestao_titulo_id') or
+            tx.get('sugestao_transferencia_recebida')
+        )
+    transacoes = sorted(
+        transacoes,
+        key=lambda tx: (tx.get('data_transacao'), _tem_sugestao(tx)),
+        reverse=True,
+    )
+
     cursor.execute(
         f"SELECT COUNT(*) AS total FROM bank_transactions bt "
         f"INNER JOIN bank_accounts ba ON bt.account_id = ba.id "
