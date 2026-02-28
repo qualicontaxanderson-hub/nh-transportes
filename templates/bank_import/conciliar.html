@@ -582,16 +582,103 @@
             </button>
           </div>
           <div class="tab-pane fade" id="tabLoteDebito">
-            <p class="small text-muted mb-1">Fornecedor para os <strong>débitos</strong> selecionados:</p>
-            <input type="text" id="buscaFornLote" class="form-control form-control-sm mb-1"
-                   placeholder="Buscar..." oninput="filtrarFornLote()">
-            <select id="selectFornLote" class="form-select" size="7">
-              {% for f in fornecedores %}
-              <option value="{{ f.id }}" data-nome="{{ f.razao_social|lower }}">
-                {{ f.razao_social }}{% if f.cnpj %} – {{ f.cnpj }}{% endif %}
-              </option>
-              {% endfor %}
-            </select>
+            <!-- Sub-abas para Débito em lote: Fornecedor | Despesa | Transferência -->
+            <ul class="nav nav-tabs nav-sm mb-2" id="debitoLoteTabs">
+              <li class="nav-item">
+                <button class="nav-link active" id="lote_tab_forn_btn"
+                        onclick="alternarAbaDebitoLote('fornecedor')">
+                  <i class="bi bi-building"></i> Fornecedor
+                </button>
+              </li>
+              <li class="nav-item">
+                <button class="nav-link" id="lote_tab_desp_btn"
+                        onclick="alternarAbaDebitoLote('despesa')">
+                  <i class="bi bi-receipt"></i> Despesa
+                </button>
+              </li>
+              <li class="nav-item">
+                <button class="nav-link" id="lote_tab_transf_btn"
+                        onclick="alternarAbaDebitoLote('transferencia')">
+                  <i class="bi bi-arrow-left-right"></i> Transferência
+                </button>
+              </li>
+            </ul>
+            <input type="hidden" id="lote_tipo_debito" value="fornecedor">
+
+            <!-- Sub-aba Fornecedor -->
+            <div id="lote_aba_fornecedor">
+              <p class="small text-muted mb-1">Fornecedor para os <strong>débitos</strong> selecionados:</p>
+              <input type="text" id="buscaFornLote" class="form-control form-control-sm mb-1"
+                     placeholder="Buscar..." oninput="filtrarFornLote()">
+              <select id="selectFornLote" class="form-select" size="7">
+                {% for f in fornecedores %}
+                <option value="{{ f.id }}" data-nome="{{ f.razao_social|lower }}">
+                  {{ f.razao_social }}{% if f.cnpj %} – {{ f.cnpj }}{% endif %}
+                </option>
+                {% endfor %}
+              </select>
+            </div>
+
+            <!-- Sub-aba Despesa -->
+            <div id="lote_aba_despesa" style="display:none;">
+              <p class="small text-muted mb-1">Despesa para os <strong>débitos</strong> selecionados
+                (cada lançamento usará o valor da própria transação):</p>
+              <div class="linha-desp">
+                <div class="row g-1">
+                  <div class="col-md-4">
+                    <label class="form-label form-label-sm mb-0">Título</label>
+                    <select id="lote_desp_titulo_id" class="form-select form-select-sm sel-titulo"
+                            onchange="carregarCategorias(this, 'lote_desp_categoria_id')">
+                      <option value="">— Selecione —</option>
+                      {% for t in titulos_despesas %}
+                      <option value="{{ t.id }}" data-categorias='{{ t.categorias | tojson }}'>
+                        {{ t.nome }}
+                      </option>
+                      {% endfor %}
+                    </select>
+                  </div>
+                  <div class="col-md-4">
+                    <label class="form-label form-label-sm mb-0">Categoria</label>
+                    <select id="lote_desp_categoria_id" name="lote_desp_categoria_id"
+                            class="form-select form-select-sm sel-categoria"
+                            onchange="carregarSubcategorias(this)">
+                      <option value="">— Primeiro o título —</option>
+                    </select>
+                  </div>
+                  <div class="col-md-4">
+                    <label class="form-label form-label-sm mb-0">Subcategoria (opt.)</label>
+                    <select id="lote_desp_subcategoria_id"
+                            class="form-select form-select-sm sel-subcategoria">
+                      <option value="">— Nenhuma —</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Sub-aba Transferência -->
+            <div id="lote_aba_transferencia" style="display:none;">
+              <div class="alert alert-info py-2 px-3 small mb-2">
+                <i class="bi bi-arrow-left-right"></i>
+                <strong>Transferência entre contas</strong> — o valor sairá de cada conta selecionada
+                e entrará como crédito na conta de destino abaixo.
+              </div>
+              <label class="form-label form-label-sm mb-1">Conta de Destino</label>
+              <select id="lote_conta_destino_id" class="form-select">
+                <option value="">— Selecione a conta destino —</option>
+                {% set emp_lote = namespace(nome='') %}
+                {% for c in todas_contas %}
+                  {% if c.empresa_nome != emp_lote.nome %}
+                    {% if emp_lote.nome %}</optgroup>{% endif %}
+                    <optgroup label="{{ c.empresa_nome or 'Sem empresa' }}">
+                    {% set emp_lote.nome = c.empresa_nome %}
+                  {% endif %}
+                  <option value="{{ c.id }}">{{ c.banco_nome }} – {{ c.apelido }}</option>
+                {% endfor %}
+                {% if todas_contas %}</optgroup>{% endif %}
+              </select>
+            </div>
+
             <button class="btn btn-danger btn-sm mt-2" onclick="submeterLote('DEBIT')">
               <i class="bi bi-check-lg"></i> Conciliar Débitos
             </button>
@@ -1120,6 +1207,16 @@ function filtrarFornLote() {
   });
 }
 
+function alternarAbaDebitoLote(aba) {
+  document.getElementById('lote_aba_fornecedor').style.display = aba === 'fornecedor' ? '' : 'none';
+  document.getElementById('lote_aba_despesa').style.display = aba === 'despesa' ? '' : 'none';
+  document.getElementById('lote_aba_transferencia').style.display = aba === 'transferencia' ? '' : 'none';
+  document.getElementById('lote_tipo_debito').value = aba;
+  document.getElementById('lote_tab_forn_btn').classList.toggle('active', aba === 'fornecedor');
+  document.getElementById('lote_tab_desp_btn').classList.toggle('active', aba === 'despesa');
+  document.getElementById('lote_tab_transf_btn').classList.toggle('active', aba === 'transferencia');
+}
+
 function abrirModalLote() {
   const checks = [...document.querySelectorAll('.tx-check:checked')];
   const creditos = checks.filter(c => c.dataset.tipo === 'CREDIT').length;
@@ -1132,8 +1229,6 @@ function abrirModalLote() {
 function submeterLote(tipo) {
   const checks = [...document.querySelectorAll('.tx-check:checked')].filter(c => c.dataset.tipo === tipo);
   if (!checks.length) { alert('Nenhum ' + (tipo === 'CREDIT' ? 'crédito' : 'débito') + ' selecionado.'); return; }
-  const sel = tipo === 'CREDIT' ? document.getElementById('selectFormaLote') : document.getElementById('selectFornLote');
-  if (!sel.value) { alert('Selecione uma opção antes de confirmar.'); return; }
   const form = document.createElement('form');
   form.method = 'POST';
   checks.forEach(c => {
@@ -1144,8 +1239,32 @@ function submeterLote(tipo) {
   const add = (n, v) => { const i = document.createElement('input'); i.type='hidden'; i.name=n; i.value=v; form.appendChild(i); };
   add('acao', 'conciliar');
   add('tipo_tx', tipo);
-  if (tipo === 'CREDIT') add('forma_recebimento_id', sel.value);
-  else add('fornecedor_id', sel.value);
+  if (tipo === 'CREDIT') {
+    const sel = document.getElementById('selectFormaLote');
+    if (!sel.value) { alert('Selecione uma forma de recebimento antes de confirmar.'); return; }
+    add('forma_recebimento_id', sel.value);
+  } else {
+    const tipoDebito = document.getElementById('lote_tipo_debito').value;
+    add('tipo_debito', tipoDebito);
+    if (tipoDebito === 'fornecedor') {
+      const sel = document.getElementById('selectFornLote');
+      if (!sel.value) { alert('Selecione um fornecedor antes de confirmar.'); return; }
+      add('fornecedor_id', sel.value);
+    } else if (tipoDebito === 'despesa') {
+      const titulo = document.getElementById('lote_desp_titulo_id').value;
+      const categ  = document.getElementById('lote_desp_categoria_id').value;
+      const sub    = document.getElementById('lote_desp_subcategoria_id').value;
+      if (!titulo || !categ) { alert('Selecione o Título e a Categoria da despesa antes de confirmar.'); return; }
+      add('desp_1_titulo_id', titulo);
+      add('desp_1_categoria_id', categ);
+      if (sub) add('desp_1_subcategoria_id', sub);
+      // Valor não enviado → backend usa o valor de cada transação individualmente
+    } else if (tipoDebito === 'transferencia') {
+      const conta = document.getElementById('lote_conta_destino_id').value;
+      if (!conta) { alert('Selecione a conta destino antes de confirmar.'); return; }
+      add('conta_destino_id', conta);
+    }
+  }
   document.body.appendChild(form);
   form.submit();
 }

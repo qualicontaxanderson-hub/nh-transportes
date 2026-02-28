@@ -688,6 +688,7 @@ def _conciliar_tx(cursor, conn, tx_id, acao, tipo_tx,
         # Débito → uma ou mais Despesas (lançamentos_despesas)
         cursor.execute(
             """SELECT bt.data_transacao, bt.descricao, bt.cnpj_cpf,
+                      bt.valor AS tx_valor,
                       ba.cliente_id
                FROM bank_transactions bt
                INNER JOIN bank_accounts ba ON ba.id = bt.account_id
@@ -705,7 +706,8 @@ def _conciliar_tx(cursor, conn, tx_id, acao, tipo_tx,
             categoria_id   = desp.get('categoria_id')
             subcategoria_id = desp.get('subcategoria_id') or None
             fornecedor_txt = (desp.get('fornecedor') or descricao)[:255]
-            valor          = desp.get('valor')
+            # Usa o valor especificado ou, se ausente, o valor total da transação (modo lote)
+            valor          = desp.get('valor') or tx.get('tx_valor')
             observacao     = desp.get('observacao') or descricao
             if not titulo_id or not categoria_id or not valor:
                 continue
