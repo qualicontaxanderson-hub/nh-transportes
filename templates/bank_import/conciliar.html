@@ -785,6 +785,11 @@ document.querySelectorAll('.btn-conciliar').forEach(btn => {
     }
     document.getElementById('secao_credito').style.display = tipo === 'CREDIT' ? '' : 'none';
     document.getElementById('secao_debito').style.display  = tipo === 'DEBIT'  ? '' : 'none';
+    // Limpa campos de busca para não esconder opções por filtro residual
+    const buscaForma = document.getElementById('buscaForma');
+    if (buscaForma) { buscaForma.value = ''; filtrarFormas(); }
+    const buscaForn = document.getElementById('buscaFornecedor');
+    if (buscaForn) { buscaForn.value = ''; filtrarFornecedores(); }
     // Guarda valor bruto no modal para cálculo de soma
     const modalEl = document.getElementById('modalConciliar');
     if (modalEl) modalEl.dataset.txValorRaw = this.dataset.txValor || '0';
@@ -868,7 +873,7 @@ document.querySelectorAll('.btn-conciliar').forEach(btn => {
         }
       }
     }
-    new bootstrap.Modal(document.getElementById('modalConciliar')).show();
+    bootstrap.Modal.getOrCreateInstance(document.getElementById('modalConciliar')).show();
   });
 });
 

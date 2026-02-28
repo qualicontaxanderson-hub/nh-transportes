@@ -39,7 +39,7 @@ def novo():
         cursor = conn.cursor()
         try:
             cursor.execute(
-                "INSERT INTO formas_recebimento (nome, eh_cartao, tipo_cartao) VALUES (%s, %s, %s)",
+                "INSERT INTO formas_recebimento (nome, eh_cartao, tipo_cartao, ativo) VALUES (%s, %s, %s, 1)",
                 (nome, eh_cartao, tipo_cartao),
             )
             conn.commit()

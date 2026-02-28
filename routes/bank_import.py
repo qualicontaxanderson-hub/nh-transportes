@@ -482,9 +482,12 @@ def upload():
 
 
 def _get_formas_recebimento(cursor):
-    """Retorna formas de recebimento ativas para uso na conciliação."""
+    """Retorna formas de recebimento ativas para uso na conciliação.
+    Inclui registros com ativo IS NULL para compatibilidade com tabelas
+    criadas antes da migração que adicionou o campo com DEFAULT 1.
+    """
     cursor.execute(
-        "SELECT id, nome FROM formas_recebimento WHERE ativo=1 ORDER BY nome"
+        "SELECT id, nome FROM formas_recebimento WHERE ativo = 1 OR ativo IS NULL ORDER BY nome"
     )
     return cursor.fetchall()
 
