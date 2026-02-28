@@ -577,35 +577,29 @@
               <option value="{{ f.id }}" data-nome="{{ f.nome|lower }}">{{ f.nome }}</option>
               {% endfor %}
             </select>
-            <button class="btn btn-success btn-sm mt-2" onclick="submeterLote('CREDIT')">
+            <button type="button" class="btn btn-success btn-sm mt-2" onclick="submeterLote('CREDIT')">
               <i class="bi bi-check-lg"></i> Conciliar Créditos
             </button>
           </div>
           <div class="tab-pane fade" id="tabLoteDebito">
-            <!-- Sub-abas para Débito em lote: Fornecedor | Despesa | Transferência -->
-            <ul class="nav nav-tabs nav-sm mb-2" id="debitoLoteTabs">
-              <li class="nav-item">
-                <button class="nav-link active" id="lote_tab_forn_btn"
-                        onclick="alternarAbaDebitoLote('fornecedor')">
-                  <i class="bi bi-building"></i> Fornecedor
-                </button>
-              </li>
-              <li class="nav-item">
-                <button class="nav-link" id="lote_tab_desp_btn"
-                        onclick="alternarAbaDebitoLote('despesa')">
-                  <i class="bi bi-receipt"></i> Despesa
-                </button>
-              </li>
-              <li class="nav-item">
-                <button class="nav-link" id="lote_tab_transf_btn"
-                        onclick="alternarAbaDebitoLote('transferencia')">
-                  <i class="bi bi-arrow-left-right"></i> Transferência
-                </button>
-              </li>
-            </ul>
+            <!-- Seletor de tipo (btn-group, sem data-bs-toggle para não conflitar com tabs externos) -->
+            <div class="d-flex gap-1 mb-2">
+              <button type="button" class="btn btn-sm btn-outline-secondary active" id="lote_btn_forn"
+                      onclick="alternarAbaDebitoLote('fornecedor')">
+                <i class="bi bi-building"></i> Fornecedor
+              </button>
+              <button type="button" class="btn btn-sm btn-outline-secondary" id="lote_btn_desp"
+                      onclick="alternarAbaDebitoLote('despesa')">
+                <i class="bi bi-receipt"></i> Despesa
+              </button>
+              <button type="button" class="btn btn-sm btn-outline-secondary" id="lote_btn_transf"
+                      onclick="alternarAbaDebitoLote('transferencia')">
+                <i class="bi bi-arrow-left-right"></i> Transferência
+              </button>
+            </div>
             <input type="hidden" id="lote_tipo_debito" value="fornecedor">
 
-            <!-- Sub-aba Fornecedor -->
+            <!-- Painel Fornecedor -->
             <div id="lote_aba_fornecedor">
               <p class="small text-muted mb-1">Fornecedor para os <strong>débitos</strong> selecionados:</p>
               <input type="text" id="buscaFornLote" class="form-control form-control-sm mb-1"
@@ -619,44 +613,40 @@
               </select>
             </div>
 
-            <!-- Sub-aba Despesa -->
+            <!-- Painel Despesa -->
             <div id="lote_aba_despesa" style="display:none;">
               <p class="small text-muted mb-1">Despesa para os <strong>débitos</strong> selecionados
-                (cada lançamento usará o valor da própria transação):</p>
-              <div class="linha-desp">
-                <div class="row g-1">
-                  <div class="col-md-4">
-                    <label class="form-label form-label-sm mb-0">Título</label>
-                    <select id="lote_desp_titulo_id" class="form-select form-select-sm sel-titulo"
-                            onchange="carregarCategorias(this, 'lote_desp_categoria_id')">
-                      <option value="">— Selecione —</option>
-                      {% for t in titulos_despesas %}
-                      <option value="{{ t.id }}" data-categorias='{{ t.categorias | tojson }}'>
-                        {{ t.nome }}
-                      </option>
-                      {% endfor %}
-                    </select>
-                  </div>
-                  <div class="col-md-4">
-                    <label class="form-label form-label-sm mb-0">Categoria</label>
-                    <select id="lote_desp_categoria_id" name="lote_desp_categoria_id"
-                            class="form-select form-select-sm sel-categoria"
-                            onchange="carregarSubcategorias(this)">
-                      <option value="">— Primeiro o título —</option>
-                    </select>
-                  </div>
-                  <div class="col-md-4">
-                    <label class="form-label form-label-sm mb-0">Subcategoria (opt.)</label>
-                    <select id="lote_desp_subcategoria_id"
-                            class="form-select form-select-sm sel-subcategoria">
-                      <option value="">— Nenhuma —</option>
-                    </select>
-                  </div>
+                (o valor de cada transação será usado automaticamente):</p>
+              <div class="row g-1">
+                <div class="col-md-4">
+                  <label class="form-label form-label-sm mb-0">Título</label>
+                  <select id="lote_titulo_id" class="form-select form-select-sm"
+                          onchange="carregarCatLote()">
+                    <option value="">— Selecione —</option>
+                    {% for t in titulos_despesas %}
+                    <option value="{{ t.id }}" data-categorias='{{ t.categorias | tojson }}'>
+                      {{ t.nome }}
+                    </option>
+                    {% endfor %}
+                  </select>
+                </div>
+                <div class="col-md-4">
+                  <label class="form-label form-label-sm mb-0">Categoria</label>
+                  <select id="lote_categoria_id" class="form-select form-select-sm"
+                          onchange="carregarSubCatLote()">
+                    <option value="">— Primeiro o título —</option>
+                  </select>
+                </div>
+                <div class="col-md-4">
+                  <label class="form-label form-label-sm mb-0">Subcategoria (opt.)</label>
+                  <select id="lote_subcategoria_id" class="form-select form-select-sm">
+                    <option value="">— Nenhuma —</option>
+                  </select>
                 </div>
               </div>
             </div>
 
-            <!-- Sub-aba Transferência -->
+            <!-- Painel Transferência -->
             <div id="lote_aba_transferencia" style="display:none;">
               <div class="alert alert-info py-2 px-3 small mb-2">
                 <i class="bi bi-arrow-left-right"></i>
@@ -679,7 +669,7 @@
               </select>
             </div>
 
-            <button class="btn btn-danger btn-sm mt-2" onclick="submeterLote('DEBIT')">
+            <button type="button" class="btn btn-danger btn-sm mt-2" onclick="submeterLote('DEBIT')">
               <i class="bi bi-check-lg"></i> Conciliar Débitos
             </button>
           </div>
@@ -1212,9 +1202,44 @@ function alternarAbaDebitoLote(aba) {
   document.getElementById('lote_aba_despesa').style.display = aba === 'despesa' ? '' : 'none';
   document.getElementById('lote_aba_transferencia').style.display = aba === 'transferencia' ? '' : 'none';
   document.getElementById('lote_tipo_debito').value = aba;
-  document.getElementById('lote_tab_forn_btn').classList.toggle('active', aba === 'fornecedor');
-  document.getElementById('lote_tab_desp_btn').classList.toggle('active', aba === 'despesa');
-  document.getElementById('lote_tab_transf_btn').classList.toggle('active', aba === 'transferencia');
+  document.getElementById('lote_btn_forn').classList.toggle('active', aba === 'fornecedor');
+  document.getElementById('lote_btn_desp').classList.toggle('active', aba === 'despesa');
+  document.getElementById('lote_btn_transf').classList.toggle('active', aba === 'transferencia');
+}
+
+function carregarCatLote() {
+  const sel = document.getElementById('lote_titulo_id');
+  const opt = sel ? sel.options[sel.selectedIndex] : null;
+  const selCat = document.getElementById('lote_categoria_id');
+  const selSub = document.getElementById('lote_subcategoria_id');
+  if (!selCat) return;
+  selCat.innerHTML = '<option value="">— Selecione —</option>';
+  if (selSub) selSub.innerHTML = '<option value="">— Nenhuma —</option>';
+  if (!opt || !opt.value) return;
+  let cats = [];
+  try { cats = JSON.parse(opt.dataset.categorias || '[]'); } catch(e) {}
+  cats.forEach(c => {
+    const o = document.createElement('option');
+    o.value = c.id; o.textContent = c.nome;
+    o.dataset.subcategorias = JSON.stringify(c.subcategorias || []);
+    selCat.appendChild(o);
+  });
+}
+
+function carregarSubCatLote() {
+  const selCat = document.getElementById('lote_categoria_id');
+  const selSub = document.getElementById('lote_subcategoria_id');
+  if (!selSub) return;
+  selSub.innerHTML = '<option value="">— Nenhuma —</option>';
+  const opt = selCat ? selCat.options[selCat.selectedIndex] : null;
+  if (!opt || !opt.value) return;
+  let subs = [];
+  try { subs = JSON.parse(opt.dataset.subcategorias || '[]'); } catch(e) {}
+  subs.forEach(s => {
+    const o = document.createElement('option');
+    o.value = s.id; o.textContent = s.nome;
+    selSub.appendChild(o);
+  });
 }
 
 function abrirModalLote() {
@@ -1223,7 +1248,12 @@ function abrirModalLote() {
   const debitos  = checks.filter(c => c.dataset.tipo === 'DEBIT').length;
   const li = document.getElementById('lote_info');
   if (li) li.textContent = checks.length + ' transação(ões) selecionada(s): ' + creditos + ' crédito(s), ' + debitos + ' débito(s).';
-  new bootstrap.Modal(document.getElementById('modalLote')).show();
+  // Resetar estado dos painéis externos (Bootstrap tab pode ter mantido Débitos ativo)
+  const credBtn = document.querySelector('[data-bs-target="#tabLoteCredito"]');
+  if (credBtn) bootstrap.Tab.getOrCreateInstance(credBtn).show();
+  // Resetar painel interno de Débitos para Fornecedor
+  alternarAbaDebitoLote('fornecedor');
+  bootstrap.Modal.getOrCreateInstance(document.getElementById('modalLote')).show();
 }
 
 function submeterLote(tipo) {
@@ -1251,9 +1281,9 @@ function submeterLote(tipo) {
       if (!sel.value) { alert('Selecione um fornecedor antes de confirmar.'); return; }
       add('fornecedor_id', sel.value);
     } else if (tipoDebito === 'despesa') {
-      const titulo = document.getElementById('lote_desp_titulo_id').value;
-      const categ  = document.getElementById('lote_desp_categoria_id').value;
-      const sub    = document.getElementById('lote_desp_subcategoria_id').value;
+      const titulo = document.getElementById('lote_titulo_id').value;
+      const categ  = document.getElementById('lote_categoria_id').value;
+      const sub    = document.getElementById('lote_subcategoria_id').value;
       if (!titulo || !categ) { alert('Selecione o Título e a Categoria da despesa antes de confirmar.'); return; }
       add('desp_1_titulo_id', titulo);
       add('desp_1_categoria_id', categ);
