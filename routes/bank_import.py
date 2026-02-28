@@ -945,8 +945,6 @@ def conciliar():
     regras_padrao = cursor.fetchall()
 
     for tx in transacoes:
-        if tx.get('sugestao_forma_id') or tx.get('sugestao_fornecedor_id') or tx.get('sugestao_titulo_id'):
-            continue  # já tem sugestão por CNPJ
         descricao = (tx.get('descricao') or '').upper()
         tipo_tx_r = tx.get('tipo', '')
         for regra in regras_padrao:
@@ -967,6 +965,7 @@ def conciliar():
             padrao2 = (regra.get('padrao_secundario') or '').upper()
             if padrao2 and padrao2 not in descricao:
                 continue
+            # Regras de descrição têm prioridade sobre mapeamento por CNPJ
             if regra['forma_recebimento_id']:
                 tx['sugestao_forma_id']   = regra['forma_recebimento_id']
                 tx['sugestao_forma_nome'] = regra['forma_nome']
