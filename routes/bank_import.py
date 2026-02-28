@@ -251,7 +251,8 @@ def _auto_conciliar_por_regras(cursor, conn, account_id=None):
                       ba.cliente_id AS conta_cliente_id
                FROM bank_transactions bt
                INNER JOIN bank_accounts ba ON ba.id = bt.account_id
-               WHERE bt.status='pendente' AND bt.account_id=%s""",
+               WHERE (bt.status='pendente' OR (bt.status='conciliado' AND bt.conciliado_por='auto'))
+                 AND bt.account_id=%s""",
             (account_id,),
         )
     else:
@@ -261,7 +262,7 @@ def _auto_conciliar_por_regras(cursor, conn, account_id=None):
                       ba.cliente_id AS conta_cliente_id
                FROM bank_transactions bt
                INNER JOIN bank_accounts ba ON ba.id = bt.account_id
-               WHERE bt.status='pendente'"""
+               WHERE bt.status='pendente' OR (bt.status='conciliado' AND bt.conciliado_por='auto')"""
         )
     pendentes = cursor.fetchall()
     if not pendentes:
@@ -1326,7 +1327,10 @@ def api_auto_reconcile():
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
     try:
-        # 1. Auto-conciliação por CNPJ (mapeamentos salvos anteriormente)
+        # 1. Auto-conciliação por regras de descrição (regras têm prioridade sobre CNPJ)
+        por_regras = _auto_conciliar_por_regras(cursor, conn)
+
+        # 2. Auto-conciliação por CNPJ (apenas para os que ficaram pendentes após as regras)
         cursor.execute(
             """SELECT bt.id, bt.tipo, bsm.fornecedor_id, bsm.forma_recebimento_id
                FROM bank_transactions bt
@@ -1357,9 +1361,6 @@ def api_auto_reconcile():
             updated += 1
 
         conn.commit()
-
-        # 2. Auto-conciliação por regras de descrição
-        por_regras = _auto_conciliar_por_regras(cursor, conn)
 
         cursor.close()
         conn.close()
