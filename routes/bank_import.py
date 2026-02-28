@@ -928,13 +928,18 @@ def conciliar():
     # Aplicar regras por padrão de descrição a transações sem sugestão de CNPJ
     # -----------------------------------------------------------------------
     cursor.execute(
-        """SELECT r.id, r.padrao_descricao, r.tipo_match, r.tipo_transacao,
+        """SELECT r.id, r.padrao_descricao, r.padrao_secundario, r.tipo_match,
+                  r.tipo_transacao, r.account_id,
                   r.forma_recebimento_id, fr.nome AS forma_nome,
                   r.fornecedor_id, f.razao_social AS fornecedor_nome
            FROM bank_conciliacao_regras r
            LEFT JOIN formas_recebimento fr ON fr.id = r.forma_recebimento_id
            LEFT JOIN fornecedores f ON f.id = r.fornecedor_id
-           WHERE r.ativo = 1"""
+           WHERE r.ativo = 1
+           ORDER BY
+               (r.account_id IS NOT NULL) DESC,
+               (r.padrao_secundario IS NOT NULL AND r.padrao_secundario <> '') DESC,
+               r.id"""
     )
     regras_padrao = cursor.fetchall()
 
@@ -944,6 +949,10 @@ def conciliar():
         descricao = (tx.get('descricao') or '').upper()
         tipo_tx_r = tx.get('tipo', '')
         for regra in regras_padrao:
+            # Filtra por conta bancária
+            regra_account_id = regra.get('account_id')
+            if regra_account_id and int(regra_account_id) != int(tx['account_id']):
+                continue
             if regra['tipo_transacao'] != 'AMBOS' and regra['tipo_transacao'] != tipo_tx_r:
                 continue
             padrao = (regra['padrao_descricao'] or '').upper()
@@ -951,16 +960,21 @@ def conciliar():
                 bate = descricao == padrao
             else:
                 bate = padrao in descricao
-            if bate:
-                if regra['forma_recebimento_id']:
-                    tx['sugestao_forma_id']   = regra['forma_recebimento_id']
-                    tx['sugestao_forma_nome'] = regra['forma_nome']
-                    tx['sugestao_regra']      = True
-                if regra['fornecedor_id']:
-                    tx['sugestao_fornecedor_id']   = regra['fornecedor_id']
-                    tx['sugestao_fornecedor_nome'] = regra['fornecedor_nome']
-                    tx['sugestao_regra']           = True
-                break  # primeira regra que bate vence
+            if not bate:
+                continue
+            # Match secundário
+            padrao2 = (regra.get('padrao_secundario') or '').upper()
+            if padrao2 and padrao2 not in descricao:
+                continue
+            if regra['forma_recebimento_id']:
+                tx['sugestao_forma_id']   = regra['forma_recebimento_id']
+                tx['sugestao_forma_nome'] = regra['forma_nome']
+                tx['sugestao_regra']      = True
+            if regra['fornecedor_id']:
+                tx['sugestao_fornecedor_id']   = regra['fornecedor_id']
+                tx['sugestao_fornecedor_nome'] = regra['fornecedor_nome']
+                tx['sugestao_regra']           = True
+            break  # primeira regra que bate vence
 
     # Enriquece badge de sugestão de despesa (CNPJ → título/categoria)
     for tx in transacoes:
