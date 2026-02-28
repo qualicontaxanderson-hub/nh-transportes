@@ -521,9 +521,10 @@ def _get_titulos_despesas(cursor):
     return result
 
 
-def _conciliar_transferencia(cursor, conn, tx_id, conta_destino_id, usuario):
+def _conciliar_transferencia(cursor, conn, tx_id, conta_destino_id, usuario,
+                             salvar_mapeamento=True):
     """Registra transferência entre contas: concilia a origem e cria um CREDIT na conta destino.
-    Também salva mapeamento CNPJ→conta_destino para auto-aprendizado.
+    Salva mapeamento CNPJ→conta_destino apenas se salvar_mapeamento=True.
     """
     agora = _dt.datetime.now()
     cursor.execute(
@@ -578,7 +579,7 @@ def _conciliar_transferencia(cursor, conn, tx_id, conta_destino_id, usuario):
         )
     # Auto-aprender: salva CNPJ→conta_destino para sugestão nas próximas importações
     cnpj = tx.get('cnpj_cpf')
-    if cnpj:
+    if cnpj and salvar_mapeamento:
         try:
             cursor.execute(
                 """INSERT INTO bank_supplier_mapping (cnpj_cpf, conta_destino_id, tipo_debito)
@@ -594,12 +595,15 @@ def _conciliar_transferencia(cursor, conn, tx_id, conta_destino_id, usuario):
 
 def _conciliar_tx(cursor, conn, tx_id, acao, tipo_tx,
                   fornecedor_id, forma_recebimento_id, usuario,
-                  tipo_debito=None, despesas=None, troco_pix_id=None):
+                  tipo_debito=None, despesas=None, troco_pix_id=None,
+                  salvar_mapeamento=True):
     """Concilia (ou ignora) uma única transação e aprende mapeamentos.
 
     Para débitos com tipo_debito='despesa', *despesas* é uma lista de dicts:
         [{'titulo_id': int, 'categoria_id': int, 'valor': float, 'observacao': str}]
     Para débitos com tipo_debito='troco_pix', *troco_pix_id* deve ser informado.
+    Se salvar_mapeamento=False, a conciliação ocorre normalmente mas os dados NÃO
+    são salvos no bank_supplier_mapping (Lançamento Único / sem aprendizado).
     """
     if acao == 'ignorar':
         cursor.execute(
@@ -643,7 +647,7 @@ def _conciliar_tx(cursor, conn, tx_id, acao, tipo_tx,
             # Aprende: CNPJ → forma de recebimento
             cursor.execute("SELECT cnpj_cpf FROM bank_transactions WHERE id=%s", (tx_id,))
             row = cursor.fetchone()
-            if row and row.get('cnpj_cpf'):
+            if salvar_mapeamento and row and row.get('cnpj_cpf'):
                 cursor.execute(
                     """INSERT INTO bank_supplier_mapping
                            (cnpj_cpf, tipo_chave, total_conciliacoes, forma_recebimento_id)
@@ -720,7 +724,7 @@ def _conciliar_tx(cursor, conn, tx_id, acao, tipo_tx,
             (agora, usuario, tx_id),
         )
         # Auto-aprender: despesa INTEGRAL (não dividida) salva mapeamento para próxima importação
-        if len(despesas) == 1 and tx.get('cnpj_cpf'):
+        if salvar_mapeamento and len(despesas) == 1 and tx.get('cnpj_cpf'):
             d = despesas[0]
             cursor.execute(
                 """INSERT INTO bank_supplier_mapping
@@ -747,7 +751,7 @@ def _conciliar_tx(cursor, conn, tx_id, acao, tipo_tx,
         )
         cursor.execute("SELECT cnpj_cpf FROM bank_transactions WHERE id=%s", (tx_id,))
         row = cursor.fetchone()
-        if row and row.get('cnpj_cpf'):
+        if salvar_mapeamento and row and row.get('cnpj_cpf'):
             cursor.execute(
                 """INSERT INTO bank_supplier_mapping
                        (fornecedor_id, cnpj_cpf, tipo_chave, total_conciliacoes)
@@ -837,14 +841,19 @@ def conciliar():
         troco_pix_id     = request.form.get('troco_pix_id') or None
 
         ok = 0
+        salvar_mapeamento = (acao != 'lancamento_unico')
+        # Lançamento Único usa a mesma lógica de conciliação, apenas sem salvar mapeamento
+        acao_conciliar = 'conciliar' if acao == 'lancamento_unico' else acao
         for tx_id in tx_ids:
             if tipo_debito == 'transferencia' and conta_destino_id:
-                _conciliar_transferencia(cursor, conn, tx_id, conta_destino_id, usuario)
+                _conciliar_transferencia(cursor, conn, tx_id, conta_destino_id, usuario,
+                                         salvar_mapeamento=salvar_mapeamento)
             else:
-                _conciliar_tx(cursor, conn, tx_id, acao, tipo_tx,
+                _conciliar_tx(cursor, conn, tx_id, acao_conciliar, tipo_tx,
                               fornecedor_id, forma_recebimento_id, usuario,
                               tipo_debito=tipo_debito, despesas=despesas or None,
-                              troco_pix_id=troco_pix_id)
+                              troco_pix_id=troco_pix_id,
+                              salvar_mapeamento=salvar_mapeamento)
             ok += 1
 
         if acao == 'ignorar':

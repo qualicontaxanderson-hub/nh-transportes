@@ -112,6 +112,10 @@
                   disabled onclick="ignorarSelecionados()">
             <i class="bi bi-x-circle"></i> Ignorar Selecionados
           </button>
+          <button type="button" class="btn btn-outline-warning btn-sm" id="btnLancamentoUnico"
+                  disabled onclick="abrirLancamentoUnico()">
+            <i class="bi bi-1-circle"></i> Lançamento Único
+          </button>
         </div>
 
         <div class="table-responsive">
@@ -607,6 +611,7 @@
 const checkAll = document.getElementById('checkAll');
 const btnConciliarSel = document.getElementById('btnConciliarSelecionados');
 const btnIgnorarSel   = document.getElementById('btnIgnorarSelecionados');
+const btnLancUnico    = document.getElementById('btnLancamentoUnico');
 const contador        = document.getElementById('contadorSelecionados');
 
 function atualizarBotoes() {
@@ -614,6 +619,7 @@ function atualizarBotoes() {
   if (contador) contador.textContent = n;
   if (btnConciliarSel) btnConciliarSel.disabled = n === 0;
   if (btnIgnorarSel)   btnIgnorarSel.disabled   = n === 0;
+  if (btnLancUnico)    btnLancUnico.disabled     = n !== 1;
 }
 
 if (checkAll) {
@@ -642,6 +648,31 @@ function ignorarSelecionados() {
   form.appendChild(inp);
   form.submit();
 }
+
+function abrirLancamentoUnico() {
+  const checked = document.querySelectorAll('.tx-check:checked');
+  if (checked.length !== 1) return;
+  // Encontra o botão .btn-conciliar da mesma linha e reutiliza sua lógica
+  const tr = checked[0].closest('tr');
+  const btn = tr ? tr.querySelector('.btn-conciliar') : null;
+  if (!btn) return;
+  // Simula clique no btn-conciliar para preencher o modal
+  btn.click();
+  // Troca a ação para lancamento_unico após o modal ser populado
+  const acaoInput = document.querySelector('#formConciliar input[name="acao"]');
+  if (acaoInput) acaoInput.value = 'lancamento_unico';
+  // Atualiza o título do modal para indicar modo Lançamento Único
+  const titulo = document.querySelector('#modalConciliar .modal-title');
+  if (titulo) titulo.innerHTML = '<i class="bi bi-1-circle"></i> Lançamento Único (sem memorizar)';
+}
+
+// Restaura o título e ação padrão ao fechar o modal
+document.getElementById('modalConciliar')?.addEventListener('hidden.bs.modal', function() {
+  const acaoInput = document.querySelector('#formConciliar input[name="acao"]');
+  if (acaoInput) acaoInput.value = 'conciliar';
+  const titulo = document.querySelector('#modalConciliar .modal-title');
+  if (titulo) titulo.innerHTML = '<i class="bi bi-link-45deg"></i> Conciliar Transação';
+});
 
 document.querySelectorAll('.btn-ignorar').forEach(btn => {
   btn.addEventListener('click', function() {
