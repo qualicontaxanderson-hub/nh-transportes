@@ -481,6 +481,29 @@ def upload():
     return redirect(url_for('bank_import.index'))
 
 
+def _extrair_padrao_descricao(descricao):
+    """Extrai prefixo significativo da descrição até o primeiro CPF (11 dígitos) ou
+    CNPJ (14 dígitos). Usado para gerar regras de conciliação por padrão de descrição,
+    evitando que a forma de recebimento fique vinculada ao CPF/CNPJ do remetente
+    (o mesmo CPF pode aparecer em PIX, depósito em dinheiro, cheque, etc.).
+    """
+    # Mínimo de 5 caracteres antes do CPF/CNPJ para garantir prefixo significativo
+    _MIN_PREFIX = 5
+    # Limite do valor armazenável na coluna padrao_descricao (VARCHAR(200)); usamos 100
+    # para deixar margem e cobrir variações de maiúsculas/espaços durante o matching.
+    _MAX_PADRAO = 100
+    desc = (descricao or '').strip()
+    if not desc:
+        return ''
+    # Prioriza CPF (11 dígitos) antes de CNPJ (14 dígitos); ambos isolados por lookahead
+    m = re.search(r'(?<!\d)(\d{11}|\d{14})(?!\d)', desc)
+    if m and m.start() > _MIN_PREFIX:
+        padrao = desc[:m.start()].rstrip(' -_/')
+    else:
+        padrao = desc[:50]  # fallback: primeiros 50 chars quando não há CPF/CNPJ
+    return padrao.strip()[:_MAX_PADRAO]
+
+
 def _get_formas_recebimento(cursor):
     """Retorna formas de recebimento ativas para uso na conciliação.
     Inclui registros com ativo IS NULL para compatibilidade com tabelas
@@ -647,20 +670,42 @@ def _conciliar_tx(cursor, conn, tx_id, acao, tipo_tx,
                    WHERE id=%s""",
                 (forma_recebimento_id, agora, usuario, tx_id),
             )
-            # Aprende: CNPJ → forma de recebimento
-            cursor.execute("SELECT cnpj_cpf FROM bank_transactions WHERE id=%s", (tx_id,))
-            row = cursor.fetchone()
-            if salvar_mapeamento and row and row.get('cnpj_cpf'):
+            # Aprende: padrão de descrição → forma de recebimento (regra automática).
+            # NÃO vincula ao CNPJ/CPF do remetente porque o mesmo CPF pode aparecer
+            # em transações de tipos distintos (PIX, depósito em dinheiro, cheque…).
+            if salvar_mapeamento:
                 cursor.execute(
-                    """INSERT INTO bank_supplier_mapping
-                           (cnpj_cpf, tipo_chave, total_conciliacoes, forma_recebimento_id)
-                       VALUES (%s, 'cnpj', 1, %s)
-                       ON DUPLICATE KEY UPDATE
-                           forma_recebimento_id=%s,
-                           total_conciliacoes=total_conciliacoes+1,
-                           atualizado_em=NOW()""",
-                    (row['cnpj_cpf'], forma_recebimento_id, forma_recebimento_id),
+                    "SELECT descricao FROM bank_transactions WHERE id=%s", (tx_id,)
                 )
+                tx_row = cursor.fetchone()
+                if tx_row and tx_row.get('descricao'):
+                    padrao = _extrair_padrao_descricao(tx_row['descricao'])
+                    if padrao:
+                        cursor.execute(
+                            """SELECT id FROM bank_conciliacao_regras
+                               WHERE padrao_descricao = %s
+                                 AND tipo_transacao = 'CREDIT'
+                                 AND ativo = 1
+                               LIMIT 1""",
+                            (padrao,),
+                        )
+                        regra_existente = cursor.fetchone()
+                        if regra_existente:
+                            cursor.execute(
+                                """UPDATE bank_conciliacao_regras
+                                   SET forma_recebimento_id = %s,
+                                       total_aplicacoes = total_aplicacoes + 1
+                                   WHERE id = %s""",
+                                (forma_recebimento_id, regra_existente['id']),
+                            )
+                        else:
+                            cursor.execute(
+                                """INSERT INTO bank_conciliacao_regras
+                                       (padrao_descricao, tipo_match, tipo_transacao,
+                                        forma_recebimento_id, total_aplicacoes)
+                                   VALUES (%s, 'contem', 'CREDIT', %s, 1)""",
+                                (padrao, forma_recebimento_id),
+                            )
     elif tipo_debito == 'troco_pix' and troco_pix_id:
         # Débito → Troco PIX: vincula a transação bancária ao registro de troco_pix
         try:
@@ -989,6 +1034,15 @@ def conciliar():
                 tx['sugestao_fornecedor_nome'] = regra['fornecedor_nome']
                 tx['sugestao_regra']           = True
             break  # primeira regra que bate vence
+
+    # Para créditos sem regra de descrição correspondente: remove a sugestão de forma
+    # que veio do bank_supplier_mapping por CNPJ/CPF.  O mesmo CPF pode aparecer em
+    # transações de tipos distintos (PIX, depósito em dinheiro, cheque…), tornando a
+    # sugestão por CNPJ não confiável para créditos.
+    for tx in transacoes:
+        if tx.get('tipo') == 'CREDIT' and not tx.get('sugestao_regra'):
+            tx['sugestao_forma_id']   = None
+            tx['sugestao_forma_nome'] = None
 
     # Enriquece badge de sugestão de despesa (CNPJ → título/categoria)
     for tx in transacoes:
