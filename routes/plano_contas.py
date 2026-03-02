@@ -10,9 +10,11 @@ bp = Blueprint('plano_contas', __name__, url_prefix='/plano-contas')
 def _get_grupos(cursor):
     cursor.execute(
         """SELECT g.id, g.codigo, g.nome, g.descricao, g.ativo,
-                  COUNT(c.id) AS total_clientes
+                  COUNT(DISTINCT c.id)  AS total_contas,
+                  COUNT(DISTINCT cl.id) AS total_clientes
            FROM plano_contas_grupos g
-           LEFT JOIN clientes c ON c.grupo_contabil_id = g.id
+           LEFT JOIN plano_contas_contas c  ON c.grupo_id = g.id
+           LEFT JOIN clientes cl ON cl.grupo_contabil_id = g.id
            GROUP BY g.id
            ORDER BY g.codigo"""
     )
@@ -30,6 +32,8 @@ def lista():
     conn.close()
     return render_template('plano_contas/lista.html', grupos=grupos)
 
+
+# ─── Grupo: novo / editar / excluir ─────────────────────────────────────────
 
 @bp.route('/novo', methods=['GET', 'POST'])
 @login_required
@@ -117,6 +121,266 @@ def editar(id):
     return render_template('plano_contas/grupo_form.html', grupo=grupo, form=grupo)
 
 
+@bp.route('/excluir/<int:id>', methods=['POST'])
+@login_required
+@admin_required
+def excluir(id):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        # Remove vínculo dos clientes antes de excluir o grupo
+        cursor.execute(
+            "UPDATE clientes SET grupo_contabil_id = NULL WHERE grupo_contabil_id = %s", (id,)
+        )
+        cursor.execute("DELETE FROM plano_contas_grupos WHERE id = %s", (id,))
+        conn.commit()
+        flash('Grupo excluído com sucesso!', 'success')
+    except Exception as e:
+        conn.rollback()
+        flash(f'Erro ao excluir grupo: {e}', 'danger')
+    finally:
+        cursor.close()
+        conn.close()
+    return redirect(url_for('plano_contas.lista'))
+
+
+# ─── Grupo: clonar ──────────────────────────────────────────────────────────
+
+@bp.route('/clonar/<int:id>', methods=['POST'])
+@login_required
+@admin_required
+def clonar(id):
+    """Clona um grupo e todas as suas contas, gerando um novo código automaticamente."""
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        cursor.execute("SELECT * FROM plano_contas_grupos WHERE id = %s", (id,))
+        grupo = cursor.fetchone()
+        if not grupo:
+            flash('Grupo não encontrado.', 'danger')
+            return redirect(url_for('plano_contas.lista'))
+
+        novo_codigo = grupo['codigo'] + '_copia'
+        novo_nome   = grupo['nome'] + ' (cópia)'
+
+        # Garante código único com uma única query
+        base_codigo = novo_codigo
+        cur2 = conn.cursor(dictionary=True)
+        cur2.execute(
+            "SELECT codigo FROM plano_contas_grupos WHERE codigo LIKE %s",
+            (base_codigo + '%',),
+        )
+        codigos_existentes = {row['codigo'] for row in cur2.fetchall()}
+        cur2.close()
+
+        sufixo = 1
+        while novo_codigo in codigos_existentes:
+            sufixo += 1
+            novo_codigo = f"{base_codigo}{sufixo}"
+
+        cur3 = conn.cursor()
+        cur3.execute(
+            "INSERT INTO plano_contas_grupos (codigo, nome, descricao) VALUES (%s, %s, %s)",
+            (novo_codigo, novo_nome, grupo['descricao']),
+        )
+        novo_grupo_id = cur3.lastrowid
+
+        # Copia as contas do grupo original
+        cur3.execute(
+            "SELECT codigo, nome, descricao FROM plano_contas_contas WHERE grupo_id = %s",
+            (id,),
+        )
+        contas = cur3.fetchall()
+        if contas:
+            cur3.executemany(
+                "INSERT INTO plano_contas_contas (grupo_id, codigo, nome, descricao) VALUES (%s, %s, %s, %s)",
+                [(novo_grupo_id, codigo, nome, descricao) for codigo, nome, descricao in contas],
+            )
+
+        conn.commit()
+        cur3.close()
+        flash(f'Grupo clonado com sucesso! Novo código: {novo_codigo}', 'success')
+        return redirect(url_for('plano_contas.detalhe', id=novo_grupo_id))
+    except Exception as e:
+        conn.rollback()
+        flash(f'Erro ao clonar grupo: {e}', 'danger')
+        return redirect(url_for('plano_contas.lista'))
+    finally:
+        cursor.close()
+        conn.close()
+
+
+# ─── Grupo: detalhe (contas) ─────────────────────────────────────────────────
+
+@bp.route('/<int:id>/contas')
+@login_required
+@admin_required
+def detalhe(id):
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    cursor.execute("SELECT * FROM plano_contas_grupos WHERE id = %s", (id,))
+    grupo = cursor.fetchone()
+    if not grupo:
+        cursor.close()
+        conn.close()
+        flash('Grupo não encontrado.', 'danger')
+        return redirect(url_for('plano_contas.lista'))
+
+    cursor.execute(
+        """SELECT * FROM plano_contas_contas
+           WHERE grupo_id = %s
+           ORDER BY codigo""",
+        (id,),
+    )
+    contas = cursor.fetchall()
+    cursor.close()
+    conn.close()
+    return render_template('plano_contas/detalhe.html', grupo=grupo, contas=contas)
+
+
+# ─── Conta: nova / editar / excluir ─────────────────────────────────────────
+
+@bp.route('/<int:grupo_id>/contas/nova', methods=['GET', 'POST'])
+@login_required
+@admin_required
+def nova_conta(grupo_id):
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    cursor.execute("SELECT * FROM plano_contas_grupos WHERE id = %s", (grupo_id,))
+    grupo = cursor.fetchone()
+    cursor.close()
+    conn.close()
+
+    if not grupo:
+        flash('Grupo não encontrado.', 'danger')
+        return redirect(url_for('plano_contas.lista'))
+
+    if request.method == 'POST':
+        codigo    = request.form.get('codigo', '').strip()
+        nome      = request.form.get('nome', '').strip()
+        descricao = request.form.get('descricao', '').strip() or None
+
+        if not codigo or not nome:
+            flash('Código e Nome são obrigatórios.', 'danger')
+            return render_template('plano_contas/conta_form.html',
+                                   grupo=grupo, conta=None, form=request.form)
+
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        try:
+            cursor.execute(
+                "INSERT INTO plano_contas_contas (grupo_id, codigo, nome, descricao) VALUES (%s, %s, %s, %s)",
+                (grupo_id, codigo, nome, descricao),
+            )
+            conn.commit()
+            flash('Conta criada com sucesso!', 'success')
+            return redirect(url_for('plano_contas.detalhe', id=grupo_id))
+        except Exception as e:
+            conn.rollback()
+            flash(f'Erro ao criar conta: {e}', 'danger')
+            return render_template('plano_contas/conta_form.html',
+                                   grupo=grupo, conta=None, form=request.form)
+        finally:
+            cursor.close()
+            conn.close()
+
+    return render_template('plano_contas/conta_form.html',
+                           grupo=grupo, conta=None, form={})
+
+
+@bp.route('/contas/<int:conta_id>/editar', methods=['GET', 'POST'])
+@login_required
+@admin_required
+def editar_conta(conta_id):
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    cursor.execute(
+        """SELECT c.*, g.nome AS grupo_nome, g.codigo AS grupo_codigo
+           FROM plano_contas_contas c
+           JOIN plano_contas_grupos g ON g.id = c.grupo_id
+           WHERE c.id = %s""",
+        (conta_id,),
+    )
+    conta = cursor.fetchone()
+    cursor.close()
+    conn.close()
+
+    if not conta:
+        flash('Conta não encontrada.', 'danger')
+        return redirect(url_for('plano_contas.lista'))
+
+    grupo = {'id': conta['grupo_id'], 'nome': conta['grupo_nome'],
+             'codigo': conta['grupo_codigo']}
+
+    if request.method == 'POST':
+        codigo    = request.form.get('codigo', '').strip()
+        nome      = request.form.get('nome', '').strip()
+        descricao = request.form.get('descricao', '').strip() or None
+        ativo     = 1 if request.form.get('ativo') else 0
+
+        if not codigo or not nome:
+            flash('Código e Nome são obrigatórios.', 'danger')
+            return render_template('plano_contas/conta_form.html',
+                                   grupo=grupo, conta=conta, form=request.form)
+
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        try:
+            cursor.execute(
+                """UPDATE plano_contas_contas
+                   SET codigo=%s, nome=%s, descricao=%s, ativo=%s
+                   WHERE id=%s""",
+                (codigo, nome, descricao, ativo, conta_id),
+            )
+            conn.commit()
+            flash('Conta atualizada com sucesso!', 'success')
+            return redirect(url_for('plano_contas.detalhe', id=conta['grupo_id']))
+        except Exception as e:
+            conn.rollback()
+            flash(f'Erro ao atualizar conta: {e}', 'danger')
+            return render_template('plano_contas/conta_form.html',
+                                   grupo=grupo, conta=conta, form=request.form)
+        finally:
+            cursor.close()
+            conn.close()
+
+    return render_template('plano_contas/conta_form.html',
+                           grupo=grupo, conta=conta, form=conta)
+
+
+@bp.route('/contas/<int:conta_id>/excluir', methods=['POST'])
+@login_required
+@admin_required
+def excluir_conta(conta_id):
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    cursor.execute("SELECT grupo_id FROM plano_contas_contas WHERE id = %s", (conta_id,))
+    row = cursor.fetchone()
+    cursor.close()
+    conn.close()
+
+    if not row:
+        flash('Conta não encontrada.', 'danger')
+        return redirect(url_for('plano_contas.lista'))
+
+    grupo_id = row['grupo_id']
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute("DELETE FROM plano_contas_contas WHERE id = %s", (conta_id,))
+        conn.commit()
+        flash('Conta excluída com sucesso!', 'success')
+    except Exception as e:
+        conn.rollback()
+        flash(f'Erro ao excluir conta: {e}', 'danger')
+    finally:
+        cursor.close()
+        conn.close()
+    return redirect(url_for('plano_contas.detalhe', id=grupo_id))
+
+
+# ─── Grupo: vincular clientes / empresas ─────────────────────────────────────
+
 @bp.route('/clientes/<int:id>', methods=['GET', 'POST'])
 @login_required
 @admin_required
@@ -159,7 +423,7 @@ def vincular_clientes(id):
         cur2.close()
         cursor.close()
         conn.close()
-        flash('Clientes vinculados com sucesso!', 'success')
+        flash('Empresas vinculadas com sucesso!', 'success')
         return redirect(url_for('plano_contas.lista'))
 
     # GET: lista todos os clientes marcando os já vinculados
@@ -174,25 +438,3 @@ def vincular_clientes(id):
     return render_template('plano_contas/vincular_clientes.html',
                            grupo=grupo, clientes=clientes)
 
-
-@bp.route('/excluir/<int:id>', methods=['POST'])
-@login_required
-@admin_required
-def excluir(id):
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    try:
-        # Remove vínculo dos clientes antes de excluir o grupo
-        cursor.execute(
-            "UPDATE clientes SET grupo_contabil_id = NULL WHERE grupo_contabil_id = %s", (id,)
-        )
-        cursor.execute("DELETE FROM plano_contas_grupos WHERE id = %s", (id,))
-        conn.commit()
-        flash('Grupo excluído com sucesso!', 'success')
-    except Exception as e:
-        conn.rollback()
-        flash(f'Erro ao excluir grupo: {e}', 'danger')
-    finally:
-        cursor.close()
-        conn.close()
-    return redirect(url_for('plano_contas.lista'))

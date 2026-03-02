@@ -19,90 +19,97 @@
     </a>
   </div>
 
-  <div class="card shadow-sm">
-    <div class="card-header py-2" style="background:#1D63A5;color:white;">
-      <h6 class="mb-0"><i class="bi bi-list-ul"></i> Grupos Cadastrados</h6>
+  {% if grupos %}
+  <div class="row">
+    {% for g in grupos %}
+    <div class="col-md-6 col-lg-4 mb-3">
+      <div class="card h-100 shadow-sm hover-card {% if not g.ativo %}border-secondary opacity-75{% endif %}">
+        <div class="card-body">
+          <div class="d-flex justify-content-between align-items-start mb-2">
+            <div>
+              <span class="badge bg-secondary mb-1" style="font-family:monospace;font-size:0.85em;">
+                {{ g.codigo }}
+              </span>
+              {% if not g.ativo %}
+              <span class="badge bg-secondary ms-1" style="font-size:0.75em;">Inativo</span>
+              {% endif %}
+              <h5 class="card-title text-primary mb-0 mt-1" style="font-size:1rem;">
+                <i class="bi bi-folder-fill"></i> {{ g.nome }}
+              </h5>
+            </div>
+            <div class="btn-group btn-group-sm ms-2">
+              <a href="{{ url_for('plano_contas.editar', id=g.id) }}"
+                 class="btn btn-outline-warning" title="Editar grupo">
+                <i class="bi bi-pencil"></i>
+              </a>
+              <form method="POST" action="{{ url_for('plano_contas.excluir', id=g.id) }}"
+                    style="display:inline;"
+                    onsubmit="return confirm('Excluir o grupo \'{{ g.nome }}\'? Todos os vínculos com empresas serão removidos.');">
+                <button type="submit" class="btn btn-outline-danger" title="Excluir grupo">
+                  <i class="bi bi-trash"></i>
+                </button>
+              </form>
+            </div>
+          </div>
+
+          {% if g.descricao %}
+          <p class="card-text text-muted small mb-2">{{ g.descricao }}</p>
+          {% endif %}
+
+          <div class="d-flex justify-content-between align-items-center mt-2 flex-wrap gap-1">
+            <div class="d-flex gap-1">
+              <span class="badge bg-info text-dark" title="Contas neste grupo">
+                <i class="bi bi-list-ol"></i> {{ g.total_contas }} conta(s)
+              </span>
+              <a href="{{ url_for('plano_contas.vincular_clientes', id=g.id) }}"
+                 class="badge bg-primary text-white text-decoration-none"
+                 title="Gerenciar empresas deste grupo">
+                <i class="bi bi-building"></i> {{ g.total_clientes }} empresa(s)
+              </a>
+            </div>
+            <div class="d-flex gap-1">
+              <a href="{{ url_for('plano_contas.detalhe', id=g.id) }}"
+                 class="btn btn-sm btn-primary">
+                Ver Contas <i class="bi bi-arrow-right"></i>
+              </a>
+              <form method="POST" action="{{ url_for('plano_contas.clonar', id=g.id) }}"
+                    style="display:inline;"
+                    onsubmit="return confirm('Clonar o grupo \'{{ g.nome }}\' com todas as suas contas?');">
+                <button type="submit" class="btn btn-sm btn-outline-secondary" title="Clonar grupo">
+                  <i class="bi bi-copy"></i> Clonar
+                </button>
+              </form>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
-    <div class="card-body p-0">
-      {% if grupos %}
-      <div class="table-responsive">
-        <table class="table table-hover table-sm mb-0" style="font-size:0.88rem;">
-          <thead class="table-light">
-            <tr>
-              <th>Código Contábil</th>
-              <th>Nome / Descrição</th>
-              <th class="text-center">Clientes</th>
-              <th class="text-center">Status</th>
-              <th class="text-center">Ações</th>
-            </tr>
-          </thead>
-          <tbody>
-            {% for g in grupos %}
-            <tr>
-              <td>
-                <span class="badge bg-secondary" style="font-family:monospace;font-size:0.9em;letter-spacing:0.04em;">
-                  {{ g.codigo }}
-                </span>
-              </td>
-              <td>
-                <strong>{{ g.nome }}</strong>
-                {% if g.descricao %}
-                <br><small class="text-muted">{{ g.descricao }}</small>
-                {% endif %}
-              </td>
-              <td class="text-center">
-                <a href="{{ url_for('plano_contas.vincular_clientes', id=g.id) }}"
-                   class="badge bg-info text-dark text-decoration-none"
-                   title="Gerenciar clientes deste grupo">
-                  {{ g.total_clientes }} cliente(s)
-                </a>
-              </td>
-              <td class="text-center">
-                {% if g.ativo %}
-                <span class="badge bg-success">Ativo</span>
-                {% else %}
-                <span class="badge bg-secondary">Inativo</span>
-                {% endif %}
-              </td>
-              <td class="text-center text-nowrap">
-                <a href="{{ url_for('plano_contas.vincular_clientes', id=g.id) }}"
-                   class="btn btn-sm btn-outline-info" title="Vincular Clientes">
-                  <i class="bi bi-people"></i>
-                </a>
-                <a href="{{ url_for('plano_contas.editar', id=g.id) }}"
-                   class="btn btn-sm btn-outline-primary" title="Editar">
-                  <i class="bi bi-pencil"></i>
-                </a>
-                <form method="POST" action="{{ url_for('plano_contas.excluir', id=g.id) }}"
-                      style="display:inline;"
-                      onsubmit="return confirm('Excluir o grupo \'{{ g.nome }}\'? Os clientes vinculados serão desvinculados.');">
-                  <button type="submit" class="btn btn-sm btn-outline-danger" title="Excluir">
-                    <i class="bi bi-trash"></i>
-                  </button>
-                </form>
-              </td>
-            </tr>
-            {% endfor %}
-          </tbody>
-        </table>
-      </div>
-      {% else %}
-      <div class="p-4 text-center text-muted">
-        <i class="bi bi-journal-x fs-1"></i>
-        <p class="mt-2 mb-0">Nenhum grupo contábil cadastrado.</p>
-        <a href="{{ url_for('plano_contas.novo') }}" class="btn btn-primary btn-sm mt-2">
-          <i class="bi bi-plus-circle"></i> Criar primeiro grupo
-        </a>
-      </div>
-      {% endif %}
+    {% endfor %}
+  </div>
+  {% else %}
+  <div class="card shadow-sm">
+    <div class="card-body p-4 text-center text-muted">
+      <i class="bi bi-journal-x fs-1"></i>
+      <p class="mt-2 mb-0">Nenhum grupo contábil cadastrado.</p>
+      <a href="{{ url_for('plano_contas.novo') }}" class="btn btn-primary btn-sm mt-2">
+        <i class="bi bi-plus-circle"></i> Criar primeiro grupo
+      </a>
     </div>
   </div>
+  {% endif %}
 
   <div class="mt-3 p-3 bg-light border rounded small text-muted">
     <i class="bi bi-info-circle text-primary"></i>
-    <strong>Como usar:</strong> Cada grupo possui um <em>código contábil</em> (ex.: <code>11211</code>) e um nome
-    (ex.: <em>Conta Sicoob</em>). Clique em <strong>Vincular Clientes</strong> para associar os clientes ao grupo.
-    Clientes vinculados herdam o código contábil do grupo para exportação contábil.
+    <strong>Como usar:</strong> Crie um <em>Grupo</em> (ex.: Plano Sicoob 2025) com um código identificador.
+    Dentro de cada grupo, adicione as <em>Contas</em> com seus códigos contábeis específicos
+    (ex.: Banco Bradesco = <code>1121</code> neste grupo). Use <strong>Clonar</strong> para duplicar um grupo
+    e apenas ajustar o necessário. Depois, em <strong>Vincular Empresas</strong>, associe as empresas ao grupo.
   </div>
 </div>
+
+<style>
+  .hover-card { transition: transform 0.2s, box-shadow 0.2s; }
+  .hover-card:hover { transform: translateY(-3px); box-shadow: 0 4px 12px rgba(0,0,0,0.15) !important; }
+</style>
 {% endblock %}
+

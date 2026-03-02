@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Vincular Clientes — {{ grupo.codigo }} {{ grupo.nome }} — NH Transportes{% endblock %}
+{% block title %}Vincular Empresas — {{ grupo.codigo }} {{ grupo.nome }} — NH Transportes{% endblock %}
 
 {% block content %}
 <div class="container-fluid">
@@ -7,12 +7,13 @@
     <ol class="breadcrumb" style="font-size:0.85rem;">
       <li class="breadcrumb-item"><a href="{{ url_for('index') }}">Dashboard</a></li>
       <li class="breadcrumb-item"><a href="{{ url_for('plano_contas.lista') }}">Plano de Contas</a></li>
-      <li class="breadcrumb-item active">Vincular Clientes</li>
+      <li class="breadcrumb-item"><a href="{{ url_for('plano_contas.detalhe', id=grupo.id) }}">{{ grupo.nome }}</a></li>
+      <li class="breadcrumb-item active">Vincular Empresas</li>
     </ol>
   </nav>
 
   <h4 class="mb-1" style="color:#1D63A5;">
-    <i class="bi bi-people-fill"></i> Clientes do Grupo
+    <i class="bi bi-building-fill"></i> Empresas do Grupo
   </h4>
   <p class="text-muted mb-3" style="font-size:0.9rem;">
     Grupo: <strong><code>{{ grupo.codigo }}</code> — {{ grupo.nome }}</strong>
@@ -21,7 +22,7 @@
 
   <div class="card shadow-sm" style="max-width:720px;">
     <div class="card-header py-2" style="background:#1D63A5;color:white;">
-      <h6 class="mb-0">Selecione os clientes que pertencem a este grupo</h6>
+      <h6 class="mb-0">Selecione as empresas que utilizam este plano de contas</h6>
     </div>
     <div class="card-body">
       <form method="POST">
@@ -46,17 +47,17 @@
               {% endif %}
               {% if c.grupo_contabil_id and c.grupo_contabil_id != grupo.id %}
                 <span class="badge bg-warning text-dark ms-1" style="font-size:0.72rem;"
-                      title="Este cliente já pertence a outro grupo">outro grupo</span>
+                      title="Esta empresa já pertence a outro grupo">outro grupo</span>
               {% endif %}
             </label>
           </div>
           {% else %}
-          <p class="text-muted text-center py-3 mb-0">Nenhum cliente cadastrado.</p>
+          <p class="text-muted text-center py-3 mb-0">Nenhuma empresa cadastrada.</p>
           {% endfor %}
         </div>
 
         <div class="d-flex gap-2 mt-3">
-          <a href="{{ url_for('plano_contas.lista') }}" class="btn btn-secondary btn-sm">
+          <a href="{{ url_for('plano_contas.detalhe', id=grupo.id) }}" class="btn btn-secondary btn-sm">
             <i class="bi bi-arrow-left"></i> Voltar
           </a>
           <button type="submit" class="btn btn-primary btn-sm">
