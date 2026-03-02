@@ -242,7 +242,7 @@ def fretes_comissao_motorista():
             LEFT JOIN motoristas m ON f.motoristas_id = m.id
             LEFT JOIN quantidades q ON f.quantidade_id = q.id
             WHERE 1=1 {where_sql}
-            ORDER BY f.data_frete DESC
+            ORDER BY motorista_nome ASC, f.data_frete DESC
         """
         cursor.execute(q_det, args)
         fretes = cursor.fetchall()
@@ -284,8 +284,10 @@ def fretes_lucro():
               COALESCE(SUM(f.valor_total_frete),0) AS total_valor_frete,
               COALESCE(SUM(f.comissao_cte),0) AS total_comissao_cte,
               COALESCE(SUM(f.comissao_motorista),0) AS total_comissao_motorista,
-              COALESCE(SUM(f.lucro),0) AS total_lucro
+              COALESCE(SUM(f.lucro),0) AS total_lucro,
+              COALESCE(SUM(COALESCE(f.quantidade_manual, q.valor, 0)),0) AS total_quantidade
             FROM fretes f
+            LEFT JOIN quantidades q ON f.quantidade_id = q.id
             WHERE 1=1 {where_sql}
         """
         cursor.execute(q_totals, args)
@@ -294,6 +296,25 @@ def fretes_lucro():
         total_comissao_cte = totals.get('total_comissao_cte', 0)
         total_comissao_motorista = totals.get('total_comissao_motorista', 0)
         total_lucro = totals.get('total_lucro', 0)
+        total_quantidade = totals.get('total_quantidade', 0)
+
+        q_resumo = f"""
+            SELECT
+              COALESCE(c.razao_social, c.nome_fantasia, '') AS cliente_nome,
+              COALESCE(SUM(COALESCE(f.quantidade_manual, q.valor, 0)),0) AS quantidade_total,
+              COALESCE(SUM(f.valor_total_frete),0) AS valor_frete_total,
+              COALESCE(SUM(f.comissao_cte),0) AS comissao_cte_total,
+              COALESCE(SUM(f.comissao_motorista),0) AS comissao_motorista_total,
+              COALESCE(SUM(f.lucro),0) AS lucro_total
+            FROM fretes f
+            LEFT JOIN clientes c ON f.clientes_id = c.id
+            LEFT JOIN quantidades q ON f.quantidade_id = q.id
+            WHERE 1=1 {where_sql}
+            GROUP BY c.id, c.razao_social, c.nome_fantasia
+            ORDER BY cliente_nome ASC
+        """
+        cursor.execute(q_resumo, args)
+        resumo_clientes = cursor.fetchall()
 
         q_det = f"""
             SELECT f.data_frete,
@@ -330,6 +351,8 @@ def fretes_lucro():
         total_comissao_cte=total_comissao_cte,
         total_comissao_motorista=total_comissao_motorista,
         total_lucro=total_lucro,
+        total_quantidade=total_quantidade,
+        resumo_clientes=resumo_clientes,
         fretes=fretes
     )
 

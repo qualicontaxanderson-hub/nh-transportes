@@ -26,6 +26,16 @@
     </div>
 
     <div class="col-12">
+      <label class="form-label">Cliente</label>
+      <select name="cliente_id" class="form-select">
+        <option value="">Todos</option>
+        {% for c in clientes %}
+        <option value="{{ c.id }}" {% if cliente_id == c.id %}selected{% endif %}>{{ c.razao_social }}</option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <div class="col-12">
       <label class="form-label">Motorista</label>
       <select name="motorista_id" class="form-select">
         <option value="">Todos</option>
@@ -95,28 +105,56 @@
               <th>Data</th>
               <th>Cliente</th>
               <th>Produto</th>
-              <th>Motorista</th>
               <th style="text-align:right;">Quantidade (L)</th>
               <th style="text-align:right;">Valor Frete (R$)</th>
               <th style="text-align:right;">Comissão Motorista (R$)</th>
             </tr>
           </thead>
           <tbody>
+            {% set ns = namespace(cur_motorista='', sub_qtd=0, sub_frete=0, sub_comissao=0) %}
             {% for item in fretes %}
-            <tr>
-              <td>{{ item.data_frete.strftime('%d/%m/%Y') if item.data_frete }}</td>
-              <td>{{ item.cliente_nome or '-' }}</td>
-              <td>{{ item.produto_nome or '-' }}</td>
-              <td>{{ item.motorista_nome or '-' }}</td>
-              <td style="text-align:right;">{{ "{:,.2f}".format(item.quantidade or 0).replace(",", "X").replace(".", ",").replace("X", ".") }}</td>
-              <td style="text-align:right;">{{ "R$ {:,.2f}".format(item.valor_total_frete|float if item.valor_total_frete else 0).replace(",", "X").replace(".", ",").replace("X", ".") }}</td>
-              <td style="text-align:right;">{{ "R$ {:,.2f}".format(item.comissao_motorista|float if item.comissao_motorista else 0).replace(",", "X").replace(".", ",").replace("X", ".") }}</td>
-            </tr>
+              {% if item.motorista_nome != ns.cur_motorista %}
+                {% if ns.cur_motorista != '' %}
+                <tr style="background:#f0f4fa; font-weight:600;">
+                  <td colspan="3" class="text-end">Subtotal {{ ns.cur_motorista }}</td>
+                  <td style="text-align:right;">{{ "{:,.2f}".format(ns.sub_qtd).replace(",","X").replace(".",",").replace("X",".") }}</td>
+                  <td style="text-align:right;">{{ "R$ {:,.2f}".format(ns.sub_frete).replace(",","X").replace(".",",").replace("X",".") }}</td>
+                  <td style="text-align:right;">{{ "R$ {:,.2f}".format(ns.sub_comissao).replace(",","X").replace(".",",").replace("X",".") }}</td>
+                </tr>
+                {% endif %}
+                {% set ns.cur_motorista = item.motorista_nome %}
+                {% set ns.sub_qtd = 0 %}
+                {% set ns.sub_frete = 0 %}
+                {% set ns.sub_comissao = 0 %}
+                <tr style="background:#1D63A5; color:white;">
+                  <td colspan="6"><strong><i class="bi bi-person-fill"></i> {{ item.motorista_nome or '(sem motorista)' }}</strong></td>
+                </tr>
+              {% endif %}
+              {% set ns.sub_qtd = ns.sub_qtd + (item.quantidade|float if item.quantidade else 0) %}
+              {% set ns.sub_frete = ns.sub_frete + (item.valor_total_frete|float if item.valor_total_frete else 0) %}
+              {% set ns.sub_comissao = ns.sub_comissao + (item.comissao_motorista|float if item.comissao_motorista else 0) %}
+              <tr>
+                <td>{{ item.data_frete.strftime('%d/%m/%Y') if item.data_frete }}</td>
+                <td>{{ item.cliente_nome or '-' }}</td>
+                <td>{{ item.produto_nome or '-' }}</td>
+                <td style="text-align:right;">{{ "{:,.2f}".format(item.quantidade or 0).replace(",", "X").replace(".", ",").replace("X", ".") }}</td>
+                <td style="text-align:right;">{{ "R$ {:,.2f}".format(item.valor_total_frete|float if item.valor_total_frete else 0).replace(",", "X").replace(".", ",").replace("X", ".") }}</td>
+                <td style="text-align:right;">{{ "R$ {:,.2f}".format(item.comissao_motorista|float if item.comissao_motorista else 0).replace(",", "X").replace(".", ",").replace("X", ".") }}</td>
+              </tr>
             {% endfor %}
+            {# subtotal for last motorista group #}
+            {% if ns.cur_motorista != '' %}
+            <tr style="background:#f0f4fa; font-weight:600;">
+              <td colspan="3" class="text-end">Subtotal {{ ns.cur_motorista }}</td>
+              <td style="text-align:right;">{{ "{:,.2f}".format(ns.sub_qtd).replace(",","X").replace(".",",").replace("X",".") }}</td>
+              <td style="text-align:right;">{{ "R$ {:,.2f}".format(ns.sub_frete).replace(",","X").replace(".",",").replace("X",".") }}</td>
+              <td style="text-align:right;">{{ "R$ {:,.2f}".format(ns.sub_comissao).replace(",","X").replace(".",",").replace("X",".") }}</td>
+            </tr>
+            {% endif %}
 
             <!-- Linha de totais -->
             <tr style="background:#F5F5F5; font-weight:bold;">
-              <td colspan="4">TOTAL</td>
+              <td colspan="3">TOTAL GERAL</td>
               <td style="text-align:right;">{{ "{:,.2f}".format(total_quantidade or 0).replace(",", "X").replace(".", ",").replace("X", ".") }}</td>
               <td style="text-align:right;">{{ "R$ {:,.2f}".format(total_valor_frete|float if total_valor_frete else 0).replace(",", "X").replace(".", ",").replace("X", ".") }}</td>
               <td style="text-align:right;">{{ "R$ {:,.2f}".format(total_comissao_motorista|float if total_comissao_motorista else 0).replace(",", "X").replace(".", ",").replace("X", ".") }}</td>
