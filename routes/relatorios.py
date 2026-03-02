@@ -218,13 +218,15 @@ def fretes_comissao_motorista():
               m.nome AS motorista_nome,
               COUNT(f.id) AS qtd_fretes,
               COALESCE(SUM(COALESCE(f.quantidade_manual, q.valor, 0)),0) AS quantidade_total,
+              COALESCE(SUM(CASE WHEN COALESCE(f.comissao_motorista,0) > 0
+                THEN COALESCE(f.quantidade_manual, q.valor, 0) ELSE 0 END),0) AS quantidade_comissionada,
               COALESCE(SUM(f.comissao_motorista),0) AS comissao_total
             FROM fretes f
             LEFT JOIN motoristas m ON f.motoristas_id = m.id
             LEFT JOIN quantidades q ON f.quantidade_id = q.id
             WHERE 1=1 {where_sql}
             GROUP BY m.id
-            ORDER BY comissao_total DESC
+            ORDER BY motorista_nome ASC
         """
         cursor.execute(q_resumo, args)
         resumo_motoristas = cursor.fetchall()

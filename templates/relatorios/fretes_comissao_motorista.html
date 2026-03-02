@@ -169,6 +169,48 @@
     </div>
   </div>
 
+  <!-- Resumo por Motorista -->
+  {% if resumo_motoristas %}
+  <div class="card mt-4">
+    <div class="card-header d-flex justify-content-between align-items-center" style="background:#1D63A5;color:white;">
+      <h5 class="mb-0"><i class="bi bi-bar-chart-fill"></i> Resumo por Motorista</h5>
+      <button type="button" class="btn btn-success btn-sm" id="btnCopiarWhatsapp">
+        <i class="bi bi-whatsapp"></i> Copiar para WhatsApp
+      </button>
+    </div>
+    <div class="card-body p-0">
+      <div class="table-responsive">
+        <table class="table table-sm table-hover mb-0" id="tabelaResumoMotorista">
+          <thead style="background:#E8E8E8;">
+            <tr>
+              <th>Nome do Motorista</th>
+              <th style="text-align:right;">Qtd Transportada (L)</th>
+              <th style="text-align:right;">Qtd Comissionada (L)</th>
+              <th style="text-align:right;">Valor Comissão (R$)</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for r in resumo_motoristas %}
+            <tr>
+              <td>{{ r.motorista_nome or '(sem motorista)' }}</td>
+              <td style="text-align:right;">{{ "{:,.2f}".format(r.quantidade_total or 0).replace(",","X").replace(".",",").replace("X",".") }}</td>
+              <td style="text-align:right;">{{ "{:,.2f}".format(r.quantidade_comissionada or 0).replace(",","X").replace(".",",").replace("X",".") }}</td>
+              <td style="text-align:right;">{{ "R$ {:,.2f}".format(r.comissao_total|float if r.comissao_total else 0).replace(",","X").replace(".",",").replace("X",".") }}</td>
+            </tr>
+            {% endfor %}
+            <tr style="background:#F5F5F5; font-weight:bold;">
+              <td>TOTAL</td>
+              <td style="text-align:right;">{{ "{:,.2f}".format(total_quantidade or 0).replace(",","X").replace(".",",").replace("X",".") }}</td>
+              <td style="text-align:right;">{{ "{:,.2f}".format(resumo_motoristas|sum(attribute='quantidade_comissionada') or 0).replace(",","X").replace(".",",").replace("X",".") }}</td>
+              <td style="text-align:right;">{{ "R$ {:,.2f}".format(total_comissao_motorista|float if total_comissao_motorista else 0).replace(",","X").replace(".",",").replace("X",".") }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
 </div>
 {% endblock %}
 
@@ -192,5 +234,71 @@
   if(document.readyState==='loading') document.addEventListener('DOMContentLoaded', setDefaults);
   else setDefaults();
 })();
+
+document.addEventListener('DOMContentLoaded', function(){
+  var btn = document.getElementById('btnCopiarWhatsapp');
+  if(!btn) return;
+  btn.addEventListener('click', function(){
+    var table = document.getElementById('tabelaResumoMotorista');
+    if(!table) return;
+    var rows = table.querySelectorAll('tbody tr');
+    var lines = [];
+    var diEl = document.querySelector('input[name="data_inicio"]');
+    var dfEl = document.querySelector('input[name="data_fim"]');
+    function fmtDate(v){ if(!v) return ''; var p=v.split('-'); return p[2]+'/'+p[1]+'/'+p[0]; }
+    var periodo = (diEl && diEl.value && dfEl && dfEl.value)
+      ? '📅 Período: ' + fmtDate(diEl.value) + ' a ' + fmtDate(dfEl.value)
+      : '';
+    lines.push('🚛 *RESUMO DE COMISSÕES - MOTORISTAS*');
+    if(periodo) lines.push(periodo);
+    lines.push('━━━━━━━━━━━━━━━━━━━━');
+    rows.forEach(function(row){
+      var cells = row.querySelectorAll('td');
+      if(cells.length < 4) return;
+      var nome  = cells[0].textContent.trim();
+      var qtdT  = cells[1].textContent.trim();
+      var qtdC  = cells[2].textContent.trim();
+      var comis = cells[3].textContent.trim();
+      var isTotal = row.style.fontWeight === 'bold' || nome === 'TOTAL';
+      if(isTotal){
+        lines.push('━━━━━━━━━━━━━━━━━━━━');
+        lines.push('📌 *TOTAL GERAL*');
+        lines.push('   📦 Qtd Transportada: ' + qtdT + ' L');
+        lines.push('   ✅ Qtd Comissionada: ' + qtdC + ' L');
+        lines.push('   💵 *Comissão Total: ' + comis + '*');
+      } else {
+        lines.push('👤 *' + nome + '*');
+        lines.push('   📦 Qtd Transportada: ' + qtdT + ' L');
+        lines.push('   ✅ Qtd Comissionada: ' + qtdC + ' L');
+        lines.push('   💵 *Comissão: ' + comis + '*');
+        lines.push('');
+      }
+    });
+    var text = lines.join('\n');
+    if(navigator.clipboard && navigator.clipboard.writeText){
+      navigator.clipboard.writeText(text).then(function(){
+        btn.innerHTML = '<i class="bi bi-check2"></i> Copiado!';
+        setTimeout(function(){ btn.innerHTML = '<i class="bi bi-whatsapp"></i> Copiar para WhatsApp'; }, 2500);
+      }).catch(function(){
+        alert('Não foi possível copiar automaticamente. Selecione e copie o texto manualmente.');
+      });
+    } else {
+      try {
+        var ta = document.createElement('textarea');
+        ta.value = text;
+        ta.style.position = 'fixed';
+        ta.style.opacity = '0';
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        document.body.removeChild(ta);
+        btn.innerHTML = '<i class="bi bi-check2"></i> Copiado!';
+        setTimeout(function(){ btn.innerHTML = '<i class="bi bi-whatsapp"></i> Copiar para WhatsApp'; }, 2500);
+      } catch(e) {
+        alert('Não foi possível copiar automaticamente. Selecione e copie o texto manualmente.');
+      }
+    }
+  });
+});
 </script>
 {% endblock %}
