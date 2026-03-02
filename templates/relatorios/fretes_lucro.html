@@ -241,15 +241,36 @@ document.addEventListener('DOMContentLoaded', function(){
     if(!table) return;
     var rows = table.querySelectorAll('tbody tr');
     var lines = [];
-    lines.push('📊 *Resumo de Fretes - Lucro*');
-    lines.push('');
-    lines.push('*Razão Social | Qtd (L) | Frete (R$) | CTe (R$) | Mot (R$) | Lucro (R$)*');
+    var diEl = document.querySelector('input[name="data_inicio"]');
+    var dfEl = document.querySelector('input[name="data_fim"]');
+    function fmtDate(v){ if(!v) return ''; var p=v.split('-'); return p[2]+'/'+p[1]+'/'+p[0]; }
+    var periodo = (diEl && diEl.value && dfEl && dfEl.value)
+      ? '📅 Período: ' + fmtDate(diEl.value) + ' a ' + fmtDate(dfEl.value)
+      : '';
+    lines.push('📊 *RESUMO DE FRETES - LUCRO*');
+    if(periodo) lines.push(periodo);
+    lines.push('━━━━━━━━━━━━━━━━━━━━');
     rows.forEach(function(row){
       var cells = row.querySelectorAll('td');
       if(cells.length < 6) return;
-      var cols = [];
-      for(var i=0; i<6; i++) cols.push(cells[i].textContent.trim());
-      lines.push(cols.join(' | '));
+      var nome = cells[0].textContent.trim();
+      var qtd  = cells[1].textContent.trim();
+      var frete= cells[2].textContent.trim();
+      var cte  = cells[3].textContent.trim();
+      var mot  = cells[4].textContent.trim();
+      var lucro= cells[5].textContent.trim();
+      var isTotal = row.style.fontWeight === 'bold' || nome === 'TOTAL';
+      if(isTotal){
+        lines.push('━━━━━━━━━━━━━━━━━━━━');
+        lines.push('📌 *TOTAL GERAL*');
+      } else {
+        lines.push('🏢 *' + nome + '*');
+      }
+      lines.push('   📦 Qtd: ' + qtd + ' L');
+      lines.push('   💰 Frete: ' + frete);
+      lines.push('   📋 CTe: ' + cte + '  |  🚛 Mot: ' + mot);
+      lines.push('   💵 *Lucro: ' + lucro + '*');
+      if(!isTotal) lines.push('');
     });
     var text = lines.join('\n');
     if(navigator.clipboard && navigator.clipboard.writeText){
