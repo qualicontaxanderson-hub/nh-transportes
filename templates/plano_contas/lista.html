@@ -1,0 +1,108 @@
+{% extends "base.html" %}
+{% block title %}Plano de Contas — NH Transportes{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+  <nav aria-label="breadcrumb" class="mt-2 mb-3">
+    <ol class="breadcrumb" style="font-size:0.85rem;">
+      <li class="breadcrumb-item"><a href="{{ url_for('index') }}">Dashboard</a></li>
+      <li class="breadcrumb-item active">Plano de Contas</li>
+    </ol>
+  </nav>
+
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <h4 class="mb-0" style="color:#1D63A5;">
+      <i class="bi bi-journal-bookmark-fill"></i> Plano de Contas — Grupos Contábeis
+    </h4>
+    <a href="{{ url_for('plano_contas.novo') }}" class="btn btn-primary btn-sm">
+      <i class="bi bi-plus-circle"></i> Novo Grupo
+    </a>
+  </div>
+
+  <div class="card shadow-sm">
+    <div class="card-header py-2" style="background:#1D63A5;color:white;">
+      <h6 class="mb-0"><i class="bi bi-list-ul"></i> Grupos Cadastrados</h6>
+    </div>
+    <div class="card-body p-0">
+      {% if grupos %}
+      <div class="table-responsive">
+        <table class="table table-hover table-sm mb-0" style="font-size:0.88rem;">
+          <thead class="table-light">
+            <tr>
+              <th>Código Contábil</th>
+              <th>Nome / Descrição</th>
+              <th class="text-center">Clientes</th>
+              <th class="text-center">Status</th>
+              <th class="text-center">Ações</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for g in grupos %}
+            <tr>
+              <td>
+                <span class="badge bg-secondary" style="font-family:monospace;font-size:0.9em;letter-spacing:0.04em;">
+                  {{ g.codigo }}
+                </span>
+              </td>
+              <td>
+                <strong>{{ g.nome }}</strong>
+                {% if g.descricao %}
+                <br><small class="text-muted">{{ g.descricao }}</small>
+                {% endif %}
+              </td>
+              <td class="text-center">
+                <a href="{{ url_for('plano_contas.vincular_clientes', id=g.id) }}"
+                   class="badge bg-info text-dark text-decoration-none"
+                   title="Gerenciar clientes deste grupo">
+                  {{ g.total_clientes }} cliente(s)
+                </a>
+              </td>
+              <td class="text-center">
+                {% if g.ativo %}
+                <span class="badge bg-success">Ativo</span>
+                {% else %}
+                <span class="badge bg-secondary">Inativo</span>
+                {% endif %}
+              </td>
+              <td class="text-center text-nowrap">
+                <a href="{{ url_for('plano_contas.vincular_clientes', id=g.id) }}"
+                   class="btn btn-sm btn-outline-info" title="Vincular Clientes">
+                  <i class="bi bi-people"></i>
+                </a>
+                <a href="{{ url_for('plano_contas.editar', id=g.id) }}"
+                   class="btn btn-sm btn-outline-primary" title="Editar">
+                  <i class="bi bi-pencil"></i>
+                </a>
+                <form method="POST" action="{{ url_for('plano_contas.excluir', id=g.id) }}"
+                      style="display:inline;"
+                      onsubmit="return confirm('Excluir o grupo \'{{ g.nome }}\'? Os clientes vinculados serão desvinculados.');">
+                  <button type="submit" class="btn btn-sm btn-outline-danger" title="Excluir">
+                    <i class="bi bi-trash"></i>
+                  </button>
+                </form>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <div class="p-4 text-center text-muted">
+        <i class="bi bi-journal-x fs-1"></i>
+        <p class="mt-2 mb-0">Nenhum grupo contábil cadastrado.</p>
+        <a href="{{ url_for('plano_contas.novo') }}" class="btn btn-primary btn-sm mt-2">
+          <i class="bi bi-plus-circle"></i> Criar primeiro grupo
+        </a>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="mt-3 p-3 bg-light border rounded small text-muted">
+    <i class="bi bi-info-circle text-primary"></i>
+    <strong>Como usar:</strong> Cada grupo possui um <em>código contábil</em> (ex.: <code>11211</code>) e um nome
+    (ex.: <em>Conta Sicoob</em>). Clique em <strong>Vincular Clientes</strong> para associar os clientes ao grupo.
+    Clientes vinculados herdam o código contábil do grupo para exportação contábil.
+  </div>
+</div>
+{% endblock %}
