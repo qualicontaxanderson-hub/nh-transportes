@@ -967,13 +967,13 @@ def conciliar():
     # ------------------------------------------------------------------
     # GET: filtros
     # ------------------------------------------------------------------
-    f_cliente   = request.args.get('cliente_id', '')
+    f_clientes  = [c for c in request.args.getlist('cliente_id') if c]
     f_tipo      = request.args.get('tipo', '')           # CREDIT / DEBIT
     f_data_ini  = request.args.get('data_ini', '')
     f_data_fim  = request.args.get('data_fim', '')
     f_descricao = request.args.get('descricao', '')
     f_cnpj      = request.args.get('cnpj_cpf', '')
-    f_conta     = request.args.get('account_id', '')
+    f_contas    = [c for c in request.args.getlist('account_id') if c]
 
     page     = request.args.get('page', 1, type=int)
     per_page = 50
@@ -983,9 +983,10 @@ def conciliar():
     where  = ["bt.status = 'pendente'"]
     params = []
 
-    if f_cliente:
-        where.append("ba.cliente_id = %s")
-        params.append(f_cliente)
+    if f_clientes:
+        ph = ','.join(['%s'] * len(f_clientes))
+        where.append(f"ba.cliente_id IN ({ph})")
+        params.extend(f_clientes)
     if f_tipo and f_tipo in _TIPOS_OK:
         where.append("bt.tipo = %s")
         params.append(f_tipo)
@@ -1001,135 +1002,141 @@ def conciliar():
     if f_cnpj:
         where.append("bt.cnpj_cpf LIKE %s")
         params.append(f'%{f_cnpj}%')
-    if f_conta:
-        where.append("bt.account_id = %s")
-        params.append(f_conta)
+    if f_contas:
+        ph = ','.join(['%s'] * len(f_contas))
+        where.append(f"bt.account_id IN ({ph})")
+        params.extend(f_contas)
 
     where_sql = 'WHERE ' + ' AND '.join(where)
 
-    cursor.execute(
-        f"""SELECT bt.*, ba.apelido AS conta_apelido, ba.banco_nome,
-                   bsm.fornecedor_id AS sugestao_fornecedor_id,
-                   bsm.forma_recebimento_id AS sugestao_forma_id,
-                   bsm.titulo_id AS sugestao_titulo_id,
-                   bsm.categoria_id AS sugestao_categoria_id,
-                   bsm.subcategoria_id AS sugestao_subcategoria_id,
-                   bsm.conta_destino_id AS sugestao_conta_destino_id,
-                   bsm.tipo_debito AS sugestao_tipo_debito,
-                   fr.nome AS sugestao_forma_nome,
-                   fs.razao_social AS sugestao_fornecedor_nome,
-                   td.nome AS sugestao_titulo_nome,
-                   cd.nome AS sugestao_categoria_nome
-            FROM bank_transactions bt
-            INNER JOIN bank_accounts ba ON bt.account_id = ba.id
-            LEFT JOIN bank_supplier_mapping bsm ON bsm.cnpj_cpf = bt.cnpj_cpf
-            LEFT JOIN formas_recebimento fr ON fr.id = bsm.forma_recebimento_id
-            LEFT JOIN fornecedores fs ON fs.id = bsm.fornecedor_id
-            LEFT JOIN titulos_despesas td ON td.id = bsm.titulo_id
-            LEFT JOIN categorias_despesas cd ON cd.id = bsm.categoria_id
-            {where_sql}
-            ORDER BY bt.data_transacao DESC
-            LIMIT %s OFFSET %s""",
-        params + [per_page, offset],
-    )
-    transacoes = cursor.fetchall()
+    # When no company is selected yet, skip expensive queries and show nothing.
+    transacoes = []
+    total = 0
 
-    # -----------------------------------------------------------------------
-    # Aplicar regras por padrão de descrição a transações sem sugestão de CNPJ
-    # -----------------------------------------------------------------------
-    cursor.execute(
-        """SELECT r.id, r.padrao_descricao, r.padrao_secundario, r.tipo_match,
-                  r.tipo_transacao, r.account_id,
-                  r.forma_recebimento_id, fr.nome AS forma_nome,
-                  r.fornecedor_id, f.razao_social AS fornecedor_nome
-           FROM bank_conciliacao_regras r
-           LEFT JOIN formas_recebimento fr ON fr.id = r.forma_recebimento_id
-           LEFT JOIN fornecedores f ON f.id = r.fornecedor_id
-           WHERE r.ativo = 1
-           ORDER BY
-               (r.account_id IS NOT NULL) DESC,
-               (r.padrao_secundario IS NOT NULL AND r.padrao_secundario <> '') DESC,
-               r.id"""
-    )
-    regras_padrao = cursor.fetchall()
-
-    for tx in transacoes:
-        descricao = (tx.get('descricao') or '').upper()
-        tipo_tx_r = tx.get('tipo', '')
-        for regra in regras_padrao:
-            # Filtra por conta bancária
-            regra_account_id = regra.get('account_id')
-            if regra_account_id and int(regra_account_id) != int(tx['account_id']):
-                continue
-            if regra['tipo_transacao'] != 'AMBOS' and regra['tipo_transacao'] != tipo_tx_r:
-                continue
-            padrao = (regra['padrao_descricao'] or '').upper()
-            if regra['tipo_match'] == 'exato':
-                bate = descricao == padrao
-            else:
-                bate = padrao in descricao
-            if not bate:
-                continue
-            # Match secundário
-            padrao2 = (regra.get('padrao_secundario') or '').upper()
-            if padrao2 and padrao2 not in descricao:
-                continue
-            # Regras de descrição têm prioridade sobre mapeamento por CNPJ
-            if regra['forma_recebimento_id']:
-                tx['sugestao_forma_id']   = regra['forma_recebimento_id']
-                tx['sugestao_forma_nome'] = regra['forma_nome']
-                tx['sugestao_regra']      = True
-            if regra['fornecedor_id']:
-                tx['sugestao_fornecedor_id']   = regra['fornecedor_id']
-                tx['sugestao_fornecedor_nome'] = regra['fornecedor_nome']
-                tx['sugestao_regra']           = True
-            break  # primeira regra que bate vence
-
-    # Para créditos sem regra de descrição correspondente: remove a sugestão de forma
-    # que veio do bank_supplier_mapping por CNPJ/CPF.  O mesmo CPF pode aparecer em
-    # transações de tipos distintos (PIX, depósito em dinheiro, cheque…), tornando a
-    # sugestão por CNPJ não confiável para créditos.
-    for tx in transacoes:
-        if tx.get('tipo') == 'CREDIT' and not tx.get('sugestao_regra'):
-            tx['sugestao_forma_id']   = None
-            tx['sugestao_forma_nome'] = None
-
-    # Enriquece badge de sugestão de despesa (CNPJ → título/categoria)
-    for tx in transacoes:
-        if tx.get('sugestao_titulo_id') and not tx.get('sugestao_forma_id') and not tx.get('sugestao_fornecedor_id'):
-            tx['sugestao_despesa_label'] = (
-                (tx.get('sugestao_titulo_nome') or '') + ' › ' + (tx.get('sugestao_categoria_nome') or '')
-            )
-
-    # Marca CREDITs que são transferências recebidas (sintéticas ou por CNPJ aprendido)
-    for tx in transacoes:
-        if tx.get('tipo') == 'CREDIT':
-            tipo_conc    = tx.get('tipo_conciliacao') or ''
-            sugestao_tip = tx.get('sugestao_tipo_debito') or ''
-            if tipo_conc == 'transferencia' or sugestao_tip == 'transferencia':
-                tx['sugestao_transferencia_recebida'] = True
-
-    # Reordena: dentro de cada data, lançamentos com sugestão aparecem primeiro
-    def _tem_sugestao(tx):
-        return bool(
-            tx.get('sugestao_forma_id') or
-            tx.get('sugestao_fornecedor_id') or
-            tx.get('sugestao_titulo_id') or
-            tx.get('sugestao_transferencia_recebida')
+    if f_clientes:
+        cursor.execute(
+            f"""SELECT bt.*, ba.apelido AS conta_apelido, ba.banco_nome,
+                       bsm.fornecedor_id AS sugestao_fornecedor_id,
+                       bsm.forma_recebimento_id AS sugestao_forma_id,
+                       bsm.titulo_id AS sugestao_titulo_id,
+                       bsm.categoria_id AS sugestao_categoria_id,
+                       bsm.subcategoria_id AS sugestao_subcategoria_id,
+                       bsm.conta_destino_id AS sugestao_conta_destino_id,
+                       bsm.tipo_debito AS sugestao_tipo_debito,
+                       fr.nome AS sugestao_forma_nome,
+                       fs.razao_social AS sugestao_fornecedor_nome,
+                       td.nome AS sugestao_titulo_nome,
+                       cd.nome AS sugestao_categoria_nome
+                FROM bank_transactions bt
+                INNER JOIN bank_accounts ba ON bt.account_id = ba.id
+                LEFT JOIN bank_supplier_mapping bsm ON bsm.cnpj_cpf = bt.cnpj_cpf
+                LEFT JOIN formas_recebimento fr ON fr.id = bsm.forma_recebimento_id
+                LEFT JOIN fornecedores fs ON fs.id = bsm.fornecedor_id
+                LEFT JOIN titulos_despesas td ON td.id = bsm.titulo_id
+                LEFT JOIN categorias_despesas cd ON cd.id = bsm.categoria_id
+                {where_sql}
+                ORDER BY bt.data_transacao DESC
+                LIMIT %s OFFSET %s""",
+            params + [per_page, offset],
         )
-    transacoes = sorted(
-        transacoes,
-        key=lambda tx: (tx.get('data_transacao'), _tem_sugestao(tx)),
-        reverse=True,
-    )
+        transacoes = cursor.fetchall()
 
-    cursor.execute(
-        f"SELECT COUNT(*) AS total FROM bank_transactions bt "
-        f"INNER JOIN bank_accounts ba ON bt.account_id = ba.id "
-        f"{where_sql}",
-        params,
-    )
-    total = cursor.fetchone()['total']
+        # -----------------------------------------------------------------------
+        # Aplicar regras por padrão de descrição a transações sem sugestão de CNPJ
+        # -----------------------------------------------------------------------
+        cursor.execute(
+            """SELECT r.id, r.padrao_descricao, r.padrao_secundario, r.tipo_match,
+                      r.tipo_transacao, r.account_id,
+                      r.forma_recebimento_id, fr.nome AS forma_nome,
+                      r.fornecedor_id, f.razao_social AS fornecedor_nome
+               FROM bank_conciliacao_regras r
+               LEFT JOIN formas_recebimento fr ON fr.id = r.forma_recebimento_id
+               LEFT JOIN fornecedores f ON f.id = r.fornecedor_id
+               WHERE r.ativo = 1
+               ORDER BY
+                   (r.account_id IS NOT NULL) DESC,
+                   (r.padrao_secundario IS NOT NULL AND r.padrao_secundario <> '') DESC,
+                   r.id"""
+        )
+        regras_padrao = cursor.fetchall()
+
+        for tx in transacoes:
+            descricao = (tx.get('descricao') or '').upper()
+            tipo_tx_r = tx.get('tipo', '')
+            for regra in regras_padrao:
+                # Filtra por conta bancária
+                regra_account_id = regra.get('account_id')
+                if regra_account_id and int(regra_account_id) != int(tx['account_id']):
+                    continue
+                if regra['tipo_transacao'] != 'AMBOS' and regra['tipo_transacao'] != tipo_tx_r:
+                    continue
+                padrao = (regra['padrao_descricao'] or '').upper()
+                if regra['tipo_match'] == 'exato':
+                    bate = descricao == padrao
+                else:
+                    bate = padrao in descricao
+                if not bate:
+                    continue
+                # Match secundário
+                padrao2 = (regra.get('padrao_secundario') or '').upper()
+                if padrao2 and padrao2 not in descricao:
+                    continue
+                # Regras de descrição têm prioridade sobre mapeamento por CNPJ
+                if regra['forma_recebimento_id']:
+                    tx['sugestao_forma_id']   = regra['forma_recebimento_id']
+                    tx['sugestao_forma_nome'] = regra['forma_nome']
+                    tx['sugestao_regra']      = True
+                if regra['fornecedor_id']:
+                    tx['sugestao_fornecedor_id']   = regra['fornecedor_id']
+                    tx['sugestao_fornecedor_nome'] = regra['fornecedor_nome']
+                    tx['sugestao_regra']           = True
+                break  # primeira regra que bate vence
+
+        # Para créditos sem regra de descrição correspondente: remove a sugestão de forma
+        # que veio do bank_supplier_mapping por CNPJ/CPF.  O mesmo CPF pode aparecer em
+        # transações de tipos distintos (PIX, depósito em dinheiro, cheque…), tornando a
+        # sugestão por CNPJ não confiável para créditos.
+        for tx in transacoes:
+            if tx.get('tipo') == 'CREDIT' and not tx.get('sugestao_regra'):
+                tx['sugestao_forma_id']   = None
+                tx['sugestao_forma_nome'] = None
+
+        # Enriquece badge de sugestão de despesa (CNPJ → título/categoria)
+        for tx in transacoes:
+            if tx.get('sugestao_titulo_id') and not tx.get('sugestao_forma_id') and not tx.get('sugestao_fornecedor_id'):
+                tx['sugestao_despesa_label'] = (
+                    (tx.get('sugestao_titulo_nome') or '') + ' › ' + (tx.get('sugestao_categoria_nome') or '')
+                )
+
+        # Marca CREDITs que são transferências recebidas (sintéticas ou por CNPJ aprendido)
+        for tx in transacoes:
+            if tx.get('tipo') == 'CREDIT':
+                tipo_conc    = tx.get('tipo_conciliacao') or ''
+                sugestao_tip = tx.get('sugestao_tipo_debito') or ''
+                if tipo_conc == 'transferencia' or sugestao_tip == 'transferencia':
+                    tx['sugestao_transferencia_recebida'] = True
+
+        # Reordena: dentro de cada data, lançamentos com sugestão aparecem primeiro
+        def _tem_sugestao(tx):
+            return bool(
+                tx.get('sugestao_forma_id') or
+                tx.get('sugestao_fornecedor_id') or
+                tx.get('sugestao_titulo_id') or
+                tx.get('sugestao_transferencia_recebida')
+            )
+        transacoes = sorted(
+            transacoes,
+            key=lambda tx: (tx.get('data_transacao'), _tem_sugestao(tx)),
+            reverse=True,
+        )
+
+        cursor.execute(
+            f"SELECT COUNT(*) AS total FROM bank_transactions bt "
+            f"INNER JOIN bank_accounts ba ON bt.account_id = ba.id "
+            f"{where_sql}",
+            params,
+        )
+        total = cursor.fetchone()['total']
 
     fornecedores       = _get_fornecedores(cursor)
     formas_recebimento = _get_formas_recebimento(cursor)
@@ -1137,9 +1144,10 @@ def conciliar():
     contas             = _get_accounts(cursor)
     clientes           = _get_clientes_com_produtos(cursor)
 
-    # Todas as contas de todas as empresas (para transferência entre contas)
+    # Todas as contas de todas as empresas (para transferência entre contas e filtro JS)
     cursor.execute(
-        """SELECT ba.id, ba.apelido, ba.banco_nome, c.nome_fantasia AS empresa_nome
+        """SELECT ba.id, ba.apelido, ba.banco_nome, ba.cliente_id,
+                  c.nome_fantasia AS empresa_nome
            FROM bank_accounts ba
            LEFT JOIN clientes c ON c.id = ba.cliente_id
            WHERE ba.ativo = 1
@@ -1174,13 +1182,13 @@ def conciliar():
         total_pages=total_pages,
         total=total,
         # filtros atuais para manter na paginação
-        f_cliente=f_cliente,
+        f_clientes=f_clientes,
         f_tipo=f_tipo,
         f_data_ini=f_data_ini,
         f_data_fim=f_data_fim,
         f_descricao=f_descricao,
         f_cnpj=f_cnpj,
-        f_conta=f_conta,
+        f_contas=f_contas,
     )
 
 

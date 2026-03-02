@@ -12,67 +12,66 @@
   </nav>
 
   <!-- Filtros -->
-  <form method="GET" class="card shadow-sm mb-3">
+  <form method="GET" class="card shadow-sm mb-3" id="formFiltros">
     <div class="card-header py-2" style="background:#1D63A5;color:white;">
       <h6 class="mb-0"><i class="bi bi-funnel"></i> Filtros</h6>
     </div>
     <div class="card-body py-2">
       <div class="row g-2">
-        <div class="col-md-2">
-          <label class="form-label form-label-sm mb-0">Empresa</label>
-          <select name="cliente_id" class="form-select form-select-sm">
-            <option value="">Todas</option>
+        <div class="col-md-3">
+          <label class="form-label form-label-sm mb-0">Empresa <small class="text-muted">(Ctrl+clique p/ múltiplas)</small></label>
+          <select name="cliente_id" class="form-select form-select-sm" multiple size="4" id="selEmpresas">
             {% for c in clientes %}
-            <option value="{{ c.id }}" {% if f_cliente == c.id|string %}selected{% endif %}>
+            <option value="{{ c.id }}" {% if c.id|string in f_clientes %}selected{% endif %}>
               {{ c.nome_fantasia or c.razao_social }}
             </option>
             {% endfor %}
           </select>
         </div>
-        <div class="col-md-2">
-          <label class="form-label form-label-sm mb-0">Tipo</label>
-          <select name="tipo" class="form-select form-select-sm">
-            <option value="">Crédito + Débito</option>
-            <option value="CREDIT" {% if f_tipo == 'CREDIT' %}selected{% endif %}>Crédito</option>
-            <option value="DEBIT"  {% if f_tipo == 'DEBIT'  %}selected{% endif %}>Débito</option>
+        <div class="col-md-3" id="divContaBancaria">
+          <label class="form-label form-label-sm mb-0">Conta Bancária <small class="text-muted">(Ctrl+clique p/ múltiplas)</small></label>
+          <select name="account_id" class="form-select form-select-sm" multiple size="4" id="selContas">
+            <option value="" disabled id="optContaPlaceholder">— Selecione uma empresa primeiro —</option>
           </select>
         </div>
-        <div class="col-md-2">
-          <label class="form-label form-label-sm mb-0">Conta Bancária</label>
-          <select name="account_id" class="form-select form-select-sm">
-            <option value="">Todas</option>
-            {% for c in contas %}
-            <option value="{{ c.id }}" {% if f_conta == c.id|string %}selected{% endif %}>
-              {{ c.apelido or c.banco_nome }}
-            </option>
-            {% endfor %}
-          </select>
-        </div>
-        <div class="col-md-2">
-          <label class="form-label form-label-sm mb-0">Data início</label>
-          <input type="date" name="data_ini" class="form-control form-control-sm" value="{{ f_data_ini }}">
-        </div>
-        <div class="col-md-2">
-          <label class="form-label form-label-sm mb-0">Data fim</label>
-          <input type="date" name="data_fim" class="form-control form-control-sm" value="{{ f_data_fim }}">
-        </div>
-        <div class="col-md-2">
-          <label class="form-label form-label-sm mb-0">Descrição</label>
-          <input type="text" name="descricao" class="form-control form-control-sm"
-                 placeholder="parte da descrição" value="{{ f_descricao }}">
-        </div>
-        <div class="col-md-2">
-          <label class="form-label form-label-sm mb-0">CNPJ/CPF</label>
-          <input type="text" name="cnpj_cpf" class="form-control form-control-sm"
-                 placeholder="parte do CNPJ" value="{{ f_cnpj }}">
-        </div>
-        <div class="col-md-2 d-flex align-items-end gap-1">
-          <button type="submit" class="btn btn-primary btn-sm flex-fill">
-            <i class="bi bi-search"></i> Filtrar
-          </button>
-          <a href="{{ url_for('bank_import.conciliar') }}" class="btn btn-outline-secondary btn-sm">
-            <i class="bi bi-x"></i>
-          </a>
+        <div class="col-md-6">
+          <div class="row g-2">
+            <div class="col-md-6">
+              <label class="form-label form-label-sm mb-0">Tipo</label>
+              <select name="tipo" class="form-select form-select-sm">
+                <option value="">Crédito + Débito</option>
+                <option value="CREDIT" {% if f_tipo == 'CREDIT' %}selected{% endif %}>Crédito</option>
+                <option value="DEBIT"  {% if f_tipo == 'DEBIT'  %}selected{% endif %}>Débito</option>
+              </select>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label form-label-sm mb-0">Descrição</label>
+              <input type="text" name="descricao" class="form-control form-control-sm"
+                     placeholder="parte da descrição" value="{{ f_descricao }}">
+            </div>
+            <div class="col-md-6">
+              <label class="form-label form-label-sm mb-0">Data início</label>
+              <input type="date" name="data_ini" class="form-control form-control-sm" value="{{ f_data_ini }}">
+            </div>
+            <div class="col-md-6">
+              <label class="form-label form-label-sm mb-0">Data fim</label>
+              <input type="date" name="data_fim" class="form-control form-control-sm" value="{{ f_data_fim }}">
+            </div>
+            <div class="col-md-6">
+              <label class="form-label form-label-sm mb-0">CNPJ/CPF</label>
+              <input type="text" name="cnpj_cpf" class="form-control form-control-sm"
+                     placeholder="parte do CNPJ" value="{{ f_cnpj }}">
+            </div>
+            <div class="col-md-6 d-flex align-items-end gap-1">
+              <button type="submit" class="btn btn-primary btn-sm flex-fill" id="btnFiltrar"
+                      onclick="mostrarCarregando(this)">
+                <i class="bi bi-search"></i> Filtrar
+              </button>
+              <a href="{{ url_for('bank_import.conciliar') }}" class="btn btn-outline-secondary btn-sm">
+                <i class="bi bi-x"></i>
+              </a>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -266,17 +265,17 @@
           <ul class="pagination pagination-sm mb-0">
             {% if page > 1 %}
             <li class="page-item">
-              <a class="page-link" href="?page={{ page-1 }}&cliente_id={{ f_cliente }}&tipo={{ f_tipo }}&account_id={{ f_conta }}&data_ini={{ f_data_ini }}&data_fim={{ f_data_fim }}&descricao={{ f_descricao }}&cnpj_cpf={{ f_cnpj }}">&#8249;</a>
+              <a class="page-link" href="javascript:void(0)" onclick="irParaPagina({{ page-1 }})">&#8249;</a>
             </li>
             {% endif %}
             {% for p in range(1, total_pages+1) %}
             <li class="page-item {% if p == page %}active{% endif %}">
-              <a class="page-link" href="?page={{ p }}&cliente_id={{ f_cliente }}&tipo={{ f_tipo }}&account_id={{ f_conta }}&data_ini={{ f_data_ini }}&data_fim={{ f_data_fim }}&descricao={{ f_descricao }}&cnpj_cpf={{ f_cnpj }}">{{ p }}</a>
+              <a class="page-link" href="javascript:void(0)" onclick="irParaPagina({{ p }})">{{ p }}</a>
             </li>
             {% endfor %}
             {% if page < total_pages %}
             <li class="page-item">
-              <a class="page-link" href="?page={{ page+1 }}&cliente_id={{ f_cliente }}&tipo={{ f_tipo }}&account_id={{ f_conta }}&data_ini={{ f_data_ini }}&data_fim={{ f_data_fim }}&descricao={{ f_descricao }}&cnpj_cpf={{ f_cnpj }}">&#8250;</a>
+              <a class="page-link" href="javascript:void(0)" onclick="irParaPagina({{ page+1 }})">&#8250;</a>
             </li>
             {% endif %}
           </ul>
@@ -285,10 +284,17 @@
       {% endif %}
 
       {% else %}
+      {% if not f_clientes %}
+      <div class="p-4 text-center text-muted">
+        <i class="bi bi-building fs-1 text-primary"></i>
+        <p class="mt-2 mb-0 fw-semibold">Selecione uma ou mais empresas no filtro acima para visualizar as transações pendentes.</p>
+      </div>
+      {% else %}
       <div class="p-4 text-center text-muted">
         <i class="bi bi-check2-all fs-1 text-success"></i>
         <p class="mt-2 mb-0">Nenhuma transação pendente.</p>
       </div>
+      {% endif %}
       {% endif %}
     </div>
   </div>
@@ -478,7 +484,7 @@
               </div>
               <div class="mb-2">
                 <label class="form-label form-label-sm mb-1">Conta de Destino</label>
-                <select name="conta_destino_id" class="form-select">
+                <select name="conta_destino_id" id="selectContaDestino" class="form-select">
                   <option value="">— Selecione a conta destino —</option>
                   {% set emp_atual = namespace(nome='') %}
                   {% for c in todas_contas %}
@@ -541,7 +547,8 @@
         </div>
         <div class="modal-footer">
           <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-          <button type="submit" class="btn btn-primary">
+          <button type="submit" class="btn btn-primary" id="btnConfirmarModal"
+                  onclick="mostrarCarregando(this)">
             <i class="bi bi-check-lg"></i> Confirmar
           </button>
         </div>
@@ -690,6 +697,82 @@
 
 {% block scripts %}
 <script>
+// ---- Dados das contas bancárias para filtro dinâmico ----
+const _todasContas = {{ todas_contas | tojson }};
+const _contasSelecionadas = {{ f_contas | tojson }};
+const LOADING_TIMEOUT_MS = 20000;
+
+// ---- Helper: estado de carregamento em botões ----
+function mostrarCarregando(btn) {
+  if (!btn || btn.disabled) return;
+  const orig = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span> Aguarde...';
+  setTimeout(function() { btn.disabled = false; btn.innerHTML = orig; }, LOADING_TIMEOUT_MS);
+}
+
+// ---- Filtro dinâmico de Conta Bancária por Empresa ----
+function atualizarContasBancarias() {
+  const selEmp = document.getElementById('selEmpresas');
+  const selCon = document.getElementById('selContas');
+  if (!selEmp || !selCon) return;
+
+  const empsSelecionadas = Array.from(selEmp.selectedOptions).map(o => parseInt(o.value));
+
+  // Limpa e reconstrói a lista de contas
+  selCon.innerHTML = '';
+
+  if (empsSelecionadas.length === 0) {
+    const opt = document.createElement('option');
+    opt.value = '';
+    opt.disabled = true;
+    opt.textContent = '— Selecione uma empresa primeiro —';
+    selCon.appendChild(opt);
+    return;
+  }
+
+  const contasFiltradas = _todasContas.filter(c => {
+    // cliente_id é incluído na query das todas_contas
+    const cid = c.cliente_id !== undefined ? parseInt(c.cliente_id) : null;
+    return cid !== null && empsSelecionadas.includes(cid);
+  });
+
+  if (contasFiltradas.length === 0) {
+    const opt = document.createElement('option');
+    opt.value = '';
+    opt.disabled = true;
+    opt.textContent = '— Nenhuma conta para a empresa selecionada —';
+    selCon.appendChild(opt);
+    return;
+  }
+
+  contasFiltradas.forEach(function(c) {
+    const opt = document.createElement('option');
+    opt.value = c.id;
+    opt.textContent = c.apelido ? (c.banco_nome ? c.apelido + ' — ' + c.banco_nome : c.apelido) : (c.banco_nome || '');
+    if (_contasSelecionadas.includes(String(c.id)) || _contasSelecionadas.includes(c.id)) {
+      opt.selected = true;
+    }
+    selCon.appendChild(opt);
+  });
+}
+
+// ---- Navegação de paginação preservando multi-selects ----
+function irParaPagina(page) {
+  const params = new URLSearchParams(window.location.search);
+  params.delete('page');
+  params.append('page', page);
+  window.location.href = '?' + params.toString();
+}
+
+// Inicializa ao carregar
+document.addEventListener('DOMContentLoaded', function() {
+  const selEmp = document.getElementById('selEmpresas');
+  if (selEmp) {
+    selEmp.addEventListener('change', atualizarContasBancarias);
+    atualizarContasBancarias();
+  }
+});
 const checkAll = document.getElementById('checkAll');
 const btnConciliarSel = document.getElementById('btnConciliarSelecionados');
 const btnIgnorarSel   = document.getElementById('btnIgnorarSelecionados');
@@ -724,6 +807,7 @@ function ignorarSelecionados() {
   const ids = [...document.querySelectorAll('.tx-check:checked')].map(c => c.value);
   if (!ids.length) return;
   if (!confirm('Ignorar ' + ids.length + ' transação(ões)?')) return;
+  mostrarCarregando(document.getElementById('btnIgnorarSelecionados'));
   const form = document.getElementById('formConciliacaoLote');
   const inp = document.createElement('input');
   inp.type = 'hidden'; inp.name = 'acao'; inp.value = 'ignorar';
@@ -759,6 +843,7 @@ document.getElementById('modalConciliar')?.addEventListener('hidden.bs.modal', f
 document.querySelectorAll('.btn-ignorar').forEach(btn => {
   btn.addEventListener('click', function() {
     if (!confirm('Ignorar esta transação?')) return;
+    mostrarCarregando(this);
     const f = document.createElement('form');
     f.method = 'POST';
     const i1 = document.createElement('input');
@@ -1305,11 +1390,14 @@ function submeterLote(tipo) {
       add('conta_destino_id', conta);
     }
   }
+  // Show loading on the submit button of the current active lote tab
+  const btnLote = tipo === 'CREDIT'
+    ? document.querySelector('#tabLoteCredito .btn-success')
+    : document.querySelector('#tabLoteDebito .btn-danger');
+  if (btnLote) mostrarCarregando(btnLote);
   document.body.appendChild(form);
   form.submit();
 }
-
-// Aprovar sugestão com 1 clique
 document.querySelectorAll('.btn-aprovar').forEach(btn => {
   btn.addEventListener('click', function() {
     const txId   = this.dataset.txId;
@@ -1324,6 +1412,7 @@ document.querySelectorAll('.btn-aprovar').forEach(btn => {
     add('tipo_tx', tipo);
     if (tipo === 'CREDIT') add('forma_recebimento_id', forma);
     else add('fornecedor_id', forn);
+    mostrarCarregando(this);
     document.body.appendChild(form);
     form.submit();
   });
@@ -1350,6 +1439,7 @@ document.querySelectorAll('.btn-aprovar-despesa').forEach(btn => {
     if (sub) add('desp_1_subcategoria_id', sub);
     // Valor já vem em formato float (dataset.txValor) — usar diretamente
     add('desp_1_valor', valor);
+    mostrarCarregando(this);
     document.body.appendChild(form);
     form.submit();
   });
@@ -1369,6 +1459,7 @@ document.querySelectorAll('.btn-aprovar-transf').forEach(btn => {
     add('tipo_tx', 'DEBIT');
     add('tipo_debito', 'transferencia');
     add('conta_destino_id', conta);
+    mostrarCarregando(this);
     document.body.appendChild(form);
     form.submit();
   });
@@ -1385,6 +1476,7 @@ document.querySelectorAll('.btn-aprovar-transf-recebida').forEach(btn => {
     add('acao', 'conciliar');
     add('tipo_tx', 'CREDIT');
     add('tipo_debito', 'transferencia');
+    mostrarCarregando(this);
     document.body.appendChild(form);
     form.submit();
   });
@@ -1443,6 +1535,7 @@ function aprovarSugestoesPagina() {
   }
   if (!confirm('Aprovar ' + n + ' sugestão(ões) desta página?')) return;
 
+  mostrarCarregando(document.getElementById('btnAprovarSugestoes'));
   add('acao', 'aprovar_sugestoes_pagina');
   document.body.appendChild(form);
   form.submit();
