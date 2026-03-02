@@ -116,6 +116,11 @@
                   disabled onclick="abrirLancamentoUnico()">
             <i class="bi bi-1-circle"></i> Lançamento Único
           </button>
+          <button type="button" class="btn btn-success btn-sm" id="btnAprovarSugestoes"
+                  onclick="aprovarSugestoesPagina()">
+            <i class="bi bi-check2-all"></i> Aprovar Sugestões da Página
+            (<span id="contadorSugestoes">0</span>)
+          </button>
         </div>
 
         <div class="table-responsive">
@@ -1384,6 +1389,75 @@ document.querySelectorAll('.btn-aprovar-transf-recebida').forEach(btn => {
     form.submit();
   });
 });
+
+// Aprovar todas as sugestões visíveis na página corrente
+function aprovarSugestoesPagina() {
+  const form = document.createElement('form');
+  form.method = 'POST';
+  const add = (n, v) => { const i = document.createElement('input'); i.type='hidden'; i.name=n; i.value=v||''; form.appendChild(i); };
+
+  let n = 0;
+
+  // 1) CREDIT: transferência recebida
+  document.querySelectorAll('.btn-aprovar-transf-recebida').forEach(btn => {
+    add('tx_' + n + '_id',          btn.dataset.txId);
+    add('tx_' + n + '_tipo_tx',     'CREDIT');
+    add('tx_' + n + '_tipo_debito', 'transferencia_recebida');
+    n++;
+  });
+
+  // 2) DEBIT: transferência enviada
+  document.querySelectorAll('.btn-aprovar-transf').forEach(btn => {
+    add('tx_' + n + '_id',                btn.dataset.txId);
+    add('tx_' + n + '_tipo_tx',           'DEBIT');
+    add('tx_' + n + '_tipo_debito',       'transferencia');
+    add('tx_' + n + '_conta_destino_id',  btn.dataset.contaDestino);
+    n++;
+  });
+
+  // 3) CREDIT/DEBIT: sugestão forma de recebimento ou fornecedor
+  document.querySelectorAll('.btn-aprovar').forEach(btn => {
+    add('tx_' + n + '_id',                  btn.dataset.txId);
+    add('tx_' + n + '_tipo_tx',             btn.dataset.txTipo);
+    add('tx_' + n + '_tipo_debito',         '');
+    add('tx_' + n + '_forma_recebimento_id', btn.dataset.sugestaoForma);
+    add('tx_' + n + '_fornecedor_id',        btn.dataset.sugestaoFornecedor);
+    n++;
+  });
+
+  // 4) DEBIT: sugestão de despesa
+  document.querySelectorAll('.btn-aprovar-despesa').forEach(btn => {
+    add('tx_' + n + '_id',              btn.dataset.txId);
+    add('tx_' + n + '_tipo_tx',         'DEBIT');
+    add('tx_' + n + '_tipo_debito',     'despesa');
+    add('tx_' + n + '_titulo_id',       btn.dataset.sugestaoTitulo);
+    add('tx_' + n + '_categoria_id',    btn.dataset.sugestaoCategoria);
+    add('tx_' + n + '_subcategoria_id', btn.dataset.sugestaoSubcategoria);
+    add('tx_' + n + '_valor',           btn.dataset.txValor);
+    n++;
+  });
+
+  if (n === 0) {
+    alert('Nenhuma sugestão disponível nesta página para aprovar.');
+    return;
+  }
+  if (!confirm('Aprovar ' + n + ' sugestão(ões) desta página?')) return;
+
+  add('acao', 'aprovar_sugestoes_pagina');
+  document.body.appendChild(form);
+  form.submit();
+}
+
+// Atualiza o contador de sugestões disponíveis na página
+(function() {
+  const total = document.querySelectorAll(
+    '.btn-aprovar, .btn-aprovar-despesa, .btn-aprovar-transf, .btn-aprovar-transf-recebida'
+  ).length;
+  const el = document.getElementById('contadorSugestoes');
+  if (el) el.textContent = total;
+  const btn = document.getElementById('btnAprovarSugestoes');
+  if (btn && total === 0) btn.disabled = true;
+})();
 
 // Converte valores mascarados ("1.935,90") para float ("1935.90") antes de submeter
 document.getElementById('formConciliar').addEventListener('submit', function() {
