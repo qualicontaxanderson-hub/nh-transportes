@@ -308,7 +308,7 @@ def fretes_lucro():
             LEFT JOIN motoristas m ON f.motoristas_id = m.id
             LEFT JOIN quantidades q ON f.quantidade_id = q.id
             WHERE 1=1 {where_sql}
-            ORDER BY f.data_frete DESC
+            ORDER BY cliente_nome ASC, f.data_frete DESC
         """
         cursor.execute(q_det, args)
         fretes = cursor.fetchall()
