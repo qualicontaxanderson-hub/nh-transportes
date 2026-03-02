@@ -22,7 +22,7 @@
           <label class="form-label form-label-sm mb-0">Empresa <small class="text-muted">(Ctrl+clique p/ múltiplas)</small></label>
           <select name="cliente_id" class="form-select form-select-sm" multiple size="4" id="selEmpresas">
             {% for c in clientes %}
-            <option value="{{ c.id }}" {% if c.id|string in f_clientes %}selected{% endif %}>
+            <option value="{{ c.id }}" {% if c.id in f_clientes %}selected{% endif %}>
               {{ c.nome_fantasia or c.razao_social }}
             </option>
             {% endfor %}
@@ -63,8 +63,7 @@
                      placeholder="parte do CNPJ" value="{{ f_cnpj }}">
             </div>
             <div class="col-md-6 d-flex align-items-end gap-1">
-              <button type="submit" class="btn btn-primary btn-sm flex-fill" id="btnFiltrar"
-                      onclick="mostrarCarregando(this)">
+              <button type="submit" class="btn btn-primary btn-sm flex-fill" id="btnFiltrar">
                 <i class="bi bi-search"></i> Filtrar
               </button>
               <a href="{{ url_for('bank_import.conciliar') }}" class="btn btn-outline-secondary btn-sm">
@@ -771,6 +770,16 @@ document.addEventListener('DOMContentLoaded', function() {
   if (selEmp) {
     selEmp.addEventListener('change', atualizarContasBancarias);
     atualizarContasBancarias();
+  }
+
+  // Mostra spinner no botão Filtrar ao submeter, SEM desabilitar o botão
+  // (desabilitar antes da submissão pode bloquear o envio do formulário em alguns navegadores)
+  const formFiltros = document.getElementById('formFiltros');
+  const btnFiltrar  = document.getElementById('btnFiltrar');
+  if (formFiltros && btnFiltrar) {
+    formFiltros.addEventListener('submit', function() {
+      btnFiltrar.innerHTML = '<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span> Aguarde...';
+    });
   }
 });
 const checkAll = document.getElementById('checkAll');

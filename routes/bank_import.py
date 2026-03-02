@@ -967,7 +967,7 @@ def conciliar():
     # ------------------------------------------------------------------
     # GET: filtros
     # ------------------------------------------------------------------
-    f_clientes  = [c for c in request.args.getlist('cliente_id') if c]
+    f_clientes  = [int(c) for c in request.args.getlist('cliente_id') if c and c.isdigit()]
     f_tipo      = request.args.get('tipo', '')           # CREDIT / DEBIT
     f_data_ini  = request.args.get('data_ini', '')
     f_data_fim  = request.args.get('data_fim', '')
