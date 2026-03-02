@@ -159,7 +159,7 @@ def fretes_comissao_cte():
             LEFT JOIN produto p ON f.produto_id = p.id
             LEFT JOIN motoristas m ON f.motoristas_id = m.id
             WHERE 1=1 {where_sql}
-            ORDER BY f.data_frete DESC
+            ORDER BY cliente_nome ASC, f.data_frete DESC
         """
         cursor.execute(q_det, args)
         fretes = cursor.fetchall()
