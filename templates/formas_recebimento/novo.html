@@ -18,12 +18,12 @@
     {% endfor %}
   {% endwith %}
 
-  <div class="card shadow-sm" style="max-width:640px;">
+  <div class="card shadow-sm" style="max-width:700px;">
     <div class="card-header" style="background:#1D63A5;color:white;">
       <h5 class="mb-0" style="font-size:1rem;"><i class="bi bi-plus-circle"></i> Nova Forma de Recebimento</h5>
     </div>
     <div class="card-body">
-      <form method="POST">
+      <form method="POST" id="frmForma">
         <div class="mb-3">
           <label class="form-label fw-semibold">Nome <span class="text-danger">*</span></label>
           <input type="text" name="nome" class="form-control" required maxlength="100"
@@ -45,36 +45,19 @@
           </select>
         </div>
 
-        <div class="mb-3">
-          <label class="form-label fw-semibold">Conta Contábil</label>
-          <select name="conta_contabil_id" class="form-select">
-            <option value="">— Nenhuma —</option>
-            {% for conta in contas %}
-            <option value="{{ conta.id }}">{{ conta.label }}</option>
-            {% endfor %}
-          </select>
-          <div class="form-text">Conta que será usada nas exportações contábeis.</div>
+        <hr>
+        <div class="mb-2 d-flex justify-content-between align-items-center">
+          <label class="form-label fw-semibold mb-0">Empresas e Contas Contábeis</label>
+          <button type="button" class="btn btn-sm btn-outline-primary" onclick="adicionarLinha()">
+            <i class="bi bi-plus-lg"></i> Adicionar empresa
+          </button>
+        </div>
+        <div class="form-text mb-2">Selecione a empresa e depois a conta contábil vinculada a ela.</div>
+        <div id="vinculosContainer">
+          <!-- linhas geradas pelo JS -->
         </div>
 
-        <div class="mb-3">
-          <label class="form-label fw-semibold">Empresas que utilizam esta forma</label>
-          <div class="border rounded p-2" style="max-height:180px;overflow-y:auto;">
-            {% if empresas %}
-              {% for emp in empresas %}
-              <div class="form-check">
-                <input class="form-check-input" type="checkbox"
-                       name="empresa_ids" value="{{ emp.id }}"
-                       id="emp_{{ emp.id }}">
-                <label class="form-check-label" for="emp_{{ emp.id }}">{{ emp.nome }}</label>
-              </div>
-              {% endfor %}
-            {% else %}
-              <span class="text-muted small">Nenhuma empresa cadastrada.</span>
-            {% endif %}
-          </div>
-        </div>
-
-        <div class="d-flex gap-2">
+        <div class="d-flex gap-2 mt-3">
           <button type="submit" class="btn btn-primary">
             <i class="bi bi-check-lg"></i> Salvar
           </button>
@@ -87,8 +70,62 @@
 {% endblock %}
 {% block scripts %}
 <script>
+const EMPRESAS = {{ empresas | tojson }};
+const CONTAS_POR_GRUPO = {{ contas_por_grupo | tojson }};
+const VINCULOS_INICIAIS = [];
+
 function toggleTipoCartao(chk) {
   document.getElementById('divTipoCartao').style.display = chk.checked ? '' : 'none';
 }
+
+function buildEmpresaSelect(selectedId) {
+  let html = '<option value="">— Selecione a empresa —</option>';
+  EMPRESAS.forEach(e => {
+    html += `<option value="${e.id}" data-grupo="${e.grupo_contabil_id || ''}" ${e.id == selectedId ? 'selected' : ''}>${e.nome}</option>`;
+  });
+  return html;
+}
+
+function buildContaSelect(grupoId, selectedId) {
+  const contas = grupoId ? (CONTAS_POR_GRUPO[String(grupoId)] || []) : [];
+  let html = '<option value="">— Selecione a conta —</option>';
+  contas.forEach(c => {
+    html += `<option value="${c.id}" ${c.id == selectedId ? 'selected' : ''}>${c.label}</option>`;
+  });
+  return html;
+}
+
+function adicionarLinha(empresaId, contaId, grupoId) {
+  const container = document.getElementById('vinculosContainer');
+  const div = document.createElement('div');
+  div.className = 'row g-2 mb-2 align-items-center linha-vinculo';
+  div.innerHTML = `
+    <div class="col-5">
+      <select name="empresa_id[]" class="form-select form-select-sm sel-empresa" onchange="onEmpresaMudou(this)">
+        ${buildEmpresaSelect(empresaId)}
+      </select>
+    </div>
+    <div class="col-6">
+      <select name="conta_contabil_id[]" class="form-select form-select-sm sel-conta">
+        ${buildContaSelect(grupoId, contaId)}
+      </select>
+    </div>
+    <div class="col-1">
+      <button type="button" class="btn btn-sm btn-outline-danger" onclick="this.closest('.linha-vinculo').remove()">
+        <i class="bi bi-trash"></i>
+      </button>
+    </div>`;
+  container.appendChild(div);
+}
+
+function onEmpresaMudou(sel) {
+  const opt = sel.options[sel.selectedIndex];
+  const grupoId = opt.dataset.grupo || null;
+  const contaSel = sel.closest('.linha-vinculo').querySelector('.sel-conta');
+  contaSel.innerHTML = buildContaSelect(grupoId, null);
+}
+
+// Carregar vínculos iniciais (para editar)
+VINCULOS_INICIAIS.forEach(v => adicionarLinha(v.cliente_id, v.conta_contabil_id, v.grupo_contabil_id));
 </script>
 {% endblock %}
