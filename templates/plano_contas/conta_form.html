@@ -72,11 +72,14 @@
           <a href="{{ url_for('plano_contas.detalhe', id=grupo.id) }}" class="btn btn-secondary">
             <i class="bi bi-arrow-left"></i> Voltar
           </a>
-          <button type="submit" name="acao" value="salvar" class="btn btn-primary">
+          <input type="hidden" name="acao" id="acaoInput" value="salvar">
+          <button type="submit" class="btn btn-primary"
+                  onclick="document.getElementById('acaoInput').value='salvar'">
             <i class="bi bi-save"></i> Salvar
           </button>
           {% if not conta %}
-          <button type="submit" name="acao" value="proxima" class="btn btn-success">
+          <button type="submit" class="btn btn-success"
+                  onclick="document.getElementById('acaoInput').value='proxima'">
             <i class="bi bi-plus-circle"></i> Cadastrar Próxima
           </button>
           {% endif %}
