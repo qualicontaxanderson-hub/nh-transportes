@@ -14,7 +14,7 @@
   <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
     <div>
       <h4 class="mb-0" style="color:#1D63A5;">
-        <i class="bi bi-list-ol"></i>
+        <i class="bi bi-folder-fill"></i>
         <span class="badge bg-secondary me-1" style="font-family:monospace;font-size:0.8em;">{{ grupo.codigo }}</span>
         {{ grupo.nome }}
       </h4>
@@ -33,6 +33,29 @@
       </a>
     </div>
   </div>
+
+  {% if not contas %}
+  <div class="alert alert-info mb-3 d-flex align-items-start gap-3" style="font-size:0.9rem;">
+    <i class="bi bi-info-circle-fill fs-4 mt-1 text-primary"></i>
+    <div>
+      <strong>Grupo criado!</strong> Próximos passos:
+      <ol class="mb-0 mt-1 ps-3">
+        <li>
+          <a href="{{ url_for('plano_contas.nova_conta', grupo_id=grupo.id) }}" class="fw-semibold">
+            Adicione as contas contábeis
+          </a>
+          (ex.: Banco Bradesco = <code>1121</code>, Banco EFI = <code>1122</code>)
+        </li>
+        <li>
+          <a href="{{ url_for('plano_contas.vincular_clientes', id=grupo.id) }}" class="fw-semibold">
+            Vincule as empresas
+          </a>
+          que utilizarão este plano de contas.
+        </li>
+      </ol>
+    </div>
+  </div>
+  {% endif %}
 
   <div class="card shadow-sm">
     <div class="card-header py-2" style="background:#1D63A5;color:white;">
@@ -92,7 +115,7 @@
       {% else %}
       <div class="p-4 text-center text-muted">
         <i class="bi bi-list-ol fs-1"></i>
-        <p class="mt-2 mb-0">Nenhuma conta cadastrada neste grupo.</p>
+        <p class="mt-2 mb-0">Nenhuma conta cadastrada neste grupo ainda.</p>
         <a href="{{ url_for('plano_contas.nova_conta', grupo_id=grupo.id) }}"
            class="btn btn-primary btn-sm mt-2">
           <i class="bi bi-plus-circle"></i> Adicionar primeira conta

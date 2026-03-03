@@ -1,3 +1,5 @@
+import logging
+
 from flask import Blueprint, render_template, request, redirect, url_for, flash
 from flask_login import login_required
 
@@ -5,6 +7,41 @@ from utils.db import get_db_connection
 from utils.decorators import admin_required
 
 bp = Blueprint('plano_contas', __name__, url_prefix='/plano-contas')
+
+# Flag per-process: CREATE TABLE IF NOT EXISTS é idempotente; o flag apenas
+# evita a query DDL extra em cada request após a primeira execução bem-sucedida.
+_tables_ready = False
+
+
+def _ensure_tables():
+    """Garante que plano_contas_contas existe — idempotente, seguro de chamar sempre."""
+    global _tables_ready
+    if _tables_ready:
+        return
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS plano_contas_contas (
+                id         INT AUTO_INCREMENT PRIMARY KEY,
+                grupo_id   INT          NOT NULL COMMENT 'FK para plano_contas_grupos',
+                codigo     VARCHAR(30)  NOT NULL COMMENT 'Código contábil, ex.: 1121',
+                nome       VARCHAR(120) NOT NULL COMMENT 'Nome da conta, ex.: Banco Bradesco',
+                descricao  TEXT         NULL,
+                ativo      TINYINT(1)   NOT NULL DEFAULT 1,
+                created_at DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE KEY uq_pcc_grupo_codigo (grupo_id, codigo),
+                CONSTRAINT fk_pcc_grupo FOREIGN KEY (grupo_id)
+                    REFERENCES plano_contas_grupos(id) ON DELETE CASCADE
+            ) COMMENT='Contas do Plano de Contas Contábil dentro de cada Grupo'
+        """)
+        conn.commit()
+        _tables_ready = True
+    except Exception:
+        logging.getLogger(__name__).exception('_ensure_tables: falha ao criar plano_contas_contas')
+    finally:
+        cursor.close()
+        conn.close()
 
 
 def _get_grupos(cursor):
@@ -25,6 +62,7 @@ def _get_grupos(cursor):
 @login_required
 @admin_required
 def lista():
+    _ensure_tables()
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
     grupos = _get_grupos(cursor)
@@ -57,8 +95,9 @@ def novo():
                 (codigo, nome, descricao),
             )
             conn.commit()
-            flash('Grupo contábil criado com sucesso!', 'success')
-            return redirect(url_for('plano_contas.lista'))
+            novo_id = cursor.lastrowid
+            flash('Grupo contábil criado com sucesso! Agora adicione as contas e vincule as empresas.', 'success')
+            return redirect(url_for('plano_contas.detalhe', id=novo_id))
         except Exception as e:
             conn.rollback()
             flash(f'Erro ao criar grupo: {e}', 'danger')
@@ -216,6 +255,7 @@ def clonar(id):
 @login_required
 @admin_required
 def detalhe(id):
+    _ensure_tables()
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
     cursor.execute("SELECT * FROM plano_contas_grupos WHERE id = %s", (id,))
