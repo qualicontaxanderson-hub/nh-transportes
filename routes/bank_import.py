@@ -1,5 +1,6 @@
 import csv
 import io
+import logging
 import os
 import re
 import time
@@ -10,7 +11,41 @@ from flask import Blueprint, render_template, request, redirect, url_for, flash,
 from flask_login import login_required, current_user
 from utils.db import get_db_connection
 
+logger = logging.getLogger(__name__)
+
 bp = Blueprint('bank_import', __name__, url_prefix='/banco')
+
+# NOTE: this flag is not thread-safe but the underlying operation is idempotent
+# (ADD COLUMN IF NOT EXISTS), so a double-run in concurrent requests is harmless.
+_ld_bank_tx_id_ready = False
+
+
+def _ensure_ld_bank_tx_id():
+    """Garante que lancamentos_despesas.bank_transaction_id existe. Idempotente."""
+    global _ld_bank_tx_id_ready
+    if _ld_bank_tx_id_ready:
+        return
+    conn = get_db_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT COUNT(*) FROM information_schema.COLUMNS"
+            " WHERE TABLE_SCHEMA = DATABASE()"
+            " AND TABLE_NAME = 'lancamentos_despesas'"
+            " AND COLUMN_NAME = 'bank_transaction_id'"
+        )
+        if cursor.fetchone()[0] == 0:
+            cursor.execute(
+                "ALTER TABLE lancamentos_despesas"
+                " ADD COLUMN bank_transaction_id INT NULL"
+            )
+            conn.commit()
+        cursor.close()
+        _ld_bank_tx_id_ready = True
+    except Exception:
+        logger.warning("_ensure_ld_bank_tx_id: não foi possível criar a coluna bank_transaction_id", exc_info=True)
+    finally:
+        conn.close()
 
 
 # ---------------------------------------------------------------------------
@@ -849,6 +884,7 @@ def _get_troco_pix_sem_banco():
 @login_required
 def conciliar():
     """Interface de conciliação manual com filtros, multi-seleção e memória."""
+    _ensure_ld_bank_tx_id()
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
     usuario = current_user.email if hasattr(current_user, 'email') else 'manual'
@@ -944,17 +980,28 @@ def conciliar():
         salvar_mapeamento = (acao != 'lancamento_unico')
         # Lançamento Único usa a mesma lógica de conciliação, apenas sem salvar mapeamento
         acao_conciliar = 'conciliar' if acao == 'lancamento_unico' else acao
-        for tx_id in tx_ids:
-            if tipo_debito == 'transferencia' and conta_destino_id:
-                _conciliar_transferencia(cursor, conn, tx_id, conta_destino_id, usuario,
-                                         salvar_mapeamento=salvar_mapeamento)
-            else:
-                _conciliar_tx(cursor, conn, tx_id, acao_conciliar, tipo_tx,
-                              fornecedor_id, forma_recebimento_id, usuario,
-                              tipo_debito=tipo_debito, despesas=despesas or None,
-                              troco_pix_id=troco_pix_id,
-                              salvar_mapeamento=salvar_mapeamento)
-            ok += 1
+        try:
+            for tx_id in tx_ids:
+                if tipo_debito == 'transferencia' and conta_destino_id:
+                    _conciliar_transferencia(cursor, conn, tx_id, conta_destino_id, usuario,
+                                             salvar_mapeamento=salvar_mapeamento)
+                else:
+                    _conciliar_tx(cursor, conn, tx_id, acao_conciliar, tipo_tx,
+                                  fornecedor_id, forma_recebimento_id, usuario,
+                                  tipo_debito=tipo_debito, despesas=despesas or None,
+                                  troco_pix_id=troco_pix_id,
+                                  salvar_mapeamento=salvar_mapeamento)
+                ok += 1
+        except Exception as exc:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+            cursor.close()
+            conn.close()
+            logger.exception("Erro ao conciliar transação: %s", exc)
+            flash(f'Erro ao conciliar: {exc}', 'danger')
+            return redirect(request.url)
 
         if acao == 'ignorar':
             flash(f'{ok} transação(ões) ignorada(s).', 'info')
@@ -1461,11 +1508,12 @@ def api_transacoes_pendentes():
 @login_required
 def api_auto_reconcile():
     """API: força a auto-conciliação de transações pendentes (por CNPJ e por regras)."""
-    import logging
-    logger = logging.getLogger(__name__)
-    conn = get_db_connection()
-    cursor = conn.cursor(dictionary=True)
+    _ensure_ld_bank_tx_id()
+    conn = None
+    cursor = None
     try:
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
         # 1. Auto-conciliação por regras de descrição (regras têm prioridade sobre CNPJ)
         por_regras = _auto_conciliar_por_regras(cursor, conn)
 
@@ -1508,12 +1556,15 @@ def api_auto_reconcile():
     except Exception as e:
         logger.exception("Erro em api_auto_reconcile: %s", e)
         try:
-            conn.rollback()
+            if conn:
+                conn.rollback()
         except Exception:
             pass
         try:
-            cursor.close()
-            conn.close()
+            if cursor:
+                cursor.close()
+            if conn:
+                conn.close()
         except Exception:
             pass
         return jsonify({'success': False, 'erro': str(e), 'conciliados': 0}), 200
@@ -1523,8 +1574,6 @@ def api_auto_reconcile():
 @login_required
 def api_diagnostico_regras():
     """Diagnóstico: mostra regras e o que cada uma encontraria (sem fazer alterações)."""
-    import logging
-    logger = logging.getLogger(__name__)
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
     try:
