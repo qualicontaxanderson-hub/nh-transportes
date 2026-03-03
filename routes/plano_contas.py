@@ -1,10 +1,39 @@
 import logging
+import re
+import unicodedata
 
 from flask import Blueprint, render_template, request, redirect, url_for, flash
 from flask_login import login_required
 
 from utils.db import get_db_connection
 from utils.decorators import admin_required
+
+
+def _gerar_codigo(nome):
+    """Gera código curto e legível a partir do nome (máx. 28 chars, ASCII, sem acentos)."""
+    s = unicodedata.normalize('NFKD', nome)
+    s = ''.join(c for c in s if not unicodedata.combining(c))
+    s = s.upper()
+    slug = re.sub(r'[^A-Z0-9]', '-', s)
+    slug = re.sub(r'-+', '-', slug).strip('-')
+    return slug[:28]
+
+
+def _codigo_unico(cursor, base, excluir_id=None):
+    """Retorna um código único derivado de base, adicionando sufixo numérico se necessário."""
+    qry = "SELECT codigo FROM plano_contas_grupos WHERE codigo LIKE %s"
+    params = [base + '%']
+    if excluir_id:
+        qry += " AND id != %s"
+        params.append(excluir_id)
+    cursor.execute(qry, params)
+    existentes = {row[0] for row in cursor.fetchall()}
+    if base not in existentes:
+        return base
+    n = 2
+    while f"{base}-{n}" in existentes:
+        n += 1
+    return f"{base}-{n}"
 
 bp = Blueprint('plano_contas', __name__, url_prefix='/plano-contas')
 
@@ -136,18 +165,19 @@ def lista():
 @admin_required
 def novo():
     if request.method == 'POST':
-        codigo    = request.form.get('codigo', '').strip()
         nome      = request.form.get('nome', '').strip()
         descricao = request.form.get('descricao', '').strip() or None
 
-        if not codigo or not nome:
-            flash('Código e Nome são obrigatórios.', 'danger')
+        if not nome:
+            flash('Nome é obrigatório.', 'danger')
             return render_template('plano_contas/grupo_form.html', grupo=None,
                                    form=request.form)
 
         conn = get_db_connection()
         cursor = conn.cursor()
         try:
+            codigo = _codigo_unico(cursor, _gerar_codigo(nome))
+            logging.getLogger(__name__).debug('novo grupo: nome=%r codigo_gerado=%r', nome, codigo)
             cursor.execute(
                 "INSERT INTO plano_contas_grupos (codigo, nome, descricao) VALUES (%s, %s, %s)",
                 (codigo, nome, descricao),
@@ -184,13 +214,12 @@ def editar(id):
         return redirect(url_for('plano_contas.lista'))
 
     if request.method == 'POST':
-        codigo    = request.form.get('codigo', '').strip()
         nome      = request.form.get('nome', '').strip()
         descricao = request.form.get('descricao', '').strip() or None
         ativo     = 1 if request.form.get('ativo') else 0
 
-        if not codigo or not nome:
-            flash('Código e Nome são obrigatórios.', 'danger')
+        if not nome:
+            flash('Nome é obrigatório.', 'danger')
             return render_template('plano_contas/grupo_form.html', grupo=grupo,
                                    form=request.form)
 
@@ -199,13 +228,13 @@ def editar(id):
         try:
             cursor.execute(
                 """UPDATE plano_contas_grupos
-                   SET codigo=%s, nome=%s, descricao=%s, ativo=%s
+                   SET nome=%s, descricao=%s, ativo=%s
                    WHERE id=%s""",
-                (codigo, nome, descricao, ativo, id),
+                (nome, descricao, ativo, id),
             )
             conn.commit()
             flash('Grupo atualizado com sucesso!', 'success')
-            return redirect(url_for('plano_contas.lista'))
+            return redirect(url_for('plano_contas.detalhe', id=id))
         except Exception as e:
             conn.rollback()
             flash(f'Erro ao atualizar grupo: {e}', 'danger')
@@ -257,23 +286,11 @@ def clonar(id):
             flash('Grupo não encontrado.', 'danger')
             return redirect(url_for('plano_contas.lista'))
 
-        novo_codigo = grupo['codigo'] + '_copia'
         novo_nome   = grupo['nome'] + ' (cópia)'
-
-        # Garante código único com uma única query
-        base_codigo = novo_codigo
-        cur2 = conn.cursor(dictionary=True)
-        cur2.execute(
-            "SELECT codigo FROM plano_contas_grupos WHERE codigo LIKE %s",
-            (base_codigo + '%',),
-        )
-        codigos_existentes = {row['codigo'] for row in cur2.fetchall()}
+        base_codigo = _gerar_codigo(novo_nome)
+        cur2 = conn.cursor()
+        novo_codigo = _codigo_unico(cur2, base_codigo)
         cur2.close()
-
-        sufixo = 1
-        while novo_codigo in codigos_existentes:
-            sufixo += 1
-            novo_codigo = f"{base_codigo}{sufixo}"
 
         cur3 = conn.cursor()
         cur3.execute(
@@ -296,7 +313,7 @@ def clonar(id):
 
         conn.commit()
         cur3.close()
-        flash(f'Grupo clonado com sucesso! Novo código: {novo_codigo}', 'success')
+        flash(f'Grupo clonado com sucesso!', 'success')
         return redirect(url_for('plano_contas.detalhe', id=novo_grupo_id))
     except Exception as e:
         conn.rollback()

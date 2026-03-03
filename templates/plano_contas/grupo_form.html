@@ -1,6 +1,5 @@
 {% extends "base.html" %}
-{% set titulo_pagina = 'Editar Grupo Contábil' if grupo else 'Novo Grupo Contábil' %}
-{% block title %}{{ titulo_pagina }} — NH Transportes{% endblock %}
+{% block title %}{{ 'Editar' if grupo else 'Novo' }} Grupo — Plano de Contas — NH Transportes{% endblock %}
 
 {% block content %}
 <div class="container-fluid">
@@ -8,45 +7,35 @@
     <ol class="breadcrumb" style="font-size:0.85rem;">
       <li class="breadcrumb-item"><a href="{{ url_for('index') }}">Dashboard</a></li>
       <li class="breadcrumb-item"><a href="{{ url_for('plano_contas.lista') }}">Plano de Contas</a></li>
-      <li class="breadcrumb-item active">{{ titulo_pagina }}</li>
+      <li class="breadcrumb-item active">{{ 'Editar Grupo' if grupo else 'Novo Grupo' }}</li>
     </ol>
   </nav>
 
-  <h4 class="mb-3" style="color:#1D63A5;">
-    <i class="bi bi-journal-bookmark-fill"></i> {{ titulo_pagina }}
-  </h4>
-
-  <div class="card shadow-sm" style="max-width:640px;">
-    <div class="card-header py-2" style="background:#1D63A5;color:white;">
-      <h6 class="mb-0">Dados do Grupo</h6>
+  <div class="card shadow-sm">
+    <div class="card-header" style="background:#1D63A5;color:white;font-size:0.95rem;padding:0.6rem 1rem;">
+      <h5 class="mb-0" style="font-size:1rem;">
+        <i class="bi bi-folder-fill"></i>
+        {{ 'Editar Grupo Contábil' if grupo else 'Novo Grupo Contábil' }}
+      </h5>
     </div>
-    <div class="card-body">
+    <div class="card-body" style="padding:1.5rem;">
       <form method="POST">
 
-        <div class="mb-3">
-          <label class="form-label fw-semibold">
-            Código Contábil <span class="text-danger">*</span>
-          </label>
-          <input type="text" name="codigo" class="form-control form-control-sm"
-                 placeholder="Ex.: PLAN-2025, BRADESCO-GRUPO, SICOOB-PJ"
-                 value="{{ form.codigo if form else '' }}"
-                 style="font-family:monospace;" required>
-          <div class="form-text">Identificador único do grupo (ex.: <code>SICOOB-2025</code>). As contas têm seus próprios códigos.</div>
+        <div class="row">
+          <div class="col-md-8 mb-3">
+            <label for="nome" class="form-label fw-semibold">
+              Nome do Grupo <span class="text-danger">*</span>
+            </label>
+            <input type="text" class="form-control" id="nome" name="nome"
+                   placeholder="Ex.: Sicoob PJ 2025, Bradesco SA, Plano Padrão"
+                   value="{{ form.nome if form else '' }}" required>
+          </div>
         </div>
 
         <div class="mb-3">
-          <label class="form-label fw-semibold">
-            Nome / Descrição curta <span class="text-danger">*</span>
-          </label>
-          <input type="text" name="nome" class="form-control form-control-sm"
-                 placeholder="Ex.: Conta Sicoob, Banco Bradesco PJ"
-                 value="{{ form.nome if form else '' }}" required>
-        </div>
-
-        <div class="mb-3">
-          <label class="form-label fw-semibold">Observação (opcional)</label>
-          <textarea name="descricao" class="form-control form-control-sm" rows="2"
-                    placeholder="Informações adicionais sobre este grupo...">{{ form.descricao if form else '' }}</textarea>
+          <label for="descricao" class="form-label fw-semibold">Descrição (opcional)</label>
+          <textarea class="form-control" id="descricao" name="descricao" rows="3"
+                    placeholder="Informações adicionais sobre este grupo de contas...">{{ form.descricao if form else '' }}</textarea>
         </div>
 
         {% if grupo %}
@@ -59,19 +48,13 @@
         </div>
         {% endif %}
 
-        <div class="d-flex gap-2 mt-3">
-          <a href="{{ url_for('plano_contas.lista') }}" class="btn btn-secondary btn-sm">
+        <div class="d-flex justify-content-between">
+          <a href="{{ url_for('plano_contas.lista') }}" class="btn btn-secondary">
             <i class="bi bi-arrow-left"></i> Voltar
           </a>
-          <button type="submit" class="btn btn-primary btn-sm">
-            <i class="bi bi-check-circle"></i> Salvar
+          <button type="submit" class="btn btn-primary">
+            <i class="bi bi-save"></i> Salvar
           </button>
-          {% if grupo %}
-          <a href="{{ url_for('plano_contas.detalhe', id=grupo.id) }}"
-             class="btn btn-outline-info btn-sm ms-auto">
-            <i class="bi bi-list-ol"></i> Gerenciar Contas
-          </a>
-          {% endif %}
         </div>
 
       </form>
