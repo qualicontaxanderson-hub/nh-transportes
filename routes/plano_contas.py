@@ -14,13 +14,67 @@ _tables_ready = False
 
 
 def _ensure_tables():
-    """Garante que plano_contas_contas existe — idempotente, seguro de chamar sempre."""
+    """Garante que todas as tabelas/colunas do plano de contas existem.
+
+    Idempotente — cria com IF NOT EXISTS / verifica information_schema.
+    Chamado automaticamente ao acessar qualquer rota deste blueprint.
+    """
     global _tables_ready
     if _tables_ready:
         return
+    log = logging.getLogger(__name__)
     conn = get_db_connection()
     cursor = conn.cursor()
     try:
+        # 1. Tabela de grupos
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS plano_contas_grupos (
+                id         INT AUTO_INCREMENT PRIMARY KEY,
+                codigo     VARCHAR(30)  NOT NULL COMMENT 'Código contábil, ex.: 11211',
+                nome       VARCHAR(120) NOT NULL COMMENT 'Descrição, ex.: Conta Sicoob',
+                descricao  TEXT         NULL,
+                ativo      TINYINT(1)   NOT NULL DEFAULT 1,
+                created_at DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE KEY uq_pcg_codigo (codigo)
+            ) COMMENT='Grupos do Plano de Contas Contábil'
+        """)
+        conn.commit()
+
+        # 2. Coluna grupo_contabil_id em clientes (idempotente via information_schema)
+        cursor.execute("""
+            SELECT COUNT(*) FROM information_schema.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE()
+              AND TABLE_NAME   = 'clientes'
+              AND COLUMN_NAME  = 'grupo_contabil_id'
+        """)
+        if cursor.fetchone()[0] == 0:
+            cursor.execute(
+                "ALTER TABLE clientes ADD COLUMN grupo_contabil_id INT NULL"
+            )
+            conn.commit()
+
+        # 3. FK clientes → plano_contas_grupos (idempotente)
+        cursor.execute("""
+            SELECT COUNT(*) FROM information_schema.TABLE_CONSTRAINTS
+            WHERE TABLE_SCHEMA    = DATABASE()
+              AND TABLE_NAME      = 'clientes'
+              AND CONSTRAINT_NAME = 'fk_clientes_grupo_contabil'
+        """)
+        if cursor.fetchone()[0] == 0:
+            try:
+                cursor.execute("""
+                    ALTER TABLE clientes
+                    ADD CONSTRAINT fk_clientes_grupo_contabil
+                    FOREIGN KEY (grupo_contabil_id)
+                    REFERENCES plano_contas_grupos(id) ON DELETE SET NULL
+                """)
+                conn.commit()
+            except Exception:
+                # Pode já existir com outro nome; rollback e continua
+                log.debug('_ensure_tables: FK já existe ou não aplicável; ignorando', exc_info=True)
+                conn.rollback()
+
+        # 4. Tabela de contas dentro dos grupos
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS plano_contas_contas (
                 id         INT AUTO_INCREMENT PRIMARY KEY,
@@ -38,7 +92,11 @@ def _ensure_tables():
         conn.commit()
         _tables_ready = True
     except Exception:
-        logging.getLogger(__name__).exception('_ensure_tables: falha ao criar plano_contas_contas')
+        log.exception('_ensure_tables: falha ao inicializar tabelas do plano de contas')
+        try:
+            conn.rollback()
+        except Exception:
+            log.debug('_ensure_tables: rollback também falhou', exc_info=True)
     finally:
         cursor.close()
         conn.close()
