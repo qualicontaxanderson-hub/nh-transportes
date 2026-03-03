@@ -77,7 +77,7 @@ def _load_form_data(conn):
             contas_por_grupo[gid] = []
         contas_por_grupo[gid].append({
             'id': c['id'],
-            'label': f"{c['grupo_codigo']} {c['grupo_nome']} \u203a {c['codigo']} {c['conta_nome']}",
+            'label': f"{c['codigo']} {c['conta_nome']}",
         })
     return empresas, contas_por_grupo
 
@@ -115,7 +115,7 @@ def api_contas_by_empresa(empresa_id):
     grupo_id = row['grupo_contabil_id']
     cursor.execute(
         """SELECT c.id,
-                  CONCAT(g.codigo, ' ', g.nome, ' \u203a ', c.codigo, ' ', c.nome) AS label
+                  CONCAT(c.codigo, ' ', c.nome) AS label
              FROM plano_contas_contas c
              JOIN plano_contas_grupos g ON g.id = c.grupo_id
             WHERE c.grupo_id = %s AND c.ativo = 1

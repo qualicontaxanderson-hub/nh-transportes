@@ -95,13 +95,31 @@ function buildEmpresaSelect(selectedId) {
   return html;
 }
 
-function buildContaSelect(grupoId, selectedId) {
+function buildContaOptions(grupoId, selectedId) {
   const contas = grupoId ? (CONTAS_POR_GRUPO[String(grupoId)] || []) : [];
   let html = '<option value="">— Selecione a conta —</option>';
   contas.forEach(c => {
     html += `<option value="${c.id}" ${c.id == selectedId ? 'selected' : ''}>${c.label}</option>`;
   });
   return html;
+}
+
+function buildContaWidget(grupoId, selectedId) {
+  return `
+    <input type="text" class="form-control form-control-sm mb-1 inp-busca-conta"
+           placeholder="🔍 Buscar conta..." oninput="filtrarContas(this)" autocomplete="off">
+    <select name="conta_contabil_id[]" class="form-select form-select-sm sel-conta">
+      ${buildContaOptions(grupoId, selectedId)}
+    </select>`;
+}
+
+function filtrarContas(inp) {
+  const sel = inp.closest('.conta-wrapper').querySelector('.sel-conta');
+  const query = inp.value.toLowerCase();
+  Array.from(sel.options).forEach(opt => {
+    if (!opt.value) { opt.hidden = false; return; }
+    opt.hidden = query.length > 0 && !opt.text.toLowerCase().includes(query);
+  });
 }
 
 function adicionarLinha(empresaId, contaId, grupoId) {
@@ -115,9 +133,9 @@ function adicionarLinha(empresaId, contaId, grupoId) {
       </select>
     </div>
     <div class="col-6">
-      <select name="conta_contabil_id[]" class="form-select form-select-sm sel-conta">
-        ${buildContaSelect(grupoId, contaId)}
-      </select>
+      <div class="conta-wrapper">
+        ${buildContaWidget(grupoId, contaId)}
+      </div>
     </div>
     <div class="col-1">
       <button type="button" class="btn btn-sm btn-outline-danger" onclick="this.closest('.linha-vinculo').remove()">
@@ -130,8 +148,8 @@ function adicionarLinha(empresaId, contaId, grupoId) {
 function onEmpresaMudou(sel) {
   const opt = sel.options[sel.selectedIndex];
   const grupoId = opt.dataset.grupo || null;
-  const contaSel = sel.closest('.linha-vinculo').querySelector('.sel-conta');
-  contaSel.innerHTML = buildContaSelect(grupoId, null);
+  const wrapper = sel.closest('.linha-vinculo').querySelector('.conta-wrapper');
+  wrapper.innerHTML = buildContaWidget(grupoId, null);
 }
 
 // Carregar vínculos existentes
