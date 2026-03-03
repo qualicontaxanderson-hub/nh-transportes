@@ -35,6 +35,26 @@ def _codigo_unico(cursor, base, excluir_id=None):
         n += 1
     return f"{base}-{n}"
 
+
+_CODIGO_CONTA_RE = re.compile(r'^[0-9]+(\.[0-9]+)*$')
+
+
+def _validar_codigo_conta(codigo):
+    """Retorna True se o código contém apenas dígitos separados por ponto (ex.: 1121 ou 1122.1)."""
+    return _CODIGO_CONTA_RE.match(codigo) is not None if codigo else False
+
+
+def _codigo_conta_duplicado(cursor, grupo_id, codigo, excluir_id=None):
+    """Retorna True se já existe uma conta com este código no grupo."""
+    qry = "SELECT 1 FROM plano_contas_contas WHERE grupo_id=%s AND codigo=%s"
+    params = [grupo_id, codigo]
+    if excluir_id:
+        qry += " AND id != %s"
+        params.append(excluir_id)
+    cursor.execute(qry, params)
+    return cursor.fetchone() is not None
+
+
 bp = Blueprint('plano_contas', __name__, url_prefix='/plano-contas')
 
 # Flag per-process: CREATE TABLE IF NOT EXISTS é idempotente; o flag apenas
@@ -374,21 +394,34 @@ def nova_conta(grupo_id):
         codigo    = request.form.get('codigo', '').strip()
         nome      = request.form.get('nome', '').strip()
         descricao = request.form.get('descricao', '').strip() or None
+        acao      = request.form.get('acao', 'salvar')
 
         if not codigo or not nome:
             flash('Código e Nome são obrigatórios.', 'danger')
             return render_template('plano_contas/conta_form.html',
                                    grupo=grupo, conta=None, form=request.form)
 
+        if not _validar_codigo_conta(codigo):
+            flash('Código inválido — use apenas dígitos e ponto (ex.: 1121 ou 1122.1).', 'danger')
+            return render_template('plano_contas/conta_form.html',
+                                   grupo=grupo, conta=None, form=request.form)
+
         conn = get_db_connection()
         cursor = conn.cursor()
         try:
+            if _codigo_conta_duplicado(cursor, grupo_id, codigo):
+                flash(f'Já existe uma conta com o código {codigo!r} neste grupo.', 'danger')
+                return render_template('plano_contas/conta_form.html',
+                                       grupo=grupo, conta=None, form=request.form)
+
             cursor.execute(
                 "INSERT INTO plano_contas_contas (grupo_id, codigo, nome, descricao) VALUES (%s, %s, %s, %s)",
                 (grupo_id, codigo, nome, descricao),
             )
             conn.commit()
             flash('Conta criada com sucesso!', 'success')
+            if acao == 'proxima':
+                return redirect(url_for('plano_contas.nova_conta', grupo_id=grupo_id))
             return redirect(url_for('plano_contas.detalhe', id=grupo_id))
         except Exception as e:
             conn.rollback()
@@ -438,9 +471,19 @@ def editar_conta(conta_id):
             return render_template('plano_contas/conta_form.html',
                                    grupo=grupo, conta=conta, form=request.form)
 
+        if not _validar_codigo_conta(codigo):
+            flash('Código inválido — use apenas dígitos e ponto (ex.: 1121 ou 1122.1).', 'danger')
+            return render_template('plano_contas/conta_form.html',
+                                   grupo=grupo, conta=conta, form=request.form)
+
         conn = get_db_connection()
         cursor = conn.cursor()
         try:
+            if _codigo_conta_duplicado(cursor, conta['grupo_id'], codigo, excluir_id=conta_id):
+                flash(f'Já existe outra conta com o código {codigo!r} neste grupo.', 'danger')
+                return render_template('plano_contas/conta_form.html',
+                                       grupo=grupo, conta=conta, form=request.form)
+
             cursor.execute(
                 """UPDATE plano_contas_contas
                    SET codigo=%s, nome=%s, descricao=%s, ativo=%s
