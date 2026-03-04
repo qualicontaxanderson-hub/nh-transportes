@@ -5,6 +5,7 @@ import os
 import re
 import time
 import datetime as _dt
+from collections import Counter
 
 import mysql.connector
 from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, Response
@@ -263,6 +264,9 @@ def _auto_conciliar_por_regras(cursor, conn, account_id=None):
       - Regras de despesa (titulo_id + categoria_id → cria lancamentos_despesas)
       - Regras de cliente (cliente_id para créditos de cobrança)
     Retorna quantas foram auto-conciliadas.
+
+    Performance: todo o matching é feito em Python (memória); as escritas no BD são
+    feitas em lote com executemany() para evitar timeouts quando há muitas transações.
     """
     # Carrega regras ativas ordenadas por especificidade:
     # 1. Regras vinculadas a uma conta específica (account_id) antes das genéricas
@@ -309,7 +313,19 @@ def _auto_conciliar_por_regras(cursor, conn, account_id=None):
 
     logger.info("_auto_conciliar_por_regras: %d regra(s) ativa(s), %d transação(ões) pendente(s)", len(regras), len(pendentes))
     agora = _dt.datetime.now()
-    aplicadas = 0
+
+    # ------------------------------------------------------------------ #
+    # Fase 1: matching em memória — zero round-trips ao BD por transação  #
+    # ------------------------------------------------------------------ #
+    # batch_simples: linhas para UPDATE bank_transactions (forma/fornecedor)
+    batch_simples = []
+    # batch_despesa_insert: linhas para INSERT lancamentos_despesas
+    batch_despesa_insert = []
+    # batch_despesa_update: linhas para UPDATE bank_transactions (despesa)
+    batch_despesa_update = []
+    # rule_hits: contador de quantas vezes cada regra foi aplicada
+    rule_hits: Counter = Counter()
+
     for tx in pendentes:
         descricao = (tx.get('descricao') or '').upper()
         tipo = tx.get('tipo') or ''
@@ -336,56 +352,72 @@ def _auto_conciliar_por_regras(cursor, conn, account_id=None):
             padrao2 = (regra.get('padrao_secundario') or '').upper()
             if padrao2 and padrao2 not in descricao:
                 continue
+
             # Determina o que vincular
-            forma_id  = regra.get('forma_recebimento_id')
-            forn_id   = regra.get('fornecedor_id')
+            forma_id     = regra.get('forma_recebimento_id')
+            forn_id      = regra.get('fornecedor_id')
             titulo_id    = regra.get('titulo_id')
             categoria_id = regra.get('categoria_id')
 
             if titulo_id and categoria_id and tipo == 'DEBIT':
-                # Regra de despesa → cria lancamento_despesas e concilia
-                # Usa cliente_id da conta bancária para identificar a empresa
+                # Regra de despesa → acumula INSERT lancamentos_despesas
                 conta_cliente_id = tx.get('conta_cliente_id')
-                cursor.execute(
-                    """INSERT INTO lancamentos_despesas
-                       (data, cliente_id, titulo_id, categoria_id, valor,
-                        fornecedor, observacao, bank_transaction_id)
-                       VALUES (%s, %s, %s, %s, %s, %s, %s, %s)""",
-                    (tx['data_transacao'],
-                     conta_cliente_id,
-                     titulo_id, categoria_id,
-                     tx['valor'],
-                     (tx.get('descricao') or '')[:255],
-                     tx.get('descricao') or '',
-                     tx['id']),
-                )
-                cursor.execute(
-                    """UPDATE bank_transactions
-                       SET status='conciliado', conciliado_em=%s, conciliado_por='auto-regra'
-                       WHERE id=%s""",
-                    (agora, tx['id']),
-                )
+                batch_despesa_insert.append((
+                    tx['data_transacao'],
+                    conta_cliente_id,
+                    titulo_id, categoria_id,
+                    tx['valor'],
+                    (tx.get('descricao') or '')[:255],
+                    tx.get('descricao') or '',
+                    tx['id'],
+                ))
+                batch_despesa_update.append((agora, tx['id']))
             else:
-                cursor.execute(
-                    """UPDATE bank_transactions
-                       SET status='conciliado',
-                           forma_recebimento_id=%s,
-                           fornecedor_id=%s,
-                           conciliado_em=%s,
-                           conciliado_por='auto-regra'
-                       WHERE id=%s""",
-                    (forma_id, forn_id, agora, tx['id']),
-                )
-            cursor.execute(
-                """UPDATE bank_conciliacao_regras
-                   SET total_aplicacoes=total_aplicacoes+1 WHERE id=%s""",
-                (regra['id'],),
-            )
-            aplicadas += 1
+                batch_simples.append((forma_id, forn_id, agora, tx['id']))
+
+            rule_hits[regra['id']] += 1
             break  # primeira regra que bate
 
-    if aplicadas:
-        conn.commit()
+    aplicadas = len(batch_simples) + len(batch_despesa_insert)
+    if not aplicadas:
+        return 0
+
+    # ------------------------------------------------------------------ #
+    # Fase 2: escritas em lote — poucos round-trips independente do volume #
+    # ------------------------------------------------------------------ #
+    if batch_simples:
+        cursor.executemany(
+            """UPDATE bank_transactions
+               SET status='conciliado',
+                   forma_recebimento_id=%s,
+                   fornecedor_id=%s,
+                   conciliado_em=%s,
+                   conciliado_por='auto-regra'
+               WHERE id=%s""",
+            batch_simples,
+        )
+    if batch_despesa_insert:
+        cursor.executemany(
+            """INSERT INTO lancamentos_despesas
+               (data, cliente_id, titulo_id, categoria_id, valor,
+                fornecedor, observacao, bank_transaction_id)
+               VALUES (%s, %s, %s, %s, %s, %s, %s, %s)""",
+            batch_despesa_insert,
+        )
+        cursor.executemany(
+            """UPDATE bank_transactions
+               SET status='conciliado', conciliado_em=%s, conciliado_por='auto-regra'
+               WHERE id=%s""",
+            batch_despesa_update,
+        )
+    if rule_hits:
+        cursor.executemany(
+            """UPDATE bank_conciliacao_regras
+               SET total_aplicacoes=total_aplicacoes+%s WHERE id=%s""",
+            [(cnt, rid) for rid, cnt in rule_hits.items()],
+        )
+
+    conn.commit()
     return aplicadas
 
 # ---------------------------------------------------------------------------
