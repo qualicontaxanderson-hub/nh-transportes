@@ -278,6 +278,7 @@ def _auto_conciliar_por_regras(cursor, conn, account_id=None):
     )
     regras = cursor.fetchall()
     if not regras:
+        logger.info("_auto_conciliar_por_regras: nenhuma regra ativa encontrada")
         return 0
 
     # Busca transações ainda pendentes com dados da conta
@@ -303,8 +304,10 @@ def _auto_conciliar_por_regras(cursor, conn, account_id=None):
         )
     pendentes = cursor.fetchall()
     if not pendentes:
+        logger.info("_auto_conciliar_por_regras: nenhuma transação pendente encontrada (account_id=%s)", account_id)
         return 0
 
+    logger.info("_auto_conciliar_por_regras: %d regra(s) ativa(s), %d transação(ões) pendente(s)", len(regras), len(pendentes))
     agora = _dt.datetime.now()
     aplicadas = 0
     for tx in pendentes:
@@ -1519,6 +1522,7 @@ def api_auto_reconcile():
         cursor = conn.cursor(dictionary=True)
         # 1. Auto-conciliação por regras de descrição (regras têm prioridade sobre CNPJ)
         por_regras = _auto_conciliar_por_regras(cursor, conn)
+        logger.info("api_auto_reconcile: por_regras=%d", por_regras)
 
         # 2. Auto-conciliação por CNPJ (apenas para os que ficaram pendentes após as regras)
         cursor.execute(
@@ -1554,6 +1558,7 @@ def api_auto_reconcile():
 
         cursor.close()
         conn.close()
+        logger.info("api_auto_reconcile: por_cnpj=%d total=%d", updated, updated + por_regras)
         return jsonify({'success': True, 'conciliados': updated + por_regras,
                         'por_cnpj': updated, 'por_regras': por_regras})
     except Exception as e:
