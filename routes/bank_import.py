@@ -752,42 +752,7 @@ def _conciliar_tx(cursor, conn, tx_id, acao, tipo_tx,
                    WHERE id=%s""",
                 (forma_recebimento_id, agora, usuario, tx_id),
             )
-            # Aprende: padrão de descrição → forma de recebimento (regra automática).
-            # NÃO vincula ao CNPJ/CPF do remetente porque o mesmo CPF pode aparecer
-            # em transações de tipos distintos (PIX, depósito em dinheiro, cheque…).
-            if salvar_mapeamento:
-                cursor.execute(
-                    "SELECT descricao FROM bank_transactions WHERE id=%s", (tx_id,)
-                )
-                tx_row = cursor.fetchone()
-                if tx_row and tx_row.get('descricao'):
-                    padrao = _extrair_padrao_descricao(tx_row['descricao'])
-                    if padrao:
-                        cursor.execute(
-                            """SELECT id FROM bank_conciliacao_regras
-                               WHERE padrao_descricao = %s
-                                 AND tipo_transacao = 'CREDIT'
-                                 AND ativo = 1
-                               LIMIT 1""",
-                            (padrao,),
-                        )
-                        regra_existente = cursor.fetchone()
-                        if regra_existente:
-                            cursor.execute(
-                                """UPDATE bank_conciliacao_regras
-                                   SET forma_recebimento_id = %s,
-                                       total_aplicacoes = total_aplicacoes + 1
-                                   WHERE id = %s""",
-                                (forma_recebimento_id, regra_existente['id']),
-                            )
-                        else:
-                            cursor.execute(
-                                """INSERT INTO bank_conciliacao_regras
-                                       (padrao_descricao, tipo_match, tipo_transacao,
-                                        forma_recebimento_id, total_aplicacoes)
-                                   VALUES (%s, 'contem', 'CREDIT', %s, 1)""",
-                                (padrao, forma_recebimento_id),
-                            )
+
     elif tipo_debito == 'troco_pix' and troco_pix_id:
         # Débito → Troco PIX: vincula a transação bancária ao registro de troco_pix
         try:

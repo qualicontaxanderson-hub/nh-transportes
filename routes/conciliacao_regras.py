@@ -214,23 +214,72 @@ def toggle(regra_id):
 @bp.route('/<int:regra_id>/excluir', methods=['POST'])
 @login_required
 def excluir(regra_id):
-    """Exclui uma regra (somente se nunca aplicada)."""
+    """Exclui uma regra; se já aplicada, apenas desativa."""
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
     cursor.execute("SELECT total_aplicacoes FROM bank_conciliacao_regras WHERE id=%s", (regra_id,))
     r = cursor.fetchone()
-    if r and r['total_aplicacoes'] > 0:
-        flash(f'Não é possível excluir: regra já foi aplicada {r["total_aplicacoes"]} vez(es). Use desativar.', 'warning')
-    elif r:
-        cursor.execute("DELETE FROM bank_conciliacao_regras WHERE id=%s", (regra_id,))
-        conn.commit()
-        flash('Regra excluída.', 'success')
+    if r:
+        if r['total_aplicacoes'] > 0:
+            cursor.execute("UPDATE bank_conciliacao_regras SET ativo=0 WHERE id=%s", (regra_id,))
+            conn.commit()
+            flash(f'Regra já foi aplicada {r["total_aplicacoes"]} vez(es) — foi desativada.', 'info')
+        else:
+            cursor.execute("DELETE FROM bank_conciliacao_regras WHERE id=%s", (regra_id,))
+            conn.commit()
+            flash('Regra excluída.', 'success')
     cursor.close()
     conn.close()
     return redirect(url_for('conciliacao_regras.lista'))
 
 
-@bp.route('/api/subcategoria/criar', methods=['POST'])
+@bp.route('/excluir-lote', methods=['POST'])
+@login_required
+def excluir_lote():
+    """Exclui em lote as regras selecionadas; regras já aplicadas são apenas desativadas."""
+    ids_raw = request.form.getlist('regra_ids')
+    ids = [int(i) for i in ids_raw if i.isdigit()]
+    if not ids:
+        flash('Nenhuma regra selecionada.', 'warning')
+        return redirect(url_for('conciliacao_regras.lista'))
+
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+
+    # ids validated as integers above; f-string only builds %s placeholders, values stay parameterized
+    ph = ','.join(['%s'] * len(ids))
+    cursor.execute(
+        f"SELECT id, total_aplicacoes FROM bank_conciliacao_regras WHERE id IN ({ph})",
+        ids,
+    )
+    rows = cursor.fetchall()
+
+    excluir_ids  = [r['id'] for r in rows if r['total_aplicacoes'] == 0]
+    desativar_ids = [r['id'] for r in rows if r['total_aplicacoes'] > 0]
+
+    if excluir_ids:
+        ph2 = ','.join(['%s'] * len(excluir_ids))
+        cursor.execute(f"DELETE FROM bank_conciliacao_regras WHERE id IN ({ph2})", excluir_ids)
+    if desativar_ids:
+        ph3 = ','.join(['%s'] * len(desativar_ids))
+        cursor.execute(
+            f"UPDATE bank_conciliacao_regras SET ativo=0 WHERE id IN ({ph3})",
+            desativar_ids,
+        )
+
+    conn.commit()
+    cursor.close()
+    conn.close()
+
+    partes = []
+    if excluir_ids:
+        partes.append(f'{len(excluir_ids)} regra(s) excluída(s)')
+    if desativar_ids:
+        partes.append(f'{len(desativar_ids)} regra(s) já aplicada(s) foram desativadas')
+    flash('; '.join(partes) + '.', 'success')
+    return redirect(url_for('conciliacao_regras.lista'))
+
+
 @login_required
 def api_criar_subcategoria():
     """Cria uma subcategoria inline durante o preenchimento da regra (AJAX)."""
