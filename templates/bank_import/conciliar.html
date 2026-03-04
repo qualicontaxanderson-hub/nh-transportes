@@ -1582,7 +1582,14 @@ function autoConciliarAqui(btn) {
   var msg = document.getElementById('msgAutoConciliar');
   msg.textContent = '';
   fetch('{{ url_for("bank_import.api_auto_reconcile") }}', {method:'POST'})
-    .then(function(r){ return r.json(); })
+    .then(function(r){
+      return r.text().then(function(text){
+        try { return JSON.parse(text); }
+        catch(e) {
+          throw new Error('Resposta inválida do servidor (HTTP ' + r.status + '). Por favor, tente novamente.');
+        }
+      });
+    })
     .then(function(d){
       btn.disabled = false;
       btn.innerHTML = '<i class="bi bi-magic"></i> Executar Auto-Conciliação';

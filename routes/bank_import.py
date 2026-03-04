@@ -1507,9 +1507,10 @@ def api_transacoes_pendentes():
 
 
 @bp.route('/api/auto-reconcile', methods=['POST'])
-@login_required
 def api_auto_reconcile():
     """API: força a auto-conciliação de transações pendentes (por CNPJ e por regras)."""
+    if not current_user.is_authenticated:
+        return jsonify({'success': False, 'erro': 'Sessão expirada. Por favor, recarregue a página e faça login novamente.', 'conciliados': 0}), 401
     _ensure_ld_bank_tx_id()
     conn = None
     cursor = None
