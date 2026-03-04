@@ -694,7 +694,7 @@ def _conciliar_transferencia(cursor, conn, tx_id, conta_destino_id, usuario,
 def _conciliar_tx(cursor, conn, tx_id, acao, tipo_tx,
                   fornecedor_id, forma_recebimento_id, usuario,
                   tipo_debito=None, despesas=None, troco_pix_id=None,
-                  salvar_mapeamento=True):
+                  salvar_mapeamento=True, conta_origem_id=None):
     """Concilia (ou ignora) uma única transação e aprende mapeamentos.
 
     Para débitos com tipo_debito='despesa', *despesas* é uma lista de dicts:
@@ -731,6 +731,16 @@ def _conciliar_tx(cursor, conn, tx_id, acao, tipo_tx,
                        WHERE id=%s""",
                     (agora, usuario, tx_id),
                 )
+            # Armazena conta de origem (referência cruzada) se fornecida pelo usuário
+            if conta_origem_id:
+                try:
+                    cursor.execute(
+                        "UPDATE bank_transactions SET conta_origem_id=%s WHERE id=%s",
+                        (conta_origem_id, tx_id),
+                    )
+                except mysql.connector.errors.ProgrammingError:
+                    # Coluna pode não existir ainda (migration pendente) — ignora
+                    logger.debug("conta_origem_id column not yet available; skipping")
         else:
             # Crédito → Forma de Recebimento
             if not forma_recebimento_id:
@@ -961,6 +971,7 @@ def conciliar():
                     pass
 
         conta_destino_id = request.form.get('conta_destino_id') or None
+        conta_origem_id  = request.form.get('conta_origem_id') or None
         troco_pix_id     = request.form.get('troco_pix_id') or None
 
         ok = 0
@@ -1027,7 +1038,8 @@ def conciliar():
                                   fornecedor_id, forma_recebimento_id, usuario,
                                   tipo_debito=tipo_debito, despesas=despesas or None,
                                   troco_pix_id=troco_pix_id,
-                                  salvar_mapeamento=salvar_mapeamento)
+                                  salvar_mapeamento=salvar_mapeamento,
+                                  conta_origem_id=conta_origem_id)
                 ok += 1
         except Exception as exc:
             try:
@@ -1566,25 +1578,30 @@ def api_auto_reconcile():
         rows = cursor.fetchall()
 
         agora = _dt.datetime.now()
-        updated = 0
+        batch_credit = []
+        batch_debit  = []
         for row in rows:
             if row['tipo'] == 'CREDIT':
-                cursor.execute(
-                    """UPDATE bank_transactions
-                       SET status='conciliado', forma_recebimento_id=%s,
-                           conciliado_em=%s, conciliado_por='auto'
-                       WHERE id=%s""",
-                    (row['forma_recebimento_id'], agora, row['id']),
-                )
+                batch_credit.append((row['forma_recebimento_id'], agora, row['id']))
             else:
-                cursor.execute(
-                    """UPDATE bank_transactions
-                       SET status='conciliado', fornecedor_id=%s,
-                           conciliado_em=%s, conciliado_por='auto'
-                       WHERE id=%s""",
-                    (row['fornecedor_id'], agora, row['id']),
-                )
-            updated += 1
+                batch_debit.append((row['fornecedor_id'], agora, row['id']))
+        if batch_credit:
+            cursor.executemany(
+                """UPDATE bank_transactions
+                   SET status='conciliado', forma_recebimento_id=%s,
+                       conciliado_em=%s, conciliado_por='auto'
+                   WHERE id=%s""",
+                batch_credit,
+            )
+        if batch_debit:
+            cursor.executemany(
+                """UPDATE bank_transactions
+                   SET status='conciliado', fornecedor_id=%s,
+                       conciliado_em=%s, conciliado_por='auto'
+                   WHERE id=%s""",
+                batch_debit,
+            )
+        updated = len(batch_credit) + len(batch_debit)
 
         conn.commit()
 

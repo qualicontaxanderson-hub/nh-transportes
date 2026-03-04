@@ -353,6 +353,25 @@
                 <strong>Transferência Bancária Recebida</strong> — confirme que esta entrada é um
                 crédito proveniente de transferência entre contas bancárias.
               </div>
+              <div class="mb-2">
+                <label class="form-label form-label-sm mb-1">
+                  <i class="bi bi-bank"></i> Conta de Origem (empresa / conta que enviou)
+                </label>
+                <select name="conta_origem_id" id="selectContaOrigem" class="form-select">
+                  <option value="">— Selecione a conta de origem (opcional) —</option>
+                  {% set emp_orig = namespace(nome='') %}
+                  {% for c in todas_contas %}
+                    {% if c.empresa_nome != emp_orig.nome %}
+                      {% if emp_orig.nome %}</optgroup>{% endif %}
+                      <optgroup label="{{ c.empresa_nome or 'Sem empresa' }}">
+                      {% set emp_orig.nome = c.empresa_nome %}
+                    {% endif %}
+                    <option value="{{ c.id }}">{{ c.banco_nome }} – {{ c.apelido }}</option>
+                  {% endfor %}
+                  {% if todas_contas %}</optgroup>{% endif %}
+                </select>
+                <div class="form-text">Selecione a conta que enviou o valor para registrar a ligação entre as pontas da transferência.</div>
+              </div>
             </div>
           </div>
           <div id="secao_debito" style="display:none;">
