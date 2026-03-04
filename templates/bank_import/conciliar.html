@@ -546,8 +546,7 @@
         </div>
         <div class="modal-footer">
           <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-          <button type="submit" class="btn btn-primary" id="btnConfirmarModal"
-                  onclick="mostrarCarregando(this)">
+          <button type="submit" class="btn btn-primary" id="btnConfirmarModal">
             <i class="bi bi-check-lg"></i> Confirmar
           </button>
         </div>
@@ -1566,6 +1565,10 @@ document.getElementById('formConciliar').addEventListener('submit', function() {
   this.querySelectorAll('.inp-valor').forEach(function(inp) {
     inp.value = valorMascaraParaFloat(inp.value);
   });
+  // Mostra spinner APÓS iniciar a submissão para não bloquear o envio do formulário.
+  // (desabilitar o botão de submit no onclick cancela a submissão em vários navegadores.)
+  var btn = document.getElementById('btnConfirmarModal');
+  if (btn) setTimeout(function() { mostrarCarregando(btn); }, 0);
 });
 
 // Aplica máscara ao inp-valor da linha 1 (estática) ao carregar a página
