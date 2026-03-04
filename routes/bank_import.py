@@ -25,8 +25,9 @@ def _ensure_ld_bank_tx_id():
     global _ld_bank_tx_id_ready
     if _ld_bank_tx_id_ready:
         return
-    conn = get_db_connection()
+    conn = None
     try:
+        conn = get_db_connection()
         cursor = conn.cursor()
         cursor.execute(
             "SELECT COUNT(*) FROM information_schema.COLUMNS"
@@ -45,7 +46,8 @@ def _ensure_ld_bank_tx_id():
     except Exception:
         logger.warning("_ensure_ld_bank_tx_id: não foi possível criar a coluna bank_transaction_id", exc_info=True)
     finally:
-        conn.close()
+        if conn:
+            conn.close()
 
 
 # ---------------------------------------------------------------------------
