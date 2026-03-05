@@ -267,31 +267,33 @@
                         </div>
                     </div>
 
-                    {% if contas %}
-                    <div class="row g-2 align-items-end mb-3">
-                        <div class="col-sm-5">
+                    <div class="row g-2 align-items-end mb-3" id="dbxFiltroRow">
+                        <div class="col-sm-4">
                             <label class="form-label fw-semibold mb-1" style="font-size:0.88rem;">
-                                Conta bancária destino:
+                                <i class="bi bi-building"></i> Empresa:
                             </label>
-                            <select id="dbxAccountId" class="form-select form-select-sm">
-                                <option value="">Selecione a conta...</option>
-                                {% for conta in contas %}
-                                <option value="{{ conta.id }}">
-                                    {{ conta.apelido or conta.banco_nome }}
-                                    {%- if conta.agencia %} – Ag {{ conta.agencia }}{% endif %}
-                                    {%- if conta.conta %} / {{ conta.conta }}{% endif %}
-                                    {%- if conta.empresa_nome %} [{{ conta.empresa_nome }}]{% endif %}
-                                </option>
+                            <select id="dbxClienteId" class="form-select form-select-sm"
+                                    onchange="dbxCarregarContas(this.value)">
+                                <option value="">— Selecione a empresa —</option>
+                                {% for c in clientes %}
+                                <option value="{{ c.id }}">{{ c.razao_social }}{% if c.nome_fantasia and c.nome_fantasia != c.razao_social %} ({{ c.nome_fantasia }}){% endif %}</option>
                                 {% endfor %}
                             </select>
                         </div>
+                        <div class="col-sm-5">
+                            <label class="form-label fw-semibold mb-1" style="font-size:0.88rem;">
+                                <i class="bi bi-bank"></i> Conta bancária:
+                            </label>
+                            <select id="dbxAccountId" class="form-select form-select-sm" disabled>
+                                <option value="">— Selecione a empresa primeiro —</option>
+                            </select>
+                        </div>
                     </div>
-                    {% endif %}
 
                     <div id="dbxFileList">
                         <div class="text-muted text-center py-3">
                             <i class="bi bi-cloud fs-2 text-primary"></i>
-                            <p class="mt-1 mb-0">Clique em <strong>Verificar Dropbox</strong> para ver os arquivos disponíveis.</p>
+                            <p class="mt-1 mb-0">Selecione a <strong>Empresa</strong> e a <strong>Conta</strong> e clique em <strong>Verificar</strong>.</p>
                         </div>
                     </div>
                 </div>
@@ -783,18 +785,68 @@
     // ---------------------------------------------------------------
     {% if dropbox_configured %}
 
+    function dbxCarregarContas(clienteId) {
+        const selConta = document.getElementById('dbxAccountId');
+        selConta.innerHTML = '<option value="">Carregando...</option>';
+        selConta.disabled = true;
+        dbxResetFileList();
+        if (!clienteId) {
+            selConta.innerHTML = '<option value="">— Selecione a empresa primeiro —</option>';
+            return;
+        }
+        fetch('{{ url_for("bank_import.api_contas") }}?cliente_id=' + encodeURIComponent(clienteId))
+            .then(r => r.json())
+            .then(contas => {
+                selConta.innerHTML = '<option value="">— Selecione a conta —</option>';
+                if (contas.length === 0) {
+                    selConta.innerHTML = '<option value="">Nenhuma conta cadastrada para esta empresa</option>';
+                    return;
+                }
+                contas.forEach(c => {
+                    const opt = document.createElement('option');
+                    opt.value = c.id;
+                    let label = c.apelido || c.banco_nome;
+                    if (c.agencia) label += ' – Ag ' + c.agencia;
+                    if (c.conta)   label += ' / ' + c.conta;
+                    opt.textContent = label;
+                    selConta.appendChild(opt);
+                });
+                selConta.disabled = false;
+            })
+            .catch(() => {
+                selConta.innerHTML = '<option value="">Erro ao carregar contas — tente recarregar a página</option>';
+            });
+    }
+
+    function dbxResetFileList() {
+        document.getElementById('dbxFileList').innerHTML =
+            '<div class="text-muted text-center py-3"><i class="bi bi-cloud fs-2 text-primary"></i>' +
+            '<p class="mt-1 mb-0">Selecione a <strong>Conta</strong> e clique em <strong>Verificar</strong>.</p></div>';
+    }
+
     function verificarDropbox() {
+        const selCliente = document.getElementById('dbxClienteId');
+        const selConta   = document.getElementById('dbxAccountId');
+        const clienteId  = selCliente ? selCliente.value : '';
+        const accountId  = selConta   ? selConta.value   : '';
+
+        if (!clienteId) {
+            alert('Por favor, selecione a Empresa e a Conta antes de verificar o Dropbox.');
+            return;
+        }
+        if (!accountId) {
+            alert('Por favor, selecione a Conta antes de verificar o Dropbox.');
+            return;
+        }
+
         const listDiv = document.getElementById('dbxFileList');
         listDiv.innerHTML = '<div class="text-center py-3"><div class="spinner-border spinner-border-sm" style="color:#0061FE;"></div> Verificando Dropbox...</div>';
 
-        const sel = document.getElementById('dbxAccountId');
-        const accountId = sel ? sel.value : '';
-        const url = '{{ url_for("bank_import.api_dropbox_files") }}' + (accountId ? '?account_id=' + encodeURIComponent(accountId) : '');
+        const url = '{{ url_for("bank_import.api_dropbox_files") }}?account_id=' + encodeURIComponent(accountId);
 
         fetch(url)
             .then(r => {
                 const ct = r.headers.get('content-type') || '';
-                // Parseia JSON mesmo em status 4xx (endpoint retorna JSON com 'message' em erros)
                 if (!ct.includes('application/json')) {
                     listDiv.innerHTML = '<div class="alert alert-warning py-2">Resposta inesperada do servidor. Tente recarregar a página.</div>';
                     return null;
@@ -809,11 +861,12 @@
                     return;
                 }
                 if (!data.files || data.files.length === 0) {
+                    const contaNome = selConta.options[selConta.selectedIndex].text;
                     listDiv.innerHTML = `
-                        <div class="alert alert-info py-2 mb-0">
-                            <i class="bi bi-info-circle"></i>
-                            Nenhum arquivo <code>.ofx</code> encontrado em <code>{{ dropbox_inbox }}</code>.
-                            Coloque um arquivo OFX nessa pasta do Dropbox e clique em Verificar.
+                        <div class="alert alert-warning py-2 mb-0">
+                            <i class="bi bi-search"></i>
+                            Nenhum arquivo <code>.ofx</code> encontrado no Dropbox para a conta <strong>${contaNome}</strong>.<br>
+                            <small class="text-muted">Pasta verificada: <code>{{ dropbox_inbox }}</code>. Coloque o arquivo OFX nessa pasta e clique em Verificar novamente.</small>
                         </div>`;
                     return;
                 }

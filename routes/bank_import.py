@@ -2149,6 +2149,8 @@ def api_dropbox_files():
     API: lista arquivos .ofx na pasta Dropbox configurada.
     GET param: account_id (int, opcional) — quando informado, filtra arquivos cujo nome
     contenha o número da conta ou apelido associado à conta selecionada.
+    Quando o filtro está ativo e nenhum arquivo corresponde, retorna lista vazia
+    (o front-end exibe mensagem amigável em português).
     """
     from integrations.dropbox_ofx import listar_arquivos_ofx, get_inbox_paths
     account_id = request.args.get('account_id', type=int)
@@ -2187,10 +2189,10 @@ def api_dropbox_files():
                     f for f in arquivos
                     if any(t in f['nome'].lower() for t in tokens)
                 ]
-                if matched:
-                    arquivos = matched
-                    filtrado = True
-                # Se nenhum arquivo bate, devolve todos (sem filtro) com aviso
+                # Retorna somente os arquivos que batem com o filtro.
+                # Se não bater nenhum, retorna lista vazia (o front-end exibe mensagem amigável).
+                arquivos = matched
+                filtrado = True
 
     return jsonify({
         'success': True,
