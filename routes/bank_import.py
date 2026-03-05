@@ -2174,10 +2174,14 @@ def api_dropbox_files():
         if acc:
             # Tokens de busca: número da conta (últimos 6 dígitos) e apelido
             tokens = set()
+            conta_digits_full = ''
             if acc.get('conta'):
-                conta_digits = re.sub(r'\D', '', acc['conta'])
-                if len(conta_digits) >= 4:
-                    tokens.add(conta_digits[-6:] if len(conta_digits) >= 6 else conta_digits)
+                conta_digits_full = re.sub(r'\D', '', acc['conta'])
+                if len(conta_digits_full) >= 4:
+                    tokens.add(conta_digits_full[-6:] if len(conta_digits_full) >= 6 else conta_digits_full)
+                    # Também adiciona a sequência completa de dígitos para cobrir formatos
+                    # como "27677832" quando a conta está cadastrada como "2767783-2"
+                    tokens.add(conta_digits_full)
             if acc.get('apelido'):
                 tokens.add(acc['apelido'].lower())
             banco_parts = (acc.get('banco_nome') or '').split()
@@ -2185,10 +2189,24 @@ def api_dropbox_files():
                 tokens.add(banco_parts[0].lower())
 
             if tokens:
-                matched = [
-                    f for f in arquivos
-                    if any(t in f['nome'].lower() for t in tokens)
-                ]
+                _usar_digits = bool(conta_digits_full and len(conta_digits_full) >= 4)
+
+                def _arquivo_corresponde(nome):
+                    nome_lower = nome.lower()
+                    # Verificação padrão: token como substring do nome do arquivo
+                    if any(t in nome_lower for t in tokens):
+                        return True
+                    # Verificação por dígitos: compara apenas os dígitos do nome do arquivo
+                    # com a sequência completa de dígitos da conta.
+                    # Isso permite encontrar "2767783-2.ofx" quando a conta é "2767783-2"
+                    # ou "27677832.ofx" independentemente do formato com/sem traço.
+                    if _usar_digits:
+                        nome_digits = re.sub(r'\D', '', nome_lower)
+                        if conta_digits_full in nome_digits:
+                            return True
+                    return False
+
+                matched = [f for f in arquivos if _arquivo_corresponde(f['nome'])]
                 # Retorna somente os arquivos que batem com o filtro.
                 # Se não bater nenhum, retorna lista vazia (o front-end exibe mensagem amigável).
                 arquivos = matched
