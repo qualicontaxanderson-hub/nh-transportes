@@ -870,22 +870,30 @@
                         </div>`;
                     return;
                 }
-                renderDropboxFiles(data.files, data.filtrado);
+                renderDropboxFiles(data.files, data.filtrado, data.filtrado_sem_resultado);
             })
             .catch(err => {
                 listDiv.innerHTML = `<div class="alert alert-danger py-2">Erro ao verificar Dropbox: ${err}</div>`;
             });
     }
 
-    function renderDropboxFiles(files, filtrado) {
+    function renderDropboxFiles(files, filtrado, filtradoSemResultado) {
         const listDiv = document.getElementById('dbxFileList');
         const wrap = document.createElement('div');
 
         const header = document.createElement('div');
-        header.className = filtrado ? 'alert alert-success py-2 mb-3' : 'alert alert-info py-2 mb-3';
-        header.innerHTML = filtrado
-            ? `<i class="bi bi-funnel-fill text-success"></i> <strong>${files.length}</strong> arquivo(s) encontrado(s) para a conta selecionada.`
-            : `<i class="bi bi-check-circle"></i> <strong>${files.length}</strong> arquivo(s) OFX encontrado(s) no Dropbox. <small class="text-muted">(selecione uma conta para filtrar)</small>`;
+        if (filtradoSemResultado) {
+            header.className = 'alert alert-warning py-2 mb-3';
+            const selConta = document.getElementById('dbxAccountId');
+            const contaNome = selConta ? selConta.options[selConta.selectedIndex].text : '';
+            header.innerHTML = `<i class="bi bi-exclamation-triangle"></i> Nenhum arquivo encontrado automaticamente para a conta <strong>${contaNome}</strong>.<br>
+                <small>O nome do arquivo pode não conter o número da conta. Selecione o arquivo correto na lista abaixo para importar.</small>`;
+        } else {
+            header.className = filtrado ? 'alert alert-success py-2 mb-3' : 'alert alert-info py-2 mb-3';
+            header.innerHTML = filtrado
+                ? `<i class="bi bi-funnel-fill text-success"></i> <strong>${files.length}</strong> arquivo(s) encontrado(s) para a conta selecionada.`
+                : `<i class="bi bi-check-circle"></i> <strong>${files.length}</strong> arquivo(s) OFX encontrado(s) no Dropbox. <small class="text-muted">(selecione uma conta para filtrar)</small>`;
+        }
         wrap.appendChild(header);
 
         const tableWrap = document.createElement('div');

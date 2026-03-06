@@ -2147,10 +2147,10 @@ def api_dias_importados():
 def api_dropbox_files():
     """
     API: lista arquivos .ofx na pasta Dropbox configurada.
-    GET param: account_id (int, opcional) — quando informado, filtra arquivos cujo nome
-    contenha o número da conta ou apelido associado à conta selecionada.
-    Quando o filtro está ativo e nenhum arquivo corresponde, retorna lista vazia
-    (o front-end exibe mensagem amigável em português).
+    GET param: account_id (int, opcional) — quando informado, tenta filtrar arquivos cujo nome
+    contenha dígitos da conta, agência ou palavras do apelido/banco.
+    Se o filtro não encontrar nenhum arquivo, retorna todos os arquivos com
+    filtrado_sem_resultado=True para que o front-end exiba todos e permita seleção manual.
     """
     from integrations.dropbox_ofx import listar_arquivos_ofx, get_inbox_paths
     account_id = request.args.get('account_id', type=int)
@@ -2161,6 +2161,7 @@ def api_dropbox_files():
         return jsonify({'success': False, 'message': str(exc), 'files': []}), 400
 
     filtrado = False
+    filtrado_sem_resultado = False
     if account_id:
         conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)
@@ -2172,21 +2173,43 @@ def api_dropbox_files():
         cursor.close()
         conn.close()
         if acc:
-            # Tokens de busca: número da conta (últimos 6 dígitos) e apelido
+            # Tokens de busca: múltiplos sinais para localizar o arquivo OFX correto.
+            # Palavras comuns que aparecem em nomes de bancos/arquivos mas não identificam
+            # uma conta específica — excluídas dos tokens para evitar falsos positivos.
+            STOPWORDS = {'banco', 'de', 'do', 'da', 'e', 'em', 'sa', 's/a', 'ltda'}
+
             tokens = set()
             conta_digits_full = ''
+
+            # 1. Dígitos do número da conta (com e sem traço).
             if acc.get('conta'):
                 conta_digits_full = re.sub(r'\D', '', acc['conta'])
                 if len(conta_digits_full) >= 4:
                     tokens.add(conta_digits_full[-6:] if len(conta_digits_full) >= 6 else conta_digits_full)
-                    # Também adiciona a sequência completa de dígitos para cobrir formatos
-                    # como "27677832" quando a conta está cadastrada como "2767783-2"
+                    # Sequência completa cobre "27677832" quando a conta é "2767783-2"
                     tokens.add(conta_digits_full)
+
+            # 2. Dígitos da agência (quando tiver 4+ dígitos).
+            if acc.get('agencia'):
+                ag_digits = re.sub(r'\D', '', acc['agencia'])
+                if len(ag_digits) >= 4:
+                    tokens.add(ag_digits)
+
+            # 3. Palavras significativas do apelido da conta (ex: "SICREDI", "CORA", "GTBA").
             if acc.get('apelido'):
-                tokens.add(acc['apelido'].lower())
-            banco_parts = (acc.get('banco_nome') or '').split()
-            if banco_parts:
-                tokens.add(banco_parts[0].lower())
+                for palavra in re.split(r'[\W_]+', acc['apelido']):
+                    palavra_lower = palavra.lower()
+                    if len(palavra_lower) >= 3 and palavra_lower not in STOPWORDS:
+                        tokens.add(palavra_lower)
+
+            # 4. Palavras significativas do nome do banco (ex: "SICREDI", "EFI").
+            for palavra in re.split(r'[\W_]+', acc.get('banco_nome') or ''):
+                palavra_lower = palavra.lower()
+                if len(palavra_lower) >= 3 and palavra_lower not in STOPWORDS:
+                    tokens.add(palavra_lower)
+
+            # Remove tokens vazios que possam ter sido gerados.
+            tokens.discard('')
 
             if tokens:
                 _usar_digits = bool(conta_digits_full and len(conta_digits_full) >= 4)
@@ -2198,8 +2221,8 @@ def api_dropbox_files():
                         return True
                     # Verificação por dígitos: compara apenas os dígitos do nome do arquivo
                     # com a sequência completa de dígitos da conta.
-                    # Isso permite encontrar "2767783-2.ofx" quando a conta é "2767783-2"
-                    # ou "27677832.ofx" independentemente do formato com/sem traço.
+                    # Permite encontrar "2767783-2.ofx" ou "27677832.ofx" independentemente
+                    # do formato com/sem traço.
                     if _usar_digits:
                         nome_digits = re.sub(r'\D', '', nome_lower)
                         if conta_digits_full in nome_digits:
@@ -2207,10 +2230,16 @@ def api_dropbox_files():
                     return False
 
                 matched = [f for f in arquivos if _arquivo_corresponde(f['nome'])]
-                # Retorna somente os arquivos que batem com o filtro.
-                # Se não bater nenhum, retorna lista vazia (o front-end exibe mensagem amigável).
-                arquivos = matched
-                filtrado = True
+
+                if matched:
+                    # Arquivos encontrados pelo filtro — retorna apenas os correspondentes.
+                    arquivos = matched
+                    filtrado = True
+                else:
+                    # Nenhum arquivo correspondeu ao filtro por nome.
+                    # Retorna todos os arquivos da pasta com flag especial para que o
+                    # front-end informe o usuário e permita selecionar manualmente.
+                    filtrado_sem_resultado = True
 
     return jsonify({
         'success': True,
@@ -2218,6 +2247,7 @@ def api_dropbox_files():
         'pasta': inbox,
         'pasta_processados': processed,
         'filtrado': filtrado,
+        'filtrado_sem_resultado': filtrado_sem_resultado,
     })
 
 
