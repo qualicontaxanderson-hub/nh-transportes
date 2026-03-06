@@ -2173,9 +2173,11 @@ def api_dropbox_files():
         cursor.close()
         conn.close()
         if acc:
-            # Tokens de busca: múltiplos sinais para localizar o arquivo OFX correto.
-            # Palavras comuns que aparecem em nomes de bancos/arquivos mas não identificam
-            # uma conta específica — excluídas dos tokens para evitar falsos positivos.
+            # Tokens de busca: sinais específicos do BANCO e CONTA para localizar o arquivo.
+            # NÃO usamos palavras do apelido (ex: "GTBA") porque o sufixo de empresa
+            # (ex: "NH GTBA") é compartilhado entre contas de bancos diferentes
+            # (CORA - NH GTBA e SICREDI - NH GTBA), causando falsos positivos.
+            # Apenas dígitos da conta/agência e nome do banco são suficientemente únicos.
             STOPWORDS = {'banco', 'de', 'do', 'da', 'e', 'em', 'sa', 's/a', 'ltda'}
 
             tokens = set()
@@ -2195,14 +2197,8 @@ def api_dropbox_files():
                 if len(ag_digits) >= 4:
                     tokens.add(ag_digits)
 
-            # 3. Palavras significativas do apelido da conta (ex: "SICREDI", "CORA", "GTBA").
-            if acc.get('apelido'):
-                for palavra in re.split(r'[\W_]+', acc['apelido']):
-                    palavra_lower = palavra.lower()
-                    if len(palavra_lower) >= 3 and palavra_lower not in STOPWORDS:
-                        tokens.add(palavra_lower)
-
-            # 4. Palavras significativas do nome do banco (ex: "SICREDI", "EFI").
+            # 3. Palavras significativas do nome do banco (ex: "SICREDI", "CORA", "EFI").
+            # O apelido NÃO é usado aqui intencionalmente — veja comentário acima.
             for palavra in re.split(r'[\W_]+', acc.get('banco_nome') or ''):
                 palavra_lower = palavra.lower()
                 if len(palavra_lower) >= 3 and palavra_lower not in STOPWORDS:
