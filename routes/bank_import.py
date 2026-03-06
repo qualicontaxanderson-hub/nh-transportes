@@ -2174,11 +2174,18 @@ def api_dropbox_files():
         conn.close()
         if acc:
             # Tokens de busca: sinais específicos do BANCO e CONTA para localizar o arquivo.
-            # NÃO usamos palavras do apelido (ex: "GTBA") porque o sufixo de empresa
-            # (ex: "NH GTBA") é compartilhado entre contas de bancos diferentes
-            # (CORA - NH GTBA e SICREDI - NH GTBA), causando falsos positivos.
-            # Apenas dígitos da conta/agência e nome do banco são suficientemente únicos.
+            # Tokens de dígitos (conta/agência) são altamente confiáveis — match direto.
+            # Tokens de texto (banco, apelido) são ambíguos e requerem verificação de ACCTID:
+            #   ex: "NH GTBA" é compartilhado entre CORA - NH GTBA e SICREDI - NH GTBA.
+            #   A verificação de ACCTID garante que o arquivo corresponde à conta selecionada.
             STOPWORDS = {'banco', 'de', 'do', 'da', 'e', 'em', 'sa', 's/a', 'ltda'}
+
+            def _extrair_palavras(texto):
+                """Retorna palavras significativas de um texto (mín. 3 chars, fora de stopwords)."""
+                for p in re.split(r'[\W_]+', texto or ''):
+                    pl = p.lower()
+                    if len(pl) >= 3 and pl not in STOPWORDS:
+                        yield pl
 
             tokens = set()
             conta_digits_full = ''
@@ -2198,11 +2205,17 @@ def api_dropbox_files():
                     tokens.add(ag_digits)
 
             # 3. Palavras significativas do nome do banco (ex: "SICREDI", "CORA", "EFI").
-            # O apelido NÃO é usado aqui intencionalmente — veja comentário acima.
-            for palavra in re.split(r'[\W_]+', acc.get('banco_nome') or ''):
-                palavra_lower = palavra.lower()
-                if len(palavra_lower) >= 3 and palavra_lower not in STOPWORDS:
-                    tokens.add(palavra_lower)
+            tokens.update(_extrair_palavras(acc.get('banco_nome')))
+
+            # 4. Palavras do apelido da conta (ex: "NH GTBA" → token "gtba").
+            # Apis bancárias como a CORA nomeiam os arquivos OFX com a slug da empresa
+            # (ex: "nh-gtba_...ofx"), sem o nome do banco no nome do arquivo.
+            # Quando o nome do banco não aparece no arquivo, sem essa inclusão nenhum
+            # token corresponderia e todos os arquivos seriam exibidos como fallback.
+            # Como o apelido é compartilhado entre contas de bancos diferentes,
+            # os arquivos que só correspondem por esses tokens passam pela verificação
+            # de ACCTID (conteúdo do OFX), garantindo que pertencem à conta correta.
+            tokens.update(_extrair_palavras(acc.get('apelido')))
 
             # Remove tokens vazios que possam ter sido gerados.
             tokens.discard('')
