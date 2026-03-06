@@ -2210,15 +2210,38 @@ def api_dropbox_files():
             if tokens:
                 _usar_digits = bool(conta_digits_full and len(conta_digits_full) >= 4)
 
+                # Tokens numéricos (conta/agência) — altamente específicos.
+                # Quando um arquivo corresponde a um desses tokens, não precisa de
+                # verificação de conteúdo (o número da conta já está no nome).
+                digit_tokens = set()
+                if conta_digits_full and len(conta_digits_full) >= 4:
+                    digit_tokens.add(conta_digits_full)
+                    digit_tokens.add(conta_digits_full[-6:] if len(conta_digits_full) >= 6 else conta_digits_full)
+                if acc.get('agencia'):
+                    ag_d = re.sub(r'\D', '', acc['agencia'])
+                    if len(ag_d) >= 4:
+                        digit_tokens.add(ag_d)
+
+                # Tokens de texto do nome do banco (ex: "sicredi") — ambíguos quando
+                # várias contas são do mesmo banco. Arquivos que só correspondem por
+                # esses tokens precisam de verificação de conteúdo.
+                bank_name_tokens = tokens - digit_tokens
+
+                def _arquivo_corresponde_por_digito(nome):
+                    """Verdadeiro quando o nome contém dígitos da conta/agência."""
+                    nome_lower = nome.lower()
+                    if any(t in nome_lower for t in digit_tokens):
+                        return True
+                    if _usar_digits:
+                        nome_digits = re.sub(r'\D', '', nome_lower)
+                        if conta_digits_full in nome_digits:
+                            return True
+                    return False
+
                 def _arquivo_corresponde(nome):
                     nome_lower = nome.lower()
-                    # Verificação padrão: token como substring do nome do arquivo
                     if any(t in nome_lower for t in tokens):
                         return True
-                    # Verificação por dígitos: compara apenas os dígitos do nome do arquivo
-                    # com a sequência completa de dígitos da conta.
-                    # Permite encontrar "2767783-2.ofx" ou "27677832.ofx" independentemente
-                    # do formato com/sem traço.
                     if _usar_digits:
                         nome_digits = re.sub(r'\D', '', nome_lower)
                         if conta_digits_full in nome_digits:
@@ -2228,11 +2251,41 @@ def api_dropbox_files():
                 matched = [f for f in arquivos if _arquivo_corresponde(f['nome'])]
 
                 if matched:
+                    # Para arquivos que correspondem APENAS pelo nome do banco
+                    # (sem dígitos da conta no nome), verificamos o conteúdo OFX
+                    # para garantir que o ACCTID dentro do arquivo realmente pertence
+                    # à conta selecionada. Isso evita que um arquivo de outra empresa
+                    # (ex: extrato SICREDI da NH-GTBA) apareça para QUALICONTAX.
+                    from integrations.dropbox_ofx import extrair_acctid_ofx
+                    verificados = []
+                    for f in matched:
+                        # Se o nome já contém dígitos da conta → confiável, sem download
+                        if _arquivo_corresponde_por_digito(f['nome']):
+                            verificados.append(f)
+                            continue
+                        # Caso contrário (só bateu por nome do banco) → lê o OFX
+                        acctid_no_arquivo = extrair_acctid_ofx(f['nome'])
+                        if acctid_no_arquivo is None:
+                            # Falha ao ler: mantém o arquivo (benefício da dúvida)
+                            verificados.append(f)
+                            continue
+                        # Verifica se os dígitos da conta selecionada correspondem ao ACCTID
+                        # do arquivo. Exige que ambos tenham ao menos 4 dígitos para evitar
+                        # correspondências acidentais com sequências curtas.
+                        if (conta_digits_full and len(acctid_no_arquivo) >= 4 and (
+                            acctid_no_arquivo == conta_digits_full
+                            or acctid_no_arquivo.endswith(conta_digits_full)
+                            or conta_digits_full.endswith(acctid_no_arquivo)
+                        )):
+                            verificados.append(f)
+                    matched = verificados
+
+                if matched:
                     # Arquivos encontrados pelo filtro — retorna apenas os correspondentes.
                     arquivos = matched
                     filtrado = True
                 else:
-                    # Nenhum arquivo correspondeu ao filtro por nome.
+                    # Nenhum arquivo correspondeu ao filtro por nome nem por conteúdo.
                     # Retorna todos os arquivos da pasta com flag especial para que o
                     # front-end informe o usuário e permita selecionar manualmente.
                     filtrado_sem_resultado = True

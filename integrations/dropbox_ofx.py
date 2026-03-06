@@ -24,6 +24,7 @@ Como gerar o DROPBOX_TOKEN:
 """
 
 import os
+import re
 
 # Importação lazy para não quebrar o app se o pacote não estiver instalado
 try:
@@ -220,6 +221,25 @@ def baixar_arquivo(nome_arquivo: str) -> str:
         raise RuntimeError(f'Arquivo não encontrado no Dropbox: {caminho} — {exc}')
 
     return response.content.decode('latin-1', errors='replace')
+
+
+def extrair_acctid_ofx(nome_arquivo: str) -> str | None:
+    """
+    Baixa o arquivo OFX e retorna apenas os dígitos do ACCTID (número da conta)
+    encontrado no cabeçalho OFX, ou None em caso de falha.
+
+    Usado para verificar se um arquivo Dropbox realmente pertence à conta selecionada
+    quando o nome do arquivo não contém o número da conta.
+    """
+    try:
+        content = baixar_arquivo(nome_arquivo)
+        # Busca a tag ACCTID sem precisar do parser completo — mais rápido
+        m = re.search(r'<ACCTID>\s*([^\s<]+)', content, re.IGNORECASE)
+        if m:
+            return re.sub(r'\D', '', m.group(1))
+    except Exception:
+        pass
+    return None
 
 
 def mover_para_processados(nome_arquivo: str) -> None:
