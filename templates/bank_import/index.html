@@ -883,11 +883,15 @@
 
         const header = document.createElement('div');
         if (filtradoSemResultado) {
-            header.className = 'alert alert-warning py-2 mb-3';
+            header.className = 'alert alert-warning py-2 mb-0';
             const selConta = document.getElementById('dbxAccountId');
             const contaNome = selConta ? selConta.options[selConta.selectedIndex].text : '';
             header.innerHTML = `<i class="bi bi-exclamation-triangle"></i> Nenhum arquivo encontrado automaticamente para a conta <strong>${contaNome}</strong>.<br>
-                <small>O nome do arquivo pode não conter o número da conta. Selecione o arquivo correto na lista abaixo para importar.</small>`;
+                <small>Coloque o arquivo OFX correto na pasta Dropbox e clique em Verificar novamente.</small>`;
+            wrap.appendChild(header);
+            listDiv.innerHTML = '';
+            listDiv.appendChild(wrap);
+            return;
         } else {
             header.className = filtrado ? 'alert alert-success py-2 mb-3' : 'alert alert-info py-2 mb-3';
             header.innerHTML = filtrado
