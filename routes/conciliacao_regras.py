@@ -55,28 +55,78 @@ def _get_contas(cursor):
 @bp.route('/')
 @login_required
 def lista():
-    """Lista todas as regras de conciliação."""
+    """Lista as regras de conciliação com filtros opcionais."""
+    mostrar_inativos = request.args.get('inativos', '0') == '1'
+    filtro_banco     = request.args.get('banco', '').strip()
+    filtro_empresa   = request.args.get('empresa', '').strip()
+
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
+
+    where  = []
+    params = []
+
+    if not mostrar_inativos:
+        where.append("r.ativo = 1")
+
+    if filtro_banco:
+        where.append("ba.banco_nome = %s")
+        params.append(filtro_banco)
+
+    if filtro_empresa:
+        where.append("ba.cliente_id = %s")
+        params.append(filtro_empresa)
+
+    where_clause = ("WHERE " + " AND ".join(where)) if where else ""
+
     cursor.execute(
-        """SELECT r.*,
+        f"""SELECT r.*,
                   fr.nome AS forma_nome,
                   f.razao_social AS fornecedor_nome,
                   c.razao_social AS cliente_nome,
                   td.nome AS titulo_nome,
-                  cd.nome AS categoria_nome
+                  cd.nome AS categoria_nome,
+                  ba.banco_nome AS conta_banco,
+                  ba.apelido AS conta_apelido
            FROM bank_conciliacao_regras r
            LEFT JOIN formas_recebimento fr ON fr.id = r.forma_recebimento_id
            LEFT JOIN fornecedores f ON f.id = r.fornecedor_id
            LEFT JOIN clientes c ON c.id = r.cliente_id
            LEFT JOIN titulos_despesas td ON td.id = r.titulo_id
            LEFT JOIN categorias_despesas cd ON cd.id = r.categoria_id
-           ORDER BY r.ativo DESC, r.total_aplicacoes DESC, r.id"""
+           LEFT JOIN bank_accounts ba ON ba.id = r.account_id
+           {where_clause}
+           ORDER BY r.padrao_descricao""",
+        params or None,
     )
     regras = cursor.fetchall()
+
+    # Opções para os dropdowns de filtro
+    cursor.execute(
+        "SELECT DISTINCT banco_nome FROM bank_accounts WHERE ativo=1 ORDER BY banco_nome"
+    )
+    bancos = [row['banco_nome'] for row in cursor.fetchall()]
+
+    cursor.execute(
+        """SELECT DISTINCT cl.id, cl.razao_social
+           FROM clientes cl
+           INNER JOIN bank_accounts ba ON ba.cliente_id = cl.id
+           WHERE ba.ativo = 1
+           ORDER BY cl.razao_social"""
+    )
+    empresas = cursor.fetchall()
+
     cursor.close()
     conn.close()
-    return render_template('bank_import/regras/lista.html', regras=regras)
+    return render_template(
+        'bank_import/regras/lista.html',
+        regras=regras,
+        bancos=bancos,
+        empresas=empresas,
+        mostrar_inativos=mostrar_inativos,
+        filtro_banco=filtro_banco,
+        filtro_empresa=filtro_empresa,
+    )
 
 
 @bp.route('/novo', methods=['GET', 'POST'])
