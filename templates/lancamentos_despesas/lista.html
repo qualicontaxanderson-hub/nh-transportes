@@ -29,73 +29,114 @@
     </div>
 
     <!-- Filtros -->
-    <div class="card mb-3">
-        <div class="card-header" style="background:#1D63A5;color:white; font-size: 0.95rem; padding: 0.6rem 1rem;">
-            <h5 class="mb-0" style="font-size: 1rem;">
-                <i class="bi bi-funnel"></i> Filtros
-            </h5>
+    <form method="GET" action="{{ url_for('lancamentos_despesas.lista') }}" class="card shadow-sm mb-3" id="formFiltros">
+        <div class="card-header py-2" style="background:#1D63A5;color:white;">
+            <h6 class="mb-0"><i class="bi bi-funnel"></i> Filtros</h6>
         </div>
-        <div class="card-body" style="padding: 1rem;">
-            <form method="GET" action="{{ url_for('lancamentos_despesas.lista') }}">
-                <div class="row">
-                    <div class="col-md-2 mb-2">
-                        <label for="data_inicio" class="form-label" style="font-size: 0.85rem;">Data Início</label>
-                        <input type="date" class="form-control form-control-sm" id="data_inicio" name="data_inicio" 
-                               value="{{ filtros.data_inicio }}">
-                    </div>
-                    <div class="col-md-2 mb-2">
-                        <label for="data_fim" class="form-label" style="font-size: 0.85rem;">Data Fim</label>
-                        <input type="date" class="form-control form-control-sm" id="data_fim" name="data_fim" 
-                               value="{{ filtros.data_fim }}">
-                    </div>
-                    <div class="col-md-3 mb-2">
-                        <label for="cliente_id" class="form-label" style="font-size: 0.85rem;">Empresa</label>
-                        <select class="form-select form-select-sm" id="cliente_id" name="cliente_id">
-                            <option value="">Todas</option>
-                            {% for cliente in clientes %}
-                            <option value="{{ cliente.id }}" {% if filtros.cliente_id|string == cliente.id|string %}selected{% endif %}>
-                                {{ cliente.razao_social }}
-                            </option>
-                            {% endfor %}
-                        </select>
-                    </div>
-                    <div class="col-md-3 mb-2">
-                        <label for="titulo_id" class="form-label" style="font-size: 0.85rem;">Título</label>
-                        <select class="form-select form-select-sm" id="titulo_id" name="titulo_id" 
-                                onchange="this.form.submit()">
-                            <option value="">Todos</option>
-                            {% for titulo in titulos %}
-                            <option value="{{ titulo.id }}" {% if filtros.titulo_id|string == titulo.id|string %}selected{% endif %}>
-                                {{ titulo.nome }}
-                            </option>
-                            {% endfor %}
-                        </select>
-                    </div>
-                    <div class="col-md-2 mb-2">
-                        <label for="categoria_id" class="form-label" style="font-size: 0.85rem;">Categoria</label>
-                        <select class="form-select form-select-sm" id="categoria_id" name="categoria_id">
-                            <option value="">Todas</option>
-                            {% for categoria in categorias %}
-                            <option value="{{ categoria.id }}" {% if filtros.categoria_id|string == categoria.id|string %}selected{% endif %}>
-                                {{ categoria.nome }}
-                            </option>
-                            {% endfor %}
-                        </select>
+        <div class="card-body py-2">
+            <div class="row g-2">
+                <!-- Empresa (multi-select) -->
+                <div class="col-md-3">
+                    <label class="form-label form-label-sm mb-0">Empresa <small class="text-muted">(Ctrl+clique p/ múltiplas)</small></label>
+                    <select name="cliente_id" class="form-select form-select-sm" multiple size="4" id="selEmpresas">
+                        {% for cliente in clientes %}
+                        <option value="{{ cliente.id }}"
+                            {% if cliente.id|string in (filtros.cliente_ids or []) %}selected{% endif %}>
+                            {{ cliente.nome_fantasia or cliente.razao_social }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <!-- Título + Categoria + Subcategoria -->
+                <div class="col-md-3">
+                    <div class="row g-1">
+                        <div class="col-12">
+                            <label class="form-label form-label-sm mb-0">Título</label>
+                            <select class="form-select form-select-sm" name="titulo_id" id="selTitulo"
+                                    onchange="this.form.submit()">
+                                <option value="">Todos</option>
+                                {% for titulo in titulos %}
+                                <option value="{{ titulo.id }}"
+                                    {% if filtros.titulo_id|string == titulo.id|string %}selected{% endif %}>
+                                    {{ titulo.nome }}
+                                </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label form-label-sm mb-0">Categoria</label>
+                            <select class="form-select form-select-sm" name="categoria_id" id="selCategoria"
+                                    onchange="this.form.submit()">
+                                <option value="">Todas</option>
+                                {% for categoria in categorias %}
+                                <option value="{{ categoria.id }}"
+                                    {% if filtros.categoria_id|string == categoria.id|string %}selected{% endif %}>
+                                    {{ categoria.nome }}
+                                </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label form-label-sm mb-0">Subcategoria</label>
+                            <select class="form-select form-select-sm" name="subcategoria_id" id="selSubcategoria">
+                                <option value="">Todas</option>
+                                {% for sub in subcategorias %}
+                                <option value="{{ sub.id }}"
+                                    {% if filtros.subcategoria_id|string == sub.id|string %}selected{% endif %}>
+                                    {{ sub.nome }}
+                                </option>
+                                {% endfor %}
+                            </select>
+                        </div>
                     </div>
                 </div>
-                <div class="row">
-                    <div class="col-12">
-                        <button type="submit" class="btn btn-primary btn-sm">
-                            <i class="bi bi-search"></i> Filtrar
-                        </button>
-                        <a href="{{ url_for('lancamentos_despesas.lista') }}" class="btn btn-secondary btn-sm">
-                            <i class="bi bi-x-circle"></i> Limpar
-                        </a>
+                <!-- Datas + Buscas + Botões -->
+                <div class="col-md-6">
+                    <div class="row g-2">
+                        <div class="col-md-6">
+                            <label class="form-label form-label-sm mb-0">Data início</label>
+                            <input type="date" name="data_inicio" class="form-control form-control-sm"
+                                   value="{{ filtros.data_inicio or '' }}">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label form-label-sm mb-0">Data fim</label>
+                            <input type="date" name="data_fim" class="form-control form-control-sm"
+                                   value="{{ filtros.data_fim or '' }}">
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label form-label-sm mb-0">Fornecedor</label>
+                            <input type="text" name="fornecedor" class="form-control form-control-sm"
+                                   placeholder="Parte do nome do fornecedor"
+                                   value="{{ filtros.fornecedor or '' }}">
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label form-label-sm mb-0">Observação</label>
+                            <input type="text" name="observacao" class="form-control form-control-sm"
+                                   placeholder="Parte da observação"
+                                   value="{{ filtros.observacao or '' }}">
+                        </div>
+                        <!-- Atalhos de período -->
+                        <div class="col-12">
+                            <div class="d-flex gap-1 flex-wrap mb-1">
+                                <span class="text-muted" style="font-size:0.78rem; line-height:1.8;">Período:</span>
+                                <button type="button" class="btn btn-outline-secondary btn-xs" onclick="setPeriodo('mes_atual')">Este mês</button>
+                                <button type="button" class="btn btn-outline-secondary btn-xs" onclick="setPeriodo('mes_anterior')">Mês anterior</button>
+                                <button type="button" class="btn btn-outline-secondary btn-xs" onclick="setPeriodo('ano_atual')">Este ano</button>
+                            </div>
+                        </div>
+                        <div class="col-12 d-flex gap-1">
+                            <button type="submit" class="btn btn-primary btn-sm flex-fill">
+                                <i class="bi bi-search"></i> Filtrar
+                            </button>
+                            <a href="{{ url_for('lancamentos_despesas.lista') }}" class="btn btn-outline-secondary btn-sm">
+                                <i class="bi bi-x"></i> Limpar
+                            </a>
+                        </div>
                     </div>
                 </div>
-            </form>
+            </div>
         </div>
-    </div>
+    </form>
 
     <!-- Tabela de Lançamentos -->
     <div class="card shadow-sm">
@@ -207,4 +248,25 @@
     border-radius: 0.2rem;
 }
 </style>
+<script>
+function setPeriodo(tipo) {
+    var hoje = new Date();
+    var ini, fim;
+    if (tipo === 'mes_atual') {
+        ini = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
+        fim = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0);
+    } else if (tipo === 'mes_anterior') {
+        ini = new Date(hoje.getFullYear(), hoje.getMonth() - 1, 1);
+        fim = new Date(hoje.getFullYear(), hoje.getMonth(), 0);
+    } else if (tipo === 'ano_atual') {
+        ini = new Date(hoje.getFullYear(), 0, 1);
+        fim = new Date(hoje.getFullYear(), 11, 31);
+    }
+    function formatDate(d) {
+        return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+    }
+    document.querySelector('input[name="data_inicio"]').value = formatDate(ini);
+    document.querySelector('input[name="data_fim"]').value = formatDate(fim);
+}
+</script>
 {% endblock %}

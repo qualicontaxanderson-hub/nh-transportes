@@ -135,9 +135,12 @@ def lista():
         # Get filter parameters
         data_inicio = request.args.get('data_inicio', '')
         data_fim = request.args.get('data_fim', '')
-        cliente_id = request.args.get('cliente_id', '')
+        cliente_ids = request.args.getlist('cliente_id')  # multi-select
         titulo_id = request.args.get('titulo_id', '')
         categoria_id = request.args.get('categoria_id', '')
+        subcategoria_id = request.args.get('subcategoria_id', '')
+        fornecedor = request.args.get('fornecedor', '').strip()
+        observacao = request.args.get('observacao', '').strip()
         
         # Base query
         query = """
@@ -164,9 +167,13 @@ def lista():
             query += " AND ld.data <= %s"
             params.append(data_fim)
         
-        if cliente_id:
-            query += " AND ld.cliente_id = %s"
-            params.append(cliente_id)
+        if cliente_ids:
+            # Validate all IDs are integers before building the IN clause
+            valid_ids = [c for c in cliente_ids if c.isdigit()]
+            if valid_ids:
+                placeholders = ','.join(['%s'] * len(valid_ids))
+                query += f" AND ld.cliente_id IN ({placeholders})"
+                params.extend(valid_ids)
         
         if titulo_id:
             query += " AND ld.titulo_id = %s"
@@ -175,6 +182,18 @@ def lista():
         if categoria_id:
             query += " AND ld.categoria_id = %s"
             params.append(categoria_id)
+        
+        if subcategoria_id:
+            query += " AND ld.subcategoria_id = %s"
+            params.append(subcategoria_id)
+        
+        if fornecedor:
+            query += " AND ld.fornecedor LIKE %s"
+            params.append(f'%{fornecedor}%')
+        
+        if observacao:
+            query += " AND ld.observacao LIKE %s"
+            params.append(f'%{observacao}%')
         
         query += " ORDER BY ld.data DESC, ld.id DESC"
         
@@ -207,18 +226,33 @@ def lista():
             """, (titulo_id,))
             categorias = cursor.fetchall()
         
+        # Get subcategorias for filter (if categoria selected)
+        subcategorias = []
+        if categoria_id:
+            cursor.execute("""
+                SELECT id, nome 
+                FROM subcategorias_despesas 
+                WHERE categoria_id = %s AND ativo = 1 
+                ORDER BY ordem, nome
+            """, (categoria_id,))
+            subcategorias = cursor.fetchall()
+        
         return render_template('lancamentos_despesas/lista.html', 
                              lancamentos=lancamentos,
                              total=total,
                              clientes=clientes,
                              titulos=titulos,
                              categorias=categorias,
+                             subcategorias=subcategorias,
                              filtros={
                                  'data_inicio': data_inicio,
                                  'data_fim': data_fim,
-                                 'cliente_id': cliente_id,
+                                 'cliente_ids': [str(c) for c in cliente_ids],
                                  'titulo_id': titulo_id,
-                                 'categoria_id': categoria_id
+                                 'categoria_id': categoria_id,
+                                 'subcategoria_id': subcategoria_id,
+                                 'fornecedor': fornecedor,
+                                 'observacao': observacao,
                              })
     except Exception as e:
         flash(f'Erro ao listar lançamentos: {str(e)}', 'danger')
@@ -228,6 +262,7 @@ def lista():
                              clientes=[],
                              titulos=[],
                              categorias=[],
+                             subcategorias=[],
                              filtros={})
     finally:
         if cursor:
