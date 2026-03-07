@@ -1270,8 +1270,7 @@ def transferencias():
 
         if not filtro_aplicado:
             # No empresa/conta selected — skip main queries, show empty table
-            cursor.close()
-            conn.close()
+            # Do NOT close cursor/conn here; the finally block handles cleanup.
             return render_template(
                 'financeiro/transferencias.html',
                 transferencias=lista,
