@@ -989,7 +989,31 @@ def _get_bank_transactions(tipo, request_args, exclude_transfers=False):
     data_inicio = request_args.get('data_inicio', '').strip()
     data_fim = request_args.get('data_fim', '').strip()
 
-    # Filtros dinâmicos
+    # Require empresa or conta filter before querying (empty on first load)
+    if not conta_ids and not empresa_ids:
+        # Still need contas/empresas/formas for the filter dropdowns
+        cursor.execute(
+            """SELECT ba.id, ba.apelido, ba.banco_nome,
+                      ba.cliente_id,
+                      c.razao_social AS empresa_nome
+               FROM bank_accounts ba
+               LEFT JOIN clientes c ON c.id = ba.cliente_id
+               WHERE ba.ativo = 1
+               ORDER BY c.razao_social, ba.apelido, ba.banco_nome"""
+        )
+        contas = cursor.fetchall()
+        cursor.execute(
+            """SELECT DISTINCT c.id, c.razao_social
+               FROM clientes c
+               INNER JOIN bank_accounts ba ON ba.cliente_id = c.id AND ba.ativo = 1
+               ORDER BY c.razao_social"""
+        )
+        empresas = cursor.fetchall()
+        cursor.execute("SELECT id, nome FROM formas_recebimento WHERE ativo = 1 ORDER BY nome")
+        formas = cursor.fetchall()
+        cursor.close()
+        conn.close()
+        return [], {}, contas, empresas, formas
     where = ["bt.tipo = %s"]
     params = [tipo]
     if conta_ids:
@@ -1121,6 +1145,9 @@ def _get_bank_transactions(tipo, request_args, exclude_transfers=False):
 def recebimento():
     """Exibe os créditos bancários importados via OFX."""
     transacoes, totais, contas, empresas, formas = _get_bank_transactions('CREDIT', request.args)
+    empresa_ids_filter = [str(e) for e in request.args.getlist('empresa_id') if e]
+    conta_ids_filter   = [str(c) for c in request.args.getlist('conta_id') if c]
+    filtro_aplicado = bool(empresa_ids_filter or conta_ids_filter)
     return render_template(
         'financeiro/recebimento.html',
         transacoes=transacoes,
@@ -1130,8 +1157,9 @@ def recebimento():
         contas=contas,
         empresas=empresas,
         formas=formas,
-        empresa_ids_filter=[str(e) for e in request.args.getlist('empresa_id') if e],
-        conta_ids_filter=[str(c) for c in request.args.getlist('conta_id') if c],
+        filtro_aplicado=filtro_aplicado,
+        empresa_ids_filter=empresa_ids_filter,
+        conta_ids_filter=conta_ids_filter,
         forma_recebimento_id_filter=request.args.get('forma_recebimento_id', ''),
         status_filter=request.args.get('status', ''),
         data_inicio=request.args.get('data_inicio', ''),
@@ -1144,6 +1172,9 @@ def recebimento():
 def pagamentos():
     """Exibe os débitos bancários importados via OFX (exclui transferências entre contas)."""
     transacoes, totais, contas, empresas, formas = _get_bank_transactions('DEBIT', request.args, exclude_transfers=True)
+    empresa_ids_filter = [str(e) for e in request.args.getlist('empresa_id') if e]
+    conta_ids_filter   = [str(c) for c in request.args.getlist('conta_id') if c]
+    filtro_aplicado = bool(empresa_ids_filter or conta_ids_filter)
     return render_template(
         'financeiro/pagamentos.html',
         transacoes=transacoes,
@@ -1152,8 +1183,9 @@ def pagamentos():
         total_pendentes=totais.get('pendentes') or 0,
         contas=contas,
         empresas=empresas,
-        empresa_ids_filter=[str(e) for e in request.args.getlist('empresa_id') if e],
-        conta_ids_filter=[str(c) for c in request.args.getlist('conta_id') if c],
+        filtro_aplicado=filtro_aplicado,
+        empresa_ids_filter=empresa_ids_filter,
+        conta_ids_filter=conta_ids_filter,
         status_filter=request.args.get('status', ''),
         data_inicio=request.args.get('data_inicio', ''),
         data_fim=request.args.get('data_fim', ''),
@@ -1213,8 +1245,53 @@ def transferencias():
     contas      = []
     empresas    = []
     erro_db     = None
+    migration_aplicada = False
+
+    filtro_aplicado = bool(f_contas or f_empresas)
 
     try:
+        # Contas para o filtro (inclui cliente_id para cascata empresa→conta no JS)
+        cursor.execute(
+            """SELECT ba.id, ba.apelido, ba.banco_nome, ba.cliente_id
+               FROM bank_accounts ba
+               WHERE ba.ativo = 1
+               ORDER BY ba.apelido"""
+        )
+        contas = cursor.fetchall()
+
+        # Empresas que possuem contas bancárias ativas
+        cursor.execute(
+            """SELECT DISTINCT c.id, c.razao_social
+               FROM clientes c
+               INNER JOIN bank_accounts ba ON ba.cliente_id = c.id AND ba.ativo = 1
+               ORDER BY c.razao_social"""
+        )
+        empresas = cursor.fetchall()
+
+        if not filtro_aplicado:
+            # No empresa/conta selected — skip main queries, show empty table
+            cursor.close()
+            conn.close()
+            return render_template(
+                'financeiro/transferencias.html',
+                transferencias=lista,
+                total_valor=0,
+                total_qtd=0,
+                orfaos=orfaos,
+                candidatos=candidatos,
+                contas=contas,
+                empresas=empresas,
+                erro_db=None,
+                migration_aplicada=False,
+                filtro_aplicado=False,
+                f_data_ini=f_data_ini,
+                f_data_fim=f_data_fim,
+                f_contas=[str(c) for c in f_contas],
+                f_empresas=[str(e) for e in f_empresas],
+                f_conta=f_conta,
+                f_empresa=f_empresa,
+            )
+
         # Query principal: parte do lado CREDIT (hash_dedup LIKE 'TRANSFER_%')
         # Não usa ba.cliente_id pois essa coluna pode não existir ainda
         # (depende da migration 20260223_pending_all_idempotente.sql).
@@ -1289,24 +1366,6 @@ def transferencias():
         except Exception:
             orfaos = []
 
-        # Contas para o filtro (inclui cliente_id para cascata empresa→conta no JS)
-        cursor.execute(
-            """SELECT ba.id, ba.apelido, ba.banco_nome, ba.cliente_id
-               FROM bank_accounts ba
-               WHERE ba.ativo = 1
-               ORDER BY ba.apelido"""
-        )
-        contas = cursor.fetchall()
-
-        # Empresas que possuem contas bancárias ativas
-        cursor.execute(
-            """SELECT DISTINCT c.id, c.razao_social
-               FROM clientes c
-               INNER JOIN bank_accounts ba ON ba.cliente_id = c.id AND ba.ativo = 1
-               ORDER BY c.razao_social"""
-        )
-        empresas = cursor.fetchall()
-
         # Candidatos: DEBITs conciliados manualmente cuja descrição contém "Transf"
         # Inclui também aqueles com tipo_conciliacao='transferencia' sem CREDIT criado
         try:
@@ -1372,6 +1431,7 @@ def transferencias():
         empresas=empresas,
         erro_db=erro_db,
         migration_aplicada=migration_aplicada,
+        filtro_aplicado=filtro_aplicado,
         f_data_ini=f_data_ini,
         f_data_fim=f_data_fim,
         f_contas=[str(c) for c in f_contas],

@@ -288,7 +288,8 @@
       </div>
       {% else %}
       <div class="py-4 px-4">
-        <div class="alert alert-info mb-0">
+        <div class="alert {% if filtro_aplicado %}alert-info{% else %}alert-secondary{% endif %} mb-0">
+          {% if filtro_aplicado %}
           <h6 class="alert-heading"><i class="bi bi-info-circle-fill me-1"></i> Nenhuma transferência concluída ainda</h6>
           {% if not migration_aplicada %}
           <p class="mb-2"><strong>Passo 1:</strong> Execute a migration no Railway (Railway → banco → Connect → Query):</p>
@@ -312,6 +313,11 @@ SELECT 'OK' AS resultado;</pre>
             uma <strong>transferência entre suas contas bancárias</strong>, escolha a aba
             <strong>"🔄 Transferência"</strong> e selecione a conta destino.
           </p>
+          {% else %}
+          <p class="mb-0"><i class="bi bi-funnel me-1"></i>
+            Selecione uma <strong>Empresa</strong> ou <strong>Conta Bancária</strong> acima e clique em <strong>Filtrar</strong> para visualizar as transferências.
+          </p>
+          {% endif %}
         </div>
       </div>
       {% endif %}

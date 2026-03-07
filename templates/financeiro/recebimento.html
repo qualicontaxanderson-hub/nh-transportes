@@ -270,7 +270,12 @@
                         {% else %}
                         <tr>
                             <td colspan="8" class="text-center text-muted py-4">
-                                <i class="bi bi-inbox"></i> Nenhum crédito encontrado para os filtros selecionados.
+                                <i class="bi bi-inbox"></i>
+                                {% if filtro_aplicado %}
+                                Nenhum crédito encontrado para os filtros selecionados.
+                                {% else %}
+                                Selecione uma <strong>Empresa</strong> ou <strong>Conta Bancária</strong> acima e clique em <strong>Filtrar</strong> para visualizar os recebimentos.
+                                {% endif %}
                             </td>
                         </tr>
                         {% endfor %}

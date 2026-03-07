@@ -144,73 +144,71 @@ def lista():
         observacao = request.args.get('observacao', '').strip()
         
         # Base query
-        query = """
-            SELECT ld.*, 
-                   t.nome as titulo_nome,
-                   c.nome as categoria_nome,
-                   s.nome as subcategoria_nome,
-                   cl.razao_social as cliente_nome
-            FROM lancamentos_despesas ld
-            INNER JOIN titulos_despesas t ON ld.titulo_id = t.id
-            INNER JOIN categorias_despesas c ON ld.categoria_id = c.id
-            LEFT JOIN subcategorias_despesas s ON ld.subcategoria_id = s.id
-            LEFT JOIN clientes cl ON ld.cliente_id = cl.id
-            LEFT JOIN bank_transactions _bt ON _bt.id = ld.bank_transaction_id
-            WHERE 1=1
-        """
-        params = []
-        
-        # Apply filters
-        if data_inicio:
-            query += " AND ld.data >= %s"
-            params.append(data_inicio)
-        
-        if data_fim:
-            query += " AND ld.data <= %s"
-            params.append(data_fim)
-        
-        if cliente_ids:
-            # Validate all IDs are integers before building the IN clause
-            valid_ids = [c for c in cliente_ids if c.isdigit()]
-            if valid_ids:
-                placeholders = ','.join(['%s'] * len(valid_ids))
-                query += f" AND ld.cliente_id IN ({placeholders})"
-                params.extend(valid_ids)
-        
-        if titulo_id:
-            query += " AND ld.titulo_id = %s"
-            params.append(titulo_id)
-        
-        if categoria_id:
-            query += " AND ld.categoria_id = %s"
-            params.append(categoria_id)
-        
-        if subcategoria_id:
-            query += " AND ld.subcategoria_id = %s"
-            params.append(subcategoria_id)
-        
-        if account_ids:
-            valid_account_ids = [int(a) for a in account_ids if a.isdigit()]
-            if valid_account_ids:
-                placeholders = ','.join(['%s'] * len(valid_account_ids))
-                query += f" AND _bt.account_id IN ({placeholders})"
-                params.extend(valid_account_ids)
-        
-        if fornecedor:
-            query += " AND ld.fornecedor LIKE %s"
-            params.append(f'%{fornecedor}%')
-        
-        if observacao:
-            query += " AND ld.observacao LIKE %s"
-            params.append(f'%{observacao}%')
-        
-        query += " ORDER BY ld.data DESC, ld.id DESC"
-        
-        cursor.execute(query, params)
-        lancamentos = cursor.fetchall()
-        
-        # Calculate total
-        total = sum(lanc['valor'] for lanc in lancamentos) if lancamentos else Decimal('0')
+        # Require empresa or conta filter before executing query (empty on first load)
+        has_empresa_filter = any(c.strip() for c in cliente_ids)
+        has_conta_filter   = any(a.strip() for a in account_ids)
+
+        if not has_empresa_filter and not has_conta_filter:
+            # No empresa/conta selected — return empty result without hitting DB
+            lancamentos = []
+            total = Decimal('0')
+            filtro_aplicado = False
+        else:
+            filtro_aplicado = True
+            query = """
+                SELECT ld.*,
+                       t.nome as titulo_nome,
+                       c.nome as categoria_nome,
+                       s.nome as subcategoria_nome,
+                       cl.razao_social as cliente_nome
+                FROM lancamentos_despesas ld
+                INNER JOIN titulos_despesas t ON ld.titulo_id = t.id
+                INNER JOIN categorias_despesas c ON ld.categoria_id = c.id
+                LEFT JOIN subcategorias_despesas s ON ld.subcategoria_id = s.id
+                LEFT JOIN clientes cl ON ld.cliente_id = cl.id
+                LEFT JOIN bank_transactions _bt ON _bt.id = ld.bank_transaction_id
+                WHERE 1=1
+            """
+            params = []
+
+            if data_inicio:
+                query += " AND ld.data >= %s"
+                params.append(data_inicio)
+            if data_fim:
+                query += " AND ld.data <= %s"
+                params.append(data_fim)
+            if cliente_ids:
+                valid_ids = [c for c in cliente_ids if c.isdigit()]
+                if valid_ids:
+                    placeholders = ','.join(['%s'] * len(valid_ids))
+                    query += f" AND ld.cliente_id IN ({placeholders})"
+                    params.extend(valid_ids)
+            if titulo_id:
+                query += " AND ld.titulo_id = %s"
+                params.append(titulo_id)
+            if categoria_id:
+                query += " AND ld.categoria_id = %s"
+                params.append(categoria_id)
+            if subcategoria_id:
+                query += " AND ld.subcategoria_id = %s"
+                params.append(subcategoria_id)
+            if account_ids:
+                valid_account_ids = [int(a) for a in account_ids if a.isdigit()]
+                if valid_account_ids:
+                    placeholders = ','.join(['%s'] * len(valid_account_ids))
+                    query += f" AND _bt.account_id IN ({placeholders})"
+                    params.extend(valid_account_ids)
+            if fornecedor:
+                query += " AND ld.fornecedor LIKE %s"
+                params.append(f'%{fornecedor}%')
+            if observacao:
+                query += " AND ld.observacao LIKE %s"
+                params.append(f'%{observacao}%')
+
+            query += " ORDER BY ld.data DESC, ld.id DESC"
+            cursor.execute(query, params)
+            lancamentos = cursor.fetchall()
+            total = sum(lanc['valor'] for lanc in lancamentos) if lancamentos else Decimal('0')
         
         # Get clientes with products for filter
         clientes = get_clientes_com_produtos()
@@ -263,6 +261,7 @@ def lista():
                              categorias=categorias,
                              subcategorias=subcategorias,
                              todas_contas=todas_contas,
+                             filtro_aplicado=filtro_aplicado,
                              filtros={
                                  'data_inicio': data_inicio,
                                  'data_fim': data_fim,

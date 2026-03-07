@@ -209,11 +209,12 @@
                         {% else %}
                             <tr>
                                 <td colspan="{% if nivel_usuario in ['ADMIN', 'ADMINISTRADOR'] %}10{% else %}9{% endif %}"
-                                    class="text-center text-muted py-3">
+                                    class="text-center text-muted py-4">
                                     <i class="bi bi-inbox" style="font-size:1.5rem;"></i><br>
-                                    Nenhum lançamento encontrado
-                                    {% if nivel_usuario in ['ADMIN', 'ADMINISTRADOR'] %}
-                                    <br><a href="{{ url_for('lancamentos_despesas.novo') }}">Clique aqui para criar o primeiro lançamento</a>
+                                    {% if filtro_aplicado %}
+                                    Nenhum lançamento encontrado para os filtros selecionados.
+                                    {% else %}
+                                    Selecione uma <strong>Empresa</strong> ou <strong>Conta Bancária</strong> acima e clique em <strong>Filtrar</strong> para visualizar os lançamentos.
                                     {% endif %}
                                 </td>
                             </tr>
