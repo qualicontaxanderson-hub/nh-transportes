@@ -60,13 +60,12 @@
         </div>
         <div class="card-body py-2">
             <div class="row g-2">
-                <!-- Empresa (seleção única → cascata em Conta) -->
+                <!-- Empresa (multi-select com cascata em Conta) -->
                 <div class="col-md-3">
-                    <label class="form-label form-label-sm mb-0">Empresa</label>
-                    <select name="empresa_id" id="sel-empresa" class="form-select form-select-sm">
-                        <option value="">— Todas as Empresas —</option>
+                    <label class="form-label form-label-sm mb-0">Empresa <small class="text-muted">(Ctrl+clique p/ múltiplas)</small></label>
+                    <select name="empresa_id" id="selEmpresasReceb" class="form-select form-select-sm" multiple size="4">
                         {% for e in empresas %}
-                        <option value="{{ e.id }}" {% if e.id|string == empresa_id_filter %}selected{% endif %}>
+                        <option value="{{ e.id }}" {% if e.id|string in (empresa_ids_filter or []) %}selected{% endif %}>
                             {{ e.razao_social }}
                         </option>
                         {% endfor %}
@@ -76,16 +75,9 @@
                 <div class="col-md-3">
                     <div class="row g-1">
                         <div class="col-12">
-                            <label class="form-label form-label-sm mb-0">Conta Bancária</label>
-                            <select name="conta_id" id="sel-conta" class="form-select form-select-sm">
-                                <option value="">— Todas as Contas —</option>
-                                {% for c in contas %}
-                                <option value="{{ c.id }}"
-                                        data-empresa="{{ c.cliente_id or '' }}"
-                                        {% if c.id|string == conta_id_filter %}selected{% endif %}>
-                                    {{ c.apelido or c.banco_nome }}{% if c.empresa_nome %} [{{ c.empresa_nome }}]{% endif %}
-                                </option>
-                                {% endfor %}
+                            <label class="form-label form-label-sm mb-0">Conta Bancária <small class="text-muted">(Ctrl+clique p/ múltiplas)</small></label>
+                            <select name="conta_id" id="selContasReceb" class="form-select form-select-sm" multiple size="4">
+                                <option value="" disabled>— Selecione uma empresa primeiro —</option>
                             </select>
                         </div>
                         <div class="col-12">
@@ -145,33 +137,50 @@
         </div>
     </form>
 
-    <!-- JS: cascata Empresa → Conta Bancária + atalhos de período -->
+    <!-- JS: cascata Empresa → Conta Bancária (multi-select) + atalhos de período -->
     <script>
-    (function () {
-        const selEmpresa = document.getElementById('sel-empresa');
-        const selConta   = document.getElementById('sel-conta');
-        const allContas  = Array.from(selConta.options).slice(1);
+    const _todasContasReceb = {{ contas | tojson }};
+    const _contasSelecionadasReceb = ({{ (conta_ids_filter or []) | tojson }}).map(String);
 
-        function filtrarContas(empresaId) {
-            const selectedVal = selConta.value;
-            while (selConta.options.length > 1) selConta.remove(1);
-            allContas.forEach(function(opt) {
-                if (!empresaId || opt.dataset.empresa === empresaId) {
-                    selConta.appendChild(opt.cloneNode(true));
-                }
-            });
-            if (selectedVal) {
-                const found = Array.from(selConta.options).find(function(o) { return o.value === selectedVal; });
-                if (found) selConta.value = selectedVal;
-            }
+    function atualizarContasReceb() {
+        var selEmp = document.getElementById('selEmpresasReceb');
+        var selCon = document.getElementById('selContasReceb');
+        if (!selEmp || !selCon) return;
+        var empsSel = Array.from(selEmp.selectedOptions).map(function(o) { return parseInt(o.value); });
+        selCon.innerHTML = '';
+        if (empsSel.length === 0) {
+            var opt = document.createElement('option');
+            opt.value = ''; opt.disabled = true;
+            opt.textContent = '— Selecione uma empresa primeiro —';
+            selCon.appendChild(opt);
+            return;
         }
-
-        filtrarContas(selEmpresa.value);
-        selEmpresa.addEventListener('change', function () {
-            selConta.value = '';
-            filtrarContas(this.value);
+        var filtradas = _todasContasReceb.filter(function(c) {
+            return empsSel.includes(parseInt(c.cliente_id));
         });
-    })();
+        if (filtradas.length === 0) {
+            var opt2 = document.createElement('option');
+            opt2.value = ''; opt2.disabled = true;
+            opt2.textContent = '— Nenhuma conta para a empresa selecionada —';
+            selCon.appendChild(opt2);
+            return;
+        }
+        filtradas.forEach(function(c) {
+            var opt = document.createElement('option');
+            opt.value = c.id;
+            opt.textContent = (c.apelido || '') + (c.banco_nome ? ' — ' + c.banco_nome : '') + (c.empresa_nome ? ' [' + c.empresa_nome + ']' : '');
+            if (_contasSelecionadasReceb.includes(String(c.id))) opt.selected = true;
+            selCon.appendChild(opt);
+        });
+    }
+
+    document.addEventListener('DOMContentLoaded', function() {
+        var selEmp = document.getElementById('selEmpresasReceb');
+        if (selEmp) {
+            selEmp.addEventListener('change', atualizarContasReceb);
+            atualizarContasReceb();
+        }
+    });
 
     function setPeriodoReceb(tipo) {
         var hoje = new Date();

@@ -89,9 +89,9 @@
                             </select>
                         </div>
                         <div class="col-12">
-                            <label class="form-label form-label-sm mb-0">Conta Bancária</label>
-                            <select class="form-select form-select-sm" name="account_id" id="selContas">
-                                <option value="">— Selecione uma empresa primeiro —</option>
+                            <label class="form-label form-label-sm mb-0">Conta Bancária <small class="text-muted">(Ctrl+clique p/ múltiplas)</small></label>
+                            <select class="form-select form-select-sm" name="account_id" id="selContas" multiple size="4">
+                                <option value="" disabled>— Selecione uma empresa primeiro —</option>
                             </select>
                         </div>
                     </div>
@@ -302,11 +302,8 @@ function atualizarContasBancarias() {
         return cid !== null && empsSelecionadas.includes(cid);
     });
 
-    // Add "Todas" option first
-    var optTodas = document.createElement('option');
-    optTodas.value = '';
-    optTodas.textContent = 'Todas as contas';
-    selCon.appendChild(optTodas);
+    // Add "Todas" option only if no company filter (show-all mode)
+    // With multi-select, leaving nothing selected = all accounts
 
     if (contasFiltradas.length === 0) {
         var opt2 = document.createElement('option');

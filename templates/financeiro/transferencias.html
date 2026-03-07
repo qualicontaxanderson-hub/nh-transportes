@@ -37,30 +37,22 @@
     </div>
     <div class="card-body py-2">
       <div class="row g-2">
-        <!-- Empresa (seleção única → cascata em Conta) -->
+        <!-- Empresa (multi-select com cascata em Conta) -->
         <div class="col-md-3">
-          <label class="form-label form-label-sm mb-0">Empresa</label>
-          <select name="empresa_id" id="sel-empresa-transf" class="form-select form-select-sm">
-            <option value="">— Todas as Empresas —</option>
+          <label class="form-label form-label-sm mb-0">Empresa <small class="text-muted">(Ctrl+clique p/ múltiplas)</small></label>
+          <select name="empresa_id" id="selEmpresasTransf" class="form-select form-select-sm" multiple size="4">
             {% for e in empresas %}
-            <option value="{{ e.id }}" {% if f_empresa == e.id|string %}selected{% endif %}>
+            <option value="{{ e.id }}" {% if e.id|string in (f_empresas or []) %}selected{% endif %}>
               {{ e.razao_social }}
             </option>
             {% endfor %}
           </select>
         </div>
-        <!-- Conta Bancária -->
+        <!-- Conta Bancária (multi-select) -->
         <div class="col-md-3">
-          <label class="form-label form-label-sm mb-0">Conta Bancária</label>
-          <select name="account_id" id="sel-conta-transf" class="form-select form-select-sm">
-            <option value="">Todas as contas</option>
-            {% for c in contas %}
-            <option value="{{ c.id }}"
-                    data-empresa="{{ c.cliente_id or '' }}"
-                    {% if f_conta == c.id|string %}selected{% endif %}>
-              {{ c.apelido or c.banco_nome }}
-            </option>
-            {% endfor %}
+          <label class="form-label form-label-sm mb-0">Conta Bancária <small class="text-muted">(Ctrl+clique p/ múltiplas)</small></label>
+          <select name="account_id" id="selContasTransf" class="form-select form-select-sm" multiple size="4">
+            <option value="" disabled>— Selecione uma empresa primeiro —</option>
           </select>
         </div>
         <!-- Datas + atalhos + botões -->
@@ -99,31 +91,48 @@
   .btn-xs { padding:0.15rem 0.35rem; font-size:0.72rem; line-height:1.3; border-radius:0.2rem; }
   </style>
   <script>
-  (function () {
-      var selEmpresa = document.getElementById('sel-empresa-transf');
-      var selConta   = document.getElementById('sel-conta-transf');
-      var allContas  = Array.from(selConta.options).slice(1);
+  const _todasContasTransf = {{ contas | tojson }};
+  const _contasSelecionadasTransf = ({{ (f_contas or []) | tojson }}).map(String);
 
-      function filtrarContas(empresaId) {
-          var selectedVal = selConta.value;
-          while (selConta.options.length > 1) selConta.remove(1);
-          allContas.forEach(function(opt) {
-              if (!empresaId || opt.dataset.empresa === empresaId) {
-                  selConta.appendChild(opt.cloneNode(true));
-              }
-          });
-          if (selectedVal) {
-              var found = Array.from(selConta.options).find(function(o) { return o.value === selectedVal; });
-              if (found) selConta.value = selectedVal;
-          }
+  function atualizarContasTransf() {
+      var selEmp = document.getElementById('selEmpresasTransf');
+      var selCon = document.getElementById('selContasTransf');
+      if (!selEmp || !selCon) return;
+      var empsSel = Array.from(selEmp.selectedOptions).map(function(o) { return parseInt(o.value); });
+      selCon.innerHTML = '';
+      if (empsSel.length === 0) {
+          var opt = document.createElement('option');
+          opt.value = ''; opt.disabled = true;
+          opt.textContent = '— Selecione uma empresa primeiro —';
+          selCon.appendChild(opt);
+          return;
       }
-
-      filtrarContas(selEmpresa.value);
-      selEmpresa.addEventListener('change', function () {
-          selConta.value = '';
-          filtrarContas(this.value);
+      var filtradas = _todasContasTransf.filter(function(c) {
+          return empsSel.includes(parseInt(c.cliente_id));
       });
-  })();
+      if (filtradas.length === 0) {
+          var opt2 = document.createElement('option');
+          opt2.value = ''; opt2.disabled = true;
+          opt2.textContent = '— Nenhuma conta para a empresa selecionada —';
+          selCon.appendChild(opt2);
+          return;
+      }
+      filtradas.forEach(function(c) {
+          var opt = document.createElement('option');
+          opt.value = c.id;
+          opt.textContent = (c.apelido || '') + (c.banco_nome ? ' — ' + c.banco_nome : '');
+          if (_contasSelecionadasTransf.includes(String(c.id))) opt.selected = true;
+          selCon.appendChild(opt);
+      });
+  }
+
+  document.addEventListener('DOMContentLoaded', function() {
+      var selEmp = document.getElementById('selEmpresasTransf');
+      if (selEmp) {
+          selEmp.addEventListener('change', atualizarContasTransf);
+          atualizarContasTransf();
+      }
+  });
 
   function setPeriodoTransf(tipo) {
       var hoje = new Date();

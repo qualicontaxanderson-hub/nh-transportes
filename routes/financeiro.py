@@ -972,8 +972,18 @@ def _get_bank_transactions(tipo, request_args, exclude_transfers=False):
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
 
-    conta_id = request_args.get('conta_id', '').strip()
-    empresa_id = request_args.get('empresa_id', '').strip()
+    # Suporte a multi-select: getlist retorna lista; get retorna string única.
+    conta_ids  = [c for c in request_args.getlist('conta_id')   if c and c.strip()]
+    empresa_ids= [e for e in request_args.getlist('empresa_id') if e and e.strip()]
+    # Fallback para parâmetro único (compatibilidade com URLs antigas)
+    if not conta_ids:
+        _v = request_args.get('conta_id', '').strip()
+        if _v:
+            conta_ids = [_v]
+    if not empresa_ids:
+        _v = request_args.get('empresa_id', '').strip()
+        if _v:
+            empresa_ids = [_v]
     forma_recebimento_id = request_args.get('forma_recebimento_id', '').strip()
     status = request_args.get('status', '').strip()
     data_inicio = request_args.get('data_inicio', '').strip()
@@ -982,13 +992,15 @@ def _get_bank_transactions(tipo, request_args, exclude_transfers=False):
     # Filtros dinâmicos
     where = ["bt.tipo = %s"]
     params = [tipo]
-    if conta_id:
-        where.append("bt.account_id = %s")
-        params.append(conta_id)
-    elif empresa_id:
-        # Filtra pelas contas que pertencem à empresa selecionada
-        where.append("ba.cliente_id = %s")
-        params.append(empresa_id)
+    if conta_ids:
+        ph = ','.join(['%s'] * len(conta_ids))
+        where.append(f"bt.account_id IN ({ph})")
+        params.extend(conta_ids)
+    elif empresa_ids:
+        # Filtra pelas contas que pertencem às empresas selecionadas
+        ph = ','.join(['%s'] * len(empresa_ids))
+        where.append(f"ba.cliente_id IN ({ph})")
+        params.extend(empresa_ids)
     if forma_recebimento_id:
         where.append("bt.forma_recebimento_id = %s")
         params.append(forma_recebimento_id)
@@ -1118,8 +1130,8 @@ def recebimento():
         contas=contas,
         empresas=empresas,
         formas=formas,
-        empresa_id_filter=request.args.get('empresa_id', ''),
-        conta_id_filter=request.args.get('conta_id', ''),
+        empresa_ids_filter=[str(e) for e in request.args.getlist('empresa_id') if e],
+        conta_ids_filter=[str(c) for c in request.args.getlist('conta_id') if c],
         forma_recebimento_id_filter=request.args.get('forma_recebimento_id', ''),
         status_filter=request.args.get('status', ''),
         data_inicio=request.args.get('data_inicio', ''),
@@ -1140,8 +1152,8 @@ def pagamentos():
         total_pendentes=totais.get('pendentes') or 0,
         contas=contas,
         empresas=empresas,
-        empresa_id_filter=request.args.get('empresa_id', ''),
-        conta_id_filter=request.args.get('conta_id', ''),
+        empresa_ids_filter=[str(e) for e in request.args.getlist('empresa_id') if e],
+        conta_ids_filter=[str(c) for c in request.args.getlist('conta_id') if c],
         status_filter=request.args.get('status', ''),
         data_inicio=request.args.get('data_inicio', ''),
         data_fim=request.args.get('data_fim', ''),
@@ -1176,11 +1188,23 @@ def transferencias():
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
 
-    # Filtros
-    f_data_ini = request.args.get('data_ini', '').strip()
-    f_data_fim = request.args.get('data_fim', '').strip()
-    f_conta    = request.args.get('account_id', '').strip()
-    f_empresa  = request.args.get('empresa_id', '').strip()
+    # Filtros — suporte a multi-select (getlist) para empresa e conta
+    f_data_ini  = request.args.get('data_ini', '').strip()
+    f_data_fim  = request.args.get('data_fim', '').strip()
+    f_contas    = [c for c in request.args.getlist('account_id') if c and c.strip()]
+    f_empresas  = [e for e in request.args.getlist('empresa_id') if e and e.strip()]
+    # Compatibilidade com URLs antigas (parâmetro único)
+    if not f_contas:
+        _v = request.args.get('account_id', '').strip()
+        if _v:
+            f_contas = [_v]
+    if not f_empresas:
+        _v = request.args.get('empresa_id', '').strip()
+        if _v:
+            f_empresas = [_v]
+    # Mantém variáveis singulares para compatibilidade com template (f_conta/f_empresa usados em alguns casos)
+    f_conta   = f_contas[0]   if f_contas   else ''
+    f_empresa = f_empresas[0] if f_empresas else ''
 
     lista       = []
     totais      = {}
@@ -1204,9 +1228,10 @@ def transferencias():
         if f_data_fim:
             where.append("bt.data_transacao <= %s")
             params.append(f_data_fim)
-        if f_conta:
-            where.append("(bt.account_id = %s OR bt_orig.account_id = %s)")
-            params += [f_conta, f_conta]
+        if f_contas:
+            ph = ','.join(['%s'] * len(f_contas))
+            where.append(f"(bt.account_id IN ({ph}) OR bt_orig.account_id IN ({ph}))")
+            params += f_contas + f_contas
 
         where_sql = ' AND '.join(where)
 
@@ -1349,6 +1374,8 @@ def transferencias():
         migration_aplicada=migration_aplicada,
         f_data_ini=f_data_ini,
         f_data_fim=f_data_fim,
+        f_contas=[str(c) for c in f_contas],
+        f_empresas=[str(e) for e in f_empresas],
         f_conta=f_conta,
         f_empresa=f_empresa,
     )
