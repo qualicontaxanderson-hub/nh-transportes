@@ -1139,6 +1139,8 @@ def pagamentos():
         total_conciliados=totais.get('conciliados') or 0,
         total_pendentes=totais.get('pendentes') or 0,
         contas=contas,
+        empresas=empresas,
+        empresa_id_filter=request.args.get('empresa_id', ''),
         conta_id_filter=request.args.get('conta_id', ''),
         status_filter=request.args.get('status', ''),
         data_inicio=request.args.get('data_inicio', ''),
@@ -1178,12 +1180,14 @@ def transferencias():
     f_data_ini = request.args.get('data_ini', '').strip()
     f_data_fim = request.args.get('data_fim', '').strip()
     f_conta    = request.args.get('account_id', '').strip()
+    f_empresa  = request.args.get('empresa_id', '').strip()
 
     lista       = []
     totais      = {}
     orfaos      = []
     candidatos  = []
     contas      = []
+    empresas    = []
     erro_db     = None
 
     try:
@@ -1260,14 +1264,23 @@ def transferencias():
         except Exception:
             orfaos = []
 
-        # Contas para o filtro (sem cliente_id)
+        # Contas para o filtro (inclui cliente_id para cascata empresa→conta no JS)
         cursor.execute(
-            """SELECT ba.id, ba.apelido, ba.banco_nome
+            """SELECT ba.id, ba.apelido, ba.banco_nome, ba.cliente_id
                FROM bank_accounts ba
                WHERE ba.ativo = 1
                ORDER BY ba.apelido"""
         )
         contas = cursor.fetchall()
+
+        # Empresas que possuem contas bancárias ativas
+        cursor.execute(
+            """SELECT DISTINCT c.id, c.razao_social
+               FROM clientes c
+               INNER JOIN bank_accounts ba ON ba.cliente_id = c.id AND ba.ativo = 1
+               ORDER BY c.razao_social"""
+        )
+        empresas = cursor.fetchall()
 
         # Candidatos: DEBITs conciliados manualmente cuja descrição contém "Transf"
         # Inclui também aqueles com tipo_conciliacao='transferencia' sem CREDIT criado
@@ -1331,9 +1344,11 @@ def transferencias():
         orfaos=orfaos,
         candidatos=candidatos,
         contas=contas,
+        empresas=empresas,
         erro_db=erro_db,
         migration_aplicada=migration_aplicada,
         f_data_ini=f_data_ini,
         f_data_fim=f_data_fim,
         f_conta=f_conta,
+        f_empresa=f_empresa,
     )

@@ -31,34 +31,118 @@
   </div>
 
   <!-- Filtros -->
-  <div class="card border-0 shadow-sm mb-3">
+  <form method="get" class="card border-0 shadow-sm mb-3" id="form-filtros-transf">
+    <div class="card-header py-2" style="background:#1D63A5;color:white;">
+        <h6 class="mb-0"><i class="bi bi-funnel"></i> Filtros</h6>
+    </div>
     <div class="card-body py-2">
-      <form method="get" class="row g-2 align-items-end">
-        <div class="col-sm-3">
-          <label class="form-label small mb-1">Data início</label>
-          <input type="date" name="data_ini" class="form-control form-control-sm" value="{{ f_data_ini }}">
-        </div>
-        <div class="col-sm-3">
-          <label class="form-label small mb-1">Data fim</label>
-          <input type="date" name="data_fim" class="form-control form-control-sm" value="{{ f_data_fim }}">
-        </div>
-        <div class="col-sm-4">
-          <label class="form-label small mb-1">Conta</label>
-          <select name="account_id" class="form-select form-select-sm">
-            <option value="">Todas as contas</option>
-            {% for c in contas %}
-            <option value="{{ c.id }}" {% if f_conta == c.id|string %}selected{% endif %}>
-              {{ c.banco_nome }} — {{ c.apelido }}
+      <div class="row g-2">
+        <!-- Empresa (seleção única → cascata em Conta) -->
+        <div class="col-md-3">
+          <label class="form-label form-label-sm mb-0">Empresa</label>
+          <select name="empresa_id" id="sel-empresa-transf" class="form-select form-select-sm">
+            <option value="">— Todas as Empresas —</option>
+            {% for e in empresas %}
+            <option value="{{ e.id }}" {% if f_empresa == e.id|string %}selected{% endif %}>
+              {{ e.razao_social }}
             </option>
             {% endfor %}
           </select>
         </div>
-        <div class="col-sm-2">
-          <button type="submit" class="btn btn-sm btn-primary w-100">Filtrar</button>
+        <!-- Conta Bancária -->
+        <div class="col-md-3">
+          <label class="form-label form-label-sm mb-0">Conta Bancária</label>
+          <select name="account_id" id="sel-conta-transf" class="form-select form-select-sm">
+            <option value="">Todas as contas</option>
+            {% for c in contas %}
+            <option value="{{ c.id }}"
+                    data-empresa="{{ c.cliente_id or '' }}"
+                    {% if f_conta == c.id|string %}selected{% endif %}>
+              {{ c.apelido or c.banco_nome }}
+            </option>
+            {% endfor %}
+          </select>
         </div>
-      </form>
+        <!-- Datas + atalhos + botões -->
+        <div class="col-md-6">
+          <div class="row g-2">
+            <div class="col-md-6">
+              <label class="form-label form-label-sm mb-0">Data início</label>
+              <input type="date" name="data_ini" class="form-control form-control-sm" value="{{ f_data_ini }}">
+            </div>
+            <div class="col-md-6">
+              <label class="form-label form-label-sm mb-0">Data fim</label>
+              <input type="date" name="data_fim" class="form-control form-control-sm" value="{{ f_data_fim }}">
+            </div>
+            <div class="col-12">
+              <div class="d-flex gap-1 flex-wrap mb-1">
+                <span class="text-muted" style="font-size:0.78rem; line-height:1.8;">Período:</span>
+                <button type="button" class="btn btn-outline-secondary btn-xs" onclick="setPeriodoTransf('mes_atual')">Este mês</button>
+                <button type="button" class="btn btn-outline-secondary btn-xs" onclick="setPeriodoTransf('mes_anterior')">Mês anterior</button>
+                <button type="button" class="btn btn-outline-secondary btn-xs" onclick="setPeriodoTransf('ano_atual')">Este ano</button>
+              </div>
+            </div>
+            <div class="col-12 d-flex gap-1">
+              <button type="submit" class="btn btn-primary btn-sm flex-fill">
+                <i class="bi bi-search"></i> Filtrar
+              </button>
+              <a href="/financeiro/transferencias/" class="btn btn-outline-secondary btn-sm">
+                <i class="bi bi-x"></i> Limpar
+              </a>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
-  </div>
+  </form>
+  <style>
+  .btn-xs { padding:0.15rem 0.35rem; font-size:0.72rem; line-height:1.3; border-radius:0.2rem; }
+  </style>
+  <script>
+  (function () {
+      var selEmpresa = document.getElementById('sel-empresa-transf');
+      var selConta   = document.getElementById('sel-conta-transf');
+      var allContas  = Array.from(selConta.options).slice(1);
+
+      function filtrarContas(empresaId) {
+          var selectedVal = selConta.value;
+          while (selConta.options.length > 1) selConta.remove(1);
+          allContas.forEach(function(opt) {
+              if (!empresaId || opt.dataset.empresa === empresaId) {
+                  selConta.appendChild(opt.cloneNode(true));
+              }
+          });
+          if (selectedVal) {
+              var found = Array.from(selConta.options).find(function(o) { return o.value === selectedVal; });
+              if (found) selConta.value = selectedVal;
+          }
+      }
+
+      filtrarContas(selEmpresa.value);
+      selEmpresa.addEventListener('change', function () {
+          selConta.value = '';
+          filtrarContas(this.value);
+      });
+  })();
+
+  function setPeriodoTransf(tipo) {
+      var hoje = new Date();
+      var ini, fim;
+      if (tipo === 'mes_atual') {
+          ini = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
+          fim = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0);
+      } else if (tipo === 'mes_anterior') {
+          ini = new Date(hoje.getFullYear(), hoje.getMonth() - 1, 1);
+          fim = new Date(hoje.getFullYear(), hoje.getMonth(), 0);
+      } else {
+          ini = new Date(hoje.getFullYear(), 0, 1);
+          fim = new Date(hoje.getFullYear(), 11, 31);
+      }
+      function fmt(d) { return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0'); }
+      document.querySelector('#form-filtros-transf input[name="data_ini"]').value = fmt(ini);
+      document.querySelector('#form-filtros-transf input[name="data_fim"]').value = fmt(fim);
+  }
+  </script>
 
   {% if erro_db %}
   <div class="alert alert-danger">
