@@ -139,6 +139,7 @@ def lista():
         titulo_id = request.args.get('titulo_id', '')
         categoria_id = request.args.get('categoria_id', '')
         subcategoria_id = request.args.get('subcategoria_id', '')
+        account_ids = request.args.getlist('account_id')  # bank account multi-select
         fornecedor = request.args.get('fornecedor', '').strip()
         observacao = request.args.get('observacao', '').strip()
         
@@ -154,6 +155,7 @@ def lista():
             INNER JOIN categorias_despesas c ON ld.categoria_id = c.id
             LEFT JOIN subcategorias_despesas s ON ld.subcategoria_id = s.id
             LEFT JOIN clientes cl ON ld.cliente_id = cl.id
+            LEFT JOIN bank_transactions _bt ON _bt.id = ld.bank_transaction_id
             WHERE 1=1
         """
         params = []
@@ -187,6 +189,13 @@ def lista():
             query += " AND ld.subcategoria_id = %s"
             params.append(subcategoria_id)
         
+        if account_ids:
+            valid_account_ids = [int(a) for a in account_ids if a.isdigit()]
+            if valid_account_ids:
+                placeholders = ','.join(['%s'] * len(valid_account_ids))
+                query += f" AND _bt.account_id IN ({placeholders})"
+                params.extend(valid_account_ids)
+        
         if fornecedor:
             query += " AND ld.fornecedor LIKE %s"
             params.append(f'%{fornecedor}%')
@@ -205,6 +214,15 @@ def lista():
         
         # Get clientes with products for filter
         clientes = get_clientes_com_produtos()
+        
+        # Get all bank accounts for dynamic filter (client-side empresa→conta filtering)
+        cursor.execute("""
+            SELECT ba.id, ba.banco_nome, ba.apelido, ba.cliente_id
+            FROM bank_accounts ba
+            WHERE ba.ativo = 1
+            ORDER BY ba.apelido, ba.banco_nome
+        """)
+        todas_contas = cursor.fetchall()
         
         # Get titulos for filter
         cursor.execute("""
@@ -244,6 +262,7 @@ def lista():
                              titulos=titulos,
                              categorias=categorias,
                              subcategorias=subcategorias,
+                             todas_contas=todas_contas,
                              filtros={
                                  'data_inicio': data_inicio,
                                  'data_fim': data_fim,
@@ -251,6 +270,7 @@ def lista():
                                  'titulo_id': titulo_id,
                                  'categoria_id': categoria_id,
                                  'subcategoria_id': subcategoria_id,
+                                 'account_ids': account_ids,
                                  'fornecedor': fornecedor,
                                  'observacao': observacao,
                              })
@@ -263,6 +283,7 @@ def lista():
                              titulos=[],
                              categorias=[],
                              subcategorias=[],
+                             todas_contas=[],
                              filtros={})
     finally:
         if cursor:

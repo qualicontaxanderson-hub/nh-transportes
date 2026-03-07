@@ -88,6 +88,12 @@
                                 {% endfor %}
                             </select>
                         </div>
+                        <div class="col-12">
+                            <label class="form-label form-label-sm mb-0">Conta Bancária</label>
+                            <select class="form-select form-select-sm" name="account_id" id="selContas">
+                                <option value="">— Selecione uma empresa primeiro —</option>
+                            </select>
+                        </div>
                     </div>
                 </div>
                 <!-- Datas + Buscas + Botões -->
@@ -268,5 +274,72 @@ function setPeriodo(tipo) {
     document.querySelector('input[name="data_inicio"]').value = formatDate(ini);
     document.querySelector('input[name="data_fim"]').value = formatDate(fim);
 }
+
+// ---- Filtro dinâmico de Conta Bancária por Empresa ----
+const _todasContasDespesas = {{ todas_contas | tojson }};
+const _contasSelecionadasDespesas = ({{ (filtros.account_ids or []) | tojson }}).map(String);
+
+function atualizarContasBancarias() {
+    var selEmp = document.getElementById('selEmpresas');
+    var selCon = document.getElementById('selContas');
+    if (!selEmp || !selCon) return;
+
+    var empsSelecionadas = Array.from(selEmp.selectedOptions).map(function(o) { return parseInt(o.value); });
+
+    selCon.innerHTML = '';
+
+    if (empsSelecionadas.length === 0) {
+        var opt = document.createElement('option');
+        opt.value = '';
+        opt.disabled = true;
+        opt.textContent = '— Selecione uma empresa primeiro —';
+        selCon.appendChild(opt);
+        return;
+    }
+
+    var contasFiltradas = _todasContasDespesas.filter(function(c) {
+        var cid = c.cliente_id !== undefined ? parseInt(c.cliente_id) : null;
+        return cid !== null && empsSelecionadas.includes(cid);
+    });
+
+    // Add "Todas" option first
+    var optTodas = document.createElement('option');
+    optTodas.value = '';
+    optTodas.textContent = 'Todas as contas';
+    selCon.appendChild(optTodas);
+
+    if (contasFiltradas.length === 0) {
+        var opt2 = document.createElement('option');
+        opt2.value = '';
+        opt2.disabled = true;
+        opt2.textContent = '— Nenhuma conta cadastrada —';
+        selCon.appendChild(opt2);
+        return;
+    }
+
+    contasFiltradas.forEach(function(c) {
+        var opt = document.createElement('option');
+        var apelido = c.apelido || '';
+        var banco = c.banco_nome || '';
+        if (apelido && banco) {
+            opt.textContent = apelido + ' — ' + banco;
+        } else {
+            opt.textContent = apelido || banco;
+        }
+        opt.value = c.id;
+        if (_contasSelecionadasDespesas.includes(String(c.id))) {
+            opt.selected = true;
+        }
+        selCon.appendChild(opt);
+    });
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    var selEmp = document.getElementById('selEmpresas');
+    if (selEmp) {
+        selEmp.addEventListener('change', atualizarContasBancarias);
+        atualizarContasBancarias();
+    }
+});
 </script>
 {% endblock %}
