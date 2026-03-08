@@ -330,6 +330,61 @@ def excluir_lote():
     return redirect(url_for('conciliacao_regras.lista'))
 
 
+@bp.route('/memorias')
+@login_required
+def memorias():
+    """Lista as memorizações de conciliação (bank_supplier_mapping)."""
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        cursor.execute(
+            """SELECT bsm.id, bsm.cnpj_cpf, bsm.tipo_chave, bsm.total_conciliacoes,
+                      bsm.criado_em, bsm.atualizado_em,
+                      f.razao_social AS fornecedor_nome,
+                      fr.nome AS forma_nome,
+                      td.nome AS titulo_nome,
+                      cd.nome AS categoria_nome,
+                      ba.apelido AS conta_destino_apelido,
+                      ba.banco_nome AS conta_destino_banco,
+                      bsm.tipo_debito
+               FROM bank_supplier_mapping bsm
+               LEFT JOIN fornecedores f ON f.id = bsm.fornecedor_id
+               LEFT JOIN formas_recebimento fr ON fr.id = bsm.forma_recebimento_id
+               LEFT JOIN titulos_despesas td ON td.id = bsm.titulo_id
+               LEFT JOIN categorias_despesas cd ON cd.id = bsm.categoria_id
+               LEFT JOIN bank_accounts ba ON ba.id = bsm.conta_destino_id
+               ORDER BY bsm.atualizado_em DESC"""
+        )
+        memorias_list = cursor.fetchall()
+    except Exception:
+        logger.exception("Erro ao carregar memorizações de conciliação")
+        memorias_list = []
+    finally:
+        cursor.close()
+        conn.close()
+    return render_template('bank_import/regras/memorias.html', memorias=memorias_list)
+
+
+@bp.route('/memorias/<int:memoria_id>/excluir', methods=['POST'])
+@login_required
+def excluir_memoria(memoria_id):
+    """Exclui uma memorização de conciliação."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute("DELETE FROM bank_supplier_mapping WHERE id = %s", (memoria_id,))
+        conn.commit()
+        flash('Memorização excluída com sucesso.', 'success')
+    except Exception as e:
+        conn.rollback()
+        flash(f'Erro ao excluir memorização: {e}', 'danger')
+    finally:
+        cursor.close()
+        conn.close()
+    return redirect(url_for('conciliacao_regras.memorias'))
+
+
+
 @login_required
 def api_criar_subcategoria():
     """Cria uma subcategoria inline durante o preenchimento da regra (AJAX)."""

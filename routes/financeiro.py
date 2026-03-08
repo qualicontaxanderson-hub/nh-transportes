@@ -989,9 +989,125 @@ def _get_bank_transactions(tipo, request_args, exclude_transfers=False):
     data_inicio = request_args.get('data_inicio', '').strip()
     data_fim = request_args.get('data_fim', '').strip()
 
-    # Require empresa or conta filter before querying (empty on first load)
-    if not conta_ids and not empresa_ids:
-        # Still need contas/empresas/formas for the filter dropdowns
+    try:
+        # Require empresa or conta filter before querying (empty on first load)
+        if not conta_ids and not empresa_ids:
+            # Still need contas/empresas/formas for the filter dropdowns
+            cursor.execute(
+                """SELECT ba.id, ba.apelido, ba.banco_nome,
+                          ba.cliente_id,
+                          c.razao_social AS empresa_nome
+                   FROM bank_accounts ba
+                   LEFT JOIN clientes c ON c.id = ba.cliente_id
+                   WHERE ba.ativo = 1
+                   ORDER BY c.razao_social, ba.apelido, ba.banco_nome"""
+            )
+            contas = cursor.fetchall()
+            cursor.execute(
+                """SELECT DISTINCT c.id, c.razao_social
+                   FROM clientes c
+                   INNER JOIN bank_accounts ba ON ba.cliente_id = c.id AND ba.ativo = 1
+                   ORDER BY c.razao_social"""
+            )
+            empresas = cursor.fetchall()
+            cursor.execute("SELECT id, nome FROM formas_recebimento WHERE ativo = 1 ORDER BY nome")
+            formas = cursor.fetchall()
+            return [], {}, contas, empresas, formas
+
+        where = ["bt.tipo = %s"]
+        params = [tipo]
+        if conta_ids:
+            ph = ','.join(['%s'] * len(conta_ids))
+            where.append(f"bt.account_id IN ({ph})")
+            params.extend(conta_ids)
+        elif empresa_ids:
+            # Filtra pelas contas que pertencem às empresas selecionadas
+            ph = ','.join(['%s'] * len(empresa_ids))
+            where.append(f"ba.cliente_id IN ({ph})")
+            params.extend(empresa_ids)
+        if forma_recebimento_id:
+            where.append("bt.forma_recebimento_id = %s")
+            params.append(forma_recebimento_id)
+        if status:
+            where.append("bt.status = %s")
+            params.append(status)
+        if data_inicio:
+            where.append("bt.data_transacao >= %s")
+            params.append(data_inicio)
+        if data_fim:
+            where.append("bt.data_transacao <= %s")
+            params.append(data_fim)
+
+        # Exclui transferências entre contas da página de Pagamentos.
+        # Condição 1: existe um CREDIT sintético TRANSFER_<id> (transferência concluída).
+        # Condição 2: tipo_conciliacao='transferencia' (transferência órfã ou sem CREDIT).
+        # A condição 2 usa try/except para não quebrar em BDs sem a coluna (migration pendente).
+        if exclude_transfers and tipo == 'DEBIT':
+            where.append(
+                "NOT EXISTS ("
+                "  SELECT 1 FROM bank_transactions cr"
+                "  WHERE cr.hash_dedup = CONCAT('TRANSFER_', bt.id)"
+                "  AND cr.tipo = 'CREDIT'"
+                ")"
+            )
+            # tipo_conciliacao pode não existir antes da migration; testado separadamente abaixo.
+            _tc_filter = "(bt.tipo_conciliacao IS NULL OR bt.tipo_conciliacao != 'transferencia')"
+        else:
+            _tc_filter = None
+
+        where_sql = " AND ".join(where)
+
+        def _run_query(extra_filter):
+            w = (where_sql + " AND " + extra_filter) if extra_filter else where_sql
+            cursor.execute(
+                f"""SELECT bt.id, bt.data_transacao, bt.tipo, bt.valor, bt.descricao,
+                           bt.cnpj_cpf, bt.memo, bt.status, bt.fornecedor_id,
+                           bt.forma_recebimento_id,
+                           ba.apelido AS conta_apelido, ba.banco_nome,
+                           f.razao_social AS fornecedor_nome,
+                           fr.nome AS forma_recebimento_nome,
+                           (bt.status='conciliado'
+                            AND bt.fornecedor_id IS NULL
+                            AND bt.forma_recebimento_id IS NULL
+                            AND bt.tipo='DEBIT') AS is_despesa
+                    FROM bank_transactions bt
+                    INNER JOIN bank_accounts ba ON bt.account_id = ba.id
+                    LEFT JOIN fornecedores f ON bt.fornecedor_id = f.id
+                    LEFT JOIN formas_recebimento fr ON fr.id = bt.forma_recebimento_id
+                    WHERE {w}
+                    ORDER BY bt.data_transacao DESC
+                    LIMIT 500""",
+                params,
+            )
+            return cursor.fetchall()
+
+        def _run_totais(extra_filter):
+            w = (where_sql + " AND " + extra_filter) if extra_filter else where_sql
+            cursor.execute(
+                f"""SELECT SUM(bt.valor) AS total,
+                           SUM(CASE WHEN bt.status='conciliado' THEN 1 ELSE 0 END) AS conciliados,
+                           SUM(CASE WHEN bt.status='pendente' THEN 1 ELSE 0 END) AS pendentes
+                    FROM bank_transactions bt
+                    INNER JOIN bank_accounts ba ON bt.account_id = ba.id
+                    WHERE {w}""",
+                params,
+            )
+            return cursor.fetchone() or {}
+
+        try:
+            transacoes = _run_query(_tc_filter)
+            totais = _run_totais(_tc_filter)
+        except Exception as exc:
+            # Fallback: tipo_conciliacao não existe (migration pendente) — usa apenas NOT EXISTS.
+            # ProgrammingError errno 1054 = Unknown column.
+            import mysql.connector
+            if not isinstance(exc, mysql.connector.errors.ProgrammingError):
+                raise
+            conn.rollback()
+            transacoes = _run_query(None)
+            totais = _run_totais(None)
+
+        # Lista de contas para o filtro (inclui cliente_id para cascata empresa→conta no JS)
         cursor.execute(
             """SELECT ba.id, ba.apelido, ba.banco_nome,
                       ba.cliente_id,
@@ -1002,6 +1118,8 @@ def _get_bank_transactions(tipo, request_args, exclude_transfers=False):
                ORDER BY c.razao_social, ba.apelido, ba.banco_nome"""
         )
         contas = cursor.fetchall()
+
+        # Lista de empresas (clientes) que possuem contas bancárias ativas
         cursor.execute(
             """SELECT DISTINCT c.id, c.razao_social
                FROM clientes c
@@ -1009,135 +1127,17 @@ def _get_bank_transactions(tipo, request_args, exclude_transfers=False):
                ORDER BY c.razao_social"""
         )
         empresas = cursor.fetchall()
-        cursor.execute("SELECT id, nome FROM formas_recebimento WHERE ativo = 1 ORDER BY nome")
+
+        # Lista de formas de recebimento ativas
+        cursor.execute(
+            "SELECT id, nome FROM formas_recebimento WHERE ativo = 1 ORDER BY nome"
+        )
         formas = cursor.fetchall()
+
+        return transacoes, totais, contas, empresas, formas
+    finally:
         cursor.close()
         conn.close()
-        return [], {}, contas, empresas, formas
-    where = ["bt.tipo = %s"]
-    params = [tipo]
-    if conta_ids:
-        ph = ','.join(['%s'] * len(conta_ids))
-        where.append(f"bt.account_id IN ({ph})")
-        params.extend(conta_ids)
-    elif empresa_ids:
-        # Filtra pelas contas que pertencem às empresas selecionadas
-        ph = ','.join(['%s'] * len(empresa_ids))
-        where.append(f"ba.cliente_id IN ({ph})")
-        params.extend(empresa_ids)
-    if forma_recebimento_id:
-        where.append("bt.forma_recebimento_id = %s")
-        params.append(forma_recebimento_id)
-    if status:
-        where.append("bt.status = %s")
-        params.append(status)
-    if data_inicio:
-        where.append("bt.data_transacao >= %s")
-        params.append(data_inicio)
-    if data_fim:
-        where.append("bt.data_transacao <= %s")
-        params.append(data_fim)
-
-    # Exclui transferências entre contas da página de Pagamentos.
-    # Condição 1: existe um CREDIT sintético TRANSFER_<id> (transferência concluída).
-    # Condição 2: tipo_conciliacao='transferencia' (transferência órfã ou sem CREDIT).
-    # A condição 2 usa try/except para não quebrar em BDs sem a coluna (migration pendente).
-    if exclude_transfers and tipo == 'DEBIT':
-        where.append(
-            "NOT EXISTS ("
-            "  SELECT 1 FROM bank_transactions cr"
-            "  WHERE cr.hash_dedup = CONCAT('TRANSFER_', bt.id)"
-            "  AND cr.tipo = 'CREDIT'"
-            ")"
-        )
-        # tipo_conciliacao pode não existir antes da migration; testado separadamente abaixo.
-        _tc_filter = "(bt.tipo_conciliacao IS NULL OR bt.tipo_conciliacao != 'transferencia')"
-    else:
-        _tc_filter = None
-
-    where_sql = " AND ".join(where)
-
-    def _run_query(extra_filter):
-        w = (where_sql + " AND " + extra_filter) if extra_filter else where_sql
-        cursor.execute(
-            f"""SELECT bt.id, bt.data_transacao, bt.tipo, bt.valor, bt.descricao,
-                       bt.cnpj_cpf, bt.memo, bt.status, bt.fornecedor_id,
-                       bt.forma_recebimento_id,
-                       ba.apelido AS conta_apelido, ba.banco_nome,
-                       f.razao_social AS fornecedor_nome,
-                       fr.nome AS forma_recebimento_nome,
-                       (bt.status='conciliado'
-                        AND bt.fornecedor_id IS NULL
-                        AND bt.forma_recebimento_id IS NULL
-                        AND bt.tipo='DEBIT') AS is_despesa
-                FROM bank_transactions bt
-                INNER JOIN bank_accounts ba ON bt.account_id = ba.id
-                LEFT JOIN fornecedores f ON bt.fornecedor_id = f.id
-                LEFT JOIN formas_recebimento fr ON fr.id = bt.forma_recebimento_id
-                WHERE {w}
-                ORDER BY bt.data_transacao DESC
-                LIMIT 500""",
-            params,
-        )
-        return cursor.fetchall()
-
-    def _run_totais(extra_filter):
-        w = (where_sql + " AND " + extra_filter) if extra_filter else where_sql
-        cursor.execute(
-            f"""SELECT SUM(bt.valor) AS total,
-                       SUM(CASE WHEN bt.status='conciliado' THEN 1 ELSE 0 END) AS conciliados,
-                       SUM(CASE WHEN bt.status='pendente' THEN 1 ELSE 0 END) AS pendentes
-                FROM bank_transactions bt
-                INNER JOIN bank_accounts ba ON bt.account_id = ba.id
-                WHERE {w}""",
-            params,
-        )
-        return cursor.fetchone() or {}
-
-    try:
-        transacoes = _run_query(_tc_filter)
-        totais = _run_totais(_tc_filter)
-    except Exception as exc:
-        # Fallback: tipo_conciliacao não existe (migration pendente) — usa apenas NOT EXISTS.
-        # ProgrammingError errno 1054 = Unknown column.
-        import mysql.connector
-        if not isinstance(exc, mysql.connector.errors.ProgrammingError):
-            raise
-        conn.rollback()
-        transacoes = _run_query(None)
-        totais = _run_totais(None)
-
-    # Lista de contas para o filtro (inclui cliente_id para cascata empresa→conta no JS)
-    cursor.execute(
-        """SELECT ba.id, ba.apelido, ba.banco_nome,
-                  ba.cliente_id,
-                  c.razao_social AS empresa_nome
-           FROM bank_accounts ba
-           LEFT JOIN clientes c ON c.id = ba.cliente_id
-           WHERE ba.ativo = 1
-           ORDER BY c.razao_social, ba.apelido, ba.banco_nome"""
-    )
-    contas = cursor.fetchall()
-
-    # Lista de empresas (clientes) que possuem contas bancárias ativas
-    cursor.execute(
-        """SELECT DISTINCT c.id, c.razao_social
-           FROM clientes c
-           INNER JOIN bank_accounts ba ON ba.cliente_id = c.id AND ba.ativo = 1
-           ORDER BY c.razao_social"""
-    )
-    empresas = cursor.fetchall()
-
-    # Lista de formas de recebimento ativas
-    cursor.execute(
-        "SELECT id, nome FROM formas_recebimento WHERE ativo = 1 ORDER BY nome"
-    )
-    formas = cursor.fetchall()
-
-    cursor.close()
-    conn.close()
-
-    return transacoes, totais, contas, empresas, formas
 
 
 @financeiro_bp.route('/recebimento/')
