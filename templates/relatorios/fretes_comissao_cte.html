@@ -88,7 +88,7 @@
   </div>
 
   <!-- Tabela de detalhe -->
-  <div class="card">
+  <div class="card mb-4">
     <div class="card-header" style="background:#151515;color:white;">
       <h5 class="mb-0"><i class="bi bi-table"></i> Detalhe de Fretes</h5>
     </div>
@@ -178,6 +178,50 @@
       {% endif %}
     </div>
   </div>
+
+  <!-- Resumo por Caminhão -->
+  {% if resumo_caminhoes %}
+  <div class="card mb-4">
+    <div class="card-header" style="background:#1D63A5;color:white;">
+      <h5 class="mb-0"><i class="bi bi-truck"></i> Resumo por Caminhão</h5>
+    </div>
+    <div class="card-body p-0">
+      <div class="table-responsive">
+        <table class="table table-sm table-hover mb-0">
+          <thead style="background:#E8E8E8;">
+            <tr>
+              <th>Caminhão</th>
+              <th>Placa</th>
+              <th class="text-center">Qtd. Fretes</th>
+              <th class="text-end">Valor CTe (R$)</th>
+              <th class="text-end">Comissão CTe (R$)</th>
+              <th class="text-end">Valor Frete (R$)</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in resumo_caminhoes %}
+            <tr>
+              <td><strong>{{ row.caminhao_nome }}</strong></td>
+              <td>{{ row.placa or '-' }}</td>
+              <td class="text-center">{{ row.qtd_fretes }}</td>
+              <td class="text-end">{{ "R$ {:,.2f}".format(row.valor_cte_total|float).replace(",","X").replace(".",",").replace("X",".") }}</td>
+              <td class="text-end">{{ "R$ {:,.2f}".format(row.comissao_total|float).replace(",","X").replace(".",",").replace("X",".") }}</td>
+              <td class="text-end">{{ "R$ {:,.2f}".format(row.valor_frete_total|float).replace(",","X").replace(".",",").replace("X",".") }}</td>
+            </tr>
+            {% endfor %}
+            <!-- Total geral -->
+            <tr style="background:#F5F5F5;font-weight:bold;">
+              <td colspan="3">TOTAL GERAL</td>
+              <td class="text-end">{{ "R$ {:,.2f}".format(total_valor_cte|float if total_valor_cte else 0).replace(",","X").replace(".",",").replace("X",".") }}</td>
+              <td class="text-end">{{ "R$ {:,.2f}".format(total_comissao_cte|float if total_comissao_cte else 0).replace(",","X").replace(".",",").replace("X",".") }}</td>
+              <td class="text-end">{{ "R$ {:,.2f}".format(total_valor_frete|float if total_valor_frete else 0).replace(",","X").replace(".",",").replace("X",".") }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+  {% endif %}
 
 </div>
 {% endblock %}

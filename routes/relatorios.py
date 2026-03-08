@@ -163,6 +163,24 @@ def fretes_comissao_cte():
         """
         cursor.execute(q_det, args)
         fretes = cursor.fetchall()
+
+        # Resumo por caminhão
+        q_caminhoes = f"""
+            SELECT
+              COALESCE(v.caminhao, '(sem caminhão)') AS caminhao_nome,
+              COALESCE(v.placa, '') AS placa,
+              COUNT(f.id) AS qtd_fretes,
+              COALESCE(SUM(f.valor_cte), 0) AS valor_cte_total,
+              COALESCE(SUM(f.comissao_cte), 0) AS comissao_total,
+              COALESCE(SUM(f.valor_total_frete), 0) AS valor_frete_total
+            FROM fretes f
+            LEFT JOIN veiculos v ON f.veiculos_id = v.id
+            WHERE 1=1 {where_sql}
+            GROUP BY f.veiculos_id, v.caminhao, v.placa
+            ORDER BY COALESCE(SUM(f.valor_cte), 0) DESC
+        """
+        cursor.execute(q_caminhoes, args)
+        resumo_caminhoes = cursor.fetchall()
     finally:
         cursor.close()
         conn.close()
@@ -181,6 +199,7 @@ def fretes_comissao_cte():
         total_comissao_cte=total_comissao_cte,
         total_valor_frete=total_valor_frete,
         resumo_clientes=resumo_clientes,
+        resumo_caminhoes=resumo_caminhoes,
         fretes=fretes
     )
 
