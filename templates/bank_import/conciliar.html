@@ -1053,7 +1053,7 @@ function mascaraMoeda(e) {
   const inp = e.target;
   // Remove tudo que não é dígito
   let v = inp.value.replace(/\D/g, '');
-  if (!v) { inp.value = ''; return; }
+  if (!v) { inp.value = ''; atualizarSoma(); return; }
   // Converte para centavos → reais
   let num = parseInt(v, 10);
   let reais = Math.floor(num / 100);
@@ -1061,6 +1061,8 @@ function mascaraMoeda(e) {
   // Formata com pontos de milhar e vírgula decimal
   let s = reais.toLocaleString('pt-BR') + ',' + String(cents).padStart(2, '0');
   inp.value = s;
+  // Recalcula soma APÓS formatação para garantir valor correto
+  atualizarSoma();
 }
 function aplicarMascaraMoeda(inp) {
   inp.addEventListener('input', mascaraMoeda);
@@ -1248,7 +1250,7 @@ function adicionarLinhaDespesa() {
     <div class="row g-1 mt-1">
       <div class="col-md-4">
         <label class="form-label form-label-sm mb-0">Valor R$</label>
-        <input type="text" name="desp_${i}_valor" class="form-control form-control-sm inp-valor" placeholder="0,00" inputmode="numeric" oninput="atualizarSoma()">
+        <input type="text" name="desp_${i}_valor" class="form-control form-control-sm inp-valor" placeholder="0,00" inputmode="numeric">
       </div>
       <div class="col-md-4">
         <label class="form-label form-label-sm mb-0">Fornecedor (opt.)</label>
