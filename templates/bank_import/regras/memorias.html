@@ -14,7 +14,7 @@
   <div class="alert alert-info py-2">
     <i class="bi bi-info-circle"></i>
     Estas memorizações são criadas automaticamente ao conciliar uma transação pelo botão
-    <strong>Conciliar</strong> na tela de conciliação. Elas associam um CNPJ/CPF a um
+    <strong>Conciliar</strong> na tela de conciliação. Elas associam um CNPJ/CPF + Descrição a um
     fornecedor, forma de recebimento, despesa ou conta destino para sugestões futuras.
     <br>
     Você pode excluir uma memorização caso ela esteja incorreta.
@@ -38,6 +38,7 @@
           <thead class="table-dark">
             <tr>
               <th>CNPJ/CPF</th>
+              <th>Descrição-chave</th>
               <th>Vincula a</th>
               <th class="text-center">Tipo</th>
               <th class="text-center">Conciliações</th>
@@ -49,6 +50,13 @@
             {% for m in memorias %}
             <tr>
               <td><code>{{ m.cnpj_cpf }}</code></td>
+              <td>
+                {% if m.get('descricao_chave') %}
+                  <small class="text-muted" title="{{ m.descricao_chave }}">{{ m.descricao_chave[:60] }}{% if m.descricao_chave|length > 60 %}…{% endif %}</small>
+                {% else %}
+                  <span class="text-muted small fst-italic">— (legado)</span>
+                {% endif %}
+              </td>
               <td>
                 {% if m.get('forma_nome') %}
                   <span class="badge bg-success"><i class="bi bi-wallet2"></i> {{ m.forma_nome }}</span>
@@ -106,7 +114,7 @@
             </tr>
             {% else %}
             <tr>
-              <td colspan="6" class="text-center text-muted py-3">
+              <td colspan="7" class="text-center text-muted py-3">
                 Nenhuma memorização registrada.
               </td>
             </tr>

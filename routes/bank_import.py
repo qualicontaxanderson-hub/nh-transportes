@@ -55,6 +55,17 @@ def _ensure_ld_bank_tx_id():
 # Funções auxiliares
 # ---------------------------------------------------------------------------
 
+
+def _desc_chave(descricao: str) -> str:
+    """Normaliza a descrição para chave de memorização: primeiros 100 chars em maiúsculas.
+
+    Usada como parte da chave composta (cnpj_cpf, descricao_chave) na tabela
+    bank_supplier_mapping, para diferenciar transações do mesmo CNPJ com tipos
+    distintos (ex: mesma empresa pagando por categorias diferentes de despesas).
+    """
+    return (descricao or '').upper().strip()[:100]
+
+
 def _get_accounts(cursor, cliente_id=None):
     if cliente_id:
         cursor.execute(
@@ -124,16 +135,24 @@ def _save_transactions(cursor, conn, account_id, transactions):
 
     # 2. Busca de mapeamento de fornecedores/formas/despesas em lote (por CNPJ)
     cnpj_list = list({tx['cnpj_cpf'] for tx in transactions if tx.get('cnpj_cpf')})
-    mapping = {}  # cnpj -> {'fornecedor_id': ..., 'forma_recebimento_id': ..., 'titulo_id': ..., ...}
+    mapping = {}  # (cnpj_cpf, descricao_chave) -> row
     if cnpj_list:
         ph2 = ','.join(['%s'] * len(cnpj_list))
-        cursor.execute(
-            f'SELECT cnpj_cpf, fornecedor_id, forma_recebimento_id, titulo_id, categoria_id, subcategoria_id '
-            f'FROM bank_supplier_mapping WHERE cnpj_cpf IN ({ph2})',
-            cnpj_list,
-        )
+        try:
+            cursor.execute(
+                f'SELECT cnpj_cpf, descricao_chave, fornecedor_id, forma_recebimento_id, titulo_id, categoria_id, subcategoria_id '
+                f'FROM bank_supplier_mapping WHERE cnpj_cpf IN ({ph2})',
+                cnpj_list,
+            )
+        except mysql.connector.errors.ProgrammingError:
+            # Coluna descricao_chave pode ainda não existir (migration pendente)
+            cursor.execute(
+                f"SELECT cnpj_cpf, '' AS descricao_chave, fornecedor_id, forma_recebimento_id, titulo_id, categoria_id, subcategoria_id "
+                f'FROM bank_supplier_mapping WHERE cnpj_cpf IN ({ph2})',
+                cnpj_list,
+            )
         for row in cursor.fetchall():
-            mapping[row['cnpj_cpf']] = row
+            mapping[(row['cnpj_cpf'], row['descricao_chave'])] = row
 
     now = _dt.datetime.now()
     rows = []
@@ -142,7 +161,9 @@ def _save_transactions(cursor, conn, account_id, transactions):
         if tx['hash_dedup'] in existing_hashes:
             duplicados += 1
             continue
-        m = mapping.get(tx.get('cnpj_cpf') or '')
+        cnpj = tx.get('cnpj_cpf') or ''
+        desc = _desc_chave(tx.get('descricao') or '')
+        m = mapping.get((cnpj, desc)) or mapping.get((cnpj, ''))
         if tx['tipo'] == 'CREDIT':
             frec_id = m['forma_recebimento_id'] if m else None
             forn_id = None
@@ -207,7 +228,8 @@ def _auto_conciliar_despesas_por_cnpj(cursor, conn, account_id, mapping):
     tem mapeamento de despesa integral (titulo_id+categoria_id) em bank_supplier_mapping.
     Débitos divididos (split) nunca são auto-conciliados — ficam para o usuário.
     """
-    despesa_mappings = {cnpj: m for cnpj, m in mapping.items() if m.get('titulo_id')}
+    # mapping é indexado por (cnpj_cpf, descricao_chave); filtra os que têm despesa
+    despesa_mappings = {key: m for key, m in mapping.items() if m.get('titulo_id')}
     if not despesa_mappings:
         return 0
 
@@ -216,7 +238,7 @@ def _auto_conciliar_despesas_por_cnpj(cursor, conn, account_id, mapping):
     acc = cursor.fetchone()
     cliente_id = acc['cliente_id'] if acc else None
 
-    cnpj_list = list(despesa_mappings.keys())
+    cnpj_list = list({key[0] for key in despesa_mappings.keys()})
     ph = ','.join(['%s'] * len(cnpj_list))
     cursor.execute(
         f"""SELECT id, data_transacao, descricao, cnpj_cpf, valor
@@ -231,7 +253,9 @@ def _auto_conciliar_despesas_por_cnpj(cursor, conn, account_id, mapping):
     agora = _dt.datetime.now()
     count = 0
     for tx in pendentes:
-        m = despesa_mappings.get(tx['cnpj_cpf'])
+        cnpj = tx['cnpj_cpf']
+        desc = _desc_chave(tx.get('descricao') or '')
+        m = despesa_mappings.get((cnpj, desc)) or despesa_mappings.get((cnpj, ''))
         if not m:
             continue
         descricao = (tx.get('descricao') or '')
@@ -678,14 +702,15 @@ def _conciliar_transferencia(cursor, conn, tx_id, conta_destino_id, usuario,
     # Auto-aprender: salva CNPJ→conta_destino para sugestão nas próximas importações
     cnpj = tx.get('cnpj_cpf')
     if cnpj and salvar_mapeamento:
+        desc_chave = _desc_chave(tx.get('descricao') or '')
         try:
             cursor.execute(
-                """INSERT INTO bank_supplier_mapping (cnpj_cpf, conta_destino_id, tipo_debito)
-                   VALUES (%s, %s, 'transferencia')
+                """INSERT INTO bank_supplier_mapping (cnpj_cpf, descricao_chave, conta_destino_id, tipo_debito)
+                   VALUES (%s, %s, %s, 'transferencia')
                    ON DUPLICATE KEY UPDATE conta_destino_id=%s, tipo_debito='transferencia'""",
-                (cnpj, conta_destino_id, conta_destino_id),
+                (cnpj, desc_chave, conta_destino_id, conta_destino_id),
             )
-        except Exception:
+        except mysql.connector.errors.ProgrammingError:
             # Coluna pode não existir ainda (migration pendente) — ignora silenciosamente
             pass
     conn.commit()
@@ -823,15 +848,16 @@ def _conciliar_tx(cursor, conn, tx_id, acao, tipo_tx,
         # Auto-aprender: despesa INTEGRAL (não dividida) salva mapeamento para próxima importação
         if salvar_mapeamento and len(despesas) == 1 and tx.get('cnpj_cpf'):
             d = despesas[0]
+            desc_chave = _desc_chave(descricao)
             cursor.execute(
                 """INSERT INTO bank_supplier_mapping
-                       (cnpj_cpf, tipo_chave, total_conciliacoes, titulo_id, categoria_id, subcategoria_id)
-                   VALUES (%s, 'cnpj', 1, %s, %s, %s)
+                       (cnpj_cpf, descricao_chave, tipo_chave, total_conciliacoes, titulo_id, categoria_id, subcategoria_id)
+                   VALUES (%s, %s, 'cnpj', 1, %s, %s, %s)
                    ON DUPLICATE KEY UPDATE
                        titulo_id=%s, categoria_id=%s, subcategoria_id=%s,
                        fornecedor_id=NULL, forma_recebimento_id=NULL,
                        total_conciliacoes=total_conciliacoes+1, atualizado_em=NOW()""",
-                (tx['cnpj_cpf'],
+                (tx['cnpj_cpf'], desc_chave,
                  d['titulo_id'], d['categoria_id'], d.get('subcategoria_id'),
                  d['titulo_id'], d['categoria_id'], d.get('subcategoria_id')),
             )
@@ -846,18 +872,19 @@ def _conciliar_tx(cursor, conn, tx_id, acao, tipo_tx,
                WHERE id=%s""",
             (fornecedor_id, agora, usuario, tx_id),
         )
-        cursor.execute("SELECT cnpj_cpf FROM bank_transactions WHERE id=%s", (tx_id,))
+        cursor.execute("SELECT cnpj_cpf, descricao FROM bank_transactions WHERE id=%s", (tx_id,))
         row = cursor.fetchone()
         if salvar_mapeamento and row and row.get('cnpj_cpf'):
+            desc_chave = _desc_chave(row.get('descricao') or '')
             cursor.execute(
                 """INSERT INTO bank_supplier_mapping
-                       (fornecedor_id, cnpj_cpf, tipo_chave, total_conciliacoes)
-                   VALUES (%s, %s, 'cnpj', 1)
+                       (fornecedor_id, cnpj_cpf, descricao_chave, tipo_chave, total_conciliacoes)
+                   VALUES (%s, %s, %s, 'cnpj', 1)
                    ON DUPLICATE KEY UPDATE
                        fornecedor_id=%s,
                        total_conciliacoes=total_conciliacoes+1,
                        atualizado_em=NOW()""",
-                (fornecedor_id, row['cnpj_cpf'], fornecedor_id),
+                (fornecedor_id, row['cnpj_cpf'], desc_chave, fornecedor_id),
             )
 
     conn.commit()
@@ -1090,7 +1117,13 @@ def conciliar():
                        cd.nome AS sugestao_categoria_nome
                 FROM bank_transactions bt
                 INNER JOIN bank_accounts ba ON bt.account_id = ba.id
-                LEFT JOIN bank_supplier_mapping bsm ON bsm.cnpj_cpf = bt.cnpj_cpf
+                LEFT JOIN bank_supplier_mapping bsm ON bsm.id = (
+                    SELECT s.id FROM bank_supplier_mapping s
+                    WHERE s.cnpj_cpf = bt.cnpj_cpf
+                      AND s.descricao_chave IN ('', LEFT(UPPER(TRIM(bt.descricao)), 100))
+                    ORDER BY LENGTH(s.descricao_chave) DESC
+                    LIMIT 1
+                )
                 LEFT JOIN formas_recebimento fr ON fr.id = bsm.forma_recebimento_id
                 LEFT JOIN fornecedores fs ON fs.id = bsm.fornecedor_id
                 LEFT JOIN titulos_despesas td ON td.id = bsm.titulo_id
@@ -1537,7 +1570,13 @@ def api_auto_reconcile():
         cursor.execute(
             """SELECT bt.id, bt.tipo, bsm.fornecedor_id, bsm.forma_recebimento_id
                FROM bank_transactions bt
-               INNER JOIN bank_supplier_mapping bsm ON bt.cnpj_cpf = bsm.cnpj_cpf
+               INNER JOIN bank_supplier_mapping bsm ON bsm.id = (
+                   SELECT s.id FROM bank_supplier_mapping s
+                   WHERE s.cnpj_cpf = bt.cnpj_cpf
+                     AND s.descricao_chave IN ('', LEFT(UPPER(TRIM(bt.descricao)), 100))
+                   ORDER BY LENGTH(s.descricao_chave) DESC
+                   LIMIT 1
+               )
                WHERE bt.status = 'pendente' AND bt.cnpj_cpf IS NOT NULL AND bt.cnpj_cpf != ''"""
         )
         rows = cursor.fetchall()

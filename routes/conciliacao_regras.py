@@ -338,7 +338,7 @@ def memorias():
     cursor = conn.cursor(dictionary=True)
     try:
         cursor.execute(
-            """SELECT bsm.id, bsm.cnpj_cpf, bsm.tipo_chave, bsm.total_conciliacoes,
+            """SELECT bsm.id, bsm.cnpj_cpf, bsm.descricao_chave, bsm.tipo_chave, bsm.total_conciliacoes,
                       bsm.criado_em, bsm.atualizado_em,
                       f.razao_social AS fornecedor_nome,
                       fr.nome AS forma_nome,
