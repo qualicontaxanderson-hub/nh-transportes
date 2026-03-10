@@ -830,6 +830,33 @@ def _conciliar_tx(cursor, conn, tx_id, acao, tipo_tx,
                    WHERE id=%s""",
                 (forma_recebimento_id, agora, usuario, tx_id),
             )
+            # Auto-aprender: salva CNPJ+Descrição → forma_recebimento para sugestões e
+            # auto-conciliação em importações futuras com a mesma transação.
+            if salvar_mapeamento:
+                cursor.execute(
+                    "SELECT cnpj_cpf, descricao FROM bank_transactions WHERE id=%s", (tx_id,)
+                )
+                row_cr = cursor.fetchone()
+                if row_cr and row_cr.get('cnpj_cpf'):
+                    desc_chave = _desc_chave(row_cr.get('descricao') or '')
+                    try:
+                        cursor.execute(
+                            """INSERT INTO bank_supplier_mapping
+                                   (cnpj_cpf, descricao_chave, tipo_chave, total_conciliacoes,
+                                    forma_recebimento_id)
+                               VALUES (%s, %s, 'cnpj', 1, %s)
+                               ON DUPLICATE KEY UPDATE
+                                   forma_recebimento_id=%s,
+                                   fornecedor_id=NULL, titulo_id=NULL,
+                                   categoria_id=NULL, subcategoria_id=NULL,
+                                   total_conciliacoes=total_conciliacoes+1,
+                                   atualizado_em=NOW()""",
+                            (row_cr['cnpj_cpf'], desc_chave,
+                             forma_recebimento_id, forma_recebimento_id),
+                        )
+                    except mysql.connector.errors.ProgrammingError:
+                        # Coluna descricao_chave pode não existir ainda (migration pendente)
+                        pass
 
     elif tipo_debito == 'troco_pix' and troco_pix_id:
         # Débito → Troco PIX: vincula a transação bancária ao registro de troco_pix
@@ -1185,6 +1212,7 @@ def conciliar():
                        bsm.subcategoria_id AS sugestao_subcategoria_id,
                        bsm.conta_destino_id AS sugestao_conta_destino_id,
                        bsm.tipo_debito AS sugestao_tipo_debito,
+                       bsm.descricao_chave AS sugestao_bsm_descricao_chave,
                        fr.nome AS sugestao_forma_nome,
                        fs.razao_social AS sugestao_fornecedor_nome,
                        td.nome AS sugestao_titulo_nome,
@@ -1214,10 +1242,14 @@ def conciliar():
         except mysql.connector.errors.ProgrammingError as _e:
             if _e.errno != 1054:
                 raise
-            # Fallback when descricao_chave column does not yet exist in the DB
+            # Fallback when descricao_chave column does not yet exist in the DB.
+            # Use a version of _SELECT_TX without the bsm.descricao_chave field.
             logger.warning("conciliar: descricao_chave column missing, using simple join fallback")
+            _SELECT_TX_LEGACY = _SELECT_TX.replace(
+                "bsm.descricao_chave AS sugestao_bsm_descricao_chave,\n                       ", ""
+            )
             cursor.execute(
-                f"""{_SELECT_TX}
+                f"""{_SELECT_TX_LEGACY}
                 LEFT JOIN bank_supplier_mapping bsm ON bsm.cnpj_cpf = bt.cnpj_cpf
                 {_JOINS_TAIL}""",
                 params + [per_page, offset],
@@ -1276,13 +1308,16 @@ def conciliar():
                 break  # primeira regra que bate vence
 
         # Para créditos sem regra de descrição correspondente: remove a sugestão de forma
-        # que veio do bank_supplier_mapping por CNPJ/CPF.  O mesmo CPF pode aparecer em
-        # transações de tipos distintos (PIX, depósito em dinheiro, cheque…), tornando a
-        # sugestão por CNPJ não confiável para créditos.
+        # que veio do bank_supplier_mapping por CNPJ/CPF genérico (sem descrição específica).
+        # O mesmo CPF pode aparecer em transações de tipos distintos (PIX, depósito, cheque…),
+        # tornando a sugestão por CNPJ não confiável para créditos.
+        # Exceção: mapeamentos com descricao_chave específica são confiáveis e mantidos.
         for tx in transacoes:
             if tx.get('tipo') == 'CREDIT' and not tx.get('sugestao_regra'):
-                tx['sugestao_forma_id']   = None
-                tx['sugestao_forma_nome'] = None
+                # Preserve a sugestão se veio de memorização específica (descricao_chave não vazia)
+                if not tx.get('sugestao_bsm_descricao_chave'):
+                    tx['sugestao_forma_id']   = None
+                    tx['sugestao_forma_nome'] = None
 
         # Enriquece badge de sugestão de despesa (CNPJ → título/categoria)
         for tx in transacoes:
