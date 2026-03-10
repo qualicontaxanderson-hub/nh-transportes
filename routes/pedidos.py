@@ -58,7 +58,7 @@ def index():
     params = []
     
     if data_inicio and data_fim:
-        sql += " AND p.data_pedido BETWEEN %s AND %s"
+        sql += " AND DATE(p.data_pedido) BETWEEN %s AND %s"
         params.extend([data_inicio, data_fim])
     
     if status:

@@ -1333,6 +1333,8 @@ def transferencias():
         cursor.execute(
             f"""SELECT SUM(bt.valor) AS total_valor, COUNT(*) AS total_qtd
                 FROM bank_transactions bt
+                LEFT JOIN bank_transactions bt_orig
+                       ON bt_orig.id = CAST(SUBSTRING(bt.hash_dedup, 10) AS UNSIGNED)
                 WHERE {where_sql}""",
             params,
         )
