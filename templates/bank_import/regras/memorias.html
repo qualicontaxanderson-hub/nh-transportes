@@ -37,7 +37,7 @@
           em <code>bank_supplier_mapping</code> usando a chave
           <code>(CNPJ/CPF&nbsp;+&nbsp;Descrição)</code> da transação.
           Nas próximas importações/conciliações, essa chave é consultada para pré-preencher
-          os campos ou para auto-conciliar automaticamente.
+          os campos ou para conciliar automaticamente.
         </p>
         <div class="row g-3">
 
@@ -138,7 +138,7 @@
         <ul class="small mb-0">
           <li><strong>Troco PIX</strong> — vincula apenas ao registro de troco, sem aprender CNPJ.</li>
           <li><strong>Despesa dividida (split)</strong> — múltiplas linhas de despesa na mesma transação.</li>
-          <li><strong>Lançamento Único</strong> — quando o checkbox <em>"Salvar memorização"</em> (ou opção equivalente) está desmarcado na tela de conciliação.</li>
+          <li><strong>Modo "sem aprendizado"</strong> — quando o parâmetro interno <code>salvar_mapeamento=False</code> é usado (ex.: conciliações programáticas ou fluxos que não devem criar regra automática).</li>
           <li><strong>Ignorar transação</strong> — ao clicar em "Ignorar", nenhuma memorização é gerada.</li>
         </ul>
       </div>
