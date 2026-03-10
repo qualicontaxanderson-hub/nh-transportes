@@ -9,6 +9,56 @@ logger = logging.getLogger(__name__)
 
 bp = Blueprint('conciliacao_regras', __name__, url_prefix='/banco/regras')
 
+_bsm_descricao_chave_ready = False
+
+
+def _ensure_descricao_chave():
+    """Garante que bank_supplier_mapping.descricao_chave existe. Idempotente."""
+    global _bsm_descricao_chave_ready
+    if _bsm_descricao_chave_ready:
+        return
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT COUNT(*) FROM information_schema.COLUMNS"
+            " WHERE TABLE_SCHEMA = DATABASE()"
+            " AND TABLE_NAME = 'bank_supplier_mapping'"
+            " AND COLUMN_NAME = 'descricao_chave'"
+        )
+        col_exists = cursor.fetchone()[0] > 0
+        if not col_exists:
+            cursor.execute(
+                "ALTER TABLE bank_supplier_mapping"
+                " ADD COLUMN descricao_chave VARCHAR(100) NOT NULL DEFAULT ''"
+                " COMMENT 'Prefixo normalizado da descrição para diferenciar entradas com mesmo CNPJ'"
+            )
+            try:
+                cursor.execute("ALTER TABLE bank_supplier_mapping DROP INDEX uq_bsm_chave")
+            except Exception:
+                pass
+            try:
+                cursor.execute(
+                    "ALTER TABLE bank_supplier_mapping"
+                    " ADD UNIQUE KEY uq_bsm_chave (cnpj_cpf, descricao_chave)"
+                )
+            except Exception:
+                pass
+            try:
+                cursor.execute("DROP TRIGGER IF EXISTS tr_learn_supplier_mapping")
+            except Exception:
+                pass
+            conn.commit()
+            logger.info("_ensure_descricao_chave (conciliacao_regras): coluna e índice criados")
+        cursor.close()
+        _bsm_descricao_chave_ready = True
+    except Exception:
+        logger.warning("_ensure_descricao_chave (conciliacao_regras): falhou", exc_info=True)
+    finally:
+        if conn:
+            conn.close()
+
 
 def _get_formas(cursor):
     cursor.execute("SELECT id, nome FROM formas_recebimento WHERE ativo=1 ORDER BY nome")
@@ -334,6 +384,7 @@ def excluir_lote():
 @login_required
 def memorias():
     """Lista as memorizações de conciliação (bank_supplier_mapping)."""
+    _ensure_descricao_chave()
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
     try:

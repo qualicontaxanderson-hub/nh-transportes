@@ -19,6 +19,59 @@ bp = Blueprint('bank_import', __name__, url_prefix='/banco')
 # NOTE: this flag is not thread-safe but the underlying operation is idempotent
 # (ADD COLUMN IF NOT EXISTS), so a double-run in concurrent requests is harmless.
 _ld_bank_tx_id_ready = False
+_bsm_descricao_chave_ready = False
+
+
+def _ensure_descricao_chave():
+    """Garante que bank_supplier_mapping.descricao_chave existe e que a UNIQUE KEY
+    é composta por (cnpj_cpf, descricao_chave). Idempotente."""
+    global _bsm_descricao_chave_ready
+    if _bsm_descricao_chave_ready:
+        return
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT COUNT(*) FROM information_schema.COLUMNS"
+            " WHERE TABLE_SCHEMA = DATABASE()"
+            " AND TABLE_NAME = 'bank_supplier_mapping'"
+            " AND COLUMN_NAME = 'descricao_chave'"
+        )
+        col_exists = cursor.fetchone()[0] > 0
+        if not col_exists:
+            cursor.execute(
+                "ALTER TABLE bank_supplier_mapping"
+                " ADD COLUMN descricao_chave VARCHAR(100) NOT NULL DEFAULT ''"
+                " COMMENT 'Prefixo normalizado da descrição para diferenciar entradas com mesmo CNPJ'"
+            )
+            # Remove a constraint única antiga (somente cnpj_cpf) se existir
+            try:
+                cursor.execute("ALTER TABLE bank_supplier_mapping DROP INDEX uq_bsm_chave")
+            except Exception:
+                pass
+            # Cria nova constraint única composta
+            try:
+                cursor.execute(
+                    "ALTER TABLE bank_supplier_mapping"
+                    " ADD UNIQUE KEY uq_bsm_chave (cnpj_cpf, descricao_chave)"
+                )
+            except Exception:
+                pass
+            # Remove trigger redundante se existir
+            try:
+                cursor.execute("DROP TRIGGER IF EXISTS tr_learn_supplier_mapping")
+            except Exception:
+                pass
+            conn.commit()
+            logger.info("_ensure_descricao_chave: coluna e índice criados com sucesso")
+        cursor.close()
+        _bsm_descricao_chave_ready = True
+    except Exception:
+        logger.warning("_ensure_descricao_chave: não foi possível criar coluna/índice", exc_info=True)
+    finally:
+        if conn:
+            conn.close()
 
 
 def _ensure_ld_bank_tx_id():
@@ -924,6 +977,7 @@ def _get_troco_pix_sem_banco():
 def conciliar():
     """Interface de conciliação manual com filtros, multi-seleção e memória."""
     _ensure_ld_bank_tx_id()
+    _ensure_descricao_chave()
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
     usuario = current_user.email if hasattr(current_user, 'email') else 'manual'
@@ -1557,6 +1611,7 @@ def api_auto_reconcile():
     if not current_user.is_authenticated:
         return jsonify({'success': False, 'erro': 'Sessão expirada. Por favor, recarregue a página e faça login novamente.', 'conciliados': 0}), 401
     _ensure_ld_bank_tx_id()
+    _ensure_descricao_chave()
     conn = None
     cursor = None
     try:
