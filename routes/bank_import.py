@@ -854,9 +854,13 @@ def _conciliar_tx(cursor, conn, tx_id, acao, tipo_tx,
                             (row_cr['cnpj_cpf'], desc_chave,
                              forma_recebimento_id, forma_recebimento_id),
                         )
-                    except mysql.connector.errors.ProgrammingError:
+                    except mysql.connector.errors.ProgrammingError as _pe:
+                        if _pe.errno != 1054:
+                            raise
                         # Coluna descricao_chave pode não existir ainda (migration pendente)
-                        pass
+                        logger.debug(
+                            "_conciliar_tx CREDIT: descricao_chave column missing, skipping mapping"
+                        )
 
     elif tipo_debito == 'troco_pix' and troco_pix_id:
         # Débito → Troco PIX: vincula a transação bancária ao registro de troco_pix
@@ -1219,6 +1223,21 @@ def conciliar():
                        cd.nome AS sugestao_categoria_nome
                 FROM bank_transactions bt
                 INNER JOIN bank_accounts ba ON bt.account_id = ba.id"""
+        # Legacy SELECT without bsm.descricao_chave — used when the column does not yet exist
+        _SELECT_TX_LEGACY = f"""SELECT bt.*, ba.apelido AS conta_apelido, ba.banco_nome,
+                       bsm.fornecedor_id AS sugestao_fornecedor_id,
+                       bsm.forma_recebimento_id AS sugestao_forma_id,
+                       bsm.titulo_id AS sugestao_titulo_id,
+                       bsm.categoria_id AS sugestao_categoria_id,
+                       bsm.subcategoria_id AS sugestao_subcategoria_id,
+                       bsm.conta_destino_id AS sugestao_conta_destino_id,
+                       bsm.tipo_debito AS sugestao_tipo_debito,
+                       fr.nome AS sugestao_forma_nome,
+                       fs.razao_social AS sugestao_fornecedor_nome,
+                       td.nome AS sugestao_titulo_nome,
+                       cd.nome AS sugestao_categoria_nome
+                FROM bank_transactions bt
+                INNER JOIN bank_accounts ba ON bt.account_id = ba.id"""
         _JOINS_TAIL = f"""LEFT JOIN formas_recebimento fr ON fr.id = bsm.forma_recebimento_id
                 LEFT JOIN fornecedores fs ON fs.id = bsm.fornecedor_id
                 LEFT JOIN titulos_despesas td ON td.id = bsm.titulo_id
@@ -1243,11 +1262,8 @@ def conciliar():
             if _e.errno != 1054:
                 raise
             # Fallback when descricao_chave column does not yet exist in the DB.
-            # Use a version of _SELECT_TX without the bsm.descricao_chave field.
+            # Use _SELECT_TX_LEGACY which omits the bsm.descricao_chave field.
             logger.warning("conciliar: descricao_chave column missing, using simple join fallback")
-            _SELECT_TX_LEGACY = _SELECT_TX.replace(
-                "bsm.descricao_chave AS sugestao_bsm_descricao_chave,\n                       ", ""
-            )
             cursor.execute(
                 f"""{_SELECT_TX_LEGACY}
                 LEFT JOIN bank_supplier_mapping bsm ON bsm.cnpj_cpf = bt.cnpj_cpf
