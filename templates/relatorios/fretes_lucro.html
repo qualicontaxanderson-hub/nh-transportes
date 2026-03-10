@@ -30,7 +30,7 @@
       <select name="cliente_id" class="form-select">
         <option value="">Todos</option>
         {% for c in clientes %}
-        <option value="{{ c.id }}" {% if cliente_id == c.id %}selected{% endif %}>{{ c.nome_fantasia or c.razao_social }}</option>
+        <option value="{{ c.id }}" {% if cliente_id == c.id %}selected{% endif %}>{{ c.razao_social }}</option>
         {% endfor %}
       </select>
     </div>
@@ -80,11 +80,10 @@
     <div class="card-body">
       {% if fretes %}
       <div class="table-responsive">
-        <table class="table table-sm table-hover">
+        <table class="table table-sm table-hover mb-0">
           <thead style="background:#E8E8E8;">
             <tr>
               <th>Data</th>
-              <th>Cliente</th>
               <th>Produto</th>
               <th style="text-align:right;">Quantidade (L)</th>
               <th style="text-align:right;">Valor Frete (R$)</th>
@@ -94,29 +93,65 @@
             </tr>
           </thead>
           <tbody>
+            {% set ns = namespace(cur_cliente='', sub_qtd=0, sub_frete=0, sub_cte=0, sub_mot=0, sub_lucro=0) %}
             {% for item in fretes %}
-            <tr>
-              <td>{{ item.data_frete.strftime('%d/%m/%Y') if item.data_frete }}</td>
-              <td>{{ item.cliente_nome or '-' }}</td>
-              <td>{{ item.produto_nome or '-' }}</td>
-              <td style="text-align:right;">{{ "{:,.2f}".format(item.quantidade or 0).replace(",", "X").replace(".", ",").replace("X", ".") }}</td>
-              <td style="text-align:right;">{{ "R$ {:,.2f}".format(item.valor_total_frete|float if item.valor_total_frete else 0).replace(",", "X").replace(".", ",").replace("X", ".") }}</td>
-              <td style="text-align:right;">{{ "R$ {:,.2f}".format(item.comissao_cte|float if item.comissao_cte else 0).replace(",", "X").replace(".", ",").replace("X", ".") }}</td>
-              <td style="text-align:right;">{{ "R$ {:,.2f}".format(item.comissao_motorista|float if item.comissao_motorista else 0).replace(",", "X").replace(".", ",").replace("X", ".") }}</td>
-              <td style="text-align:right;">{{ "R$ {:,.2f}".format(item.lucro|float if item.lucro else 0).replace(",", "X").replace(".", ",").replace("X", ".") }}</td>
-            </tr>
+              {# — client group header — #}
+              {% if item.cliente_nome != ns.cur_cliente %}
+                {% if ns.cur_cliente != '' %}
+                <tr style="background:#f0f4fa; font-weight:600;">
+                  <td colspan="2" class="text-end">Subtotal {{ ns.cur_cliente }}</td>
+                  <td style="text-align:right;">{{ "{:,.2f}".format(ns.sub_qtd).replace(",","X").replace(".",",").replace("X",".") }}</td>
+                  <td style="text-align:right;">{{ "R$ {:,.2f}".format(ns.sub_frete).replace(",","X").replace(".",",").replace("X",".") }}</td>
+                  <td style="text-align:right;">{{ "R$ {:,.2f}".format(ns.sub_cte).replace(",","X").replace(".",",").replace("X",".") }}</td>
+                  <td style="text-align:right;">{{ "R$ {:,.2f}".format(ns.sub_mot).replace(",","X").replace(".",",").replace("X",".") }}</td>
+                  <td style="text-align:right;">{{ "R$ {:,.2f}".format(ns.sub_lucro).replace(",","X").replace(".",",").replace("X",".") }}</td>
+                </tr>
+                {% endif %}
+                {% set ns.cur_cliente = item.cliente_nome %}
+                {% set ns.sub_qtd = 0 %}
+                {% set ns.sub_frete = 0 %}
+                {% set ns.sub_cte = 0 %}
+                {% set ns.sub_mot = 0 %}
+                {% set ns.sub_lucro = 0 %}
+                <tr style="background:#1D63A5; color:white;">
+                  <td colspan="7"><strong><i class="bi bi-building"></i> {{ item.cliente_nome or '(sem cliente)' }}</strong></td>
+                </tr>
+              {% endif %}
+              {% set ns.sub_qtd = ns.sub_qtd + (item.quantidade|float if item.quantidade else 0) %}
+              {% set ns.sub_frete = ns.sub_frete + (item.valor_total_frete|float if item.valor_total_frete else 0) %}
+              {% set ns.sub_cte = ns.sub_cte + (item.comissao_cte|float if item.comissao_cte else 0) %}
+              {% set ns.sub_mot = ns.sub_mot + (item.comissao_motorista|float if item.comissao_motorista else 0) %}
+              {% set ns.sub_lucro = ns.sub_lucro + (item.lucro|float if item.lucro else 0) %}
+              <tr>
+                <td>{{ item.data_frete.strftime('%d/%m/%Y') if item.data_frete }}</td>
+                <td>{{ item.produto_nome or '-' }}</td>
+                <td style="text-align:right;">{{ "{:,.2f}".format(item.quantidade or 0).replace(",", "X").replace(".", ",").replace("X", ".") }}</td>
+                <td style="text-align:right;">{{ "R$ {:,.2f}".format(item.valor_total_frete|float if item.valor_total_frete else 0).replace(",", "X").replace(".", ",").replace("X", ".") }}</td>
+                <td style="text-align:right;">{{ "R$ {:,.2f}".format(item.comissao_cte|float if item.comissao_cte else 0).replace(",", "X").replace(".", ",").replace("X", ".") }}</td>
+                <td style="text-align:right;">{{ "R$ {:,.2f}".format(item.comissao_motorista|float if item.comissao_motorista else 0).replace(",", "X").replace(".", ",").replace("X", ".") }}</td>
+                <td style="text-align:right;">{{ "R$ {:,.2f}".format(item.lucro|float if item.lucro else 0).replace(",", "X").replace(".", ",").replace("X", ".") }}</td>
+              </tr>
             {% endfor %}
-
-            <!-- Linha de totais -->
+            {# subtotal for last group #}
+            {% if ns.cur_cliente != '' %}
+            <tr style="background:#f0f4fa; font-weight:600;">
+              <td colspan="2" class="text-end">Subtotal {{ ns.cur_cliente }}</td>
+              <td style="text-align:right;">{{ "{:,.2f}".format(ns.sub_qtd).replace(",","X").replace(".",",").replace("X",".") }}</td>
+              <td style="text-align:right;">{{ "R$ {:,.2f}".format(ns.sub_frete).replace(",","X").replace(".",",").replace("X",".") }}</td>
+              <td style="text-align:right;">{{ "R$ {:,.2f}".format(ns.sub_cte).replace(",","X").replace(".",",").replace("X",".") }}</td>
+              <td style="text-align:right;">{{ "R$ {:,.2f}".format(ns.sub_mot).replace(",","X").replace(".",",").replace("X",".") }}</td>
+              <td style="text-align:right;">{{ "R$ {:,.2f}".format(ns.sub_lucro).replace(",","X").replace(".",",").replace("X",".") }}</td>
+            </tr>
+            {% endif %}
+            <!-- Grand total -->
             <tr style="background:#F5F5F5; font-weight:bold;">
-              <td colspan="3">TOTAL</td>
+              <td colspan="2">TOTAL GERAL</td>
               <td style="text-align:right;">{{ "{:,.2f}".format(total_quantidade or 0).replace(",", "X").replace(".", ",").replace("X", ".") }}</td>
               <td style="text-align:right;">{{ "R$ {:,.2f}".format(total_valor_frete|float if total_valor_frete else 0).replace(",", "X").replace(".", ",").replace("X", ".") }}</td>
               <td style="text-align:right;">{{ "R$ {:,.2f}".format(total_comissao_cte|float if total_comissao_cte else 0).replace(",", "X").replace(".", ",").replace("X", ".") }}</td>
               <td style="text-align:right;">{{ "R$ {:,.2f}".format(total_comissao_motorista|float if total_comissao_motorista else 0).replace(",", "X").replace(".", ",").replace("X", ".") }}</td>
               <td style="text-align:right;">{{ "R$ {:,.2f}".format(total_lucro|float if total_lucro else 0).replace(",", "X").replace(".", ",").replace("X", ".") }}</td>
             </tr>
-
           </tbody>
         </table>
       </div>
@@ -125,6 +160,54 @@
       {% endif %}
     </div>
   </div>
+
+  <!-- Resumo por Cliente -->
+  {% if resumo_clientes %}
+  <div class="card mt-4">
+    <div class="card-header d-flex justify-content-between align-items-center" style="background:#1D63A5;color:white;">
+      <h5 class="mb-0"><i class="bi bi-bar-chart-fill"></i> Resumo por Cliente</h5>
+      <button type="button" class="btn btn-success btn-sm" id="btnCopiarWhatsapp">
+        <i class="bi bi-whatsapp"></i> Copiar para WhatsApp
+      </button>
+    </div>
+    <div class="card-body p-0">
+      <div class="table-responsive">
+        <table class="table table-sm table-hover mb-0" id="tabelaResumo">
+          <thead style="background:#E8E8E8;">
+            <tr>
+              <th>Razão Social</th>
+              <th style="text-align:right;">Qtd (L)</th>
+              <th style="text-align:right;">Valor Frete (R$)</th>
+              <th style="text-align:right;">Comissão CTe (R$)</th>
+              <th style="text-align:right;">Comissão Motorista (R$)</th>
+              <th style="text-align:right;">Lucro (R$)</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for r in resumo_clientes %}
+            <tr>
+              <td>{{ r.cliente_nome or '-' }}</td>
+              <td style="text-align:right;">{{ "{:,.2f}".format(r.quantidade_total or 0).replace(",","X").replace(".",",").replace("X",".") }}</td>
+              <td style="text-align:right;">{{ "R$ {:,.2f}".format(r.valor_frete_total|float if r.valor_frete_total else 0).replace(",","X").replace(".",",").replace("X",".") }}</td>
+              <td style="text-align:right;">{{ "R$ {:,.2f}".format(r.comissao_cte_total|float if r.comissao_cte_total else 0).replace(",","X").replace(".",",").replace("X",".") }}</td>
+              <td style="text-align:right;">{{ "R$ {:,.2f}".format(r.comissao_motorista_total|float if r.comissao_motorista_total else 0).replace(",","X").replace(".",",").replace("X",".") }}</td>
+              <td style="text-align:right;">{{ "R$ {:,.2f}".format(r.lucro_total|float if r.lucro_total else 0).replace(",","X").replace(".",",").replace("X",".") }}</td>
+            </tr>
+            {% endfor %}
+            <tr style="background:#F5F5F5; font-weight:bold;">
+              <td>TOTAL</td>
+              <td style="text-align:right;">{{ "{:,.2f}".format(total_quantidade or 0).replace(",","X").replace(".",",").replace("X",".") }}</td>
+              <td style="text-align:right;">{{ "R$ {:,.2f}".format(total_valor_frete|float if total_valor_frete else 0).replace(",","X").replace(".",",").replace("X",".") }}</td>
+              <td style="text-align:right;">{{ "R$ {:,.2f}".format(total_comissao_cte|float if total_comissao_cte else 0).replace(",","X").replace(".",",").replace("X",".") }}</td>
+              <td style="text-align:right;">{{ "R$ {:,.2f}".format(total_comissao_motorista|float if total_comissao_motorista else 0).replace(",","X").replace(".",",").replace("X",".") }}</td>
+              <td style="text-align:right;">{{ "R$ {:,.2f}".format(total_lucro|float if total_lucro else 0).replace(",","X").replace(".",",").replace("X",".") }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+  {% endif %}
 
 </div>
 {% endblock %}
@@ -149,5 +232,71 @@
   if(document.readyState==='loading') document.addEventListener('DOMContentLoaded', setDefaults);
   else setDefaults();
 })();
+
+document.addEventListener('DOMContentLoaded', function(){
+  var btn = document.getElementById('btnCopiarWhatsapp');
+  if(!btn) return;
+  btn.addEventListener('click', function(){
+    var table = document.getElementById('tabelaResumo');
+    if(!table) return;
+    var rows = table.querySelectorAll('tbody tr');
+    var lines = [];
+    var diEl = document.querySelector('input[name="data_inicio"]');
+    var dfEl = document.querySelector('input[name="data_fim"]');
+    function fmtDate(v){ if(!v) return ''; var p=v.split('-'); return p[2]+'/'+p[1]+'/'+p[0]; }
+    var periodo = (diEl && diEl.value && dfEl && dfEl.value)
+      ? '📅 Período: ' + fmtDate(diEl.value) + ' a ' + fmtDate(dfEl.value)
+      : '';
+    lines.push('📊 *RESUMO DE FRETES - LUCRO*');
+    if(periodo) lines.push(periodo);
+    lines.push('━━━━━━━━━━━━━━━━━━━━');
+    rows.forEach(function(row){
+      var cells = row.querySelectorAll('td');
+      if(cells.length < 6) return;
+      var nome = cells[0].textContent.trim();
+      var qtd  = cells[1].textContent.trim();
+      var frete= cells[2].textContent.trim();
+      var cte  = cells[3].textContent.trim();
+      var mot  = cells[4].textContent.trim();
+      var lucro= cells[5].textContent.trim();
+      var isTotal = row.style.fontWeight === 'bold' || nome === 'TOTAL';
+      if(isTotal){
+        lines.push('━━━━━━━━━━━━━━━━━━━━');
+        lines.push('📌 *TOTAL GERAL*');
+      } else {
+        lines.push('🏢 *' + nome + '*');
+      }
+      lines.push('   📦 Qtd: ' + qtd + ' L');
+      lines.push('   💰 Frete: ' + frete);
+      lines.push('   📋 CTe: ' + cte + '  |  🚛 Mot: ' + mot);
+      lines.push('   💵 *Lucro: ' + lucro + '*');
+      if(!isTotal) lines.push('');
+    });
+    var text = lines.join('\n');
+    if(navigator.clipboard && navigator.clipboard.writeText){
+      navigator.clipboard.writeText(text).then(function(){
+        btn.innerHTML = '<i class="bi bi-check2"></i> Copiado!';
+        setTimeout(function(){ btn.innerHTML = '<i class="bi bi-whatsapp"></i> Copiar para WhatsApp'; }, 2500);
+      }).catch(function(){
+        alert('Não foi possível copiar automaticamente. Selecione e copie o texto manualmente.');
+      });
+    } else {
+      try {
+        var ta = document.createElement('textarea');
+        ta.value = text;
+        ta.style.position = 'fixed';
+        ta.style.opacity = '0';
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        document.body.removeChild(ta);
+        btn.innerHTML = '<i class="bi bi-check2"></i> Copiado!';
+        setTimeout(function(){ btn.innerHTML = '<i class="bi bi-whatsapp"></i> Copiar para WhatsApp'; }, 2500);
+      } catch(e) {
+        alert('Não foi possível copiar automaticamente. Selecione e copie o texto manualmente.');
+      }
+    }
+  });
+});
 </script>
 {% endblock %}

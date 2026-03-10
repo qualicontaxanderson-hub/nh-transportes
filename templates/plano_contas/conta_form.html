@@ -1,0 +1,127 @@
+{% extends "base.html" %}
+{% set titulo_pagina = 'Editar Conta' if conta else 'Nova Conta' %}
+{% block title %}{{ titulo_pagina }} — {{ grupo.nome }} — NH Transportes{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+  <nav aria-label="breadcrumb" class="mt-2 mb-3">
+    <ol class="breadcrumb" style="font-size:0.85rem;">
+      <li class="breadcrumb-item"><a href="{{ url_for('index') }}">Dashboard</a></li>
+      <li class="breadcrumb-item"><a href="{{ url_for('plano_contas.lista') }}">Plano de Contas</a></li>
+      <li class="breadcrumb-item"><a href="{{ url_for('plano_contas.detalhe', id=grupo.id) }}">{{ grupo.nome }}</a></li>
+      <li class="breadcrumb-item active">{{ titulo_pagina }}</li>
+    </ol>
+  </nav>
+
+  <div class="card shadow-sm" style="max-width:640px;">
+    <div class="card-header" style="background:#1D63A5;color:white;font-size:0.95rem;padding:0.6rem 1rem;">
+      <h5 class="mb-0" style="font-size:1rem;">
+        <i class="bi bi-list-ol"></i> {{ titulo_pagina }}
+        <small class="ms-2" style="font-size:0.8rem;opacity:0.85;">
+          Grupo: <code style="color:#fff;">{{ grupo.codigo }}</code> — {{ grupo.nome }}
+        </small>
+      </h5>
+    </div>
+    <div class="card-body" style="padding:1.5rem;">
+      <form method="POST" id="contaForm" novalidate>
+
+        <div class="mb-3">
+          <label for="codigo" class="form-label fw-semibold">
+            Código Contábil <span class="text-danger">*</span>
+          </label>
+          <input type="text" id="codigo" name="codigo"
+                 class="form-control" style="font-family:monospace;"
+                 placeholder="Ex.: 1121, 1122.1, 15262"
+                 value="{{ form.codigo if form else '' }}"
+                 inputmode="numeric"
+                 pattern="[0-9]+(\.[0-9]+)*"
+                 title="Somente números e ponto como separador (ex.: 1121 ou 1122.1)"
+                 autocomplete="off"
+                 required>
+          <div class="form-text">Somente dígitos e ponto. Cada código deve ser único dentro do grupo.</div>
+          <div class="invalid-feedback">Código inválido — use apenas dígitos e ponto.</div>
+        </div>
+
+        <div class="mb-3">
+          <label for="nome" class="form-label fw-semibold">
+            Nome da Conta <span class="text-danger">*</span>
+          </label>
+          <input type="text" id="nome" name="nome" class="form-control"
+                 placeholder="Ex.: Banco Bradesco, Conta Sicoob PJ"
+                 value="{{ form.nome if form else '' }}" required>
+          <div class="invalid-feedback">Nome é obrigatório.</div>
+        </div>
+
+        <div class="mb-3">
+          <label for="descricao" class="form-label fw-semibold">Observação (opcional)</label>
+          <textarea id="descricao" name="descricao" class="form-control" rows="2"
+                    placeholder="Informações adicionais sobre esta conta...">{{ form.descricao if form else '' }}</textarea>
+        </div>
+
+        {% if conta %}
+        <div class="mb-3">
+          <div class="form-check form-switch">
+            <input class="form-check-input" type="checkbox" name="ativo" id="ativo"
+                   {% if form.ativo %}checked{% endif %}>
+            <label class="form-check-label" for="ativo">Conta ativa</label>
+          </div>
+        </div>
+        {% endif %}
+
+        <div class="d-flex gap-2 mt-3">
+          <a href="{{ url_for('plano_contas.detalhe', id=grupo.id) }}" class="btn btn-secondary">
+            <i class="bi bi-arrow-left"></i> Voltar
+          </a>
+          <input type="hidden" name="acao" id="acaoInput" value="salvar">
+          <button type="submit" class="btn btn-primary"
+                  onclick="document.getElementById('acaoInput').value='salvar'">
+            <i class="bi bi-save"></i> Salvar
+          </button>
+          {% if not conta %}
+          <button type="submit" class="btn btn-success"
+                  onclick="document.getElementById('acaoInput').value='proxima'">
+            <i class="bi bi-plus-circle"></i> Cadastrar Próxima
+          </button>
+          {% endif %}
+        </div>
+
+      </form>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  var input = document.getElementById('codigo');
+
+  // Strip invalid characters as the user types
+  input.addEventListener('input', function () {
+    var pos = this.selectionStart;
+    var cleaned = this.value.replace(/[^0-9.]/g, '');
+    if (cleaned !== this.value) {
+      var diff = this.value.length - cleaned.length;
+      this.value = cleaned;
+      this.setSelectionRange(pos - diff, pos - diff);
+    }
+  });
+
+  // Prevent invalid key presses (allow control keys)
+  input.addEventListener('keydown', function (e) {
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
+    var allowed = /^[0-9.]$/.test(e.key);
+    var control = ['Backspace','Delete','Tab','ArrowLeft','ArrowRight','Home','End'].includes(e.key);
+    if (!allowed && !control) e.preventDefault();
+  });
+
+  // Bootstrap validation
+  document.getElementById('contaForm').addEventListener('submit', function (e) {
+    if (!this.checkValidity()) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+    this.classList.add('was-validated');
+  });
+})();
+</script>
+{% endblock %}
+

@@ -57,51 +57,142 @@
     </div>
 
     <!-- FILTROS -->
-    <div class="card mb-3">
-        <div class="card-header" style="background:#dc3545;color:#fff;font-weight:600;">
-            <i class="bi bi-funnel"></i> Filtros
+    <form method="GET" class="card shadow-sm mb-3" id="form-filtros-pag">
+        <div class="card-header py-2" style="background:#dc3545;color:white;">
+            <h6 class="mb-0"><i class="bi bi-funnel"></i> Filtros</h6>
         </div>
-        <div class="card-body">
-            <form method="GET" class="row g-2 align-items-end">
+        <div class="card-body py-2">
+            <div class="row g-2">
+                <!-- Empresa (multi-select com cascata em Conta) -->
                 <div class="col-md-3">
-                    <label class="form-label mb-1">Conta Bancária</label>
-                    <select name="conta_id" class="form-select form-select-sm">
-                        <option value="">— Todas as Contas —</option>
-                        {% for c in contas %}
-                        <option value="{{ c.id }}" {% if c.id|string == conta_id_filter %}selected{% endif %}>
-                            {{ c.apelido or c.banco_nome }}{% if c.empresa_nome %} [{{ c.empresa_nome }}]{% endif %}
+                    <label class="form-label form-label-sm mb-0">Empresa <small class="text-muted">(Ctrl+clique p/ múltiplas)</small></label>
+                    <select name="empresa_id" id="selEmpresasPag" class="form-select form-select-sm" multiple size="4">
+                        {% for e in empresas %}
+                        <option value="{{ e.id }}" {% if e.id|string in (empresa_ids_filter or []) %}selected{% endif %}>
+                            {{ e.razao_social }}
                         </option>
                         {% endfor %}
                     </select>
                 </div>
-                <div class="col-md-2">
-                    <label class="form-label mb-1">Status</label>
-                    <select name="status" class="form-select form-select-sm">
-                        <option value="">— Todos —</option>
-                        <option value="pendente" {% if status_filter=='pendente' %}selected{% endif %}>Pendente</option>
-                        <option value="conciliado" {% if status_filter=='conciliado' %}selected{% endif %}>Conciliado</option>
-                        <option value="ignorado" {% if status_filter=='ignorado' %}selected{% endif %}>Ignorado</option>
-                    </select>
+                <!-- Conta + Status empilhados -->
+                <div class="col-md-3">
+                    <div class="row g-1">
+                        <div class="col-12">
+                            <label class="form-label form-label-sm mb-0">Conta Bancária <small class="text-muted">(Ctrl+clique p/ múltiplas)</small></label>
+                            <select name="conta_id" id="selContasPag" class="form-select form-select-sm" multiple size="4">
+                                <option value="" disabled>— Selecione uma empresa primeiro —</option>
+                            </select>
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label form-label-sm mb-0">Status</label>
+                            <select name="status" class="form-select form-select-sm">
+                                <option value="">— Todos —</option>
+                                <option value="pendente" {% if status_filter=='pendente' %}selected{% endif %}>Pendente</option>
+                                <option value="conciliado" {% if status_filter=='conciliado' %}selected{% endif %}>Conciliado</option>
+                                <option value="ignorado" {% if status_filter=='ignorado' %}selected{% endif %}>Ignorado</option>
+                            </select>
+                        </div>
+                    </div>
                 </div>
-                <div class="col-md-2">
-                    <label class="form-label mb-1">Data Início</label>
-                    <input type="date" name="data_inicio" class="form-control form-control-sm" value="{{ data_inicio }}">
+                <!-- Datas + atalhos + botões -->
+                <div class="col-md-6">
+                    <div class="row g-2">
+                        <div class="col-md-6">
+                            <label class="form-label form-label-sm mb-0">Data início</label>
+                            <input type="date" name="data_inicio" class="form-control form-control-sm"
+                                   value="{{ data_inicio or '' }}">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label form-label-sm mb-0">Data fim</label>
+                            <input type="date" name="data_fim" class="form-control form-control-sm"
+                                   value="{{ data_fim or '' }}">
+                        </div>
+                        <div class="col-12">
+                            <div class="d-flex gap-1 flex-wrap mb-1">
+                                <span class="text-muted" style="font-size:0.78rem; line-height:1.8;">Período:</span>
+                                <button type="button" class="btn btn-outline-secondary btn-xs" onclick="setPeriodoPag('mes_atual')">Este mês</button>
+                                <button type="button" class="btn btn-outline-secondary btn-xs" onclick="setPeriodoPag('mes_anterior')">Mês anterior</button>
+                                <button type="button" class="btn btn-outline-secondary btn-xs" onclick="setPeriodoPag('ano_atual')">Este ano</button>
+                            </div>
+                        </div>
+                        <div class="col-12 d-flex gap-1">
+                            <button type="submit" class="btn btn-danger btn-sm flex-fill">
+                                <i class="bi bi-search"></i> Filtrar
+                            </button>
+                            <a href="/financeiro/pagamentos/" class="btn btn-outline-secondary btn-sm">
+                                <i class="bi bi-x"></i> Limpar
+                            </a>
+                        </div>
+                    </div>
                 </div>
-                <div class="col-md-2">
-                    <label class="form-label mb-1">Data Fim</label>
-                    <input type="date" name="data_fim" class="form-control form-control-sm" value="{{ data_fim }}">
-                </div>
-                <div class="col-md-3 d-flex gap-2">
-                    <button type="submit" class="btn btn-danger btn-sm">
-                        <i class="bi bi-search"></i> Filtrar
-                    </button>
-                    <a href="/financeiro/pagamentos/" class="btn btn-outline-secondary btn-sm">
-                        <i class="bi bi-x-circle"></i> Limpar
-                    </a>
-                </div>
-            </form>
+            </div>
         </div>
-    </div>
+    </form>
+    <style>
+    .btn-xs { padding:0.15rem 0.35rem; font-size:0.72rem; line-height:1.3; border-radius:0.2rem; }
+    </style>
+    <script>
+    const _todasContasPag = {{ contas | tojson }};
+    const _contasSelecionadasPag = ({{ (conta_ids_filter or []) | tojson }}).map(String);
+
+    function atualizarContasPag() {
+        var selEmp = document.getElementById('selEmpresasPag');
+        var selCon = document.getElementById('selContasPag');
+        if (!selEmp || !selCon) return;
+        var empsSel = Array.from(selEmp.selectedOptions).map(function(o) { return parseInt(o.value); });
+        selCon.innerHTML = '';
+        if (empsSel.length === 0) {
+            var opt = document.createElement('option');
+            opt.value = ''; opt.disabled = true;
+            opt.textContent = '— Selecione uma empresa primeiro —';
+            selCon.appendChild(opt);
+            return;
+        }
+        var filtradas = _todasContasPag.filter(function(c) {
+            return empsSel.includes(parseInt(c.cliente_id));
+        });
+        if (filtradas.length === 0) {
+            var opt2 = document.createElement('option');
+            opt2.value = ''; opt2.disabled = true;
+            opt2.textContent = '— Nenhuma conta para a empresa selecionada —';
+            selCon.appendChild(opt2);
+            return;
+        }
+        filtradas.forEach(function(c) {
+            var opt = document.createElement('option');
+            opt.value = c.id;
+            opt.textContent = (c.apelido || '') + (c.banco_nome ? ' — ' + c.banco_nome : '') + (c.empresa_nome ? ' [' + c.empresa_nome + ']' : '');
+            if (_contasSelecionadasPag.includes(String(c.id))) opt.selected = true;
+            selCon.appendChild(opt);
+        });
+    }
+
+    document.addEventListener('DOMContentLoaded', function() {
+        var selEmp = document.getElementById('selEmpresasPag');
+        if (selEmp) {
+            selEmp.addEventListener('change', atualizarContasPag);
+            atualizarContasPag();
+        }
+    });
+
+    function setPeriodoPag(tipo) {
+        var hoje = new Date();
+        var ini, fim;
+        if (tipo === 'mes_atual') {
+            ini = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
+            fim = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0);
+        } else if (tipo === 'mes_anterior') {
+            ini = new Date(hoje.getFullYear(), hoje.getMonth() - 1, 1);
+            fim = new Date(hoje.getFullYear(), hoje.getMonth(), 0);
+        } else {
+            ini = new Date(hoje.getFullYear(), 0, 1);
+            fim = new Date(hoje.getFullYear(), 11, 31);
+        }
+        function fmt(d) { return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0'); }
+        document.querySelector('#form-filtros-pag input[name="data_inicio"]').value = fmt(ini);
+        document.querySelector('#form-filtros-pag input[name="data_fim"]').value = fmt(fim);
+    }
+    </script>
 
     <!-- TABELA -->
     <div class="card">
@@ -121,6 +212,7 @@
                             <th>Vinculado a</th>
                             <th class="text-end">Valor (R$)</th>
                             <th class="text-center">Status</th>
+                            <th class="text-center">Ações</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -153,11 +245,32 @@
                                     <span class="badge bg-warning text-dark">Pendente</span>
                                 {% endif %}
                             </td>
+                            <td class="text-center text-nowrap">
+                                {% if t.status == 'conciliado' or t.status == 'ignorado' %}
+                                <form method="POST"
+                                      action="{{ url_for('financeiro.reverter_conciliacao', tx_id=t.id) }}"
+                                      style="display:inline;"
+                                      onsubmit="return confirm('Reverter esta conciliação?\nO débito voltará para Pendente e poderá ser reconciliado corretamente.');">
+                                    <button type="submit" class="btn btn-sm btn-outline-warning" title="Reverter Conciliação">
+                                        <i class="bi bi-arrow-counterclockwise"></i> Reverter
+                                    </button>
+                                </form>
+                                {% else %}
+                                <a href="/banco/conciliar?tipo=DEBIT" class="btn btn-sm btn-outline-primary" title="Conciliar esta transação">
+                                    <i class="bi bi-check2-circle"></i> Conciliar
+                                </a>
+                                {% endif %}
+                            </td>
                         </tr>
                         {% else %}
                         <tr>
-                            <td colspan="7" class="text-center text-muted py-4">
-                                <i class="bi bi-inbox"></i> Nenhum débito encontrado para os filtros selecionados.
+                            <td colspan="8" class="text-center text-muted py-4">
+                                <i class="bi bi-inbox"></i>
+                                {% if filtro_aplicado %}
+                                Nenhum débito encontrado para os filtros selecionados.
+                                {% else %}
+                                Selecione uma <strong>Empresa</strong> ou <strong>Conta Bancária</strong> acima e clique em <strong>Filtrar</strong> para visualizar os pagamentos.
+                                {% endif %}
                             </td>
                         </tr>
                         {% endfor %}

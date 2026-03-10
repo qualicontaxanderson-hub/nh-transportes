@@ -172,6 +172,9 @@
                     <a href="{{ url_for('bank_import.relatorio') }}" class="btn btn-outline-info">
                         <i class="bi bi-bar-chart-line"></i> Relatório de Transações
                     </a>
+                    <button class="btn btn-outline-success" data-bs-toggle="modal" data-bs-target="#modalDiasImportados">
+                        <i class="bi bi-calendar-check"></i> Consultar Dias Importados
+                    </button>
                     <button class="btn btn-outline-secondary" onclick="autoReconcile()">
                         <i class="bi bi-magic"></i> Executar Auto-Conciliação
                     </button>
@@ -264,31 +267,33 @@
                         </div>
                     </div>
 
-                    {% if contas %}
-                    <div class="row g-2 align-items-end mb-3">
-                        <div class="col-sm-5">
+                    <div class="row g-2 align-items-end mb-3" id="dbxFiltroRow">
+                        <div class="col-sm-4">
                             <label class="form-label fw-semibold mb-1" style="font-size:0.88rem;">
-                                Conta bancária destino:
+                                <i class="bi bi-building"></i> Empresa:
                             </label>
-                            <select id="dbxAccountId" class="form-select form-select-sm">
-                                <option value="">Selecione a conta...</option>
-                                {% for conta in contas %}
-                                <option value="{{ conta.id }}">
-                                    {{ conta.apelido or conta.banco_nome }}
-                                    {%- if conta.agencia %} – Ag {{ conta.agencia }}{% endif %}
-                                    {%- if conta.conta %} / {{ conta.conta }}{% endif %}
-                                    {%- if conta.empresa_nome %} [{{ conta.empresa_nome }}]{% endif %}
-                                </option>
+                            <select id="dbxClienteId" class="form-select form-select-sm"
+                                    onchange="dbxCarregarContas(this.value)">
+                                <option value="">— Selecione a empresa —</option>
+                                {% for c in clientes %}
+                                <option value="{{ c.id }}">{{ c.razao_social }}{% if c.nome_fantasia and c.nome_fantasia != c.razao_social %} ({{ c.nome_fantasia }}){% endif %}</option>
                                 {% endfor %}
                             </select>
                         </div>
+                        <div class="col-sm-5">
+                            <label class="form-label fw-semibold mb-1" style="font-size:0.88rem;">
+                                <i class="bi bi-bank"></i> Conta bancária:
+                            </label>
+                            <select id="dbxAccountId" class="form-select form-select-sm" disabled>
+                                <option value="">— Selecione a empresa primeiro —</option>
+                            </select>
+                        </div>
                     </div>
-                    {% endif %}
 
                     <div id="dbxFileList">
                         <div class="text-muted text-center py-3">
                             <i class="bi bi-cloud fs-2 text-primary"></i>
-                            <p class="mt-1 mb-0">Clique em <strong>Verificar Dropbox</strong> para ver os arquivos disponíveis.</p>
+                            <p class="mt-1 mb-0">Selecione a <strong>Empresa</strong> e a <strong>Conta</strong> e clique em <strong>Verificar</strong>.</p>
                         </div>
                     </div>
                 </div>
@@ -491,6 +496,45 @@
                 <button type="button" class="btn btn-primary" onclick="salvarConta()">
                     <i class="bi bi-check-lg"></i> Salvar
                 </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal: Dias Importados -->
+<div class="modal fade" id="modalDiasImportados" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header" style="background:#28a745;color:white;">
+                <h5 class="modal-title"><i class="bi bi-calendar-check"></i> Consultar Dias Importados</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="row g-2 align-items-end mb-3">
+                    <div class="col-sm-8">
+                        <label class="form-label fw-semibold mb-1" style="font-size:0.88rem;">Selecione a Conta Bancária:</label>
+                        <select id="diasContaId" class="form-select form-select-sm">
+                            <option value="">— Selecione a conta —</option>
+                            {% for conta in contas %}
+                            <option value="{{ conta.id }}">
+                                {{ conta.apelido or conta.banco_nome }}
+                                {%- if conta.agencia %} – Ag {{ conta.agencia }}{% endif %}
+                                {%- if conta.conta %} / {{ conta.conta }}{% endif %}
+                                {%- if conta.empresa_nome %} [{{ conta.empresa_nome }}]{% endif %}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-sm-4">
+                        <button class="btn btn-success btn-sm w-100" onclick="consultarDiasImportados()">
+                            <i class="bi bi-search"></i> Consultar
+                        </button>
+                    </div>
+                </div>
+                <div id="diasResultado"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fechar</button>
             </div>
         </div>
     </div>
@@ -741,14 +785,68 @@
     // ---------------------------------------------------------------
     {% if dropbox_configured %}
 
+    function dbxCarregarContas(clienteId) {
+        const selConta = document.getElementById('dbxAccountId');
+        selConta.innerHTML = '<option value="">Carregando...</option>';
+        selConta.disabled = true;
+        dbxResetFileList();
+        if (!clienteId) {
+            selConta.innerHTML = '<option value="">— Selecione a empresa primeiro —</option>';
+            return;
+        }
+        fetch('{{ url_for("bank_import.api_contas") }}?cliente_id=' + encodeURIComponent(clienteId))
+            .then(r => r.json())
+            .then(contas => {
+                selConta.innerHTML = '<option value="">— Selecione a conta —</option>';
+                if (contas.length === 0) {
+                    selConta.innerHTML = '<option value="">Nenhuma conta cadastrada para esta empresa</option>';
+                    return;
+                }
+                contas.forEach(c => {
+                    const opt = document.createElement('option');
+                    opt.value = c.id;
+                    let label = c.apelido || c.banco_nome;
+                    if (c.agencia) label += ' – Ag ' + c.agencia;
+                    if (c.conta)   label += ' / ' + c.conta;
+                    opt.textContent = label;
+                    selConta.appendChild(opt);
+                });
+                selConta.disabled = false;
+            })
+            .catch(() => {
+                selConta.innerHTML = '<option value="">Erro ao carregar contas — tente recarregar a página</option>';
+            });
+    }
+
+    function dbxResetFileList() {
+        document.getElementById('dbxFileList').innerHTML =
+            '<div class="text-muted text-center py-3"><i class="bi bi-cloud fs-2 text-primary"></i>' +
+            '<p class="mt-1 mb-0">Selecione a <strong>Conta</strong> e clique em <strong>Verificar</strong>.</p></div>';
+    }
+
     function verificarDropbox() {
+        const selCliente = document.getElementById('dbxClienteId');
+        const selConta   = document.getElementById('dbxAccountId');
+        const clienteId  = selCliente ? selCliente.value : '';
+        const accountId  = selConta   ? selConta.value   : '';
+
+        if (!clienteId) {
+            alert('Por favor, selecione a Empresa e a Conta antes de verificar o Dropbox.');
+            return;
+        }
+        if (!accountId) {
+            alert('Por favor, selecione a Conta antes de verificar o Dropbox.');
+            return;
+        }
+
         const listDiv = document.getElementById('dbxFileList');
         listDiv.innerHTML = '<div class="text-center py-3"><div class="spinner-border spinner-border-sm" style="color:#0061FE;"></div> Verificando Dropbox...</div>';
 
-        fetch('{{ url_for("bank_import.api_dropbox_files") }}')
+        const url = '{{ url_for("bank_import.api_dropbox_files") }}?account_id=' + encodeURIComponent(accountId);
+
+        fetch(url)
             .then(r => {
                 const ct = r.headers.get('content-type') || '';
-                // Parseia JSON mesmo em status 4xx (endpoint retorna JSON com 'message' em erros)
                 if (!ct.includes('application/json')) {
                     listDiv.innerHTML = '<div class="alert alert-warning py-2">Resposta inesperada do servidor. Tente recarregar a página.</div>';
                     return null;
@@ -763,28 +861,43 @@
                     return;
                 }
                 if (!data.files || data.files.length === 0) {
+                    const contaNome = selConta.options[selConta.selectedIndex].text;
                     listDiv.innerHTML = `
-                        <div class="alert alert-info py-2 mb-0">
-                            <i class="bi bi-info-circle"></i>
-                            Nenhum arquivo <code>.ofx</code> encontrado em <code>{{ dropbox_inbox }}</code>.
-                            Coloque um arquivo OFX nessa pasta do Dropbox e clique em Verificar.
+                        <div class="alert alert-warning py-2 mb-0">
+                            <i class="bi bi-search"></i>
+                            Nenhum arquivo <code>.ofx</code> encontrado no Dropbox para a conta <strong>${contaNome}</strong>.<br>
+                            <small class="text-muted">Pasta verificada: <code>{{ dropbox_inbox }}</code>. Coloque o arquivo OFX nessa pasta e clique em Verificar novamente.</small>
                         </div>`;
                     return;
                 }
-                renderDropboxFiles(data.files);
+                renderDropboxFiles(data.files, data.filtrado, data.filtrado_sem_resultado);
             })
             .catch(err => {
                 listDiv.innerHTML = `<div class="alert alert-danger py-2">Erro ao verificar Dropbox: ${err}</div>`;
             });
     }
 
-    function renderDropboxFiles(files) {
+    function renderDropboxFiles(files, filtrado, filtradoSemResultado) {
         const listDiv = document.getElementById('dbxFileList');
         const wrap = document.createElement('div');
 
         const header = document.createElement('div');
-        header.className = 'alert alert-success py-2 mb-3';
-        header.innerHTML = `<i class="bi bi-check-circle"></i> <strong>${files.length}</strong> arquivo(s) OFX encontrado(s) no Dropbox.`;
+        if (filtradoSemResultado) {
+            header.className = 'alert alert-warning py-2 mb-0';
+            const selConta = document.getElementById('dbxAccountId');
+            const contaNome = selConta ? selConta.options[selConta.selectedIndex].text : '';
+            header.innerHTML = `<i class="bi bi-exclamation-triangle"></i> Nenhum arquivo encontrado automaticamente para a conta <strong>${contaNome}</strong>.<br>
+                <small>Coloque o arquivo OFX correto na pasta Dropbox e clique em Verificar novamente.</small>`;
+            wrap.appendChild(header);
+            listDiv.innerHTML = '';
+            listDiv.appendChild(wrap);
+            return;
+        } else {
+            header.className = filtrado ? 'alert alert-success py-2 mb-3' : 'alert alert-info py-2 mb-3';
+            header.innerHTML = filtrado
+                ? `<i class="bi bi-funnel-fill text-success"></i> <strong>${files.length}</strong> arquivo(s) encontrado(s) para a conta selecionada.`
+                : `<i class="bi bi-check-circle"></i> <strong>${files.length}</strong> arquivo(s) OFX encontrado(s) no Dropbox. <small class="text-muted">(selecione uma conta para filtrar)</small>`;
+        }
         wrap.appendChild(header);
 
         const tableWrap = document.createElement('div');
@@ -895,5 +1008,101 @@
     {% endif %}
 
     {% endif %}
+
+    // ---------------------------------------------------------------
+    // Consultar Dias Importados
+    // ---------------------------------------------------------------
+    function consultarDiasImportados() {
+        const sel = document.getElementById('diasContaId');
+        const accountId = sel ? sel.value : '';
+        const res = document.getElementById('diasResultado');
+        if (!accountId) {
+            res.innerHTML = '<div class="alert alert-warning py-2">Selecione uma conta antes de consultar.</div>';
+            return;
+        }
+        res.innerHTML = '<div class="text-center py-3"><div class="spinner-border spinner-border-sm"></div> Consultando...</div>';
+
+        fetch('{{ url_for("bank_import.api_dias_importados") }}?account_id=' + encodeURIComponent(accountId))
+            .then(r => r.json())
+            .then(data => {
+                if (!data.success) {
+                    res.innerHTML = `<div class="alert alert-danger py-2">${data.message || 'Erro desconhecido.'}</div>`;
+                    return;
+                }
+                if (!data.dias || data.dias.length === 0) {
+                    res.innerHTML = '<div class="alert alert-info py-2">Nenhuma transação importada para esta conta.</div>';
+                    return;
+                }
+                // Formata lista de dias importados e faltando
+                const fmtDate = s => s.split('-').reverse().join('/');
+                let html = `<p class="fw-semibold mb-2" style="font-size:0.9rem;">
+                    <i class="bi bi-bank"></i> ${data.titulo}
+                    &nbsp;·&nbsp; <span class="text-success">${data.dias.length} dia(s) importado(s)</span>
+                    ${data.faltando.length ? `&nbsp;·&nbsp; <span class="text-danger">${data.faltando.length} dia(s) sem importação</span>` : ''}
+                </p>`;
+
+                html += '<div class="row g-2">';
+
+                // Coluna de dias importados
+                html += `<div class="col-md-6">
+                    <div class="card border-success mb-0">
+                        <div class="card-header py-1 bg-success text-white" style="font-size:0.82rem;">
+                            <i class="bi bi-check-circle"></i> Dias Importados (${data.dias.length})
+                        </div>
+                        <div class="card-body p-0" style="max-height:260px;overflow-y:auto;">
+                            <table class="table table-sm table-hover mb-0" style="font-size:0.82rem;">
+                                <thead class="table-light sticky-top">
+                                    <tr><th>Data</th><th class="text-end">Transações</th></tr>
+                                </thead>
+                                <tbody>`;
+                data.dias.slice().reverse().forEach(d => {
+                    html += `<tr><td>${fmtDate(d.data)}</td><td class="text-end">${d.qtd}</td></tr>`;
+                });
+                html += `</tbody></table></div></div></div>`;
+
+                // Coluna de dias faltando
+                if (data.faltando.length > 0) {
+                    html += `<div class="col-md-6">
+                        <div class="card border-danger mb-0">
+                            <div class="card-header py-1 bg-danger text-white" style="font-size:0.82rem;">
+                                <i class="bi bi-exclamation-triangle"></i> Dias sem Importação (${data.faltando.length})
+                                <small class="fw-normal opacity-75"> (dias úteis)</small>
+                            </div>
+                            <div class="card-body p-0" style="max-height:260px;overflow-y:auto;">
+                                <table class="table table-sm table-hover mb-0" style="font-size:0.82rem;">
+                                    <thead class="table-light sticky-top">
+                                        <tr><th>Data faltando</th></tr>
+                                    </thead>
+                                    <tbody>`;
+                    data.faltando.slice().reverse().forEach(d => {
+                        html += `<tr class="table-danger"><td>${fmtDate(d)}</td></tr>`;
+                    });
+                    html += `</tbody></table></div></div></div>`;
+                } else {
+                    html += `<div class="col-md-6">
+                        <div class="alert alert-success h-100 d-flex align-items-center mb-0">
+                            <i class="bi bi-check-circle-fill me-2 fs-4"></i>
+                            <span>Todos os dias úteis foram importados! ✅</span>
+                        </div>
+                    </div>`;
+                }
+
+                html += '</div>';
+                res.innerHTML = html;
+            })
+            .catch(err => {
+                res.innerHTML = `<div class="alert alert-danger py-2">Erro ao consultar: ${err}</div>`;
+            });
+    }
+
+    // Ao abrir o modal, pré-preenche a conta se já tiver uma selecionada no upload
+    document.getElementById('modalDiasImportados').addEventListener('show.bs.modal', function() {
+        const uploadSel = document.getElementById('account_id') || document.querySelector('select[name="account_id"]');
+        const diasSel = document.getElementById('diasContaId');
+        if (uploadSel && diasSel && uploadSel.value && !diasSel.value) {
+            diasSel.value = uploadSel.value;
+        }
+        document.getElementById('diasResultado').innerHTML = '';
+    });
 </script>
 {% endblock %}

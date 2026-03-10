@@ -31,7 +31,7 @@
         <option value="">Todos</option>
         {% for c in clientes %}
         <option value="{{ c.id }}" {% if cliente_id == c.id %}selected{% endif %}>
-          {{ c.nome_fantasia or c.razao_social }}
+          {{ c.razao_social }}
         </option>
         {% endfor %}
       </select>
@@ -88,18 +88,17 @@
   </div>
 
   <!-- Tabela de detalhe -->
-  <div class="card">
+  <div class="card mb-4">
     <div class="card-header" style="background:#151515;color:white;">
       <h5 class="mb-0"><i class="bi bi-table"></i> Detalhe de Fretes</h5>
     </div>
     <div class="card-body">
       {% if fretes %}
       <div class="table-responsive">
-        <table class="table table-sm table-hover">
+        <table class="table table-sm table-hover mb-0">
           <thead style="background:#E8E8E8;">
             <tr>
               <th>Data</th>
-              <th>Cliente</th>
               <th>Produto</th>
               <th>Motorista</th>
               <th style="text-align:right;">Valor CTe (R$)</th>
@@ -108,26 +107,59 @@
             </tr>
           </thead>
           <tbody>
+            {% set ns = namespace(cur_cliente='', sub_cte=0, sub_com=0, sub_frete=0) %}
             {% for item in fretes %}
-            <tr>
-              <td>{{ item.data_frete.strftime('%d/%m/%Y') if item.data_frete }}</td>
-              <td>{{ item.cliente_nome or '-' }}</td>
-              <td>{{ item.produto_nome or '-' }}</td>
-              <td>{{ item.motorista_nome or '-' }}</td>
-              <td style="text-align:right;">
-                {{ "R$ {:,.2f}".format(item.valor_cte|float if item.valor_cte else 0).replace(",", "X").replace(".", ",").replace("X", ".") }}
-              </td>
-              <td style="text-align:right;">
-                {{ "R$ {:,.2f}".format(item.comissao_cte|float if item.comissao_cte else 0).replace(",", "X").replace(".", ",").replace("X", ".") }}
-              </td>
-              <td style="text-align:right;">
-                {{ "R$ {:,.2f}".format(item.valor_total_frete|float if item.valor_total_frete else 0).replace(",", "X").replace(".", ",").replace("X", ".") }}
-              </td>
-            </tr>
+              {# — client group header — #}
+              {% if item.cliente_nome != ns.cur_cliente %}
+                {# subtotal for previous group #}
+                {% if ns.cur_cliente != '' %}
+                <tr style="background:#f0f4fa; font-weight:600;">
+                  <td colspan="3" class="text-end">Subtotal {{ ns.cur_cliente }}</td>
+                  <td style="text-align:right;">{{ "R$ {:,.2f}".format(ns.sub_cte).replace(",","X").replace(".",",").replace("X",".") }}</td>
+                  <td style="text-align:right;">{{ "R$ {:,.2f}".format(ns.sub_com).replace(",","X").replace(".",",").replace("X",".") }}</td>
+                  <td style="text-align:right;">{{ "R$ {:,.2f}".format(ns.sub_frete).replace(",","X").replace(".",",").replace("X",".") }}</td>
+                </tr>
+                {% endif %}
+                {# reset subtotals #}
+                {% set ns.cur_cliente = item.cliente_nome %}
+                {% set ns.sub_cte = 0 %}
+                {% set ns.sub_com = 0 %}
+                {% set ns.sub_frete = 0 %}
+                <tr style="background:#1D63A5; color:white;">
+                  <td colspan="6"><strong><i class="bi bi-building"></i> {{ item.cliente_nome or '(sem cliente)' }}</strong></td>
+                </tr>
+              {% endif %}
+              {# accumulate subtotals #}
+              {% set ns.sub_cte = ns.sub_cte + (item.valor_cte|float if item.valor_cte else 0) %}
+              {% set ns.sub_com = ns.sub_com + (item.comissao_cte|float if item.comissao_cte else 0) %}
+              {% set ns.sub_frete = ns.sub_frete + (item.valor_total_frete|float if item.valor_total_frete else 0) %}
+              <tr>
+                <td>{{ item.data_frete.strftime('%d/%m/%Y') if item.data_frete }}</td>
+                <td>{{ item.produto_nome or '-' }}</td>
+                <td>{{ item.motorista_nome or '-' }}</td>
+                <td style="text-align:right;">
+                  {{ "R$ {:,.2f}".format(item.valor_cte|float if item.valor_cte else 0).replace(",","X").replace(".",",").replace("X",".") }}
+                </td>
+                <td style="text-align:right;">
+                  {{ "R$ {:,.2f}".format(item.comissao_cte|float if item.comissao_cte else 0).replace(",","X").replace(".",",").replace("X",".") }}
+                </td>
+                <td style="text-align:right;">
+                  {{ "R$ {:,.2f}".format(item.valor_total_frete|float if item.valor_total_frete else 0).replace(",","X").replace(".",",").replace("X",".") }}
+                </td>
+              </tr>
             {% endfor %}
-            <!-- Linha de totais -->
+            {# subtotal for last group #}
+            {% if ns.cur_cliente != '' %}
+            <tr style="background:#f0f4fa; font-weight:600;">
+              <td colspan="3" class="text-end">Subtotal {{ ns.cur_cliente }}</td>
+              <td style="text-align:right;">{{ "R$ {:,.2f}".format(ns.sub_cte).replace(",","X").replace(".",",").replace("X",".") }}</td>
+              <td style="text-align:right;">{{ "R$ {:,.2f}".format(ns.sub_com).replace(",","X").replace(".",",").replace("X",".") }}</td>
+              <td style="text-align:right;">{{ "R$ {:,.2f}".format(ns.sub_frete).replace(",","X").replace(".",",").replace("X",".") }}</td>
+            </tr>
+            {% endif %}
+            <!-- Grand total -->
             <tr style="background:#F5F5F5; font-weight:bold;">
-              <td colspan="4">TOTAL</td>
+              <td colspan="3">TOTAL GERAL</td>
               <td style="text-align:right;">
                 {{ "R$ {:,.2f}".format(total_valor_cte|float if total_valor_cte else 0).replace(",", "X").replace(".", ",").replace("X", ".") }}
               </td>
@@ -146,6 +178,50 @@
       {% endif %}
     </div>
   </div>
+
+  <!-- Resumo por Caminhão -->
+  {% if resumo_caminhoes %}
+  <div class="card mb-4">
+    <div class="card-header" style="background:#1D63A5;color:white;">
+      <h5 class="mb-0"><i class="bi bi-truck"></i> Resumo por Caminhão</h5>
+    </div>
+    <div class="card-body p-0">
+      <div class="table-responsive">
+        <table class="table table-sm table-hover mb-0">
+          <thead style="background:#E8E8E8;">
+            <tr>
+              <th>Caminhão</th>
+              <th>Placa</th>
+              <th class="text-center">Qtd. Fretes</th>
+              <th class="text-end">Valor CTe (R$)</th>
+              <th class="text-end">Comissão CTe (R$)</th>
+              <th class="text-end">Valor Frete (R$)</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in resumo_caminhoes %}
+            <tr>
+              <td><strong>{{ row.caminhao_nome }}</strong></td>
+              <td>{{ row.placa or '-' }}</td>
+              <td class="text-center">{{ row.qtd_fretes }}</td>
+              <td class="text-end">{{ "R$ {:,.2f}".format(row.valor_cte_total|float).replace(",","X").replace(".",",").replace("X",".") }}</td>
+              <td class="text-end">{{ "R$ {:,.2f}".format(row.comissao_total|float).replace(",","X").replace(".",",").replace("X",".") }}</td>
+              <td class="text-end">{{ "R$ {:,.2f}".format(row.valor_frete_total|float).replace(",","X").replace(".",",").replace("X",".") }}</td>
+            </tr>
+            {% endfor %}
+            <!-- Total geral -->
+            <tr style="background:#F5F5F5;font-weight:bold;">
+              <td colspan="3">TOTAL GERAL</td>
+              <td class="text-end">{{ "R$ {:,.2f}".format(total_valor_cte|float if total_valor_cte else 0).replace(",","X").replace(".",",").replace("X",".") }}</td>
+              <td class="text-end">{{ "R$ {:,.2f}".format(total_comissao_cte|float if total_comissao_cte else 0).replace(",","X").replace(".",",").replace("X",".") }}</td>
+              <td class="text-end">{{ "R$ {:,.2f}".format(total_valor_frete|float if total_valor_frete else 0).replace(",","X").replace(".",",").replace("X",".") }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+  {% endif %}
 
 </div>
 {% endblock %}

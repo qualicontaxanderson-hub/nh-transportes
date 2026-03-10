@@ -18,12 +18,12 @@
     {% endfor %}
   {% endwith %}
 
-  <div class="card shadow-sm" style="max-width:540px;">
+  <div class="card shadow-sm" style="max-width:700px;">
     <div class="card-header" style="background:#1D63A5;color:white;">
       <h5 class="mb-0" style="font-size:1rem;"><i class="bi bi-plus-circle"></i> Nova Forma de Recebimento</h5>
     </div>
     <div class="card-body">
-      <form method="POST">
+      <form method="POST" id="frmForma">
         <div class="mb-3">
           <label class="form-label fw-semibold">Nome <span class="text-danger">*</span></label>
           <input type="text" name="nome" class="form-control" required maxlength="100"
@@ -44,7 +44,20 @@
             <option value="CREDITO">Crédito</option>
           </select>
         </div>
-        <div class="d-flex gap-2">
+
+        <hr>
+        <div class="mb-2 d-flex justify-content-between align-items-center">
+          <label class="form-label fw-semibold mb-0">Empresas e Contas Contábeis</label>
+          <button type="button" class="btn btn-sm btn-outline-primary" onclick="adicionarLinha()">
+            <i class="bi bi-plus-lg"></i> Adicionar empresa
+          </button>
+        </div>
+        <div class="form-text mb-2">Selecione a empresa e depois a conta contábil vinculada a ela.</div>
+        <div id="vinculosContainer">
+          <!-- linhas geradas pelo JS -->
+        </div>
+
+        <div class="d-flex gap-2 mt-3">
           <button type="submit" class="btn btn-primary">
             <i class="bi bi-check-lg"></i> Salvar
           </button>
@@ -57,8 +70,80 @@
 {% endblock %}
 {% block scripts %}
 <script>
+const EMPRESAS = {{ empresas | tojson }};
+const CONTAS_POR_GRUPO = {{ contas_por_grupo | tojson }};
+const VINCULOS_INICIAIS = [];
+
 function toggleTipoCartao(chk) {
   document.getElementById('divTipoCartao').style.display = chk.checked ? '' : 'none';
 }
+
+function buildEmpresaSelect(selectedId) {
+  let html = '<option value="">— Selecione a empresa —</option>';
+  EMPRESAS.forEach(e => {
+    html += `<option value="${e.id}" data-grupo="${e.grupo_contabil_id || ''}" ${e.id == selectedId ? 'selected' : ''}>${e.nome}</option>`;
+  });
+  return html;
+}
+
+function buildContaOptions(grupoId, selectedId) {
+  const contas = grupoId ? (CONTAS_POR_GRUPO[String(grupoId)] || []) : [];
+  let html = '<option value="">— Selecione a conta —</option>';
+  contas.forEach(c => {
+    html += `<option value="${c.id}" ${c.id == selectedId ? 'selected' : ''}>${c.label}</option>`;
+  });
+  return html;
+}
+
+function buildContaWidget(grupoId, selectedId) {
+  return `
+    <input type="text" class="form-control form-control-sm mb-1 inp-busca-conta"
+           placeholder="🔍 Buscar conta..." oninput="filtrarContas(this)" autocomplete="off">
+    <select name="conta_contabil_id[]" class="form-select form-select-sm sel-conta">
+      ${buildContaOptions(grupoId, selectedId)}
+    </select>`;
+}
+
+function filtrarContas(inp) {
+  const sel = inp.closest('.conta-wrapper').querySelector('.sel-conta');
+  const query = inp.value.toLowerCase();
+  Array.from(sel.options).forEach(opt => {
+    if (!opt.value) { opt.hidden = false; return; }
+    opt.hidden = query.length > 0 && !opt.text.toLowerCase().includes(query);
+  });
+}
+
+function adicionarLinha(empresaId, contaId, grupoId) {
+  const container = document.getElementById('vinculosContainer');
+  const div = document.createElement('div');
+  div.className = 'row g-2 mb-2 align-items-center linha-vinculo';
+  div.innerHTML = `
+    <div class="col-5">
+      <select name="empresa_id[]" class="form-select form-select-sm sel-empresa" onchange="onEmpresaMudou(this)">
+        ${buildEmpresaSelect(empresaId)}
+      </select>
+    </div>
+    <div class="col-6">
+      <div class="conta-wrapper">
+        ${buildContaWidget(grupoId, contaId)}
+      </div>
+    </div>
+    <div class="col-1">
+      <button type="button" class="btn btn-sm btn-outline-danger" onclick="this.closest('.linha-vinculo').remove()">
+        <i class="bi bi-trash"></i>
+      </button>
+    </div>`;
+  container.appendChild(div);
+}
+
+function onEmpresaMudou(sel) {
+  const opt = sel.options[sel.selectedIndex];
+  const grupoId = opt.dataset.grupo || null;
+  const wrapper = sel.closest('.linha-vinculo').querySelector('.conta-wrapper');
+  wrapper.innerHTML = buildContaWidget(grupoId, null);
+}
+
+// Carregar vínculos iniciais (para editar)
+VINCULOS_INICIAIS.forEach(v => adicionarLinha(v.cliente_id, v.conta_contabil_id, v.grupo_contabil_id));
 </script>
 {% endblock %}

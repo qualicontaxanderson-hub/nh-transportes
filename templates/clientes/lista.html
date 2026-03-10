@@ -46,6 +46,7 @@
                             <th>CNPJ</th>
                             <th>Telefone</th>
                             <th>Município</th>
+                            <th>Grupo Contábil</th>
                             <th class="text-center">Ações</th>
                         </tr>
                     </thead>
@@ -62,6 +63,16 @@
                                         {{ cliente.destino_nome }} - {{ cliente.destino_estado }}
                                     {% else %}
                                         -
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if cliente.grupo_codigo %}
+                                    <span class="badge" style="background:#1D63A5;font-family:monospace;">
+                                      {{ cliente.grupo_codigo }}
+                                    </span>
+                                    <small>{{ cliente.grupo_nome }}</small>
+                                    {% else %}
+                                    <span class="text-muted">—</span>
                                     {% endif %}
                                 </td>
                                 <td class="text-center">

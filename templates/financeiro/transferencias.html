@@ -31,34 +31,127 @@
   </div>
 
   <!-- Filtros -->
-  <div class="card border-0 shadow-sm mb-3">
+  <form method="get" class="card border-0 shadow-sm mb-3" id="form-filtros-transf">
+    <div class="card-header py-2" style="background:#1D63A5;color:white;">
+        <h6 class="mb-0"><i class="bi bi-funnel"></i> Filtros</h6>
+    </div>
     <div class="card-body py-2">
-      <form method="get" class="row g-2 align-items-end">
-        <div class="col-sm-3">
-          <label class="form-label small mb-1">Data início</label>
-          <input type="date" name="data_ini" class="form-control form-control-sm" value="{{ f_data_ini }}">
-        </div>
-        <div class="col-sm-3">
-          <label class="form-label small mb-1">Data fim</label>
-          <input type="date" name="data_fim" class="form-control form-control-sm" value="{{ f_data_fim }}">
-        </div>
-        <div class="col-sm-4">
-          <label class="form-label small mb-1">Conta</label>
-          <select name="account_id" class="form-select form-select-sm">
-            <option value="">Todas as contas</option>
-            {% for c in contas %}
-            <option value="{{ c.id }}" {% if f_conta == c.id|string %}selected{% endif %}>
-              {{ c.banco_nome }} — {{ c.apelido }}
+      <div class="row g-2">
+        <!-- Empresa (multi-select com cascata em Conta) -->
+        <div class="col-md-3">
+          <label class="form-label form-label-sm mb-0">Empresa <small class="text-muted">(Ctrl+clique p/ múltiplas)</small></label>
+          <select name="empresa_id" id="selEmpresasTransf" class="form-select form-select-sm" multiple size="4">
+            {% for e in empresas %}
+            <option value="{{ e.id }}" {% if e.id|string in (f_empresas or []) %}selected{% endif %}>
+              {{ e.razao_social }}
             </option>
             {% endfor %}
           </select>
         </div>
-        <div class="col-sm-2">
-          <button type="submit" class="btn btn-sm btn-primary w-100">Filtrar</button>
+        <!-- Conta Bancária (multi-select) -->
+        <div class="col-md-3">
+          <label class="form-label form-label-sm mb-0">Conta Bancária <small class="text-muted">(Ctrl+clique p/ múltiplas)</small></label>
+          <select name="account_id" id="selContasTransf" class="form-select form-select-sm" multiple size="4">
+            <option value="" disabled>— Selecione uma empresa primeiro —</option>
+          </select>
         </div>
-      </form>
+        <!-- Datas + atalhos + botões -->
+        <div class="col-md-6">
+          <div class="row g-2">
+            <div class="col-md-6">
+              <label class="form-label form-label-sm mb-0">Data início</label>
+              <input type="date" name="data_ini" class="form-control form-control-sm" value="{{ f_data_ini }}">
+            </div>
+            <div class="col-md-6">
+              <label class="form-label form-label-sm mb-0">Data fim</label>
+              <input type="date" name="data_fim" class="form-control form-control-sm" value="{{ f_data_fim }}">
+            </div>
+            <div class="col-12">
+              <div class="d-flex gap-1 flex-wrap mb-1">
+                <span class="text-muted" style="font-size:0.78rem; line-height:1.8;">Período:</span>
+                <button type="button" class="btn btn-outline-secondary btn-xs" onclick="setPeriodoTransf('mes_atual')">Este mês</button>
+                <button type="button" class="btn btn-outline-secondary btn-xs" onclick="setPeriodoTransf('mes_anterior')">Mês anterior</button>
+                <button type="button" class="btn btn-outline-secondary btn-xs" onclick="setPeriodoTransf('ano_atual')">Este ano</button>
+              </div>
+            </div>
+            <div class="col-12 d-flex gap-1">
+              <button type="submit" class="btn btn-primary btn-sm flex-fill">
+                <i class="bi bi-search"></i> Filtrar
+              </button>
+              <a href="/financeiro/transferencias/" class="btn btn-outline-secondary btn-sm">
+                <i class="bi bi-x"></i> Limpar
+              </a>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
-  </div>
+  </form>
+  <style>
+  .btn-xs { padding:0.15rem 0.35rem; font-size:0.72rem; line-height:1.3; border-radius:0.2rem; }
+  </style>
+  <script>
+  const _todasContasTransf = {{ contas | tojson }};
+  const _contasSelecionadasTransf = ({{ (f_contas or []) | tojson }}).map(String);
+
+  function atualizarContasTransf() {
+      var selEmp = document.getElementById('selEmpresasTransf');
+      var selCon = document.getElementById('selContasTransf');
+      if (!selEmp || !selCon) return;
+      var empsSel = Array.from(selEmp.selectedOptions).map(function(o) { return parseInt(o.value); });
+      selCon.innerHTML = '';
+      if (empsSel.length === 0) {
+          var opt = document.createElement('option');
+          opt.value = ''; opt.disabled = true;
+          opt.textContent = '— Selecione uma empresa primeiro —';
+          selCon.appendChild(opt);
+          return;
+      }
+      var filtradas = _todasContasTransf.filter(function(c) {
+          return empsSel.includes(parseInt(c.cliente_id));
+      });
+      if (filtradas.length === 0) {
+          var opt2 = document.createElement('option');
+          opt2.value = ''; opt2.disabled = true;
+          opt2.textContent = '— Nenhuma conta para a empresa selecionada —';
+          selCon.appendChild(opt2);
+          return;
+      }
+      filtradas.forEach(function(c) {
+          var opt = document.createElement('option');
+          opt.value = c.id;
+          opt.textContent = (c.apelido || '') + (c.banco_nome ? ' — ' + c.banco_nome : '');
+          if (_contasSelecionadasTransf.includes(String(c.id))) opt.selected = true;
+          selCon.appendChild(opt);
+      });
+  }
+
+  document.addEventListener('DOMContentLoaded', function() {
+      var selEmp = document.getElementById('selEmpresasTransf');
+      if (selEmp) {
+          selEmp.addEventListener('change', atualizarContasTransf);
+          atualizarContasTransf();
+      }
+  });
+
+  function setPeriodoTransf(tipo) {
+      var hoje = new Date();
+      var ini, fim;
+      if (tipo === 'mes_atual') {
+          ini = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
+          fim = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0);
+      } else if (tipo === 'mes_anterior') {
+          ini = new Date(hoje.getFullYear(), hoje.getMonth() - 1, 1);
+          fim = new Date(hoje.getFullYear(), hoje.getMonth(), 0);
+      } else {
+          ini = new Date(hoje.getFullYear(), 0, 1);
+          fim = new Date(hoje.getFullYear(), 11, 31);
+      }
+      function fmt(d) { return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0'); }
+      document.querySelector('#form-filtros-transf input[name="data_ini"]').value = fmt(ini);
+      document.querySelector('#form-filtros-transf input[name="data_fim"]').value = fmt(fim);
+  }
+  </script>
 
   {% if erro_db %}
   <div class="alert alert-danger">
@@ -146,10 +239,10 @@
   </div>
   {% endif %}
 
-  <!-- TABELA PRINCIPAL: transferências confirmadas -->
+  <!-- TABELA PRINCIPAL: transferências -->
   <div class="card border-0 shadow-sm">
     <div class="card-header fw-semibold bg-primary bg-opacity-10 text-primary-emphasis">
-      <i class="bi bi-check2-circle me-1"></i> Transferências Concluídas
+      <i class="bi bi-check2-circle me-1"></i> Transferências Entre Contas
     </div>
     <div class="card-body p-0">
       {% if transferencias %}
@@ -162,16 +255,32 @@
               <th>Descrição</th>
               <th>Conta Origem</th>
               <th>→ Conta Destino</th>
+              <th class="text-center">Ação</th>
             </tr>
           </thead>
           <tbody>
             {% for t in transferencias %}
-            <tr>
+            <tr{% if t.credit_status == 'pendente' %} class="table-warning"{% endif %}>
               <td class="text-nowrap">{{ t.data_transacao.strftime('%d/%m/%Y') if t.data_transacao else '—' }}</td>
               <td class="text-end fw-bold text-primary">R$ {{ "%.2f"|format(t.valor|float) | replace('.', ',') }}</td>
               <td class="text-truncate" style="max-width:220px" title="{{ t.descricao }}">{{ t.descricao or '—' }}</td>
               <td><span class="badge bg-secondary">{{ t.banco_orig or '?' }} — {{ t.conta_orig_apelido or '?' }}</span></td>
-              <td><span class="badge bg-primary">{{ t.banco_dest or '?' }} — {{ t.conta_dest_apelido or '?' }}</span></td>
+              <td>
+                <span class="badge bg-primary">{{ t.banco_dest or '?' }} — {{ t.conta_dest_apelido or '?' }}</span>
+                {% if t.credit_status == 'pendente' %}
+                <span class="badge text-white ms-1" style="background:#fd7e14;font-size:0.7rem;" title="Aguardando confirmação na conta destino">⏳ Aguardando</span>
+                {% endif %}
+              </td>
+              <td class="text-center">
+                {% if t.credit_status == 'pendente' %}
+                <a href="/banco/conciliar?status=pendente" class="btn btn-sm btn-warning me-1" title="Confirmar recebimento na conta destino">
+                  <i class="bi bi-check2"></i> Confirmar
+                </a>
+                {% endif %}
+                <button class="btn btn-sm btn-outline-warning" onclick="desfazerConciliacao({{ t.id }}, this)">
+                  <i class="bi bi-arrow-counterclockwise"></i> Desfazer
+                </button>
+              </td>
             </tr>
             {% endfor %}
           </tbody>
@@ -179,7 +288,8 @@
       </div>
       {% else %}
       <div class="py-4 px-4">
-        <div class="alert alert-info mb-0">
+        <div class="alert {% if filtro_aplicado %}alert-info{% else %}alert-secondary{% endif %} mb-0">
+          {% if filtro_aplicado %}
           <h6 class="alert-heading"><i class="bi bi-info-circle-fill me-1"></i> Nenhuma transferência concluída ainda</h6>
           {% if not migration_aplicada %}
           <p class="mb-2"><strong>Passo 1:</strong> Execute a migration no Railway (Railway → banco → Connect → Query):</p>
@@ -203,6 +313,11 @@ SELECT 'OK' AS resultado;</pre>
             uma <strong>transferência entre suas contas bancárias</strong>, escolha a aba
             <strong>"🔄 Transferência"</strong> e selecione a conta destino.
           </p>
+          {% else %}
+          <p class="mb-0"><i class="bi bi-funnel me-1"></i>
+            Selecione uma <strong>Empresa</strong> ou <strong>Conta Bancária</strong> acima e clique em <strong>Filtrar</strong> para visualizar as transferências.
+          </p>
+          {% endif %}
         </div>
       </div>
       {% endif %}
@@ -223,7 +338,7 @@ function desfazerConciliacao(txId, btn) {
   .then(d => {
     if (d.ok) {
       btn.closest('tr').innerHTML =
-        '<td colspan="5" class="text-success py-2 px-3"><i class="bi bi-check-circle"></i> ' +
+        '<td colspan="6" class="text-success py-2 px-3"><i class="bi bi-check-circle"></i> ' +
         'Conciliação desfeita! — <a href="/banco/conciliar" class="fw-semibold">Ir para Conciliação →</a>' +
         ' (aba "🔄 Transferência")</td>';
     } else {

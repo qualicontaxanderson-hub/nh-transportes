@@ -1,18 +1,123 @@
+import csv
+import io
+import logging
 import os
+import re
 import time
 import datetime as _dt
+from collections import Counter
 
 import mysql.connector
-from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify
+from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, Response
 from flask_login import login_required, current_user
 from utils.db import get_db_connection
 
+logger = logging.getLogger(__name__)
+
 bp = Blueprint('bank_import', __name__, url_prefix='/banco')
+
+# NOTE: this flag is not thread-safe but the underlying operation is idempotent
+# (ADD COLUMN IF NOT EXISTS), so a double-run in concurrent requests is harmless.
+_ld_bank_tx_id_ready = False
+_bsm_descricao_chave_ready = False
+
+
+def _ensure_descricao_chave():
+    """Garante que bank_supplier_mapping.descricao_chave existe e que a UNIQUE KEY
+    é composta por (cnpj_cpf, descricao_chave). Idempotente."""
+    global _bsm_descricao_chave_ready
+    if _bsm_descricao_chave_ready:
+        return
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT COUNT(*) FROM information_schema.COLUMNS"
+            " WHERE TABLE_SCHEMA = DATABASE()"
+            " AND TABLE_NAME = 'bank_supplier_mapping'"
+            " AND COLUMN_NAME = 'descricao_chave'"
+        )
+        col_exists = cursor.fetchone()[0] > 0
+        if not col_exists:
+            cursor.execute(
+                "ALTER TABLE bank_supplier_mapping"
+                " ADD COLUMN descricao_chave VARCHAR(100) NOT NULL DEFAULT ''"
+                " COMMENT 'Prefixo normalizado da descrição para diferenciar entradas com mesmo CNPJ'"
+            )
+            # Remove a constraint única antiga (somente cnpj_cpf) se existir
+            try:
+                cursor.execute("ALTER TABLE bank_supplier_mapping DROP INDEX uq_bsm_chave")
+            except Exception:
+                pass
+            # Cria nova constraint única composta
+            try:
+                cursor.execute(
+                    "ALTER TABLE bank_supplier_mapping"
+                    " ADD UNIQUE KEY uq_bsm_chave (cnpj_cpf, descricao_chave)"
+                )
+            except Exception:
+                pass
+            # Remove trigger redundante se existir
+            try:
+                cursor.execute("DROP TRIGGER IF EXISTS tr_learn_supplier_mapping")
+            except Exception:
+                pass
+            conn.commit()
+            logger.info("_ensure_descricao_chave: coluna e índice criados com sucesso")
+        cursor.close()
+        _bsm_descricao_chave_ready = True
+    except Exception:
+        logger.warning("_ensure_descricao_chave: não foi possível criar coluna/índice", exc_info=True)
+    finally:
+        if conn:
+            conn.close()
+
+
+def _ensure_ld_bank_tx_id():
+    """Garante que lancamentos_despesas.bank_transaction_id existe. Idempotente."""
+    global _ld_bank_tx_id_ready
+    if _ld_bank_tx_id_ready:
+        return
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT COUNT(*) FROM information_schema.COLUMNS"
+            " WHERE TABLE_SCHEMA = DATABASE()"
+            " AND TABLE_NAME = 'lancamentos_despesas'"
+            " AND COLUMN_NAME = 'bank_transaction_id'"
+        )
+        if cursor.fetchone()[0] == 0:
+            cursor.execute(
+                "ALTER TABLE lancamentos_despesas"
+                " ADD COLUMN bank_transaction_id INT NULL"
+            )
+            conn.commit()
+        cursor.close()
+        _ld_bank_tx_id_ready = True
+    except Exception:
+        logger.warning("_ensure_ld_bank_tx_id: não foi possível criar a coluna bank_transaction_id", exc_info=True)
+    finally:
+        if conn:
+            conn.close()
 
 
 # ---------------------------------------------------------------------------
 # Funções auxiliares
 # ---------------------------------------------------------------------------
+
+
+def _desc_chave(descricao: str) -> str:
+    """Normaliza a descrição para chave de memorização: primeiros 100 chars em maiúsculas.
+
+    Usada como parte da chave composta (cnpj_cpf, descricao_chave) na tabela
+    bank_supplier_mapping, para diferenciar transações do mesmo CNPJ com tipos
+    distintos (ex: mesma empresa pagando por categorias diferentes de despesas).
+    """
+    return (descricao or '').upper().strip()[:100]
+
 
 def _get_accounts(cursor, cliente_id=None):
     if cliente_id:
@@ -83,16 +188,24 @@ def _save_transactions(cursor, conn, account_id, transactions):
 
     # 2. Busca de mapeamento de fornecedores/formas/despesas em lote (por CNPJ)
     cnpj_list = list({tx['cnpj_cpf'] for tx in transactions if tx.get('cnpj_cpf')})
-    mapping = {}  # cnpj -> {'fornecedor_id': ..., 'forma_recebimento_id': ..., 'titulo_id': ..., ...}
+    mapping = {}  # (cnpj_cpf, descricao_chave) -> row
     if cnpj_list:
         ph2 = ','.join(['%s'] * len(cnpj_list))
-        cursor.execute(
-            f'SELECT cnpj_cpf, fornecedor_id, forma_recebimento_id, titulo_id, categoria_id, subcategoria_id '
-            f'FROM bank_supplier_mapping WHERE cnpj_cpf IN ({ph2})',
-            cnpj_list,
-        )
+        try:
+            cursor.execute(
+                f'SELECT cnpj_cpf, descricao_chave, fornecedor_id, forma_recebimento_id, titulo_id, categoria_id, subcategoria_id '
+                f'FROM bank_supplier_mapping WHERE cnpj_cpf IN ({ph2})',
+                cnpj_list,
+            )
+        except mysql.connector.errors.ProgrammingError:
+            # Coluna descricao_chave pode ainda não existir (migration pendente)
+            cursor.execute(
+                f"SELECT cnpj_cpf, '' AS descricao_chave, fornecedor_id, forma_recebimento_id, titulo_id, categoria_id, subcategoria_id "
+                f'FROM bank_supplier_mapping WHERE cnpj_cpf IN ({ph2})',
+                cnpj_list,
+            )
         for row in cursor.fetchall():
-            mapping[row['cnpj_cpf']] = row
+            mapping[(row['cnpj_cpf'], row['descricao_chave'])] = row
 
     now = _dt.datetime.now()
     rows = []
@@ -101,7 +214,9 @@ def _save_transactions(cursor, conn, account_id, transactions):
         if tx['hash_dedup'] in existing_hashes:
             duplicados += 1
             continue
-        m = mapping.get(tx.get('cnpj_cpf') or '')
+        cnpj = tx.get('cnpj_cpf') or ''
+        desc = _desc_chave(tx.get('descricao') or '')
+        m = mapping.get((cnpj, desc)) or mapping.get((cnpj, ''))
         if tx['tipo'] == 'CREDIT':
             frec_id = m['forma_recebimento_id'] if m else None
             forn_id = None
@@ -166,7 +281,8 @@ def _auto_conciliar_despesas_por_cnpj(cursor, conn, account_id, mapping):
     tem mapeamento de despesa integral (titulo_id+categoria_id) em bank_supplier_mapping.
     Débitos divididos (split) nunca são auto-conciliados — ficam para o usuário.
     """
-    despesa_mappings = {cnpj: m for cnpj, m in mapping.items() if m.get('titulo_id')}
+    # mapping é indexado por (cnpj_cpf, descricao_chave); filtra os que têm despesa
+    despesa_mappings = {key: m for key, m in mapping.items() if m.get('titulo_id')}
     if not despesa_mappings:
         return 0
 
@@ -175,7 +291,7 @@ def _auto_conciliar_despesas_por_cnpj(cursor, conn, account_id, mapping):
     acc = cursor.fetchone()
     cliente_id = acc['cliente_id'] if acc else None
 
-    cnpj_list = list(despesa_mappings.keys())
+    cnpj_list = list({key[0] for key in despesa_mappings.keys()})
     ph = ','.join(['%s'] * len(cnpj_list))
     cursor.execute(
         f"""SELECT id, data_transacao, descricao, cnpj_cpf, valor
@@ -190,7 +306,9 @@ def _auto_conciliar_despesas_por_cnpj(cursor, conn, account_id, mapping):
     agora = _dt.datetime.now()
     count = 0
     for tx in pendentes:
-        m = despesa_mappings.get(tx['cnpj_cpf'])
+        cnpj = tx['cnpj_cpf']
+        desc = _desc_chave(tx.get('descricao') or '')
+        m = despesa_mappings.get((cnpj, desc)) or despesa_mappings.get((cnpj, ''))
         if not m:
             continue
         descricao = (tx.get('descricao') or '')
@@ -223,43 +341,77 @@ def _auto_conciliar_por_regras(cursor, conn, account_id=None):
       - Regras de despesa (titulo_id + categoria_id → cria lancamentos_despesas)
       - Regras de cliente (cliente_id para créditos de cobrança)
     Retorna quantas foram auto-conciliadas.
+
+    Performance: todo o matching é feito em Python (memória); as escritas no BD são
+    feitas em lote com executemany() para evitar timeouts quando há muitas transações.
     """
-    # Carrega regras ativas (banco já possui todos os campos após migration consolidada)
+    # Carrega regras ativas ordenadas por especificidade:
+    # 1. Regras vinculadas a uma conta específica (account_id) antes das genéricas
+    # 2. Regras com padrão secundário (mais específicas) antes das que só têm padrão principal
+    # Isso garante que "DEP + DINHEIRO" é avaliada antes de "DEP" sozinho,
+    # evitando que uma regra genérica capture transações que deveriam ir para uma regra específica.
     cursor.execute(
-        """SELECT * FROM bank_conciliacao_regras WHERE ativo=1 ORDER BY id"""
+        """SELECT * FROM bank_conciliacao_regras WHERE ativo=1
+           ORDER BY
+               (account_id IS NOT NULL) DESC,
+               (padrao_secundario IS NOT NULL AND padrao_secundario <> '') DESC,
+               id"""
     )
     regras = cursor.fetchall()
     if not regras:
+        logger.info("_auto_conciliar_por_regras: nenhuma regra ativa encontrada")
         return 0
 
     # Busca transações ainda pendentes com dados da conta
     if account_id:
         cursor.execute(
             """SELECT bt.id, bt.descricao, bt.tipo, bt.cnpj_cpf,
-                      bt.data_transacao, bt.valor, ba.cliente_id AS conta_cliente_id
+                      bt.data_transacao, bt.valor, bt.account_id,
+                      ba.cliente_id AS conta_cliente_id
                FROM bank_transactions bt
                INNER JOIN bank_accounts ba ON ba.id = bt.account_id
-               WHERE bt.status='pendente' AND bt.account_id=%s""",
+               WHERE (bt.status='pendente' OR (bt.status='conciliado' AND bt.conciliado_por='auto'))
+                 AND bt.account_id=%s""",
             (account_id,),
         )
     else:
         cursor.execute(
             """SELECT bt.id, bt.descricao, bt.tipo, bt.cnpj_cpf,
-                      bt.data_transacao, bt.valor, ba.cliente_id AS conta_cliente_id
+                      bt.data_transacao, bt.valor, bt.account_id,
+                      ba.cliente_id AS conta_cliente_id
                FROM bank_transactions bt
                INNER JOIN bank_accounts ba ON ba.id = bt.account_id
-               WHERE bt.status='pendente'"""
+               WHERE bt.status='pendente' OR (bt.status='conciliado' AND bt.conciliado_por='auto')"""
         )
     pendentes = cursor.fetchall()
     if not pendentes:
+        logger.info("_auto_conciliar_por_regras: nenhuma transação pendente encontrada (account_id=%s)", account_id)
         return 0
 
+    logger.info("_auto_conciliar_por_regras: %d regra(s) ativa(s), %d transação(ões) pendente(s)", len(regras), len(pendentes))
     agora = _dt.datetime.now()
-    aplicadas = 0
+
+    # ------------------------------------------------------------------ #
+    # Fase 1: matching em memória — zero round-trips ao BD por transação  #
+    # ------------------------------------------------------------------ #
+    # batch_simples: linhas para UPDATE bank_transactions (forma/fornecedor)
+    batch_simples = []
+    # batch_despesa_insert: linhas para INSERT lancamentos_despesas
+    batch_despesa_insert = []
+    # batch_despesa_update: linhas para UPDATE bank_transactions (despesa)
+    batch_despesa_update = []
+    # rule_hits: contador de quantas vezes cada regra foi aplicada
+    rule_hits: Counter = Counter()
+
     for tx in pendentes:
         descricao = (tx.get('descricao') or '').upper()
         tipo = tx.get('tipo') or ''
         for regra in regras:
+            # Filtra por conta bancária: se a regra for específica para uma conta,
+            # só aplica a transações dessa conta
+            regra_account_id = regra.get('account_id')
+            if regra_account_id and int(regra_account_id) != int(tx['account_id']):
+                continue
             # Filtra por tipo de transação
             tipo_regra = regra.get('tipo_transacao', 'AMBOS')
             if tipo_regra != 'AMBOS' and tipo_regra != tipo:
@@ -277,56 +429,72 @@ def _auto_conciliar_por_regras(cursor, conn, account_id=None):
             padrao2 = (regra.get('padrao_secundario') or '').upper()
             if padrao2 and padrao2 not in descricao:
                 continue
+
             # Determina o que vincular
-            forma_id  = regra.get('forma_recebimento_id')
-            forn_id   = regra.get('fornecedor_id')
+            forma_id     = regra.get('forma_recebimento_id')
+            forn_id      = regra.get('fornecedor_id')
             titulo_id    = regra.get('titulo_id')
             categoria_id = regra.get('categoria_id')
 
             if titulo_id and categoria_id and tipo == 'DEBIT':
-                # Regra de despesa → cria lancamento_despesas e concilia
-                # Usa cliente_id da conta bancária para identificar a empresa
+                # Regra de despesa → acumula INSERT lancamentos_despesas
                 conta_cliente_id = tx.get('conta_cliente_id')
-                cursor.execute(
-                    """INSERT INTO lancamentos_despesas
-                       (data, cliente_id, titulo_id, categoria_id, valor,
-                        fornecedor, observacao, bank_transaction_id)
-                       VALUES (%s, %s, %s, %s, %s, %s, %s, %s)""",
-                    (tx['data_transacao'],
-                     conta_cliente_id,
-                     titulo_id, categoria_id,
-                     tx['valor'],
-                     (tx.get('descricao') or '')[:255],
-                     tx.get('descricao') or '',
-                     tx['id']),
-                )
-                cursor.execute(
-                    """UPDATE bank_transactions
-                       SET status='conciliado', conciliado_em=%s, conciliado_por='auto-regra'
-                       WHERE id=%s""",
-                    (agora, tx['id']),
-                )
+                batch_despesa_insert.append((
+                    tx['data_transacao'],
+                    conta_cliente_id,
+                    titulo_id, categoria_id,
+                    tx['valor'],
+                    (tx.get('descricao') or '')[:255],
+                    tx.get('descricao') or '',
+                    tx['id'],
+                ))
+                batch_despesa_update.append((agora, tx['id']))
             else:
-                cursor.execute(
-                    """UPDATE bank_transactions
-                       SET status='conciliado',
-                           forma_recebimento_id=%s,
-                           fornecedor_id=%s,
-                           conciliado_em=%s,
-                           conciliado_por='auto-regra'
-                       WHERE id=%s""",
-                    (forma_id, forn_id, agora, tx['id']),
-                )
-            cursor.execute(
-                """UPDATE bank_conciliacao_regras
-                   SET total_aplicacoes=total_aplicacoes+1 WHERE id=%s""",
-                (regra['id'],),
-            )
-            aplicadas += 1
+                batch_simples.append((forma_id, forn_id, agora, tx['id']))
+
+            rule_hits[regra['id']] += 1
             break  # primeira regra que bate
 
-    if aplicadas:
-        conn.commit()
+    aplicadas = len(batch_simples) + len(batch_despesa_insert)
+    if not aplicadas:
+        return 0
+
+    # ------------------------------------------------------------------ #
+    # Fase 2: escritas em lote — poucos round-trips independente do volume #
+    # ------------------------------------------------------------------ #
+    if batch_simples:
+        cursor.executemany(
+            """UPDATE bank_transactions
+               SET status='conciliado',
+                   forma_recebimento_id=%s,
+                   fornecedor_id=%s,
+                   conciliado_em=%s,
+                   conciliado_por='auto-regra'
+               WHERE id=%s""",
+            batch_simples,
+        )
+    if batch_despesa_insert:
+        cursor.executemany(
+            """INSERT INTO lancamentos_despesas
+               (data, cliente_id, titulo_id, categoria_id, valor,
+                fornecedor, observacao, bank_transaction_id)
+               VALUES (%s, %s, %s, %s, %s, %s, %s, %s)""",
+            batch_despesa_insert,
+        )
+        cursor.executemany(
+            """UPDATE bank_transactions
+               SET status='conciliado', conciliado_em=%s, conciliado_por='auto-regra'
+               WHERE id=%s""",
+            batch_despesa_update,
+        )
+    if rule_hits:
+        cursor.executemany(
+            """UPDATE bank_conciliacao_regras
+               SET total_aplicacoes=total_aplicacoes+%s WHERE id=%s""",
+            [(cnt, rid) for rid, cnt in rule_hits.items()],
+        )
+
+    conn.commit()
     return aplicadas
 
 # ---------------------------------------------------------------------------
@@ -462,10 +630,36 @@ def upload():
     return redirect(url_for('bank_import.index'))
 
 
+def _extrair_padrao_descricao(descricao):
+    """Extrai prefixo significativo da descrição até o primeiro CPF (11 dígitos) ou
+    CNPJ (14 dígitos). Usado para gerar regras de conciliação por padrão de descrição,
+    evitando que a forma de recebimento fique vinculada ao CPF/CNPJ do remetente
+    (o mesmo CPF pode aparecer em PIX, depósito em dinheiro, cheque, etc.).
+    """
+    # Mínimo de 5 caracteres antes do CPF/CNPJ para garantir prefixo significativo
+    _MIN_PREFIX = 5
+    # Limite do valor armazenável na coluna padrao_descricao (VARCHAR(200)); usamos 100
+    # para deixar margem e cobrir variações de maiúsculas/espaços durante o matching.
+    _MAX_PADRAO = 100
+    desc = (descricao or '').strip()
+    if not desc:
+        return ''
+    # Prioriza CPF (11 dígitos) antes de CNPJ (14 dígitos); ambos isolados por lookahead
+    m = re.search(r'(?<!\d)(\d{11}|\d{14})(?!\d)', desc)
+    if m and m.start() > _MIN_PREFIX:
+        padrao = desc[:m.start()].rstrip(' -_/')
+    else:
+        padrao = desc[:50]  # fallback: primeiros 50 chars quando não há CPF/CNPJ
+    return padrao.strip()[:_MAX_PADRAO]
+
+
 def _get_formas_recebimento(cursor):
-    """Retorna formas de recebimento ativas para uso na conciliação."""
+    """Retorna formas de recebimento ativas para uso na conciliação.
+    Inclui registros com ativo IS NULL para compatibilidade com tabelas
+    criadas antes da migração que adicionou o campo com DEFAULT 1.
+    """
     cursor.execute(
-        "SELECT id, nome FROM formas_recebimento WHERE ativo=1 ORDER BY nome"
+        "SELECT id, nome FROM formas_recebimento WHERE ativo = 1 OR ativo IS NULL ORDER BY nome"
     )
     return cursor.fetchall()
 
@@ -502,9 +696,10 @@ def _get_titulos_despesas(cursor):
     return result
 
 
-def _conciliar_transferencia(cursor, conn, tx_id, conta_destino_id, usuario):
+def _conciliar_transferencia(cursor, conn, tx_id, conta_destino_id, usuario,
+                             salvar_mapeamento=True):
     """Registra transferência entre contas: concilia a origem e cria um CREDIT na conta destino.
-    Também salva mapeamento CNPJ→conta_destino para auto-aprendizado.
+    Salva mapeamento CNPJ→conta_destino apenas se salvar_mapeamento=True.
     """
     agora = _dt.datetime.now()
     cursor.execute(
@@ -535,41 +730,40 @@ def _conciliar_transferencia(cursor, conn, tx_id, conta_destino_id, usuario):
         )
     # Cria CREDIT na conta destino. Usa TRANSFER_<id> para garantir que cabe
     # em VARCHAR(64) (SHA-256 = 64 chars; '_transfer' causaria overflow).
-    # Usa INSERT normal (não IGNORE) para que falhas reais propaguen erro.
+    # Cria como 'pendente' para que apareça na fila de conciliação da conta destino.
     hash_destino = f'TRANSFER_{tx_id}'
     descricao_dest = f"TRANSFERENCIA RECEBIDA - {tx.get('descricao') or ''}"[:500]
     try:
         cursor.execute(
             """INSERT INTO bank_transactions
                    (account_id, data_transacao, tipo, valor, descricao, hash_dedup,
-                    status, conciliado_em, conciliado_por, tipo_conciliacao)
-               VALUES (%s, %s, 'CREDIT', %s, %s, %s,
-                       'conciliado', %s, %s, 'transferencia')""",
+                    status, tipo_conciliacao)
+               VALUES (%s, %s, 'CREDIT', %s, %s, %s, 'pendente', 'transferencia')""",
             (conta_destino_id, tx['data_transacao'], tx['valor'],
-             descricao_dest, hash_destino, agora, usuario),
+             descricao_dest, hash_destino),
         )
     except Exception:
         # tipo_conciliacao não existe ainda — INSERT sem a coluna
         cursor.execute(
             """INSERT INTO bank_transactions
                    (account_id, data_transacao, tipo, valor, descricao, hash_dedup,
-                    status, conciliado_em, conciliado_por)
-               VALUES (%s, %s, 'CREDIT', %s, %s, %s,
-                       'conciliado', %s, %s)""",
+                    status)
+               VALUES (%s, %s, 'CREDIT', %s, %s, %s, 'pendente')""",
             (conta_destino_id, tx['data_transacao'], tx['valor'],
-             descricao_dest, hash_destino, agora, usuario),
+             descricao_dest, hash_destino),
         )
     # Auto-aprender: salva CNPJ→conta_destino para sugestão nas próximas importações
     cnpj = tx.get('cnpj_cpf')
-    if cnpj:
+    if cnpj and salvar_mapeamento:
+        desc_chave = _desc_chave(tx.get('descricao') or '')
         try:
             cursor.execute(
-                """INSERT INTO bank_supplier_mapping (cnpj_cpf, conta_destino_id, tipo_debito)
-                   VALUES (%s, %s, 'transferencia')
+                """INSERT INTO bank_supplier_mapping (cnpj_cpf, descricao_chave, conta_destino_id, tipo_debito)
+                   VALUES (%s, %s, %s, 'transferencia')
                    ON DUPLICATE KEY UPDATE conta_destino_id=%s, tipo_debito='transferencia'""",
-                (cnpj, conta_destino_id, conta_destino_id),
+                (cnpj, desc_chave, conta_destino_id, conta_destino_id),
             )
-        except Exception:
+        except mysql.connector.errors.ProgrammingError:
             # Coluna pode não existir ainda (migration pendente) — ignora silenciosamente
             pass
     conn.commit()
@@ -577,11 +771,15 @@ def _conciliar_transferencia(cursor, conn, tx_id, conta_destino_id, usuario):
 
 def _conciliar_tx(cursor, conn, tx_id, acao, tipo_tx,
                   fornecedor_id, forma_recebimento_id, usuario,
-                  tipo_debito=None, despesas=None):
+                  tipo_debito=None, despesas=None, troco_pix_id=None,
+                  salvar_mapeamento=True, conta_origem_id=None):
     """Concilia (ou ignora) uma única transação e aprende mapeamentos.
 
     Para débitos com tipo_debito='despesa', *despesas* é uma lista de dicts:
         [{'titulo_id': int, 'categoria_id': int, 'valor': float, 'observacao': str}]
+    Para débitos com tipo_debito='troco_pix', *troco_pix_id* deve ser informado.
+    Se salvar_mapeamento=False, a conciliação ocorre normalmente mas os dados NÃO
+    são salvos no bank_supplier_mapping (Lançamento Único / sem aprendizado).
     """
     if acao == 'ignorar':
         cursor.execute(
@@ -593,34 +791,77 @@ def _conciliar_tx(cursor, conn, tx_id, acao, tipo_tx,
     agora = _dt.datetime.now()
 
     if tipo_tx == 'CREDIT':
-        # Crédito → Forma de Recebimento
-        if not forma_recebimento_id:
-            return
-        cursor.execute(
-            """UPDATE bank_transactions
-               SET status='conciliado', forma_recebimento_id=%s,
-                   conciliado_em=%s, conciliado_por=%s
-               WHERE id=%s""",
-            (forma_recebimento_id, agora, usuario, tx_id),
-        )
-        # Aprende: CNPJ → forma de recebimento
-        cursor.execute("SELECT cnpj_cpf FROM bank_transactions WHERE id=%s", (tx_id,))
-        row = cursor.fetchone()
-        if row and row.get('cnpj_cpf'):
+        if tipo_debito == 'transferencia':
+            # Crédito de transferência recebida — confirma a entrada e marca como conciliado
+            try:
+                cursor.execute(
+                    """UPDATE bank_transactions
+                       SET status='conciliado', conciliado_em=%s, conciliado_por=%s,
+                           tipo_conciliacao='transferencia'
+                       WHERE id=%s""",
+                    (agora, usuario, tx_id),
+                )
+            except Exception:
+                conn.rollback()
+                cursor.execute(
+                    """UPDATE bank_transactions
+                       SET status='conciliado', conciliado_em=%s, conciliado_por=%s
+                       WHERE id=%s""",
+                    (agora, usuario, tx_id),
+                )
+            # Armazena conta de origem (referência cruzada) se fornecida pelo usuário
+            if conta_origem_id:
+                try:
+                    cursor.execute(
+                        "UPDATE bank_transactions SET conta_origem_id=%s WHERE id=%s",
+                        (conta_origem_id, tx_id),
+                    )
+                except mysql.connector.errors.ProgrammingError:
+                    # Coluna pode não existir ainda (migration pendente) — ignora
+                    logger.debug("conta_origem_id column not yet available; skipping")
+        else:
+            # Crédito → Forma de Recebimento
+            if not forma_recebimento_id:
+                return
             cursor.execute(
-                """INSERT INTO bank_supplier_mapping
-                       (cnpj_cpf, tipo_chave, total_conciliacoes, forma_recebimento_id)
-                   VALUES (%s, 'cnpj', 1, %s)
-                   ON DUPLICATE KEY UPDATE
-                       forma_recebimento_id=%s,
-                       total_conciliacoes=total_conciliacoes+1,
-                       atualizado_em=NOW()""",
-                (row['cnpj_cpf'], forma_recebimento_id, forma_recebimento_id),
+                """UPDATE bank_transactions
+                   SET status='conciliado', forma_recebimento_id=%s,
+                       conciliado_em=%s, conciliado_por=%s
+                   WHERE id=%s""",
+                (forma_recebimento_id, agora, usuario, tx_id),
             )
+
+    elif tipo_debito == 'troco_pix' and troco_pix_id:
+        # Débito → Troco PIX: vincula a transação bancária ao registro de troco_pix
+        try:
+            cursor.execute(
+                """UPDATE bank_transactions
+                   SET status='conciliado', conciliado_em=%s, conciliado_por=%s,
+                       tipo_conciliacao='troco_pix'
+                   WHERE id=%s""",
+                (agora, usuario, tx_id),
+            )
+        except Exception:
+            conn.rollback()
+            cursor.execute(
+                """UPDATE bank_transactions
+                   SET status='conciliado', conciliado_em=%s, conciliado_por=%s
+                   WHERE id=%s""",
+                (agora, usuario, tx_id),
+            )
+        # Vincula o troco_pix à transação bancária (graceful: ignora se coluna não existir)
+        try:
+            cursor.execute(
+                "UPDATE troco_pix SET bank_transaction_id=%s WHERE id=%s",
+                (tx_id, troco_pix_id),
+            )
+        except Exception:
+            pass
     elif tipo_debito == 'despesa' and despesas:
         # Débito → uma ou mais Despesas (lançamentos_despesas)
         cursor.execute(
             """SELECT bt.data_transacao, bt.descricao, bt.cnpj_cpf,
+                      bt.valor AS tx_valor,
                       ba.cliente_id
                FROM bank_transactions bt
                INNER JOIN bank_accounts ba ON ba.id = bt.account_id
@@ -638,7 +879,8 @@ def _conciliar_tx(cursor, conn, tx_id, acao, tipo_tx,
             categoria_id   = desp.get('categoria_id')
             subcategoria_id = desp.get('subcategoria_id') or None
             fornecedor_txt = (desp.get('fornecedor') or descricao)[:255]
-            valor          = desp.get('valor')
+            # Usa o valor especificado ou, se ausente, o valor total da transação (modo lote)
+            valor          = desp.get('valor') or tx.get('tx_valor')
             observacao     = desp.get('observacao') or descricao
             if not titulo_id or not categoria_id or not valor:
                 continue
@@ -657,17 +899,18 @@ def _conciliar_tx(cursor, conn, tx_id, acao, tipo_tx,
             (agora, usuario, tx_id),
         )
         # Auto-aprender: despesa INTEGRAL (não dividida) salva mapeamento para próxima importação
-        if len(despesas) == 1 and tx.get('cnpj_cpf'):
+        if salvar_mapeamento and len(despesas) == 1 and tx.get('cnpj_cpf'):
             d = despesas[0]
+            desc_chave = _desc_chave(descricao)
             cursor.execute(
                 """INSERT INTO bank_supplier_mapping
-                       (cnpj_cpf, tipo_chave, total_conciliacoes, titulo_id, categoria_id, subcategoria_id)
-                   VALUES (%s, 'cnpj', 1, %s, %s, %s)
+                       (cnpj_cpf, descricao_chave, tipo_chave, total_conciliacoes, titulo_id, categoria_id, subcategoria_id)
+                   VALUES (%s, %s, 'cnpj', 1, %s, %s, %s)
                    ON DUPLICATE KEY UPDATE
                        titulo_id=%s, categoria_id=%s, subcategoria_id=%s,
                        fornecedor_id=NULL, forma_recebimento_id=NULL,
                        total_conciliacoes=total_conciliacoes+1, atualizado_em=NOW()""",
-                (tx['cnpj_cpf'],
+                (tx['cnpj_cpf'], desc_chave,
                  d['titulo_id'], d['categoria_id'], d.get('subcategoria_id'),
                  d['titulo_id'], d['categoria_id'], d.get('subcategoria_id')),
             )
@@ -682,27 +925,59 @@ def _conciliar_tx(cursor, conn, tx_id, acao, tipo_tx,
                WHERE id=%s""",
             (fornecedor_id, agora, usuario, tx_id),
         )
-        cursor.execute("SELECT cnpj_cpf FROM bank_transactions WHERE id=%s", (tx_id,))
+        cursor.execute("SELECT cnpj_cpf, descricao FROM bank_transactions WHERE id=%s", (tx_id,))
         row = cursor.fetchone()
-        if row and row.get('cnpj_cpf'):
+        if salvar_mapeamento and row and row.get('cnpj_cpf'):
+            desc_chave = _desc_chave(row.get('descricao') or '')
             cursor.execute(
                 """INSERT INTO bank_supplier_mapping
-                       (fornecedor_id, cnpj_cpf, tipo_chave, total_conciliacoes)
-                   VALUES (%s, %s, 'cnpj', 1)
+                       (fornecedor_id, cnpj_cpf, descricao_chave, tipo_chave, total_conciliacoes)
+                   VALUES (%s, %s, %s, 'cnpj', 1)
                    ON DUPLICATE KEY UPDATE
                        fornecedor_id=%s,
                        total_conciliacoes=total_conciliacoes+1,
                        atualizado_em=NOW()""",
-                (fornecedor_id, row['cnpj_cpf'], fornecedor_id),
+                (fornecedor_id, row['cnpj_cpf'], desc_chave, fornecedor_id),
             )
 
     conn.commit()
+
+
+def _get_troco_pix_sem_banco():
+    """Retorna Troco PIX que ainda não foram vinculados a transações bancárias.
+    Graceful: se a coluna bank_transaction_id não existir ainda, retorna lista vazia.
+    """
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        cursor.execute(
+            """SELECT tp.id, tp.data, tp.troco_pix AS valor_pix,
+                      tp.numero_sequencial,
+                      c.razao_social AS posto_nome,
+                      tpc.nome_completo AS cliente_nome
+               FROM troco_pix tp
+               LEFT JOIN clientes c ON c.id = tp.cliente_id
+               LEFT JOIN troco_pix_clientes tpc ON tpc.id = tp.troco_pix_cliente_id
+               WHERE tp.bank_transaction_id IS NULL AND tp.troco_pix > 0
+               ORDER BY tp.data DESC
+               LIMIT 200"""
+        )
+        rows = cursor.fetchall()
+        return rows
+    except Exception:
+        # Coluna bank_transaction_id ainda não existe (migration pendente)
+        return []
+    finally:
+        cursor.close()
+        conn.close()
 
 
 @bp.route('/conciliar', methods=['GET', 'POST'])
 @login_required
 def conciliar():
     """Interface de conciliação manual com filtros, multi-seleção e memória."""
+    _ensure_ld_bank_tx_id()
+    _ensure_descricao_chave()
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
     usuario = current_user.email if hasattr(current_user, 'email') else 'manual'
@@ -742,16 +1017,86 @@ def conciliar():
                     pass
 
         conta_destino_id = request.form.get('conta_destino_id') or None
+        conta_origem_id  = request.form.get('conta_origem_id') or None
+        troco_pix_id     = request.form.get('troco_pix_id') or None
 
         ok = 0
-        for tx_id in tx_ids:
-            if tipo_debito == 'transferencia' and conta_destino_id:
-                _conciliar_transferencia(cursor, conn, tx_id, conta_destino_id, usuario)
-            else:
-                _conciliar_tx(cursor, conn, tx_id, acao, tipo_tx,
-                              fornecedor_id, forma_recebimento_id, usuario,
-                              tipo_debito=tipo_debito, despesas=despesas or None)
-            ok += 1
+
+        if acao == 'aprovar_sugestoes_pagina':
+            # Aprovação em lote das sugestões visíveis na página corrente.
+            # O frontend envia campos tx_N_id, tx_N_tipo_tx, tx_N_tipo_debito,
+            # tx_N_forma_recebimento_id, tx_N_fornecedor_id, tx_N_conta_destino_id,
+            # tx_N_titulo_id, tx_N_categoria_id, tx_N_subcategoria_id, tx_N_valor
+            # para N = 0, 1, 2, ... enquanto tx_N_id estiver presente.
+            n = 0
+            while True:
+                tid = request.form.get(f'tx_{n}_id', '').strip()
+                if not tid:
+                    break
+                t_tipo_tx  = request.form.get(f'tx_{n}_tipo_tx', 'DEBIT')
+                t_tipo_deb = request.form.get(f'tx_{n}_tipo_debito', '')
+                t_forma    = request.form.get(f'tx_{n}_forma_recebimento_id') or None
+                t_forn     = request.form.get(f'tx_{n}_fornecedor_id') or None
+                t_conta    = request.form.get(f'tx_{n}_conta_destino_id') or None
+                t_titulo   = request.form.get(f'tx_{n}_titulo_id') or None
+                t_categ    = request.form.get(f'tx_{n}_categoria_id') or None
+                t_sub      = request.form.get(f'tx_{n}_subcategoria_id') or None
+                t_valor    = request.form.get(f'tx_{n}_valor') or None
+                if t_tipo_deb == 'transferencia' and t_conta:
+                    _conciliar_transferencia(cursor, conn, tid, t_conta, usuario,
+                                             salvar_mapeamento=True)
+                elif t_tipo_deb == 'transferencia_recebida':
+                    _conciliar_tx(cursor, conn, tid, 'conciliar', 'CREDIT',
+                                  None, None, usuario, tipo_debito='transferencia',
+                                  salvar_mapeamento=True)
+                elif t_tipo_deb == 'despesa' and t_titulo and t_categ and t_valor:
+                    try:
+                        val_f = float(str(t_valor).replace(',', '.'))
+                    except (ValueError, TypeError):
+                        n += 1
+                        continue
+                    desp = [{'titulo_id': int(t_titulo), 'categoria_id': int(t_categ),
+                              'subcategoria_id': int(t_sub) if t_sub else None,
+                              'valor': val_f, 'observacao': None, 'fornecedor': None}]
+                    _conciliar_tx(cursor, conn, tid, 'conciliar', 'DEBIT',
+                                  None, None, usuario, tipo_debito='despesa',
+                                  despesas=desp, salvar_mapeamento=True)
+                else:
+                    _conciliar_tx(cursor, conn, tid, 'conciliar', t_tipo_tx,
+                                  t_forn, t_forma, usuario,
+                                  tipo_debito=t_tipo_deb or 'fornecedor',
+                                  salvar_mapeamento=True)
+                ok += 1
+                n += 1
+            flash(f'{ok} sugestão(ões) aprovada(s) com sucesso!', 'success')
+            return redirect(request.url)
+
+        salvar_mapeamento = (acao != 'lancamento_unico')
+        # Lançamento Único usa a mesma lógica de conciliação, apenas sem salvar mapeamento
+        acao_conciliar = 'conciliar' if acao == 'lancamento_unico' else acao
+        try:
+            for tx_id in tx_ids:
+                if tipo_debito == 'transferencia' and conta_destino_id:
+                    _conciliar_transferencia(cursor, conn, tx_id, conta_destino_id, usuario,
+                                             salvar_mapeamento=salvar_mapeamento)
+                else:
+                    _conciliar_tx(cursor, conn, tx_id, acao_conciliar, tipo_tx,
+                                  fornecedor_id, forma_recebimento_id, usuario,
+                                  tipo_debito=tipo_debito, despesas=despesas or None,
+                                  troco_pix_id=troco_pix_id,
+                                  salvar_mapeamento=salvar_mapeamento,
+                                  conta_origem_id=conta_origem_id)
+                ok += 1
+        except Exception as exc:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+            cursor.close()
+            conn.close()
+            logger.exception("Erro ao conciliar transação: %s", exc)
+            flash(f'Erro ao conciliar: {exc}', 'danger')
+            return redirect(request.url)
 
         if acao == 'ignorar':
             flash(f'{ok} transação(ões) ignorada(s).', 'info')
@@ -764,13 +1109,13 @@ def conciliar():
     # ------------------------------------------------------------------
     # GET: filtros
     # ------------------------------------------------------------------
-    f_cliente   = request.args.get('cliente_id', '')
+    f_clientes  = [int(c) for c in request.args.getlist('cliente_id') if c and c.isdigit()]
     f_tipo      = request.args.get('tipo', '')           # CREDIT / DEBIT
     f_data_ini  = request.args.get('data_ini', '')
     f_data_fim  = request.args.get('data_fim', '')
     f_descricao = request.args.get('descricao', '')
     f_cnpj      = request.args.get('cnpj_cpf', '')
-    f_conta     = request.args.get('account_id', '')
+    f_contas    = [c for c in request.args.getlist('account_id') if c]
 
     page     = request.args.get('page', 1, type=int)
     per_page = 50
@@ -780,9 +1125,10 @@ def conciliar():
     where  = ["bt.status = 'pendente'"]
     params = []
 
-    if f_cliente:
-        where.append("ba.cliente_id = %s")
-        params.append(f_cliente)
+    if f_clientes:
+        ph = ','.join(['%s'] * len(f_clientes))
+        where.append(f"ba.cliente_id IN ({ph})")
+        params.extend(f_clientes)
     if f_tipo and f_tipo in _TIPOS_OK:
         where.append("bt.tipo = %s")
         params.append(f_tipo)
@@ -798,67 +1144,106 @@ def conciliar():
     if f_cnpj:
         where.append("bt.cnpj_cpf LIKE %s")
         params.append(f'%{f_cnpj}%')
-    if f_conta:
-        where.append("bt.account_id = %s")
-        params.append(f_conta)
+    if f_contas:
+        ph = ','.join(['%s'] * len(f_contas))
+        where.append(f"bt.account_id IN ({ph})")
+        params.extend(f_contas)
 
     where_sql = 'WHERE ' + ' AND '.join(where)
 
-    cursor.execute(
-        f"""SELECT bt.*, ba.apelido AS conta_apelido, ba.banco_nome,
-                   bsm.fornecedor_id AS sugestao_fornecedor_id,
-                   bsm.forma_recebimento_id AS sugestao_forma_id,
-                   bsm.titulo_id AS sugestao_titulo_id,
-                   bsm.categoria_id AS sugestao_categoria_id,
-                   bsm.subcategoria_id AS sugestao_subcategoria_id,
-                   bsm.conta_destino_id AS sugestao_conta_destino_id,
-                   bsm.tipo_debito AS sugestao_tipo_debito,
-                   fr.nome AS sugestao_forma_nome,
-                   fs.razao_social AS sugestao_fornecedor_nome,
-                   td.nome AS sugestao_titulo_nome,
-                   cd.nome AS sugestao_categoria_nome
-            FROM bank_transactions bt
-            INNER JOIN bank_accounts ba ON bt.account_id = ba.id
-            LEFT JOIN bank_supplier_mapping bsm ON bsm.cnpj_cpf = bt.cnpj_cpf
-            LEFT JOIN formas_recebimento fr ON fr.id = bsm.forma_recebimento_id
-            LEFT JOIN fornecedores fs ON fs.id = bsm.fornecedor_id
-            LEFT JOIN titulos_despesas td ON td.id = bsm.titulo_id
-            LEFT JOIN categorias_despesas cd ON cd.id = bsm.categoria_id
-            {where_sql}
-            ORDER BY bt.data_transacao DESC
-            LIMIT %s OFFSET %s""",
-        params + [per_page, offset],
-    )
-    transacoes = cursor.fetchall()
+    # When no company is selected yet, skip expensive queries and show nothing.
+    transacoes = []
+    total = 0
 
-    # -----------------------------------------------------------------------
-    # Aplicar regras por padrão de descrição a transações sem sugestão de CNPJ
-    # -----------------------------------------------------------------------
-    cursor.execute(
-        """SELECT r.id, r.padrao_descricao, r.tipo_match, r.tipo_transacao,
-                  r.forma_recebimento_id, fr.nome AS forma_nome,
-                  r.fornecedor_id, f.razao_social AS fornecedor_nome
-           FROM bank_conciliacao_regras r
-           LEFT JOIN formas_recebimento fr ON fr.id = r.forma_recebimento_id
-           LEFT JOIN fornecedores f ON f.id = r.fornecedor_id
-           WHERE r.ativo = 1"""
-    )
-    regras_padrao = cursor.fetchall()
+    if f_clientes:
+        _SELECT_TX = f"""SELECT bt.*, ba.apelido AS conta_apelido, ba.banco_nome,
+                       bsm.fornecedor_id AS sugestao_fornecedor_id,
+                       bsm.forma_recebimento_id AS sugestao_forma_id,
+                       bsm.titulo_id AS sugestao_titulo_id,
+                       bsm.categoria_id AS sugestao_categoria_id,
+                       bsm.subcategoria_id AS sugestao_subcategoria_id,
+                       bsm.conta_destino_id AS sugestao_conta_destino_id,
+                       bsm.tipo_debito AS sugestao_tipo_debito,
+                       fr.nome AS sugestao_forma_nome,
+                       fs.razao_social AS sugestao_fornecedor_nome,
+                       td.nome AS sugestao_titulo_nome,
+                       cd.nome AS sugestao_categoria_nome
+                FROM bank_transactions bt
+                INNER JOIN bank_accounts ba ON bt.account_id = ba.id"""
+        _JOINS_TAIL = f"""LEFT JOIN formas_recebimento fr ON fr.id = bsm.forma_recebimento_id
+                LEFT JOIN fornecedores fs ON fs.id = bsm.fornecedor_id
+                LEFT JOIN titulos_despesas td ON td.id = bsm.titulo_id
+                LEFT JOIN categorias_despesas cd ON cd.id = bsm.categoria_id
+                {where_sql}
+                ORDER BY bt.data_transacao DESC
+                LIMIT %s OFFSET %s"""
+        try:
+            cursor.execute(
+                f"""{_SELECT_TX}
+                LEFT JOIN bank_supplier_mapping bsm ON bsm.id = (
+                    SELECT s.id FROM bank_supplier_mapping s
+                    WHERE s.cnpj_cpf = bt.cnpj_cpf
+                      AND s.descricao_chave IN ('', LEFT(UPPER(TRIM(bt.descricao)), 100))
+                    ORDER BY LENGTH(s.descricao_chave) DESC
+                    LIMIT 1
+                )
+                {_JOINS_TAIL}""",
+                params + [per_page, offset],
+            )
+        except mysql.connector.errors.ProgrammingError as _e:
+            if _e.errno != 1054:
+                raise
+            # Fallback when descricao_chave column does not yet exist in the DB
+            logger.warning("conciliar: descricao_chave column missing, using simple join fallback")
+            cursor.execute(
+                f"""{_SELECT_TX}
+                LEFT JOIN bank_supplier_mapping bsm ON bsm.cnpj_cpf = bt.cnpj_cpf
+                {_JOINS_TAIL}""",
+                params + [per_page, offset],
+            )
+        transacoes = cursor.fetchall()
 
-    for tx in transacoes:
-        if tx.get('sugestao_forma_id') or tx.get('sugestao_fornecedor_id') or tx.get('sugestao_titulo_id'):
-            continue  # já tem sugestão por CNPJ
-        descricao = (tx.get('descricao') or '').upper()
-        tipo_tx_r = tx.get('tipo', '')
-        for regra in regras_padrao:
-            if regra['tipo_transacao'] != 'AMBOS' and regra['tipo_transacao'] != tipo_tx_r:
-                continue
-            padrao = (regra['padrao_descricao'] or '').upper()
-            if regra['tipo_match'] == 'exato':
-                bate = descricao == padrao
-            else:
-                bate = padrao in descricao
-            if bate:
+        # -----------------------------------------------------------------------
+        # Aplicar regras por padrão de descrição a transações sem sugestão de CNPJ
+        # -----------------------------------------------------------------------
+        cursor.execute(
+            """SELECT r.id, r.padrao_descricao, r.padrao_secundario, r.tipo_match,
+                      r.tipo_transacao, r.account_id,
+                      r.forma_recebimento_id, fr.nome AS forma_nome,
+                      r.fornecedor_id, f.razao_social AS fornecedor_nome
+               FROM bank_conciliacao_regras r
+               LEFT JOIN formas_recebimento fr ON fr.id = r.forma_recebimento_id
+               LEFT JOIN fornecedores f ON f.id = r.fornecedor_id
+               WHERE r.ativo = 1
+               ORDER BY
+                   (r.account_id IS NOT NULL) DESC,
+                   (r.padrao_secundario IS NOT NULL AND r.padrao_secundario <> '') DESC,
+                   r.id"""
+        )
+        regras_padrao = cursor.fetchall()
+
+        for tx in transacoes:
+            descricao = (tx.get('descricao') or '').upper()
+            tipo_tx_r = tx.get('tipo', '')
+            for regra in regras_padrao:
+                # Filtra por conta bancária
+                regra_account_id = regra.get('account_id')
+                if regra_account_id and int(regra_account_id) != int(tx['account_id']):
+                    continue
+                if regra['tipo_transacao'] != 'AMBOS' and regra['tipo_transacao'] != tipo_tx_r:
+                    continue
+                padrao = (regra['padrao_descricao'] or '').upper()
+                if regra['tipo_match'] == 'exato':
+                    bate = descricao == padrao
+                else:
+                    bate = padrao in descricao
+                if not bate:
+                    continue
+                # Match secundário
+                padrao2 = (regra.get('padrao_secundario') or '').upper()
+                if padrao2 and padrao2 not in descricao:
+                    continue
+                # Regras de descrição têm prioridade sobre mapeamento por CNPJ
                 if regra['forma_recebimento_id']:
                     tx['sugestao_forma_id']   = regra['forma_recebimento_id']
                     tx['sugestao_forma_nome'] = regra['forma_nome']
@@ -869,20 +1254,51 @@ def conciliar():
                     tx['sugestao_regra']           = True
                 break  # primeira regra que bate vence
 
-    # Enriquece badge de sugestão de despesa (CNPJ → título/categoria)
-    for tx in transacoes:
-        if tx.get('sugestao_titulo_id') and not tx.get('sugestao_forma_id') and not tx.get('sugestao_fornecedor_id'):
-            tx['sugestao_despesa_label'] = (
-                (tx.get('sugestao_titulo_nome') or '') + ' › ' + (tx.get('sugestao_categoria_nome') or '')
-            )
+        # Para créditos sem regra de descrição correspondente: remove a sugestão de forma
+        # que veio do bank_supplier_mapping por CNPJ/CPF.  O mesmo CPF pode aparecer em
+        # transações de tipos distintos (PIX, depósito em dinheiro, cheque…), tornando a
+        # sugestão por CNPJ não confiável para créditos.
+        for tx in transacoes:
+            if tx.get('tipo') == 'CREDIT' and not tx.get('sugestao_regra'):
+                tx['sugestao_forma_id']   = None
+                tx['sugestao_forma_nome'] = None
 
-    cursor.execute(
-        f"SELECT COUNT(*) AS total FROM bank_transactions bt "
-        f"INNER JOIN bank_accounts ba ON bt.account_id = ba.id "
-        f"{where_sql}",
-        params,
-    )
-    total = cursor.fetchone()['total']
+        # Enriquece badge de sugestão de despesa (CNPJ → título/categoria)
+        for tx in transacoes:
+            if tx.get('sugestao_titulo_id') and not tx.get('sugestao_forma_id') and not tx.get('sugestao_fornecedor_id'):
+                tx['sugestao_despesa_label'] = (
+                    (tx.get('sugestao_titulo_nome') or '') + ' › ' + (tx.get('sugestao_categoria_nome') or '')
+                )
+
+        # Marca CREDITs que são transferências recebidas (sintéticas ou por CNPJ aprendido)
+        for tx in transacoes:
+            if tx.get('tipo') == 'CREDIT':
+                tipo_conc    = tx.get('tipo_conciliacao') or ''
+                sugestao_tip = tx.get('sugestao_tipo_debito') or ''
+                if tipo_conc == 'transferencia' or sugestao_tip == 'transferencia':
+                    tx['sugestao_transferencia_recebida'] = True
+
+        # Reordena: dentro de cada data, lançamentos com sugestão aparecem primeiro
+        def _tem_sugestao(tx):
+            return bool(
+                tx.get('sugestao_forma_id') or
+                tx.get('sugestao_fornecedor_id') or
+                tx.get('sugestao_titulo_id') or
+                tx.get('sugestao_transferencia_recebida')
+            )
+        transacoes = sorted(
+            transacoes,
+            key=lambda tx: (tx.get('data_transacao'), _tem_sugestao(tx)),
+            reverse=True,
+        )
+
+        cursor.execute(
+            f"SELECT COUNT(*) AS total FROM bank_transactions bt "
+            f"INNER JOIN bank_accounts ba ON bt.account_id = ba.id "
+            f"{where_sql}",
+            params,
+        )
+        total = cursor.fetchone()['total']
 
     fornecedores       = _get_fornecedores(cursor)
     formas_recebimento = _get_formas_recebimento(cursor)
@@ -890,9 +1306,10 @@ def conciliar():
     contas             = _get_accounts(cursor)
     clientes           = _get_clientes_com_produtos(cursor)
 
-    # Todas as contas de todas as empresas (para transferência entre contas)
+    # Todas as contas de todas as empresas (para transferência entre contas e filtro JS)
     cursor.execute(
-        """SELECT ba.id, ba.apelido, ba.banco_nome, c.nome_fantasia AS empresa_nome
+        """SELECT ba.id, ba.apelido, ba.banco_nome, ba.cliente_id,
+                  c.nome_fantasia AS empresa_nome
            FROM bank_accounts ba
            LEFT JOIN clientes c ON c.id = ba.cliente_id
            WHERE ba.ativo = 1
@@ -908,6 +1325,10 @@ def conciliar():
 
     total_pages = max(1, (total + per_page - 1) // per_page)
 
+    # Busca Troco PIX pendentes de conciliação bancária para o modal de débitos.
+    # Graceful: se a coluna bank_transaction_id não existir ainda, retorna lista vazia.
+    troco_pix_pendentes = _get_troco_pix_sem_banco()
+
     return render_template(
         'bank_import/conciliar.html',
         transacoes=transacoes,
@@ -918,97 +1339,248 @@ def conciliar():
         clientes=clientes,
         todas_contas=todas_contas,
         todas_contas_map=todas_contas_map,
+        troco_pix_pendentes=troco_pix_pendentes,
         page=page,
         total_pages=total_pages,
         total=total,
         # filtros atuais para manter na paginação
-        f_cliente=f_cliente,
+        f_clientes=f_clientes,
         f_tipo=f_tipo,
         f_data_ini=f_data_ini,
         f_data_fim=f_data_fim,
         f_descricao=f_descricao,
         f_cnpj=f_cnpj,
-        f_conta=f_conta,
+        f_contas=f_contas,
     )
 
 
 @bp.route('/relatorio')
 @login_required
 def relatorio():
-    """Relatório de transações com filtros."""
+    """Relatório completo de transações — ferramenta de auditoria."""
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
 
-    contas = _get_accounts(cursor)
+    contas   = _get_accounts(cursor)
+    clientes = _get_clientes_com_produtos(cursor)
 
     # Filtros
     account_id = request.args.get('account_id', '')
-    status = request.args.get('status', '')
-    data_ini = request.args.get('data_ini', '')
-    data_fim = request.args.get('data_fim', '')
+    empresa_id = request.args.get('empresa_id', '')
+    status     = request.args.get('status', '')
+    tipo       = request.args.get('tipo', '')
+    data_ini   = request.args.get('data_ini', '')
+    data_fim   = request.args.get('data_fim', '')
 
-    # Monta query parametrizada segura usando apenas cláusulas fixas no SQL
-    # (os valores do usuário vão para a lista de params, nunca diretamente na string SQL)
+    # Paginação (page >= 1 sempre)
+    page     = max(1, request.args.get('page', 1, type=int))
+    per_page = 100
+    offset   = (page - 1) * per_page
+
+    # Monta filtros seguros
     _ALLOWED_STATUSES = {'pendente', 'conciliado', 'ignorado'}
-    base_where = 'WHERE 1=1'
-    extra_clauses = []
-    params = []
+    _ALLOWED_TIPOS    = {'CREDIT', 'DEBIT'}
+    where_parts = []
+    params      = []
 
     if account_id:
-        extra_clauses.append('AND bt.account_id = %s')
+        where_parts.append('bt.account_id = %s')
         params.append(account_id)
+    if empresa_id:
+        where_parts.append('ba.cliente_id = %s')
+        params.append(empresa_id)
     if status and status in _ALLOWED_STATUSES:
-        extra_clauses.append('AND bt.status = %s')
+        where_parts.append('bt.status = %s')
         params.append(status)
+    if tipo and tipo in _ALLOWED_TIPOS:
+        where_parts.append('bt.tipo = %s')
+        params.append(tipo)
     if data_ini:
-        extra_clauses.append('AND bt.data_transacao >= %s')
+        where_parts.append('bt.data_transacao >= %s')
         params.append(data_ini)
     if data_fim:
-        extra_clauses.append('AND bt.data_transacao <= %s')
+        where_parts.append('bt.data_transacao <= %s')
         params.append(data_fim)
 
-    where_clauses = ' '.join([base_where] + extra_clauses)
+    where_sql = ('WHERE ' + ' AND '.join(where_parts)) if where_parts else ''
 
+    # Query principal: traz formas_recebimento + empresa + indica vínculos via LEFT JOIN
     cursor.execute(
-        """SELECT bt.*, ba.apelido AS conta_apelido, ba.banco_nome,
-                   f.razao_social AS fornecedor_nome
-            FROM bank_transactions bt
-            INNER JOIN bank_accounts ba ON bt.account_id = ba.id
-            LEFT JOIN fornecedores f ON bt.fornecedor_id = f.id
-            """
-        + where_clauses
-        + """ ORDER BY bt.data_transacao DESC LIMIT 500""",
-        params,
+        """SELECT bt.id, bt.data_transacao, bt.tipo, bt.valor, bt.descricao,
+                  bt.cnpj_cpf, bt.status, bt.conciliado_em, bt.conciliado_por,
+                  bt.tipo_conciliacao,
+                  ba.apelido AS conta_apelido, ba.banco_nome,
+                  c.razao_social AS empresa_nome,
+                  f.razao_social  AS fornecedor_nome,
+                  fr.nome         AS forma_recebimento_nome,
+                  CASE WHEN ld.bt_id IS NOT NULL THEN 1 ELSE 0 END AS tem_lancamento_despesa,
+                  CASE WHEN tp.bt_id IS NOT NULL THEN 1 ELSE 0 END AS tem_troco_pix
+           FROM bank_transactions bt
+           INNER JOIN bank_accounts ba ON bt.account_id = ba.id
+           LEFT JOIN clientes c ON c.id = ba.cliente_id
+           LEFT JOIN fornecedores f ON f.id = bt.fornecedor_id
+           LEFT JOIN formas_recebimento fr ON fr.id = bt.forma_recebimento_id
+           LEFT JOIN (SELECT DISTINCT bank_transaction_id AS bt_id
+                      FROM lancamentos_despesas
+                      WHERE bank_transaction_id IS NOT NULL) ld ON ld.bt_id = bt.id
+           LEFT JOIN (SELECT DISTINCT bank_transaction_id AS bt_id
+                      FROM troco_pix
+                      WHERE bank_transaction_id IS NOT NULL) tp ON tp.bt_id = bt.id
+           """
+        + where_sql
+        + ' ORDER BY bt.data_transacao DESC, bt.id DESC'
+        + ' LIMIT %s OFFSET %s',
+        params + [per_page, offset],
     )
     transacoes = cursor.fetchall()
 
-    # Totais
+    # Totais (sem paginação)
     cursor.execute(
         """SELECT
-               SUM(CASE WHEN tipo='DEBIT' THEN valor ELSE 0 END) AS total_debitos,
-               SUM(CASE WHEN tipo='CREDIT' THEN valor ELSE 0 END) AS total_creditos,
-               COUNT(*) AS total_transacoes
-            FROM bank_transactions bt
-            """
-        + where_clauses,
+               COUNT(*) AS total_transacoes,
+               SUM(CASE WHEN bt.tipo='DEBIT'  THEN bt.valor ELSE 0 END) AS total_debitos,
+               SUM(CASE WHEN bt.tipo='CREDIT' THEN bt.valor ELSE 0 END) AS total_creditos,
+               SUM(CASE WHEN bt.status='pendente'   THEN 1 ELSE 0 END) AS total_pendentes,
+               SUM(CASE WHEN bt.status='conciliado' THEN 1 ELSE 0 END) AS total_conciliados
+           FROM bank_transactions bt
+           INNER JOIN bank_accounts ba ON bt.account_id = ba.id
+           """
+        + where_sql,
         params,
     )
     totais = cursor.fetchone()
+    total_rows = totais['total_transacoes'] or 0
 
     cursor.close()
     conn.close()
+
+    total_pages = max(1, (total_rows + per_page - 1) // per_page)
 
     return render_template(
         'bank_import/relatorio.html',
         transacoes=transacoes,
         contas=contas,
+        clientes=clientes,
         totais=totais,
+        total_rows=total_rows,
+        page=page,
+        total_pages=total_pages,
+        per_page=per_page,
         filtros={
             'account_id': account_id,
-            'status': status,
-            'data_ini': data_ini,
-            'data_fim': data_fim,
+            'empresa_id': empresa_id,
+            'status':     status,
+            'tipo':       tipo,
+            'data_ini':   data_ini,
+            'data_fim':   data_fim,
         },
+    )
+
+
+@bp.route('/relatorio/exportar-csv')
+@login_required
+def relatorio_exportar_csv():
+    """Exporta o relatório completo de transações como CSV (sem limite de linhas)."""
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+
+    account_id = request.args.get('account_id', '')
+    empresa_id = request.args.get('empresa_id', '')
+    status     = request.args.get('status', '')
+    tipo       = request.args.get('tipo', '')
+    data_ini   = request.args.get('data_ini', '')
+    data_fim   = request.args.get('data_fim', '')
+
+    _ALLOWED_STATUSES = {'pendente', 'conciliado', 'ignorado'}
+    _ALLOWED_TIPOS    = {'CREDIT', 'DEBIT'}
+    where_parts = []
+    params      = []
+
+    if account_id:
+        where_parts.append('bt.account_id = %s')
+        params.append(account_id)
+    if empresa_id:
+        where_parts.append('ba.cliente_id = %s')
+        params.append(empresa_id)
+    if status and status in _ALLOWED_STATUSES:
+        where_parts.append('bt.status = %s')
+        params.append(status)
+    if tipo and tipo in _ALLOWED_TIPOS:
+        where_parts.append('bt.tipo = %s')
+        params.append(tipo)
+    if data_ini:
+        where_parts.append('bt.data_transacao >= %s')
+        params.append(data_ini)
+    if data_fim:
+        where_parts.append('bt.data_transacao <= %s')
+        params.append(data_fim)
+
+    where_sql = ('WHERE ' + ' AND '.join(where_parts)) if where_parts else ''
+
+    cursor.execute(
+        """SELECT bt.id, bt.data_transacao, bt.tipo, bt.valor, bt.descricao,
+                  bt.cnpj_cpf, bt.status, bt.conciliado_em, bt.conciliado_por,
+                  bt.tipo_conciliacao,
+                  ba.apelido AS conta_apelido, ba.banco_nome,
+                  c.razao_social AS empresa_nome,
+                  f.razao_social  AS fornecedor_nome,
+                  fr.nome         AS forma_recebimento_nome,
+                  CASE WHEN ld.bt_id IS NOT NULL THEN 1 ELSE 0 END AS tem_lancamento_despesa,
+                  CASE WHEN tp.bt_id IS NOT NULL THEN 1 ELSE 0 END AS tem_troco_pix
+           FROM bank_transactions bt
+           INNER JOIN bank_accounts ba ON bt.account_id = ba.id
+           LEFT JOIN clientes c ON c.id = ba.cliente_id
+           LEFT JOIN fornecedores f ON f.id = bt.fornecedor_id
+           LEFT JOIN formas_recebimento fr ON fr.id = bt.forma_recebimento_id
+           LEFT JOIN (SELECT DISTINCT bank_transaction_id AS bt_id
+                      FROM lancamentos_despesas
+                      WHERE bank_transaction_id IS NOT NULL) ld ON ld.bt_id = bt.id
+           LEFT JOIN (SELECT DISTINCT bank_transaction_id AS bt_id
+                      FROM troco_pix
+                      WHERE bank_transaction_id IS NOT NULL) tp ON tp.bt_id = bt.id
+           """
+        + where_sql
+        + ' ORDER BY bt.data_transacao DESC, bt.id DESC',
+        params,
+    )
+    rows = cursor.fetchall()
+    cursor.close()
+    conn.close()
+
+    output = io.StringIO()
+    writer = csv.writer(output, delimiter=';')
+    writer.writerow([
+        'ID', 'Data', 'Tipo', 'Valor', 'Descrição', 'CNPJ/CPF',
+        'Status', 'Tipo Conciliação', 'Fornecedor', 'Forma Recebimento',
+        'Conta', 'Empresa', 'Conciliado Em', 'Conciliado Por',
+        'Tem Lançamento Despesa', 'Tem Troco PIX',
+    ])
+    for r in rows:
+        valor = r['valor']
+        writer.writerow([
+            r['id'],
+            r['data_transacao'].strftime('%d/%m/%Y') if r['data_transacao'] else '',
+            'Débito' if r['tipo'] == 'DEBIT' else 'Crédito',
+            str(valor).replace('.', ',') if valor is not None else '',
+            r['descricao'] or '',
+            r['cnpj_cpf'] or '',
+            r['status'] or '',
+            r['tipo_conciliacao'] or '',
+            r['fornecedor_nome'] or '',
+            r['forma_recebimento_nome'] or '',
+            r['conta_apelido'] or r['banco_nome'] or '',
+            r['empresa_nome'] or '',
+            r['conciliado_em'].strftime('%d/%m/%Y %H:%M') if r['conciliado_em'] else '',
+            r['conciliado_por'] or '',
+            'Sim' if r['tem_lancamento_despesa'] else 'Não',
+            'Sim' if r['tem_troco_pix'] else 'Não',
+        ])
+
+    output.seek(0)
+    return Response(
+        '\ufeff' + output.getvalue(),   # BOM para Excel abrir UTF-8 corretamente
+        mimetype='text/csv',
+        headers={'Content-Disposition': 'attachment; filename="transacoes_bancarias.csv"'},
     )
 
 
@@ -1048,62 +1620,93 @@ def api_transacoes_pendentes():
 
 
 @bp.route('/api/auto-reconcile', methods=['POST'])
-@login_required
 def api_auto_reconcile():
     """API: força a auto-conciliação de transações pendentes (por CNPJ e por regras)."""
-    import logging
-    logger = logging.getLogger(__name__)
-    conn = get_db_connection()
-    cursor = conn.cursor(dictionary=True)
+    if not current_user.is_authenticated:
+        return jsonify({'success': False, 'erro': 'Sessão expirada. Por favor, recarregue a página e faça login novamente.', 'conciliados': 0}), 401
+    _ensure_ld_bank_tx_id()
+    _ensure_descricao_chave()
+    conn = None
+    cursor = None
     try:
-        # 1. Auto-conciliação por CNPJ (mapeamentos salvos anteriormente)
-        cursor.execute(
-            """SELECT bt.id, bt.tipo, bsm.fornecedor_id, bsm.forma_recebimento_id
-               FROM bank_transactions bt
-               INNER JOIN bank_supplier_mapping bsm ON bt.cnpj_cpf = bsm.cnpj_cpf
-               WHERE bt.status = 'pendente' AND bt.cnpj_cpf IS NOT NULL AND bt.cnpj_cpf != ''"""
-        )
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+        # 1. Auto-conciliação por regras de descrição (regras têm prioridade sobre CNPJ)
+        por_regras = _auto_conciliar_por_regras(cursor, conn)
+        logger.info("api_auto_reconcile: por_regras=%d", por_regras)
+
+        # 2. Auto-conciliação por CNPJ (apenas para os que ficaram pendentes após as regras)
+        try:
+            cursor.execute(
+                """SELECT bt.id, bt.tipo, bsm.fornecedor_id, bsm.forma_recebimento_id
+                   FROM bank_transactions bt
+                   INNER JOIN bank_supplier_mapping bsm ON bsm.id = (
+                       SELECT s.id FROM bank_supplier_mapping s
+                       WHERE s.cnpj_cpf = bt.cnpj_cpf
+                         AND s.descricao_chave IN ('', LEFT(UPPER(TRIM(bt.descricao)), 100))
+                       ORDER BY LENGTH(s.descricao_chave) DESC
+                       LIMIT 1
+                   )
+                   WHERE bt.status = 'pendente' AND bt.cnpj_cpf IS NOT NULL AND bt.cnpj_cpf != ''"""
+            )
+        except mysql.connector.errors.ProgrammingError as _e:
+            if _e.errno != 1054:
+                raise
+            # Fallback when descricao_chave column does not yet exist in the DB
+            logger.warning("api_auto_reconcile: descricao_chave column missing, using simple join fallback")
+            cursor.execute(
+                """SELECT bt.id, bt.tipo, bsm.fornecedor_id, bsm.forma_recebimento_id
+                   FROM bank_transactions bt
+                   INNER JOIN bank_supplier_mapping bsm ON bsm.cnpj_cpf = bt.cnpj_cpf
+                   WHERE bt.status = 'pendente' AND bt.cnpj_cpf IS NOT NULL AND bt.cnpj_cpf != ''"""
+            )
         rows = cursor.fetchall()
 
         agora = _dt.datetime.now()
-        updated = 0
+        batch_credit = []
+        batch_debit  = []
         for row in rows:
             if row['tipo'] == 'CREDIT':
-                cursor.execute(
-                    """UPDATE bank_transactions
-                       SET status='conciliado', forma_recebimento_id=%s,
-                           conciliado_em=%s, conciliado_por='auto'
-                       WHERE id=%s""",
-                    (row['forma_recebimento_id'], agora, row['id']),
-                )
+                batch_credit.append((row['forma_recebimento_id'], agora, row['id']))
             else:
-                cursor.execute(
-                    """UPDATE bank_transactions
-                       SET status='conciliado', fornecedor_id=%s,
-                           conciliado_em=%s, conciliado_por='auto'
-                       WHERE id=%s""",
-                    (row['fornecedor_id'], agora, row['id']),
-                )
-            updated += 1
+                batch_debit.append((row['fornecedor_id'], agora, row['id']))
+        if batch_credit:
+            cursor.executemany(
+                """UPDATE bank_transactions
+                   SET status='conciliado', forma_recebimento_id=%s,
+                       conciliado_em=%s, conciliado_por='auto'
+                   WHERE id=%s""",
+                batch_credit,
+            )
+        if batch_debit:
+            cursor.executemany(
+                """UPDATE bank_transactions
+                   SET status='conciliado', fornecedor_id=%s,
+                       conciliado_em=%s, conciliado_por='auto'
+                   WHERE id=%s""",
+                batch_debit,
+            )
+        updated = len(batch_credit) + len(batch_debit)
 
         conn.commit()
 
-        # 2. Auto-conciliação por regras de descrição
-        por_regras = _auto_conciliar_por_regras(cursor, conn)
-
         cursor.close()
         conn.close()
+        logger.info("api_auto_reconcile: por_cnpj=%d total=%d", updated, updated + por_regras)
         return jsonify({'success': True, 'conciliados': updated + por_regras,
                         'por_cnpj': updated, 'por_regras': por_regras})
     except Exception as e:
         logger.exception("Erro em api_auto_reconcile: %s", e)
         try:
-            conn.rollback()
+            if conn:
+                conn.rollback()
         except Exception:
             pass
         try:
-            cursor.close()
-            conn.close()
+            if cursor:
+                cursor.close()
+            if conn:
+                conn.close()
         except Exception:
             pass
         return jsonify({'success': False, 'erro': str(e), 'conciliados': 0}), 200
@@ -1113,12 +1716,16 @@ def api_auto_reconcile():
 @login_required
 def api_diagnostico_regras():
     """Diagnóstico: mostra regras e o que cada uma encontraria (sem fazer alterações)."""
-    import logging
-    logger = logging.getLogger(__name__)
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
     try:
-        cursor.execute("SELECT * FROM bank_conciliacao_regras WHERE ativo=1 ORDER BY id")
+        cursor.execute(
+            """SELECT * FROM bank_conciliacao_regras WHERE ativo=1
+               ORDER BY
+                   (account_id IS NOT NULL) DESC,
+                   (padrao_secundario IS NOT NULL AND padrao_secundario <> '') DESC,
+                   id"""
+        )
         regras = cursor.fetchall()
 
         cursor.execute(
@@ -1154,6 +1761,9 @@ def api_diagnostico_regras():
             descricao = (tx.get('descricao') or '').upper()
             tipo = tx.get('tipo') or ''
             for regra in regras:
+                regra_account_id = regra.get('account_id')
+                if regra_account_id and int(regra_account_id) != int(tx['account_id']):
+                    continue
                 tipo_regra = regra.get('tipo_transacao', 'AMBOS')
                 if tipo_regra != 'AMBOS' and tipo_regra != tipo:
                     continue
@@ -1550,25 +2160,277 @@ def scan_inbox():
 
 
 # ---------------------------------------------------------------------------
+# API: dias importados por conta
+# ---------------------------------------------------------------------------
+
+@bp.route('/api/dias-importados')
+@login_required
+def api_dias_importados():
+    """
+    Retorna os dias com transações importadas para uma conta (ou empresa).
+    GET params:
+      - account_id (int, opcional) — filtra por conta específica
+      - empresa_id (int, opcional) — filtra por todas as contas de uma empresa
+    Retorna lista de datas importadas e lista de datas faltando no intervalo.
+    """
+    account_id = request.args.get('account_id', type=int)
+    empresa_id = request.args.get('empresa_id', type=int)
+
+    if not account_id and not empresa_id:
+        return jsonify({'success': False, 'message': 'Informe account_id ou empresa_id'}), 400
+
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+
+    try:
+        if account_id:
+            # Busca info da conta para o título
+            cursor.execute(
+                """SELECT ba.id, ba.apelido, ba.banco_nome, ba.agencia, ba.conta,
+                          c.razao_social AS empresa_nome
+                   FROM bank_accounts ba
+                   LEFT JOIN clientes c ON c.id = ba.cliente_id
+                   WHERE ba.id = %s""",
+                (account_id,),
+            )
+            conta_info = cursor.fetchone() or {}
+            titulo = (
+                conta_info.get('apelido') or conta_info.get('banco_nome') or f'Conta #{account_id}'
+            )
+            if conta_info.get('empresa_nome'):
+                titulo += f' – {conta_info["empresa_nome"]}'
+
+            cursor.execute(
+                """SELECT DATE(data_transacao) AS dia, COUNT(*) AS qtd
+                   FROM bank_transactions
+                   WHERE account_id = %s
+                   GROUP BY DATE(data_transacao)
+                   ORDER BY dia""",
+                (account_id,),
+            )
+        else:
+            # Filtra por empresa (todas as contas dela)
+            cursor.execute(
+                "SELECT razao_social FROM clientes WHERE id = %s", (empresa_id,)
+            )
+            emp = cursor.fetchone()
+            titulo = emp['razao_social'] if emp else f'Empresa #{empresa_id}'
+
+            cursor.execute(
+                """SELECT DATE(bt.data_transacao) AS dia, COUNT(*) AS qtd
+                   FROM bank_transactions bt
+                   INNER JOIN bank_accounts ba ON ba.id = bt.account_id
+                   WHERE ba.cliente_id = %s
+                   GROUP BY DATE(bt.data_transacao)
+                   ORDER BY dia""",
+                (empresa_id,),
+            )
+
+        rows = cursor.fetchall()
+    finally:
+        cursor.close()
+        conn.close()
+
+    if not rows:
+        return jsonify({'success': True, 'titulo': titulo, 'dias': [], 'faltando': []})
+
+    # Converte para strings YYYY-MM-DD
+    dias_importados = [str(r['dia']) for r in rows]
+    qtd_por_dia = {str(r['dia']): r['qtd'] for r in rows}
+
+    # Calcula dias faltando (entre o primeiro e hoje, exceto fins de semana)
+    data_min = _dt.date.fromisoformat(dias_importados[0])
+    data_max = _dt.date.today()
+    faltando = []
+    cur = data_min
+    while cur <= data_max:
+        dia_str = cur.isoformat()
+        # Pula fins de semana (sábado=5, domingo=6)
+        if cur.weekday() < 5 and dia_str not in qtd_por_dia:
+            faltando.append(dia_str)
+        cur += _dt.timedelta(days=1)
+
+    return jsonify({
+        'success': True,
+        'titulo': titulo,
+        'dias': [{'data': d, 'qtd': qtd_por_dia[d]} for d in dias_importados],
+        'faltando': faltando,
+    })
+
+
+# ---------------------------------------------------------------------------
 # Integração Dropbox API
 # ---------------------------------------------------------------------------
 
 @bp.route('/api/dropbox-files')
 @login_required
 def api_dropbox_files():
-    """API: lista arquivos .ofx na pasta Dropbox configurada."""
+    """
+    API: lista arquivos .ofx na pasta Dropbox configurada.
+    GET param: account_id (int, opcional) — quando informado, tenta filtrar arquivos cujo nome
+    contenha dígitos da conta, agência ou palavras do apelido/banco.
+    Se o filtro não encontrar nenhum arquivo, retorna todos os arquivos com
+    filtrado_sem_resultado=True para que o front-end exiba todos e permita seleção manual.
+    """
     from integrations.dropbox_ofx import listar_arquivos_ofx, get_inbox_paths
+    account_id = request.args.get('account_id', type=int)
     try:
         arquivos = listar_arquivos_ofx()
         inbox, processed = get_inbox_paths()
-        return jsonify({
-            'success': True,
-            'files': arquivos,
-            'pasta': inbox,
-            'pasta_processados': processed,
-        })
     except RuntimeError as exc:
         return jsonify({'success': False, 'message': str(exc), 'files': []}), 400
+
+    filtrado = False
+    filtrado_sem_resultado = False
+    if account_id:
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute(
+            "SELECT banco_nome, agencia, conta, apelido FROM bank_accounts WHERE id = %s",
+            (account_id,),
+        )
+        acc = cursor.fetchone()
+        cursor.close()
+        conn.close()
+        if acc:
+            # Tokens de busca: sinais específicos do BANCO e CONTA para localizar o arquivo.
+            # Tokens de dígitos (conta/agência) são altamente confiáveis — match direto.
+            # Tokens de texto (banco, apelido) são ambíguos e requerem verificação de ACCTID:
+            #   ex: "NH GTBA" é compartilhado entre CORA - NH GTBA e SICREDI - NH GTBA.
+            #   A verificação de ACCTID garante que o arquivo corresponde à conta selecionada.
+            STOPWORDS = {'banco', 'de', 'do', 'da', 'e', 'em', 'sa', 's/a', 'ltda'}
+
+            def _extrair_palavras(texto):
+                """Retorna palavras significativas de um texto (mín. 3 chars, fora de stopwords)."""
+                for p in re.split(r'[\W_]+', texto or ''):
+                    pl = p.lower()
+                    if len(pl) >= 3 and pl not in STOPWORDS:
+                        yield pl
+
+            tokens = set()
+            conta_digits_full = ''
+
+            # 1. Dígitos do número da conta (com e sem traço).
+            if acc.get('conta'):
+                conta_digits_full = re.sub(r'\D', '', acc['conta'])
+                if len(conta_digits_full) >= 4:
+                    tokens.add(conta_digits_full[-6:] if len(conta_digits_full) >= 6 else conta_digits_full)
+                    # Sequência completa cobre "27677832" quando a conta é "2767783-2"
+                    tokens.add(conta_digits_full)
+
+            # 2. Dígitos da agência (quando tiver 4+ dígitos).
+            if acc.get('agencia'):
+                ag_digits = re.sub(r'\D', '', acc['agencia'])
+                if len(ag_digits) >= 4:
+                    tokens.add(ag_digits)
+
+            # 3. Palavras significativas do nome do banco (ex: "SICREDI", "CORA", "EFI").
+            tokens.update(_extrair_palavras(acc.get('banco_nome')))
+
+            # 4. Palavras do apelido da conta (ex: "NH GTBA" → token "gtba").
+            # Apis bancárias como a CORA nomeiam os arquivos OFX com a slug da empresa
+            # (ex: "nh-gtba_...ofx"), sem o nome do banco no nome do arquivo.
+            # Quando o nome do banco não aparece no arquivo, sem essa inclusão nenhum
+            # token corresponderia e todos os arquivos seriam exibidos como fallback.
+            # Como o apelido é compartilhado entre contas de bancos diferentes,
+            # os arquivos que só correspondem por esses tokens passam pela verificação
+            # de ACCTID (conteúdo do OFX), garantindo que pertencem à conta correta.
+            tokens.update(_extrair_palavras(acc.get('apelido')))
+
+            # Remove tokens vazios que possam ter sido gerados.
+            tokens.discard('')
+
+            if tokens:
+                _usar_digits = bool(conta_digits_full and len(conta_digits_full) >= 4)
+
+                # Tokens numéricos (conta/agência) — altamente específicos.
+                # Quando um arquivo corresponde a um desses tokens, não precisa de
+                # verificação de conteúdo (o número da conta já está no nome).
+                digit_tokens = set()
+                if conta_digits_full and len(conta_digits_full) >= 4:
+                    digit_tokens.add(conta_digits_full)
+                    digit_tokens.add(conta_digits_full[-6:] if len(conta_digits_full) >= 6 else conta_digits_full)
+                if acc.get('agencia'):
+                    ag_d = re.sub(r'\D', '', acc['agencia'])
+                    if len(ag_d) >= 4:
+                        digit_tokens.add(ag_d)
+
+                # Tokens de texto do nome do banco (ex: "sicredi") — ambíguos quando
+                # várias contas são do mesmo banco. Arquivos que só correspondem por
+                # esses tokens precisam de verificação de conteúdo.
+                bank_name_tokens = tokens - digit_tokens
+
+                def _arquivo_corresponde_por_digito(nome):
+                    """Verdadeiro quando o nome contém dígitos da conta/agência."""
+                    nome_lower = nome.lower()
+                    if any(t in nome_lower for t in digit_tokens):
+                        return True
+                    if _usar_digits:
+                        nome_digits = re.sub(r'\D', '', nome_lower)
+                        if conta_digits_full in nome_digits:
+                            return True
+                    return False
+
+                def _arquivo_corresponde(nome):
+                    nome_lower = nome.lower()
+                    if any(t in nome_lower for t in tokens):
+                        return True
+                    if _usar_digits:
+                        nome_digits = re.sub(r'\D', '', nome_lower)
+                        if conta_digits_full in nome_digits:
+                            return True
+                    return False
+
+                matched = [f for f in arquivos if _arquivo_corresponde(f['nome'])]
+
+                if matched:
+                    # Para arquivos que correspondem APENAS pelo nome do banco
+                    # (sem dígitos da conta no nome), verificamos o conteúdo OFX
+                    # para garantir que o ACCTID dentro do arquivo realmente pertence
+                    # à conta selecionada. Isso evita que um arquivo de outra empresa
+                    # (ex: extrato SICREDI da NH-GTBA) apareça para QUALICONTAX.
+                    from integrations.dropbox_ofx import extrair_acctid_ofx
+                    verificados = []
+                    for f in matched:
+                        # Se o nome já contém dígitos da conta → confiável, sem download
+                        if _arquivo_corresponde_por_digito(f['nome']):
+                            verificados.append(f)
+                            continue
+                        # Caso contrário (só bateu por nome do banco) → lê o OFX
+                        acctid_no_arquivo = extrair_acctid_ofx(f['nome'])
+                        if acctid_no_arquivo is None:
+                            # Falha ao ler: mantém o arquivo (benefício da dúvida)
+                            verificados.append(f)
+                            continue
+                        # Verifica se os dígitos da conta selecionada correspondem ao ACCTID
+                        # do arquivo. Exige que ambos tenham ao menos 4 dígitos para evitar
+                        # correspondências acidentais com sequências curtas.
+                        if (conta_digits_full and len(acctid_no_arquivo) >= 4 and (
+                            acctid_no_arquivo == conta_digits_full
+                            or acctid_no_arquivo.endswith(conta_digits_full)
+                            or conta_digits_full.endswith(acctid_no_arquivo)
+                        )):
+                            verificados.append(f)
+                    matched = verificados
+
+                if matched:
+                    # Arquivos encontrados pelo filtro — retorna apenas os correspondentes.
+                    arquivos = matched
+                    filtrado = True
+                else:
+                    # Nenhum arquivo correspondeu ao filtro por nome nem por conteúdo.
+                    # Retorna todos os arquivos da pasta com flag especial para que o
+                    # front-end informe o usuário e permita selecionar manualmente.
+                    filtrado_sem_resultado = True
+
+    return jsonify({
+        'success': True,
+        'files': arquivos,
+        'pasta': inbox,
+        'pasta_processados': processed,
+        'filtrado': filtrado,
+        'filtrado_sem_resultado': filtrado_sem_resultado,
+    })
 
 
 @bp.route('/importar-dropbox', methods=['POST'])

@@ -38,7 +38,7 @@ def _get_connection_pool():
             pool_config = {
                 'pool_name': 'nh_transportes_pool',
                 'pool_size': Config.DB_POOL_SIZE,
-                'pool_reset_session': True,  # Reset session variables on connection return
+                'pool_reset_session': False,  # Avoid AttributeError on dead connections
                 **CONNECTION_PARAMS
             }
             _connection_pool = pooling.MySQLConnectionPool(**pool_config)

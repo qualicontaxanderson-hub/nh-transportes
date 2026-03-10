@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+{% block title %}Vincular Empresas — {{ grupo.codigo }} {{ grupo.nome }} — NH Transportes{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+  <nav aria-label="breadcrumb" class="mt-2 mb-3">
+    <ol class="breadcrumb" style="font-size:0.85rem;">
+      <li class="breadcrumb-item"><a href="{{ url_for('index') }}">Dashboard</a></li>
+      <li class="breadcrumb-item"><a href="{{ url_for('plano_contas.lista') }}">Plano de Contas</a></li>
+      <li class="breadcrumb-item"><a href="{{ url_for('plano_contas.detalhe', id=grupo.id) }}">{{ grupo.nome }}</a></li>
+      <li class="breadcrumb-item active">Vincular Empresas</li>
+    </ol>
+  </nav>
+
+  <h4 class="mb-1" style="color:#1D63A5;">
+    <i class="bi bi-building-fill"></i> Empresas do Grupo
+  </h4>
+  <p class="text-muted mb-3" style="font-size:0.9rem;">
+    Grupo: <strong><code>{{ grupo.codigo }}</code> — {{ grupo.nome }}</strong>
+    {% if grupo.descricao %} — {{ grupo.descricao }}{% endif %}
+  </p>
+
+  <div class="card shadow-sm" style="max-width:720px;">
+    <div class="card-header py-2" style="background:#1D63A5;color:white;">
+      <h6 class="mb-0">Selecione as empresas que utilizam este plano de contas</h6>
+    </div>
+    <div class="card-body">
+      <form method="POST">
+        <div class="mb-2 d-flex gap-2">
+          <button type="button" class="btn btn-outline-secondary btn-sm" id="btnMarcarTodos">
+            <i class="bi bi-check-all"></i> Marcar todos
+          </button>
+          <button type="button" class="btn btn-outline-secondary btn-sm" id="btnDesmarcarTodos">
+            <i class="bi bi-x-square"></i> Desmarcar todos
+          </button>
+        </div>
+        <div style="max-height:420px;overflow-y:auto;border:1px solid #dee2e6;border-radius:4px;padding:0.5rem;">
+          {% for c in clientes %}
+          <div class="form-check py-1 border-bottom">
+            <input class="form-check-input cli-check" type="checkbox"
+                   name="cliente_ids" value="{{ c.id }}" id="cli_{{ c.id }}"
+                   {% if c.grupo_contabil_id == grupo.id %}checked{% endif %}>
+            <label class="form-check-label" for="cli_{{ c.id }}" style="font-size:0.88rem;">
+              {{ c.razao_social }}
+              {% if c.nome_fantasia and c.nome_fantasia != c.razao_social %}
+                <small class="text-muted">({{ c.nome_fantasia }})</small>
+              {% endif %}
+              {% if c.grupo_contabil_id and c.grupo_contabil_id != grupo.id %}
+                <span class="badge bg-warning text-dark ms-1" style="font-size:0.72rem;"
+                      title="Esta empresa já pertence a outro grupo">outro grupo</span>
+              {% endif %}
+            </label>
+          </div>
+          {% else %}
+          <p class="text-muted text-center py-3 mb-0">Nenhuma empresa cadastrada.</p>
+          {% endfor %}
+        </div>
+
+        <div class="d-flex gap-2 mt-3">
+          <a href="{{ url_for('plano_contas.detalhe', id=grupo.id) }}" class="btn btn-secondary btn-sm">
+            <i class="bi bi-arrow-left"></i> Voltar
+          </a>
+          <button type="submit" class="btn btn-primary btn-sm">
+            <i class="bi bi-check-circle"></i> Salvar vínculos
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.getElementById('btnMarcarTodos')?.addEventListener('click', function() {
+  document.querySelectorAll('.cli-check').forEach(c => c.checked = true);
+});
+document.getElementById('btnDesmarcarTodos')?.addEventListener('click', function() {
+  document.querySelectorAll('.cli-check').forEach(c => c.checked = false);
+});
+</script>
+{% endblock %}

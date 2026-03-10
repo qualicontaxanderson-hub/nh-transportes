@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% block title %}{{ 'Editar' if grupo else 'Novo' }} Grupo — Plano de Contas — NH Transportes{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+  <nav aria-label="breadcrumb" class="mt-2 mb-3">
+    <ol class="breadcrumb" style="font-size:0.85rem;">
+      <li class="breadcrumb-item"><a href="{{ url_for('index') }}">Dashboard</a></li>
+      <li class="breadcrumb-item"><a href="{{ url_for('plano_contas.lista') }}">Plano de Contas</a></li>
+      <li class="breadcrumb-item active">{{ 'Editar Grupo' if grupo else 'Novo Grupo' }}</li>
+    </ol>
+  </nav>
+
+  <div class="card shadow-sm">
+    <div class="card-header" style="background:#1D63A5;color:white;font-size:0.95rem;padding:0.6rem 1rem;">
+      <h5 class="mb-0" style="font-size:1rem;">
+        <i class="bi bi-folder-fill"></i>
+        {{ 'Editar Grupo Contábil' if grupo else 'Novo Grupo Contábil' }}
+      </h5>
+    </div>
+    <div class="card-body" style="padding:1.5rem;">
+      <form method="POST">
+
+        <div class="row">
+          <div class="col-md-8 mb-3">
+            <label for="nome" class="form-label fw-semibold">
+              Nome do Grupo <span class="text-danger">*</span>
+            </label>
+            <input type="text" class="form-control" id="nome" name="nome"
+                   placeholder="Ex.: Sicoob PJ 2025, Bradesco SA, Plano Padrão"
+                   value="{{ form.nome if form else '' }}" required>
+          </div>
+        </div>
+
+        <div class="mb-3">
+          <label for="descricao" class="form-label fw-semibold">Descrição (opcional)</label>
+          <textarea class="form-control" id="descricao" name="descricao" rows="3"
+                    placeholder="Informações adicionais sobre este grupo de contas...">{{ form.descricao if form else '' }}</textarea>
+        </div>
+
+        {% if grupo %}
+        <div class="mb-3">
+          <div class="form-check form-switch">
+            <input class="form-check-input" type="checkbox" name="ativo" id="ativo"
+                   {% if form.ativo %}checked{% endif %}>
+            <label class="form-check-label" for="ativo">Grupo ativo</label>
+          </div>
+        </div>
+        {% endif %}
+
+        <div class="d-flex justify-content-between">
+          <a href="{{ url_for('plano_contas.lista') }}" class="btn btn-secondary">
+            <i class="bi bi-arrow-left"></i> Voltar
+          </a>
+          <button type="submit" class="btn btn-primary">
+            <i class="bi bi-save"></i> Salvar
+          </button>
+        </div>
+
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}

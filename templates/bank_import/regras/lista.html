@@ -5,6 +5,9 @@
   <div class="d-flex justify-content-between align-items-center mb-3">
     <h4><i class="bi bi-funnel-fill text-primary"></i> Regras de Conciliação Automática</h4>
     <div class="d-flex gap-2">
+      <a href="{{ url_for('conciliacao_regras.memorias') }}" class="btn btn-outline-warning btn-sm">
+        <i class="bi bi-bookmark-star"></i> Memorizações
+      </a>
       <button class="btn btn-outline-info btn-sm" onclick="diagnosticarRegras(this)">
         <i class="bi bi-bug"></i> Diagnóstico
       </button>
@@ -25,6 +28,60 @@
     Útil para "LIQ.COBRANCA SIMPLES" + "TRANSPORTES TREMEA" → direcionar para um cliente específico.
   </div>
 
+  <!-- Filtros -->
+  <form method="get" action="" class="card card-body bg-light border py-2 mb-3">
+    <div class="row g-2 align-items-end">
+      <div class="col-sm-auto">
+        <label class="form-label small mb-1 fw-semibold">Banco</label>
+        <select name="banco" class="form-select form-select-sm" style="min-width:160px;">
+          <option value="">Todos os bancos</option>
+          {% for b in bancos %}
+            <option value="{{ b }}" {{ 'selected' if filtro_banco == b else '' }}>{{ b }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-sm-auto">
+        <label class="form-label small mb-1 fw-semibold">Empresa</label>
+        <select name="empresa" class="form-select form-select-sm" style="min-width:200px;">
+          <option value="">Todas as empresas</option>
+          {% for e in empresas %}
+            <option value="{{ e.id }}" {{ 'selected' if filtro_empresa == e.id|string else '' }}>{{ e.razao_social }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-sm-auto d-flex align-items-end gap-2">
+        {% if mostrar_inativos %}
+          <input type="hidden" name="inativos" value="1">
+          <span class="badge bg-secondary p-2">
+            <i class="bi bi-eye-slash"></i> Mostrando inativos
+          </span>
+        {% endif %}
+        <button type="submit" class="btn btn-outline-secondary btn-sm">
+          <i class="bi bi-search"></i> Filtrar
+        </button>
+        {% if filtro_banco or filtro_empresa %}
+          <a href="{{ url_for('conciliacao_regras.lista', inativos='1' if mostrar_inativos else None) }}"
+             class="btn btn-outline-danger btn-sm" title="Limpar filtros">
+            <i class="bi bi-x-circle"></i> Limpar
+          </a>
+        {% endif %}
+      </div>
+      <div class="col-sm-auto ms-auto d-flex align-items-end">
+        {% if mostrar_inativos %}
+          <a href="{{ url_for('conciliacao_regras.lista', banco=filtro_banco, empresa=filtro_empresa) }}"
+             class="btn btn-warning btn-sm">
+            <i class="bi bi-eye-slash"></i> Ocultar Inativos
+          </a>
+        {% else %}
+          <a href="{{ url_for('conciliacao_regras.lista', inativos='1', banco=filtro_banco, empresa=filtro_empresa) }}"
+             class="btn btn-outline-secondary btn-sm">
+            <i class="bi bi-eye"></i> Mostrar Inativos
+          </a>
+        {% endif %}
+      </div>
+    </div>
+  </form>
+
   {% with messages = get_flashed_messages(with_categories=true) %}
     {% for cat, msg in messages %}
       <div class="alert alert-{{ cat }} alert-dismissible fade show py-2" role="alert">
@@ -33,12 +90,39 @@
     {% endfor %}
   {% endwith %}
 
+  <!-- Barra de ações em lote (aparece ao selecionar) -->
+  <form method="post" action="{{ url_for('conciliacao_regras.excluir_lote') }}" id="formLote">
+    <div id="barraLote" class="d-none mb-2 p-2 bg-light border rounded d-flex align-items-center gap-2">
+      <span id="lblSelecionados" class="small fw-semibold text-secondary"></span>
+      <button type="submit" class="btn btn-danger btn-sm"
+              onclick="return confirm('Excluir/desativar as regras selecionadas?')">
+        <i class="bi bi-trash"></i> Excluir selecionadas
+      </button>
+      <button type="button" class="btn btn-outline-secondary btn-sm" onclick="limparSelecao()">
+        <i class="bi bi-x"></i> Cancelar
+      </button>
+      <span class="small text-muted ms-1">Regras já aplicadas serão desativadas em vez de excluídas.</span>
+    </div>
+
   <div class="card shadow-sm">
     <div class="card-body p-0">
+      {% set total = regras|length %}
+      {% set inativos_count = regras|selectattr('ativo', 'equalto', 0)|list|length %}
+      <div class="px-3 pt-2 pb-1 text-muted small border-bottom d-flex justify-content-between">
+        <span>
+          <strong>{{ total }}</strong> regra(s) exibida(s){% if not mostrar_inativos and inativos_count == 0 %} — somente ativas{% endif %}
+        </span>
+        {% if mostrar_inativos and inativos_count > 0 %}
+          <span class="badge bg-secondary">{{ inativos_count }} inativa(s)</span>
+        {% endif %}
+      </div>
       <table class="table table-hover table-sm mb-0">
         <thead class="table-dark">
           <tr>
-            <th>Padrão Principal</th>
+            <th style="width:2rem;">
+              <input type="checkbox" id="checkAll" class="form-check-input" title="Selecionar todas">
+            </th>
+            <th>Padrão Principal ↑</th>
             <th>Padrão Secundário</th>
             <th>Tipo Match</th>
             <th>Transação</th>
@@ -51,6 +135,10 @@
         <tbody>
           {% for r in regras %}
           <tr class="{{ 'table-secondary text-muted' if not r.ativo else '' }}">
+            <td>
+              <input type="checkbox" name="regra_ids" value="{{ r.id }}"
+                     class="form-check-input chk-regra">
+            </td>
             <td><code>{{ r.padrao_descricao }}</code></td>
             <td>
               {% if r.get('padrao_secundario') %}
@@ -115,7 +203,6 @@
                   <i class="bi {{ 'bi-pause-circle' if r.ativo else 'bi-play-circle' }}"></i>
                 </button>
               </form>
-              {% if r.total_aplicacoes == 0 %}
               <form method="post"
                     action="{{ url_for('conciliacao_regras.excluir', regra_id=r.id) }}"
                     class="d-inline"
@@ -124,16 +211,23 @@
                   <i class="bi bi-trash"></i>
                 </button>
               </form>
-              {% endif %}
             </td>
           </tr>
           {% else %}
-          <tr><td colspan="8" class="text-center text-muted py-3">Nenhuma regra cadastrada. Clique em "Nova Regra" para começar.</td></tr>
+          <tr><td colspan="9" class="text-center text-muted py-3">
+            {% if filtro_banco or filtro_empresa %}
+              Nenhuma regra encontrada para os filtros selecionados.
+              <a href="{{ url_for('conciliacao_regras.lista') }}">Limpar filtros</a>
+            {% else %}
+              Nenhuma regra cadastrada. Clique em "Nova Regra" para começar.
+            {% endif %}
+          </td></tr>
           {% endfor %}
         </tbody>
       </table>
     </div>
   </div>
+  </form><!-- /formLote -->
 
   <div class="mt-3">
     <a href="{{ url_for('bank_import.conciliar') }}" class="btn btn-outline-secondary btn-sm">
@@ -143,6 +237,42 @@
 </div>
 
 <script>
+// ---- Checkboxes e barra de lote ----
+const checkAll = document.getElementById('checkAll');
+const barraLote = document.getElementById('barraLote');
+const lblSelecionados = document.getElementById('lblSelecionados');
+
+function atualizarBarra() {
+  var marcados = document.querySelectorAll('.chk-regra:checked').length;
+  var total    = document.querySelectorAll('.chk-regra').length;
+  if (marcados > 0) {
+    barraLote.classList.remove('d-none');
+    barraLote.classList.add('d-flex');
+    lblSelecionados.textContent = marcados + ' de ' + total + ' selecionada(s)';
+  } else {
+    barraLote.classList.add('d-none');
+    barraLote.classList.remove('d-flex');
+  }
+  if (checkAll) checkAll.checked = marcados === total && total > 0;
+}
+
+function limparSelecao() {
+  document.querySelectorAll('.chk-regra').forEach(function(c){ c.checked = false; });
+  if (checkAll) checkAll.checked = false;
+  atualizarBarra();
+}
+
+if (checkAll) {
+  checkAll.addEventListener('change', function() {
+    document.querySelectorAll('.chk-regra').forEach(function(c){ c.checked = checkAll.checked; });
+    atualizarBarra();
+  });
+}
+document.querySelectorAll('.chk-regra').forEach(function(c){
+  c.addEventListener('change', atualizarBarra);
+});
+
+// ---- Diagnóstico ----
 function diagnosticarRegras(btn) {
   btn.disabled = true;
   btn.innerHTML = '<i class="bi bi-hourglass-split"></i> Verificando...';

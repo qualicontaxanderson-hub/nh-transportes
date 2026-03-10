@@ -159,10 +159,28 @@ def fretes_comissao_cte():
             LEFT JOIN produto p ON f.produto_id = p.id
             LEFT JOIN motoristas m ON f.motoristas_id = m.id
             WHERE 1=1 {where_sql}
-            ORDER BY f.data_frete DESC
+            ORDER BY cliente_nome ASC, f.data_frete DESC
         """
         cursor.execute(q_det, args)
         fretes = cursor.fetchall()
+
+        # Resumo por caminhão
+        q_caminhoes = f"""
+            SELECT
+              COALESCE(v.caminhao, '(sem caminhão)') AS caminhao_nome,
+              COALESCE(v.placa, '') AS placa,
+              COUNT(f.id) AS qtd_fretes,
+              COALESCE(SUM(f.valor_cte), 0) AS valor_cte_total,
+              COALESCE(SUM(f.comissao_cte), 0) AS comissao_total,
+              COALESCE(SUM(f.valor_total_frete), 0) AS valor_frete_total
+            FROM fretes f
+            LEFT JOIN veiculos v ON f.veiculos_id = v.id
+            WHERE 1=1 {where_sql}
+            GROUP BY f.veiculos_id, v.caminhao, v.placa
+            ORDER BY COALESCE(SUM(f.valor_cte), 0) DESC
+        """
+        cursor.execute(q_caminhoes, args)
+        resumo_caminhoes = cursor.fetchall()
     finally:
         cursor.close()
         conn.close()
@@ -181,6 +199,7 @@ def fretes_comissao_cte():
         total_comissao_cte=total_comissao_cte,
         total_valor_frete=total_valor_frete,
         resumo_clientes=resumo_clientes,
+        resumo_caminhoes=resumo_caminhoes,
         fretes=fretes
     )
 
@@ -218,13 +237,15 @@ def fretes_comissao_motorista():
               m.nome AS motorista_nome,
               COUNT(f.id) AS qtd_fretes,
               COALESCE(SUM(COALESCE(f.quantidade_manual, q.valor, 0)),0) AS quantidade_total,
+              COALESCE(SUM(CASE WHEN COALESCE(f.comissao_motorista,0) > 0
+                THEN COALESCE(f.quantidade_manual, q.valor, 0) ELSE 0 END),0) AS quantidade_comissionada,
               COALESCE(SUM(f.comissao_motorista),0) AS comissao_total
             FROM fretes f
             LEFT JOIN motoristas m ON f.motoristas_id = m.id
             LEFT JOIN quantidades q ON f.quantidade_id = q.id
             WHERE 1=1 {where_sql}
             GROUP BY m.id
-            ORDER BY comissao_total DESC
+            ORDER BY motorista_nome ASC
         """
         cursor.execute(q_resumo, args)
         resumo_motoristas = cursor.fetchall()
@@ -242,7 +263,7 @@ def fretes_comissao_motorista():
             LEFT JOIN motoristas m ON f.motoristas_id = m.id
             LEFT JOIN quantidades q ON f.quantidade_id = q.id
             WHERE 1=1 {where_sql}
-            ORDER BY f.data_frete DESC
+            ORDER BY motorista_nome ASC, f.data_frete DESC
         """
         cursor.execute(q_det, args)
         fretes = cursor.fetchall()
@@ -284,8 +305,10 @@ def fretes_lucro():
               COALESCE(SUM(f.valor_total_frete),0) AS total_valor_frete,
               COALESCE(SUM(f.comissao_cte),0) AS total_comissao_cte,
               COALESCE(SUM(f.comissao_motorista),0) AS total_comissao_motorista,
-              COALESCE(SUM(f.lucro),0) AS total_lucro
+              COALESCE(SUM(f.lucro),0) AS total_lucro,
+              COALESCE(SUM(COALESCE(f.quantidade_manual, q.valor, 0)),0) AS total_quantidade
             FROM fretes f
+            LEFT JOIN quantidades q ON f.quantidade_id = q.id
             WHERE 1=1 {where_sql}
         """
         cursor.execute(q_totals, args)
@@ -294,6 +317,25 @@ def fretes_lucro():
         total_comissao_cte = totals.get('total_comissao_cte', 0)
         total_comissao_motorista = totals.get('total_comissao_motorista', 0)
         total_lucro = totals.get('total_lucro', 0)
+        total_quantidade = totals.get('total_quantidade', 0)
+
+        q_resumo = f"""
+            SELECT
+              COALESCE(c.razao_social, c.nome_fantasia, '') AS cliente_nome,
+              COALESCE(SUM(COALESCE(f.quantidade_manual, q.valor, 0)),0) AS quantidade_total,
+              COALESCE(SUM(f.valor_total_frete),0) AS valor_frete_total,
+              COALESCE(SUM(f.comissao_cte),0) AS comissao_cte_total,
+              COALESCE(SUM(f.comissao_motorista),0) AS comissao_motorista_total,
+              COALESCE(SUM(f.lucro),0) AS lucro_total
+            FROM fretes f
+            LEFT JOIN clientes c ON f.clientes_id = c.id
+            LEFT JOIN quantidades q ON f.quantidade_id = q.id
+            WHERE 1=1 {where_sql}
+            GROUP BY c.id, c.razao_social, c.nome_fantasia
+            ORDER BY cliente_nome ASC
+        """
+        cursor.execute(q_resumo, args)
+        resumo_clientes = cursor.fetchall()
 
         q_det = f"""
             SELECT f.data_frete,
@@ -308,7 +350,7 @@ def fretes_lucro():
             LEFT JOIN motoristas m ON f.motoristas_id = m.id
             LEFT JOIN quantidades q ON f.quantidade_id = q.id
             WHERE 1=1 {where_sql}
-            ORDER BY f.data_frete DESC
+            ORDER BY cliente_nome ASC, f.data_frete DESC
         """
         cursor.execute(q_det, args)
         fretes = cursor.fetchall()
@@ -330,6 +372,8 @@ def fretes_lucro():
         total_comissao_cte=total_comissao_cte,
         total_comissao_motorista=total_comissao_motorista,
         total_lucro=total_lucro,
+        total_quantidade=total_quantidade,
+        resumo_clientes=resumo_clientes,
         fretes=fretes
     )
 

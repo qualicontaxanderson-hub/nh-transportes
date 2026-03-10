@@ -132,6 +132,31 @@
           </div>
         </div>
 
+        <!-- Grupo Contábil -->
+        {% if grupos %}
+        <hr style="margin: 1rem 0;">
+        <h6 style="font-size: 0.9rem; color: #1D63A5; margin-bottom: 0.75rem;">
+          <i class="bi bi-journal-bookmark-fill"></i> Contabilidade
+        </h6>
+        <div class="row">
+          <div class="col-md-6 mb-2">
+            <label class="form-label" style="font-size: 0.85rem;">Grupo do Plano de Contas</label>
+            <select name="grupo_contabil_id" class="form-select form-select-sm">
+              <option value="">— Sem grupo contábil —</option>
+              {% for g in grupos %}
+              <option value="{{ g.id }}"
+                {% if cliente.grupo_contabil_id == g.id %}selected{% endif %}>
+                {{ g.codigo }} — {{ g.nome }}
+              </option>
+              {% endfor %}
+            </select>
+            <div class="form-text" style="font-size:0.78rem;">
+              Associe este cliente a um grupo do Plano de Contas para exportação contábil.
+            </div>
+          </div>
+        </div>
+        {% endif %}
+
         <!-- Botões -->
         <div class="d-flex justify-content-between mt-3">
           <a href="{{ url_for('clientes.lista') }}" class="btn btn-secondary btn-sm">
