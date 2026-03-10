@@ -822,7 +822,7 @@ def _conciliar_tx(cursor, conn, tx_id, acao, tipo_tx,
         else:
             # Crédito → Forma de Recebimento
             if not forma_recebimento_id:
-                return
+                raise ValueError("Selecione uma forma de recebimento para conciliar este crédito.")
             cursor.execute(
                 """UPDATE bank_transactions
                    SET status='conciliado', forma_recebimento_id=%s,
@@ -870,10 +870,11 @@ def _conciliar_tx(cursor, conn, tx_id, acao, tipo_tx,
         )
         tx = cursor.fetchone()
         if not tx:
-            return
+            raise ValueError(f"Transação bancária #{tx_id} não encontrada.")
         data_tx    = tx['data_transacao']
         descricao  = tx.get('descricao') or ''
         cliente_id = tx.get('cliente_id')
+        inseridos = 0
         for desp in despesas:
             titulo_id      = desp.get('titulo_id')
             categoria_id   = desp.get('categoria_id')
@@ -891,6 +892,12 @@ def _conciliar_tx(cursor, conn, tx_id, acao, tipo_tx,
                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)""",
                 (data_tx, cliente_id, titulo_id, categoria_id, subcategoria_id,
                  valor, fornecedor_txt, observacao, tx_id),
+            )
+            inseridos += 1
+        if not inseridos:
+            raise ValueError(
+                "Preencha os campos obrigatórios da despesa (Título, Categoria e Valor) "
+                "antes de conciliar."
             )
         cursor.execute(
             """UPDATE bank_transactions
@@ -916,8 +923,13 @@ def _conciliar_tx(cursor, conn, tx_id, acao, tipo_tx,
             )
     else:
         # Débito → Fornecedor
+        if tipo_debito == 'despesa':
+            raise ValueError(
+                "Preencha os campos obrigatórios da despesa (Título, Categoria e Valor) "
+                "antes de conciliar."
+            )
         if not fornecedor_id:
-            return
+            raise ValueError("Selecione um fornecedor para conciliar este débito.")
         cursor.execute(
             """UPDATE bank_transactions
                SET status='conciliado', fornecedor_id=%s,
@@ -1061,11 +1073,20 @@ def conciliar():
                     _conciliar_tx(cursor, conn, tid, 'conciliar', 'DEBIT',
                                   None, None, usuario, tipo_debito='despesa',
                                   despesas=desp, salvar_mapeamento=True)
+                elif t_forn or t_forma:
+                    try:
+                        _conciliar_tx(cursor, conn, tid, 'conciliar', t_tipo_tx,
+                                      t_forn, t_forma, usuario,
+                                      tipo_debito=t_tipo_deb or 'fornecedor',
+                                      salvar_mapeamento=True)
+                    except ValueError as ve:
+                        logger.debug("aprovar_sugestoes_pagina: ignorando tx %s — %s", tid, ve)
+                        n += 1
+                        continue
                 else:
-                    _conciliar_tx(cursor, conn, tid, 'conciliar', t_tipo_tx,
-                                  t_forn, t_forma, usuario,
-                                  tipo_debito=t_tipo_deb or 'fornecedor',
-                                  salvar_mapeamento=True)
+                    # Sugestão sem dados suficientes — ignora silenciosamente
+                    n += 1
+                    continue
                 ok += 1
                 n += 1
             flash(f'{ok} sugestão(ões) aprovada(s) com sucesso!', 'success')
