@@ -1,6 +1,7 @@
 """CRUD de regras de conciliação automática (bank_conciliacao_regras)."""
 
 import logging
+import mysql.connector
 from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify
 from flask_login import login_required, current_user
 from utils.db import get_db_connection
@@ -387,25 +388,39 @@ def memorias():
     _ensure_descricao_chave()
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
+    _MEMORIA_SELECT = """
+                   FROM bank_supplier_mapping bsm
+                   LEFT JOIN fornecedores f ON f.id = bsm.fornecedor_id
+                   LEFT JOIN formas_recebimento fr ON fr.id = bsm.forma_recebimento_id
+                   LEFT JOIN titulos_despesas td ON td.id = bsm.titulo_id
+                   LEFT JOIN categorias_despesas cd ON cd.id = bsm.categoria_id
+                   LEFT JOIN bank_accounts ba ON ba.id = bsm.conta_destino_id
+                   ORDER BY bsm.atualizado_em DESC"""
     try:
-        cursor.execute(
-            """SELECT bsm.id, bsm.cnpj_cpf, bsm.descricao_chave, bsm.tipo_chave, bsm.total_conciliacoes,
-                      bsm.criado_em, bsm.atualizado_em,
-                      f.razao_social AS fornecedor_nome,
-                      fr.nome AS forma_nome,
-                      td.nome AS titulo_nome,
-                      cd.nome AS categoria_nome,
-                      ba.apelido AS conta_destino_apelido,
-                      ba.banco_nome AS conta_destino_banco,
-                      bsm.tipo_debito
-               FROM bank_supplier_mapping bsm
-               LEFT JOIN fornecedores f ON f.id = bsm.fornecedor_id
-               LEFT JOIN formas_recebimento fr ON fr.id = bsm.forma_recebimento_id
-               LEFT JOIN titulos_despesas td ON td.id = bsm.titulo_id
-               LEFT JOIN categorias_despesas cd ON cd.id = bsm.categoria_id
-               LEFT JOIN bank_accounts ba ON ba.id = bsm.conta_destino_id
-               ORDER BY bsm.atualizado_em DESC"""
-        )
+        try:
+            cursor.execute(
+                "SELECT bsm.id, bsm.cnpj_cpf, bsm.descricao_chave, bsm.tipo_chave,"
+                " bsm.total_conciliacoes, bsm.criado_em, bsm.atualizado_em,"
+                " f.razao_social AS fornecedor_nome, fr.nome AS forma_nome,"
+                " td.nome AS titulo_nome, cd.nome AS categoria_nome,"
+                " ba.apelido AS conta_destino_apelido,"
+                " ba.banco_nome AS conta_destino_banco, bsm.tipo_debito"
+                + _MEMORIA_SELECT
+            )
+        except mysql.connector.errors.ProgrammingError as _e:
+            if _e.errno != 1054:
+                raise
+            # Fallback when descricao_chave column does not yet exist in the DB
+            logger.warning("memorias: descricao_chave column missing, using empty string fallback")
+            cursor.execute(
+                "SELECT bsm.id, bsm.cnpj_cpf, '' AS descricao_chave, bsm.tipo_chave,"
+                " bsm.total_conciliacoes, bsm.criado_em, bsm.atualizado_em,"
+                " f.razao_social AS fornecedor_nome, fr.nome AS forma_nome,"
+                " td.nome AS titulo_nome, cd.nome AS categoria_nome,"
+                " ba.apelido AS conta_destino_apelido,"
+                " ba.banco_nome AS conta_destino_banco, bsm.tipo_debito"
+                + _MEMORIA_SELECT
+            )
         memorias_list = cursor.fetchall()
     except Exception:
         logger.exception("Erro ao carregar memorizações de conciliação")

@@ -1156,8 +1156,7 @@ def conciliar():
     total = 0
 
     if f_clientes:
-        cursor.execute(
-            f"""SELECT bt.*, ba.apelido AS conta_apelido, ba.banco_nome,
+        _SELECT_TX = f"""SELECT bt.*, ba.apelido AS conta_apelido, ba.banco_nome,
                        bsm.fornecedor_id AS sugestao_fornecedor_id,
                        bsm.forma_recebimento_id AS sugestao_forma_id,
                        bsm.titulo_id AS sugestao_titulo_id,
@@ -1170,7 +1169,17 @@ def conciliar():
                        td.nome AS sugestao_titulo_nome,
                        cd.nome AS sugestao_categoria_nome
                 FROM bank_transactions bt
-                INNER JOIN bank_accounts ba ON bt.account_id = ba.id
+                INNER JOIN bank_accounts ba ON bt.account_id = ba.id"""
+        _JOINS_TAIL = f"""LEFT JOIN formas_recebimento fr ON fr.id = bsm.forma_recebimento_id
+                LEFT JOIN fornecedores fs ON fs.id = bsm.fornecedor_id
+                LEFT JOIN titulos_despesas td ON td.id = bsm.titulo_id
+                LEFT JOIN categorias_despesas cd ON cd.id = bsm.categoria_id
+                {where_sql}
+                ORDER BY bt.data_transacao DESC
+                LIMIT %s OFFSET %s"""
+        try:
+            cursor.execute(
+                f"""{_SELECT_TX}
                 LEFT JOIN bank_supplier_mapping bsm ON bsm.id = (
                     SELECT s.id FROM bank_supplier_mapping s
                     WHERE s.cnpj_cpf = bt.cnpj_cpf
@@ -1178,15 +1187,20 @@ def conciliar():
                     ORDER BY LENGTH(s.descricao_chave) DESC
                     LIMIT 1
                 )
-                LEFT JOIN formas_recebimento fr ON fr.id = bsm.forma_recebimento_id
-                LEFT JOIN fornecedores fs ON fs.id = bsm.fornecedor_id
-                LEFT JOIN titulos_despesas td ON td.id = bsm.titulo_id
-                LEFT JOIN categorias_despesas cd ON cd.id = bsm.categoria_id
-                {where_sql}
-                ORDER BY bt.data_transacao DESC
-                LIMIT %s OFFSET %s""",
-            params + [per_page, offset],
-        )
+                {_JOINS_TAIL}""",
+                params + [per_page, offset],
+            )
+        except mysql.connector.errors.ProgrammingError as _e:
+            if _e.errno != 1054:
+                raise
+            # Fallback when descricao_chave column does not yet exist in the DB
+            logger.warning("conciliar: descricao_chave column missing, using simple join fallback")
+            cursor.execute(
+                f"""{_SELECT_TX}
+                LEFT JOIN bank_supplier_mapping bsm ON bsm.cnpj_cpf = bt.cnpj_cpf
+                {_JOINS_TAIL}""",
+                params + [per_page, offset],
+            )
         transacoes = cursor.fetchall()
 
         # -----------------------------------------------------------------------
@@ -1622,18 +1636,30 @@ def api_auto_reconcile():
         logger.info("api_auto_reconcile: por_regras=%d", por_regras)
 
         # 2. Auto-conciliação por CNPJ (apenas para os que ficaram pendentes após as regras)
-        cursor.execute(
-            """SELECT bt.id, bt.tipo, bsm.fornecedor_id, bsm.forma_recebimento_id
-               FROM bank_transactions bt
-               INNER JOIN bank_supplier_mapping bsm ON bsm.id = (
-                   SELECT s.id FROM bank_supplier_mapping s
-                   WHERE s.cnpj_cpf = bt.cnpj_cpf
-                     AND s.descricao_chave IN ('', LEFT(UPPER(TRIM(bt.descricao)), 100))
-                   ORDER BY LENGTH(s.descricao_chave) DESC
-                   LIMIT 1
-               )
-               WHERE bt.status = 'pendente' AND bt.cnpj_cpf IS NOT NULL AND bt.cnpj_cpf != ''"""
-        )
+        try:
+            cursor.execute(
+                """SELECT bt.id, bt.tipo, bsm.fornecedor_id, bsm.forma_recebimento_id
+                   FROM bank_transactions bt
+                   INNER JOIN bank_supplier_mapping bsm ON bsm.id = (
+                       SELECT s.id FROM bank_supplier_mapping s
+                       WHERE s.cnpj_cpf = bt.cnpj_cpf
+                         AND s.descricao_chave IN ('', LEFT(UPPER(TRIM(bt.descricao)), 100))
+                       ORDER BY LENGTH(s.descricao_chave) DESC
+                       LIMIT 1
+                   )
+                   WHERE bt.status = 'pendente' AND bt.cnpj_cpf IS NOT NULL AND bt.cnpj_cpf != ''"""
+            )
+        except mysql.connector.errors.ProgrammingError as _e:
+            if _e.errno != 1054:
+                raise
+            # Fallback when descricao_chave column does not yet exist in the DB
+            logger.warning("api_auto_reconcile: descricao_chave column missing, using simple join fallback")
+            cursor.execute(
+                """SELECT bt.id, bt.tipo, bsm.fornecedor_id, bsm.forma_recebimento_id
+                   FROM bank_transactions bt
+                   INNER JOIN bank_supplier_mapping bsm ON bsm.cnpj_cpf = bt.cnpj_cpf
+                   WHERE bt.status = 'pendente' AND bt.cnpj_cpf IS NOT NULL AND bt.cnpj_cpf != ''"""
+            )
         rows = cursor.fetchall()
 
         agora = _dt.datetime.now()
