@@ -929,7 +929,7 @@ def _conciliar_tx(cursor, conn, tx_id, acao, tipo_tx,
             # e será commitada independentemente do resultado do mapeamento.
             if salvar_mapeamento:
                 try:
-                    with conn.cursor() as _map_cur:
+                    with conn.cursor(dictionary=True) as _map_cur:
                         _map_cur.execute(
                             "SELECT cnpj_cpf, descricao FROM bank_transactions WHERE id=%s",
                             (tx_id,),
