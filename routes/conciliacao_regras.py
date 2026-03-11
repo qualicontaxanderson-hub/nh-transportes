@@ -388,40 +388,77 @@ def memorias():
     _ensure_descricao_chave()
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
-    _MEMORIA_SELECT = """
-                   FROM bank_supplier_mapping bsm
-                   LEFT JOIN fornecedores f ON f.id = bsm.fornecedor_id
-                   LEFT JOIN formas_recebimento fr ON fr.id = bsm.forma_recebimento_id
-                   LEFT JOIN titulos_despesas td ON td.id = bsm.titulo_id
-                   LEFT JOIN categorias_despesas cd ON cd.id = bsm.categoria_id
-                   LEFT JOIN bank_accounts ba ON ba.id = bsm.conta_destino_id
-                   ORDER BY bsm.atualizado_em DESC"""
+
+    # Tried in order from newest schema to oldest; on ProgrammingError errno=1054
+    # (unknown column) the next simpler query is attempted so the page stays
+    # functional even when optional migration columns (descricao_chave,
+    # tipo_debito, conta_destino_id, titulo_id/categoria_id) haven't been
+    # applied to the production DB yet.
+    _QUERIES = [
+        # Level 1 — full schema (all columns added through all migrations)
+        (
+            "SELECT bsm.id, bsm.cnpj_cpf, bsm.descricao_chave, bsm.tipo_chave,"
+            " bsm.total_conciliacoes, bsm.criado_em, bsm.atualizado_em,"
+            " f.razao_social AS fornecedor_nome, fr.nome AS forma_nome,"
+            " td.nome AS titulo_nome, cd.nome AS categoria_nome,"
+            " ba.apelido AS conta_destino_apelido,"
+            " ba.banco_nome AS conta_destino_banco, bsm.tipo_debito"
+            " FROM bank_supplier_mapping bsm"
+            " LEFT JOIN fornecedores f ON f.id = bsm.fornecedor_id"
+            " LEFT JOIN formas_recebimento fr ON fr.id = bsm.forma_recebimento_id"
+            " LEFT JOIN titulos_despesas td ON td.id = bsm.titulo_id"
+            " LEFT JOIN categorias_despesas cd ON cd.id = bsm.categoria_id"
+            " LEFT JOIN bank_accounts ba ON ba.id = bsm.conta_destino_id"
+            " ORDER BY bsm.atualizado_em DESC"
+        ),
+        # Level 2 — without descricao_chave, tipo_debito, conta_destino_id
+        #   (handles migrations 20260223_add_transfer_fields and
+        #    20260309_add_descricao_chave not yet applied)
+        (
+            "SELECT bsm.id, bsm.cnpj_cpf, '' AS descricao_chave, bsm.tipo_chave,"
+            " bsm.total_conciliacoes, bsm.criado_em, bsm.atualizado_em,"
+            " f.razao_social AS fornecedor_nome, fr.nome AS forma_nome,"
+            " td.nome AS titulo_nome, cd.nome AS categoria_nome,"
+            " NULL AS conta_destino_apelido, NULL AS conta_destino_banco,"
+            " NULL AS tipo_debito"
+            " FROM bank_supplier_mapping bsm"
+            " LEFT JOIN fornecedores f ON f.id = bsm.fornecedor_id"
+            " LEFT JOIN formas_recebimento fr ON fr.id = bsm.forma_recebimento_id"
+            " LEFT JOIN titulos_despesas td ON td.id = bsm.titulo_id"
+            " LEFT JOIN categorias_despesas cd ON cd.id = bsm.categoria_id"
+            " ORDER BY bsm.id DESC"
+        ),
+        # Level 3 — minimal: only columns present since the original schema
+        #   (handles 20260223_add_despesa_to_mapping also not yet applied)
+        (
+            "SELECT bsm.id, bsm.cnpj_cpf, '' AS descricao_chave, bsm.tipo_chave,"
+            " bsm.total_conciliacoes, bsm.criado_em, bsm.atualizado_em,"
+            " f.razao_social AS fornecedor_nome, fr.nome AS forma_nome,"
+            " NULL AS titulo_nome, NULL AS categoria_nome,"
+            " NULL AS conta_destino_apelido, NULL AS conta_destino_banco,"
+            " NULL AS tipo_debito"
+            " FROM bank_supplier_mapping bsm"
+            " LEFT JOIN fornecedores f ON f.id = bsm.fornecedor_id"
+            " LEFT JOIN formas_recebimento fr ON fr.id = bsm.forma_recebimento_id"
+            " ORDER BY bsm.id DESC"
+        ),
+    ]
+
+    memorias_list = []
     try:
-        try:
-            cursor.execute(
-                "SELECT bsm.id, bsm.cnpj_cpf, bsm.descricao_chave, bsm.tipo_chave,"
-                " bsm.total_conciliacoes, bsm.criado_em, bsm.atualizado_em,"
-                " f.razao_social AS fornecedor_nome, fr.nome AS forma_nome,"
-                " td.nome AS titulo_nome, cd.nome AS categoria_nome,"
-                " ba.apelido AS conta_destino_apelido,"
-                " ba.banco_nome AS conta_destino_banco, bsm.tipo_debito"
-                + _MEMORIA_SELECT
-            )
-        except mysql.connector.errors.ProgrammingError as _e:
-            if _e.errno != 1054:
-                raise
-            # Fallback when descricao_chave column does not yet exist in the DB
-            logger.warning("memorias: descricao_chave column missing, using empty string fallback")
-            cursor.execute(
-                "SELECT bsm.id, bsm.cnpj_cpf, '' AS descricao_chave, bsm.tipo_chave,"
-                " bsm.total_conciliacoes, bsm.criado_em, bsm.atualizado_em,"
-                " f.razao_social AS fornecedor_nome, fr.nome AS forma_nome,"
-                " td.nome AS titulo_nome, cd.nome AS categoria_nome,"
-                " ba.apelido AS conta_destino_apelido,"
-                " ba.banco_nome AS conta_destino_banco, bsm.tipo_debito"
-                + _MEMORIA_SELECT
-            )
-        memorias_list = cursor.fetchall()
+        for lvl, sql in enumerate(_QUERIES):
+            try:
+                cursor.execute(sql)
+                memorias_list = cursor.fetchall()
+                break
+            except mysql.connector.errors.ProgrammingError as _e:
+                if _e.errno != 1054 or lvl == len(_QUERIES) - 1:
+                    raise
+                conn.rollback()
+                logger.warning(
+                    "memorias: unknown column at level %d, trying simpler query: %s",
+                    lvl + 1, _e,
+                )
     except Exception:
         logger.exception("Erro ao carregar memorizações de conciliação")
         memorias_list = []
