@@ -11,40 +11,63 @@ import logging as _logging
 _logger = _logging.getLogger(__name__)
 
 
-def _ensure_fretes_pedido_id():
+def _ensure_fretes_pedido_id(conn=None):
     """
     Garante que a coluna pedido_id existe na tabela fretes.
     Migration idempotente: segura para executar múltiplas vezes.
+
+    Se ``conn`` for fornecido, reutiliza a conexão existente em vez de abrir
+    uma nova — isso evita falhas silenciosas quando a conectividade com o banco
+    está lenta e a segunda conexão expira antes de executar o ALTER TABLE.
     """
-    conn = None
+    _own_conn = conn is None
     cur = None
     try:
-        conn = get_db_connection()
+        if _own_conn:
+            conn = get_db_connection()
         cur = conn.cursor()
+
+        # Verifica se a coluna já existe usando INFORMATION_SCHEMA (evita
+        # capturar error 1060 e esconder outros erros de forma silenciosa).
         cur.execute("""
-            ALTER TABLE fretes
-            ADD COLUMN pedido_id INT NULL DEFAULT NULL
+            SELECT COUNT(*)
+            FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE()
+              AND TABLE_NAME   = 'fretes'
+              AND COLUMN_NAME  = 'pedido_id'
         """)
-        conn.commit()
-        _logger.info("_ensure_fretes_pedido_id: coluna pedido_id adicionada à tabela fretes")
+        row = cur.fetchone()
+        already_exists = row and row[0] > 0
+
+        if not already_exists:
+            cur.execute("""
+                ALTER TABLE fretes
+                ADD COLUMN pedido_id INT NULL DEFAULT NULL
+            """)
+            # ALTER TABLE é DDL — o MySQL o auto-commita implicitamente.
+            # O commit() explícito garante estado limpo independentemente de
+            # quem forneceu a conexão (própria ou emprestada do chamador).
+            try:
+                conn.commit()
+            except Exception:
+                pass
+            _logger.info("_ensure_fretes_pedido_id: coluna pedido_id adicionada à tabela fretes")
+        else:
+            _logger.debug("_ensure_fretes_pedido_id: coluna pedido_id já existe (ok)")
     except Exception as e:
-        if conn:
+        if _own_conn and conn:
             try:
                 conn.rollback()
             except Exception:
                 pass
-        err = str(e)
-        if getattr(e, 'args', (None,))[0] == 1060 or '1060' in err or 'Duplicate column' in err or 'already exists' in err.lower():
-            _logger.debug("_ensure_fretes_pedido_id: coluna pedido_id já existe (ok)")
-        else:
-            _logger.warning("_ensure_fretes_pedido_id: não foi possível adicionar coluna pedido_id: %s", e)
+        _logger.warning("_ensure_fretes_pedido_id: não foi possível garantir coluna pedido_id: %s", e)
     finally:
         if cur:
             try:
                 cur.close()
             except Exception:
                 pass
-        if conn:
+        if _own_conn and conn:
             try:
                 conn.close()
             except Exception:

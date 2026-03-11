@@ -517,8 +517,11 @@ def importar_lista():
     Lista pedidos pendentes para o fluxo de importação.
     Pode ser carregada em modal via fetch ou aberta em nova aba.
     """
-    _ensure_fretes_pedido_id()
     conn = get_db()
+    # Garante que pedido_id existe em fretes usando a MESMA conexão já aberta,
+    # evitando falhas silenciosas causadas por lentidão na abertura de uma segunda
+    # conexão com o Railway durante a chamada separada anterior.
+    _ensure_fretes_pedido_id(conn)
     cursor = conn.cursor(dictionary=True)
 
     # Buscar pedidos pendentes (ajuste condição se quiser outros status)
