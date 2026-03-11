@@ -5,6 +5,7 @@ from datetime import datetime, date, timedelta
 import logging
 import time
 import mysql.connector
+from routes.fretes import _ensure_fretes_pedido_id
 
 logger = logging.getLogger(__name__)
 
@@ -516,6 +517,7 @@ def importar_lista():
     Lista pedidos pendentes para o fluxo de importação.
     Pode ser carregada em modal via fetch ou aberta em nova aba.
     """
+    _ensure_fretes_pedido_id()
     conn = get_db()
     cursor = conn.cursor(dictionary=True)
 
