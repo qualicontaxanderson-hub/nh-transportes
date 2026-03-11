@@ -875,37 +875,105 @@ def _conciliar_tx(cursor, conn, tx_id, acao, tipo_tx,
                    WHERE id=%s""",
                 (forma_recebimento_id, agora, usuario, tx_id),
             )
+            # Marca duplicatas pendentes com o mesmo conteúdo como 'ignorado'.
+            # Transações duplicadas podem existir quando o banco re-exportou o extrato OFX
+            # com FITIDs diferentes antes da deduplicação por conteúdo ser implementada.
+            # Usar um cursor separado para evitar conflito de result-set com o cursor principal.
+            try:
+                # dictionary=True necessário para acessar campos por nome no fetchone()
+                with conn.cursor(dictionary=True) as _dup_cur:
+                    _dup_cur.execute(
+                        "SELECT account_id, tipo, data_transacao, valor, "
+                        "COALESCE(cnpj_cpf,'') AS cnpj_cpf, "
+                        "UPPER(TRIM(LEFT(COALESCE(descricao,''),255))) AS desc_norm "
+                        "FROM bank_transactions WHERE id=%s",
+                        (tx_id,),
+                    )
+                    _tx_info = _dup_cur.fetchone()
+                if _tx_info:
+                    with conn.cursor() as _dup_upd:
+                        _dup_upd.execute(
+                            """UPDATE bank_transactions
+                               SET status='ignorado'
+                               WHERE id <> %s
+                                 AND account_id = %s
+                                 AND status = 'pendente'
+                                 AND tipo = %s
+                                 AND data_transacao = %s
+                                 AND valor = %s
+                                 AND COALESCE(cnpj_cpf,'') = %s
+                                 AND UPPER(TRIM(LEFT(COALESCE(descricao,''),255))) = %s""",
+                            (
+                                tx_id,
+                                _tx_info['account_id'],
+                                _tx_info['tipo'],
+                                _tx_info['data_transacao'],
+                                _tx_info['valor'],
+                                _tx_info['cnpj_cpf'],
+                                _tx_info['desc_norm'],
+                            ),
+                        )
+                        if _dup_upd.rowcount:
+                            logger.info(
+                                "_conciliar_tx: %d duplicata(s) pendente(s) marcadas como"
+                                " ignorado para tx_id=%s", _dup_upd.rowcount, tx_id
+                            )
+            except Exception as _dup_exc:
+                # Falha na deduplicação não impede a conciliação principal
+                logger.warning(
+                    "_conciliar_tx: erro ao marcar duplicatas, ignorando: %s", _dup_exc
+                )
             # Auto-aprender: salva CNPJ+Descrição → forma_recebimento para sugestões e
             # auto-conciliação em importações futuras com a mesma transação.
+            # Qualquer falha aqui é recuperável — a conciliação principal já foi executada
+            # e será commitada independentemente do resultado do mapeamento.
             if salvar_mapeamento:
-                cursor.execute(
-                    "SELECT cnpj_cpf, descricao FROM bank_transactions WHERE id=%s", (tx_id,)
-                )
-                row_cr = cursor.fetchone()
-                if row_cr and row_cr.get('cnpj_cpf'):
-                    desc_chave = _desc_chave(row_cr.get('descricao') or '')
-                    try:
-                        cursor.execute(
-                            """INSERT INTO bank_supplier_mapping
-                                   (cnpj_cpf, descricao_chave, tipo_chave, total_conciliacoes,
-                                    forma_recebimento_id)
-                               VALUES (%s, %s, 'cnpj', 1, %s)
-                               ON DUPLICATE KEY UPDATE
-                                   forma_recebimento_id=%s,
-                                   fornecedor_id=NULL, titulo_id=NULL,
-                                   categoria_id=NULL, subcategoria_id=NULL,
-                                   total_conciliacoes=total_conciliacoes+1,
-                                   atualizado_em=NOW()""",
-                            (row_cr['cnpj_cpf'], desc_chave,
-                             forma_recebimento_id, forma_recebimento_id),
+                try:
+                    with conn.cursor() as _map_cur:
+                        _map_cur.execute(
+                            "SELECT cnpj_cpf, descricao FROM bank_transactions WHERE id=%s",
+                            (tx_id,),
                         )
-                    except mysql.connector.errors.ProgrammingError as _pe:
-                        if _pe.errno != 1054:
-                            raise
-                        # Coluna descricao_chave pode não existir ainda (migration pendente)
-                        logger.debug(
-                            "_conciliar_tx CREDIT: descricao_chave column missing, skipping mapping"
-                        )
+                        row_cr = _map_cur.fetchone()
+                    if row_cr and row_cr.get('cnpj_cpf'):
+                        desc_chave = _desc_chave(row_cr.get('descricao') or '')
+                        try:
+                            with conn.cursor() as _ins_cur:
+                                _ins_cur.execute(
+                                    """INSERT INTO bank_supplier_mapping
+                                           (cnpj_cpf, descricao_chave, tipo_chave,
+                                            total_conciliacoes, forma_recebimento_id)
+                                       VALUES (%s, %s, 'cnpj', 1, %s)
+                                       ON DUPLICATE KEY UPDATE
+                                           forma_recebimento_id=%s,
+                                           fornecedor_id=NULL, titulo_id=NULL,
+                                           categoria_id=NULL, subcategoria_id=NULL,
+                                           total_conciliacoes=total_conciliacoes+1,
+                                           atualizado_em=NOW()""",
+                                    (row_cr['cnpj_cpf'], desc_chave,
+                                     forma_recebimento_id, forma_recebimento_id),
+                                )
+                        except mysql.connector.errors.ProgrammingError as _pe:
+                            if _pe.errno == 1054:
+                                logger.debug(
+                                    "_conciliar_tx CREDIT: coluna ausente em"
+                                    " bank_supplier_mapping, mapeamento ignorado"
+                                )
+                            else:
+                                logger.warning(
+                                    "_conciliar_tx CREDIT: erro ao salvar mapeamento"
+                                    " (ProgrammingError %s), ignorando: %s", _pe.errno, _pe
+                                )
+                        except Exception as _map_e:
+                            logger.warning(
+                                "_conciliar_tx CREDIT: erro ao salvar mapeamento, ignorando: %s",
+                                _map_e,
+                            )
+                except Exception as _outer_map_e:
+                    logger.warning(
+                        "_conciliar_tx CREDIT: erro ao buscar dados para mapeamento,"
+                        " ignorando: %s", _outer_map_e
+                    )
 
     elif tipo_debito == 'troco_pix' and troco_pix_id:
         # Débito → Troco PIX: vincula a transação bancária ao registro de troco_pix
@@ -1166,6 +1234,8 @@ def conciliar():
                 ok += 1
                 n += 1
             flash(f'{ok} sugestão(ões) aprovada(s) com sucesso!', 'success')
+            cursor.close()
+            conn.close()
             return redirect(request.url)
 
         salvar_mapeamento = (acao != 'lancamento_unico')
@@ -1200,6 +1270,8 @@ def conciliar():
         else:
             flash(f'{ok} transação(ões) conciliada(s) com sucesso!', 'success')
 
+        cursor.close()
+        conn.close()
         # Mantém filtros após POST
         return redirect(request.url)
 
