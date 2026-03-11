@@ -7,6 +7,49 @@ from utils.helpers import parse_moeda
 
 bp = Blueprint('fretes', __name__, url_prefix='/fretes')
 
+import logging as _logging
+_logger = _logging.getLogger(__name__)
+
+
+def _ensure_fretes_pedido_id():
+    """
+    Garante que a coluna pedido_id existe na tabela fretes.
+    Migration idempotente: segura para executar múltiplas vezes.
+    """
+    conn = None
+    cur = None
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        cur.execute("""
+            ALTER TABLE fretes
+            ADD COLUMN pedido_id INT NULL DEFAULT NULL
+        """)
+        conn.commit()
+        _logger.info("_ensure_fretes_pedido_id: coluna pedido_id adicionada à tabela fretes")
+    except Exception as e:
+        if conn:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+        err = str(e)
+        if getattr(e, 'args', (None,))[0] == 1060 or '1060' in err or 'Duplicate column' in err or 'already exists' in err.lower():
+            _logger.debug("_ensure_fretes_pedido_id: coluna pedido_id já existe (ok)")
+        else:
+            _logger.warning("_ensure_fretes_pedido_id: não foi possível adicionar coluna pedido_id: %s", e)
+    finally:
+        if cur:
+            try:
+                cur.close()
+            except Exception:
+                pass
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
 
 @bp.route('/', methods=['GET'])
 @login_required
@@ -455,6 +498,7 @@ def salvar_importados():
     - Por padrão só loga e devolve flash informando quantidade recebida.
     - Se for enviado save=1 no form, tenta gravar (com logging por item e sem abortar todos em erro).
     """
+    _ensure_fretes_pedido_id()
     form = request.form or {}
     current_app.logger.info("[salvar_importados] POST recebida - keys: %s", list(form.keys()))
 
@@ -548,8 +592,8 @@ def salvar_importados():
                         quantidade_id, quantidade_manual,
                         preco_produto_unitario, preco_por_litro,
                         total_nf_compra, valor_total_frete, comissao_motorista,
-                        valor_cte, comissao_cte, lucro
-                    ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                        valor_cte, comissao_cte, lucro, pedido_id
+                    ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
                 """, (
                     data_frete or None,
                     item.get('status') or 'Importado',
@@ -570,7 +614,8 @@ def salvar_importados():
                     comissao_motorista or 0,
                     valor_cte or 0,
                     comissao_cte or 0,
-                    lucro or 0
+                    lucro or 0,
+                    pedido_id
                 ))
                 conn.commit()
                 saved += 1

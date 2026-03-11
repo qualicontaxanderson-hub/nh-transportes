@@ -531,6 +531,9 @@ def importar_lista():
         LEFT JOIN veiculos v ON p.veiculo_id = v.id
         LEFT JOIN pedidos_itens pi ON p.id = pi.pedido_id
         WHERE p.status = 'Pendente'
+          AND NOT EXISTS (
+              SELECT 1 FROM fretes f WHERE f.pedido_id = p.id
+          )
         GROUP BY p.id
         ORDER BY p.data_pedido DESC, p.id DESC
     """)
