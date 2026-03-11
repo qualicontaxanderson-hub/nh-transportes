@@ -31,7 +31,7 @@ def _proximo_numero_pedido(cursor):
         "SELECT COALESCE(MAX(CAST(SUBSTRING(numero, 5) AS UNSIGNED)), 0) AS max_num FROM pedidos"
     )
     row = cursor.fetchone()
-    return (row['max_num'] if row else 0) + 1
+    return int(row['max_num'] if row else 0) + 1
 
 
 def gerar_numero_pedido():
