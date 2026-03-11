@@ -23,8 +23,18 @@ _bsm_descricao_chave_ready = False
 
 
 def _ensure_descricao_chave():
-    """Garante que bank_supplier_mapping.descricao_chave existe e que a UNIQUE KEY
-    é composta por (cnpj_cpf, descricao_chave). Idempotente."""
+    """Garante que bank_supplier_mapping está com o schema completo esperado.
+
+    Aplica todas as migrations opcionais da tabela de forma idempotente:
+    - fornecedor_id nullable (necessário para mapeamentos CREDIT sem fornecedor)
+    - colunas forma_recebimento_id, titulo_id, categoria_id, subcategoria_id,
+      conta_destino_id, tipo_debito (adicionadas em migrations pós-criação)
+    - descricao_chave + UNIQUE KEY composta (cnpj_cpf, descricao_chave)
+
+    Se qualquer coluna estiver ausente, o INSERT de conciliação falha com
+    ProgrammingError(1054) e o mapeamento não é salvo — por isso garantimos
+    tudo aqui antes da primeira conciliação.
+    """
     global _bsm_descricao_chave_ready
     if _bsm_descricao_chave_ready:
         return
@@ -32,6 +42,40 @@ def _ensure_descricao_chave():
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
+
+        # 1. fornecedor_id deve ser nullable para mapeamentos CREDIT (sem fornecedor)
+        try:
+            cursor.execute(
+                "ALTER TABLE bank_supplier_mapping MODIFY COLUMN fornecedor_id INT NULL"
+            )
+            conn.commit()
+        except Exception:
+            conn.rollback()
+
+        # 2. Colunas opcionais adicionadas em migrations posteriores à criação da tabela.
+        #    Sem elas, o INSERT/ON DUPLICATE KEY UPDATE falha com errno=1054 e o
+        #    mapeamento é silenciosamente descartado.
+        _opt_cols = [
+            ('forma_recebimento_id', 'INT NULL'),
+            ('titulo_id',            'INT NULL'),
+            ('categoria_id',         'INT NULL'),
+            ('subcategoria_id',      'INT NULL'),
+            ('conta_destino_id',     'INT NULL'),
+            ('tipo_debito',          'VARCHAR(20) NULL'),
+        ]
+        # col/definition são constantes do código acima (não input do usuário),
+        # portanto a interpolação direta não cria risco de SQL injection.
+        for col, definition in _opt_cols:
+            try:
+                cursor.execute(
+                    f"ALTER TABLE bank_supplier_mapping"
+                    f" ADD COLUMN IF NOT EXISTS {col} {definition}"
+                )
+                conn.commit()
+            except Exception:
+                conn.rollback()
+
+        # 3. descricao_chave + UNIQUE KEY composta
         cursor.execute(
             "SELECT COUNT(*) FROM information_schema.COLUMNS"
             " WHERE TABLE_SCHEMA = DATABASE()"
@@ -64,11 +108,12 @@ def _ensure_descricao_chave():
             except Exception:
                 pass
             conn.commit()
-            logger.info("_ensure_descricao_chave: coluna e índice criados com sucesso")
+            logger.info("_ensure_descricao_chave: coluna descricao_chave e índice criados com sucesso")
+
         cursor.close()
         _bsm_descricao_chave_ready = True
     except Exception:
-        logger.warning("_ensure_descricao_chave: não foi possível criar coluna/índice", exc_info=True)
+        logger.warning("_ensure_descricao_chave: não foi possível aplicar schema de bank_supplier_mapping", exc_info=True)
     finally:
         if conn:
             conn.close()
@@ -663,6 +708,7 @@ def upload():
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
 
+    _ensure_descricao_chave()
     inseridos, duplicados = _save_transactions(cursor, conn, account_id, transactions)
 
     cursor.close()
@@ -2325,6 +2371,7 @@ def scan_inbox():
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
 
+    _ensure_descricao_chave()
     inseridos, duplicados = _save_transactions(cursor, conn, account_id, transactions)
 
     cursor.close()
@@ -2669,6 +2716,7 @@ def importar_dropbox():
 
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
+    _ensure_descricao_chave()
     inseridos, duplicados = _save_transactions(cursor, conn, account_id, transactions)
     cursor.close()
     conn.close()
