@@ -167,7 +167,9 @@ def _save_transactions(cursor, conn, account_id, transactions):
     bank_transactions para o *account_id* informado.
 
     Estratégia:
-      1. Verificação de duplicatas em lote – uma query IN para todos os hashes.
+      1. Verificação de duplicatas em lote por hash_dedup (sha256 de fitid+data+valor+desc).
+      1b. Verificação secundária por conteúdo (data+tipo+valor+cnpj+desc) para detectar a
+          mesma transação re-exportada com um FITID diferente pelo banco.
       2. Busca de mapeamento de fornecedores em lote – uma query IN para todos os CNPJs.
       3. INSERT único com executemany para todas as novas linhas.
       4. Até 3 tentativas em caso de deadlock MySQL (errno 1213).
@@ -177,7 +179,7 @@ def _save_transactions(cursor, conn, account_id, transactions):
     if not transactions:
         return 0, 0
 
-    # 1. Verificação de duplicatas em lote
+    # 1. Verificação de duplicatas em lote por hash_dedup
     hashes = [tx['hash_dedup'] for tx in transactions]
     placeholders = ','.join(['%s'] * len(hashes))
     cursor.execute(
@@ -185,6 +187,32 @@ def _save_transactions(cursor, conn, account_id, transactions):
         hashes,
     )
     existing_hashes = {row['hash_dedup'] for row in cursor.fetchall()}
+
+    # 1b. Deduplicação secundária por conteúdo: evita "lançamentos pendentes fantasmas"
+    # quando o banco re-exporta o mesmo extrato com FITIDs diferentes a cada download.
+    # A chave é: (data_transacao, tipo, valor, cnpj_cpf, primeiros 255 chars da descrição)
+    # - Para CREDIT com CPF: a combinação conta+data+tipo+valor+CPF é praticamente única.
+    # - Incluímos a descrição normalizada para lidar com transações sem CPF/CNPJ.
+    # Transações candidatas (que passaram no hash check) são filtradas por este critério.
+    candidate_dates = [
+        tx['data_transacao']
+        for tx in transactions
+        if tx['hash_dedup'] not in existing_hashes
+    ]
+    existing_content_keys: set = set()
+    if candidate_dates:
+        min_date = min(candidate_dates)
+        max_date = max(candidate_dates)
+        cursor.execute(
+            """SELECT CONCAT(data_transacao, '|', tipo, '|',
+                             CAST(valor AS CHAR), '|',
+                             COALESCE(cnpj_cpf,''), '|',
+                             UPPER(TRIM(LEFT(COALESCE(descricao,''), 255)))) AS ck
+               FROM bank_transactions
+               WHERE account_id = %s AND data_transacao BETWEEN %s AND %s""",
+            (account_id, min_date, max_date),
+        )
+        existing_content_keys = {row['ck'] for row in cursor.fetchall()}
 
     # 2. Busca de mapeamento de fornecedores/formas/despesas em lote (por CNPJ)
     cnpj_list = list({tx['cnpj_cpf'] for tx in transactions if tx.get('cnpj_cpf')})
@@ -214,6 +242,23 @@ def _save_transactions(cursor, conn, account_id, transactions):
         if tx['hash_dedup'] in existing_hashes:
             duplicados += 1
             continue
+        # Secondary content-based dedup.
+        # Key format must match the SQL CONCAT in the DB query above:
+        #   CONCAT(data_transacao, '|', tipo, '|', CAST(valor AS CHAR), '|', ...)
+        # MySQL DECIMAL(15,2) CAST returns exactly 2 decimal places (e.g., '79.20').
+        # round() prevents floating-point imprecision before {:.2f} formatting.
+        _ck = '{}|{}|{:.2f}|{}|{}'.format(
+            tx['data_transacao'],
+            tx.get('tipo', ''),
+            round(float(tx.get('valor', 0)), 2),
+            tx.get('cnpj_cpf') or '',
+            (tx.get('descricao') or '')[:255].upper().strip(),
+        )
+        if _ck in existing_content_keys:
+            duplicados += 1
+            continue
+        # Add to existing_content_keys to catch duplicates within the same batch
+        existing_content_keys.add(_ck)
         cnpj = tx.get('cnpj_cpf') or ''
         desc = _desc_chave(tx.get('descricao') or '')
         m = mapping.get((cnpj, desc)) or mapping.get((cnpj, ''))
@@ -1243,7 +1288,7 @@ def conciliar():
                 LEFT JOIN titulos_despesas td ON td.id = bsm.titulo_id
                 LEFT JOIN categorias_despesas cd ON cd.id = bsm.categoria_id
                 {where_sql}
-                ORDER BY bt.data_transacao DESC
+                ORDER BY bt.data_transacao DESC, bt.id DESC
                 LIMIT %s OFFSET %s"""
         try:
             cursor.execute(
