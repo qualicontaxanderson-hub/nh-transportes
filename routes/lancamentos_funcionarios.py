@@ -102,76 +102,81 @@ def lista():
 @login_required
 @admin_required
 def novo():
-    if request.method == 'POST':
+    conn = None
+    cursor = None
+    try:
         conn = get_db_connection()
-        cursor = conn.cursor()
-        
-        mes = request.form.get('mes')
-        clienteid = request.form.get('clienteid')
-        
-        # Process each employee's data
-        funcionarios_ids = request.form.getlist('funcionarioid[]')
-        
-        for func_id in funcionarios_ids:
-            # Get all rubrica values for this employee
-            rubricas = request.form.getlist(f'rubrica_{func_id}[]')
-            valores = request.form.getlist(f'valor_{func_id}[]')
-            
-            for i, rubricaid in enumerate(rubricas):
-                if rubricaid and valores[i]:
-                    valor = float(valores[i]) if valores[i] else 0
-                    if valor != 0:
-                        cursor.execute("""
-                            INSERT INTO lancamentosfuncionarios_v2 (
-                                clienteid, funcionarioid, mes, rubricaid, valor, 
-                                statuslancamento
-                            ) VALUES (%s, %s, %s, %s, %s, %s)
-                            ON DUPLICATE KEY UPDATE 
-                                valor = VALUES(valor),
-                                atualizadoem = CURRENT_TIMESTAMP
-                        """, (
-                            clienteid,
-                            func_id,
-                            mes,
-                            rubricaid,
-                            valor,
-                            'PENDENTE'
-                        ))
-        
-        conn.commit()
-        cursor.close()
-        conn.close()
-        flash('Lançamentos salvos com sucesso! Valores existentes foram atualizados.', 'success')
+        cursor = conn.cursor(dictionary=True)
+
+        if request.method == 'POST':
+            mes = request.form.get('mes')
+            clienteid = request.form.get('clienteid')
+
+            # Process each employee's data
+            funcionarios_ids = request.form.getlist('funcionarioid[]')
+
+            for func_id in funcionarios_ids:
+                # Get all rubrica values for this employee
+                rubricas = request.form.getlist(f'rubrica_{func_id}[]')
+                valores = request.form.getlist(f'valor_{func_id}[]')
+
+                for i, rubricaid in enumerate(rubricas):
+                    if rubricaid and valores[i]:
+                        valor = float(valores[i]) if valores[i] else 0
+                        if valor != 0:
+                            cursor.execute("""
+                                INSERT INTO lancamentosfuncionarios_v2 (
+                                    clienteid, funcionarioid, mes, rubricaid, valor, 
+                                    statuslancamento
+                                ) VALUES (%s, %s, %s, %s, %s, %s)
+                                ON DUPLICATE KEY UPDATE 
+                                    valor = VALUES(valor),
+                                    atualizadoem = CURRENT_TIMESTAMP
+                            """, (
+                                clienteid,
+                                func_id,
+                                mes,
+                                rubricaid,
+                                valor,
+                                'PENDENTE'
+                            ))
+
+            conn.commit()
+            flash('Lançamentos salvos com sucesso! Valores existentes foram atualizados.', 'success')
+            return redirect(url_for('lancamentos_funcionarios.lista'))
+
+        # GET request - show form
+        # Get default month (previous month)
+        mes_padrao = get_previous_month()
+
+        # Get clientes - only those with products configured
+        cursor.execute("""
+            SELECT DISTINCT c.id, c.razao_social as nome 
+            FROM clientes c
+            INNER JOIN cliente_produtos cp ON c.id = cp.cliente_id
+            WHERE cp.ativo = 1
+            ORDER BY c.razao_social
+        """)
+        clientes = cursor.fetchall()
+
+        # Get all rubricas
+        cursor.execute("SELECT * FROM rubricas WHERE ativo = 1 ORDER BY ordem, nome")
+        rubricas = cursor.fetchall()
+
+        return render_template('lancamentos_funcionarios/novo.html',
+                             mes_padrao=mes_padrao,
+                             clientes=clientes,
+                             rubricas=rubricas)
+    except Exception as e:
+        if conn:
+            conn.rollback()
+        flash(f'Erro ao salvar lançamentos: {str(e)}', 'danger')
         return redirect(url_for('lancamentos_funcionarios.lista'))
-    
-    # GET request - show form
-    conn = get_db_connection()
-    cursor = conn.cursor(dictionary=True)
-    
-    # Get default month (previous month)
-    mes_padrao = get_previous_month()
-    
-    # Get clientes - only those with products configured
-    cursor.execute("""
-        SELECT DISTINCT c.id, c.razao_social as nome 
-        FROM clientes c
-        INNER JOIN cliente_produtos cp ON c.id = cp.cliente_id
-        WHERE cp.ativo = 1
-        ORDER BY c.razao_social
-    """)
-    clientes = cursor.fetchall()
-    
-    # Get all rubricas
-    cursor.execute("SELECT * FROM rubricas WHERE ativo = 1 ORDER BY ordem, nome")
-    rubricas = cursor.fetchall()
-    
-    cursor.close()
-    conn.close()
-    
-    return render_template('lancamentos_funcionarios/novo.html', 
-                         mes_padrao=mes_padrao,
-                         clientes=clientes,
-                         rubricas=rubricas)
+    finally:
+        if cursor:
+            cursor.close()
+        if conn:
+            conn.close()
 
 @bp.route('/get-funcionarios/<int:cliente_id>')
 @login_required
@@ -467,111 +472,116 @@ def editar(mes, cliente_id):
     """Edit existing payroll entries for a specific month and client"""
     # Convert mes from URL format (01-2026) to database format (01/2026)
     mes = mes.replace('-', '/')
-    
-    if request.method == 'POST':
+
+    conn = None
+    cursor = None
+    try:
         conn = get_db_connection()
-        cursor = conn.cursor()
-        
-        mes_form = request.form.get('mes')
-        clienteid = request.form.get('clienteid')
-        
-        # Process each employee's data
-        funcionarios_ids = request.form.getlist('funcionarioid[]')
-        
-        for func_id in funcionarios_ids:
-            # Get all rubrica values for this employee
-            rubricas = request.form.getlist(f'rubrica_{func_id}[]')
-            valores = request.form.getlist(f'valor_{func_id}[]')
-            
-            for i, rubricaid in enumerate(rubricas):
-                if rubricaid:
-                    # Convert valor to float, treating empty string as 0
-                    valor_str = valores[i] if i < len(valores) else ''
-                    valor = float(valor_str) if valor_str else 0
-                    
-                    if valor != 0:
-                        # Insert or update the value
-                        cursor.execute("""
-                            INSERT INTO lancamentosfuncionarios_v2 (
-                                clienteid, funcionarioid, mes, rubricaid, valor, 
-                                statuslancamento
-                            ) VALUES (%s, %s, %s, %s, %s, %s)
-                            ON DUPLICATE KEY UPDATE 
-                                valor = VALUES(valor),
-                                atualizadoem = CURRENT_TIMESTAMP
-                        """, (
-                            clienteid,
-                            func_id,
-                            mes_form,
-                            rubricaid,
-                            valor,
-                            'PENDENTE'
-                        ))
-                    else:
-                        # If valor is 0 or empty, DELETE the record to truly remove it
-                        cursor.execute("""
-                            DELETE FROM lancamentosfuncionarios_v2
-                            WHERE clienteid = %s 
-                              AND funcionarioid = %s 
-                              AND mes = %s 
-                              AND rubricaid = %s
-                        """, (
-                            clienteid,
-                            func_id,
-                            mes_form,
-                            rubricaid
-                        ))
-        
-        conn.commit()
-        cursor.close()
-        conn.close()
-        flash('Lançamentos atualizados com sucesso!', 'success')
+        cursor = conn.cursor(dictionary=True)
+
+        if request.method == 'POST':
+            mes_form = request.form.get('mes')
+            clienteid = request.form.get('clienteid')
+
+            # Process each employee's data
+            funcionarios_ids = request.form.getlist('funcionarioid[]')
+
+            for func_id in funcionarios_ids:
+                # Get all rubrica values for this employee
+                rubricas = request.form.getlist(f'rubrica_{func_id}[]')
+                valores = request.form.getlist(f'valor_{func_id}[]')
+
+                for i, rubricaid in enumerate(rubricas):
+                    if rubricaid:
+                        # Convert valor to float, treating empty string as 0
+                        valor_str = valores[i] if i < len(valores) else ''
+                        valor = float(valor_str) if valor_str else 0
+
+                        if valor != 0:
+                            # Insert or update the value
+                            cursor.execute("""
+                                INSERT INTO lancamentosfuncionarios_v2 (
+                                    clienteid, funcionarioid, mes, rubricaid, valor, 
+                                    statuslancamento
+                                ) VALUES (%s, %s, %s, %s, %s, %s)
+                                ON DUPLICATE KEY UPDATE 
+                                    valor = VALUES(valor),
+                                    atualizadoem = CURRENT_TIMESTAMP
+                            """, (
+                                clienteid,
+                                func_id,
+                                mes_form,
+                                rubricaid,
+                                valor,
+                                'PENDENTE'
+                            ))
+                        else:
+                            # If valor is 0 or empty, DELETE the record to truly remove it
+                            cursor.execute("""
+                                DELETE FROM lancamentosfuncionarios_v2
+                                WHERE clienteid = %s 
+                                  AND funcionarioid = %s 
+                                  AND mes = %s 
+                                  AND rubricaid = %s
+                            """, (
+                                clienteid,
+                                func_id,
+                                mes_form,
+                                rubricaid
+                            ))
+
+            conn.commit()
+            flash('Lançamentos atualizados com sucesso!', 'success')
+            return redirect(url_for('lancamentos_funcionarios.lista'))
+
+        # GET request - show form with existing data
+        # Get clientes - only those with products configured
+        cursor.execute("""
+            SELECT DISTINCT c.id, c.razao_social as nome 
+            FROM clientes c
+            INNER JOIN cliente_produtos cp ON c.id = cp.cliente_id
+            WHERE cp.ativo = 1
+            ORDER BY c.razao_social
+        """)
+        clientes = cursor.fetchall()
+
+        # Get all rubricas
+        cursor.execute("SELECT * FROM rubricas WHERE ativo = 1 ORDER BY ordem, nome")
+        rubricas = cursor.fetchall()
+
+        # Get existing lancamentos for this month and client
+        cursor.execute("""
+            SELECT funcionarioid, rubricaid, valor
+            FROM lancamentosfuncionarios_v2
+            WHERE mes = %s AND clienteid = %s
+        """, (mes, cliente_id))
+        lancamentos_existentes = cursor.fetchall()
+
+        # Convert to dict for easy lookup: {funcionario_id: {rubrica_id: valor}}
+        valores_existentes = {}
+        for lanc in lancamentos_existentes:
+            func_id = lanc['funcionarioid']
+            if func_id not in valores_existentes:
+                valores_existentes[func_id] = {}
+            valores_existentes[func_id][lanc['rubricaid']] = float(lanc['valor'])
+
+        return render_template('lancamentos_funcionarios/novo.html',
+                             mes_padrao=mes,
+                             cliente_selecionado=cliente_id,
+                             clientes=clientes,
+                             rubricas=rubricas,
+                             valores_existentes=valores_existentes,
+                             modo_edicao=True)
+    except Exception as e:
+        if conn:
+            conn.rollback()
+        flash(f'Erro ao editar lançamentos: {str(e)}', 'danger')
         return redirect(url_for('lancamentos_funcionarios.lista'))
-    
-    # GET request - show form with existing data
-    conn = get_db_connection()
-    cursor = conn.cursor(dictionary=True)
-    
-    # Get clientes - only those with products configured
-    cursor.execute("""
-        SELECT DISTINCT c.id, c.razao_social as nome 
-        FROM clientes c
-        INNER JOIN cliente_produtos cp ON c.id = cp.cliente_id
-        WHERE cp.ativo = 1
-        ORDER BY c.razao_social
-    """)
-    clientes = cursor.fetchall()
-    
-    # Get all rubricas
-    cursor.execute("SELECT * FROM rubricas WHERE ativo = 1 ORDER BY ordem, nome")
-    rubricas = cursor.fetchall()
-    
-    # Get existing lancamentos for this month and client
-    cursor.execute("""
-        SELECT funcionarioid, rubricaid, valor
-        FROM lancamentosfuncionarios_v2
-        WHERE mes = %s AND clienteid = %s
-    """, (mes, cliente_id))
-    lancamentos_existentes = cursor.fetchall()
-    
-    # Convert to dict for easy lookup: {funcionario_id: {rubrica_id: valor}}
-    valores_existentes = {}
-    for lanc in lancamentos_existentes:
-        func_id = lanc['funcionarioid']
-        if func_id not in valores_existentes:
-            valores_existentes[func_id] = {}
-        valores_existentes[func_id][lanc['rubricaid']] = float(lanc['valor'])
-    
-    cursor.close()
-    conn.close()
-    
-    return render_template('lancamentos_funcionarios/novo.html', 
-                         mes_padrao=mes,
-                         cliente_selecionado=cliente_id,
-                         clientes=clientes,
-                         rubricas=rubricas,
-                         valores_existentes=valores_existentes,
-                         modo_edicao=True)
+    finally:
+        if cursor:
+            cursor.close()
+        if conn:
+            conn.close()
 
 
 @bp.route('/admin/limpar-comissoes-frentistas', methods=['POST'])
@@ -585,10 +595,12 @@ def limpar_comissoes_frentistas():
     IMPORTANTE: Funcionários estão na tabela 'funcionarios', motoristas na tabela 'motoristas'.
     Comissões devem existir APENAS para IDs que estão na tabela 'motoristas'.
     """
+    conn = None
+    cursor = None
     try:
         conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)
-        
+
         # First, count how many will be affected
         # Query corrigida: verifica se funcionarioid está na tabela 'funcionarios'
         cursor.execute("""
@@ -598,7 +610,7 @@ def limpar_comissoes_frentistas():
             AND funcionarioid IN (SELECT id FROM funcionarios)
         """)
         count_before = cursor.fetchone()['total']
-        
+
         # Delete commissions for funcionarios (non-motoristas)
         # Query corrigida: deleta se funcionarioid está na tabela 'funcionarios'
         cursor.execute("""
@@ -606,22 +618,26 @@ def limpar_comissoes_frentistas():
             WHERE rubricaid IN (SELECT id FROM rubricas WHERE nome IN ('Comissão', 'Comissão / Aj. Custo'))
             AND funcionarioid IN (SELECT id FROM funcionarios)
         """)
-        
+
         conn.commit()
         deleted_count = cursor.rowcount
-        
-        cursor.close()
-        conn.close()
-        
+
         return jsonify({
             'success': True,
             'message': f'Limpeza concluída com sucesso!',
             'registros_esperados': count_before,
             'registros_deletados': deleted_count
         }), 200
-        
+
     except Exception as e:
+        if conn:
+            conn.rollback()
         return jsonify({
             'success': False,
             'error': str(e)
         }), 500
+    finally:
+        if cursor:
+            cursor.close()
+        if conn:
+            conn.close()

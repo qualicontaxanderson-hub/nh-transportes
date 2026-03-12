@@ -115,8 +115,6 @@ def index():
         total_vendas = float(cursor.fetchone()['total'])
     
     # Estoque atual = Saldo inicial + Compras - Vendas
-    # Se há filtro de cliente, usa o saldo inicial daquele cliente
-    # Se não há filtro, soma TODOS os saldos iniciais de todos os clientes
     if cliente_id:
         volume_inicial = float(saldo['volume_inicial']) if saldo else 0
     else:
@@ -182,48 +180,57 @@ def index():
 @bp.route('/saldo-inicial', methods=['GET', 'POST'])
 @login_required
 def saldo_inicial():
-    conn = get_db()
-    cursor = conn.cursor(dictionary=True)
+    conn = None
+    cursor = None
+    try:
+        conn = get_db()
+        cursor = conn.cursor(dictionary=True)
 
-    if request.method == 'POST':
-        data = request.form['data']
-        volume_inicial = request.form['volume_inicial']
-        preco_medio_compra = request.form['preco_medio_compra']
-        encerrante_inicial = request.form['encerrante_inicial']
-        cliente_id = request.form.get('cliente_id')
-        
-        if not cliente_id:
-            flash('Por favor, selecione um cliente!', 'danger')
-            return redirect(url_for('arla.saldo_inicial'))
+        if request.method == 'POST':
+            data = request.form['data']
+            volume_inicial = request.form['volume_inicial']
+            preco_medio_compra = request.form['preco_medio_compra']
+            encerrante_inicial = request.form['encerrante_inicial']
+            cliente_id = request.form.get('cliente_id')
 
+            if not cliente_id:
+                flash('Por favor, selecione um cliente!', 'danger')
+                return redirect(url_for('arla.saldo_inicial'))
+
+            cursor.execute("""
+                INSERT INTO arla_saldo_inicial (data, volume_inicial, preco_medio_compra, encerrante_inicial, cliente_id)
+                VALUES (%s, %s, %s, %s, %s)
+            """, (data, volume_inicial, preco_medio_compra, encerrante_inicial, cliente_id))
+            conn.commit()
+
+            flash('Saldo inicial cadastrado com sucesso!', 'success')
+            return redirect(url_for('arla.index'))
+
+        cursor.execute("SELECT * FROM arla_saldo_inicial ORDER BY data DESC LIMIT 1")
+        saldo = cursor.fetchone()
+
+        # Busca clientes com ARLA configurado
         cursor.execute("""
-            INSERT INTO arla_saldo_inicial (data, volume_inicial, preco_medio_compra, encerrante_inicial, cliente_id)
-            VALUES (%s, %s, %s, %s, %s)
-        """, (data, volume_inicial, preco_medio_compra, encerrante_inicial, cliente_id))
-        conn.commit()
-        cursor.close()
-        conn.close()
+            SELECT DISTINCT c.id, c.razao_social 
+            FROM clientes c
+            INNER JOIN cliente_produtos cp ON c.id = cp.cliente_id
+            INNER JOIN produto p ON cp.produto_id = p.id
+            WHERE p.nome = 'ARLA' AND cp.ativo = 1
+            ORDER BY c.razao_social
+        """)
+        clientes_arla = cursor.fetchall()
 
-        flash('Saldo inicial cadastrado com sucesso!', 'success')
+        return render_template('arla/saldo_inicial.html', saldo=saldo, clientes_arla=clientes_arla)
+    except Exception as e:
+        if conn:
+            conn.rollback()
+        flash(f'Erro ao salvar saldo inicial: {str(e)}', 'danger')
         return redirect(url_for('arla.index'))
-
-    cursor.execute("SELECT * FROM arla_saldo_inicial ORDER BY data DESC LIMIT 1")
-    saldo = cursor.fetchone()
-    
-    # Busca clientes com ARLA configurado
-    cursor.execute("""
-        SELECT DISTINCT c.id, c.razao_social 
-        FROM clientes c
-        INNER JOIN cliente_produtos cp ON c.id = cp.cliente_id
-        INNER JOIN produto p ON cp.produto_id = p.id
-        WHERE p.nome = 'ARLA' AND cp.ativo = 1
-        ORDER BY c.razao_social
-    """)
-    clientes_arla = cursor.fetchall()
-    cursor.close()
-    conn.close()
-
-    return render_template('arla/saldo_inicial.html', saldo=saldo, clientes_arla=clientes_arla)
+    finally:
+        if cursor:
+            cursor.close()
+        if conn:
+            conn.close()
 
 # =============================================
 # SALDO INICIAL - EDITAR
@@ -231,33 +238,42 @@ def saldo_inicial():
 @bp.route('/editar-saldo-inicial/<int:id>', methods=['GET', 'POST'])
 @login_required
 def editar_saldo_inicial(id):
-    conn = get_db()
-    cursor = conn.cursor(dictionary=True)
+    conn = None
+    cursor = None
+    try:
+        conn = get_db()
+        cursor = conn.cursor(dictionary=True)
 
-    if request.method == 'POST':
-        data = request.form['data']
-        volume_inicial = request.form['volume_inicial']
-        preco_medio_compra = request.form['preco_medio_compra']
-        encerrante_inicial = request.form['encerrante_inicial']
+        if request.method == 'POST':
+            data = request.form['data']
+            volume_inicial = request.form['volume_inicial']
+            preco_medio_compra = request.form['preco_medio_compra']
+            encerrante_inicial = request.form['encerrante_inicial']
 
-        cursor.execute("""
-            UPDATE arla_saldo_inicial
-            SET data = %s, volume_inicial = %s, preco_medio_compra = %s, encerrante_inicial = %s
-            WHERE id = %s
-        """, (data, volume_inicial, preco_medio_compra, encerrante_inicial, id))
-        conn.commit()
-        cursor.close()
-        conn.close()
+            cursor.execute("""
+                UPDATE arla_saldo_inicial
+                SET data = %s, volume_inicial = %s, preco_medio_compra = %s, encerrante_inicial = %s
+                WHERE id = %s
+            """, (data, volume_inicial, preco_medio_compra, encerrante_inicial, id))
+            conn.commit()
 
-        flash('Saldo inicial atualizado com sucesso!', 'success')
+            flash('Saldo inicial atualizado com sucesso!', 'success')
+            return redirect(url_for('arla.index'))
+
+        cursor.execute("SELECT * FROM arla_saldo_inicial WHERE id = %s", (id,))
+        saldo = cursor.fetchone()
+
+        return render_template('arla/editar_saldo_inicial.html', saldo=saldo)
+    except Exception as e:
+        if conn:
+            conn.rollback()
+        flash(f'Erro ao editar saldo inicial: {str(e)}', 'danger')
         return redirect(url_for('arla.index'))
-
-    cursor.execute("SELECT * FROM arla_saldo_inicial WHERE id = %s", (id,))
-    saldo = cursor.fetchone()
-    cursor.close()
-    conn.close()
-
-    return render_template('arla/editar_saldo_inicial.html', saldo=saldo)
+    finally:
+        if cursor:
+            cursor.close()
+        if conn:
+            conn.close()
 
 # =============================================
 # COMPRAS - CRIAR
@@ -265,44 +281,53 @@ def editar_saldo_inicial(id):
 @bp.route('/compras', methods=['GET', 'POST'])
 @login_required
 def compras():
-    conn = get_db()
-    cursor = conn.cursor(dictionary=True)
-    
-    if request.method == 'POST':
-        data = request.form['data']
-        quantidade = request.form['quantidade']
-        preco_compra = request.form['preco_compra']
-        cliente_id = request.form.get('cliente_id')
-        
-        if not cliente_id:
-            flash('Por favor, selecione um cliente!', 'danger')
-            return redirect(url_for('arla.compras'))
+    conn = None
+    cursor = None
+    try:
+        conn = get_db()
+        cursor = conn.cursor(dictionary=True)
 
+        if request.method == 'POST':
+            data = request.form['data']
+            quantidade = request.form['quantidade']
+            preco_compra = request.form['preco_compra']
+            cliente_id = request.form.get('cliente_id')
+
+            if not cliente_id:
+                flash('Por favor, selecione um cliente!', 'danger')
+                return redirect(url_for('arla.compras'))
+
+            cursor.execute("""
+                INSERT INTO arla_compras (data, quantidade, preco_compra, cliente_id)
+                VALUES (%s, %s, %s, %s)
+            """, (data, quantidade, preco_compra, cliente_id))
+            conn.commit()
+
+            flash('Compra registrada com sucesso!', 'success')
+            return redirect(url_for('arla.index'))
+
+        # Busca clientes com ARLA configurado
         cursor.execute("""
-            INSERT INTO arla_compras (data, quantidade, preco_compra, cliente_id)
-            VALUES (%s, %s, %s, %s)
-        """, (data, quantidade, preco_compra, cliente_id))
-        conn.commit()
-        cursor.close()
-        conn.close()
+            SELECT DISTINCT c.id, c.razao_social 
+            FROM clientes c
+            INNER JOIN cliente_produtos cp ON c.id = cp.cliente_id
+            INNER JOIN produto p ON cp.produto_id = p.id
+            WHERE p.nome = 'ARLA' AND cp.ativo = 1
+            ORDER BY c.razao_social
+        """)
+        clientes_arla = cursor.fetchall()
 
-        flash('Compra registrada com sucesso!', 'success')
+        return render_template('arla/compras.html', clientes_arla=clientes_arla)
+    except Exception as e:
+        if conn:
+            conn.rollback()
+        flash(f'Erro ao registrar compra: {str(e)}', 'danger')
         return redirect(url_for('arla.index'))
-    
-    # Busca clientes com ARLA configurado
-    cursor.execute("""
-        SELECT DISTINCT c.id, c.razao_social 
-        FROM clientes c
-        INNER JOIN cliente_produtos cp ON c.id = cp.cliente_id
-        INNER JOIN produto p ON cp.produto_id = p.id
-        WHERE p.nome = 'ARLA' AND cp.ativo = 1
-        ORDER BY c.razao_social
-    """)
-    clientes_arla = cursor.fetchall()
-    cursor.close()
-    conn.close()
-
-    return render_template('arla/compras.html', clientes_arla=clientes_arla)
+    finally:
+        if cursor:
+            cursor.close()
+        if conn:
+            conn.close()
 
 # =============================================
 # COMPRAS - EDITAR
@@ -310,32 +335,41 @@ def compras():
 @bp.route('/editar-compra/<int:id>', methods=['GET', 'POST'])
 @login_required
 def editar_compra(id):
-    conn = get_db()
-    cursor = conn.cursor(dictionary=True)
+    conn = None
+    cursor = None
+    try:
+        conn = get_db()
+        cursor = conn.cursor(dictionary=True)
 
-    if request.method == 'POST':
-        data = request.form['data']
-        quantidade = request.form['quantidade']
-        preco_compra = request.form['preco_compra']
+        if request.method == 'POST':
+            data = request.form['data']
+            quantidade = request.form['quantidade']
+            preco_compra = request.form['preco_compra']
 
-        cursor.execute("""
-            UPDATE arla_compras
-            SET data = %s, quantidade = %s, preco_compra = %s
-            WHERE id = %s
-        """, (data, quantidade, preco_compra, id))
-        conn.commit()
-        cursor.close()
-        conn.close()
+            cursor.execute("""
+                UPDATE arla_compras
+                SET data = %s, quantidade = %s, preco_compra = %s
+                WHERE id = %s
+            """, (data, quantidade, preco_compra, id))
+            conn.commit()
 
-        flash('Compra atualizada com sucesso!', 'success')
+            flash('Compra atualizada com sucesso!', 'success')
+            return redirect(url_for('arla.index'))
+
+        cursor.execute("SELECT * FROM arla_compras WHERE id = %s", (id,))
+        compra = cursor.fetchone()
+
+        return render_template('arla/editar_compra.html', compra=compra)
+    except Exception as e:
+        if conn:
+            conn.rollback()
+        flash(f'Erro ao editar compra: {str(e)}', 'danger')
         return redirect(url_for('arla.index'))
-
-    cursor.execute("SELECT * FROM arla_compras WHERE id = %s", (id,))
-    compra = cursor.fetchone()
-    cursor.close()
-    conn.close()
-
-    return render_template('arla/editar_compra.html', compra=compra)
+    finally:
+        if cursor:
+            cursor.close()
+        if conn:
+            conn.close()
 
 # =============================================
 # PREÇO DE VENDA - CRIAR
@@ -343,48 +377,57 @@ def editar_compra(id):
 @bp.route('/preco-venda', methods=['GET', 'POST'])
 @login_required
 def preco_venda():
-    conn = get_db()
-    cursor = conn.cursor(dictionary=True)
+    conn = None
+    cursor = None
+    try:
+        conn = get_db()
+        cursor = conn.cursor(dictionary=True)
 
-    if request.method == 'POST':
-        data_inicio = request.form['data_inicio']
-        preco_venda = request.form['preco_venda']
-        cliente_id = request.form.get('cliente_id')
-        
-        if not cliente_id:
-            flash('Por favor, selecione um cliente!', 'danger')
-            return redirect(url_for('arla.preco_venda'))
+        if request.method == 'POST':
+            data_inicio = request.form['data_inicio']
+            preco_venda = request.form['preco_venda']
+            cliente_id = request.form.get('cliente_id')
+
+            if not cliente_id:
+                flash('Por favor, selecione um cliente!', 'danger')
+                return redirect(url_for('arla.preco_venda'))
+
+            cursor.execute("""
+                INSERT INTO arla_precos_venda (data_inicio, preco_venda, cliente_id)
+                VALUES (%s, %s, %s)
+            """, (data_inicio, preco_venda, cliente_id))
+            conn.commit()
+
+            flash('Preço de venda alterado com sucesso!', 'success')
+            return redirect(url_for('arla.index'))
 
         cursor.execute("""
-            INSERT INTO arla_precos_venda (data_inicio, preco_venda, cliente_id)
-            VALUES (%s, %s, %s)
-        """, (data_inicio, preco_venda, cliente_id))
-        conn.commit()
-        cursor.close()
-        conn.close()
+            SELECT * FROM arla_precos_venda ORDER BY data_inicio DESC LIMIT 1
+        """)
+        preco_atual = cursor.fetchone()
 
-        flash('Preço de venda alterado com sucesso!', 'success')
+        # Busca clientes com ARLA configurado
+        cursor.execute("""
+            SELECT DISTINCT c.id, c.razao_social 
+            FROM clientes c
+            INNER JOIN cliente_produtos cp ON c.id = cp.cliente_id
+            INNER JOIN produto p ON cp.produto_id = p.id
+            WHERE p.nome = 'ARLA' AND cp.ativo = 1
+            ORDER BY c.razao_social
+        """)
+        clientes_arla = cursor.fetchall()
+
+        return render_template('arla/preco_venda.html', preco_atual=preco_atual, clientes_arla=clientes_arla)
+    except Exception as e:
+        if conn:
+            conn.rollback()
+        flash(f'Erro ao salvar preço de venda: {str(e)}', 'danger')
         return redirect(url_for('arla.index'))
-
-    cursor.execute("""
-        SELECT * FROM arla_precos_venda ORDER BY data_inicio DESC LIMIT 1
-    """)
-    preco_atual = cursor.fetchone()
-    
-    # Busca clientes com ARLA configurado
-    cursor.execute("""
-        SELECT DISTINCT c.id, c.razao_social 
-        FROM clientes c
-        INNER JOIN cliente_produtos cp ON c.id = cp.cliente_id
-        INNER JOIN produto p ON cp.produto_id = p.id
-        WHERE p.nome = 'ARLA' AND cp.ativo = 1
-        ORDER BY c.razao_social
-    """)
-    clientes_arla = cursor.fetchall()
-    cursor.close()
-    conn.close()
-
-    return render_template('arla/preco_venda.html', preco_atual=preco_atual, clientes_arla=clientes_arla)
+    finally:
+        if cursor:
+            cursor.close()
+        if conn:
+            conn.close()
 
 # =============================================
 # API - ÚLTIMA DATA DE LANÇAMENTO
@@ -477,107 +520,113 @@ def api_encerrante_anterior(cliente_id):
 @bp.route('/lancamento', methods=['GET', 'POST'])
 @login_required
 def lancamento():
-    conn = get_db()
-    cursor = conn.cursor(dictionary=True)
+    conn = None
+    cursor = None
+    try:
+        conn = get_db()
+        cursor = conn.cursor(dictionary=True)
 
-    if request.method == 'POST':
-        data = request.form['data']
-        encerrante_final = float(request.form['encerrante_final'])
-        cliente_id = request.form.get('cliente_id')
-        
-        if not cliente_id:
-            flash('Por favor, selecione um cliente!', 'danger')
-            return redirect(url_for('arla.lancamento'))
+        if request.method == 'POST':
+            data = request.form['data']
+            encerrante_final = float(request.form['encerrante_final'])
+            cliente_id = request.form.get('cliente_id')
 
-        cursor.execute("SELECT id FROM arla_lancamentos WHERE data = %s AND cliente_id = %s", (data, cliente_id))
-        existe = cursor.fetchone()
-        if existe:
-            flash('Já existe um lançamento para esta data e cliente!', 'danger')
-            cursor.close()
-            conn.close()
-            return redirect(url_for('arla.lancamento'))
+            if not cliente_id:
+                flash('Por favor, selecione um cliente!', 'danger')
+                return redirect(url_for('arla.lancamento'))
 
-        cursor.execute("""
-            SELECT encerrante_final FROM arla_lancamentos
-            WHERE data < %s AND cliente_id = %s
-            ORDER BY data DESC LIMIT 1
-        """, (data, cliente_id))
-        ante = cursor.fetchone()
-        
-        encerrante_anterior = ante['encerrante_final'] if ante else None
-        
-        if encerrante_anterior is None:
+            cursor.execute("SELECT id FROM arla_lancamentos WHERE data = %s AND cliente_id = %s", (data, cliente_id))
+            existe = cursor.fetchone()
+            if existe:
+                flash('Já existe um lançamento para esta data e cliente!', 'danger')
+                return redirect(url_for('arla.lancamento'))
+
             cursor.execute("""
-                SELECT encerrante_inicial FROM arla_saldo_inicial
-                WHERE data <= %s AND cliente_id = %s ORDER BY data DESC LIMIT 1
+                SELECT encerrante_final FROM arla_lancamentos
+                WHERE data < %s AND cliente_id = %s
+                ORDER BY data DESC LIMIT 1
             """, (data, cliente_id))
-            saldo_ini = cursor.fetchone()
-            encerrante_anterior = saldo_ini['encerrante_inicial'] if saldo_ini else 0
+            ante = cursor.fetchone()
 
-        quantidade_vendida = encerrante_final - float(encerrante_anterior)
+            encerrante_anterior = ante['encerrante_final'] if ante else None
 
+            if encerrante_anterior is None:
+                cursor.execute("""
+                    SELECT encerrante_inicial FROM arla_saldo_inicial
+                    WHERE data <= %s AND cliente_id = %s ORDER BY data DESC LIMIT 1
+                """, (data, cliente_id))
+                saldo_ini = cursor.fetchone()
+                encerrante_anterior = saldo_ini['encerrante_inicial'] if saldo_ini else 0
+
+            quantidade_vendida = encerrante_final - float(encerrante_anterior)
+
+            cursor.execute("""
+                SELECT preco_venda FROM arla_precos_venda 
+                WHERE data_inicio <= %s AND cliente_id = %s
+                ORDER BY data_inicio DESC LIMIT 1
+            """, (data, cliente_id))
+            preco_row = cursor.fetchone()
+            preco_venda = preco_row['preco_venda'] if preco_row else 0
+
+            cursor.execute("""
+                INSERT INTO arla_lancamentos
+                (data, encerrante_final, quantidade_vendida, preco_venda_aplicado, cliente_id)
+                VALUES (%s, %s, %s, %s, %s)
+            """, (data, encerrante_final, quantidade_vendida, preco_venda, cliente_id))
+            conn.commit()
+
+            flash('Lançamento registrado com sucesso!', 'success')
+            return redirect(url_for('arla.index'))
+
+        # GET - Busca dados para exibir no formulário
         cursor.execute("""
-            SELECT preco_venda FROM arla_precos_venda 
-            WHERE data_inicio <= %s AND cliente_id = %s
-            ORDER BY data_inicio DESC LIMIT 1
-        """, (data, cliente_id))
-        preco_row = cursor.fetchone()
-        preco_venda = preco_row['preco_venda'] if preco_row else 0
-
-        cursor.execute("""
-            INSERT INTO arla_lancamentos
-            (data, encerrante_final, quantidade_vendida, preco_venda_aplicado, cliente_id)
-            VALUES (%s, %s, %s, %s, %s)
-        """, (data, encerrante_final, quantidade_vendida, preco_venda, cliente_id))
-        conn.commit()
-        cursor.close()
-        conn.close()
-        
-        flash('Lançamento registrado com sucesso!', 'success')
-        return redirect(url_for('arla.index'))
-
-    # GET - Busca dados para exibir no formulário
-    cursor.execute("""
-        SELECT * FROM arla_lancamentos ORDER BY data DESC LIMIT 1
-    """)
-    ultimo_lancamento = cursor.fetchone()
-
-    if ultimo_lancamento:
-        encerrante_anterior = float(ultimo_lancamento['encerrante_final'])
-    else:
-        cursor.execute("""
-            SELECT encerrante_inicial FROM arla_saldo_inicial ORDER BY data DESC LIMIT 1
+            SELECT * FROM arla_lancamentos ORDER BY data DESC LIMIT 1
         """)
-        saldo_ini = cursor.fetchone()
-        encerrante_anterior = float(saldo_ini['encerrante_inicial']) if saldo_ini else 0
+        ultimo_lancamento = cursor.fetchone()
 
-    cursor.execute("""
-        SELECT preco_venda FROM arla_precos_venda ORDER BY data_inicio DESC LIMIT 1
-    """)
-    preco_row = cursor.fetchone()
-    preco_venda = float(preco_row['preco_venda']) if preco_row else 0
-    
-    # Busca clientes com ARLA configurado
-    cursor.execute("""
-        SELECT DISTINCT c.id, c.razao_social 
-        FROM clientes c
-        INNER JOIN cliente_produtos cp ON c.id = cp.cliente_id
-        INNER JOIN produto p ON cp.produto_id = p.id
-        WHERE p.nome = 'ARLA' AND cp.ativo = 1
-        ORDER BY c.razao_social
-    """)
-    clientes_arla = cursor.fetchall()
+        if ultimo_lancamento:
+            encerrante_anterior = float(ultimo_lancamento['encerrante_final'])
+        else:
+            cursor.execute("""
+                SELECT encerrante_inicial FROM arla_saldo_inicial ORDER BY data DESC LIMIT 1
+            """)
+            saldo_ini = cursor.fetchone()
+            encerrante_anterior = float(saldo_ini['encerrante_inicial']) if saldo_ini else 0
 
-    cursor.close()
-    conn.close()
+        cursor.execute("""
+            SELECT preco_venda FROM arla_precos_venda ORDER BY data_inicio DESC LIMIT 1
+        """)
+        preco_row = cursor.fetchone()
+        preco_venda = float(preco_row['preco_venda']) if preco_row else 0
 
-    return render_template(
-        'arla/lancamento.html',
-        ultimo_lancamento=ultimo_lancamento,
-        encerrante_anterior=encerrante_anterior,
-        preco_venda=preco_venda,
-        clientes_arla=clientes_arla
-    )
+        # Busca clientes com ARLA configurado
+        cursor.execute("""
+            SELECT DISTINCT c.id, c.razao_social 
+            FROM clientes c
+            INNER JOIN cliente_produtos cp ON c.id = cp.cliente_id
+            INNER JOIN produto p ON cp.produto_id = p.id
+            WHERE p.nome = 'ARLA' AND cp.ativo = 1
+            ORDER BY c.razao_social
+        """)
+        clientes_arla = cursor.fetchall()
+
+        return render_template(
+            'arla/lancamento.html',
+            ultimo_lancamento=ultimo_lancamento,
+            encerrante_anterior=encerrante_anterior,
+            preco_venda=preco_venda,
+            clientes_arla=clientes_arla
+        )
+    except Exception as e:
+        if conn:
+            conn.rollback()
+        flash(f'Erro ao registrar lançamento: {str(e)}', 'danger')
+        return redirect(url_for('arla.index'))
+    finally:
+        if cursor:
+            cursor.close()
+        if conn:
+            conn.close()
 
 
 # =============================================
@@ -586,84 +635,90 @@ def lancamento():
 @bp.route('/editar-lancamento/<int:id>', methods=['GET', 'POST'])
 @login_required
 def editar_lancamento(id):
-    conn = get_db()
-    cursor = conn.cursor(dictionary=True)
+    conn = None
+    cursor = None
+    try:
+        conn = get_db()
+        cursor = conn.cursor(dictionary=True)
 
-    if request.method == 'POST':
-        data = request.form['data']
-        encerrante_final = float(request.form['encerrante_final'])
-        
-        # Verifica se é intervenção manual
-        intervencao_manual = request.form.get('intervencao_manual') == '1'
-        
-        if intervencao_manual:
-            # Modo intervenção: usuário define quantidade_vendida manualmente
-            quantidade_vendida = float(request.form['quantidade_vendida_manual'])
-        else:
-            # Modo normal: calcula baseado no encerrante
-            cursor.execute("""
-                SELECT encerrante_final FROM arla_lancamentos
-                WHERE data < %s AND id != %s
-                ORDER BY data DESC LIMIT 1
-            """, (data, id))
-            ante = cursor.fetchone()
-            
-            encerrante_anterior = ante['encerrante_final'] if ante else None
-            
-            if encerrante_anterior is None:
+        if request.method == 'POST':
+            data = request.form['data']
+            encerrante_final = float(request.form['encerrante_final'])
+
+            # Verifica se é intervenção manual
+            intervencao_manual = request.form.get('intervencao_manual') == '1'
+
+            if intervencao_manual:
+                # Modo intervenção: usuário define quantidade_vendida manualmente
+                quantidade_vendida = float(request.form['quantidade_vendida_manual'])
+            else:
+                # Modo normal: calcula baseado no encerrante
                 cursor.execute("""
-                    SELECT encerrante_inicial FROM arla_saldo_inicial
-                    WHERE data <= %s ORDER BY data DESC LIMIT 1
-                """, (data,))
-                saldo_ini = cursor.fetchone()
-                encerrante_anterior = saldo_ini['encerrante_inicial'] if saldo_ini else 0
+                    SELECT encerrante_final FROM arla_lancamentos
+                    WHERE data < %s AND id != %s
+                    ORDER BY data DESC LIMIT 1
+                """, (data, id))
+                ante = cursor.fetchone()
 
-            quantidade_vendida = encerrante_final - float(encerrante_anterior)
+                encerrante_anterior = ante['encerrante_final'] if ante else None
 
+                if encerrante_anterior is None:
+                    cursor.execute("""
+                        SELECT encerrante_inicial FROM arla_saldo_inicial
+                        WHERE data <= %s ORDER BY data DESC LIMIT 1
+                    """, (data,))
+                    saldo_ini = cursor.fetchone()
+                    encerrante_anterior = saldo_ini['encerrante_inicial'] if saldo_ini else 0
+
+                quantidade_vendida = encerrante_final - float(encerrante_anterior)
+
+            cursor.execute("""
+                SELECT preco_venda FROM arla_precos_venda WHERE data_inicio <= %s
+                ORDER BY data_inicio DESC LIMIT 1
+            """, (data,))
+            preco_row = cursor.fetchone()
+            preco_venda = preco_row['preco_venda'] if preco_row else 0
+
+            cursor.execute("""
+                UPDATE arla_lancamentos
+                SET data = %s, encerrante_final = %s, quantidade_vendida = %s, preco_venda_aplicado = %s
+                WHERE id = %s
+            """, (data, encerrante_final, quantidade_vendida, preco_venda, id))
+            conn.commit()
+
+            flash('Lançamento atualizado com sucesso!', 'success')
+            return redirect(url_for('arla.index'))
+
+        cursor.execute("SELECT * FROM arla_lancamentos WHERE id = %s", (id,))
+        lancamento = cursor.fetchone()
+
+        # Busca encerrante anterior para cálculo
         cursor.execute("""
-            SELECT preco_venda FROM arla_precos_venda WHERE data_inicio <= %s
-            ORDER BY data_inicio DESC LIMIT 1
-        """, (data,))
-        preco_row = cursor.fetchone()
-        preco_venda = preco_row['preco_venda'] if preco_row else 0
+            SELECT encerrante_final FROM arla_lancamentos
+            WHERE data < %s AND id != %s
+            ORDER BY data DESC LIMIT 1
+        """, (lancamento['data'], id))
+        ante = cursor.fetchone()
+        encerrante_anterior = ante['encerrante_final'] if ante else None
 
-        cursor.execute("""
-            UPDATE arla_lancamentos
-            SET data = %s, encerrante_final = %s, quantidade_vendida = %s, preco_venda_aplicado = %s
-            WHERE id = %s
-        """, (data, encerrante_final, quantidade_vendida, preco_venda, id))
-        conn.commit()
-        cursor.close()
-        conn.close()
+        if encerrante_anterior is None:
+            cursor.execute("""
+                SELECT encerrante_inicial FROM arla_saldo_inicial
+                WHERE data <= %s ORDER BY data DESC LIMIT 1
+            """, (lancamento['data'],))
+            saldo_ini = cursor.fetchone()
+            encerrante_anterior = saldo_ini['encerrante_inicial'] if saldo_ini else 0
 
-        flash('Lançamento atualizado com sucesso!', 'success')
+        return render_template('arla/editar_lancamento.html',
+                              lancamento=lancamento,
+                              encerrante_anterior=encerrante_anterior)
+    except Exception as e:
+        if conn:
+            conn.rollback()
+        flash(f'Erro ao editar lançamento: {str(e)}', 'danger')
         return redirect(url_for('arla.index'))
-
-    cursor.execute("SELECT * FROM arla_lancamentos WHERE id = %s", (id,))
-    lancamento = cursor.fetchone()
-    
-    # Busca encerrante anterior para cálculo
-    cursor.execute("""
-        SELECT encerrante_final FROM arla_lancamentos
-        WHERE data < %s AND id != %s
-        ORDER BY data DESC LIMIT 1
-    """, (lancamento['data'], id))
-    ante = cursor.fetchone()
-    encerrante_anterior = ante['encerrante_final'] if ante else None
-    
-    if encerrante_anterior is None:
-        cursor.execute("""
-            SELECT encerrante_inicial FROM arla_saldo_inicial
-            WHERE data <= %s ORDER BY data DESC LIMIT 1
-        """, (lancamento['data'],))
-        saldo_ini = cursor.fetchone()
-        encerrante_anterior = saldo_ini['encerrante_inicial'] if saldo_ini else 0
-    
-    cursor.close()
-    conn.close()
-
-    return render_template('arla/editar_lancamento.html', 
-                          lancamento=lancamento, 
-                          encerrante_anterior=encerrante_anterior)
-
-
+    finally:
+        if cursor:
+            cursor.close()
+        if conn:
+            conn.close()

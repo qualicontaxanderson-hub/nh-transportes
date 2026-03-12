@@ -67,6 +67,8 @@ def lista():
         
         return render_template('caixa/lista.html', formas_pagamento=formas_pagamento, tipos=VALID_TIPOS)
     except Exception as e:
+        if conn:
+            conn.rollback()
         flash(f'Erro ao carregar formas de pagamento: {str(e)}', 'danger')
         return render_template('caixa/lista.html', formas_pagamento=[], tipos=VALID_TIPOS)
     finally:
@@ -124,6 +126,8 @@ def novo():
             flash('Forma de pagamento cadastrada com sucesso!', 'success')
             return redirect(url_for('caixa.lista'))
         except Exception as e:
+            if conn:
+                conn.rollback()
             flash(f'Erro ao cadastrar forma de pagamento: {str(e)}', 'danger')
             return render_template('caixa/novo.html', nome=nome, tipo=tipo, ativo=ativo, tipos=VALID_TIPOS)
         finally:
@@ -206,6 +210,8 @@ def editar(id):
         
         return render_template('caixa/editar.html', forma_pagamento=forma_pagamento, tipos=VALID_TIPOS)
     except Exception as e:
+        if conn:
+            conn.rollback()
         flash(f'Erro ao atualizar forma de pagamento: {str(e)}', 'danger')
         return redirect(url_for('caixa.lista'))
     finally:
@@ -247,6 +253,8 @@ def bloquear(id):
         status_text = 'desbloqueada' if novo_status else 'bloqueada'
         flash(f'Forma de pagamento {status_text} com sucesso!', 'success')
     except Exception as e:
+        if conn:
+            conn.rollback()
         flash(f'Erro ao alterar status da forma de pagamento: {str(e)}', 'danger')
     finally:
         if cursor is not None:
