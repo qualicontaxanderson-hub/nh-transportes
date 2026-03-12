@@ -5,6 +5,7 @@ from utils.boletos import emitir_boleto_frete, emitir_boleto_multiplo, fetch_cha
 from datetime import datetime, date
 from calendar import monthrange
 import os
+import mysql.connector
 
 financeiro_bp = Blueprint('financeiro', __name__, url_prefix='/financeiro')
 
@@ -866,7 +867,8 @@ def consultar_status_efi(charge_id):
 def reverter_conciliacao(tx_id):
     """Reverte a conciliação de uma transação bancária: volta para status='pendente',
     limpa forma_recebimento_id, fornecedor_id, conciliado_em, conciliado_por e tipo_conciliacao,
-    e remove os vínculos em lancamentos_despesas e troco_pix.
+    remove os vínculos em lancamentos_despesas e troco_pix, e exclui o CREDIT sintético
+    TRANSFER_<id> criado quando a transação foi classificada como transferência.
     """
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
@@ -884,6 +886,34 @@ def reverter_conciliacao(tx_id):
             return redirect(request.referrer or url_for('financeiro.recebimento'))
 
         cursor_w = conn.cursor()
+
+        # Reverter a transação — tenta com tipo_conciliacao (migration >= 20260224)
+        try:
+            cursor_w.execute(
+                """UPDATE bank_transactions
+                   SET status = 'pendente',
+                       forma_recebimento_id = NULL,
+                       fornecedor_id        = NULL,
+                       conciliado_em        = NULL,
+                       conciliado_por       = NULL,
+                       tipo_conciliacao     = NULL
+                   WHERE id = %s""",
+                (tx_id,),
+            )
+        except Exception:
+            # Fallback: tipo_conciliacao não existe (migration pendente)
+            conn.rollback()
+            cursor_w.execute(
+                """UPDATE bank_transactions
+                   SET status = 'pendente',
+                       forma_recebimento_id = NULL,
+                       fornecedor_id        = NULL,
+                       conciliado_em        = NULL,
+                       conciliado_por       = NULL
+                   WHERE id = %s""",
+                (tx_id,),
+            )
+
         # Desvincular lancamentos_despesas (graceful: tabela pode não ter a coluna)
         try:
             cursor_w.execute(
@@ -902,35 +932,12 @@ def reverter_conciliacao(tx_id):
         except Exception as exc_tp:
             current_app.logger.warning("reverter_conciliacao: não foi possível desvincular troco_pix tx=%s: %s", tx_id, exc_tp)
 
-        # Reverter a transação — tenta com tipo_conciliacao (migration >= 20260224)
-        try:
-            cursor_w.execute(
-                """UPDATE bank_transactions
-                   SET status = 'pendente',
-                       forma_recebimento_id = NULL,
-                       fornecedor_id        = NULL,
-                       conciliado_em        = NULL,
-                       conciliado_por       = NULL,
-                       tipo_conciliacao     = NULL
-                   WHERE id = %s""",
-                (tx_id,),
-            )
-        except Exception:
-            # Fallback: tipo_conciliacao não existe (migration pendente)
-            conn.rollback()
-            try:
-                cursor_w.execute(
-                    """UPDATE bank_transactions
-                       SET status = 'pendente',
-                           forma_recebimento_id = NULL,
-                           fornecedor_id        = NULL,
-                           conciliado_em        = NULL,
-                           conciliado_por       = NULL
-                       WHERE id = %s""",
-                    (tx_id,),
-                )
-            except Exception as exc_fb:
-                raise exc_fb
+        # Remover o CREDIT sintético TRANSFER_<id> criado por _conciliar_transferencia,
+        # mas somente se ainda estiver pendente (se já foi conciliado na conta destino, preserva).
+        cursor_w.execute(
+            "DELETE FROM bank_transactions WHERE hash_dedup = %s AND tipo = 'CREDIT' AND status = 'pendente'",
+            (f'TRANSFER_{tx_id}',),
+        )
 
         conn.commit()
         flash(
@@ -1039,31 +1046,67 @@ def _get_bank_transactions(tipo, request_args, exclude_transfers=False):
             params.append(data_fim)
 
         # Exclui transferências entre contas da página de Pagamentos.
-        # Condição 1: existe um CREDIT sintético TRANSFER_<id> (transferência concluída).
+        # Só exclui DEBITs *conciliados* — transações pendentes nunca são excluídas,
+        # pois podem ter um CREDIT TRANSFER_ obsoleto (ex: após reverter sem limpar o CREDIT).
+        # Condição 1: DEBIT conciliado com CREDIT sintético TRANSFER_<id>.
         # Condição 2: tipo_conciliacao='transferencia' (transferência órfã ou sem CREDIT).
         # A condição 2 usa try/except para não quebrar em BDs sem a coluna (migration pendente).
         if exclude_transfers and tipo == 'DEBIT':
             where.append(
-                "NOT EXISTS ("
+                "NOT (bt.status = 'conciliado' AND EXISTS ("
                 "  SELECT 1 FROM bank_transactions cr"
                 "  WHERE cr.hash_dedup = CONCAT('TRANSFER_', bt.id)"
                 "  AND cr.tipo = 'CREDIT'"
-                ")"
+                "))"
             )
             # tipo_conciliacao pode não existir antes da migration; testado separadamente abaixo.
-            _tc_filter = "(bt.tipo_conciliacao IS NULL OR bt.tipo_conciliacao != 'transferencia')"
+            _tc_filter = "(bt.status != 'conciliado' OR bt.tipo_conciliacao IS NULL OR bt.tipo_conciliacao != 'transferencia')"
         else:
             _tc_filter = None
 
         where_sql = " AND ".join(where)
 
-        def _run_query(extra_filter):
+        def _run_query(extra_filter, check_lancamentos_despesas=True):
             w = (where_sql + " AND " + extra_filter) if extra_filter else where_sql
+            # Try with EXISTS check on lancamentos_despesas to accurately detect despesa records.
+            # Falls back to the simple formula if bank_transaction_id column doesn't exist yet.
+            if check_lancamentos_despesas:
+                try:
+                    cursor.execute(
+                        f"""SELECT bt.id, bt.data_transacao, bt.tipo, bt.valor, bt.descricao,
+                                   bt.cnpj_cpf, bt.memo, bt.status, bt.fornecedor_id,
+                                   bt.forma_recebimento_id,
+                                   ba.apelido AS conta_apelido, ba.banco_nome,
+                                   ba.cliente_id AS empresa_id,
+                                   f.razao_social AS fornecedor_nome,
+                                   fr.nome AS forma_recebimento_nome,
+                                   (bt.status='conciliado'
+                                    AND bt.fornecedor_id IS NULL
+                                    AND bt.forma_recebimento_id IS NULL
+                                    AND bt.tipo='DEBIT'
+                                    AND EXISTS (
+                                        SELECT 1 FROM lancamentos_despesas ld
+                                        WHERE ld.bank_transaction_id = bt.id
+                                    )) AS is_despesa
+                            FROM bank_transactions bt
+                            INNER JOIN bank_accounts ba ON bt.account_id = ba.id
+                            LEFT JOIN fornecedores f ON bt.fornecedor_id = f.id
+                            LEFT JOIN formas_recebimento fr ON fr.id = bt.forma_recebimento_id
+                            WHERE {w}
+                            ORDER BY bt.data_transacao DESC
+                            LIMIT 500""",
+                        params,
+                    )
+                    return cursor.fetchall()
+                except mysql.connector.errors.ProgrammingError:
+                    # bank_transaction_id column does not exist yet — use simple fallback
+                    conn.rollback()
             cursor.execute(
                 f"""SELECT bt.id, bt.data_transacao, bt.tipo, bt.valor, bt.descricao,
                            bt.cnpj_cpf, bt.memo, bt.status, bt.fornecedor_id,
                            bt.forma_recebimento_id,
                            ba.apelido AS conta_apelido, ba.banco_nome,
+                           ba.cliente_id AS empresa_id,
                            f.razao_social AS fornecedor_nome,
                            fr.nome AS forma_recebimento_nome,
                            (bt.status='conciliado'
@@ -1100,11 +1143,10 @@ def _get_bank_transactions(tipo, request_args, exclude_transfers=False):
         except Exception as exc:
             # Fallback: tipo_conciliacao não existe (migration pendente) — usa apenas NOT EXISTS.
             # ProgrammingError errno 1054 = Unknown column.
-            import mysql.connector
             if not isinstance(exc, mysql.connector.errors.ProgrammingError):
                 raise
             conn.rollback()
-            transacoes = _run_query(None)
+            transacoes = _run_query(None, check_lancamentos_despesas=False)
             totais = _run_totais(None)
 
         # Lista de contas para o filtro (inclui cliente_id para cascata empresa→conta no JS)

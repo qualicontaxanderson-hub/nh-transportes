@@ -228,7 +228,14 @@
                                 {% if t.fornecedor_nome %}
                                     {{ t.fornecedor_nome }}
                                 {% elif t.is_despesa %}
-                                    <a href="/lancamentos_despesas/" class="badge bg-primary text-decoration-none">Despesa ↗</a>
+                                    {% set data_str = t.data_transacao.strftime('%Y-%m-%d') if t.data_transacao else '' %}
+                                    <a href="/lancamentos_despesas/?cliente_id={{ t.empresa_id or '' }}&data_inicio={{ data_str }}&data_fim={{ data_str }}"
+                                       class="badge bg-primary text-decoration-none" title="Ver lançamento de despesa">Despesa ↗</a>
+                                {% elif t.status == 'conciliado' and not t.is_despesa and not t.fornecedor_id %}
+                                    <span class="badge bg-warning text-dark"
+                                          title="Conciliado sem lançamento vinculado. Clique em 'Reverter' e reconcilie novamente para criar o lançamento.">
+                                        ⚠ Sem vínculo
+                                    </span>
                                 {% else %}
                                     —
                                 {% endif %}

@@ -182,6 +182,7 @@
                                    class="btn btn-sm btn-warning" title="Editar">
                                     <i class="bi bi-pencil"></i>
                                 </a>
+                                {% if current_user.nivel.upper() in ['ADMIN', 'GERENTE', 'SUPERVISOR'] %}
                                 <form method="POST" action="{{ url_for('troco_pix.excluir', troco_pix_id=t.id) }}" 
                                       style="display:inline;" 
                                       onsubmit="return confirm('Tem certeza que deseja excluir esta transação?');">
@@ -189,6 +190,7 @@
                                         <i class="bi bi-trash"></i>
                                     </button>
                                 </form>
+                                {% endif %}
                             </td>
                         </tr>
                         {% endfor %}

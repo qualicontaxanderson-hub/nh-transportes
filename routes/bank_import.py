@@ -23,8 +23,18 @@ _bsm_descricao_chave_ready = False
 
 
 def _ensure_descricao_chave():
-    """Garante que bank_supplier_mapping.descricao_chave existe e que a UNIQUE KEY
-    é composta por (cnpj_cpf, descricao_chave). Idempotente."""
+    """Garante que bank_supplier_mapping está com o schema completo esperado.
+
+    Aplica todas as migrations opcionais da tabela de forma idempotente:
+    - fornecedor_id nullable (necessário para mapeamentos CREDIT sem fornecedor)
+    - colunas forma_recebimento_id, titulo_id, categoria_id, subcategoria_id,
+      conta_destino_id, tipo_debito (adicionadas em migrations pós-criação)
+    - descricao_chave + UNIQUE KEY composta (cnpj_cpf, descricao_chave)
+
+    Se qualquer coluna estiver ausente, o INSERT de conciliação falha com
+    ProgrammingError(1054) e o mapeamento não é salvo — por isso garantimos
+    tudo aqui antes da primeira conciliação.
+    """
     global _bsm_descricao_chave_ready
     if _bsm_descricao_chave_ready:
         return
@@ -32,6 +42,40 @@ def _ensure_descricao_chave():
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
+
+        # 1. fornecedor_id deve ser nullable para mapeamentos CREDIT (sem fornecedor)
+        try:
+            cursor.execute(
+                "ALTER TABLE bank_supplier_mapping MODIFY COLUMN fornecedor_id INT NULL"
+            )
+            conn.commit()
+        except Exception:
+            conn.rollback()
+
+        # 2. Colunas opcionais adicionadas em migrations posteriores à criação da tabela.
+        #    Sem elas, o INSERT/ON DUPLICATE KEY UPDATE falha com errno=1054 e o
+        #    mapeamento é silenciosamente descartado.
+        _opt_cols = [
+            ('forma_recebimento_id', 'INT NULL'),
+            ('titulo_id',            'INT NULL'),
+            ('categoria_id',         'INT NULL'),
+            ('subcategoria_id',      'INT NULL'),
+            ('conta_destino_id',     'INT NULL'),
+            ('tipo_debito',          'VARCHAR(20) NULL'),
+        ]
+        # col/definition são constantes do código acima (não input do usuário),
+        # portanto a interpolação direta não cria risco de SQL injection.
+        for col, definition in _opt_cols:
+            try:
+                cursor.execute(
+                    f"ALTER TABLE bank_supplier_mapping"
+                    f" ADD COLUMN IF NOT EXISTS {col} {definition}"
+                )
+                conn.commit()
+            except Exception:
+                conn.rollback()
+
+        # 3. descricao_chave + UNIQUE KEY composta
         cursor.execute(
             "SELECT COUNT(*) FROM information_schema.COLUMNS"
             " WHERE TABLE_SCHEMA = DATABASE()"
@@ -64,11 +108,12 @@ def _ensure_descricao_chave():
             except Exception:
                 pass
             conn.commit()
-            logger.info("_ensure_descricao_chave: coluna e índice criados com sucesso")
+            logger.info("_ensure_descricao_chave: coluna descricao_chave e índice criados com sucesso")
+
         cursor.close()
         _bsm_descricao_chave_ready = True
     except Exception:
-        logger.warning("_ensure_descricao_chave: não foi possível criar coluna/índice", exc_info=True)
+        logger.warning("_ensure_descricao_chave: não foi possível aplicar schema de bank_supplier_mapping", exc_info=True)
     finally:
         if conn:
             conn.close()
@@ -167,7 +212,9 @@ def _save_transactions(cursor, conn, account_id, transactions):
     bank_transactions para o *account_id* informado.
 
     Estratégia:
-      1. Verificação de duplicatas em lote – uma query IN para todos os hashes.
+      1. Verificação de duplicatas em lote por hash_dedup (sha256 de fitid+data+valor+desc).
+      1b. Verificação secundária por conteúdo (data+tipo+valor+cnpj+desc) para detectar a
+          mesma transação re-exportada com um FITID diferente pelo banco.
       2. Busca de mapeamento de fornecedores em lote – uma query IN para todos os CNPJs.
       3. INSERT único com executemany para todas as novas linhas.
       4. Até 3 tentativas em caso de deadlock MySQL (errno 1213).
@@ -177,7 +224,7 @@ def _save_transactions(cursor, conn, account_id, transactions):
     if not transactions:
         return 0, 0
 
-    # 1. Verificação de duplicatas em lote
+    # 1. Verificação de duplicatas em lote por hash_dedup
     hashes = [tx['hash_dedup'] for tx in transactions]
     placeholders = ','.join(['%s'] * len(hashes))
     cursor.execute(
@@ -185,6 +232,32 @@ def _save_transactions(cursor, conn, account_id, transactions):
         hashes,
     )
     existing_hashes = {row['hash_dedup'] for row in cursor.fetchall()}
+
+    # 1b. Deduplicação secundária por conteúdo: evita "lançamentos pendentes fantasmas"
+    # quando o banco re-exporta o mesmo extrato com FITIDs diferentes a cada download.
+    # A chave é: (data_transacao, tipo, valor, cnpj_cpf, primeiros 255 chars da descrição)
+    # - Para CREDIT com CPF: a combinação conta+data+tipo+valor+CPF é praticamente única.
+    # - Incluímos a descrição normalizada para lidar com transações sem CPF/CNPJ.
+    # Transações candidatas (que passaram no hash check) são filtradas por este critério.
+    candidate_dates = [
+        tx['data_transacao']
+        for tx in transactions
+        if tx['hash_dedup'] not in existing_hashes
+    ]
+    existing_content_keys: set = set()
+    if candidate_dates:
+        min_date = min(candidate_dates)
+        max_date = max(candidate_dates)
+        cursor.execute(
+            """SELECT CONCAT(data_transacao, '|', tipo, '|',
+                             CAST(valor AS CHAR), '|',
+                             COALESCE(cnpj_cpf,''), '|',
+                             UPPER(TRIM(LEFT(COALESCE(descricao,''), 255)))) AS ck
+               FROM bank_transactions
+               WHERE account_id = %s AND data_transacao BETWEEN %s AND %s""",
+            (account_id, min_date, max_date),
+        )
+        existing_content_keys = {row['ck'] for row in cursor.fetchall()}
 
     # 2. Busca de mapeamento de fornecedores/formas/despesas em lote (por CNPJ)
     cnpj_list = list({tx['cnpj_cpf'] for tx in transactions if tx.get('cnpj_cpf')})
@@ -214,6 +287,23 @@ def _save_transactions(cursor, conn, account_id, transactions):
         if tx['hash_dedup'] in existing_hashes:
             duplicados += 1
             continue
+        # Secondary content-based dedup.
+        # Key format must match the SQL CONCAT in the DB query above:
+        #   CONCAT(data_transacao, '|', tipo, '|', CAST(valor AS CHAR), '|', ...)
+        # MySQL DECIMAL(15,2) CAST returns exactly 2 decimal places (e.g., '79.20').
+        # round() prevents floating-point imprecision before {:.2f} formatting.
+        _ck = '{}|{}|{:.2f}|{}|{}'.format(
+            tx['data_transacao'],
+            tx.get('tipo', ''),
+            round(float(tx.get('valor', 0)), 2),
+            tx.get('cnpj_cpf') or '',
+            (tx.get('descricao') or '')[:255].upper().strip(),
+        )
+        if _ck in existing_content_keys:
+            duplicados += 1
+            continue
+        # Add to existing_content_keys to catch duplicates within the same batch
+        existing_content_keys.add(_ck)
         cnpj = tx.get('cnpj_cpf') or ''
         desc = _desc_chave(tx.get('descricao') or '')
         m = mapping.get((cnpj, desc)) or mapping.get((cnpj, ''))
@@ -618,6 +708,7 @@ def upload():
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
 
+    _ensure_descricao_chave()
     inseridos, duplicados = _save_transactions(cursor, conn, account_id, transactions)
 
     cursor.close()
@@ -822,7 +913,7 @@ def _conciliar_tx(cursor, conn, tx_id, acao, tipo_tx,
         else:
             # Crédito → Forma de Recebimento
             if not forma_recebimento_id:
-                return
+                raise ValueError("Selecione uma forma de recebimento para conciliar este crédito.")
             cursor.execute(
                 """UPDATE bank_transactions
                    SET status='conciliado', forma_recebimento_id=%s,
@@ -830,6 +921,105 @@ def _conciliar_tx(cursor, conn, tx_id, acao, tipo_tx,
                    WHERE id=%s""",
                 (forma_recebimento_id, agora, usuario, tx_id),
             )
+            # Marca duplicatas pendentes com o mesmo conteúdo como 'ignorado'.
+            # Transações duplicadas podem existir quando o banco re-exportou o extrato OFX
+            # com FITIDs diferentes antes da deduplicação por conteúdo ser implementada.
+            # Usar um cursor separado para evitar conflito de result-set com o cursor principal.
+            try:
+                # dictionary=True necessário para acessar campos por nome no fetchone()
+                with conn.cursor(dictionary=True) as _dup_cur:
+                    _dup_cur.execute(
+                        "SELECT account_id, tipo, data_transacao, valor, "
+                        "COALESCE(cnpj_cpf,'') AS cnpj_cpf, "
+                        "UPPER(TRIM(LEFT(COALESCE(descricao,''),255))) AS desc_norm "
+                        "FROM bank_transactions WHERE id=%s",
+                        (tx_id,),
+                    )
+                    _tx_info = _dup_cur.fetchone()
+                if _tx_info:
+                    with conn.cursor() as _dup_upd:
+                        _dup_upd.execute(
+                            """UPDATE bank_transactions
+                               SET status='ignorado'
+                               WHERE id <> %s
+                                 AND account_id = %s
+                                 AND status = 'pendente'
+                                 AND tipo = %s
+                                 AND data_transacao = %s
+                                 AND valor = %s
+                                 AND COALESCE(cnpj_cpf,'') = %s
+                                 AND UPPER(TRIM(LEFT(COALESCE(descricao,''),255))) = %s""",
+                            (
+                                tx_id,
+                                _tx_info['account_id'],
+                                _tx_info['tipo'],
+                                _tx_info['data_transacao'],
+                                _tx_info['valor'],
+                                _tx_info['cnpj_cpf'],
+                                _tx_info['desc_norm'],
+                            ),
+                        )
+                        if _dup_upd.rowcount:
+                            logger.info(
+                                "_conciliar_tx: %d duplicata(s) pendente(s) marcadas como"
+                                " ignorado para tx_id=%s", _dup_upd.rowcount, tx_id
+                            )
+            except Exception as _dup_exc:
+                # Falha na deduplicação não impede a conciliação principal
+                logger.warning(
+                    "_conciliar_tx: erro ao marcar duplicatas, ignorando: %s", _dup_exc
+                )
+            # Auto-aprender: salva CNPJ+Descrição → forma_recebimento para sugestões e
+            # auto-conciliação em importações futuras com a mesma transação.
+            # Qualquer falha aqui é recuperável — a conciliação principal já foi executada
+            # e será commitada independentemente do resultado do mapeamento.
+            if salvar_mapeamento:
+                try:
+                    with conn.cursor(dictionary=True) as _map_cur:
+                        _map_cur.execute(
+                            "SELECT cnpj_cpf, descricao FROM bank_transactions WHERE id=%s",
+                            (tx_id,),
+                        )
+                        row_cr = _map_cur.fetchone()
+                    if row_cr and row_cr.get('cnpj_cpf'):
+                        desc_chave = _desc_chave(row_cr.get('descricao') or '')
+                        try:
+                            with conn.cursor() as _ins_cur:
+                                _ins_cur.execute(
+                                    """INSERT INTO bank_supplier_mapping
+                                           (cnpj_cpf, descricao_chave, tipo_chave,
+                                            total_conciliacoes, forma_recebimento_id)
+                                       VALUES (%s, %s, 'cnpj', 1, %s)
+                                       ON DUPLICATE KEY UPDATE
+                                           forma_recebimento_id=%s,
+                                           fornecedor_id=NULL, titulo_id=NULL,
+                                           categoria_id=NULL, subcategoria_id=NULL,
+                                           total_conciliacoes=total_conciliacoes+1,
+                                           atualizado_em=NOW()""",
+                                    (row_cr['cnpj_cpf'], desc_chave,
+                                     forma_recebimento_id, forma_recebimento_id),
+                                )
+                        except mysql.connector.errors.ProgrammingError as _pe:
+                            if _pe.errno == 1054:
+                                logger.debug(
+                                    "_conciliar_tx CREDIT: coluna ausente em"
+                                    " bank_supplier_mapping, mapeamento ignorado"
+                                )
+                            else:
+                                logger.warning(
+                                    "_conciliar_tx CREDIT: erro ao salvar mapeamento"
+                                    " (ProgrammingError %s), ignorando: %s", _pe.errno, _pe
+                                )
+                        except Exception as _map_e:
+                            logger.warning(
+                                "_conciliar_tx CREDIT: erro ao salvar mapeamento, ignorando: %s",
+                                _map_e,
+                            )
+                except Exception as _outer_map_e:
+                    logger.warning(
+                        "_conciliar_tx CREDIT: erro ao buscar dados para mapeamento,"
+                        " ignorando: %s", _outer_map_e
+                    )
 
     elif tipo_debito == 'troco_pix' and troco_pix_id:
         # Débito → Troco PIX: vincula a transação bancária ao registro de troco_pix
@@ -870,10 +1060,11 @@ def _conciliar_tx(cursor, conn, tx_id, acao, tipo_tx,
         )
         tx = cursor.fetchone()
         if not tx:
-            return
+            raise ValueError(f"Transação bancária #{tx_id} não encontrada.")
         data_tx    = tx['data_transacao']
         descricao  = tx.get('descricao') or ''
         cliente_id = tx.get('cliente_id')
+        inseridos = 0
         for desp in despesas:
             titulo_id      = desp.get('titulo_id')
             categoria_id   = desp.get('categoria_id')
@@ -891,6 +1082,12 @@ def _conciliar_tx(cursor, conn, tx_id, acao, tipo_tx,
                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)""",
                 (data_tx, cliente_id, titulo_id, categoria_id, subcategoria_id,
                  valor, fornecedor_txt, observacao, tx_id),
+            )
+            inseridos += 1
+        if not inseridos:
+            raise ValueError(
+                "Preencha os campos obrigatórios da despesa (Título, Categoria e Valor) "
+                "antes de conciliar."
             )
         cursor.execute(
             """UPDATE bank_transactions
@@ -916,8 +1113,13 @@ def _conciliar_tx(cursor, conn, tx_id, acao, tipo_tx,
             )
     else:
         # Débito → Fornecedor
+        if tipo_debito == 'despesa':
+            raise ValueError(
+                "Preencha os campos obrigatórios da despesa (Título, Categoria e Valor) "
+                "antes de conciliar."
+            )
         if not fornecedor_id:
-            return
+            raise ValueError("Selecione um fornecedor para conciliar este débito.")
         cursor.execute(
             """UPDATE bank_transactions
                SET status='conciliado', fornecedor_id=%s,
@@ -1061,14 +1263,25 @@ def conciliar():
                     _conciliar_tx(cursor, conn, tid, 'conciliar', 'DEBIT',
                                   None, None, usuario, tipo_debito='despesa',
                                   despesas=desp, salvar_mapeamento=True)
+                elif t_forn or t_forma:
+                    try:
+                        _conciliar_tx(cursor, conn, tid, 'conciliar', t_tipo_tx,
+                                      t_forn, t_forma, usuario,
+                                      tipo_debito=t_tipo_deb or 'fornecedor',
+                                      salvar_mapeamento=True)
+                    except ValueError as ve:
+                        logger.debug("aprovar_sugestoes_pagina: ignorando tx %s — %s", tid, ve)
+                        n += 1
+                        continue
                 else:
-                    _conciliar_tx(cursor, conn, tid, 'conciliar', t_tipo_tx,
-                                  t_forn, t_forma, usuario,
-                                  tipo_debito=t_tipo_deb or 'fornecedor',
-                                  salvar_mapeamento=True)
+                    # Sugestão sem dados suficientes — ignora silenciosamente
+                    n += 1
+                    continue
                 ok += 1
                 n += 1
             flash(f'{ok} sugestão(ões) aprovada(s) com sucesso!', 'success')
+            cursor.close()
+            conn.close()
             return redirect(request.url)
 
         salvar_mapeamento = (acao != 'lancamento_unico')
@@ -1103,6 +1316,8 @@ def conciliar():
         else:
             flash(f'{ok} transação(ões) conciliada(s) com sucesso!', 'success')
 
+        cursor.close()
+        conn.close()
         # Mantém filtros após POST
         return redirect(request.url)
 
@@ -1164,6 +1379,22 @@ def conciliar():
                        bsm.subcategoria_id AS sugestao_subcategoria_id,
                        bsm.conta_destino_id AS sugestao_conta_destino_id,
                        bsm.tipo_debito AS sugestao_tipo_debito,
+                       bsm.descricao_chave AS sugestao_bsm_descricao_chave,
+                       fr.nome AS sugestao_forma_nome,
+                       fs.razao_social AS sugestao_fornecedor_nome,
+                       td.nome AS sugestao_titulo_nome,
+                       cd.nome AS sugestao_categoria_nome
+                FROM bank_transactions bt
+                INNER JOIN bank_accounts ba ON bt.account_id = ba.id"""
+        # Legacy SELECT without bsm.descricao_chave — used when the column does not yet exist
+        _SELECT_TX_LEGACY = f"""SELECT bt.*, ba.apelido AS conta_apelido, ba.banco_nome,
+                       bsm.fornecedor_id AS sugestao_fornecedor_id,
+                       bsm.forma_recebimento_id AS sugestao_forma_id,
+                       bsm.titulo_id AS sugestao_titulo_id,
+                       bsm.categoria_id AS sugestao_categoria_id,
+                       bsm.subcategoria_id AS sugestao_subcategoria_id,
+                       bsm.conta_destino_id AS sugestao_conta_destino_id,
+                       bsm.tipo_debito AS sugestao_tipo_debito,
                        fr.nome AS sugestao_forma_nome,
                        fs.razao_social AS sugestao_fornecedor_nome,
                        td.nome AS sugestao_titulo_nome,
@@ -1175,7 +1406,7 @@ def conciliar():
                 LEFT JOIN titulos_despesas td ON td.id = bsm.titulo_id
                 LEFT JOIN categorias_despesas cd ON cd.id = bsm.categoria_id
                 {where_sql}
-                ORDER BY bt.data_transacao DESC
+                ORDER BY bt.data_transacao DESC, bt.id DESC
                 LIMIT %s OFFSET %s"""
         try:
             cursor.execute(
@@ -1193,10 +1424,11 @@ def conciliar():
         except mysql.connector.errors.ProgrammingError as _e:
             if _e.errno != 1054:
                 raise
-            # Fallback when descricao_chave column does not yet exist in the DB
+            # Fallback when descricao_chave column does not yet exist in the DB.
+            # Use _SELECT_TX_LEGACY which omits the bsm.descricao_chave field.
             logger.warning("conciliar: descricao_chave column missing, using simple join fallback")
             cursor.execute(
-                f"""{_SELECT_TX}
+                f"""{_SELECT_TX_LEGACY}
                 LEFT JOIN bank_supplier_mapping bsm ON bsm.cnpj_cpf = bt.cnpj_cpf
                 {_JOINS_TAIL}""",
                 params + [per_page, offset],
@@ -1255,13 +1487,16 @@ def conciliar():
                 break  # primeira regra que bate vence
 
         # Para créditos sem regra de descrição correspondente: remove a sugestão de forma
-        # que veio do bank_supplier_mapping por CNPJ/CPF.  O mesmo CPF pode aparecer em
-        # transações de tipos distintos (PIX, depósito em dinheiro, cheque…), tornando a
-        # sugestão por CNPJ não confiável para créditos.
+        # que veio do bank_supplier_mapping por CNPJ/CPF genérico (sem descrição específica).
+        # O mesmo CPF pode aparecer em transações de tipos distintos (PIX, depósito, cheque…),
+        # tornando a sugestão por CNPJ não confiável para créditos.
+        # Exceção: mapeamentos com descricao_chave específica são confiáveis e mantidos.
         for tx in transacoes:
             if tx.get('tipo') == 'CREDIT' and not tx.get('sugestao_regra'):
-                tx['sugestao_forma_id']   = None
-                tx['sugestao_forma_nome'] = None
+                # Preserve a sugestão se veio de memorização específica (descricao_chave não vazia)
+                if not tx.get('sugestao_bsm_descricao_chave'):
+                    tx['sugestao_forma_id']   = None
+                    tx['sugestao_forma_nome'] = None
 
         # Enriquece badge de sugestão de despesa (CNPJ → título/categoria)
         for tx in transacoes:
@@ -2136,6 +2371,7 @@ def scan_inbox():
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
 
+    _ensure_descricao_chave()
     inseridos, duplicados = _save_transactions(cursor, conn, account_id, transactions)
 
     cursor.close()
@@ -2480,6 +2716,7 @@ def importar_dropbox():
 
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
+    _ensure_descricao_chave()
     inseridos, duplicados = _save_transactions(cursor, conn, account_id, transactions)
     cursor.close()
     conn.close()

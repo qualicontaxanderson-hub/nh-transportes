@@ -13,7 +13,7 @@
       </div>
       <div class="modal-body">
         <div class="container-fluid">
-          <form method="POST" action="{{ url_for('fretes.salvar_importados') }}" id="formImportacaoModal">
+          <form method="POST" action="{{ url_for('fretes.salvar_importados') }}" id="formImportacaoModal" autocomplete="off">
             <input type="hidden" name="pedido_id" value="{{ pedido.id }}">
             <input type="hidden" name="save" value="1">
 
@@ -105,7 +105,7 @@
 
             <div class="d-flex justify-content-between mt-3">
               <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Fechar</button>
-              <button type="submit" class="btn btn-success btn-sm">Salvar Todos os Fretes</button>
+              <button type="submit" class="btn btn-success btn-sm" id="btn-salvar-importados">Salvar Todos os Fretes</button>
             </div>
 
           </form>
@@ -253,6 +253,33 @@ function calcularItem(itemDiv) {
     const modalEl = document.getElementById('modalImportarPedido');
     if (modalEl && window.bootstrap && bootstrap.Modal) {
       try { new bootstrap.Modal(modalEl, {backdrop:'static'}).show(); } catch(e){ console.error(e); }
+    }
+
+    // Proteção contra duplo envio: desabilitar botão e form após primeiro submit
+    const formImport = document.getElementById('formImportacaoModal');
+    if (formImport) {
+      formImport.addEventListener('submit', function(evt) {
+        const btn = document.getElementById('btn-salvar-importados');
+        if (formImport.dataset.submitting === '1') {
+          // Segundo clique: bloquear completamente
+          evt.preventDefault();
+          return false;
+        }
+        formImport.dataset.submitting = '1';
+        if (btn) {
+          btn.disabled = true;
+          btn.textContent = 'Salvando...';
+        }
+      });
+
+      // Impedir que Enter nos campos de texto/número acione o submit do form
+      formImport.querySelectorAll('input[type="text"], input[type="number"]').forEach(function(inp) {
+        inp.addEventListener('keydown', function(e) {
+          if (e.key === 'Enter') {
+            e.preventDefault();
+          }
+        });
+      });
     }
 
     // ligar events para cada item

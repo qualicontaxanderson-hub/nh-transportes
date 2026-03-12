@@ -11,14 +11,140 @@
     </div>
   </div>
 
-  <div class="alert alert-info py-2">
+  <div class="alert alert-info py-2 mb-2">
     <i class="bi bi-info-circle"></i>
-    Estas memorizações são criadas automaticamente ao conciliar uma transação pelo botão
-    <strong>Conciliar</strong> na tela de conciliação. Elas associam um CNPJ/CPF + Descrição a um
-    fornecedor, forma de recebimento, despesa ou conta destino para sugestões futuras.
+    Estas memorizações são criadas <strong>automaticamente</strong> ao clicar em
+    <strong>Conciliar</strong> na tela de conciliação. Elas associam
+    <code>CNPJ/CPF + Descrição</code> da transação bancária a um destino (fornecedor, forma de
+    recebimento, despesa ou conta). Na próxima importação, o sistema usa esse vínculo para sugerir
+    ou aplicar a conciliação automaticamente.
     <br>
     Você pode excluir uma memorização caso ela esteja incorreta.
   </div>
+
+  <!-- ── Painel: O que é salvo por tipo de opção ──────────────────────────── -->
+  <div class="card mb-3 border-warning">
+    <div class="card-header bg-warning text-dark py-2 d-flex align-items-center gap-2"
+         style="cursor:pointer" data-bs-toggle="collapse" data-bs-target="#painelRegras">
+      <i class="bi bi-question-circle-fill"></i>
+      <strong>O que é memorizado para cada opção na Conciliação?</strong>
+      <i class="bi bi-chevron-down ms-auto"></i>
+    </div>
+    <div class="collapse" id="painelRegras">
+      <div class="card-body py-3">
+        <p class="text-muted small mb-3">
+          Ao clicar em <strong>Conciliar</strong>, o sistema salva automaticamente uma entrada
+          em <code>bank_supplier_mapping</code> usando a chave
+          <code>(CNPJ/CPF&nbsp;+&nbsp;Descrição)</code> da transação.
+          Nas próximas importações/conciliações, essa chave é consultada para pré-preencher
+          os campos ou para conciliar automaticamente.
+        </p>
+        <div class="row g-3">
+
+          <!-- CRÉDITO -->
+          <div class="col-md-6">
+            <div class="card h-100 border-success">
+              <div class="card-header bg-success text-white py-1">
+                <i class="bi bi-arrow-down-circle-fill"></i> Crédito &rarr; Forma de Recebimento
+              </div>
+              <div class="card-body py-2 small">
+                <p class="mb-1"><strong>Quando ocorre:</strong> transação do tipo <code>CREDIT</code> e você seleciona uma <em>Forma de Recebimento</em>.</p>
+                <p class="mb-1"><strong>O que é salvo:</strong></p>
+                <ul class="mb-0">
+                  <li>CNPJ/CPF + Descrição da transação</li>
+                  <li>Forma de Recebimento escolhida (<code>forma_recebimento_id</code>)</li>
+                </ul>
+                <p class="mt-2 mb-0 text-muted">
+                  <i class="bi bi-lightning-charge"></i>
+                  <em>Na próxima importação o sistema sugere automaticamente a mesma forma para transações com mesmo CNPJ + descrição.</em>
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <!-- DÉBITO – FORNECEDOR -->
+          <div class="col-md-6">
+            <div class="card h-100 border-primary">
+              <div class="card-header bg-primary text-white py-1">
+                <i class="bi bi-arrow-up-circle-fill"></i> Débito &rarr; Fornecedor
+              </div>
+              <div class="card-body py-2 small">
+                <p class="mb-1"><strong>Quando ocorre:</strong> transação do tipo <code>DEBIT</code>, opção <strong>Fornecedor</strong> selecionada.</p>
+                <p class="mb-1"><strong>O que é salvo:</strong></p>
+                <ul class="mb-0">
+                  <li>CNPJ/CPF + Descrição da transação</li>
+                  <li>Fornecedor escolhido (<code>fornecedor_id</code>)</li>
+                </ul>
+                <p class="mt-2 mb-0 text-muted">
+                  <i class="bi bi-lightning-charge"></i>
+                  <em>Da próxima vez, o fornecedor é pré-sugerido automaticamente.</em>
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <!-- DÉBITO – DESPESA -->
+          <div class="col-md-6">
+            <div class="card h-100 border-warning">
+              <div class="card-header bg-warning text-dark py-1">
+                <i class="bi bi-receipt-cutoff"></i> Débito &rarr; Despesa (lançamento único)
+              </div>
+              <div class="card-body py-2 small">
+                <p class="mb-1"><strong>Quando ocorre:</strong> opção <strong>Despesa</strong>, com apenas <em>uma</em> linha de despesa preenchida.</p>
+                <p class="mb-1"><strong>O que é salvo:</strong></p>
+                <ul class="mb-0">
+                  <li>CNPJ/CPF + Descrição da transação</li>
+                  <li>Título de Despesa (<code>titulo_id</code>)</li>
+                  <li>Categoria (<code>categoria_id</code>) e Subcategoria (se informada)</li>
+                </ul>
+                <p class="mt-2 mb-0 text-warning-emphasis">
+                  <i class="bi bi-exclamation-triangle-fill"></i>
+                  <em><strong>Despesas divididas (split) NÃO são memorizadas</strong> — ficam para conciliação manual.</em>
+                </p>
+                <p class="mt-1 mb-0 text-muted">
+                  <i class="bi bi-lightning-charge"></i>
+                  <em>Na próxima importação, o <code>lancamento_despesa</code> é criado automaticamente.</em>
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <!-- DÉBITO – TRANSFERÊNCIA -->
+          <div class="col-md-6">
+            <div class="card h-100 border-info">
+              <div class="card-header bg-info text-dark py-1">
+                <i class="bi bi-arrow-left-right"></i> Débito &rarr; Transferência entre contas
+              </div>
+              <div class="card-body py-2 small">
+                <p class="mb-1"><strong>Quando ocorre:</strong> opção <strong>Transferência</strong> e você seleciona a conta destino.</p>
+                <p class="mb-1"><strong>O que é salvo:</strong></p>
+                <ul class="mb-0">
+                  <li>CNPJ/CPF + Descrição da transação</li>
+                  <li>Conta bancária destino (<code>conta_destino_id</code>)</li>
+                  <li>Tipo <code>transferencia</code></li>
+                </ul>
+                <p class="mt-2 mb-0 text-muted">
+                  <i class="bi bi-lightning-charge"></i>
+                  <em>Na próxima importação, a transferência é sugerida/aplicada automaticamente.</em>
+                </p>
+              </div>
+            </div>
+          </div>
+
+        </div><!-- /row -->
+
+        <hr class="my-3">
+        <p class="small mb-1"><strong><i class="bi bi-x-circle-fill text-danger"></i> Casos em que NÃO é criada memorização:</strong></p>
+        <ul class="small mb-0">
+          <li><strong>Troco PIX</strong> — vincula apenas ao registro de troco, sem aprender CNPJ.</li>
+          <li><strong>Despesa dividida (split)</strong> — múltiplas linhas de despesa na mesma transação.</li>
+          <li><strong>Modo "sem aprendizado"</strong> — quando o parâmetro interno <code>salvar_mapeamento=False</code> é usado (ex.: conciliações programáticas ou fluxos que não devem criar regra automática).</li>
+          <li><strong>Ignorar transação</strong> — ao clicar em "Ignorar", nenhuma memorização é gerada.</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+  <!-- ── /Painel ──────────────────────────────────────────────────────────── -->
 
   {% with messages = get_flashed_messages(with_categories=true) %}
     {% for cat, msg in messages %}

@@ -2,6 +2,12 @@ from flask import Blueprint, render_template, request, redirect, url_for, flash,
 from flask_login import login_required
 from utils.db import get_db_connection
 from datetime import datetime, date, timedelta
+import logging
+import time
+import mysql.connector
+from routes.fretes import _ensure_fretes_pedido_id
+
+logger = logging.getLogger(__name__)
 
 bp = Blueprint('pedidos', __name__, url_prefix='/pedidos')
 
@@ -9,19 +15,35 @@ def get_db():
     """Usa a conexão centralizada com credenciais seguras"""
     return get_db_connection()
 
+def _proximo_numero_pedido(cursor):
+    """
+    Retorna o próximo número de pedido como inteiro, consultando o maior número
+    existente na tabela dentro da mesma conexão/transação.
+
+    Usar MAX() ao invés de ORDER BY id DESC garante o resultado correto mesmo
+    quando pedidos são excluídos (id DESC pode retornar um número menor que o
+    maior já usado).
+
+    Deve ser chamado com a conexão principal já aberta para que, junto com o
+    INSERT subsequente, a geração seja atomicamente protegida pela mesma
+    transação.
+    """
+    cursor.execute(
+        "SELECT COALESCE(MAX(CAST(SUBSTRING(numero, 5) AS UNSIGNED)), 0) AS max_num FROM pedidos"
+    )
+    row = cursor.fetchone()
+    return int(row['max_num'] if row else 0) + 1
+
+
 def gerar_numero_pedido():
+    """Gera o próximo número de pedido (uso em GET para pré-visualização no form)."""
     conn = get_db()
     cursor = conn.cursor(dictionary=True)
-    cursor.execute("SELECT numero FROM pedidos ORDER BY id DESC LIMIT 1")
-    ultimo = cursor.fetchone()
-    cursor.close()
-    conn.close()
-    
-    if ultimo:
-        num = int(ultimo['numero'].replace('PED-', '')) + 1
-    else:
-        num = 1
-    return f"PED-{num:05d}"
+    try:
+        return f"PED-{_proximo_numero_pedido(cursor):05d}"
+    finally:
+        cursor.close()
+        conn.close()
 
 
 @bp.route('/')
@@ -91,58 +113,86 @@ def novo():
         motorista_id = request.form.get('motorista_id') or None
         veiculo_id = request.form.get('veiculo_id') or None
         observacoes = request.form.get('observacoes', '')
-        numero = gerar_numero_pedido()
         
-        cursor.execute("""
-            INSERT INTO pedidos (numero, data_pedido, motorista_id, veiculo_id, status, observacoes)
-            VALUES (%s, %s, %s, %s, 'Pendente', %s)
-        """, (numero, data_pedido, motorista_id, veiculo_id, observacoes))
-        
-        pedido_id = cursor.lastrowid
-        
-        # Processar itens
-        clientes = request.form.getlist('cliente_id')
-        produtos = request.form.getlist('produto_id')
-        fornecedores = request.form.getlist('fornecedor_id')
-        origens = request.form.getlist('origem_id')
-        bases = request.form.getlist('base_id')
-        quantidades = request.form.getlist('quantidade')
-        quantidade_ids = request.form.getlist('quantidade_id')
-        tipos_qtd = request.form.getlist('tipo_quantidade')
-        precos = request.form.getlist('preco_unitario')
-        totais_nf = request.form.getlist('total_nf')
-        formas_pagto = request.form.getlist('forma_pagamento_fornecedor_item')
-        pix_aleatorias = request.form.getlist('pix_aleatoria')
-        dados_transf_itens = request.form.getlist('dados_transferencia_item')
-        
-        for i in range(len(clientes)):
-            if clientes[i] and produtos[i] and fornecedores[i]:
-                qtd_id = quantidade_ids[i] if quantidade_ids[i] else None
-                qtd_valor = quantidades[i] if quantidades[i] else 0
-                base_id = bases[i] if bases[i] else None
-                forma_pagto = formas_pagto[i] if i < len(formas_pagto) else None
-                pix_aleatoria = pix_aleatorias[i] if i < len(pix_aleatorias) else None
-                dados_transf = dados_transf_itens[i] if i < len(dados_transf_itens) else None
-                
-                cursor.execute("""
-                    INSERT INTO pedidos_itens (
-                        pedido_id, cliente_id, produto_id, fornecedor_id, origem_id, base_id,
-                        quantidade, quantidade_id, tipo_quantidade, forma_pagamento_fornecedor_item,
-                        pix_aleatoria, dados_transferencia_item, preco_unitario, total_nf
-                    )
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-                """, (
-                    pedido_id, clientes[i], produtos[i], fornecedores[i], origens[i], base_id,
-                    qtd_valor, qtd_id, tipos_qtd[i], forma_pagto, pix_aleatoria, dados_transf,
-                    precos[i], totais_nf[i]
-                ))
-        
-        conn.commit()
-        cursor.close()
-        conn.close()
-        
-        flash(f'Pedido {numero} criado com sucesso!', 'success')
-        return redirect(url_for('pedidos.visualizar', id=pedido_id))
+        try:
+            # Gera o número e faz o INSERT dentro da mesma conexão/transação.
+            # Em caso de colisão por acesso simultâneo (IntegrityError no UNIQUE
+            # de `numero`), tenta até 3 vezes com o próximo número disponível.
+            pedido_id = None
+            numero = None
+            for _attempt in range(3):
+                numero = f"PED-{_proximo_numero_pedido(cursor):05d}"
+                try:
+                    cursor.execute("""
+                        INSERT INTO pedidos (numero, data_pedido, motorista_id, veiculo_id, status, observacoes)
+                        VALUES (%s, %s, %s, %s, 'Pendente', %s)
+                    """, (numero, data_pedido, motorista_id, veiculo_id, observacoes))
+                    pedido_id = cursor.lastrowid
+                    break  # INSERT bem-sucedido
+                except mysql.connector.errors.IntegrityError:
+                    if _attempt == 2:
+                        raise
+                    conn.rollback()
+                    time.sleep(0.05 * (_attempt + 1))
+                    continue
+
+            # Processar itens
+            clientes = request.form.getlist('cliente_id')
+            produtos = request.form.getlist('produto_id')
+            fornecedores = request.form.getlist('fornecedor_id')
+            origens = request.form.getlist('origem_id')
+            bases = request.form.getlist('base_id')
+            quantidades = request.form.getlist('quantidade')
+            quantidade_ids = request.form.getlist('quantidade_id')
+            tipos_qtd = request.form.getlist('tipo_quantidade')
+            precos = request.form.getlist('preco_unitario')
+            totais_nf = request.form.getlist('total_nf')
+            formas_pagto = request.form.getlist('forma_pagamento_fornecedor_item')
+            pix_aleatorias = request.form.getlist('pix_aleatoria')
+            dados_transf_itens = request.form.getlist('dados_transferencia_item')
+            
+            for i in range(len(clientes)):
+                if clientes[i] and produtos[i] and fornecedores[i]:
+                    qtd_id = quantidade_ids[i] if quantidade_ids[i] else None
+                    qtd_valor = quantidades[i] if quantidades[i] else 0
+                    base_id = bases[i] if bases[i] else None
+                    forma_pagto = formas_pagto[i] if i < len(formas_pagto) else None
+                    pix_aleatoria = pix_aleatorias[i] if i < len(pix_aleatorias) else None
+                    dados_transf = dados_transf_itens[i] if i < len(dados_transf_itens) else None
+                    
+                    cursor.execute("""
+                        INSERT INTO pedidos_itens (
+                            pedido_id, cliente_id, produto_id, fornecedor_id, origem_id, base_id,
+                            quantidade, quantidade_id, tipo_quantidade, forma_pagamento_fornecedor_item,
+                            pix_aleatoria, dados_transferencia_item, preco_unitario, total_nf
+                        )
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    """, (
+                        pedido_id, clientes[i], produtos[i], fornecedores[i], origens[i], base_id,
+                        qtd_valor, qtd_id, tipos_qtd[i], forma_pagto, pix_aleatoria, dados_transf,
+                        precos[i], totais_nf[i]
+                    ))
+            
+            conn.commit()
+            cursor.close()
+            conn.close()
+            
+            flash(f'Pedido {numero} criado com sucesso!', 'success')
+            return redirect(url_for('pedidos.visualizar', id=pedido_id))
+
+        except Exception as exc:
+            logger.exception("Erro ao criar pedido: %s", exc)
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+            try:
+                cursor.close()
+                conn.close()
+            except Exception:
+                pass
+            flash('Erro ao criar pedido. Por favor, tente novamente.', 'danger')
+            return redirect(url_for('pedidos.novo'))
     
     # GET - carregar dados para o formulário
     cursor.execute("SELECT id, razao_social, nome_fantasia, cnpj FROM clientes ORDER BY razao_social")
@@ -272,57 +322,72 @@ def editar(id):
         status = request.form['status']
         observacoes = request.form.get('observacoes', '')
         
-        cursor.execute("""
-            UPDATE pedidos
-            SET data_pedido=%s, motorista_id=%s, veiculo_id=%s, status=%s, observacoes=%s
-            WHERE id=%s
-        """, (data_pedido, motorista_id, veiculo_id, status, observacoes, id))
-        
-        # Deletar e recriar itens
-        cursor.execute("DELETE FROM pedidos_itens WHERE pedido_id = %s", (id,))
-        
-        clientes = request.form.getlist('cliente_id')
-        produtos = request.form.getlist('produto_id')
-        fornecedores = request.form.getlist('fornecedor_id')
-        origens = request.form.getlist('origem_id')
-        bases = request.form.getlist('base_id')
-        quantidades = request.form.getlist('quantidade')
-        quantidade_ids = request.form.getlist('quantidade_id')
-        tipos_qtd = request.form.getlist('tipo_quantidade')
-        precos = request.form.getlist('preco_unitario')
-        totais_nf = request.form.getlist('total_nf')
-        formas_pagto = request.form.getlist('forma_pagamento_fornecedor_item')
-        pix_aleatorias = request.form.getlist('pix_aleatoria')
-        dados_transf_itens = request.form.getlist('dados_transferencia_item')
-        
-        for i in range(len(clientes)):
-            if clientes[i] and produtos[i] and fornecedores[i]:
-                qtd_id = quantidade_ids[i] if quantidade_ids[i] else None
-                qtd_valor = quantidades[i] if quantidades[i] else 0
-                base_id = bases[i] if bases[i] else None
-                forma_pagto = formas_pagto[i] if i < len(formas_pagto) else None
-                pix_aleatoria = pix_aleatorias[i] if i < len(pix_aleatorias) else None
-                dados_transf = dados_transf_itens[i] if i < len(dados_transf_itens) else None
-                
-                cursor.execute("""
-                    INSERT INTO pedidos_itens (
-                        pedido_id, cliente_id, produto_id, fornecedor_id, origem_id, base_id,
-                        quantidade, quantidade_id, tipo_quantidade, forma_pagamento_fornecedor_item,
-                        pix_aleatoria, dados_transferencia_item, preco_unitario, total_nf
-                    )
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-                """, (
-                    id, clientes[i], produtos[i], fornecedores[i], origens[i], base_id,
-                    qtd_valor, qtd_id, tipos_qtd[i], forma_pagto, pix_aleatoria, dados_transf,
-                    precos[i], totais_nf[i]
-                ))
-        
-        conn.commit()
-        cursor.close()
-        conn.close()
-        
-        flash('Pedido atualizado com sucesso!', 'success')
-        return redirect(url_for('pedidos.visualizar', id=id))
+        try:
+            cursor.execute("""
+                UPDATE pedidos
+                SET data_pedido=%s, motorista_id=%s, veiculo_id=%s, status=%s, observacoes=%s
+                WHERE id=%s
+            """, (data_pedido, motorista_id, veiculo_id, status, observacoes, id))
+            
+            # Deletar e recriar itens
+            cursor.execute("DELETE FROM pedidos_itens WHERE pedido_id = %s", (id,))
+            
+            clientes = request.form.getlist('cliente_id')
+            produtos = request.form.getlist('produto_id')
+            fornecedores = request.form.getlist('fornecedor_id')
+            origens = request.form.getlist('origem_id')
+            bases = request.form.getlist('base_id')
+            quantidades = request.form.getlist('quantidade')
+            quantidade_ids = request.form.getlist('quantidade_id')
+            tipos_qtd = request.form.getlist('tipo_quantidade')
+            precos = request.form.getlist('preco_unitario')
+            totais_nf = request.form.getlist('total_nf')
+            formas_pagto = request.form.getlist('forma_pagamento_fornecedor_item')
+            pix_aleatorias = request.form.getlist('pix_aleatoria')
+            dados_transf_itens = request.form.getlist('dados_transferencia_item')
+            
+            for i in range(len(clientes)):
+                if clientes[i] and produtos[i] and fornecedores[i]:
+                    qtd_id = quantidade_ids[i] if quantidade_ids[i] else None
+                    qtd_valor = quantidades[i] if quantidades[i] else 0
+                    base_id = bases[i] if bases[i] else None
+                    forma_pagto = formas_pagto[i] if i < len(formas_pagto) else None
+                    pix_aleatoria = pix_aleatorias[i] if i < len(pix_aleatorias) else None
+                    dados_transf = dados_transf_itens[i] if i < len(dados_transf_itens) else None
+                    
+                    cursor.execute("""
+                        INSERT INTO pedidos_itens (
+                            pedido_id, cliente_id, produto_id, fornecedor_id, origem_id, base_id,
+                            quantidade, quantidade_id, tipo_quantidade, forma_pagamento_fornecedor_item,
+                            pix_aleatoria, dados_transferencia_item, preco_unitario, total_nf
+                        )
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    """, (
+                        id, clientes[i], produtos[i], fornecedores[i], origens[i], base_id,
+                        qtd_valor, qtd_id, tipos_qtd[i], forma_pagto, pix_aleatoria, dados_transf,
+                        precos[i], totais_nf[i]
+                    ))
+            
+            conn.commit()
+            cursor.close()
+            conn.close()
+            
+            flash('Pedido atualizado com sucesso!', 'success')
+            return redirect(url_for('pedidos.visualizar', id=id))
+
+        except Exception as exc:
+            logger.exception("Erro ao atualizar pedido id=%s: %s", id, exc)
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+            try:
+                cursor.close()
+                conn.close()
+            except Exception:
+                pass
+            flash('Erro ao atualizar pedido. Por favor, tente novamente.', 'danger')
+            return redirect(url_for('pedidos.editar', id=id))
     
     # GET
     cursor.execute("SELECT * FROM pedidos WHERE id = %s", (id,))
@@ -453,6 +518,10 @@ def importar_lista():
     Pode ser carregada em modal via fetch ou aberta em nova aba.
     """
     conn = get_db()
+    # Garante que pedido_id existe em fretes usando a MESMA conexão já aberta,
+    # evitando falhas silenciosas causadas por lentidão na abertura de uma segunda
+    # conexão com o Railway durante a chamada separada anterior.
+    _ensure_fretes_pedido_id(conn)
     cursor = conn.cursor(dictionary=True)
 
     # Buscar pedidos pendentes (ajuste condição se quiser outros status)
@@ -467,6 +536,9 @@ def importar_lista():
         LEFT JOIN veiculos v ON p.veiculo_id = v.id
         LEFT JOIN pedidos_itens pi ON p.id = pi.pedido_id
         WHERE p.status = 'Pendente'
+          AND NOT EXISTS (
+              SELECT 1 FROM fretes f WHERE f.pedido_id = p.id
+          )
         GROUP BY p.id
         ORDER BY p.data_pedido DESC, p.id DESC
     """)

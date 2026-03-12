@@ -208,8 +208,21 @@
                                 <a href="{{ url_for('lubrificantes.editar_lancamento', id=mov.id) }}" class="btn btn-sm btn-primary" title="Editar Lançamento">
                                     <i class="bi bi-pencil"></i>
                                 </a>
+                                <form method="POST" action="{{ url_for('lubrificantes.excluir_lancamento', id=mov.id) }}"
+                                      style="display:inline;"
+                                      onsubmit="return confirm('Tem certeza que deseja excluir este lançamento?');">
+                                    <button type="submit" class="btn btn-sm btn-danger" title="Excluir Lançamento">
+                                        <i class="bi bi-trash"></i>
+                                    </button>
+                                </form>
                                 {% else %}
-                                -
+                                <form method="POST" action="{{ url_for('lubrificantes.excluir_compra', id=mov.id) }}"
+                                      style="display:inline;"
+                                      onsubmit="return confirm('Tem certeza que deseja excluir esta compra?');">
+                                    <button type="submit" class="btn btn-sm btn-danger" title="Excluir Compra">
+                                        <i class="bi bi-trash"></i>
+                                    </button>
+                                </form>
                                 {% endif %}
                             </td>
                         </tr>

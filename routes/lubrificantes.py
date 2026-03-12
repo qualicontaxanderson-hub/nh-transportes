@@ -612,6 +612,64 @@ def editar_lancamento(id):
     )
 
 # =============================================
+# EXCLUIR LANÇAMENTO (VENDA)
+# =============================================
+@bp.route('/lancamento/excluir/<int:id>', methods=['POST'])
+@login_required
+@supervisor_or_admin_required
+def excluir_lancamento(id):
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True)
+
+    cursor.execute("SELECT id FROM lubrificantes_lancamentos WHERE id = %s", (id,))
+    lancamento = cursor.fetchone()
+
+    if not lancamento:
+        flash('Lançamento não encontrado!', 'danger')
+        cursor.close()
+        conn.close()
+        return redirect(url_for('lubrificantes.index'))
+
+    # O estoque é calculado dinamicamente (saldo_inicial + compras - vendas),
+    # portanto excluir o lançamento já corrige o estoque automaticamente.
+    cursor.execute("DELETE FROM lubrificantes_lancamentos WHERE id = %s", (id,))
+    conn.commit()
+    cursor.close()
+    conn.close()
+
+    flash('Lançamento excluído com sucesso!', 'success')
+    return redirect(url_for('lubrificantes.index'))
+
+# =============================================
+# EXCLUIR COMPRA
+# =============================================
+@bp.route('/compra/excluir/<int:id>', methods=['POST'])
+@login_required
+@supervisor_or_admin_required
+def excluir_compra(id):
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True)
+
+    cursor.execute("SELECT id FROM lubrificantes_compras WHERE id = %s", (id,))
+    compra = cursor.fetchone()
+
+    if not compra:
+        flash('Compra não encontrada!', 'danger')
+        cursor.close()
+        conn.close()
+        return redirect(url_for('lubrificantes.index'))
+
+    # O estoque é calculado dinamicamente (saldo_inicial + compras - vendas),
+    # portanto excluir a compra já corrige o estoque automaticamente.
+    cursor.execute("DELETE FROM lubrificantes_compras WHERE id = %s", (id,))
+    conn.commit()
+    cursor.close()
+    conn.close()
+
+    flash('Compra excluída com sucesso!', 'success')
+    return redirect(url_for('lubrificantes.index'))
+
+# =============================================
 # PRODUTOS - LISTAR
 # =============================================
 @bp.route('/produtos')

@@ -7,6 +7,72 @@ from utils.helpers import parse_moeda
 
 bp = Blueprint('fretes', __name__, url_prefix='/fretes')
 
+import logging as _logging
+_logger = _logging.getLogger(__name__)
+
+
+def _ensure_fretes_pedido_id(conn=None):
+    """
+    Garante que a coluna pedido_id existe na tabela fretes.
+    Migration idempotente: segura para executar múltiplas vezes.
+
+    Se ``conn`` for fornecido, reutiliza a conexão existente em vez de abrir
+    uma nova — isso evita falhas silenciosas quando a conectividade com o banco
+    está lenta e a segunda conexão expira antes de executar o ALTER TABLE.
+    """
+    _own_conn = conn is None
+    cur = None
+    try:
+        if _own_conn:
+            conn = get_db_connection()
+        cur = conn.cursor()
+
+        # Verifica se a coluna já existe usando INFORMATION_SCHEMA (evita
+        # capturar error 1060 e esconder outros erros de forma silenciosa).
+        cur.execute("""
+            SELECT COUNT(*)
+            FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE()
+              AND TABLE_NAME   = 'fretes'
+              AND COLUMN_NAME  = 'pedido_id'
+        """)
+        row = cur.fetchone()
+        already_exists = row and row[0] > 0
+
+        if not already_exists:
+            cur.execute("""
+                ALTER TABLE fretes
+                ADD COLUMN pedido_id INT NULL DEFAULT NULL
+            """)
+            # ALTER TABLE é DDL — o MySQL o auto-commita implicitamente.
+            # O commit() explícito garante estado limpo independentemente de
+            # quem forneceu a conexão (própria ou emprestada do chamador).
+            try:
+                conn.commit()
+            except Exception:
+                pass
+            _logger.info("_ensure_fretes_pedido_id: coluna pedido_id adicionada à tabela fretes")
+        else:
+            _logger.debug("_ensure_fretes_pedido_id: coluna pedido_id já existe (ok)")
+    except Exception as e:
+        if _own_conn and conn:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+        _logger.warning("_ensure_fretes_pedido_id: não foi possível garantir coluna pedido_id: %s", e)
+    finally:
+        if cur:
+            try:
+                cur.close()
+            except Exception:
+                pass
+        if _own_conn and conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
 
 @bp.route('/', methods=['GET'])
 @login_required
@@ -455,6 +521,7 @@ def salvar_importados():
     - Por padrão só loga e devolve flash informando quantidade recebida.
     - Se for enviado save=1 no form, tenta gravar (com logging por item e sem abortar todos em erro).
     """
+    _ensure_fretes_pedido_id()
     form = request.form or {}
     current_app.logger.info("[salvar_importados] POST recebida - keys: %s", list(form.keys()))
 
@@ -513,6 +580,36 @@ def salvar_importados():
     saved = 0
     failed = []
     try:
+        # Idempotência: se já existem fretes gravados para este pedido_id,
+        # abortar antes de qualquer INSERT para evitar duplicatas causadas por
+        # duplo-clique, lentidão da rede (Railway/Render) ou retry do browser.
+        if pedido_id:
+            try:
+                cur.execute(
+                    "SELECT COUNT(*) FROM fretes WHERE pedido_id = %s",
+                    (pedido_id,)
+                )
+                row = cur.fetchone()
+                already_imported = row and row[0] > 0
+            except Exception as e_check:
+                current_app.logger.warning(
+                    "[salvar_importados] erro ao verificar fretes existentes para pedido_id=%s: %s",
+                    pedido_id, e_check
+                )
+                already_imported = False
+
+            if already_imported:
+                current_app.logger.warning(
+                    "[salvar_importados] pedido_id=%s já possui fretes gravados — abortando para evitar duplicata",
+                    pedido_id
+                )
+                flash(
+                    f"Pedido #{pedido_id} já foi importado anteriormente. "
+                    "Nenhum frete duplicado foi criado.",
+                    "warning"
+                )
+                return redirect(url_for('fretes.lista'))
+
         for idx, item in sorted(items.items()):
             try:
                 data_frete = item.get('data_frete') or request.form.get('data_frete') or None
@@ -548,8 +645,8 @@ def salvar_importados():
                         quantidade_id, quantidade_manual,
                         preco_produto_unitario, preco_por_litro,
                         total_nf_compra, valor_total_frete, comissao_motorista,
-                        valor_cte, comissao_cte, lucro
-                    ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                        valor_cte, comissao_cte, lucro, pedido_id
+                    ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
                 """, (
                     data_frete or None,
                     item.get('status') or 'Importado',
@@ -570,7 +667,8 @@ def salvar_importados():
                     comissao_motorista or 0,
                     valor_cte or 0,
                     comissao_cte or 0,
-                    lucro or 0
+                    lucro or 0,
+                    pedido_id
                 ))
                 conn.commit()
                 saved += 1

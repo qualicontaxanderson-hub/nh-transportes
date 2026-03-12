@@ -2,6 +2,7 @@ import mysql.connector
 from mysql.connector import pooling, Error
 from config import Config
 import logging
+import time
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -52,24 +53,40 @@ def _get_connection_pool():
 def get_db_connection():
     """
     Get a database connection from the pool.
+    Falls back to a direct connection if the pool is unavailable.
+    Pings the connection to detect and recover stale connections obtained
+    from the pool (common when Railway proxy closes idle connections).
     
     Returns:
         mysql.connector.connection: A database connection from the pool
         
     Raises:
-        Error: If unable to get connection from pool
+        Error: If unable to get connection from pool or direct fallback
     """
     try:
         pool = _get_connection_pool()
         connection = pool.get_connection()
         
-        # Test connection and reconnect if necessary
-        if not connection.is_connected():
-            connection.reconnect(attempts=RECONNECT_ATTEMPTS, delay=RECONNECT_DELAY)
+        # Ping / reconnect if the pooled connection has gone stale.
+        # This handles Railway proxy drop-outs without raising to the caller.
+        try:
+            connection.ping(reconnect=True, attempts=RECONNECT_ATTEMPTS, delay=RECONNECT_DELAY)
+        except Error:
+            # ping() already attempted reconnect; if still broken, fall through
+            # to the direct-connection fallback below.
+            raise
             
         return connection
     except Error as e:
         logger.error(f"Error getting connection from pool: {e}")
         # Fallback to direct connection if pool fails
         logger.warning("Falling back to direct connection")
-        return mysql.connector.connect(**CONNECTION_PARAMS)
+        for attempt in range(1, RECONNECT_ATTEMPTS + 1):
+            try:
+                return mysql.connector.connect(**CONNECTION_PARAMS)
+            except Error as direct_err:
+                logger.warning(f"Direct connection attempt {attempt}/{RECONNECT_ATTEMPTS} failed: {direct_err}")
+                if attempt < RECONNECT_ATTEMPTS:
+                    time.sleep(RECONNECT_DELAY)
+        raise
+
