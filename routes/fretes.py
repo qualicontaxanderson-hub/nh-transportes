@@ -580,6 +580,36 @@ def salvar_importados():
     saved = 0
     failed = []
     try:
+        # Idempotência: se já existem fretes gravados para este pedido_id,
+        # abortar antes de qualquer INSERT para evitar duplicatas causadas por
+        # duplo-clique, lentidão da rede (Railway/Render) ou retry do browser.
+        if pedido_id:
+            try:
+                cur.execute(
+                    "SELECT COUNT(*) FROM fretes WHERE pedido_id = %s",
+                    (pedido_id,)
+                )
+                row = cur.fetchone()
+                already_imported = row and row[0] > 0
+            except Exception as e_check:
+                current_app.logger.warning(
+                    "[salvar_importados] erro ao verificar fretes existentes para pedido_id=%s: %s",
+                    pedido_id, e_check
+                )
+                already_imported = False
+
+            if already_imported:
+                current_app.logger.warning(
+                    "[salvar_importados] pedido_id=%s já possui fretes gravados — abortando para evitar duplicata",
+                    pedido_id
+                )
+                flash(
+                    f"Pedido #{pedido_id} já foi importado anteriormente. "
+                    "Nenhum frete duplicado foi criado.",
+                    "warning"
+                )
+                return redirect(url_for('fretes.lista'))
+
         for idx, item in sorted(items.items()):
             try:
                 data_frete = item.get('data_frete') or request.form.get('data_frete') or None
