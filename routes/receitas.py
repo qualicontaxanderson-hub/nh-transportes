@@ -57,8 +57,6 @@ def lista():
         receitas = cursor.fetchall()
         return render_template('receitas/lista.html', receitas=receitas)
     except Exception as e:
-        if conn:
-            conn.rollback()
         flash(f'Erro ao carregar receitas: {str(e)}', 'danger')
         return render_template('receitas/lista.html', receitas=[])
     finally:

@@ -50,8 +50,6 @@ def lista():
         cartoes = cursor.fetchall()
         return render_template('cartoes/lista.html', cartoes=cartoes)
     except Exception as e:
-        if conn:
-            conn.rollback()
         flash(f'Erro ao carregar cartões: {str(e)}', 'danger')
         return render_template('cartoes/lista.html', cartoes=[])
     finally:

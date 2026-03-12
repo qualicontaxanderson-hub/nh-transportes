@@ -67,8 +67,6 @@ def lista():
         
         return render_template('caixa/lista.html', formas_pagamento=formas_pagamento, tipos=VALID_TIPOS)
     except Exception as e:
-        if conn:
-            conn.rollback()
         flash(f'Erro ao carregar formas de pagamento: {str(e)}', 'danger')
         return render_template('caixa/lista.html', formas_pagamento=[], tipos=VALID_TIPOS)
     finally:

@@ -99,8 +99,6 @@ def lista():
         lancamentos = cursor.fetchall()
         return render_template('lancamentos_receitas/lista.html', lancamentos=lancamentos)
     except Exception as e:
-        if conn:
-            conn.rollback()
         flash(f'Erro ao carregar lançamentos: {str(e)}', 'danger')
         return render_template('lancamentos_receitas/lista.html', lancamentos=[])
     finally:
