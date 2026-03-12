@@ -20,72 +20,101 @@ def lista():
 @login_required
 @admin_required
 def novo():
-    if request.method == 'POST':
+    conn = None
+    cursor = None
+    try:
         conn = get_db_connection()
         cursor = conn.cursor()
-        
-        cursor.execute("""
-            INSERT INTO rubricas (
-                nome, descricao, tipo, percentualouvalorfixo, ordem, ativo
-            ) VALUES (%s, %s, %s, %s, %s, %s)
-        """, (
-            request.form.get('nome'),
-            request.form.get('descricao'),
-            request.form.get('tipo'),
-            request.form.get('percentualouvalorfixo', 'VALOR_FIXO'),
-            request.form.get('ordem', 1),
-            1
-        ))
-        conn.commit()
-        cursor.close()
-        conn.close()
-        flash('Rubrica cadastrada com sucesso!', 'success')
+
+        if request.method == 'POST':
+            cursor.execute("""
+                INSERT INTO rubricas (
+                    nome, descricao, tipo, percentualouvalorfixo, ordem, ativo
+                ) VALUES (%s, %s, %s, %s, %s, %s)
+            """, (
+                request.form.get('nome'),
+                request.form.get('descricao'),
+                request.form.get('tipo'),
+                request.form.get('percentualouvalorfixo', 'VALOR_FIXO'),
+                request.form.get('ordem', 1),
+                1
+            ))
+            conn.commit()
+            flash('Rubrica cadastrada com sucesso!', 'success')
+            return redirect(url_for('rubricas.lista'))
+
+        return render_template('rubricas/novo.html')
+    except Exception as e:
+        if conn:
+            conn.rollback()
+        flash(f'Erro ao cadastrar rubrica: {str(e)}', 'danger')
         return redirect(url_for('rubricas.lista'))
-    
-    return render_template('rubricas/novo.html')
+    finally:
+        if cursor:
+            cursor.close()
+        if conn:
+            conn.close()
 
 @bp.route('/editar/<int:id>', methods=['GET', 'POST'])
 @login_required
 @admin_required
 def editar(id):
-    conn = get_db_connection()
-    cursor = conn.cursor(dictionary=True)
-    
-    if request.method == 'POST':
-        cursor.execute("""
-            UPDATE rubricas 
-            SET nome=%s, descricao=%s, tipo=%s, percentualouvalorfixo=%s, ordem=%s
-            WHERE id=%s
-        """, (
-            request.form.get('nome'),
-            request.form.get('descricao'),
-            request.form.get('tipo'),
-            request.form.get('percentualouvalorfixo'),
-            request.form.get('ordem'),
-            id
-        ))
-        conn.commit()
-        cursor.close()
-        conn.close()
-        flash('Rubrica atualizada com sucesso!', 'success')
+    conn = None
+    cursor = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+
+        if request.method == 'POST':
+            cursor.execute("""
+                UPDATE rubricas 
+                SET nome=%s, descricao=%s, tipo=%s, percentualouvalorfixo=%s, ordem=%s
+                WHERE id=%s
+            """, (
+                request.form.get('nome'),
+                request.form.get('descricao'),
+                request.form.get('tipo'),
+                request.form.get('percentualouvalorfixo'),
+                request.form.get('ordem'),
+                id
+            ))
+            conn.commit()
+            flash('Rubrica atualizada com sucesso!', 'success')
+            return redirect(url_for('rubricas.lista'))
+
+        cursor.execute("SELECT * FROM rubricas WHERE id = %s", (id,))
+        rubrica = cursor.fetchone()
+        return render_template('rubricas/editar.html', rubrica=rubrica)
+    except Exception as e:
+        if conn:
+            conn.rollback()
+        flash(f'Erro ao editar rubrica: {str(e)}', 'danger')
         return redirect(url_for('rubricas.lista'))
-    
-    cursor.execute("SELECT * FROM rubricas WHERE id = %s", (id,))
-    rubrica = cursor.fetchone()
-    cursor.close()
-    conn.close()
-    
-    return render_template('rubricas/editar.html', rubrica=rubrica)
+    finally:
+        if cursor:
+            cursor.close()
+        if conn:
+            conn.close()
 
 @bp.route('/excluir/<int:id>', methods=['POST'])
 @login_required
 @admin_required
 def excluir(id):
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    cursor.execute("UPDATE rubricas SET ativo = 0 WHERE id = %s", (id,))
-    conn.commit()
-    cursor.close()
-    conn.close()
-    flash('Rubrica desativada com sucesso!', 'success')
+    conn = None
+    cursor = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("UPDATE rubricas SET ativo = 0 WHERE id = %s", (id,))
+        conn.commit()
+        flash('Rubrica desativada com sucesso!', 'success')
+    except Exception as e:
+        if conn:
+            conn.rollback()
+        flash(f'Erro ao desativar rubrica: {str(e)}', 'danger')
+    finally:
+        if cursor:
+            cursor.close()
+        if conn:
+            conn.close()
     return redirect(url_for('rubricas.lista'))

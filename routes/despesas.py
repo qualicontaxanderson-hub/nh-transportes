@@ -12,7 +12,7 @@ def index():
     """Lista todos os títulos de despesas"""
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
-    
+
     cursor.execute("""
         SELECT t.*, 
                COUNT(DISTINCT c.id) as total_categorias
@@ -23,10 +23,10 @@ def index():
         ORDER BY t.ordem, t.nome
     """)
     titulos = cursor.fetchall()
-    
+
     cursor.close()
     conn.close()
-    
+
     return render_template('despesas/index.html', titulos=titulos)
 
 
@@ -37,16 +37,16 @@ def titulo_detalhes(titulo_id):
     """Mostra categorias de um título específico"""
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
-    
-    # Buscar título
+
     cursor.execute("SELECT * FROM titulos_despesas WHERE id = %s", (titulo_id,))
     titulo = cursor.fetchone()
-    
+
     if not titulo:
         flash('Título não encontrado!', 'error')
+        cursor.close()
+        conn.close()
         return redirect(url_for('despesas.index'))
-    
-    # Buscar categorias do título
+
     cursor.execute("""
         SELECT c.*, 
                COUNT(DISTINCT s.id) as total_subcategorias
@@ -57,10 +57,10 @@ def titulo_detalhes(titulo_id):
         ORDER BY c.nome
     """, (titulo_id,))
     categorias = cursor.fetchall()
-    
+
     cursor.close()
     conn.close()
-    
+
     return render_template('despesas/titulo_detalhes.html', titulo=titulo, categorias=categorias)
 
 
@@ -71,8 +71,7 @@ def categoria_detalhes(categoria_id):
     """Mostra subcategorias de uma categoria específica"""
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
-    
-    # Buscar categoria e título
+
     cursor.execute("""
         SELECT c.*, t.nome as titulo_nome, t.id as titulo_id
         FROM categorias_despesas c
@@ -80,24 +79,25 @@ def categoria_detalhes(categoria_id):
         WHERE c.id = %s
     """, (categoria_id,))
     categoria = cursor.fetchone()
-    
+
     if not categoria:
         flash('Categoria não encontrada!', 'error')
+        cursor.close()
+        conn.close()
         return redirect(url_for('despesas.index'))
-    
-    # Buscar subcategorias da categoria
+
     cursor.execute("""
         SELECT * FROM subcategorias_despesas
         WHERE categoria_id = %s AND ativo = 1
         ORDER BY nome
     """, (categoria_id,))
     subcategorias = cursor.fetchall()
-    
+
     cursor.close()
     conn.close()
-    
-    return render_template('despesas/categoria_detalhes.html', 
-                         categoria=categoria, 
+
+    return render_template('despesas/categoria_detalhes.html',
+                         categoria=categoria,
                          subcategorias=subcategorias)
 
 
@@ -107,28 +107,38 @@ def categoria_detalhes(categoria_id):
 @admin_required
 def novo_titulo():
     """Criar novo título de despesa"""
-    if request.method == 'POST':
+    conn = None
+    cursor = None
+    try:
         conn = get_db_connection()
         cursor = conn.cursor()
-        
-        cursor.execute("""
-            INSERT INTO titulos_despesas (nome, descricao, ordem, ativo)
-            VALUES (%s, %s, %s, %s)
-        """, (
-            request.form.get('nome'),
-            request.form.get('descricao'),
-            request.form.get('ordem', 0),
-            1
-        ))
-        
-        conn.commit()
-        cursor.close()
-        conn.close()
-        
-        flash('Título criado com sucesso!', 'success')
+
+        if request.method == 'POST':
+            cursor.execute("""
+                INSERT INTO titulos_despesas (nome, descricao, ordem, ativo)
+                VALUES (%s, %s, %s, %s)
+            """, (
+                request.form.get('nome'),
+                request.form.get('descricao'),
+                request.form.get('ordem', 0),
+                1
+            ))
+
+            conn.commit()
+            flash('Título criado com sucesso!', 'success')
+            return redirect(url_for('despesas.index'))
+
+        return render_template('despesas/titulo_form.html', titulo=None)
+    except Exception as e:
+        if conn:
+            conn.rollback()
+        flash(f'Erro ao salvar título: {str(e)}', 'danger')
         return redirect(url_for('despesas.index'))
-    
-    return render_template('despesas/titulo_form.html', titulo=None)
+    finally:
+        if cursor:
+            cursor.close()
+        if conn:
+            conn.close()
 
 
 @bp.route('/titulos/editar/<int:id>', methods=['GET', 'POST'])
@@ -136,35 +146,41 @@ def novo_titulo():
 @admin_required
 def editar_titulo(id):
     """Editar título de despesa"""
-    conn = get_db_connection()
-    cursor = conn.cursor(dictionary=True)
-    
-    if request.method == 'POST':
-        cursor.execute("""
-            UPDATE titulos_despesas 
-            SET nome = %s, descricao = %s, ordem = %s
-            WHERE id = %s
-        """, (
-            request.form.get('nome'),
-            request.form.get('descricao'),
-            request.form.get('ordem', 0),
-            id
-        ))
-        
-        conn.commit()
-        cursor.close()
-        conn.close()
-        
-        flash('Título atualizado com sucesso!', 'success')
+    conn = None
+    cursor = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+
+        if request.method == 'POST':
+            cursor.execute("""
+                UPDATE titulos_despesas 
+                SET nome = %s, descricao = %s, ordem = %s
+                WHERE id = %s
+            """, (
+                request.form.get('nome'),
+                request.form.get('descricao'),
+                request.form.get('ordem', 0),
+                id
+            ))
+
+            conn.commit()
+            flash('Título atualizado com sucesso!', 'success')
+            return redirect(url_for('despesas.index'))
+
+        cursor.execute("SELECT * FROM titulos_despesas WHERE id = %s", (id,))
+        titulo = cursor.fetchone()
+        return render_template('despesas/titulo_form.html', titulo=titulo)
+    except Exception as e:
+        if conn:
+            conn.rollback()
+        flash(f'Erro ao editar título: {str(e)}', 'danger')
         return redirect(url_for('despesas.index'))
-    
-    cursor.execute("SELECT * FROM titulos_despesas WHERE id = %s", (id,))
-    titulo = cursor.fetchone()
-    
-    cursor.close()
-    conn.close()
-    
-    return render_template('despesas/titulo_form.html', titulo=titulo)
+    finally:
+        if cursor:
+            cursor.close()
+        if conn:
+            conn.close()
 
 
 # Rotas de gerenciamento de categorias
@@ -173,40 +189,47 @@ def editar_titulo(id):
 @admin_required
 def nova_categoria():
     """Criar nova categoria de despesa"""
-    conn = get_db_connection()
-    cursor = conn.cursor(dictionary=True)
-    
-    if request.method == 'POST':
-        cursor.execute("""
-            INSERT INTO categorias_despesas (titulo_id, nome, ordem, ativo)
-            VALUES (%s, %s, %s, %s)
-        """, (
-            request.form.get('titulo_id'),
-            request.form.get('nome'),
-            request.form.get('ordem', 0),
-            1
-        ))
-        
-        conn.commit()
-        titulo_id = request.form.get('titulo_id')
-        cursor.close()
-        conn.close()
-        
-        flash('Categoria criada com sucesso!', 'success')
-        return redirect(url_for('despesas.titulo_detalhes', titulo_id=titulo_id))
-    
-    # Buscar títulos para o dropdown
-    cursor.execute("SELECT * FROM titulos_despesas WHERE ativo = 1 ORDER BY ordem, nome")
-    titulos = cursor.fetchall()
-    
-    titulo_id = request.args.get('titulo_id')
-    cursor.close()
-    conn.close()
-    
-    return render_template('despesas/categoria_form.html', 
-                         categoria=None, 
-                         titulos=titulos, 
-                         titulo_id_pre=titulo_id)
+    conn = None
+    cursor = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+
+        if request.method == 'POST':
+            titulo_id = request.form.get('titulo_id')
+            cursor.execute("""
+                INSERT INTO categorias_despesas (titulo_id, nome, ordem, ativo)
+                VALUES (%s, %s, %s, %s)
+            """, (
+                titulo_id,
+                request.form.get('nome'),
+                request.form.get('ordem', 0),
+                1
+            ))
+
+            conn.commit()
+            flash('Categoria criada com sucesso!', 'success')
+            return redirect(url_for('despesas.titulo_detalhes', titulo_id=titulo_id))
+
+        # Buscar títulos para o dropdown
+        cursor.execute("SELECT * FROM titulos_despesas WHERE ativo = 1 ORDER BY ordem, nome")
+        titulos = cursor.fetchall()
+
+        titulo_id = request.args.get('titulo_id')
+        return render_template('despesas/categoria_form.html',
+                             categoria=None,
+                             titulos=titulos,
+                             titulo_id_pre=titulo_id)
+    except Exception as e:
+        if conn:
+            conn.rollback()
+        flash(f'Erro ao salvar categoria: {str(e)}', 'danger')
+        return redirect(url_for('despesas.index'))
+    finally:
+        if cursor:
+            cursor.close()
+        if conn:
+            conn.close()
 
 
 @bp.route('/categorias/editar/<int:id>', methods=['GET', 'POST'])
@@ -214,46 +237,53 @@ def nova_categoria():
 @admin_required
 def editar_categoria(id):
     """Editar categoria de despesa"""
-    conn = get_db_connection()
-    cursor = conn.cursor(dictionary=True)
-    
-    if request.method == 'POST':
-        cursor.execute("""
-            UPDATE categorias_despesas 
-            SET titulo_id = %s, nome = %s, ordem = %s
-            WHERE id = %s
-        """, (
-            request.form.get('titulo_id'),
-            request.form.get('nome'),
-            request.form.get('ordem', 0),
-            id
-        ))
-        
-        conn.commit()
-        
-        cursor.execute("SELECT titulo_id FROM categorias_despesas WHERE id = %s", (id,))
-        result = cursor.fetchone()
-        titulo_id = result['titulo_id']
-        
-        cursor.close()
-        conn.close()
-        
-        flash('Categoria atualizada com sucesso!', 'success')
-        return redirect(url_for('despesas.titulo_detalhes', titulo_id=titulo_id))
-    
-    cursor.execute("SELECT * FROM categorias_despesas WHERE id = %s", (id,))
-    categoria = cursor.fetchone()
-    
-    cursor.execute("SELECT * FROM titulos_despesas WHERE ativo = 1 ORDER BY ordem, nome")
-    titulos = cursor.fetchall()
-    
-    cursor.close()
-    conn.close()
-    
-    return render_template('despesas/categoria_form.html', 
-                         categoria=categoria, 
-                         titulos=titulos,
-                         titulo_id_pre=None)
+    conn = None
+    cursor = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+
+        if request.method == 'POST':
+            cursor.execute("""
+                UPDATE categorias_despesas 
+                SET titulo_id = %s, nome = %s, ordem = %s
+                WHERE id = %s
+            """, (
+                request.form.get('titulo_id'),
+                request.form.get('nome'),
+                request.form.get('ordem', 0),
+                id
+            ))
+
+            conn.commit()
+
+            cursor.execute("SELECT titulo_id FROM categorias_despesas WHERE id = %s", (id,))
+            result = cursor.fetchone()
+            titulo_id = result['titulo_id']
+
+            flash('Categoria atualizada com sucesso!', 'success')
+            return redirect(url_for('despesas.titulo_detalhes', titulo_id=titulo_id))
+
+        cursor.execute("SELECT * FROM categorias_despesas WHERE id = %s", (id,))
+        categoria = cursor.fetchone()
+
+        cursor.execute("SELECT * FROM titulos_despesas WHERE ativo = 1 ORDER BY ordem, nome")
+        titulos = cursor.fetchall()
+
+        return render_template('despesas/categoria_form.html',
+                             categoria=categoria,
+                             titulos=titulos,
+                             titulo_id_pre=None)
+    except Exception as e:
+        if conn:
+            conn.rollback()
+        flash(f'Erro ao editar categoria: {str(e)}', 'danger')
+        return redirect(url_for('despesas.index'))
+    finally:
+        if cursor:
+            cursor.close()
+        if conn:
+            conn.close()
 
 
 # Rotas de gerenciamento de subcategorias
@@ -262,59 +292,66 @@ def editar_categoria(id):
 @admin_required
 def nova_subcategoria():
     """Criar nova subcategoria de despesa"""
-    conn = get_db_connection()
-    cursor = conn.cursor(dictionary=True)
-    
-    if request.method == 'POST':
+    conn = None
+    cursor = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+
+        if request.method == 'POST':
+            categoria_id = request.form.get('categoria_id')
+            cursor.execute("""
+                INSERT INTO subcategorias_despesas (categoria_id, nome, ordem, ativo)
+                VALUES (%s, %s, %s, %s)
+            """, (
+                categoria_id,
+                request.form.get('nome'),
+                request.form.get('ordem', 0),
+                1
+            ))
+
+            conn.commit()
+            flash('Subcategoria criada com sucesso!', 'success')
+            return redirect(url_for('despesas.categoria_detalhes', categoria_id=categoria_id))
+
+        categoria_id = request.args.get('categoria_id')
+
+        # Buscar categoria
+        if categoria_id:
+            cursor.execute("""
+                SELECT c.*, t.nome as titulo_nome
+                FROM categorias_despesas c
+                LEFT JOIN titulos_despesas t ON c.titulo_id = t.id
+                WHERE c.id = %s
+            """, (categoria_id,))
+            categoria = cursor.fetchone()
+        else:
+            categoria = None
+
+        # Buscar todas categorias para dropdown
         cursor.execute("""
-            INSERT INTO subcategorias_despesas (categoria_id, nome, ordem, ativo)
-            VALUES (%s, %s, %s, %s)
-        """, (
-            request.form.get('categoria_id'),
-            request.form.get('nome'),
-            request.form.get('ordem', 0),
-            1
-        ))
-        
-        conn.commit()
-        categoria_id = request.form.get('categoria_id')
-        cursor.close()
-        conn.close()
-        
-        flash('Subcategoria criada com sucesso!', 'success')
-        return redirect(url_for('despesas.categoria_detalhes', categoria_id=categoria_id))
-    
-    categoria_id = request.args.get('categoria_id')
-    
-    # Buscar categoria
-    if categoria_id:
-        cursor.execute("""
-            SELECT c.*, t.nome as titulo_nome
+            SELECT c.id, c.nome, t.nome as titulo_nome
             FROM categorias_despesas c
             LEFT JOIN titulos_despesas t ON c.titulo_id = t.id
-            WHERE c.id = %s
-        """, (categoria_id,))
-        categoria = cursor.fetchone()
-    else:
-        categoria = None
-    
-    # Buscar todas categorias para dropdown
-    cursor.execute("""
-        SELECT c.id, c.nome, t.nome as titulo_nome
-        FROM categorias_despesas c
-        LEFT JOIN titulos_despesas t ON c.titulo_id = t.id
-        WHERE c.ativo = 1
-        ORDER BY t.ordem, c.ordem, c.nome
-    """)
-    categorias = cursor.fetchall()
-    
-    cursor.close()
-    conn.close()
-    
-    return render_template('despesas/subcategoria_form.html', 
-                         subcategoria=None, 
-                         categorias=categorias,
-                         categoria_pre=categoria)
+            WHERE c.ativo = 1
+            ORDER BY t.ordem, c.ordem, c.nome
+        """)
+        categorias = cursor.fetchall()
+
+        return render_template('despesas/subcategoria_form.html',
+                             subcategoria=None,
+                             categorias=categorias,
+                             categoria_pre=categoria)
+    except Exception as e:
+        if conn:
+            conn.rollback()
+        flash(f'Erro ao salvar subcategoria: {str(e)}', 'danger')
+        return redirect(url_for('despesas.index'))
+    finally:
+        if cursor:
+            cursor.close()
+        if conn:
+            conn.close()
 
 
 @bp.route('/subcategorias/editar/<int:id>', methods=['GET', 'POST'])
@@ -322,62 +359,69 @@ def nova_subcategoria():
 @admin_required
 def editar_subcategoria(id):
     """Editar subcategoria de despesa"""
-    conn = get_db_connection()
-    cursor = conn.cursor(dictionary=True)
-    
-    if request.method == 'POST':
+    conn = None
+    cursor = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+
+        if request.method == 'POST':
+            cursor.execute("""
+                UPDATE subcategorias_despesas 
+                SET categoria_id = %s, nome = %s, ordem = %s
+                WHERE id = %s
+            """, (
+                request.form.get('categoria_id'),
+                request.form.get('nome'),
+                request.form.get('ordem', 0),
+                id
+            ))
+
+            conn.commit()
+
+            cursor.execute("SELECT categoria_id FROM subcategorias_despesas WHERE id = %s", (id,))
+            result = cursor.fetchone()
+            categoria_id = result['categoria_id']
+
+            flash('Subcategoria atualizada com sucesso!', 'success')
+            return redirect(url_for('despesas.categoria_detalhes', categoria_id=categoria_id))
+
+        cursor.execute("SELECT * FROM subcategorias_despesas WHERE id = %s", (id,))
+        subcategoria = cursor.fetchone()
+
+        # Buscar categoria da subcategoria
         cursor.execute("""
-            UPDATE subcategorias_despesas 
-            SET categoria_id = %s, nome = %s, ordem = %s
-            WHERE id = %s
-        """, (
-            request.form.get('categoria_id'),
-            request.form.get('nome'),
-            request.form.get('ordem', 0),
-            id
-        ))
-        
-        conn.commit()
-        
-        cursor.execute("SELECT categoria_id FROM subcategorias_despesas WHERE id = %s", (id,))
-        result = cursor.fetchone()
-        categoria_id = result['categoria_id']
-        
-        cursor.close()
-        conn.close()
-        
-        flash('Subcategoria atualizada com sucesso!', 'success')
-        return redirect(url_for('despesas.categoria_detalhes', categoria_id=categoria_id))
-    
-    cursor.execute("SELECT * FROM subcategorias_despesas WHERE id = %s", (id,))
-    subcategoria = cursor.fetchone()
-    
-    # Buscar categoria da subcategoria
-    cursor.execute("""
-        SELECT c.*, t.nome as titulo_nome
-        FROM categorias_despesas c
-        LEFT JOIN titulos_despesas t ON c.titulo_id = t.id
-        WHERE c.id = %s
-    """, (subcategoria['categoria_id'],))
-    categoria = cursor.fetchone()
-    
-    # Buscar todas categorias para dropdown
-    cursor.execute("""
-        SELECT c.id, c.nome, t.nome as titulo_nome
-        FROM categorias_despesas c
-        LEFT JOIN titulos_despesas t ON c.titulo_id = t.id
-        WHERE c.ativo = 1
-        ORDER BY t.ordem, c.ordem, c.nome
-    """)
-    categorias = cursor.fetchall()
-    
-    cursor.close()
-    conn.close()
-    
-    return render_template('despesas/subcategoria_form.html', 
-                         subcategoria=subcategoria, 
-                         categorias=categorias,
-                         categoria_pre=categoria)
+            SELECT c.*, t.nome as titulo_nome
+            FROM categorias_despesas c
+            LEFT JOIN titulos_despesas t ON c.titulo_id = t.id
+            WHERE c.id = %s
+        """, (subcategoria['categoria_id'],))
+        categoria = cursor.fetchone()
+
+        # Buscar todas categorias para dropdown
+        cursor.execute("""
+            SELECT c.id, c.nome, t.nome as titulo_nome
+            FROM categorias_despesas c
+            LEFT JOIN titulos_despesas t ON c.titulo_id = t.id
+            WHERE c.ativo = 1
+            ORDER BY t.ordem, c.ordem, c.nome
+        """)
+        categorias = cursor.fetchall()
+
+        return render_template('despesas/subcategoria_form.html',
+                             subcategoria=subcategoria,
+                             categorias=categorias,
+                             categoria_pre=categoria)
+    except Exception as e:
+        if conn:
+            conn.rollback()
+        flash(f'Erro ao editar subcategoria: {str(e)}', 'danger')
+        return redirect(url_for('despesas.index'))
+    finally:
+        if cursor:
+            cursor.close()
+        if conn:
+            conn.close()
 
 
 # Rotas de exclusão (soft delete)
@@ -386,16 +430,26 @@ def editar_subcategoria(id):
 @admin_required
 def excluir_titulo(id):
     """Desativar título de despesa"""
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    
-    cursor.execute("UPDATE titulos_despesas SET ativo = 0 WHERE id = %s", (id,))
-    conn.commit()
-    
-    cursor.close()
-    conn.close()
-    
-    flash('Título desativado com sucesso!', 'success')
+    conn = None
+    cursor = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        cursor.execute("UPDATE titulos_despesas SET ativo = 0 WHERE id = %s", (id,))
+        conn.commit()
+
+        flash('Título desativado com sucesso!', 'success')
+    except Exception as e:
+        if conn:
+            conn.rollback()
+        flash(f'Erro ao desativar título: {str(e)}', 'danger')
+    finally:
+        if cursor:
+            cursor.close()
+        if conn:
+            conn.close()
+
     return redirect(url_for('despesas.index'))
 
 
@@ -404,22 +458,32 @@ def excluir_titulo(id):
 @admin_required
 def excluir_categoria(id):
     """Desativar categoria de despesa"""
-    conn = get_db_connection()
-    cursor = conn.cursor(dictionary=True)
-    
-    # Buscar titulo_id antes de excluir
-    cursor.execute("SELECT titulo_id FROM categorias_despesas WHERE id = %s", (id,))
-    result = cursor.fetchone()
-    titulo_id = result['titulo_id'] if result else None
-    
-    cursor.execute("UPDATE categorias_despesas SET ativo = 0 WHERE id = %s", (id,))
-    conn.commit()
-    
-    cursor.close()
-    conn.close()
-    
-    flash('Categoria desativada com sucesso!', 'success')
-    
+    conn = None
+    cursor = None
+    titulo_id = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+
+        # Buscar titulo_id antes de excluir
+        cursor.execute("SELECT titulo_id FROM categorias_despesas WHERE id = %s", (id,))
+        result = cursor.fetchone()
+        titulo_id = result['titulo_id'] if result else None
+
+        cursor.execute("UPDATE categorias_despesas SET ativo = 0 WHERE id = %s", (id,))
+        conn.commit()
+
+        flash('Categoria desativada com sucesso!', 'success')
+    except Exception as e:
+        if conn:
+            conn.rollback()
+        flash(f'Erro ao desativar categoria: {str(e)}', 'danger')
+    finally:
+        if cursor:
+            cursor.close()
+        if conn:
+            conn.close()
+
     if titulo_id:
         return redirect(url_for('despesas.titulo_detalhes', titulo_id=titulo_id))
     return redirect(url_for('despesas.index'))
@@ -430,22 +494,32 @@ def excluir_categoria(id):
 @admin_required
 def excluir_subcategoria(id):
     """Desativar subcategoria de despesa"""
-    conn = get_db_connection()
-    cursor = conn.cursor(dictionary=True)
-    
-    # Buscar categoria_id antes de excluir
-    cursor.execute("SELECT categoria_id FROM subcategorias_despesas WHERE id = %s", (id,))
-    result = cursor.fetchone()
-    categoria_id = result['categoria_id'] if result else None
-    
-    cursor.execute("UPDATE subcategorias_despesas SET ativo = 0 WHERE id = %s", (id,))
-    conn.commit()
-    
-    cursor.close()
-    conn.close()
-    
-    flash('Subcategoria desativada com sucesso!', 'success')
-    
+    conn = None
+    cursor = None
+    categoria_id = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+
+        # Buscar categoria_id antes de excluir
+        cursor.execute("SELECT categoria_id FROM subcategorias_despesas WHERE id = %s", (id,))
+        result = cursor.fetchone()
+        categoria_id = result['categoria_id'] if result else None
+
+        cursor.execute("UPDATE subcategorias_despesas SET ativo = 0 WHERE id = %s", (id,))
+        conn.commit()
+
+        flash('Subcategoria desativada com sucesso!', 'success')
+    except Exception as e:
+        if conn:
+            conn.rollback()
+        flash(f'Erro ao desativar subcategoria: {str(e)}', 'danger')
+    finally:
+        if cursor:
+            cursor.close()
+        if conn:
+            conn.close()
+
     if categoria_id:
         return redirect(url_for('despesas.categoria_detalhes', categoria_id=categoria_id))
     return redirect(url_for('despesas.index'))

@@ -119,6 +119,8 @@ def novo():
         return render_template('receitas/novo.html', clientes=clientes)
         
     except Exception as e:
+        if conn:
+            conn.rollback()
         flash(f'Erro ao cadastrar receita: {str(e)}', 'danger')
         # Try to get clients for re-rendering form
         try:
@@ -202,6 +204,8 @@ def editar(id):
         
         return render_template('receitas/editar.html', receita=receita, clientes=clientes)
     except Exception as e:
+        if conn:
+            conn.rollback()
         flash(f'Erro ao atualizar receita: {str(e)}', 'danger')
         return redirect(url_for('receitas.lista'))
     finally:
@@ -243,6 +247,8 @@ def bloquear(id):
         status_text = 'desbloqueada' if novo_status else 'bloqueada'
         flash(f'Receita {status_text} com sucesso!', 'success')
     except Exception as e:
+        if conn:
+            conn.rollback()
         flash(f'Erro ao alterar status da receita: {str(e)}', 'danger')
     finally:
         if cursor is not None:

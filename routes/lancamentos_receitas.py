@@ -171,6 +171,8 @@ def novo():
         return render_template('lancamentos_receitas/novo.html', receitas=receitas, data=hoje)
         
     except Exception as e:
+        if conn:
+            conn.rollback()
         flash(f'Erro ao cadastrar lançamento: {str(e)}', 'danger')
         # Try to get receitas for re-rendering form
         try:
@@ -262,6 +264,8 @@ def editar(id):
         
         return render_template('lancamentos_receitas/editar.html', lancamento=lancamento, receitas=receitas)
     except Exception as e:
+        if conn:
+            conn.rollback()
         flash(f'Erro ao atualizar lançamento: {str(e)}', 'danger')
         return redirect(url_for('lancamentos_receitas.lista'))
     finally:
@@ -288,6 +292,8 @@ def excluir(id):
         
         flash('Lançamento excluído com sucesso!', 'success')
     except Exception as e:
+        if conn:
+            conn.rollback()
         flash(f'Erro ao excluir lançamento: {str(e)}', 'danger')
     finally:
         if cursor is not None:

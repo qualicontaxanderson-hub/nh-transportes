@@ -39,65 +39,94 @@ def listar():
 @login_required
 @admin_required
 def novo():
-    if request.method == 'POST':
+    conn = None
+    cursor = None
+    try:
         conn = get_db_connection()
         cursor = conn.cursor()
-        cursor.execute("""
-            INSERT INTO veiculos (caminhao, placa, modelo)
-            VALUES (%s, %s, %s)
-        """, (
-            request.form.get('caminhao'),
-            request.form.get('placa'),
-            request.form.get('modelo')
-        ))
-        conn.commit()
-        cursor.close()
-        conn.close()
-        flash('Veículo cadastrado com sucesso!', 'success')
+
+        if request.method == 'POST':
+            cursor.execute("""
+                INSERT INTO veiculos (caminhao, placa, modelo)
+                VALUES (%s, %s, %s)
+            """, (
+                request.form.get('caminhao'),
+                request.form.get('placa'),
+                request.form.get('modelo')
+            ))
+            conn.commit()
+            flash('Veículo cadastrado com sucesso!', 'success')
+            return redirect(url_for('veiculos.lista'))
+
+        return render_template('veiculos/novo.html')
+    except Exception as e:
+        if conn:
+            conn.rollback()
+        flash(f'Erro ao cadastrar veículo: {str(e)}', 'danger')
         return redirect(url_for('veiculos.lista'))
-    return render_template('veiculos/novo.html')
+    finally:
+        if cursor:
+            cursor.close()
+        if conn:
+            conn.close()
 
 @bp.route('/editar/<int:id>', methods=['GET', 'POST'])
 @login_required
 @admin_required
 def editar(id):
-    conn = get_db_connection()
-    cursor = conn.cursor(dictionary=True)
-    
-    if request.method == 'POST':
-        cursor.execute("""
-            UPDATE veiculos SET caminhao=%s, placa=%s, modelo=%s
-            WHERE id=%s
-        """, (
-            request.form.get('caminhao'),
-            request.form.get('placa'),
-            request.form.get('modelo'),
-            id
-        ))
-        conn.commit()
-        cursor.close()
-        conn.close()
-        flash('Veículo atualizado com sucesso!', 'success')
+    conn = None
+    cursor = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+
+        if request.method == 'POST':
+            cursor.execute("""
+                UPDATE veiculos SET caminhao=%s, placa=%s, modelo=%s
+                WHERE id=%s
+            """, (
+                request.form.get('caminhao'),
+                request.form.get('placa'),
+                request.form.get('modelo'),
+                id
+            ))
+            conn.commit()
+            flash('Veículo atualizado com sucesso!', 'success')
+            return redirect(url_for('veiculos.lista'))
+
+        cursor.execute("SELECT * FROM veiculos WHERE id = %s", (id,))
+        veiculo = cursor.fetchone()
+        return render_template('veiculos/editar.html', veiculo=veiculo)
+    except Exception as e:
+        if conn:
+            conn.rollback()
+        flash(f'Erro ao editar veículo: {str(e)}', 'danger')
         return redirect(url_for('veiculos.lista'))
-    
-    cursor.execute("SELECT * FROM veiculos WHERE id = %s", (id,))
-    veiculo = cursor.fetchone()
-    cursor.close()
-    conn.close()
-    return render_template('veiculos/editar.html', veiculo=veiculo)
+    finally:
+        if cursor:
+            cursor.close()
+        if conn:
+            conn.close()
 
 @bp.route('/excluir/<int:id>', methods=['POST'])
 @login_required
 @admin_required
 def excluir(id):
+    conn = None
+    cursor = None
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
         cursor.execute("DELETE FROM veiculos WHERE id = %s", (id,))
         conn.commit()
-        cursor.close()
-        conn.close()
         flash('Veículo excluído com sucesso!', 'success')
     except Exception as e:
+        if conn:
+            conn.rollback()
         flash(f'Erro ao excluir veículo: {str(e)}', 'danger')
+    finally:
+        if cursor:
+            cursor.close()
+        if conn:
+            conn.close()
     return redirect(url_for('veiculos.lista'))

@@ -1,19 +1,13 @@
 from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify
 from flask_login import login_required
-from config import Config
-import mysql.connector
+from utils.db import get_db_connection
 from datetime import date
 
 bp = Blueprint('quilometragem', __name__, url_prefix='/quilometragem')
 
 def get_db():
-    return mysql.connector.connect(
-        host=Config.DB_HOST,
-        user=Config.DB_USER,
-        password=Config.DB_PASSWORD,
-        database=Config.DB_NAME,
-        port=Config.DB_PORT
-    )
+    """Usa a conexão centralizada com credenciais seguras"""
+    return get_db_connection()
 
 def converter_para_decimal(valor):
     if isinstance(valor, str):
@@ -160,6 +154,8 @@ def lista():
 @login_required
 def novo():
     if request.method == 'POST':
+        conn = None
+        cursor = None
         try:
             veiculos_id = request.form.get('veiculos_id')
             motoristas_id = request.form.get('motoristas_id')
@@ -187,12 +183,17 @@ def novo():
             """, (veiculos_id, motoristas_id, data, km_inicial, km_final, km_rodados,
                   valor_combustivel, litros_abastecidos, valor_produtos_diversos, observacoes))
             conn.commit()
-            cursor.close()
-            conn.close()
             flash('Quilometragem cadastrada com sucesso!', 'success')
             return redirect(url_for('quilometragem.lista'))
         except Exception as e:
+            if conn:
+                conn.rollback()
             flash(f'Erro ao cadastrar quilometragem: {str(e)}', 'danger')
+        finally:
+            if cursor:
+                cursor.close()
+            if conn:
+                conn.close()
     conn = get_db()
     cursor = conn.cursor(dictionary=True)
     cursor.execute("SELECT id, placa, modelo FROM veiculos WHERE ativo = 1 ORDER BY placa")
@@ -212,6 +213,8 @@ def novo():
 def novo_produto():
     """Rota para lançar apenas produtos diversos, sem abastecimento"""
     if request.method == 'POST':
+        conn = None
+        cursor = None
         try:
             veiculos_id = request.form.get('veiculos_id')
             motoristas_id = request.form.get('motoristas_id')
@@ -242,13 +245,18 @@ def novo_produto():
             """, (veiculos_id, motoristas_id, data, km_inicial, km_final, km_rodados,
                   valor_combustivel, litros_abastecidos, valor_produtos_diversos, observacoes))
             conn.commit()
-            cursor.close()
-            conn.close()
             flash('Produtos diversos cadastrados com sucesso!', 'success')
             return redirect(url_for('quilometragem.lista'))
         except Exception as e:
+            if conn:
+                conn.rollback()
             flash(f'Erro ao cadastrar produtos: {str(e)}', 'danger')
-    
+        finally:
+            if cursor:
+                cursor.close()
+            if conn:
+                conn.close()
+
     conn = get_db()
     cursor = conn.cursor(dictionary=True)
     cursor.execute("SELECT id, placa, modelo FROM veiculos WHERE ativo = 1 ORDER BY placa")
@@ -294,6 +302,8 @@ def editar(id):
             flash('Quilometragem atualizada com sucesso!', 'success')
             return redirect(url_for('quilometragem.lista'))
         except Exception as e:
+            if conn:
+                conn.rollback()
             flash(f'Erro ao atualizar quilometragem: {str(e)}', 'danger')
     cursor.execute("SELECT * FROM quilometragem WHERE id = %s", (id,))
     quilometragem = cursor.fetchone()
@@ -316,6 +326,8 @@ def editar(id):
 @bp.route('/configurar-km-inicial', methods=['POST'])
 @login_required
 def configurar_km_inicial():
+    conn = None
+    cursor = None
     try:
         veiculos_id = request.form.get('veiculos_id')
         km_inicial = converter_para_decimal(request.form.get('km_inicial'))
@@ -338,10 +350,15 @@ def configurar_km_inicial():
             """, (veiculos_id, km_inicial, observacoes))
             flash('KM inicial cadastrado com sucesso!', 'success')
         conn.commit()
-        cursor.close()
-        conn.close()
     except Exception as e:
+        if conn:
+            conn.rollback()
         flash(f'Erro ao configurar KM inicial: {str(e)}', 'danger')
+    finally:
+        if cursor:
+            cursor.close()
+        if conn:
+            conn.close()
     return redirect(url_for('quilometragem.lista'))
 
 @bp.route('/api/get-ultimo-km/<int:veiculos_id>')
@@ -353,14 +370,21 @@ def get_ultimo_km(veiculos_id):
 @bp.route('/excluir/<int:id>')
 @login_required
 def excluir(id):
+    conn = None
+    cursor = None
     try:
         conn = get_db()
         cursor = conn.cursor()
         cursor.execute("DELETE FROM quilometragem WHERE id = %s", (id,))
         conn.commit()
-        cursor.close()
-        conn.close()
         flash('Quilometragem excluída com sucesso!', 'success')
     except Exception as e:
+        if conn:
+            conn.rollback()
         flash(f'Erro ao excluir quilometragem: {str(e)}', 'danger')
+    finally:
+        if cursor:
+            cursor.close()
+        if conn:
+            conn.close()
     return redirect(url_for('quilometragem.lista'))

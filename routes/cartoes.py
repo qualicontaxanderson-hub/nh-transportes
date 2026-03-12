@@ -91,6 +91,8 @@ def novo():
             flash('Cartão cadastrado com sucesso!', 'success')
             return redirect(url_for('cartoes.lista'))
         except Exception as e:
+            if conn:
+                conn.rollback()
             flash(f'Erro ao cadastrar cartão: {str(e)}', 'danger')
             return render_template('cartoes/novo.html', nome=nome, tipo=tipo, ativo=ativo)
         finally:
@@ -150,6 +152,8 @@ def editar(id):
         
         return render_template('cartoes/editar.html', cartao=cartao)
     except Exception as e:
+        if conn:
+            conn.rollback()
         flash(f'Erro ao atualizar cartão: {str(e)}', 'danger')
         return redirect(url_for('cartoes.lista'))
     finally:
@@ -191,6 +195,8 @@ def bloquear(id):
         status_text = 'desbloqueado' if novo_status else 'bloqueado'
         flash(f'Cartão {status_text} com sucesso!', 'success')
     except Exception as e:
+        if conn:
+            conn.rollback()
         flash(f'Erro ao alterar status do cartão: {str(e)}', 'danger')
     finally:
         if cursor is not None:

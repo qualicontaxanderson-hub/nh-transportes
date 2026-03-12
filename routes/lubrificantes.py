@@ -210,64 +210,72 @@ def index():
 @bp.route('/saldo-inicial', methods=['GET', 'POST'])
 @login_required
 def saldo_inicial():
-    conn = get_db()
-    cursor = conn.cursor(dictionary=True)
+    conn = None
+    cursor = None
+    try:
+        conn = get_db()
+        cursor = conn.cursor(dictionary=True)
 
-    if request.method == 'POST':
-        data = request.form['data']
-        quantidade = request.form['quantidade']
-        custo_medio_compra = request.form['custo_medio_compra']
-        cliente_id = request.form.get('cliente_id')
-        produto_id = request.form.get('produto_id')
-        
-        if not cliente_id:
-            flash('Por favor, selecione um cliente!', 'danger')
-            return redirect(url_for('lubrificantes.saldo_inicial'))
-        
-        if not produto_id:
-            flash('Por favor, selecione um produto!', 'danger')
-            return redirect(url_for('lubrificantes.saldo_inicial'))
+        if request.method == 'POST':
+            data = request.form['data']
+            quantidade = request.form['quantidade']
+            custo_medio_compra = request.form['custo_medio_compra']
+            cliente_id = request.form.get('cliente_id')
+            produto_id = request.form.get('produto_id')
 
+            if not cliente_id:
+                flash('Por favor, selecione um cliente!', 'danger')
+                return redirect(url_for('lubrificantes.saldo_inicial'))
+
+            if not produto_id:
+                flash('Por favor, selecione um produto!', 'danger')
+                return redirect(url_for('lubrificantes.saldo_inicial'))
+
+            cursor.execute("""
+                INSERT INTO lubrificantes_saldo_inicial 
+                (data, produtoid, clienteid, quantidade, custo_medio_compra)
+                VALUES (%s, %s, %s, %s, %s)
+            """, (data, produto_id, cliente_id, quantidade, custo_medio_compra))
+            conn.commit()
+
+            flash('Saldo inicial cadastrado com sucesso!', 'success')
+            return redirect(url_for('lubrificantes.index'))
+
+        cursor.execute("SELECT * FROM lubrificantes_saldo_inicial ORDER BY data DESC LIMIT 1")
+        saldo = cursor.fetchone()
+
+        # Busca clientes configurados
         cursor.execute("""
-            INSERT INTO lubrificantes_saldo_inicial 
-            (data, produtoid, clienteid, quantidade, custo_medio_compra)
-            VALUES (%s, %s, %s, %s, %s)
-        """, (data, produto_id, cliente_id, quantidade, custo_medio_compra))
-        conn.commit()
-        cursor.close()
-        conn.close()
+            SELECT DISTINCT c.id, c.razao_social 
+            FROM clientes c
+            INNER JOIN cliente_produtos cp ON c.id = cp.cliente_id
+            WHERE cp.ativo = 1
+            ORDER BY c.razao_social
+        """)
+        clientes_lubrificantes = cursor.fetchall()
 
-        flash('Saldo inicial cadastrado com sucesso!', 'success')
+        # Busca produtos de lubrificantes
+        cursor.execute("""
+            SELECT * FROM lubrificantes_produtos 
+            WHERE ativo = 1
+            ORDER BY nome
+        """)
+        produtos = cursor.fetchall()
+
+        return render_template('lubrificantes/saldo_inicial.html',
+                             saldo=saldo,
+                             clientes_lubrificantes=clientes_lubrificantes,
+                             produtos=produtos)
+    except Exception as e:
+        if conn:
+            conn.rollback()
+        flash(f'Erro ao salvar saldo inicial: {str(e)}', 'danger')
         return redirect(url_for('lubrificantes.index'))
-
-    cursor.execute("SELECT * FROM lubrificantes_saldo_inicial ORDER BY data DESC LIMIT 1")
-    saldo = cursor.fetchone()
-    
-    # Busca clientes configurados
-    cursor.execute("""
-        SELECT DISTINCT c.id, c.razao_social 
-        FROM clientes c
-        INNER JOIN cliente_produtos cp ON c.id = cp.cliente_id
-        WHERE cp.ativo = 1
-        ORDER BY c.razao_social
-    """)
-    clientes_lubrificantes = cursor.fetchall()
-    
-    # Busca produtos de lubrificantes
-    cursor.execute("""
-        SELECT * FROM lubrificantes_produtos 
-        WHERE ativo = 1
-        ORDER BY nome
-    """)
-    produtos = cursor.fetchall()
-    
-    cursor.close()
-    conn.close()
-
-    return render_template('lubrificantes/saldo_inicial.html', 
-                         saldo=saldo, 
-                         clientes_lubrificantes=clientes_lubrificantes,
-                         produtos=produtos)
+    finally:
+        if cursor:
+            cursor.close()
+        if conn:
+            conn.close()
 
 # =============================================
 # COMPRAS - CRIAR
@@ -275,75 +283,83 @@ def saldo_inicial():
 @bp.route('/compras', methods=['GET', 'POST'])
 @login_required
 def compras():
-    conn = get_db()
-    cursor = conn.cursor(dictionary=True)
-    
-    if request.method == 'POST':
-        data = request.form['data']
-        quantidade = request.form['quantidade']
-        preco_unitario = request.form['preco_unitario']
-        cliente_id = request.form.get('cliente_id')
-        produto_id = request.form.get('produto_id')
-        fornecedor_id = request.form.get('fornecedor_id', None)
-        numero_nf = request.form.get('numero_nf', None)
-        observacoes = request.form.get('observacoes', None)
-        
-        if not cliente_id:
-            flash('Por favor, selecione um cliente!', 'danger')
-            return redirect(url_for('lubrificantes.compras'))
-        
-        if not produto_id:
-            flash('Por favor, selecione um produto!', 'danger')
-            return redirect(url_for('lubrificantes.compras'))
-        
-        # Calcula o total da nota fiscal
-        total_nf = float(quantidade) * float(preco_unitario)
+    conn = None
+    cursor = None
+    try:
+        conn = get_db()
+        cursor = conn.cursor(dictionary=True)
 
+        if request.method == 'POST':
+            data = request.form['data']
+            quantidade = request.form['quantidade']
+            preco_unitario = request.form['preco_unitario']
+            cliente_id = request.form.get('cliente_id')
+            produto_id = request.form.get('produto_id')
+            fornecedor_id = request.form.get('fornecedor_id', None)
+            numero_nf = request.form.get('numero_nf', None)
+            observacoes = request.form.get('observacoes', None)
+
+            if not cliente_id:
+                flash('Por favor, selecione um cliente!', 'danger')
+                return redirect(url_for('lubrificantes.compras'))
+
+            if not produto_id:
+                flash('Por favor, selecione um produto!', 'danger')
+                return redirect(url_for('lubrificantes.compras'))
+
+            # Calcula o total da nota fiscal
+            total_nf = float(quantidade) * float(preco_unitario)
+
+            cursor.execute("""
+                INSERT INTO lubrificantes_compras 
+                (data, produtoid, clienteid, quantidade, preco_unitario, total_nf, fornecedorid, numero_nf, observacoes)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+            """, (data, produto_id, cliente_id, quantidade, preco_unitario, total_nf, fornecedor_id, numero_nf, observacoes))
+            conn.commit()
+
+            flash('Compra registrada com sucesso!', 'success')
+            return redirect(url_for('lubrificantes.index'))
+
+        # Busca clientes configurados
         cursor.execute("""
-            INSERT INTO lubrificantes_compras 
-            (data, produtoid, clienteid, quantidade, preco_unitario, total_nf, fornecedorid, numero_nf, observacoes)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
-        """, (data, produto_id, cliente_id, quantidade, preco_unitario, total_nf, fornecedor_id, numero_nf, observacoes))
-        conn.commit()
-        cursor.close()
-        conn.close()
+            SELECT DISTINCT c.id, c.razao_social 
+            FROM clientes c
+            INNER JOIN cliente_produtos cp ON c.id = cp.cliente_id
+            WHERE cp.ativo = 1
+            ORDER BY c.razao_social
+        """)
+        clientes_lubrificantes = cursor.fetchall()
 
-        flash('Compra registrada com sucesso!', 'success')
+        # Busca produtos de lubrificantes
+        cursor.execute("""
+            SELECT * FROM lubrificantes_produtos 
+            WHERE ativo = 1
+            ORDER BY nome
+        """)
+        produtos = cursor.fetchall()
+
+        # Busca fornecedores
+        cursor.execute("""
+            SELECT id, razao_social 
+            FROM fornecedores
+            ORDER BY razao_social
+        """)
+        fornecedores = cursor.fetchall()
+
+        return render_template('lubrificantes/compras.html',
+                             clientes_lubrificantes=clientes_lubrificantes,
+                             produtos=produtos,
+                             fornecedores=fornecedores)
+    except Exception as e:
+        if conn:
+            conn.rollback()
+        flash(f'Erro ao registrar compra: {str(e)}', 'danger')
         return redirect(url_for('lubrificantes.index'))
-    
-    # Busca clientes configurados
-    cursor.execute("""
-        SELECT DISTINCT c.id, c.razao_social 
-        FROM clientes c
-        INNER JOIN cliente_produtos cp ON c.id = cp.cliente_id
-        WHERE cp.ativo = 1
-        ORDER BY c.razao_social
-    """)
-    clientes_lubrificantes = cursor.fetchall()
-    
-    # Busca produtos de lubrificantes
-    cursor.execute("""
-        SELECT * FROM lubrificantes_produtos 
-        WHERE ativo = 1
-        ORDER BY nome
-    """)
-    produtos = cursor.fetchall()
-    
-    # Busca fornecedores
-    cursor.execute("""
-        SELECT id, razao_social 
-        FROM fornecedores
-        ORDER BY razao_social
-    """)
-    fornecedores = cursor.fetchall()
-    
-    cursor.close()
-    conn.close()
-
-    return render_template('lubrificantes/compras.html', 
-                         clientes_lubrificantes=clientes_lubrificantes,
-                         produtos=produtos,
-                         fornecedores=fornecedores)
+    finally:
+        if cursor:
+            cursor.close()
+        if conn:
+            conn.close()
 
 # =============================================
 # PREÇO DE VENDA - CRIAR
@@ -351,73 +367,81 @@ def compras():
 @bp.route('/preco-venda', methods=['GET', 'POST'])
 @login_required
 def preco_venda():
-    conn = get_db()
-    cursor = conn.cursor(dictionary=True)
+    conn = None
+    cursor = None
+    try:
+        conn = get_db()
+        cursor = conn.cursor(dictionary=True)
 
-    if request.method == 'POST':
-        data_inicio = request.form['data_inicio']
-        preco_venda = request.form['preco_venda']
-        cliente_id = request.form.get('cliente_id')
-        produto_id = request.form.get('produto_id')
-        
-        if not cliente_id:
-            flash('Por favor, selecione um cliente!', 'danger')
-            return redirect(url_for('lubrificantes.preco_venda'))
-        
-        if not produto_id:
-            flash('Por favor, selecione um produto!', 'danger')
-            return redirect(url_for('lubrificantes.preco_venda'))
-        
-        # Desativa todos os preços anteriores para este produto/cliente
+        if request.method == 'POST':
+            data_inicio = request.form['data_inicio']
+            preco_venda = request.form['preco_venda']
+            cliente_id = request.form.get('cliente_id')
+            produto_id = request.form.get('produto_id')
+
+            if not cliente_id:
+                flash('Por favor, selecione um cliente!', 'danger')
+                return redirect(url_for('lubrificantes.preco_venda'))
+
+            if not produto_id:
+                flash('Por favor, selecione um produto!', 'danger')
+                return redirect(url_for('lubrificantes.preco_venda'))
+
+            # Desativa todos os preços anteriores para este produto/cliente
+            cursor.execute("""
+                UPDATE lubrificantes_precos_venda 
+                SET ativo = 0
+                WHERE produtoid = %s AND clienteid = %s
+            """, (produto_id, cliente_id))
+
+            cursor.execute("""
+                INSERT INTO lubrificantes_precos_venda (data_inicio, produtoid, clienteid, preco_venda, ativo)
+                VALUES (%s, %s, %s, %s, 1)
+            """, (data_inicio, produto_id, cliente_id, preco_venda))
+            conn.commit()
+
+            flash('Preço de venda alterado com sucesso!', 'success')
+            return redirect(url_for('lubrificantes.index'))
+
         cursor.execute("""
-            UPDATE lubrificantes_precos_venda 
-            SET ativo = 0
-            WHERE produtoid = %s AND clienteid = %s
-        """, (produto_id, cliente_id))
+            SELECT * FROM lubrificantes_precos_venda 
+            WHERE ativo = 1
+            ORDER BY data_inicio DESC LIMIT 1
+        """)
+        preco_atual = cursor.fetchone()
 
+        # Busca clientes configurados
         cursor.execute("""
-            INSERT INTO lubrificantes_precos_venda (data_inicio, produtoid, clienteid, preco_venda, ativo)
-            VALUES (%s, %s, %s, %s, 1)
-        """, (data_inicio, produto_id, cliente_id, preco_venda))
-        conn.commit()
-        cursor.close()
-        conn.close()
+            SELECT DISTINCT c.id, c.razao_social 
+            FROM clientes c
+            INNER JOIN cliente_produtos cp ON c.id = cp.cliente_id
+            WHERE cp.ativo = 1
+            ORDER BY c.razao_social
+        """)
+        clientes_lubrificantes = cursor.fetchall()
 
-        flash('Preço de venda alterado com sucesso!', 'success')
+        # Busca produtos de lubrificantes
+        cursor.execute("""
+            SELECT * FROM lubrificantes_produtos 
+            WHERE ativo = 1
+            ORDER BY nome
+        """)
+        produtos = cursor.fetchall()
+
+        return render_template('lubrificantes/preco_venda.html',
+                             preco_atual=preco_atual,
+                             clientes_lubrificantes=clientes_lubrificantes,
+                             produtos=produtos)
+    except Exception as e:
+        if conn:
+            conn.rollback()
+        flash(f'Erro ao salvar preço de venda: {str(e)}', 'danger')
         return redirect(url_for('lubrificantes.index'))
-
-    cursor.execute("""
-        SELECT * FROM lubrificantes_precos_venda 
-        WHERE ativo = 1
-        ORDER BY data_inicio DESC LIMIT 1
-    """)
-    preco_atual = cursor.fetchone()
-    
-    # Busca clientes configurados
-    cursor.execute("""
-        SELECT DISTINCT c.id, c.razao_social 
-        FROM clientes c
-        INNER JOIN cliente_produtos cp ON c.id = cp.cliente_id
-        WHERE cp.ativo = 1
-        ORDER BY c.razao_social
-    """)
-    clientes_lubrificantes = cursor.fetchall()
-    
-    # Busca produtos de lubrificantes
-    cursor.execute("""
-        SELECT * FROM lubrificantes_produtos 
-        WHERE ativo = 1
-        ORDER BY nome
-    """)
-    produtos = cursor.fetchall()
-    
-    cursor.close()
-    conn.close()
-
-    return render_template('lubrificantes/preco_venda.html', 
-                         preco_atual=preco_atual, 
-                         clientes_lubrificantes=clientes_lubrificantes,
-                         produtos=produtos)
+    finally:
+        if cursor:
+            cursor.close()
+        if conn:
+            conn.close()
 
 # =============================================
 # LANÇAMENTO DIÁRIO - CRIAR
@@ -425,97 +449,102 @@ def preco_venda():
 @bp.route('/lancamento', methods=['GET', 'POST'])
 @login_required
 def lancamento():
-    conn = get_db()
-    cursor = conn.cursor(dictionary=True)
+    conn = None
+    cursor = None
+    try:
+        conn = get_db()
+        cursor = conn.cursor(dictionary=True)
 
-    if request.method == 'POST':
-        data = request.form['data']
-        valor_total = float(request.form['valor_total'])
-        cliente_id = request.form.get('cliente_id')
-        produto_id = request.form.get('produto_id')
-        observacoes = request.form.get('observacoes', None)
-        
-        if not cliente_id:
-            flash('Por favor, selecione um cliente!', 'danger')
-            return redirect(url_for('lubrificantes.lancamento'))
-        
-        if not produto_id:
-            flash('Por favor, selecione um produto!', 'danger')
-            return redirect(url_for('lubrificantes.lancamento'))
+        if request.method == 'POST':
+            data = request.form['data']
+            valor_total = float(request.form['valor_total'])
+            cliente_id = request.form.get('cliente_id')
+            produto_id = request.form.get('produto_id')
+            observacoes = request.form.get('observacoes', None)
 
+            if not cliente_id:
+                flash('Por favor, selecione um cliente!', 'danger')
+                return redirect(url_for('lubrificantes.lancamento'))
+
+            if not produto_id:
+                flash('Por favor, selecione um produto!', 'danger')
+                return redirect(url_for('lubrificantes.lancamento'))
+
+            cursor.execute("""
+                SELECT id FROM lubrificantes_lancamentos 
+                WHERE data = %s AND clienteid = %s AND produtoid = %s
+            """, (data, cliente_id, produto_id))
+            existe = cursor.fetchone()
+            if existe:
+                flash('Já existe um lançamento para esta data, cliente e produto!', 'danger')
+                return redirect(url_for('lubrificantes.lancamento'))
+
+            # Como é lançamento direto de valor, não usamos preço unitário
+            quantidade = 0
+            preco_venda_aplicado = 0
+
+            cursor.execute("""
+                INSERT INTO lubrificantes_lancamentos
+                (data, produtoid, clienteid, quantidade, preco_venda_aplicado, valor_total, observacoes)
+                VALUES (%s, %s, %s, %s, %s, %s, %s)
+            """, (data, produto_id, cliente_id, quantidade, preco_venda_aplicado, valor_total, observacoes))
+            conn.commit()
+
+            flash('Lançamento registrado com sucesso!', 'success')
+            return redirect(url_for('lubrificantes.index'))
+
+        # GET - Busca dados para exibir no formulário
+        # Busca clientes configurados
         cursor.execute("""
-            SELECT id FROM lubrificantes_lancamentos 
-            WHERE data = %s AND clienteid = %s AND produtoid = %s
-        """, (data, cliente_id, produto_id))
-        existe = cursor.fetchone()
-        if existe:
-            flash('Já existe um lançamento para esta data, cliente e produto!', 'danger')
-            cursor.close()
-            conn.close()
-            return redirect(url_for('lubrificantes.lancamento'))
-        
-        # Como é lançamento direto de valor, não usamos preço unitário
-        # quantidade e preco_venda_aplicado serão 0, apenas valor_total importa
-        quantidade = 0
-        preco_venda_aplicado = 0
+            SELECT DISTINCT c.id, c.razao_social 
+            FROM clientes c
+            INNER JOIN cliente_produtos cp ON c.id = cp.cliente_id
+            WHERE cp.ativo = 1
+            ORDER BY c.razao_social
+        """)
+        clientes_lubrificantes = cursor.fetchall()
 
+        # Busca produtos de lubrificantes
         cursor.execute("""
-            INSERT INTO lubrificantes_lancamentos
-            (data, produtoid, clienteid, quantidade, preco_venda_aplicado, valor_total, observacoes)
-            VALUES (%s, %s, %s, %s, %s, %s, %s)
-        """, (data, produto_id, cliente_id, quantidade, preco_venda_aplicado, valor_total, observacoes))
-        conn.commit()
-        cursor.close()
-        conn.close()
-        
-        flash('Lançamento registrado com sucesso!', 'success')
+            SELECT * FROM lubrificantes_produtos 
+            WHERE ativo = 1
+            ORDER BY nome
+        """)
+        produtos = cursor.fetchall()
+
+        # Busca a última data de lançamento
+        cursor.execute("""
+            SELECT MAX(data) as ultima_data 
+            FROM lubrificantes_lancamentos
+        """)
+        result = cursor.fetchone()
+        ultima_data = result['ultima_data'] if result and result['ultima_data'] else None
+
+        # Calcula a próxima data sugerida (dia seguinte ao último lançamento ou hoje)
+        if ultima_data:
+            proxima_data = (ultima_data + timedelta(days=1)).strftime('%Y-%m-%d')
+            ultima_data_formatada = ultima_data.strftime('%d/%m/%Y')
+        else:
+            proxima_data = date.today().strftime('%Y-%m-%d')
+            ultima_data_formatada = None
+
+        return render_template(
+            'lubrificantes/lancamento.html',
+            clientes_lubrificantes=clientes_lubrificantes,
+            produtos=produtos,
+            proxima_data=proxima_data,
+            ultima_data=ultima_data_formatada
+        )
+    except Exception as e:
+        if conn:
+            conn.rollback()
+        flash(f'Erro ao registrar lançamento: {str(e)}', 'danger')
         return redirect(url_for('lubrificantes.index'))
-
-    # GET - Busca dados para exibir no formulário
-    # Busca clientes configurados
-    cursor.execute("""
-        SELECT DISTINCT c.id, c.razao_social 
-        FROM clientes c
-        INNER JOIN cliente_produtos cp ON c.id = cp.cliente_id
-        WHERE cp.ativo = 1
-        ORDER BY c.razao_social
-    """)
-    clientes_lubrificantes = cursor.fetchall()
-    
-    # Busca produtos de lubrificantes
-    cursor.execute("""
-        SELECT * FROM lubrificantes_produtos 
-        WHERE ativo = 1
-        ORDER BY nome
-    """)
-    produtos = cursor.fetchall()
-    
-    # Busca a última data de lançamento
-    cursor.execute("""
-        SELECT MAX(data) as ultima_data 
-        FROM lubrificantes_lancamentos
-    """)
-    result = cursor.fetchone()
-    ultima_data = result['ultima_data'] if result and result['ultima_data'] else None
-    
-    # Calcula a próxima data sugerida (dia seguinte ao último lançamento ou hoje)
-    if ultima_data:
-        proxima_data = (ultima_data + timedelta(days=1)).strftime('%Y-%m-%d')
-        ultima_data_formatada = ultima_data.strftime('%d/%m/%Y')
-    else:
-        proxima_data = date.today().strftime('%Y-%m-%d')
-        ultima_data_formatada = None
-
-    cursor.close()
-    conn.close()
-
-    return render_template(
-        'lubrificantes/lancamento.html',
-        clientes_lubrificantes=clientes_lubrificantes,
-        produtos=produtos,
-        proxima_data=proxima_data,
-        ultima_data=ultima_data_formatada
-    )
+    finally:
+        if cursor:
+            cursor.close()
+        if conn:
+            conn.close()
 
 # =============================================
 # LANÇAMENTO DIÁRIO - EDITAR
@@ -523,93 +552,96 @@ def lancamento():
 @bp.route('/lancamento/editar/<int:id>', methods=['GET', 'POST'])
 @login_required
 def editar_lancamento(id):
-    conn = get_db()
-    cursor = conn.cursor(dictionary=True)
-    
-    if request.method == 'POST':
-        data = request.form['data']
-        valor_total = float(request.form['valor_total'])
-        cliente_id = request.form.get('cliente_id')
-        produto_id = request.form.get('produto_id')
-        observacoes = request.form.get('observacoes', None)
-        
-        if not cliente_id:
-            flash('Por favor, selecione um cliente!', 'danger')
-            return redirect(url_for('lubrificantes.editar_lancamento', id=id))
-        
-        if not produto_id:
-            flash('Por favor, selecione um produto!', 'danger')
-            return redirect(url_for('lubrificantes.editar_lancamento', id=id))
-        
-        # Verifica se já existe outro lançamento com a mesma data/cliente/produto
+    conn = None
+    cursor = None
+    try:
+        conn = get_db()
+        cursor = conn.cursor(dictionary=True)
+
+        if request.method == 'POST':
+            data = request.form['data']
+            valor_total = float(request.form['valor_total'])
+            cliente_id = request.form.get('cliente_id')
+            produto_id = request.form.get('produto_id')
+            observacoes = request.form.get('observacoes', None)
+
+            if not cliente_id:
+                flash('Por favor, selecione um cliente!', 'danger')
+                return redirect(url_for('lubrificantes.editar_lancamento', id=id))
+
+            if not produto_id:
+                flash('Por favor, selecione um produto!', 'danger')
+                return redirect(url_for('lubrificantes.editar_lancamento', id=id))
+
+            # Verifica se já existe outro lançamento com a mesma data/cliente/produto
+            cursor.execute("""
+                SELECT id FROM lubrificantes_lancamentos 
+                WHERE data = %s AND clienteid = %s AND produtoid = %s AND id != %s
+            """, (data, cliente_id, produto_id, id))
+            existe = cursor.fetchone()
+            if existe:
+                flash('Já existe outro lançamento para esta data, cliente e produto!', 'danger')
+                return redirect(url_for('lubrificantes.editar_lancamento', id=id))
+
+            # Como é lançamento direto de valor, não usamos preço unitário
+            quantidade = 0
+            preco_venda_aplicado = 0
+
+            cursor.execute("""
+                UPDATE lubrificantes_lancamentos
+                SET data = %s, produtoid = %s, clienteid = %s, 
+                    quantidade = %s, preco_venda_aplicado = %s, valor_total = %s, observacoes = %s
+                WHERE id = %s
+            """, (data, produto_id, cliente_id, quantidade, preco_venda_aplicado, valor_total, observacoes, id))
+            conn.commit()
+
+            flash('Lançamento atualizado com sucesso!', 'success')
+            return redirect(url_for('lubrificantes.index'))
+
+        # GET - Busca o lançamento a ser editado
         cursor.execute("""
-            SELECT id FROM lubrificantes_lancamentos 
-            WHERE data = %s AND clienteid = %s AND produtoid = %s AND id != %s
-        """, (data, cliente_id, produto_id, id))
-        existe = cursor.fetchone()
-        if existe:
-            flash('Já existe outro lançamento para esta data, cliente e produto!', 'danger')
+            SELECT * FROM lubrificantes_lancamentos WHERE id = %s
+        """, (id,))
+        lancamento = cursor.fetchone()
+
+        if not lancamento:
+            flash('Lançamento não encontrado!', 'danger')
+            return redirect(url_for('lubrificantes.index'))
+
+        # Busca clientes configurados
+        cursor.execute("""
+            SELECT DISTINCT c.id, c.razao_social 
+            FROM clientes c
+            INNER JOIN cliente_produtos cp ON c.id = cp.cliente_id
+            WHERE cp.ativo = 1
+            ORDER BY c.razao_social
+        """)
+        clientes_lubrificantes = cursor.fetchall()
+
+        # Busca produtos de lubrificantes
+        cursor.execute("""
+            SELECT * FROM lubrificantes_produtos 
+            WHERE ativo = 1
+            ORDER BY nome
+        """)
+        produtos = cursor.fetchall()
+
+        return render_template(
+            'lubrificantes/editar_lancamento.html',
+            lancamento=lancamento,
+            clientes_lubrificantes=clientes_lubrificantes,
+            produtos=produtos
+        )
+    except Exception as e:
+        if conn:
+            conn.rollback()
+        flash(f'Erro ao editar lançamento: {str(e)}', 'danger')
+        return redirect(url_for('lubrificantes.index'))
+    finally:
+        if cursor:
             cursor.close()
+        if conn:
             conn.close()
-            return redirect(url_for('lubrificantes.editar_lancamento', id=id))
-        
-        # Como é lançamento direto de valor, não usamos preço unitário
-        # quantidade e preco_venda_aplicado serão 0, apenas valor_total importa
-        quantidade = 0
-        preco_venda_aplicado = 0
-        
-        cursor.execute("""
-            UPDATE lubrificantes_lancamentos
-            SET data = %s, produtoid = %s, clienteid = %s, 
-                quantidade = %s, preco_venda_aplicado = %s, valor_total = %s, observacoes = %s
-            WHERE id = %s
-        """, (data, produto_id, cliente_id, quantidade, preco_venda_aplicado, valor_total, observacoes, id))
-        conn.commit()
-        cursor.close()
-        conn.close()
-        
-        flash('Lançamento atualizado com sucesso!', 'success')
-        return redirect(url_for('lubrificantes.index'))
-    
-    # GET - Busca o lançamento a ser editado
-    cursor.execute("""
-        SELECT * FROM lubrificantes_lancamentos WHERE id = %s
-    """, (id,))
-    lancamento = cursor.fetchone()
-    
-    if not lancamento:
-        flash('Lançamento não encontrado!', 'danger')
-        cursor.close()
-        conn.close()
-        return redirect(url_for('lubrificantes.index'))
-    
-    # Busca clientes configurados
-    cursor.execute("""
-        SELECT DISTINCT c.id, c.razao_social 
-        FROM clientes c
-        INNER JOIN cliente_produtos cp ON c.id = cp.cliente_id
-        WHERE cp.ativo = 1
-        ORDER BY c.razao_social
-    """)
-    clientes_lubrificantes = cursor.fetchall()
-    
-    # Busca produtos de lubrificantes
-    cursor.execute("""
-        SELECT * FROM lubrificantes_produtos 
-        WHERE ativo = 1
-        ORDER BY nome
-    """)
-    produtos = cursor.fetchall()
-    
-    cursor.close()
-    conn.close()
-    
-    return render_template(
-        'lubrificantes/editar_lancamento.html',
-        lancamento=lancamento,
-        clientes_lubrificantes=clientes_lubrificantes,
-        produtos=produtos
-    )
 
 # =============================================
 # EXCLUIR LANÇAMENTO (VENDA)
@@ -618,26 +650,35 @@ def editar_lancamento(id):
 @login_required
 @supervisor_or_admin_required
 def excluir_lancamento(id):
-    conn = get_db()
-    cursor = conn.cursor(dictionary=True)
+    conn = None
+    cursor = None
+    try:
+        conn = get_db()
+        cursor = conn.cursor(dictionary=True)
 
-    cursor.execute("SELECT id FROM lubrificantes_lancamentos WHERE id = %s", (id,))
-    lancamento = cursor.fetchone()
+        cursor.execute("SELECT id FROM lubrificantes_lancamentos WHERE id = %s", (id,))
+        lancamento = cursor.fetchone()
 
-    if not lancamento:
-        flash('Lançamento não encontrado!', 'danger')
-        cursor.close()
-        conn.close()
-        return redirect(url_for('lubrificantes.index'))
+        if not lancamento:
+            flash('Lançamento não encontrado!', 'danger')
+            return redirect(url_for('lubrificantes.index'))
 
-    # O estoque é calculado dinamicamente (saldo_inicial + compras - vendas),
-    # portanto excluir o lançamento já corrige o estoque automaticamente.
-    cursor.execute("DELETE FROM lubrificantes_lancamentos WHERE id = %s", (id,))
-    conn.commit()
-    cursor.close()
-    conn.close()
+        # O estoque é calculado dinamicamente (saldo_inicial + compras - vendas),
+        # portanto excluir o lançamento já corrige o estoque automaticamente.
+        cursor.execute("DELETE FROM lubrificantes_lancamentos WHERE id = %s", (id,))
+        conn.commit()
 
-    flash('Lançamento excluído com sucesso!', 'success')
+        flash('Lançamento excluído com sucesso!', 'success')
+    except Exception as e:
+        if conn:
+            conn.rollback()
+        flash(f'Erro ao excluir lançamento: {str(e)}', 'danger')
+    finally:
+        if cursor:
+            cursor.close()
+        if conn:
+            conn.close()
+
     return redirect(url_for('lubrificantes.index'))
 
 # =============================================
@@ -647,26 +688,35 @@ def excluir_lancamento(id):
 @login_required
 @supervisor_or_admin_required
 def excluir_compra(id):
-    conn = get_db()
-    cursor = conn.cursor(dictionary=True)
+    conn = None
+    cursor = None
+    try:
+        conn = get_db()
+        cursor = conn.cursor(dictionary=True)
 
-    cursor.execute("SELECT id FROM lubrificantes_compras WHERE id = %s", (id,))
-    compra = cursor.fetchone()
+        cursor.execute("SELECT id FROM lubrificantes_compras WHERE id = %s", (id,))
+        compra = cursor.fetchone()
 
-    if not compra:
-        flash('Compra não encontrada!', 'danger')
-        cursor.close()
-        conn.close()
-        return redirect(url_for('lubrificantes.index'))
+        if not compra:
+            flash('Compra não encontrada!', 'danger')
+            return redirect(url_for('lubrificantes.index'))
 
-    # O estoque é calculado dinamicamente (saldo_inicial + compras - vendas),
-    # portanto excluir a compra já corrige o estoque automaticamente.
-    cursor.execute("DELETE FROM lubrificantes_compras WHERE id = %s", (id,))
-    conn.commit()
-    cursor.close()
-    conn.close()
+        # O estoque é calculado dinamicamente (saldo_inicial + compras - vendas),
+        # portanto excluir a compra já corrige o estoque automaticamente.
+        cursor.execute("DELETE FROM lubrificantes_compras WHERE id = %s", (id,))
+        conn.commit()
 
-    flash('Compra excluída com sucesso!', 'success')
+        flash('Compra excluída com sucesso!', 'success')
+    except Exception as e:
+        if conn:
+            conn.rollback()
+        flash(f'Erro ao excluir compra: {str(e)}', 'danger')
+    finally:
+        if cursor:
+            cursor.close()
+        if conn:
+            conn.close()
+
     return redirect(url_for('lubrificantes.index'))
 
 # =============================================
@@ -678,16 +728,16 @@ def excluir_compra(id):
 def produtos():
     conn = get_db()
     cursor = conn.cursor(dictionary=True)
-    
+
     cursor.execute("""
         SELECT * FROM lubrificantes_produtos 
         ORDER BY nome
     """)
     produtos = cursor.fetchall()
-    
+
     cursor.close()
     conn.close()
-    
+
     return render_template('lubrificantes/produtos.html', produtos=produtos)
 
 # =============================================
@@ -696,38 +746,46 @@ def produtos():
 @bp.route('/produtos/novo', methods=['GET', 'POST'])
 @login_required
 def novo_produto():
-    conn = get_db()
-    cursor = conn.cursor(dictionary=True)
-    
-    if request.method == 'POST':
-        nome = request.form['nome'].strip().upper()
-        descricao = request.form.get('descricao', '').strip()
-        unidade = request.form.get('unidade', 'LITROS')
-        ativo = request.form.get('ativo', '1')
-        preco_venda = request.form.get('preco_venda', None)
-        
-        if not nome:
-            flash('Nome é obrigatório!', 'danger')
-            return redirect(url_for('lubrificantes.novo_produto'))
-        
-        # Converte preco_venda para None se estiver vazio
-        preco_venda_value = float(preco_venda) if preco_venda and preco_venda.strip() else None
-        
-        cursor.execute("""
-            INSERT INTO lubrificantes_produtos (nome, descricao, unidade, ativo, preco_venda)
-            VALUES (%s, %s, %s, %s, %s)
-        """, (nome, descricao if descricao else None, unidade, int(ativo), preco_venda_value))
-        conn.commit()
-        cursor.close()
-        conn.close()
-        
-        flash('Produto cadastrado com sucesso!', 'success')
+    conn = None
+    cursor = None
+    try:
+        conn = get_db()
+        cursor = conn.cursor(dictionary=True)
+
+        if request.method == 'POST':
+            nome = request.form['nome'].strip().upper()
+            descricao = request.form.get('descricao', '').strip()
+            unidade = request.form.get('unidade', 'LITROS')
+            ativo = request.form.get('ativo', '1')
+            preco_venda = request.form.get('preco_venda', None)
+
+            if not nome:
+                flash('Nome é obrigatório!', 'danger')
+                return redirect(url_for('lubrificantes.novo_produto'))
+
+            # Converte preco_venda para None se estiver vazio
+            preco_venda_value = float(preco_venda) if preco_venda and preco_venda.strip() else None
+
+            cursor.execute("""
+                INSERT INTO lubrificantes_produtos (nome, descricao, unidade, ativo, preco_venda)
+                VALUES (%s, %s, %s, %s, %s)
+            """, (nome, descricao if descricao else None, unidade, int(ativo), preco_venda_value))
+            conn.commit()
+
+            flash('Produto cadastrado com sucesso!', 'success')
+            return redirect(url_for('lubrificantes.produtos'))
+
+        return render_template('lubrificantes/novo_produto.html')
+    except Exception as e:
+        if conn:
+            conn.rollback()
+        flash(f'Erro ao cadastrar produto: {str(e)}', 'danger')
         return redirect(url_for('lubrificantes.produtos'))
-    
-    cursor.close()
-    conn.close()
-    
-    return render_template('lubrificantes/novo_produto.html')
+    finally:
+        if cursor:
+            cursor.close()
+        if conn:
+            conn.close()
 
 # =============================================
 # PRODUTOS - EDITAR
@@ -735,45 +793,51 @@ def novo_produto():
 @bp.route('/produtos/editar/<int:id>', methods=['GET', 'POST'])
 @login_required
 def editar_produto(id):
-    conn = get_db()
-    cursor = conn.cursor(dictionary=True)
-    
-    if request.method == 'POST':
-        nome = request.form['nome'].strip().upper()
-        descricao = request.form.get('descricao', '').strip()
-        unidade = request.form.get('unidade', 'LITROS')
-        ativo = request.form.get('ativo', '1')
-        preco_venda = request.form.get('preco_venda', None)
-        
-        if not nome:
-            flash('Nome é obrigatório!', 'danger')
-            return redirect(url_for('lubrificantes.editar_produto', id=id))
-        
-        # Converte preco_venda para None se estiver vazio
-        preco_venda_value = float(preco_venda) if preco_venda and preco_venda.strip() else None
-        
-        cursor.execute("""
-            UPDATE lubrificantes_produtos 
-            SET nome = %s, descricao = %s, unidade = %s, ativo = %s, preco_venda = %s
-            WHERE id = %s
-        """, (nome, descricao if descricao else None, unidade, int(ativo), preco_venda_value, id))
-        conn.commit()
-        cursor.close()
-        conn.close()
-        
-        flash('Produto atualizado com sucesso!', 'success')
+    conn = None
+    cursor = None
+    try:
+        conn = get_db()
+        cursor = conn.cursor(dictionary=True)
+
+        if request.method == 'POST':
+            nome = request.form['nome'].strip().upper()
+            descricao = request.form.get('descricao', '').strip()
+            unidade = request.form.get('unidade', 'LITROS')
+            ativo = request.form.get('ativo', '1')
+            preco_venda = request.form.get('preco_venda', None)
+
+            if not nome:
+                flash('Nome é obrigatório!', 'danger')
+                return redirect(url_for('lubrificantes.editar_produto', id=id))
+
+            # Converte preco_venda para None se estiver vazio
+            preco_venda_value = float(preco_venda) if preco_venda and preco_venda.strip() else None
+
+            cursor.execute("""
+                UPDATE lubrificantes_produtos 
+                SET nome = %s, descricao = %s, unidade = %s, ativo = %s, preco_venda = %s
+                WHERE id = %s
+            """, (nome, descricao if descricao else None, unidade, int(ativo), preco_venda_value, id))
+            conn.commit()
+
+            flash('Produto atualizado com sucesso!', 'success')
+            return redirect(url_for('lubrificantes.produtos'))
+
+        cursor.execute("SELECT * FROM lubrificantes_produtos WHERE id = %s", (id,))
+        produto = cursor.fetchone()
+
+        if not produto:
+            flash('Produto não encontrado!', 'danger')
+            return redirect(url_for('lubrificantes.produtos'))
+
+        return render_template('lubrificantes/editar_produto.html', produto=produto)
+    except Exception as e:
+        if conn:
+            conn.rollback()
+        flash(f'Erro ao editar produto: {str(e)}', 'danger')
         return redirect(url_for('lubrificantes.produtos'))
-    
-    cursor.execute("SELECT * FROM lubrificantes_produtos WHERE id = %s", (id,))
-    produto = cursor.fetchone()
-    
-    if not produto:
-        flash('Produto não encontrado!', 'danger')
-        cursor.close()
-        conn.close()
-        return redirect(url_for('lubrificantes.produtos'))
-    
-    cursor.close()
-    conn.close()
-    
-    return render_template('lubrificantes/editar_produto.html', produto=produto)
+    finally:
+        if cursor:
+            cursor.close()
+        if conn:
+            conn.close()

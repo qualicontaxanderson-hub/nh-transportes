@@ -39,37 +39,44 @@ def lista():
 @supervisor_or_admin_required
 def novo():
     """Cria um novo tipo de receita de caixa"""
+    conn = None
+    cursor = None
     if request.method == 'POST':
         try:
             nome = request.form.get('nome', '').strip().upper()  # Força MAIÚSCULAS
             tipo = request.form.get('tipo', '').strip()
             ativo = 1 if request.form.get('ativo') == '1' else 0
-            
+
             if not nome:
                 flash('Nome é obrigatório', 'danger')
                 return redirect(url_for('tipos_receita_caixa.novo'))
-            
+
             conn = get_db_connection()
             cursor = conn.cursor()
-            
+
             cursor.execute("""
                 INSERT INTO tipos_receita_caixa (nome, tipo, ativo)
                 VALUES (%s, %s, %s)
             """, (nome, tipo if tipo else None, ativo))
-            
+
             conn.commit()
-            cursor.close()
-            conn.close()
-            
+
             flash(f'Tipo de receita "{nome}" criado com sucesso!', 'success')
             return redirect(url_for('tipos_receita_caixa.lista'))
-            
+
         except Exception as e:
+            if conn:
+                conn.rollback()
             error_msg = f"Erro ao criar tipo de receita: {str(e)}"
             print(f"Error in tipos_receita_caixa novo: {traceback.format_exc()}")
             flash(error_msg, 'danger')
             return redirect(url_for('tipos_receita_caixa.novo'))
-    
+        finally:
+            if cursor:
+                cursor.close()
+            if conn:
+                conn.close()
+
     # GET request
     return render_template('tipos_receita_caixa/novo.html')
 
@@ -79,37 +86,44 @@ def novo():
 @supervisor_or_admin_required
 def editar(id):
     """Edita um tipo de receita de caixa existente"""
+    conn = None
+    cursor = None
     if request.method == 'POST':
         try:
             nome = request.form.get('nome', '').strip().upper()  # Força MAIÚSCULAS
             tipo = request.form.get('tipo', '').strip()
             ativo = 1 if request.form.get('ativo') == '1' else 0
-            
+
             if not nome:
                 flash('Nome é obrigatório', 'danger')
                 return redirect(url_for('tipos_receita_caixa.editar', id=id))
-            
+
             conn = get_db_connection()
             cursor = conn.cursor()
-            
+
             cursor.execute("""
                 UPDATE tipos_receita_caixa
                 SET nome = %s, tipo = %s, ativo = %s
                 WHERE id = %s
             """, (nome, tipo if tipo else None, ativo, id))
-            
+
             conn.commit()
-            cursor.close()
-            conn.close()
-            
+
             flash(f'Tipo de receita "{nome}" atualizado com sucesso!', 'success')
             return redirect(url_for('tipos_receita_caixa.lista'))
-            
+
         except Exception as e:
+            if conn:
+                conn.rollback()
             error_msg = f"Erro ao atualizar tipo de receita: {str(e)}"
             print(f"Error in tipos_receita_caixa editar: {traceback.format_exc()}")
             flash(error_msg, 'danger')
             return redirect(url_for('tipos_receita_caixa.editar', id=id))
+        finally:
+            if cursor:
+                cursor.close()
+            if conn:
+                conn.close()
     
     # GET request
     try:
@@ -142,33 +156,40 @@ def editar(id):
 @bp.route('/toggle/<int:id>', methods=['POST'])
 def toggle(id):
     """Ativa/desativa um tipo de receita de caixa"""
+    conn = None
+    cursor = None
     try:
         conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)
-        
+
         # Get current status
         cursor.execute("SELECT ativo, nome FROM tipos_receita_caixa WHERE id = %s", (id,))
         tipo_receita = cursor.fetchone()
-        
+
         if not tipo_receita:
             return jsonify({'success': False, 'message': 'Tipo de receita não encontrado'}), 404
-        
+
         # Toggle status
         novo_status = 0 if tipo_receita['ativo'] == 1 else 1
         cursor.execute("UPDATE tipos_receita_caixa SET ativo = %s WHERE id = %s", (novo_status, id))
-        
+
         conn.commit()
-        cursor.close()
-        conn.close()
-        
+
         status_texto = 'ativado' if novo_status == 1 else 'desativado'
         return jsonify({
             'success': True,
             'message': f'Tipo de receita "{tipo_receita["nome"]}" {status_texto} com sucesso!',
             'novo_status': novo_status
         })
-        
+
     except Exception as e:
+        if conn:
+            conn.rollback()
         error_msg = f"Erro ao alterar status: {str(e)}"
         print(f"Error in tipos_receita_caixa toggle: {traceback.format_exc()}")
         return jsonify({'success': False, 'message': error_msg}), 500
+    finally:
+        if cursor:
+            cursor.close()
+        if conn:
+            conn.close()
