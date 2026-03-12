@@ -1,18 +1,12 @@
 from flask import Blueprint, render_template, request, redirect, url_for, flash
 from flask_login import login_required
-from config import Config
-import mysql.connector
+from utils.db import get_db_connection
 
 bp = Blueprint('produtos', __name__, url_prefix='/produtos')
 
 def get_db():
-    return mysql.connector.connect(
-        host=Config.DB_HOST,
-        user=Config.DB_USER,
-        password=Config.DB_PASSWORD,
-        database=Config.DB_NAME,
-        port=Config.DB_PORT
-    )
+    """Usa a conexão centralizada com credenciais seguras"""
+    return get_db_connection()
 
 @bp.route('/')
 @login_required
@@ -30,6 +24,8 @@ def lista():
 def novo():
     if request.method == 'POST':
         nome = request.form.get('nome')
+        conn = None
+        cursor = None
         try:
             conn = get_db()
             cursor = conn.cursor()
@@ -38,13 +34,18 @@ def novo():
                 (nome,)
             )
             conn.commit()
-            cursor.close()
-            conn.close()
             flash('Produto cadastrado com sucesso!', 'success')
             return redirect(url_for('produtos.lista'))
         except Exception as e:
+            if conn:
+                conn.rollback()
             flash(f'Erro ao cadastrar produto: {str(e)}', 'danger')
-    
+        finally:
+            if cursor:
+                cursor.close()
+            if conn:
+                conn.close()
+
     return render_template('produtos/novo.html')
 
 @bp.route('/editar/<int:id>', methods=['GET', 'POST'])
@@ -52,7 +53,7 @@ def novo():
 def editar(id):
     conn = get_db()
     cursor = conn.cursor(dictionary=True)
-    
+
     if request.method == 'POST':
         nome = request.form.get('nome')
         try:
@@ -66,8 +67,10 @@ def editar(id):
             flash('Produto atualizado com sucesso!', 'success')
             return redirect(url_for('produtos.lista'))
         except Exception as e:
+            if conn:
+                conn.rollback()
             flash(f'Erro ao atualizar produto: {str(e)}', 'danger')
-    
+
     cursor.execute("SELECT * FROM produto WHERE id = %s", (id,))
     produto = cursor.fetchone()
     cursor.close()
@@ -82,14 +85,21 @@ def editar(id):
 @bp.route('/excluir/<int:id>')
 @login_required
 def excluir(id):
+    conn = None
+    cursor = None
     try:
         conn = get_db()
         cursor = conn.cursor()
         cursor.execute("DELETE FROM produto WHERE id = %s", (id,))
         conn.commit()
-        cursor.close()
-        conn.close()
         flash('Produto excluído com sucesso!', 'success')
     except Exception as e:
+        if conn:
+            conn.rollback()
         flash(f'Erro ao excluir produto: {str(e)}', 'danger')
+    finally:
+        if cursor:
+            cursor.close()
+        if conn:
+            conn.close()
     return redirect(url_for('produtos.lista'))
