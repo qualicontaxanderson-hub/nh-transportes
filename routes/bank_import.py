@@ -1357,6 +1357,16 @@ def conciliar():
     # ------------------------------------------------------------------
     # GET: filtros
     # ------------------------------------------------------------------
+    # Inicia uma transação limpa para garantir que o SELECT enxergue os dados
+    # mais recentes já commitados (snapshot MVCC atualizado).  Mesmo com
+    # pool_reset_session=True, conexões de fallback direto e casos extremos
+    # podem herdar um snapshot antigo; este rollback explícito garante que a
+    # leitura use sempre o snapshot mais recente do InnoDB (REPEATABLE READ).
+    try:
+        conn.rollback()
+    except Exception:
+        pass
+
     f_clientes  = [int(c) for c in request.args.getlist('cliente_id') if c and c.isdigit()]
     f_tipo      = request.args.get('tipo', '')           # CREDIT / DEBIT
     f_data_ini  = request.args.get('data_ini', '')
@@ -1459,8 +1469,8 @@ def conciliar():
                         cnpjs,
                     )
                     bsm_rows = cursor.fetchall()
-                except mysql.connector.errors.ProgrammingError as _e:
-                    if _e.errno == _MYSQL_ERRNO_UNKNOWN_COLUMN:
+                except mysql.connector.errors.ProgrammingError as e:
+                    if e.errno == _MYSQL_ERRNO_UNKNOWN_COLUMN:
                         # descricao_chave column not yet created — use legacy fallback without it.
                         logger.warning("conciliar: descricao_chave column missing, using batch fallback")
                         try:

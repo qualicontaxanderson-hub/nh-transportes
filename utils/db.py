@@ -39,7 +39,13 @@ def _get_connection_pool():
             pool_config = {
                 'pool_name': 'nh_transportes_pool',
                 'pool_size': Config.DB_POOL_SIZE,
-                'pool_reset_session': False,  # Avoid AttributeError on dead connections
+                # pool_reset_session=True (default) issues ROLLBACK when a connection is
+                # returned to the pool, clearing its MVCC snapshot.  Without this,
+                # connections returned mid-transaction hold a stale InnoDB REPEATABLE READ
+                # snapshot, causing recently-committed rows to appear unchanged (e.g. a
+                # bank_transaction just set to 'conciliado' reappearing as 'pendente').
+                # Dead connections on acquire are already handled by ping(reconnect=True).
+                'pool_reset_session': True,
                 **CONNECTION_PARAMS
             }
             _connection_pool = pooling.MySQLConnectionPool(**pool_config)
