@@ -2,9 +2,12 @@
 
 import logging
 import mysql.connector
+import pytz
 from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify
 from flask_login import login_required, current_user
 from utils.db import get_db_connection
+
+_BRASILIA = pytz.timezone('America/Sao_Paulo')
 
 logger = logging.getLogger(__name__)
 
@@ -465,6 +468,19 @@ def memorias():
     finally:
         cursor.close()
         conn.close()
+
+    # Converte timestamps UTC → horário de Brasília para exibição
+    for m in memorias_list:
+        for field in ('atualizado_em', 'criado_em'):
+            val = m.get(field)
+            if val is not None:
+                try:
+                    # MySQL datetime sem tzinfo → assume UTC
+                    utc_dt = pytz.utc.localize(val) if val.tzinfo is None else val
+                    m[field] = utc_dt.astimezone(_BRASILIA)
+                except Exception:
+                    pass  # mantém o valor original em caso de erro inesperado
+
     return render_template('bank_import/regras/memorias.html', memorias=memorias_list)
 
 

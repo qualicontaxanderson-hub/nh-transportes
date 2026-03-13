@@ -1497,7 +1497,7 @@ def conciliar():
                             bsm_rows = []
                     else:
                         # Other MySQL error (e.g., errno=1146 table not found) — degrade gracefully.
-                        logger.warning("conciliar: BSM lookup failed (errno=%s), skipping suggestions", _e.errno)
+                        logger.warning("conciliar: BSM lookup failed (errno=%s), skipping suggestions", e.errno)
                         bsm_rows = []
                 except Exception:
                     logger.warning("conciliar: BSM lookup failed unexpectedly, skipping suggestions", exc_info=True)
