@@ -1256,55 +1256,65 @@ def conciliar():
             # tx_N_forma_recebimento_id, tx_N_fornecedor_id, tx_N_conta_destino_id,
             # tx_N_titulo_id, tx_N_categoria_id, tx_N_subcategoria_id, tx_N_valor
             # para N = 0, 1, 2, ... enquanto tx_N_id estiver presente.
-            n = 0
-            while True:
-                tid = request.form.get(f'tx_{n}_id', '').strip()
-                if not tid:
-                    break
-                t_tipo_tx  = request.form.get(f'tx_{n}_tipo_tx', 'DEBIT')
-                t_tipo_deb = request.form.get(f'tx_{n}_tipo_debito', '')
-                t_forma    = request.form.get(f'tx_{n}_forma_recebimento_id') or None
-                t_forn     = request.form.get(f'tx_{n}_fornecedor_id') or None
-                t_conta    = request.form.get(f'tx_{n}_conta_destino_id') or None
-                t_titulo   = request.form.get(f'tx_{n}_titulo_id') or None
-                t_categ    = request.form.get(f'tx_{n}_categoria_id') or None
-                t_sub      = request.form.get(f'tx_{n}_subcategoria_id') or None
-                t_valor    = request.form.get(f'tx_{n}_valor') or None
-                if t_tipo_deb == 'transferencia' and t_conta:
-                    _conciliar_transferencia(cursor, conn, tid, t_conta, usuario,
-                                             salvar_mapeamento=True)
-                elif t_tipo_deb == 'transferencia_recebida':
-                    _conciliar_tx(cursor, conn, tid, 'conciliar', 'CREDIT',
-                                  None, None, usuario, tipo_debito='transferencia',
-                                  salvar_mapeamento=True)
-                elif t_tipo_deb == 'despesa' and t_titulo and t_categ and t_valor:
-                    try:
-                        val_f = float(str(t_valor).replace(',', '.'))
-                    except (ValueError, TypeError):
-                        n += 1
-                        continue
-                    desp = [{'titulo_id': int(t_titulo), 'categoria_id': int(t_categ),
-                              'subcategoria_id': int(t_sub) if t_sub else None,
-                              'valor': val_f, 'observacao': None, 'fornecedor': None}]
-                    _conciliar_tx(cursor, conn, tid, 'conciliar', 'DEBIT',
-                                  None, None, usuario, tipo_debito='despesa',
-                                  despesas=desp, salvar_mapeamento=True)
-                elif t_forn or t_forma:
-                    try:
-                        _conciliar_tx(cursor, conn, tid, 'conciliar', t_tipo_tx,
-                                      t_forn, t_forma, usuario,
-                                      tipo_debito=t_tipo_deb or 'fornecedor',
+            try:
+                n = 0
+                while True:
+                    tid = request.form.get(f'tx_{n}_id', '').strip()
+                    if not tid:
+                        break
+                    t_tipo_tx  = request.form.get(f'tx_{n}_tipo_tx', 'DEBIT')
+                    t_tipo_deb = request.form.get(f'tx_{n}_tipo_debito', '')
+                    t_forma    = request.form.get(f'tx_{n}_forma_recebimento_id') or None
+                    t_forn     = request.form.get(f'tx_{n}_fornecedor_id') or None
+                    t_conta    = request.form.get(f'tx_{n}_conta_destino_id') or None
+                    t_titulo   = request.form.get(f'tx_{n}_titulo_id') or None
+                    t_categ    = request.form.get(f'tx_{n}_categoria_id') or None
+                    t_sub      = request.form.get(f'tx_{n}_subcategoria_id') or None
+                    t_valor    = request.form.get(f'tx_{n}_valor') or None
+                    if t_tipo_deb == 'transferencia' and t_conta:
+                        _conciliar_transferencia(cursor, conn, tid, t_conta, usuario,
+                                                 salvar_mapeamento=True)
+                    elif t_tipo_deb == 'transferencia_recebida':
+                        _conciliar_tx(cursor, conn, tid, 'conciliar', 'CREDIT',
+                                      None, None, usuario, tipo_debito='transferencia',
                                       salvar_mapeamento=True)
-                    except ValueError as ve:
-                        logger.debug("aprovar_sugestoes_pagina: ignorando tx %s — %s", tid, ve)
+                    elif t_tipo_deb == 'despesa' and t_titulo and t_categ and t_valor:
+                        try:
+                            val_f = float(str(t_valor).replace(',', '.'))
+                        except (ValueError, TypeError):
+                            n += 1
+                            continue
+                        desp = [{'titulo_id': int(t_titulo), 'categoria_id': int(t_categ),
+                                  'subcategoria_id': int(t_sub) if t_sub else None,
+                                  'valor': val_f, 'observacao': None, 'fornecedor': None}]
+                        _conciliar_tx(cursor, conn, tid, 'conciliar', 'DEBIT',
+                                      None, None, usuario, tipo_debito='despesa',
+                                      despesas=desp, salvar_mapeamento=True)
+                    elif t_forn or t_forma:
+                        try:
+                            _conciliar_tx(cursor, conn, tid, 'conciliar', t_tipo_tx,
+                                          t_forn, t_forma, usuario,
+                                          tipo_debito=t_tipo_deb or 'fornecedor',
+                                          salvar_mapeamento=True)
+                        except ValueError as ve:
+                            logger.debug("aprovar_sugestoes_pagina: ignorando tx %s — %s", tid, ve)
+                            n += 1
+                            continue
+                    else:
+                        # Sugestão sem dados suficientes — ignora silenciosamente
                         n += 1
                         continue
-                else:
-                    # Sugestão sem dados suficientes — ignora silenciosamente
+                    ok += 1
                     n += 1
-                    continue
-                ok += 1
-                n += 1
+            except Exception as exc:
+                try:
+                    conn.rollback()
+                except Exception:
+                    pass
+                _close_db()
+                logger.exception("Erro ao aprovar sugestões em lote: %s", exc)
+                flash('Erro ao aprovar sugestões. Tente novamente ou contacte o suporte.', 'danger')
+                return redirect(request.url)
             flash(f'{ok} sugestão(ões) aprovada(s) com sucesso!', 'success')
             _close_db()
             return redirect(request.url)

@@ -151,6 +151,18 @@ document.addEventListener('DOMContentLoaded', function() {
         } else if (btn.tagName === 'INPUT') {
           btn.value = 'Salvando...';
         }
+
+        // Reabilita o botão após 30 segundos para evitar estado permanentemente desabilitado
+        // caso a resposta do servidor demore ou o envio falhe.
+        var originalText = btn.dataset.originalText;
+        setTimeout(function() {
+          btn.disabled = false;
+          if (btn.tagName === 'BUTTON' && btn.innerText === 'Salvando...') {
+            btn.innerText = originalText || 'Salvar';
+          } else if (btn.tagName === 'INPUT' && btn.value === 'Salvando...') {
+            btn.value = originalText || 'Salvar';
+          }
+        }, 30000);
       });
     });
   });

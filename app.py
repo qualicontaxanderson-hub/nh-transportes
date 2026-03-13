@@ -162,6 +162,30 @@ def create_app():
     app.logger.info("Registro de blueprints concluído!")
     app.logger.info("="*60)
 
+    # Executa migrations opcionais de schema na inicialização do servidor.
+    # Garante que as colunas adicionadas em versões recentes (descricao_chave,
+    # bank_transaction_id, etc.) existam antes da primeira request, evitando
+    # lentidão de 10-30 s no primeiro acesso após cada deployment.
+    with app.app_context():
+        try:
+            from routes.bank_import import _ensure_ld_bank_tx_id, _ensure_descricao_chave
+            _ensure_ld_bank_tx_id()
+            _ensure_descricao_chave()
+            app.logger.info("Migrations de schema de bank_import executadas na inicialização.")
+        except Exception:
+            app.logger.warning(
+                "Migrations de bank_import falharam na inicialização "
+                "(não crítico – serão reexecutadas na primeira request).",
+                exc_info=True,
+            )
+            # Reseta os flags de desistência para que a primeira request tente novamente.
+            try:
+                import routes.bank_import as _bi
+                _bi._ld_bank_tx_id_gave_up = False
+                _bi._bsm_descricao_chave_gave_up = False
+            except Exception:
+                pass
+
     # Registrar filtro e helpers de template
     app.jinja_env.filters['formatar_moeda'] = formatar_moeda
 

@@ -12,7 +12,7 @@
   </nav>
 
   <!-- Filtros -->
-  <form method="GET" class="card shadow-sm mb-3" id="formFiltros">
+  <form method="GET" class="card shadow-sm mb-3 js-sem-trava" id="formFiltros">
     <div class="card-header py-2" style="background:#1D63A5;color:white;">
       <h6 class="mb-0"><i class="bi bi-funnel"></i> Filtros</h6>
     </div>
@@ -96,7 +96,7 @@
     </div>
     <div class="card-body p-0">
       {% if transacoes %}
-      <form method="POST" id="formConciliacaoLote">
+      <form method="POST" class="js-sem-trava" id="formConciliacaoLote">
         <div class="d-flex gap-2 p-2 bg-light border-bottom" style="font-size:0.85rem;">
           <button type="button" class="btn btn-outline-primary btn-sm" id="btnSelecionarTodos">
             <i class="bi bi-check-all"></i> Selecionar Todos
@@ -311,7 +311,7 @@
         <h5 class="modal-title"><i class="bi bi-link-45deg"></i> Conciliar Transação</h5>
         <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
       </div>
-      <form method="POST" id="formConciliar">
+      <form method="POST" class="js-sem-trava" id="formConciliar">
         <div class="modal-body">
           <input type="hidden" name="transaction_id" id="modal_tx_id">
           <input type="hidden" name="acao" value="conciliar">
