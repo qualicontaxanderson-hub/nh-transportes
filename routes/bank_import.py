@@ -16,6 +16,10 @@ logger = logging.getLogger(__name__)
 
 bp = Blueprint('bank_import', __name__, url_prefix='/banco')
 
+# MySQL error codes used in exception handling throughout this module
+_MYSQL_ERRNO_UNKNOWN_COLUMN = 1054   # Unknown column (e.g., descricao_chave not yet added)
+_MYSQL_ERRNO_TABLE_NOT_FOUND = 1146  # Table doesn't exist (schema not yet migrated)
+
 # NOTE: this flag is not thread-safe but the underlying operation is idempotent
 # (ADD COLUMN IF NOT EXISTS), so a double-run in concurrent requests is harmless.
 _ld_bank_tx_id_ready = False
@@ -1188,12 +1192,13 @@ def conciliar():
     _ensure_descricao_chave()
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
-    _db_closed = [False]
+    _db_closed = False
 
     def _close_db():
         """Fecha cursor e conn de forma idempotente (seguro chamar múltiplas vezes)."""
-        if not _db_closed[0]:
-            _db_closed[0] = True
+        nonlocal _db_closed
+        if not _db_closed:
+            _db_closed = True
             try:
                 cursor.close()
             except Exception:
@@ -1445,7 +1450,7 @@ def conciliar():
                     )
                     bsm_rows = cursor.fetchall()
                 except mysql.connector.errors.ProgrammingError as _e:
-                    if _e.errno == 1054:
+                    if _e.errno == _MYSQL_ERRNO_UNKNOWN_COLUMN:
                         # descricao_chave column not yet created — use legacy fallback without it.
                         logger.warning("conciliar: descricao_chave column missing, using batch fallback")
                         try:
