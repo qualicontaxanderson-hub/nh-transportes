@@ -20,6 +20,10 @@ bp = Blueprint('bank_import', __name__, url_prefix='/banco')
 # (ADD COLUMN IF NOT EXISTS), so a double-run in concurrent requests is harmless.
 _ld_bank_tx_id_ready = False
 _bsm_descricao_chave_ready = False
+# After one failed attempt, stop retrying to avoid slow ALTER TABLE calls on every request.
+# The BSM batch query has its own graceful fallback if the schema isn't perfect.
+_bsm_descricao_chave_gave_up = False
+_ld_bank_tx_id_gave_up = False
 
 
 def _ensure_descricao_chave():
@@ -35,8 +39,8 @@ def _ensure_descricao_chave():
     ProgrammingError(1054) e o mapeamento não é salvo — por isso garantimos
     tudo aqui antes da primeira conciliação.
     """
-    global _bsm_descricao_chave_ready
-    if _bsm_descricao_chave_ready:
+    global _bsm_descricao_chave_ready, _bsm_descricao_chave_gave_up
+    if _bsm_descricao_chave_ready or _bsm_descricao_chave_gave_up:
         return
     conn = None
     try:
@@ -114,6 +118,7 @@ def _ensure_descricao_chave():
         _bsm_descricao_chave_ready = True
     except Exception:
         logger.warning("_ensure_descricao_chave: não foi possível aplicar schema de bank_supplier_mapping", exc_info=True)
+        _bsm_descricao_chave_gave_up = True  # evita retries caros em toda request
     finally:
         if conn:
             conn.close()
@@ -121,8 +126,8 @@ def _ensure_descricao_chave():
 
 def _ensure_ld_bank_tx_id():
     """Garante que lancamentos_despesas.bank_transaction_id existe. Idempotente."""
-    global _ld_bank_tx_id_ready
-    if _ld_bank_tx_id_ready:
+    global _ld_bank_tx_id_ready, _ld_bank_tx_id_gave_up
+    if _ld_bank_tx_id_ready or _ld_bank_tx_id_gave_up:
         return
     conn = None
     try:
@@ -144,6 +149,7 @@ def _ensure_ld_bank_tx_id():
         _ld_bank_tx_id_ready = True
     except Exception:
         logger.warning("_ensure_ld_bank_tx_id: não foi possível criar a coluna bank_transaction_id", exc_info=True)
+        _ld_bank_tx_id_gave_up = True  # evita retries caros em toda request
     finally:
         if conn:
             conn.close()
@@ -1182,6 +1188,21 @@ def conciliar():
     _ensure_descricao_chave()
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
+    _db_closed = [False]
+
+    def _close_db():
+        """Fecha cursor e conn de forma idempotente (seguro chamar múltiplas vezes)."""
+        if not _db_closed[0]:
+            _db_closed[0] = True
+            try:
+                cursor.close()
+            except Exception:
+                pass
+            try:
+                conn.close()
+            except Exception:
+                pass
+
     usuario = current_user.email if hasattr(current_user, 'email') else 'manual'
 
     # ------------------------------------------------------------------
@@ -1280,8 +1301,7 @@ def conciliar():
                 ok += 1
                 n += 1
             flash(f'{ok} sugestão(ões) aprovada(s) com sucesso!', 'success')
-            cursor.close()
-            conn.close()
+            _close_db()
             return redirect(request.url)
 
         salvar_mapeamento = (acao != 'lancamento_unico')
@@ -1305,8 +1325,7 @@ def conciliar():
                 conn.rollback()
             except Exception:
                 pass
-            cursor.close()
-            conn.close()
+            _close_db()
             logger.exception("Erro ao conciliar transação: %s", exc)
             flash(f'Erro ao conciliar: {exc}', 'danger')
             return redirect(request.url)
@@ -1316,8 +1335,7 @@ def conciliar():
         else:
             flash(f'{ok} transação(ões) conciliada(s) com sucesso!', 'success')
 
-        cursor.close()
-        conn.close()
+        _close_db()
         # Mantém filtros após POST
         return redirect(request.url)
 
@@ -1367,236 +1385,260 @@ def conciliar():
     where_sql = 'WHERE ' + ' AND '.join(where)
 
     # When no company is selected yet, skip expensive queries and show nothing.
-    transacoes = []
-    total = 0
+    try:
+        transacoes = []
+        total = 0
 
-    if f_clientes:
-        # ------------------------------------------------------------------
-        # Busca transações sem N+1 query: sem correlated subquery do BSM
-        # ------------------------------------------------------------------
-        cursor.execute(
-            f"""SELECT bt.*, ba.apelido AS conta_apelido, ba.banco_nome
-                FROM bank_transactions bt
-                INNER JOIN bank_accounts ba ON bt.account_id = ba.id
-                {where_sql}
-                ORDER BY bt.data_transacao DESC, bt.id DESC
-                LIMIT %s OFFSET %s""",
-            params + [per_page, offset],
-        )
-        transacoes = cursor.fetchall()
+        if f_clientes:
+            # ------------------------------------------------------------------
+            # Busca transações sem N+1 query: sem correlated subquery do BSM
+            # ------------------------------------------------------------------
+            cursor.execute(
+                f"""SELECT bt.*, ba.apelido AS conta_apelido, ba.banco_nome
+                    FROM bank_transactions bt
+                    INNER JOIN bank_accounts ba ON bt.account_id = ba.id
+                    {where_sql}
+                    ORDER BY bt.data_transacao DESC, bt.id DESC
+                    LIMIT %s OFFSET %s""",
+                params + [per_page, offset],
+            )
+            transacoes = cursor.fetchall()
 
-        # ------------------------------------------------------------------
-        # Batch lookup: bank_supplier_mapping para todos os CNPJs distintos
-        # Substitui o N+1 correlated subquery por uma única consulta em lote
-        # ------------------------------------------------------------------
-        for tx in transacoes:
-            tx['sugestao_fornecedor_id']       = None
-            tx['sugestao_forma_id']            = None
-            tx['sugestao_titulo_id']           = None
-            tx['sugestao_categoria_id']        = None
-            tx['sugestao_subcategoria_id']     = None
-            tx['sugestao_conta_destino_id']    = None
-            tx['sugestao_tipo_debito']         = None
-            tx['sugestao_bsm_descricao_chave'] = None
-            tx['sugestao_forma_nome']          = None
-            tx['sugestao_fornecedor_nome']     = None
-            tx['sugestao_titulo_nome']         = None
-            tx['sugestao_categoria_nome']      = None
+            # ------------------------------------------------------------------
+            # Batch lookup: bank_supplier_mapping para todos os CNPJs distintos
+            # Substitui o N+1 correlated subquery por uma única consulta em lote
+            # ------------------------------------------------------------------
+            for tx in transacoes:
+                tx['sugestao_fornecedor_id']       = None
+                tx['sugestao_forma_id']            = None
+                tx['sugestao_titulo_id']           = None
+                tx['sugestao_categoria_id']        = None
+                tx['sugestao_subcategoria_id']     = None
+                tx['sugestao_conta_destino_id']    = None
+                tx['sugestao_tipo_debito']         = None
+                tx['sugestao_bsm_descricao_chave'] = None
+                tx['sugestao_forma_nome']          = None
+                tx['sugestao_fornecedor_nome']     = None
+                tx['sugestao_titulo_nome']         = None
+                tx['sugestao_categoria_nome']      = None
 
-        cnpjs = list({tx['cnpj_cpf'] for tx in transacoes if tx.get('cnpj_cpf')})
-        if cnpjs:
-            ph = ','.join(['%s'] * len(cnpjs))
+            cnpjs = list({tx['cnpj_cpf'] for tx in transacoes if tx.get('cnpj_cpf')})
+            if cnpjs:
+                ph = ','.join(['%s'] * len(cnpjs))
+                try:
+                    cursor.execute(
+                        f"""SELECT bsm.cnpj_cpf, bsm.descricao_chave,
+                                   bsm.fornecedor_id, bsm.forma_recebimento_id,
+                                   bsm.titulo_id, bsm.categoria_id, bsm.subcategoria_id,
+                                   bsm.conta_destino_id, bsm.tipo_debito,
+                                   fr.nome AS sugestao_forma_nome,
+                                   fs.razao_social AS sugestao_fornecedor_nome,
+                                   td.nome AS sugestao_titulo_nome,
+                                   cd.nome AS sugestao_categoria_nome
+                            FROM bank_supplier_mapping bsm
+                            LEFT JOIN formas_recebimento fr ON fr.id = bsm.forma_recebimento_id
+                            LEFT JOIN fornecedores fs ON fs.id = bsm.fornecedor_id
+                            LEFT JOIN titulos_despesas td ON td.id = bsm.titulo_id
+                            LEFT JOIN categorias_despesas cd ON cd.id = bsm.categoria_id
+                            WHERE bsm.cnpj_cpf IN ({ph})""",
+                        cnpjs,
+                    )
+                    bsm_rows = cursor.fetchall()
+                except mysql.connector.errors.ProgrammingError as _e:
+                    if _e.errno == 1054:
+                        # descricao_chave column not yet created — use legacy fallback without it.
+                        logger.warning("conciliar: descricao_chave column missing, using batch fallback")
+                        try:
+                            cursor.execute(
+                                f"""SELECT bsm.cnpj_cpf, '' AS descricao_chave,
+                                           bsm.fornecedor_id, bsm.forma_recebimento_id,
+                                           bsm.titulo_id, bsm.categoria_id, bsm.subcategoria_id,
+                                           bsm.conta_destino_id, bsm.tipo_debito,
+                                           fr.nome AS sugestao_forma_nome,
+                                           fs.razao_social AS sugestao_fornecedor_nome,
+                                           td.nome AS sugestao_titulo_nome,
+                                           cd.nome AS sugestao_categoria_nome
+                                    FROM bank_supplier_mapping bsm
+                                    LEFT JOIN formas_recebimento fr ON fr.id = bsm.forma_recebimento_id
+                                    LEFT JOIN fornecedores fs ON fs.id = bsm.fornecedor_id
+                                    LEFT JOIN titulos_despesas td ON td.id = bsm.titulo_id
+                                    LEFT JOIN categorias_despesas cd ON cd.id = bsm.categoria_id
+                                    WHERE bsm.cnpj_cpf IN ({ph})""",
+                                cnpjs,
+                            )
+                            bsm_rows = cursor.fetchall()
+                        except Exception:
+                            logger.warning("conciliar: BSM fallback query also failed, skipping suggestions", exc_info=True)
+                            bsm_rows = []
+                    else:
+                        # Other MySQL error (e.g., errno=1146 table not found) — degrade gracefully.
+                        logger.warning("conciliar: BSM lookup failed (errno=%s), skipping suggestions", _e.errno)
+                        bsm_rows = []
+                except Exception:
+                    logger.warning("conciliar: BSM lookup failed unexpectedly, skipping suggestions", exc_info=True)
+                    bsm_rows = []
+
+                # Índice: (cnpj_cpf, descricao_chave) → row
+                bsm_index = {}
+                for row in bsm_rows:
+                    bsm_index[(row['cnpj_cpf'], row['descricao_chave'])] = row
+
+                # Aplica o mapeamento a cada transação (match específico > genérico)
+                for tx in transacoes:
+                    cnpj = tx.get('cnpj_cpf') or ''
+                    if not cnpj:
+                        continue
+                    desc_key = _desc_chave(tx.get('descricao') or '')
+                    bsm = bsm_index.get((cnpj, desc_key)) or bsm_index.get((cnpj, ''))
+                    if bsm:
+                        tx['sugestao_fornecedor_id']       = bsm.get('fornecedor_id')
+                        tx['sugestao_forma_id']            = bsm.get('forma_recebimento_id')
+                        tx['sugestao_titulo_id']           = bsm.get('titulo_id')
+                        tx['sugestao_categoria_id']        = bsm.get('categoria_id')
+                        tx['sugestao_subcategoria_id']     = bsm.get('subcategoria_id')
+                        tx['sugestao_conta_destino_id']    = bsm.get('conta_destino_id')
+                        tx['sugestao_tipo_debito']         = bsm.get('tipo_debito')
+                        tx['sugestao_bsm_descricao_chave'] = bsm.get('descricao_chave', '')
+                        tx['sugestao_forma_nome']          = bsm.get('sugestao_forma_nome')
+                        tx['sugestao_fornecedor_nome']     = bsm.get('sugestao_fornecedor_nome')
+                        tx['sugestao_titulo_nome']         = bsm.get('sugestao_titulo_nome')
+                        tx['sugestao_categoria_nome']      = bsm.get('sugestao_categoria_nome')
+
+            # -----------------------------------------------------------------------
+            # Aplicar regras por padrão de descrição a transações sem sugestão de CNPJ
+            # -----------------------------------------------------------------------
             try:
                 cursor.execute(
-                    f"""SELECT bsm.cnpj_cpf, bsm.descricao_chave,
-                               bsm.fornecedor_id, bsm.forma_recebimento_id,
-                               bsm.titulo_id, bsm.categoria_id, bsm.subcategoria_id,
-                               bsm.conta_destino_id, bsm.tipo_debito,
-                               fr.nome AS sugestao_forma_nome,
-                               fs.razao_social AS sugestao_fornecedor_nome,
-                               td.nome AS sugestao_titulo_nome,
-                               cd.nome AS sugestao_categoria_nome
-                        FROM bank_supplier_mapping bsm
-                        LEFT JOIN formas_recebimento fr ON fr.id = bsm.forma_recebimento_id
-                        LEFT JOIN fornecedores fs ON fs.id = bsm.fornecedor_id
-                        LEFT JOIN titulos_despesas td ON td.id = bsm.titulo_id
-                        LEFT JOIN categorias_despesas cd ON cd.id = bsm.categoria_id
-                        WHERE bsm.cnpj_cpf IN ({ph})""",
-                    cnpjs,
+                    """SELECT r.id, r.padrao_descricao, r.padrao_secundario, r.tipo_match,
+                              r.tipo_transacao, r.account_id,
+                              r.forma_recebimento_id, fr.nome AS forma_nome,
+                              r.fornecedor_id, f.razao_social AS fornecedor_nome
+                       FROM bank_conciliacao_regras r
+                       LEFT JOIN formas_recebimento fr ON fr.id = r.forma_recebimento_id
+                       LEFT JOIN fornecedores f ON f.id = r.fornecedor_id
+                       WHERE r.ativo = 1
+                       ORDER BY
+                           (r.account_id IS NOT NULL) DESC,
+                           (r.padrao_secundario IS NOT NULL AND r.padrao_secundario <> '') DESC,
+                           r.id"""
                 )
-                bsm_rows = cursor.fetchall()
-            except mysql.connector.errors.ProgrammingError as _e:
-                if _e.errno != 1054:
-                    raise
-                # Fallback quando a coluna descricao_chave ainda não existe no banco.
-                logger.warning("conciliar: descricao_chave column missing, using batch fallback")
-                cursor.execute(
-                    f"""SELECT bsm.cnpj_cpf, '' AS descricao_chave,
-                               bsm.fornecedor_id, bsm.forma_recebimento_id,
-                               bsm.titulo_id, bsm.categoria_id, bsm.subcategoria_id,
-                               bsm.conta_destino_id, bsm.tipo_debito,
-                               fr.nome AS sugestao_forma_nome,
-                               fs.razao_social AS sugestao_fornecedor_nome,
-                               td.nome AS sugestao_titulo_nome,
-                               cd.nome AS sugestao_categoria_nome
-                        FROM bank_supplier_mapping bsm
-                        LEFT JOIN formas_recebimento fr ON fr.id = bsm.forma_recebimento_id
-                        LEFT JOIN fornecedores fs ON fs.id = bsm.fornecedor_id
-                        LEFT JOIN titulos_despesas td ON td.id = bsm.titulo_id
-                        LEFT JOIN categorias_despesas cd ON cd.id = bsm.categoria_id
-                        WHERE bsm.cnpj_cpf IN ({ph})""",
-                    cnpjs,
-                )
-                bsm_rows = cursor.fetchall()
+                regras_padrao = cursor.fetchall()
+            except Exception:
+                logger.warning("conciliar: bank_conciliacao_regras query failed, skipping rules", exc_info=True)
+                regras_padrao = []
 
-            # Índice: (cnpj_cpf, descricao_chave) → row
-            bsm_index = {}
-            for row in bsm_rows:
-                bsm_index[(row['cnpj_cpf'], row['descricao_chave'])] = row
-
-            # Aplica o mapeamento a cada transação (match específico > genérico)
             for tx in transacoes:
-                cnpj = tx.get('cnpj_cpf') or ''
-                if not cnpj:
-                    continue
-                desc_key = _desc_chave(tx.get('descricao') or '')
-                bsm = bsm_index.get((cnpj, desc_key)) or bsm_index.get((cnpj, ''))
-                if bsm:
-                    tx['sugestao_fornecedor_id']       = bsm.get('fornecedor_id')
-                    tx['sugestao_forma_id']            = bsm.get('forma_recebimento_id')
-                    tx['sugestao_titulo_id']           = bsm.get('titulo_id')
-                    tx['sugestao_categoria_id']        = bsm.get('categoria_id')
-                    tx['sugestao_subcategoria_id']     = bsm.get('subcategoria_id')
-                    tx['sugestao_conta_destino_id']    = bsm.get('conta_destino_id')
-                    tx['sugestao_tipo_debito']         = bsm.get('tipo_debito')
-                    tx['sugestao_bsm_descricao_chave'] = bsm.get('descricao_chave', '')
-                    tx['sugestao_forma_nome']          = bsm.get('sugestao_forma_nome')
-                    tx['sugestao_fornecedor_nome']     = bsm.get('sugestao_fornecedor_nome')
-                    tx['sugestao_titulo_nome']         = bsm.get('sugestao_titulo_nome')
-                    tx['sugestao_categoria_nome']      = bsm.get('sugestao_categoria_nome')
+                descricao = (tx.get('descricao') or '').upper()
+                tipo_tx_r = tx.get('tipo', '')
+                for regra in regras_padrao:
+                    # Filtra por conta bancária
+                    regra_account_id = regra.get('account_id')
+                    if regra_account_id and int(regra_account_id) != int(tx['account_id']):
+                        continue
+                    if regra['tipo_transacao'] != 'AMBOS' and regra['tipo_transacao'] != tipo_tx_r:
+                        continue
+                    padrao = (regra['padrao_descricao'] or '').upper()
+                    if regra['tipo_match'] == 'exato':
+                        bate = descricao == padrao
+                    else:
+                        bate = padrao in descricao
+                    if not bate:
+                        continue
+                    # Match secundário
+                    padrao2 = (regra.get('padrao_secundario') or '').upper()
+                    if padrao2 and padrao2 not in descricao:
+                        continue
+                    # Regras de descrição têm prioridade sobre mapeamento por CNPJ
+                    if regra['forma_recebimento_id']:
+                        tx['sugestao_forma_id']   = regra['forma_recebimento_id']
+                        tx['sugestao_forma_nome'] = regra['forma_nome']
+                        tx['sugestao_regra']      = True
+                    if regra['fornecedor_id']:
+                        tx['sugestao_fornecedor_id']   = regra['fornecedor_id']
+                        tx['sugestao_fornecedor_nome'] = regra['fornecedor_nome']
+                        tx['sugestao_regra']           = True
+                    break  # primeira regra que bate vence
 
-        # -----------------------------------------------------------------------
-        # Aplicar regras por padrão de descrição a transações sem sugestão de CNPJ
-        # -----------------------------------------------------------------------
-        cursor.execute(
-            """SELECT r.id, r.padrao_descricao, r.padrao_secundario, r.tipo_match,
-                      r.tipo_transacao, r.account_id,
-                      r.forma_recebimento_id, fr.nome AS forma_nome,
-                      r.fornecedor_id, f.razao_social AS fornecedor_nome
-               FROM bank_conciliacao_regras r
-               LEFT JOIN formas_recebimento fr ON fr.id = r.forma_recebimento_id
-               LEFT JOIN fornecedores f ON f.id = r.fornecedor_id
-               WHERE r.ativo = 1
-               ORDER BY
-                   (r.account_id IS NOT NULL) DESC,
-                   (r.padrao_secundario IS NOT NULL AND r.padrao_secundario <> '') DESC,
-                   r.id"""
-        )
-        regras_padrao = cursor.fetchall()
+            # Para créditos sem regra de descrição correspondente: remove a sugestão de forma
+            # que veio do bank_supplier_mapping por CNPJ/CPF genérico (sem descrição específica).
+            # O mesmo CPF pode aparecer em transações de tipos distintos (PIX, depósito, cheque…),
+            # tornando a sugestão por CNPJ não confiável para créditos.
+            # Exceção: mapeamentos com descricao_chave específica são confiáveis e mantidos.
+            for tx in transacoes:
+                if tx.get('tipo') == 'CREDIT' and not tx.get('sugestao_regra'):
+                    # Preserve a sugestão se veio de memorização específica (descricao_chave não vazia)
+                    if not tx.get('sugestao_bsm_descricao_chave'):
+                        tx['sugestao_forma_id']   = None
+                        tx['sugestao_forma_nome'] = None
 
-        for tx in transacoes:
-            descricao = (tx.get('descricao') or '').upper()
-            tipo_tx_r = tx.get('tipo', '')
-            for regra in regras_padrao:
-                # Filtra por conta bancária
-                regra_account_id = regra.get('account_id')
-                if regra_account_id and int(regra_account_id) != int(tx['account_id']):
-                    continue
-                if regra['tipo_transacao'] != 'AMBOS' and regra['tipo_transacao'] != tipo_tx_r:
-                    continue
-                padrao = (regra['padrao_descricao'] or '').upper()
-                if regra['tipo_match'] == 'exato':
-                    bate = descricao == padrao
-                else:
-                    bate = padrao in descricao
-                if not bate:
-                    continue
-                # Match secundário
-                padrao2 = (regra.get('padrao_secundario') or '').upper()
-                if padrao2 and padrao2 not in descricao:
-                    continue
-                # Regras de descrição têm prioridade sobre mapeamento por CNPJ
-                if regra['forma_recebimento_id']:
-                    tx['sugestao_forma_id']   = regra['forma_recebimento_id']
-                    tx['sugestao_forma_nome'] = regra['forma_nome']
-                    tx['sugestao_regra']      = True
-                if regra['fornecedor_id']:
-                    tx['sugestao_fornecedor_id']   = regra['fornecedor_id']
-                    tx['sugestao_fornecedor_nome'] = regra['fornecedor_nome']
-                    tx['sugestao_regra']           = True
-                break  # primeira regra que bate vence
+            # Enriquece badge de sugestão de despesa (CNPJ → título/categoria)
+            for tx in transacoes:
+                if tx.get('sugestao_titulo_id') and not tx.get('sugestao_forma_id') and not tx.get('sugestao_fornecedor_id'):
+                    tx['sugestao_despesa_label'] = (
+                        (tx.get('sugestao_titulo_nome') or '') + ' › ' + (tx.get('sugestao_categoria_nome') or '')
+                    )
 
-        # Para créditos sem regra de descrição correspondente: remove a sugestão de forma
-        # que veio do bank_supplier_mapping por CNPJ/CPF genérico (sem descrição específica).
-        # O mesmo CPF pode aparecer em transações de tipos distintos (PIX, depósito, cheque…),
-        # tornando a sugestão por CNPJ não confiável para créditos.
-        # Exceção: mapeamentos com descricao_chave específica são confiáveis e mantidos.
-        for tx in transacoes:
-            if tx.get('tipo') == 'CREDIT' and not tx.get('sugestao_regra'):
-                # Preserve a sugestão se veio de memorização específica (descricao_chave não vazia)
-                if not tx.get('sugestao_bsm_descricao_chave'):
-                    tx['sugestao_forma_id']   = None
-                    tx['sugestao_forma_nome'] = None
+            # Marca CREDITs que são transferências recebidas (sintéticas ou por CNPJ aprendido)
+            for tx in transacoes:
+                if tx.get('tipo') == 'CREDIT':
+                    tipo_conc    = tx.get('tipo_conciliacao') or ''
+                    sugestao_tip = tx.get('sugestao_tipo_debito') or ''
+                    if tipo_conc == 'transferencia' or sugestao_tip == 'transferencia':
+                        tx['sugestao_transferencia_recebida'] = True
 
-        # Enriquece badge de sugestão de despesa (CNPJ → título/categoria)
-        for tx in transacoes:
-            if tx.get('sugestao_titulo_id') and not tx.get('sugestao_forma_id') and not tx.get('sugestao_fornecedor_id'):
-                tx['sugestao_despesa_label'] = (
-                    (tx.get('sugestao_titulo_nome') or '') + ' › ' + (tx.get('sugestao_categoria_nome') or '')
+            # Reordena: dentro de cada data, lançamentos com sugestão aparecem primeiro
+            def _tem_sugestao(tx):
+                return bool(
+                    tx.get('sugestao_forma_id') or
+                    tx.get('sugestao_fornecedor_id') or
+                    tx.get('sugestao_titulo_id') or
+                    tx.get('sugestao_transferencia_recebida')
                 )
-
-        # Marca CREDITs que são transferências recebidas (sintéticas ou por CNPJ aprendido)
-        for tx in transacoes:
-            if tx.get('tipo') == 'CREDIT':
-                tipo_conc    = tx.get('tipo_conciliacao') or ''
-                sugestao_tip = tx.get('sugestao_tipo_debito') or ''
-                if tipo_conc == 'transferencia' or sugestao_tip == 'transferencia':
-                    tx['sugestao_transferencia_recebida'] = True
-
-        # Reordena: dentro de cada data, lançamentos com sugestão aparecem primeiro
-        def _tem_sugestao(tx):
-            return bool(
-                tx.get('sugestao_forma_id') or
-                tx.get('sugestao_fornecedor_id') or
-                tx.get('sugestao_titulo_id') or
-                tx.get('sugestao_transferencia_recebida')
+            transacoes = sorted(
+                transacoes,
+                key=lambda tx: (tx.get('data_transacao'), _tem_sugestao(tx)),
+                reverse=True,
             )
-        transacoes = sorted(
-            transacoes,
-            key=lambda tx: (tx.get('data_transacao'), _tem_sugestao(tx)),
-            reverse=True,
-        )
 
+            cursor.execute(
+                f"SELECT COUNT(*) AS total FROM bank_transactions bt "
+                f"INNER JOIN bank_accounts ba ON bt.account_id = ba.id "
+                f"{where_sql}",
+                params,
+            )
+            total = cursor.fetchone()['total']
+
+        fornecedores       = _get_fornecedores(cursor)
+        formas_recebimento = _get_formas_recebimento(cursor)
+        titulos_despesas   = _get_titulos_despesas(cursor)
+        contas             = _get_accounts(cursor)
+        clientes           = _get_clientes_com_produtos(cursor)
+
+        # Todas as contas de todas as empresas (para transferência entre contas e filtro JS)
         cursor.execute(
-            f"SELECT COUNT(*) AS total FROM bank_transactions bt "
-            f"INNER JOIN bank_accounts ba ON bt.account_id = ba.id "
-            f"{where_sql}",
-            params,
+            """SELECT ba.id, ba.apelido, ba.banco_nome, ba.cliente_id,
+                      c.nome_fantasia AS empresa_nome
+               FROM bank_accounts ba
+               LEFT JOIN clientes c ON c.id = ba.cliente_id
+               WHERE ba.ativo = 1
+               ORDER BY empresa_nome, ba.banco_nome, ba.apelido"""
         )
-        total = cursor.fetchone()['total']
+        todas_contas = cursor.fetchall()
+        # Mapa id→label para exibir nome da conta sugerida no badge de transferência
+        todas_contas_map = {c['id']: f"{c.get('empresa_nome') or ''} — {c['banco_nome']} {c['apelido']}"
+                            for c in todas_contas}
 
-    fornecedores       = _get_fornecedores(cursor)
-    formas_recebimento = _get_formas_recebimento(cursor)
-    titulos_despesas   = _get_titulos_despesas(cursor)
-    contas             = _get_accounts(cursor)
-    clientes           = _get_clientes_com_produtos(cursor)
-
-    # Todas as contas de todas as empresas (para transferência entre contas e filtro JS)
-    cursor.execute(
-        """SELECT ba.id, ba.apelido, ba.banco_nome, ba.cliente_id,
-                  c.nome_fantasia AS empresa_nome
-           FROM bank_accounts ba
-           LEFT JOIN clientes c ON c.id = ba.cliente_id
-           WHERE ba.ativo = 1
-           ORDER BY empresa_nome, ba.banco_nome, ba.apelido"""
-    )
-    todas_contas = cursor.fetchall()
-    # Mapa id→label para exibir nome da conta sugerida no badge de transferência
-    todas_contas_map = {c['id']: f"{c.get('empresa_nome') or ''} — {c['banco_nome']} {c['apelido']}"
-                        for c in todas_contas}
-
-    cursor.close()
-    conn.close()
+    except Exception as exc:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        _close_db()
+        logger.exception("Erro ao carregar página de conciliação: %s", exc)
+        flash('Erro ao carregar a página de conciliação. Tente novamente.', 'danger')
+        return redirect(url_for('bank_import.index'))
+    finally:
+        _close_db()
 
     total_pages = max(1, (total + per_page - 1) // per_page)
 
