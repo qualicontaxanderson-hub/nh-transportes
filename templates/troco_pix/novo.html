@@ -70,14 +70,14 @@
                         <div class="mb-3">
                             <label for="data" class="form-label">Data *</label>
                             {% set nivel_usuario = current_user.nivel|upper if current_user.nivel else '' %}
-                            {% if nivel_usuario in ['PISTA', 'SUPERVISOR'] %}
-                                <!-- Data fixa para PISTA/SUPERVISOR com destaque visual -->
+                            {% if nivel_usuario in ['PISTA'] %}
+                                <!-- Data fixa para PISTA com destaque visual -->
                                 <input type="date" class="form-control" id="data" name="data" 
                                        style="background-color: #fff3cd; border-color: #ffc107; font-weight: 500;" 
                                        value="{{ data_hoje }}" readonly required>
                                 <small class="text-warning"><i class="bi bi-lock-fill"></i> Data fixa: hoje (não pode ser alterada)</small>
                             {% else %}
-                                <!-- Data editável para ADMIN/GERENTE -->
+                                <!-- Data editável para SUPERVISOR/ADMIN/GERENTE -->
                                 <input type="date" class="form-control" id="data" name="data" required
                                        value="{{ transacao.data.strftime('%Y-%m-%d') if edit_mode and transacao.data else data_hoje }}">
                             {% endif %}
