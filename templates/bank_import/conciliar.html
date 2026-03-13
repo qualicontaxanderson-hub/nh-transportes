@@ -792,11 +792,14 @@ document.addEventListener('DOMContentLoaded', function() {
 
   // Mostra spinner no botão Filtrar ao submeter, SEM desabilitar o botão
   // (desabilitar antes da submissão pode bloquear o envio do formulário em alguns navegadores)
+  // Após LOADING_TIMEOUT_MS restaura o texto original caso o servidor não responda.
   const formFiltros = document.getElementById('formFiltros');
   const btnFiltrar  = document.getElementById('btnFiltrar');
   if (formFiltros && btnFiltrar) {
     formFiltros.addEventListener('submit', function() {
+      const origHTML = btnFiltrar.innerHTML;
       btnFiltrar.innerHTML = '<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span> Aguarde...';
+      setTimeout(function() { btnFiltrar.innerHTML = origHTML; }, LOADING_TIMEOUT_MS);
     });
   }
 });
