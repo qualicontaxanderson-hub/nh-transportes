@@ -677,13 +677,13 @@ def novo():
         cliente_id = request.form.get('cliente_id')
         data_transacao = request.form.get('data')
         
-        # Validação de segurança para usuários PISTA/SUPERVISOR
-        if hasattr(current_user, 'nivel') and current_user.nivel.upper() in ['PISTA', 'SUPERVISOR']:
-            # PISTA/SUPERVISOR só pode criar para seu cliente vinculado
+        # Validação de segurança para usuários PISTA
+        if hasattr(current_user, 'nivel') and current_user.nivel.upper() == 'PISTA':
+            # PISTA só pode criar para seu cliente vinculado
             if hasattr(current_user, 'cliente_id') and current_user.cliente_id:
                 cliente_id = current_user.cliente_id
             else:
-                flash('Usuário PISTA/SUPERVISOR deve ter um posto vinculado.', 'danger')
+                flash('Usuário PISTA deve ter um posto vinculado.', 'danger')
                 return redirect(url_for('troco_pix.novo', origem=request.args.get('origem')))
         
         # PISTA só pode criar transações para a data de hoje (horário de Brasília)
