@@ -1,4 +1,4 @@
-from flask import Blueprint, render_template, current_app, url_for, jsonify, request, redirect
+from flask import Blueprint, render_template, current_app, url_for, jsonify, request, redirect, flash
 from flask_login import login_required, current_user
 from utils.db import get_db_connection
 
@@ -108,7 +108,34 @@ def index():
     return render_template('dashboard.html', **context)
 
 
-@bp.route('/nova', methods=['GET', 'POST'])
+@bp.route('/bases/', methods=['GET'])
+@login_required
+def lista():
+    conn = None
+    cursor = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute("SELECT id, nome, cidade, observacao, ativo FROM bases ORDER BY nome")
+        bases = cursor.fetchall()
+    except Exception:
+        bases = []
+    finally:
+        if cursor:
+            try:
+                cursor.close()
+            except Exception:
+                pass
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+    return render_template('bases/index.html', bases=bases)
+
+
+@bp.route('/bases/nova', methods=['GET', 'POST'])
+@login_required
 def nova():
     """
     Rota mínima para criação de Base (endpoint 'bases.nova').
@@ -116,9 +143,120 @@ def nova():
     - POST: comportamento mínimo: redireciona para a lista (implemente o salvamento se desejar)
     """
     if request.method == 'POST':
-        # implementar criação real aqui se desejar; por enquanto redireciona para a index
-        return redirect(url_for('bases.index'))
+        nome = request.form.get('nome', '').strip()
+        cidade = request.form.get('cidade', '').strip() or None
+        observacao = request.form.get('observacao', '').strip() or None
+        ativo = 1 if request.form.get('ativo') else 0
+        conn = None
+        cursor = None
+        try:
+            conn = get_db_connection()
+            cursor = conn.cursor()
+            cursor.execute(
+                "INSERT INTO bases (nome, cidade, observacao, ativo) VALUES (%s, %s, %s, %s)",
+                (nome, cidade, observacao, ativo)
+            )
+            conn.commit()
+            flash('Base cadastrada com sucesso!', 'success')
+        except Exception as e:
+            if conn:
+                try:
+                    conn.rollback()
+                except Exception:
+                    pass
+            flash(f'Erro ao cadastrar base: {str(e)}', 'danger')
+        finally:
+            if cursor:
+                try:
+                    cursor.close()
+                except Exception:
+                    pass
+            if conn:
+                try:
+                    conn.close()
+                except Exception:
+                    pass
+        return redirect(url_for('bases.lista'))
     return render_template('bases/nova.html')
+
+
+@bp.route('/bases/editar/<int:id>', methods=['GET', 'POST'])
+@login_required
+def editar(id):
+    conn = None
+    cursor = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+        if request.method == 'POST':
+            nome = request.form.get('nome', '').strip()
+            cidade = request.form.get('cidade', '').strip() or None
+            observacao = request.form.get('observacao', '').strip() or None
+            ativo = 1 if request.form.get('ativo') else 0
+            cursor.execute(
+                "UPDATE bases SET nome=%s, cidade=%s, observacao=%s, ativo=%s WHERE id=%s",
+                (nome, cidade, observacao, ativo, id)
+            )
+            conn.commit()
+            flash('Base atualizada com sucesso!', 'success')
+            return redirect(url_for('bases.lista'))
+        cursor.execute("SELECT id, nome, cidade, observacao, ativo FROM bases WHERE id=%s", (id,))
+        base = cursor.fetchone()
+        if not base:
+            flash('Base não encontrada.', 'danger')
+            return redirect(url_for('bases.lista'))
+        return render_template('bases/editar.html', base=base)
+    except Exception as e:
+        if conn:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+        flash(f'Erro ao editar base: {str(e)}', 'danger')
+        return redirect(url_for('bases.lista'))
+    finally:
+        if cursor:
+            try:
+                cursor.close()
+            except Exception:
+                pass
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@bp.route('/bases/excluir/<int:id>', methods=['GET', 'POST'])
+@login_required
+def excluir(id):
+    conn = None
+    cursor = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM bases WHERE id=%s", (id,))
+        conn.commit()
+        flash('Base excluída com sucesso!', 'success')
+    except Exception as e:
+        if conn:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+        flash(f'Erro ao excluir base: {str(e)}', 'danger')
+    finally:
+        if cursor:
+            try:
+                cursor.close()
+            except Exception:
+                pass
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+    return redirect(url_for('bases.lista'))
 
 
 @bp.route('/health', methods=['GET'])
