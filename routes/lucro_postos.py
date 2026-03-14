@@ -14,6 +14,11 @@ import logging
 from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
 
+import pytz
+
+# Fuso horário de Brasília (UTC-3)
+_BRASILIA = pytz.timezone('America/Sao_Paulo')
+
 from flask import Blueprint, flash, redirect, render_template, request, url_for
 from flask_login import current_user
 
@@ -207,6 +212,16 @@ def index():
             ORDER BY data_inicio DESC, cliente_nome, produto_nome
         """)
         entradas = cur.fetchall()
+
+        # Converter created_at UTC → horário de Brasília para exibição correta
+        for e in entradas:
+            val = e.get('created_at')
+            if val is not None:
+                try:
+                    utc_dt = pytz.utc.localize(val) if val.tzinfo is None else val
+                    e['created_at'] = utc_dt.astimezone(_BRASILIA)
+                except Exception:
+                    pass  # mantém o valor original em caso de erro inesperado
     finally:
         cur.close()
         conn.close()
