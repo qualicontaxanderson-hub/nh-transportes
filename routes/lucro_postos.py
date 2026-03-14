@@ -175,33 +175,28 @@ def _calcular_fifo(camadas_iniciais, compras, vendas):
 @bp.route('/')
 @admin_required
 def index():
-    """Dashboard: lista empresas com seu status do mês atual."""
-    clientes = _clientes_posto()
-    ano_mes = request.args.get('ano_mes', _ano_mes_atual())
-    ano, mes = _parse_ano_mes(ano_mes)
-    if not ano:
-        ano_mes = _ano_mes_atual()
-        ano, mes = _parse_ano_mes(ano_mes)
-
-    data_inicio, data_fim = _datas_do_mes(ano, mes)
-
-    status_por_cliente = {}
-    for c in clientes:
-        comp = FifoCompetencia.query.filter_by(
-            cliente_id=c['id'], ano_mes=ano_mes
-        ).first()
-        status_por_cliente[c['id']] = {
-            'status': comp.status if comp else 'SEM_REGISTRO',
-            'competencia': comp,
-        }
+    """Lista os registros de Estoque Inicial (estoque_inicial_global), sem filtros."""
+    conn = get_db_connection()
+    cur = conn.cursor(dictionary=True)
+    try:
+        cur.execute("""
+            SELECT eig.id, eig.cliente_id, eig.produto_id,
+                   eig.data_inicio, eig.quantidade_inicial, eig.created_at,
+                   c.razao_social AS cliente_nome, c.nome_fantasia,
+                   p.nome AS produto_nome
+            FROM estoque_inicial_global eig
+            INNER JOIN clientes c ON c.id = eig.cliente_id
+            INNER JOIN produto p ON p.id = eig.produto_id
+            ORDER BY eig.data_inicio DESC, c.razao_social, p.nome
+        """)
+        entradas = cur.fetchall()
+    finally:
+        cur.close()
+        conn.close()
 
     return render_template(
         'lucro_postos/index.html',
-        clientes=clientes,
-        ano_mes=ano_mes,
-        data_inicio=data_inicio,
-        data_fim=data_fim,
-        status_por_cliente=status_por_cliente,
+        entradas=entradas,
     )
 
 
