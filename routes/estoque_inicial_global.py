@@ -1,8 +1,8 @@
 from flask import Blueprint, flash, redirect, render_template, request, url_for
 from flask_login import current_user, login_required
 
+from routes.auth import admin_required
 from utils.db import get_db_connection
-from utils.decorators import admin_required
 
 bp = Blueprint('estoque_inicial_global', __name__, url_prefix='/estoque-inicial')
 
