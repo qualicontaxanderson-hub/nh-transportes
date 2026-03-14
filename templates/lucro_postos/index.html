@@ -39,6 +39,7 @@
             <th>Produto</th>
             <th>Data Início</th>
             <th class="text-end">Quantidade Inicial (L)</th>
+            <th class="text-end">Custo Unit. (R$)</th>
             <th>Registrado em</th>
           </tr>
         </thead>
@@ -51,11 +52,18 @@
             <td class="text-end">
               {{ "{:,.3f}".format(e.quantidade_inicial | float).replace(",", "X").replace(".", ",").replace("X", ".") }}
             </td>
+            <td class="text-end">
+              {% if e.custo_unitario is not none and e.custo_unitario %}
+                {{ "{:,.4f}".format(e.custo_unitario | float).replace(",", "X").replace(".", ",").replace("X", ".") }}
+              {% else %}
+                <span class="text-muted">—</span>
+              {% endif %}
+            </td>
             <td class="text-muted small">{{ e.created_at.strftime('%d/%m/%Y %H:%M') if e.created_at }}</td>
           </tr>
           {% else %}
           <tr>
-            <td colspan="5" class="text-center text-muted py-4">Nenhum registro de estoque inicial encontrado.</td>
+            <td colspan="6" class="text-center text-muted py-4">Nenhum registro de estoque inicial encontrado.</td>
           </tr>
           {% endfor %}
         </tbody>

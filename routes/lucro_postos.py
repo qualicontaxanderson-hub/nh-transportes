@@ -175,19 +175,36 @@ def _calcular_fifo(camadas_iniciais, compras, vendas):
 @bp.route('/')
 @admin_required
 def index():
-    """Lista os registros de Estoque Inicial (estoque_inicial_global), sem filtros."""
+    """Lista os registros de Estoque Inicial combinando fifo_abertura e estoque_inicial_global."""
     conn = get_db_connection()
     cur = conn.cursor(dictionary=True)
     try:
         cur.execute("""
-            SELECT eig.id, eig.cliente_id, eig.produto_id,
-                   eig.data_inicio, eig.quantidade_inicial, eig.created_at,
+            SELECT fa.cliente_id, fa.produto_id,
+                   fa.data_abertura AS data_inicio,
+                   fa.quantidade AS quantidade_inicial,
+                   fa.custo_unitario,
+                   fa.criado_em AS created_at,
+                   c.razao_social AS cliente_nome, c.nome_fantasia,
+                   p.nome AS produto_nome
+            FROM fifo_abertura fa
+            INNER JOIN clientes c ON c.id = fa.cliente_id
+            INNER JOIN produto p ON p.id = fa.produto_id
+
+            UNION ALL
+
+            SELECT eig.cliente_id, eig.produto_id,
+                   eig.data_inicio,
+                   eig.quantidade_inicial,
+                   NULL AS custo_unitario,
+                   eig.created_at,
                    c.razao_social AS cliente_nome, c.nome_fantasia,
                    p.nome AS produto_nome
             FROM estoque_inicial_global eig
             INNER JOIN clientes c ON c.id = eig.cliente_id
             INNER JOIN produto p ON p.id = eig.produto_id
-            ORDER BY eig.data_inicio DESC, c.razao_social, p.nome
+
+            ORDER BY data_inicio DESC, cliente_nome, produto_nome
         """)
         entradas = cur.fetchall()
     finally:
