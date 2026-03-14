@@ -118,6 +118,9 @@
             <li><a class="dropdown-item" href="/emprestimos/"><i class="bi bi-cash-coin" style="color: #fd7e14;"></i> Empréstimos</a></li>
             <li><hr class="dropdown-divider"></li>
             <li><a class="dropdown-item" href="/posto/admin/clientes"><i class="bi bi-gear" style="color: #6c757d;"></i> Config. Produtos Posto</a></li>
+            {% if nivel_usuario == 'ADMIN' %}
+            <li><a class="dropdown-item" href="/lucro_postos/"><i class="bi bi-lock" style="color: #1D63A5;"></i> Fechamento FIFO Posto</a></li>
+            {% endif %}
           </ul>
         </li>
 
@@ -149,6 +152,10 @@
             <li><a class="dropdown-item" href="/relatorios/fretes_comissao_motorista"><i class="bi bi-person-check" style="color: #28a745;"></i> Comissão Motorista</a></li>
             <li><a class="dropdown-item" href="/relatorios/fretes_lucro"><i class="bi bi-graph-up-arrow" style="color: #ffc107;"></i> Lucro</a></li>
             <li><a class="dropdown-item" href="/relatorios/fretes_produtos"><i class="bi bi-box-seam" style="color: #fd7e14;"></i> Produtos</a></li>
+            {% if nivel_usuario == 'ADMIN' %}
+            <li><hr class="dropdown-divider"></li>
+            <li><a class="dropdown-item" href="/relatorios/lucro_postos"><i class="bi bi-fuel-pump-fill" style="color: #28a745;"></i> Lucro Postos</a></li>
+            {% endif %}
           </ul>
         </li>
         {% endif %}

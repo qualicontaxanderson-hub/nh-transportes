@@ -1,0 +1,127 @@
+{% extends 'base.html' %}
+{% block title %}Lucro Postos – Gestão FIFO{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+
+  <!-- Breadcrumb -->
+  <nav aria-label="breadcrumb">
+    <ol class="breadcrumb">
+      <li class="breadcrumb-item"><a href="{{ url_for('index') }}">Dashboard</a></li>
+      <li class="breadcrumb-item active">Lucro Postos – FIFO</li>
+    </ol>
+  </nav>
+
+  <div class="d-flex align-items-center mb-3 gap-3 flex-wrap">
+    <h2 class="mb-0" style="color:#1D63A5;">
+      <i class="bi bi-fuel-pump-fill"></i> Lucro Postos — Gestão FIFO
+    </h2>
+    <a href="{{ url_for('relatorios.lucro_postos') }}" class="btn btn-outline-primary btn-sm ms-auto">
+      <i class="bi bi-bar-chart"></i> Ver Relatório
+    </a>
+  </div>
+
+  <!-- Filtro de mês -->
+  <form method="get" class="row g-2 align-items-end mb-4">
+    <div class="col-auto">
+      <label class="form-label fw-semibold">Mês/Ano</label>
+      <input type="month" name="ano_mes" value="{{ ano_mes }}" class="form-control" style="width:160px;">
+    </div>
+    <div class="col-auto">
+      <button type="submit" class="btn btn-primary"><i class="bi bi-search"></i> Filtrar</button>
+    </div>
+  </form>
+
+  <!-- Período -->
+  <p class="text-muted">
+    Período:
+    <strong>{{ data_inicio.strftime('%d/%m/%Y') }}</strong>
+    a
+    <strong>{{ data_fim.strftime('%d/%m/%Y') }}</strong>
+  </p>
+
+  <!-- Tabela de empresas -->
+  {% if clientes %}
+  <div class="card shadow-sm">
+    <div class="card-header" style="background:#1D63A5;color:#fff;">
+      <h5 class="mb-0"><i class="bi bi-building"></i> Empresas (Postos)</h5>
+    </div>
+    <div class="table-responsive">
+      <table class="table table-hover align-middle mb-0">
+        <thead style="background:#e9ecef;">
+          <tr>
+            <th>Empresa</th>
+            <th class="text-center">Status {{ ano_mes }}</th>
+            <th class="text-center">Ações</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for c in clientes %}
+          {% set info = status_por_cliente.get(c.id, {}) %}
+          {% set status = info.get('status', 'SEM_REGISTRO') %}
+          <tr>
+            <td>
+              <strong>{{ c.nome_fantasia or c.razao_social }}</strong>
+              {% if c.nome_fantasia and c.nome_fantasia != c.razao_social %}
+                <br><small class="text-muted">{{ c.razao_social }}</small>
+              {% endif %}
+            </td>
+            <td class="text-center">
+              {% if status == 'FECHADO' %}
+                <span class="badge bg-success fs-6"><i class="bi bi-lock-fill"></i> FECHADO</span>
+              {% elif status == 'ABERTO' %}
+                <span class="badge bg-warning text-dark fs-6"><i class="bi bi-unlock"></i> ABERTO</span>
+              {% else %}
+                <span class="badge bg-secondary fs-6"><i class="bi bi-dash-circle"></i> SEM REGISTRO</span>
+              {% endif %}
+            </td>
+            <td class="text-center">
+              <div class="d-flex justify-content-center gap-2 flex-wrap">
+                <!-- Abertura FIFO -->
+                <a href="{{ url_for('lucro_postos.abertura', cliente_id=c.id) }}"
+                   class="btn btn-sm btn-outline-secondary">
+                  <i class="bi bi-box-arrow-in-down"></i> Abertura
+                </a>
+
+                <!-- Fechar mês -->
+                {% if status != 'FECHADO' %}
+                <form method="post" action="{{ url_for('lucro_postos.fechar') }}"
+                      onsubmit="return confirm('Fechar {{ ano_mes }} para {{ c.nome_fantasia or c.razao_social }}?');"
+                      class="d-inline">
+                  <input type="hidden" name="cliente_id" value="{{ c.id }}">
+                  <input type="hidden" name="ano_mes" value="{{ ano_mes }}">
+                  <button type="submit" class="btn btn-sm btn-success">
+                    <i class="bi bi-lock-fill"></i> Fechar
+                  </button>
+                </form>
+                {% endif %}
+
+                <!-- Reabrir mês -->
+                {% if status == 'FECHADO' %}
+                <form method="post" action="{{ url_for('lucro_postos.reabrir') }}"
+                      onsubmit="return confirm('Reabrir {{ ano_mes }} para {{ c.nome_fantasia or c.razao_social }}? O snapshot atual será invalidado.');"
+                      class="d-inline">
+                  <input type="hidden" name="cliente_id" value="{{ c.id }}">
+                  <input type="hidden" name="ano_mes" value="{{ ano_mes }}">
+                  <button type="submit" class="btn btn-sm btn-warning">
+                    <i class="bi bi-unlock-fill"></i> Reabrir
+                  </button>
+                </form>
+                {% endif %}
+              </div>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {% else %}
+  <div class="alert alert-info">
+    Nenhuma empresa com produtos vinculados ao posto encontrada.
+    <a href="{{ url_for('posto.admin_clientes') }}">Configurar produtos do posto</a>.
+  </div>
+  {% endif %}
+
+</div>
+{% endblock %}

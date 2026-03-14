@@ -189,6 +189,27 @@ def create_app():
     # Registrar filtro e helpers de template
     app.jinja_env.filters['formatar_moeda'] = formatar_moeda
 
+    def _fmtnum(v, dec=3):
+        """Formata número em PT-BR com separador de milhar e decimais configuráveis."""
+        try:
+            num = float(v) if v is not None else 0.0
+        except (TypeError, ValueError):
+            return '0'
+        fmt = f'{{:,.{dec}f}}'.format(num)
+        return fmt.replace(',', 'X').replace('.', ',').replace('X', '.')
+
+    def _fmtmoney(v):
+        """Formata valor monetário em PT-BR sem o prefixo R$."""
+        try:
+            num = float(v) if v is not None else 0.0
+        except (TypeError, ValueError):
+            return '0,00'
+        fmt = '{:,.2f}'.format(num)
+        return fmt.replace(',', 'X').replace('.', ',').replace('X', '.')
+
+    app.jinja_env.filters['fmtnum'] = _fmtnum
+    app.jinja_env.filters['fmtmoney'] = _fmtmoney
+
     @app.context_processor
     def inject_helpers():
         """

@@ -1,0 +1,116 @@
+{% extends 'base.html' %}
+{% block title %}Abertura FIFO – {{ cliente.razao_social }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+
+  <!-- Breadcrumb -->
+  <nav aria-label="breadcrumb">
+    <ol class="breadcrumb">
+      <li class="breadcrumb-item"><a href="{{ url_for('index') }}">Dashboard</a></li>
+      <li class="breadcrumb-item"><a href="{{ url_for('lucro_postos.index') }}">Lucro Postos</a></li>
+      <li class="breadcrumb-item active">Abertura FIFO</li>
+    </ol>
+  </nav>
+
+  <h2 class="mb-1" style="color:#1D63A5;">
+    <i class="bi bi-box-arrow-in-down"></i> Abertura FIFO
+  </h2>
+  <p class="text-muted mb-4">
+    Empresa: <strong>{{ cliente.nome_fantasia or cliente.razao_social }}</strong>
+    &mdash; Informe o estoque inicial (litros e custo unitário) por produto.
+  </p>
+
+  {% if produtos %}
+  <form method="post" action="{{ url_for('lucro_postos.abertura_salvar', cliente_id=cliente.id) }}">
+
+    <div class="row g-3 mb-3">
+      <div class="col-md-4">
+        <label class="form-label fw-semibold">Data de Abertura</label>
+        <input type="date" name="data_abertura"
+               value="{{ aberturas.values() | list | first | attr('data_abertura') if aberturas else '2026-01-01' }}"
+               class="form-control"
+               required>
+        <div class="form-text">Normalmente 01/01/2026 (início do sistema).</div>
+      </div>
+    </div>
+
+    <div class="card shadow-sm mb-4">
+      <div class="card-header" style="background:#1D63A5;color:#fff;">
+        <h5 class="mb-0"><i class="bi bi-fuel-pump"></i> Produtos</h5>
+      </div>
+      <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+          <thead style="background:#e9ecef;">
+            <tr>
+              <th>Produto</th>
+              <th style="width:200px;">Quantidade (L)</th>
+              <th style="width:200px;">Custo Unitário (R$/L)</th>
+              <th style="width:160px;">Valor Total (R$)</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for prod in produtos %}
+            {% set ab = aberturas.get(prod.id) %}
+            <tr>
+              <td><strong>{{ prod.nome }}</strong></td>
+              <td>
+                <input type="number" name="quantidade_{{ prod.id }}"
+                       value="{{ '%.3f' | format(ab.quantidade | float) if ab else '0.000' }}"
+                       class="form-control form-control-sm qtde-input"
+                       data-prodid="{{ prod.id }}"
+                       step="0.001" min="0" placeholder="0,000">
+              </td>
+              <td>
+                <input type="number" name="custo_unitario_{{ prod.id }}"
+                       value="{{ '%.4f' | format(ab.custo_unitario | float) if ab else '0.0000' }}"
+                       class="form-control form-control-sm custo-input"
+                       data-prodid="{{ prod.id }}"
+                       step="0.0001" min="0" placeholder="0,0000">
+              </td>
+              <td>
+                <span id="total_{{ prod.id }}" class="fw-semibold text-success">
+                  {{ 'R$ %.2f' | format((ab.quantidade | float) * (ab.custo_unitario | float)) if ab else 'R$ 0,00' }}
+                </span>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="d-flex gap-2">
+      <button type="submit" class="btn btn-primary">
+        <i class="bi bi-save"></i> Salvar Abertura
+      </button>
+      <a href="{{ url_for('lucro_postos.index') }}" class="btn btn-secondary">
+        <i class="bi bi-arrow-left"></i> Voltar
+      </a>
+    </div>
+
+  </form>
+  {% else %}
+  <div class="alert alert-warning">
+    Nenhum produto vinculado a este cliente no posto.
+    <a href="{{ url_for('posto.admin_produtos_cliente', cliente_id=cliente.id) }}">Configurar produtos</a>.
+  </div>
+  {% endif %}
+
+</div>
+
+<script>
+  function recalcTotal(prodId) {
+    var qtde = parseFloat(document.querySelector('.qtde-input[data-prodid="' + prodId + '"]').value) || 0;
+    var custo = parseFloat(document.querySelector('.custo-input[data-prodid="' + prodId + '"]').value) || 0;
+    var total = qtde * custo;
+    document.getElementById('total_' + prodId).textContent = 'R$ ' + total.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+  }
+
+  document.querySelectorAll('.qtde-input, .custo-input').forEach(function(el) {
+    el.addEventListener('input', function() {
+      recalcTotal(this.dataset.prodid);
+    });
+  });
+</script>
+{% endblock %}

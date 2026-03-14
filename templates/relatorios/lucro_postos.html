@@ -1,0 +1,281 @@
+{% extends 'base.html' %}
+{% block title %}Relatório Lucro Postos{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+
+  <!-- Breadcrumb -->
+  <nav aria-label="breadcrumb">
+    <ol class="breadcrumb">
+      <li class="breadcrumb-item"><a href="{{ url_for('index') }}">Dashboard</a></li>
+      <li class="breadcrumb-item">Relatórios</li>
+      <li class="breadcrumb-item active">Lucro Postos</li>
+    </ol>
+  </nav>
+
+  <div class="d-flex align-items-center mb-3 gap-3 flex-wrap">
+    <h2 class="mb-0" style="color:#1D63A5;">
+      <i class="bi bi-graph-up-arrow"></i> Relatório — Lucro Postos (FIFO)
+    </h2>
+    <a href="{{ url_for('lucro_postos.index', ano_mes=ano_mes) }}" class="btn btn-outline-secondary btn-sm ms-auto">
+      <i class="bi bi-gear"></i> Gerenciar Fechamentos
+    </a>
+  </div>
+
+  <!-- Filtros -->
+  <form method="get" class="card card-body shadow-sm mb-4">
+    <div class="row g-3 align-items-end">
+      <div class="col-md-2">
+        <label class="form-label fw-semibold">Mês/Ano</label>
+        <input type="month" name="ano_mes" value="{{ ano_mes }}" class="form-control" required>
+      </div>
+
+      <div class="col-md-3">
+        <label class="form-label fw-semibold">Empresas</label>
+        <select name="cliente_ids[]" class="form-select" multiple size="4">
+          {% for c in clientes_disponiveis %}
+          <option value="{{ c.id }}"
+            {% if c.id in cliente_ids %}selected{% endif %}>
+            {{ c.nome_fantasia or c.razao_social }}
+          </option>
+          {% endfor %}
+        </select>
+        <div class="form-text">Ctrl+clique para múltiplos. Vazio = todas.</div>
+      </div>
+
+      <div class="col-md-3">
+        <label class="form-label fw-semibold">Produtos</label>
+        <select name="produto_ids[]" class="form-select" multiple size="4">
+          {% for p in produtos_disponiveis %}
+          <option value="{{ p.id }}"
+            {% if p.id in produto_ids %}selected{% endif %}>
+            {{ p.nome }}
+          </option>
+          {% endfor %}
+        </select>
+        <div class="form-text">Ctrl+clique para múltiplos. Vazio = todos.</div>
+      </div>
+
+      <div class="col-md-2 d-flex flex-column gap-2">
+        <button type="submit" class="btn btn-primary">
+          <i class="bi bi-search"></i> Filtrar
+        </button>
+        <a href="{{ url_for('relatorios.lucro_postos') }}" class="btn btn-outline-secondary btn-sm">
+          <i class="bi bi-x-circle"></i> Limpar
+        </a>
+      </div>
+
+      <div class="col-md-2 d-flex flex-column gap-2">
+        <button type="submit" name="exportar" value="csv" class="btn btn-success btn-sm">
+          <i class="bi bi-file-earmark-spreadsheet"></i> Exportar CSV
+        </button>
+      </div>
+    </div>
+  </form>
+
+  {% if not resultados_por_cliente %}
+  <div class="alert alert-info">
+    <i class="bi bi-info-circle"></i>
+    Nenhum dado encontrado para os filtros selecionados.
+    Verifique se há <a href="{{ url_for('lucro_postos.index') }}">abertura FIFO cadastrada</a>
+    e se existem fretes/vendas no período.
+  </div>
+  {% endif %}
+
+  {# ----------------------------------------------------------------
+     Bloco por EMPRESA
+  ---------------------------------------------------------------- #}
+  {% for cid, dados in resultados_por_cliente.items() %}
+  <div class="card shadow-sm mb-4">
+    <div class="card-header d-flex align-items-center justify-content-between"
+         style="background:#1D63A5;color:#fff;">
+      <h5 class="mb-0">
+        <i class="bi bi-building"></i> {{ dados.nome }}
+      </h5>
+      {% if dados.fechado %}
+        <span class="badge bg-success"><i class="bi bi-lock-fill"></i> FECHADO</span>
+      {% else %}
+        <span class="badge bg-warning text-dark"><i class="bi bi-unlock"></i> ABERTO (provisório)</span>
+      {% endif %}
+    </div>
+
+    <div class="table-responsive">
+      <table class="table table-sm table-bordered align-middle mb-0" style="font-size:0.85rem;">
+        <thead>
+          <tr style="background:#2c3e50;color:#fff;text-align:center;">
+            <th rowspan="2" class="align-middle" style="width:130px;">Produto</th>
+            <th colspan="3" style="border-right:2px solid #888;">ENTRADA (Compra)</th>
+            <th colspan="3" style="border-right:2px solid #888;">SAÍDA (Venda)</th>
+            <th colspan="3" style="border-right:2px solid #888;">SALDO ESTOQUE</th>
+            <th colspan="3">RESULTADO</th>
+          </tr>
+          <tr style="background:#34495e;color:#fff;text-align:center;">
+            <th>Qtde (L)</th>
+            <th>Vl Unit (R$)</th>
+            <th style="border-right:2px solid #888;">Total (R$)</th>
+            <th>Qtde (L)</th>
+            <th>Vl Unit Méd (R$)</th>
+            <th style="border-right:2px solid #888;">Total (R$)</th>
+            <th>Estoque (L)</th>
+            <th>Custo Unit (R$)</th>
+            <th style="border-right:2px solid #888;">Valor (R$)</th>
+            <th>Receita (R$)</th>
+            <th>COGS FIFO (R$)</th>
+            <th>Lucro (R$)</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% set ns = namespace(acum_lucro=0) %}
+          {% for pid, res in dados.produtos.items() | sort(attribute='1.produto_nome') %}
+          {% set ns.acum_lucro = ns.acum_lucro + res.lucro %}
+          <tr>
+            <td class="fw-semibold">{{ res.produto_nome }}</td>
+            <!-- ENTRADA -->
+            <td class="text-end">{{ res.qtde_entrada | fmtnum }}</td>
+            <td class="text-end">{{ res.custo_entrada_unit | fmtmoney }}</td>
+            <td class="text-end" style="border-right:2px solid #ccc;">{{ res.custo_entrada_total | fmtmoney }}</td>
+            <!-- SAÍDA -->
+            <td class="text-end">{{ res.qtde_saida | fmtnum }}</td>
+            <td class="text-end">{{ res.preco_medio_saida | fmtmoney }}</td>
+            <td class="text-end" style="border-right:2px solid #ccc;">{{ res.receita_saida | fmtmoney }}</td>
+            <!-- SALDO -->
+            <td class="text-end">{{ res.estoque_final_qtde | fmtnum }}</td>
+            <td class="text-end">{{ res.estoque_final_custo_unit | fmtmoney }}</td>
+            <td class="text-end" style="border-right:2px solid #ccc;">{{ res.estoque_final_valor | fmtmoney }}</td>
+            <!-- RESULTADO -->
+            <td class="text-end text-primary fw-semibold">{{ res.receita_saida | fmtmoney }}</td>
+            <td class="text-end text-danger">{{ res.cogs | fmtmoney }}</td>
+            <td class="text-end fw-bold {% if res.lucro >= 0 %}text-success{% else %}text-danger{% endif %}">
+              {{ res.lucro | fmtmoney }}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+        <tfoot>
+          <tr style="background:#e9ecef;font-weight:bold;">
+            <td>TOTAL</td>
+            <td class="text-end">
+              {{ dados.produtos.values() | sum(attribute='qtde_entrada') | fmtnum }}
+            </td>
+            <td></td>
+            <td class="text-end" style="border-right:2px solid #ccc;">
+              {{ dados.produtos.values() | sum(attribute='custo_entrada_total') | fmtmoney }}
+            </td>
+            <td class="text-end">
+              {{ dados.produtos.values() | sum(attribute='qtde_saida') | fmtnum }}
+            </td>
+            <td></td>
+            <td class="text-end" style="border-right:2px solid #ccc;">
+              {{ dados.produtos.values() | sum(attribute='receita_saida') | fmtmoney }}
+            </td>
+            <td class="text-end">
+              {{ dados.produtos.values() | sum(attribute='estoque_final_qtde') | fmtnum }}
+            </td>
+            <td></td>
+            <td class="text-end" style="border-right:2px solid #ccc;">
+              {{ dados.produtos.values() | sum(attribute='estoque_final_valor') | fmtmoney }}
+            </td>
+            <td class="text-end text-primary">
+              {{ dados.produtos.values() | sum(attribute='receita_saida') | fmtmoney }}
+            </td>
+            <td class="text-end text-danger">
+              {{ dados.produtos.values() | sum(attribute='cogs') | fmtmoney }}
+            </td>
+            <td class="text-end {% if ns.acum_lucro >= 0 %}text-success{% else %}text-danger{% endif %}">
+              {{ ns.acum_lucro | fmtmoney }}
+            </td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+  </div>
+  {% endfor %}
+
+  {# ----------------------------------------------------------------
+     Bloco CONSOLIDADO (todos os clientes)
+  ---------------------------------------------------------------- #}
+  {% if consolidado %}
+  <div class="card shadow-sm mb-4">
+    <div class="card-header" style="background:#2c3e50;color:#fff;">
+      <h5 class="mb-0"><i class="bi bi-collection"></i> CONSOLIDADO — TODOS OS CLIENTES / TODOS OS PRODUTOS</h5>
+    </div>
+    <div class="table-responsive">
+      <table class="table table-sm table-bordered align-middle mb-0" style="font-size:0.85rem;">
+        <thead>
+          <tr style="background:#2c3e50;color:#fff;text-align:center;">
+            <th rowspan="2" class="align-middle" style="width:130px;">Produto</th>
+            <th colspan="3" style="border-right:2px solid #888;">ENTRADA</th>
+            <th colspan="3" style="border-right:2px solid #888;">SAÍDA</th>
+            <th colspan="3" style="border-right:2px solid #888;">SALDO</th>
+            <th colspan="3">RESULTADO</th>
+          </tr>
+          <tr style="background:#34495e;color:#fff;text-align:center;">
+            <th>Qtde (L)</th><th>Vl Unit (R$)</th><th style="border-right:2px solid #888;">Total (R$)</th>
+            <th>Qtde (L)</th><th>Vl Méd (R$)</th><th style="border-right:2px solid #888;">Total (R$)</th>
+            <th>Estoque (L)</th><th>Custo (R$)</th><th style="border-right:2px solid #888;">Valor (R$)</th>
+            <th>Receita (R$)</th><th>COGS (R$)</th><th>Lucro (R$)</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% set ns2 = namespace(total_receita=0, total_cogs=0, total_lucro=0) %}
+          {% for pid, res in consolidado.items() | sort(attribute='1.produto_nome') %}
+          {% set ns2.total_receita = ns2.total_receita + res.receita_saida %}
+          {% set ns2.total_cogs = ns2.total_cogs + res.cogs %}
+          {% set ns2.total_lucro = ns2.total_lucro + res.lucro %}
+          <tr>
+            <td class="fw-semibold">{{ res.produto_nome }}</td>
+            <td class="text-end">{{ res.qtde_entrada | fmtnum }}</td>
+            <td class="text-end">{{ res.custo_entrada_unit | fmtmoney }}</td>
+            <td class="text-end" style="border-right:2px solid #ccc;">{{ res.custo_entrada_total | fmtmoney }}</td>
+            <td class="text-end">{{ res.qtde_saida | fmtnum }}</td>
+            <td class="text-end">{{ res.preco_medio_saida | fmtmoney }}</td>
+            <td class="text-end" style="border-right:2px solid #ccc;">{{ res.receita_saida | fmtmoney }}</td>
+            <td class="text-end">{{ res.estoque_final_qtde | fmtnum }}</td>
+            <td class="text-end">{{ res.estoque_final_custo_unit | fmtmoney }}</td>
+            <td class="text-end" style="border-right:2px solid #ccc;">{{ res.estoque_final_valor | fmtmoney }}</td>
+            <td class="text-end text-primary fw-semibold">{{ res.receita_saida | fmtmoney }}</td>
+            <td class="text-end text-danger">{{ res.cogs | fmtmoney }}</td>
+            <td class="text-end fw-bold {% if res.lucro >= 0 %}text-success{% else %}text-danger{% endif %}">
+              {{ res.lucro | fmtmoney }}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+        <tfoot>
+          <tr style="background:#e9ecef;font-weight:bold;font-size:0.9rem;">
+            <td>TOTAL GERAL</td>
+            <td class="text-end">
+              {{ consolidado.values() | sum(attribute='qtde_entrada') | fmtnum }}
+            </td>
+            <td></td>
+            <td class="text-end" style="border-right:2px solid #ccc;">
+              {{ consolidado.values() | sum(attribute='custo_entrada_total') | fmtmoney }}
+            </td>
+            <td class="text-end">
+              {{ consolidado.values() | sum(attribute='qtde_saida') | fmtnum }}
+            </td>
+            <td></td>
+            <td class="text-end" style="border-right:2px solid #ccc;">
+              {{ ns2.total_receita | fmtmoney }}
+            </td>
+            <td class="text-end">
+              {{ consolidado.values() | sum(attribute='estoque_final_qtde') | fmtnum }}
+            </td>
+            <td></td>
+            <td class="text-end" style="border-right:2px solid #ccc;">
+              {{ consolidado.values() | sum(attribute='estoque_final_valor') | fmtmoney }}
+            </td>
+            <td class="text-end text-primary">{{ ns2.total_receita | fmtmoney }}</td>
+            <td class="text-end text-danger">{{ ns2.total_cogs | fmtmoney }}</td>
+            <td class="text-end fw-bold {% if ns2.total_lucro >= 0 %}text-success{% else %}text-danger{% endif %}">
+              {{ ns2.total_lucro | fmtmoney }}
+            </td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+  </div>
+  {% endif %}
+
+</div>
+{% endblock %}

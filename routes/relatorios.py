@@ -1,7 +1,15 @@
-from flask import Blueprint, render_template, request, redirect, url_for
+from flask import Blueprint, render_template, request, redirect, url_for, Response
 from flask_login import login_required
 from utils.db import get_db_connection
 from datetime import datetime, date
+import calendar
+import csv
+import io
+import logging
+
+from routes.auth import admin_required
+
+logger = logging.getLogger(__name__)
 
 bp = Blueprint('relatorios', __name__, url_prefix='/relatorios')
 
@@ -507,4 +515,405 @@ def fretes_produtos():
         fretes=fretes,
         resumo_por_produto=resumo_por_produto,
         resumo_por_produto_geral=resumo_por_produto_geral
+    )
+
+
+# ---------------------------------------------------------------------------
+# Relatório: Lucro Postos (FIFO)
+# ---------------------------------------------------------------------------
+
+def _calcular_fifo_relatorio(camadas_iniciais, compras, vendas):
+    """
+    Calcula FIFO para um produto. Reutiliza a mesma lógica das rotas admin.
+    Retorna (resultado_dict, camadas_finais_list).
+    """
+    from decimal import Decimal
+    from collections import defaultdict
+
+    layers = [{'qtde': Decimal(str(c['qtde'])), 'custo': Decimal(str(c['custo']))}
+              for c in camadas_iniciais if float(c.get('qtde', 0)) > 0]
+
+    qtde_entrada = Decimal('0')
+    custo_entrada = Decimal('0')
+    qtde_saida = Decimal('0')
+    receita = Decimal('0')
+    cogs = Decimal('0')
+
+    comp_by_date = defaultdict(list)
+    for c in sorted(compras, key=lambda x: x['data']):
+        comp_by_date[c['data']].append(c)
+    vend_by_date = defaultdict(list)
+    for v in sorted(vendas, key=lambda x: x['data']):
+        vend_by_date[v['data']].append(v)
+
+    all_dates = sorted(set(list(comp_by_date.keys()) + list(vend_by_date.keys())))
+
+    for data in all_dates:
+        for comp in comp_by_date.get(data, []):
+            qtde = Decimal(str(comp['qtde']))
+            custo = Decimal(str(comp['custo']))
+            if qtde > 0:
+                layers.append({'qtde': qtde, 'custo': custo})
+                qtde_entrada += qtde
+                custo_entrada += qtde * custo
+
+        for vend in vend_by_date.get(data, []):
+            qtde_vender = Decimal(str(vend['qtde']))
+            valor = Decimal(str(vend['valor_total']))
+            if qtde_vender <= 0:
+                continue
+            qtde_saida += qtde_vender
+            receita += valor
+            restante = qtde_vender
+            while restante > Decimal('0.001') and layers:
+                layer = layers[0]
+                if layer['qtde'] <= restante + Decimal('0.001'):
+                    cogs += layer['qtde'] * layer['custo']
+                    restante -= layer['qtde']
+                    layers.pop(0)
+                else:
+                    cogs += restante * layer['custo']
+                    layer['qtde'] -= restante
+                    restante = Decimal('0')
+
+    estoque_final_qtde = sum(l['qtde'] for l in layers)
+    estoque_final_valor = sum(l['qtde'] * l['custo'] for l in layers)
+
+    resultado = {
+        'qtde_entrada': float(qtde_entrada),
+        'custo_entrada_total': float(custo_entrada),
+        'custo_entrada_unit': float(custo_entrada / qtde_entrada) if qtde_entrada > 0 else 0.0,
+        'qtde_saida': float(qtde_saida),
+        'receita_saida': float(receita),
+        'preco_medio_saida': float(receita / qtde_saida) if qtde_saida > 0 else 0.0,
+        'cogs': float(cogs),
+        'lucro': float(receita - cogs),
+        'estoque_final_qtde': float(estoque_final_qtde),
+        'estoque_final_valor': float(estoque_final_valor),
+        'estoque_final_custo_unit': float(estoque_final_valor / estoque_final_qtde) if estoque_final_qtde > 0 else 0.0,
+    }
+    return resultado, layers
+
+
+def _obter_camadas_base_relatorio(cur, cliente_id, produto_id, ano, mes):
+    """Obtém camadas base para o relatório FIFO (snapshot anterior ou abertura)."""
+    if mes == 1:
+        ano_ant, mes_ant = ano - 1, 12
+    else:
+        ano_ant, mes_ant = ano, mes - 1
+    ano_mes_ant = f'{ano_ant:04d}-{mes_ant:02d}'
+
+    cur.execute("""
+        SELECT fc.id, fc.versao_atual
+        FROM fifo_competencia fc
+        WHERE fc.cliente_id = %s AND fc.ano_mes = %s AND fc.status = 'FECHADO'
+        LIMIT 1
+    """, (cliente_id, ano_mes_ant))
+    comp_ant = cur.fetchone()
+
+    if comp_ant:
+        cur.execute("""
+            SELECT quantidade_restante AS qtde, custo_unitario AS custo
+            FROM fifo_snapshot_lotes
+            WHERE competencia_id = %s
+              AND produto_id = %s
+              AND versao = %s
+              AND substituido = 0
+              AND quantidade_restante > 0
+            ORDER BY lote_ordem
+        """, (comp_ant['id'], produto_id, comp_ant['versao_atual']))
+        lotes = cur.fetchall()
+        if lotes:
+            return [{'qtde': float(l['qtde']), 'custo': float(l['custo'])} for l in lotes]
+
+    cur.execute("""
+        SELECT quantidade AS qtde, custo_unitario AS custo
+        FROM fifo_abertura
+        WHERE cliente_id = %s AND produto_id = %s
+    """, (cliente_id, produto_id))
+    ab = cur.fetchone()
+    if ab and float(ab['qtde']) > 0:
+        return [{'qtde': float(ab['qtde']), 'custo': float(ab['custo'])}]
+    return []
+
+
+def _calcular_resultado_cliente(cur, cliente_id, ano_mes, data_inicio, data_fim, produto_ids_filtro=None):
+    """
+    Retorna resultados por produto para um cliente num mês.
+    Se mês FECHADO: usa fifo_resumo_mensal.
+    Se ABERTO: calcula on-the-fly.
+    """
+    ano, mes = int(ano_mes[:4]), int(ano_mes[5:7])
+
+    # Verificar status da competência
+    cur.execute("""
+        SELECT id, status, versao_atual
+        FROM fifo_competencia
+        WHERE cliente_id = %s AND ano_mes = %s
+        LIMIT 1
+    """, (cliente_id, ano_mes))
+    comp = cur.fetchone()
+    fechado = comp and comp['status'] == 'FECHADO'
+
+    # Produtos do cliente (posto)
+    q_produtos = """
+        SELECT DISTINCT p.id, p.nome
+        FROM produto p
+        INNER JOIN cliente_produtos cp ON cp.produto_id = p.id
+        WHERE cp.cliente_id = %s AND cp.ativo = 1
+        ORDER BY p.nome
+    """
+    cur.execute(q_produtos, (cliente_id,))
+    produtos = cur.fetchall()
+    if produto_ids_filtro:
+        produtos = [p for p in produtos if p['id'] in produto_ids_filtro]
+
+    resultados = {}
+
+    if fechado:
+        # Usar resumo salvo
+        cur.execute("""
+            SELECT r.produto_id, r.qtde_entrada, r.custo_entrada_total,
+                   r.qtde_saida, r.receita_saida_total, r.cogs_fifo,
+                   r.lucro_bruto, r.estoque_final_qtde, r.estoque_final_valor
+            FROM fifo_resumo_mensal r
+            WHERE r.competencia_id = %s AND r.versao = %s AND r.substituido = 0
+        """, (comp['id'], comp['versao_atual']))
+        rows = cur.fetchall()
+        for row in rows:
+            pid = row['produto_id']
+            if produto_ids_filtro and pid not in produto_ids_filtro:
+                continue
+            qtde_entrada = float(row['qtde_entrada'] or 0)
+            qtde_saida = float(row['qtde_saida'] or 0)
+            receita = float(row['receita_saida_total'] or 0)
+            cogs = float(row['cogs_fifo'] or 0)
+            estoque_qtde = float(row['estoque_final_qtde'] or 0)
+            estoque_valor = float(row['estoque_final_valor'] or 0)
+            resultados[pid] = {
+                'qtde_entrada': qtde_entrada,
+                'custo_entrada_total': float(row['custo_entrada_total'] or 0),
+                'custo_entrada_unit': float(row['custo_entrada_total'] or 0) / qtde_entrada if qtde_entrada else 0.0,
+                'qtde_saida': qtde_saida,
+                'receita_saida': receita,
+                'preco_medio_saida': receita / qtde_saida if qtde_saida else 0.0,
+                'cogs': cogs,
+                'lucro': float(row['lucro_bruto'] or 0),
+                'estoque_final_qtde': estoque_qtde,
+                'estoque_final_valor': estoque_valor,
+                'estoque_final_custo_unit': estoque_valor / estoque_qtde if estoque_qtde else 0.0,
+                'status': 'FECHADO',
+            }
+    else:
+        # Calcular on-the-fly
+        for prod in produtos:
+            pid = prod['id']
+            camadas_base = _obter_camadas_base_relatorio(cur, cliente_id, pid, ano, mes)
+
+            cur.execute("""
+                SELECT f.data_frete AS data,
+                       COALESCE(f.quantidade_manual, q.valor, 0) AS qtde,
+                       COALESCE(f.preco_produto_unitario, 0) AS custo
+                FROM fretes f
+                LEFT JOIN quantidades q ON f.quantidade_id = q.id
+                WHERE f.clientes_id = %s
+                  AND f.produto_id = %s
+                  AND f.data_frete BETWEEN %s AND %s
+                  AND COALESCE(f.quantidade_manual, q.valor, 0) > 0
+                ORDER BY f.data_frete
+            """, (cliente_id, pid, data_inicio, data_fim))
+            compras = cur.fetchall()
+
+            cur.execute("""
+                SELECT data_movimento AS data,
+                       SUM(COALESCE(quantidade_litros, 0)) AS qtde,
+                       SUM(COALESCE(valor_total, 0)) AS valor_total
+                FROM vendas_posto
+                WHERE cliente_id = %s
+                  AND produto_id = %s
+                  AND data_movimento BETWEEN %s AND %s
+                GROUP BY data_movimento
+                ORDER BY data_movimento
+            """, (cliente_id, pid, data_inicio, data_fim))
+            vendas = cur.fetchall()
+
+            resultado, _ = _calcular_fifo_relatorio(camadas_base, compras, vendas)
+            resultado['status'] = 'ABERTO'
+            resultados[pid] = resultado
+
+    # Mapear nome dos produtos
+    prod_map = {p['id']: p['nome'] for p in produtos}
+    resultados_com_nome = {}
+    for pid, res in resultados.items():
+        res['produto_nome'] = prod_map.get(pid, f'Produto {pid}')
+        resultados_com_nome[pid] = res
+
+    return resultados_com_nome, fechado
+
+
+@bp.route('/lucro_postos', methods=['GET'])
+@admin_required
+def lucro_postos():
+    hoje = date.today()
+    ano_mes_default = hoje.strftime('%Y-%m')
+    ano_mes = request.args.get('ano_mes', ano_mes_default).strip()
+    try:
+        ano = int(ano_mes[:4])
+        mes = int(ano_mes[5:7])
+    except (ValueError, IndexError):
+        ano_mes = ano_mes_default
+        ano = hoje.year
+        mes = hoje.month
+
+    ultimo_dia = calendar.monthrange(ano, mes)[1]
+    data_inicio = date(ano, mes, 1)
+    data_fim = date(ano, mes, ultimo_dia)
+
+    cliente_ids = request.args.getlist('cliente_ids[]')
+    cliente_ids = [int(c) for c in cliente_ids if c.isdigit()]
+    produto_ids = request.args.getlist('produto_ids[]')
+    produto_ids = [int(p) for p in produto_ids if p.isdigit()]
+
+    # Lista de clientes disponíveis (com produtos posto)
+    conn = get_db_connection()
+    cur = conn.cursor(dictionary=True)
+    try:
+        cur.execute("""
+            SELECT DISTINCT c.id, c.razao_social, c.nome_fantasia
+            FROM clientes c
+            INNER JOIN cliente_produtos cp ON cp.cliente_id = c.id AND cp.ativo = 1
+            ORDER BY c.razao_social
+        """)
+        clientes_disponiveis = cur.fetchall()
+
+        cur.execute("SELECT id, nome FROM produto ORDER BY nome")
+        produtos_disponiveis = cur.fetchall()
+
+        # Se não selecionar clientes, usar todos
+        ids_para_calcular = cliente_ids if cliente_ids else [c['id'] for c in clientes_disponiveis]
+        prod_filtro = set(produto_ids) if produto_ids else None
+
+        resultados_por_cliente = {}
+        for cid in ids_para_calcular:
+            res, fechado = _calcular_resultado_cliente(
+                cur, cid, ano_mes, data_inicio, data_fim, prod_filtro
+            )
+            if res:
+                # Nome do cliente
+                c_info = next((c for c in clientes_disponiveis if c['id'] == cid), None)
+                nome_cliente = (c_info['nome_fantasia'] or c_info['razao_social']) if c_info else f'Cliente {cid}'
+                resultados_por_cliente[cid] = {
+                    'nome': nome_cliente,
+                    'produtos': res,
+                    'fechado': fechado,
+                }
+    finally:
+        cur.close()
+        conn.close()
+
+    # Consolidado todos os produtos
+    consolidado = {}
+    for cid, dados in resultados_por_cliente.items():
+        for pid, res in dados['produtos'].items():
+            if pid not in consolidado:
+                consolidado[pid] = {
+                    'produto_nome': res['produto_nome'],
+                    'qtde_entrada': 0.0, 'custo_entrada_total': 0.0,
+                    'qtde_saida': 0.0, 'receita_saida': 0.0,
+                    'cogs': 0.0, 'lucro': 0.0,
+                    'estoque_final_qtde': 0.0, 'estoque_final_valor': 0.0,
+                }
+            for campo in ('qtde_entrada', 'custo_entrada_total', 'qtde_saida',
+                          'receita_saida', 'cogs', 'lucro',
+                          'estoque_final_qtde', 'estoque_final_valor'):
+                consolidado[pid][campo] += res.get(campo, 0.0)
+
+    for pid, c in consolidado.items():
+        c['custo_entrada_unit'] = c['custo_entrada_total'] / c['qtde_entrada'] if c['qtde_entrada'] else 0.0
+        c['preco_medio_saida'] = c['receita_saida'] / c['qtde_saida'] if c['qtde_saida'] else 0.0
+        c['estoque_final_custo_unit'] = c['estoque_final_valor'] / c['estoque_final_qtde'] if c['estoque_final_qtde'] else 0.0
+
+    exportar = request.args.get('exportar')
+    if exportar == 'csv':
+        return _exportar_csv(resultados_por_cliente, consolidado, ano_mes)
+
+    return render_template(
+        'relatorios/lucro_postos.html',
+        ano_mes=ano_mes,
+        data_inicio=data_inicio,
+        data_fim=data_fim,
+        clientes_disponiveis=clientes_disponiveis,
+        produtos_disponiveis=produtos_disponiveis,
+        cliente_ids=cliente_ids,
+        produto_ids=produto_ids,
+        resultados_por_cliente=resultados_por_cliente,
+        consolidado=consolidado,
+    )
+
+
+def _exportar_csv(resultados_por_cliente, consolidado, ano_mes):
+    """Gera exportação CSV do relatório Lucro Postos."""
+    output = io.StringIO()
+    writer = csv.writer(output, delimiter=';')
+
+    cabecalho = [
+        'Cliente', 'Produto', 'Status',
+        'Entrada Qtde (L)', 'Entrada VlUnit (R$)', 'Entrada Total (R$)',
+        'Saída Qtde (L)', 'Saída VlUnit Médio (R$)', 'Saída Total (R$)',
+        'Estoque Final (L)', 'Estoque VlUnit (R$)', 'Estoque Valor (R$)',
+        'Receita Bruta (R$)', 'COGS FIFO (R$)', 'Lucro (R$)',
+    ]
+    writer.writerow(cabecalho)
+
+    def fmt(v):
+        return f'{float(v):.4f}'.replace('.', ',')
+
+    for cid, dados in resultados_por_cliente.items():
+        for pid, res in sorted(dados['produtos'].items(), key=lambda x: x[1]['produto_nome']):
+            writer.writerow([
+                dados['nome'],
+                res['produto_nome'],
+                'FECHADO' if dados['fechado'] else 'ABERTO',
+                fmt(res['qtde_entrada']),
+                fmt(res['custo_entrada_unit']),
+                fmt(res['custo_entrada_total']),
+                fmt(res['qtde_saida']),
+                fmt(res['preco_medio_saida']),
+                fmt(res['receita_saida']),
+                fmt(res['estoque_final_qtde']),
+                fmt(res['estoque_final_custo_unit']),
+                fmt(res['estoque_final_valor']),
+                fmt(res['receita_saida']),
+                fmt(res['cogs']),
+                fmt(res['lucro']),
+            ])
+
+    # Linha em branco + consolidado
+    writer.writerow([])
+    writer.writerow(['CONSOLIDADO TODOS CLIENTES', '', '', '', '', '', '', '', '', '', '', '', '', '', ''])
+    for pid, res in sorted(consolidado.items(), key=lambda x: x[1]['produto_nome']):
+        writer.writerow([
+            'TODOS',
+            res['produto_nome'],
+            '',
+            fmt(res['qtde_entrada']),
+            fmt(res['custo_entrada_unit']),
+            fmt(res['custo_entrada_total']),
+            fmt(res['qtde_saida']),
+            fmt(res['preco_medio_saida']),
+            fmt(res['receita_saida']),
+            fmt(res['estoque_final_qtde']),
+            fmt(res['estoque_final_custo_unit']),
+            fmt(res['estoque_final_valor']),
+            fmt(res['receita_saida']),
+            fmt(res['cogs']),
+            fmt(res['lucro']),
+        ])
+
+    output.seek(0)
+    filename = f'lucro_postos_{ano_mes}.csv'
+    return Response(
+        '\ufeff' + output.getvalue(),  # BOM para Excel
+        mimetype='text/csv; charset=utf-8',
+        headers={'Content-Disposition': f'attachment; filename={filename}'},
     )
