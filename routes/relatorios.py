@@ -751,30 +751,146 @@ def _calcular_resultado_cliente(cur, cliente_id, ano_mes, data_inicio, data_fim,
     return resultados_com_nome, fechado
 
 
+def _meses_no_intervalo(data_inicio, data_fim):
+    """Retorna lista de strings 'YYYY-MM' para todos os meses no intervalo de datas."""
+    meses = []
+    ano, mes = data_inicio.year, data_inicio.month
+    while date(ano, mes, 1) <= data_fim:
+        meses.append(f'{ano:04d}-{mes:02d}')
+        mes += 1
+        if mes > 12:
+            mes = 1
+            ano += 1
+    return meses
+
+
+def _calcular_diario_cliente(cur, cliente_id, data_inicio, data_fim, produto_ids_filtro=None):
+    """
+    Retorna dados dia a dia de estoque para um cliente no intervalo de datas.
+    Resultado: {produto_id: {'nome': str, 'dias': [{'data', 'ei', 'compras', 'vendas',
+                'ef_calculado', 'ef_real', 'variacao', 'receita', 'preco_medio'}]}}
+    Fórmula variação: ef_real + vendas - compras - ei
+      (equivalente a: ef_real - (ei + compras - vendas))
+      Positivo = sobra; Negativo = perda.
+    """
+    cur.execute("""
+        SELECT DISTINCT p.id, p.nome
+        FROM produto p
+        INNER JOIN cliente_produtos cp ON cp.produto_id = p.id
+        WHERE cp.cliente_id = %s AND cp.ativo = 1
+        ORDER BY p.nome
+    """, (cliente_id,))
+    produtos = cur.fetchall()
+    if produto_ids_filtro:
+        produtos = [p for p in produtos if p['id'] in produto_ids_filtro]
+
+    resultado = {}
+    for prod in produtos:
+        pid = prod['id']
+
+        # Vendas diárias com estoque inicial registrado no lançamento
+        cur.execute("""
+            SELECT data_movimento AS data,
+                   MAX(estoque_inicial) AS estoque_inicial,
+                   SUM(COALESCE(quantidade_litros, 0)) AS vendas,
+                   SUM(COALESCE(valor_total, 0))       AS receita,
+                   AVG(COALESCE(preco_medio, 0))        AS preco_medio
+            FROM vendas_posto
+            WHERE cliente_id = %s
+              AND produto_id = %s
+              AND data_movimento BETWEEN %s AND %s
+            GROUP BY data_movimento
+            ORDER BY data_movimento
+        """, (cliente_id, pid, data_inicio, data_fim))
+        vendas_dias = {r['data']: r for r in cur.fetchall()}
+
+        # Compras diárias (fretes)
+        cur.execute("""
+            SELECT f.data_frete AS data,
+                   SUM(COALESCE(f.quantidade_manual, q.valor, 0)) AS compras
+            FROM fretes f
+            LEFT JOIN quantidades q ON f.quantidade_id = q.id
+            WHERE f.clientes_id = %s
+              AND f.produto_id = %s
+              AND f.data_frete BETWEEN %s AND %s
+            GROUP BY f.data_frete
+            ORDER BY f.data_frete
+        """, (cliente_id, pid, data_inicio, data_fim))
+        compras_dias = {r['data']: r for r in cur.fetchall()}
+
+        all_dates = sorted(set(list(vendas_dias.keys()) + list(compras_dias.keys())))
+
+        dias = []
+        for data in all_dates:
+            v = vendas_dias.get(data, {})
+            c = compras_dias.get(data, {})
+
+            ei = float(v.get('estoque_inicial') or 0)
+            vendas = float(v.get('vendas') or 0)
+            compras = float(c.get('compras') or 0)
+            receita = float(v.get('receita') or 0)
+            preco_medio = float(v.get('preco_medio') or 0)
+
+            ef_calculado = ei + compras - vendas
+
+            dias.append({
+                'data': data,
+                'ei': ei,
+                'compras': compras,
+                'vendas': vendas,
+                'receita': receita,
+                'preco_medio': preco_medio,
+                'ef_calculado': ef_calculado,
+                'ef_real': None,
+                'variacao': None,
+            })
+
+        # ef_real = estoque_inicial do dia seguinte; variação = ef_real + vendas - compras - ei
+        for i, dia in enumerate(dias):
+            if i + 1 < len(dias):
+                ef_real = dias[i + 1]['ei']
+                dia['ef_real'] = ef_real
+                if dia['ei'] is not None:
+                    dia['variacao'] = ef_real + dia['vendas'] - dia['compras'] - dia['ei']
+            # último dia: ef_real permanece None
+
+        resultado[pid] = {'nome': prod['nome'], 'dias': dias}
+
+    return resultado
+
+
 @bp.route('/lucro_postos', methods=['GET'])
 @admin_required
 def lucro_postos():
     hoje = date.today()
-    ano_mes_default = hoje.strftime('%Y-%m')
-    ano_mes = request.args.get('ano_mes', ano_mes_default).strip()
-    try:
-        ano = int(ano_mes[:4])
-        mes = int(ano_mes[5:7])
-    except (ValueError, IndexError):
-        ano_mes = ano_mes_default
-        ano = hoje.year
-        mes = hoje.month
+    # Padrão: mês corrente
+    data_inicio_default = date(hoje.year, hoje.month, 1)
+    data_fim_default = date(hoje.year, hoje.month, calendar.monthrange(hoje.year, hoje.month)[1])
 
-    ultimo_dia = calendar.monthrange(ano, mes)[1]
-    data_inicio = date(ano, mes, 1)
-    data_fim = date(ano, mes, ultimo_dia)
+    data_inicio_str = request.args.get('data_inicio', data_inicio_default.strftime('%Y-%m-%d'))
+    data_fim_str = request.args.get('data_fim', data_fim_default.strftime('%Y-%m-%d'))
+
+    try:
+        data_inicio = datetime.strptime(data_inicio_str, '%Y-%m-%d').date()
+    except (ValueError, TypeError):
+        data_inicio = data_inicio_default
+
+    try:
+        data_fim = datetime.strptime(data_fim_str, '%Y-%m-%d').date()
+    except (ValueError, TypeError):
+        data_fim = data_fim_default
+
+    if data_fim < data_inicio:
+        data_fim = data_inicio
 
     cliente_ids = request.args.getlist('cliente_ids[]')
     cliente_ids = [int(c) for c in cliente_ids if c.isdigit()]
     produto_ids = request.args.getlist('produto_ids[]')
     produto_ids = [int(p) for p in produto_ids if p.isdigit()]
 
-    # Lista de clientes disponíveis (com produtos posto)
+    # Somente busca resultados quando empresa E produto estiverem selecionados
+    filtrou = bool(cliente_ids and produto_ids)
+
     conn = get_db_connection()
     cur = conn.cursor(dictionary=True)
     try:
@@ -789,29 +905,71 @@ def lucro_postos():
         cur.execute("SELECT id, nome FROM produto ORDER BY nome")
         produtos_disponiveis = cur.fetchall()
 
-        # Se não selecionar clientes, usar todos
-        ids_para_calcular = cliente_ids if cliente_ids else [c['id'] for c in clientes_disponiveis]
-        prod_filtro = set(produto_ids) if produto_ids else None
-
         resultados_por_cliente = {}
-        for cid in ids_para_calcular:
-            res, fechado = _calcular_resultado_cliente(
-                cur, cid, ano_mes, data_inicio, data_fim, prod_filtro
-            )
-            if res:
-                # Nome do cliente
-                c_info = next((c for c in clientes_disponiveis if c['id'] == cid), None)
-                nome_cliente = (c_info['nome_fantasia'] or c_info['razao_social']) if c_info else f'Cliente {cid}'
-                resultados_por_cliente[cid] = {
-                    'nome': nome_cliente,
-                    'produtos': res,
-                    'fechado': fechado,
-                }
+        diario_por_cliente = {}
+
+        if filtrou:
+            prod_filtro = set(produto_ids)
+            meses = _meses_no_intervalo(data_inicio, data_fim)
+
+            for cid in cliente_ids:
+                res_total = {}
+                ultimo_fechado = False
+
+                for ano_mes in meses:
+                    ano_m = int(ano_mes[:4])
+                    mes_m = int(ano_mes[5:7])
+                    mes_inicio = date(ano_m, mes_m, 1)
+                    mes_fim = date(ano_m, mes_m, calendar.monthrange(ano_m, mes_m)[1])
+                    # Passa o intervalo completo do mês para manter a fidelidade FIFO
+                    res, fechado = _calcular_resultado_cliente(
+                        cur, cid, ano_mes, mes_inicio, mes_fim, prod_filtro
+                    )
+                    ultimo_fechado = fechado
+
+                    for pid, dados in res.items():
+                        if pid not in res_total:
+                            res_total[pid] = dict(dados)
+                            res_total[pid]['_meses_aberto'] = 0 if fechado else 1
+                        else:
+                            # Acumular totais entre meses
+                            for campo in ('qtde_entrada', 'custo_entrada_total', 'qtde_saida',
+                                          'receita_saida', 'cogs', 'lucro'):
+                                res_total[pid][campo] += dados.get(campo, 0.0)
+                            # Estoque final = do último mês calculado
+                            res_total[pid]['estoque_final_qtde'] = dados.get('estoque_final_qtde', 0.0)
+                            res_total[pid]['estoque_final_valor'] = dados.get('estoque_final_valor', 0.0)
+                            if not fechado:
+                                res_total[pid]['_meses_aberto'] = res_total[pid].get('_meses_aberto', 0) + 1
+
+                # Recalcular médias unitárias
+                for pid, dados in res_total.items():
+                    qe = dados.get('qtde_entrada', 0.0)
+                    qs = dados.get('qtde_saida', 0.0)
+                    eq = dados.get('estoque_final_qtde', 0.0)
+                    ev = dados.get('estoque_final_valor', 0.0)
+                    dados['custo_entrada_unit'] = dados['custo_entrada_total'] / qe if qe else 0.0
+                    dados['preco_medio_saida'] = dados['receita_saida'] / qs if qs else 0.0
+                    dados['estoque_final_custo_unit'] = ev / eq if eq else 0.0
+                    dados['status'] = 'ABERTO' if dados.pop('_meses_aberto', 0) > 0 else 'FECHADO'
+
+                if res_total:
+                    c_info = next((c for c in clientes_disponiveis if c['id'] == cid), None)
+                    nome_cliente = (c_info['nome_fantasia'] or c_info['razao_social']) if c_info else f'Cliente {cid}'
+                    resultados_por_cliente[cid] = {
+                        'nome': nome_cliente,
+                        'produtos': res_total,
+                        'fechado': ultimo_fechado,
+                    }
+
+                diario_por_cliente[cid] = _calcular_diario_cliente(
+                    cur, cid, data_inicio, data_fim, prod_filtro
+                )
     finally:
         cur.close()
         conn.close()
 
-    # Consolidado todos os produtos
+    # Consolidado
     consolidado = {}
     for cid, dados in resultados_por_cliente.items():
         for pid, res in dados['produtos'].items():
@@ -834,12 +992,12 @@ def lucro_postos():
         c['estoque_final_custo_unit'] = c['estoque_final_valor'] / c['estoque_final_qtde'] if c['estoque_final_qtde'] else 0.0
 
     exportar = request.args.get('exportar')
-    if exportar == 'csv':
-        return _exportar_csv(resultados_por_cliente, consolidado, ano_mes)
+    if exportar == 'csv' and filtrou:
+        label = f"{data_inicio.strftime('%Y%m%d')}_{data_fim.strftime('%Y%m%d')}"
+        return _exportar_csv(resultados_por_cliente, consolidado, label)
 
     return render_template(
         'relatorios/lucro_postos.html',
-        ano_mes=ano_mes,
         data_inicio=data_inicio,
         data_fim=data_fim,
         clientes_disponiveis=clientes_disponiveis,
@@ -848,10 +1006,12 @@ def lucro_postos():
         produto_ids=produto_ids,
         resultados_por_cliente=resultados_por_cliente,
         consolidado=consolidado,
+        diario_por_cliente=diario_por_cliente,
+        filtrou=filtrou,
     )
 
 
-def _exportar_csv(resultados_por_cliente, consolidado, ano_mes):
+def _exportar_csv(resultados_por_cliente, consolidado, label):
     """Gera exportação CSV do relatório Lucro Postos."""
     output = io.StringIO()
     writer = csv.writer(output, delimiter=';')
@@ -861,7 +1021,7 @@ def _exportar_csv(resultados_por_cliente, consolidado, ano_mes):
         'Entrada Qtde (L)', 'Entrada VlUnit (R$)', 'Entrada Total (R$)',
         'Saída Qtde (L)', 'Saída VlUnit Médio (R$)', 'Saída Total (R$)',
         'Estoque Final (L)', 'Estoque VlUnit (R$)', 'Estoque Valor (R$)',
-        'Receita Bruta (R$)', 'COGS FIFO (R$)', 'Lucro (R$)',
+        'Receita Bruta (R$)', 'Custo (R$)', 'Lucro (R$)',
     ]
     writer.writerow(cabecalho)
 
@@ -911,7 +1071,7 @@ def _exportar_csv(resultados_por_cliente, consolidado, ano_mes):
         ])
 
     output.seek(0)
-    filename = f'lucro_postos_{ano_mes}.csv'
+    filename = f'lucro_postos_{label}.csv'
     return Response(
         '\ufeff' + output.getvalue(),  # BOM para Excel
         mimetype='text/csv; charset=utf-8',
