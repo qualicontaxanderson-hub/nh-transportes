@@ -3,7 +3,7 @@ Rotas administrativas para o módulo Lucro Postos (FIFO).
 Permissão: somente ADMIN.
 
 Rotas:
-  GET  /lucro_postos/                         - Dashboard (lista empresas + status)
+  GET  /lucro_postos/                         - Lista unificada de estoque inicial (fifo_abertura + estoque_inicial_global)
   GET  /lucro_postos/abertura/<cliente_id>    - Gerenciar abertura FIFO de uma empresa
   POST /lucro_postos/abertura/<cliente_id>/salvar  - Salvar abertura FIFO
   POST /lucro_postos/fechar                   - Fechar mês (gera snapshot)

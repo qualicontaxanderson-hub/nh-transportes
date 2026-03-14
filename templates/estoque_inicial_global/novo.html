@@ -1,76 +1,198 @@
 {% extends 'base.html' %}
-{% block title %}Novo Estoque Inicial Global{% endblock %}
+{% block title %}Novo Estoque Inicial{% endblock %}
+
+{% block styles %}
+<style>
+  .page-hero {
+    background: linear-gradient(135deg, #1D63A5 0%, #1a4f82 60%, #154070 100%);
+    border-radius: .75rem;
+    padding: 1.5rem 2rem;
+    color: #fff;
+    margin-bottom: 1.75rem;
+  }
+  .page-hero .hero-icon {
+    width: 3rem; height: 3rem;
+    background: rgba(255,255,255,.15);
+    border-radius: .55rem;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1.5rem;
+    flex-shrink: 0;
+  }
+  .form-section-label {
+    font-size: .7rem;
+    text-transform: uppercase;
+    letter-spacing: .08em;
+    color: #8a9ab0;
+    font-weight: 700;
+    margin-bottom: .75rem;
+    margin-top: 1.5rem;
+  }
+  .form-section-label:first-child { margin-top: 0; }
+</style>
+{% endblock %}
 
 {% block content %}
 <div class="container-fluid">
 
   <!-- Breadcrumb -->
-  <nav aria-label="breadcrumb">
-    <ol class="breadcrumb">
-      <li class="breadcrumb-item"><a href="{{ url_for('index') }}">Dashboard</a></li>
-      <li class="breadcrumb-item"><a href="{{ url_for('estoque_inicial_global.list_entries') }}">Estoque Inicial Global</a></li>
+  <nav aria-label="breadcrumb" class="mb-3">
+    <ol class="breadcrumb small">
+      <li class="breadcrumb-item"><a href="{{ url_for('index') }}" class="text-decoration-none">Dashboard</a></li>
+      <li class="breadcrumb-item"><a href="{{ url_for('lucro_postos.index') }}" class="text-decoration-none">Estoque Inicial</a></li>
       <li class="breadcrumb-item active">Novo Registro</li>
     </ol>
   </nav>
 
-  <h2 class="mb-3" style="color:#1D63A5;">
-    <i class="bi bi-plus-circle"></i> Novo Estoque Inicial
-  </h2>
-
-  <div class="alert alert-warning py-2">
-    <i class="bi bi-exclamation-triangle"></i>
-    <strong>Atenção:</strong> Após salvar, este registro <strong>não poderá ser alterado ou excluído</strong>.
-    Confirme os dados antes de gravar.
+  <!-- Hero -->
+  <div class="page-hero d-flex align-items-center gap-3 flex-wrap">
+    <div class="hero-icon"><i class="bi bi-plus-circle-fill"></i></div>
+    <div class="flex-grow-1">
+      <h4 class="mb-0 fw-bold">Novo Estoque Inicial</h4>
+      <p class="mb-0 opacity-75 small">Registro imutável — confira todos os dados antes de salvar.</p>
+    </div>
+    <a href="{{ url_for('lucro_postos.index') }}"
+       class="btn btn-sm px-3" style="background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.35);">
+      <i class="bi bi-arrow-left me-1"></i> Voltar
+    </a>
   </div>
 
-  <div class="card shadow-sm" style="max-width:540px;">
-    <div class="card-body">
-      <form method="post">
+  <div class="row">
+    <div class="col-lg-5 col-md-8">
 
-        <div class="mb-3">
-          <label class="form-label fw-semibold">Empresa <span class="text-danger">*</span></label>
-          <select name="cliente_id" class="form-select" required>
-            <option value="">Selecione...</option>
-            {% for c in clientes %}
-            <option value="{{ c.id }}">{{ c.nome_fantasia or c.razao_social }}</option>
-            {% endfor %}
-          </select>
+      <!-- Warning -->
+      <div class="alert border-0 d-flex align-items-start gap-3 mb-4 py-3 px-4"
+           style="background:#fff8e1;border-left:4px solid #ffc107 !important;border-radius:.6rem;border:none;">
+        <i class="bi bi-exclamation-triangle-fill fs-5 mt-1" style="color:#e6a817;flex-shrink:0;"></i>
+        <div>
+          <div class="fw-bold mb-1" style="color:#7c5d00;">Atenção — registro imutável</div>
+          <div class="small" style="color:#7c5d00;">
+            Após salvar, este registro <strong>não poderá ser alterado ou excluído</strong>.
+            Confira empresa, produto, data e quantidade antes de gravar.
+          </div>
         </div>
+      </div>
 
-        <div class="mb-3">
-          <label class="form-label fw-semibold">Produto <span class="text-danger">*</span></label>
-          <select name="produto_id" class="form-select" required>
-            <option value="">Selecione...</option>
-            {% for p in produtos %}
-            <option value="{{ p.id }}">{{ p.nome }}</option>
-            {% endfor %}
-          </select>
+      <!-- Form card -->
+      <div class="card border-0 shadow-sm" style="border-radius:.75rem;overflow:hidden;">
+        <div class="card-header border-0 py-3 px-4"
+             style="background:#f7f9fc;border-bottom:1px solid #e8ecf1;">
+          <span class="fw-semibold" style="color:#1D63A5;">
+            <i class="bi bi-pencil-square me-1"></i> Dados do Registro
+          </span>
         </div>
+        <div class="card-body px-4 py-4">
+          <form method="post" id="novoForm">
 
-        <div class="mb-3">
-          <label class="form-label fw-semibold">Data de Início <span class="text-danger">*</span></label>
-          <input type="date" name="data_inicio" class="form-control" required value="2026-01-01">
+            <div class="form-section-label">Identificação</div>
+
+            <div class="mb-3">
+              <label class="form-label fw-semibold mb-1">
+                Empresa <span class="text-danger">*</span>
+              </label>
+              <div class="input-group">
+                <span class="input-group-text bg-white"><i class="bi bi-building text-primary"></i></span>
+                <select name="cliente_id" class="form-select" required>
+                  <option value="">Selecione a empresa...</option>
+                  {% for c in clientes %}
+                  <option value="{{ c.id }}">{{ c.nome_fantasia or c.razao_social }}</option>
+                  {% endfor %}
+                </select>
+              </div>
+            </div>
+
+            <div class="mb-3">
+              <label class="form-label fw-semibold mb-1">
+                Produto <span class="text-danger">*</span>
+              </label>
+              <div class="input-group">
+                <span class="input-group-text bg-white"><i class="bi bi-fuel-pump text-primary"></i></span>
+                <select name="produto_id" class="form-select" required>
+                  <option value="">Selecione o produto...</option>
+                  {% for p in produtos %}
+                  <option value="{{ p.id }}">{{ p.nome }}</option>
+                  {% endfor %}
+                </select>
+              </div>
+            </div>
+
+            <div class="form-section-label">Dados do Estoque</div>
+
+            <div class="mb-3">
+              <label class="form-label fw-semibold mb-1">
+                Data de Início <span class="text-danger">*</span>
+              </label>
+              <div class="input-group">
+                <span class="input-group-text bg-white"><i class="bi bi-calendar3 text-primary"></i></span>
+                <input type="date" name="data_inicio" class="form-control" required value="2026-01-01">
+              </div>
+            </div>
+
+            <div class="mb-4">
+              <label class="form-label fw-semibold mb-1">
+                Quantidade Inicial <span class="text-danger">*</span>
+              </label>
+              <div class="input-group">
+                <input type="number" name="quantidade_inicial" class="form-control"
+                       step="0.001" min="0" required placeholder="0,000"
+                       style="font-size:.95rem;">
+                <span class="input-group-text bg-white fw-semibold text-muted">L</span>
+              </div>
+            </div>
+
+            <hr class="my-4">
+
+            <div class="d-flex gap-2">
+              <button type="button" class="btn btn-primary px-4 fw-semibold"
+                      data-bs-toggle="modal" data-bs-target="#confirmModal">
+                <i class="bi bi-save me-1"></i> Salvar
+              </button>
+              <a href="{{ url_for('lucro_postos.index') }}" class="btn btn-outline-secondary px-3">
+                <i class="bi bi-x-circle me-1"></i> Cancelar
+              </a>
+            </div>
+
+          </form>
         </div>
+      </div>
 
-        <div class="mb-4">
-          <label class="form-label fw-semibold">Quantidade Inicial (L) <span class="text-danger">*</span></label>
-          <input type="number" name="quantidade_inicial" class="form-control"
-                 step="0.001" min="0" required placeholder="0,000">
-        </div>
-
-        <div class="d-flex gap-2">
-          <button type="submit" class="btn btn-primary"
-                  onclick="return confirm('Confirma o registro? Esta ação é irreversível.');">
-            <i class="bi bi-save"></i> Salvar
-          </button>
-          <a href="{{ url_for('estoque_inicial_global.list_entries') }}" class="btn btn-secondary">
-            <i class="bi bi-arrow-left"></i> Voltar
-          </a>
-        </div>
-
-      </form>
     </div>
   </div>
 
+</div>
+
+<!-- Modal de confirmação -->
+<div class="modal fade" id="confirmModal" tabindex="-1" aria-labelledby="confirmModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content border-0 shadow-lg" style="border-radius:.75rem;overflow:hidden;">
+      <div class="modal-header border-0 py-4 px-4"
+           style="background:linear-gradient(135deg,#1D63A5,#154070);color:#fff;">
+        <h5 class="modal-title fw-bold" id="confirmModalLabel">
+          <i class="bi bi-shield-exclamation me-2"></i> Confirmar Gravação
+        </h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body px-4 py-4">
+        <div class="d-flex align-items-start gap-3">
+          <i class="bi bi-exclamation-triangle-fill fs-4 mt-1" style="color:#ffc107;flex-shrink:0;"></i>
+          <div>
+            <p class="mb-1 fw-semibold">Esta ação é <span class="text-danger">irreversível</span>.</p>
+            <p class="text-muted mb-0 small">
+              O registro será gravado de forma permanente e não poderá ser alterado ou excluído.
+              Você tem certeza que os dados estão corretos?
+            </p>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer border-0 px-4 pb-4 pt-0 gap-2">
+        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">
+          <i class="bi bi-arrow-left me-1"></i> Revisar dados
+        </button>
+        <button type="button" class="btn btn-primary fw-semibold px-4"
+                onclick="document.getElementById('novoForm').submit();">
+          <i class="bi bi-check-circle me-1"></i> Confirmar e Gravar
+        </button>
+      </div>
+    </div>
+  </div>
 </div>
 {% endblock %}

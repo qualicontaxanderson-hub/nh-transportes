@@ -1,69 +1,221 @@
 {% extends 'base.html' %}
 {% block title %}Estoque Inicial{% endblock %}
 
+{% block styles %}
+<style>
+  .page-hero {
+    background: linear-gradient(135deg, #1D63A5 0%, #1a4f82 60%, #154070 100%);
+    border-radius: .75rem;
+    padding: 1.75rem 2rem;
+    margin-bottom: 1.75rem;
+    color: #fff;
+  }
+  .page-hero .hero-icon {
+    width: 3.25rem; height: 3.25rem;
+    background: rgba(255,255,255,.15);
+    border-radius: .6rem;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1.6rem;
+    flex-shrink: 0;
+  }
+  .stat-card {
+    border: 0;
+    border-radius: .65rem;
+    box-shadow: 0 2px 8px rgba(0,0,0,.07);
+    transition: box-shadow .2s;
+  }
+  .stat-card:hover { box-shadow: 0 4px 16px rgba(0,0,0,.13); }
+  .stat-card .stat-icon {
+    width: 2.8rem; height: 2.8rem;
+    border-radius: .5rem;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1.35rem;
+    flex-shrink: 0;
+  }
+  .tbl-main thead th {
+    background: #1D63A5;
+    color: #fff;
+    font-size: .78rem;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    font-weight: 600;
+    border: 0;
+    padding: .85rem 1rem;
+    white-space: nowrap;
+  }
+  .tbl-main tbody tr { transition: background .12s; }
+  .tbl-main tbody td { padding: .75rem 1rem; vertical-align: middle; border-color: #f0f2f5; }
+  .tbl-main tbody tr:last-child td { border-bottom: 0; }
+  .badge-produto {
+    background: #e8f0fb;
+    color: #1D63A5;
+    font-weight: 600;
+    font-size: .75rem;
+    padding: .3em .65em;
+    border-radius: .4rem;
+  }
+  .empty-state {
+    padding: 4rem 1rem;
+    text-align: center;
+  }
+  .empty-state i { font-size: 3.5rem; color: #cbd3da; margin-bottom: 1rem; display: block; }
+  .empty-state p { color: #8a9ab0; margin-bottom: 0; }
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="container-fluid">
 
   <!-- Breadcrumb -->
-  <nav aria-label="breadcrumb">
-    <ol class="breadcrumb">
-      <li class="breadcrumb-item"><a href="{{ url_for('index') }}">Dashboard</a></li>
+  <nav aria-label="breadcrumb" class="mb-3">
+    <ol class="breadcrumb small">
+      <li class="breadcrumb-item"><a href="{{ url_for('index') }}" class="text-decoration-none">Dashboard</a></li>
       <li class="breadcrumb-item active">Estoque Inicial</li>
     </ol>
   </nav>
 
-  <div class="d-flex align-items-center mb-3 gap-3 flex-wrap">
-    <h2 class="mb-0" style="color:#1D63A5;">
-      <i class="bi bi-archive-fill"></i> Estoque Inicial
-    </h2>
-    <a href="{{ url_for('estoque_inicial_global.create_entry') }}" class="btn btn-primary btn-sm ms-auto">
-      <i class="bi bi-plus-circle"></i> Novo Registro
-    </a>
-    <a href="{{ url_for('relatorios.lucro_postos') }}" class="btn btn-outline-primary btn-sm">
-      <i class="bi bi-bar-chart"></i> Ver Relatório
-    </a>
+  <!-- Hero header -->
+  <div class="page-hero d-flex align-items-center gap-3 flex-wrap">
+    <div class="hero-icon">
+      <i class="bi bi-archive-fill"></i>
+    </div>
+    <div class="flex-grow-1">
+      <h4 class="mb-0 fw-bold">Estoque Inicial</h4>
+      <p class="mb-0 opacity-75 small">Base de abertura FIFO — estoque de cada empresa no início do período.</p>
+    </div>
+    <div class="d-flex gap-2 flex-wrap">
+      <a href="{{ url_for('estoque_inicial_global.create_entry') }}"
+         class="btn btn-light fw-semibold btn-sm px-3">
+        <i class="bi bi-plus-circle me-1"></i> Novo Registro
+      </a>
+      <a href="{{ url_for('relatorios.lucro_postos') }}"
+         class="btn btn-sm px-3" style="background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.35);">
+        <i class="bi bi-bar-chart me-1"></i> Ver Relatório
+      </a>
+    </div>
   </div>
 
-  <div class="alert alert-info py-2">
-    <i class="bi bi-info-circle"></i>
-    Registros <strong>imutáveis</strong>: após gravação não podem ser alterados ou excluídos.
+  <!-- Stat cards -->
+  {% set total = entradas | length %}
+  {% set empresas = entradas | map(attribute='nome_fantasia') | list | unique | list | length %}
+  <div class="row g-3 mb-4">
+    <div class="col-6 col-md-3">
+      <div class="card stat-card h-100">
+        <div class="card-body d-flex align-items-center gap-3">
+          <div class="stat-icon" style="background:#e8f0fb;">
+            <i class="bi bi-database-fill-check" style="color:#1D63A5;"></i>
+          </div>
+          <div>
+            <div class="fs-4 fw-bold" style="color:#1D63A5;">{{ total }}</div>
+            <div class="text-muted small">Registros</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="col-6 col-md-3">
+      <div class="card stat-card h-100">
+        <div class="card-body d-flex align-items-center gap-3">
+          <div class="stat-icon" style="background:#e6f9ee;">
+            <i class="bi bi-building" style="color:#198754;"></i>
+          </div>
+          <div>
+            <div class="fs-4 fw-bold" style="color:#198754;">{{ entradas | map(attribute='nome_fantasia') | list | unique | list | length }}</div>
+            <div class="text-muted small">Empresas</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="col-12 col-md-6">
+      <div class="card stat-card h-100 border-start border-4" style="border-color:#ffc107 !important;">
+        <div class="card-body d-flex align-items-center gap-3">
+          <div class="stat-icon" style="background:#fff8e1;">
+            <i class="bi bi-exclamation-triangle-fill" style="color:#e6a817;"></i>
+          </div>
+          <div>
+            <div class="fw-semibold" style="font-size:.85rem;">Registros imutáveis</div>
+            <div class="text-muted small">Após gravação não podem ser alterados ou excluídos. Confira antes de salvar.</div>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 
   <!-- Tabela -->
-  <div class="card shadow-sm">
+  <div class="card border-0 shadow-sm" style="border-radius:.75rem;overflow:hidden;">
+    <div class="card-header d-flex align-items-center justify-content-between border-0 py-3 px-4"
+         style="background:#f7f9fc;">
+      <span class="fw-semibold" style="color:#1D63A5;">
+        <i class="bi bi-table me-1"></i> Registros
+      </span>
+      <span class="badge rounded-pill" style="background:#e8f0fb;color:#1D63A5;">
+        {{ total }} {{ 'registro' if total == 1 else 'registros' }}
+      </span>
+    </div>
     <div class="table-responsive">
-      <table class="table table-hover align-middle mb-0">
-        <thead style="background:#1D63A5;color:#fff;">
+      <table class="table tbl-main mb-0">
+        <thead>
           <tr>
             <th>Empresa</th>
             <th>Produto</th>
             <th>Data Início</th>
-            <th class="text-end">Quantidade Inicial (L)</th>
+            <th class="text-end">Quantidade (L)</th>
             <th class="text-end">Custo Unit. (R$)</th>
+            <th class="text-end">Valor Total (R$)</th>
             <th>Registrado em</th>
           </tr>
         </thead>
         <tbody>
           {% for e in entradas %}
+          {% set qtde = e.quantidade_inicial | float %}
+          {% set custo = e.custo_unitario | float if e.custo_unitario else 0 %}
           <tr>
-            <td>{{ e.nome_fantasia or e.cliente_nome }}</td>
-            <td>{{ e.produto_nome }}</td>
-            <td>{{ e.data_inicio.strftime('%d/%m/%Y') if e.data_inicio }}</td>
-            <td class="text-end">
-              {{ "{:,.3f}".format(e.quantidade_inicial | float).replace(",", "X").replace(".", ",").replace("X", ".") }}
+            <td>
+              <span class="fw-semibold">{{ e.nome_fantasia or e.cliente_nome }}</span>
+            </td>
+            <td>
+              <span class="badge-produto">{{ e.produto_nome }}</span>
+            </td>
+            <td class="text-muted small">
+              <i class="bi bi-calendar3 me-1"></i>
+              {{ e.data_inicio.strftime('%d/%m/%Y') if e.data_inicio }}
+            </td>
+            <td class="text-end fw-semibold">
+              {{ "{:,.3f}".format(qtde).replace(",", "X").replace(".", ",").replace("X", ".") }}
             </td>
             <td class="text-end">
-              {% if e.custo_unitario is not none and e.custo_unitario %}
-                {{ "{:,.4f}".format(e.custo_unitario | float).replace(",", "X").replace(".", ",").replace("X", ".") }}
+              {% if e.custo_unitario %}
+                <span class="text-success fw-semibold">
+                  R$ {{ "{:,.4f}".format(custo).replace(",", "X").replace(".", ",").replace("X", ".") }}
+                </span>
               {% else %}
                 <span class="text-muted">—</span>
               {% endif %}
             </td>
-            <td class="text-muted small">{{ e.created_at.strftime('%d/%m/%Y %H:%M') if e.created_at }}</td>
+            <td class="text-end">
+              {% if custo > 0 %}
+                <span class="fw-bold" style="color:#1D63A5;">
+                  R$ {{ "{:,.2f}".format(qtde * custo).replace(",", "X").replace(".", ",").replace("X", ".") }}
+                </span>
+              {% else %}
+                <span class="text-muted">—</span>
+              {% endif %}
+            </td>
+            <td class="text-muted small">
+              {{ e.created_at.strftime('%d/%m/%Y %H:%M') if e.created_at }}
+            </td>
           </tr>
           {% else %}
           <tr>
-            <td colspan="6" class="text-center text-muted py-4">Nenhum registro de estoque inicial encontrado.</td>
+            <td colspan="7">
+              <div class="empty-state">
+                <i class="bi bi-inbox"></i>
+                <p class="fw-semibold">Nenhum registro de estoque inicial encontrado.</p>
+                <a href="{{ url_for('estoque_inicial_global.create_entry') }}"
+                   class="btn btn-primary btn-sm mt-2">
+                  <i class="bi bi-plus-circle me-1"></i> Adicionar primeiro registro
+                </a>
+              </div>
+            </td>
           </tr>
           {% endfor %}
         </tbody>

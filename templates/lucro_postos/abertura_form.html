@@ -1,116 +1,236 @@
 {% extends 'base.html' %}
 {% block title %}Abertura FIFO – {{ cliente.razao_social }}{% endblock %}
 
+{% block styles %}
+<style>
+  .page-hero {
+    background: linear-gradient(135deg, #1D63A5 0%, #1a4f82 60%, #154070 100%);
+    border-radius: .75rem;
+    padding: 1.5rem 2rem;
+    color: #fff;
+    margin-bottom: 1.75rem;
+  }
+  .page-hero .hero-icon {
+    width: 3rem; height: 3rem;
+    background: rgba(255,255,255,.15);
+    border-radius: .55rem;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1.5rem;
+    flex-shrink: 0;
+  }
+  .prod-table thead th {
+    background: #f7f9fc;
+    color: #495057;
+    font-size: .78rem;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    font-weight: 700;
+    border-top: 0;
+    border-bottom: 2px solid #dee2e6;
+    padding: .85rem 1rem;
+    white-space: nowrap;
+  }
+  .prod-table tbody td { padding: .75rem 1rem; vertical-align: middle; }
+  .prod-table tbody tr:last-child td { border-bottom: 0; }
+  .input-group-text { font-size: .8rem; }
+  .total-chip {
+    display: inline-block;
+    min-width: 110px;
+    text-align: right;
+    font-weight: 700;
+    font-size: .95rem;
+    color: #198754;
+  }
+  .grand-total-row td {
+    background: #f0faf5;
+    border-top: 2px solid #198754 !important;
+    font-weight: 700;
+  }
+  .field-card {
+    background: #f7f9fc;
+    border-radius: .6rem;
+    padding: 1.25rem 1.5rem;
+    border: 1px solid #e4e8ef;
+  }
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="container-fluid">
 
   <!-- Breadcrumb -->
-  <nav aria-label="breadcrumb">
-    <ol class="breadcrumb">
-      <li class="breadcrumb-item"><a href="{{ url_for('index') }}">Dashboard</a></li>
-      <li class="breadcrumb-item"><a href="{{ url_for('lucro_postos.index') }}">Estoque Inicial</a></li>
+  <nav aria-label="breadcrumb" class="mb-3">
+    <ol class="breadcrumb small">
+      <li class="breadcrumb-item"><a href="{{ url_for('index') }}" class="text-decoration-none">Dashboard</a></li>
+      <li class="breadcrumb-item"><a href="{{ url_for('lucro_postos.index') }}" class="text-decoration-none">Estoque Inicial</a></li>
       <li class="breadcrumb-item active">Abertura FIFO</li>
     </ol>
   </nav>
 
-  <h2 class="mb-1" style="color:#1D63A5;">
-    <i class="bi bi-box-arrow-in-down"></i> Abertura FIFO
-  </h2>
-  <p class="text-muted mb-4">
-    Empresa: <strong>{{ cliente.nome_fantasia or cliente.razao_social }}</strong>
-    &mdash; Informe o estoque inicial (litros e custo unitário) por produto.
-  </p>
+  <!-- Hero -->
+  <div class="page-hero d-flex align-items-center gap-3 flex-wrap">
+    <div class="hero-icon"><i class="bi bi-box-arrow-in-down"></i></div>
+    <div class="flex-grow-1">
+      <h4 class="mb-0 fw-bold">Abertura FIFO</h4>
+      <p class="mb-0 opacity-75 small">
+        {{ cliente.nome_fantasia or cliente.razao_social }}
+        &mdash; informe o estoque inicial (litros e custo unitário) por produto.
+      </p>
+    </div>
+    <a href="{{ url_for('lucro_postos.index') }}"
+       class="btn btn-sm px-3" style="background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.35);">
+      <i class="bi bi-arrow-left me-1"></i> Voltar
+    </a>
+  </div>
 
   {% if produtos %}
-  <form method="post" action="{{ url_for('lucro_postos.abertura_salvar', cliente_id=cliente.id) }}">
+  <form method="post" action="{{ url_for('lucro_postos.abertura_salvar', cliente_id=cliente.id) }}"
+        id="aberturaForm">
 
-    <div class="row g-3 mb-3">
-      <div class="col-md-4">
-        <label class="form-label fw-semibold">Data de Abertura</label>
-        <input type="date" name="data_abertura"
-               value="{{ aberturas.values() | list | first | attr('data_abertura') if aberturas else '2026-01-01' }}"
-               class="form-control"
-               required>
-        <div class="form-text">Normalmente 01/01/2026 (início do sistema).</div>
+    <!-- Data de Abertura -->
+    <div class="field-card mb-4" style="max-width:420px;">
+      <label class="form-label fw-semibold mb-1">
+        <i class="bi bi-calendar-event me-1 text-primary"></i> Data de Abertura
+        <span class="text-danger">*</span>
+      </label>
+      <input type="date" name="data_abertura"
+             value="{{ aberturas.values() | list | first | attr('data_abertura') if aberturas else '2026-01-01' }}"
+             class="form-control"
+             required>
+      <div class="form-text mt-1">
+        <i class="bi bi-info-circle me-1"></i>
+        Normalmente 01/01/2026 — data de início do controle FIFO.
       </div>
     </div>
 
-    <div class="card shadow-sm mb-4">
-      <div class="card-header" style="background:#1D63A5;color:#fff;">
-        <h5 class="mb-0"><i class="bi bi-fuel-pump"></i> Produtos</h5>
+    <!-- Tabela de produtos -->
+    <div class="card border-0 shadow-sm mb-4" style="border-radius:.75rem;overflow:hidden;">
+      <div class="card-header d-flex align-items-center gap-2 border-0 py-3 px-4"
+           style="background:#1D63A5;color:#fff;">
+        <i class="bi bi-fuel-pump fs-5"></i>
+        <span class="fw-bold">Produtos</span>
+        <span class="ms-auto badge bg-white text-primary rounded-pill">
+          {{ produtos | length }} produto{{ 's' if produtos | length != 1 }}
+        </span>
       </div>
+
       <div class="table-responsive">
-        <table class="table table-hover align-middle mb-0">
-          <thead style="background:#e9ecef;">
+        <table class="table prod-table mb-0">
+          <thead>
             <tr>
-              <th>Produto</th>
-              <th style="width:200px;">Quantidade (L)</th>
-              <th style="width:200px;">Custo Unitário (R$/L)</th>
-              <th style="width:160px;">Valor Total (R$)</th>
+              <th style="min-width:160px;">Produto</th>
+              <th style="width:220px;">Quantidade (L)</th>
+              <th style="width:220px;">Custo Unitário (R$/L)</th>
+              <th style="width:180px;" class="text-end">Valor Total</th>
             </tr>
           </thead>
           <tbody>
             {% for prod in produtos %}
             {% set ab = aberturas.get(prod.id) %}
             <tr>
-              <td><strong>{{ prod.nome }}</strong></td>
               <td>
-                <input type="number" name="quantidade_{{ prod.id }}"
-                       value="{{ '%.3f' | format(ab.quantidade | float) if ab else '0.000' }}"
-                       class="form-control form-control-sm qtde-input"
-                       data-prodid="{{ prod.id }}"
-                       step="0.001" min="0" placeholder="0,000">
+                <span class="fw-semibold" style="color:#1D63A5;">{{ prod.nome }}</span>
               </td>
               <td>
-                <input type="number" name="custo_unitario_{{ prod.id }}"
-                       value="{{ '%.4f' | format(ab.custo_unitario | float) if ab else '0.0000' }}"
-                       class="form-control form-control-sm custo-input"
-                       data-prodid="{{ prod.id }}"
-                       step="0.0001" min="0" placeholder="0,0000">
+                <div class="input-group input-group-sm">
+                  <input type="number" name="quantidade_{{ prod.id }}"
+                         value="{{ '%.3f' | format(ab.quantidade | float) if ab else '0.000' }}"
+                         class="form-control qtde-input"
+                         data-prodid="{{ prod.id }}"
+                         step="0.001" min="0" placeholder="0,000"
+                         style="font-size:.9rem;">
+                  <span class="input-group-text text-muted">L</span>
+                </div>
               </td>
               <td>
-                <span id="total_{{ prod.id }}" class="fw-semibold text-success">
-                  {{ 'R$ %.2f' | format((ab.quantidade | float) * (ab.custo_unitario | float)) if ab else 'R$ 0,00' }}
+                <div class="input-group input-group-sm">
+                  <span class="input-group-text text-muted">R$</span>
+                  <input type="number" name="custo_unitario_{{ prod.id }}"
+                         value="{{ '%.4f' | format(ab.custo_unitario | float) if ab else '0.0000' }}"
+                         class="form-control custo-input"
+                         data-prodid="{{ prod.id }}"
+                         step="0.0001" min="0" placeholder="0,0000"
+                         style="font-size:.9rem;">
+                </div>
+              </td>
+              <td class="text-end">
+                <span id="total_{{ prod.id }}" class="total-chip">
+                  {% if ab %}
+                    R$ {{ '{:,.2f}'.format((ab.quantidade | float) * (ab.custo_unitario | float)).replace(',', 'X').replace('.', ',').replace('X', '.') }}
+                  {% else %}
+                    R$ 0,00
+                  {% endif %}
                 </span>
               </td>
             </tr>
             {% endfor %}
+            <tr class="grand-total-row">
+              <td colspan="3" class="text-end pe-3 text-muted small text-uppercase fw-bold">
+                <i class="bi bi-calculator me-1"></i> Total Geral
+              </td>
+              <td class="text-end">
+                <span id="grand_total" class="total-chip" style="color:#1D63A5;font-size:1rem;">
+                  R$ 0,00
+                </span>
+              </td>
+            </tr>
           </tbody>
         </table>
       </div>
     </div>
 
-    <div class="d-flex gap-2">
-      <button type="submit" class="btn btn-primary">
-        <i class="bi bi-save"></i> Salvar Abertura
+    <!-- Ações -->
+    <div class="d-flex gap-2 flex-wrap">
+      <button type="submit" class="btn btn-primary px-4">
+        <i class="bi bi-save me-1"></i> Salvar Abertura
       </button>
-      <a href="{{ url_for('lucro_postos.index') }}" class="btn btn-secondary">
-        <i class="bi bi-arrow-left"></i> Voltar
+      <a href="{{ url_for('lucro_postos.index') }}" class="btn btn-outline-secondary px-3">
+        <i class="bi bi-x-circle me-1"></i> Cancelar
       </a>
     </div>
 
   </form>
   {% else %}
-  <div class="alert alert-warning">
-    Nenhum produto vinculado a este cliente no posto.
-    <a href="{{ url_for('posto.admin_produtos_cliente', cliente_id=cliente.id) }}">Configurar produtos</a>.
+  <div class="card border-0 shadow-sm" style="border-radius:.75rem;max-width:500px;">
+    <div class="card-body text-center py-5">
+      <i class="bi bi-fuel-pump fs-1 text-muted d-block mb-3"></i>
+      <p class="fw-semibold text-muted mb-3">Nenhum produto vinculado a este cliente no posto.</p>
+      <a href="{{ url_for('posto.admin_produtos_cliente', cliente_id=cliente.id) }}"
+         class="btn btn-primary">
+        <i class="bi bi-gear me-1"></i> Configurar Produtos
+      </a>
+    </div>
   </div>
   {% endif %}
 
 </div>
 
 <script>
+  function fmt(val) {
+    return 'R$ ' + val.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+  }
+
   function recalcTotal(prodId) {
-    var qtde = parseFloat(document.querySelector('.qtde-input[data-prodid="' + prodId + '"]').value) || 0;
+    var qtde  = parseFloat(document.querySelector('.qtde-input[data-prodid="' + prodId + '"]').value) || 0;
     var custo = parseFloat(document.querySelector('.custo-input[data-prodid="' + prodId + '"]').value) || 0;
-    var total = qtde * custo;
-    document.getElementById('total_' + prodId).textContent = 'R$ ' + total.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+    document.getElementById('total_' + prodId).textContent = fmt(qtde * custo);
+    recalcGrand();
+  }
+
+  function recalcGrand() {
+    var sum = 0;
+    document.querySelectorAll('.total-chip[id^="total_"]').forEach(function(el) {
+      var v = el.textContent.replace(/[^0-9,]/g,'').replace('.','').replace(',','.');
+      sum += parseFloat(v) || 0;
+    });
+    document.getElementById('grand_total').textContent = fmt(sum);
   }
 
   document.querySelectorAll('.qtde-input, .custo-input').forEach(function(el) {
-    el.addEventListener('input', function() {
-      recalcTotal(this.dataset.prodid);
-    });
+    el.addEventListener('input', function() { recalcTotal(this.dataset.prodid); });
   });
+
+  // Initial grand total calculation
+  recalcGrand();
 </script>
 {% endblock %}
