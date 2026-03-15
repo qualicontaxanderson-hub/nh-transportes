@@ -1,0 +1,84 @@
+{% extends 'base.html' %}
+{% block title %}Estoque Inicial Global{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+
+  <!-- Breadcrumb -->
+  <nav aria-label="breadcrumb">
+    <ol class="breadcrumb">
+      <li class="breadcrumb-item"><a href="{{ url_for('index') }}">Dashboard</a></li>
+      <li class="breadcrumb-item active">Estoque Inicial Global</li>
+    </ol>
+  </nav>
+
+  <div class="d-flex align-items-center mb-3 gap-3">
+    <h2 class="mb-0" style="color:#1D63A5;">
+      <i class="bi bi-archive-fill"></i> Estoque Inicial Global
+    </h2>
+    <a href="{{ url_for('estoque_inicial_global.create_entry') }}" class="btn btn-primary btn-sm ms-auto">
+      <i class="bi bi-plus-circle"></i> Novo Registro
+    </a>
+  </div>
+
+  <div class="alert alert-info py-2">
+    <i class="bi bi-info-circle"></i>
+    Registros <strong>imutáveis</strong>: após gravação não podem ser alterados ou excluídos.
+    Para corrigir, use a <a href="{{ url_for('lucro_postos.index') }}">Abertura FIFO</a>.
+  </div>
+
+  <!-- Filtro -->
+  <form method="get" class="row g-2 align-items-end mb-3">
+    <div class="col-md-4">
+      <label class="form-label fw-semibold">Empresa</label>
+      <select name="cliente_id" class="form-select">
+        <option value="">Todas</option>
+        {% for c in clientes %}
+        <option value="{{ c.id }}" {% if c.id == cliente_id %}selected{% endif %}>
+          {{ c.nome_fantasia or c.razao_social }}
+        </option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-auto">
+      <button type="submit" class="btn btn-primary"><i class="bi bi-search"></i> Filtrar</button>
+      <a href="{{ url_for('estoque_inicial_global.list_entries') }}" class="btn btn-secondary">Limpar</a>
+    </div>
+  </form>
+
+  <!-- Tabela -->
+  <div class="card shadow-sm">
+    <div class="table-responsive">
+      <table class="table table-hover align-middle mb-0">
+        <thead style="background:#1D63A5;color:#fff;">
+          <tr>
+            <th>Empresa</th>
+            <th>Produto</th>
+            <th>Data Início</th>
+            <th class="text-end">Quantidade Inicial (L)</th>
+            <th>Registrado em</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for e in entradas %}
+          <tr>
+            <td>{{ e.nome_fantasia or e.cliente_nome }}</td>
+            <td>{{ e.produto_nome }}</td>
+            <td>{{ e.data_inicio.strftime('%d/%m/%Y') if e.data_inicio }}</td>
+            <td class="text-end">
+              {{ "{:,.3f}".format(e.quantidade_inicial | float).replace(",", "X").replace(".", ",").replace("X", ".") }}
+            </td>
+            <td class="text-muted small">{{ e.created_at.strftime('%d/%m/%Y %H:%M') if e.created_at }}</td>
+          </tr>
+          {% else %}
+          <tr>
+            <td colspan="5" class="text-center text-muted py-4">Nenhum registro encontrado.</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+{% endblock %}
