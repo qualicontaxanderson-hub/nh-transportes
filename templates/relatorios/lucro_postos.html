@@ -323,21 +323,11 @@ td.sec-result   { background:#f0fdf4; }
                     </tr>
                   </thead>
                   <tbody>
-                    {# ── Linha de Estoque Inicial do Período (antes do primeiro dia) ── #}
-                    <tr style="background:#dbeafe;font-weight:700;" class="text-primary">
-                      <td class="px-3 fw-bold text-nowrap">Est. Inicial do Período</td>
-                      <td class="text-end">{{ prod_diario.ei_mes | fmtnum }} L</td>
-                      <td class="text-end">R$ {{ prod_diario.ei_mes_valor | fmtmoney }}</td>
-                      <td></td>
-                      <td></td>
-                      <td class="text-end">R$ {{ prod_diario.ei_mes_custo_unit | fmtnum }}</td>
-                      <td colspan="9"></td>
-                    </tr>
                     {% for dia in prod_diario.dias %}
                     <tr>
                       <td class="px-3 fw-semibold text-nowrap">{{ dia.data.strftime('%d/%m/%Y') }}</td>
                       <td class="text-end">{{ dia.ei | fmtnum }}</td>
-                      <td class="text-end text-muted" style="font-size:.76rem;">R$ {{ dia.ei_valor | fmtmoney }}</td>
+                      <td class="text-end">R$ {{ dia.ei_valor | fmtmoney }}</td>
                       <td class="text-end sec-entrada">{{ dia.compras | fmtnum }}</td>
                       <td class="text-end sec-entrada">
                         {% if dia.custo_medio_compra %}R$ {{ dia.custo_medio_compra | fmtnum }}{% else %}<span class="text-muted">—</span>{% endif %}
@@ -351,7 +341,7 @@ td.sec-result   { background:#f0fdf4; }
                       </td>
                       <td class="text-end sec-saida">R$ {{ dia.receita | fmtmoney }}</td>
                       <td class="text-end sec-saldo">{{ dia.ef_calculado | fmtnum }}</td>
-                      <td class="text-end sec-saldo text-muted" style="font-size:.76rem;">R$ {{ dia.ef_calc_valor | fmtmoney }}</td>
+                      <td class="text-end sec-saldo">R$ {{ dia.ef_calc_valor | fmtmoney }}</td>
                       <td class="text-end sec-saldo">
                         {% if dia.ef_real is not none %}{{ dia.ef_real | fmtnum }}{% else %}<span class="text-muted">—</span>{% endif %}
                       </td>
@@ -399,12 +389,25 @@ td.sec-result   { background:#f0fdf4; }
                       </td>
                       <td></td>
                     </tr>
+                    {# ── Est. Inicial do Período ── #}
+                    <tr style="background:#dbeafe;">
+                      <td class="px-3 fw-bold text-primary">Est. Inicial do Período</td>
+                      <td class="text-end text-primary fw-bold">{{ prod_diario.ei_mes | fmtnum }} L</td>
+                      <td class="text-end text-primary">R$ {{ prod_diario.ei_mes_valor | fmtmoney }}</td>
+                      <td></td><td></td>
+                      <td class="text-end text-primary">R$ {{ prod_diario.ei_mes_custo_unit | fmtnum }}</td>
+                      <td colspan="9"></td>
+                    </tr>
+                    {# ── Est. Final do Período ── #}
                     <tr style="background:#e8f4fd;">
-                      <td class="px-3 text-primary fw-bold">Est. Final do período</td>
+                      <td class="px-3 fw-bold text-primary">Est. Final do Período</td>
+                      <td colspan="8"></td>
                       <td class="text-end text-primary fw-bold">
                         {% if prod_diario.ef_mes is not none %}{{ prod_diario.ef_mes | fmtnum }} L{% else %}<span class="text-muted">—</span>{% endif %}
                       </td>
-                      <td colspan="13"></td>
+                      <td class="text-end text-primary">R$ {{ prod_diario.ef_mes_valor | fmtmoney }}</td>
+                      <td class="text-end text-primary">R$ {{ prod_diario.ef_mes_custo_unit | fmtnum }}</td>
+                      <td colspan="3"></td>
                     </tr>
                   </tfoot>
                 </table>

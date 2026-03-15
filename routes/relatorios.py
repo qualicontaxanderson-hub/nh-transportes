@@ -950,8 +950,6 @@ def _calcular_diario_cliente(cur, cliente_id, data_inicio, data_fim, produto_ids
 
             # Valor FIFO do estoque inicial do dia
             ei_valor = sum(l['qtde'] * l['custo'] for l in layers)
-            # Custo corrido = custo do lote frontal (mais antigo) ANTES da compra
-            custo_corrido = layers[0]['custo'] if layers else 0.0
 
             # Adicionar compra do dia ao final da fila FIFO
             if compras > 0 and custo_medio_compra > 0:
@@ -959,6 +957,9 @@ def _calcular_diario_cliente(cur, cliente_id, data_inicio, data_fim, produto_ids
 
             # Consumir vendas pelo método FIFO (lotes mais antigos primeiro)
             cogs_fifo = _consumir_fifo(layers, vendas)
+
+            # Custo corrido = média ponderada FIFO do que foi vendido no dia
+            custo_corrido = cogs_fifo / vendas if vendas > 0 else 0.0
 
             ef_calculado = ei + compras - vendas
             ef_calc_valor = sum(l['qtde'] * l['custo'] for l in layers)
@@ -1006,12 +1007,20 @@ def _calcular_diario_cliente(cur, cliente_id, data_inicio, data_fim, produto_ids
                 ef_mes = dia['ef_real']
                 break
 
+        # EF FIFO: estado final das camadas após todos os dias processados
+        ef_mes_fifo_qtde = sum(l['qtde'] for l in layers)
+        ef_mes_valor = sum(l['qtde'] * l['custo'] for l in layers)
+        ef_mes_custo_unit = ef_mes_valor / ef_mes_fifo_qtde if ef_mes_fifo_qtde else 0.0
+
         resultado[pid] = {
             'nome': prod['nome'],
             'ei_mes': ei_mes,
             'ei_mes_custo_unit': ei_mes_custo_unit,
             'ei_mes_valor': ei_mes_valor,
             'ef_mes': ef_mes,
+            'ef_mes_fifo_qtde': ef_mes_fifo_qtde,
+            'ef_mes_valor': ef_mes_valor,
+            'ef_mes_custo_unit': ef_mes_custo_unit,
             'dias': dias,
         }
 
@@ -1127,6 +1136,20 @@ def lucro_postos():
                 diario_por_cliente[cid] = _calcular_diario_cliente(
                     cur, cid, data_inicio, data_fim, prod_filtro
                 )
+
+            # Sincronizar EF do resumo com os valores FIFO da tabela diária
+            for cid, daily_prods in diario_por_cliente.items():
+                if cid not in resultados_por_cliente:
+                    continue
+                for pid, pd in daily_prods.items():
+                    if pid not in resultados_por_cliente[cid]['produtos']:
+                        continue
+                    res = resultados_por_cliente[cid]['produtos'][pid]
+                    ef_q = pd.get('ef_mes_fifo_qtde', 0.0)
+                    ef_v = pd.get('ef_mes_valor', 0.0)
+                    res['estoque_final_qtde'] = ef_q
+                    res['estoque_final_valor'] = ef_v
+                    res['estoque_final_custo_unit'] = ef_v / ef_q if ef_q else 0.0
     finally:
         cur.close()
         conn.close()
