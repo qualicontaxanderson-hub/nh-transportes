@@ -401,13 +401,13 @@ td.sec-result   { background:#f0fdf4; }
                     {# ── Est. Final do Período ── #}
                     <tr style="background:#e8f4fd;">
                       <td class="px-3 fw-bold text-primary">Est. Final do Período</td>
-                      <td colspan="8"></td>
                       <td class="text-end text-primary fw-bold">
                         {% if prod_diario.ef_mes is not none %}{{ prod_diario.ef_mes | fmtnum }} L{% else %}<span class="text-muted">—</span>{% endif %}
                       </td>
                       <td class="text-end text-primary">R$ {{ prod_diario.ef_mes_valor | fmtmoney }}</td>
+                      <td></td><td></td>
                       <td class="text-end text-primary">R$ {{ prod_diario.ef_mes_custo_unit | fmtnum }}</td>
-                      <td colspan="3"></td>
+                      <td colspan="9"></td>
                     </tr>
                   </tfoot>
                 </table>
