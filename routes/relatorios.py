@@ -778,23 +778,51 @@ def _meses_no_intervalo(data_inicio, data_fim):
     return meses
 
 
+def _consumir_fifo(layers, quantidade):
+    """
+    Consome `quantidade` litros das camadas FIFO (mais antigas primeiro).
+    Modifica `layers` in-place.
+    Retorna o COGS (custo total) das unidades consumidas.
+    """
+    cogs = 0.0
+    restante = quantidade
+    while restante > 0.001 and layers:
+        camada = layers[0]
+        if camada['qtde'] <= restante + 0.001:
+            cogs += camada['qtde'] * camada['custo']
+            restante -= camada['qtde']
+            layers.pop(0)
+        else:
+            cogs += restante * camada['custo']
+            camada['qtde'] -= restante
+            restante = 0.0
+    return cogs
+
+
 def _calcular_diario_cliente(cur, cliente_id, data_inicio, data_fim, produto_ids_filtro=None):
     """
     Retorna dados dia a dia de estoque para um cliente no intervalo de datas.
+
+    Usa FIFO verdadeiro: o custo só muda quando um lote anterior é esgotado.
+    layers = fila FIFO de {'qtde': float, 'custo': float}.
+
     Resultado: {produto_id: {
         'nome': str,
-        'ei_mes': float,     # estoque inicial do primeiro dia do período
-        'ef_mes': float,     # estoque final real do último dia (inclusive após período)
+        'ei_mes': float,          # litros medidos no 1º dia do período
+        'ei_mes_custo_unit': float,# custo do lote frontal FIFO no início do período
+        'ei_mes_valor': float,     # valor FIFO total no início do período
+        'ef_mes': float,           # litros medidos no último dia com ef_real conhecido
         'dias': [{
-            'data', 'ei', 'compras', 'custo_medio_compra', 'custo_corrido',
+            'data', 'ei', 'ei_valor',
+            'compras', 'custo_medio_compra', 'custo_corrido',
             'vendas', 'preco_venda_medio', 'receita',
-            'ef_calculado', 'ef_real', 'variacao',
+            'ef_calculado', 'ef_calc_valor', 'ef_real', 'variacao',
             'lucro_diario', 'lucro_acumulado'
         }]
     }}
-    custo_corrido: média ponderada contínua que atualiza a cada compra.
-    ef_real do último dia: obtido do estoque_inicial do primeiro dia após o período.
     """
+    import calendar as _cal
+
     cur.execute("""
         SELECT DISTINCT p.id, p.nome
         FROM produto p
@@ -810,7 +838,50 @@ def _calcular_diario_cliente(cur, cliente_id, data_inicio, data_fim, produto_ids
     for prod in produtos:
         pid = prod['id']
 
-        # Vendas diárias com estoque inicial registrado no lançamento
+        # ── Inicializar camadas FIFO ao início do mês de data_inicio ─────────
+        layers = _obter_camadas_base_relatorio(
+            cur, cliente_id, pid, data_inicio.year, data_inicio.month
+        )
+        layers = [
+            {'qtde': float(l.get('qtde', 0)), 'custo': float(l.get('custo', 0))}
+            for l in layers if float(l.get('qtde', 0)) > 0
+        ]
+
+        # Se data_inicio não é o 1º do mês, avançar layers até data_inicio
+        mes_inicio = date(data_inicio.year, data_inicio.month, 1)
+        if data_inicio > mes_inicio:
+            # Compras entre 1º do mês e data_inicio (exclusive)
+            cur.execute("""
+                SELECT f.data_frete AS data,
+                       COALESCE(f.quantidade_manual, q.valor, 0) AS qtde,
+                       COALESCE(f.preco_produto_unitario, 0)     AS custo
+                FROM fretes f
+                LEFT JOIN quantidades q ON f.quantidade_id = q.id
+                WHERE f.clientes_id = %s AND f.produto_id = %s
+                  AND f.data_frete >= %s AND f.data_frete < %s
+                  AND COALESCE(f.quantidade_manual, q.valor, 0) > 0
+                ORDER BY f.data_frete
+            """, (cliente_id, pid, mes_inicio, data_inicio))
+            for row in cur.fetchall():
+                if float(row['qtde']) > 0:
+                    layers.append({'qtde': float(row['qtde']), 'custo': float(row['custo'])})
+            # Vendas entre 1º do mês e data_inicio (exclusive)
+            cur.execute("""
+                SELECT SUM(COALESCE(quantidade_litros, 0)) AS qtde
+                FROM vendas_posto
+                WHERE cliente_id = %s AND produto_id = %s
+                  AND data_movimento >= %s AND data_movimento < %s
+            """, (cliente_id, pid, mes_inicio, data_inicio))
+            row = cur.fetchone()
+            vendas_pre = float(row['qtde'] or 0) if row else 0.0
+            if vendas_pre > 0:
+                _consumir_fifo(layers, vendas_pre)
+
+        # EI do período = estado das camadas agora
+        ei_mes_custo_unit = layers[0]['custo'] if layers else 0.0
+        ei_mes_valor = sum(l['qtde'] * l['custo'] for l in layers)
+
+        # ── Vendas diárias ────────────────────────────────────────────────────
         cur.execute("""
             SELECT data_movimento AS data,
                    MAX(estoque_inicial)                   AS estoque_inicial,
@@ -828,7 +899,7 @@ def _calcular_diario_cliente(cur, cliente_id, data_inicio, data_fim, produto_ids
         """, (cliente_id, pid, data_inicio, data_fim))
         vendas_dias = {r['data']: r for r in cur.fetchall()}
 
-        # Compras diárias (fretes) com custo médio unitário do dia
+        # ── Compras diárias ───────────────────────────────────────────────────
         cur.execute("""
             SELECT f.data_frete AS data,
                    SUM(COALESCE(f.quantidade_manual, q.valor, 0)) AS compras,
@@ -847,7 +918,7 @@ def _calcular_diario_cliente(cur, cliente_id, data_inicio, data_fim, produto_ids
         """, (cliente_id, pid, data_inicio, data_fim))
         compras_dias = {r['data']: r for r in cur.fetchall()}
 
-        # ef_real do último dia: estoque_inicial do primeiro lançamento após o período
+        # ── ef_real do último dia ─────────────────────────────────────────────
         cur.execute("""
             SELECT estoque_inicial
             FROM vendas_posto
@@ -861,20 +932,6 @@ def _calcular_diario_cliente(cur, cliente_id, data_inicio, data_fim, produto_ids
             if prox and prox['estoque_inicial'] is not None
             else None
         )
-
-        # Custo corrido inicial: último preço de compra anterior ao período
-        cur.execute("""
-            SELECT COALESCE(f.preco_produto_unitario, 0) AS custo
-            FROM fretes f
-            LEFT JOIN quantidades q ON f.quantidade_id = q.id
-            WHERE f.clientes_id = %s AND f.produto_id = %s
-              AND f.data_frete < %s
-              AND COALESCE(f.quantidade_manual, q.valor, 0) > 0
-            ORDER BY f.data_frete DESC
-            LIMIT 1
-        """, (cliente_id, pid, data_inicio))
-        ult_custo = cur.fetchone()
-        custo_corrido = float(ult_custo['custo']) if ult_custo else 0.0
 
         all_dates = sorted(set(list(vendas_dias.keys()) + list(compras_dias.keys())))
 
@@ -891,21 +948,28 @@ def _calcular_diario_cliente(cur, cliente_id, data_inicio, data_fim, produto_ids
             preco_venda_medio = float(v.get('preco_venda_medio') or 0)
             custo_medio_compra = float(c.get('custo_medio_compra') or 0)
 
-            # Atualizar custo corrido pela média ponderada quando há compra no dia
+            # Valor FIFO do estoque inicial do dia
+            ei_valor = sum(l['qtde'] * l['custo'] for l in layers)
+            # Custo corrido = custo do lote frontal (mais antigo) ANTES da compra
+            custo_corrido = layers[0]['custo'] if layers else 0.0
+
+            # Adicionar compra do dia ao final da fila FIFO
             if compras > 0 and custo_medio_compra > 0:
-                total_stock = ei + compras
-                if total_stock > 0:
-                    custo_corrido = (ei * custo_corrido + compras * custo_medio_compra) / total_stock
-                else:
-                    custo_corrido = custo_medio_compra
+                layers.append({'qtde': compras, 'custo': custo_medio_compra})
+
+            # Consumir vendas pelo método FIFO (lotes mais antigos primeiro)
+            cogs_fifo = _consumir_fifo(layers, vendas)
 
             ef_calculado = ei + compras - vendas
-            lucro_diario = receita - vendas * custo_corrido
+            ef_calc_valor = sum(l['qtde'] * l['custo'] for l in layers)
+
+            lucro_diario = receita - cogs_fifo
             lucro_acumulado += lucro_diario
 
             dias.append({
                 'data': data,
                 'ei': ei,
+                'ei_valor': ei_valor,
                 'compras': compras,
                 'custo_medio_compra': custo_medio_compra,
                 'custo_corrido': custo_corrido,
@@ -913,6 +977,7 @@ def _calcular_diario_cliente(cur, cliente_id, data_inicio, data_fim, produto_ids
                 'preco_venda_medio': preco_venda_medio,
                 'receita': receita,
                 'ef_calculado': ef_calculado,
+                'ef_calc_valor': ef_calc_valor,
                 'ef_real': None,
                 'variacao': None,
                 'lucro_diario': lucro_diario,
@@ -933,7 +998,7 @@ def _calcular_diario_cliente(cur, cliente_id, data_inicio, data_fim, produto_ids
                 ef_proximo_periodo + dias[-1]['vendas'] - dias[-1]['compras'] - dias[-1]['ei']
             )
 
-        # Estoque inicial e final do período completo
+        # Estoque inicial e final do período completo (litros medidos)
         ei_mes = dias[0]['ei'] if dias else 0.0
         ef_mes = None
         for dia in reversed(dias):
@@ -944,6 +1009,8 @@ def _calcular_diario_cliente(cur, cliente_id, data_inicio, data_fim, produto_ids
         resultado[pid] = {
             'nome': prod['nome'],
             'ei_mes': ei_mes,
+            'ei_mes_custo_unit': ei_mes_custo_unit,
+            'ei_mes_valor': ei_mes_valor,
             'ef_mes': ef_mes,
             'dias': dias,
         }
