@@ -82,8 +82,17 @@ def lista():
 
     data_inicio = request.args.get('data_inicio', '')
     data_fim = request.args.get('data_fim', '')
-    cliente_id = request.args.get('cliente_id', '')
-    
+
+    # Multi-select cliente_ids (new); backward-compat with legacy single cliente_id
+    cliente_ids = [c for c in request.args.getlist('cliente_ids[]') if c]
+    if not cliente_ids:
+        _v = request.args.get('cliente_id', '').strip()
+        if _v:
+            cliente_ids = [_v]
+
+    # Multi-select produto_ids
+    produto_ids = [p for p in request.args.getlist('produto_ids[]') if p]
+
     # Se não houver filtro de data, aplicar filtro do mês atual por padrão
     if not data_inicio and not data_fim:
         hoje = date.today()
@@ -112,9 +121,15 @@ def lista():
             filters.append("f.data_frete <= %s")
             params.append(df)
 
-        if cliente_id:
-            filters.append("f.clientes_id = %s")
-            params.append(cliente_id)
+        if cliente_ids:
+            ph = ','.join(['%s'] * len(cliente_ids))
+            filters.append(f"f.clientes_id IN ({ph})")
+            params.extend(cliente_ids)
+
+        if produto_ids:
+            ph = ','.join(['%s'] * len(produto_ids))
+            filters.append(f"f.produto_id IN ({ph})")
+            params.extend(produto_ids)
 
         where_clause = ""
         if filters:
@@ -164,9 +179,13 @@ def lista():
 
         cursor.execute("SELECT id, razao_social FROM clientes ORDER BY razao_social")
         clientes = cursor.fetchall()
+
+        cursor.execute("SELECT id, nome FROM produto ORDER BY nome")
+        produtos = cursor.fetchall()
     except Exception:
         fretes = []
         clientes = []
+        produtos = []
     finally:
         try:
             cursor.close()
@@ -178,9 +197,11 @@ def lista():
         'fretes/lista.html',
         fretes=fretes,
         clientes=clientes,
+        produtos=produtos,
         data_inicio=data_inicio,
         data_fim=data_fim,
-        cliente_id=cliente_id
+        cliente_ids=cliente_ids,
+        produto_ids=produto_ids,
     )
 
 

@@ -19,35 +19,77 @@
 
   <!-- Card de Filtros -->
   <div class="card mb-4">
-    <div class="card-header" style="background:#151515;color:white">
+    <div class="card-header" style="background:#1D63A5;color:white">
       <h6 class="mb-0"><i class="bi bi-funnel"></i> Filtros</h6>
     </div>
     <div class="card-body">
-      <form method="get" action="{{ url_for('fretes.lista') }}" class="row g-3 align-items-end">
-        <div class="col-md-3">
-          <label class="form-label">Data Início</label>
-          <input type="date" name="data_inicio" class="form-control" value="{{ data_inicio or '' }}">
-        </div>
-        <div class="col-md-3">
-          <label class="form-label">Data Fim</label>
-          <input type="date" name="data_fim" class="form-control" value="{{ data_fim or '' }}">
-        </div>
-        <div class="col-md-4">
-          <label class="form-label">Cliente</label>
-          <select name="cliente_id" class="form-select">
-            <option value="">Todos os clientes</option>
-            {% for cliente in clientes %}
-            <option value="{{ cliente.id }}" {% if cliente_id == cliente.id|string %}selected{% endif %}>
-                {{ cliente.razao_social }}
-            </option>
-            {% endfor %}
-          </select>
-        </div>
-        <div class="col-md-2 text-end">
-          <button type="submit" class="btn btn-primary">
-            <i class="bi bi-search"></i> Filtrar
-          </button>
-          <a class="btn btn-secondary" href="{{ url_for('fretes.lista') }}">Limpar</a>
+      <form method="get" action="{{ url_for('fretes.lista') }}" id="frm-filtros-fretes">
+        <div class="row g-3 align-items-start">
+          <!-- Empresa (multi-select) -->
+          <div class="col-md-3">
+            <label class="form-label form-label-sm mb-1">
+              Empresa <small class="text-muted">(Ctrl+clique p/ múltiplas)</small>
+            </label>
+            <select name="cliente_ids[]" id="selEmpresasFretes"
+                    class="form-select form-select-sm" multiple size="4">
+              {% for c in clientes %}
+              <option value="{{ c.id }}"
+                {% if c.id|string in (cliente_ids or []) %}selected{% endif %}>
+                {{ c.razao_social }}
+              </option>
+              {% endfor %}
+            </select>
+          </div>
+          <!-- Produto (multi-select) -->
+          <div class="col-md-3">
+            <label class="form-label form-label-sm mb-1">
+              Produto <small class="text-muted">(Ctrl+clique p/ múltiplos)</small>
+            </label>
+            <select name="produto_ids[]" id="selProdutosFretes"
+                    class="form-select form-select-sm" multiple size="4">
+              {% for p in produtos %}
+              <option value="{{ p.id }}"
+                {% if p.id|string in (produto_ids or []) %}selected{% endif %}>
+                {{ p.nome }}
+              </option>
+              {% endfor %}
+            </select>
+          </div>
+          <!-- Datas -->
+          <div class="col-md-4">
+            <div class="row g-2">
+              <div class="col-6">
+                <label class="form-label form-label-sm mb-1">Data Início</label>
+                <input type="date" name="data_inicio" id="frtDtInicio"
+                       class="form-control form-control-sm"
+                       value="{{ data_inicio or '' }}">
+              </div>
+              <div class="col-6">
+                <label class="form-label form-label-sm mb-1">Data Fim</label>
+                <input type="date" name="data_fim" id="frtDtFim"
+                       class="form-control form-control-sm"
+                       value="{{ data_fim or '' }}">
+              </div>
+              <div class="col-12">
+                <small class="text-muted me-1">Período:</small>
+                <button type="button" class="btn btn-outline-secondary btn-xs py-0 px-1"
+                        onclick="setFretePeriodo('mes_atual')">Este mês</button>
+                <button type="button" class="btn btn-outline-secondary btn-xs py-0 px-1"
+                        onclick="setFretePeriodo('mes_anterior')">Mês anterior</button>
+                <button type="button" class="btn btn-outline-secondary btn-xs py-0 px-1"
+                        onclick="setFretePeriodo('ano_atual')">Este ano</button>
+              </div>
+            </div>
+          </div>
+          <!-- Botões -->
+          <div class="col-md-2 d-flex flex-column gap-2 justify-content-end">
+            <button type="submit" class="btn btn-primary btn-sm">
+              <i class="bi bi-search"></i> Filtrar
+            </button>
+            <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('fretes.lista') }}">
+              <i class="bi bi-x"></i> Limpar
+            </a>
+          </div>
         </div>
       </form>
     </div>
@@ -507,6 +549,25 @@ document.addEventListener('DOMContentLoaded', function () {
     if(ev.target === modal) closeModal(modal);
     if(ev.target === quitarModal) closeModal(quitarModal);
   });
+
+  // ── Atalhos de período para filtro de datas ────────────────────────────────
+  function setFretePeriodo(tipo) {
+    const hoje = new Date();
+    let ini, fim;
+    if (tipo === 'mes_atual') {
+      ini = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
+      fim = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0);
+    } else if (tipo === 'mes_anterior') {
+      ini = new Date(hoje.getFullYear(), hoje.getMonth() - 1, 1);
+      fim = new Date(hoje.getFullYear(), hoje.getMonth(), 0);
+    } else if (tipo === 'ano_atual') {
+      ini = new Date(hoje.getFullYear(), 0, 1);
+      fim = new Date(hoje.getFullYear(), 11, 31);
+    }
+    const fmt = d => d.toISOString().slice(0, 10);
+    document.getElementById('frtDtInicio').value = fmt(ini);
+    document.getElementById('frtDtFim').value = fmt(fim);
+  }
 
 });
 </script>
