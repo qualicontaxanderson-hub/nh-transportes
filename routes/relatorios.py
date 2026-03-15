@@ -1137,7 +1137,9 @@ def lucro_postos():
                     cur, cid, data_inicio, data_fim, prod_filtro
                 )
 
-            # Sincronizar EF do resumo com os valores FIFO da tabela diária
+            # Sincronizar EF do resumo com os valores da tabela diária
+            # Qtde: usa ef_mes (estoque real medido = ei do dia seguinte), igual ao tfoot da tabela detalhada
+            # Valor/Custo: usa cálculo FIFO das camadas restantes
             for cid, daily_prods in diario_por_cliente.items():
                 if cid not in resultados_por_cliente:
                     continue
@@ -1145,8 +1147,9 @@ def lucro_postos():
                     if pid not in resultados_por_cliente[cid]['produtos']:
                         continue
                     res = resultados_por_cliente[cid]['produtos'][pid]
-                    ef_q = pd.get('ef_mes_fifo_qtde', 0.0)
                     ef_v = pd.get('ef_mes_valor', 0.0)
+                    # Preferir quantidade real medida; cair para FIFO se não disponível
+                    ef_q = pd.get('ef_mes') if pd.get('ef_mes') is not None else pd.get('ef_mes_fifo_qtde', 0.0)
                     res['estoque_final_qtde'] = ef_q
                     res['estoque_final_valor'] = ef_v
                     res['estoque_final_custo_unit'] = ef_v / ef_q if ef_q else 0.0
