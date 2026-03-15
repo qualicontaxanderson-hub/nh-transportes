@@ -690,6 +690,10 @@ def _calcular_resultado_cliente(cur, cliente_id, ano_mes, data_inicio, data_fim,
             cogs = float(row['cogs_fifo'] or 0)
             estoque_qtde = float(row['estoque_final_qtde'] or 0)
             estoque_valor = float(row['estoque_final_valor'] or 0)
+            # EI: camadas FIFO no início do mês
+            camadas_ei = _obter_camadas_base_relatorio(cur, cliente_id, pid, ano, mes)
+            ei_qtde = sum(float(l.get('qtde', 0)) for l in camadas_ei)
+            ei_valor = sum(float(l.get('qtde', 0)) * float(l.get('custo', 0)) for l in camadas_ei)
             resultados[pid] = {
                 'qtde_entrada': qtde_entrada,
                 'custo_entrada_total': float(row['custo_entrada_total'] or 0),
@@ -699,6 +703,9 @@ def _calcular_resultado_cliente(cur, cliente_id, ano_mes, data_inicio, data_fim,
                 'preco_medio_saida': receita / qtde_saida if qtde_saida else 0.0,
                 'cogs': cogs,
                 'lucro': float(row['lucro_bruto'] or 0),
+                'estoque_inicial_qtde': ei_qtde,
+                'estoque_inicial_valor': ei_valor,
+                'estoque_inicial_custo_unit': ei_valor / ei_qtde if ei_qtde else 0.0,
                 'estoque_final_qtde': estoque_qtde,
                 'estoque_final_valor': estoque_valor,
                 'estoque_final_custo_unit': estoque_valor / estoque_qtde if estoque_qtde else 0.0,
@@ -709,6 +716,10 @@ def _calcular_resultado_cliente(cur, cliente_id, ano_mes, data_inicio, data_fim,
         for prod in produtos:
             pid = prod['id']
             camadas_base = _obter_camadas_base_relatorio(cur, cliente_id, pid, ano, mes)
+
+            # EI: peso das camadas FIFO no início do mês
+            ei_qtde = sum(float(l.get('qtde', 0)) for l in camadas_base)
+            ei_valor = sum(float(l.get('qtde', 0)) * float(l.get('custo', 0)) for l in camadas_base)
 
             cur.execute("""
                 SELECT f.data_frete AS data,
@@ -738,6 +749,9 @@ def _calcular_resultado_cliente(cur, cliente_id, ano_mes, data_inicio, data_fim,
             vendas = cur.fetchall()
 
             resultado, _ = _calcular_fifo_relatorio(camadas_base, compras, vendas)
+            resultado['estoque_inicial_qtde'] = ei_qtde
+            resultado['estoque_inicial_valor'] = ei_valor
+            resultado['estoque_inicial_custo_unit'] = ei_valor / ei_qtde if ei_qtde else 0.0
             resultado['status'] = 'ABERTO'
             resultados[pid] = resultado
 
@@ -769,17 +783,17 @@ def _calcular_diario_cliente(cur, cliente_id, data_inicio, data_fim, produto_ids
     Retorna dados dia a dia de estoque para um cliente no intervalo de datas.
     Resultado: {produto_id: {
         'nome': str,
-        'ei_mes': float,   # estoque inicial do primeiro dia do período
-        'ef_mes': float,   # estoque final real do último dia com ef_real conhecido
+        'ei_mes': float,     # estoque inicial do primeiro dia do período
+        'ef_mes': float,     # estoque final real do último dia (inclusive após período)
         'dias': [{
-            'data', 'ei', 'compras', 'custo_medio_compra',
+            'data', 'ei', 'compras', 'custo_medio_compra', 'custo_corrido',
             'vendas', 'preco_venda_medio', 'receita',
-            'ef_calculado', 'ef_real', 'variacao'
+            'ef_calculado', 'ef_real', 'variacao',
+            'lucro_diario', 'lucro_acumulado'
         }]
     }}
-    Fórmula variação: ef_real + vendas - compras - ei
-      (equivalente a: ef_real - (ei + compras - vendas))
-      Positivo = sobra; Negativo = perda.
+    custo_corrido: média ponderada contínua que atualiza a cada compra.
+    ef_real do último dia: obtido do estoque_inicial do primeiro dia após o período.
     """
     cur.execute("""
         SELECT DISTINCT p.id, p.nome
@@ -833,9 +847,39 @@ def _calcular_diario_cliente(cur, cliente_id, data_inicio, data_fim, produto_ids
         """, (cliente_id, pid, data_inicio, data_fim))
         compras_dias = {r['data']: r for r in cur.fetchall()}
 
+        # ef_real do último dia: estoque_inicial do primeiro lançamento após o período
+        cur.execute("""
+            SELECT estoque_inicial
+            FROM vendas_posto
+            WHERE cliente_id = %s AND produto_id = %s AND data_movimento > %s
+            ORDER BY data_movimento ASC
+            LIMIT 1
+        """, (cliente_id, pid, data_fim))
+        prox = cur.fetchone()
+        ef_proximo_periodo = (
+            float(prox['estoque_inicial'])
+            if prox and prox['estoque_inicial'] is not None
+            else None
+        )
+
+        # Custo corrido inicial: último preço de compra anterior ao período
+        cur.execute("""
+            SELECT COALESCE(f.preco_produto_unitario, 0) AS custo
+            FROM fretes f
+            LEFT JOIN quantidades q ON f.quantidade_id = q.id
+            WHERE f.clientes_id = %s AND f.produto_id = %s
+              AND f.data_frete < %s
+              AND COALESCE(f.quantidade_manual, q.valor, 0) > 0
+            ORDER BY f.data_frete DESC
+            LIMIT 1
+        """, (cliente_id, pid, data_inicio))
+        ult_custo = cur.fetchone()
+        custo_corrido = float(ult_custo['custo']) if ult_custo else 0.0
+
         all_dates = sorted(set(list(vendas_dias.keys()) + list(compras_dias.keys())))
 
         dias = []
+        lucro_acumulado = 0.0
         for data in all_dates:
             v = vendas_dias.get(data, {})
             c = compras_dias.get(data, {})
@@ -847,29 +891,47 @@ def _calcular_diario_cliente(cur, cliente_id, data_inicio, data_fim, produto_ids
             preco_venda_medio = float(v.get('preco_venda_medio') or 0)
             custo_medio_compra = float(c.get('custo_medio_compra') or 0)
 
+            # Atualizar custo corrido pela média ponderada quando há compra no dia
+            if compras > 0 and custo_medio_compra > 0:
+                total_stock = ei + compras
+                if total_stock > 0:
+                    custo_corrido = (ei * custo_corrido + compras * custo_medio_compra) / total_stock
+                else:
+                    custo_corrido = custo_medio_compra
+
             ef_calculado = ei + compras - vendas
+            lucro_diario = receita - vendas * custo_corrido
+            lucro_acumulado += lucro_diario
 
             dias.append({
                 'data': data,
                 'ei': ei,
                 'compras': compras,
                 'custo_medio_compra': custo_medio_compra,
+                'custo_corrido': custo_corrido,
                 'vendas': vendas,
                 'preco_venda_medio': preco_venda_medio,
                 'receita': receita,
                 'ef_calculado': ef_calculado,
                 'ef_real': None,
                 'variacao': None,
+                'lucro_diario': lucro_diario,
+                'lucro_acumulado': lucro_acumulado,
             })
 
-        # ef_real = estoque_inicial do dia seguinte; variação = ef_real + vendas - compras - ei
+        # ef_real = estoque_inicial do dia seguinte dentro do período
         for i, dia in enumerate(dias):
             if i + 1 < len(dias):
                 ef_real = dias[i + 1]['ei']
                 dia['ef_real'] = ef_real
-                if dia['ei'] is not None:
-                    dia['variacao'] = ef_real + dia['vendas'] - dia['compras'] - dia['ei']
-            # último dia: ef_real permanece None
+                dia['variacao'] = ef_real + dia['vendas'] - dia['compras'] - dia['ei']
+
+        # ef_real do último dia = estoque_inicial do primeiro dia após o período
+        if dias and ef_proximo_periodo is not None:
+            dias[-1]['ef_real'] = ef_proximo_periodo
+            dias[-1]['variacao'] = (
+                ef_proximo_periodo + dias[-1]['vendas'] - dias[-1]['compras'] - dias[-1]['ei']
+            )
 
         # Estoque inicial e final do período completo
         ei_mes = dias[0]['ei'] if dias else 0.0
@@ -978,9 +1040,12 @@ def lucro_postos():
                     qs = dados.get('qtde_saida', 0.0)
                     eq = dados.get('estoque_final_qtde', 0.0)
                     ev = dados.get('estoque_final_valor', 0.0)
+                    ei_q = dados.get('estoque_inicial_qtde', 0.0)
+                    ei_v = dados.get('estoque_inicial_valor', 0.0)
                     dados['custo_entrada_unit'] = dados['custo_entrada_total'] / qe if qe else 0.0
                     dados['preco_medio_saida'] = dados['receita_saida'] / qs if qs else 0.0
                     dados['estoque_final_custo_unit'] = ev / eq if eq else 0.0
+                    dados['estoque_inicial_custo_unit'] = ei_v / ei_q if ei_q else 0.0
                     dados['status'] = 'ABERTO' if dados.pop('_meses_aberto', 0) > 0 else 'FECHADO'
 
                 if res_total:
@@ -1009,16 +1074,19 @@ def lucro_postos():
                     'qtde_entrada': 0.0, 'custo_entrada_total': 0.0,
                     'qtde_saida': 0.0, 'receita_saida': 0.0,
                     'cogs': 0.0, 'lucro': 0.0,
+                    'estoque_inicial_qtde': 0.0, 'estoque_inicial_valor': 0.0,
                     'estoque_final_qtde': 0.0, 'estoque_final_valor': 0.0,
                 }
             for campo in ('qtde_entrada', 'custo_entrada_total', 'qtde_saida',
                           'receita_saida', 'cogs', 'lucro',
+                          'estoque_inicial_qtde', 'estoque_inicial_valor',
                           'estoque_final_qtde', 'estoque_final_valor'):
                 consolidado[pid][campo] += res.get(campo, 0.0)
 
     for pid, c in consolidado.items():
         c['custo_entrada_unit'] = c['custo_entrada_total'] / c['qtde_entrada'] if c['qtde_entrada'] else 0.0
         c['preco_medio_saida'] = c['receita_saida'] / c['qtde_saida'] if c['qtde_saida'] else 0.0
+        c['estoque_inicial_custo_unit'] = c['estoque_inicial_valor'] / c['estoque_inicial_qtde'] if c['estoque_inicial_qtde'] else 0.0
         c['estoque_final_custo_unit'] = c['estoque_final_valor'] / c['estoque_final_qtde'] if c['estoque_final_qtde'] else 0.0
 
     exportar = request.args.get('exportar')
