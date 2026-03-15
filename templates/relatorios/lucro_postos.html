@@ -297,7 +297,9 @@
                       <th class="px-3">Data</th>
                       <th class="text-end">Est. Inicial (L)</th>
                       <th class="text-end sec-entrada">Compras (L)</th>
+                      <th class="text-end sec-entrada">Prc Custo</th>
                       <th class="text-end sec-saida">Vendas (L)</th>
+                      <th class="text-end sec-saida">Prc Venda</th>
                       <th class="text-end sec-saida">Receita</th>
                       <th class="text-end sec-saldo">Est. Final Calc. (L)</th>
                       <th class="text-end sec-saldo">Est. Final Real (L)</th>
@@ -310,7 +312,13 @@
                       <td class="px-3 fw-semibold text-nowrap">{{ dia.data.strftime('%d/%m/%Y') }}</td>
                       <td class="text-end">{{ dia.ei | fmtnum }}</td>
                       <td class="text-end sec-entrada">{{ dia.compras | fmtnum }}</td>
+                      <td class="text-end sec-entrada">
+                        {% if dia.custo_medio_compra %}R$ {{ dia.custo_medio_compra | fmtmoney }}{% else %}<span class="text-muted">—</span>{% endif %}
+                      </td>
                       <td class="text-end sec-saida">{{ dia.vendas | fmtnum }}</td>
+                      <td class="text-end sec-saida">
+                        {% if dia.preco_venda_medio %}R$ {{ dia.preco_venda_medio | fmtmoney }}{% else %}<span class="text-muted">—</span>{% endif %}
+                      </td>
                       <td class="text-end sec-saida">R$ {{ dia.receita | fmtmoney }}</td>
                       <td class="text-end sec-saldo">{{ dia.ef_calculado | fmtnum }}</td>
                       <td class="text-end sec-saldo">
@@ -319,7 +327,7 @@
                       <td class="text-end sec-result">
                         {% if dia.variacao is not none %}
                           <span class="{% if dia.variacao >= -0.001 %}variacao-ok{% else %}variacao-mal{% endif %}">
-                            {% if dia.variacao >= 0 %}+{% endif %}{{ dia.variacao | fmtnum }}
+                            {% if dia.variacao >= 0 %}+{% endif %}{{ dia.variacao | fmtmoney }}
                           </span>
                         {% else %}
                           <span class="text-muted">—</span>
@@ -330,10 +338,12 @@
                   </tbody>
                   <tfoot style="background:#f0f4f8;font-weight:700;">
                     <tr>
-                      <td class="px-3">Total</td>
+                      <td class="px-3">Total do período</td>
                       <td></td>
                       <td class="text-end sec-entrada">{{ prod_diario.dias | sum(attribute='compras') | fmtnum }}</td>
+                      <td></td>
                       <td class="text-end sec-saida">{{ prod_diario.dias | sum(attribute='vendas') | fmtnum }}</td>
+                      <td></td>
                       <td class="text-end sec-saida">
                         R$ {{ prod_diario.dias | sum(attribute='receita') | fmtmoney }}
                       </td>
@@ -343,10 +353,22 @@
                         {% for dia in prod_diario.dias %}{% if dia.variacao is not none %}{% set total_var.v = total_var.v + dia.variacao %}{% set total_var.has = total_var.has + 1 %}{% endif %}{% endfor %}
                         {% if total_var.has > 0 %}
                           <span class="{% if total_var.v >= -0.001 %}variacao-ok{% else %}variacao-mal{% endif %}">
-                            {% if total_var.v >= 0 %}+{% endif %}{{ total_var.v | fmtnum }}
+                            {% if total_var.v >= 0 %}+{% endif %}{{ total_var.v | fmtmoney }}
                           </span>
                         {% else %}<span class="text-muted">—</span>{% endif %}
                       </td>
+                    </tr>
+                    <tr style="background:#e8f4fd;">
+                      <td class="px-3 text-primary fw-bold">Est. Inicial do período</td>
+                      <td class="text-end text-primary fw-bold">{{ prod_diario.ei_mes | fmtnum }} L</td>
+                      <td colspan="8"></td>
+                    </tr>
+                    <tr style="background:#e8f4fd;">
+                      <td class="px-3 text-primary fw-bold">Est. Final do período</td>
+                      <td class="text-end text-primary fw-bold">
+                        {% if prod_diario.ef_mes is not none %}{{ prod_diario.ef_mes | fmtnum }} L{% else %}<span class="text-muted">—</span>{% endif %}
+                      </td>
+                      <td colspan="8"></td>
                     </tr>
                   </tfoot>
                 </table>

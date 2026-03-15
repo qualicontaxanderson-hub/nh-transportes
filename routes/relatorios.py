@@ -767,8 +767,16 @@ def _meses_no_intervalo(data_inicio, data_fim):
 def _calcular_diario_cliente(cur, cliente_id, data_inicio, data_fim, produto_ids_filtro=None):
     """
     Retorna dados dia a dia de estoque para um cliente no intervalo de datas.
-    Resultado: {produto_id: {'nome': str, 'dias': [{'data', 'ei', 'compras', 'vendas',
-                'ef_calculado', 'ef_real', 'variacao', 'receita', 'preco_medio'}]}}
+    Resultado: {produto_id: {
+        'nome': str,
+        'ei_mes': float,   # estoque inicial do primeiro dia do período
+        'ef_mes': float,   # estoque final real do último dia com ef_real conhecido
+        'dias': [{
+            'data', 'ei', 'compras', 'custo_medio_compra',
+            'vendas', 'preco_venda_medio', 'receita',
+            'ef_calculado', 'ef_real', 'variacao'
+        }]
+    }}
     Fórmula variação: ef_real + vendas - compras - ei
       (equivalente a: ef_real - (ei + compras - vendas))
       Positivo = sobra; Negativo = perda.
@@ -791,10 +799,12 @@ def _calcular_diario_cliente(cur, cliente_id, data_inicio, data_fim, produto_ids
         # Vendas diárias com estoque inicial registrado no lançamento
         cur.execute("""
             SELECT data_movimento AS data,
-                   MAX(estoque_inicial) AS estoque_inicial,
-                   SUM(COALESCE(quantidade_litros, 0)) AS vendas,
-                   SUM(COALESCE(valor_total, 0))       AS receita,
-                   AVG(COALESCE(preco_medio, 0))        AS preco_medio
+                   MAX(estoque_inicial)                   AS estoque_inicial,
+                   SUM(COALESCE(quantidade_litros, 0))    AS vendas,
+                   SUM(COALESCE(valor_total, 0))          AS receita,
+                   CASE WHEN SUM(COALESCE(quantidade_litros, 0)) > 0
+                        THEN SUM(COALESCE(valor_total, 0)) / SUM(COALESCE(quantidade_litros, 0))
+                        ELSE 0 END                        AS preco_venda_medio
             FROM vendas_posto
             WHERE cliente_id = %s
               AND produto_id = %s
@@ -804,10 +814,15 @@ def _calcular_diario_cliente(cur, cliente_id, data_inicio, data_fim, produto_ids
         """, (cliente_id, pid, data_inicio, data_fim))
         vendas_dias = {r['data']: r for r in cur.fetchall()}
 
-        # Compras diárias (fretes)
+        # Compras diárias (fretes) com custo médio unitário do dia
         cur.execute("""
             SELECT f.data_frete AS data,
-                   SUM(COALESCE(f.quantidade_manual, q.valor, 0)) AS compras
+                   SUM(COALESCE(f.quantidade_manual, q.valor, 0)) AS compras,
+                   CASE WHEN SUM(COALESCE(f.quantidade_manual, q.valor, 0)) > 0
+                        THEN SUM(COALESCE(f.quantidade_manual, q.valor, 0) *
+                                 COALESCE(f.preco_produto_unitario, 0))
+                             / SUM(COALESCE(f.quantidade_manual, q.valor, 0))
+                        ELSE 0 END AS custo_medio_compra
             FROM fretes f
             LEFT JOIN quantidades q ON f.quantidade_id = q.id
             WHERE f.clientes_id = %s
@@ -829,7 +844,8 @@ def _calcular_diario_cliente(cur, cliente_id, data_inicio, data_fim, produto_ids
             vendas = float(v.get('vendas') or 0)
             compras = float(c.get('compras') or 0)
             receita = float(v.get('receita') or 0)
-            preco_medio = float(v.get('preco_medio') or 0)
+            preco_venda_medio = float(v.get('preco_venda_medio') or 0)
+            custo_medio_compra = float(c.get('custo_medio_compra') or 0)
 
             ef_calculado = ei + compras - vendas
 
@@ -837,9 +853,10 @@ def _calcular_diario_cliente(cur, cliente_id, data_inicio, data_fim, produto_ids
                 'data': data,
                 'ei': ei,
                 'compras': compras,
+                'custo_medio_compra': custo_medio_compra,
                 'vendas': vendas,
+                'preco_venda_medio': preco_venda_medio,
                 'receita': receita,
-                'preco_medio': preco_medio,
                 'ef_calculado': ef_calculado,
                 'ef_real': None,
                 'variacao': None,
@@ -854,7 +871,20 @@ def _calcular_diario_cliente(cur, cliente_id, data_inicio, data_fim, produto_ids
                     dia['variacao'] = ef_real + dia['vendas'] - dia['compras'] - dia['ei']
             # último dia: ef_real permanece None
 
-        resultado[pid] = {'nome': prod['nome'], 'dias': dias}
+        # Estoque inicial e final do período completo
+        ei_mes = dias[0]['ei'] if dias else 0.0
+        ef_mes = None
+        for dia in reversed(dias):
+            if dia['ef_real'] is not None:
+                ef_mes = dia['ef_real']
+                break
+
+        resultado[pid] = {
+            'nome': prod['nome'],
+            'ei_mes': ei_mes,
+            'ef_mes': ef_mes,
+            'dias': dias,
+        }
 
     return resultado
 
