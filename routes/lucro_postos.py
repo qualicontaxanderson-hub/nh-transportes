@@ -191,7 +191,8 @@ def index():
                    fa.custo_unitario,
                    fa.criado_em AS created_at,
                    c.razao_social AS cliente_nome, c.nome_fantasia,
-                   p.nome AS produto_nome
+                   p.nome AS produto_nome,
+                   'fifo' AS tipo
             FROM fifo_abertura fa
             INNER JOIN clientes c ON c.id = fa.cliente_id
             INNER JOIN produto p ON p.id = fa.produto_id
@@ -204,7 +205,8 @@ def index():
                    NULL AS custo_unitario,
                    eig.created_at,
                    c.razao_social AS cliente_nome, c.nome_fantasia,
-                   p.nome AS produto_nome
+                   p.nome AS produto_nome,
+                   'global' AS tipo
             FROM estoque_inicial_global eig
             INNER JOIN clientes c ON c.id = eig.cliente_id
             INNER JOIN produto p ON p.id = eig.produto_id
@@ -222,6 +224,8 @@ def index():
                     e['created_at'] = utc_dt.astimezone(_BRASILIA)
                 except Exception:
                     pass  # mantém o valor original em caso de erro inesperado
+
+        clientes_posto = _clientes_posto()
     finally:
         cur.close()
         conn.close()
@@ -229,6 +233,7 @@ def index():
     return render_template(
         'lucro_postos/index.html',
         entradas=entradas,
+        clientes_posto=clientes_posto,
     )
 
 
