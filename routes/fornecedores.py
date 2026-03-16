@@ -14,7 +14,7 @@ _tables_ready = False
 
 
 def _ensure_tables():
-    """Garante que a tabela fornecedor_empresas existe. Idempotente."""
+    """Garante que a tabela fornecedor_empresas existe e que a coluna cep existe. Idempotente."""
     global _tables_ready
     if _tables_ready:
         return
@@ -33,6 +33,17 @@ def _ensure_tables():
                     REFERENCES clientes(id) ON DELETE CASCADE
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
         """)
+        # Add cep column to fornecedores if it doesn't exist yet
+        cursor.execute("""
+            SELECT COUNT(*) FROM information_schema.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE()
+              AND TABLE_NAME = 'fornecedores'
+              AND COLUMN_NAME = 'cep'
+        """)
+        if cursor.fetchone()[0] == 0:
+            cursor.execute(
+                "ALTER TABLE fornecedores ADD COLUMN cep VARCHAR(10) NULL AFTER bairro"
+            )
         conn.commit()
         cursor.close()
         _tables_ready = True
