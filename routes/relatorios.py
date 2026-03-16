@@ -999,6 +999,17 @@ def _calcular_diario_cliente(cur, cliente_id, data_inicio, data_fim, produto_ids
                 ef_proximo_periodo + dias[-1]['vendas'] - dias[-1]['compras'] - dias[-1]['ei']
             )
 
+        # Dia da semana (PT-BR) e variação acumulada
+        _DIAS_PT = ['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom']
+        var_acum = 0.0
+        has_var = False
+        for dia in dias:
+            dia['dia_semana'] = _DIAS_PT[dia['data'].weekday()]
+            if dia['variacao'] is not None:
+                var_acum += dia['variacao']
+                has_var = True
+            dia['variacao_acumulada'] = var_acum if has_var else None
+
         # Estoque inicial e final do período completo (litros medidos)
         ei_mes = dias[0]['ei'] if dias else 0.0
         ef_mes = None

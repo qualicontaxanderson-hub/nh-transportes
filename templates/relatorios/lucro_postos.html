@@ -318,6 +318,7 @@ td.sec-result   { background:#f0fdf4; }
                       <th class="text-end sec-saldo">EF Calc. R$</th>
                       <th class="text-end sec-saldo">EF Real (L)</th>
                       <th class="text-end sec-result">Variação (L)</th>
+                      <th class="text-end sec-result">Var. Acum. (L)</th>
                       <th class="text-end sec-result">Lucro Diário</th>
                       <th class="text-end sec-result">Lucro Acum.</th>
                     </tr>
@@ -325,7 +326,7 @@ td.sec-result   { background:#f0fdf4; }
                   <tbody>
                     {% for dia in prod_diario.dias %}
                     <tr>
-                      <td class="px-3 fw-semibold text-nowrap">{{ dia.data.strftime('%d/%m/%Y') }}</td>
+                      <td class="px-3 fw-semibold text-nowrap">{{ dia.data.strftime('%d/%m/%Y') }} <span class="text-muted fw-normal" style="font-size:.75em;">{{ dia.dia_semana }}</span></td>
                       <td class="text-end">{{ dia.ei | fmtnum }}</td>
                       <td class="text-end">R$ {{ dia.ei_valor | fmtmoney }}</td>
                       <td class="text-end sec-entrada">{{ dia.compras | fmtnum }}</td>
@@ -349,6 +350,15 @@ td.sec-result   { background:#f0fdf4; }
                         {% if dia.variacao is not none %}
                           <span class="{% if dia.variacao >= -0.001 %}variacao-ok{% else %}variacao-mal{% endif %}">
                             {% if dia.variacao >= 0 %}+{% endif %}{{ dia.variacao | fmtmoney }}
+                          </span>
+                        {% else %}
+                          <span class="text-muted">—</span>
+                        {% endif %}
+                      </td>
+                      <td class="text-end sec-result">
+                        {% if dia.variacao_acumulada is not none %}
+                          <span class="{% if dia.variacao_acumulada >= -0.001 %}variacao-ok{% else %}variacao-mal{% endif %}" style="font-weight:600;">
+                            {% if dia.variacao_acumulada >= 0 %}+{% endif %}{{ dia.variacao_acumulada | fmtmoney }}
                           </span>
                         {% else %}
                           <span class="text-muted">—</span>
@@ -384,6 +394,7 @@ td.sec-result   { background:#f0fdf4; }
                           </span>
                         {% else %}<span class="text-muted">—</span>{% endif %}
                       </td>
+                      <td></td>
                       <td class="text-end sec-result fw-bold {% if prod_diario.dias | sum(attribute='lucro_diario') >= 0 %}text-success{% else %}text-danger{% endif %}">
                         R$ {{ prod_diario.dias | sum(attribute='lucro_diario') | fmtmoney }}
                       </td>
@@ -396,7 +407,7 @@ td.sec-result   { background:#f0fdf4; }
                       <td class="text-end text-primary">R$ {{ prod_diario.ei_mes_valor | fmtmoney }}</td>
                       <td></td><td></td>
                       <td class="text-end text-primary">R$ {{ prod_diario.ei_mes_custo_unit | fmtnum }}</td>
-                      <td colspan="9"></td>
+                      <td colspan="10"></td>
                     </tr>
                     {# ── Est. Final do Período ── #}
                     <tr style="background:#e8f4fd;">
@@ -407,7 +418,7 @@ td.sec-result   { background:#f0fdf4; }
                       <td class="text-end text-primary">R$ {{ prod_diario.ef_mes_valor | fmtmoney }}</td>
                       <td></td><td></td>
                       <td class="text-end text-primary">R$ {{ prod_diario.ef_mes_custo_unit | fmtnum }}</td>
-                      <td colspan="9"></td>
+                      <td colspan="10"></td>
                     </tr>
                   </tfoot>
                 </table>
