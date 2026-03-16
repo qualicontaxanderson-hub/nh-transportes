@@ -124,17 +124,61 @@ def api_cnpj_lookup(cnpj):
 @login_required
 def lista():
     _ensure_tables()
+    cliente_id = request.args.get('cliente_id', '').strip()
     try:
         conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)
+
+        # Fornecedores list
         cursor.execute("SELECT * FROM fornecedores ORDER BY razao_social")
         fornecedores = cursor.fetchall()
+
+        # Companies with active products for the filter dropdown
+        cursor.execute(
+            """SELECT DISTINCT c.id,
+                      COALESCE(c.nome_fantasia, c.razao_social) AS nome
+                 FROM clientes c
+                 INNER JOIN cliente_produtos cp ON cp.cliente_id = c.id AND cp.ativo = 1
+                ORDER BY nome"""
+        )
+        empresas = cursor.fetchall()
+
+        # Report: fornecedores + contas contábeis for the selected company
+        relatorio = []
+        empresa_selecionada = None
+        if cliente_id:
+            cursor.execute(
+                """SELECT f.id, f.razao_social, f.nome_fantasia, f.cnpj,
+                          pcc.codigo AS conta_codigo, pcc.nome AS conta_nome
+                     FROM fornecedor_empresas fe
+                     JOIN fornecedores f ON f.id = fe.fornecedor_id
+                     LEFT JOIN plano_contas_contas pcc ON pcc.id = fe.conta_contabil_id
+                    WHERE fe.cliente_id = %s
+                    ORDER BY f.razao_social""",
+                (int(cliente_id),)
+            )
+            relatorio = cursor.fetchall()
+            for emp in empresas:
+                if str(emp['id']) == cliente_id:
+                    empresa_selecionada = emp
+                    break
+
         cursor.close()
         conn.close()
-        return render_template('fornecedores/lista.html', fornecedores=fornecedores)
+        return render_template('fornecedores/lista.html',
+                               fornecedores=fornecedores,
+                               empresas=empresas,
+                               relatorio=relatorio,
+                               cliente_id=cliente_id,
+                               empresa_selecionada=empresa_selecionada)
     except Exception as e:
         flash(f'Erro ao carregar fornecedores: {str(e)}', 'danger')
-        return render_template('fornecedores/lista.html', fornecedores=[])
+        return render_template('fornecedores/lista.html',
+                               fornecedores=[],
+                               empresas=[],
+                               relatorio=[],
+                               cliente_id='',
+                               empresa_selecionada=None)
 
 
 @bp.route('/novo', methods=['GET', 'POST'])
