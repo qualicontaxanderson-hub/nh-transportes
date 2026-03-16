@@ -310,6 +310,7 @@ td.sec-result   { background:#f0fdf4; }
                       <th class="text-end">EI Valor R$</th>
                       <th class="text-end sec-entrada">Compras (L)</th>
                       <th class="text-end sec-entrada">Prc Compra Unit.</th>
+                      <th class="text-end sec-entrada">Compras R$</th>
                       <th class="text-end sec-entrada">Custo Corrido</th>
                       <th class="text-end sec-saida">Vendas (L)</th>
                       <th class="text-end sec-saida">Prc Venda</th>
@@ -332,6 +333,9 @@ td.sec-result   { background:#f0fdf4; }
                       <td class="text-end sec-entrada">{{ dia.compras | fmtnum }}</td>
                       <td class="text-end sec-entrada">
                         {% if dia.custo_medio_compra %}R$ {{ dia.custo_medio_compra | fmtnum }}{% else %}<span class="text-muted">—</span>{% endif %}
+                      </td>
+                      <td class="text-end sec-entrada fw-semibold">
+                        {% if dia.compras_valor %}R$ {{ dia.compras_valor | fmtmoney }}{% else %}<span class="text-muted">—</span>{% endif %}
                       </td>
                       <td class="text-end sec-entrada fw-semibold">
                         {% if dia.custo_corrido %}R$ {{ dia.custo_corrido | fmtnum }}{% else %}<span class="text-muted">—</span>{% endif %}
@@ -378,7 +382,11 @@ td.sec-result   { background:#f0fdf4; }
                       <td class="px-3">Total do período</td>
                       <td colspan="2"></td>
                       <td class="text-end sec-entrada">{{ prod_diario.dias | sum(attribute='compras') | fmtnum }}</td>
-                      <td colspan="2"></td>
+                      <td></td>
+                      <td class="text-end sec-entrada fw-bold">
+                        R$ {{ prod_diario.dias | sum(attribute='compras_valor') | fmtmoney }}
+                      </td>
+                      <td></td>
                       <td class="text-end sec-saida">{{ prod_diario.dias | sum(attribute='vendas') | fmtnum }}</td>
                       <td></td>
                       <td class="text-end sec-saida">
@@ -405,7 +413,7 @@ td.sec-result   { background:#f0fdf4; }
                       <td class="px-3 fw-bold text-primary">Est. Inicial do Período</td>
                       <td class="text-end text-primary fw-bold">{{ prod_diario.ei_mes | fmtnum }} L</td>
                       <td class="text-end text-primary">R$ {{ prod_diario.ei_mes_valor | fmtmoney }}</td>
-                      <td></td><td></td>
+                      <td></td><td></td><td></td>
                       <td class="text-end text-primary">R$ {{ prod_diario.ei_mes_custo_unit | fmtnum }}</td>
                       <td colspan="10"></td>
                     </tr>
@@ -416,7 +424,7 @@ td.sec-result   { background:#f0fdf4; }
                         {% if prod_diario.ef_mes is not none %}{{ prod_diario.ef_mes | fmtnum }} L{% else %}<span class="text-muted">—</span>{% endif %}
                       </td>
                       <td class="text-end text-primary">R$ {{ prod_diario.ef_mes_valor | fmtmoney }}</td>
-                      <td></td><td></td>
+                      <td></td><td></td><td></td>
                       <td class="text-end text-primary">R$ {{ prod_diario.ef_mes_custo_unit | fmtnum }}</td>
                       <td colspan="10"></td>
                     </tr>

@@ -973,6 +973,7 @@ def _calcular_diario_cliente(cur, cliente_id, data_inicio, data_fim, produto_ids
                 'ei_valor': ei_valor,
                 'compras': compras,
                 'custo_medio_compra': custo_medio_compra,
+                'compras_valor': compras * custo_medio_compra,
                 'custo_corrido': custo_corrido,
                 'vendas': vendas,
                 'preco_venda_medio': preco_venda_medio,
