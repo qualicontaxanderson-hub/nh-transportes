@@ -43,6 +43,21 @@
         </div>
 
         <div class="mb-3">
+          <label for="tipo_grupo" class="form-label fw-semibold">
+            Tipo / Grupo Contábil <span class="text-danger">*</span>
+          </label>
+          <select id="tipo_grupo" name="tipo_grupo" class="form-select" required>
+            {% set tg = form.tipo_grupo if form else '' %}
+            <option value="ATIVO"    {% if tg == 'ATIVO'    %}selected{% endif %}>Ativo</option>
+            <option value="PASSIVO"  {% if tg == 'PASSIVO'  %}selected{% endif %}>Passivo</option>
+            <option value="RECEITAS" {% if tg == 'RECEITAS' %}selected{% endif %}>Receitas</option>
+            <option value="CUSTOS"   {% if tg == 'CUSTOS'   %}selected{% endif %}>Custos</option>
+            <option value="DESPESAS" {% if tg == 'DESPESAS' %}selected{% endif %}>Despesas</option>
+            <option value="OUTROS"   {% if not tg or tg == 'OUTROS' %}selected{% endif %}>Outros</option>
+          </select>
+        </div>
+
+        <div class="mb-3">
           <label for="nome" class="form-label fw-semibold">
             Nome da Conta <span class="text-danger">*</span>
           </label>
