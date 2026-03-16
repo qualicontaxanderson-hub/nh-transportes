@@ -4,48 +4,47 @@
 
 {% block content %}
 <div class="container-fluid mt-3">
-    <h2 class="mb-3" style="color:#1D63A5">
-        <i class="bi bi-wallet2"></i> Receb. Frete / Boletos
-    </h2>
+
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h2 style="font-size:1.5rem;color:#1D63A5;">
+            <i class="bi bi-wallet2"></i> Receb. Frete / Boletos
+        </h2>
+    </div>
 
     <!-- RESUMO: FRETES, BOLETOS, DIFERENÇA -->
-    <div class="row mb-3">
-        <!-- TOTAL FRETES -->
+    <div class="row mb-4">
         <div class="col-md-4 mb-2">
-            <div class="card h-100">
-                <div class="card-header d-flex justify-content-between align-items-center" style="background:#92a7be;font-weight:600;">
-                    <span>Valor de Frete</span>
-                </div>
-                <div class="card-body text-center">
-                    <h3 style="color:#17963c; margin-bottom: 0;">R$ {{ "{:,.2f}".format(total_fretes).replace(',', 'X').replace('.', ',').replace('X', '.') }}</h3>
+            <div class="card shadow-sm h-100 summary-card">
+                <div class="card-body py-3 px-4">
+                    <div class="d-flex align-items-center mb-1">
+                        <span class="summary-icon me-2" style="background:#d4edda;color:#155724;"><i class="bi bi-truck"></i></span>
+                        <span class="summary-label">Valor de Frete</span>
+                    </div>
+                    <div class="summary-value" style="color:#17963c;">R$ {{ "{:,.2f}".format(total_fretes).replace(',', 'X').replace('.', ',').replace('X', '.') }}</div>
                     <small class="text-muted">Total do período</small>
                 </div>
             </div>
         </div>
-
-        <!-- TOTAL BOLETOS EMITIDOS -->
         <div class="col-md-4 mb-2">
-            <div class="card h-100">
-                <div class="card-header" style="background:#85e6e6;font-weight:600;">
-                    Boletos Emitidos
-                </div>
-                <div class="card-body text-center">
-                    <h3 style="color:#0066cc; margin-bottom: 0;">R$ {{ "{:,.2f}".format(total_boletos).replace(',', 'X').replace('.', ',').replace('X', '.') }}</h3>
+            <div class="card shadow-sm h-100 summary-card">
+                <div class="card-body py-3 px-4">
+                    <div class="d-flex align-items-center mb-1">
+                        <span class="summary-icon me-2" style="background:#cce5ff;color:#004085;"><i class="bi bi-receipt"></i></span>
+                        <span class="summary-label">Boletos Emitidos</span>
+                    </div>
+                    <div class="summary-value" style="color:#0066cc;">R$ {{ "{:,.2f}".format(total_boletos).replace(',', 'X').replace('.', ',').replace('X', '.') }}</div>
                     <small class="text-muted">Total emitido</small>
                 </div>
             </div>
         </div>
-
-        <!-- DIFERENÇA -->
         <div class="col-md-4 mb-2">
-            <div class="card h-100">
-                <div class="card-header" style="background:#f8b500;font-weight:600;">
-                    Diferença (Fretes - Boletos)
-                </div>
-                <div class="card-body text-center">
-                    <h3 style="color:{% if diferenca >= 0 %}#333{% else %}#dc3545{% endif %}; margin-bottom: 0;">
-                        R$ {{ "{:,.2f}".format(diferenca).replace(',', 'X').replace('.', ',').replace('X', '.') }}
-                    </h3>
+            <div class="card shadow-sm h-100 summary-card">
+                <div class="card-body py-3 px-4">
+                    <div class="d-flex align-items-center mb-1">
+                        <span class="summary-icon me-2" style="background:#fff3cd;color:#856404;"><i class="bi bi-bar-chart-line"></i></span>
+                        <span class="summary-label">Diferença (Fretes − Boletos)</span>
+                    </div>
+                    <div class="summary-value" style="color:{% if diferenca >= 0 %}#374151{% else %}#dc3545{% endif %};">R$ {{ "{:,.2f}".format(diferenca).replace(',', 'X').replace('.', ',').replace('X', '.') }}</div>
                     <small class="text-muted">Saldo do período</small>
                 </div>
             </div>
@@ -53,153 +52,239 @@
     </div>
 
     <!-- FILTRO POR DATA -->
-    <div class="card mb-3">
-        <div class="card-header" style="background:#e9ecef;font-weight:600;">
+    <div class="card shadow-sm mb-4">
+        <div class="card-header" style="background:#1D63A5;color:white;font-size:0.9rem;font-weight:600;">
             <i class="bi bi-funnel"></i> Filtrar por Período
         </div>
         <div class="card-body">
             <form method="GET" action="{{ url_for('financeiro.recebimentos') }}" class="row g-2 align-items-end">
                 <div class="col-md-4">
-                    <label for="data_inicio" class="form-label" style="font-size:0.9rem;">Data Inicial</label>
+                    <label for="data_inicio" class="form-label mb-1" style="font-size:0.85rem;">Data Inicial</label>
                     <input type="date" class="form-control form-control-sm" id="data_inicio" name="data_inicio" value="{{ data_inicio }}">
                 </div>
                 <div class="col-md-4">
-                    <label for="data_fim" class="form-label" style="font-size:0.9rem;">Data Final</label>
+                    <label for="data_fim" class="form-label mb-1" style="font-size:0.85rem;">Data Final</label>
                     <input type="date" class="form-control form-control-sm" id="data_fim" name="data_fim" value="{{ data_fim }}">
                 </div>
-                <div class="col-md-4">
-                    <button type="submit" class="btn btn-primary btn-sm me-2">
+                <div class="col-auto">
+                    <button type="submit" class="btn btn-primary btn-sm">
                         <i class="bi bi-search"></i> Filtrar
                     </button>
-                    <a href="{{ url_for('financeiro.recebimentos') }}" class="btn btn-secondary btn-sm">
+                    <a href="{{ url_for('financeiro.recebimentos') }}" class="btn btn-secondary btn-sm ms-1">
                         <i class="bi bi-x-circle"></i> Limpar
                     </a>
                 </div>
             </form>
         </div>
     </div>
-    
-    {% if recebimentos %}
-    <div class="table-responsive">
-        <table class="table table-striped table-hover">
-            <thead class="table-dark">
-                <tr>
-                    <th>ID</th>
-                    <th>Frete</th>
-                    <th>Cliente</th>
-                    <th>Valor</th>
-                    <th>Vencimento</th>
-                    <th>Status</th>
-                    <th>Charge ID</th>
-                    <th>Ações</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for r in recebimentos %}
-                <tr id="cobranca-row-{{ r.charge_id or r.id }}">
-                    <td>{{ r.id }}</td>
-                    <td>
-                      {# Mostrar número do frete se disponível, fallback para frete_id #}
-                      {% if r.frete_numero %}
-                        #{{ r.frete_numero }}
-                      {% elif r.frete_id %}
-                        #{{ r.frete_id }}
-                      {% else %}
-                        -
-                      {% endif %}
-                    </td>
-                    <td>{{ r.cliente_fantasia or r.cliente_nome or '-' }}</td>
-                    <td>
-                      {% if r.valor is not none %}
-                        R$ {{ ("%.2f"|format(r.valor|float)).replace('.', ',') }}
-                      {% else %}
-                        R$ 0,00
-                      {% endif %}
-                    </td>
-                    <td>{{ r.data_vencimento_fmt or (r.data_vencimento.strftime('%d/%m/%Y') if r.data_vencimento else '-') }}</td>
-                    <td>
-                        {# usar display_status calculado no backend (routes/financeiro.py) #}
+
+    <!-- TABELA DE RECEBIMENTOS -->
+    <div class="card shadow-sm">
+        <div class="card-header d-flex justify-content-between align-items-center py-2" style="background:#1D63A5;color:white;font-size:0.82rem;font-weight:600;letter-spacing:0.02em;">
+            <span><i class="bi bi-list me-1"></i> Recebimentos</span>
+            {% if recebimentos %}
+            <span class="badge bg-white text-secondary" style="font-size:0.7rem;font-weight:600;">{{ recebimentos|length }}</span>
+            {% endif %}
+        </div>
+        <div class="card-body p-0">
+            {% if recebimentos %}
+            <div class="table-responsive">
+                <table class="table table-hover mb-0" id="tbl-recebimentos">
+                    <thead id="tbl-recebimentos-head">
+                        <tr>
+                            <th style="width:4%">ID</th>
+                            <th>Frete</th>
+                            <th>Cliente</th>
+                            <th>Valor</th>
+                            <th>Vencimento</th>
+                            <th>Status</th>
+                            <th>Charge ID</th>
+                            <th class="text-center" style="width:12%">Ações</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for r in recebimentos %}
                         {% set ds = r.display_status if r.display_status is defined else (r.status or 'pendente') %}
-                        {% if ds == 'pago' %}
-                            <span class="badge bg-success">Pago</span>
-                        {% elif ds == 'quitado' %}
-                            <span class="badge bg-info">Quitado</span>
-                        {% elif ds == 'vencido' %}
-                            <span class="badge bg-danger">Vencido</span>
-                        {% elif ds == 'cancelado' %}
-                            <span class="badge bg-secondary">Cancelado</span>
-                        {% else %}
-                            <span class="badge bg-warning">Pendente</span>
-                        {% endif %}
-                    </td>
-                    <td><small>{{ r.charge_id or '-' }}</small></td>
-                    <td>
-                        <div class="btn-group" role="group" aria-label="Ações cobranca">
-                            {# Mostrar botão de visualização sempre que houver charge_id (serve local ou provedor) #}
-                            {% if r.charge_id %}
-                            <a href="{{ url_for('financeiro.visualizar_boleto', charge_id=r.charge_id) }}" target="_blank" class="btn btn-sm btn-primary" title="Ver/Imprimir Boleto">
-                                <i class="bi bi-file-earmark-pdf"></i>
-                            </a>
-                            {% else %}
-                            <button class="btn btn-sm btn-secondary" disabled title="Sem link de boleto">
-                                <i class="bi bi-file-earmark-pdf"></i>
-                            </button>
-                            {% endif %}
+                        <tr id="cobranca-row-{{ r.charge_id or r.id }}">
+                            <td class="text-muted">{{ r.id }}</td>
+                            <td>
+                                {% if r.frete_numero %}
+                                    <span class="font-monospace">#{{ r.frete_numero }}</span>
+                                {% elif r.frete_id %}
+                                    <span class="font-monospace">#{{ r.frete_id }}</span>
+                                {% else %}
+                                    <span class="text-muted">—</span>
+                                {% endif %}
+                            </td>
+                            <td>{{ r.cliente_fantasia or r.cliente_nome or '—' }}</td>
+                            <td class="font-monospace">
+                                {% if r.valor is not none %}
+                                    R$ {{ ("%.2f"|format(r.valor|float)).replace('.', ',') }}
+                                {% else %}
+                                    R$ 0,00
+                                {% endif %}
+                            </td>
+                            <td class="text-muted">{{ r.data_vencimento_fmt or (r.data_vencimento.strftime('%d/%m/%Y') if r.data_vencimento else '—') }}</td>
+                            <td>
+                                {% if ds == 'pago' %}
+                                    <span class="badge-status badge-pago">Pago</span>
+                                {% elif ds == 'quitado' %}
+                                    <span class="badge-status badge-quitado">Quitado</span>
+                                {% elif ds == 'vencido' %}
+                                    <span class="badge-status badge-vencido">Vencido</span>
+                                {% elif ds == 'cancelado' %}
+                                    <span class="badge-status badge-cancelado">Cancelado</span>
+                                {% else %}
+                                    <span class="badge-status badge-pendente">Pendente</span>
+                                {% endif %}
+                            </td>
+                            <td><span class="font-monospace text-muted">{{ r.charge_id or '—' }}</span></td>
+                            <td class="text-center">
+                                {% if r.charge_id %}
+                                <a href="{{ url_for('financeiro.visualizar_boleto', charge_id=r.charge_id) }}" target="_blank" class="btn-acao btn-boleto" title="Ver/Imprimir Boleto">
+                                    <i class="bi bi-file-earmark-pdf"></i>
+                                </a>
+                                {% else %}
+                                <span class="btn-acao btn-disabled" title="Sem link de boleto">
+                                    <i class="bi bi-file-earmark-pdf"></i>
+                                </span>
+                                {% endif %}
 
-                            {% if r.charge_id %}
-                            <!-- Marcar pago -->
-                            <form method="post" action="{{ url_for('financeiro.marcar_pago', charge_id=r.charge_id) }}" style="display:inline;">
-                                <button type="submit" class="btn btn-sm btn-success" title="Marcar como Pago" onclick="return confirm('Confirma marcar esta cobrança como PAGO (admin)?');">
-                                    <i class="bi bi-check2-circle"></i>
+                                {% if r.charge_id %}
+                                <form method="post" action="{{ url_for('financeiro.marcar_pago', charge_id=r.charge_id) }}" style="display:inline;">
+                                    <button type="submit" class="btn-acao btn-pagar" title="Marcar como Pago" onclick="return confirm('Confirma marcar esta cobrança como PAGO (admin)?');">
+                                        <i class="bi bi-check2-circle"></i>
+                                    </button>
+                                </form>
+
+                                <form method="post" action="{{ url_for('financeiro.cancelar_boleto', charge_id=r.charge_id) }}" style="display:inline;">
+                                    <button type="submit" class="btn-acao btn-cancelar" title="Cancelar Boleto" onclick="return confirm('Confirma cancelar este boleto no provedor? Isto permitirá reemitir.');">
+                                        <i class="bi bi-x-circle"></i>
+                                    </button>
+                                </form>
+
+                                <button type="button" class="btn-acao btn-prorrogar btn-prorrogar-js"
+                                        data-charge-id="{{ r.charge_id }}"
+                                        title="Prorrogar vencimento">
+                                    <i class="bi bi-calendar-plus"></i>
                                 </button>
-                            </form>
 
-                            <!-- Cancelar -->
-                            <form method="post" action="{{ url_for('financeiro.cancelar_boleto', charge_id=r.charge_id) }}" style="display:inline;">
-                                <button type="submit" class="btn btn-sm btn-outline-danger" title="Cancelar Boleto" onclick="return confirm('Confirma cancelar este boleto no provedor? Isto permitirá reemitir.');">
-                                    <i class="bi bi-x-circle"></i>
+                                <button type="button" class="btn-acao btn-reemitir btn-reemitir-js"
+                                        data-charge-id="{{ r.charge_id }}"
+                                        data-frete-id="{{ r.frete_id or '' }}"
+                                        title="Reemitir boleto"
+                                        {% if ds != 'cancelado' %}style="opacity:0.35;cursor:not-allowed;"{% endif %}>
+                                    <i class="bi bi-arrow-clockwise"></i>
                                 </button>
-                            </form>
 
-                            <!-- Prorrogar vencimento (JS) -->
-                            <button type="button"
-                                    class="btn btn-sm btn-outline-secondary btn-prorrogar"
-                                    data-charge-id="{{ r.charge_id }}"
-                                    title="Prorrogar vencimento">
-                                <i class="bi bi-calendar-plus"></i>
-                            </button>
-
-                            <!-- Reemitir: habilitado apenas se display_status == 'cancelado' -->
-                            <button type="button"
-                                    class="btn btn-sm btn-outline-primary btn-reemitir"
-                                    data-charge-id="{{ r.charge_id }}"
-                                    data-frete-id="{{ r.frete_id or '' }}"
-                                    title="Reemitir boleto"
-                                    {% if ds != 'cancelado' %} disabled {% endif %}>
-                                <i class="bi bi-arrow-clockwise"></i>
-                            </button>
-
-                            <!-- Consultar Status EFI -->
-                            <button type="button"
-                                    class="btn btn-sm btn-outline-info btn-status-efi"
-                                    data-charge-id="{{ r.charge_id }}"
-                                    title="Consultar Status no Banco EFI">
-                                <i class="bi bi-info-circle"></i>
-                            </button>
-                            {% endif %}
-                        </div>
-                    </td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
+                                <button type="button" class="btn-acao btn-efi btn-status-efi"
+                                        data-charge-id="{{ r.charge_id }}"
+                                        title="Consultar Status no Banco EFI">
+                                    <i class="bi bi-info-circle"></i>
+                                </button>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="text-center text-muted py-4">
+                <i class="bi bi-inbox" style="font-size:1.8rem;opacity:0.4;"></i>
+                <div class="mt-2" style="font-size:0.82rem;">Nenhum recebimento encontrado.</div>
+            </div>
+            {% endif %}
+        </div>
     </div>
-    {% else %}
-    <div class="alert alert-info">
-        <i class="bi bi-info-circle"></i> Nenhum recebimento encontrado.
-    </div>
-    {% endif %}
 </div>
+
+<style>
+    /* ── Summary cards ─────────────────────────────────────────── */
+    .summary-card { border: none; border-radius: 8px; }
+    .summary-icon {
+        display: inline-flex; align-items: center; justify-content: center;
+        width: 2rem; height: 2rem; border-radius: 6px; font-size: 1rem;
+    }
+    .summary-label { font-size: 0.78rem; font-weight: 600; color: #6c757d; text-transform: uppercase; letter-spacing: 0.04em; }
+    .summary-value { font-size: 1.35rem; font-weight: 700; line-height: 1.2; margin-bottom: 0.1rem; }
+
+    /* ── Main table ────────────────────────────────────────────── */
+    #tbl-recebimentos {
+        font-size: 0.76rem;
+        border-collapse: separate;
+        border-spacing: 0;
+    }
+    #tbl-recebimentos-head tr th {
+        background: #f0f4f8;
+        color: #2c3e50;
+        font-weight: 700;
+        font-size: 0.72rem;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        padding: 0.45rem 0.65rem;
+        border-bottom: 2px solid #c5d5e8;
+        white-space: nowrap;
+    }
+    #tbl-recebimentos tbody tr td {
+        padding: 0.38rem 0.65rem;
+        border-bottom: 1px solid #eef1f4;
+        vertical-align: middle;
+        color: #374151;
+    }
+    #tbl-recebimentos tbody tr:last-child td { border-bottom: none; }
+    #tbl-recebimentos tbody tr:hover td { background: #f0f7ff; }
+
+    /* ── Status badges ─────────────────────────────────────────── */
+    .badge-status {
+        display: inline-block;
+        border-radius: 3px;
+        padding: 0.12rem 0.42rem;
+        font-size: 0.68rem;
+        font-weight: 700;
+        letter-spacing: 0.03em;
+    }
+    .badge-pago     { background:#d4edda; color:#155724; }
+    .badge-quitado  { background:#cce5ff; color:#004085; }
+    .badge-vencido  { background:#f8d7da; color:#721c24; }
+    .badge-cancelado{ background:#e2e3e5; color:#383d41; }
+    .badge-pendente { background:#fff3cd; color:#856404; }
+
+    /* ── Action icon buttons ───────────────────────────────────── */
+    .btn-acao {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 1.6rem;
+        height: 1.6rem;
+        border-radius: 4px;
+        font-size: 0.75rem;
+        border: none;
+        cursor: pointer;
+        text-decoration: none;
+        transition: opacity 0.15s;
+        margin: 0 0.05rem;
+    }
+    .btn-acao:hover { opacity: 0.8; }
+    .btn-boleto  { background: #cce5ff; color: #004085; }
+    .btn-pagar   { background: #d4edda; color: #155724; }
+    .btn-cancelar{ background: #f8d7da; color: #721c24; }
+    .btn-prorrogar { background: #e2e3e5; color: #383d41; }
+    .btn-reemitir{ background: #d1ecf1; color: #0c5460; }
+    .btn-efi     { background: #e8f0fe; color: #1a56db; }
+    .btn-disabled{ background: #f0f0f0; color: #aaa; cursor: default; }
+
+    .font-monospace {
+        font-family: 'SFMono-Regular', Consolas, monospace;
+        font-size: 0.72rem;
+        color: #555;
+    }
+
+    @media (max-width: 768px) {
+        h2 { font-size: 1.2rem !important; }
+        #tbl-recebimentos { font-size: 0.70rem; }
+    }
+</style>
 
 <!-- Script inline para ações de prorrogar e reemitir -->
 <script>
@@ -207,7 +292,7 @@ document.addEventListener('DOMContentLoaded', function () {
   function qsa(sel, el=document){ return Array.from(el.querySelectorAll(sel)); }
 
   // Prorrogar vencimento
-  qsa('.btn-prorrogar').forEach(btn => {
+  qsa('.btn-prorrogar-js').forEach(btn => {
     btn.addEventListener('click', async function () {
       const chargeId = this.getAttribute('data-charge-id');
       if (!chargeId) { alert('Charge ID ausente'); return; }
@@ -236,7 +321,7 @@ document.addEventListener('DOMContentLoaded', function () {
   });
 
   // Reemitir boleto
-  qsa('.btn-reemitir').forEach(btn => {
+  qsa('.btn-reemitir-js').forEach(btn => {
     btn.addEventListener('click', async function () {
       const chargeId = this.getAttribute('data-charge-id');
       const freteId = this.getAttribute('data-frete-id') || null;
