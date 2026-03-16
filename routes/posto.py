@@ -2,7 +2,7 @@
 # MÓDULO POSTO - Vendas do Posto de Gasolina
 # ===========================================
 
-from flask import Blueprint, render_template, request, flash, redirect, url_for, jsonify
+from flask import Blueprint, render_template, request, flash, redirect, url_for, jsonify, session
 from flask_login import login_required, current_user
 from models import db, Cliente, Produto, ClienteProduto
 from datetime import datetime, timedelta
@@ -205,6 +205,9 @@ def api_ultima_data(cliente_id):
 @login_required
 def vendas_lista():
     """Lista todas as vendas do posto de gasolina"""
+    # Salva a URL da pesquisa atual na sessão para restaurar após uma edição
+    session['posto_vendas_lista_url'] = request.url
+
     try:
         from models.vendas_posto import VendasPosto
         from collections import defaultdict
@@ -511,7 +514,7 @@ def vendas_editar_data(data, cliente_id):
             
             db.session.commit()
             flash(f'✅ {vendas_atualizadas} venda(s) atualizada(s) com sucesso!', 'success')
-            return redirect(url_for('posto.vendas_lista'))
+            return redirect(session.get('posto_vendas_lista_url') or url_for('posto.vendas_lista'))
         
         # GET - Mostrar formulário com vendas preenchidas
         # Buscar produtos do cliente

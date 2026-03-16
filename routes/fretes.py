@@ -1,4 +1,4 @@
-from flask import Blueprint, render_template, request, redirect, url_for, flash, current_app
+from flask import Blueprint, render_template, request, redirect, url_for, flash, current_app, session
 from flask_login import login_required
 import re
 from datetime import datetime, date
@@ -77,6 +77,9 @@ def _ensure_fretes_pedido_id(conn=None):
 @bp.route('/', methods=['GET'])
 @login_required
 def lista():
+    # Salva a URL da pesquisa atual na sessão para restaurar após uma edição
+    session['fretes_lista_url'] = request.url
+
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
 
@@ -860,7 +863,7 @@ def editar(id):
             ))
             conn.commit()
             flash('Frete atualizado com sucesso!', 'success')
-            return redirect(url_for('fretes.lista'))
+            return redirect(session.get('fretes_lista_url') or url_for('fretes.lista'))
         except Exception as e:
             conn.rollback()
             flash(f'Erro ao atualizar frete: {e}', 'danger')
