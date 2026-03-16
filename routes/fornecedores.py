@@ -52,13 +52,14 @@ def _ensure_tables():
 
 
 def _load_form_data(conn):
-    """Carrega todas as empresas e o mapeamento grupo→contas contábeis."""
+    """Carrega empresas com produtos configurados e o mapeamento grupo→contas contábeis."""
     cursor = conn.cursor(dictionary=True)
     cursor.execute(
-        """SELECT c.id,
+        """SELECT DISTINCT c.id,
                   COALESCE(c.nome_fantasia, c.razao_social) AS nome,
                   c.grupo_contabil_id
              FROM clientes c
+             INNER JOIN cliente_produtos cp ON cp.cliente_id = c.id AND cp.ativo = 1
             ORDER BY nome"""
     )
     empresas = cursor.fetchall()
