@@ -123,7 +123,15 @@
           <tbody>
             {% if contas %}
               {% for c in contas %}
-              <tr class="row-item" data-empresa-id="{{ c.cliente_id or '' }}">
+              <tr class="row-item"
+                  data-empresa-id="{{ c.cliente_id or '' }}"
+                  data-id="{{ c.id }}"
+                  data-banco="{{ c.banco_nome|e }}"
+                  data-agencia="{{ (c.agencia or '')|e }}"
+                  data-conta="{{ (c.conta or '')|e }}"
+                  data-apelido="{{ (c.apelido or '')|e }}"
+                  data-cliente-id="{{ c.cliente_id or '' }}"
+                  data-plano-id="{{ c.plano_contas_conta_id or '' }}">
                 <td>
                   <strong>{{ c.apelido or c.banco_nome }}</strong>
                   {% if c.apelido and c.apelido != c.banco_nome %}
@@ -308,6 +316,22 @@ function showAlert(msg, type) {
       ${msg}<button type="button" class="btn-close" data-bs-dismiss="alert"></button></div>`;
   setTimeout(() => box.innerHTML = '', 5000);
 }
+
+// ---- Row click → open edit modal ----
+document.querySelectorAll('#tbl-lista tbody tr.row-item').forEach(function(row) {
+  row.addEventListener('click', function() {
+    const d = this.dataset;
+    abrirEditar(
+      parseInt(d.id),
+      d.banco,
+      d.agencia,
+      d.conta,
+      d.apelido,
+      d.clienteId ? parseInt(d.clienteId) : null,
+      d.planoId   ? parseInt(d.planoId)   : null
+    );
+  });
+});
 
 // ---- Filter ----
 document.getElementById('filtroEmpresa').addEventListener('change', function() {
