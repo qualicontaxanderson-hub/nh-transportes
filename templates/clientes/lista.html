@@ -33,30 +33,15 @@
     font-size: 1.2rem;
     flex-shrink: 0;
   }
-  #tbl-lista {
-    font-size: 0.76rem;
-    border-collapse: separate;
-    border-spacing: 0;
+  #tbl-lista { font-size: 0.72rem; }
+  #tbl-lista thead th {
+    background: #1D63A5; color: #fff;
+    font-size: 0.68rem; font-weight: 700;
+    text-transform: uppercase; letter-spacing: .04em;
+    padding: 0.45rem 0.5rem; border: none; white-space: nowrap;
   }
-  #tbl-lista thead tr th {
-    background: #f0f4f8;
-    color: #2c3e50;
-    font-weight: 700;
-    font-size: 0.72rem;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-    padding: 0.45rem 0.65rem;
-    border-bottom: 2px solid #c5d5e8;
-    white-space: nowrap;
-  }
-  #tbl-lista tbody tr td {
-    padding: 0.38rem 0.65rem;
-    border-bottom: 1px solid #eef1f4;
-    vertical-align: middle;
-    color: #374151;
-  }
-  #tbl-lista tbody tr:last-child td { border-bottom: none; }
-  #tbl-lista tbody tr:hover td { background: #f0f7ff; }
+  #tbl-lista tbody td { padding: 0.35rem 0.5rem; vertical-align: middle; border-color: #f0f3f7; }
+  #tbl-lista tbody tr:hover td { background: #eef4ff; }
   .badge-conta {
     display: inline-block;
     background: #e8f0fe;
@@ -190,7 +175,7 @@
         </div>
         <div class="card-body p-0">
             <div class="table-responsive">
-                <table class="table table-hover mb-0" id="tbl-lista">
+                <table class="table mb-0" id="tbl-lista">
                     <thead>
                         <tr>
                             <th style="width:4%">ID</th>
