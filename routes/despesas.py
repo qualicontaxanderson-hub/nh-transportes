@@ -85,24 +85,75 @@ def _load_form_data(conn):
 @admin_required
 def index():
     """Lista todos os títulos de despesas"""
-    conn = get_db_connection()
-    cursor = conn.cursor(dictionary=True)
+    _ensure_tables()
+    cliente_id = request.args.get('cliente_id', '').strip()
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
 
-    cursor.execute("""
-        SELECT t.*, 
-               COUNT(DISTINCT c.id) as total_categorias
-        FROM titulos_despesas t
-        LEFT JOIN categorias_despesas c ON t.id = c.titulo_id AND c.ativo = 1
-        WHERE t.ativo = 1
-        GROUP BY t.id
-        ORDER BY t.ordem, t.nome
-    """)
-    titulos = cursor.fetchall()
+        cursor.execute("""
+            SELECT t.*,
+                   COUNT(DISTINCT c.id) as total_categorias
+            FROM titulos_despesas t
+            LEFT JOIN categorias_despesas c ON t.id = c.titulo_id AND c.ativo = 1
+            WHERE t.ativo = 1
+            GROUP BY t.id
+            ORDER BY t.ordem, t.nome
+        """)
+        titulos = cursor.fetchall()
 
-    cursor.close()
-    conn.close()
+        # Companies with active products for the filter dropdown
+        cursor.execute(
+            """SELECT DISTINCT c.id,
+                      COALESCE(c.nome_fantasia, c.razao_social) AS nome
+                 FROM clientes c
+                 INNER JOIN cliente_produtos cp ON cp.cliente_id = c.id AND cp.ativo = 1
+                ORDER BY nome"""
+        )
+        empresas = cursor.fetchall()
 
-    return render_template('despesas/index.html', titulos=titulos)
+        # Report: categories + contas contábeis for the selected company
+        relatorio = []
+        empresa_selecionada = None
+        if cliente_id:
+            cursor.execute(
+                """SELECT t.nome AS titulo_nome,
+                          cat.nome AS categoria_nome,
+                          pcc.codigo AS conta_codigo,
+                          pcc.nome AS conta_nome
+                     FROM categorias_despesas cat
+                     JOIN titulos_despesas t ON t.id = cat.titulo_id AND t.ativo = 1
+                     LEFT JOIN categoria_despesa_contas cdc
+                            ON cdc.categoria_id = cat.id AND cdc.cliente_id = %s
+                     LEFT JOIN plano_contas_contas pcc ON pcc.id = cdc.conta_contabil_id
+                    WHERE cat.ativo = 1
+                    ORDER BY t.ordem, t.nome, cat.nome""",
+                (int(cliente_id),)
+            )
+            relatorio = cursor.fetchall()
+            for emp in empresas:
+                if str(emp['id']) == cliente_id:
+                    empresa_selecionada = emp
+                    break
+
+        cursor.close()
+        conn.close()
+        return render_template('despesas/index.html',
+                               titulos=titulos,
+                               empresas=empresas,
+                               relatorio=relatorio,
+                               cliente_id=cliente_id,
+                               empresa_selecionada=empresa_selecionada)
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).exception('index despesas error')
+        flash(f'Erro ao carregar despesas: {str(e)}', 'danger')
+        return render_template('despesas/index.html',
+                               titulos=[],
+                               empresas=[],
+                               relatorio=[],
+                               cliente_id='',
+                               empresa_selecionada=None)
 
 
 @bp.route('/titulo/<int:titulo_id>')

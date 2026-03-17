@@ -94,6 +94,95 @@
     </div>
   </div>
 
+  <!-- Filtro por Empresa — Contas Contábeis -->
+  <div class="card shadow-sm mb-4" id="card-relatorio-filtro">
+    <div class="card-header d-flex justify-content-between align-items-center py-2"
+         style="background:#1D63A5;color:white;font-size:0.82rem;font-weight:600;letter-spacing:0.02em;">
+      <span><i class="bi bi-table me-1"></i> Relatório de Contas Contábeis por Empresa</span>
+    </div>
+    <div class="card-body">
+      <form method="GET" class="row g-2 align-items-end">
+        <div class="col-md-5">
+          <label class="form-label mb-1" style="font-size:0.85rem;">Selecione a Empresa</label>
+          <select name="cliente_id" class="form-select form-select-sm">
+            <option value="">— Selecione uma empresa —</option>
+            {% for emp in empresas %}
+            <option value="{{ emp.id }}" {% if cliente_id == emp.id|string %}selected{% endif %}>
+              {{ emp.nome }}
+            </option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-auto">
+          <button type="submit" class="btn btn-primary btn-sm">
+            <i class="bi bi-search"></i> Pesquisar
+          </button>
+          {% if cliente_id %}
+          <a href="{{ url_for('despesas.index') }}" class="btn btn-secondary btn-sm ms-1">
+            <i class="bi bi-x-circle"></i> Limpar
+          </a>
+          {% endif %}
+        </div>
+      </form>
+    </div>
+  </div>
+
+  {% if cliente_id %}
+  <div class="card shadow-sm mb-4" id="card-relatorio">
+    <div class="card-header d-flex justify-content-between align-items-center py-2"
+         style="background:#17a2b8;color:white;font-size:0.82rem;font-weight:600;letter-spacing:0.02em;">
+      <span><i class="bi bi-table me-1"></i> Categorias e Contas Contábeis — {{ empresa_selecionada.nome if empresa_selecionada else '' }}</span>
+      {% if relatorio %}
+      <button class="btn btn-sm btn-light py-0 px-2" style="font-size:0.75rem;" onclick="window.print()" title="Imprimir relatório">
+        <i class="bi bi-printer"></i> Imprimir
+      </button>
+      {% endif %}
+    </div>
+    <div class="card-body p-0">
+      {% if relatorio %}
+      <div class="table-responsive">
+        <table class="table table-hover mb-0">
+          <thead>
+            <tr style="font-size:0.75rem;background:#f0f4ff;">
+              <th style="width:3%">#</th>
+              <th>Título</th>
+              <th>Categoria</th>
+              <th>Conta Contábil</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in relatorio %}
+            <tr style="font-size:0.78rem;">
+              <td class="text-muted">{{ loop.index }}</td>
+              <td>{{ row.titulo_nome }}</td>
+              <td>{{ row.categoria_nome }}</td>
+              <td>
+                {% if row.conta_codigo %}
+                  <strong>{{ row.conta_codigo }}</strong>
+                  <span class="text-muted ms-1">{{ row.conta_nome }}</span>
+                {% else %}
+                  <span class="text-muted fst-italic" style="font-size:0.72rem;">não vinculada</span>
+                {% endif %}
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <div class="px-3 py-2 border-top" style="font-size:0.72rem;color:#6c757d;background:#f8f9fa;">
+        <i class="bi bi-info-circle me-1"></i>
+        <strong>{{ relatorio|length }}</strong> categoria(s) listada(s) para esta empresa.
+      </div>
+      {% else %}
+      <div class="text-center text-muted py-4" style="font-size:0.85rem;">
+        <i class="bi bi-inbox" style="font-size:1.8rem;opacity:0.4;"></i>
+        <div class="mt-2">Nenhuma categoria encontrada para esta empresa.</div>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+  {% endif %}
+
   <!-- Card de títulos -->
   <div class="card shadow-sm">
     <div class="card-header d-flex align-items-center py-2"
