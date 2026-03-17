@@ -372,7 +372,110 @@ def _save_transactions(cursor, conn, account_id, transactions):
     _auto_conciliar_por_regras(cursor, conn, account_id)
     # 5. Auto-conciliação de despesas por CNPJ (cria lancamentos_despesas automaticamente)
     _auto_conciliar_despesas_por_cnpj(cursor, conn, account_id, mapping)
+    # 6. Auto-conciliação de créditos EFI por charge_id (Recebimento de cobrança: XXXXXXXXX)
+    _auto_conciliar_cobrancas(cursor, conn, account_id)
     return inseridos, duplicados
+
+
+def _auto_conciliar_cobrancas(cursor, conn, account_id=None):
+    """
+    Auto-concilia créditos do banco EFI com cobranças emitidas.
+
+    O extrato EFI produz descrições no formato:
+        "Recebimento de cobrança: 979319884 de AUTO POSTO SCARPIM LTDA"
+    O número (charge_id) é idêntico ao campo `cobrancas.charge_id`.
+
+    Para cada transação CREDIT pendente cujo texto contiver esse padrão:
+    1. Extrai o charge_id numérico.
+    2. Localiza a cobrança correspondente na tabela `cobrancas`.
+    3. Marca a cobrança como paga (status='pago', pago_via_provedor=1).
+    4. Marca a transação bancária como conciliada.
+
+    Retorna o número de pares conciliados.
+    """
+    import re as _re
+
+    _CHARGE_RE = _re.compile(
+        r'(?:recebimento\s+de\s+cobran[çc]a|cobran[çc]a)[:\s]+(\d+)',
+        _re.IGNORECASE,
+    )
+
+    # Busca créditos pendentes (ou já conciliados por outras regras mas sem cobranca linkada)
+    if account_id:
+        cursor.execute(
+            """SELECT id, descricao, valor, data_transacao
+               FROM bank_transactions
+               WHERE account_id = %s AND tipo = 'CREDIT' AND status = 'pendente'""",
+            (account_id,),
+        )
+    else:
+        cursor.execute(
+            """SELECT id, descricao, valor, data_transacao
+               FROM bank_transactions
+               WHERE tipo = 'CREDIT' AND status = 'pendente'"""
+        )
+    pendentes = cursor.fetchall()
+    if not pendentes:
+        return 0
+
+    agora = _dt.datetime.now()
+    count = 0
+    for tx in pendentes:
+        descricao = tx.get('descricao') or ''
+        m = _CHARGE_RE.search(descricao)
+        if not m:
+            continue
+        charge_id = m.group(1)
+
+        # Verifica se a cobrança existe e ainda não está paga/cancelada
+        cursor.execute(
+            """SELECT id, status, pago_via_provedor
+               FROM cobrancas
+               WHERE charge_id = %s LIMIT 1""",
+            (charge_id,),
+        )
+        cobr = cursor.fetchone()
+        if not cobr:
+            continue
+        status_cobr = (cobr.get('status') or '').lower()
+        if status_cobr in ('pago', 'cancelado'):
+            # Mesmo que a cobrança já esteja paga, concilia a transação bancária
+            cursor.execute(
+                """UPDATE bank_transactions
+                   SET status = 'conciliado',
+                       conciliado_em = %s,
+                       conciliado_por = 'auto-efi'
+                   WHERE id = %s""",
+                (agora, tx['id']),
+            )
+            count += 1
+            continue
+
+        # Marca cobrança como paga via provedor
+        data_pagamento = tx.get('data_transacao')
+        cursor.execute(
+            """UPDATE cobrancas
+               SET status = 'pago',
+                   pago_via_provedor = 1,
+                   data_pagamento = %s
+               WHERE id = %s""",
+            (data_pagamento, cobr['id']),
+        )
+        # Marca transação bancária como conciliada
+        cursor.execute(
+            """UPDATE bank_transactions
+               SET status = 'conciliado',
+                   conciliado_em = %s,
+                   conciliado_por = 'auto-efi'
+               WHERE id = %s""",
+            (agora, tx['id']),
+        )
+        count += 1
+
+    if count:
+        conn.commit()
+        logger.info("_auto_conciliar_cobrancas: %d transação(ões) conciliada(s) por charge_id", count)
+    return count
 
 
 def _auto_conciliar_despesas_por_cnpj(cursor, conn, account_id, mapping):
@@ -2032,11 +2135,14 @@ def api_auto_reconcile():
 
         conn.commit()
 
+        # 3. Auto-conciliação por charge_id EFI
+        por_efi = _auto_conciliar_cobrancas(cursor, conn)
+
         cursor.close()
         conn.close()
-        logger.info("api_auto_reconcile: por_cnpj=%d total=%d", updated, updated + por_regras)
-        return jsonify({'success': True, 'conciliados': updated + por_regras,
-                        'por_cnpj': updated, 'por_regras': por_regras})
+        logger.info("api_auto_reconcile: por_cnpj=%d por_efi=%d total=%d", updated, por_efi, updated + por_regras + por_efi)
+        return jsonify({'success': True, 'conciliados': updated + por_regras + por_efi,
+                        'por_cnpj': updated, 'por_regras': por_regras, 'por_efi': por_efi})
     except Exception as e:
         logger.exception("Erro em api_auto_reconcile: %s", e)
         try:

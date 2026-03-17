@@ -618,6 +618,111 @@ def alterar_vencimento(charge_id):
             conn.close()
 
 
+@financeiro_bp.route('/registrar-pagamento-manual/', methods=['POST'])
+@login_required
+def registrar_pagamento_manual():
+    """
+    Registra pagamento manual para uma cobrança.
+    Útil para boletos substituídos, agrupados ou com desconto que foram pagos
+    fora do fluxo normal do provedor EFI.
+
+    Parâmetros (form ou JSON):
+        cobranca_id   : int  – ID primário da cobrança
+        data_pagamento: str  – Data no formato YYYY-MM-DD (default: hoje)
+        observacao    : str  – Observação opcional
+    """
+    conn = None
+    cursor = None
+    try:
+        if request.is_json:
+            data = request.get_json(silent=True) or {}
+        else:
+            data = request.form
+
+        cobranca_id = data.get('cobranca_id')
+        data_pagamento = data.get('data_pagamento') or datetime.today().date().isoformat()
+        observacao = (data.get('observacao') or '').strip()
+
+        try:
+            cobranca_id = int(cobranca_id)
+        except (TypeError, ValueError):
+            flash('ID da cobrança inválido.', 'danger')
+            return redirect(url_for('financeiro.recebimentos'))
+
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+
+        cursor.execute(
+            'SELECT id, status, charge_id, pago_via_provedor FROM cobrancas WHERE id = %s LIMIT 1',
+            (cobranca_id,),
+        )
+        cobr = cursor.fetchone()
+        if not cobr:
+            flash('Cobrança não encontrada.', 'danger')
+            return redirect(url_for('financeiro.recebimentos'))
+
+        status_atual = (cobr.get('status') or '').lower()
+        if status_atual == 'cancelado':
+            flash('Não é possível registrar pagamento em uma cobrança cancelada.', 'warning')
+            return redirect(url_for('financeiro.recebimentos'))
+
+        if int(cobr.get('pago_via_provedor') or 0):
+            flash('Pagamento já registrado pelo provedor EFI. Alteração não permitida.', 'warning')
+            return redirect(url_for('financeiro.recebimentos'))
+
+        # Atualiza a cobrança como paga manualmente (sem alterar charge_id existente)
+        cursor2 = conn.cursor()
+        try:
+            try:
+                cursor2.execute(
+                    """UPDATE cobrancas
+                       SET status = 'pago',
+                           data_pagamento = %s,
+                           observacao = COALESCE(NULLIF(%s, ''), observacao)
+                       WHERE id = %s""",
+                    (data_pagamento, observacao, cobranca_id),
+                )
+            except Exception:
+                # Fallback: coluna observacao pode não existir ainda
+                cursor2.close()
+                cursor2 = conn.cursor()
+                cursor2.execute(
+                    'UPDATE cobrancas SET status = %s, data_pagamento = %s WHERE id = %s',
+                    ('pago', data_pagamento, cobranca_id),
+                )
+            conn.commit()
+            flash('Pagamento registrado com sucesso.', 'success')
+        except Exception as e:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+            current_app.logger.exception('[registrar_pagamento_manual] erro: %s', e)
+            flash('Falha ao registrar pagamento.', 'danger')
+        finally:
+            try:
+                cursor2.close()
+            except Exception:
+                pass
+
+    except Exception as e:
+        current_app.logger.exception('[registrar_pagamento_manual] erro geral: %s', e)
+        flash('Erro ao registrar pagamento.', 'danger')
+    finally:
+        try:
+            if cursor:
+                cursor.close()
+        except Exception:
+            pass
+        try:
+            if conn:
+                conn.close()
+        except Exception:
+            pass
+
+    return redirect(url_for('financeiro.recebimentos'))
+
+
 @financeiro_bp.route('/marcar-pago/<int:charge_id>/', methods=['POST'])
 @login_required
 def marcar_pago(charge_id):
