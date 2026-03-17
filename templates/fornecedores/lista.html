@@ -60,7 +60,8 @@
     #tbl-lista tbody tr:last-child td {
         border-bottom: none;
     }
-    #tbl-lista tbody tr:hover td {
+    #tbl-lista tbody tr.row-forn { cursor: pointer; transition: background .1s; }
+    #tbl-lista tbody tr.row-forn:hover td {
         background: #f0f7ff;
     }
 
@@ -335,14 +336,15 @@
                     <tbody>
                         {% if fornecedores %}
                             {% for fornecedor in fornecedores %}
-                            <tr>
+                            <tr class="row-forn" data-url="{{ url_for('fornecedores.editar', id=fornecedor.id) }}"
+                                title="Clique para editar">
                                 <td class="text-muted">{{ fornecedor.id }}</td>
                                 <td>{{ fornecedor.razao_social }}</td>
                                 <td class="text-muted">{{ fornecedor.nome_fantasia or '—' }}</td>
                                 <td class="font-monospace">{{ fornecedor.cnpj or '—' }}</td>
                                 <td class="text-muted">{{ fornecedor.telefone or '—' }}</td>
                                 <td class="text-muted">{{ fornecedor.municipio or '—' }}</td>
-                                <td class="text-center">
+                                <td class="text-center actions-cell" onclick="event.stopPropagation()">
                                     <a href="{{ url_for('fornecedores.editar', id=fornecedor.id) }}" class="btn-acao btn-editar" title="Editar">
                                         <i class="bi bi-pencil"></i>
                                     </a>
@@ -370,4 +372,16 @@
         </div>
     </div>
 </div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+  document.querySelectorAll('tr.row-forn[data-url]').forEach(function (row) {
+    row.addEventListener('click', function (e) {
+      if (e.target.closest('.actions-cell') || e.target.closest('a') || e.target.closest('button') || e.target.closest('form')) return;
+      window.location.href = row.getAttribute('data-url');
+    });
+  });
+});
+</script>
+
 {% endblock %}

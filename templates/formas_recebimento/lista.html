@@ -51,7 +51,8 @@
     font-size: .78rem;
   }
   .tbl-fr tbody tr:last-child td { border-bottom: 0; }
-  .tbl-fr tbody tr:hover td { background: #f0f7ff; }
+  .tbl-fr tbody tr.row-fr { cursor: pointer; transition: background .1s; }
+  .tbl-fr tbody tr.row-fr:hover td { background: #f0f7ff; }
   .badge-status-ativo {
     display: inline-flex; align-items: center;
     background: #e6f9ee; color: #146c43;
@@ -200,7 +201,8 @@
           </thead>
           <tbody>
             {% for f in formas %}
-            <tr>
+            <tr class="row-fr" data-url="{{ url_for('formas_recebimento.editar', id=f.id) }}"
+                title="Clique para editar">
               <td class="text-muted">{{ f.id }}</td>
               <td class="fw-semibold">{{ f.nome }}</td>
               <td>
@@ -219,7 +221,7 @@
                 <span class="badge-status-inativo"><i class="bi bi-x-circle me-1"></i>Inativo</span>
                 {% endif %}
               </td>
-              <td class="text-center">
+              <td class="text-center actions-cell" onclick="event.stopPropagation()">
                 <a href="{{ url_for('formas_recebimento.editar', id=f.id) }}"
                    class="btn-acao btn-editar" title="Editar">
                   <i class="bi bi-pencil"></i>
@@ -266,6 +268,13 @@ document.querySelectorAll('.btn-excluir-js').forEach(btn => {
           alert('⚠️ ' + d.message);
         }
       });
+  });
+});
+
+document.querySelectorAll('tr.row-fr[data-url]').forEach(function (row) {
+  row.addEventListener('click', function (e) {
+    if (e.target.closest('.actions-cell') || e.target.closest('a') || e.target.closest('button') || e.target.closest('form')) return;
+    window.location.href = row.getAttribute('data-url');
   });
 });
 </script>
