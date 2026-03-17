@@ -105,7 +105,7 @@
 
     <!-- Stat cards -->
     {% set total_prod = produtos | length %}
-    {% set com_conta  = produtos | selectattr('grupo_codigo') | list | length %}
+    {% set com_conta  = produtos | selectattr('conta_codigo') | list | length %}
     {% set sem_conta  = total_prod - com_conta %}
     <div class="row g-3 mb-4">
       <div class="col-6 col-md-4">
@@ -211,9 +211,12 @@
                   <td class="text-muted">{{ produto.id }}</td>
                   <td class="fw-semibold">{{ produto.nome }}</td>
                   <td>
+                    {% if produto.conta_codigo %}
+                    <span class="badge-conta"><strong>{{ produto.conta_codigo }}</strong></span>
+                    <span style="color:#374151;font-size:0.75rem;">{{ produto.conta_nome }}</span>
                     {% if produto.grupo_codigo %}
-                    <span class="badge-conta"><strong>{{ produto.grupo_codigo }}</strong></span>
-                    <span style="color:#374151;font-size:0.75rem;">{{ produto.grupo_nome }}</span>
+                    <span class="text-muted" style="font-size:0.68rem;"> · {{ produto.grupo_codigo }} {{ produto.grupo_nome }}</span>
+                    {% endif %}
                     {% else %}
                     <span class="text-muted fst-italic" style="font-size:0.72rem;">—</span>
                     {% endif %}

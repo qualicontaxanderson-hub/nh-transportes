@@ -75,22 +75,25 @@
                     </div>
                 </div>
 
-                {% if grupos %}
-                <div class="form-section-title"><i class="bi bi-journal-bookmark me-1"></i>Contabilidade</div>
+                {% if contas %}
+                <div class="form-section-title"><i class="bi bi-journal-bookmark me-1"></i>Conta Contábil</div>
                 <div class="row">
-                    <div class="col-md-6 mb-2">
-                        <label class="form-label">Grupo do Plano de Contas</label>
-                        <select name="grupo_contabil_id" class="form-select form-select-sm">
+                    <div class="col-md-8 mb-2">
+                        <label class="form-label">Conta do Plano de Contas</label>
+                        <input type="text" class="form-control form-control-sm mb-1"
+                               id="buscaConta" placeholder="🔍 Buscar conta..." autocomplete="off"
+                               oninput="filtrarContas(this)">
+                        <select name="conta_contabil_id" id="selConta" class="form-select form-select-sm">
                             <option value="">— Sem conta contábil —</option>
-                            {% for g in grupos %}
-                            <option value="{{ g.id }}"
-                                {% if produto.grupo_contabil_id == g.id %}selected{% endif %}>
-                                {{ g.codigo }} — {{ g.nome }}
+                            {% for c in contas %}
+                            <option value="{{ c.id }}"
+                                {% if produto.conta_contabil_id == c.id %}selected{% endif %}>
+                                {{ c.codigo }} {{ c.conta_nome }}
                             </option>
                             {% endfor %}
                         </select>
                         <div class="form-text" style="font-size:0.78rem;">
-                            Associe este produto a um grupo do Plano de Contas para exportação contábil.
+                            Associe este produto a uma conta do Plano de Contas para exportação contábil.
                         </div>
                     </div>
                 </div>
@@ -109,4 +112,17 @@
         </div>
     </div>
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function filtrarContas(inp) {
+    const sel = document.getElementById('selConta');
+    const query = inp.value.toLowerCase();
+    Array.from(sel.options).forEach(function(opt) {
+        if (!opt.value) { opt.hidden = false; return; }
+        opt.hidden = query.length > 0 && !opt.text.toLowerCase().includes(query);
+    });
+}
+</script>
 {% endblock %}

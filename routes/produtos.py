@@ -8,7 +8,7 @@ _column_ready = False
 
 
 def _ensure_column():
-    """Adds grupo_contabil_id column to produto table if not present. Idempotent."""
+    """Adds conta_contabil_id column to produto table if not present. Idempotent."""
     global _column_ready
     if _column_ready:
         return
@@ -19,11 +19,11 @@ def _ensure_column():
             SELECT COUNT(*) FROM information_schema.COLUMNS
             WHERE TABLE_SCHEMA = DATABASE()
               AND TABLE_NAME = 'produto'
-              AND COLUMN_NAME = 'grupo_contabil_id'
+              AND COLUMN_NAME = 'conta_contabil_id'
         """)
         if cursor.fetchone()[0] == 0:
             cursor.execute(
-                "ALTER TABLE produto ADD COLUMN grupo_contabil_id INT NULL"
+                "ALTER TABLE produto ADD COLUMN conta_contabil_id INT NULL"
             )
         conn.commit()
         cursor.close()
@@ -32,8 +32,28 @@ def _ensure_column():
         conn.close()
 
 
-def _get_grupos_contabeis(cursor):
-    """Returns active plano_contas_grupos for use in forms."""
+def _load_contas(conn):
+    """Loads all active plano_contas_contas with their group info, for use in forms."""
+    cursor = conn.cursor(dictionary=True)
+    try:
+        cursor.execute("""
+            SELECT c.id, c.grupo_id, c.codigo, c.nome AS conta_nome,
+                   g.codigo AS grupo_codigo, g.nome AS grupo_nome
+              FROM plano_contas_contas c
+              JOIN plano_contas_grupos g ON g.id = c.grupo_id
+             WHERE c.ativo = 1
+             ORDER BY g.codigo, c.codigo
+        """)
+        return cursor.fetchall()
+    except Exception:
+        return []
+    finally:
+        cursor.close()
+
+
+def _load_grupos(conn):
+    """Loads active plano_contas_grupos for the filter dropdown."""
+    cursor = conn.cursor(dictionary=True)
     try:
         cursor.execute(
             "SELECT id, codigo, nome FROM plano_contas_grupos WHERE ativo = 1 ORDER BY codigo"
@@ -41,6 +61,8 @@ def _get_grupos_contabeis(cursor):
         return cursor.fetchall()
     except Exception:
         return []
+    finally:
+        cursor.close()
 
 
 @bp.route('/')
@@ -54,22 +76,25 @@ def lista():
 
     query = """
         SELECT p.*,
+               c.codigo AS conta_codigo,
+               c.nome   AS conta_nome,
                g.codigo AS grupo_codigo,
                g.nome   AS grupo_nome
         FROM produto p
-        LEFT JOIN plano_contas_grupos g ON g.id = p.grupo_contabil_id
+        LEFT JOIN plano_contas_contas c ON c.id = p.conta_contabil_id
+        LEFT JOIN plano_contas_grupos g ON g.id = c.grupo_id
     """
     params = []
     if grupo_id:
-        query += " WHERE p.grupo_contabil_id = %s"
+        query += " WHERE c.grupo_id = %s"
         params.append(int(grupo_id))
     query += " ORDER BY p.nome"
 
     cursor.execute(query, params)
     produtos = cursor.fetchall()
-
-    grupos = _get_grupos_contabeis(cursor)
     cursor.close()
+
+    grupos = _load_grupos(conn)
     conn.close()
     return render_template('produtos/lista.html', produtos=produtos,
                            grupos=grupos, grupo_id=grupo_id)
@@ -84,14 +109,14 @@ def novo():
 
     if request.method == 'POST':
         nome = request.form.get('nome')
-        grupo_id_raw = request.form.get('grupo_contabil_id')
-        grupo_contabil_id = int(grupo_id_raw) if grupo_id_raw else None
+        conta_id_raw = request.form.get('conta_contabil_id')
+        conta_contabil_id = int(conta_id_raw) if conta_id_raw else None
         try:
             conn = get_db_connection()
             cursor = conn.cursor()
             cursor.execute(
-                "INSERT INTO produto (nome, grupo_contabil_id) VALUES (%s, %s)",
-                (nome, grupo_contabil_id)
+                "INSERT INTO produto (nome, conta_contabil_id) VALUES (%s, %s)",
+                (nome, conta_contabil_id)
             )
             conn.commit()
             flash('Produto cadastrado com sucesso!', 'success')
@@ -107,11 +132,9 @@ def novo():
                 conn.close()
 
     conn = get_db_connection()
-    cursor = conn.cursor(dictionary=True)
-    grupos = _get_grupos_contabeis(cursor)
-    cursor.close()
+    contas = _load_contas(conn)
     conn.close()
-    return render_template('produtos/novo.html', grupos=grupos)
+    return render_template('produtos/novo.html', contas=contas)
 
 
 @bp.route('/editar/<int:id>', methods=['GET', 'POST'])
@@ -123,12 +146,12 @@ def editar(id):
 
     if request.method == 'POST':
         nome = request.form.get('nome')
-        grupo_id_raw = request.form.get('grupo_contabil_id')
-        grupo_contabil_id = int(grupo_id_raw) if grupo_id_raw else None
+        conta_id_raw = request.form.get('conta_contabil_id')
+        conta_contabil_id = int(conta_id_raw) if conta_id_raw else None
         try:
             cursor.execute(
-                "UPDATE produto SET nome=%s, grupo_contabil_id=%s WHERE id=%s",
-                (nome, grupo_contabil_id, id)
+                "UPDATE produto SET nome=%s, conta_contabil_id=%s WHERE id=%s",
+                (nome, conta_contabil_id, id)
             )
             conn.commit()
             cursor.close()
@@ -142,15 +165,16 @@ def editar(id):
 
     cursor.execute("SELECT * FROM produto WHERE id = %s", (id,))
     produto = cursor.fetchone()
-    grupos = _get_grupos_contabeis(cursor)
     cursor.close()
+
+    contas = _load_contas(conn)
     conn.close()
 
     if not produto:
         flash('Produto não encontrado!', 'danger')
         return redirect(url_for('produtos.lista'))
 
-    return render_template('produtos/editar.html', produto=produto, grupos=grupos)
+    return render_template('produtos/editar.html', produto=produto, contas=contas)
 
 
 @bp.route('/excluir/<int:id>')
