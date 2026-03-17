@@ -124,7 +124,7 @@
                 <table class="table table-hover mb-0 tp-table">
                     <thead>
                         <tr>
-                            <th>ID</th>
+                            <th>Controle</th>
                             <th>Data</th>
                             <th>Posto/Cliente</th>
                             <th>Cliente PIX</th>
@@ -138,7 +138,7 @@
                     <tbody>
                         {% for t in transacoes %}
                         <tr>
-                            <td class="text-muted">{{ t.id }}</td>
+                            <td><span class="tp-ctrl-num">{{ t.get('numero_sequencial') or '-' }}</span></td>
                             <td>{{ t.data.strftime('%d/%m/%Y') if t.data else '-' }}</td>
                             <td>{{ t.posto_nome or '-' }}</td>
                             <td>{{ t.cliente_pix_nome or '-' }}</td>
@@ -286,6 +286,15 @@
     white-space: nowrap;
 }
 .tp-badge-ok { background: #d1e7dd; color: #0f5132; }
+
+/* Discrete control number */
+.tp-ctrl-num {
+    font-size: 0.65rem;
+    font-family: 'Courier New', Courier, monospace;
+    color: #8796a5;
+    letter-spacing: 0.02em;
+    white-space: nowrap;
+}
 </style>
 
 <!-- Modal: Vincular Transação Bancária -->
