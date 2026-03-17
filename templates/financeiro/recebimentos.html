@@ -90,6 +90,13 @@
       {{ recebimentos|length }} registro{{ 's' if recebimentos|length != 1 }}
     </span>
     {% endif %}
+    <button type="button" class="btn btn-sm fw-semibold" id="btn-efi-auto"
+            style="background:rgba(255,255,255,.18);color:#fff;border:1px solid rgba(255,255,255,.35);"
+            onclick="executarConciliacaoEFI(this)"
+            title="Verifica o extrato EFI e marca automaticamente os boletos que já foram pagos">
+      <i class="bi bi-bank me-1"></i>Conciliar EFI Automático
+    </button>
+    <span id="msg-efi-auto" class="small" style="color:rgba(255,255,255,.85);"></span>
   </div>
 
   <!-- ── Stat cards ─────────────────────────────────────────── -->
@@ -465,6 +472,50 @@ document.addEventListener('DOMContentLoaded', function () {
   });
 
 });
+</script>
+
+<script>
+// ── Conciliação EFI Automático (chamado da página de recebimentos) ──────────
+function executarConciliacaoEFI(btn) {
+  var msg = document.getElementById('msg-efi-auto');
+  btn.disabled = true;
+  btn.innerHTML = '<i class="bi bi-hourglass-split me-1"></i>Conciliando…';
+  msg.textContent = '';
+  fetch('{{ url_for("bank_import.api_auto_reconcile") }}', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'}
+  })
+  .then(function(r) {
+    return r.text().then(function(text) {
+      try { return JSON.parse(text); }
+      catch(e) { throw new Error('Erro HTTP ' + r.status); }
+    });
+  })
+  .then(function(d) {
+    btn.disabled = false;
+    btn.innerHTML = '<i class="bi bi-bank me-1"></i>Conciliar EFI Automático';
+    if (d.success) {
+      var efi = d.por_efi || 0;
+      var total = d.conciliados || 0;
+      msg.style.color = 'rgba(255,255,255,.9)';
+      if (total > 0) {
+        msg.textContent = '✅ ' + total + ' conciliado(s) — EFI: ' + efi + '. Atualizando…';
+        setTimeout(function() { location.reload(); }, 1800);
+      } else {
+        msg.textContent = '✅ Nenhuma transação pendente encontrada.';
+      }
+    } else {
+      msg.style.color = '#ffc';
+      msg.textContent = '❌ ' + (d.erro || 'Erro desconhecido.');
+    }
+  })
+  .catch(function(e) {
+    btn.disabled = false;
+    btn.innerHTML = '<i class="bi bi-bank me-1"></i>Conciliar EFI Automático';
+    msg.style.color = '#ffc';
+    msg.textContent = '❌ ' + e.message;
+  });
+}
 </script>
 
 {% endblock %}
