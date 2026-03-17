@@ -2,182 +2,208 @@
 
 {% block title %}Novo Cliente - {{ app_name }}{% endblock %}
 
+{% block styles %}
+<style>
+  .page-hero {
+    background: linear-gradient(135deg, #1D63A5 0%, #1a4f82 60%, #154070 100%);
+    border-radius: .75rem;
+    padding: 1.5rem 2rem;
+    margin-bottom: 1.5rem;
+    color: #fff;
+  }
+  .page-hero .hero-icon {
+    width: 3rem; height: 3rem;
+    background: rgba(255,255,255,.15);
+    border-radius: .6rem;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1.5rem;
+    flex-shrink: 0;
+  }
+  .form-section-title {
+    font-size: 0.78rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: #1D63A5;
+    padding-bottom: 0.4rem;
+    border-bottom: 2px solid #e0eaf5;
+    margin-bottom: 1rem;
+    margin-top: 1.25rem;
+  }
+  .form-label { font-size: 0.83rem; font-weight: 600; color: #374151; }
+  .form-control-sm, .form-select-sm { font-size: 0.84rem; }
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="container-fluid">
-  <nav aria-label="breadcrumb" class="mt-2 mb-3">
-    <ol class="breadcrumb" style="font-size: 0.85rem;">
-      <li class="breadcrumb-item"><a href="{{ url_for('index') }}">Dashboard</a></li>
-      <li class="breadcrumb-item"><a href="{{ url_for('clientes.lista') }}">Clientes</a></li>
-      <li class="breadcrumb-item active" aria-current="page">Novo Cliente</li>
-    </ol>
-  </nav>
 
-  <h2 class="mb-3" style="color:#1D63A5; font-size: 1.3rem;"><i class="bi bi-person-plus"></i> Novo Cliente</h2>
+    <!-- Breadcrumb -->
+    <nav aria-label="breadcrumb" class="mb-3">
+        <ol class="breadcrumb small">
+            <li class="breadcrumb-item"><a href="{{ url_for('index') }}" class="text-decoration-none">Dashboard</a></li>
+            <li class="breadcrumb-item"><a href="{{ url_for('clientes.lista') }}" class="text-decoration-none">Clientes</a></li>
+            <li class="breadcrumb-item active">Novo Cliente</li>
+        </ol>
+    </nav>
 
-  <div class="card shadow-sm">
-    <div class="card-header" style="background:#ff9800;color:white; font-size: 0.95rem; padding: 0.6rem 1rem;">
-      <h5 class="mb-0" style="font-size: 1rem;">Cadastrar Cliente</h5>
+    <!-- Hero header -->
+    <div class="page-hero d-flex align-items-center gap-3 flex-wrap">
+        <div class="hero-icon"><i class="bi bi-person-plus-fill"></i></div>
+        <div class="flex-grow-1">
+            <h4 class="mb-0 fw-bold">Novo Cliente</h4>
+            <p class="mb-0 opacity-75 small">Cadastre um novo cliente com dados de contato e configurações de frete.</p>
+        </div>
+        <a href="{{ url_for('clientes.lista') }}"
+           class="btn btn-sm px-3" style="background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.35);">
+            <i class="bi bi-arrow-left me-1"></i> Voltar
+        </a>
     </div>
-    <div class="card-body" style="padding: 1rem;">
-      <form method="POST">
 
-        <!-- Dados Principais -->
-        <div class="row">
-          <div class="col-md-6 mb-2">
-            <label class="form-label" style="font-size: 0.85rem;">Razão Social</label>
-            <input type="text" name="razao_social" class="form-control form-control-sm" required>
-          </div>
-          <div class="col-md-6 mb-2">
-            <label class="form-label" style="font-size: 0.85rem;">Nome Fantasia</label>
-            <input type="text" name="nome_fantasia" class="form-control form-control-sm">
-          </div>
+    <div class="card shadow-sm">
+        <div class="card-header d-flex align-items-center py-2"
+             style="background:#1D63A5;color:white;font-size:0.82rem;font-weight:600;letter-spacing:0.02em;">
+            <i class="bi bi-person-fill me-2"></i> Dados do Cliente
         </div>
+        <div class="card-body">
+            <form method="POST">
 
-        <!-- Documentos -->
-        <div class="row">
-          <div class="col-md-4 mb-2">
-            <label class="form-label" style="font-size: 0.85rem;">CNPJ</label>
-            <input type="text" name="cnpj" class="form-control form-control-sm" placeholder="00.000.000/0000-00">
-          </div>
-          <div class="col-md-4 mb-2">
-            <label class="form-label" style="font-size: 0.85rem;">IE</label>
-            <input type="text" name="ie" class="form-control form-control-sm">
-          </div>
-          <div class="col-md-4 mb-2">
-            <label class="form-label" style="font-size: 0.85rem;">Telefone</label>
-            <input type="text" name="telefone" class="form-control form-control-sm" placeholder="(00) 0000-0000">
-          </div>
+                <!-- Dados Principais -->
+                <div class="form-section-title"><i class="bi bi-person-badge me-1"></i>Dados Principais</div>
+                <div class="row">
+                    <div class="col-md-6 mb-2">
+                        <label class="form-label">Razão Social <span class="text-danger">*</span></label>
+                        <input type="text" name="razao_social" class="form-control form-control-sm" required>
+                    </div>
+                    <div class="col-md-6 mb-2">
+                        <label class="form-label">Nome Fantasia</label>
+                        <input type="text" name="nome_fantasia" class="form-control form-control-sm">
+                    </div>
+                </div>
+
+                <!-- Identificação Fiscal -->
+                <div class="form-section-title"><i class="bi bi-file-earmark-text me-1"></i>Identificação Fiscal</div>
+                <div class="row">
+                    <div class="col-md-4 mb-2">
+                        <label class="form-label">CNPJ</label>
+                        <input type="text" name="cnpj" class="form-control form-control-sm" placeholder="00.000.000/0000-00">
+                    </div>
+                    <div class="col-md-4 mb-2">
+                        <label class="form-label">IE</label>
+                        <input type="text" name="ie" class="form-control form-control-sm">
+                    </div>
+                    <div class="col-md-4 mb-2">
+                        <label class="form-label">Telefone</label>
+                        <input type="text" name="telefone" class="form-control form-control-sm" placeholder="(00) 0000-0000">
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="col-md-6 mb-2">
+                        <label class="form-label">Contato</label>
+                        <input type="text" name="contato" class="form-control form-control-sm" placeholder="Nome do responsável">
+                    </div>
+                    <div class="col-md-6 mb-2">
+                        <label class="form-label">E-mail</label>
+                        <input type="email" name="email" class="form-control form-control-sm" placeholder="email@exemplo.com">
+                    </div>
+                </div>
+
+                <!-- Configurações de Frete -->
+                <div class="form-section-title"><i class="bi bi-truck me-1"></i>Configurações de Frete</div>
+                <div class="row">
+                    <div class="col-md-6 mb-2">
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" name="paga_comissao" id="paga_comissao" checked>
+                            <label class="form-check-label" for="paga_comissao" style="font-size: 0.85rem;">
+                                <strong>Paga Comissão ao Motorista</strong>
+                                <small class="text-muted d-block">R$ 0,01 por litro transportado</small>
+                            </label>
+                        </div>
+                    </div>
+                    <div class="col-md-6 mb-2">
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" id="cte_integral" name="cte_integral" value="1">
+                            <label class="form-check-label" for="cte_integral" style="font-size: 0.85rem;">
+                                <strong>CTE Integral</strong>
+                                <small class="text-muted d-block">Valor do CTE = Valor total do frete</small>
+                            </label>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Endereço -->
+                <div class="form-section-title"><i class="bi bi-geo-alt me-1"></i>Endereço</div>
+                <div class="row">
+                    <div class="col-md-8 mb-2">
+                        <label class="form-label">Logradouro</label>
+                        <input type="text" name="endereco" class="form-control form-control-sm" placeholder="Rua, Avenida...">
+                    </div>
+                    <div class="col-md-2 mb-2">
+                        <label class="form-label">Número</label>
+                        <input type="text" name="numero" class="form-control form-control-sm">
+                    </div>
+                    <div class="col-md-2 mb-2">
+                        <label class="form-label">CEP</label>
+                        <input type="text" name="cep" class="form-control form-control-sm" placeholder="00000-000">
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="col-md-6 mb-2">
+                        <label class="form-label">Complemento</label>
+                        <input type="text" name="complemento" class="form-control form-control-sm" placeholder="Apto, Sala, Bloco...">
+                    </div>
+                    <div class="col-md-6 mb-2">
+                        <label class="form-label">Bairro</label>
+                        <input type="text" name="bairro" class="form-control form-control-sm">
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="col-md-10 mb-2">
+                        <label class="form-label">Município</label>
+                        <select name="destino_id" class="form-select form-select-sm">
+                            <option value="">Selecione o município</option>
+                            {% for destino in destinos %}
+                            <option value="{{ destino.id }}">{{ destino.nome }} - {{ destino.estado }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-2 mb-2">
+                        <label class="form-label">UF</label>
+                        <input type="text" name="uf" class="form-control form-control-sm" maxlength="2" placeholder="SP">
+                    </div>
+                </div>
+
+                <!-- Grupo Contábil -->
+                {% if grupos %}
+                <div class="form-section-title"><i class="bi bi-journal-bookmark me-1"></i>Contabilidade</div>
+                <div class="row">
+                    <div class="col-md-6 mb-2">
+                        <label class="form-label">Grupo do Plano de Contas</label>
+                        <select name="grupo_contabil_id" class="form-select form-select-sm">
+                            <option value="">— Sem grupo contábil —</option>
+                            {% for g in grupos %}
+                            <option value="{{ g.id }}">{{ g.codigo }} — {{ g.nome }}</option>
+                            {% endfor %}
+                        </select>
+                        <div class="form-text" style="font-size:0.78rem;">
+                            Associe este cliente a um grupo do Plano de Contas para exportação contábil.
+                        </div>
+                    </div>
+                </div>
+                {% endif %}
+
+                <!-- Botões -->
+                <div class="d-flex justify-content-between mt-4 pt-2 border-top">
+                    <a href="{{ url_for('clientes.lista') }}" class="btn btn-secondary btn-sm">
+                        <i class="bi bi-arrow-left me-1"></i> Voltar
+                    </a>
+                    <button type="submit" class="btn btn-primary btn-sm px-4">
+                        <i class="bi bi-check-circle me-1"></i> Salvar
+                    </button>
+                </div>
+
+            </form>
         </div>
-
-        <!-- Contato -->
-        <div class="row">
-          <div class="col-md-6 mb-2">
-            <label class="form-label" style="font-size: 0.85rem;">Contato</label>
-            <input type="text" name="contato" class="form-control form-control-sm" placeholder="Nome do responsável">
-          </div>
-          <div class="col-md-6 mb-2">
-            <label class="form-label" style="font-size: 0.85rem;">E-mail</label>
-            <input type="email" name="email" class="form-control form-control-sm" placeholder="email@exemplo.com">
-          </div>
-        </div>
-
-        <!-- Configurações de Comissão -->
-        <hr style="margin: 1rem 0;">
-        <h6 style="font-size: 0.9rem; color: #1D63A5; margin-bottom: 0.75rem;">Configurações de Frete</h6>
-        <div class="row">
-          <div class="col-md-6 mb-2">
-            <div class="form-check form-switch">
-              <input class="form-check-input" type="checkbox" name="paga_comissao" id="paga_comissao" checked>
-              <label class="form-check-label" for="paga_comissao" style="font-size: 0.85rem;">
-                <strong>Paga Comissão ao Motorista</strong>
-                <small class="text-muted d-block">R$ 0,01 por litro transportado</small>
-              </label>
-            </div>
-          </div>
-          <div class="col-md-6 mb-2">
-            <div class="form-check form-switch">
-              <input class="form-check-input" type="checkbox" id="cte_integral" name="cte_integral" value="1">
-              <label class="form-check-label" for="cte_integral" style="font-size: 0.85rem;">
-                <strong>CTE Integral</strong>
-                <small class="text-muted d-block">Valor do CTE = Valor total do frete</small>
-              </label>
-            </div>
-          </div>
-        </div>
-
-        <!-- Endereço -->
-        <hr style="margin: 1rem 0;">
-        <h6 style="font-size: 0.9rem; color: #1D63A5; margin-bottom: 0.75rem;">Endereço</h6>
-        <div class="row">
-          <div class="col-md-8 mb-2">
-            <label class="form-label" style="font-size: 0.85rem;">Endereço</label>
-            <input type="text" name="endereco" class="form-control form-control-sm" placeholder="Rua, Avenida...">
-          </div>
-          <div class="col-md-2 mb-2">
-            <label class="form-label" style="font-size: 0.85rem;">Número</label>
-            <input type="text" name="numero" class="form-control form-control-sm">
-          </div>
-          <div class="col-md-2 mb-2">
-            <label class="form-label" style="font-size: 0.85rem;">CEP</label>
-            <input type="text" name="cep" class="form-control form-control-sm" placeholder="00000-000">
-          </div>
-        </div>
-
-        <div class="row">
-          <div class="col-md-6 mb-2">
-            <label class="form-label" style="font-size: 0.85rem;">Complemento</label>
-            <input type="text" name="complemento" class="form-control form-control-sm" placeholder="Apto, Sala, Bloco...">
-          </div>
-          <div class="col-md-6 mb-2">
-            <label class="form-label" style="font-size: 0.85rem;">Bairro</label>
-            <input type="text" name="bairro" class="form-control form-control-sm">
-          </div>
-        </div>
-
-        <div class="row">
-          <div class="col-md-10 mb-2">
-            <label class="form-label" style="font-size: 0.85rem;">Município</label>
-            <select name="destino_id" class="form-select form-select-sm">
-              <option value="">Selecione o município</option>
-              {% for destino in destinos %}
-                <option value="{{ destino.id }}">{{ destino.nome }} - {{ destino.estado }}</option>
-              {% endfor %}
-            </select>
-          </div>
-          <div class="col-md-2 mb-2">
-            <label class="form-label" style="font-size: 0.85rem;">UF</label>
-            <input type="text" name="uf" class="form-control form-control-sm" maxlength="2" placeholder="SP">
-          </div>
-        </div>
-
-        <!-- Grupo Contábil -->
-        {% if grupos %}
-        <hr style="margin: 1rem 0;">
-        <h6 style="font-size: 0.9rem; color: #1D63A5; margin-bottom: 0.75rem;">
-          <i class="bi bi-journal-bookmark-fill"></i> Contabilidade
-        </h6>
-        <div class="row">
-          <div class="col-md-6 mb-2">
-            <label class="form-label" style="font-size: 0.85rem;">Grupo do Plano de Contas</label>
-            <select name="grupo_contabil_id" class="form-select form-select-sm">
-              <option value="">— Sem grupo contábil —</option>
-              {% for g in grupos %}
-              <option value="{{ g.id }}">{{ g.codigo }} — {{ g.nome }}</option>
-              {% endfor %}
-            </select>
-            <div class="form-text" style="font-size:0.78rem;">
-              Associe este cliente a um grupo do Plano de Contas para exportação contábil.
-            </div>
-          </div>
-        </div>
-        {% endif %}
-
-        <!-- Botões -->
-        <div class="d-flex justify-content-between mt-3">
-          <a href="{{ url_for('clientes.lista') }}" class="btn btn-secondary btn-sm">
-            <i class="bi bi-arrow-left"></i> Voltar
-          </a>
-          <button type="submit" class="btn btn-success btn-sm">
-            <i class="bi bi-check-circle"></i> Salvar
-          </button>
-        </div>
-
-      </form>
     </div>
-  </div>
 </div>
-
-<style>
-  .form-control-sm, .form-select-sm {
-    font-size: 0.85rem;
-  }
-  .btn-sm {
-    font-size: 0.85rem;
-    padding: 0.4rem 0.8rem;
-  }
-  hr {
-    border-top: 1px solid #dee2e6;
-  }
-</style>
-
 {% endblock %}
