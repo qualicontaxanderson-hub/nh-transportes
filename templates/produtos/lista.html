@@ -2,90 +2,264 @@
 
 {% block title %}Produtos - NH Transportes{% endblock %}
 
+{% block styles %}
+<style>
+  .page-hero {
+    background: linear-gradient(135deg, #1D63A5 0%, #1a4f82 60%, #154070 100%);
+    border-radius: .75rem;
+    padding: 1.5rem 2rem;
+    margin-bottom: 1.5rem;
+    color: #fff;
+  }
+  .page-hero .hero-icon {
+    width: 3rem; height: 3rem;
+    background: rgba(255,255,255,.15);
+    border-radius: .6rem;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1.5rem;
+    flex-shrink: 0;
+  }
+  .stat-card-prod {
+    border: 0;
+    border-radius: .65rem;
+    box-shadow: 0 2px 8px rgba(0,0,0,.07);
+    transition: box-shadow .2s;
+  }
+  .stat-card-prod:hover { box-shadow: 0 4px 16px rgba(0,0,0,.13); }
+  .stat-card-prod .stat-icon {
+    width: 2.6rem; height: 2.6rem;
+    border-radius: .5rem;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1.2rem;
+    flex-shrink: 0;
+  }
+  #tbl-lista { font-size: 0.72rem; }
+  #tbl-lista thead th {
+    background: #1D63A5; color: #fff;
+    font-size: 0.68rem; font-weight: 700;
+    text-transform: uppercase; letter-spacing: .04em;
+    padding: 0.45rem 0.5rem; border: none; white-space: nowrap;
+  }
+  #tbl-lista tbody td { padding: 0.35rem 0.5rem; vertical-align: middle; border-color: #f0f3f7; }
+  #tbl-lista tbody tr.row-prod { cursor: pointer; transition: background .1s; }
+  #tbl-lista tbody tr.row-prod:hover td { background: #eef4ff; }
+  .badge-conta {
+    display: inline-block;
+    background: #e8f0fe;
+    color: #1a56db;
+    border-radius: 3px;
+    padding: 0.1rem 0.35rem;
+    font-size: 0.7rem;
+    font-weight: 700;
+    margin-right: 0.3rem;
+    letter-spacing: 0.02em;
+  }
+  .btn-acao {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 1.6rem; height: 1.6rem;
+    border-radius: 4px; font-size: 0.75rem;
+    border: none; cursor: pointer;
+    text-decoration: none; transition: opacity 0.15s;
+  }
+  .btn-acao:hover { opacity: 0.8; }
+  .btn-editar  { background: #fff3cd; color: #856404; }
+  .btn-excluir { background: #f8d7da; color: #842029; }
+  @media (max-width: 768px) {
+    #tbl-lista { font-size: 0.70rem; }
+  }
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="container-fluid">
-    <div class="d-flex justify-content-between align-items-center mb-3">
-        <h2 style="font-size: 1.5rem;"><i class="bi bi-fuel-pump"></i> Produtos</h2>
-        <div>
-            <a href="{{ url_for('produtos.novo') }}" class="btn btn-primary btn-sm">
-                <i class="bi bi-plus-circle"></i> Novo Produto
-            </a>
-        </div>
+
+    <!-- Breadcrumb -->
+    <nav aria-label="breadcrumb" class="mb-3">
+      <ol class="breadcrumb small">
+        <li class="breadcrumb-item"><a href="/" class="text-decoration-none">Dashboard</a></li>
+        <li class="breadcrumb-item active">Produtos</li>
+      </ol>
+    </nav>
+
+    <!-- Hero header -->
+    <div class="page-hero d-flex align-items-center gap-3 flex-wrap">
+      <div class="hero-icon"><i class="bi bi-fuel-pump-fill"></i></div>
+      <div class="flex-grow-1">
+        <h4 class="mb-0 fw-bold">Produtos</h4>
+        <p class="mb-0 opacity-75 small">Cadastro e gestão de produtos com vínculos contábeis.</p>
+      </div>
+      <a href="{{ url_for('produtos.novo') }}"
+         class="btn btn-light fw-semibold btn-sm px-3">
+        <i class="bi bi-plus-circle me-1"></i> Novo Produto
+      </a>
     </div>
 
-    <div class="card">
-        <div class="card-header" style="background:#1D63A5;color:white;font-size:0.9rem;font-weight:600;">
-            <i class="bi bi-list"></i> Lista de Produtos
-        </div>
-        <div class="card-body" style="padding: 0.5rem;">
-            <div class="table-responsive">
-                <table class="table table-hover table-striped table-sm mb-0">
-                    <thead style="background:#4A90E2;color:#000;font-weight:700;font-size:0.85rem;">
-                        <tr>
-                            <th>ID</th>
-                            <th>Nome</th>
-                            <th class="text-center">Ações</th>
-                        </tr>
-                    </thead>
-                    <tbody style="font-size: 0.85rem;">
-                        {% if produtos %}
-                            {% for produto in produtos %}
-                            <tr>
-                                <td><strong>{{ produto.id }}</strong></td>
-                                <td>{{ produto.nome }}</td>
-                                <td class="text-center">
-                                    {% if current_user.nivel == 'admin' %}
-                                    <a href="{{ url_for('produtos.editar', id=produto.id) }}" class="btn btn-sm btn-warning" title="Editar" style="padding: 0.2rem 0.4rem;">
-                                        <i class="bi bi-pencil"></i>
-                                    </a>
-                                    <a href="{{ url_for('produtos.excluir', id=produto.id) }}" 
-                                       class="btn btn-sm btn-danger" 
-                                       title="Excluir"
-                                       style="padding: 0.2rem 0.4rem;"
-                                       onclick="return confirm('Deseja realmente excluir este produto?')">
-                                        <i class="bi bi-trash"></i>
-                                    </a>
-                                    {% else %}
-                                    <span class="text-muted" style="font-size: 0.75rem;">
-                                        <i class="bi bi-lock"></i> Restrito
-                                    </span>
-                                    {% endif %}
-                                </td>
-                            </tr>
-                            {% endfor %}
-                        {% else %}
-                            <tr>
-                                <td colspan="3" class="text-center text-muted py-3" style="font-size: 0.9rem;">
-                                    <i class="bi bi-inbox" style="font-size:1.5rem;"></i><br>
-                                    Nenhum produto cadastrado
-                                </td>
-                            </tr>
-                        {% endif %}
-                    </tbody>
-                </table>
+    <!-- Flash messages -->
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% for cat, msg in messages %}
+      <div class="alert alert-{{ cat }} alert-dismissible fade show py-2" role="alert">
+        {{ msg }}<button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+      </div>
+      {% endfor %}
+    {% endwith %}
+
+    <!-- Stat cards -->
+    {% set total_prod = produtos | length %}
+    {% set com_conta  = produtos | selectattr('grupo_codigo') | list | length %}
+    {% set sem_conta  = total_prod - com_conta %}
+    <div class="row g-3 mb-4">
+      <div class="col-6 col-md-4">
+        <div class="card stat-card-prod h-100">
+          <div class="card-body d-flex align-items-center gap-3 py-3">
+            <div class="stat-icon" style="background:#e8f0fb;">
+              <i class="bi bi-fuel-pump" style="color:#1D63A5;"></i>
             </div>
+            <div>
+              <div class="fs-4 fw-bold" style="color:#1D63A5;">{{ total_prod }}</div>
+              <div class="text-muted small">Produtos</div>
+            </div>
+          </div>
         </div>
+      </div>
+      <div class="col-6 col-md-4">
+        <div class="card stat-card-prod h-100">
+          <div class="card-body d-flex align-items-center gap-3 py-3">
+            <div class="stat-icon" style="background:#e6f9ee;">
+              <i class="bi bi-journal-bookmark" style="color:#198754;"></i>
+            </div>
+            <div>
+              <div class="fs-4 fw-bold" style="color:#198754;">{{ com_conta }}</div>
+              <div class="text-muted small">Com Conta Contábil</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="col-12 col-md-4">
+        <div class="card stat-card-prod h-100">
+          <div class="card-body d-flex align-items-center gap-3 py-3">
+            <div class="stat-icon" style="background:#fff3cd;">
+              <i class="bi bi-journal" style="color:#856404;"></i>
+            </div>
+            <div>
+              <div class="fs-4 fw-bold" style="color:#856404;">{{ sem_conta }}</div>
+              <div class="text-muted small">Sem Conta Contábil</div>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
+
+    <!-- Filtro por Conta Contábil -->
+    {% if grupos %}
+    <div class="card shadow-sm mb-4">
+      <div class="card-header d-flex align-items-center py-2"
+           style="background:#1D63A5;color:white;font-size:0.82rem;font-weight:600;letter-spacing:0.02em;">
+        <i class="bi bi-funnel me-1"></i> Filtrar por Conta Contábil
+      </div>
+      <div class="card-body py-2">
+        <form method="GET" class="row g-2 align-items-end">
+          <div class="col-md-8">
+            <select name="grupo_id" class="form-select form-select-sm">
+              <option value="">— Todos os produtos —</option>
+              {% for g in grupos %}
+              <option value="{{ g.id }}" {% if grupo_id == g.id|string %}selected{% endif %}>
+                {{ g.codigo }} — {{ g.nome }}
+              </option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-auto">
+            <button type="submit" class="btn btn-primary btn-sm">
+              <i class="bi bi-search"></i> Filtrar
+            </button>
+            {% if grupo_id %}
+            <a href="{{ url_for('produtos.lista') }}" class="btn btn-secondary btn-sm ms-1">
+              <i class="bi bi-x-circle"></i> Limpar
+            </a>
+            {% endif %}
+          </div>
+        </form>
+      </div>
+    </div>
+    {% endif %}
+
+    <!-- Tabela de Produtos -->
+    <div class="card shadow-sm">
+      <div class="card-header d-flex justify-content-between align-items-center py-2"
+           style="background:#1D63A5;color:white;font-size:0.82rem;font-weight:600;letter-spacing:0.02em;">
+        <span><i class="bi bi-list me-1"></i> Lista de Produtos</span>
+        {% if produtos %}
+        <span class="badge bg-white text-secondary" style="font-size:0.7rem;font-weight:600;">{{ produtos|length }}</span>
+        {% endif %}
+      </div>
+      <div class="card-body p-0">
+        <div class="table-responsive">
+          <table class="table mb-0" id="tbl-lista">
+            <thead>
+              <tr>
+                <th style="width:4%">ID</th>
+                <th>Nome</th>
+                <th>Conta Contábil</th>
+                <th class="text-center" style="width:8%">Ações</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% if produtos %}
+                {% for produto in produtos %}
+                <tr class="row-prod" data-url="{{ url_for('produtos.editar', id=produto.id) }}"
+                    title="Clique para editar">
+                  <td class="text-muted">{{ produto.id }}</td>
+                  <td class="fw-semibold">{{ produto.nome }}</td>
+                  <td>
+                    {% if produto.grupo_codigo %}
+                    <span class="badge-conta"><strong>{{ produto.grupo_codigo }}</strong></span>
+                    <span style="color:#374151;font-size:0.75rem;">{{ produto.grupo_nome }}</span>
+                    {% else %}
+                    <span class="text-muted fst-italic" style="font-size:0.72rem;">—</span>
+                    {% endif %}
+                  </td>
+                  <td class="text-center actions-cell" onclick="event.stopPropagation()">
+                    <a href="{{ url_for('produtos.editar', id=produto.id) }}" class="btn-acao btn-editar" title="Editar">
+                      <i class="bi bi-pencil"></i>
+                    </a>
+                    {% if current_user.nivel == 'admin' %}
+                    <a href="{{ url_for('produtos.excluir', id=produto.id) }}"
+                       class="btn-acao btn-excluir"
+                       title="Excluir"
+                       onclick="return confirm('Deseja realmente excluir este produto?')">
+                      <i class="bi bi-trash"></i>
+                    </a>
+                    {% endif %}
+                  </td>
+                </tr>
+                {% endfor %}
+              {% else %}
+                <tr>
+                  <td colspan="4" class="text-center text-muted py-4">
+                    <i class="bi bi-inbox" style="font-size:1.8rem;opacity:0.4;"></i>
+                    <div class="mt-2" style="font-size:0.82rem;">
+                      {% if grupo_id %}Nenhum produto nesta conta contábil.{% else %}Nenhum produto cadastrado.{% endif %}
+                    </div>
+                  </td>
+                </tr>
+              {% endif %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
 </div>
 
-<style>
-    .table-sm th, .table-sm td {
-        padding: 0.4rem;
-    }
-    
-    .btn-sm {
-        font-size: 0.8rem;
-        padding: 0.3rem 0.6rem;
-    }
-    
-    @media (max-width: 768px) {
-        h2 {
-            font-size: 1.2rem !important;
-        }
-        .table-sm th, .table-sm td {
-            font-size: 0.75rem !important;
-            padding: 0.3rem !important;
-        }
-    }
-</style>
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+  document.querySelectorAll('tr.row-prod[data-url]').forEach(function (row) {
+    row.addEventListener('click', function (e) {
+      if (e.target.closest('.actions-cell') || e.target.closest('a') || e.target.closest('button') || e.target.closest('form')) return;
+      window.location.href = row.getAttribute('data-url');
+    });
+  });
+});
+</script>
+
 {% endblock %}
