@@ -33,7 +33,16 @@
   }
   .table th { font-weight: 700; font-size: 0.8rem; text-transform: uppercase; letter-spacing: .03em; color: #374151; }
   .table td { font-size: 0.87rem; vertical-align: middle; }
-  .btn-acao { width: 30px; height: 30px; padding: 0; display:inline-flex; align-items:center; justify-content:center; border-radius:.4rem; }
+  .btn-act {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 1.65rem; height: 1.65rem; border-radius: 4px;
+    font-size: 0.72rem; border: none; cursor: pointer;
+    text-decoration: none; transition: opacity .12s; padding: 0;
+  }
+  .btn-act:hover { opacity: .75; }
+  .btn-act-view   { background: #d1ecf1; color: #0c5460; }
+  .btn-act-edit   { background: #cce5ff; color: #004085; }
+  .btn-act-danger { background: #f8d7da; color: #721c24; }
   #tbl-pedidos tbody tr.row-item { cursor: pointer; transition: background .1s; }
   #tbl-pedidos tbody tr.row-item:hover td { background: #f0f7ff; }
 </style>
@@ -171,16 +180,18 @@
                 {% endif %}
               </td>
               <td class="text-center pe-3" onclick="event.stopPropagation()">
-                <a href="{{ url_for('pedidos.visualizar', id=pedido.id) }}" class="btn btn-acao btn-info text-white" title="Visualizar">
-                  <i class="bi bi-eye"></i>
-                </a>
-                <a href="{{ url_for('pedidos.editar', id=pedido.id) }}" class="btn btn-acao" style="background:#f59e0b;color:#fff;" title="Editar">
-                  <i class="bi bi-pencil"></i>
-                </a>
-                <a href="{{ url_for('pedidos.excluir', id=pedido.id) }}" class="btn btn-acao btn-danger" title="Excluir"
-                   onclick="return confirm('Deseja realmente excluir este pedido?')">
-                  <i class="bi bi-trash"></i>
-                </a>
+                <div class="d-flex justify-content-center gap-1">
+                  <a href="{{ url_for('pedidos.visualizar', id=pedido.id) }}" class="btn-act btn-act-view" title="Visualizar">
+                    <i class="bi bi-eye"></i>
+                  </a>
+                  <a href="{{ url_for('pedidos.editar', id=pedido.id) }}" class="btn-act btn-act-edit" title="Editar">
+                    <i class="bi bi-pencil"></i>
+                  </a>
+                  <a href="{{ url_for('pedidos.excluir', id=pedido.id) }}" class="btn-act btn-act-danger" title="Excluir"
+                     onclick="return confirm('Deseja realmente excluir este pedido?')">
+                    <i class="bi bi-trash"></i>
+                  </a>
+                </div>
               </td>
             </tr>
             {% endfor %}
