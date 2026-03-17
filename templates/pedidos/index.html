@@ -34,6 +34,8 @@
   .table th { font-weight: 700; font-size: 0.8rem; text-transform: uppercase; letter-spacing: .03em; color: #374151; }
   .table td { font-size: 0.87rem; vertical-align: middle; }
   .btn-acao { width: 30px; height: 30px; padding: 0; display:inline-flex; align-items:center; justify-content:center; border-radius:.4rem; }
+  #tbl-pedidos tbody tr.row-item { cursor: pointer; transition: background .1s; }
+  #tbl-pedidos tbody tr.row-item:hover td { background: #f0f7ff; }
 </style>
 {% endblock %}
 
@@ -132,11 +134,12 @@
       <span class="badge ms-2" style="background:rgba(255,255,255,.2);font-size:0.78rem;">{{ total }}</span>
     </div>
     <div class="card-body table-responsive p-0">
-      <table class="table table-hover table-sm mb-0">
+      <table class="table table-hover table-sm mb-0" id="tbl-pedidos">
         <thead style="background:#f8f9fb;">
           <tr>
             <th class="ps-3">Número</th>
             <th>Data</th>
+            <th>Motorista</th>
             <th class="text-center">Itens</th>
             <th class="text-end">Qtd Total</th>
             <th class="text-end">Valor Total</th>
@@ -147,9 +150,10 @@
         <tbody>
           {% if pedidos %}
             {% for pedido in pedidos %}
-            <tr>
+            <tr class="row-item" data-url="{{ url_for('pedidos.visualizar', id=pedido.id) }}">
               <td class="ps-3"><strong>{{ pedido.numero }}</strong></td>
               <td>{{ pedido.data_pedido.strftime('%d/%m/%Y') if pedido.data_pedido else '-' }}</td>
+              <td>{% if pedido.motorista_nome %}{{ pedido.motorista_nome }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
               <td class="text-center">{{ pedido.total_itens or 0 }}</td>
               <td class="text-end">{{ "{:,.2f}".format(pedido.total_quantidade or 0).replace(',', 'X').replace('.', ',').replace('X', '.') }} m³</td>
               <td class="text-end">R$ {{ "{:,.2f}".format(pedido.total_valor or 0).replace(',', 'X').replace('.', ',').replace('X', '.') }}</td>
@@ -166,7 +170,7 @@
                   <span class="badge bg-secondary">{{ pedido.status }}</span>
                 {% endif %}
               </td>
-              <td class="text-center pe-3">
+              <td class="text-center pe-3" onclick="event.stopPropagation()">
                 <a href="{{ url_for('pedidos.visualizar', id=pedido.id) }}" class="btn btn-acao btn-info text-white" title="Visualizar">
                   <i class="bi bi-eye"></i>
                 </a>
@@ -182,7 +186,7 @@
             {% endfor %}
           {% else %}
             <tr>
-              <td colspan="7" class="text-center text-muted py-4">
+              <td colspan="8" class="text-center text-muted py-4">
                 <i class="bi bi-inbox" style="font-size:2rem;"></i><br>
                 Nenhum pedido encontrado.
               </td>
@@ -194,4 +198,14 @@
   </div>
 
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.querySelectorAll('#tbl-pedidos tbody tr.row-item').forEach(function(row) {
+  row.addEventListener('click', function() {
+    window.location.href = this.dataset.url;
+  });
+});
+</script>
 {% endblock %}
