@@ -178,6 +178,7 @@
               <th style="width:10%">Valor</th>
               <th style="width:10%">Vencimento</th>
               <th style="width:8%">Status</th>
+              <th style="width:12%">Charge ID</th>
               <th class="text-center" style="width:14%">Ações</th>
             </tr>
           </thead>
@@ -210,6 +211,7 @@
                 {% elif ds == 'cancelado' %}<span class="badge-status badge-cancelado">Cancelado</span>
                 {% else %}<span class="badge-status badge-pendente">Pendente</span>{% endif %}
               </td>
+              <td class="mono text-muted" style="font-size:0.65rem;word-break:break-all;">{{ r.charge_id or '—' }}</td>
               <td class="text-center actions-cell" onclick="event.stopPropagation()">
                 {% if r.charge_id %}
                 <a href="{{ boleto_url }}" target="_blank" class="btn-act btn-boleto" title="Ver/Imprimir Boleto">
