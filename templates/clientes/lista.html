@@ -41,7 +41,8 @@
     padding: 0.45rem 0.5rem; border: none; white-space: nowrap;
   }
   #tbl-lista tbody td { padding: 0.35rem 0.5rem; vertical-align: middle; border-color: #f0f3f7; }
-  #tbl-lista tbody tr:hover td { background: #eef4ff; }
+  #tbl-lista tbody tr.row-cli { cursor: pointer; transition: background .1s; }
+  #tbl-lista tbody tr.row-cli:hover td { background: #eef4ff; }
   .badge-conta {
     display: inline-block;
     background: #e8f0fe;
@@ -190,7 +191,8 @@
                     <tbody>
                         {% if clientes %}
                             {% for cliente in clientes %}
-                            <tr>
+                            <tr class="row-cli" data-url="{{ url_for('clientes.editar', id=cliente.id) }}"
+                                title="Clique para editar">
                                 <td class="text-muted">{{ cliente.id }}</td>
                                 <td>{{ cliente.razao_social }}</td>
                                 <td style="font-family:monospace;font-size:0.72rem;color:#555;">{{ cliente.cnpj or '—' }}</td>
@@ -210,7 +212,7 @@
                                     <span class="text-muted fst-italic" style="font-size:0.72rem;">—</span>
                                     {% endif %}
                                 </td>
-                                <td class="text-center">
+                                <td class="text-center actions-cell" onclick="event.stopPropagation()">
                                     <a href="{{ url_for('clientes.editar', id=cliente.id) }}" class="btn-acao btn-editar" title="Editar">
                                         <i class="bi bi-pencil"></i>
                                     </a>
@@ -238,4 +240,16 @@
         </div>
     </div>
 </div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+  document.querySelectorAll('tr.row-cli[data-url]').forEach(function (row) {
+    row.addEventListener('click', function (e) {
+      if (e.target.closest('.actions-cell') || e.target.closest('a') || e.target.closest('button') || e.target.closest('form')) return;
+      window.location.href = row.getAttribute('data-url');
+    });
+  });
+});
+</script>
+
 {% endblock %}
