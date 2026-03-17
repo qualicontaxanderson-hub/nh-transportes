@@ -22,84 +22,113 @@
     </div>
     
     <div class="card shadow-sm">
-        <div class="card-header" style="background:#1D63A5;color:white; font-size: 0.95rem; padding: 0.6rem 1rem;">
-            <h5 class="mb-0" style="font-size: 1rem;">Títulos de Despesas</h5>
+        <div class="card-header d-flex justify-content-between align-items-center py-2" style="background:#1D63A5;color:white;font-size:0.82rem;font-weight:600;letter-spacing:0.02em;">
+            <span><i class="bi bi-folder2-open me-1"></i> Títulos de Despesas</span>
+            {% if titulos %}
+            <span class="badge bg-white text-secondary" style="font-size:0.7rem;font-weight:600;">{{ titulos|length }}</span>
+            {% endif %}
         </div>
-        <div class="card-body" style="padding: 1rem;">
-            <div class="row">
+        <div class="card-body p-0">
+            {% if titulos %}
+            <div class="row g-2 p-2">
                 {% for titulo in titulos %}
-                <div class="col-md-6 col-lg-4 mb-3">
-                    <div class="card h-100 shadow-sm hover-card">
-                        <div class="card-body">
-                            <div class="d-flex justify-content-between align-items-start mb-2">
-                                <h5 class="card-title text-primary mb-0" style="font-size: 1rem;">
-                                    <i class="bi bi-folder-fill"></i> {{ titulo.nome }}
-                                </h5>
-                                {% if nivel_usuario in ['ADMIN', 'ADMINISTRADOR'] %}
-                                <div class="btn-group btn-group-sm">
-                                    <a href="{{ url_for('despesas.titulo_detalhes', titulo_id=titulo.id) }}" 
-                                       class="btn btn-outline-info btn-sm" 
-                                       title="Ver Categorias">
-                                        <i class="bi bi-eye"></i>
-                                    </a>
-                                    <a href="{{ url_for('despesas.editar_titulo', id=titulo.id) }}" 
-                                       class="btn btn-outline-warning btn-sm" 
-                                       title="Editar">
-                                        <i class="bi bi-pencil"></i>
-                                    </a>
-                                    <form method="POST" 
-                                          action="{{ url_for('despesas.excluir_titulo', id=titulo.id) }}" 
-                                          style="display:inline;" 
-                                          onsubmit="return confirm('Tem certeza que deseja desativar este título?');">
-                                        <button type="submit" 
-                                                class="btn btn-outline-danger btn-sm" 
-                                                title="Desativar">
-                                            <i class="bi bi-trash"></i>
-                                        </button>
-                                    </form>
-                                </div>
-                                {% endif %}
-                            </div>
+                <div class="col-md-6 col-lg-4">
+                    <div class="desp-card d-flex align-items-center">
+                        <span class="desp-icon me-2"><i class="bi bi-folder-fill"></i></span>
+                        <div class="flex-grow-1 overflow-hidden">
+                            <a href="{{ url_for('despesas.titulo_detalhes', titulo_id=titulo.id) }}" class="desp-title text-decoration-none">{{ titulo.nome }}</a>
                             {% if titulo.descricao %}
-                            <p class="card-text text-muted small mb-2">{{ titulo.descricao }}</p>
+                            <div class="desp-desc text-truncate">{{ titulo.descricao }}</div>
                             {% endif %}
-                            <div class="d-flex justify-content-between align-items-center">
-                                <span class="badge bg-info">
-                                    {{ titulo.total_categorias or 0 }} categoria(s)
-                                </span>
-                                <a href="{{ url_for('despesas.titulo_detalhes', titulo_id=titulo.id) }}" 
-                                   class="btn btn-sm btn-primary">
-                                    Ver Categorias <i class="bi bi-arrow-right"></i>
-                                </a>
-                            </div>
                         </div>
-                    </div>
-                </div>
-                {% else %}
-                <div class="col-12">
-                    <div class="alert alert-info">
-                        <i class="bi bi-info-circle"></i> Nenhum título de despesa cadastrado ainda.
+                        <span class="desp-badge me-2">{{ titulo.total_categorias or 0 }} cat.</span>
                         {% if nivel_usuario in ['ADMIN', 'ADMINISTRADOR'] %}
-                        <a href="{{ url_for('despesas.novo_titulo') }}">Clique aqui para criar o primeiro título</a>.
+                        <div class="d-flex gap-1 flex-shrink-0">
+                            <a href="{{ url_for('despesas.titulo_detalhes', titulo_id=titulo.id) }}" class="btn-desp btn-desp-info" title="Ver Categorias"><i class="bi bi-eye"></i></a>
+                            <a href="{{ url_for('despesas.editar_titulo', id=titulo.id) }}" class="btn-desp btn-desp-warn" title="Editar"><i class="bi bi-pencil"></i></a>
+                            <form method="POST" action="{{ url_for('despesas.excluir_titulo', id=titulo.id) }}" style="display:inline;" onsubmit="return confirm('Desativar este título?');">
+                                <button type="submit" class="btn-desp btn-desp-danger" title="Desativar"><i class="bi bi-trash"></i></button>
+                            </form>
+                        </div>
+                        {% else %}
+                        <a href="{{ url_for('despesas.titulo_detalhes', titulo_id=titulo.id) }}" class="btn-desp btn-desp-info" title="Ver Categorias"><i class="bi bi-eye"></i></a>
                         {% endif %}
                     </div>
                 </div>
                 {% endfor %}
             </div>
+            {% else %}
+            <div class="text-center text-muted py-4">
+                <i class="bi bi-inbox" style="font-size:1.8rem;opacity:0.4;"></i>
+                <div class="mt-2" style="font-size:0.82rem;">Nenhum título de despesa cadastrado ainda.
+                    {% if nivel_usuario in ['ADMIN', 'ADMINISTRADOR'] %}
+                    <a href="{{ url_for('despesas.novo_titulo') }}">Criar o primeiro título</a>.
+                    {% endif %}
+                </div>
+            </div>
+            {% endif %}
         </div>
     </div>
 </div>
 
 <style>
-    .hover-card {
-        transition: transform 0.2s, box-shadow 0.2s;
+    .desp-card {
+        background: #fff;
+        border: 1px solid #e4e9f0;
+        border-radius: 6px;
+        padding: 0.45rem 0.6rem;
+        font-size: 0.78rem;
+        transition: background 0.12s;
     }
-    .hover-card:hover {
-        transform: translateY(-4px);
-        box-shadow: 0 4px 12px rgba(0,0,0,0.15) !important;
+    .desp-card:hover { background: #f0f7ff; }
+    .desp-icon {
+        font-size: 1rem;
+        color: #1D63A5;
+        flex-shrink: 0;
     }
-    .card-title {
+    .desp-title {
         font-weight: 600;
+        font-size: 0.78rem;
+        color: #1D63A5;
+        display: block;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
     }
+    .desp-title:hover { color: #0d4a88; }
+    .desp-desc {
+        font-size: 0.68rem;
+        color: #6c757d;
+        line-height: 1.2;
+    }
+    .desp-badge {
+        background: #e8f0fe;
+        color: #1a56db;
+        border-radius: 3px;
+        padding: 0.1rem 0.35rem;
+        font-size: 0.65rem;
+        font-weight: 700;
+        white-space: nowrap;
+        flex-shrink: 0;
+    }
+    .btn-desp {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 1.5rem;
+        height: 1.5rem;
+        border-radius: 4px;
+        font-size: 0.68rem;
+        border: none;
+        cursor: pointer;
+        text-decoration: none;
+        transition: opacity 0.12s;
+        background: transparent;
+        padding: 0;
+    }
+    .btn-desp:hover { opacity: 0.75; }
+    .btn-desp-info   { background: #cce5ff; color: #004085; }
+    .btn-desp-warn   { background: #fff3cd; color: #856404; }
+    .btn-desp-danger { background: #f8d7da; color: #721c24; }
 </style>
 {% endblock %}
