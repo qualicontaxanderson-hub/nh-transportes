@@ -1,281 +1,408 @@
 {% extends "base.html" %}
+{% block title %}Contas Bancárias - {{ app_name }}{% endblock %}
 
-{% block title %}Contas Bancárias - NH Transportes{% endblock %}
+{% block styles %}
+<style>
+  .page-hero {
+    background: linear-gradient(135deg, #1D63A5 0%, #1a4f82 60%, #154070 100%);
+    border-radius: .75rem;
+    padding: 1.5rem 2rem;
+    margin-bottom: 1.5rem;
+    color: #fff;
+  }
+  .page-hero .hero-icon {
+    width: 3rem; height: 3rem;
+    background: rgba(255,255,255,.15);
+    border-radius: .6rem;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1.5rem; flex-shrink: 0;
+  }
+  .stat-card { border: 0; border-radius: .65rem; box-shadow: 0 2px 8px rgba(0,0,0,.07); }
+  .stat-card .stat-icon { width: 2.6rem; height: 2.6rem; border-radius: .5rem; display: flex; align-items: center; justify-content: center; font-size: 1.2rem; flex-shrink: 0; }
+  #tbl-lista { font-size: 0.76rem; border-collapse: separate; border-spacing: 0; }
+  #tbl-lista thead tr th { background: #f0f4f8; color: #2c3e50; font-weight: 700; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.04em; padding: 0.45rem 0.65rem; border-bottom: 2px solid #c5d5e8; white-space: nowrap; }
+  #tbl-lista tbody tr td { padding: 0.38rem 0.65rem; border-bottom: 1px solid #eef1f4; vertical-align: middle; color: #374151; }
+  #tbl-lista tbody tr:last-child td { border-bottom: none; }
+  #tbl-lista tbody tr.row-item { cursor: pointer; transition: background .1s; }
+  #tbl-lista tbody tr.row-item:hover td { background: #f0f7ff; }
+  .btn-acao { display: inline-flex; align-items: center; justify-content: center; width: 1.8rem; height: 1.8rem; border-radius: .4rem; border: 1px solid; font-size: .82rem; transition: background .15s, color .15s; text-decoration: none; cursor: pointer; background: none; }
+  .btn-editar  { color:#1D63A5; border-color:#bee0f5; background:#f0f7ff; }
+  .btn-editar:hover  { background:#1D63A5; color:#fff; }
+  .btn-desativar { color:#dc3545; border-color:#f5c6cb; background:#fff5f5; }
+  .btn-desativar:hover { background:#dc3545; color:#fff; }
+  .actions-cell { white-space: nowrap; }
+  .filter-bar { background: #f8fbff; border: 1px solid #d9e8f5; border-radius: .5rem; padding: .6rem 1rem; margin-bottom: 1rem; }
+</style>
+{% endblock %}
 
 {% block content %}
 <div class="container-fluid">
-    <nav aria-label="breadcrumb" class="mt-2 mb-3">
-        <ol class="breadcrumb" style="font-size:0.85rem;">
-            <li class="breadcrumb-item"><a href="{{ url_for('index') }}">Dashboard</a></li>
-            <li class="breadcrumb-item"><a href="{{ url_for('bank_import.index') }}">Importação Bancária</a></li>
-            <li class="breadcrumb-item active">Contas Bancárias</li>
-        </ol>
-    </nav>
 
-    <div class="d-flex justify-content-between align-items-center mb-3">
-        <h4 style="color:#1D63A5;"><i class="bi bi-bank2"></i> Gerenciar Contas Bancárias</h4>
-        <button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#modalNovaConta">
-            <i class="bi bi-plus-lg"></i> Nova Conta
-        </button>
+  <!-- Hero -->
+  <div class="page-hero d-flex align-items-center gap-3 flex-wrap">
+    <div class="hero-icon"><i class="bi bi-bank2"></i></div>
+    <div class="flex-grow-1">
+      <h4 class="mb-0 fw-bold">Contas Bancárias</h4>
+      <p class="mb-0 opacity-75 small">Gerencie as contas bancárias vinculadas às empresas.</p>
     </div>
+    <button class="btn btn-sm px-3"
+            style="background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.35);"
+            data-bs-toggle="modal" data-bs-target="#modalNovaConta">
+      <i class="bi bi-plus-lg me-1"></i> Nova Conta
+    </button>
+  </div>
 
-    {% with messages = get_flashed_messages(with_categories=true) %}
-    {% for category, message in messages %}
-    <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
-        {{ message }}<button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-    </div>
-    {% endfor %}
-    {% endwith %}
+  {% with messages = get_flashed_messages(with_categories=true) %}
+  {% for category, message in messages %}
+  <div class="alert alert-{{ category }} alert-dismissible fade show">
+    {{ message }}<button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+  </div>
+  {% endfor %}
+  {% endwith %}
+  <div id="alertBox"></div>
 
-    <div id="alertBox"></div>
-
-    <div class="card shadow-sm">
-        <div class="card-body p-0">
-            {% if contas %}
-            <div class="table-responsive">
-                <table class="table table-hover table-sm mb-0">
-                    <thead class="table-light">
-                        <tr>
-                            <th>Apelido / Banco</th>
-                            <th>Agência</th>
-                            <th>Conta</th>
-                            <th>Empresa</th>
-                            <th class="text-center">Transações</th>
-                            <th class="text-center">Status</th>
-                            <th class="text-end">Ações</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for c in contas %}
-                        <tr class="{{ 'table-secondary text-muted' if not c.ativo else '' }}">
-                            <td>
-                                <strong>{{ c.apelido or c.banco_nome }}</strong>
-                                {% if c.apelido and c.apelido != c.banco_nome %}
-                                <br><small class="text-muted">{{ c.banco_nome }}</small>
-                                {% endif %}
-                            </td>
-                            <td>{{ c.agencia or '—' }}</td>
-                            <td>{{ c.conta or '—' }}</td>
-                            <td>
-                                {% if c.empresa_nome %}{{ c.empresa_nome }}{% else %}<span class="text-muted">—</span>{% endif %}
-                            </td>
-                            <td class="text-center">
-                                <span class="badge bg-secondary">{{ c.total_transacoes }}</span>
-                            </td>
-                            <td class="text-center">
-                                {% if c.ativo %}
-                                <span class="badge bg-success">Ativa</span>
-                                {% else %}
-                                <span class="badge bg-secondary">Inativa</span>
-                                {% endif %}
-                            </td>
-                            <td class="text-end">
-                                <button class="btn btn-sm btn-outline-primary me-1"
-                                        onclick="abrirEditar({{ c.id }}, '{{ c.banco_nome|e }}', '{{ (c.agencia or '')|e }}', '{{ (c.conta or '')|e }}', '{{ (c.apelido or '')|e }}', {{ c.cliente_id or 'null' }})"
-                                        title="Editar">
-                                    <i class="bi bi-pencil"></i>
-                                </button>
-                                {% if c.ativo %}
-                                <button class="btn btn-sm btn-outline-danger"
-                                        onclick="excluirConta({{ c.id }}, '{{ (c.apelido or c.banco_nome)|e }}')"
-                                        title="Desativar">
-                                    <i class="bi bi-trash"></i>
-                                </button>
-                                {% endif %}
-                            </td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
-            {% else %}
-            <div class="alert alert-info m-3">
-                <i class="bi bi-info-circle"></i> Nenhuma conta bancária cadastrada ainda.
-                <a href="#" data-bs-toggle="modal" data-bs-target="#modalNovaConta">Cadastre a primeira conta.</a>
-            </div>
-            {% endif %}
+  <!-- Stat cards -->
+  {% set total = contas | length %}
+  {% set ativas = contas | selectattr('ativo') | list | length %}
+  <div class="row g-3 mb-3">
+    <div class="col-6 col-md-3">
+      <div class="card stat-card h-100">
+        <div class="card-body d-flex align-items-center gap-3 py-3">
+          <div class="stat-icon" style="background:#e8f0fb;"><i class="bi bi-bank" style="color:#1D63A5;"></i></div>
+          <div><div class="fs-4 fw-bold" style="color:#1D63A5;">{{ total }}</div><div class="text-muted small">Total</div></div>
         </div>
+      </div>
     </div>
+    <div class="col-6 col-md-3">
+      <div class="card stat-card h-100">
+        <div class="card-body d-flex align-items-center gap-3 py-3">
+          <div class="stat-icon" style="background:#e6f4ea;"><i class="bi bi-check-circle" style="color:#198754;"></i></div>
+          <div><div class="fs-4 fw-bold" style="color:#198754;">{{ ativas }}</div><div class="text-muted small">Ativas</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Filter bar -->
+  <div class="filter-bar d-flex align-items-center gap-2 flex-wrap">
+    <i class="bi bi-funnel text-secondary"></i>
+    <label class="text-muted small mb-0 me-1">Empresa:</label>
+    <select id="filtroEmpresa" class="form-select form-select-sm" style="width:auto;min-width:180px;">
+      <option value="">Todas</option>
+      {% for cl in clientes %}
+      <option value="{{ cl.id }}">{{ cl.razao_social }}</option>
+      {% endfor %}
+    </select>
+    <button class="btn btn-sm btn-outline-secondary" onclick="limparFiltro()">
+      <i class="bi bi-x-lg"></i>
+    </button>
+  </div>
+
+  <!-- Table -->
+  <div class="card shadow-sm">
+    <div class="card-header d-flex justify-content-between align-items-center py-2"
+         style="background:#1D63A5;color:white;font-size:0.82rem;font-weight:600;letter-spacing:0.02em;">
+      <span><i class="bi bi-list me-1"></i> Lista de Contas</span>
+      <span id="badgeTotal" class="badge bg-white text-secondary" style="font-size:0.7rem;font-weight:600;">{{ total }}</span>
+    </div>
+    <div class="card-body p-0">
+      <div class="table-responsive">
+        <table class="table mb-0" id="tbl-lista">
+          <thead>
+            <tr>
+              <th>Apelido / Banco</th>
+              <th>Agência</th>
+              <th>Conta</th>
+              <th>Empresa</th>
+              <th>Plano de Contas</th>
+              <th class="text-center">Transações</th>
+              <th class="text-center">Status</th>
+              <th class="text-center actions-cell" style="width:8%">Ações</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% if contas %}
+              {% for c in contas %}
+              <tr class="row-item" data-empresa-id="{{ c.cliente_id or '' }}">
+                <td>
+                  <strong>{{ c.apelido or c.banco_nome }}</strong>
+                  {% if c.apelido and c.apelido != c.banco_nome %}
+                  <br><small class="text-muted">{{ c.banco_nome }}</small>
+                  {% endif %}
+                </td>
+                <td>{{ c.agencia or '—' }}</td>
+                <td>{{ c.conta or '—' }}</td>
+                <td>{{ c.empresa_nome or '<span class="text-muted">—</span>' }}</td>
+                <td>
+                  {% if c.plano_codigo %}
+                    <small><code>{{ c.plano_codigo }}</code> {{ c.plano_nome }}</small>
+                  {% else %}
+                    <span class="text-muted">—</span>
+                  {% endif %}
+                </td>
+                <td class="text-center">
+                  <span class="badge bg-secondary" style="font-size:0.7rem;">{{ c.total_transacoes }}</span>
+                </td>
+                <td class="text-center">
+                  {% if c.ativo %}
+                    <span class="badge bg-success" style="font-size:0.7rem;">Ativa</span>
+                  {% else %}
+                    <span class="badge bg-secondary" style="font-size:0.7rem;">Inativa</span>
+                  {% endif %}
+                </td>
+                <td class="text-center actions-cell" onclick="event.stopPropagation()">
+                  <button class="btn-acao btn-editar"
+                          onclick="abrirEditar({{ c.id }}, '{{ c.banco_nome|e }}', '{{ (c.agencia or '')|e }}', '{{ (c.conta or '')|e }}', '{{ (c.apelido or '')|e }}', {{ c.cliente_id or 'null' }}, {{ c.plano_contas_conta_id or 'null' }})"
+                          title="Editar">
+                    <i class="bi bi-pencil"></i>
+                  </button>
+                  {% if c.ativo %}
+                  <button class="btn-acao btn-desativar ms-1"
+                          onclick="excluirConta({{ c.id }}, '{{ (c.apelido or c.banco_nome)|e }}')"
+                          title="Desativar">
+                    <i class="bi bi-trash"></i>
+                  </button>
+                  {% endif %}
+                </td>
+              </tr>
+              {% endfor %}
+            {% else %}
+              <tr>
+                <td colspan="8" class="text-center text-muted py-4">
+                  <i class="bi bi-inbox" style="font-size:1.8rem;opacity:0.4;"></i>
+                  <div class="mt-2" style="font-size:0.82rem;">Nenhuma conta bancária cadastrada.</div>
+                </td>
+              </tr>
+            {% endif %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
 </div>
 
 <!-- Modal: Nova Conta -->
 <div class="modal fade" id="modalNovaConta" tabindex="-1">
-    <div class="modal-dialog">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title"><i class="bi bi-bank"></i> Nova Conta Bancária</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-            </div>
-            <div class="modal-body">
-                <div class="mb-3">
-                    <label class="form-label fw-semibold">Empresa</label>
-                    <select id="nc_cliente_id" class="form-select">
-                        <option value="">— Sem empresa vinculada —</option>
-                        {% for cl in clientes %}
-                        <option value="{{ cl.id }}">{{ cl.razao_social }}{% if cl.nome_fantasia and cl.nome_fantasia != cl.razao_social %} ({{ cl.nome_fantasia }}){% endif %}</option>
-                        {% endfor %}
-                    </select>
-                    <div class="form-text">Apenas empresas com produtos cadastrados aparecem aqui.</div>
-                </div>
-                <div class="mb-3">
-                    <label class="form-label">Nome do Banco *</label>
-                    <input type="text" id="nc_banco" class="form-control" placeholder="Ex: Banco do Brasil">
-                    <div class="invalid-feedback">Informe o nome do banco.</div>
-                </div>
-                <div class="row g-2">
-                    <div class="col-6">
-                        <label class="form-label">Agência</label>
-                        <input type="text" id="nc_agencia" class="form-control" placeholder="0001">
-                    </div>
-                    <div class="col-6">
-                        <label class="form-label">Conta</label>
-                        <input type="text" id="nc_conta" class="form-control" placeholder="12345-6">
-                    </div>
-                </div>
-                <div class="mt-3">
-                    <label class="form-label">Apelido</label>
-                    <input type="text" id="nc_apelido" class="form-control" placeholder="Ex: Conta Corrente Principal">
-                </div>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-                <button type="button" class="btn btn-primary" onclick="salvarNovaConta()">
-                    <i class="bi bi-check-lg"></i> Salvar
-                </button>
-            </div>
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header" style="background:#1D63A5;color:#fff;">
+        <h6 class="modal-title"><i class="bi bi-bank me-1"></i> Nova Conta Bancária</h6>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="mb-3">
+          <label class="form-label fw-semibold form-label-sm">Empresa</label>
+          <select id="nc_cliente_id" class="form-select form-select-sm">
+            <option value="">— Sem empresa vinculada —</option>
+            {% for cl in clientes %}
+            <option value="{{ cl.id }}">{{ cl.razao_social }}{% if cl.nome_fantasia and cl.nome_fantasia != cl.razao_social %} ({{ cl.nome_fantasia }}){% endif %}</option>
+            {% endfor %}
+          </select>
         </div>
+        <div class="mb-3">
+          <label class="form-label fw-semibold form-label-sm">Plano de Contas</label>
+          <select id="nc_plano_contas_conta_id" class="form-select form-select-sm">
+            <option value="">— Sem vínculo —</option>
+            {% for pc in plano_contas %}
+            <option value="{{ pc.id }}">{{ pc.codigo }} – {{ pc.nome }} <small>({{ pc.grupo_nome }})</small></option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="mb-3">
+          <label class="form-label fw-semibold form-label-sm">Nome do Banco <span class="text-danger">*</span></label>
+          <input type="text" id="nc_banco" class="form-control form-control-sm" placeholder="Ex: Banco do Brasil">
+          <div class="invalid-feedback">Informe o nome do banco.</div>
+        </div>
+        <div class="row g-2">
+          <div class="col-6">
+            <label class="form-label form-label-sm">Agência</label>
+            <input type="text" id="nc_agencia" class="form-control form-control-sm" placeholder="0001">
+          </div>
+          <div class="col-6">
+            <label class="form-label form-label-sm">Conta</label>
+            <input type="text" id="nc_conta" class="form-control form-control-sm" placeholder="12345-6">
+          </div>
+        </div>
+        <div class="mt-3">
+          <label class="form-label form-label-sm">Apelido</label>
+          <input type="text" id="nc_apelido" class="form-control form-control-sm" placeholder="Ex: Conta Corrente Principal">
+        </div>
+      </div>
+      <div class="modal-footer py-2">
+        <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+        <button type="button" class="btn btn-sm btn-primary" onclick="salvarNovaConta()">
+          <i class="bi bi-check-lg me-1"></i> Salvar
+        </button>
+      </div>
     </div>
+  </div>
 </div>
 
 <!-- Modal: Editar Conta -->
 <div class="modal fade" id="modalEditarConta" tabindex="-1">
-    <div class="modal-dialog">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title"><i class="bi bi-pencil"></i> Editar Conta Bancária</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-            </div>
-            <div class="modal-body">
-                <input type="hidden" id="ed_id">
-                <div class="mb-3">
-                    <label class="form-label fw-semibold">Empresa</label>
-                    <select id="ed_cliente_id" class="form-select">
-                        <option value="">— Sem empresa vinculada —</option>
-                        {% for cl in clientes %}
-                        <option value="{{ cl.id }}">{{ cl.razao_social }}{% if cl.nome_fantasia and cl.nome_fantasia != cl.razao_social %} ({{ cl.nome_fantasia }}){% endif %}</option>
-                        {% endfor %}
-                    </select>
-                </div>
-                <div class="mb-3">
-                    <label class="form-label">Nome do Banco *</label>
-                    <input type="text" id="ed_banco" class="form-control">
-                    <div class="invalid-feedback">Informe o nome do banco.</div>
-                </div>
-                <div class="row g-2">
-                    <div class="col-6">
-                        <label class="form-label">Agência</label>
-                        <input type="text" id="ed_agencia" class="form-control">
-                    </div>
-                    <div class="col-6">
-                        <label class="form-label">Conta</label>
-                        <input type="text" id="ed_conta" class="form-control">
-                    </div>
-                </div>
-                <div class="mt-3">
-                    <label class="form-label">Apelido</label>
-                    <input type="text" id="ed_apelido" class="form-control">
-                </div>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-                <button type="button" class="btn btn-primary" onclick="salvarEdicao()">
-                    <i class="bi bi-check-lg"></i> Salvar Alterações
-                </button>
-            </div>
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header" style="background:#1D63A5;color:#fff;">
+        <h6 class="modal-title"><i class="bi bi-pencil me-1"></i> Editar Conta Bancária</h6>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="ed_id">
+        <div class="mb-3">
+          <label class="form-label fw-semibold form-label-sm">Empresa</label>
+          <select id="ed_cliente_id" class="form-select form-select-sm">
+            <option value="">— Sem empresa vinculada —</option>
+            {% for cl in clientes %}
+            <option value="{{ cl.id }}">{{ cl.razao_social }}{% if cl.nome_fantasia and cl.nome_fantasia != cl.razao_social %} ({{ cl.nome_fantasia }}){% endif %}</option>
+            {% endfor %}
+          </select>
         </div>
+        <div class="mb-3">
+          <label class="form-label fw-semibold form-label-sm">Plano de Contas</label>
+          <select id="ed_plano_contas_conta_id" class="form-select form-select-sm">
+            <option value="">— Sem vínculo —</option>
+            {% for pc in plano_contas %}
+            <option value="{{ pc.id }}">{{ pc.codigo }} – {{ pc.nome }} <small>({{ pc.grupo_nome }})</small></option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="mb-3">
+          <label class="form-label fw-semibold form-label-sm">Nome do Banco <span class="text-danger">*</span></label>
+          <input type="text" id="ed_banco" class="form-control form-control-sm">
+          <div class="invalid-feedback">Informe o nome do banco.</div>
+        </div>
+        <div class="row g-2">
+          <div class="col-6">
+            <label class="form-label form-label-sm">Agência</label>
+            <input type="text" id="ed_agencia" class="form-control form-control-sm">
+          </div>
+          <div class="col-6">
+            <label class="form-label form-label-sm">Conta</label>
+            <input type="text" id="ed_conta" class="form-control form-control-sm">
+          </div>
+        </div>
+        <div class="mt-3">
+          <label class="form-label form-label-sm">Apelido</label>
+          <input type="text" id="ed_apelido" class="form-control form-control-sm">
+        </div>
+      </div>
+      <div class="modal-footer py-2">
+        <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+        <button type="button" class="btn btn-sm btn-primary" onclick="salvarEdicao()">
+          <i class="bi bi-check-lg me-1"></i> Salvar Alterações
+        </button>
+      </div>
     </div>
+  </div>
 </div>
 {% endblock %}
 
 {% block scripts %}
 <script>
-    const BASE = '{{ url_for("bank_import.api_contas") }}';
+const BASE = '{{ url_for("bank_import.api_contas") }}';
 
-    function showAlert(msg, type) {
-        const box = document.getElementById('alertBox');
-        box.innerHTML = `<div class="alert alert-${type} alert-dismissible fade show" role="alert">
-            ${msg}<button type="button" class="btn-close" data-bs-dismiss="alert"></button></div>`;
-        setTimeout(() => box.innerHTML = '', 5000);
-    }
+function showAlert(msg, type) {
+  const box = document.getElementById('alertBox');
+  box.innerHTML = `<div class="alert alert-${type} alert-dismissible fade show" role="alert">
+      ${msg}<button type="button" class="btn-close" data-bs-dismiss="alert"></button></div>`;
+  setTimeout(() => box.innerHTML = '', 5000);
+}
 
-    // ---- Nova Conta ----
-    function salvarNovaConta() {        const banco_nome = document.getElementById('nc_banco').value.trim();
-        document.getElementById('nc_banco').classList.toggle('is-invalid', !banco_nome);
-        if (!banco_nome) return;
+// ---- Filter ----
+document.getElementById('filtroEmpresa').addEventListener('change', function() {
+  const v = this.value;
+  const rows = document.querySelectorAll('#tbl-lista tbody tr.row-item');
+  let visible = 0;
+  rows.forEach(r => {
+    const match = !v || r.dataset.empresaId === v;
+    r.style.display = match ? '' : 'none';
+    if (match) visible++;
+  });
+  document.getElementById('badgeTotal').textContent = visible;
+});
 
-        const cliente_id_raw = document.getElementById('nc_cliente_id').value;
-        fetch(BASE, {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({
-                banco_nome,
-                agencia: document.getElementById('nc_agencia').value.trim(),
-                conta: document.getElementById('nc_conta').value.trim(),
-                apelido: document.getElementById('nc_apelido').value.trim(),
-                cliente_id: cliente_id_raw ? parseInt(cliente_id_raw) : null,
-            })
-        })
-        .then(r => r.json())
-        .then(d => {
-            if (d.success) { location.reload(); }
-            else { showAlert('Erro: ' + d.message, 'danger'); }
-        });
-    }
+function limparFiltro() {
+  document.getElementById('filtroEmpresa').value = '';
+  document.querySelectorAll('#tbl-lista tbody tr.row-item').forEach(r => r.style.display = '');
+  document.getElementById('badgeTotal').textContent = '{{ total }}';
+}
 
-    // ---- Editar ----
-    function abrirEditar(id, banco, agencia, conta, apelido, clienteId) {        document.getElementById('ed_id').value = id;
-        document.getElementById('ed_banco').value = banco;
-        document.getElementById('ed_agencia').value = agencia;
-        document.getElementById('ed_conta').value = conta;
-        document.getElementById('ed_apelido').value = apelido;
-        const sel = document.getElementById('ed_cliente_id');
-        sel.value = clienteId !== null ? String(clienteId) : '';
-        new bootstrap.Modal(document.getElementById('modalEditarConta')).show();
-    }
+// ---- Nova Conta ----
+function salvarNovaConta() {
+  const banco_nome = document.getElementById('nc_banco').value.trim();
+  document.getElementById('nc_banco').classList.toggle('is-invalid', !banco_nome);
+  if (!banco_nome) return;
 
-    function salvarEdicao() {
-        const id = document.getElementById('ed_id').value;
-        const banco_nome = document.getElementById('ed_banco').value.trim();
-        document.getElementById('ed_banco').classList.toggle('is-invalid', !banco_nome);
-        if (!banco_nome) return;
+  const cliente_id_raw = document.getElementById('nc_cliente_id').value;
+  const plano_raw = document.getElementById('nc_plano_contas_conta_id').value;
+  fetch(BASE, {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({
+      banco_nome,
+      agencia: document.getElementById('nc_agencia').value.trim(),
+      conta: document.getElementById('nc_conta').value.trim(),
+      apelido: document.getElementById('nc_apelido').value.trim(),
+      cliente_id: cliente_id_raw ? parseInt(cliente_id_raw) : null,
+      plano_contas_conta_id: plano_raw ? parseInt(plano_raw) : null,
+    })
+  })
+  .then(r => r.json())
+  .then(d => {
+    if (d.success) { location.reload(); }
+    else { showAlert('Erro: ' + d.message, 'danger'); }
+  });
+}
 
-        const cliente_id_raw = document.getElementById('ed_cliente_id').value;
-        fetch(`/banco/api/contas/${id}`, {
-            method: 'PUT',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({
-                banco_nome,
-                agencia: document.getElementById('ed_agencia').value.trim(),
-                conta: document.getElementById('ed_conta').value.trim(),
-                apelido: document.getElementById('ed_apelido').value.trim(),
-                cliente_id: cliente_id_raw ? parseInt(cliente_id_raw) : null,
-            })
-        })
-        .then(r => r.json())
-        .then(d => {
-            if (d.success) { location.reload(); }
-            else { showAlert('Erro: ' + d.message, 'danger'); }
-        });
-    }
+// ---- Editar ----
+function abrirEditar(id, banco, agencia, conta, apelido, clienteId, planoId) {
+  document.getElementById('ed_id').value = id;
+  document.getElementById('ed_banco').value = banco;
+  document.getElementById('ed_agencia').value = agencia;
+  document.getElementById('ed_conta').value = conta;
+  document.getElementById('ed_apelido').value = apelido;
+  document.getElementById('ed_cliente_id').value = clienteId !== null ? String(clienteId) : '';
+  document.getElementById('ed_plano_contas_conta_id').value = planoId !== null ? String(planoId) : '';
+  new bootstrap.Modal(document.getElementById('modalEditarConta')).show();
+}
 
-    // ---- Excluir / Desativar ----
-    function excluirConta(id, nome) {        if (!confirm(`Desativar a conta "${nome}"? As transações vinculadas não serão excluídas.`)) return;
-        fetch(`/banco/api/contas/${id}/excluir`, { method: 'POST' })
-        .then(r => r.json())
-        .then(d => {
-            if (d.success) { location.reload(); }
-            else { showAlert(d.message, 'danger'); }
-        });
-    }
+function salvarEdicao() {
+  const id = document.getElementById('ed_id').value;
+  const banco_nome = document.getElementById('ed_banco').value.trim();
+  document.getElementById('ed_banco').classList.toggle('is-invalid', !banco_nome);
+  if (!banco_nome) return;
+
+  const cliente_id_raw = document.getElementById('ed_cliente_id').value;
+  const plano_raw = document.getElementById('ed_plano_contas_conta_id').value;
+  fetch(`/banco/api/contas/${id}`, {
+    method: 'PUT',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({
+      banco_nome,
+      agencia: document.getElementById('ed_agencia').value.trim(),
+      conta: document.getElementById('ed_conta').value.trim(),
+      apelido: document.getElementById('ed_apelido').value.trim(),
+      cliente_id: cliente_id_raw ? parseInt(cliente_id_raw) : null,
+      plano_contas_conta_id: plano_raw ? parseInt(plano_raw) : null,
+    })
+  })
+  .then(r => r.json())
+  .then(d => {
+    if (d.success) { location.reload(); }
+    else { showAlert('Erro: ' + d.message, 'danger'); }
+  });
+}
+
+// ---- Excluir / Desativar ----
+function excluirConta(id, nome) {
+  if (!confirm(`Desativar a conta "${nome}"? As transações vinculadas não serão excluídas.`)) return;
+  fetch(`/banco/api/contas/${id}/excluir`, { method: 'POST' })
+  .then(r => r.json())
+  .then(d => {
+    if (d.success) { location.reload(); }
+    else { showAlert(d.message, 'danger'); }
+  });
+}
 </script>
 {% endblock %}

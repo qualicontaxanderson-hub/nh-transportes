@@ -1238,21 +1238,46 @@ def pagamentos():
 @login_required
 def contas():
     """Lista as contas bancárias cadastradas no sistema de importação OFX."""
+    f_empresa = request.args.get('empresa_id', '').strip()
+
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
+
+    where = 'WHERE 1=1'
+    params = []
+    if f_empresa:
+        where += ' AND ba.cliente_id = %s'
+        params.append(int(f_empresa))
+
     cursor.execute(
-        """SELECT ba.id, ba.banco_nome, ba.agencia, ba.conta, ba.apelido,
+        f"""SELECT ba.id, ba.banco_nome, ba.agencia, ba.conta, ba.apelido,
                   ba.ativo, ba.criado_em, ba.cliente_id,
+                  ba.plano_contas_conta_id,
                   c.razao_social AS empresa_nome,
+                  pc.codigo AS plano_codigo, pc.nome AS plano_nome,
                   (SELECT COUNT(*) FROM bank_transactions bt WHERE bt.account_id = ba.id) AS total_transacoes
            FROM bank_accounts ba
            LEFT JOIN clientes c ON c.id = ba.cliente_id
-           ORDER BY ba.ativo DESC, ba.apelido, ba.banco_nome"""
+           LEFT JOIN plano_contas_contas pc ON pc.id = ba.plano_contas_conta_id
+           {where}
+           ORDER BY ba.ativo DESC, ba.apelido, ba.banco_nome""",
+        params,
     )
     contas_list = cursor.fetchall()
+
+    # Lista de empresas para o filtro (apenas as que têm contas cadastradas)
+    cursor.execute(
+        """SELECT DISTINCT c.id, c.razao_social
+           FROM clientes c
+           INNER JOIN bank_accounts ba ON ba.cliente_id = c.id
+           ORDER BY c.razao_social"""
+    )
+    empresas = cursor.fetchall()
+
     cursor.close()
     conn.close()
-    return render_template('financeiro/contas.html', contas=contas_list)
+    return render_template('financeiro/contas.html', contas=contas_list,
+                           empresas=empresas, f_empresa=f_empresa)
 
 
 @financeiro_bp.route('/transferencias/')

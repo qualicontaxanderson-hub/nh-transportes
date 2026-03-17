@@ -2211,13 +2211,21 @@ def api_criar_conta():
         except (ValueError, TypeError):
             return jsonify({'success': False, 'message': 'cliente_id inválido'}), 400
 
+    plano_contas_conta_id = data.get('plano_contas_conta_id') or None
+    if plano_contas_conta_id is not None:
+        try:
+            plano_contas_conta_id = int(plano_contas_conta_id)
+        except (ValueError, TypeError):
+            return jsonify({'success': False, 'message': 'plano_contas_conta_id inválido'}), 400
+
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
 
     cursor.execute(
-        """INSERT INTO bank_accounts (banco_nome, agencia, conta, apelido, cliente_id)
-           VALUES (%s, %s, %s, %s, %s)""",
-        (banco_nome, data.get('agencia'), data.get('conta'), data.get('apelido'), cliente_id),
+        """INSERT INTO bank_accounts (banco_nome, agencia, conta, apelido, cliente_id, plano_contas_conta_id)
+           VALUES (%s, %s, %s, %s, %s, %s)""",
+        (banco_nome, data.get('agencia'), data.get('conta'), data.get('apelido'),
+         cliente_id, plano_contas_conta_id),
     )
     conn.commit()
     new_id = cursor.lastrowid
@@ -2236,17 +2244,29 @@ def gerenciar_contas():
     cursor.execute(
         """SELECT ba.id, ba.banco_nome, ba.agencia, ba.conta, ba.apelido,
                   ba.ativo, ba.cliente_id, ba.criado_em,
+                  ba.plano_contas_conta_id,
                   c.razao_social AS empresa_nome,
+                  pc.codigo AS plano_codigo, pc.nome AS plano_nome,
                   (SELECT COUNT(*) FROM bank_transactions bt WHERE bt.account_id = ba.id) AS total_transacoes
            FROM bank_accounts ba
            LEFT JOIN clientes c ON c.id = ba.cliente_id
+           LEFT JOIN plano_contas_contas pc ON pc.id = ba.plano_contas_conta_id
            ORDER BY ba.ativo DESC, ba.apelido, ba.banco_nome"""
     )
     contas = cursor.fetchall()
     clientes = _get_clientes_com_produtos(cursor)
+    cursor.execute(
+        """SELECT pcc.id, pcc.codigo, pcc.nome, g.nome AS grupo_nome
+           FROM plano_contas_contas pcc
+           JOIN plano_contas_grupos g ON g.id = pcc.grupo_id
+           WHERE pcc.ativo = 1
+           ORDER BY pcc.codigo"""
+    )
+    plano_contas = cursor.fetchall()
     cursor.close()
     conn.close()
-    return render_template('bank_import/contas.html', contas=contas, clientes=clientes)
+    return render_template('bank_import/contas.html', contas=contas, clientes=clientes,
+                           plano_contas=plano_contas)
 
 
 @bp.route('/api/contas/<int:conta_id>', methods=['PUT'])
@@ -2265,14 +2285,22 @@ def api_editar_conta(conta_id):
         except (ValueError, TypeError):
             return jsonify({'success': False, 'message': 'cliente_id inválido'}), 400
 
+    plano_contas_conta_id = data.get('plano_contas_conta_id') or None
+    if plano_contas_conta_id is not None:
+        try:
+            plano_contas_conta_id = int(plano_contas_conta_id)
+        except (ValueError, TypeError):
+            return jsonify({'success': False, 'message': 'plano_contas_conta_id inválido'}), 400
+
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
     cursor.execute(
         """UPDATE bank_accounts
-           SET banco_nome=%s, agencia=%s, conta=%s, apelido=%s, cliente_id=%s
+           SET banco_nome=%s, agencia=%s, conta=%s, apelido=%s,
+               cliente_id=%s, plano_contas_conta_id=%s
            WHERE id=%s""",
         (banco_nome, data.get('agencia') or None, data.get('conta') or None,
-         data.get('apelido') or None, cliente_id, conta_id),
+         data.get('apelido') or None, cliente_id, plano_contas_conta_id, conta_id),
     )
     conn.commit()
     cursor.close()
