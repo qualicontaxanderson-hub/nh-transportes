@@ -5,6 +5,40 @@ from utils.decorators import admin_required
 
 bp = Blueprint('despesas', __name__, url_prefix='/despesas')
 
+
+def _load_form_data(conn):
+    """Carrega empresas e o mapeamento grupo→contas contábeis para o formulário de categoria."""
+    cursor = conn.cursor(dictionary=True)
+    cursor.execute(
+        """SELECT DISTINCT c.id,
+                  COALESCE(c.nome_fantasia, c.razao_social) AS nome,
+                  c.grupo_contabil_id
+             FROM clientes c
+             INNER JOIN cliente_produtos cp ON cp.cliente_id = c.id AND cp.ativo = 1
+            ORDER BY nome"""
+    )
+    empresas = cursor.fetchall()
+    cursor.execute(
+        """SELECT c.id, c.grupo_id, c.codigo, c.nome AS conta_nome
+             FROM plano_contas_contas c
+             JOIN plano_contas_grupos g ON g.id = c.grupo_id
+            WHERE c.ativo = 1
+            ORDER BY g.codigo, c.codigo"""
+    )
+    contas_raw = cursor.fetchall()
+    cursor.close()
+    contas_por_grupo = {}
+    for c in contas_raw:
+        gid = c['grupo_id']
+        if gid not in contas_por_grupo:
+            contas_por_grupo[gid] = []
+        contas_por_grupo[gid].append({
+            'id': c['id'],
+            'label': f"{c['codigo']} {c['conta_nome']}",
+        })
+    return empresas, contas_por_grupo
+
+
 @bp.route('/')
 @login_required
 @admin_required
@@ -47,6 +81,7 @@ def titulo_detalhes(titulo_id):
         conn.close()
         return redirect(url_for('despesas.index'))
 
+    empresa_id = current_user.cliente_id if hasattr(current_user, 'cliente_id') else None
     cursor.execute("""
         SELECT c.*,
                COUNT(DISTINCT s.id) as total_subcategorias,
@@ -54,11 +89,13 @@ def titulo_detalhes(titulo_id):
                pcc.nome   as conta_nome
         FROM categorias_despesas c
         LEFT JOIN subcategorias_despesas s ON c.id = s.categoria_id AND s.ativo = 1
-        LEFT JOIN plano_contas_contas pcc ON c.conta_contabil_id = pcc.id
+        LEFT JOIN categoria_despesa_contas cdc
+               ON cdc.categoria_id = c.id AND cdc.cliente_id = %s
+        LEFT JOIN plano_contas_contas pcc ON pcc.id = cdc.conta_contabil_id
         WHERE c.titulo_id = %s AND c.ativo = 1
         GROUP BY c.id
         ORDER BY c.nome
-    """, (titulo_id,))
+    """, (empresa_id, titulo_id,))
     categorias = cursor.fetchall()
 
     cursor.close()
@@ -200,19 +237,33 @@ def nova_categoria():
 
         if request.method == 'POST':
             titulo_id = request.form.get('titulo_id')
-            conta_contabil_id = request.form.get('conta_contabil_id') or None
             cursor.execute("""
-                INSERT INTO categorias_despesas (titulo_id, nome, ordem, ativo, conta_contabil_id)
-                VALUES (%s, %s, %s, %s, %s)
+                INSERT INTO categorias_despesas (titulo_id, nome, ordem, ativo)
+                VALUES (%s, %s, %s, %s)
             """, (
                 titulo_id,
                 request.form.get('nome'),
                 request.form.get('ordem', 0),
-                1,
-                conta_contabil_id
+                1
             ))
-
             conn.commit()
+            nova_id = cursor.lastrowid
+
+            # Salvar vínculos empresa + conta contábil
+            empresa_ids = request.form.getlist('empresa_id[]')
+            conta_ids = request.form.getlist('conta_contabil_id[]')
+            for eid, cid in zip(empresa_ids, conta_ids):
+                if eid:
+                    conta_id = int(cid) if cid else None
+                    cursor.execute(
+                        """INSERT INTO categoria_despesa_contas
+                               (categoria_id, cliente_id, conta_contabil_id)
+                           VALUES (%s, %s, %s)
+                           ON DUPLICATE KEY UPDATE conta_contabil_id = VALUES(conta_contabil_id)""",
+                        (nova_id, int(eid), conta_id)
+                    )
+            conn.commit()
+
             flash('Categoria criada com sucesso!', 'success')
             return redirect(url_for('despesas.titulo_detalhes', titulo_id=titulo_id))
 
@@ -220,20 +271,15 @@ def nova_categoria():
         cursor.execute("SELECT * FROM titulos_despesas WHERE ativo = 1 ORDER BY ordem, nome")
         titulos = cursor.fetchall()
 
-        cursor.execute("""
-            SELECT pcc.id, pcc.codigo, pcc.nome, pcg.nome as grupo_nome
-            FROM plano_contas_contas pcc
-            JOIN plano_contas_grupos pcg ON pcc.grupo_id = pcg.id
-            WHERE pcc.ativo = 1
-            ORDER BY pcg.nome, pcc.codigo
-        """)
-        contas = cursor.fetchall()
+        empresas, contas_por_grupo = _load_form_data(conn)
 
         titulo_id = request.args.get('titulo_id')
         return render_template('despesas/categoria_form.html',
                              categoria=None,
                              titulos=titulos,
-                             contas=contas,
+                             empresas=empresas,
+                             contas_por_grupo=contas_por_grupo,
+                             vinculos=[],
                              titulo_id_pre=titulo_id)
     except Exception as e:
         if conn:
@@ -259,19 +305,32 @@ def editar_categoria(id):
         cursor = conn.cursor(dictionary=True)
 
         if request.method == 'POST':
-            conta_contabil_id = request.form.get('conta_contabil_id') or None
             cursor.execute("""
                 UPDATE categorias_despesas 
-                SET titulo_id = %s, nome = %s, ordem = %s, conta_contabil_id = %s
+                SET titulo_id = %s, nome = %s, ordem = %s
                 WHERE id = %s
             """, (
                 request.form.get('titulo_id'),
                 request.form.get('nome'),
                 request.form.get('ordem', 0),
-                conta_contabil_id,
                 id
             ))
+            conn.commit()
 
+            # Atualizar vínculos empresa + conta contábil
+            cursor.execute("DELETE FROM categoria_despesa_contas WHERE categoria_id = %s", (id,))
+            empresa_ids = request.form.getlist('empresa_id[]')
+            conta_ids = request.form.getlist('conta_contabil_id[]')
+            for eid, cid in zip(empresa_ids, conta_ids):
+                if eid:
+                    conta_id = int(cid) if cid else None
+                    cursor.execute(
+                        """INSERT INTO categoria_despesa_contas
+                               (categoria_id, cliente_id, conta_contabil_id)
+                           VALUES (%s, %s, %s)
+                           ON DUPLICATE KEY UPDATE conta_contabil_id = VALUES(conta_contabil_id)""",
+                        (id, int(eid), conta_id)
+                    )
             conn.commit()
 
             cursor.execute("SELECT titulo_id FROM categorias_despesas WHERE id = %s", (id,))
@@ -287,19 +346,23 @@ def editar_categoria(id):
         cursor.execute("SELECT * FROM titulos_despesas WHERE ativo = 1 ORDER BY ordem, nome")
         titulos = cursor.fetchall()
 
-        cursor.execute("""
-            SELECT pcc.id, pcc.codigo, pcc.nome, pcg.nome as grupo_nome
-            FROM plano_contas_contas pcc
-            JOIN plano_contas_grupos pcg ON pcc.grupo_id = pcg.id
-            WHERE pcc.ativo = 1
-            ORDER BY pcg.nome, pcc.codigo
-        """)
-        contas = cursor.fetchall()
+        cursor.execute(
+            """SELECT cdc.cliente_id, cdc.conta_contabil_id, c.grupo_contabil_id
+                 FROM categoria_despesa_contas cdc
+                 JOIN clientes c ON c.id = cdc.cliente_id
+                WHERE cdc.categoria_id = %s""",
+            (id,)
+        )
+        vinculos = cursor.fetchall()
+
+        empresas, contas_por_grupo = _load_form_data(conn)
 
         return render_template('despesas/categoria_form.html',
                              categoria=categoria,
                              titulos=titulos,
-                             contas=contas,
+                             empresas=empresas,
+                             contas_por_grupo=contas_por_grupo,
+                             vinculos=vinculos,
                              titulo_id_pre=None)
     except Exception as e:
         if conn:
