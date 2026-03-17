@@ -48,10 +48,13 @@ def titulo_detalhes(titulo_id):
         return redirect(url_for('despesas.index'))
 
     cursor.execute("""
-        SELECT c.*, 
-               COUNT(DISTINCT s.id) as total_subcategorias
+        SELECT c.*,
+               COUNT(DISTINCT s.id) as total_subcategorias,
+               pcc.codigo as conta_codigo,
+               pcc.nome   as conta_nome
         FROM categorias_despesas c
         LEFT JOIN subcategorias_despesas s ON c.id = s.categoria_id AND s.ativo = 1
+        LEFT JOIN plano_contas_contas pcc ON c.conta_contabil_id = pcc.id
         WHERE c.titulo_id = %s AND c.ativo = 1
         GROUP BY c.id
         ORDER BY c.nome
@@ -197,14 +200,16 @@ def nova_categoria():
 
         if request.method == 'POST':
             titulo_id = request.form.get('titulo_id')
+            conta_contabil_id = request.form.get('conta_contabil_id') or None
             cursor.execute("""
-                INSERT INTO categorias_despesas (titulo_id, nome, ordem, ativo)
-                VALUES (%s, %s, %s, %s)
+                INSERT INTO categorias_despesas (titulo_id, nome, ordem, ativo, conta_contabil_id)
+                VALUES (%s, %s, %s, %s, %s)
             """, (
                 titulo_id,
                 request.form.get('nome'),
                 request.form.get('ordem', 0),
-                1
+                1,
+                conta_contabil_id
             ))
 
             conn.commit()
@@ -215,10 +220,20 @@ def nova_categoria():
         cursor.execute("SELECT * FROM titulos_despesas WHERE ativo = 1 ORDER BY ordem, nome")
         titulos = cursor.fetchall()
 
+        cursor.execute("""
+            SELECT pcc.id, pcc.codigo, pcc.nome, pcg.nome as grupo_nome
+            FROM plano_contas_contas pcc
+            JOIN plano_contas_grupos pcg ON pcc.grupo_id = pcg.id
+            WHERE pcc.ativo = 1
+            ORDER BY pcg.nome, pcc.codigo
+        """)
+        contas = cursor.fetchall()
+
         titulo_id = request.args.get('titulo_id')
         return render_template('despesas/categoria_form.html',
                              categoria=None,
                              titulos=titulos,
+                             contas=contas,
                              titulo_id_pre=titulo_id)
     except Exception as e:
         if conn:
@@ -244,14 +259,16 @@ def editar_categoria(id):
         cursor = conn.cursor(dictionary=True)
 
         if request.method == 'POST':
+            conta_contabil_id = request.form.get('conta_contabil_id') or None
             cursor.execute("""
                 UPDATE categorias_despesas 
-                SET titulo_id = %s, nome = %s, ordem = %s
+                SET titulo_id = %s, nome = %s, ordem = %s, conta_contabil_id = %s
                 WHERE id = %s
             """, (
                 request.form.get('titulo_id'),
                 request.form.get('nome'),
                 request.form.get('ordem', 0),
+                conta_contabil_id,
                 id
             ))
 
@@ -270,9 +287,19 @@ def editar_categoria(id):
         cursor.execute("SELECT * FROM titulos_despesas WHERE ativo = 1 ORDER BY ordem, nome")
         titulos = cursor.fetchall()
 
+        cursor.execute("""
+            SELECT pcc.id, pcc.codigo, pcc.nome, pcg.nome as grupo_nome
+            FROM plano_contas_contas pcc
+            JOIN plano_contas_grupos pcg ON pcc.grupo_id = pcg.id
+            WHERE pcc.ativo = 1
+            ORDER BY pcg.nome, pcc.codigo
+        """)
+        contas = cursor.fetchall()
+
         return render_template('despesas/categoria_form.html',
                              categoria=categoria,
                              titulos=titulos,
+                             contas=contas,
                              titulo_id_pre=None)
     except Exception as e:
         if conn:
