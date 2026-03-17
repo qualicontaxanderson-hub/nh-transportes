@@ -149,18 +149,29 @@
       </div>
     </div>
 
-    <!-- Filtro por Conta Contábil -->
-    {% if grupos %}
+    <!-- Filtro por Conta Contábil / Empresa -->
     <div class="card shadow-sm mb-4">
       <div class="card-header d-flex align-items-center py-2"
            style="background:#1D63A5;color:white;font-size:0.82rem;font-weight:600;letter-spacing:0.02em;">
-        <i class="bi bi-funnel me-1"></i> Filtrar por Conta Contábil
+        <i class="bi bi-funnel me-1"></i> Filtrar
       </div>
       <div class="card-body py-2">
         <form method="GET" class="row g-2 align-items-end">
-          <div class="col-md-8">
+          <div class="col-md-4">
+            <label class="form-label form-label-sm mb-0">Empresa</label>
+            <select name="cliente_id" class="form-select form-select-sm">
+              <option value="">— Todas as empresas —</option>
+              {% for e in empresas %}
+              <option value="{{ e.id }}" {% if cliente_id == e.id|string %}selected{% endif %}>
+                {{ e.nome }}
+              </option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-md-4">
+            <label class="form-label form-label-sm mb-0">Grupo do Plano de Contas</label>
             <select name="grupo_id" class="form-select form-select-sm">
-              <option value="">— Todos os produtos —</option>
+              <option value="">— Todos os grupos —</option>
               {% for g in grupos %}
               <option value="{{ g.id }}" {% if grupo_id == g.id|string %}selected{% endif %}>
                 {{ g.codigo }} — {{ g.nome }}
@@ -172,7 +183,7 @@
             <button type="submit" class="btn btn-primary btn-sm">
               <i class="bi bi-search"></i> Filtrar
             </button>
-            {% if grupo_id %}
+            {% if grupo_id or cliente_id %}
             <a href="{{ url_for('produtos.lista') }}" class="btn btn-secondary btn-sm ms-1">
               <i class="bi bi-x-circle"></i> Limpar
             </a>
@@ -181,7 +192,6 @@
         </form>
       </div>
     </div>
-    {% endif %}
 
     <!-- Tabela de Produtos -->
     <div class="card shadow-sm">
@@ -199,6 +209,7 @@
               <tr>
                 <th style="width:4%">ID</th>
                 <th>Nome</th>
+                <th>Empresa</th>
                 <th>Conta Contábil</th>
                 <th class="text-center" style="width:8%">Ações</th>
               </tr>
@@ -210,13 +221,17 @@
                     title="Clique para editar">
                   <td class="text-muted">{{ produto.id }}</td>
                   <td class="fw-semibold">{{ produto.nome }}</td>
+                  <td style="font-size:0.8rem;">
+                    {% if produto.empresa_nome %}
+                    <span>{{ produto.empresa_nome }}</span>
+                    {% else %}
+                    <span class="text-muted fst-italic" style="font-size:0.72rem;">—</span>
+                    {% endif %}
+                  </td>
                   <td>
                     {% if produto.conta_codigo %}
                     <span class="badge-conta"><strong>{{ produto.conta_codigo }}</strong></span>
                     <span style="color:#374151;font-size:0.75rem;">{{ produto.conta_nome }}</span>
-                    {% if produto.grupo_codigo %}
-                    <span class="text-muted" style="font-size:0.68rem;"> · {{ produto.grupo_codigo }} {{ produto.grupo_nome }}</span>
-                    {% endif %}
                     {% else %}
                     <span class="text-muted fst-italic" style="font-size:0.72rem;">—</span>
                     {% endif %}
@@ -238,10 +253,10 @@
                 {% endfor %}
               {% else %}
                 <tr>
-                  <td colspan="4" class="text-center text-muted py-4">
+                  <td colspan="5" class="text-center text-muted py-4">
                     <i class="bi bi-inbox" style="font-size:1.8rem;opacity:0.4;"></i>
                     <div class="mt-2" style="font-size:0.82rem;">
-                      {% if grupo_id %}Nenhum produto nesta conta contábil.{% else %}Nenhum produto cadastrado.{% endif %}
+                      {% if grupo_id or cliente_id %}Nenhum produto neste filtro.{% else %}Nenhum produto cadastrado.{% endif %}
                     </div>
                   </td>
                 </tr>

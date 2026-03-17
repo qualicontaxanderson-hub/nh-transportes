@@ -50,7 +50,7 @@
         <div class="hero-icon"><i class="bi bi-plus-circle-fill"></i></div>
         <div class="flex-grow-1">
             <h4 class="mb-0 fw-bold">Novo Produto</h4>
-            <p class="mb-0 opacity-75 small">Cadastre um novo produto com vínculo contábil.</p>
+            <p class="mb-0 opacity-75 small">Cadastre um novo produto com vínculo contábil por empresa.</p>
         </div>
         <a href="{{ url_for('produtos.lista') }}"
            class="btn btn-sm px-3" style="background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.35);">
@@ -75,26 +75,15 @@
                     </div>
                 </div>
 
-                {% if contas %}
-                <div class="form-section-title"><i class="bi bi-journal-bookmark me-1"></i>Conta Contábil</div>
-                <div class="row">
-                    <div class="col-md-8 mb-2">
-                        <label class="form-label">Conta do Plano de Contas</label>
-                        <input type="text" class="form-control form-control-sm mb-1"
-                               id="buscaConta" placeholder="🔍 Buscar conta..." autocomplete="off"
-                               oninput="filtrarContas(this)">
-                        <select name="conta_contabil_id" id="selConta" class="form-select form-select-sm">
-                            <option value="">— Sem conta contábil —</option>
-                            {% for c in contas %}
-                            <option value="{{ c.id }}">{{ c.codigo }} {{ c.conta_nome }}</option>
-                            {% endfor %}
-                        </select>
-                        <div class="form-text" style="font-size:0.78rem;">
-                            Associe este produto a uma conta do Plano de Contas para exportação contábil.
-                        </div>
-                    </div>
+                <!-- Empresas e Contas Contábeis -->
+                <div class="form-section-title"><i class="bi bi-journal-bookmark me-1"></i>Empresas e Contas Contábeis</div>
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <span class="form-text mb-0">Selecione a empresa e a conta contábil vinculada a ela.</span>
+                    <button type="button" class="btn btn-sm btn-outline-primary" onclick="adicionarLinha()">
+                        <i class="bi bi-plus-lg"></i> Adicionar empresa
+                    </button>
                 </div>
-                {% endif %}
+                <div id="vinculosContainer"></div>
 
                 <div class="d-flex justify-content-between mt-4 pt-2 border-top">
                     <a href="{{ url_for('produtos.lista') }}" class="btn btn-secondary btn-sm">
@@ -113,13 +102,65 @@
 
 {% block scripts %}
 <script>
+const EMPRESAS = {{ empresas | tojson }};
+const CONTAS_POR_GRUPO = {{ contas_por_grupo | tojson }};
+
+function buildEmpresaSelect(selectedId) {
+    let html = '<option value="">— Selecione a empresa —</option>';
+    EMPRESAS.forEach(function(e) {
+        html += '<option value="' + e.id + '" data-grupo="' + (e.grupo_contabil_id || '') + '"'
+              + (e.id == selectedId ? ' selected' : '') + '>' + e.nome + '</option>';
+    });
+    return html;
+}
+
+function buildContaOptions(grupoId, selectedId) {
+    const contas = grupoId ? (CONTAS_POR_GRUPO[String(grupoId)] || []) : [];
+    let html = '<option value="">— Selecione a conta —</option>';
+    contas.forEach(function(c) {
+        html += '<option value="' + c.id + '"' + (c.id == selectedId ? ' selected' : '') + '>' + c.label + '</option>';
+    });
+    return html;
+}
+
+function buildContaWidget(grupoId, selectedId) {
+    return '<input type="text" class="form-control form-control-sm mb-1 inp-busca-conta"'
+         + ' placeholder="🔍 Buscar conta..." oninput="filtrarContas(this)" autocomplete="off">'
+         + '<select name="conta_contabil_id[]" class="form-select form-select-sm sel-conta">'
+         + buildContaOptions(grupoId, selectedId)
+         + '</select>';
+}
+
 function filtrarContas(inp) {
-    const sel = document.getElementById('selConta');
+    const sel = inp.closest('.conta-wrapper').querySelector('.sel-conta');
     const query = inp.value.toLowerCase();
     Array.from(sel.options).forEach(function(opt) {
         if (!opt.value) { opt.hidden = false; return; }
         opt.hidden = query.length > 0 && !opt.text.toLowerCase().includes(query);
     });
+}
+
+function adicionarLinha(empresaId, contaId, grupoId) {
+    const container = document.getElementById('vinculosContainer');
+    const div = document.createElement('div');
+    div.className = 'row g-2 mb-2 align-items-center linha-vinculo';
+    div.innerHTML = '<div class="col-5">'
+        + '<select name="empresa_id[]" class="form-select form-select-sm sel-empresa" onchange="onEmpresaMudou(this)">'
+        + buildEmpresaSelect(empresaId)
+        + '</select></div>'
+        + '<div class="col-6"><div class="conta-wrapper">'
+        + buildContaWidget(grupoId, contaId)
+        + '</div></div>'
+        + '<div class="col-1"><button type="button" class="btn btn-sm btn-outline-danger" onclick="this.closest(\'.linha-vinculo\').remove()">'
+        + '<i class="bi bi-trash"></i></button></div>';
+    container.appendChild(div);
+}
+
+function onEmpresaMudou(sel) {
+    const opt = sel.options[sel.selectedIndex];
+    const grupoId = opt.dataset.grupo || null;
+    const wrapper = sel.closest('.linha-vinculo').querySelector('.conta-wrapper');
+    wrapper.innerHTML = buildContaWidget(grupoId, null);
 }
 </script>
 {% endblock %}
