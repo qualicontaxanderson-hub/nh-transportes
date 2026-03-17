@@ -1,100 +1,106 @@
 {% extends "base.html" %}
+{% block title %}Receitas - {{ app_name }}{% endblock %}
 
-{% block title %}Receitas - NH Transportes{% endblock %}
+{% block styles %}
+<style>
+  .page-hero { background: linear-gradient(135deg, #1D63A5 0%, #1a4f82 60%, #154070 100%); border-radius: .75rem; padding: 1.5rem 2rem; margin-bottom: 1.5rem; color: #fff; }
+  .page-hero .hero-icon { width: 3rem; height: 3rem; background: rgba(255,255,255,.15); border-radius: .6rem; display: flex; align-items: center; justify-content: center; font-size: 1.5rem; flex-shrink: 0; }
+  .stat-card { border: 0; border-radius: .65rem; box-shadow: 0 2px 8px rgba(0,0,0,.07); transition: box-shadow .2s; }
+  .stat-card:hover { box-shadow: 0 4px 16px rgba(0,0,0,.13); }
+  .stat-card .stat-icon { width: 2.6rem; height: 2.6rem; border-radius: .5rem; display: flex; align-items: center; justify-content: center; font-size: 1.2rem; flex-shrink: 0; }
+  #tbl-lista { font-size: 0.76rem; border-collapse: separate; border-spacing: 0; }
+  #tbl-lista thead tr th { background: #f0f4f8; color: #2c3e50; font-weight: 700; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.04em; padding: 0.45rem 0.65rem; border-bottom: 2px solid #c5d5e8; white-space: nowrap; }
+  #tbl-lista tbody tr td { padding: 0.38rem 0.65rem; border-bottom: 1px solid #eef1f4; vertical-align: middle; color: #374151; }
+  #tbl-lista tbody tr:last-child td { border-bottom: none; }
+  #tbl-lista tbody tr.row-item { cursor: pointer; transition: background .1s; }
+  #tbl-lista tbody tr.row-item:hover td { background: #f0f7ff; }
+  .btn-acao { display: inline-flex; align-items: center; justify-content: center; width: 1.8rem; height: 1.8rem; border-radius: .4rem; border: 1px solid; font-size: .82rem; transition: background .15s, color .15s; text-decoration: none; }
+  .btn-editar { color:#1D63A5; border-color:#bee0f5; background:#f0f7ff; }
+  .btn-editar:hover { background:#1D63A5; color:#fff; }
+  .btn-bloquear { color:#fd7e14; border-color:#fde8d0; background:#fff8f0; }
+  .btn-bloquear:hover { background:#fd7e14; color:#fff; }
+  .btn-desbloquear { color:#198754; border-color:#b7dfca; background:#f0faf4; }
+  .btn-desbloquear:hover { background:#198754; color:#fff; }
+  .actions-cell { white-space: nowrap; }
+</style>
+{% endblock %}
 
 {% block content %}
 <div class="container-fluid">
-    <div class="d-flex justify-content-between align-items-center mb-3">
-        <h2 style="font-size: 1.5rem;"><i class="bi bi-wallet2"></i> Receitas</h2>
-        {% if current_user.nivel == 'admin' %}
-        <a href="{{ url_for('receitas.novo') }}" class="btn btn-primary btn-sm">
-            <i class="bi bi-plus-circle"></i> Nova Receita
-        </a>
-        {% endif %}
+  <div class="page-hero d-flex align-items-center gap-3 flex-wrap">
+    <div class="hero-icon"><i class="bi bi-wallet2"></i></div>
+    <div class="flex-grow-1">
+      <h4 class="mb-0 fw-bold">Receitas</h4>
+      <p class="mb-0 opacity-75 small">Gerencie as receitas por cliente.</p>
     </div>
+    {% if current_user.nivel == 'admin' %}
+    <a href="{{ url_for('receitas.novo') }}" class="btn btn-sm px-3" style="background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.35);">
+      <i class="bi bi-plus-circle me-1"></i> Nova Receita
+    </a>
+    {% endif %}
+  </div>
 
-    <!-- Tabela de Receitas -->
-    <div class="card">
-        <div class="card-header" style="background:#1D63A5;color:white;font-size:0.9rem;font-weight:600;">
-            <i class="bi bi-list"></i> Lista de Receitas
+  {% set total = receitas | length %}
+  <div class="row g-3 mb-4">
+    <div class="col-12 col-md-4">
+      <div class="card stat-card h-100">
+        <div class="card-body d-flex align-items-center gap-3 py-3">
+          <div class="stat-icon" style="background:#e8f0fb;"><i class="bi bi-wallet2" style="color:#1D63A5;"></i></div>
+          <div><div class="fs-4 fw-bold" style="color:#1D63A5;">{{ total }}</div><div class="text-muted small">Total de Receitas</div></div>
         </div>
-        <div class="card-body" style="padding: 0.5rem;">
-            <div class="table-responsive">
-                <table class="table table-hover table-striped table-sm mb-0">
-                    <thead style="background:#4A90E2;color:#000;font-weight:700;font-size:0.85rem;">
-                        <tr>
-                            <th>ID</th>
-                            <th>Nome</th>
-                            <th>Cliente</th>
-                            <th class="text-center">Status</th>
-                            <th class="text-center">Ações</th>
-                        </tr>
-                    </thead>
-                    <tbody style="font-size: 0.85rem;">
-                        {% if receitas %}
-                            {% for receita in receitas %}
-                            <tr>
-                                <td><strong>{{ receita.id }}</strong></td>
-                                <td>{{ receita.nome }}</td>
-                                <td>{{ receita.cliente_nome }}</td>
-                                <td class="text-center">
-                                    {% if receita.ativo %}
-                                        <span class="badge bg-success"><i class="bi bi-check-circle"></i> Ativo</span>
-                                    {% else %}
-                                        <span class="badge bg-danger"><i class="bi bi-x-circle"></i> Bloqueado</span>
-                                    {% endif %}
-                                </td>
-                                <td class="text-center">
-                                    {% if current_user.nivel == 'admin' %}
-                                    <a href="{{ url_for('receitas.editar', id=receita.id) }}" class="btn btn-sm btn-warning" title="Editar" style="padding: 0.2rem 0.4rem;">
-                                        <i class="bi bi-pencil"></i>
-                                    </a>
-                                    <form method="POST" action="{{ url_for('receitas.bloquear', id=receita.id) }}" style="display:inline;">
-                                        <button type="submit" class="btn btn-sm {% if receita.ativo %}btn-danger{% else %}btn-success{% endif %}" 
-                                                title="{% if receita.ativo %}Bloquear{% else %}Desbloquear{% endif %}" 
-                                                style="padding: 0.2rem 0.4rem;">
-                                            <i class="bi {% if receita.ativo %}bi-lock{% else %}bi-unlock{% endif %}"></i>
-                                        </button>
-                                    </form>
-                                    {% else %}
-                                    <span class="text-muted" style="font-size: 0.75rem;">-</span>
-                                    {% endif %}
-                                </td>
-                            </tr>
-                            {% endfor %}
-                        {% else %}
-                            <tr>
-                                <td colspan="5" class="text-center text-muted py-3" style="font-size: 0.9rem;">
-                                    <i class="bi bi-inbox" style="font-size:1.5rem;"></i><br>
-                                    Nenhuma receita cadastrada
-                                </td>
-                            </tr>
-                        {% endif %}
-                    </tbody>
-                </table>
-            </div>
-        </div>
+      </div>
     </div>
+  </div>
+
+  <div class="card shadow-sm">
+    <div class="card-header d-flex justify-content-between align-items-center py-2" style="background:#1D63A5;color:white;font-size:0.82rem;font-weight:600;letter-spacing:0.02em;">
+      <span><i class="bi bi-list me-1"></i> Lista de Receitas</span>
+      <span class="badge bg-white text-secondary" style="font-size:0.7rem;font-weight:600;">{{ total }}</span>
+    </div>
+    <div class="card-body p-0">
+      <div class="table-responsive">
+        <table class="table mb-0" id="tbl-lista">
+          <thead><tr>
+            <th>ID</th><th>Nome</th><th>Cliente</th><th class="text-center">Status</th>
+            <th class="text-center" style="width:10%">Ações</th>
+          </tr></thead>
+          <tbody>
+            {% if receitas %}{% for receita in receitas %}
+            <tr class="row-item" {% if current_user.nivel == 'admin' %}data-url="{{ url_for('receitas.editar', id=receita.id) }}" title="Clique para editar"{% endif %}>
+              <td><strong>{{ receita.id }}</strong></td>
+              <td>{{ receita.nome }}</td>
+              <td>{{ receita.cliente_nome }}</td>
+              <td class="text-center">
+                {% if receita.ativo %}<span class="badge bg-success"><i class="bi bi-check-circle"></i> Ativo</span>
+                {% else %}<span class="badge bg-danger"><i class="bi bi-x-circle"></i> Bloqueado</span>{% endif %}
+              </td>
+              <td class="text-center actions-cell" onclick="event.stopPropagation()">
+                {% if current_user.nivel == 'admin' %}
+                <a href="{{ url_for('receitas.editar', id=receita.id) }}" class="btn-acao btn-editar" title="Editar"><i class="bi bi-pencil"></i></a>
+                <form method="POST" action="{{ url_for('receitas.bloquear', id=receita.id) }}" style="display:inline;">
+                  <button type="submit" class="btn-acao {% if receita.ativo %}btn-bloquear{% else %}btn-desbloquear{% endif %}" title="{% if receita.ativo %}Bloquear{% else %}Desbloquear{% endif %}">
+                    <i class="bi {% if receita.ativo %}bi-lock{% else %}bi-unlock{% endif %}"></i>
+                  </button>
+                </form>
+                {% else %}
+                <span class="text-muted" style="font-size:0.75rem;">-</span>
+                {% endif %}
+              </td>
+            </tr>
+            {% endfor %}
+            {% else %}
+            <tr><td colspan="5" class="text-center text-muted py-4"><i class="bi bi-inbox" style="font-size:1.8rem;opacity:0.4;"></i><div class="mt-2" style="font-size:0.82rem;">Nenhuma receita cadastrada.</div></td></tr>
+            {% endif %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
 </div>
+{% endblock %}
 
-<style>
-    .table-sm th, .table-sm td {
-        padding: 0.4rem;
-    }
-    
-    .btn-sm {
-        font-size: 0.8rem;
-        padding: 0.3rem 0.6rem;
-    }
-    
-    @media (max-width: 768px) {
-        h2 {
-            font-size: 1.2rem !important;
-        }
-        .table-sm th, .table-sm td {
-            font-size: 0.75rem !important;
-            padding: 0.3rem !important;
-        }
-    }
-</style>
+{% block scripts %}
+<script>
+document.querySelectorAll('.row-item[data-url]').forEach(function(row){row.addEventListener('click',function(){window.location=this.dataset.url;});});
+</script>
 {% endblock %}
