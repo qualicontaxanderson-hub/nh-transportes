@@ -2,19 +2,228 @@
 
 {% block title %}Fornecedores - NH Transportes{% endblock %}
 
+{% block styles %}
+<style>
+  .page-hero {
+    background: linear-gradient(135deg, #1D63A5 0%, #1a4f82 60%, #154070 100%);
+    border-radius: .75rem;
+    padding: 1.5rem 2rem;
+    margin-bottom: 1.5rem;
+    color: #fff;
+  }
+  .page-hero .hero-icon {
+    width: 3rem; height: 3rem;
+    background: rgba(255,255,255,.15);
+    border-radius: .6rem;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1.5rem;
+    flex-shrink: 0;
+  }
+  .stat-card-forn {
+    border: 0;
+    border-radius: .65rem;
+    box-shadow: 0 2px 8px rgba(0,0,0,.07);
+    transition: box-shadow .2s;
+  }
+  .stat-card-forn:hover { box-shadow: 0 4px 16px rgba(0,0,0,.13); }
+  .stat-card-forn .stat-icon {
+    width: 2.6rem; height: 2.6rem;
+    border-radius: .5rem;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1.2rem;
+    flex-shrink: 0;
+  }
+
+    /* ── Main list table ───────────────────────────────────────── */
+    #tbl-lista {
+        font-size: 0.76rem;
+        border-collapse: separate;
+        border-spacing: 0;
+    }
+    #tbl-lista-head tr th {
+        background: #f0f4f8;
+        color: #2c3e50;
+        font-weight: 700;
+        font-size: 0.72rem;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        padding: 0.45rem 0.65rem;
+        border-bottom: 2px solid #c5d5e8;
+        white-space: nowrap;
+    }
+    #tbl-lista tbody tr td {
+        padding: 0.38rem 0.65rem;
+        border-bottom: 1px solid #eef1f4;
+        vertical-align: middle;
+        color: #374151;
+    }
+    #tbl-lista tbody tr:last-child td {
+        border-bottom: none;
+    }
+    #tbl-lista tbody tr:hover td {
+        background: #f0f7ff;
+    }
+
+    /* ── Report table ──────────────────────────────────────────── */
+    #tbl-relatorio {
+        font-size: 0.76rem;
+        border-collapse: separate;
+        border-spacing: 0;
+    }
+    #tbl-relatorio-head tr th {
+        background: #f0f4f8;
+        color: #2c3e50;
+        font-weight: 700;
+        font-size: 0.72rem;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        padding: 0.45rem 0.6rem;
+        border-bottom: 2px solid #c5d5e8;
+        white-space: nowrap;
+    }
+    #tbl-relatorio tbody tr td {
+        padding: 0.35rem 0.6rem;
+        border-bottom: 1px solid #eef1f4;
+        vertical-align: middle;
+        color: #374151;
+    }
+    #tbl-relatorio tbody tr:last-child td {
+        border-bottom: none;
+    }
+    #tbl-relatorio tbody tr:hover td {
+        background: #f0f7ff;
+    }
+
+    /* ── Shared helpers ────────────────────────────────────────── */
+    .badge-conta {
+        display: inline-block;
+        background: #e8f0fe;
+        color: #1a56db;
+        border-radius: 3px;
+        padding: 0.1rem 0.35rem;
+        font-size: 0.7rem;
+        font-weight: 700;
+        margin-right: 0.3rem;
+        letter-spacing: 0.02em;
+    }
+    .conta-nome {
+        color: #374151;
+        font-size: 0.75rem;
+    }
+    .font-monospace {
+        font-family: 'SFMono-Regular', Consolas, monospace;
+        font-size: 0.72rem;
+        color: #555;
+    }
+
+    /* ── Action icon buttons ───────────────────────────────────── */
+    .btn-acao {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 1.6rem;
+        height: 1.6rem;
+        border-radius: 4px;
+        font-size: 0.75rem;
+        border: none;
+        cursor: pointer;
+        text-decoration: none;
+        transition: opacity 0.15s;
+    }
+    .btn-acao:hover { opacity: 0.8; }
+    .btn-editar  { background: #fff3cd; color: #856404; }
+    .btn-excluir { background: #f8d7da; color: #842029; }
+
+    @media (max-width: 768px) {
+        #tbl-lista, #tbl-relatorio { font-size: 0.70rem; }
+    }
+
+    @media print {
+        .btn, form, nav, .card-header .btn, .btn-acao { display: none !important; }
+        #tbl-relatorio, #tbl-lista { width: 100%; font-size: 0.7rem; }
+    }
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="container-fluid">
-    <div class="d-flex justify-content-between align-items-center mb-3">
-        <h2 style="font-size: 1.5rem;"><i class="bi bi-building"></i> Fornecedores</h2>
-        <a href="{{ url_for('fornecedores.novo') }}" class="btn btn-primary btn-sm">
-            <i class="bi bi-plus-circle"></i> Novo Fornecedor
+
+    <!-- Breadcrumb -->
+    <nav aria-label="breadcrumb" class="mb-3">
+      <ol class="breadcrumb small">
+        <li class="breadcrumb-item"><a href="/" class="text-decoration-none">Dashboard</a></li>
+        <li class="breadcrumb-item active">Fornecedores</li>
+      </ol>
+    </nav>
+
+    <!-- Hero header -->
+    <div class="page-hero d-flex align-items-center gap-3 flex-wrap">
+      <div class="hero-icon"><i class="bi bi-building-fill"></i></div>
+      <div class="flex-grow-1">
+        <h4 class="mb-0 fw-bold">Fornecedores</h4>
+        <p class="mb-0 opacity-75 small">Cadastro e gestão de fornecedores com vínculos contábeis por empresa.</p>
+      </div>
+      <div class="d-flex gap-2 flex-wrap">
+        <a href="{{ url_for('fornecedores.novo') }}"
+           class="btn btn-light fw-semibold btn-sm px-3">
+          <i class="bi bi-plus-circle me-1"></i> Novo Fornecedor
         </a>
+        <a href="#card-relatorio-filtro"
+           class="btn btn-sm px-3" style="background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.35);">
+          <i class="bi bi-table me-1"></i> Relatório de Contas Contábeis
+        </a>
+      </div>
+    </div>
+
+    <!-- Stat cards -->
+    {% set total_forn = fornecedores | length %}
+    <div class="row g-3 mb-4">
+      <div class="col-6 col-md-4">
+        <div class="card stat-card-forn h-100">
+          <div class="card-body d-flex align-items-center gap-3 py-3">
+            <div class="stat-icon" style="background:#e8f0fb;">
+              <i class="bi bi-building" style="color:#1D63A5;"></i>
+            </div>
+            <div>
+              <div class="fs-4 fw-bold" style="color:#1D63A5;">{{ total_forn }}</div>
+              <div class="text-muted small">Fornecedores</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="col-6 col-md-4">
+        <div class="card stat-card-forn h-100">
+          <div class="card-body d-flex align-items-center gap-3 py-3">
+            <div class="stat-icon" style="background:#e6f9ee;">
+              <i class="bi bi-link-45deg" style="color:#198754;"></i>
+            </div>
+            <div>
+              <div class="fs-4 fw-bold" style="color:#198754;">{{ empresas | length }}</div>
+              <div class="text-muted small">Empresas</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="col-12 col-md-4">
+        <div class="card stat-card-forn h-100">
+          <div class="card-body d-flex align-items-center gap-3 py-3">
+            <div class="stat-icon" style="background:#fff3cd;">
+              <i class="bi bi-journal-text" style="color:#856404;"></i>
+            </div>
+            <div>
+              <div class="fs-4 fw-bold" style="color:#856404;">{{ relatorio | length if relatorio else '—' }}</div>
+              <div class="text-muted small">Vínculos no Relatório</div>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
 
     <!-- Filtro por Empresa -->
-    <div class="card shadow-sm mb-4">
-        <div class="card-header" style="background:#1D63A5;color:white;font-size:0.9rem;font-weight:600;">
-            <i class="bi bi-funnel"></i> Relatório de Contas Contábeis por Empresa
+    <div class="card shadow-sm mb-4" id="card-relatorio-filtro">
+        <div class="card-header d-flex justify-content-between align-items-center py-2"
+             style="background:#1D63A5;color:white;font-size:0.82rem;font-weight:600;letter-spacing:0.02em;">
+          <span><i class="bi bi-table me-1"></i> Relatório de Contas Contábeis por Empresa</span>
         </div>
         <div class="card-body">
             <form method="GET" class="row g-2 align-items-end">
@@ -161,116 +370,4 @@
         </div>
     </div>
 </div>
-
-<style>
-    /* ── Main list table ───────────────────────────────────────── */
-    #tbl-lista {
-        font-size: 0.76rem;
-        border-collapse: separate;
-        border-spacing: 0;
-    }
-    #tbl-lista-head tr th {
-        background: #f0f4f8;
-        color: #2c3e50;
-        font-weight: 700;
-        font-size: 0.72rem;
-        text-transform: uppercase;
-        letter-spacing: 0.04em;
-        padding: 0.45rem 0.65rem;
-        border-bottom: 2px solid #c5d5e8;
-        white-space: nowrap;
-    }
-    #tbl-lista tbody tr td {
-        padding: 0.38rem 0.65rem;
-        border-bottom: 1px solid #eef1f4;
-        vertical-align: middle;
-        color: #374151;
-    }
-    #tbl-lista tbody tr:last-child td {
-        border-bottom: none;
-    }
-    #tbl-lista tbody tr:hover td {
-        background: #f0f7ff;
-    }
-
-    /* ── Report table ──────────────────────────────────────────── */
-    #tbl-relatorio {
-        font-size: 0.76rem;
-        border-collapse: separate;
-        border-spacing: 0;
-    }
-    #tbl-relatorio-head tr th {
-        background: #f0f4f8;
-        color: #2c3e50;
-        font-weight: 700;
-        font-size: 0.72rem;
-        text-transform: uppercase;
-        letter-spacing: 0.04em;
-        padding: 0.45rem 0.6rem;
-        border-bottom: 2px solid #c5d5e8;
-        white-space: nowrap;
-    }
-    #tbl-relatorio tbody tr td {
-        padding: 0.35rem 0.6rem;
-        border-bottom: 1px solid #eef1f4;
-        vertical-align: middle;
-        color: #374151;
-    }
-    #tbl-relatorio tbody tr:last-child td {
-        border-bottom: none;
-    }
-    #tbl-relatorio tbody tr:hover td {
-        background: #f0f7ff;
-    }
-
-    /* ── Shared helpers ────────────────────────────────────────── */
-    .badge-conta {
-        display: inline-block;
-        background: #e8f0fe;
-        color: #1a56db;
-        border-radius: 3px;
-        padding: 0.1rem 0.35rem;
-        font-size: 0.7rem;
-        font-weight: 700;
-        margin-right: 0.3rem;
-        letter-spacing: 0.02em;
-    }
-    .conta-nome {
-        color: #374151;
-        font-size: 0.75rem;
-    }
-    .font-monospace {
-        font-family: 'SFMono-Regular', Consolas, monospace;
-        font-size: 0.72rem;
-        color: #555;
-    }
-
-    /* ── Action icon buttons ───────────────────────────────────── */
-    .btn-acao {
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        width: 1.6rem;
-        height: 1.6rem;
-        border-radius: 4px;
-        font-size: 0.75rem;
-        border: none;
-        cursor: pointer;
-        text-decoration: none;
-        transition: opacity 0.15s;
-    }
-    .btn-acao:hover { opacity: 0.8; }
-    .btn-editar  { background: #fff3cd; color: #856404; }
-    .btn-excluir { background: #f8d7da; color: #842029; }
-
-    @media (max-width: 768px) {
-        h2 { font-size: 1.2rem !important; }
-        #tbl-lista, #tbl-relatorio { font-size: 0.70rem; }
-    }
-
-    @media print {
-        .btn, form, nav, .card-header .btn, .btn-acao { display: none !important; }
-        #tbl-relatorio, #tbl-lista { width: 100%; font-size: 0.7rem; }
-    }
-</style>
 {% endblock %}
