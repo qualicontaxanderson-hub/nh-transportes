@@ -58,8 +58,8 @@
   {% set total_fretes = fretes | length %}
   {% set ns = namespace(valor=0.0, lucro=0.0) %}
   {% for f in fretes %}
-    {% if f.valor_total_frete %}{% set ns.valor = ns.valor + f.valor_total_frete %}{% endif %}
-    {% if f.lucro %}{% set ns.lucro = ns.lucro + f.lucro %}{% endif %}
+    {% if f.valor_total_frete %}{% set ns.valor = ns.valor + f.valor_total_frete|float %}{% endif %}
+    {% if f.lucro %}{% set ns.lucro = ns.lucro + f.lucro|float %}{% endif %}
   {% endfor %}
 
   <!-- Hero header -->
