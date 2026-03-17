@@ -1,9 +1,50 @@
+import logging
+
 from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify
 from flask_login import login_required, current_user
 from utils.db import get_db_connection
 from utils.decorators import admin_required
 
 bp = Blueprint('despesas', __name__, url_prefix='/despesas')
+
+_tables_ready = False
+
+
+def _ensure_tables():
+    """Garante que a tabela categoria_despesa_contas existe. Idempotente."""
+    global _tables_ready
+    if _tables_ready:
+        return
+    log = logging.getLogger(__name__)
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS categoria_despesa_contas (
+                id                INT          AUTO_INCREMENT PRIMARY KEY,
+                categoria_id      INT          NOT NULL,
+                cliente_id        INT          NOT NULL,
+                conta_contabil_id INT          NULL,
+                UNIQUE KEY uq_cdc_cat_cliente (categoria_id, cliente_id),
+                CONSTRAINT fk_cdc_categoria FOREIGN KEY (categoria_id)
+                    REFERENCES categorias_despesas(id) ON DELETE CASCADE,
+                CONSTRAINT fk_cdc_cliente FOREIGN KEY (cliente_id)
+                    REFERENCES clientes(id) ON DELETE CASCADE,
+                CONSTRAINT fk_cdc_conta FOREIGN KEY (conta_contabil_id)
+                    REFERENCES plano_contas_contas(id) ON DELETE SET NULL
+            ) COMMENT='Vínculo por empresa entre categorias de despesas e contas contábeis'
+        """)
+        conn.commit()
+        _tables_ready = True
+    except Exception:
+        log.exception('_ensure_tables despesas: falha ao inicializar tabelas')
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+    finally:
+        cursor.close()
+        conn.close()
 
 
 def _load_form_data(conn):
@@ -69,6 +110,7 @@ def index():
 @admin_required
 def titulo_detalhes(titulo_id):
     """Mostra categorias de um título específico"""
+    _ensure_tables()
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
 
@@ -229,6 +271,7 @@ def editar_titulo(id):
 @admin_required
 def nova_categoria():
     """Criar nova categoria de despesa"""
+    _ensure_tables()
     conn = None
     cursor = None
     try:
@@ -298,6 +341,7 @@ def nova_categoria():
 @admin_required
 def editar_categoria(id):
     """Editar categoria de despesa"""
+    _ensure_tables()
     conn = None
     cursor = None
     try:
