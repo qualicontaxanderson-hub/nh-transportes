@@ -71,6 +71,9 @@
   .btn-disabled { background: #f0f0f0; color: #aaa; cursor: default; }
   .btn-registrar{ background: #fff3cd; color: #856404; }
 
+  /* Keep all action icons on a single line */
+  .actions-cell { white-space: nowrap; }
+
   .mono { font-family: 'SFMono-Regular', Consolas, monospace; font-size: 0.7rem; }
 </style>
 {% endblock %}
@@ -187,7 +190,7 @@
               <th style="width:10%">Vencimento</th>
               <th style="width:8%">Status</th>
               <th style="width:12%">Charge ID</th>
-              <th class="text-center" style="width:14%">Ações</th>
+              <th class="text-center" style="width:17%">Ações</th>
             </tr>
           </thead>
           <tbody>
