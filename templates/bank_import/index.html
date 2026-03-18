@@ -2,14 +2,33 @@
 
 {% block title %}Importação Bancária OFX - NH Transportes{% endblock %}
 
+{% block styles %}
+<style>
+  .page-hero {
+    background: linear-gradient(135deg, #1D63A5 0%, #1a4f82 60%, #154070 100%);
+    border-radius: .75rem; padding: 1.25rem 1.75rem; margin-bottom: 1.25rem; color: #fff;
+  }
+  .page-hero .hero-icon {
+    width: 2.75rem; height: 2.75rem; background: rgba(255,255,255,.15);
+    border-radius: .5rem; display: flex; align-items: center; justify-content: center;
+    font-size: 1.35rem; flex-shrink: 0;
+  }
+  .stat-card { border: none; border-radius: .55rem; box-shadow: 0 1px 5px rgba(0,0,0,.07); }
+  .stat-label { font-size: 0.68rem; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; opacity: .7; }
+  .stat-value { font-size: 1.3rem; font-weight: 700; line-height: 1; }
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="container-fluid">
-    <nav aria-label="breadcrumb" class="mt-2 mb-3">
-        <ol class="breadcrumb" style="font-size:0.85rem;">
-            <li class="breadcrumb-item"><a href="{{ url_for('index') }}">Dashboard</a></li>
-            <li class="breadcrumb-item active">Importação Bancária</li>
-        </ol>
-    </nav>
+    <!-- Hero header -->
+    <div class="page-hero d-flex align-items-center gap-3 flex-wrap mt-2">
+      <div class="hero-icon"><i class="bi bi-bank"></i></div>
+      <div class="flex-grow-1">
+        <h4 class="mb-0 fw-bold">Importação Bancária OFX</h4>
+        <p class="mb-0 opacity-75" style="font-size:0.8rem;">Importe extratos OFX e concilie as transações bancárias.</p>
+      </div>
+    </div>
 
     <!-- Dropbox — pasta automática (movido para o topo) -->
     {# ── Dropbox: sempre aparece quando configurado ── #}
@@ -129,26 +148,41 @@
     <!-- Summary cards -->
     <div class="row g-3 mb-3">
         <div class="col-sm-4">
-            <div class="card border-0 shadow-sm text-center">
-                <div class="card-body py-3">
-                    <div class="fs-2 fw-bold text-primary">{{ total }}</div>
-                    <div class="text-muted small">Total Importado</div>
+            <div class="card stat-card">
+                <div class="card-body d-flex align-items-center gap-3 py-3">
+                    <div style="width:2.5rem;height:2.5rem;background:#cce5ff;color:#004085;border-radius:.5rem;display:flex;align-items:center;justify-content:center;font-size:1.2rem;flex-shrink:0;">
+                        <i class="bi bi-database"></i>
+                    </div>
+                    <div>
+                        <div class="stat-label text-muted">Total Importado</div>
+                        <div class="stat-value text-primary">{{ total }}</div>
+                    </div>
                 </div>
             </div>
         </div>
         <div class="col-sm-4">
-            <div class="card border-0 shadow-sm text-center">
-                <div class="card-body py-3">
-                    <div class="fs-2 fw-bold text-warning">{{ pendentes }}</div>
-                    <div class="text-muted small">Pendentes</div>
+            <div class="card stat-card">
+                <div class="card-body d-flex align-items-center gap-3 py-3">
+                    <div style="width:2.5rem;height:2.5rem;background:#fff3cd;color:#856404;border-radius:.5rem;display:flex;align-items:center;justify-content:center;font-size:1.2rem;flex-shrink:0;">
+                        <i class="bi bi-hourglass-split"></i>
+                    </div>
+                    <div>
+                        <div class="stat-label text-muted">Pendentes</div>
+                        <div class="stat-value" style="color:#856404;">{{ pendentes }}</div>
+                    </div>
                 </div>
             </div>
         </div>
         <div class="col-sm-4">
-            <div class="card border-0 shadow-sm text-center">
-                <div class="card-body py-3">
-                    <div class="fs-2 fw-bold text-success">{{ conciliados }}</div>
-                    <div class="text-muted small">Conciliados</div>
+            <div class="card stat-card">
+                <div class="card-body d-flex align-items-center gap-3 py-3">
+                    <div style="width:2.5rem;height:2.5rem;background:#d4edda;color:#155724;border-radius:.5rem;display:flex;align-items:center;justify-content:center;font-size:1.2rem;flex-shrink:0;">
+                        <i class="bi bi-check2-circle"></i>
+                    </div>
+                    <div>
+                        <div class="stat-label text-muted">Conciliados</div>
+                        <div class="stat-value text-success">{{ conciliados }}</div>
+                    </div>
                 </div>
             </div>
         </div>

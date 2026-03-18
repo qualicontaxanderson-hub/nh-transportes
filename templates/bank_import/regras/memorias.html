@@ -1,14 +1,39 @@
 {% extends "base.html" %}
 {% block title %}Memorizações de Conciliação{% endblock %}
+
+{% block styles %}
+<style>
+  .page-hero {
+    background: linear-gradient(135deg, #1D63A5 0%, #1a4f82 60%, #154070 100%);
+    border-radius: .75rem; padding: 1.25rem 1.75rem; margin-bottom: 1.25rem; color: #fff;
+  }
+  .page-hero .hero-icon {
+    width: 2.75rem; height: 2.75rem; background: rgba(255,255,255,.15);
+    border-radius: .5rem; display: flex; align-items: center; justify-content: center;
+    font-size: 1.35rem; flex-shrink: 0;
+  }
+  #tbl-memorias thead th {
+    background: #1D63A5; color: #fff;
+    font-size: 0.68rem; font-weight: 700; text-transform: uppercase; letter-spacing: .04em;
+    padding: 0.45rem 0.5rem; border: none; white-space: nowrap;
+  }
+  #tbl-memorias tbody td { padding: 0.35rem 0.5rem; vertical-align: middle; border-color: #f0f3f7; font-size: 0.8rem; }
+</style>
+{% endblock %}
+
 {% block content %}
-<div class="container-fluid mt-4">
-  <div class="d-flex justify-content-between align-items-center mb-3">
-    <h4><i class="bi bi-bookmark-star-fill text-warning"></i> Memorizações de Conciliação</h4>
-    <div class="d-flex gap-2">
-      <a href="{{ url_for('conciliacao_regras.lista') }}" class="btn btn-outline-secondary btn-sm">
-        <i class="bi bi-arrow-left"></i> Voltar para Regras
-      </a>
+<div class="container-fluid mt-2">
+
+  <!-- Hero header -->
+  <div class="page-hero d-flex align-items-center gap-3 flex-wrap">
+    <div class="hero-icon"><i class="bi bi-bookmark-star-fill"></i></div>
+    <div class="flex-grow-1">
+      <h4 class="mb-0 fw-bold">Memorizações de Conciliação</h4>
+      <p class="mb-0 opacity-75" style="font-size:0.8rem;">Vínculos aprendidos automaticamente ao conciliar transações bancárias.</p>
     </div>
+    <a href="{{ url_for('conciliacao_regras.lista') }}" class="btn btn-sm" style="background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.3);">
+      <i class="bi bi-arrow-left"></i> Voltar para Regras
+    </a>
   </div>
 
   <div class="alert alert-info py-2 mb-2">
@@ -160,8 +185,8 @@
         <strong>{{ memorias|length }}</strong> memorização(ões) registrada(s)
       </div>
       <div class="table-responsive">
-        <table class="table table-hover table-sm mb-0" style="font-size:0.8rem">
-          <thead class="table-dark">
+        <table class="table table-hover table-sm mb-0" id="tbl-memorias">
+          <thead>
             <tr>
               <th>CNPJ/CPF</th>
               <th>Descrição-chave</th>
