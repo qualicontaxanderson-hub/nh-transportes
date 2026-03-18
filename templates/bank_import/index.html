@@ -559,11 +559,157 @@
         </div>
     </div>
 </div>
+
+<!-- Modal: Duplicatas na Importação -->
+<div class="modal fade" id="modalDuplicatas" tabindex="-1" aria-labelledby="modalDuplicatasLabel">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header" style="background:#ffc107;color:#212529;">
+                <h5 class="modal-title" id="modalDuplicatasLabel">
+                    <i class="bi bi-copy"></i> Duplicatas Encontradas na Importação
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p id="modalDuplicatasResumo" class="fw-semibold mb-1"></p>
+                <p class="text-muted small mb-2">
+                    As transações abaixo já existem no banco de dados e foram ignoradas na importação.
+                    Marque as que deseja <strong>re-ativar</strong> para conciliação.
+                    Apenas registros com status <span class="badge bg-warning text-dark">Pendente</span>
+                    ou <span class="badge bg-secondary">Ignorado</span> podem ser re-ativados.
+                </p>
+                <div class="table-responsive">
+                    <table class="table table-sm table-hover mb-0" style="font-size:0.82rem;">
+                        <thead class="table-light sticky-top">
+                            <tr>
+                                <th><input type="checkbox" id="checkAllDups" title="Selecionar todos"></th>
+                                <th>Data</th>
+                                <th>Tipo</th>
+                                <th class="text-end">Valor</th>
+                                <th>Descrição</th>
+                                <th>Status Atual</th>
+                            </tr>
+                        </thead>
+                        <tbody id="modalDuplicatasTabela"></tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fechar</button>
+                <button type="button" class="btn btn-warning" id="btnReativarSelecionados">
+                    <i class="bi bi-arrow-repeat"></i> Re-ativar selecionados
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
 {% endblock %}
 
 {% block scripts %}
 <script>
+    // ---------------------------------------------------------------
+    // Duplicatas na importação: modal interativo
+    // ---------------------------------------------------------------
+    function mostrarResultadoImportacao(data) {
+        if (!data.success) {
+            alert('Erro: ' + data.message);
+            return;
+        }
+        if (!data.duplicados || data.duplicados === 0) {
+            alert(data.message);
+            location.reload();
+            return;
+        }
+        // Preenche resumo
+        document.getElementById('modalDuplicatasResumo').innerHTML =
+            '<i class="bi bi-check-circle text-success"></i> <strong>' + data.inseridos + '</strong> transação(ões) importada(s). ' +
+            '<i class="bi bi-copy text-warning"></i> <strong>' + data.duplicados + '</strong> duplicata(s) encontrada(s).';
+
+        const fmtDate = function(s) { return s ? s.split('-').reverse().join('/') : ''; };
+        const fmtValor = function(v) {
+            return 'R$ ' + parseFloat(v).toFixed(2).replace('.', ',').replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+        };
+        const statusBadges = {
+            'pendente':   '<span class="badge bg-warning text-dark">Pendente</span>',
+            'conciliado': '<span class="badge bg-success">Conciliado</span>',
+            'ignorado':   '<span class="badge bg-secondary">Ignorado</span>',
+        };
+
+        const tbody = document.getElementById('modalDuplicatasTabela');
+        tbody.innerHTML = '';
+        (data.duplicados_lista || []).forEach(function(d, idx) {
+            const canReactivate = d.existing_id && (d.existing_status === 'ignorado' || d.existing_status === 'pendente');
+            const badge = statusBadges[d.existing_status] || '<span class="badge bg-secondary">—</span>';
+            const tipoBadge = d.tipo === 'CREDIT'
+                ? '<span class="text-success fw-semibold">Crédito</span>'
+                : '<span class="text-danger fw-semibold">Débito</span>';
+            const desc = (d.descricao || '').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+            const cbId = 'dup_' + idx;
+            const cbHtml = canReactivate
+                ? '<input type="checkbox" class="dup-check" value="' + d.existing_id + '" id="' + cbId + '">'
+                : '';
+            tbody.innerHTML +=
+                '<tr>' +
+                '<td>' + cbHtml + '</td>' +
+                '<td style="white-space:nowrap">' + fmtDate(d.data_transacao) + '</td>' +
+                '<td>' + tipoBadge + '</td>' +
+                '<td class="text-end" style="white-space:nowrap">' + fmtValor(d.valor) + '</td>' +
+                '<td style="max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + desc + '">' + desc + '</td>' +
+                '<td>' + badge + '</td>' +
+                '</tr>';
+        });
+
+        // Selecionar todos
+        const checkAll = document.getElementById('checkAllDups');
+        checkAll.checked = false;
+        checkAll.onchange = function() {
+            document.querySelectorAll('.dup-check').forEach(function(cb) { cb.checked = checkAll.checked; });
+        };
+
+        // Botão re-ativar
+        document.getElementById('btnReativarSelecionados').onclick = function() {
+            var ids = Array.from(document.querySelectorAll('.dup-check:checked')).map(function(cb) { return parseInt(cb.value); });
+            if (!ids.length) {
+                alert('Selecione ao menos uma transação para re-ativar.');
+                return;
+            }
+            var btn = document.getElementById('btnReativarSelecionados');
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Processando...';
+            fetch('{{ url_for("bank_import.api_reimportar_duplicatas") }}', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ ids: ids })
+            })
+            .then(function(r) { return r.json(); })
+            .then(function(res) {
+                if (res.success) {
+                    alert(res.reativados + ' transação(ões) re-ativada(s) com sucesso! Acesse a lista de pendentes para conciliá-las.');
+                    bootstrap.Modal.getInstance(document.getElementById('modalDuplicatas')).hide();
+                } else {
+                    alert('Erro: ' + res.message);
+                    btn.disabled = false;
+                    btn.innerHTML = '<i class="bi bi-arrow-repeat"></i> Re-ativar selecionados';
+                }
+            })
+            .catch(function() {
+                alert('Erro ao re-ativar transações.');
+                btn.disabled = false;
+                btn.innerHTML = '<i class="bi bi-arrow-repeat"></i> Re-ativar selecionados';
+            });
+        };
+
+        // Ao fechar o modal, recarrega a página
+        document.getElementById('modalDuplicatas').addEventListener('hidden.bs.modal', function() {
+            location.reload();
+        }, { once: true });
+
+        new bootstrap.Modal(document.getElementById('modalDuplicatas')).show();
+    }
+
+    // ---------------------------------------------------------------
     // Arrastar e soltar / seleção de arquivo
+    // ---------------------------------------------------------------
     const dropZone = document.getElementById('dropZone');
     const fileInput = document.getElementById('ofxFile');
     const fileInfo = document.getElementById('fileInfo');
@@ -594,6 +740,41 @@
             showFile(file);
         }
     });
+
+    // Intercepta o formulário de upload para usar AJAX e mostrar modal de duplicatas
+    const uploadForm = document.getElementById('uploadForm');
+    if (uploadForm) {
+        uploadForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            const form = this;
+            const submitBtn = form.querySelector('button[type="submit"]');
+            const originalHtml = submitBtn ? submitBtn.innerHTML : '';
+            if (submitBtn) { submitBtn.disabled = true; submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Importando...'; }
+
+            fetch(form.action, {
+                method: 'POST',
+                headers: { 'X-Requested-With': 'XMLHttpRequest' },
+                body: new FormData(form),
+            })
+            .then(function(r) {
+                const ct = r.headers.get('content-type') || '';
+                if (ct.includes('application/json')) return r.json();
+                // Resposta não-JSON (ex: redirect flash): recarrega normalmente
+                location.reload();
+                return null;
+            })
+            .then(function(data) {
+                if (!data) return;
+                mostrarResultadoImportacao(data);
+            })
+            .catch(function(err) {
+                alert('Erro ao importar arquivo: ' + (err.message || err));
+            })
+            .finally(function() {
+                if (submitBtn) { submitBtn.disabled = false; submitBtn.innerHTML = originalHtml; }
+            });
+        });
+    }
 
     // Auto-conciliação
     function autoReconcile() {
@@ -787,14 +968,7 @@
             body: JSON.stringify({ account_id: accountId, nome_arquivo: nomeArquivo })
         })
         .then(r => r.json())
-        .then(data => {
-            if (data.success) {
-                alert(data.message);
-                location.reload();  // refresh counters and file list together
-            } else {
-                alert('Erro: ' + data.message);
-            }
-        })
+        .then(data => { mostrarResultadoImportacao(data); })
         .catch(() => alert('Erro ao processar arquivo.'));
     }
 
@@ -984,14 +1158,7 @@
             body: JSON.stringify({ account_id: accountId, nome_arquivo: nomeArquivo })
         })
         .then(r => r.json())
-        .then(data => {
-            if (data.success) {
-                alert(data.message);
-                location.reload();
-            } else {
-                alert('Erro: ' + data.message);
-            }
-        })
+        .then(data => { mostrarResultadoImportacao(data); })
         .catch(() => alert('Erro ao importar do Dropbox.'));
     }
 

@@ -229,10 +229,11 @@ def _save_transactions(cursor, conn, account_id, transactions):
       3. INSERT único com executemany para todas as novas linhas.
       4. Até 3 tentativas em caso de deadlock MySQL (errno 1213).
 
-    Retorna (inseridos, duplicados).
+    Retorna (inseridos, duplicados_count, duplicados_lista) onde duplicados_lista é uma
+    lista de dicts com os dados das transações duplicadas e o status do registro existente.
     """
     if not transactions:
-        return 0, 0
+        return 0, 0, []
 
     # 1. Verificação de duplicatas em lote por hash_dedup
     hashes = [tx['hash_dedup'] for tx in transactions]
@@ -293,9 +294,19 @@ def _save_transactions(cursor, conn, account_id, transactions):
     now = _dt.datetime.now()
     rows = []
     duplicados = 0
+    duplicados_lista = []
     for tx in transactions:
         if tx['hash_dedup'] in existing_hashes:
             duplicados += 1
+            duplicados_lista.append({
+                'data_transacao': str(tx['data_transacao']),
+                'tipo': tx.get('tipo', ''),
+                'valor': round(float(tx.get('valor', 0)), 2),
+                'descricao': (tx.get('descricao') or '')[:120],
+                'cnpj_cpf': tx.get('cnpj_cpf') or '',
+                'hash_dedup': tx['hash_dedup'],
+                'por_hash': True,
+            })
             continue
         # Secondary content-based dedup.
         # Key format must match the SQL CONCAT in the DB query above:
@@ -311,6 +322,15 @@ def _save_transactions(cursor, conn, account_id, transactions):
         )
         if _ck in existing_content_keys:
             duplicados += 1
+            duplicados_lista.append({
+                'data_transacao': str(tx['data_transacao']),
+                'tipo': tx.get('tipo', ''),
+                'valor': round(float(tx.get('valor', 0)), 2),
+                'descricao': (tx.get('descricao') or '')[:120],
+                'cnpj_cpf': tx.get('cnpj_cpf') or '',
+                'hash_dedup': tx.get('hash_dedup'),
+                'por_hash': False,
+            })
             continue
         # Add to existing_content_keys to catch duplicates within the same batch
         existing_content_keys.add(_ck)
@@ -374,7 +394,45 @@ def _save_transactions(cursor, conn, account_id, transactions):
     _auto_conciliar_despesas_por_cnpj(cursor, conn, account_id, mapping)
     # 6. Auto-conciliação de créditos EFI por charge_id (Recebimento de cobrança: XXXXXXXXX)
     _auto_conciliar_cobrancas(cursor, conn, account_id)
-    return inseridos, duplicados
+
+    # Enriquece duplicados_lista com informações do registro existente (id, status)
+    if duplicados_lista:
+        hash_only = [d['hash_dedup'] for d in duplicados_lista if d.get('por_hash') and d.get('hash_dedup')]
+        if hash_only:
+            ph = ','.join(['%s'] * len(hash_only))
+            cursor.execute(
+                f"SELECT id, hash_dedup, status FROM bank_transactions WHERE hash_dedup IN ({ph})",
+                hash_only,
+            )
+            hash_to_info = {r['hash_dedup']: r for r in cursor.fetchall()}
+            for d in duplicados_lista:
+                if d.get('por_hash') and d.get('hash_dedup') in hash_to_info:
+                    info = hash_to_info[d['hash_dedup']]
+                    d['existing_id'] = info['id']
+                    d['existing_status'] = info['status']
+        # Para duplicatas por conteúdo, busca o registro existente individualmente
+        for d in duplicados_lista:
+            if not d.get('por_hash') and 'existing_id' not in d:
+                try:
+                    cursor.execute(
+                        """SELECT id, status FROM bank_transactions
+                           WHERE account_id = %s AND data_transacao = %s
+                             AND tipo = %s AND valor = %s
+                             AND COALESCE(cnpj_cpf,'') = %s
+                             AND UPPER(TRIM(LEFT(COALESCE(descricao,''),255))) = %s
+                           LIMIT 1""",
+                        (account_id, d['data_transacao'], d['tipo'], d['valor'],
+                         d.get('cnpj_cpf') or '',
+                         (d.get('descricao') or '')[:255].upper().strip()),
+                    )
+                    row = cursor.fetchone()
+                    if row:
+                        d['existing_id'] = row['id']
+                        d['existing_status'] = row['status']
+                except Exception:
+                    pass
+
+    return inseridos, duplicados, duplicados_lista
 
 
 def _get_or_create_forma_compensacao_cobranca(cursor, conn):
@@ -857,15 +915,22 @@ def upload():
     cursor = conn.cursor(dictionary=True)
 
     _ensure_descricao_chave()
-    inseridos, duplicados = _save_transactions(cursor, conn, account_id, transactions)
+    inseridos, duplicados, duplicados_lista = _save_transactions(cursor, conn, account_id, transactions)
 
     cursor.close()
     conn.close()
 
-    flash(
-        f'Importação concluída: {inseridos} transação(ões) importada(s), {duplicados} duplicata(s) ignorada(s).',
-        'success',
-    )
+    msg = f'Importação concluída: {inseridos} transação(ões) importada(s), {duplicados} duplicata(s) ignorada(s).'
+    wants_json = request.headers.get('X-Requested-With') == 'XMLHttpRequest'
+    if wants_json:
+        return jsonify({
+            'success': True,
+            'message': msg,
+            'inseridos': inseridos,
+            'duplicados': duplicados,
+            'duplicados_lista': duplicados_lista,
+        })
+    flash(msg, 'success')
     return redirect(url_for('bank_import.index'))
 
 
@@ -2733,7 +2798,7 @@ def scan_inbox():
     cursor = conn.cursor(dictionary=True)
 
     _ensure_descricao_chave()
-    inseridos, duplicados = _save_transactions(cursor, conn, account_id, transactions)
+    inseridos, duplicados, duplicados_lista = _save_transactions(cursor, conn, account_id, transactions)
 
     cursor.close()
     conn.close()
@@ -2751,7 +2816,7 @@ def scan_inbox():
 
     msg = f'{nome_arquivo}: {inseridos} transação(ões) importada(s), {duplicados} duplicata(s) ignorada(s).'
     if request.is_json:
-        return jsonify({'success': True, 'message': msg, 'inseridos': inseridos, 'duplicados': duplicados})
+        return jsonify({'success': True, 'message': msg, 'inseridos': inseridos, 'duplicados': duplicados, 'duplicados_lista': duplicados_lista})
     flash(msg, 'success')
     return redirect(url_for('bank_import.index'))
 
@@ -3078,7 +3143,7 @@ def importar_dropbox():
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
     _ensure_descricao_chave()
-    inseridos, duplicados = _save_transactions(cursor, conn, account_id, transactions)
+    inseridos, duplicados, duplicados_lista = _save_transactions(cursor, conn, account_id, transactions)
     cursor.close()
     conn.close()
 
@@ -3087,9 +3152,42 @@ def importar_dropbox():
 
     msg = f'Dropbox "{nome_arquivo}": {inseridos} transação(ões) importada(s), {duplicados} duplicata(s) ignorada(s).'
     if request.is_json:
-        return jsonify({'success': True, 'message': msg, 'inseridos': inseridos, 'duplicados': duplicados})
+        return jsonify({'success': True, 'message': msg, 'inseridos': inseridos, 'duplicados': duplicados, 'duplicados_lista': duplicados_lista})
     flash(msg, 'success')
     return redirect(url_for('bank_import.index'))
+
+
+@bp.route('/api/reimportar-duplicatas', methods=['POST'])
+@login_required
+def api_reimportar_duplicatas():
+    """
+    Re-ativa transações bancárias duplicadas que foram ignoradas ou estão pendentes,
+    resetando seu status para 'pendente' para que possam ser conciliadas novamente.
+    """
+    data = request.get_json() or {}
+    ids = data.get('ids', [])
+    if not ids or not isinstance(ids, list):
+        return jsonify({'success': False, 'message': 'Lista de IDs inválida'}), 400
+    try:
+        ids = [int(i) for i in ids]
+    except (ValueError, TypeError):
+        return jsonify({'success': False, 'message': 'IDs devem ser inteiros'}), 400
+
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    ph = ','.join(['%s'] * len(ids))
+    cursor.execute(
+        f"""UPDATE bank_transactions
+               SET status='pendente', conciliado_em=NULL, conciliado_por=NULL
+             WHERE id IN ({ph})
+               AND status IN ('ignorado', 'pendente')""",
+        ids,
+    )
+    reativados = cursor.rowcount
+    conn.commit()
+    cursor.close()
+    conn.close()
+    return jsonify({'success': True, 'reativados': reativados})
 
 
 # ---------------------------------------------------------------------------
