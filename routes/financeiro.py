@@ -971,18 +971,32 @@ def consultar_status_efi(charge_id):
 @login_required
 def auto_conciliar_efi():
     """
-    Verifica automaticamente o status de todos os boletos pendentes/vencidos no EFI
-    e marca como pagos os que o provedor já registrou como 'paid'.
-    Retorna JSON: {success, atualizados, erros, message}
+    Verifica automaticamente o status de um lote de boletos pendentes no EFI
+    e marca como pagos os que o provedor já registrou como 'paid'/'settled'.
+
+    Processa no máximo _BATCH_SIZE boletos por chamada (os mais antigos primeiro)
+    para evitar timeouts. Retorna JSON: {success, atualizados, erros, restantes, message}
     """
+    import concurrent.futures as _cf
+    from datetime import datetime as _dt_cls
+
+    _BATCH_SIZE = 20      # boletos por chamada
+    _PER_CHARGE_TIMEOUT = 10  # segundos por consulta EFI
+
     conn = None
     cursor = None
     try:
         credentials = _get_efi_credentials()
+
+        # Aborta rapidamente se as credenciais não estiverem configuradas
+        if not credentials.get('client_id') or not credentials.get('client_secret'):
+            return jsonify({'success': False, 'atualizados': 0, 'erros': 0, 'restantes': 0,
+                            'message': 'Credenciais EFI não configuradas (EFI_CLIENT_ID / EFI_CLIENT_SECRET).'})
+
         conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)
 
-        # Busca cobrancas com charge_id que ainda não estão pagas/canceladas
+        # Busca apenas os próximos _BATCH_SIZE boletos pendentes/vencidos com charge_id
         cursor.execute("""
             SELECT id, charge_id, status, valor, data_vencimento
             FROM cobrancas
@@ -990,82 +1004,104 @@ def auto_conciliar_efi():
               AND charge_id != ''
               AND (status IS NULL OR status NOT IN ('pago', 'cancelado'))
             ORDER BY data_vencimento ASC
-        """)
-        pendentes = cursor.fetchall()
+            LIMIT %s
+        """, (_BATCH_SIZE,))
+        lote = cursor.fetchall()
 
-        if not pendentes:
-            return jsonify({'success': True, 'atualizados': 0, 'erros': 0,
+        # Conta total de pendentes para informar ao usuário quantos restam
+        cursor.execute("""
+            SELECT COUNT(*) AS total
+            FROM cobrancas
+            WHERE charge_id IS NOT NULL
+              AND charge_id != ''
+              AND (status IS NULL OR status NOT IN ('pago', 'cancelado'))
+        """)
+        total_pendentes = cursor.fetchone()['total']
+
+        if not lote:
+            cursor.close()
+            conn.close()
+            return jsonify({'success': True, 'atualizados': 0, 'erros': 0, 'restantes': 0,
                             'message': 'Nenhum boleto pendente para verificar.'})
 
+        hoje = date.today()
         atualizados = 0
         erros = 0
-        hoje = date.today()
 
-        for cobr in pendentes:
-            charge_id = cobr.get('charge_id')
+        def _consultar(cobr):
+            """Consulta EFI para um boleto; retorna (cobr, charge_data) ou (cobr, None) em erro."""
             try:
-                charge_data = fetch_charge(credentials, charge_id)
-                if not charge_data or not isinstance(charge_data, dict):
-                    erros += 1
-                    continue
-
-                # Ignorar respostas de erro do provedor
-                error_code = charge_data.get('http_status') or charge_data.get('code')
-                if error_code and error_code != 200:
-                    erros += 1
-                    continue
-
-                data = charge_data.get('data') or charge_data.get('charge') or charge_data
-                if not isinstance(data, dict):
-                    erros += 1
-                    continue
-
-                status_efi = (data.get('status') or '').lower()
-                if status_efi not in ('paid', 'settled'):
-                    continue
-
-                # Extrai data de pagamento se disponível
-                payment = data.get('payment') or {}
-                if isinstance(payment, list) and payment:
-                    payment = payment[0]
-                paid_at_str = None
-                if isinstance(payment, dict):
-                    paid_at_str = payment.get('paid_at')
-                if not paid_at_str:
-                    paid_at_str = data.get('paid_at')
-
-                try:
-                    from datetime import datetime as _dt_cls
-                    data_pag = _dt_cls.strptime(paid_at_str[:10], '%Y-%m-%d').date() if paid_at_str else hoje
-                except (ValueError, TypeError):
-                    data_pag = hoje
-
-                cursor.execute("""
-                    UPDATE cobrancas
-                    SET status = 'pago',
-                        pago_via_provedor = 1,
-                        data_pagamento = %s
-                    WHERE id = %s AND (status IS NULL OR status NOT IN ('pago', 'cancelado'))
-                """, (data_pag, cobr['id']))
-
-                if cursor.rowcount > 0:
-                    atualizados += 1
-
+                with _cf.ThreadPoolExecutor(max_workers=1) as ex:
+                    fut = ex.submit(fetch_charge, credentials, cobr['charge_id'])
+                    return cobr, fut.result(timeout=_PER_CHARGE_TIMEOUT)
             except Exception as exc:
                 current_app.logger.warning(
-                    '[auto_conciliar_efi] erro ao consultar charge_id=%s: %s', charge_id, exc)
+                    '[auto_conciliar_efi] charge_id=%s: %s', cobr.get('charge_id'), exc)
+                return cobr, None
+
+        # Consulta todos do lote em paralelo (máximo _BATCH_SIZE threads)
+        with _cf.ThreadPoolExecutor(max_workers=min(len(lote), 5)) as pool:
+            resultados = list(pool.map(_consultar, lote))
+
+        for cobr, charge_data in resultados:
+            if not charge_data or not isinstance(charge_data, dict):
                 erros += 1
+                continue
+
+            error_code = charge_data.get('http_status') or charge_data.get('code')
+            if error_code and error_code != 200:
+                erros += 1
+                continue
+
+            data = charge_data.get('data') or charge_data.get('charge') or charge_data
+            if not isinstance(data, dict):
+                erros += 1
+                continue
+
+            status_efi = (data.get('status') or '').lower()
+            if status_efi not in ('paid', 'settled'):
+                continue
+
+            payment = data.get('payment') or {}
+            if isinstance(payment, list) and payment:
+                payment = payment[0]
+            paid_at_str = (payment.get('paid_at') if isinstance(payment, dict) else None) \
+                          or data.get('paid_at')
+
+            try:
+                data_pag = _dt_cls.strptime(paid_at_str[:10], '%Y-%m-%d').date() if paid_at_str else hoje
+            except (ValueError, TypeError):
+                data_pag = hoje
+
+            cursor.execute("""
+                UPDATE cobrancas
+                SET status = 'pago',
+                    pago_via_provedor = 1,
+                    data_pagamento = %s
+                WHERE id = %s AND (status IS NULL OR status NOT IN ('pago', 'cancelado'))
+            """, (data_pag, cobr['id']))
+
+            if cursor.rowcount > 0:
+                atualizados += 1
 
         if atualizados:
             conn.commit()
 
+        restantes = max(0, total_pendentes - len(lote))
         cursor.close()
         conn.close()
 
-        msg = f'{atualizados} boleto(s) marcado(s) como pago(s) via EFI.'
+        if atualizados > 0:
+            msg = f'{atualizados} boleto(s) marcado(s) como pago(s) via EFI.'
+        else:
+            msg = 'Nenhum boleto novo confirmado como pago no EFI neste lote.'
+        if restantes > 0:
+            msg += f' Clique novamente para verificar os {restantes} boleto(s) restante(s).'
         if erros:
             msg += f' ({erros} erro(s) ao consultar o provedor)'
-        return jsonify({'success': True, 'atualizados': atualizados, 'erros': erros, 'message': msg})
+
+        return jsonify({'success': True, 'atualizados': atualizados, 'erros': erros,
+                        'restantes': restantes, 'message': msg})
 
     except Exception as e:
         current_app.logger.exception('[auto_conciliar_efi] erro: %s', e)
@@ -1078,7 +1114,7 @@ def auto_conciliar_efi():
                 conn.close()
         except Exception:
             pass
-        return jsonify({'success': False, 'atualizados': 0, 'erros': 0,
+        return jsonify({'success': False, 'atualizados': 0, 'erros': 0, 'restantes': 0,
                         'message': f'Erro interno: {str(e)}'}), 500
 
 

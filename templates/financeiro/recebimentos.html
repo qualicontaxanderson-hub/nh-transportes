@@ -476,11 +476,19 @@ document.addEventListener('DOMContentLoaded', function () {
 
 <script>
 // ── Conciliação EFI Automático (chamado da página de recebimentos) ──────────
+var _efiTotalAtualizados = 0;
+
 function executarConciliacaoEFI(btn) {
+  _efiTotalAtualizados = 0;
+  _efiRodada(btn);
+}
+
+function _efiRodada(btn) {
   var msg = document.getElementById('msg-efi-auto');
   btn.disabled = true;
   btn.innerHTML = '<i class="bi bi-hourglass-split me-1"></i>Conciliando…';
-  msg.textContent = '';
+  msg.style.color = 'rgba(255,255,255,.9)';
+
   fetch('{{ url_for("financeiro.auto_conciliar_efi") }}', {
     method: 'POST',
     headers: {'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest'}
@@ -492,18 +500,29 @@ function executarConciliacaoEFI(btn) {
     });
   })
   .then(function(d) {
-    btn.disabled = false;
-    btn.innerHTML = '<i class="bi bi-bank me-1"></i>Conciliar EFI Automático';
     msg.style.color = 'rgba(255,255,255,.9)';
     if (d.success) {
-      var atualizados = d.atualizados || 0;
-      if (atualizados > 0) {
-        msg.textContent = '✅ ' + d.message;
-        setTimeout(function() { location.reload(); }, 1800);
+      _efiTotalAtualizados += (d.atualizados || 0);
+      var restantes = d.restantes || 0;
+
+      if (restantes > 0) {
+        // Há mais boletos para verificar — mostra progresso e chama novamente
+        msg.textContent = '⏳ Verificando… ' + _efiTotalAtualizados + ' pago(s), ' + restantes + ' restante(s)…';
+        setTimeout(function() { _efiRodada(btn); }, 500);
       } else {
-        msg.textContent = '✅ ' + (d.message || 'Nenhum boleto novo para atualizar.');
+        // Terminou
+        btn.disabled = false;
+        btn.innerHTML = '<i class="bi bi-bank me-1"></i>Conciliar EFI Automático';
+        if (_efiTotalAtualizados > 0) {
+          msg.textContent = '✅ ' + _efiTotalAtualizados + ' boleto(s) marcado(s) como pago(s) via EFI. Atualizando…';
+          setTimeout(function() { location.reload(); }, 1800);
+        } else {
+          msg.textContent = '✅ ' + (d.message || 'Nenhum boleto novo para atualizar.');
+        }
       }
     } else {
+      btn.disabled = false;
+      btn.innerHTML = '<i class="bi bi-bank me-1"></i>Conciliar EFI Automático';
       msg.style.color = '#ffc';
       msg.textContent = '❌ ' + (d.message || d.erro || 'Erro desconhecido.');
     }
