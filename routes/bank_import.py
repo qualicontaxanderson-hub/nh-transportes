@@ -38,6 +38,7 @@ def _ensure_descricao_chave():
     - colunas forma_recebimento_id, titulo_id, categoria_id, subcategoria_id,
       conta_destino_id, tipo_debito (adicionadas em migrations pós-criação)
     - descricao_chave + UNIQUE KEY composta (cnpj_cpf, descricao_chave)
+    - tipo_chave ENUM expandido para incluir 'descricao' (transações sem CNPJ)
 
     Se qualquer coluna estiver ausente, o INSERT de conciliação falha com
     ProgrammingError(1054) e o mapeamento não é salvo — por isso garantimos
@@ -117,6 +118,19 @@ def _ensure_descricao_chave():
                 pass
             conn.commit()
             logger.info("_ensure_descricao_chave: coluna descricao_chave e índice criados com sucesso")
+
+        # 4. tipo_chave ENUM deve incluir 'descricao' (valor usado para transações sem CNPJ).
+        #    O ENUM original tem apenas 'cnpj', 'cpf', 'texto'; inserir 'descricao' em
+        #    modo estrito (STRICT_TRANS_TABLES) causa DataError e o mapeamento não é salvo.
+        try:
+            cursor.execute(
+                "ALTER TABLE bank_supplier_mapping"
+                " MODIFY COLUMN tipo_chave"
+                " ENUM('cnpj','cpf','texto','descricao') NOT NULL DEFAULT 'cnpj'"
+            )
+            conn.commit()
+        except Exception:
+            conn.rollback()
 
         cursor.close()
         _bsm_descricao_chave_ready = True
