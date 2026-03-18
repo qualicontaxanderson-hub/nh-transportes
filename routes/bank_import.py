@@ -1197,22 +1197,24 @@ def _conciliar_tx(cursor, conn, tx_id, acao, tipo_tx,
                             (tx_id,),
                         )
                         row_cr = _map_cur.fetchone()
-                    if row_cr and row_cr.get('cnpj_cpf'):
-                        desc_chave = _desc_chave(row_cr.get('descricao') or '')
+                    desc_chave = _desc_chave(row_cr.get('descricao') or '') if row_cr else ''
+                    if row_cr and (row_cr.get('cnpj_cpf') or desc_chave):
+                        cnpj_save = row_cr.get('cnpj_cpf') or ''
+                        tipo_chave_save = 'cnpj' if cnpj_save else 'descricao'
                         try:
                             with conn.cursor() as _ins_cur:
                                 _ins_cur.execute(
                                     """INSERT INTO bank_supplier_mapping
                                            (cnpj_cpf, descricao_chave, tipo_chave,
                                             total_conciliacoes, forma_recebimento_id)
-                                       VALUES (%s, %s, 'cnpj', 1, %s)
+                                       VALUES (%s, %s, %s, 1, %s)
                                        ON DUPLICATE KEY UPDATE
                                            forma_recebimento_id=%s,
                                            fornecedor_id=NULL, titulo_id=NULL,
                                            categoria_id=NULL, subcategoria_id=NULL,
                                            total_conciliacoes=total_conciliacoes+1,
                                            atualizado_em=NOW()""",
-                                    (row_cr['cnpj_cpf'], desc_chave,
+                                    (cnpj_save, desc_chave, tipo_chave_save,
                                      forma_recebimento_id, forma_recebimento_id),
                                 )
                         except mysql.connector.errors.ProgrammingError as _pe:
@@ -1312,18 +1314,21 @@ def _conciliar_tx(cursor, conn, tx_id, acao, tipo_tx,
             (agora, usuario, tx_id),
         )
         # Auto-aprender: despesa INTEGRAL (não dividida) salva mapeamento para próxima importação
-        if salvar_mapeamento and len(despesas) == 1 and tx.get('cnpj_cpf'):
+        desc_chave_desp = _desc_chave(descricao)
+        if salvar_mapeamento and len(despesas) == 1 and (tx.get('cnpj_cpf') or desc_chave_desp):
             d = despesas[0]
-            desc_chave = _desc_chave(descricao)
+            cnpj_save_desp = tx.get('cnpj_cpf') or ''
+            tipo_chave_desp = 'cnpj' if cnpj_save_desp else 'descricao'
+            desc_chave = desc_chave_desp
             cursor.execute(
                 """INSERT INTO bank_supplier_mapping
                        (cnpj_cpf, descricao_chave, tipo_chave, total_conciliacoes, titulo_id, categoria_id, subcategoria_id)
-                   VALUES (%s, %s, 'cnpj', 1, %s, %s, %s)
+                   VALUES (%s, %s, %s, 1, %s, %s, %s)
                    ON DUPLICATE KEY UPDATE
                        titulo_id=%s, categoria_id=%s, subcategoria_id=%s,
                        fornecedor_id=NULL, forma_recebimento_id=NULL,
                        total_conciliacoes=total_conciliacoes+1, atualizado_em=NOW()""",
-                (tx['cnpj_cpf'], desc_chave,
+                (cnpj_save_desp, desc_chave, tipo_chave_desp,
                  d['titulo_id'], d['categoria_id'], d.get('subcategoria_id'),
                  d['titulo_id'], d['categoria_id'], d.get('subcategoria_id')),
             )
@@ -1345,17 +1350,20 @@ def _conciliar_tx(cursor, conn, tx_id, acao, tipo_tx,
         )
         cursor.execute("SELECT cnpj_cpf, descricao FROM bank_transactions WHERE id=%s", (tx_id,))
         row = cursor.fetchone()
-        if salvar_mapeamento and row and row.get('cnpj_cpf'):
-            desc_chave = _desc_chave(row.get('descricao') or '')
+        desc_chave_row = _desc_chave(row.get('descricao') or '') if row else ''
+        if salvar_mapeamento and row and (row.get('cnpj_cpf') or desc_chave_row):
+            cnpj_save = row.get('cnpj_cpf') or ''
+            tipo_chave_save = 'cnpj' if cnpj_save else 'descricao'
+            desc_chave = desc_chave_row
             cursor.execute(
                 """INSERT INTO bank_supplier_mapping
                        (fornecedor_id, cnpj_cpf, descricao_chave, tipo_chave, total_conciliacoes)
-                   VALUES (%s, %s, %s, 'cnpj', 1)
+                   VALUES (%s, %s, %s, %s, 1)
                    ON DUPLICATE KEY UPDATE
                        fornecedor_id=%s,
                        total_conciliacoes=total_conciliacoes+1,
                        atualizado_em=NOW()""",
-                (fornecedor_id, row['cnpj_cpf'], desc_chave, fornecedor_id),
+                (fornecedor_id, cnpj_save, desc_chave, tipo_chave_save, fornecedor_id),
             )
 
     conn.commit()
