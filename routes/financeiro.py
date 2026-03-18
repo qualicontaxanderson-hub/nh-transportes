@@ -967,6 +967,121 @@ def consultar_status_efi(charge_id):
         }), 500
 
 
+@financeiro_bp.route('/auto-conciliar-efi/', methods=['POST'])
+@login_required
+def auto_conciliar_efi():
+    """
+    Verifica automaticamente o status de todos os boletos pendentes/vencidos no EFI
+    e marca como pagos os que o provedor já registrou como 'paid'.
+    Retorna JSON: {success, atualizados, erros, message}
+    """
+    conn = None
+    cursor = None
+    try:
+        credentials = _get_efi_credentials()
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+
+        # Busca cobrancas com charge_id que ainda não estão pagas/canceladas
+        cursor.execute("""
+            SELECT id, charge_id, status, valor, data_vencimento
+            FROM cobrancas
+            WHERE charge_id IS NOT NULL
+              AND charge_id != ''
+              AND (status IS NULL OR status NOT IN ('pago', 'cancelado'))
+            ORDER BY data_vencimento ASC
+        """)
+        pendentes = cursor.fetchall()
+
+        if not pendentes:
+            return jsonify({'success': True, 'atualizados': 0, 'erros': 0,
+                            'message': 'Nenhum boleto pendente para verificar.'})
+
+        atualizados = 0
+        erros = 0
+        hoje = date.today()
+
+        for cobr in pendentes:
+            charge_id = cobr.get('charge_id')
+            try:
+                charge_data = fetch_charge(credentials, charge_id)
+                if not charge_data or not isinstance(charge_data, dict):
+                    erros += 1
+                    continue
+
+                # Ignorar respostas de erro do provedor
+                error_code = charge_data.get('http_status') or charge_data.get('code')
+                if error_code and error_code != 200:
+                    erros += 1
+                    continue
+
+                data = charge_data.get('data') or charge_data.get('charge') or charge_data
+                if not isinstance(data, dict):
+                    erros += 1
+                    continue
+
+                status_efi = (data.get('status') or '').lower()
+                if status_efi not in ('paid', 'settled'):
+                    continue
+
+                # Extrai data de pagamento se disponível
+                payment = data.get('payment') or {}
+                if isinstance(payment, list) and payment:
+                    payment = payment[0]
+                paid_at_str = None
+                if isinstance(payment, dict):
+                    paid_at_str = payment.get('paid_at')
+                if not paid_at_str:
+                    paid_at_str = data.get('paid_at')
+
+                try:
+                    from datetime import datetime as _dt_cls
+                    data_pag = _dt_cls.strptime(paid_at_str[:10], '%Y-%m-%d').date() if paid_at_str else hoje
+                except (ValueError, TypeError):
+                    data_pag = hoje
+
+                cursor.execute("""
+                    UPDATE cobrancas
+                    SET status = 'pago',
+                        pago_via_provedor = 1,
+                        data_pagamento = %s
+                    WHERE id = %s AND (status IS NULL OR status NOT IN ('pago', 'cancelado'))
+                """, (data_pag, cobr['id']))
+
+                if cursor.rowcount > 0:
+                    atualizados += 1
+
+            except Exception as exc:
+                current_app.logger.warning(
+                    '[auto_conciliar_efi] erro ao consultar charge_id=%s: %s', charge_id, exc)
+                erros += 1
+
+        if atualizados:
+            conn.commit()
+
+        cursor.close()
+        conn.close()
+
+        msg = f'{atualizados} boleto(s) marcado(s) como pago(s) via EFI.'
+        if erros:
+            msg += f' ({erros} erro(s) ao consultar o provedor)'
+        return jsonify({'success': True, 'atualizados': atualizados, 'erros': erros, 'message': msg})
+
+    except Exception as e:
+        current_app.logger.exception('[auto_conciliar_efi] erro: %s', e)
+        try:
+            if conn:
+                conn.rollback()
+            if cursor:
+                cursor.close()
+            if conn:
+                conn.close()
+        except Exception:
+            pass
+        return jsonify({'success': False, 'atualizados': 0, 'erros': 0,
+                        'message': f'Erro interno: {str(e)}'}), 500
+
+
 @financeiro_bp.route('/reverter-conciliacao/<int:tx_id>/', methods=['POST'])
 @login_required
 def reverter_conciliacao(tx_id):

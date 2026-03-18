@@ -481,9 +481,9 @@ function executarConciliacaoEFI(btn) {
   btn.disabled = true;
   btn.innerHTML = '<i class="bi bi-hourglass-split me-1"></i>Conciliando…';
   msg.textContent = '';
-  fetch('{{ url_for("bank_import.api_auto_reconcile") }}', {
+  fetch('{{ url_for("financeiro.auto_conciliar_efi") }}', {
     method: 'POST',
-    headers: {'Content-Type': 'application/json'}
+    headers: {'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest'}
   })
   .then(function(r) {
     return r.text().then(function(text) {
@@ -494,19 +494,18 @@ function executarConciliacaoEFI(btn) {
   .then(function(d) {
     btn.disabled = false;
     btn.innerHTML = '<i class="bi bi-bank me-1"></i>Conciliar EFI Automático';
+    msg.style.color = 'rgba(255,255,255,.9)';
     if (d.success) {
-      var efi = d.por_efi || 0;
-      var total = d.conciliados || 0;
-      msg.style.color = 'rgba(255,255,255,.9)';
-      if (total > 0) {
-        msg.textContent = '✅ ' + total + ' conciliado(s) — EFI: ' + efi + '. Atualizando…';
+      var atualizados = d.atualizados || 0;
+      if (atualizados > 0) {
+        msg.textContent = '✅ ' + d.message;
         setTimeout(function() { location.reload(); }, 1800);
       } else {
-        msg.textContent = '✅ Nenhuma transação pendente encontrada.';
+        msg.textContent = '✅ ' + (d.message || 'Nenhum boleto novo para atualizar.');
       }
     } else {
       msg.style.color = '#ffc';
-      msg.textContent = '❌ ' + (d.erro || 'Erro desconhecido.');
+      msg.textContent = '❌ ' + (d.message || d.erro || 'Erro desconhecido.');
     }
   })
   .catch(function(e) {
