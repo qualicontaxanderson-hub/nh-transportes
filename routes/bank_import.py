@@ -24,10 +24,12 @@ _MYSQL_ERRNO_TABLE_NOT_FOUND = 1146  # Table doesn't exist (schema not yet migra
 # (ADD COLUMN IF NOT EXISTS), so a double-run in concurrent requests is harmless.
 _ld_bank_tx_id_ready = False
 _bsm_descricao_chave_ready = False
-# After one failed attempt, stop retrying to avoid slow ALTER TABLE calls on every request.
-# The BSM batch query has its own graceful fallback if the schema isn't perfect.
-_bsm_descricao_chave_gave_up = False
-_ld_bank_tx_id_gave_up = False
+# Timestamp-based retry cooldown: after a failed attempt, wait _MIGRATION_RETRY_DELAY
+# seconds before retrying.  This avoids hammering the DB on every request but still
+# allows recovery from transient errors (e.g., DB temporarily unavailable at startup).
+_MIGRATION_RETRY_DELAY = 60  # seconds
+_bsm_descricao_chave_retry_after = 0.0   # epoch timestamp; 0 = may run immediately
+_ld_bank_tx_id_retry_after       = 0.0
 
 
 def _ensure_descricao_chave():
@@ -44,9 +46,11 @@ def _ensure_descricao_chave():
     ProgrammingError(1054) e o mapeamento não é salvo — por isso garantimos
     tudo aqui antes da primeira conciliação.
     """
-    global _bsm_descricao_chave_ready, _bsm_descricao_chave_gave_up
-    if _bsm_descricao_chave_ready or _bsm_descricao_chave_gave_up:
+    global _bsm_descricao_chave_ready, _bsm_descricao_chave_retry_after
+    if _bsm_descricao_chave_ready:
         return
+    if _bsm_descricao_chave_retry_after > time.time():
+        return  # em cooldown; tenta novamente após o período de espera
     conn = None
     try:
         conn = get_db_connection()
@@ -136,7 +140,7 @@ def _ensure_descricao_chave():
         _bsm_descricao_chave_ready = True
     except Exception:
         logger.warning("_ensure_descricao_chave: não foi possível aplicar schema de bank_supplier_mapping", exc_info=True)
-        _bsm_descricao_chave_gave_up = True  # evita retries caros em toda request
+        _bsm_descricao_chave_retry_after = time.time() + _MIGRATION_RETRY_DELAY  # evita retries imediatos, mas permite recuperação
     finally:
         if conn:
             conn.close()
@@ -144,9 +148,11 @@ def _ensure_descricao_chave():
 
 def _ensure_ld_bank_tx_id():
     """Garante que lancamentos_despesas.bank_transaction_id existe. Idempotente."""
-    global _ld_bank_tx_id_ready, _ld_bank_tx_id_gave_up
-    if _ld_bank_tx_id_ready or _ld_bank_tx_id_gave_up:
+    global _ld_bank_tx_id_ready, _ld_bank_tx_id_retry_after
+    if _ld_bank_tx_id_ready:
         return
+    if _ld_bank_tx_id_retry_after > time.time():
+        return  # em cooldown
     conn = None
     try:
         conn = get_db_connection()
@@ -167,7 +173,7 @@ def _ensure_ld_bank_tx_id():
         _ld_bank_tx_id_ready = True
     except Exception:
         logger.warning("_ensure_ld_bank_tx_id: não foi possível criar a coluna bank_transaction_id", exc_info=True)
-        _ld_bank_tx_id_gave_up = True  # evita retries caros em toda request
+        _ld_bank_tx_id_retry_after = time.time() + _MIGRATION_RETRY_DELAY  # evita retries imediatos, permite recuperação
     finally:
         if conn:
             conn.close()
@@ -1233,9 +1239,10 @@ def _conciliar_tx(cursor, conn, tx_id, acao, tipo_tx,
                                 )
                         except mysql.connector.errors.ProgrammingError as _pe:
                             if _pe.errno == 1054:
-                                logger.debug(
-                                    "_conciliar_tx CREDIT: coluna ausente em"
-                                    " bank_supplier_mapping, mapeamento ignorado"
+                                logger.warning(
+                                    "_conciliar_tx CREDIT: coluna descricao_chave ausente em"
+                                    " bank_supplier_mapping — migration pendente, mapeamento ignorado."
+                                    " Execute migrations/20260318_fix_banco_sugestoes_sem_cnpj.sql no Railway."
                                 )
                             else:
                                 logger.warning(
@@ -1243,10 +1250,21 @@ def _conciliar_tx(cursor, conn, tx_id, acao, tipo_tx,
                                     " (ProgrammingError %s), ignorando: %s", _pe.errno, _pe
                                 )
                         except Exception as _map_e:
-                            logger.warning(
-                                "_conciliar_tx CREDIT: erro ao salvar mapeamento, ignorando: %s",
-                                _map_e,
-                            )
+                            _errno = getattr(_map_e, 'errno', None)
+                            if _errno in (1364, 1048):
+                                # 1364: Field has no default value (fornecedor_id NOT NULL)
+                                # 1048: Column cannot be null
+                                logger.warning(
+                                    "_conciliar_tx CREDIT: fornecedor_id NOT NULL impede salvar"
+                                    " mapeamento (errno=%s) — execute migration"
+                                    " 20260318_fix_banco_sugestoes_sem_cnpj.sql no Railway.",
+                                    _errno,
+                                )
+                            else:
+                                logger.warning(
+                                    "_conciliar_tx CREDIT: erro ao salvar mapeamento, ignorando: %s",
+                                    _map_e,
+                                )
                 except Exception as _outer_map_e:
                     logger.warning(
                         "_conciliar_tx CREDIT: erro ao buscar dados para mapeamento,"

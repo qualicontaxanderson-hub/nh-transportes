@@ -337,13 +337,17 @@ def create_app():
                 "(não crítico – serão reexecutadas na primeira request).",
                 exc_info=True,
             )
-            # Reseta os flags de desistência para que a primeira request tente novamente.
-            try:
-                import routes.bank_import as _bi
-                _bi._ld_bank_tx_id_gave_up = False
-                _bi._bsm_descricao_chave_gave_up = False
-            except Exception:
-                pass
+        # Garante que cooldowns de retry sejam zerados após a inicialização,
+        # de modo que a primeira request possa tentar novamente imediatamente
+        # mesmo que a migration tenha falhado durante o startup.
+        try:
+            import routes.bank_import as _bi
+            if not _bi._bsm_descricao_chave_ready:
+                _bi._bsm_descricao_chave_retry_after = 0.0
+            if not _bi._ld_bank_tx_id_ready:
+                _bi._ld_bank_tx_id_retry_after = 0.0
+        except Exception:
+            pass
 
     # Cria as tabelas do módulo Lucro Postos (FIFO) e Estoque Inicial Global na
     # primeira inicialização, usando CREATE TABLE IF NOT EXISTS para idempotência.
