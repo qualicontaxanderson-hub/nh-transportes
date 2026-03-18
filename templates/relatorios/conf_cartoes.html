@@ -1,0 +1,376 @@
+{% extends 'base.html' %}
+{% block title %}Conf. Cartões{% endblock %}
+
+{% block styles %}
+<style>
+.page-hero {
+  background: linear-gradient(135deg, #1D63A5 0%, #154070 100%);
+  border-radius: .75rem; padding: 1.5rem 2rem; margin-bottom: 1.5rem; color: #fff;
+}
+.page-hero .hero-icon {
+  width: 3rem; height: 3rem; background: rgba(255,255,255,.15);
+  border-radius: .6rem; display: flex; align-items: center; justify-content: center;
+  font-size: 1.5rem; flex-shrink: 0;
+}
+.band-header {
+  background: #1D63A5; color: #fff; padding: .4rem .85rem;
+  border-radius: .4rem .4rem 0 0; font-weight: 700; font-size: .85rem;
+}
+.band-header.debito  { background: #0d6efd; }
+.band-header.credito { background: #6f42c1; }
+/* compact table */
+.tbl-cart {
+  font-size: .78rem;
+}
+.tbl-cart thead th {
+  font-size: .72rem; text-transform: uppercase; letter-spacing: .04em;
+  white-space: nowrap; padding: .3rem .45rem;
+}
+.tbl-cart td {
+  padding: .25rem .45rem;
+  vertical-align: middle;
+}
+.row-total  { background: #e9ecef; font-weight: 700; }
+.row-grand  { background: #1D63A5; color: #fff; font-weight: 700; }
+.saldo-pos  { color: #198754; font-weight: 700; }
+.saldo-neg  { color: #dc3545; font-weight: 700; }
+.saldo-zero { color: #6c757d; font-weight: 700; }
+.badge-debito  { background: #0d6efd; }
+.badge-credito { background: #6f42c1; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+
+  <!-- Breadcrumb -->
+  <nav aria-label="breadcrumb" class="mb-3">
+    <ol class="breadcrumb small">
+      <li class="breadcrumb-item"><a href="{{ url_for('index') }}" class="text-decoration-none">Dashboard</a></li>
+      <li class="breadcrumb-item">Relatórios</li>
+      <li class="breadcrumb-item active">Conf. Cartões</li>
+    </ol>
+  </nav>
+
+  <!-- Hero -->
+  <div class="page-hero d-flex align-items-center gap-3 flex-wrap mb-3">
+    <div class="hero-icon"><i class="bi bi-credit-card-2-front-fill"></i></div>
+    <div class="flex-grow-1">
+      <h4 class="mb-0 fw-bold">Conferência de Cartões</h4>
+      <p class="mb-0 opacity-75 small">Cruza vendas de cartão (Fechamento de Caixa) com recebimentos bancários para conferir diferenças</p>
+    </div>
+    <div>
+      <button class="btn btn-light btn-sm" data-bs-toggle="modal" data-bs-target="#modalVinculos">
+        <i class="bi bi-link-45deg"></i> Gerenciar Vinculações
+      </button>
+    </div>
+  </div>
+
+  <!-- ── Filtros ────────────────────────────────────────────────────────── -->
+  <div class="card shadow-sm mb-4">
+    <div class="card-body">
+      <form method="get" id="form-filtros">
+        <div class="row g-3 align-items-end">
+
+          <!-- Data Início -->
+          <div class="col-6 col-md-2">
+            <label class="form-label small fw-semibold mb-1">Data Início</label>
+            <input type="date" name="data_inicio" value="{{ data_inicio }}" class="form-control form-control-sm">
+          </div>
+
+          <!-- Data Fim -->
+          <div class="col-6 col-md-2">
+            <label class="form-label small fw-semibold mb-1">Data Fim</label>
+            <input type="date" name="data_fim" value="{{ data_fim }}" class="form-control form-control-sm">
+          </div>
+
+          <!-- Empresa (multi-select) -->
+          <div class="col-12 col-md-4">
+            <label class="form-label small fw-semibold mb-1">Empresa</label>
+            <select name="empresa_ids[]" class="form-select form-select-sm" multiple size="3">
+              {% for emp in empresas %}
+              <option value="{{ emp.id }}" {% if emp.id|string in empresa_ids %}selected{% endif %}>
+                {{ emp.nome }}
+              </option>
+              {% endfor %}
+            </select>
+            <div class="form-text">Ctrl+clique p/ múltiplos</div>
+          </div>
+
+          <!-- Botões -->
+          <div class="col-12 col-md-2 d-flex gap-2">
+            <button type="submit" class="btn btn-primary btn-sm px-3">
+              <i class="bi bi-search"></i> Filtrar
+            </button>
+            <a href="{{ url_for('conf_cartoes.conf_cartoes') }}" class="btn btn-outline-secondary btn-sm">
+              <i class="bi bi-x-circle"></i>
+            </a>
+          </div>
+
+        </div>
+
+        <!-- Quick period buttons -->
+        <div class="mt-2 d-flex gap-1 flex-wrap">
+          <span class="text-muted small me-1 align-self-center">Período:</span>
+          <button type="button" class="btn btn-outline-secondary btn-sm periodo-btn" data-periodo="mes_atual">Mês Atual</button>
+          <button type="button" class="btn btn-outline-secondary btn-sm periodo-btn" data-periodo="mes_anterior">Mês Anterior</button>
+          <button type="button" class="btn btn-outline-secondary btn-sm periodo-btn" data-periodo="ano_atual">Ano Atual</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  {% if not report %}
+  <div class="alert alert-info">
+    <i class="bi bi-info-circle me-2"></i>
+    {% if not bandeiras %}
+    Nenhuma bandeira de cartão cadastrada. Acesse <strong>Cadastros → Cartões</strong> para adicionar.
+    {% else %}
+    Nenhum dado encontrado para os filtros selecionados.
+    {% if bandeiras | selectattr('forma_recebimento_id', 'none') | list | length == bandeiras | length %}
+    <br>Nenhuma bandeira está vinculada a uma forma de recebimento bancário.
+    Clique em <strong>Gerenciar Vinculações</strong> para configurar.
+    {% endif %}
+    {% endif %}
+  </div>
+  {% else %}
+
+  <!-- ── Per-card tables ─────────────────────────────────────────────────── -->
+  {% for card in report %}
+  <div class="mb-4">
+    <div class="band-header {{ 'debito' if card.tipo_cartao == 'DEBITO' else 'credito' }} d-flex justify-content-between align-items-center">
+      <span>
+        <i class="bi bi-credit-card me-2"></i>
+        <span class="badge {% if card.tipo_cartao == 'DEBITO' %}badge-debito{% else %}badge-credito{% endif %} me-1" style="font-size:.7rem;">
+          {{ card.tipo_cartao }}
+        </span>
+        {{ card.bandeira_nome }}
+        {% if card.forma_recebimento_nome %}
+        <span class="opacity-75 small ms-2">→ {{ card.forma_recebimento_nome }}</span>
+        {% endif %}
+      </span>
+      <span class="small opacity-75">
+        Saldo Final:
+        <span class="fw-bold {% if card.saldo_final > 0.005 %}text-success{% elif card.saldo_final < -0.005 %}text-warning{% else %}text-light{% endif %}">
+          {{ card.saldo_final | fmtmoney }}
+        </span>
+      </span>
+    </div>
+    <div class="table-responsive">
+      <table class="table table-bordered table-sm tbl-cart mb-0">
+        <thead class="table-dark">
+          <tr>
+            <th class="text-center" style="width:88px;">Dt. Venda</th>
+            <th class="text-end"   style="width:110px;">Venda</th>
+            <th class="text-center" style="width:88px;">Dt. Recebimento</th>
+            <th class="text-end"   style="width:110px;">Recebimento</th>
+            <th class="text-end"   style="width:110px;">Dif. Acumulada</th>
+            <th class="text-end"   style="width:70px;">%</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for linha in card.linhas %}
+          <tr>
+            <td class="text-center">{{ linha.data_venda }}</td>
+            <td class="text-end">{% if linha.total_venda %}{{ linha.total_venda | fmtmoney }}{% endif %}</td>
+            <td class="text-center">{{ linha.data_recebimento }}</td>
+            <td class="text-end">{% if linha.total_recebimento %}{{ linha.total_recebimento | fmtmoney }}{% endif %}</td>
+            <td class="text-end {% if linha.saldo_acumulado > 0.005 %}saldo-pos{% elif linha.saldo_acumulado < -0.005 %}saldo-neg{% else %}saldo-zero{% endif %}">
+              {{ linha.saldo_acumulado | fmtmoney }}
+            </td>
+            <td class="text-end {% if linha.porcentagem is not none %}{% if linha.porcentagem >= 99 %}saldo-pos{% elif linha.porcentagem >= 90 %}text-warning{% else %}saldo-neg{% endif %}{% endif %}">
+              {% if linha.porcentagem is not none %}{{ "%.1f"|format(linha.porcentagem) }}%{% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+          <!-- Card subtotal -->
+          <tr class="row-total">
+            <td class="text-end fw-bold" colspan="1">TOTAL {{ card.bandeira_nome }}</td>
+            <td class="text-end">{{ card.total_venda | fmtmoney }}</td>
+            <td></td>
+            <td class="text-end">{{ card.total_recebimento | fmtmoney }}</td>
+            <td class="text-end {% if card.saldo_final > 0.005 %}saldo-pos{% elif card.saldo_final < -0.005 %}saldo-neg{% else %}saldo-zero{% endif %}">
+              {{ card.saldo_final | fmtmoney }}
+            </td>
+            <td class="text-end">
+              {% if card.total_venda %}{{ "%.1f"|format(card.total_recebimento / card.total_venda * 100) }}%{% endif %}
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {% endfor %}
+
+  <!-- ── Grand total ────────────────────────────────────────────────────── -->
+  <div class="table-responsive mb-4">
+    <table class="table table-bordered table-sm tbl-cart">
+      <thead>
+        <tr class="row-grand">
+          <td class="fw-bold" style="width:88px;">TOTAL GERAL</td>
+          <td class="text-end fw-bold" style="width:110px;">{{ grand_total_venda | fmtmoney }}</td>
+          <td style="width:88px;"></td>
+          <td class="text-end fw-bold" style="width:110px;">{{ grand_total_recebimento | fmtmoney }}</td>
+          <td class="text-end fw-bold {% if grand_saldo > 0.005 %}saldo-pos{% elif grand_saldo < -0.005 %}saldo-neg{% else %}saldo-zero{% endif %}" style="width:110px;">
+            {{ grand_saldo | fmtmoney }}
+          </td>
+          <td class="text-end fw-bold" style="width:70px;">
+            {% if grand_total_venda %}{{ "%.1f"|format(grand_total_recebimento / grand_total_venda * 100) }}%{% endif %}
+          </td>
+        </tr>
+      </thead>
+    </table>
+  </div>
+
+  <!-- Legend -->
+  <div class="small text-muted mb-4">
+    <strong>Dt. Venda</strong>: data do fechamento de caixa. &nbsp;
+    <strong>Dt. Recebimento</strong>: data do crédito bancário. &nbsp;
+    <strong>Dif. Acumulada</strong> = Recebimento − Venda acumulados
+    (<span class="text-success">verde = crédito a favor</span> / <span class="text-danger">vermelho = déficit</span>). &nbsp;
+    <strong>%</strong> = Recebimento / Venda × 100 (taxa líquida).
+  </div>
+
+  {% endif %}
+
+</div>
+
+<!-- ── Modal de Vinculações ──────────────────────────────────────────────── -->
+<div class="modal fade" id="modalVinculos" tabindex="-1" aria-labelledby="labelModalVinculos" aria-hidden="true">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header" style="background:#1D63A5;color:#fff;">
+        <h5 class="modal-title" id="labelModalVinculos">
+          <i class="bi bi-link-45deg me-2"></i>Gerenciar Vinculações de Cartões
+        </h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <p class="small text-muted mb-3">
+          Vincule cada bandeira de cartão registrada no <strong>Fechamento de Caixa</strong>
+          à sua respectiva <strong>Forma de Recebimento Bancário</strong> (importado via OFX).
+          Este vínculo é utilizado para cruzar vendas com recebimentos no relatório.
+        </p>
+        <table class="table table-sm table-bordered" style="font-size:.82rem;">
+          <thead class="table-dark">
+            <tr>
+              <th>Bandeira (Caixa)</th>
+              <th>Tipo</th>
+              <th>Forma de Recebimento (Banco)</th>
+              <th class="text-center" style="width:80px;">Ação</th>
+            </tr>
+          </thead>
+          <tbody id="tbl-vinculos-body">
+            {% for b in bandeiras %}
+            <tr id="row-band-{{ b.id }}">
+              <td class="fw-semibold">{{ b.nome }}</td>
+              <td>
+                <span class="badge {% if b.tipo == 'DEBITO' %}bg-primary{% else %}bg-purple text-white{% endif %}" style="{% if b.tipo == 'CREDITO' %}background:#6f42c1{% endif %}; font-size:.68rem;">
+                  {{ b.tipo }}
+                </span>
+              </td>
+              <td>
+                <select class="form-select form-select-sm sel-forma" data-bandeira="{{ b.id }}"
+                        style="min-width:200px;">
+                  <option value="">— sem vínculo —</option>
+                  {% for fr in formas_cartao %}
+                  <option value="{{ fr.id }}" {% if fr.id == b.forma_recebimento_id %}selected{% endif %}>
+                    {{ fr.nome }}{% if fr.tipo_cartao %} ({{ fr.tipo_cartao }}){% endif %}
+                  </option>
+                  {% endfor %}
+                </select>
+              </td>
+              <td class="text-center">
+                <button class="btn btn-sm btn-success btn-vincular" data-bandeira="{{ b.id }}" title="Salvar">
+                  <i class="bi bi-check-lg"></i>
+                </button>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        {% if not formas_cartao %}
+        <div class="alert alert-warning small mt-2">
+          <i class="bi bi-exclamation-triangle me-1"></i>
+          Nenhuma forma de recebimento com tipo cartão foi encontrada.
+          Acesse <a href="/formas_recebimento/">Formas de Recebimento</a> e marque as opções de cartão.
+        </div>
+        {% endif %}
+      </div>
+      <div class="modal-footer">
+        <span id="msg-vinculos" class="small text-success me-auto"></span>
+        <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Fechar</button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  // Quick period buttons
+  const inp_ini = document.querySelector('[name="data_inicio"]');
+  const inp_fim = document.querySelector('[name="data_fim"]');
+
+  document.querySelectorAll('.periodo-btn').forEach(btn => {
+    btn.addEventListener('click', function () {
+      const today = new Date();
+      let ini, fim;
+      if (this.dataset.periodo === 'mes_atual') {
+        ini = new Date(today.getFullYear(), today.getMonth(), 1);
+        fim = today;
+      } else if (this.dataset.periodo === 'mes_anterior') {
+        ini = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+        fim = new Date(today.getFullYear(), today.getMonth(), 0);
+      } else {
+        ini = new Date(today.getFullYear(), 0, 1);
+        fim = today;
+      }
+      inp_ini.value = ini.toISOString().slice(0, 10);
+      inp_fim.value = fim.toISOString().slice(0, 10);
+    });
+  });
+
+  // Vincular buttons inside modal
+  document.querySelectorAll('.btn-vincular').forEach(btn => {
+    btn.addEventListener('click', async function () {
+      const bandeiraId = parseInt(this.dataset.bandeira);
+      const row = document.getElementById('row-band-' + bandeiraId);
+      const sel = row.querySelector('.sel-forma');
+      const formaId = parseInt(sel.value) || null;
+      const msgEl = document.getElementById('msg-vinculos');
+      msgEl.textContent = '';
+
+      const url = formaId
+        ? '{{ url_for("conf_cartoes.vincular_cartao") }}'
+        : '{{ url_for("conf_cartoes.desvincular_cartao") }}';
+      const body = formaId
+        ? { bandeira_cartao_id: bandeiraId, forma_recebimento_id: formaId }
+        : { bandeira_cartao_id: bandeiraId };
+
+      try {
+        const resp = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+        const data = await resp.json();
+        if (data.success) {
+          msgEl.textContent = data.message;
+          msgEl.className = 'small text-success me-auto';
+          btn.classList.replace('btn-success', 'btn-outline-success');
+          setTimeout(() => { btn.classList.replace('btn-outline-success', 'btn-success'); }, 1500);
+        } else {
+          msgEl.textContent = data.message || 'Erro ao salvar.';
+          msgEl.className = 'small text-danger me-auto';
+        }
+      } catch (e) {
+        msgEl.textContent = 'Erro de comunicação.';
+        msgEl.className = 'small text-danger me-auto';
+      }
+    });
+  });
+})();
+</script>
+{% endblock %}
