@@ -991,10 +991,13 @@ def _conciliar_transferencia(cursor, conn, tx_id, conta_destino_id, usuario,
             (conta_destino_id, tx['data_transacao'], tx['valor'],
              descricao_dest, hash_destino),
         )
-    # Auto-aprender: salva CNPJ→conta_destino para sugestão nas próximas importações
-    cnpj = tx.get('cnpj_cpf')
-    if cnpj and salvar_mapeamento:
-        desc_chave = _desc_chave(tx.get('descricao') or '')
+    # Auto-aprender: salva CNPJ+descrição→conta_destino para sugestão nas próximas importações.
+    # Quando não há CNPJ, usa cnpj_cpf='' com descricao_chave como chave de match — isso
+    # permite que transações sem CPF/CNPJ (ex: Pix sem identificação) recebam sugestão de
+    # transferência na próxima vez que o mesmo texto de descrição aparecer.
+    cnpj = tx.get('cnpj_cpf') or ''
+    desc_chave = _desc_chave(tx.get('descricao') or '')
+    if salvar_mapeamento and (cnpj or desc_chave):
         try:
             cursor.execute(
                 """INSERT INTO bank_supplier_mapping (cnpj_cpf, descricao_chave, conta_destino_id, tipo_debito)
@@ -1666,6 +1669,58 @@ def conciliar():
                         tx['sugestao_fornecedor_nome']     = bsm.get('sugestao_fornecedor_nome')
                         tx['sugestao_titulo_nome']         = bsm.get('sugestao_titulo_nome')
                         tx['sugestao_categoria_nome']      = bsm.get('sugestao_categoria_nome')
+
+            # ------------------------------------------------------------------
+            # Sugestões para transações SEM CNPJ: match por descricao_chave
+            # (ex: transferências Pix que não têm CPF/CNPJ no extrato OFX)
+            # ------------------------------------------------------------------
+            desc_chaves_sem_cnpj = list({
+                _desc_chave(tx.get('descricao') or '')
+                for tx in transacoes
+                if not tx.get('cnpj_cpf') and (tx.get('descricao') or '')
+            })
+            if desc_chaves_sem_cnpj:
+                ph_desc = ','.join(['%s'] * len(desc_chaves_sem_cnpj))
+                try:
+                    cursor.execute(
+                        f"""SELECT bsm.descricao_chave,
+                                   bsm.fornecedor_id, bsm.forma_recebimento_id,
+                                   bsm.titulo_id, bsm.categoria_id, bsm.subcategoria_id,
+                                   bsm.conta_destino_id, bsm.tipo_debito,
+                                   fr.nome AS sugestao_forma_nome,
+                                   fs.razao_social AS sugestao_fornecedor_nome,
+                                   td.nome AS sugestao_titulo_nome,
+                                   cd.nome AS sugestao_categoria_nome
+                            FROM bank_supplier_mapping bsm
+                            LEFT JOIN formas_recebimento fr ON fr.id = bsm.forma_recebimento_id
+                            LEFT JOIN fornecedores fs ON fs.id = bsm.fornecedor_id
+                            LEFT JOIN titulos_despesas td ON td.id = bsm.titulo_id
+                            LEFT JOIN categorias_despesas cd ON cd.id = bsm.categoria_id
+                            WHERE bsm.cnpj_cpf = '' AND bsm.descricao_chave IN ({ph_desc})""",
+                        desc_chaves_sem_cnpj,
+                    )
+                    desc_bsm_rows = cursor.fetchall()
+                    desc_bsm_index = {row['descricao_chave']: row for row in desc_bsm_rows}
+                    for tx in transacoes:
+                        if tx.get('cnpj_cpf'):
+                            continue
+                        desc_key = _desc_chave(tx.get('descricao') or '')
+                        bsm = desc_bsm_index.get(desc_key)
+                        if bsm:
+                            tx['sugestao_fornecedor_id']       = bsm.get('fornecedor_id')
+                            tx['sugestao_forma_id']            = bsm.get('forma_recebimento_id')
+                            tx['sugestao_titulo_id']           = bsm.get('titulo_id')
+                            tx['sugestao_categoria_id']        = bsm.get('categoria_id')
+                            tx['sugestao_subcategoria_id']     = bsm.get('subcategoria_id')
+                            tx['sugestao_conta_destino_id']    = bsm.get('conta_destino_id')
+                            tx['sugestao_tipo_debito']         = bsm.get('tipo_debito')
+                            tx['sugestao_bsm_descricao_chave'] = bsm.get('descricao_chave', '')
+                            tx['sugestao_forma_nome']          = bsm.get('sugestao_forma_nome')
+                            tx['sugestao_fornecedor_nome']     = bsm.get('sugestao_fornecedor_nome')
+                            tx['sugestao_titulo_nome']         = bsm.get('sugestao_titulo_nome')
+                            tx['sugestao_categoria_nome']      = bsm.get('sugestao_categoria_nome')
+                except Exception:
+                    logger.warning("conciliar: description-only BSM lookup failed", exc_info=True)
 
             # -----------------------------------------------------------------------
             # Aplicar regras por padrão de descrição a transações sem sugestão de CNPJ
