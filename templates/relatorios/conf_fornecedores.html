@@ -13,19 +13,30 @@
   font-size: 1.5rem; flex-shrink: 0;
 }
 .forn-header {
-  background: #1D63A5; color: #fff; padding: .5rem 1rem;
-  border-radius: .4rem .4rem 0 0; font-weight: 700; font-size: .95rem;
+  background: #1D63A5; color: #fff; padding: .4rem .85rem;
+  border-radius: .4rem .4rem 0 0; font-weight: 700; font-size: .85rem;
+}
+/* compact table */
+.tbl-conf {
+  font-size: .78rem;
 }
 .tbl-conf thead th {
-  font-size: .78rem; text-transform: uppercase; letter-spacing: .04em;
-  white-space: nowrap;
+  font-size: .72rem; text-transform: uppercase; letter-spacing: .04em;
+  white-space: nowrap; padding: .3rem .45rem;
+}
+.tbl-conf td {
+  padding: .25rem .45rem;
+  vertical-align: middle;
+}
+.tbl-conf .badge {
+  font-size: .68rem; padding: .2em .5em;
 }
 .row-pagto   { background: #eef4fc; }
 .row-carga   { background: #f0fdf4; }
 .row-total   { background: #e9ecef; font-weight: 700; }
 .row-grand   { background: #1D63A5; color: #fff; font-weight: 700; }
-.saldo-pos   { color: #dc3545; font-weight: 700; } /* pagou mais do que retirou */
-.saldo-neg   { color: #dc3545; font-weight: 700; } /* retirou mais do que pagou */
+.saldo-pos   { color: #dc3545; font-weight: 700; }
+.saldo-neg   { color: #dc3545; font-weight: 700; }
 .saldo-zero  { color: #198754; font-weight: 700; }
 </style>
 {% endblock %}
@@ -151,14 +162,14 @@
       <table class="table table-bordered table-sm tbl-conf mb-0">
         <thead class="table-dark">
           <tr>
-            <th class="text-center" style="width:100px;">Tipo</th>
-            <th class="text-center" style="width:110px;">Data Pagto</th>
-            <th class="text-center" style="width:115px;">Data Carregamento</th>
-            <th class="text-end" style="width:100px;">Quantidade</th>
-            <th class="text-end" style="width:100px;">Vlr Uni</th>
-            <th class="text-end" style="width:130px;">Vlr Compra Total</th>
-            <th class="text-end" style="width:130px;">Valor Pago</th>
-            <th class="text-end" style="width:130px;">Saldo</th>
+            <th class="text-center" style="width:88px;">Tipo</th>
+            <th class="text-center" style="width:88px;">Dt. Pagto</th>
+            <th class="text-center" style="width:88px;">Dt. Carga</th>
+            <th class="text-end"   style="width:80px;">Qtd</th>
+            <th class="text-end"   style="width:78px;">Vlr Unit.</th>
+            <th class="text-end"   style="width:105px;">Vlr Compra</th>
+            <th class="text-end"   style="width:105px;">Vlr Pago</th>
+            <th class="text-end"   style="width:105px;">Saldo</th>
           </tr>
         </thead>
         <tbody>
@@ -214,14 +225,14 @@
       <thead class="table-dark">
         <tr>
           <th>Fornecedor</th>
-          <th class="text-center" style="width:100px;">Tipo</th>
-          <th class="text-center" style="width:110px;">Data Pagto</th>
-          <th class="text-center" style="width:115px;">Data Carregamento</th>
-          <th class="text-end" style="width:100px;">Quantidade</th>
-          <th class="text-end" style="width:100px;">Vlr Uni</th>
-          <th class="text-end" style="width:130px;">Vlr Compra Total</th>
-          <th class="text-end" style="width:130px;">Valor Pago</th>
-          <th class="text-end" style="width:130px;">Saldo</th>
+          <th class="text-center" style="width:88px;">Tipo</th>
+          <th class="text-center" style="width:88px;">Dt. Pagto</th>
+          <th class="text-center" style="width:88px;">Dt. Carga</th>
+          <th class="text-end"   style="width:80px;">Qtd</th>
+          <th class="text-end"   style="width:78px;">Vlr Unit.</th>
+          <th class="text-end"   style="width:105px;">Vlr Compra</th>
+          <th class="text-end"   style="width:105px;">Vlr Pago</th>
+          <th class="text-end"   style="width:105px;">Saldo</th>
         </tr>
       </thead>
       <tbody>
