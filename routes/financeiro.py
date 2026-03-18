@@ -1384,6 +1384,7 @@ def _get_bank_transactions(tipo, request_args, exclude_transfers=False):
     status = request_args.get('status', '').strip()
     data_inicio = request_args.get('data_inicio', '').strip()
     data_fim = request_args.get('data_fim', '').strip()
+    f_descricao = request_args.get('f_descricao', '').strip()
 
     try:
         # Require empresa or conta filter before querying (empty on first load)
@@ -1433,6 +1434,9 @@ def _get_bank_transactions(tipo, request_args, exclude_transfers=False):
         if data_fim:
             where.append("bt.data_transacao <= %s")
             params.append(data_fim)
+        if f_descricao:
+            where.append("bt.descricao LIKE %s")
+            params.append(f'%{f_descricao}%')
 
         # Exclui transferências entre contas da página de Pagamentos.
         # Só exclui DEBITs *conciliados* — transações pendentes nunca são excluídas,
@@ -1595,6 +1599,7 @@ def recebimento():
         status_filter=request.args.get('status', ''),
         data_inicio=request.args.get('data_inicio', ''),
         data_fim=request.args.get('data_fim', ''),
+        f_descricao=request.args.get('f_descricao', ''),
     )
 
 
@@ -1620,6 +1625,7 @@ def pagamentos():
         status_filter=request.args.get('status', ''),
         data_inicio=request.args.get('data_inicio', ''),
         data_fim=request.args.get('data_fim', ''),
+        f_descricao=request.args.get('f_descricao', ''),
     )
 
 
@@ -1679,6 +1685,7 @@ def transferencias():
     # Filtros — suporte a multi-select (getlist) para empresa e conta
     f_data_ini  = request.args.get('data_ini', '').strip()
     f_data_fim  = request.args.get('data_fim', '').strip()
+    f_descricao = request.args.get('f_descricao', '').strip()
     f_contas    = [c for c in request.args.getlist('account_id') if c and c.strip()]
     f_empresas  = [e for e in request.args.getlist('empresa_id') if e and e.strip()]
     # Compatibilidade com URLs antigas (parâmetro único)
@@ -1741,6 +1748,7 @@ def transferencias():
                 filtro_aplicado=False,
                 f_data_ini=f_data_ini,
                 f_data_fim=f_data_fim,
+                f_descricao=f_descricao,
                 f_contas=[str(c) for c in f_contas],
                 f_empresas=[str(e) for e in f_empresas],
                 f_conta=f_conta,
@@ -1764,6 +1772,9 @@ def transferencias():
             ph = ','.join(['%s'] * len(f_contas))
             where.append(f"(bt.account_id IN ({ph}) OR bt_orig.account_id IN ({ph}))")
             params += f_contas + f_contas
+        if f_descricao:
+            where.append("bt_orig.descricao LIKE %s")
+            params.append(f'%{f_descricao}%')
 
         where_sql = ' AND '.join(where)
 
@@ -1891,6 +1902,7 @@ def transferencias():
         filtro_aplicado=filtro_aplicado,
         f_data_ini=f_data_ini,
         f_data_fim=f_data_fim,
+        f_descricao=f_descricao,
         f_contas=[str(c) for c in f_contas],
         f_empresas=[str(e) for e in f_empresas],
         f_conta=f_conta,

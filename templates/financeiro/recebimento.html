@@ -155,6 +155,11 @@
                                    value="{{ data_fim or '' }}">
                         </div>
                         <div class="col-12">
+                            <label class="form-label form-label-sm mb-0">Descrição</label>
+                            <input type="text" name="f_descricao" class="form-control form-control-sm"
+                                   placeholder="Parte da descrição..." value="{{ f_descricao or '' }}">
+                        </div>
+                        <div class="col-12">
                             <div class="d-flex gap-1 flex-wrap mb-1">
                                 <span class="text-muted" style="font-size:0.72rem; line-height:1.8;">Período:</span>
                                 <button type="button" class="btn btn-outline-secondary btn-xs" onclick="setPeriodoReceb('mes_atual')">Este mês</button>
