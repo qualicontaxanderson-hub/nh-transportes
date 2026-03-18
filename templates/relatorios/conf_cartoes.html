@@ -67,58 +67,98 @@
   </div>
 
   <!-- ── Filtros ────────────────────────────────────────────────────────── -->
-  <div class="card shadow-sm mb-4">
-    <div class="card-body">
-      <form method="get" id="form-filtros">
-        <div class="row g-3 align-items-end">
-
-          <!-- Data Início -->
-          <div class="col-6 col-md-2">
-            <label class="form-label small fw-semibold mb-1">Data Início</label>
-            <input type="date" name="data_inicio" value="{{ data_inicio }}" class="form-control form-control-sm">
-          </div>
-
-          <!-- Data Fim -->
-          <div class="col-6 col-md-2">
-            <label class="form-label small fw-semibold mb-1">Data Fim</label>
-            <input type="date" name="data_fim" value="{{ data_fim }}" class="form-control form-control-sm">
-          </div>
-
-          <!-- Empresa (multi-select) -->
-          <div class="col-12 col-md-4">
-            <label class="form-label small fw-semibold mb-1">Empresa</label>
-            <select name="empresa_ids[]" class="form-select form-select-sm" multiple size="3">
-              {% for emp in empresas %}
-              <option value="{{ emp.id }}" {% if emp.id|string in empresa_ids %}selected{% endif %}>
-                {{ emp.nome }}
-              </option>
-              {% endfor %}
-            </select>
-            <div class="form-text">Ctrl+clique p/ múltiplos</div>
-          </div>
-
-          <!-- Botões -->
-          <div class="col-12 col-md-2 d-flex gap-2">
-            <button type="submit" class="btn btn-primary btn-sm px-3">
-              <i class="bi bi-search"></i> Filtrar
-            </button>
-            <a href="{{ url_for('conf_cartoes.conf_cartoes') }}" class="btn btn-outline-secondary btn-sm">
-              <i class="bi bi-x-circle"></i>
-            </a>
-          </div>
-
-        </div>
-
-        <!-- Quick period buttons -->
-        <div class="mt-2 d-flex gap-1 flex-wrap">
-          <span class="text-muted small me-1 align-self-center">Período:</span>
-          <button type="button" class="btn btn-outline-secondary btn-sm periodo-btn" data-periodo="mes_atual">Mês Atual</button>
-          <button type="button" class="btn btn-outline-secondary btn-sm periodo-btn" data-periodo="mes_anterior">Mês Anterior</button>
-          <button type="button" class="btn btn-outline-secondary btn-sm periodo-btn" data-periodo="ano_atual">Ano Atual</button>
-        </div>
-      </form>
+  <form method="get" id="form-filtros" class="card shadow-sm mb-4">
+    <div class="card-header py-2" style="background:#1D63A5;color:white;">
+      <h6 class="mb-0"><i class="bi bi-funnel me-1"></i> Filtros</h6>
     </div>
-  </div>
+    <div class="card-body py-3">
+      <div class="row g-3 align-items-end">
+
+        <!-- Data Início -->
+        <div class="col-6 col-sm-3 col-md-2">
+          <label class="form-label small fw-semibold mb-1">
+            <i class="bi bi-calendar-event me-1 text-primary"></i>Data Início
+          </label>
+          <input type="date" name="data_inicio" value="{{ data_inicio }}" class="form-control form-control-sm">
+        </div>
+
+        <!-- Data Fim -->
+        <div class="col-6 col-sm-3 col-md-2">
+          <label class="form-label small fw-semibold mb-1">
+            <i class="bi bi-calendar-check me-1 text-primary"></i>Data Fim
+          </label>
+          <input type="date" name="data_fim" value="{{ data_fim }}" class="form-control form-control-sm">
+        </div>
+
+        <!-- Empresa (multi-select) -->
+        <div class="col-12 col-sm-6 col-md-3">
+          <label class="form-label small fw-semibold mb-1">
+            <i class="bi bi-building me-1 text-primary"></i>Empresa
+          </label>
+          <select name="empresa_ids[]" class="form-select form-select-sm" multiple id="selEmpresas"
+                  style="height:auto; min-height:2.1rem;">
+            {% for emp in empresas %}
+            <option value="{{ emp.id }}" {% if emp.id|string in empresa_ids %}selected{% endif %}>
+              {{ emp.nome }}
+            </option>
+            {% endfor %}
+          </select>
+          <div class="form-text" style="font-size:.7rem;"><i class="bi bi-info-circle me-1"></i>Ctrl+clique p/ múltiplos</div>
+        </div>
+
+        <!-- Cartões / Bandeiras (multi-select) -->
+        <div class="col-12 col-sm-6 col-md-3">
+          <label class="form-label small fw-semibold mb-1">
+            <i class="bi bi-credit-card me-1 text-primary"></i>Cartões
+          </label>
+          <div class="input-group input-group-sm mb-1">
+            <span class="input-group-text bg-white border-end-0 pe-1">
+              <i class="bi bi-search text-muted" style="font-size:.75rem;"></i>
+            </span>
+            <input type="text" id="buscaBandeira" class="form-control form-control-sm border-start-0 ps-1"
+                   placeholder="Buscar cartão..." autocomplete="off">
+          </div>
+          <select name="bandeira_ids[]" class="form-select form-select-sm" multiple id="selBandeiras"
+                  style="height:auto; min-height:2.1rem;">
+            {% for b in bandeiras %}
+            <option value="{{ b.id }}"
+              data-nome="{{ b.nome|lower }}"
+              data-tipo="{{ b.tipo|lower }}"
+              {% if b.id|string in bandeira_ids %}selected{% endif %}>
+              {{ b.nome }} ({{ b.tipo }})
+            </option>
+            {% endfor %}
+          </select>
+          <div class="form-text" style="font-size:.7rem;"><i class="bi bi-info-circle me-1"></i>Ctrl+clique p/ múltiplos</div>
+        </div>
+
+        <!-- Botões -->
+        <div class="col-12 col-md-2 d-flex flex-column gap-2">
+          <button type="submit" class="btn btn-primary btn-sm">
+            <i class="bi bi-search me-1"></i> Filtrar
+          </button>
+          <a href="{{ url_for('conf_cartoes.conf_cartoes') }}" class="btn btn-outline-secondary btn-sm">
+            <i class="bi bi-x-circle me-1"></i> Limpar
+          </a>
+        </div>
+
+      </div>
+
+      <!-- Quick period buttons -->
+      <div class="mt-3 pt-2 border-top d-flex gap-1 flex-wrap align-items-center">
+        <span class="text-muted small me-1"><i class="bi bi-clock-history me-1"></i>Atalhos:</span>
+        <button type="button" class="btn btn-outline-primary btn-sm periodo-btn" data-periodo="mes_atual">
+          <i class="bi bi-calendar3 me-1"></i>Mês Atual
+        </button>
+        <button type="button" class="btn btn-outline-primary btn-sm periodo-btn" data-periodo="mes_anterior">
+          <i class="bi bi-calendar3 me-1"></i>Mês Anterior
+        </button>
+        <button type="button" class="btn btn-outline-primary btn-sm periodo-btn" data-periodo="ano_atual">
+          <i class="bi bi-calendar-range me-1"></i>Ano Atual
+        </button>
+      </div>
+    </div>
+  </form>
 
   {% if not report %}
   <div class="alert alert-info">
@@ -346,6 +386,19 @@
       inp_fim.value = fim.toISOString().slice(0, 10);
     });
   });
+
+  // Live search filter for bandeiras select
+  const buscaBandeira = document.getElementById('buscaBandeira');
+  const selBandeiras = document.getElementById('selBandeiras');
+  if (buscaBandeira && selBandeiras) {
+    buscaBandeira.addEventListener('input', function () {
+      const q = this.value.toLowerCase().trim();
+      Array.from(selBandeiras.options).forEach(opt => {
+        const match = !q || opt.dataset.nome.includes(q) || opt.dataset.tipo.includes(q);
+        opt.style.display = match ? '' : 'none';
+      });
+    });
+  }
 
   // Salva vínculos (Forma 1 + Forma 2) para uma bandeira
   document.querySelectorAll('.btn-vincular').forEach(btn => {

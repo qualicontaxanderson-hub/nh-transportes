@@ -345,6 +345,7 @@ def conf_cartoes():
         data_inicio, data_fim = _default_period()
 
     empresa_ids = [e for e in args.getlist('empresa_ids[]') if e]
+    bandeira_ids = [b for b in args.getlist('bandeira_ids[]') if b]
 
     conn = get_db_connection()
     try:
@@ -354,9 +355,14 @@ def conf_cartoes():
         bandeiras = _get_bandeiras(conn)
         formas_cartao = _get_formas_recebimento_cartao(conn)
 
+        # Apply bandeira filter if selected
+        bandeiras_filtered = bandeiras
+        if bandeira_ids:
+            bandeiras_filtered = [b for b in bandeiras if str(b['id']) in bandeira_ids]
+
         # Build vinculos map: bandeira_id → [forma_recebimento_id, ...]
         vinculos_map = defaultdict(list)
-        for b in bandeiras:
+        for b in bandeiras_filtered:
             for v in b.get('vinculos', []):
                 vinculos_map[b['id']].append(v['forma_recebimento_id'])
 
@@ -374,7 +380,7 @@ def conf_cartoes():
                 conn, data_inicio, data_fim, empresa_ids, forma_ids
             )
             report, grand_total_venda, grand_total_recebimento, grand_saldo = (
-                _build_report(bandeiras, vinculos_map, vendas_rows, receb_rows)
+                _build_report(bandeiras_filtered, vinculos_map, vendas_rows, receb_rows)
             )
     finally:
         conn.close()
@@ -388,6 +394,7 @@ def conf_cartoes():
         data_inicio=data_inicio,
         data_fim=data_fim,
         empresa_ids=empresa_ids,
+        bandeira_ids=bandeira_ids,
         grand_total_venda=grand_total_venda,
         grand_total_recebimento=grand_total_recebimento,
         grand_saldo=grand_saldo,
