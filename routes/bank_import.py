@@ -1376,9 +1376,10 @@ def conciliar():
             val  = request.form.get(f'desp_{i}_valor') or None
             obs  = request.form.get(f'desp_{i}_observacao') or None
             forn = request.form.get(f'desp_{i}_fornecedor') or None
-            if tid and cid and val:
+            if tid and cid:
                 try:
-                    val_f = float(val.replace(',', '.'))
+                    # val can be None in batch mode → _conciliar_tx uses the transaction's own value
+                    val_f = float(val.replace(',', '.')) if val else None
                     despesas.append({'titulo_id': int(tid), 'categoria_id': int(cid),
                                      'subcategoria_id': int(scid) if scid else None,
                                      'valor': val_f, 'observacao': obs, 'fornecedor': forn})
