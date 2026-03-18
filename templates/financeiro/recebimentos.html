@@ -477,9 +477,14 @@ document.addEventListener('DOMContentLoaded', function () {
 <script>
 // ── Conciliação EFI Automático (chamado da página de recebimentos) ──────────
 var _efiTotalAtualizados = 0;
+var _efiPrevRestantes = -1;
+var _efiNoProgressCalls = 0;
+var _EFI_MAX_NO_PROGRESS = 8;  // Para após 8 chamadas consecutivas sem atualizar nada
 
 function executarConciliacaoEFI(btn) {
   _efiTotalAtualizados = 0;
+  _efiPrevRestantes = -1;
+  _efiNoProgressCalls = 0;
   _efiRodada(btn);
 }
 
@@ -502,20 +507,31 @@ function _efiRodada(btn) {
   .then(function(d) {
     msg.style.color = 'rgba(255,255,255,.9)';
     if (d.success) {
-      _efiTotalAtualizados += (d.atualizados || 0);
+      var atualizadosLote = d.atualizados || 0;
+      _efiTotalAtualizados += atualizadosLote;
       var restantes = d.restantes || 0;
 
-      if (restantes > 0) {
+      // Detecta se houve progresso para evitar loop infinito
+      if (atualizadosLote === 0 && restantes === _efiPrevRestantes) {
+        _efiNoProgressCalls++;
+      } else {
+        _efiNoProgressCalls = 0;
+      }
+      _efiPrevRestantes = restantes;
+
+      if (restantes > 0 && _efiNoProgressCalls < _EFI_MAX_NO_PROGRESS) {
         // Há mais boletos para verificar — mostra progresso e chama novamente
         msg.textContent = '⏳ Verificando… ' + _efiTotalAtualizados + ' pago(s), ' + restantes + ' restante(s)…';
         setTimeout(function() { _efiRodada(btn); }, 500);
       } else {
-        // Terminou
+        // Terminou (ou sem progresso após N tentativas)
         btn.disabled = false;
         btn.innerHTML = '<i class="bi bi-bank me-1"></i>Conciliar EFI Automático';
         if (_efiTotalAtualizados > 0) {
           msg.textContent = '✅ ' + _efiTotalAtualizados + ' boleto(s) marcado(s) como pago(s) via EFI. Atualizando…';
           setTimeout(function() { location.reload(); }, 1800);
+        } else if (restantes > 0) {
+          msg.textContent = '⚠️ ' + restantes + ' boleto(s) pendente(s) não confirmado(s) pelo EFI. Verifique as credenciais ou o extrato bancário.';
         } else {
           msg.textContent = '✅ ' + (d.message || 'Nenhum boleto novo para atualizar.');
         }

@@ -1092,12 +1092,15 @@ def auto_conciliar_efi():
         # chegam com descrição "Recebimento de cobrança: <charge_id> de CLIENTE".
         # Esta fase detecta essas transações e concilia tanto o boleto quanto a
         # transação bancária, usando forma 'Compensação Cobrança'.
+        # Aceita tanto a codificação correta (cobrança) quanto a dupla-codificação
+        # que ocorre quando OFX UTF-8 é lido como Latin-1 (cobranÃ§a).
         import re as _re
         _CHARGE_RE_BT = _re.compile(
-            r'(?:recebimento\s+de\s+cobran[çc]a|cobran[çc]a)[:\s]+(\d+)',
+            r'cobran(?:ça|Ã§a|ca)[:\s]+(\d{6,12})',
             _re.IGNORECASE,
         )
         atualizados_bt = 0
+        bt_pendentes = []
         try:
             cursor.execute(
                 """SELECT bt.id, bt.descricao, bt.valor, bt.data_transacao
@@ -1193,12 +1196,30 @@ def auto_conciliar_efi():
             if atualizados_bt:
                 conn.commit()
                 current_app.logger.info('[auto_conciliar_efi] fase2 bank_tx: %d conciliado(s)', atualizados_bt)
+            elif atualizados_bt == 0 and bt_pendentes:
+                # Mesmo sem novos pagamentos, bank_transactions de cobranças já pagas
+                # podem ter sido conciliadas — commitar para não perder essas atualizações.
+                try:
+                    conn.commit()
+                except Exception:
+                    pass
         except Exception as _bt_exc:
             current_app.logger.warning('[auto_conciliar_efi] fase2 bank_tx falhou: %s', _bt_exc)
 
         atualizados += atualizados_bt
-        restantes_total = max(0, total_pendentes - len(lote) - atualizados_bt)
-        restantes = restantes_total
+
+        # Reconta após todas as atualizações para obter o número real de pendentes
+        try:
+            cursor.execute("""
+                SELECT COUNT(*) AS total
+                FROM cobrancas
+                WHERE charge_id IS NOT NULL
+                  AND charge_id != ''
+                  AND (status IS NULL OR status NOT IN ('pago', 'cancelado'))
+            """)
+            restantes = cursor.fetchone()['total']
+        except Exception:
+            restantes = max(0, total_pendentes - len(lote) - atualizados_bt)
 
         cursor.close()
         conn.close()

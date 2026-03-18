@@ -414,8 +414,10 @@ def _auto_conciliar_cobrancas(cursor, conn, account_id=None):
     """
     import re as _re
 
+    # Aceita tanto a codificação correta (cobrança) quanto a dupla-codificação
+    # que ocorre quando arquivos OFX em UTF-8 são lidos como Latin-1 (cobranÃ§a).
     _CHARGE_RE = _re.compile(
-        r'(?:recebimento\s+de\s+cobran[çc]a|cobran[çc]a)[:\s]+(\d+)',
+        r'cobran(?:ça|Ã§a|ca)[:\s]+(\d{6,12})',
         _re.IGNORECASE,
     )
 
@@ -1734,8 +1736,10 @@ def conciliar():
 
             # Sugestão 'Compensação Cobrança' para créditos EFI sem outra sugestão de forma.
             # Detecta o padrão do extrato EFI: "Recebimento de cobrança: <charge_id> de ..."
+            # Aceita tanto a codificação correta (cobrança) quanto a dupla-codificação
+            # que ocorre quando OFX UTF-8 é lido como Latin-1 (cobranÃ§a).
             _efi_charge_re = re.compile(
-                r'(?:recebimento\s+de\s+cobran[çc]a|cobran[çc]a)[:\s]+\d+',
+                r'cobran(?:ça|Ã§a|ca)[:\s]+\d{6,12}',
                 re.IGNORECASE,
             )
             _forma_comp_id   = None
