@@ -237,7 +237,7 @@
 
 <!-- ── Modal de Vinculações ──────────────────────────────────────────────── -->
 <div class="modal fade" id="modalVinculos" tabindex="-1" aria-labelledby="labelModalVinculos" aria-hidden="true">
-  <div class="modal-dialog modal-lg">
+  <div class="modal-dialog modal-xl">
     <div class="modal-content">
       <div class="modal-header" style="background:#1D63A5;color:#fff;">
         <h5 class="modal-title" id="labelModalVinculos">
@@ -249,15 +249,17 @@
         <p class="small text-muted mb-3">
           Vincule cada bandeira de cartão registrada no <strong>Fechamento de Caixa</strong>
           à sua respectiva <strong>Forma de Recebimento Bancário</strong> (importado via OFX).
-          Este vínculo é utilizado para cruzar vendas com recebimentos no relatório.
+          Cada bandeira pode ter até <strong>2 formas</strong> vinculadas
+          (ex: regular e antecipado para cartão de crédito).
         </p>
         <table class="table table-sm table-bordered" style="font-size:.82rem;">
           <thead class="table-dark">
             <tr>
-              <th>Bandeira (Caixa)</th>
-              <th>Tipo</th>
-              <th>Forma de Recebimento (Banco)</th>
-              <th class="text-center" style="width:80px;">Ação</th>
+              <th style="width:120px;">Bandeira (Caixa)</th>
+              <th style="width:70px;">Tipo</th>
+              <th>Forma 1 de Recebimento (Banco)</th>
+              <th>Forma 2 de Recebimento (Banco)</th>
+              <th class="text-center" style="width:60px;">Salvar</th>
             </tr>
           </thead>
           <tbody id="tbl-vinculos-body">
@@ -270,11 +272,24 @@
                 </span>
               </td>
               <td>
-                <select class="form-select form-select-sm sel-forma" data-bandeira="{{ b.id }}"
-                        style="min-width:200px;">
+                <select class="form-select form-select-sm sel-forma-1" data-bandeira="{{ b.id }}"
+                        style="min-width:180px;">
                   <option value="">— sem vínculo —</option>
                   {% for fr in formas_cartao %}
-                  <option value="{{ fr.id }}" {% if fr.id == b.forma_recebimento_id %}selected{% endif %}>
+                  <option value="{{ fr.id }}"
+                    {% if b.vinculos|length >= 1 and fr.id == b.vinculos[0].forma_recebimento_id %}selected{% endif %}>
+                    {{ fr.nome }}{% if fr.tipo_cartao %} ({{ fr.tipo_cartao }}){% endif %}
+                  </option>
+                  {% endfor %}
+                </select>
+              </td>
+              <td>
+                <select class="form-select form-select-sm sel-forma-2" data-bandeira="{{ b.id }}"
+                        style="min-width:180px;">
+                  <option value="">— sem vínculo —</option>
+                  {% for fr in formas_cartao %}
+                  <option value="{{ fr.id }}"
+                    {% if b.vinculos|length >= 2 and fr.id == b.vinculos[1].forma_recebimento_id %}selected{% endif %}>
                     {{ fr.nome }}{% if fr.tipo_cartao %} ({{ fr.tipo_cartao }}){% endif %}
                   </option>
                   {% endfor %}
@@ -332,44 +347,67 @@
     });
   });
 
-  // Vincular buttons inside modal
+  // Salva vínculos (Forma 1 + Forma 2) para uma bandeira
   document.querySelectorAll('.btn-vincular').forEach(btn => {
     btn.addEventListener('click', async function () {
       const bandeiraId = parseInt(this.dataset.bandeira);
       const row = document.getElementById('row-band-' + bandeiraId);
-      const sel = row.querySelector('.sel-forma');
-      const formaId = parseInt(sel.value) || null;
+      const sel1 = row.querySelector('.sel-forma-1');
+      const sel2 = row.querySelector('.sel-forma-2');
+      const forma1 = parseInt(sel1.value) || null;
+      const forma2 = parseInt(sel2.value) || null;
       const msgEl = document.getElementById('msg-vinculos');
       msgEl.textContent = '';
 
-      const url = formaId
-        ? '{{ url_for("conf_cartoes.vincular_cartao") }}'
-        : '{{ url_for("conf_cartoes.desvincular_cartao") }}';
-      const body = formaId
-        ? { bandeira_cartao_id: bandeiraId, forma_recebimento_id: formaId }
-        : { bandeira_cartao_id: bandeiraId };
+      // Novas formas desejadas (sem nulos, sem duplicatas)
+      const novasFormas = [...new Set([forma1, forma2].filter(Boolean))];
+
+      // Formas originais (antes de salvar) registradas nos data-attributes
+      const originalFormas = (row.dataset.vinculos || '').split(',').filter(Boolean).map(Number);
 
       try {
-        const resp = await fetch(url, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(body),
-        });
-        const data = await resp.json();
-        if (data.success) {
-          msgEl.textContent = data.message;
-          msgEl.className = 'small text-success me-auto';
-          btn.classList.replace('btn-success', 'btn-outline-success');
-          setTimeout(() => { btn.classList.replace('btn-outline-success', 'btn-success'); }, 1500);
-        } else {
-          msgEl.textContent = data.message || 'Erro ao salvar.';
-          msgEl.className = 'small text-danger me-auto';
+        // Remove formas que estão no original mas não estão nas novas
+        for (const fid of originalFormas) {
+          if (!novasFormas.includes(fid)) {
+            await fetch('{{ url_for("conf_cartoes.desvincular_cartao") }}', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ bandeira_cartao_id: bandeiraId, forma_recebimento_id: fid }),
+            });
+          }
         }
+        // Adiciona formas novas que não estavam no original
+        for (const fid of novasFormas) {
+          if (!originalFormas.includes(fid)) {
+            await fetch('{{ url_for("conf_cartoes.vincular_cartao") }}', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ bandeira_cartao_id: bandeiraId, forma_recebimento_id: fid }),
+            });
+          }
+        }
+
+        // Atualiza data-vinculos para refletir o estado atual
+        row.dataset.vinculos = novasFormas.join(',');
+        msgEl.textContent = 'Vinculação salva com sucesso.';
+        msgEl.className = 'small text-success me-auto';
+        btn.classList.replace('btn-success', 'btn-outline-success');
+        setTimeout(() => { btn.classList.replace('btn-outline-success', 'btn-success'); }, 1500);
       } catch (e) {
         msgEl.textContent = 'Erro de comunicação.';
         msgEl.className = 'small text-danger me-auto';
       }
     });
+  });
+
+  // Inicializa data-vinculos nos rows a partir dos selects pré-selecionados
+  document.querySelectorAll('#tbl-vinculos-body tr').forEach(row => {
+    const sel1 = row.querySelector('.sel-forma-1');
+    const sel2 = row.querySelector('.sel-forma-2');
+    if (!sel1) return;
+    const v1 = parseInt(sel1.value) || 0;
+    const v2 = parseInt(sel2.value) || 0;
+    row.dataset.vinculos = [v1, v2].filter(Boolean).join(',');
   });
 })();
 </script>

@@ -5,12 +5,13 @@ Cruza vendas de cartão (lancamentos_caixa_comprovacao com bandeira_cartao_id)
 com recebimentos bancários (bank_transactions CREDIT vinculados a
 formas_recebimento com eh_cartao=1), usando a tabela de vinculação
 conf_cartoes_vinculos para saber qual bandeira corresponde a qual
-forma de recebimento.
+forma de recebimento. Cada bandeira pode ter até 2 formas vinculadas
+(ex: regular + antecipado para cartão de crédito).
 
 Rota:
   GET  /relatorios/conf_cartoes         – relatório
-  POST /relatorios/conf_cartoes/vincular – salva/atualiza vinculação
-  POST /relatorios/conf_cartoes/desvincular – remove vinculação
+  POST /relatorios/conf_cartoes/vincular – salva vinculação
+  POST /relatorios/conf_cartoes/desvincular – remove vinculação específica
 """
 from datetime import date, datetime
 from collections import defaultdict
@@ -34,20 +35,39 @@ def _default_period():
 
 
 def _ensure_vinculos_table(conn):
-    """Cria a tabela de vinculações se ainda não existir."""
+    """Cria a tabela de vinculações se ainda não existir e migra a chave única."""
     cur = conn.cursor()
+    # Cria a tabela com a chave composta (bandeira + forma) – permite múltiplos vínculos
     cur.execute(
         """
         CREATE TABLE IF NOT EXISTS conf_cartoes_vinculos (
-            id                  INT AUTO_INCREMENT PRIMARY KEY,
-            bandeira_cartao_id  INT NOT NULL,
+            id                   INT AUTO_INCREMENT PRIMARY KEY,
+            bandeira_cartao_id   INT NOT NULL,
             forma_recebimento_id INT NOT NULL,
-            criado_em           DATETIME DEFAULT CURRENT_TIMESTAMP,
-            UNIQUE KEY uk_bandeira (bandeira_cartao_id)
+            criado_em            DATETIME DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE KEY uk_bandeira_forma (bandeira_cartao_id, forma_recebimento_id)
         )
         """
     )
     conn.commit()
+    # Migração: se a tabela foi criada com a chave antiga (uk_bandeira apenas em
+    # bandeira_cartao_id), dropar e recriar com a chave composta.
+    try:
+        cur.execute(
+            "ALTER TABLE conf_cartoes_vinculos "
+            "DROP INDEX uk_bandeira"
+        )
+        conn.commit()
+    except Exception:
+        pass  # índice já não existe ou já foi migrado
+    try:
+        cur.execute(
+            "ALTER TABLE conf_cartoes_vinculos "
+            "ADD UNIQUE KEY uk_bandeira_forma (bandeira_cartao_id, forma_recebimento_id)"
+        )
+        conn.commit()
+    except Exception:
+        pass  # índice já existe
     cur.close()
 
 
@@ -68,23 +88,46 @@ def _get_empresas(conn):
 
 
 def _get_bandeiras(conn):
-    """Retorna todas as bandeiras de cartão ativas com sua vinculação (se houver)."""
+    """Retorna todas as bandeiras de cartão ativas com a lista de vínculos (0, 1 ou 2)."""
     cur = conn.cursor(dictionary=True)
+    # Busca as bandeiras
     cur.execute(
         """
-        SELECT bc.id, bc.nome, bc.tipo,
-               v.forma_recebimento_id,
-               fr.nome AS forma_recebimento_nome
+        SELECT bc.id, bc.nome, bc.tipo
           FROM bandeiras_cartao bc
-          LEFT JOIN conf_cartoes_vinculos v ON v.bandeira_cartao_id = bc.id
-          LEFT JOIN formas_recebimento fr ON fr.id = v.forma_recebimento_id
          WHERE bc.ativo = 1
          ORDER BY bc.tipo, bc.nome
         """
     )
-    rows = cur.fetchall()
+    bandeiras = cur.fetchall()
+
+    # Busca todos os vínculos existentes
+    cur.execute(
+        """
+        SELECT v.bandeira_cartao_id, v.forma_recebimento_id, fr.nome AS forma_recebimento_nome
+          FROM conf_cartoes_vinculos v
+          JOIN formas_recebimento fr ON fr.id = v.forma_recebimento_id
+         ORDER BY v.id
+        """
+    )
+    vinculo_rows = cur.fetchall()
     cur.close()
-    return rows
+
+    # Agrupa vínculos por bandeira
+    vinculos_by_band = defaultdict(list)
+    for v in vinculo_rows:
+        vinculos_by_band[v['bandeira_cartao_id']].append({
+            'forma_recebimento_id': v['forma_recebimento_id'],
+            'forma_recebimento_nome': v['forma_recebimento_nome'],
+        })
+
+    for b in bandeiras:
+        b['vinculos'] = vinculos_by_band.get(b['id'], [])
+        # Compatibilidade: mantém campos simples para o primeiro vínculo
+        b['forma_recebimento_id'] = b['vinculos'][0]['forma_recebimento_id'] if b['vinculos'] else None
+        b['forma_recebimento_nome'] = b['vinculos'][0]['forma_recebimento_nome'] if b['vinculos'] else None
+
+    return bandeiras
 
 
 def _get_formas_recebimento_cartao(conn):
@@ -196,7 +239,7 @@ def _build_report(bandeiras, vinculos_map, vendas_rows, recebimentos_rows):
     Para cada bandeira vinculada, produz uma lista de linhas cronológicas
     mostrando vendas x recebimentos com diferença acumulada.
 
-    vinculos_map: dict bandeira_id → forma_recebimento_id
+    vinculos_map: dict bandeira_id → [forma_recebimento_id, ...]
     """
     # Index vendas: (bandeira_id, data) → total_venda
     vendas_idx = {}
@@ -212,16 +255,18 @@ def _build_report(bandeiras, vinculos_map, vendas_rows, recebimentos_rows):
         d = r['data_recebimento']
         if hasattr(d, 'isoformat'):
             d = d.isoformat()
-        receb_idx[(int(r['forma_id']), str(d))] = float(r['total_recebimento'] or 0)
+        key = (int(r['forma_id']), str(d))
+        receb_idx[key] = float(r['total_recebimento'] or 0)
 
-    # Collect all unique dates per bandeira
+    # Collect all unique dates per bandeira (from vendas and from all linked formas)
     dates_by_bandeira = defaultdict(set)
     for (bid, d) in vendas_idx:
         dates_by_bandeira[bid].add(d)
-    for bid, forma_id in vinculos_map.items():
-        for (fid, d) in receb_idx:
-            if fid == forma_id:
-                dates_by_bandeira[bid].add(d)
+    for bid, forma_ids in vinculos_map.items():
+        for fid in forma_ids:
+            for (fid2, d) in receb_idx:
+                if fid2 == fid:
+                    dates_by_bandeira[bid].add(d)
 
     report = []
     grand_total_venda = 0.0
@@ -229,7 +274,7 @@ def _build_report(bandeiras, vinculos_map, vendas_rows, recebimentos_rows):
 
     for band in bandeiras:
         bid = band['id']
-        forma_id = vinculos_map.get(bid)
+        forma_ids = vinculos_map.get(bid, [])
 
         all_dates = sorted(dates_by_bandeira.get(bid, set()))
 
@@ -243,7 +288,8 @@ def _build_report(bandeiras, vinculos_map, vendas_rows, recebimentos_rows):
 
         for d in all_dates:
             venda = vendas_idx.get((bid, d), 0.0)
-            receb = receb_idx.get((forma_id, d), 0.0) if forma_id else 0.0
+            # Sum receipts across ALL linked formas for this date
+            receb = sum(receb_idx.get((fid, d), 0.0) for fid in forma_ids)
 
             saldo += receb - venda
             total_venda += venda
@@ -263,12 +309,15 @@ def _build_report(bandeiras, vinculos_map, vendas_rows, recebimentos_rows):
         grand_total_venda += total_venda
         grand_total_recebimento += total_recebimento
 
+        # Build names of linked formas for display
+        forma_nomes = [v['forma_recebimento_nome'] for v in band.get('vinculos', [])]
+
         report.append({
             'bandeira_id': bid,
             'bandeira_nome': band['nome'],
             'tipo_cartao': band['tipo'],
-            'forma_recebimento_id': forma_id,
-            'forma_recebimento_nome': band.get('forma_recebimento_nome') or '',
+            'forma_recebimento_ids': forma_ids,
+            'forma_recebimento_nome': ' + '.join(forma_nomes) if forma_nomes else '',
             'linhas': linhas,
             'total_venda': total_venda,
             'total_recebimento': total_recebimento,
@@ -305,15 +354,14 @@ def conf_cartoes():
         bandeiras = _get_bandeiras(conn)
         formas_cartao = _get_formas_recebimento_cartao(conn)
 
-        # Build vinculos map: bandeira_id → forma_recebimento_id
-        vinculos_map = {
-            b['id']: b['forma_recebimento_id']
-            for b in bandeiras
-            if b.get('forma_recebimento_id')
-        }
+        # Build vinculos map: bandeira_id → [forma_recebimento_id, ...]
+        vinculos_map = defaultdict(list)
+        for b in bandeiras:
+            for v in b.get('vinculos', []):
+                vinculos_map[b['id']].append(v['forma_recebimento_id'])
 
         # IDs das formas vinculadas (para query de recebimentos)
-        forma_ids = list(set(vinculos_map.values())) if vinculos_map else []
+        forma_ids = list(set(fid for fids in vinculos_map.values() for fid in fids))
 
         report = []
         grand_total_venda = 0.0
@@ -350,7 +398,7 @@ def conf_cartoes():
 @login_required
 @admin_required
 def vincular_cartao():
-    """Salva ou atualiza a vinculação bandeira_cartao ↔ forma_recebimento."""
+    """Adiciona uma vinculação bandeira_cartao ↔ forma_recebimento (máximo 2 por bandeira)."""
     data = request.get_json(silent=True) or {}
     bandeira_id = data.get('bandeira_cartao_id')
     forma_id = data.get('forma_recebimento_id')
@@ -362,11 +410,36 @@ def vincular_cartao():
     try:
         _ensure_vinculos_table(conn)
         cur = conn.cursor()
+        # Verifica quantas vinculações já existem para esta bandeira
+        cur.execute(
+            "SELECT COUNT(*) AS cnt FROM conf_cartoes_vinculos WHERE bandeira_cartao_id = %s",
+            (bandeira_id,),
+        )
+        row = cur.fetchone()
+        count = row[0] if row else 0
+
+        # Verifica se essa combinação exata já existe
+        cur.execute(
+            "SELECT id FROM conf_cartoes_vinculos WHERE bandeira_cartao_id = %s AND forma_recebimento_id = %s",
+            (bandeira_id, forma_id),
+        )
+        exists = cur.fetchone()
+
+        if exists:
+            cur.close()
+            return jsonify({'success': True, 'message': 'Vínculo já existente.'})
+
+        if count >= 2:
+            cur.close()
+            return jsonify({
+                'success': False,
+                'message': 'Máximo de 2 formas de recebimento por bandeira atingido. Remova uma antes de adicionar.'
+            }), 400
+
         cur.execute(
             """
             INSERT INTO conf_cartoes_vinculos (bandeira_cartao_id, forma_recebimento_id)
             VALUES (%s, %s)
-            ON DUPLICATE KEY UPDATE forma_recebimento_id = VALUES(forma_recebimento_id)
             """,
             (bandeira_id, forma_id),
         )
@@ -382,9 +455,10 @@ def vincular_cartao():
 @login_required
 @admin_required
 def desvincular_cartao():
-    """Remove a vinculação de uma bandeira."""
+    """Remove uma vinculação específica de bandeira ↔ forma_recebimento."""
     data = request.get_json(silent=True) or {}
     bandeira_id = data.get('bandeira_cartao_id')
+    forma_id = data.get('forma_recebimento_id')
 
     if not bandeira_id:
         return jsonify({'success': False, 'message': 'Parâmetros inválidos.'}), 400
@@ -393,10 +467,18 @@ def desvincular_cartao():
     try:
         _ensure_vinculos_table(conn)
         cur = conn.cursor()
-        cur.execute(
-            "DELETE FROM conf_cartoes_vinculos WHERE bandeira_cartao_id = %s",
-            (bandeira_id,),
-        )
+        if forma_id:
+            # Remove vinculação específica
+            cur.execute(
+                "DELETE FROM conf_cartoes_vinculos WHERE bandeira_cartao_id = %s AND forma_recebimento_id = %s",
+                (bandeira_id, forma_id),
+            )
+        else:
+            # Remove todas as vinculações da bandeira
+            cur.execute(
+                "DELETE FROM conf_cartoes_vinculos WHERE bandeira_cartao_id = %s",
+                (bandeira_id,),
+            )
         conn.commit()
         cur.close()
     finally:
