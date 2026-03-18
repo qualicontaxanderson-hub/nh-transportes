@@ -187,7 +187,7 @@ td.sec-result   { background:#f0fdf4; }
             <th colspan="3" class="sec-saida">SAÍDA (Venda)</th>
             <th colspan="3" class="sec-saldo text-center">EI (Estoque Inicial)</th>
             <th colspan="3" class="sec-saldo text-center">EF (Estoque Final)</th>
-            <th colspan="3" class="sec-result">RESULTADO</th>
+            <th colspan="4" class="sec-result">RESULTADO</th>
           </tr>
           <tr style="text-align:center;font-size:.75rem;">
             <th class="sec-entrada">Qtde (L)</th>
@@ -205,6 +205,7 @@ td.sec-result   { background:#f0fdf4; }
             <th class="sec-result">Receita</th>
             <th class="sec-result">Custo</th>
             <th class="sec-result">Lucro</th>
+            <th class="sec-result">Margem/L</th>
           </tr>
         </thead>
         <tbody>
@@ -243,6 +244,10 @@ td.sec-result   { background:#f0fdf4; }
             <td class="text-end sec-result fw-bold {% if res.lucro >= 0 %}text-success{% else %}text-danger{% endif %}">
               R$ {{ res.lucro | fmtmoney }}
             </td>
+            {% set margem_r = res.preco_medio_saida - res.custo_entrada_unit %}
+            <td class="text-end sec-result fw-semibold {% if margem_r >= 0 %}text-success{% else %}text-danger{% endif %}" title="Vl Médio Saída − Vl Unit Entrada">
+              R$ {{ margem_r | fmtmoney }}
+            </td>
           </tr>
           {% endfor %}
         </tbody>
@@ -266,6 +271,7 @@ td.sec-result   { background:#f0fdf4; }
             <td class="text-end sec-result fw-bold {% if ns.acum_lucro >= 0 %}text-success{% else %}text-danger{% endif %}">
               R$ {{ ns.acum_lucro | fmtmoney }}
             </td>
+            <td class="text-end sec-result text-muted">—</td>
           </tr>
         </tfoot>
       </table>
@@ -315,6 +321,7 @@ td.sec-result   { background:#f0fdf4; }
                       <th class="text-end sec-saida">Vendas (L)</th>
                       <th class="text-end sec-saida">Prc Venda</th>
                       <th class="text-end sec-saida">Receita</th>
+                      <th class="text-end sec-saida">Margem/L</th>
                       <th class="text-end sec-saldo">EF Calc. (L)</th>
                       <th class="text-end sec-saldo">EF Calc. R$</th>
                       <th class="text-end sec-saldo">EF Real (L)</th>
@@ -345,6 +352,11 @@ td.sec-result   { background:#f0fdf4; }
                         {% if dia.preco_venda_medio %}R$ {{ dia.preco_venda_medio | fmtmoney }}{% else %}<span class="text-muted">—</span>{% endif %}
                       </td>
                       <td class="text-end sec-saida">R$ {{ dia.receita | fmtmoney }}</td>
+                      <td class="text-end sec-saida fw-semibold {% if dia.preco_venda_medio and dia.custo_corrido and (dia.preco_venda_medio - dia.custo_corrido) >= 0 %}text-success{% elif dia.preco_venda_medio and dia.custo_corrido %}text-danger{% endif %}" title="Prc Venda − Custo Corrido">
+                        {% if dia.preco_venda_medio and dia.custo_corrido %}
+                          R$ {{ (dia.preco_venda_medio - dia.custo_corrido) | fmtmoney }}
+                        {% else %}<span class="text-muted">—</span>{% endif %}
+                      </td>
                       <td class="text-end sec-saldo">{{ dia.ef_calculado | fmtnum }}</td>
                       <td class="text-end sec-saldo">R$ {{ dia.ef_calc_valor | fmtmoney }}</td>
                       <td class="text-end sec-saldo">
@@ -392,6 +404,7 @@ td.sec-result   { background:#f0fdf4; }
                       <td class="text-end sec-saida">
                         R$ {{ prod_diario.dias | sum(attribute='receita') | fmtmoney }}
                       </td>
+                      <td class="text-end sec-saida text-muted">—</td>
                       <td colspan="3"></td>
                       <td class="text-end sec-result">
                         {% set total_var = namespace(v=0, has=0) %}
@@ -459,14 +472,14 @@ td.sec-result   { background:#f0fdf4; }
             <th colspan="3" class="sec-saida">SAÍDA</th>
             <th colspan="3" class="sec-saldo text-center">EI (Estoque Inicial)</th>
             <th colspan="3" class="sec-saldo text-center">EF (Estoque Final)</th>
-            <th colspan="3" class="sec-result">RESULTADO</th>
+            <th colspan="4" class="sec-result">RESULTADO</th>
           </tr>
           <tr style="text-align:center;font-size:.75rem;">
             <th class="sec-entrada">Qtde (L)</th><th class="sec-entrada">Vl Unit</th><th class="sec-entrada">Total</th>
             <th class="sec-saida">Qtde (L)</th><th class="sec-saida">Vl Médio</th><th class="sec-saida">Total</th>
             <th class="sec-saldo">Qtde (L)</th><th class="sec-saldo">Custo</th><th class="sec-saldo">Total</th>
             <th class="sec-saldo">Qtde (L)</th><th class="sec-saldo">Custo</th><th class="sec-saldo">Total</th>
-            <th class="sec-result">Receita</th><th class="sec-result">Custo</th><th class="sec-result">Lucro</th>
+            <th class="sec-result">Receita</th><th class="sec-result">Custo</th><th class="sec-result">Lucro</th><th class="sec-result">Margem/L</th>
           </tr>
         </thead>
         <tbody>
@@ -500,6 +513,10 @@ td.sec-result   { background:#f0fdf4; }
             <td class="text-end sec-result fw-bold {% if res.lucro >= 0 %}text-success{% else %}text-danger{% endif %}">
               R$ {{ res.lucro | fmtmoney }}
             </td>
+            {% set margem_c = res.preco_medio_saida - res.custo_entrada_unit %}
+            <td class="text-end sec-result fw-semibold {% if margem_c >= 0 %}text-success{% else %}text-danger{% endif %}" title="Vl Médio Saída − Vl Unit Entrada">
+              R$ {{ margem_c | fmtmoney }}
+            </td>
           </tr>
           {% endfor %}
         </tbody>
@@ -523,6 +540,7 @@ td.sec-result   { background:#f0fdf4; }
             <td class="text-end sec-result fw-bold {% if ns2.total_lucro >= 0 %}text-success{% else %}text-danger{% endif %}">
               R$ {{ ns2.total_lucro | fmtmoney }}
             </td>
+            <td class="text-end sec-result text-muted">—</td>
           </tr>
         </tfoot>
       </table>
