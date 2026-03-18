@@ -42,6 +42,21 @@
   }
   #tbl-recebimento tbody td { padding: 0.35rem 0.5rem; vertical-align: middle; border-color: #f0f3f7; }
   #tbl-recebimento tbody tr:hover td { background: #eef4ff; }
+  /* Filter card — smaller, more elegant typography */
+  #form-filtros .form-label,
+  #form-filtros .form-label-sm {
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.01em;
+    color: #374151;
+  }
+  #form-filtros .form-select,
+  #form-filtros .form-select-sm,
+  #form-filtros .form-control,
+  #form-filtros .form-control-sm {
+    font-size: 0.72rem;
+  }
+  #form-filtros small.text-muted { font-size: 0.65rem; }
   .btn-xs {
     padding: 0.15rem 0.35rem;
     font-size: 0.72rem;
@@ -186,7 +201,7 @@
                         </div>
                         <div class="col-12">
                             <div class="d-flex gap-1 flex-wrap mb-1">
-                                <span class="text-muted" style="font-size:0.78rem; line-height:1.8;">Período:</span>
+                                <span class="text-muted" style="font-size:0.72rem; line-height:1.8;">Período:</span>
                                 <button type="button" class="btn btn-outline-secondary btn-xs" onclick="setPeriodoReceb('mes_atual')">Este mês</button>
                                 <button type="button" class="btn btn-outline-secondary btn-xs" onclick="setPeriodoReceb('mes_anterior')">Mês anterior</button>
                                 <button type="button" class="btn btn-outline-secondary btn-xs" onclick="setPeriodoReceb('ano_atual')">Este ano</button>
