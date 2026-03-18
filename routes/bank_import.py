@@ -1214,7 +1214,7 @@ def _conciliar_tx(cursor, conn, tx_id, acao, tipo_tx,
                     desc_chave = _desc_chave(row_cr.get('descricao') or '') if row_cr else ''
                     if row_cr and (row_cr.get('cnpj_cpf') or desc_chave):
                         cnpj_save = row_cr.get('cnpj_cpf') or ''
-                        tipo_chave_save = 'cnpj' if cnpj_save else 'descricao'
+                        tipo_chave_save = 'cnpj' if cnpj_save else 'texto'
                         try:
                             with conn.cursor() as _ins_cur:
                                 _ins_cur.execute(
@@ -1332,7 +1332,7 @@ def _conciliar_tx(cursor, conn, tx_id, acao, tipo_tx,
         if salvar_mapeamento and len(despesas) == 1 and (tx.get('cnpj_cpf') or desc_chave_desp):
             d = despesas[0]
             cnpj_save_desp = tx.get('cnpj_cpf') or ''
-            tipo_chave_desp = 'cnpj' if cnpj_save_desp else 'descricao'
+            tipo_chave_desp = 'cnpj' if cnpj_save_desp else 'texto'
             desc_chave = desc_chave_desp
             cursor.execute(
                 """INSERT INTO bank_supplier_mapping
@@ -1367,7 +1367,7 @@ def _conciliar_tx(cursor, conn, tx_id, acao, tipo_tx,
         desc_chave_row = _desc_chave(row.get('descricao') or '') if row else ''
         if salvar_mapeamento and row and (row.get('cnpj_cpf') or desc_chave_row):
             cnpj_save = row.get('cnpj_cpf') or ''
-            tipo_chave_save = 'cnpj' if cnpj_save else 'descricao'
+            tipo_chave_save = 'cnpj' if cnpj_save else 'texto'
             desc_chave = desc_chave_row
             cursor.execute(
                 """INSERT INTO bank_supplier_mapping
