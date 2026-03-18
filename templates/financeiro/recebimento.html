@@ -14,45 +14,6 @@
         Os valores aparecem aqui assim que o extrato OFX for importado em <a href="/banco/">Importação Bancária</a>.
     </div>
 
-    <!-- RESUMO -->
-    <div class="row mb-3">
-        <div class="col-md-4 mb-2">
-            <div class="card h-100">
-                <div class="card-header d-flex justify-content-between align-items-center" style="background:#c3e6cb;font-weight:600;">
-                    <span>Total Recebido</span>
-                </div>
-                <div class="card-body text-center">
-                    <h3 style="color:#17963c; margin-bottom:0;">
-                        R$ {{ "{:,.2f}".format(total_creditos or 0).replace(',','X').replace('.',',').replace('X','.') }}
-                    </h3>
-                    <small class="text-muted">Créditos no período</small>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-4 mb-2">
-            <div class="card h-100">
-                <div class="card-header" style="background:#bee5eb;font-weight:600;">
-                    Conciliados
-                </div>
-                <div class="card-body text-center">
-                    <h3 style="color:#0066cc; margin-bottom:0;">{{ total_conciliados }}</h3>
-                    <small class="text-muted">Transações conciliadas</small>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-4 mb-2">
-            <div class="card h-100">
-                <div class="card-header" style="background:#ffeeba;font-weight:600;">
-                    Pendentes
-                </div>
-                <div class="card-body text-center">
-                    <h3 style="color:#856404; margin-bottom:0;">{{ total_pendentes }}</h3>
-                    <small class="text-muted">Aguardando conciliação</small>
-                </div>
-            </div>
-        </div>
-    </div>
-
     <!-- FILTROS -->
     <form method="GET" class="card shadow-sm mb-3" id="form-filtros">
         <div class="card-header py-2" style="background:#1D63A5;color:white;">
@@ -209,7 +170,7 @@
         </div>
         <div class="card-body p-0">
             <div class="table-responsive">
-                <table class="table table-sm table-hover mb-0">
+                <table class="table table-sm table-hover mb-0" id="tbl-recebimento">
                     <thead class="table-light">
                         <tr>
                             <th>Data</th>
@@ -293,6 +254,45 @@
             <i class="bi bi-file-earmark-text"></i> Relatório OFX Completo
         </a>
     </div>
+
+    <!-- RESUMO (ao final da página para não atrapalhar o trabalho) -->
+    <div class="row mt-3">
+        <div class="col-md-4 mb-2">
+            <div class="card h-100">
+                <div class="card-header d-flex justify-content-between align-items-center" style="background:#c3e6cb;font-weight:600;">
+                    <span>Total Recebido</span>
+                </div>
+                <div class="card-body text-center">
+                    <h3 style="color:#17963c; margin-bottom:0;">
+                        R$ {{ "{:,.2f}".format(total_creditos or 0).replace(',','X').replace('.',',').replace('X','.') }}
+                    </h3>
+                    <small class="text-muted">Créditos no período</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4 mb-2">
+            <div class="card h-100">
+                <div class="card-header" style="background:#bee5eb;font-weight:600;">
+                    Conciliados
+                </div>
+                <div class="card-body text-center">
+                    <h3 style="color:#0066cc; margin-bottom:0;">{{ total_conciliados }}</h3>
+                    <small class="text-muted">Transações conciliadas</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4 mb-2">
+            <div class="card h-100">
+                <div class="card-header" style="background:#ffeeba;font-weight:600;">
+                    Pendentes
+                </div>
+                <div class="card-body text-center">
+                    <h3 style="color:#856404; margin-bottom:0;">{{ total_pendentes }}</h3>
+                    <small class="text-muted">Aguardando conciliação</small>
+                </div>
+            </div>
+        </div>
+    </div>
 </div>
 <style>
 .btn-xs {
@@ -301,5 +301,6 @@
     line-height: 1.3;
     border-radius: 0.2rem;
 }
+#tbl-recebimento { font-size: 0.72rem; }
 </style>
 {% endblock %}
