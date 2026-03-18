@@ -1087,7 +1087,119 @@ def auto_conciliar_efi():
         if atualizados:
             conn.commit()
 
-        restantes = max(0, total_pendentes - len(lote))
+        # ── Fase 2: conciliar via bank_transactions importados ─────────────────
+        # Para contas onde o extrato já foi importado (OFX/CSV), os créditos EFI
+        # chegam com descrição "Recebimento de cobrança: <charge_id> de CLIENTE".
+        # Esta fase detecta essas transações e concilia tanto o boleto quanto a
+        # transação bancária, usando forma 'Compensação Cobrança'.
+        import re as _re
+        _CHARGE_RE_BT = _re.compile(
+            r'(?:recebimento\s+de\s+cobran[çc]a|cobran[çc]a)[:\s]+(\d+)',
+            _re.IGNORECASE,
+        )
+        atualizados_bt = 0
+        try:
+            cursor.execute(
+                """SELECT bt.id, bt.descricao, bt.valor, bt.data_transacao
+                   FROM bank_transactions bt
+                   WHERE bt.tipo = 'CREDIT' AND bt.status = 'pendente'"""
+            )
+            bt_pendentes = cursor.fetchall()
+
+            # Obtém ou cria a forma 'Compensação Cobrança'
+            cursor.execute(
+                "SELECT id FROM formas_recebimento WHERE nome = 'Compensação Cobrança' LIMIT 1"
+            )
+            _fr = cursor.fetchone()
+            forma_comp_id = _fr['id'] if _fr else None
+            if not forma_comp_id:
+                cursor.execute(
+                    "INSERT INTO formas_recebimento (nome, ativo) VALUES ('Compensação Cobrança', 1)"
+                )
+                conn.commit()
+                forma_comp_id = cursor.lastrowid
+
+            agora_bt = _dt_cls.now()
+            for tx in bt_pendentes:
+                descricao = tx.get('descricao') or ''
+                m = _CHARGE_RE_BT.search(descricao)
+                if not m:
+                    continue
+                cid_str = m.group(1)
+
+                cursor.execute(
+                    """SELECT id, status FROM cobrancas
+                       WHERE charge_id = %s
+                         AND (status IS NULL OR status NOT IN ('pago', 'cancelado'))
+                       LIMIT 1""",
+                    (cid_str,),
+                )
+                cobr_bt = cursor.fetchone()
+                if not cobr_bt:
+                    # Cobrança já paga — só concilia a transação bancária
+                    if forma_comp_id:
+                        try:
+                            cursor.execute(
+                                """UPDATE bank_transactions
+                                   SET status = 'conciliado',
+                                       forma_recebimento_id = %s,
+                                       conciliado_em = %s,
+                                       conciliado_por = 'auto-efi-cobranca'
+                                   WHERE id = %s""",
+                                (forma_comp_id, agora_bt, tx['id']),
+                            )
+                        except Exception:
+                            cursor.execute(
+                                """UPDATE bank_transactions
+                                   SET status = 'conciliado',
+                                       conciliado_em = %s,
+                                       conciliado_por = 'auto-efi-cobranca'
+                                   WHERE id = %s""",
+                                (agora_bt, tx['id']),
+                            )
+                    continue
+
+                data_pag_bt = tx.get('data_transacao') or hoje
+                cursor.execute(
+                    """UPDATE cobrancas
+                       SET status = 'pago', pago_via_provedor = 1, data_pagamento = %s
+                       WHERE id = %s""",
+                    (data_pag_bt, cobr_bt['id']),
+                )
+                if cursor.rowcount > 0:
+                    atualizados_bt += 1
+
+                if forma_comp_id:
+                    try:
+                        cursor.execute(
+                            """UPDATE bank_transactions
+                               SET status = 'conciliado',
+                                   forma_recebimento_id = %s,
+                                   conciliado_em = %s,
+                                   conciliado_por = 'auto-efi-cobranca'
+                               WHERE id = %s""",
+                            (forma_comp_id, agora_bt, tx['id']),
+                        )
+                    except Exception:
+                        cursor.execute(
+                            """UPDATE bank_transactions
+                               SET status = 'conciliado',
+                                   conciliado_em = %s,
+                                   conciliado_por = 'auto-efi-cobranca'
+                               WHERE id = %s""",
+                            (agora_bt, tx['id']),
+                        )
+
+            if atualizados_bt:
+                conn.commit()
+                current_app.logger.info('[auto_conciliar_efi] fase2 bank_tx: %d conciliado(s)', atualizados_bt)
+        except Exception as _bt_exc:
+            current_app.logger.warning('[auto_conciliar_efi] fase2 bank_tx falhou: %s', _bt_exc)
+
+        atualizados += atualizados_bt
+        restantes_total = max(0, total_pendentes - len(lote) - atualizados_bt)
+        restantes = restantes_total
+
         cursor.close()
         conn.close()
 

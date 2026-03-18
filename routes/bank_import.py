@@ -377,6 +377,25 @@ def _save_transactions(cursor, conn, account_id, transactions):
     return inseridos, duplicados
 
 
+def _get_or_create_forma_compensacao_cobranca(cursor, conn):
+    """Retorna o id de formas_recebimento para 'Compensação Cobrança', criando se não existir."""
+    try:
+        cursor.execute(
+            "SELECT id FROM formas_recebimento WHERE nome = 'Compensação Cobrança' LIMIT 1"
+        )
+        row = cursor.fetchone()
+        if row:
+            return row['id']
+        cursor.execute(
+            "INSERT INTO formas_recebimento (nome, ativo) VALUES ('Compensação Cobrança', 1)"
+        )
+        conn.commit()
+        return cursor.lastrowid
+    except Exception as _e:
+        logger.warning("_get_or_create_forma_compensacao_cobranca: %s", _e)
+        return None
+
+
 def _auto_conciliar_cobrancas(cursor, conn, account_id=None):
     """
     Auto-concilia créditos do banco EFI com cobranças emitidas.
@@ -389,7 +408,7 @@ def _auto_conciliar_cobrancas(cursor, conn, account_id=None):
     1. Extrai o charge_id numérico.
     2. Localiza a cobrança correspondente na tabela `cobrancas`.
     3. Marca a cobrança como paga (status='pago', pago_via_provedor=1).
-    4. Marca a transação bancária como conciliada.
+    4. Marca a transação bancária como conciliada com forma 'Compensação Cobrança'.
 
     Retorna o número de pares conciliados.
     """
@@ -399,6 +418,8 @@ def _auto_conciliar_cobrancas(cursor, conn, account_id=None):
         r'(?:recebimento\s+de\s+cobran[çc]a|cobran[çc]a)[:\s]+(\d+)',
         _re.IGNORECASE,
     )
+
+    forma_id = _get_or_create_forma_compensacao_cobranca(cursor, conn)
 
     # Busca créditos pendentes (ou já conciliados por outras regras mas sem cobranca linkada)
     if account_id:
@@ -440,14 +461,7 @@ def _auto_conciliar_cobrancas(cursor, conn, account_id=None):
         status_cobr = (cobr.get('status') or '').lower()
         if status_cobr in ('pago', 'cancelado'):
             # Mesmo que a cobrança já esteja paga, concilia a transação bancária
-            cursor.execute(
-                """UPDATE bank_transactions
-                   SET status = 'conciliado',
-                       conciliado_em = %s,
-                       conciliado_por = 'auto-efi'
-                   WHERE id = %s""",
-                (agora, tx['id']),
-            )
+            _update_bank_tx_conciliada(cursor, tx['id'], forma_id, agora)
             count += 1
             continue
 
@@ -461,21 +475,40 @@ def _auto_conciliar_cobrancas(cursor, conn, account_id=None):
                WHERE id = %s""",
             (data_pagamento, cobr['id']),
         )
-        # Marca transação bancária como conciliada
-        cursor.execute(
-            """UPDATE bank_transactions
-               SET status = 'conciliado',
-                   conciliado_em = %s,
-                   conciliado_por = 'auto-efi'
-               WHERE id = %s""",
-            (agora, tx['id']),
-        )
+        # Marca transação bancária como conciliada com forma 'Compensação Cobrança'
+        _update_bank_tx_conciliada(cursor, tx['id'], forma_id, agora)
         count += 1
 
     if count:
         conn.commit()
         logger.info("_auto_conciliar_cobrancas: %d transação(ões) conciliada(s) por charge_id", count)
     return count
+
+
+def _update_bank_tx_conciliada(cursor, tx_id, forma_id, agora):
+    """Marca uma bank_transaction como conciliada com a forma 'Compensação Cobrança'."""
+    if forma_id:
+        try:
+            cursor.execute(
+                """UPDATE bank_transactions
+                   SET status = 'conciliado',
+                       forma_recebimento_id = %s,
+                       conciliado_em = %s,
+                       conciliado_por = 'auto-efi'
+                   WHERE id = %s""",
+                (forma_id, agora, tx_id),
+            )
+            return
+        except Exception:
+            pass
+    cursor.execute(
+        """UPDATE bank_transactions
+           SET status = 'conciliado',
+               conciliado_em = %s,
+               conciliado_por = 'auto-efi'
+           WHERE id = %s""",
+        (agora, tx_id),
+    )
 
 
 def _auto_conciliar_despesas_por_cnpj(cursor, conn, account_id, mapping):
@@ -1698,6 +1731,33 @@ def conciliar():
                     if not tx.get('sugestao_bsm_descricao_chave'):
                         tx['sugestao_forma_id']   = None
                         tx['sugestao_forma_nome'] = None
+
+            # Sugestão 'Compensação Cobrança' para créditos EFI sem outra sugestão de forma.
+            # Detecta o padrão do extrato EFI: "Recebimento de cobrança: <charge_id> de ..."
+            _efi_charge_re = re.compile(
+                r'(?:recebimento\s+de\s+cobran[çc]a|cobran[çc]a)[:\s]+\d+',
+                re.IGNORECASE,
+            )
+            _forma_comp_id   = None
+            _forma_comp_nome = None
+            try:
+                cursor.execute(
+                    "SELECT id, nome FROM formas_recebimento WHERE nome = 'Compensação Cobrança' LIMIT 1"
+                )
+                _fr = cursor.fetchone()
+                if _fr:
+                    _forma_comp_id   = _fr['id']
+                    _forma_comp_nome = _fr['nome']
+            except Exception:
+                pass
+            if _forma_comp_id:
+                for tx in transacoes:
+                    if (tx.get('tipo') == 'CREDIT'
+                            and not tx.get('sugestao_forma_id')
+                            and _efi_charge_re.search(tx.get('descricao') or '')):
+                        tx['sugestao_forma_id']   = _forma_comp_id
+                        tx['sugestao_forma_nome'] = _forma_comp_nome
+                        tx['sugestao_regra']      = True
 
             # Enriquece badge de sugestão de despesa (CNPJ → título/categoria)
             for tx in transacoes:
