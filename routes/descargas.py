@@ -369,8 +369,8 @@ def _gerar_mensagem_whatsapp(descarga):
         if med_depois is not None:
             linhas.append(f"  Depois: {_fmt_num(med_depois)}")
         if med_antes is not None and med_depois is not None and volume_ref is not None:
-            # Fórmula: Depois + Volume - Antes = Sobra
-            sobra = float(med_depois) + float(volume_ref) - float(med_antes)
+            # Fórmula: Depois - Volume - Antes = Sobra
+            sobra = float(med_depois) - float(volume_ref) - float(med_antes)
             linhas.append(f"  Sobra: {_diff_sign(sobra)}")
 
     # Temperatura e densidade
@@ -528,7 +528,7 @@ def lista():
                 ma = d.get('medidor_antes')
                 md = d.get('medidor_depois')
                 if ma is not None and md is not None and vol is not None:
-                    d['diff_medidor'] = float(md) + float(vol) - float(ma)
+                    d['diff_medidor'] = float(md) - float(vol) - float(ma)
                 else:
                     d['diff_medidor'] = None
                 ra = d.get('regua_antes_litros')
@@ -789,13 +789,13 @@ def detalhe(id):
 
     mensagem = _gerar_mensagem_whatsapp(descarga)
 
-    # Calcular sobra medidor: Depois + Volume - Antes
+    # Calcular sobra medidor: Depois - Volume - Antes
     diff_medidor = None
     vol = descarga.get('volume_descarga') or descarga.get('volume_nf')
     if (descarga.get('medidor_antes') is not None
             and descarga.get('medidor_depois') is not None
             and vol is not None):
-        diff_medidor = float(descarga['medidor_depois']) + float(vol) - float(descarga['medidor_antes'])
+        diff_medidor = float(descarga['medidor_depois']) - float(vol) - float(descarga['medidor_antes'])
 
     diff_regua = None
     if descarga.get('regua_antes_litros') is not None and descarga.get('regua_depois_litros') is not None:

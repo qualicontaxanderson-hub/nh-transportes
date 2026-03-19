@@ -194,7 +194,7 @@
                    class="form-control form-control-sm" step="0.001" min="0" placeholder="ex: 3050">
           </div>
           <div class="col-6 col-md-4">
-            <label class="form-label form-label-sm">Sobra (Depois + Volume − Antes)</label>
+            <label class="form-label form-label-sm">Sobra (Depois − Volume − Antes)</label>
             <input type="text" id="diff_medidor" class="form-control form-control-sm calc-field"
                    readonly placeholder="calculado automaticamente">
           </div>
@@ -433,12 +433,12 @@ function calcDiffs() {
   }
 
   if (!isNaN(ma) && !isNaN(md) && vol > 0) {
-    // Fórmula de sobra: Medidor_Depois + Litros_chegando - Medidor_Antes
+    // Fórmula de sobra: Medidor_Depois - Litros_chegando - Medidor_Antes
     // Valor positivo = sobra no tanque; negativo = faltou combustível
-    const sobra = md + vol - ma;
+    const sobra = md - vol - ma;
     elM.value = (sobra >= 0 ? '+' : '') + fmtNum(sobra, 3);
     elM.style.color = sobra >= 0 ? '#198754' : '#dc3545';
-    elFI.textContent = `= ${fmtNum(md,3)} + ${fmtNum(vol,0)} − ${fmtNum(ma,3)} = ${fmtNum(sobra,3)}`;
+    elFI.textContent = `= ${fmtNum(md,3)} − ${fmtNum(vol,0)} − ${fmtNum(ma,3)} = ${fmtNum(sobra,3)}`;
   } else if (!isNaN(ma) && !isNaN(md) && vol === 0) {
     elM.value = '';
     elFI.textContent = 'aguardando volume...';

@@ -156,7 +156,7 @@
                    value="{{ descarga.medidor_depois if descarga.medidor_depois is not none else '' }}">
           </div>
           <div class="col-6 col-md-4">
-            <label class="form-label form-label-sm">Sobra (Depois + Volume − Antes)</label>
+            <label class="form-label form-label-sm">Sobra (Depois − Volume − Antes)</label>
             <input type="text" id="diff_medidor" class="form-control form-control-sm calc-field" readonly>
           </div>
         </div>
@@ -271,7 +271,7 @@ function calcDiffs() {
   const vol = parseFloat(document.getElementById('volume_descarga').value) || 0;
   const elM = document.getElementById('diff_medidor');
   if (!isNaN(ma) && !isNaN(md) && vol > 0) {
-    const sobra = md + vol - ma;
+    const sobra = md - vol - ma;
     elM.value = (sobra >= 0 ? '+' : '') + fmtNum(sobra, 3);
     elM.style.color = sobra >= 0 ? '#198754' : '#dc3545';
   } else { elM.value = ''; elM.style.color = ''; }

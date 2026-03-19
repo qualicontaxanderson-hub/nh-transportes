@@ -264,7 +264,7 @@
                   <td>{{ '{:,.3f}'.format(o.medidor_depois|float).replace(',','.') if o.medidor_depois is not none else '—' }}</td>
                   <td>
                     {% if o.medidor_antes is not none and o.medidor_depois is not none and o.volume_descarga is not none %}
-                      {% set sobra = o.medidor_depois|float + o.volume_descarga|float - o.medidor_antes|float %}
+                      {% set sobra = o.medidor_depois|float - o.volume_descarga|float - o.medidor_antes|float %}
                       <span style="color:{{ '#198754' if sobra >= 0 else '#dc3545' }};font-weight:600;">
                         {{ '+' if sobra >= 0 else '' }}{{ '{:,.3f}'.format(sobra).replace(',','.') }}
                       </span>
