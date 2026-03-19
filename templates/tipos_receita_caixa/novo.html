@@ -1,83 +1,71 @@
 {% extends "base.html" %}
+{% block title %}Nova Forma de Recebimento - {{ app_name }}{% endblock %}
 
-{% block title %}Nova Forma de Recebimento Caixa{% endblock %}
+{% block styles %}
+<style>
+  .page-hero { background: linear-gradient(135deg,#1D63A5 0%,#1a4f82 60%,#154070 100%); border-radius:.75rem; padding:1.5rem 2rem; margin-bottom:1.5rem; color:#fff; }
+  .page-hero .hero-icon { width:3rem;height:3rem;background:rgba(255,255,255,.15);border-radius:.6rem;display:flex;align-items:center;justify-content:center;font-size:1.5rem;flex-shrink:0; }
+  .form-section-title { font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:#1D63A5;border-left:3px solid #1D63A5;padding-left:0.5rem;margin:1rem 0 0.6rem; }
+  .form-label { font-size:0.83rem;font-weight:600;color:#374151; }
+  .form-control-sm,.form-select-sm { font-size:0.84rem; }
+</style>
+{% endblock %}
 
 {% block content %}
-<div class="container mt-4">
-    <div class="row justify-content-center">
-        <div class="col-md-8">
-            <div class="card">
-                <div class="card-header bg-success text-white">
-                    <h4 class="mb-0"><i class="bi bi-plus-circle"></i> Nova Forma de Recebimento Caixa</h4>
-                </div>
-                <div class="card-body">
-                    <form method="POST" action="{{ url_for('tipos_receita_caixa.novo') }}">
-                        <div class="mb-3">
-                            <label for="nome" class="form-label">Nome <span class="text-danger">*</span></label>
-                            <input type="text" 
-                                   class="form-control" 
-                                   id="nome" 
-                                   name="nome" 
-                                   required
-                                   maxlength="100"
-                                   placeholder="Digite o nome (será convertido para MAIÚSCULAS)"
-                                   style="text-transform: uppercase;">
-                            <small class="text-muted">O nome será automaticamente convertido para MAIÚSCULAS</small>
-                        </div>
+<div class="container-fluid">
+  <nav aria-label="breadcrumb" class="mb-3"><ol class="breadcrumb small">
+    <li class="breadcrumb-item"><a href="/">Dashboard</a></li>
+    <li class="breadcrumb-item"><a href="{{ url_for('tipos_receita_caixa.lista') }}">Formas de Recebimento</a></li>
+    <li class="breadcrumb-item active">Nova</li>
+  </ol></nav>
 
-                        <div class="mb-3">
-                            <label for="tipo" class="form-label">Tipo</label>
-                            <select class="form-select" id="tipo" name="tipo">
-                                <option value="">Selecione...</option>
-                                <option value="AUTO">AUTO (Auto-preenchido)</option>
-                                <option value="MANUAL">MANUAL (Preenchimento manual)</option>
-                            </select>
-                            <small class="text-muted">
-                                AUTO: Valores preenchidos automaticamente (ex: VENDAS POSTO, ARLA)<br>
-                                MANUAL: Valores preenchidos manualmente (ex: TROCO PIX, EMPRÉSTIMOS)
-                            </small>
-                        </div>
-
-                        <div class="mb-3">
-                            <div class="form-check form-switch">
-                                <input class="form-check-input" 
-                                       type="checkbox" 
-                                       id="ativo" 
-                                       name="ativo" 
-                                       value="1" 
-                                       checked>
-                                <label class="form-check-label" for="ativo">
-                                    Ativo
-                                </label>
-                            </div>
-                        </div>
-
-                        <div class="d-grid gap-2 d-md-flex justify-content-md-end">
-                            <a href="{{ url_for('tipos_receita_caixa.lista') }}" class="btn btn-secondary">
-                                <i class="bi bi-x-circle"></i> Cancelar
-                            </a>
-                            <button type="submit" class="btn btn-success">
-                                <i class="bi bi-check-circle"></i> Salvar
-                            </button>
-                        </div>
-                    </form>
-                </div>
-            </div>
-
-            <div class="mt-4">
-                <div class="alert alert-info">
-                    <h6><i class="bi bi-info-circle"></i> Exemplos de Formas de Recebimento:</h6>
-                    <ul class="mb-0">
-                        <li><strong>VENDAS POSTO</strong> (Tipo: AUTO) - Preenchido automaticamente do sistema de vendas</li>
-                        <li><strong>ARLA</strong> (Tipo: AUTO) - Preenchido automaticamente dos lançamentos de ARLA</li>
-                        <li><strong>LUBRIFICANTES</strong> (Tipo: AUTO) - Preenchido automaticamente das vendas de lubrificantes</li>
-                        <li><strong>TROCO PIX</strong> (Tipo: MANUAL) - Preenchimento manual no fechamento</li>
-                        <li><strong>EMPRÉSTIMOS</strong> (Tipo: MANUAL) - Preenchimento manual no fechamento</li>
-                        <li><strong>OUTROS</strong> (Tipo: MANUAL) - Para outras receitas diversas</li>
-                    </ul>
-                </div>
-            </div>
-        </div>
+  <div class="page-hero d-flex align-items-center gap-3 flex-wrap">
+    <div class="hero-icon"><i class="bi bi-cash-coin"></i></div>
+    <div class="flex-grow-1">
+      <h4 class="mb-0 fw-bold">Nova Forma de Recebimento</h4>
+      <p class="mb-0 opacity-75 small">Cadastre uma nova forma de recebimento para o caixa.</p>
     </div>
+    <a href="{{ url_for('tipos_receita_caixa.lista') }}" class="btn btn-sm px-3" style="background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.35);"><i class="bi bi-arrow-left me-1"></i> Voltar</a>
+  </div>
+
+  <div class="card shadow-sm">
+    <div class="card-header d-flex align-items-center py-2" style="background:#1D63A5;color:white;font-size:0.82rem;font-weight:600;letter-spacing:0.02em;"><i class="bi bi-cash-coin me-2"></i> Dados</div>
+    <div class="card-body">
+      <form method="POST" action="{{ url_for('tipos_receita_caixa.novo') }}">
+        <div class="form-section-title"><i class="bi bi-info-circle me-1"></i>Dados Principais</div>
+        <div class="row">
+          <div class="col-md-6 mb-3">
+            <label for="nome" class="form-label">Nome <span class="text-danger">*</span></label>
+            <input type="text" class="form-control form-control-sm" id="nome" name="nome" required maxlength="100" placeholder="Digite o nome (será convertido para MAIÚSCULAS)" style="text-transform: uppercase;">
+            <small class="text-muted" style="font-size:0.75rem;">O nome será automaticamente convertido para MAIÚSCULAS</small>
+          </div>
+          <div class="col-md-4 mb-3">
+            <label for="tipo" class="form-label">Tipo</label>
+            <select class="form-select form-select-sm" id="tipo" name="tipo">
+              <option value="">Selecione...</option>
+              <option value="AUTO">AUTO (Auto-preenchido)</option>
+              <option value="MANUAL">MANUAL (Preenchimento manual)</option>
+            </select>
+            <small class="text-muted" style="font-size:0.75rem;">AUTO: ex. VENDAS POSTO, ARLA &nbsp;|&nbsp; MANUAL: ex. TROCO PIX, EMPRÉSTIMOS</small>
+          </div>
+          <div class="col-md-2 mb-3">
+            <label for="ativo" class="form-label">Status</label>
+            <div class="form-check form-switch mt-2">
+              <input class="form-check-input" type="checkbox" id="ativo" name="ativo" value="1" checked>
+              <label class="form-check-label form-label" for="ativo">Ativo</label>
+            </div>
+          </div>
+        </div>
+        <div class="alert alert-info" style="font-size:0.8rem;">
+          <strong><i class="bi bi-info-circle me-1"></i>Exemplos:</strong>
+          VENDAS POSTO (AUTO), ARLA (AUTO), LUBRIFICANTES (AUTO), TROCO PIX (MANUAL), EMPRÉSTIMOS (MANUAL)
+        </div>
+        <div class="d-flex justify-content-between mt-4 pt-2 border-top">
+          <a href="{{ url_for('tipos_receita_caixa.lista') }}" class="btn btn-secondary btn-sm"><i class="bi bi-arrow-left me-1"></i> Voltar</a>
+          <button type="submit" class="btn btn-primary btn-sm px-4"><i class="bi bi-check-circle me-1"></i> Salvar</button>
+        </div>
+      </form>
+    </div>
+  </div>
 </div>
 {% endblock %}

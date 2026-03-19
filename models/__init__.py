@@ -28,6 +28,7 @@ from models.subcategoria_despesa import SubcategoriaDespesa
 from models.titulo_despesa import TituloDespesa
 from models.lancamento_caixa import LancamentoCaixa
 from models.bank_models import BankAccount, BankTransaction, BankSupplierMapping
+from models.lucro_postos import FifoAbertura, FifoCompetencia, FifoSnapshotLote, FifoResumoMensal
 
 __all__ = [
     'Usuario',
@@ -58,5 +59,9 @@ __all__ = [
     'BankAccount',
     'BankTransaction',
     'BankSupplierMapping',
+    'FifoAbertura',
+    'FifoCompetencia',
+    'FifoSnapshotLote',
+    'FifoResumoMensal',
     'db',
 ]

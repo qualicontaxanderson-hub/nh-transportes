@@ -1,94 +1,150 @@
 {% extends 'base.html' %}
 {% block title %}Novo Fornecedor - {{ app_name }}{% endblock %}
+
+{% block styles %}
+<style>
+  .page-hero {
+    background: linear-gradient(135deg, #1D63A5 0%, #1a4f82 60%, #154070 100%);
+    border-radius: .75rem;
+    padding: 1.5rem 2rem;
+    margin-bottom: 1.5rem;
+    color: #fff;
+  }
+  .page-hero .hero-icon {
+    width: 3rem; height: 3rem;
+    background: rgba(255,255,255,.15);
+    border-radius: .6rem;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1.5rem;
+    flex-shrink: 0;
+  }
+  .form-section-title {
+    font-size: 0.78rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: #1D63A5;
+    padding-bottom: 0.4rem;
+    border-bottom: 2px solid #e0eaf5;
+    margin-bottom: 1rem;
+    margin-top: 1.25rem;
+  }
+  .form-label { font-size: 0.83rem; font-weight: 600; color: #374151; }
+  .form-control-sm, .form-select-sm { font-size: 0.84rem; }
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="container-fluid">
-    <nav aria-label="breadcrumb" class="mt-2 mb-3">
-        <ol class="breadcrumb" style="font-size: 0.85rem;">
-            <li class="breadcrumb-item"><a href="{{ url_for('index') }}">Dashboard</a></li>
-            <li class="breadcrumb-item"><a href="{{ url_for('fornecedores.lista') }}">Fornecedores</a></li>
-            <li class="breadcrumb-item active" aria-current="page">Novo Fornecedor</li>
+
+    <!-- Breadcrumb -->
+    <nav aria-label="breadcrumb" class="mb-3">
+        <ol class="breadcrumb small">
+            <li class="breadcrumb-item"><a href="{{ url_for('index') }}" class="text-decoration-none">Dashboard</a></li>
+            <li class="breadcrumb-item"><a href="{{ url_for('fornecedores.lista') }}" class="text-decoration-none">Fornecedores</a></li>
+            <li class="breadcrumb-item active">Novo Fornecedor</li>
         </ol>
     </nav>
-    
-    <h2 class="mb-3" style="color:#1D63A5; font-size: 1.3rem;"><i class="bi bi-building-add"></i> Novo Fornecedor</h2>
-    
-    <div class="card shadow-sm">
-        <div class="card-header" style="background:#ff9800;color:white; font-size: 0.95rem; padding: 0.6rem 1rem;">
-            <h5 class="mb-0" style="font-size: 1rem;">Cadastrar Fornecedor</h5>
+
+    <!-- Hero header -->
+    <div class="page-hero d-flex align-items-center gap-3 flex-wrap">
+        <div class="hero-icon"><i class="bi bi-building-add"></i></div>
+        <div class="flex-grow-1">
+            <h4 class="mb-0 fw-bold">Novo Fornecedor</h4>
+            <p class="mb-0 opacity-75 small">Cadastre um novo fornecedor com dados de contato e vínculo contábil.</p>
         </div>
-        <div class="card-body" style="padding: 1rem;">
+        <a href="{{ url_for('fornecedores.lista') }}"
+           class="btn btn-sm px-3" style="background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.35);">
+            <i class="bi bi-arrow-left me-1"></i> Voltar
+        </a>
+    </div>
+
+    <div class="card shadow-sm">
+        <div class="card-header d-flex align-items-center py-2"
+             style="background:#1D63A5;color:white;font-size:0.82rem;font-weight:600;letter-spacing:0.02em;">
+            <i class="bi bi-building-fill me-2"></i> Dados do Fornecedor
+        </div>
+        <div class="card-body">
             <form method="POST">
-                <!-- Dados Principais -->
-                <div class="row">
-                    <div class="col-md-6 mb-2">
-                        <label class="form-label" style="font-size: 0.85rem;">Razão Social *</label>
-                        <input type="text" name="razao_social" class="form-control form-control-sm" required>
-                    </div>
-                    <div class="col-md-6 mb-2">
-                        <label class="form-label" style="font-size: 0.85rem;">Nome Fantasia</label>
-                        <input type="text" name="nome_fantasia" class="form-control form-control-sm">
-                    </div>
-                </div>
-                
-                <!-- Documentos e Vendedor -->
+
+                <!-- Identificação fiscal -->
+                <div class="form-section-title"><i class="bi bi-file-earmark-text me-1"></i>Identificação Fiscal</div>
                 <div class="row">
                     <div class="col-md-4 mb-2">
-                        <label class="form-label" style="font-size: 0.85rem;">CNPJ</label>
-                        <input type="text" name="cnpj" class="form-control form-control-sm" placeholder="00.000.000/0000-00">
+                        <label class="form-label">CNPJ</label>
+                        <div class="input-group input-group-sm">
+                            <input type="text" id="cnpj" name="cnpj" class="form-control form-control-sm"
+                                   placeholder="00.000.000/0000-00" maxlength="18">
+                            <button type="button" class="btn btn-primary btn-sm" id="btnConsultarCNPJ"
+                                    title="Consultar Receita Federal">
+                                <i class="bi bi-search"></i> Consultar
+                            </button>
+                        </div>
+                        <div id="cnpjStatus" class="form-text"></div>
                     </div>
                     <div class="col-md-4 mb-2">
-                        <label class="form-label" style="font-size: 0.85rem;">IE</label>
+                        <label class="form-label">IE</label>
                         <input type="text" name="ie" class="form-control form-control-sm">
                     </div>
                     <div class="col-md-4 mb-2">
-                        <label class="form-label" style="font-size: 0.85rem;">Nome do Vendedor</label>
+                        <label class="form-label">Nome do Vendedor</label>
                         <input type="text" name="nome_vendedor" class="form-control form-control-sm">
                     </div>
                 </div>
-                
-                <!-- Contato -->
+
+                <!-- Dados Principais -->
+                <div class="form-section-title"><i class="bi bi-person-badge me-1"></i>Dados Principais</div>
                 <div class="row">
                     <div class="col-md-6 mb-2">
-                        <label class="form-label" style="font-size: 0.85rem;">Telefone</label>
-                        <input type="text" name="telefone" class="form-control form-control-sm" placeholder="(00) 0000-0000">
+                        <label class="form-label">Razão Social <span class="text-danger">*</span></label>
+                        <input type="text" id="razao_social" name="razao_social" class="form-control form-control-sm" required>
                     </div>
                     <div class="col-md-6 mb-2">
-                        <label class="form-label" style="font-size: 0.85rem;">E-mail</label>
-                        <input type="email" name="email" class="form-control form-control-sm" placeholder="email@exemplo.com">
+                        <label class="form-label">Nome Fantasia</label>
+                        <input type="text" id="nome_fantasia" name="nome_fantasia" class="form-control form-control-sm">
+                    </div>
+                    <div class="col-md-6 mb-2">
+                        <label class="form-label">Telefone</label>
+                        <input type="text" id="telefone" name="telefone" class="form-control form-control-sm" placeholder="(00) 0000-0000">
+                    </div>
+                    <div class="col-md-6 mb-2">
+                        <label class="form-label">E-mail</label>
+                        <input type="email" id="email" name="email" class="form-control form-control-sm" placeholder="email@exemplo.com">
                     </div>
                 </div>
-                
+
                 <!-- Endereço -->
-                <hr style="margin: 1rem 0;">
-                <h6 style="font-size: 0.9rem; color: #1D63A5; margin-bottom: 0.75rem;">Endereço</h6>
-                
+                <div class="form-section-title"><i class="bi bi-geo-alt me-1"></i>Endereço</div>
                 <div class="row">
                     <div class="col-md-8 mb-2">
-                        <label class="form-label" style="font-size: 0.85rem;">Endereço</label>
-                        <input type="text" name="endereco" class="form-control form-control-sm" placeholder="Rua, Avenida...">
+                        <label class="form-label">Logradouro</label>
+                        <input type="text" id="endereco" name="endereco" class="form-control form-control-sm" placeholder="Rua, Avenida...">
                     </div>
                     <div class="col-md-2 mb-2">
-                        <label class="form-label" style="font-size: 0.85rem;">Número</label>
-                        <input type="text" name="numero" class="form-control form-control-sm">
+                        <label class="form-label">Número</label>
+                        <input type="text" id="numero" name="numero" class="form-control form-control-sm">
                     </div>
                     <div class="col-md-2 mb-2">
-                        <label class="form-label" style="font-size: 0.85rem;">Complemento</label>
-                        <input type="text" name="complemento" class="form-control form-control-sm">
+                        <label class="form-label">Complemento</label>
+                        <input type="text" id="complemento" name="complemento" class="form-control form-control-sm">
                     </div>
                 </div>
-                
                 <div class="row">
-                    <div class="col-md-5 mb-2">
-                        <label class="form-label" style="font-size: 0.85rem;">Bairro</label>
-                        <input type="text" name="bairro" class="form-control form-control-sm">
+                    <div class="col-md-3 mb-2">
+                        <label class="form-label">CEP</label>
+                        <input type="text" id="cep" name="cep" class="form-control form-control-sm">
                     </div>
-                    <div class="col-md-5 mb-2">
-                        <label class="form-label" style="font-size: 0.85rem;">Município</label>
-                        <input type="text" name="municipio" class="form-control form-control-sm">
+                    <div class="col-md-4 mb-2">
+                        <label class="form-label">Bairro</label>
+                        <input type="text" id="bairro" name="bairro" class="form-control form-control-sm">
+                    </div>
+                    <div class="col-md-3 mb-2">
+                        <label class="form-label">Município</label>
+                        <input type="text" id="municipio" name="municipio" class="form-control form-control-sm">
                     </div>
                     <div class="col-md-2 mb-2">
-                        <label class="form-label" style="font-size: 0.85rem;">UF</label>
-                        <select name="uf" class="form-select form-select-sm">
+                        <label class="form-label">UF</label>
+                        <select id="uf" name="uf" class="form-select form-select-sm">
                             <option value="">Selecione...</option>
                             <option value="AC">AC</option>
                             <option value="AL">AL</option>
@@ -122,12 +178,10 @@
                 </div>
 
                 <!-- Pagamento -->
-                <hr style="margin: 1rem 0;">
-                <h6 style="font-size: 0.9rem; color: #1D63A5; margin-bottom: 0.75rem;">Pagamento ao Fornecedor</h6>
-
+                <div class="form-section-title"><i class="bi bi-cash-coin me-1"></i>Pagamento ao Fornecedor</div>
                 <div class="row">
                     <div class="col-md-4 mb-2">
-                        <label class="form-label" style="font-size: 0.85rem;">Forma Pagamento Padrão</label>
+                        <label class="form-label">Forma de Pagamento Padrão</label>
                         <select name="tipo_pagamento_padrao" class="form-select form-select-sm">
                             <option value="">Selecione...</option>
                             <option value="pix_fixa">Pix chave fixa</option>
@@ -137,41 +191,170 @@
                         </select>
                     </div>
                     <div class="col-md-4 mb-2">
-                        <label class="form-label" style="font-size: 0.85rem;">Chave Pix fixa</label>
+                        <label class="form-label">Chave Pix fixa</label>
                         <input type="text" name="chave_pix" class="form-control form-control-sm"
                                placeholder="CNPJ, CPF, e-mail ou telefone">
                     </div>
                     <div class="col-md-4 mb-2">
-                        <label class="form-label" style="font-size: 0.85rem;">Dados bancários / Transferência</label>
+                        <label class="form-label">Dados bancários / Transferência</label>
                         <textarea name="dados_bancarios" class="form-control form-control-sm" rows="2"
                                   placeholder="Banco, agência, conta, tipo de conta"></textarea>
                     </div>
                 </div>
-                
+
+                <!-- Conta Contábil por Empresa -->
+                <div class="form-section-title"><i class="bi bi-journal-bookmark me-1"></i>Empresas e Contas Contábeis</div>
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <span class="form-text mb-0">Selecione a empresa e a conta contábil vinculada a ela.</span>
+                    <button type="button" class="btn btn-sm btn-outline-primary" onclick="adicionarLinha()">
+                        <i class="bi bi-plus-lg"></i> Adicionar empresa
+                    </button>
+                </div>
+                <div id="vinculosContainer"></div>
+
                 <!-- Botões -->
-                <div class="d-flex justify-content-between mt-3">
+                <div class="d-flex justify-content-between mt-4 pt-2 border-top">
                     <a href="{{ url_for('fornecedores.lista') }}" class="btn btn-secondary btn-sm">
-                        <i class="bi bi-arrow-left"></i> Voltar
+                        <i class="bi bi-arrow-left me-1"></i> Voltar
                     </a>
-                    <button type="submit" class="btn btn-success btn-sm">
-                        <i class="bi bi-check-circle"></i> Salvar
+                    <button type="submit" class="btn btn-primary btn-sm px-4">
+                        <i class="bi bi-check-circle me-1"></i> Salvar
                     </button>
                 </div>
             </form>
         </div>
     </div>
 </div>
+{% endblock %}
+{% block scripts %}
+<script>
+const EMPRESAS = {{ empresas | tojson }};
+const CONTAS_POR_GRUPO = {{ contas_por_grupo | tojson }};
+const VINCULOS_INICIAIS = {{ vinculos | tojson }};
 
-<style>
-    .form-control-sm, .form-select-sm {
-        font-size: 0.85rem;
+// ── CNPJ Lookup ─────────────────────────────────────────────────────────────
+function formatarCNPJ(value) {
+    let v = value.replace(/\D/g, '').substring(0, 14);
+    if (v.length > 12) v = v.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5');
+    else if (v.length > 8) v = v.replace(/^(\d{2})(\d{3})(\d{3})(\d{0,4})/, '$1.$2.$3/$4');
+    else if (v.length > 5) v = v.replace(/^(\d{2})(\d{3})(\d{0,3})/, '$1.$2.$3');
+    else if (v.length > 2) v = v.replace(/^(\d{2})(\d{0,3})/, '$1.$2');
+    return v;
+}
+
+document.getElementById('cnpj').addEventListener('input', function() {
+    this.value = formatarCNPJ(this.value);
+});
+
+document.getElementById('btnConsultarCNPJ').addEventListener('click', function() {
+    const cnpj = document.getElementById('cnpj').value.replace(/\D/g, '');
+    const statusEl = document.getElementById('cnpjStatus');
+    if (cnpj.length !== 14) {
+        statusEl.textContent = 'Digite um CNPJ válido (14 dígitos).';
+        statusEl.className = 'form-text text-danger';
+        return;
     }
-    .btn-sm {
-        font-size: 0.85rem;
-        padding: 0.4rem 0.8rem;
-    }
-    hr {
-        border-top: 1px solid #dee2e6;
-    }
-</style>
+    statusEl.textContent = 'Consultando...';
+    statusEl.className = 'form-text text-muted';
+    this.disabled = true;
+    fetch(`/fornecedores/api/cnpj/${cnpj}`)
+        .then(r => r.json())
+        .then(data => {
+            if (data.erro) {
+                statusEl.textContent = data.erro;
+                statusEl.className = 'form-text text-danger';
+            } else {
+                document.getElementById('razao_social').value = data.razao_social || '';
+                document.getElementById('nome_fantasia').value = data.nome_fantasia || '';
+                document.getElementById('telefone').value = data.telefone || '';
+                document.getElementById('email').value = data.email || '';
+                document.getElementById('cep').value = data.cep || '';
+                document.getElementById('endereco').value = data.endereco || '';
+                document.getElementById('numero').value = data.numero || '';
+                document.getElementById('complemento').value = data.complemento || '';
+                document.getElementById('bairro').value = data.bairro || '';
+                document.getElementById('municipio').value = data.municipio || '';
+                const ufSel = document.getElementById('uf');
+                for (let i = 0; i < ufSel.options.length; i++) {
+                    if (ufSel.options[i].value === data.uf) { ufSel.selectedIndex = i; break; }
+                }
+                statusEl.textContent = 'Dados preenchidos com sucesso!';
+                statusEl.className = 'form-text text-success';
+            }
+        })
+        .catch(() => {
+            statusEl.textContent = 'Erro ao consultar Receita Federal.';
+            statusEl.className = 'form-text text-danger';
+        })
+        .finally(() => { document.getElementById('btnConsultarCNPJ').disabled = false; });
+});
+
+// ── Empresa / Conta Contábil ─────────────────────────────────────────────────
+function buildEmpresaSelect(selectedId) {
+    let html = '<option value="">— Selecione a empresa —</option>';
+    EMPRESAS.forEach(e => {
+        html += `<option value="${e.id}" data-grupo="${e.grupo_contabil_id || ''}" ${e.id == selectedId ? 'selected' : ''}>${e.nome}</option>`;
+    });
+    return html;
+}
+
+function buildContaOptions(grupoId, selectedId) {
+    const contas = grupoId ? (CONTAS_POR_GRUPO[String(grupoId)] || []) : [];
+    let html = '<option value="">— Selecione a conta —</option>';
+    contas.forEach(c => {
+        html += `<option value="${c.id}" ${c.id == selectedId ? 'selected' : ''}>${c.label}</option>`;
+    });
+    return html;
+}
+
+function buildContaWidget(grupoId, selectedId) {
+    return `
+        <input type="text" class="form-control form-control-sm mb-1 inp-busca-conta"
+               placeholder="🔍 Buscar conta..." oninput="filtrarContas(this)" autocomplete="off">
+        <select name="conta_contabil_id[]" class="form-select form-select-sm sel-conta">
+          ${buildContaOptions(grupoId, selectedId)}
+        </select>`;
+}
+
+function filtrarContas(inp) {
+    const sel = inp.closest('.conta-wrapper').querySelector('.sel-conta');
+    const query = inp.value.toLowerCase();
+    Array.from(sel.options).forEach(opt => {
+        if (!opt.value) { opt.hidden = false; return; }
+        opt.hidden = query.length > 0 && !opt.text.toLowerCase().includes(query);
+    });
+}
+
+function adicionarLinha(empresaId, contaId, grupoId) {
+    const container = document.getElementById('vinculosContainer');
+    const div = document.createElement('div');
+    div.className = 'row g-2 mb-2 align-items-center linha-vinculo';
+    div.innerHTML = `
+        <div class="col-5">
+          <select name="empresa_id[]" class="form-select form-select-sm sel-empresa" onchange="onEmpresaMudou(this)">
+            ${buildEmpresaSelect(empresaId)}
+          </select>
+        </div>
+        <div class="col-6">
+          <div class="conta-wrapper">
+            ${buildContaWidget(grupoId, contaId)}
+          </div>
+        </div>
+        <div class="col-1">
+          <button type="button" class="btn btn-sm btn-outline-danger" onclick="this.closest('.linha-vinculo').remove()">
+            <i class="bi bi-trash"></i>
+          </button>
+        </div>`;
+    container.appendChild(div);
+}
+
+function onEmpresaMudou(sel) {
+    const opt = sel.options[sel.selectedIndex];
+    const grupoId = opt.dataset.grupo || null;
+    const wrapper = sel.closest('.linha-vinculo').querySelector('.conta-wrapper');
+    wrapper.innerHTML = buildContaWidget(grupoId, null);
+}
+
+VINCULOS_INICIAIS.forEach(v => adicionarLinha(v.cliente_id, v.conta_contabil_id, v.grupo_contabil_id));
+</script>
 {% endblock %}

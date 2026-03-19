@@ -1,22 +1,43 @@
 {% extends "base.html" %}
-{% block title %}Plano de Contas — NH Transportes{% endblock %}
+{% block title %}Plano de Contas — {{ app_name }}{% endblock %}
+
+{% block styles %}
+<style>
+  .page-hero {
+    background: linear-gradient(135deg, #1D63A5 0%, #1a4f82 60%, #154070 100%);
+    border-radius: .75rem;
+    padding: 1.5rem 2rem;
+    margin-bottom: 1.5rem;
+    color: #fff;
+  }
+  .page-hero .hero-icon {
+    width: 3rem; height: 3rem;
+    background: rgba(255,255,255,.15);
+    border-radius: .6rem;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1.5rem;
+    flex-shrink: 0;
+  }
+  .hover-card { transition: transform 0.2s, box-shadow 0.2s; }
+  .hover-card:hover { transform: translateY(-3px); box-shadow: 0 4px 12px rgba(0,0,0,0.15) !important; }
+</style>
+{% endblock %}
 
 {% block content %}
 <div class="container-fluid">
-  <nav aria-label="breadcrumb" class="mt-2 mb-3">
-    <ol class="breadcrumb" style="font-size:0.85rem;">
-      <li class="breadcrumb-item"><a href="{{ url_for('index') }}">Dashboard</a></li>
-      <li class="breadcrumb-item active">Plano de Contas</li>
-    </ol>
-  </nav>
 
-  <div class="d-flex justify-content-between align-items-center mb-3">
-    <h4 class="mb-0" style="color:#1D63A5;">
-      <i class="bi bi-journal-bookmark-fill"></i> Plano de Contas — Grupos Contábeis
-    </h4>
-    <a href="{{ url_for('plano_contas.novo') }}" class="btn btn-primary btn-sm">
-      <i class="bi bi-plus-circle"></i> Novo Grupo
+  <div class="page-hero d-flex align-items-center gap-3 flex-wrap">
+    <div class="hero-icon"><i class="bi bi-journal-bookmark-fill"></i></div>
+    <div class="flex-grow-1">
+      <h4 class="mb-0 fw-bold">Plano de Contas</h4>
+      <p class="mb-0 opacity-75 small">Grupos contábeis cadastrados no sistema.</p>
+    </div>
+    {% if current_user.nivel == 'admin' %}
+    <a href="{{ url_for('plano_contas.novo') }}"
+       class="btn btn-sm px-3" style="background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.35);">
+      <i class="bi bi-plus-circle me-1"></i> Novo Grupo
     </a>
+    {% endif %}
   </div>
 
   {% if grupos %}
@@ -106,10 +127,5 @@
     e apenas ajustar o necessário. Depois, em <strong>Vincular Empresas</strong>, associe as empresas ao grupo.
   </div>
 </div>
-
-<style>
-  .hover-card { transition: transform 0.2s, box-shadow 0.2s; }
-  .hover-card:hover { transform: translateY(-3px); box-shadow: 0 4px 12px rgba(0,0,0,0.15) !important; }
-</style>
 {% endblock %}
 

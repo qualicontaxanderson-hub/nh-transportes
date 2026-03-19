@@ -1,26 +1,65 @@
 {% extends "base.html" %}
 {% block titulo %}{% if frete %}Editar Frete{% else %}Novo Frete{% endif %}{% endblock %}
 
+{% block styles %}
+<style>
+  .page-hero {
+    background: linear-gradient(135deg, #1D63A5 0%, #1a4f82 60%, #154070 100%);
+    border-radius: .75rem;
+    padding: 1.25rem 1.75rem;
+    margin-bottom: 1.25rem;
+    color: #fff;
+  }
+  .page-hero .hero-icon {
+    width: 2.75rem; height: 2.75rem;
+    background: rgba(255,255,255,.15);
+    border-radius: .5rem;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1.35rem; flex-shrink: 0;
+  }
+  .section-header {
+    font-size: 0.7rem; font-weight: 700; text-transform: uppercase;
+    letter-spacing: .06em; color: #1D63A5;
+    border-left: 3px solid #1D63A5; padding-left: .5rem;
+    margin: 1rem 0 .6rem;
+  }
+  .result-field { background: #fff8e1 !important; font-weight: 600; }
+  .lucro-field  { background: #e8f5e9 !important; font-weight: 700; }
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="container-fluid">
-  <nav aria-label="breadcrumb" class="mt-2 mb-3">
-    <ol class="breadcrumb" style="font-size: 0.85rem;">
-      <li class="breadcrumb-item"><a href="{{ url_for('index') }}">Início</a></li>
-      <li class="breadcrumb-item"><a href="{{ url_for('fretes.lista') }}">Fretes</a></li>
-      <li class="breadcrumb-item active" aria-current="page">
+
+  <!-- Hero header -->
+  <div class="page-hero d-flex align-items-center gap-3 flex-wrap">
+    <div class="hero-icon"><i class="bi bi-truck"></i></div>
+    <div class="flex-grow-1">
+      <h4 class="mb-0 fw-bold">
         {% if frete %}Editar Frete{% else %}Novo Frete{% endif %}
-      </li>
-    </ol>
-  </nav>
+        {% if frete %}<span class="ms-2 opacity-75" style="font-size:.9rem;">#{{ frete.id }}</span>{% endif %}
+      </h4>
+      <p class="mb-0 opacity-75" style="font-size:0.8rem;">
+        {% if frete %}Atualize os dados do frete abaixo.{% else %}Preencha os dados para cadastrar um novo frete.{% endif %}
+      </p>
+    </div>
+    <div class="d-flex gap-2">
+      {% if not frete %}
+        <button type="button" class="btn btn-sm fw-semibold" id="btn_importar_pedido" title="Importar pedido"
+                style="background:rgba(255,255,255,.18);color:#fff;border:1px solid rgba(255,255,255,.4);">
+          <i class="bi bi-upload me-1"></i> Importar Pedido
+        </button>
+      {% endif %}
+      <a href="{{ url_for('fretes.lista') }}"
+         class="btn btn-sm fw-semibold"
+         style="background:rgba(255,255,255,.12);color:#fff;border:1px solid rgba(255,255,255,.35);">
+        <i class="bi bi-arrow-left me-1"></i> Voltar
+      </a>
+    </div>
+  </div>
 
   <div class="card shadow-sm">
-    <div class="card-header bg-warning text-dark" style="padding: 0.6rem 1rem;">
-      <h4 class="mb-0">
-        {% if frete %}Editar Frete{% else %}Novo Frete{% endif %}
-      </h4>
-    </div>
-
-    <div class="card-body" style="padding: 1rem;">
+    <div class="card-body" style="padding: 1.25rem;">
       <form method="POST"
             action="{{ url_for('fretes.editar', id=frete.id) if frete else url_for('fretes.novo') }}"
             enctype="multipart/form-data">
@@ -30,7 +69,9 @@
           <input type="hidden" name="id" value="{{ frete.id }}">
         {% endif %}
 
-        <!-- DATA / STATUS / BOTÃO IMPORTAR (VERDE) -->
+        <!-- ── SEÇÃO: Informações Gerais ── -->
+        <div class="section-header"><i class="bi bi-info-circle me-1"></i>Informações Gerais</div>
+
         <div class="row mb-2 align-items-end">
           <div class="col-md-3">
             <label for="data_frete" class="form-label">Data</label>
@@ -50,19 +91,19 @@
             </select>
           </div>
 
-          <div class="col-md-6 text-end">
-            {% if not frete %}
-              <!-- botão IMPORTAR em VERDE (apenas no NOVO) -->
-              <button type="button" class="btn btn-success btn-sm" id="btn_importar_pedido" title="Importar pedido">
-                <i class="bi bi-upload"></i> Importar Pedido
-              </button>
-            {% endif %}
+          <div class="col-md-6 mb-2">
+            <label for="observacoes" class="form-label">Observações</label>
+            <input type="text" id="observacoes" name="observacoes"
+                   class="form-control form-control-sm"
+                   value="{{ frete.observacoes if frete else '' }}">
           </div>
         </div>
 
-        <!-- CLIENTE / OBSERVAÇÕES -->
+        <!-- ── SEÇÃO: Partes Envolvidas ── -->
+        <div class="section-header"><i class="bi bi-people me-1"></i>Partes Envolvidas</div>
+
         <div class="row">
-          <div class="col-md-8 mb-2">
+          <div class="col-md-6 mb-2">
             <label for="clientes_id" class="form-label">Cliente</label>
             <select id="clientes_id" name="clientes_id" class="form-select form-select-sm" required>
               <option value="">Selecione um cliente</option>
@@ -79,16 +120,6 @@
             </select>
           </div>
 
-          <div class="col-md-4 mb-2">
-            <label for="observacoes" class="form-label">Observações</label>
-            <input type="text" id="observacoes" name="observacoes"
-                   class="form-control form-control-sm"
-                   value="{{ frete.observacoes if frete else '' }}">
-          </div>
-        </div>
-
-        <!-- FORNECEDOR / PRODUTO -->
-        <div class="row">
           <div class="col-md-6 mb-2">
             <label for="fornecedores_id" class="form-label">Fornecedor</label>
             <select id="fornecedores_id" name="fornecedores_id" class="form-select form-select-sm" required>
@@ -100,53 +131,8 @@
               {% endfor %}
             </select>
           </div>
-
-          <div class="col-md-6 mb-2">
-            <label for="produto_id" class="form-label">Produto</label>
-            <select id="produto_id" name="produto_id" class="form-select form-select-sm" required>
-              <option value="">Selecione o produto</option>
-              {% for produto in produtos %}
-              <option value="{{ produto.id }}" {% if frete and produto.id == frete.produto_id %}selected{% endif %}>
-                {{ produto.nome }}
-              </option>
-              {% endfor %}
-            </select>
-          </div>
         </div>
 
-        <!-- ORIGEM / DESTINO -->
-        <div class="row">
-          <div class="col-md-6 mb-2">
-            <label for="origem_id" class="form-label">Origem</label>
-            <select id="origem_id" name="origem_id" class="form-select form-select-sm" required>
-              <option value="">Selecione a origem</option>
-              {% for origem in origens %}
-              <option value="{{ origem.id }}" {% if frete and origem.id == frete.origem_id %}selected{% endif %}>
-                {{ origem.nome }}
-              </option>
-              {% endfor %}
-            </select>
-          </div>
-
-          <div class="col-md-6 mb-2">
-            <label for="destino_id" class="form-label">Destino</label>
-            <select id="destino_id" name="destino_id" class="form-select form-select-sm" disabled>
-              <option value="">Selecione o destino</option>
-              {% for destino in destinos %}
-              <option value="{{ destino.id }}" {% if frete and destino.id == frete.destino_id %}selected{% endif %}>
-                {{ destino.nome }}
-              </option>
-              {% endfor %}
-            </select>
-            <input type="hidden" id="destino_id_hidden" name="destino_id"
-                   value="{{ frete.destino_id if frete else '' }}">
-            <small class="text-muted destino-auto-badge d-block mt-1">
-              <i class="bi bi-info-circle"></i> Destino preenchido a partir do cadastro do cliente
-            </small>
-          </div>
-        </div>
-
-        <!-- MOTORISTA / VEÍCULO -->
         <div class="row">
           <div class="col-md-6 mb-2">
             <label for="motoristas_id" class="form-label">Motorista</label>
@@ -174,9 +160,57 @@
           </div>
         </div>
 
-        <!-- TIPO DE QUANTIDADE / QUANTIDADE -->
+        <!-- ── SEÇÃO: Produto e Rota ── -->
+        <div class="section-header"><i class="bi bi-geo-alt me-1"></i>Produto e Rota</div>
+
         <div class="row">
           <div class="col-md-6 mb-2">
+            <label for="produto_id" class="form-label">Produto</label>
+            <select id="produto_id" name="produto_id" class="form-select form-select-sm" required>
+              <option value="">Selecione o produto</option>
+              {% for produto in produtos %}
+              <option value="{{ produto.id }}" {% if frete and produto.id == frete.produto_id %}selected{% endif %}>
+                {{ produto.nome }}
+              </option>
+              {% endfor %}
+            </select>
+          </div>
+
+          <div class="col-md-3 mb-2">
+            <label for="origem_id" class="form-label">Origem</label>
+            <select id="origem_id" name="origem_id" class="form-select form-select-sm" required>
+              <option value="">Selecione a origem</option>
+              {% for origem in origens %}
+              <option value="{{ origem.id }}" {% if frete and origem.id == frete.origem_id %}selected{% endif %}>
+                {{ origem.nome }}
+              </option>
+              {% endfor %}
+            </select>
+          </div>
+
+          <div class="col-md-3 mb-2">
+            <label for="destino_id" class="form-label">Destino</label>
+            <select id="destino_id" name="destino_id" class="form-select form-select-sm" disabled>
+              <option value="">Selecione o destino</option>
+              {% for destino in destinos %}
+              <option value="{{ destino.id }}" {% if frete and destino.id == frete.destino_id %}selected{% endif %}>
+                {{ destino.nome }}
+              </option>
+              {% endfor %}
+            </select>
+            <input type="hidden" id="destino_id_hidden" name="destino_id"
+                   value="{{ frete.destino_id if frete else '' }}">
+            <small class="text-muted destino-auto-badge d-block mt-1">
+              <i class="bi bi-info-circle"></i> Preenchido pelo cliente
+            </small>
+          </div>
+        </div>
+
+        <!-- ── SEÇÃO: Quantidade ── -->
+        <div class="section-header"><i class="bi bi-droplet me-1"></i>Quantidade</div>
+
+        <div class="row">
+          <div class="col-md-4 mb-2">
             <label for="quantidade_tipo" class="form-label">Tipo de Quantidade</label>
             <select id="quantidade_tipo" name="quantidade_tipo" class="form-select form-select-sm">
               <option value="padrao" {% if frete and frete.quantidade_id %}selected{% endif %}>
@@ -188,7 +222,7 @@
             </select>
           </div>
 
-          <div id="div_quantidade_padrao" class="col-md-6 mb-2">
+          <div id="div_quantidade_padrao" class="col-md-4 mb-2">
             <label for="quantidade_id" class="form-label">Quantidade (Litros)</label>
             <select id="quantidade_id" name="quantidade_id" class="form-select form-select-sm">
               <option value="">Selecione a quantidade</option>
@@ -201,7 +235,7 @@
             </select>
           </div>
 
-          <div id="div_quantidade_personalizada" style="display:none" class="col-md-6 mb-2">
+          <div id="div_quantidade_personalizada" style="display:none" class="col-md-4 mb-2">
             <label for="quantidade_manual" class="form-label">Quantidade Manual</label>
             <input type="text" id="quantidade_manual" name="quantidade_manual"
                    class="form-control form-control-sm" placeholder="Ex: 9.975"
@@ -210,8 +244,10 @@
           </div>
         </div>
 
-        <!-- PREÇOS -->
-        <div class="row mt-2">
+        <!-- ── SEÇÃO: Preços ── -->
+        <div class="section-header"><i class="bi bi-currency-dollar me-1"></i>Preços</div>
+
+        <div class="row">
           <div class="col-md-6 mb-2">
             <label for="preco_produto_unitario" class="form-label">Preço Produto Unitário (R$)</label>
             <input type="text" id="preco_produto_unitario" name="preco_produto_unitario"
@@ -231,53 +267,64 @@
           </div>
         </div>
 
-        <!-- RESULTADOS -->
-        <div class="row mt-2">
+        <!-- ── SEÇÃO: Resultados (calculados) ── -->
+        <div class="section-header"><i class="bi bi-calculator me-1"></i>Resultados Calculados</div>
+
+        <div class="row">
           <div class="col-md-4 mb-2">
             <label for="total_nf_compra" class="form-label">Total NF Compra (R$)</label>
             <input type="text" id="total_nf_compra" name="total_nf_compra"
-                   class="form-control form-control-sm bg-warning" readonly
+                   class="form-control form-control-sm result-field" readonly
                    value="{{ 'R$ {:.2f}'.format(frete.total_nf_compra).replace('.', ',') if frete and frete.total_nf_compra else 'R$ 0,00' }}">
           </div>
 
           <div class="col-md-4 mb-2">
             <label for="valor_total_frete" class="form-label">Valor Total Frete (R$)</label>
             <input type="text" id="valor_total_frete" name="valor_total_frete"
-                   class="form-control form-control-sm bg-warning" readonly
+                   class="form-control form-control-sm result-field" readonly
                    value="{{ 'R$ {:.2f}'.format(frete.valor_total_frete).replace('.', ',') if frete and frete.valor_total_frete else 'R$ 0,00' }}">
           </div>
 
           <div class="col-md-4 mb-2">
             <label for="comissao_motorista" class="form-label">Comissão Motorista (R$)</label>
             <input type="text" id="comissao_motorista" name="comissao_motorista"
-                   class="form-control form-control-sm bg-warning" readonly
+                   class="form-control form-control-sm result-field" readonly
                    value="{{ 'R$ {:.2f}'.format(frete.comissao_motorista).replace('.', ',') if frete and frete.comissao_motorista else 'R$ 0,00' }}">
           </div>
         </div>
 
-        <div class="row mt-2">
+        <div class="row">
           <div class="col-md-4 mb-2">
             <label for="valor_cte" class="form-label">Valor CTe (R$)</label>
             <input type="text" id="valor_cte" name="valor_cte"
-                   class="form-control form-control-sm bg-warning" readonly
+                   class="form-control form-control-sm result-field" readonly
                    value="{{ 'R$ {:.2f}'.format(frete.valor_cte).replace('.', ',') if frete and frete.valor_cte else 'R$ 0,00' }}">
           </div>
 
           <div class="col-md-4 mb-2">
             <label for="comissao_cte" class="form-label">Comissão CTe (R$)</label>
-            <input type="text" id="comissao_cte" name="comissao_cte" class="form-control form-control-sm bg-warning" readonly
+            <input type="text" id="comissao_cte" name="comissao_cte"
+                   class="form-control form-control-sm result-field" readonly
                    value="{{ 'R$ {:.2f}'.format(frete.comissao_cte).replace('.', ',') if frete and frete.comissao_cte else 'R$ 0,00' }}">
           </div>
 
           <div class="col-md-4 mb-2">
-            <label for="lucro" class="form-label">Lucro</label>
-            <input type="text" id="lucro" name="lucro" class="form-control form-control-sm bg-warning" readonly
+            <label for="lucro" class="form-label">Lucro (R$)</label>
+            <input type="text" id="lucro" name="lucro"
+                   class="form-control form-control-sm lucro-field" readonly
                    value="{{ 'R$ {:.2f}'.format(frete.lucro).replace('.', ',') if frete and frete.lucro else 'R$ 0,00' }}">
           </div>
         </div>
 
-        <div class="mt-3 d-flex justify-content-end">
-          <button type="submit" class="btn btn-warning btn-sm">Salvar</button>
+        <!-- ── Ações ── -->
+        <div class="mt-4 d-flex justify-content-between align-items-center border-top pt-3">
+          <a href="{{ url_for('fretes.lista') }}" class="btn btn-outline-secondary btn-sm">
+            <i class="bi bi-arrow-left me-1"></i> Voltar para a lista
+          </a>
+          <button type="submit" class="btn btn-primary btn-sm px-4">
+            <i class="bi bi-check-lg me-1"></i>
+            {% if frete %}Salvar Alterações{% else %}Cadastrar Frete{% endif %}
+          </button>
         </div>
       </form>
     </div>

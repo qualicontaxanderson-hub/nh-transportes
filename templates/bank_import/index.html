@@ -2,14 +2,33 @@
 
 {% block title %}Importação Bancária OFX - NH Transportes{% endblock %}
 
+{% block styles %}
+<style>
+  .page-hero {
+    background: linear-gradient(135deg, #1D63A5 0%, #1a4f82 60%, #154070 100%);
+    border-radius: .75rem; padding: 1.25rem 1.75rem; margin-bottom: 1.25rem; color: #fff;
+  }
+  .page-hero .hero-icon {
+    width: 2.75rem; height: 2.75rem; background: rgba(255,255,255,.15);
+    border-radius: .5rem; display: flex; align-items: center; justify-content: center;
+    font-size: 1.35rem; flex-shrink: 0;
+  }
+  .stat-card { border: none; border-radius: .55rem; box-shadow: 0 1px 5px rgba(0,0,0,.07); }
+  .stat-label { font-size: 0.68rem; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; opacity: .7; }
+  .stat-value { font-size: 1.3rem; font-weight: 700; line-height: 1; }
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="container-fluid">
-    <nav aria-label="breadcrumb" class="mt-2 mb-3">
-        <ol class="breadcrumb" style="font-size:0.85rem;">
-            <li class="breadcrumb-item"><a href="{{ url_for('index') }}">Dashboard</a></li>
-            <li class="breadcrumb-item active">Importação Bancária</li>
-        </ol>
-    </nav>
+    <!-- Hero header -->
+    <div class="page-hero d-flex align-items-center gap-3 flex-wrap mt-2">
+      <div class="hero-icon"><i class="bi bi-bank"></i></div>
+      <div class="flex-grow-1">
+        <h4 class="mb-0 fw-bold">Importação Bancária OFX</h4>
+        <p class="mb-0 opacity-75" style="font-size:0.8rem;">Importe extratos OFX e concilie as transações bancárias.</p>
+      </div>
+    </div>
 
     <!-- Dropbox — pasta automática (movido para o topo) -->
     {# ── Dropbox: sempre aparece quando configurado ── #}
@@ -129,26 +148,41 @@
     <!-- Summary cards -->
     <div class="row g-3 mb-3">
         <div class="col-sm-4">
-            <div class="card border-0 shadow-sm text-center">
-                <div class="card-body py-3">
-                    <div class="fs-2 fw-bold text-primary">{{ total }}</div>
-                    <div class="text-muted small">Total Importado</div>
+            <div class="card stat-card">
+                <div class="card-body d-flex align-items-center gap-3 py-3">
+                    <div style="width:2.5rem;height:2.5rem;background:#cce5ff;color:#004085;border-radius:.5rem;display:flex;align-items:center;justify-content:center;font-size:1.2rem;flex-shrink:0;">
+                        <i class="bi bi-database"></i>
+                    </div>
+                    <div>
+                        <div class="stat-label text-muted">Total Importado</div>
+                        <div class="stat-value text-primary">{{ total }}</div>
+                    </div>
                 </div>
             </div>
         </div>
         <div class="col-sm-4">
-            <div class="card border-0 shadow-sm text-center">
-                <div class="card-body py-3">
-                    <div class="fs-2 fw-bold text-warning">{{ pendentes }}</div>
-                    <div class="text-muted small">Pendentes</div>
+            <div class="card stat-card">
+                <div class="card-body d-flex align-items-center gap-3 py-3">
+                    <div style="width:2.5rem;height:2.5rem;background:#fff3cd;color:#856404;border-radius:.5rem;display:flex;align-items:center;justify-content:center;font-size:1.2rem;flex-shrink:0;">
+                        <i class="bi bi-hourglass-split"></i>
+                    </div>
+                    <div>
+                        <div class="stat-label text-muted">Pendentes</div>
+                        <div class="stat-value" style="color:#856404;">{{ pendentes }}</div>
+                    </div>
                 </div>
             </div>
         </div>
         <div class="col-sm-4">
-            <div class="card border-0 shadow-sm text-center">
-                <div class="card-body py-3">
-                    <div class="fs-2 fw-bold text-success">{{ conciliados }}</div>
-                    <div class="text-muted small">Conciliados</div>
+            <div class="card stat-card">
+                <div class="card-body d-flex align-items-center gap-3 py-3">
+                    <div style="width:2.5rem;height:2.5rem;background:#d4edda;color:#155724;border-radius:.5rem;display:flex;align-items:center;justify-content:center;font-size:1.2rem;flex-shrink:0;">
+                        <i class="bi bi-check2-circle"></i>
+                    </div>
+                    <div>
+                        <div class="stat-label text-muted">Conciliados</div>
+                        <div class="stat-value text-success">{{ conciliados }}</div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -525,11 +559,157 @@
         </div>
     </div>
 </div>
+
+<!-- Modal: Duplicatas na Importação -->
+<div class="modal fade" id="modalDuplicatas" tabindex="-1" aria-labelledby="modalDuplicatasLabel">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header" style="background:#ffc107;color:#212529;">
+                <h5 class="modal-title" id="modalDuplicatasLabel">
+                    <i class="bi bi-copy"></i> Duplicatas Encontradas na Importação
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p id="modalDuplicatasResumo" class="fw-semibold mb-1"></p>
+                <p class="text-muted small mb-2">
+                    As transações abaixo já existem no banco de dados e foram ignoradas na importação.
+                    Marque as que deseja <strong>re-ativar</strong> para conciliação.
+                    Apenas registros com status <span class="badge bg-warning text-dark">Pendente</span>
+                    ou <span class="badge bg-secondary">Ignorado</span> podem ser re-ativados.
+                </p>
+                <div class="table-responsive">
+                    <table class="table table-sm table-hover mb-0" style="font-size:0.82rem;">
+                        <thead class="table-light sticky-top">
+                            <tr>
+                                <th><input type="checkbox" id="checkAllDups" title="Selecionar todos"></th>
+                                <th>Data</th>
+                                <th>Tipo</th>
+                                <th class="text-end">Valor</th>
+                                <th>Descrição</th>
+                                <th>Status Atual</th>
+                            </tr>
+                        </thead>
+                        <tbody id="modalDuplicatasTabela"></tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fechar</button>
+                <button type="button" class="btn btn-warning" id="btnReativarSelecionados">
+                    <i class="bi bi-arrow-repeat"></i> Re-ativar selecionados
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
 {% endblock %}
 
 {% block scripts %}
 <script>
+    // ---------------------------------------------------------------
+    // Duplicatas na importação: modal interativo
+    // ---------------------------------------------------------------
+    function mostrarResultadoImportacao(data) {
+        if (!data.success) {
+            alert('Erro: ' + data.message);
+            return;
+        }
+        if (!data.duplicados || data.duplicados === 0) {
+            alert(data.message);
+            location.reload();
+            return;
+        }
+        // Preenche resumo
+        document.getElementById('modalDuplicatasResumo').innerHTML =
+            '<i class="bi bi-check-circle text-success"></i> <strong>' + data.inseridos + '</strong> transação(ões) importada(s). ' +
+            '<i class="bi bi-copy text-warning"></i> <strong>' + data.duplicados + '</strong> duplicata(s) encontrada(s).';
+
+        const fmtDate = function(s) { return s ? s.split('-').reverse().join('/') : ''; };
+        const fmtValor = function(v) {
+            return 'R$ ' + parseFloat(v).toFixed(2).replace('.', ',').replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+        };
+        const statusBadges = {
+            'pendente':   '<span class="badge bg-warning text-dark">Pendente</span>',
+            'conciliado': '<span class="badge bg-success">Conciliado</span>',
+            'ignorado':   '<span class="badge bg-secondary">Ignorado</span>',
+        };
+
+        const tbody = document.getElementById('modalDuplicatasTabela');
+        tbody.innerHTML = '';
+        (data.duplicados_lista || []).forEach(function(d, idx) {
+            const canReactivate = d.existing_id && (d.existing_status === 'ignorado' || d.existing_status === 'pendente');
+            const badge = statusBadges[d.existing_status] || '<span class="badge bg-secondary">—</span>';
+            const tipoBadge = d.tipo === 'CREDIT'
+                ? '<span class="text-success fw-semibold">Crédito</span>'
+                : '<span class="text-danger fw-semibold">Débito</span>';
+            const desc = (d.descricao || '').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+            const cbId = 'dup_' + idx;
+            const cbHtml = canReactivate
+                ? '<input type="checkbox" class="dup-check" value="' + d.existing_id + '" id="' + cbId + '">'
+                : '';
+            tbody.innerHTML +=
+                '<tr>' +
+                '<td>' + cbHtml + '</td>' +
+                '<td style="white-space:nowrap">' + fmtDate(d.data_transacao) + '</td>' +
+                '<td>' + tipoBadge + '</td>' +
+                '<td class="text-end" style="white-space:nowrap">' + fmtValor(d.valor) + '</td>' +
+                '<td style="max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + desc + '">' + desc + '</td>' +
+                '<td>' + badge + '</td>' +
+                '</tr>';
+        });
+
+        // Selecionar todos
+        const checkAll = document.getElementById('checkAllDups');
+        checkAll.checked = false;
+        checkAll.onchange = function() {
+            document.querySelectorAll('.dup-check').forEach(function(cb) { cb.checked = checkAll.checked; });
+        };
+
+        // Botão re-ativar
+        document.getElementById('btnReativarSelecionados').onclick = function() {
+            var ids = Array.from(document.querySelectorAll('.dup-check:checked')).map(function(cb) { return parseInt(cb.value); });
+            if (!ids.length) {
+                alert('Selecione ao menos uma transação para re-ativar.');
+                return;
+            }
+            var btn = document.getElementById('btnReativarSelecionados');
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Processando...';
+            fetch('{{ url_for("bank_import.api_reimportar_duplicatas") }}', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ ids: ids })
+            })
+            .then(function(r) { return r.json(); })
+            .then(function(res) {
+                if (res.success) {
+                    alert(res.reativados + ' transação(ões) re-ativada(s) com sucesso! Acesse a lista de pendentes para conciliá-las.');
+                    bootstrap.Modal.getInstance(document.getElementById('modalDuplicatas')).hide();
+                } else {
+                    alert('Erro: ' + res.message);
+                    btn.disabled = false;
+                    btn.innerHTML = '<i class="bi bi-arrow-repeat"></i> Re-ativar selecionados';
+                }
+            })
+            .catch(function() {
+                alert('Erro ao re-ativar transações.');
+                btn.disabled = false;
+                btn.innerHTML = '<i class="bi bi-arrow-repeat"></i> Re-ativar selecionados';
+            });
+        };
+
+        // Ao fechar o modal, recarrega a página
+        document.getElementById('modalDuplicatas').addEventListener('hidden.bs.modal', function() {
+            location.reload();
+        }, { once: true });
+
+        new bootstrap.Modal(document.getElementById('modalDuplicatas')).show();
+    }
+
+    // ---------------------------------------------------------------
     // Arrastar e soltar / seleção de arquivo
+    // ---------------------------------------------------------------
     const dropZone = document.getElementById('dropZone');
     const fileInput = document.getElementById('ofxFile');
     const fileInfo = document.getElementById('fileInfo');
@@ -560,6 +740,41 @@
             showFile(file);
         }
     });
+
+    // Intercepta o formulário de upload para usar AJAX e mostrar modal de duplicatas
+    const uploadForm = document.getElementById('uploadForm');
+    if (uploadForm) {
+        uploadForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            const form = this;
+            const submitBtn = form.querySelector('button[type="submit"]');
+            const originalHtml = submitBtn ? submitBtn.innerHTML : '';
+            if (submitBtn) { submitBtn.disabled = true; submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Importando...'; }
+
+            fetch(form.action, {
+                method: 'POST',
+                headers: { 'X-Requested-With': 'XMLHttpRequest' },
+                body: new FormData(form),
+            })
+            .then(function(r) {
+                const ct = r.headers.get('content-type') || '';
+                if (ct.includes('application/json')) return r.json();
+                // Resposta não-JSON (ex: redirect flash): recarrega normalmente
+                location.reload();
+                return null;
+            })
+            .then(function(data) {
+                if (!data) return;
+                mostrarResultadoImportacao(data);
+            })
+            .catch(function(err) {
+                alert('Erro ao importar arquivo: ' + (err.message || err));
+            })
+            .finally(function() {
+                if (submitBtn) { submitBtn.disabled = false; submitBtn.innerHTML = originalHtml; }
+            });
+        });
+    }
 
     // Auto-conciliação
     function autoReconcile() {
@@ -753,14 +968,7 @@
             body: JSON.stringify({ account_id: accountId, nome_arquivo: nomeArquivo })
         })
         .then(r => r.json())
-        .then(data => {
-            if (data.success) {
-                alert(data.message);
-                location.reload();  // refresh counters and file list together
-            } else {
-                alert('Erro: ' + data.message);
-            }
-        })
+        .then(data => { mostrarResultadoImportacao(data); })
         .catch(() => alert('Erro ao processar arquivo.'));
     }
 
@@ -950,14 +1158,7 @@
             body: JSON.stringify({ account_id: accountId, nome_arquivo: nomeArquivo })
         })
         .then(r => r.json())
-        .then(data => {
-            if (data.success) {
-                alert(data.message);
-                location.reload();
-            } else {
-                alert('Erro: ' + data.message);
-            }
-        })
+        .then(data => { mostrarResultadoImportacao(data); })
         .catch(() => alert('Erro ao importar do Dropbox.'));
     }
 

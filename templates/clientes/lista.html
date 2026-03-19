@@ -2,25 +2,159 @@
 
 {% block title %}Clientes - NH Transportes{% endblock %}
 
+{% block styles %}
+<style>
+  .page-hero {
+    background: linear-gradient(135deg, #1D63A5 0%, #1a4f82 60%, #154070 100%);
+    border-radius: .75rem;
+    padding: 1.5rem 2rem;
+    margin-bottom: 1.5rem;
+    color: #fff;
+  }
+  .page-hero .hero-icon {
+    width: 3rem; height: 3rem;
+    background: rgba(255,255,255,.15);
+    border-radius: .6rem;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1.5rem;
+    flex-shrink: 0;
+  }
+  .stat-card-cli {
+    border: 0;
+    border-radius: .65rem;
+    box-shadow: 0 2px 8px rgba(0,0,0,.07);
+    transition: box-shadow .2s;
+  }
+  .stat-card-cli:hover { box-shadow: 0 4px 16px rgba(0,0,0,.13); }
+  .stat-card-cli .stat-icon {
+    width: 2.6rem; height: 2.6rem;
+    border-radius: .5rem;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1.2rem;
+    flex-shrink: 0;
+  }
+  #tbl-lista { font-size: 0.72rem; }
+  #tbl-lista thead th {
+    background: #1D63A5; color: #fff;
+    font-size: 0.68rem; font-weight: 700;
+    text-transform: uppercase; letter-spacing: .04em;
+    padding: 0.45rem 0.5rem; border: none; white-space: nowrap;
+  }
+  #tbl-lista tbody td { padding: 0.35rem 0.5rem; vertical-align: middle; border-color: #f0f3f7; }
+  #tbl-lista tbody tr.row-cli { cursor: pointer; transition: background .1s; }
+  #tbl-lista tbody tr.row-cli:hover td { background: #eef4ff; }
+  .badge-conta {
+    display: inline-block;
+    background: #e8f0fe;
+    color: #1a56db;
+    border-radius: 3px;
+    padding: 0.1rem 0.35rem;
+    font-size: 0.7rem;
+    font-weight: 700;
+    margin-right: 0.3rem;
+    letter-spacing: 0.02em;
+  }
+  .btn-acao {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.6rem;
+    height: 1.6rem;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    border: none;
+    cursor: pointer;
+    text-decoration: none;
+    transition: opacity 0.15s;
+  }
+  .btn-acao:hover { opacity: 0.8; }
+  .btn-editar  { background: #fff3cd; color: #856404; }
+  .btn-excluir { background: #f8d7da; color: #842029; }
+  @media (max-width: 768px) {
+    #tbl-lista { font-size: 0.70rem; }
+  }
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="container-fluid">
-    <div class="d-flex justify-content-between align-items-center mb-3">
-        <h2 style="font-size: 1.5rem;"><i class="bi bi-people"></i> Clientes</h2>
-        <a href="{{ url_for('clientes.novo') }}" class="btn btn-primary btn-sm">
-            <i class="bi bi-plus-circle"></i> Novo Cliente
-        </a>
+
+    <!-- Breadcrumb -->
+    <nav aria-label="breadcrumb" class="mb-3">
+      <ol class="breadcrumb small">
+        <li class="breadcrumb-item"><a href="/" class="text-decoration-none">Dashboard</a></li>
+        <li class="breadcrumb-item active">Clientes</li>
+      </ol>
+    </nav>
+
+    <!-- Hero header -->
+    <div class="page-hero d-flex align-items-center gap-3 flex-wrap">
+      <div class="hero-icon"><i class="bi bi-people-fill"></i></div>
+      <div class="flex-grow-1">
+        <h4 class="mb-0 fw-bold">Clientes</h4>
+        <p class="mb-0 opacity-75 small">Cadastro e gestão de clientes com vínculos contábeis.</p>
+      </div>
+      <a href="{{ url_for('clientes.novo') }}"
+         class="btn btn-light fw-semibold btn-sm px-3">
+        <i class="bi bi-plus-circle me-1"></i> Novo Cliente
+      </a>
+    </div>
+
+    <!-- Stat cards -->
+    {% set total_cli = clientes | length %}
+    <div class="row g-3 mb-4">
+      <div class="col-6 col-md-4">
+        <div class="card stat-card-cli h-100">
+          <div class="card-body d-flex align-items-center gap-3 py-3">
+            <div class="stat-icon" style="background:#e8f0fb;">
+              <i class="bi bi-people" style="color:#1D63A5;"></i>
+            </div>
+            <div>
+              <div class="fs-4 fw-bold" style="color:#1D63A5;">{{ total_cli }}</div>
+              <div class="text-muted small">Clientes</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="col-6 col-md-4">
+        <div class="card stat-card-cli h-100">
+          <div class="card-body d-flex align-items-center gap-3 py-3">
+            <div class="stat-icon" style="background:#e6f9ee;">
+              <i class="bi bi-file-earmark-text" style="color:#198754;"></i>
+            </div>
+            <div>
+              <div class="fs-4 fw-bold" style="color:#198754;">{{ clientes | selectattr('cnpj') | list | length }}</div>
+              <div class="text-muted small">Com CNPJ</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="col-12 col-md-4">
+        <div class="card stat-card-cli h-100">
+          <div class="card-body d-flex align-items-center gap-3 py-3">
+            <div class="stat-icon" style="background:#fff3cd;">
+              <i class="bi bi-journal-bookmark" style="color:#856404;"></i>
+            </div>
+            <div>
+              <div class="fs-4 fw-bold" style="color:#856404;">{{ clientes | selectattr('grupo_codigo') | list | length }}</div>
+              <div class="text-muted small">Com Grupo Contábil</div>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
 
     <!-- Filtro de Busca -->
-    <div class="card mb-3">
-        <div class="card-header" style="background:#4A90E2;color:#000;font-weight:600;font-size:0.9rem;">
-            <i class="bi bi-search"></i> Buscar Cliente
+    <div class="card shadow-sm mb-4">
+        <div class="card-header d-flex align-items-center py-2"
+             style="background:#1D63A5;color:white;font-size:0.82rem;font-weight:600;letter-spacing:0.02em;">
+            <i class="bi bi-search me-1"></i> Buscar Cliente
         </div>
-        <div class="card-body" style="padding: 0.75rem;">
-            <form method="GET" class="row g-2">
+        <div class="card-body py-2">
+            <form method="GET" class="row g-2 align-items-end">
                 <div class="col-md-10">
-                    <input type="text" name="busca" class="form-control form-control-sm" 
-                           placeholder="Buscar por razão social ou CNPJ" value="{{ busca or '' }}" style="font-size: 0.85rem;">
+                    <input type="text" name="busca" class="form-control form-control-sm"
+                           placeholder="Buscar por razão social ou CNPJ" value="{{ busca or '' }}">
                 </div>
                 <div class="col-md-2">
                     <button type="submit" class="btn btn-primary btn-sm w-100">
@@ -32,56 +166,59 @@
     </div>
 
     <!-- Tabela de Clientes -->
-    <div class="card">
-        <div class="card-header" style="background:#1D63A5;color:white;font-size:0.9rem;font-weight:600;">
-            <i class="bi bi-list"></i> Lista de Clientes
+    <div class="card shadow-sm">
+        <div class="card-header d-flex justify-content-between align-items-center py-2"
+             style="background:#1D63A5;color:white;font-size:0.82rem;font-weight:600;letter-spacing:0.02em;">
+            <span><i class="bi bi-list me-1"></i> Lista de Clientes</span>
+            {% if clientes %}
+            <span class="badge bg-white text-secondary" style="font-size:0.7rem;font-weight:600;">{{ clientes|length }}</span>
+            {% endif %}
         </div>
-        <div class="card-body" style="padding: 0.5rem;">
+        <div class="card-body p-0">
             <div class="table-responsive">
-                <table class="table table-hover table-striped table-sm mb-0">
-                    <thead style="background:#4A90E2;color:#000;font-weight:700;font-size:0.85rem;">
+                <table class="table mb-0" id="tbl-lista">
+                    <thead>
                         <tr>
-                            <th>ID</th>
+                            <th style="width:4%">ID</th>
                             <th>Razão Social</th>
                             <th>CNPJ</th>
                             <th>Telefone</th>
                             <th>Município</th>
                             <th>Grupo Contábil</th>
-                            <th class="text-center">Ações</th>
+                            <th class="text-center" style="width:8%">Ações</th>
                         </tr>
                     </thead>
-                    <tbody style="font-size: 0.85rem;">
+                    <tbody>
                         {% if clientes %}
                             {% for cliente in clientes %}
-                            <tr>
-                                <td><strong>{{ cliente.id }}</strong></td>
+                            <tr class="row-cli" data-url="{{ url_for('clientes.editar', id=cliente.id) }}"
+                                title="Clique para editar">
+                                <td class="text-muted">{{ cliente.id }}</td>
                                 <td>{{ cliente.razao_social }}</td>
-                                <td>{{ cliente.cnpj or '-' }}</td>
-                                <td>{{ cliente.telefone or '-' }}</td>
-                                <td>
+                                <td style="font-family:monospace;font-size:0.72rem;color:#555;">{{ cliente.cnpj or '—' }}</td>
+                                <td class="text-muted">{{ cliente.telefone or '—' }}</td>
+                                <td class="text-muted">
                                     {% if cliente.destino_nome %}
                                         {{ cliente.destino_nome }} - {{ cliente.destino_estado }}
                                     {% else %}
-                                        -
+                                        —
                                     {% endif %}
                                 </td>
                                 <td>
                                     {% if cliente.grupo_codigo %}
-                                    <span class="badge" style="background:#1D63A5;font-family:monospace;">
-                                      {{ cliente.grupo_codigo }}
-                                    </span>
-                                    <small>{{ cliente.grupo_nome }}</small>
+                                    <span class="badge-conta"><strong>{{ cliente.grupo_codigo }}</strong></span>
+                                    <span style="color:#374151;font-size:0.75rem;">{{ cliente.grupo_nome }}</span>
                                     {% else %}
-                                    <span class="text-muted">—</span>
+                                    <span class="text-muted fst-italic" style="font-size:0.72rem;">—</span>
                                     {% endif %}
                                 </td>
-                                <td class="text-center">
-                                    <a href="{{ url_for('clientes.editar', id=cliente.id) }}" class="btn btn-sm btn-warning" title="Editar" style="padding: 0.2rem 0.4rem;">
+                                <td class="text-center actions-cell" onclick="event.stopPropagation()">
+                                    <a href="{{ url_for('clientes.editar', id=cliente.id) }}" class="btn-acao btn-editar" title="Editar">
                                         <i class="bi bi-pencil"></i>
                                     </a>
                                     {% if current_user.nivel == 'admin' %}
-                                    <form action="{{ url_for('clientes.excluir', id=cliente.id) }}" method="POST" style="display:inline;" onsubmit="return confirm('Deseja realmente excluir este cliente?');">
-                                        <button type="submit" class="btn btn-sm btn-danger" title="Excluir" style="padding: 0.2rem 0.4rem;">
+                                    <form method="POST" action="{{ url_for('clientes.excluir', id=cliente.id) }}" style="display:inline;" onsubmit="return confirm('Deseja realmente excluir este cliente?');">
+                                        <button type="submit" class="btn-acao btn-excluir" title="Excluir">
                                             <i class="bi bi-trash"></i>
                                         </button>
                                     </form>
@@ -91,9 +228,9 @@
                             {% endfor %}
                         {% else %}
                             <tr>
-                                <td colspan="6" class="text-center text-muted py-3" style="font-size: 0.9rem;">
-                                    <i class="bi bi-inbox" style="font-size:1.5rem;"></i><br>
-                                    Nenhum cliente cadastrado
+                                <td colspan="7" class="text-center text-muted py-4">
+                                    <i class="bi bi-inbox" style="font-size:1.8rem;opacity:0.4;"></i>
+                                    <div class="mt-2" style="font-size:0.82rem;">Nenhum cliente cadastrado</div>
                                 </td>
                             </tr>
                         {% endif %}
@@ -104,24 +241,15 @@
     </div>
 </div>
 
-<style>
-    .table-sm th, .table-sm td {
-        padding: 0.4rem;
-    }
-    
-    .btn-sm {
-        font-size: 0.8rem;
-        padding: 0.3rem 0.6rem;
-    }
-    
-    @media (max-width: 768px) {
-        h2 {
-            font-size: 1.2rem !important;
-        }
-        .table-sm th, .table-sm td {
-            font-size: 0.75rem !important;
-            padding: 0.3rem !important;
-        }
-    }
-</style>
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+  document.querySelectorAll('tr.row-cli[data-url]').forEach(function (row) {
+    row.addEventListener('click', function (e) {
+      if (e.target.closest('.actions-cell') || e.target.closest('a') || e.target.closest('button') || e.target.closest('form')) return;
+      window.location.href = row.getAttribute('data-url');
+    });
+  });
+});
+</script>
+
 {% endblock %}

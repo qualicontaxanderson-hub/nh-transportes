@@ -2,37 +2,75 @@
 
 {% block title %}Editar Pedido {{ pedido.numero }} - NH Transportes{% endblock %}
 
+{% block styles %}
+<style>
+  .page-hero {
+    background: linear-gradient(135deg, #1D63A5 0%, #1a4f82 60%, #154070 100%);
+    border-radius: .75rem;
+    padding: 1.5rem 2rem;
+    margin-bottom: 1.5rem;
+    color: #fff;
+  }
+  .page-hero .hero-icon {
+    width: 3rem; height: 3rem;
+    background: rgba(255,255,255,.15);
+    border-radius: .6rem;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1.5rem;
+    flex-shrink: 0;
+  }
+  .form-label { font-size: 0.83rem; font-weight: 600; color: #374151; }
+  .item-pedido { border-radius: .5rem; }
+  .item-pedido .card-header { border-radius: .5rem .5rem 0 0 !important; background: #f8f9fb; font-size: 0.85rem; font-weight: 600; }
+</style>
+{% endblock %}
+
 {% block content %}
-<div class="container-fluid mt-4">
-  <div class="row mb-3">
-    <div class="col">
-      <h2><i class="bi bi-pencil"></i> Editar Pedido {{ pedido.numero }}</h2>
+<div class="container-fluid">
+
+  <!-- Breadcrumb -->
+  <nav aria-label="breadcrumb" class="mb-3">
+    <ol class="breadcrumb small">
+      <li class="breadcrumb-item"><a href="/" class="text-decoration-none">Dashboard</a></li>
+      <li class="breadcrumb-item"><a href="{{ url_for('pedidos.index') }}" class="text-decoration-none">Pedidos</a></li>
+      <li class="breadcrumb-item active">Editar {{ pedido.numero }}</li>
+    </ol>
+  </nav>
+
+  <!-- Hero header -->
+  <div class="page-hero d-flex align-items-center gap-3 flex-wrap">
+    <div class="hero-icon"><i class="bi bi-pencil-fill"></i></div>
+    <div class="flex-grow-1">
+      <h4 class="mb-0 fw-bold">Editar Pedido</h4>
+      <p class="mb-0 opacity-75 small">Editando: <strong>{{ pedido.numero }}</strong></p>
     </div>
-    <div class="col-auto">
-      <a href="{{ url_for('pedidos.visualizar', id=pedido.id) }}" class="btn btn-secondary">
-        <i class="bi bi-arrow-left"></i> Voltar
-      </a>
-    </div>
+    <a href="{{ url_for('pedidos.visualizar', id=pedido.id) }}"
+       class="btn btn-sm px-3" style="background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.35);">
+      <i class="bi bi-arrow-left me-1"></i> Voltar
+    </a>
   </div>
 
   <form method="POST" id="formPedido">
-    <div class="card mb-4">
-      <div class="card-header bg-primary text-white">
-        <i class="bi bi-info-circle"></i> Informações do Pedido
+
+    <!-- Informações do Pedido -->
+    <div class="card shadow-sm mb-4">
+      <div class="card-header d-flex align-items-center py-2"
+           style="background:#1D63A5;color:white;font-size:0.82rem;font-weight:600;letter-spacing:0.02em;">
+        <i class="bi bi-info-circle me-2"></i> Informações do Pedido
       </div>
       <div class="card-body">
-        <div class="row">
+        <div class="row g-3">
           <div class="col-md-2">
             <label class="form-label">Número</label>
-            <input type="text" class="form-control" value="{{ pedido.numero }}" readonly style="background-color: #e9ecef;">
+            <input type="text" class="form-control form-control-sm" value="{{ pedido.numero }}" readonly style="background-color:#e9ecef;">
           </div>
           <div class="col-md-2">
             <label class="form-label">Data do Pedido</label>
-            <input type="date" class="form-control" name="data_pedido" value="{{ pedido.data_pedido.strftime('%Y-%m-%d') if pedido.data_pedido else '' }}" required>
+            <input type="date" class="form-control form-control-sm" name="data_pedido" value="{{ pedido.data_pedido.strftime('%Y-%m-%d') if pedido.data_pedido else '' }}" required>
           </div>
           <div class="col-md-2">
             <label class="form-label">Motorista</label>
-            <select class="form-select" name="motorista_id">
+            <select class="form-select form-select-sm" name="motorista_id">
               <option value="">Selecione o Motorista</option>
               {% for m in motoristas %}
                 <option value="{{ m.id }}" {% if pedido.motorista_id == m.id %}selected{% endif %}>{{ m.nome }}</option>
@@ -41,7 +79,7 @@
           </div>
           <div class="col-md-2">
             <label class="form-label">Veículo</label>
-            <select class="form-select" name="veiculo_id">
+            <select class="form-select form-select-sm" name="veiculo_id">
               <option value="">Selecione o Veículo</option>
               {% for v in veiculos %}
                 <option value="{{ v.id }}" {% if pedido.veiculo_id == v.id %}selected{% endif %}>{{ v.caminhao }} - {{ v.placa }}</option>
@@ -50,7 +88,7 @@
           </div>
           <div class="col-md-2">
             <label class="form-label">Status</label>
-            <select class="form-select" name="status">
+            <select class="form-select form-select-sm" name="status">
               <option value="Pendente" {% if pedido.status == 'Pendente' %}selected{% endif %}>Pendente</option>
               <option value="Confirmado" {% if pedido.status == 'Confirmado' %}selected{% endif %}>Confirmado</option>
               <option value="Faturado" {% if pedido.status == 'Faturado' %}selected{% endif %}>Faturado</option>
@@ -59,17 +97,19 @@
           </div>
           <div class="col-md-2">
             <label class="form-label">Observações</label>
-            <input type="text" class="form-control" name="observacoes" value="{{ pedido.observacoes or '' }}" placeholder="Observações gerais do pedido">
+            <input type="text" class="form-control form-control-sm" name="observacoes" value="{{ pedido.observacoes or '' }}" placeholder="Observações gerais do pedido">
           </div>
         </div>
       </div>
     </div>
 
-    <div class="card mb-4">
-      <div class="card-header bg-success text-white d-flex justify-content-between align-items-center">
-        <span><i class="bi bi-list-ul"></i> Itens do Pedido</span>
-        <button type="button" class="btn btn-light btn-sm" onclick="adicionarItem()">
-          <i class="bi bi-plus-circle"></i> Adicionar Item
+    <!-- Itens do Pedido -->
+    <div class="card shadow-sm mb-4">
+      <div class="card-header d-flex align-items-center justify-content-between py-2"
+           style="background:#1D63A5;color:white;font-size:0.82rem;font-weight:600;letter-spacing:0.02em;">
+        <span><i class="bi bi-list-ul me-2"></i> Itens do Pedido</span>
+        <button type="button" class="btn btn-sm px-3" style="background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.35);" onclick="adicionarItem()">
+          <i class="bi bi-plus-circle me-1"></i> Adicionar Item
         </button>
       </div>
       <div class="card-body">
@@ -77,12 +117,13 @@
       </div>
     </div>
 
+    <!-- Botões -->
     <div class="d-flex justify-content-end gap-2 mb-4">
-      <a href="{{ url_for('pedidos.visualizar', id=pedido.id) }}" class="btn btn-secondary">
-        <i class="bi bi-x-circle"></i> Cancelar
+      <a href="{{ url_for('pedidos.visualizar', id=pedido.id) }}" class="btn btn-secondary btn-sm">
+        <i class="bi bi-x-circle me-1"></i> Cancelar
       </a>
-      <button type="submit" class="btn btn-primary">
-        <i class="bi bi-check-circle"></i> Salvar Alterações
+      <button type="submit" class="btn btn-primary btn-sm px-4">
+        <i class="bi bi-check-circle me-1"></i> Salvar Alterações
       </button>
     </div>
   </form>
@@ -90,17 +131,17 @@
 
 <template id="templateItem">
   <div class="item-pedido card mb-3">
-    <div class="card-header bg-light d-flex justify-content-between align-items-center">
-      <span class="item-numero">Item 1</span>
+    <div class="card-header d-flex justify-content-between align-items-center">
+      <span class="item-numero fw-semibold">Item 1</span>
       <button type="button" class="btn btn-danger btn-sm" onclick="removerItem(this)">
-        <i class="bi bi-trash"></i> Remover
+        <i class="bi bi-trash me-1"></i> Remover
       </button>
     </div>
     <div class="card-body">
       <div class="row g-3">
         <div class="col-md-4">
           <label class="form-label">Cliente</label>
-          <select class="form-select select-cliente" name="cliente_id" required>
+          <select class="form-select form-select-sm select-cliente" name="cliente_id" required>
             <option value="">Selecione o Cliente</option>
             {% for c in clientes %}
               <option value="{{ c.id }}">{{ c.nome_fantasia or c.razao_social }}{% if c.cnpj %} - {{ c.cnpj }}{% endif %}</option>
@@ -109,7 +150,7 @@
         </div>
         <div class="col-md-4">
           <label class="form-label">Produto</label>
-          <select class="form-select select-produto" name="produto_id" required>
+          <select class="form-select form-select-sm select-produto" name="produto_id" required>
             <option value="">Selecione o Produto</option>
             {% for p in produtos %}
               <option value="{{ p.id }}">{{ p.nome }}</option>
@@ -118,17 +159,22 @@
         </div>
         <div class="col-md-4">
           <label class="form-label">Fornecedor</label>
-          <select class="form-select select-fornecedor" name="fornecedor_id" required>
+          <select class="form-select form-select-sm select-fornecedor" name="fornecedor_id" required>
             <option value="">Selecione o Fornecedor</option>
             {% for f in fornecedores %}
-              <option value="{{ f.id }}">{{ f.nome_fantasia or f.razao_social }}</option>
+              <option value="{{ f.id }}"
+                      data-pix="{{ f.chave_pix or '' }}"
+                      data-banco="{{ f.dados_bancarios or '' }}"
+                      data-tipo="{{ f.tipo_pagamento_padrao or '' }}">
+                {{ f.razao_social }}
+              </option>
             {% endfor %}
           </select>
         </div>
 
         <div class="col-md-3">
           <label class="form-label">Origem</label>
-          <select class="form-select select-origem" name="origem_id" required>
+          <select class="form-select form-select-sm select-origem" name="origem_id" required>
             <option value="">Selecione a Origem</option>
             {% for o in origens %}
               <option value="{{ o.id }}">{{ o.nome }}</option>
@@ -137,7 +183,7 @@
         </div>
         <div class="col-md-3 div-base" style="display:none;">
           <label class="form-label">Base</label>
-          <select class="form-select select-base" name="base_id">
+          <select class="form-select form-select-sm select-base" name="base_id">
             <option value="">Selecione a Base</option>
             {% for b in bases %}
               <option value="{{ b.id }}">{{ b.nome }}</option>
@@ -146,7 +192,7 @@
         </div>
         <div class="col-md-2">
           <label class="form-label">Tipo Qtd</label>
-          <select class="form-select select-tipo-qtd" name="tipo_quantidade" onchange="toggleQuantidade(this)">
+          <select class="form-select form-select-sm select-tipo-qtd" name="tipo_quantidade" onchange="toggleQuantidade(this)">
             <option value="lista">Lista</option>
             <option value="manual">Manual</option>
           </select>
@@ -154,7 +200,7 @@
         <div class="col-md-3">
           <label class="form-label">Quantidade</label>
           <div class="div-quantidade-lista">
-            <select class="form-select select-quantidade" name="quantidade_id" onchange="selecionarQuantidade(this)">
+            <select class="form-select form-select-sm select-quantidade" name="quantidade_id" onchange="selecionarQuantidade(this)">
               <option value="">Selecione</option>
               {% for q in quantidades %}
                 <option value="{{ q.id }}" data-valor="{{ q.valor }}">{{ q.descricao }}</option>
@@ -162,17 +208,17 @@
             </select>
           </div>
           <div class="div-quantidade-manual" style="display:none;">
-            <input type="number" class="form-control input-quantidade-manual" placeholder="Digite a quantidade" step="0.01" min="0">
+            <input type="number" class="form-control form-control-sm input-quantidade-manual" placeholder="Digite a quantidade" step="0.01" min="0">
           </div>
           <input type="hidden" class="input-quantidade-final" name="quantidade" value="">
         </div>
         <div class="col-md-2">
           <label class="form-label">Preço Unit. R$</label>
-          <input type="text" class="form-control input-preco" name="preco_unitario" placeholder="0,000">
+          <input type="text" class="form-control form-control-sm input-preco" name="preco_unitario" placeholder="0,000">
         </div>
         <div class="col-md-2">
           <label class="form-label">Total NF R$</label>
-          <input type="text" class="form-control input-total-nf" name="total_nf" placeholder="0,00" readonly style="background-color: #e9ecef;">
+          <input type="text" class="form-control form-control-sm input-total-nf" name="total_nf" placeholder="0,00" readonly style="background-color:#e9ecef;">
         </div>
       </div>
     </div>

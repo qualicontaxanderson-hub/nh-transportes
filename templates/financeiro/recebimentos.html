@@ -2,212 +2,339 @@
 
 {% block titulo %}Receb. Frete - NH Transportes{% endblock %}
 
+{% block styles %}
+<style>
+  /* ── Hero header ───────────────────────────────────────────── */
+  .page-hero {
+    background: linear-gradient(135deg, #1D63A5 0%, #1a4f82 60%, #154070 100%);
+    border-radius: .75rem;
+    padding: 1.25rem 1.75rem;
+    margin-bottom: 1.25rem;
+    color: #fff;
+  }
+  .page-hero .hero-icon {
+    width: 2.75rem; height: 2.75rem;
+    background: rgba(255,255,255,.15);
+    border-radius: .5rem;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1.35rem; flex-shrink: 0;
+  }
+
+  /* ── Stat cards ───────────────────────────────────────────── */
+  .stat-card { border: none; border-radius: .55rem; box-shadow: 0 1px 5px rgba(0,0,0,.07); }
+  .stat-label { font-size: 0.68rem; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; opacity: .7; }
+  .stat-value { font-size: 1.3rem; font-weight: 700; line-height: 1; }
+
+  /* ── Filter card header ───────────────────────────────────── */
+  .flt-header { background: #1D63A5; color: #fff; font-size: 0.78rem; font-weight: 600; padding: .45rem .75rem; border-radius: .35rem .35rem 0 0; }
+
+  /* ── Main table ───────────────────────────────────────────── */
+  #tbl-recebimentos { font-size: 0.72rem; }
+  #tbl-recebimentos thead th {
+    background: #1D63A5; color: #fff;
+    font-size: 0.68rem; font-weight: 700;
+    text-transform: uppercase; letter-spacing: .04em;
+    padding: 0.45rem 0.5rem; border: none; white-space: nowrap;
+  }
+  #tbl-recebimentos tbody td { padding: 0.35rem 0.5rem; vertical-align: middle; border-color: #f0f3f7; }
+  #tbl-recebimentos tbody tr.row-receb { cursor: pointer; transition: background .1s; }
+  #tbl-recebimentos tbody tr.row-receb:hover { background: #eef4ff; }
+  #tbl-recebimentos tbody tr.no-boleto { cursor: default; }
+
+  /* ── Status badges ─────────────────────────────────────────── */
+  .badge-status {
+    display: inline-block; border-radius: 3px;
+    padding: 0.12rem 0.42rem; font-size: 0.62rem;
+    font-weight: 700; letter-spacing: 0.03em;
+  }
+  .badge-pago     { background:#d4edda; color:#155724; }
+  .badge-quitado  { background:#cce5ff; color:#004085; }
+  .badge-vencido  { background:#f8d7da; color:#721c24; }
+  .badge-cancelado{ background:#e2e3e5; color:#383d41; }
+  .badge-pendente { background:#fff3cd; color:#856404; }
+
+  /* ── Action icon buttons ──────────────────────────────────── */
+  .btn-act {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 1.55rem; height: 1.55rem; border-radius: 4px;
+    font-size: 0.68rem; border: none; cursor: pointer;
+    text-decoration: none; transition: opacity .12s; padding: 0; margin: 0 .05rem;
+  }
+  .btn-act:hover { opacity: .75; }
+  .btn-act:disabled, .btn-act[disabled] { opacity: .4; cursor: not-allowed; }
+  .btn-boleto   { background: #cce5ff; color: #004085; }
+  .btn-pagar    { background: #d4edda; color: #155724; }
+  .btn-cancelar { background: #f8d7da; color: #721c24; }
+  .btn-prorrogar{ background: #e2e3e5; color: #383d41; }
+  .btn-reemitir { background: #d1ecf1; color: #0c5460; }
+  .btn-efi      { background: #e8f0fe; color: #1a56db; }
+  .btn-disabled { background: #f0f0f0; color: #aaa; cursor: default; }
+  .btn-registrar{ background: #fff3cd; color: #856404; }
+
+  /* Keep all action icons on a single line */
+  .actions-cell { white-space: nowrap; }
+
+  .mono { font-family: 'SFMono-Regular', Consolas, monospace; font-size: 0.7rem; }
+</style>
+{% endblock %}
+
 {% block content %}
-<div class="container-fluid mt-3">
-    <h2 class="mb-3" style="color:#1D63A5">
-        <i class="bi bi-wallet2"></i> Receb. Frete / Boletos
-    </h2>
+<div class="container-fluid">
 
-    <!-- RESUMO: FRETES, BOLETOS, DIFERENÇA -->
-    <div class="row mb-3">
-        <!-- TOTAL FRETES -->
-        <div class="col-md-4 mb-2">
-            <div class="card h-100">
-                <div class="card-header d-flex justify-content-between align-items-center" style="background:#92a7be;font-weight:600;">
-                    <span>Valor de Frete</span>
-                </div>
-                <div class="card-body text-center">
-                    <h3 style="color:#17963c; margin-bottom: 0;">R$ {{ "{:,.2f}".format(total_fretes).replace(',', 'X').replace('.', ',').replace('X', '.') }}</h3>
-                    <small class="text-muted">Total do período</small>
-                </div>
-            </div>
-        </div>
-
-        <!-- TOTAL BOLETOS EMITIDOS -->
-        <div class="col-md-4 mb-2">
-            <div class="card h-100">
-                <div class="card-header" style="background:#85e6e6;font-weight:600;">
-                    Boletos Emitidos
-                </div>
-                <div class="card-body text-center">
-                    <h3 style="color:#0066cc; margin-bottom: 0;">R$ {{ "{:,.2f}".format(total_boletos).replace(',', 'X').replace('.', ',').replace('X', '.') }}</h3>
-                    <small class="text-muted">Total emitido</small>
-                </div>
-            </div>
-        </div>
-
-        <!-- DIFERENÇA -->
-        <div class="col-md-4 mb-2">
-            <div class="card h-100">
-                <div class="card-header" style="background:#f8b500;font-weight:600;">
-                    Diferença (Fretes - Boletos)
-                </div>
-                <div class="card-body text-center">
-                    <h3 style="color:{% if diferenca >= 0 %}#333{% else %}#dc3545{% endif %}; margin-bottom: 0;">
-                        R$ {{ "{:,.2f}".format(diferenca).replace(',', 'X').replace('.', ',').replace('X', '.') }}
-                    </h3>
-                    <small class="text-muted">Saldo do período</small>
-                </div>
-            </div>
-        </div>
+  <!-- ── Hero header ────────────────────────────────────────── -->
+  <div class="page-hero d-flex align-items-center gap-3 flex-wrap">
+    <div class="hero-icon"><i class="bi bi-wallet2"></i></div>
+    <div class="flex-grow-1">
+      <h4 class="mb-0 fw-bold">Recebimentos de Frete / Boletos</h4>
+      <p class="mb-0 opacity-75" style="font-size:0.8rem;">Gerencie os boletos emitidos e acompanhe o status dos recebimentos.</p>
     </div>
-
-    <!-- FILTRO POR DATA -->
-    <div class="card mb-3">
-        <div class="card-header" style="background:#e9ecef;font-weight:600;">
-            <i class="bi bi-funnel"></i> Filtrar por Período
-        </div>
-        <div class="card-body">
-            <form method="GET" action="{{ url_for('financeiro.recebimentos') }}" class="row g-2 align-items-end">
-                <div class="col-md-4">
-                    <label for="data_inicio" class="form-label" style="font-size:0.9rem;">Data Inicial</label>
-                    <input type="date" class="form-control form-control-sm" id="data_inicio" name="data_inicio" value="{{ data_inicio }}">
-                </div>
-                <div class="col-md-4">
-                    <label for="data_fim" class="form-label" style="font-size:0.9rem;">Data Final</label>
-                    <input type="date" class="form-control form-control-sm" id="data_fim" name="data_fim" value="{{ data_fim }}">
-                </div>
-                <div class="col-md-4">
-                    <button type="submit" class="btn btn-primary btn-sm me-2">
-                        <i class="bi bi-search"></i> Filtrar
-                    </button>
-                    <a href="{{ url_for('financeiro.recebimentos') }}" class="btn btn-secondary btn-sm">
-                        <i class="bi bi-x-circle"></i> Limpar
-                    </a>
-                </div>
-            </form>
-        </div>
-    </div>
-    
     {% if recebimentos %}
-    <div class="table-responsive">
-        <table class="table table-striped table-hover">
-            <thead class="table-dark">
-                <tr>
-                    <th>ID</th>
-                    <th>Frete</th>
-                    <th>Cliente</th>
-                    <th>Valor</th>
-                    <th>Vencimento</th>
-                    <th>Status</th>
-                    <th>Charge ID</th>
-                    <th>Ações</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for r in recebimentos %}
-                <tr id="cobranca-row-{{ r.charge_id or r.id }}">
-                    <td>{{ r.id }}</td>
-                    <td>
-                      {# Mostrar número do frete se disponível, fallback para frete_id #}
-                      {% if r.frete_numero %}
-                        #{{ r.frete_numero }}
-                      {% elif r.frete_id %}
-                        #{{ r.frete_id }}
-                      {% else %}
-                        -
-                      {% endif %}
-                    </td>
-                    <td>{{ r.cliente_fantasia or r.cliente_nome or '-' }}</td>
-                    <td>
-                      {% if r.valor is not none %}
-                        R$ {{ ("%.2f"|format(r.valor|float)).replace('.', ',') }}
-                      {% else %}
-                        R$ 0,00
-                      {% endif %}
-                    </td>
-                    <td>{{ r.data_vencimento_fmt or (r.data_vencimento.strftime('%d/%m/%Y') if r.data_vencimento else '-') }}</td>
-                    <td>
-                        {# usar display_status calculado no backend (routes/financeiro.py) #}
-                        {% set ds = r.display_status if r.display_status is defined else (r.status or 'pendente') %}
-                        {% if ds == 'pago' %}
-                            <span class="badge bg-success">Pago</span>
-                        {% elif ds == 'quitado' %}
-                            <span class="badge bg-info">Quitado</span>
-                        {% elif ds == 'vencido' %}
-                            <span class="badge bg-danger">Vencido</span>
-                        {% elif ds == 'cancelado' %}
-                            <span class="badge bg-secondary">Cancelado</span>
-                        {% else %}
-                            <span class="badge bg-warning">Pendente</span>
-                        {% endif %}
-                    </td>
-                    <td><small>{{ r.charge_id or '-' }}</small></td>
-                    <td>
-                        <div class="btn-group" role="group" aria-label="Ações cobranca">
-                            {# Mostrar botão de visualização sempre que houver charge_id (serve local ou provedor) #}
-                            {% if r.charge_id %}
-                            <a href="{{ url_for('financeiro.visualizar_boleto', charge_id=r.charge_id) }}" target="_blank" class="btn btn-sm btn-primary" title="Ver/Imprimir Boleto">
-                                <i class="bi bi-file-earmark-pdf"></i>
-                            </a>
-                            {% else %}
-                            <button class="btn btn-sm btn-secondary" disabled title="Sem link de boleto">
-                                <i class="bi bi-file-earmark-pdf"></i>
-                            </button>
-                            {% endif %}
-
-                            {% if r.charge_id %}
-                            <!-- Marcar pago -->
-                            <form method="post" action="{{ url_for('financeiro.marcar_pago', charge_id=r.charge_id) }}" style="display:inline;">
-                                <button type="submit" class="btn btn-sm btn-success" title="Marcar como Pago" onclick="return confirm('Confirma marcar esta cobrança como PAGO (admin)?');">
-                                    <i class="bi bi-check2-circle"></i>
-                                </button>
-                            </form>
-
-                            <!-- Cancelar -->
-                            <form method="post" action="{{ url_for('financeiro.cancelar_boleto', charge_id=r.charge_id) }}" style="display:inline;">
-                                <button type="submit" class="btn btn-sm btn-outline-danger" title="Cancelar Boleto" onclick="return confirm('Confirma cancelar este boleto no provedor? Isto permitirá reemitir.');">
-                                    <i class="bi bi-x-circle"></i>
-                                </button>
-                            </form>
-
-                            <!-- Prorrogar vencimento (JS) -->
-                            <button type="button"
-                                    class="btn btn-sm btn-outline-secondary btn-prorrogar"
-                                    data-charge-id="{{ r.charge_id }}"
-                                    title="Prorrogar vencimento">
-                                <i class="bi bi-calendar-plus"></i>
-                            </button>
-
-                            <!-- Reemitir: habilitado apenas se display_status == 'cancelado' -->
-                            <button type="button"
-                                    class="btn btn-sm btn-outline-primary btn-reemitir"
-                                    data-charge-id="{{ r.charge_id }}"
-                                    data-frete-id="{{ r.frete_id or '' }}"
-                                    title="Reemitir boleto"
-                                    {% if ds != 'cancelado' %} disabled {% endif %}>
-                                <i class="bi bi-arrow-clockwise"></i>
-                            </button>
-
-                            <!-- Consultar Status EFI -->
-                            <button type="button"
-                                    class="btn btn-sm btn-outline-info btn-status-efi"
-                                    data-charge-id="{{ r.charge_id }}"
-                                    title="Consultar Status no Banco EFI">
-                                <i class="bi bi-info-circle"></i>
-                            </button>
-                            {% endif %}
-                        </div>
-                    </td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-    </div>
-    {% else %}
-    <div class="alert alert-info">
-        <i class="bi bi-info-circle"></i> Nenhum recebimento encontrado.
-    </div>
+    <span class="badge rounded-pill" style="background:rgba(255,255,255,.2);font-size:0.75rem;">
+      {{ recebimentos|length }} registro{{ 's' if recebimentos|length != 1 }}
+    </span>
     {% endif %}
+    <button type="button" class="btn btn-sm fw-semibold" id="btn-efi-auto"
+            style="background:rgba(255,255,255,.18);color:#fff;border:1px solid rgba(255,255,255,.35);"
+            onclick="executarConciliacaoEFI(this)"
+            title="Verifica o extrato EFI e marca automaticamente os boletos que já foram pagos">
+      <i class="bi bi-bank me-1"></i>Conciliar EFI Automático
+    </button>
+    <span id="msg-efi-auto" class="small" style="color:rgba(255,255,255,.85);"></span>
+  </div>
+
+  <!-- ── Stat cards ─────────────────────────────────────────── -->
+  <div class="row mb-3 g-3">
+    <div class="col-md-4">
+      <div class="card stat-card h-100">
+        <div class="card-body d-flex align-items-center gap-3 py-3">
+          <div style="width:2.5rem;height:2.5rem;background:#d4edda;color:#155724;border-radius:.5rem;display:flex;align-items:center;justify-content:center;font-size:1.2rem;flex-shrink:0;">
+            <i class="bi bi-truck"></i>
+          </div>
+          <div>
+            <div class="stat-label text-muted">Valor de Frete</div>
+            <div class="stat-value" style="color:#17963c;">R$ {{ "{:,.2f}".format(total_fretes).replace(',','X').replace('.',',').replace('X','.') }}</div>
+            <small class="text-muted">Total do período</small>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-4">
+      <div class="card stat-card h-100">
+        <div class="card-body d-flex align-items-center gap-3 py-3">
+          <div style="width:2.5rem;height:2.5rem;background:#cce5ff;color:#004085;border-radius:.5rem;display:flex;align-items:center;justify-content:center;font-size:1.2rem;flex-shrink:0;">
+            <i class="bi bi-receipt"></i>
+          </div>
+          <div>
+            <div class="stat-label text-muted">Boletos Emitidos</div>
+            <div class="stat-value" style="color:#0066cc;">R$ {{ "{:,.2f}".format(total_boletos).replace(',','X').replace('.',',').replace('X','.') }}</div>
+            <small class="text-muted">Total emitido</small>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-4">
+      <div class="card stat-card h-100">
+        <div class="card-body d-flex align-items-center gap-3 py-3">
+          <div style="width:2.5rem;height:2.5rem;background:#fff3cd;color:#856404;border-radius:.5rem;display:flex;align-items:center;justify-content:center;font-size:1.2rem;flex-shrink:0;">
+            <i class="bi bi-bar-chart-line"></i>
+          </div>
+          <div>
+            <div class="stat-label text-muted">Diferença (Fretes − Boletos)</div>
+            <div class="stat-value" style="color:{% if diferenca >= 0 %}#374151{% else %}#dc3545{% endif %};">R$ {{ "{:,.2f}".format(diferenca).replace(',','X').replace('.',',').replace('X','.') }}</div>
+            <small class="text-muted">Saldo do período</small>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Filter ─────────────────────────────────────────────── -->
+  <div class="card shadow-sm mb-3">
+    <div class="flt-header"><i class="bi bi-funnel me-1"></i>Filtrar por Período</div>
+    <div class="card-body py-2">
+      <form method="GET" action="{{ url_for('financeiro.recebimentos') }}" class="row g-2 align-items-end">
+        <div class="col-md-4">
+          <label for="data_inicio" class="form-label mb-1" style="font-size:0.82rem;">Data Inicial</label>
+          <input type="date" class="form-control form-control-sm" id="data_inicio" name="data_inicio" value="{{ data_inicio }}">
+        </div>
+        <div class="col-md-4">
+          <label for="data_fim" class="form-label mb-1" style="font-size:0.82rem;">Data Final</label>
+          <input type="date" class="form-control form-control-sm" id="data_fim" name="data_fim" value="{{ data_fim }}">
+        </div>
+        <div class="col-auto">
+          <button type="submit" class="btn btn-primary btn-sm"><i class="bi bi-search me-1"></i>Filtrar</button>
+          <a href="{{ url_for('financeiro.recebimentos') }}" class="btn btn-outline-secondary btn-sm ms-1"><i class="bi bi-x-circle me-1"></i>Limpar</a>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ── Table ──────────────────────────────────────────────── -->
+  <div class="card shadow-sm">
+    <div class="card-header d-flex justify-content-between align-items-center py-2" style="background:#1D63A5;color:#fff;font-size:0.78rem;font-weight:600;">
+      <span><i class="bi bi-list me-1"></i>Recebimentos</span>
+      {% if recebimentos %}
+      <span class="badge bg-white text-secondary" style="font-size:0.68rem;">{{ recebimentos|length }}</span>
+      {% endif %}
+    </div>
+    <div class="card-body p-0">
+      {% if recebimentos %}
+      <div class="table-responsive">
+        <table class="table mb-0" id="tbl-recebimentos">
+          <thead>
+            <tr>
+              <th style="width:3%">#</th>
+              <th style="width:7%">Frete</th>
+              <th>Cliente</th>
+              <th style="width:10%">Valor</th>
+              <th style="width:10%">Vencimento</th>
+              <th style="width:8%">Status</th>
+              <th style="width:12%">Charge ID</th>
+              <th class="text-center" style="width:17%">Ações</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for r in recebimentos %}
+            {% set ds = r.display_status if r.display_status is defined else (r.status or 'pendente') %}
+            {% set boleto_url = url_for('financeiro.visualizar_boleto', charge_id=r.charge_id) if r.charge_id else '' %}
+            <tr id="cobranca-row-{{ r.charge_id or r.id }}"
+                class="row-receb{% if not r.charge_id %} no-boleto{% endif %}"
+                {% if boleto_url %}data-boleto-url="{{ boleto_url }}" title="Clique para abrir o boleto"{% endif %}>
+              <td class="text-muted mono">{{ r.id }}</td>
+              <td class="mono">
+                {% if r.frete_numero %}#{{ r.frete_numero }}
+                {% elif r.frete_id %}#{{ r.frete_id }}
+                {% else %}<span class="text-muted">—</span>{% endif %}
+              </td>
+              <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"
+                  title="{{ r.cliente_fantasia or r.cliente_nome or '' }}">
+                {{ r.cliente_fantasia or r.cliente_nome or '—' }}
+              </td>
+              <td class="mono fw-semibold">
+                {% if r.valor is not none %}R$ {{ ("%.2f"|format(r.valor|float)).replace('.', ',') }}
+                {% else %}R$ 0,00{% endif %}
+              </td>
+              <td class="text-muted mono">{{ r.data_vencimento_fmt or (r.data_vencimento.strftime('%d/%m/%Y') if r.data_vencimento else '—') }}</td>
+              <td>
+                {% if ds == 'pago' %}<span class="badge-status badge-pago">Pago</span>
+                {% elif ds == 'quitado' %}<span class="badge-status badge-quitado">Quitado</span>
+                {% elif ds == 'vencido' %}<span class="badge-status badge-vencido">Vencido</span>
+                {% elif ds == 'cancelado' %}<span class="badge-status badge-cancelado">Cancelado</span>
+                {% else %}<span class="badge-status badge-pendente">Pendente</span>{% endif %}
+              </td>
+              <td class="mono text-muted" style="font-size:0.65rem;word-break:break-all;">{{ r.charge_id or '—' }}</td>
+              <td class="text-center actions-cell" onclick="event.stopPropagation()">
+                {% if r.charge_id %}
+                <a href="{{ boleto_url }}" target="_blank" class="btn-act btn-boleto" title="Ver/Imprimir Boleto">
+                  <i class="bi bi-file-earmark-pdf"></i>
+                </a>
+                <form method="post" action="{{ url_for('financeiro.marcar_pago', charge_id=r.charge_id) }}" style="display:inline;">
+                  <button type="submit" class="btn-act btn-pagar" title="Marcar como Pago"
+                          onclick="return confirm('Confirma marcar esta cobrança como PAGO (admin)?');">
+                    <i class="bi bi-check2-circle"></i>
+                  </button>
+                </form>
+                <form method="post" action="{{ url_for('financeiro.cancelar_boleto', charge_id=r.charge_id) }}" style="display:inline;">
+                  <button type="submit" class="btn-act btn-cancelar" title="Cancelar Boleto"
+                          onclick="return confirm('Confirma cancelar este boleto no provedor? Isto permitirá reemitir.');">
+                    <i class="bi bi-x-circle"></i>
+                  </button>
+                </form>
+                <button type="button" class="btn-act btn-prorrogar btn-prorrogar-js"
+                        data-charge-id="{{ r.charge_id }}" title="Prorrogar vencimento">
+                  <i class="bi bi-calendar-plus"></i>
+                </button>
+                <button type="button" class="btn-act btn-reemitir btn-reemitir-js"
+                        data-charge-id="{{ r.charge_id }}" data-frete-id="{{ r.frete_id or '' }}"
+                        title="Reemitir boleto"
+                        {% if ds != 'cancelado' %}style="opacity:0.35;cursor:not-allowed;"{% endif %}>
+                  <i class="bi bi-arrow-clockwise"></i>
+                </button>
+                <button type="button" class="btn-act btn-efi btn-status-efi"
+                        data-charge-id="{{ r.charge_id }}" title="Consultar Status no Banco EFI">
+                  <i class="bi bi-info-circle"></i>
+                </button>
+                {% if ds not in ('pago', 'quitado', 'cancelado') %}
+                <button type="button" class="btn-act btn-registrar btn-registrar-pag"
+                        data-cobranca-id="{{ r.id }}"
+                        data-cliente="{{ r.cliente_fantasia or r.cliente_nome or '' }}"
+                        title="Registrar Pagamento Manual">
+                  <i class="bi bi-cash-stack"></i>
+                </button>
+                {% endif %}
+                {% else %}
+                <span class="btn-act btn-disabled" title="Sem boleto emitido">
+                  <i class="bi bi-file-earmark-pdf"></i>
+                </span>
+                {% if ds not in ('pago', 'quitado', 'cancelado') %}
+                <button type="button" class="btn-act btn-registrar btn-registrar-pag"
+                        data-cobranca-id="{{ r.id }}"
+                        data-cliente="{{ r.cliente_fantasia or r.cliente_nome or '' }}"
+                        title="Registrar Pagamento Manual">
+                  <i class="bi bi-cash-stack"></i>
+                </button>
+                {% endif %}
+                {% endif %}
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <div class="text-center text-muted py-5">
+        <i class="bi bi-inbox" style="font-size:2rem;opacity:0.35;"></i>
+        <div class="mt-2" style="font-size:0.82rem;">Nenhum recebimento encontrado.</div>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+
 </div>
 
-<!-- Script inline para ações de prorrogar e reemitir -->
+<!-- Modal: Registrar Pagamento Manual -->
+<div id="modal-registrar-pag" style="display:none;position:fixed;inset:0;z-index:2000;background:rgba(0,0,0,.45);">
+  <div style="background:#fff;border-radius:.75rem;padding:1.5rem;max-width:420px;margin:6rem auto;box-shadow:0 8px 32px rgba(0,0,0,.18);">
+    <div class="d-flex align-items-center mb-3 gap-2">
+      <span style="background:#fff3cd;color:#856404;width:2rem;height:2rem;border-radius:.4rem;display:inline-flex;align-items:center;justify-content:center;font-size:1rem;"><i class="bi bi-cash-stack"></i></span>
+      <h6 class="mb-0 fw-bold">Registrar Pagamento Manual</h6>
+    </div>
+    <p id="modal-reg-cliente" class="mb-3" style="font-size:0.82rem;color:#555;"></p>
+    <form method="post" action="{{ url_for('financeiro.registrar_pagamento_manual') }}">
+      <input type="hidden" name="cobranca_id" id="modal-reg-id">
+      <div class="mb-3">
+        <label class="form-label fw-semibold" style="font-size:0.78rem;">Data do Pagamento</label>
+        <input type="date" name="data_pagamento" id="modal-reg-data" class="form-control form-control-sm" required>
+      </div>
+      <div class="mb-3">
+        <label class="form-label fw-semibold" style="font-size:0.78rem;">Observação (opcional)</label>
+        <input type="text" name="observacao" class="form-control form-control-sm" placeholder="Ex.: pago com desconto, boleto substituído…" maxlength="255">
+      </div>
+      <div class="d-flex gap-2 justify-content-end mt-3">
+        <button type="button" class="btn btn-secondary btn-sm" id="modal-reg-cancel">Cancelar</button>
+        <button type="submit" class="btn btn-warning btn-sm fw-semibold"><i class="bi bi-check2-circle me-1"></i>Confirmar Pagamento</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Script inline para ações de prorrogar, reemitir e click-on-row -->
 <script>
 document.addEventListener('DOMContentLoaded', function () {
   function qsa(sel, el=document){ return Array.from(el.querySelectorAll(sel)); }
 
-  // Prorrogar vencimento
-  qsa('.btn-prorrogar').forEach(btn => {
+  // ── Click on row to open boleto ──────────────────────────────
+  qsa('tr.row-receb[data-boleto-url]').forEach(function(row) {
+    row.addEventListener('click', function(e) {
+      // Don't open if clicking inside the actions cell or a form/button/link
+      if (e.target.closest('.actions-cell') || e.target.closest('a') || e.target.closest('button') || e.target.closest('form')) return;
+      var url = row.getAttribute('data-boleto-url');
+      if (url) window.open(url, '_blank');
+    });
+  });
+
+  // ── Prorrogar vencimento ─────────────────────────────────────
+  qsa('.btn-prorrogar-js').forEach(btn => {
     btn.addEventListener('click', async function () {
       const chargeId = this.getAttribute('data-charge-id');
       if (!chargeId) { alert('Charge ID ausente'); return; }
@@ -236,7 +363,7 @@ document.addEventListener('DOMContentLoaded', function () {
   });
 
   // Reemitir boleto
-  qsa('.btn-reemitir').forEach(btn => {
+  qsa('.btn-reemitir-js').forEach(btn => {
     btn.addEventListener('click', async function () {
       const chargeId = this.getAttribute('data-charge-id');
       const freteId = this.getAttribute('data-frete-id') || null;
@@ -326,7 +453,106 @@ document.addEventListener('DOMContentLoaded', function () {
     });
   });
 
+  // ── Registrar Pagamento Manual ───────────────────────────────
+  var modal = document.getElementById('modal-registrar-pag');
+  var modalId = document.getElementById('modal-reg-id');
+  var modalData = document.getElementById('modal-reg-data');
+  var modalCliente = document.getElementById('modal-reg-cliente');
+  var today = new Date().toISOString().split('T')[0];
+  qsa('.btn-registrar-pag').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      modalId.value = btn.dataset.cobrancaId;
+      modalCliente.textContent = btn.dataset.cliente ? 'Cliente: ' + btn.dataset.cliente : '';
+      modalData.value = today;
+      modal.style.display = '';
+    });
+  });
+  document.getElementById('modal-reg-cancel').addEventListener('click', function() {
+    modal.style.display = 'none';
+  });
+  modal.addEventListener('click', function(e) {
+    if (e.target === modal) modal.style.display = 'none';
+  });
+
 });
+</script>
+
+<script>
+// ── Conciliação EFI Automático (chamado da página de recebimentos) ──────────
+var _efiTotalAtualizados = 0;
+var _efiPrevRestantes = -1;
+var _efiNoProgressCalls = 0;
+var _EFI_MAX_NO_PROGRESS = 8;  // Para após 8 chamadas consecutivas sem atualizar nada
+
+function executarConciliacaoEFI(btn) {
+  _efiTotalAtualizados = 0;
+  _efiPrevRestantes = -1;
+  _efiNoProgressCalls = 0;
+  _efiRodada(btn);
+}
+
+function _efiRodada(btn) {
+  var msg = document.getElementById('msg-efi-auto');
+  btn.disabled = true;
+  btn.innerHTML = '<i class="bi bi-hourglass-split me-1"></i>Conciliando…';
+  msg.style.color = 'rgba(255,255,255,.9)';
+
+  fetch('{{ url_for("financeiro.auto_conciliar_efi") }}', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest'}
+  })
+  .then(function(r) {
+    return r.text().then(function(text) {
+      try { return JSON.parse(text); }
+      catch(e) { throw new Error('Erro HTTP ' + r.status); }
+    });
+  })
+  .then(function(d) {
+    msg.style.color = 'rgba(255,255,255,.9)';
+    if (d.success) {
+      var atualizadosLote = d.atualizados || 0;
+      _efiTotalAtualizados += atualizadosLote;
+      var restantes = d.restantes || 0;
+
+      // Detecta se houve progresso para evitar loop infinito
+      if (atualizadosLote === 0 && restantes === _efiPrevRestantes) {
+        _efiNoProgressCalls++;
+      } else {
+        _efiNoProgressCalls = 0;
+      }
+      _efiPrevRestantes = restantes;
+
+      if (restantes > 0 && _efiNoProgressCalls < _EFI_MAX_NO_PROGRESS) {
+        // Há mais boletos para verificar — mostra progresso e chama novamente
+        msg.textContent = '⏳ Verificando… ' + _efiTotalAtualizados + ' pago(s), ' + restantes + ' restante(s)…';
+        setTimeout(function() { _efiRodada(btn); }, 500);
+      } else {
+        // Terminou (ou sem progresso após N tentativas)
+        btn.disabled = false;
+        btn.innerHTML = '<i class="bi bi-bank me-1"></i>Conciliar EFI Automático';
+        if (_efiTotalAtualizados > 0) {
+          msg.textContent = '✅ ' + _efiTotalAtualizados + ' boleto(s) marcado(s) como pago(s) via EFI. Atualizando…';
+          setTimeout(function() { location.reload(); }, 1800);
+        } else if (restantes > 0) {
+          msg.textContent = '⚠️ ' + restantes + ' boleto(s) pendente(s) não confirmado(s) pelo EFI. Verifique as credenciais ou o extrato bancário.';
+        } else {
+          msg.textContent = '✅ ' + (d.message || 'Nenhum boleto novo para atualizar.');
+        }
+      }
+    } else {
+      btn.disabled = false;
+      btn.innerHTML = '<i class="bi bi-bank me-1"></i>Conciliar EFI Automático';
+      msg.style.color = '#ffc';
+      msg.textContent = '❌ ' + (d.message || d.erro || 'Erro desconhecido.');
+    }
+  })
+  .catch(function(e) {
+    btn.disabled = false;
+    btn.innerHTML = '<i class="bi bi-bank me-1"></i>Conciliar EFI Automático';
+    msg.style.color = '#ffc';
+    msg.textContent = '❌ ' + e.message;
+  });
+}
 </script>
 
 {% endblock %}

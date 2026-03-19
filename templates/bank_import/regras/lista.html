@@ -1,21 +1,53 @@
 {% extends "base.html" %}
 {% block title %}Regras de Conciliação{% endblock %}
+
+{% block styles %}
+<style>
+  .page-hero {
+    background: linear-gradient(135deg, #1D63A5 0%, #1a4f82 60%, #154070 100%);
+    border-radius: .75rem; padding: 1.25rem 1.75rem; margin-bottom: 1.25rem; color: #fff;
+  }
+  .page-hero .hero-icon {
+    width: 2.75rem; height: 2.75rem; background: rgba(255,255,255,.15);
+    border-radius: .5rem; display: flex; align-items: center; justify-content: center;
+    font-size: 1.35rem; flex-shrink: 0;
+  }
+  .flt-header { background: #1D63A5; color: #fff; font-size: 0.78rem; font-weight: 600; padding: .45rem .75rem; border-radius: .35rem .35rem 0 0; }
+  #tbl-regras { font-size: 0.82rem; }
+  #tbl-regras thead th {
+    background: #1D63A5; color: #fff;
+    font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: .04em;
+    padding: 0.45rem 0.5rem; border: none; white-space: nowrap;
+  }
+  #tbl-regras tbody td { padding: 0.35rem 0.5rem; vertical-align: middle; border-color: #f0f3f7; }
+  #tbl-regras tbody tr.regra-row { cursor: pointer; transition: background .1s; }
+  #tbl-regras tbody tr.regra-row:hover { background: #eef4ff; }
+</style>
+{% endblock %}
+
 {% block content %}
-<div class="container-fluid mt-4">
-  <div class="d-flex justify-content-between align-items-center mb-3">
-    <h4><i class="bi bi-funnel-fill text-primary"></i> Regras de Conciliação Automática</h4>
+<div class="container-fluid mt-2">
+
+  <!-- Hero header -->
+  <div class="page-hero d-flex align-items-center gap-3 flex-wrap">
+    <div class="hero-icon"><i class="bi bi-funnel-fill"></i></div>
+    <div class="flex-grow-1">
+      <h4 class="mb-0 fw-bold">Regras de Conciliação Automática</h4>
+      <p class="mb-0 opacity-75" style="font-size:0.8rem;">Gerencie as regras para conciliação automática de transações bancárias.</p>
+    </div>
     <div class="d-flex gap-2">
-      <a href="{{ url_for('conciliacao_regras.memorias') }}" class="btn btn-outline-warning btn-sm">
+      <a href="{{ url_for('conciliacao_regras.memorias') }}" class="btn btn-sm" style="background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.3);">
         <i class="bi bi-bookmark-star"></i> Memorizações
       </a>
-      <button class="btn btn-outline-info btn-sm" onclick="diagnosticarRegras(this)">
+      <button class="btn btn-sm" style="background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.3);" onclick="diagnosticarRegras(this)">
         <i class="bi bi-bug"></i> Diagnóstico
       </button>
-      <a href="{{ url_for('conciliacao_regras.novo') }}" class="btn btn-primary btn-sm">
+      <a href="{{ url_for('conciliacao_regras.novo') }}" class="btn btn-sm" style="background:rgba(255,255,255,.9);color:#1D63A5;font-weight:600;">
         <i class="bi bi-plus-circle"></i> Nova Regra
       </a>
     </div>
   </div>
+
   <div id="divDiagnostico" class="d-none mb-3"></div>
 
   <div class="alert alert-info py-2">
@@ -29,7 +61,9 @@
   </div>
 
   <!-- Filtros -->
-  <form method="get" action="" class="card card-body bg-light border py-2 mb-3">
+  <form method="get" action="" class="card shadow-sm mb-3">
+    <div class="flt-header"><i class="bi bi-funnel me-1"></i> Filtros</div>
+    <div class="card-body py-2">
     <div class="row g-2 align-items-end">
       <div class="col-sm-auto">
         <label class="form-label small mb-1 fw-semibold">Banco</label>
@@ -80,6 +114,7 @@
         {% endif %}
       </div>
     </div>
+    </div><!-- /card-body -->
   </form>
 
   {% with messages = get_flashed_messages(with_categories=true) %}
@@ -116,8 +151,8 @@
           <span class="badge bg-secondary">{{ inativos_count }} inativa(s)</span>
         {% endif %}
       </div>
-      <table class="table table-hover table-sm mb-0">
-        <thead class="table-dark">
+      <table class="table table-hover table-sm mb-0" id="tbl-regras">
+        <thead>
           <tr>
             <th style="width:2rem;">
               <input type="checkbox" id="checkAll" class="form-check-input" title="Selecionar todas">
@@ -134,7 +169,7 @@
         </thead>
         <tbody>
           {% for r in regras %}
-          <tr class="{{ 'table-secondary text-muted' if not r.ativo else '' }}">
+          <tr class="regra-row{{ ' table-secondary text-muted' if not r.ativo else '' }}">
             <td>
               <input type="checkbox" name="regra_ids" value="{{ r.id }}"
                      class="form-check-input chk-regra">
@@ -270,6 +305,17 @@ if (checkAll) {
 }
 document.querySelectorAll('.chk-regra').forEach(function(c){
   c.addEventListener('change', atualizarBarra);
+});
+
+// Clique na linha seleciona o checkbox (single-click)
+document.querySelectorAll('tr.regra-row').forEach(function(row) {
+  row.addEventListener('click', function(e) {
+    if (e.target.closest('button, a, input, select, textarea, label')) return;
+    var chk = row.querySelector('.chk-regra');
+    if (!chk) return;
+    chk.checked = !chk.checked;
+    chk.dispatchEvent(new Event('change'));
+  });
 });
 
 // ---- Diagnóstico ----

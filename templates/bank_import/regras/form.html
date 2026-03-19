@@ -1,11 +1,35 @@
 {% extends "base.html" %}
 {% block title %}{{ acao }} Regra de Conciliação{% endblock %}
+
+{% block styles %}
+<style>
+  .page-hero {
+    background: linear-gradient(135deg, #1D63A5 0%, #1a4f82 60%, #154070 100%);
+    border-radius: .75rem; padding: 1.25rem 1.75rem; margin-bottom: 1.25rem; color: #fff;
+  }
+  .page-hero .hero-icon {
+    width: 2.75rem; height: 2.75rem; background: rgba(255,255,255,.15);
+    border-radius: .5rem; display: flex; align-items: center; justify-content: center;
+    font-size: 1.35rem; flex-shrink: 0;
+  }
+  .card-header.sec-header { background: #1D63A5; color: #fff; font-weight: 600; }
+</style>
+{% endblock %}
+
 {% block content %}
-<div class="container mt-4" style="max-width:720px">
-  <h4>
-    <i class="bi bi-funnel-fill text-primary"></i>
-    {{ acao }} Regra de Conciliação
-  </h4>
+<div class="container mt-2" style="max-width:720px">
+
+  <!-- Hero header -->
+  <div class="page-hero d-flex align-items-center gap-3 flex-wrap">
+    <div class="hero-icon"><i class="bi bi-funnel-fill"></i></div>
+    <div class="flex-grow-1">
+      <h4 class="mb-0 fw-bold">{{ acao }} Regra de Conciliação</h4>
+      <p class="mb-0 opacity-75" style="font-size:0.8rem;">Configure o padrão de descrição e o destino da conciliação automática.</p>
+    </div>
+    <a href="{{ url_for('conciliacao_regras.lista') }}" class="btn btn-sm" style="background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.3);">
+      <i class="bi bi-arrow-left"></i> Voltar
+    </a>
+  </div>
 
   <div class="alert alert-info py-2 small">
     <strong>Como funciona:</strong>
@@ -21,7 +45,7 @@
 
   <form method="post" id="formRegra" onsubmit="return validarFormRegra()">
     <div class="card shadow-sm mb-3">
-      <div class="card-header fw-bold bg-light">Padrão de Descrição</div>
+      <div class="card-header sec-header">Padrão de Descrição</div>
       <div class="card-body">
 
         <div class="mb-3">
@@ -66,7 +90,7 @@
     </div>
 
     <div class="card shadow-sm mb-3">
-      <div class="card-header fw-bold bg-light">Vincular a (preencha apenas o campo relevante)</div>
+      <div class="card-header sec-header">Vincular a (preencha apenas o campo relevante)</div>
       <div class="card-body">
 
         <div class="mb-3">

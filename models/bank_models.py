@@ -53,7 +53,7 @@ class BankSupplierMapping(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     fornecedor_id = db.Column(db.Integer, db.ForeignKey('fornecedores.id', ondelete='CASCADE'), nullable=False, index=True)
     cnpj_cpf = db.Column(db.String(18), nullable=False, unique=True, index=True)
-    tipo_chave = db.Column(db.Enum('cnpj', 'cpf', 'texto'), nullable=False, default='cnpj')
+    tipo_chave = db.Column(db.Enum('cnpj', 'cpf', 'texto', 'descricao'), nullable=False, default='cnpj')
     total_conciliacoes = db.Column(db.Integer, nullable=False, default=0)
     criado_em = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     atualizado_em = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)

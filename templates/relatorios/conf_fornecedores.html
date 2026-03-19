@@ -1,0 +1,333 @@
+{% extends 'base.html' %}
+{% block title %}Conf. Fornecedores{% endblock %}
+
+{% block styles %}
+<style>
+.page-hero {
+  background: linear-gradient(135deg, #1D63A5 0%, #154070 100%);
+  border-radius: .75rem; padding: 1.5rem 2rem; margin-bottom: 1.5rem; color: #fff;
+}
+.page-hero .hero-icon {
+  width: 3rem; height: 3rem; background: rgba(255,255,255,.15);
+  border-radius: .6rem; display: flex; align-items: center; justify-content: center;
+  font-size: 1.5rem; flex-shrink: 0;
+}
+.forn-header {
+  background: #1D63A5; color: #fff; padding: .4rem .85rem;
+  border-radius: .4rem .4rem 0 0; font-weight: 700; font-size: .85rem;
+}
+/* compact table */
+.tbl-conf {
+  font-size: .78rem;
+}
+.tbl-conf thead th {
+  font-size: .72rem; text-transform: uppercase; letter-spacing: .04em;
+  white-space: nowrap; padding: .3rem .45rem;
+}
+.tbl-conf td {
+  padding: .25rem .45rem;
+  vertical-align: middle;
+}
+.tbl-conf .badge {
+  font-size: .68rem; padding: .2em .5em;
+}
+.row-pagto   { background: #eef4fc; }
+.row-carga   { background: #f0fdf4; }
+.row-total   { background: #e9ecef; font-weight: 700; }
+.row-grand   { background: #1D63A5; color: #fff; font-weight: 700; }
+.saldo-pos   { color: #dc3545; font-weight: 700; }
+.saldo-neg   { color: #dc3545; font-weight: 700; }
+.saldo-zero  { color: #198754; font-weight: 700; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+
+  <!-- Breadcrumb -->
+  <nav aria-label="breadcrumb" class="mb-3">
+    <ol class="breadcrumb small">
+      <li class="breadcrumb-item"><a href="{{ url_for('index') }}" class="text-decoration-none">Dashboard</a></li>
+      <li class="breadcrumb-item">Relatórios</li>
+      <li class="breadcrumb-item active">Conf. Fornecedores</li>
+    </ol>
+  </nav>
+
+  <!-- Hero -->
+  <div class="page-hero d-flex align-items-center gap-3 flex-wrap mb-3">
+    <div class="hero-icon"><i class="bi bi-people-fill"></i></div>
+    <div class="flex-grow-1">
+      <h4 class="mb-0 fw-bold">Conferência de Fornecedores</h4>
+      <p class="mb-0 opacity-75 small">Cruza pagamentos e carregamentos para conferir saldo por fornecedor</p>
+    </div>
+  </div>
+
+  <!-- ── Filtros ────────────────────────────────────────────────────────── -->
+  <div class="card shadow-sm mb-4">
+    <div class="card-body">
+      <form method="get" id="form-filtros">
+        <div class="row g-3 align-items-end">
+
+          <!-- Data Início -->
+          <div class="col-6 col-md-2">
+            <label class="form-label small fw-semibold mb-1">Data Início</label>
+            <input type="date" name="data_inicio" value="{{ data_inicio }}" class="form-control form-control-sm">
+          </div>
+
+          <!-- Data Fim -->
+          <div class="col-6 col-md-2">
+            <label class="form-label small fw-semibold mb-1">Data Fim</label>
+            <input type="date" name="data_fim" value="{{ data_fim }}" class="form-control form-control-sm">
+          </div>
+
+          <!-- Empresa (multi-select) -->
+          <div class="col-12 col-md-3">
+            <label class="form-label small fw-semibold mb-1">Empresa</label>
+            <select name="cliente_ids[]" id="sel-empresas" class="form-select form-select-sm" multiple size="3">
+              {% for emp in empresas %}
+              <option value="{{ emp.id }}" {% if emp.id|string in cliente_ids %}selected{% endif %}>
+                {{ emp.nome }}
+              </option>
+              {% endfor %}
+            </select>
+            <div class="form-text">Ctrl+clique p/ múltiplos</div>
+          </div>
+
+          <!-- Fornecedor (multi-select) -->
+          <div class="col-12 col-md-3">
+            <label class="form-label small fw-semibold mb-1">Fornecedor</label>
+            <select name="fornecedor_ids[]" id="sel-fornecedores" class="form-select form-select-sm" multiple size="3">
+              {% for f in fornecedores %}
+              <option value="{{ f.id }}" {% if f.id|string in fornecedor_ids %}selected{% endif %}>
+                {{ f.razao_social }}
+              </option>
+              {% endfor %}
+            </select>
+            <div class="form-text">Ctrl+clique p/ múltiplos</div>
+          </div>
+
+          <!-- Agrupamento -->
+          <div class="col-6 col-md-1">
+            <label class="form-label small fw-semibold mb-1">Agrupar</label>
+            <select name="agrupar" class="form-select form-select-sm">
+              <option value="1" {% if agrupar == '1' %}selected{% endif %}>Por fornecedor</option>
+              <option value="0" {% if agrupar == '0' %}selected{% endif %}>Lista corrida</option>
+            </select>
+          </div>
+
+          <!-- Botões -->
+          <div class="col-12 col-md-1 d-flex gap-2">
+            <button type="submit" class="btn btn-primary btn-sm px-3">
+              <i class="bi bi-search"></i> Filtrar
+            </button>
+            <a href="{{ url_for('conf_fornecedores.conf_fornecedores') }}" class="btn btn-outline-secondary btn-sm">
+              <i class="bi bi-x-circle"></i>
+            </a>
+          </div>
+
+        </div>
+
+        <!-- Quick period buttons -->
+        <div class="mt-2 d-flex gap-1 flex-wrap">
+          <span class="text-muted small me-1 align-self-center">Período:</span>
+          <button type="button" class="btn btn-outline-secondary btn-sm periodo-btn" data-periodo="mes_atual">Mês Atual</button>
+          <button type="button" class="btn btn-outline-secondary btn-sm periodo-btn" data-periodo="mes_anterior">Mês Anterior</button>
+          <button type="button" class="btn btn-outline-secondary btn-sm periodo-btn" data-periodo="ano_atual">Ano Atual</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  {% if not fornecedores_data %}
+  <div class="alert alert-info">
+    <i class="bi bi-info-circle me-2"></i>
+    Nenhum dado encontrado para os filtros selecionados. Verifique se há pagamentos vinculados a fornecedores no período.
+  </div>
+  {% else %}
+
+  <!-- ── Per-supplier tables ─────────────────────────────────────────────── -->
+  {% if agrupar == '1' %}
+
+  {% for forn in fornecedores_data %}
+  <div class="mb-4">
+    <div class="forn-header d-flex justify-content-between align-items-center">
+      <span><i class="bi bi-building me-2"></i>{{ forn.fornecedor_nome }}</span>
+      <span class="small opacity-75">Saldo Final:
+        <span class="{% if forn.saldo_final > 0.005 %}text-warning{% elif forn.saldo_final < -0.005 %}text-danger{% else %}text-success{% endif %} fw-bold">
+          {{ forn.saldo_final | fmtmoney }}
+        </span>
+      </span>
+    </div>
+    <div class="table-responsive">
+      <table class="table table-bordered table-sm tbl-conf mb-0">
+        <thead class="table-dark">
+          <tr>
+            <th class="text-center" style="width:88px;">Tipo</th>
+            <th class="text-center" style="width:88px;">Dt. Pagto</th>
+            <th class="text-center" style="width:88px;">Dt. Carga</th>
+            <th class="text-end"   style="width:80px;">Qtd</th>
+            <th class="text-end"   style="width:78px;">Vlr Unit.</th>
+            <th class="text-end"   style="width:105px;">Vlr Compra</th>
+            <th class="text-end"   style="width:105px;">Vlr Pago</th>
+            <th class="text-end"   style="width:105px;">Saldo</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for linha in forn.linhas %}
+          <tr class="{% if linha.tipo == 'pagamento' %}row-pagto{% else %}row-carga{% endif %}">
+            <td class="text-center">
+              {% if linha.tipo == 'pagamento' %}
+              <span class="badge bg-primary">Pagamento</span>
+              {% else %}
+              <span class="badge bg-success">Carregamento</span>
+              {% endif %}
+            </td>
+            <td class="text-center">{{ linha.data_pagto }}</td>
+            <td class="text-center">{{ linha.data_carregamento }}</td>
+            <td class="text-end">
+              {% if linha.quantidade %}{{ linha.quantidade | fmtnum(3) }}{% endif %}
+            </td>
+            <td class="text-end">
+              {% if linha.vlr_uni %}{{ linha.vlr_uni | fmtmoney }}{% endif %}
+            </td>
+            <td class="text-end">
+              {% if linha.vlr_compra_total %}{{ linha.vlr_compra_total | fmtmoney }}{% endif %}
+            </td>
+            <td class="text-end">
+              {% if linha.valor_pago %}{{ linha.valor_pago | fmtmoney }}{% endif %}
+            </td>
+            <td class="text-end {% if linha.saldo > 0.005 %}saldo-pos{% elif linha.saldo < -0.005 %}saldo-neg{% else %}saldo-zero{% endif %}">
+              {{ linha.saldo | fmtmoney }}
+            </td>
+          </tr>
+          {% endfor %}
+          <!-- Supplier total row -->
+          <tr class="row-total">
+            <td colspan="3" class="text-end fw-bold">TOTAL {{ forn.fornecedor_nome }}</td>
+            <td class="text-end">{{ forn.total_qtd | fmtnum(3) }}</td>
+            <td></td>
+            <td class="text-end">{{ forn.total_compra | fmtmoney }}</td>
+            <td class="text-end">{{ forn.total_pago | fmtmoney }}</td>
+            <td class="text-end {% if forn.saldo_final > 0.005 %}saldo-pos{% elif forn.saldo_final < -0.005 %}saldo-neg{% else %}saldo-zero{% endif %}">
+              {{ forn.saldo_final | fmtmoney }}
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {% endfor %}
+
+  {% else %}
+  <!-- ── Flat (running) view ─────────────────────────────────────────────── -->
+  <div class="table-responsive mb-4">
+    <table class="table table-bordered table-sm tbl-conf">
+      <thead class="table-dark">
+        <tr>
+          <th>Fornecedor</th>
+          <th class="text-center" style="width:88px;">Tipo</th>
+          <th class="text-center" style="width:88px;">Dt. Pagto</th>
+          <th class="text-center" style="width:88px;">Dt. Carga</th>
+          <th class="text-end"   style="width:80px;">Qtd</th>
+          <th class="text-end"   style="width:78px;">Vlr Unit.</th>
+          <th class="text-end"   style="width:105px;">Vlr Compra</th>
+          <th class="text-end"   style="width:105px;">Vlr Pago</th>
+          <th class="text-end"   style="width:105px;">Saldo</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for forn in fornecedores_data %}
+        {% for linha in forn.linhas %}
+        <tr class="{% if linha.tipo == 'pagamento' %}row-pagto{% else %}row-carga{% endif %}">
+          <td>{{ forn.fornecedor_nome }}</td>
+          <td class="text-center">
+            {% if linha.tipo == 'pagamento' %}
+            <span class="badge bg-primary">Pagamento</span>
+            {% else %}
+            <span class="badge bg-success">Carregamento</span>
+            {% endif %}
+          </td>
+          <td class="text-center">{{ linha.data_pagto }}</td>
+          <td class="text-center">{{ linha.data_carregamento }}</td>
+          <td class="text-end">
+            {% if linha.quantidade %}{{ linha.quantidade | fmtnum(3) }}{% endif %}
+          </td>
+          <td class="text-end">
+            {% if linha.vlr_uni %}{{ linha.vlr_uni | fmtmoney }}{% endif %}
+          </td>
+          <td class="text-end">
+            {% if linha.vlr_compra_total %}{{ linha.vlr_compra_total | fmtmoney }}{% endif %}
+          </td>
+          <td class="text-end">
+            {% if linha.valor_pago %}{{ linha.valor_pago | fmtmoney }}{% endif %}
+          </td>
+          <td class="text-end {% if linha.saldo > 0.005 %}saldo-pos{% elif linha.saldo < -0.005 %}saldo-neg{% else %}saldo-zero{% endif %}">
+            {{ linha.saldo | fmtmoney }}
+          </td>
+        </tr>
+        {% endfor %}
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+
+  <!-- ── Grand total ────────────────────────────────────────────────────── -->
+  <div class="table-responsive mb-4">
+    <table class="table table-bordered table-sm tbl-conf">
+      <thead>
+        <tr class="row-grand">
+          <td colspan="3" class="fw-bold fs-6">TOTAL GERAL</td>
+          <td class="text-end fw-bold">{{ grand_total_qtd | fmtnum(3) }}</td>
+          <td></td>
+          <td class="text-end fw-bold">{{ grand_total_compra | fmtmoney }}</td>
+          <td class="text-end fw-bold">{{ grand_total_pago | fmtmoney }}</td>
+          <td class="text-end fw-bold {% if grand_saldo > 0.005 %}saldo-pos{% elif grand_saldo < -0.005 %}saldo-neg{% else %}saldo-zero{% endif %}">
+            {{ grand_saldo | fmtmoney }}
+          </td>
+        </tr>
+      </thead>
+    </table>
+  </div>
+
+  <!-- Legend -->
+  <div class="small text-muted mb-4">
+    <span class="badge bg-primary me-2">Pagamento</span> Dinheiro saído para o fornecedor · aumenta o saldo credor.&nbsp;&nbsp;
+    <span class="badge bg-success me-2">Carregamento</span> Produto retirado · reduz o saldo.&nbsp;&nbsp;
+    <strong>Saldo positivo</strong> = você pagou mais do que retirou (crédito a favor).&nbsp;&nbsp;
+    <strong>Saldo negativo</strong> = você retirou mais do que pagou (débito em aberto).
+  </div>
+
+  {% endif %}
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  // Quick period buttons
+  const inp_ini = document.querySelector('[name="data_inicio"]');
+  const inp_fim = document.querySelector('[name="data_fim"]');
+
+  document.querySelectorAll('.periodo-btn').forEach(btn => {
+    btn.addEventListener('click', function () {
+      const today = new Date();
+      let ini, fim;
+      if (this.dataset.periodo === 'mes_atual') {
+        ini = new Date(today.getFullYear(), today.getMonth(), 1);
+        fim = today;
+      } else if (this.dataset.periodo === 'mes_anterior') {
+        ini = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+        fim = new Date(today.getFullYear(), today.getMonth(), 0);
+      } else {
+        ini = new Date(today.getFullYear(), 0, 1);
+        fim = today;
+      }
+      inp_ini.value = ini.toISOString().slice(0, 10);
+      inp_fim.value = fim.toISOString().slice(0, 10);
+    });
+  });
+})();
+</script>
+{% endblock %}

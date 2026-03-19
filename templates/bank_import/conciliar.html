@@ -1,21 +1,41 @@
 {% extends "base.html" %}
 {% block title %}Conciliação Bancária - NH Transportes{% endblock %}
 
+{% block styles %}
+<style>
+  .page-hero {
+    background: linear-gradient(135deg, #1D63A5 0%, #1a4f82 60%, #154070 100%);
+    border-radius: .75rem; padding: 1.25rem 1.75rem; margin-bottom: 1.25rem; color: #fff;
+  }
+  .page-hero .hero-icon {
+    width: 2.75rem; height: 2.75rem; background: rgba(255,255,255,.15);
+    border-radius: .5rem; display: flex; align-items: center; justify-content: center;
+    font-size: 1.35rem; flex-shrink: 0;
+  }
+  .flt-header { background: #1D63A5; color: #fff; font-size: 0.78rem; font-weight: 600; padding: .45rem .75rem; border-radius: .35rem .35rem 0 0; }
+  .tx-row { cursor: pointer; transition: background .1s; }
+  .tx-row:hover { background: #eef4ff; }
+  .tx-row.table-selected { background: #ddeeff; }
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="container-fluid">
-  <nav aria-label="breadcrumb" class="mt-2 mb-3">
-    <ol class="breadcrumb" style="font-size:0.85rem;">
-      <li class="breadcrumb-item"><a href="{{ url_for('index') }}">Dashboard</a></li>
-      <li class="breadcrumb-item"><a href="{{ url_for('bank_import.index') }}">Importação Bancária</a></li>
-      <li class="breadcrumb-item active">Conciliação</li>
-    </ol>
-  </nav>
+  <!-- Hero header -->
+  <div class="page-hero d-flex align-items-center gap-3 flex-wrap mt-2">
+    <div class="hero-icon"><i class="bi bi-arrow-left-right"></i></div>
+    <div class="flex-grow-1">
+      <h4 class="mb-0 fw-bold">Conciliação Bancária</h4>
+      <p class="mb-0 opacity-75" style="font-size:0.8rem;">Concilie as transações bancárias pendentes com fornecedores, despesas ou formas de recebimento.</p>
+    </div>
+    <a href="{{ url_for('bank_import.index') }}" class="btn btn-sm" style="background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.3);">
+      <i class="bi bi-arrow-left me-1"></i>Importação
+    </a>
+  </div>
 
   <!-- Filtros -->
   <form method="GET" class="card shadow-sm mb-3 js-sem-trava" id="formFiltros">
-    <div class="card-header py-2" style="background:#1D63A5;color:white;">
-      <h6 class="mb-0"><i class="bi bi-funnel"></i> Filtros</h6>
-    </div>
+    <div class="flt-header"><i class="bi bi-funnel me-1"></i> Filtros</div>
     <div class="card-body py-2">
       <div class="row g-2">
         <div class="col-md-3">
@@ -138,7 +158,7 @@
             </thead>
             <tbody>
               {% for tx in transacoes %}
-              <tr data-tipo="{{ tx.tipo }}">
+              <tr class="tx-row" data-tipo="{{ tx.tipo }}">
                 <td>
                   <input type="checkbox" name="transaction_id" value="{{ tx.id }}"
                          class="tx-check"
@@ -824,6 +844,17 @@ if (checkAll) {
   });
 }
 document.querySelectorAll('.tx-check').forEach(c => c.addEventListener('change', atualizarBotoes));
+
+// Clique na linha seleciona o checkbox (single-click)
+document.querySelectorAll('tr.tx-row').forEach(function(row) {
+  row.addEventListener('click', function(e) {
+    if (e.target.closest('button, a, input, select, textarea, label')) return;
+    var chk = row.querySelector('.tx-check');
+    if (!chk) return;
+    chk.checked = !chk.checked;
+    chk.dispatchEvent(new Event('change'));
+  });
+});
 
 document.getElementById('btnSelecionarTodos')?.addEventListener('click', function() {
   const all = document.querySelectorAll('.tx-check');
@@ -1619,7 +1650,9 @@ function autoConciliarAqui(btn) {
       btn.innerHTML = '<i class="bi bi-magic"></i> Executar Auto-Conciliação';
       if (d.success) {
         var det = '';
-        if (d.por_cnpj !== undefined) det = ' (CNPJ: ' + d.por_cnpj + ', Regras: ' + d.por_regras + ')';
+        if (d.por_cnpj !== undefined) {
+          det = ' (CNPJ: ' + d.por_cnpj + ', Regras: ' + d.por_regras + ', EFI: ' + (d.por_efi || 0) + ')';
+        }
         msg.className = 'small text-success fw-bold';
         msg.textContent = '✅ ' + d.conciliados + ' transação(ões) conciliada(s)' + det + '. Recarregue para atualizar.';
         if (d.conciliados > 0) setTimeout(function(){ location.reload(); }, 2000);

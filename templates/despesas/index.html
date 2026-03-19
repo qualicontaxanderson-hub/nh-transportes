@@ -1,105 +1,238 @@
 {% extends 'base.html' %}
 {% block title %}Despesas - {{ app_name }}{% endblock %}
+
+{% block styles %}
+<style>
+  .page-hero {
+    background: linear-gradient(135deg, #1D63A5 0%, #1a4f82 60%, #154070 100%);
+    border-radius: .75rem;
+    padding: 1.5rem 2rem;
+    margin-bottom: 1.5rem;
+    color: #fff;
+  }
+  .page-hero .hero-icon {
+    width: 3rem; height: 3rem;
+    background: rgba(255,255,255,.15);
+    border-radius: .6rem;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1.5rem;
+    flex-shrink: 0;
+  }
+  .desp-card {
+    background: #fff;
+    border: 1px solid #e4e9f0;
+    border-radius: 6px;
+    padding: 0.55rem 0.7rem;
+    font-size: 0.8rem;
+    transition: background 0.12s;
+  }
+  .desp-card:hover { background: #f0f7ff; }
+  .desp-icon { font-size: 1rem; color: #1D63A5; flex-shrink: 0; }
+  .desp-title {
+    font-weight: 600; font-size: 0.8rem; color: #1D63A5;
+    display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .desp-title:hover { color: #0d4a88; }
+  .desp-desc { font-size: 0.68rem; color: #6c757d; line-height: 1.2; }
+  .desp-badge {
+    background: #e8f0fe; color: #1a56db;
+    border-radius: 3px; padding: 0.1rem 0.35rem;
+    font-size: 0.65rem; font-weight: 700; white-space: nowrap; flex-shrink: 0;
+  }
+  .btn-desp {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 1.6rem; height: 1.6rem; border-radius: 4px; font-size: 0.7rem;
+    border: none; cursor: pointer; text-decoration: none;
+    transition: opacity 0.12s; padding: 0;
+  }
+  .btn-desp:hover { opacity: 0.75; }
+  .btn-desp-info   { background: #cce5ff; color: #004085; }
+  .btn-desp-warn   { background: #fff3cd; color: #856404; }
+  .btn-desp-danger { background: #f8d7da; color: #721c24; }
+  .stat-card { border: none; border-radius: .6rem; box-shadow: 0 1px 6px rgba(0,0,0,.08); }
+  .stat-label { font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; opacity: .7; }
+  .stat-value { font-size: 1.45rem; font-weight: 700; line-height: 1; }
+</style>
+{% endblock %}
+
 {% block content %}
 {% set nivel_usuario = current_user.nivel|upper if current_user.nivel else '' %}
 <div class="container-fluid">
-    <nav aria-label="breadcrumb" class="mt-2 mb-3">
-        <ol class="breadcrumb" style="font-size: 0.85rem;">
-            <li class="breadcrumb-item"><a href="{{ url_for('index') }}">Dashboard</a></li>
-            <li class="breadcrumb-item active" aria-current="page">Despesas</li>
-        </ol>
-    </nav>
-    
-    <div class="d-flex justify-content-between align-items-center mb-3">
-        <h2 style="color:#1D63A5; font-size: 1.3rem;"><i class="bi bi-wallet2"></i> Gestão de Despesas</h2>
-        {% if nivel_usuario in ['ADMIN', 'ADMINISTRADOR'] %}
-        <div class="btn-group" role="group">
-            <a href="{{ url_for('despesas.novo_titulo') }}" class="btn btn-primary btn-sm">
-                <i class="bi bi-plus-circle"></i> Cadastrar Título
-            </a>
-        </div>
-        {% endif %}
-    </div>
-    
-    <div class="card shadow-sm">
-        <div class="card-header" style="background:#1D63A5;color:white; font-size: 0.95rem; padding: 0.6rem 1rem;">
-            <h5 class="mb-0" style="font-size: 1rem;">Títulos de Despesas</h5>
-        </div>
-        <div class="card-body" style="padding: 1rem;">
-            <div class="row">
-                {% for titulo in titulos %}
-                <div class="col-md-6 col-lg-4 mb-3">
-                    <div class="card h-100 shadow-sm hover-card">
-                        <div class="card-body">
-                            <div class="d-flex justify-content-between align-items-start mb-2">
-                                <h5 class="card-title text-primary mb-0" style="font-size: 1rem;">
-                                    <i class="bi bi-folder-fill"></i> {{ titulo.nome }}
-                                </h5>
-                                {% if nivel_usuario in ['ADMIN', 'ADMINISTRADOR'] %}
-                                <div class="btn-group btn-group-sm">
-                                    <a href="{{ url_for('despesas.titulo_detalhes', titulo_id=titulo.id) }}" 
-                                       class="btn btn-outline-info btn-sm" 
-                                       title="Ver Categorias">
-                                        <i class="bi bi-eye"></i>
-                                    </a>
-                                    <a href="{{ url_for('despesas.editar_titulo', id=titulo.id) }}" 
-                                       class="btn btn-outline-warning btn-sm" 
-                                       title="Editar">
-                                        <i class="bi bi-pencil"></i>
-                                    </a>
-                                    <form method="POST" 
-                                          action="{{ url_for('despesas.excluir_titulo', id=titulo.id) }}" 
-                                          style="display:inline;" 
-                                          onsubmit="return confirm('Tem certeza que deseja desativar este título?');">
-                                        <button type="submit" 
-                                                class="btn btn-outline-danger btn-sm" 
-                                                title="Desativar">
-                                            <i class="bi bi-trash"></i>
-                                        </button>
-                                    </form>
-                                </div>
-                                {% endif %}
-                            </div>
-                            {% if titulo.descricao %}
-                            <p class="card-text text-muted small mb-2">{{ titulo.descricao }}</p>
-                            {% endif %}
-                            <div class="d-flex justify-content-between align-items-center">
-                                <span class="badge bg-info">
-                                    {{ titulo.total_categorias or 0 }} categoria(s)
-                                </span>
-                                <a href="{{ url_for('despesas.titulo_detalhes', titulo_id=titulo.id) }}" 
-                                   class="btn btn-sm btn-primary">
-                                    Ver Categorias <i class="bi bi-arrow-right"></i>
-                                </a>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                {% else %}
-                <div class="col-12">
-                    <div class="alert alert-info">
-                        <i class="bi bi-info-circle"></i> Nenhum título de despesa cadastrado ainda.
-                        {% if nivel_usuario in ['ADMIN', 'ADMINISTRADOR'] %}
-                        <a href="{{ url_for('despesas.novo_titulo') }}">Clique aqui para criar o primeiro título</a>.
-                        {% endif %}
-                    </div>
-                </div>
-                {% endfor %}
-            </div>
-        </div>
-    </div>
-</div>
 
-<style>
-    .hover-card {
-        transition: transform 0.2s, box-shadow 0.2s;
-    }
-    .hover-card:hover {
-        transform: translateY(-4px);
-        box-shadow: 0 4px 12px rgba(0,0,0,0.15) !important;
-    }
-    .card-title {
-        font-weight: 600;
-    }
-</style>
+  <!-- Hero header -->
+  <div class="page-hero d-flex align-items-center gap-3 flex-wrap">
+    <div class="hero-icon"><i class="bi bi-wallet2"></i></div>
+    <div class="flex-grow-1">
+      <h4 class="mb-0 fw-bold">Gestão de Despesas</h4>
+      <p class="mb-0 opacity-75 small">Títulos, categorias e subcategorias de despesas da empresa.</p>
+    </div>
+    {% if nivel_usuario in ['ADMIN', 'ADMINISTRADOR'] %}
+    <a href="{{ url_for('despesas.novo_titulo') }}"
+       class="btn btn-sm px-3 fw-semibold" style="background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.35);">
+      <i class="bi bi-plus-circle me-1"></i> Cadastrar Título
+    </a>
+    {% endif %}
+  </div>
+
+  <!-- Stat cards -->
+  {% set total_titulos = titulos | length %}
+  {% set total_categorias = titulos | sum(attribute='total_categorias') %}
+  <div class="row g-3 mb-4">
+    <div class="col-6 col-md-3">
+      <div class="card stat-card p-3">
+        <div class="stat-label text-primary">Títulos</div>
+        <div class="stat-value text-primary">{{ total_titulos }}</div>
+        <div class="small text-muted mt-1">títulos ativos</div>
+      </div>
+    </div>
+    <div class="col-6 col-md-3">
+      <div class="card stat-card p-3">
+        <div class="stat-label" style="color:#1D63A5;">Categorias</div>
+        <div class="stat-value" style="color:#1D63A5;">{{ total_categorias }}</div>
+        <div class="small text-muted mt-1">categorias ativas</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Filtro por Empresa — Contas Contábeis -->
+  <div class="card shadow-sm mb-4" id="card-relatorio-filtro">
+    <div class="card-header d-flex justify-content-between align-items-center py-2"
+         style="background:#1D63A5;color:white;font-size:0.82rem;font-weight:600;letter-spacing:0.02em;">
+      <span><i class="bi bi-table me-1"></i> Relatório de Contas Contábeis por Empresa</span>
+    </div>
+    <div class="card-body">
+      <form method="GET" class="row g-2 align-items-end">
+        <div class="col-md-5">
+          <label class="form-label mb-1" style="font-size:0.85rem;">Selecione a Empresa</label>
+          <select name="cliente_id" class="form-select form-select-sm">
+            <option value="">— Selecione uma empresa —</option>
+            {% for emp in empresas %}
+            <option value="{{ emp.id }}" {% if cliente_id == emp.id|string %}selected{% endif %}>
+              {{ emp.nome }}
+            </option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-auto">
+          <button type="submit" class="btn btn-primary btn-sm">
+            <i class="bi bi-search"></i> Pesquisar
+          </button>
+          {% if cliente_id %}
+          <a href="{{ url_for('despesas.index') }}" class="btn btn-secondary btn-sm ms-1">
+            <i class="bi bi-x-circle"></i> Limpar
+          </a>
+          {% endif %}
+        </div>
+      </form>
+    </div>
+  </div>
+
+  {% if cliente_id %}
+  <div class="card shadow-sm mb-4" id="card-relatorio">
+    <div class="card-header d-flex justify-content-between align-items-center py-2"
+         style="background:#17a2b8;color:white;font-size:0.82rem;font-weight:600;letter-spacing:0.02em;">
+      <span><i class="bi bi-table me-1"></i> Categorias e Contas Contábeis — {{ empresa_selecionada.nome if empresa_selecionada else '' }}</span>
+      {% if relatorio %}
+      <button class="btn btn-sm btn-light py-0 px-2" style="font-size:0.75rem;" onclick="window.print()" title="Imprimir relatório">
+        <i class="bi bi-printer"></i> Imprimir
+      </button>
+      {% endif %}
+    </div>
+    <div class="card-body p-0">
+      {% if relatorio %}
+      <div class="table-responsive">
+        <table class="table table-hover mb-0">
+          <thead>
+            <tr style="font-size:0.75rem;background:#f0f4ff;">
+              <th style="width:3%">#</th>
+              <th>Título</th>
+              <th>Categoria</th>
+              <th>Conta Contábil</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in relatorio %}
+            <tr style="font-size:0.78rem;">
+              <td class="text-muted">{{ loop.index }}</td>
+              <td>{{ row.titulo_nome }}</td>
+              <td>{{ row.categoria_nome }}</td>
+              <td>
+                {% if row.conta_codigo %}
+                  <strong>{{ row.conta_codigo }}</strong>
+                  <span class="text-muted ms-1">{{ row.conta_nome }}</span>
+                {% else %}
+                  <span class="text-muted fst-italic" style="font-size:0.72rem;">não vinculada</span>
+                {% endif %}
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <div class="px-3 py-2 border-top" style="font-size:0.72rem;color:#6c757d;background:#f8f9fa;">
+        <i class="bi bi-info-circle me-1"></i>
+        <strong>{{ relatorio|length }}</strong> categoria(s) listada(s) para esta empresa.
+      </div>
+      {% else %}
+      <div class="text-center text-muted py-4" style="font-size:0.85rem;">
+        <i class="bi bi-inbox" style="font-size:1.8rem;opacity:0.4;"></i>
+        <div class="mt-2">Nenhuma categoria encontrada para esta empresa.</div>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- Card de títulos -->
+  <div class="card shadow-sm">
+    <div class="card-header d-flex align-items-center py-2"
+         style="background:#1D63A5;color:white;font-size:0.82rem;font-weight:600;letter-spacing:0.02em;">
+      <i class="bi bi-folder2-open me-2"></i> Títulos de Despesas
+      {% if titulos %}
+      <span class="badge ms-2" style="background:rgba(255,255,255,.2);font-size:0.78rem;">{{ total_titulos }}</span>
+      {% endif %}
+    </div>
+    <div class="card-body p-0">
+      {% if titulos %}
+      <div class="row g-2 p-2">
+        {% for titulo in titulos %}
+        <div class="col-md-6 col-lg-4">
+          <div class="desp-card d-flex align-items-center gap-2">
+            <span class="desp-icon"><i class="bi bi-folder-fill"></i></span>
+            <div class="flex-grow-1 overflow-hidden">
+              <a href="{{ url_for('despesas.titulo_detalhes', titulo_id=titulo.id) }}" class="desp-title text-decoration-none">{{ titulo.nome }}</a>
+              {% if titulo.descricao %}
+              <div class="desp-desc text-truncate">{{ titulo.descricao }}</div>
+              {% endif %}
+            </div>
+            <span class="desp-badge">{{ titulo.total_categorias or 0 }} cat.</span>
+            {% if nivel_usuario in ['ADMIN', 'ADMINISTRADOR'] %}
+            <div class="d-flex gap-1 flex-shrink-0">
+              <a href="{{ url_for('despesas.titulo_detalhes', titulo_id=titulo.id) }}" class="btn-desp btn-desp-info" title="Ver Categorias"><i class="bi bi-eye"></i></a>
+              <a href="{{ url_for('despesas.editar_titulo', id=titulo.id) }}" class="btn-desp btn-desp-warn" title="Editar"><i class="bi bi-pencil"></i></a>
+              <form method="POST" action="{{ url_for('despesas.excluir_titulo', id=titulo.id) }}" style="display:inline;" onsubmit="return confirm('Desativar este título?');">
+                <button type="submit" class="btn-desp btn-desp-danger" title="Desativar"><i class="bi bi-trash"></i></button>
+              </form>
+            </div>
+            {% else %}
+            <a href="{{ url_for('despesas.titulo_detalhes', titulo_id=titulo.id) }}" class="btn-desp btn-desp-info" title="Ver Categorias"><i class="bi bi-eye"></i></a>
+            {% endif %}
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+      {% else %}
+      <div class="text-center text-muted py-4">
+        <i class="bi bi-inbox" style="font-size:1.8rem;opacity:0.4;"></i>
+        <div class="mt-2" style="font-size:0.82rem;">Nenhum título de despesa cadastrado ainda.
+          {% if nivel_usuario in ['ADMIN', 'ADMINISTRADOR'] %}
+          <a href="{{ url_for('despesas.novo_titulo') }}">Criar o primeiro título</a>.
+          {% endif %}
+        </div>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+
+</div>
 {% endblock %}

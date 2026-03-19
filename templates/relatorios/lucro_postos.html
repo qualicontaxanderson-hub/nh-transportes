@@ -1,0 +1,577 @@
+{% extends 'base.html' %}
+{% block title %}Relatório Lucro Postos{% endblock %}
+
+{% block styles %}
+<style>
+/* ── Cores de produto (mesmas do posto/vendas) ───────────────────────────── */
+:root {
+  --etanol-color:   #28a745;
+  --gasolina-color: #dc3545;
+  --s10-color:      #007bff;
+  --s500-color:     #343a40;
+}
+.prod-etanol   { color: var(--etanol-color)   !important; }
+.prod-gasolina { color: var(--gasolina-color) !important; }
+.prod-s10      { color: var(--s10-color)      !important; }
+.prod-s500     { color: var(--s500-color)     !important; }
+
+.prod-hdr-etanol   { background: var(--etanol-color)   !important; color:#fff !important; }
+.prod-hdr-gasolina { background: var(--gasolina-color) !important; color:#fff !important; }
+.prod-hdr-s10      { background: var(--s10-color)      !important; color:#fff !important; }
+.prod-hdr-s500     { background: var(--s500-color)     !important; color:#fff !important; }
+
+/* ── Seções da tabela ────────────────────────────────────────────────────── */
+th.sec-entrada  { background:#1D63A5; color:#fff; }
+td.sec-entrada  { background:#eef4fc; }
+th.sec-saida    { background:#dc3545; color:#fff; }
+td.sec-saida    { background:#fef0f0; }
+th.sec-saldo    { background:#d97706; color:#fff; }
+td.sec-saldo    { background:#fefce8; }
+th.sec-result   { background:#198754; color:#fff; }
+td.sec-result   { background:#f0fdf4; }
+
+/* ── Tabela diária ───────────────────────────────────────────────────────── */
+.tbl-diario thead th { font-size:.78rem; text-transform:uppercase; letter-spacing:.04em; }
+.variacao-ok   { color:#198754; font-weight:700; }
+.variacao-mal  { color:#dc3545; font-weight:700; }
+
+/* ── Hero header ─────────────────────────────────────────────────────────── */
+.page-hero {
+  background: linear-gradient(135deg, #1D63A5 0%, #1a4f82 60%, #154070 100%);
+  border-radius:.75rem; padding:1.5rem 2rem; margin-bottom:1.5rem; color:#fff;
+}
+.page-hero .hero-icon {
+  width:3rem; height:3rem; background:rgba(255,255,255,.15);
+  border-radius:.6rem; display:flex; align-items:center; justify-content:center;
+  font-size:1.5rem; flex-shrink:0;
+}
+
+/* ── Botões período rápido ───────────────────────────────────────────────── */
+.periodo-btn { font-size:.78rem; padding:.2rem .65rem; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+
+  <!-- Breadcrumb -->
+  <nav aria-label="breadcrumb" class="mb-3">
+    <ol class="breadcrumb small">
+      <li class="breadcrumb-item"><a href="{{ url_for('index') }}" class="text-decoration-none">Dashboard</a></li>
+      <li class="breadcrumb-item">Relatórios</li>
+      <li class="breadcrumb-item active">Lucro Postos</li>
+    </ol>
+  </nav>
+
+  <!-- Hero header -->
+  <div class="page-hero d-flex align-items-center gap-3 flex-wrap mb-3">
+    <div class="hero-icon"><i class="bi bi-graph-up-arrow"></i></div>
+    <div class="flex-grow-1">
+      <h4 class="mb-0 fw-bold">Relatório de Lucro — Postos</h4>
+      <p class="mb-0 opacity-75 small">Entradas · Saídas · Saldo de Estoque · Resultado por produto</p>
+    </div>
+    <a href="{{ url_for('lucro_postos.index') }}"
+       class="btn btn-sm px-3" style="background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.35);">
+      <i class="bi bi-archive-fill me-1"></i> Estoque Inicial
+    </a>
+  </div>
+
+  <!-- ── Filtros ─────────────────────────────────────────────────────────── -->
+  <div class="card shadow-sm mb-4">
+    <div class="card-body">
+      <form method="get" id="formFiltro">
+        <div class="row g-3 align-items-end">
+
+          <!-- Data início -->
+          <div class="col-md-3">
+            <label class="form-label fw-semibold small mb-1">Data início</label>
+            <input type="date" id="data_inicio" name="data_inicio"
+                   value="{{ data_inicio.strftime('%Y-%m-%d') }}"
+                   class="form-control form-control-sm">
+            <!-- Quick-select -->
+            <div class="mt-1 d-flex gap-1 flex-wrap">
+              <span class="text-muted small me-1">Período:</span>
+              <button type="button" class="btn btn-outline-secondary periodo-btn" onclick="setPeriodo('mes')">Este mês</button>
+              <button type="button" class="btn btn-outline-secondary periodo-btn" onclick="setPeriodo('mes_anterior')">Mês anterior</button>
+              <button type="button" class="btn btn-outline-secondary periodo-btn" onclick="setPeriodo('ano')">Este ano</button>
+            </div>
+          </div>
+
+          <!-- Data fim -->
+          <div class="col-md-3">
+            <label class="form-label fw-semibold small mb-1">Data fim</label>
+            <input type="date" id="data_fim" name="data_fim"
+                   value="{{ data_fim.strftime('%Y-%m-%d') }}"
+                   class="form-control form-control-sm">
+          </div>
+
+          <!-- Empresa -->
+          <div class="col-md-3">
+            <label class="form-label fw-semibold small mb-1">Empresa <span class="text-danger">*</span></label>
+            <select name="cliente_ids[]" class="form-select form-select-sm" multiple size="4" required>
+              {% for c in clientes_disponiveis %}
+              <option value="{{ c.id }}" {% if c.id in cliente_ids %}selected{% endif %}>
+                {{ c.nome_fantasia or c.razao_social }}
+              </option>
+              {% endfor %}
+            </select>
+            <div class="form-text small">Ctrl+clique para múltiplas.</div>
+          </div>
+
+          <!-- Produto -->
+          <div class="col-md-3">
+            <label class="form-label fw-semibold small mb-1">Produto <span class="text-danger">*</span></label>
+            <select name="produto_ids[]" class="form-select form-select-sm" multiple size="4" required>
+              {% for p in produtos_disponiveis %}
+              <option value="{{ p.id }}" {% if p.id in produto_ids %}selected{% endif %}>
+                {{ p.nome }}
+              </option>
+              {% endfor %}
+            </select>
+            <div class="form-text small">Ctrl+clique para múltiplos.</div>
+          </div>
+
+          <!-- Ações -->
+          <div class="col-12 d-flex gap-2 flex-wrap">
+            <button type="submit" class="btn btn-primary btn-sm px-4">
+              <i class="bi bi-search me-1"></i> Filtrar
+            </button>
+            <a href="{{ url_for('relatorios.lucro_postos') }}" class="btn btn-outline-secondary btn-sm px-3">
+              <i class="bi bi-x-circle me-1"></i> Limpar
+            </a>
+            {% if filtrou %}
+            <button type="submit" name="exportar" value="csv"
+                    class="btn btn-outline-success btn-sm px-3 ms-auto">
+              <i class="bi bi-file-earmark-spreadsheet me-1"></i> Exportar CSV
+            </button>
+            {% endif %}
+          </div>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ── Instrução quando ainda não filtrou ─────────────────────────────── -->
+  {% if not filtrou %}
+  <div class="alert alert-info d-flex align-items-center gap-2">
+    <i class="bi bi-info-circle-fill fs-5"></i>
+    <span>Selecione a <strong>Empresa</strong> e ao menos um <strong>Produto</strong> para visualizar o relatório.</span>
+  </div>
+  {% endif %}
+
+  {# ── Resultados por empresa ───────────────────────────────────────────── #}
+  {% for cid, dados in resultados_por_cliente.items() %}
+  {% set nome_empresa = dados.nome %}
+
+  <div class="card shadow-sm mb-4">
+    <!-- Header da empresa -->
+    <div class="card-header d-flex align-items-center justify-content-between py-3 px-4"
+         style="background:#1D63A5;color:#fff;border-radius:.5rem .5rem 0 0;">
+      <h5 class="mb-0 fw-bold">
+        <i class="bi bi-building me-2"></i>{{ nome_empresa }}
+      </h5>
+      {% if dados.fechado %}
+        <span class="badge bg-success"><i class="bi bi-lock-fill me-1"></i>FECHADO</span>
+      {% else %}
+        <span class="badge bg-warning text-dark"><i class="bi bi-unlock me-1"></i>ABERTO (provisório)</span>
+      {% endif %}
+    </div>
+
+    <!-- Tabela resumo mensal -->
+    <div class="table-responsive">
+      <table class="table table-sm table-bordered align-middle mb-0" style="font-size:.82rem;">
+        <thead>
+          <tr style="text-align:center;">
+            <th rowspan="2" class="align-middle" style="background:#2c3e50;color:#fff;width:140px;">Produto</th>
+            <th colspan="3" class="sec-entrada">ENTRADA (Compra)</th>
+            <th colspan="3" class="sec-saida">SAÍDA (Venda)</th>
+            <th colspan="3" class="sec-saldo text-center">EI (Estoque Inicial)</th>
+            <th colspan="3" class="sec-saldo text-center">EF (Estoque Final)</th>
+            <th colspan="4" class="sec-result">RESULTADO</th>
+          </tr>
+          <tr style="text-align:center;font-size:.75rem;">
+            <th class="sec-entrada">Qtde (L)</th>
+            <th class="sec-entrada">Vl Unit</th>
+            <th class="sec-entrada">Total</th>
+            <th class="sec-saida">Qtde (L)</th>
+            <th class="sec-saida">Vl Médio</th>
+            <th class="sec-saida">Total</th>
+            <th class="sec-saldo">Qtde (L)</th>
+            <th class="sec-saldo">Custo Unit</th>
+            <th class="sec-saldo">Total</th>
+            <th class="sec-saldo">Qtde (L)</th>
+            <th class="sec-saldo">Custo Unit</th>
+            <th class="sec-saldo">Total</th>
+            <th class="sec-result">Receita</th>
+            <th class="sec-result">Custo</th>
+            <th class="sec-result">Lucro</th>
+            <th class="sec-result">Margem/L</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% set ns = namespace(acum_lucro=0) %}
+          {% for pid, res in dados.produtos.items() | sort(attribute='1.produto_nome') %}
+          {% set ns.acum_lucro = ns.acum_lucro + res.lucro %}
+          {% set pnome_low = res.produto_nome | lower %}
+          {% if 'etanol' in pnome_low %}{% set pcls = 'prod-etanol' %}
+          {% elif 'gasolina' in pnome_low %}{% set pcls = 'prod-gasolina' %}
+          {% elif 's-10' in pnome_low or 's10' in pnome_low %}{% set pcls = 'prod-s10' %}
+          {% elif 's-500' in pnome_low or 's500' in pnome_low %}{% set pcls = 'prod-s500' %}
+          {% else %}{% set pcls = '' %}{% endif %}
+          <tr>
+            <td class="fw-semibold {{ pcls }}">
+              <i class="bi bi-droplet-fill me-1"></i>{{ res.produto_nome }}
+            </td>
+            <!-- ENTRADA -->
+            <td class="text-end sec-entrada">{{ res.qtde_entrada | fmtnum }}</td>
+            <td class="text-end sec-entrada">R$ {{ res.custo_entrada_unit | fmtnum }}</td>
+            <td class="text-end sec-entrada fw-semibold">R$ {{ res.custo_entrada_total | fmtmoney }}</td>
+            <!-- SAÍDA -->
+            <td class="text-end sec-saida">{{ res.qtde_saida | fmtnum }}</td>
+            <td class="text-end sec-saida">R$ {{ res.preco_medio_saida | fmtmoney }}</td>
+            <td class="text-end sec-saida fw-semibold">R$ {{ res.receita_saida | fmtmoney }}</td>
+            <!-- SALDO EI -->
+            <td class="text-end sec-saldo">{{ res.estoque_inicial_qtde | fmtnum }}</td>
+            <td class="text-end sec-saldo">R$ {{ res.estoque_inicial_custo_unit | fmtnum }}</td>
+            <td class="text-end sec-saldo fw-semibold">R$ {{ res.estoque_inicial_valor | fmtmoney }}</td>
+            <!-- SALDO EF -->
+            <td class="text-end sec-saldo">{{ res.estoque_final_qtde | fmtnum }}</td>
+            <td class="text-end sec-saldo">R$ {{ res.estoque_final_custo_unit | fmtnum }}</td>
+            <td class="text-end sec-saldo fw-semibold">R$ {{ res.estoque_final_valor | fmtmoney }}</td>
+            <!-- RESULTADO -->
+            <td class="text-end sec-result text-primary fw-semibold">R$ {{ res.receita_saida | fmtmoney }}</td>
+            <td class="text-end sec-result text-danger">R$ {{ res.cogs | fmtmoney }}</td>
+            <td class="text-end sec-result fw-bold {% if res.lucro >= 0 %}text-success{% else %}text-danger{% endif %}">
+              R$ {{ res.lucro | fmtmoney }}
+            </td>
+            {% set margem_r = res.preco_medio_saida - res.custo_entrada_unit %}
+            <td class="text-end sec-result fw-semibold {% if margem_r >= 0 %}text-success{% else %}text-danger{% endif %}" title="Vl Médio Saída − Vl Unit Entrada">
+              R$ {{ margem_r | fmtmoney }}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+        <tfoot>
+          <tr style="background:#e9ecef;font-weight:700;">
+            <td>TOTAL</td>
+            <td class="text-end sec-entrada">{{ dados.produtos.values() | sum(attribute='qtde_entrada') | fmtnum }}</td>
+            <td></td>
+            <td class="text-end sec-entrada">R$ {{ dados.produtos.values() | sum(attribute='custo_entrada_total') | fmtmoney }}</td>
+            <td class="text-end sec-saida">{{ dados.produtos.values() | sum(attribute='qtde_saida') | fmtnum }}</td>
+            <td></td>
+            <td class="text-end sec-saida">R$ {{ dados.produtos.values() | sum(attribute='receita_saida') | fmtmoney }}</td>
+            <td class="text-end sec-saldo">{{ dados.produtos.values() | sum(attribute='estoque_inicial_qtde') | fmtnum }}</td>
+            <td></td>
+            <td class="text-end sec-saldo">R$ {{ dados.produtos.values() | sum(attribute='estoque_inicial_valor') | fmtmoney }}</td>
+            <td class="text-end sec-saldo">{{ dados.produtos.values() | sum(attribute='estoque_final_qtde') | fmtnum }}</td>
+            <td></td>
+            <td class="text-end sec-saldo">R$ {{ dados.produtos.values() | sum(attribute='estoque_final_valor') | fmtmoney }}</td>
+            <td class="text-end sec-result text-primary">R$ {{ dados.produtos.values() | sum(attribute='receita_saida') | fmtmoney }}</td>
+            <td class="text-end sec-result text-danger">R$ {{ dados.produtos.values() | sum(attribute='cogs') | fmtmoney }}</td>
+            <td class="text-end sec-result fw-bold {% if ns.acum_lucro >= 0 %}text-success{% else %}text-danger{% endif %}">
+              R$ {{ ns.acum_lucro | fmtmoney }}
+            </td>
+            <td class="text-end sec-result text-muted">—</td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+
+    {# ── Relatório dia a dia por produto ───────────────────────────────── #}
+    {% set diario = diario_por_cliente.get(cid, {}) %}
+    {% if diario %}
+    <div class="card-body pt-0 pb-3 px-3">
+      <p class="fw-semibold small mb-2 mt-3" style="color:#1D63A5;">
+        <i class="bi bi-calendar3-week me-1"></i> Detalhe dia a dia por produto
+      </p>
+      <div class="accordion accordion-flush" id="acc-{{ cid }}">
+        {% for pid, prod_diario in diario.items() | sort(attribute='1.nome') %}
+        {% set pnome_low2 = prod_diario.nome | lower %}
+        {% if 'etanol' in pnome_low2 %}{% set pcls2 = 'prod-etanol' %}{% set phdr = 'prod-hdr-etanol' %}
+        {% elif 'gasolina' in pnome_low2 %}{% set pcls2 = 'prod-gasolina' %}{% set phdr = 'prod-hdr-gasolina' %}
+        {% elif 's-10' in pnome_low2 or 's10' in pnome_low2 %}{% set pcls2 = 'prod-s10' %}{% set phdr = 'prod-hdr-s10' %}
+        {% elif 's-500' in pnome_low2 or 's500' in pnome_low2 %}{% set pcls2 = 'prod-s500' %}{% set phdr = 'prod-hdr-s500' %}
+        {% else %}{% set pcls2 = '' %}{% set phdr = '' %}{% endif %}
+        <div class="accordion-item border mb-2" style="border-radius:.5rem;overflow:hidden;">
+          <h2 class="accordion-header">
+            <button class="accordion-button collapsed py-2 px-3 {{ phdr }}" type="button"
+                    data-bs-toggle="collapse"
+                    data-bs-target="#diario-{{ cid }}-{{ pid }}"
+                    style="font-size:.85rem;font-weight:600;">
+              <i class="bi bi-droplet-fill me-2"></i>{{ prod_diario.nome }}
+              <span class="badge bg-white text-dark ms-2 fw-normal" style="font-size:.72rem;">
+                {{ prod_diario.dias | length }} dias
+              </span>
+            </button>
+          </h2>
+          <div id="diario-{{ cid }}-{{ pid }}" class="accordion-collapse collapse">
+            <div class="accordion-body p-0">
+              {% if prod_diario.dias %}
+              <div class="table-responsive">
+                <table class="table table-sm table-hover tbl-diario mb-0" style="font-size:.8rem;">
+                  <thead style="background:#f0f4f8;">
+                    <tr>
+                      <th class="px-3">Data</th>
+                      <th class="text-end">Est. Inicial (L)</th>
+                      <th class="text-end">EI Valor R$</th>
+                      <th class="text-end sec-entrada">Compras (L)</th>
+                      <th class="text-end sec-entrada">Prc Compra Unit.</th>
+                      <th class="text-end sec-entrada">Compras R$</th>
+                      <th class="text-end sec-entrada">Custo Corrido</th>
+                      <th class="text-end sec-saida">Vendas (L)</th>
+                      <th class="text-end sec-saida">Prc Venda</th>
+                      <th class="text-end sec-saida">Receita</th>
+                      <th class="text-end sec-saida">Margem/L</th>
+                      <th class="text-end sec-saldo">EF Calc. (L)</th>
+                      <th class="text-end sec-saldo">EF Calc. R$</th>
+                      <th class="text-end sec-saldo">EF Real (L)</th>
+                      <th class="text-end sec-result">Variação (L)</th>
+                      <th class="text-end sec-result">Var. Acum. (L)</th>
+                      <th class="text-end sec-result">Lucro Diário</th>
+                      <th class="text-end sec-result">Lucro Acum.</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {% for dia in prod_diario.dias %}
+                    <tr>
+                      <td class="px-3 fw-semibold text-nowrap">{{ dia.data.strftime('%d/%m/%Y') }} <span class="text-muted fw-normal" style="font-size:.75em;">{{ dia.dia_semana }}</span></td>
+                      <td class="text-end">{{ dia.ei | fmtnum }}</td>
+                      <td class="text-end">R$ {{ dia.ei_valor | fmtmoney }}</td>
+                      <td class="text-end sec-entrada">{{ dia.compras | fmtnum }}</td>
+                      <td class="text-end sec-entrada">
+                        {% if dia.custo_medio_compra %}R$ {{ dia.custo_medio_compra | fmtnum }}{% else %}<span class="text-muted">—</span>{% endif %}
+                      </td>
+                      <td class="text-end sec-entrada fw-semibold">
+                        {% if dia.compras_valor %}R$ {{ dia.compras_valor | fmtmoney }}{% else %}<span class="text-muted">—</span>{% endif %}
+                      </td>
+                      <td class="text-end sec-entrada fw-semibold">
+                        {% if dia.custo_corrido %}R$ {{ dia.custo_corrido | fmtnum }}{% else %}<span class="text-muted">—</span>{% endif %}
+                      </td>
+                      <td class="text-end sec-saida">{{ dia.vendas | fmtnum }}</td>
+                      <td class="text-end sec-saida">
+                        {% if dia.preco_venda_medio %}R$ {{ dia.preco_venda_medio | fmtmoney }}{% else %}<span class="text-muted">—</span>{% endif %}
+                      </td>
+                      <td class="text-end sec-saida">R$ {{ dia.receita | fmtmoney }}</td>
+                      <td class="text-end sec-saida fw-semibold {% if dia.preco_venda_medio and dia.custo_corrido and (dia.preco_venda_medio - dia.custo_corrido) >= 0 %}text-success{% elif dia.preco_venda_medio and dia.custo_corrido %}text-danger{% endif %}" title="Prc Venda − Custo Corrido">
+                        {% if dia.preco_venda_medio and dia.custo_corrido %}
+                          R$ {{ (dia.preco_venda_medio - dia.custo_corrido) | fmtmoney }}
+                        {% else %}<span class="text-muted">—</span>{% endif %}
+                      </td>
+                      <td class="text-end sec-saldo">{{ dia.ef_calculado | fmtnum }}</td>
+                      <td class="text-end sec-saldo">R$ {{ dia.ef_calc_valor | fmtmoney }}</td>
+                      <td class="text-end sec-saldo">
+                        {% if dia.ef_real is not none %}{{ dia.ef_real | fmtnum }}{% else %}<span class="text-muted">—</span>{% endif %}
+                      </td>
+                      <td class="text-end sec-result">
+                        {% if dia.variacao is not none %}
+                          <span class="{% if dia.variacao >= -0.001 %}variacao-ok{% else %}variacao-mal{% endif %}">
+                            {% if dia.variacao >= 0 %}+{% endif %}{{ dia.variacao | fmtmoney }}
+                          </span>
+                        {% else %}
+                          <span class="text-muted">—</span>
+                        {% endif %}
+                      </td>
+                      <td class="text-end sec-result">
+                        {% if dia.variacao_acumulada is not none %}
+                          <span class="{% if dia.variacao_acumulada >= -0.001 %}variacao-ok{% else %}variacao-mal{% endif %}" style="font-weight:600;">
+                            {% if dia.variacao_acumulada >= 0 %}+{% endif %}{{ dia.variacao_acumulada | fmtmoney }}
+                          </span>
+                        {% else %}
+                          <span class="text-muted">—</span>
+                        {% endif %}
+                      </td>
+                      <td class="text-end sec-result fw-semibold {% if dia.lucro_diario >= 0 %}text-success{% else %}text-danger{% endif %}">
+                        R$ {{ dia.lucro_diario | fmtmoney }}
+                      </td>
+                      <td class="text-end sec-result {% if dia.lucro_acumulado >= 0 %}text-success{% else %}text-danger{% endif %}">
+                        R$ {{ dia.lucro_acumulado | fmtmoney }}
+                      </td>
+                    </tr>
+                    {% endfor %}
+                  </tbody>
+                  <tfoot style="background:#f0f4f8;font-weight:700;">
+                    <tr>
+                      <td class="px-3">Total do período</td>
+                      <td colspan="2"></td>
+                      <td class="text-end sec-entrada">{{ prod_diario.dias | sum(attribute='compras') | fmtnum }}</td>
+                      <td></td>
+                      <td class="text-end sec-entrada fw-bold">
+                        R$ {{ prod_diario.dias | sum(attribute='compras_valor') | fmtmoney }}
+                      </td>
+                      <td></td>
+                      <td class="text-end sec-saida">{{ prod_diario.dias | sum(attribute='vendas') | fmtnum }}</td>
+                      <td></td>
+                      <td class="text-end sec-saida">
+                        R$ {{ prod_diario.dias | sum(attribute='receita') | fmtmoney }}
+                      </td>
+                      <td class="text-end sec-saida text-muted">—</td>
+                      <td colspan="3"></td>
+                      <td class="text-end sec-result">
+                        {% set total_var = namespace(v=0, has=0) %}
+                        {% for dia in prod_diario.dias %}{% if dia.variacao is not none %}{% set total_var.v = total_var.v + dia.variacao %}{% set total_var.has = total_var.has + 1 %}{% endif %}{% endfor %}
+                        {% if total_var.has > 0 %}
+                          <span class="{% if total_var.v >= -0.001 %}variacao-ok{% else %}variacao-mal{% endif %}">
+                            {% if total_var.v >= 0 %}+{% endif %}{{ total_var.v | fmtmoney }}
+                          </span>
+                        {% else %}<span class="text-muted">—</span>{% endif %}
+                      </td>
+                      <td></td>
+                      <td class="text-end sec-result fw-bold {% if prod_diario.dias | sum(attribute='lucro_diario') >= 0 %}text-success{% else %}text-danger{% endif %}">
+                        R$ {{ prod_diario.dias | sum(attribute='lucro_diario') | fmtmoney }}
+                      </td>
+                      <td></td>
+                    </tr>
+                    {# ── Est. Inicial do Período ── #}
+                    <tr style="background:#dbeafe;">
+                      <td class="px-3 fw-bold text-primary">Est. Inicial do Período</td>
+                      <td class="text-end text-primary fw-bold">{{ prod_diario.ei_mes | fmtnum }} L</td>
+                      <td class="text-end text-primary">R$ {{ prod_diario.ei_mes_valor | fmtmoney }}</td>
+                      <td></td><td></td><td></td>
+                      <td class="text-end text-primary">R$ {{ prod_diario.ei_mes_custo_unit | fmtnum }}</td>
+                      <td colspan="10"></td>
+                    </tr>
+                    {# ── Est. Final do Período ── #}
+                    <tr style="background:#e8f4fd;">
+                      <td class="px-3 fw-bold text-primary">Est. Final do Período</td>
+                      <td class="text-end text-primary fw-bold">
+                        {% if prod_diario.ef_mes is not none %}{{ prod_diario.ef_mes | fmtnum }} L{% else %}<span class="text-muted">—</span>{% endif %}
+                      </td>
+                      <td class="text-end text-primary">R$ {{ prod_diario.ef_mes_valor | fmtmoney }}</td>
+                      <td></td><td></td><td></td>
+                      <td class="text-end text-primary">R$ {{ prod_diario.ef_mes_custo_unit | fmtnum }}</td>
+                      <td colspan="10"></td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+              {% else %}
+              <p class="text-muted small p-3 mb-0">Nenhum lançamento encontrado para este produto no período.</p>
+              {% endif %}
+            </div>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+    {% endif %}
+  </div>
+  {% endfor %}
+
+  {# ── Consolidado (múltiplas empresas) ─────────────────────────────────── #}
+  {% if consolidado and resultados_por_cliente | length > 1 %}
+  <div class="card shadow-sm mb-4">
+    <div class="card-header py-3 px-4" style="background:#2c3e50;color:#fff;">
+      <h5 class="mb-0"><i class="bi bi-collection me-2"></i>CONSOLIDADO — TODOS OS CLIENTES</h5>
+    </div>
+    <div class="table-responsive">
+      <table class="table table-sm table-bordered align-middle mb-0" style="font-size:.82rem;">
+        <thead>
+          <tr style="text-align:center;">
+            <th rowspan="2" class="align-middle" style="background:#2c3e50;color:#fff;width:140px;">Produto</th>
+            <th colspan="3" class="sec-entrada">ENTRADA</th>
+            <th colspan="3" class="sec-saida">SAÍDA</th>
+            <th colspan="3" class="sec-saldo text-center">EI (Estoque Inicial)</th>
+            <th colspan="3" class="sec-saldo text-center">EF (Estoque Final)</th>
+            <th colspan="4" class="sec-result">RESULTADO</th>
+          </tr>
+          <tr style="text-align:center;font-size:.75rem;">
+            <th class="sec-entrada">Qtde (L)</th><th class="sec-entrada">Vl Unit</th><th class="sec-entrada">Total</th>
+            <th class="sec-saida">Qtde (L)</th><th class="sec-saida">Vl Médio</th><th class="sec-saida">Total</th>
+            <th class="sec-saldo">Qtde (L)</th><th class="sec-saldo">Custo</th><th class="sec-saldo">Total</th>
+            <th class="sec-saldo">Qtde (L)</th><th class="sec-saldo">Custo</th><th class="sec-saldo">Total</th>
+            <th class="sec-result">Receita</th><th class="sec-result">Custo</th><th class="sec-result">Lucro</th><th class="sec-result">Margem/L</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% set ns2 = namespace(total_receita=0, total_cogs=0, total_lucro=0) %}
+          {% for pid, res in consolidado.items() | sort(attribute='1.produto_nome') %}
+          {% set ns2.total_receita = ns2.total_receita + res.receita_saida %}
+          {% set ns2.total_cogs = ns2.total_cogs + res.cogs %}
+          {% set ns2.total_lucro = ns2.total_lucro + res.lucro %}
+          {% set pnome_low3 = res.produto_nome | lower %}
+          {% if 'etanol' in pnome_low3 %}{% set pcls3 = 'prod-etanol' %}
+          {% elif 'gasolina' in pnome_low3 %}{% set pcls3 = 'prod-gasolina' %}
+          {% elif 's-10' in pnome_low3 or 's10' in pnome_low3 %}{% set pcls3 = 'prod-s10' %}
+          {% elif 's-500' in pnome_low3 or 's500' in pnome_low3 %}{% set pcls3 = 'prod-s500' %}
+          {% else %}{% set pcls3 = '' %}{% endif %}
+          <tr>
+            <td class="fw-semibold {{ pcls3 }}"><i class="bi bi-droplet-fill me-1"></i>{{ res.produto_nome }}</td>
+            <td class="text-end sec-entrada">{{ res.qtde_entrada | fmtnum }}</td>
+            <td class="text-end sec-entrada">R$ {{ res.custo_entrada_unit | fmtnum }}</td>
+            <td class="text-end sec-entrada fw-semibold">R$ {{ res.custo_entrada_total | fmtmoney }}</td>
+            <td class="text-end sec-saida">{{ res.qtde_saida | fmtnum }}</td>
+            <td class="text-end sec-saida">R$ {{ res.preco_medio_saida | fmtmoney }}</td>
+            <td class="text-end sec-saida fw-semibold">R$ {{ res.receita_saida | fmtmoney }}</td>
+            <td class="text-end sec-saldo">{{ res.estoque_inicial_qtde | fmtnum }}</td>
+            <td class="text-end sec-saldo">R$ {{ res.estoque_inicial_custo_unit | fmtnum }}</td>
+            <td class="text-end sec-saldo fw-semibold">R$ {{ res.estoque_inicial_valor | fmtmoney }}</td>
+            <td class="text-end sec-saldo">{{ res.estoque_final_qtde | fmtnum }}</td>
+            <td class="text-end sec-saldo">R$ {{ res.estoque_final_custo_unit | fmtnum }}</td>
+            <td class="text-end sec-saldo fw-semibold">R$ {{ res.estoque_final_valor | fmtmoney }}</td>
+            <td class="text-end sec-result text-primary fw-semibold">R$ {{ res.receita_saida | fmtmoney }}</td>
+            <td class="text-end sec-result text-danger">R$ {{ res.cogs | fmtmoney }}</td>
+            <td class="text-end sec-result fw-bold {% if res.lucro >= 0 %}text-success{% else %}text-danger{% endif %}">
+              R$ {{ res.lucro | fmtmoney }}
+            </td>
+            {% set margem_c = res.preco_medio_saida - res.custo_entrada_unit %}
+            <td class="text-end sec-result fw-semibold {% if margem_c >= 0 %}text-success{% else %}text-danger{% endif %}" title="Vl Médio Saída − Vl Unit Entrada">
+              R$ {{ margem_c | fmtmoney }}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+        <tfoot>
+          <tr style="background:#e9ecef;font-weight:700;">
+            <td>TOTAL GERAL</td>
+            <td class="text-end sec-entrada">{{ consolidado.values() | sum(attribute='qtde_entrada') | fmtnum }}</td>
+            <td></td>
+            <td class="text-end sec-entrada">R$ {{ consolidado.values() | sum(attribute='custo_entrada_total') | fmtmoney }}</td>
+            <td class="text-end sec-saida">{{ consolidado.values() | sum(attribute='qtde_saida') | fmtnum }}</td>
+            <td></td>
+            <td class="text-end sec-saida">R$ {{ ns2.total_receita | fmtmoney }}</td>
+            <td class="text-end sec-saldo">{{ consolidado.values() | sum(attribute='estoque_inicial_qtde') | fmtnum }}</td>
+            <td></td>
+            <td class="text-end sec-saldo">R$ {{ consolidado.values() | sum(attribute='estoque_inicial_valor') | fmtmoney }}</td>
+            <td class="text-end sec-saldo">{{ consolidado.values() | sum(attribute='estoque_final_qtde') | fmtnum }}</td>
+            <td></td>
+            <td class="text-end sec-saldo">R$ {{ consolidado.values() | sum(attribute='estoque_final_valor') | fmtmoney }}</td>
+            <td class="text-end sec-result text-primary">R$ {{ ns2.total_receita | fmtmoney }}</td>
+            <td class="text-end sec-result text-danger">R$ {{ ns2.total_cogs | fmtmoney }}</td>
+            <td class="text-end sec-result fw-bold {% if ns2.total_lucro >= 0 %}text-success{% else %}text-danger{% endif %}">
+              R$ {{ ns2.total_lucro | fmtmoney }}
+            </td>
+            <td class="text-end sec-result text-muted">—</td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+  </div>
+  {% endif %}
+
+</div>
+
+<script>
+// Período rápido
+function setPeriodo(tipo) {
+  const hoje = new Date();
+  let ini, fim;
+  if (tipo === 'mes') {
+    ini = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
+    fim = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0);
+  } else if (tipo === 'mes_anterior') {
+    ini = new Date(hoje.getFullYear(), hoje.getMonth() - 1, 1);
+    fim = new Date(hoje.getFullYear(), hoje.getMonth(), 0);
+  } else if (tipo === 'ano') {
+    ini = new Date(hoje.getFullYear(), 0, 1);
+    fim = new Date(hoje.getFullYear(), 11, 31);
+  }
+  document.getElementById('data_inicio').value = fmt(ini);
+  document.getElementById('data_fim').value    = fmt(fim);
+}
+function fmt(d) {
+  return d.getFullYear() + '-' +
+         String(d.getMonth() + 1).padStart(2, '0') + '-' +
+         String(d.getDate()).padStart(2, '0');
+}
+</script>
+{% endblock %}

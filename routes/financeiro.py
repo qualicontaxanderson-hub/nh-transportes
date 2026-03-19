@@ -618,6 +618,111 @@ def alterar_vencimento(charge_id):
             conn.close()
 
 
+@financeiro_bp.route('/registrar-pagamento-manual/', methods=['POST'])
+@login_required
+def registrar_pagamento_manual():
+    """
+    Registra pagamento manual para uma cobrança.
+    Útil para boletos substituídos, agrupados ou com desconto que foram pagos
+    fora do fluxo normal do provedor EFI.
+
+    Parâmetros (form ou JSON):
+        cobranca_id   : int  – ID primário da cobrança
+        data_pagamento: str  – Data no formato YYYY-MM-DD (default: hoje)
+        observacao    : str  – Observação opcional
+    """
+    conn = None
+    cursor = None
+    try:
+        if request.is_json:
+            data = request.get_json(silent=True) or {}
+        else:
+            data = request.form
+
+        cobranca_id = data.get('cobranca_id')
+        data_pagamento = data.get('data_pagamento') or datetime.today().date().isoformat()
+        observacao = (data.get('observacao') or '').strip()
+
+        try:
+            cobranca_id = int(cobranca_id)
+        except (TypeError, ValueError):
+            flash('ID da cobrança inválido.', 'danger')
+            return redirect(url_for('financeiro.recebimentos'))
+
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+
+        cursor.execute(
+            'SELECT id, status, charge_id, pago_via_provedor FROM cobrancas WHERE id = %s LIMIT 1',
+            (cobranca_id,),
+        )
+        cobr = cursor.fetchone()
+        if not cobr:
+            flash('Cobrança não encontrada.', 'danger')
+            return redirect(url_for('financeiro.recebimentos'))
+
+        status_atual = (cobr.get('status') or '').lower()
+        if status_atual == 'cancelado':
+            flash('Não é possível registrar pagamento em uma cobrança cancelada.', 'warning')
+            return redirect(url_for('financeiro.recebimentos'))
+
+        if int(cobr.get('pago_via_provedor') or 0):
+            flash('Pagamento já registrado pelo provedor EFI. Alteração não permitida.', 'warning')
+            return redirect(url_for('financeiro.recebimentos'))
+
+        # Atualiza a cobrança como paga manualmente (sem alterar charge_id existente)
+        cursor2 = conn.cursor()
+        try:
+            try:
+                cursor2.execute(
+                    """UPDATE cobrancas
+                       SET status = 'pago',
+                           data_pagamento = %s,
+                           observacao = COALESCE(NULLIF(%s, ''), observacao)
+                       WHERE id = %s""",
+                    (data_pagamento, observacao, cobranca_id),
+                )
+            except Exception:
+                # Fallback: coluna observacao pode não existir ainda
+                cursor2.close()
+                cursor2 = conn.cursor()
+                cursor2.execute(
+                    'UPDATE cobrancas SET status = %s, data_pagamento = %s WHERE id = %s',
+                    ('pago', data_pagamento, cobranca_id),
+                )
+            conn.commit()
+            flash('Pagamento registrado com sucesso.', 'success')
+        except Exception as e:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+            current_app.logger.exception('[registrar_pagamento_manual] erro: %s', e)
+            flash('Falha ao registrar pagamento.', 'danger')
+        finally:
+            try:
+                cursor2.close()
+            except Exception:
+                pass
+
+    except Exception as e:
+        current_app.logger.exception('[registrar_pagamento_manual] erro geral: %s', e)
+        flash('Erro ao registrar pagamento.', 'danger')
+    finally:
+        try:
+            if cursor:
+                cursor.close()
+        except Exception:
+            pass
+        try:
+            if conn:
+                conn.close()
+        except Exception:
+            pass
+
+    return redirect(url_for('financeiro.recebimentos'))
+
+
 @financeiro_bp.route('/marcar-pago/<int:charge_id>/', methods=['POST'])
 @login_required
 def marcar_pago(charge_id):
@@ -862,6 +967,290 @@ def consultar_status_efi(charge_id):
         }), 500
 
 
+@financeiro_bp.route('/auto-conciliar-efi/', methods=['POST'])
+@login_required
+def auto_conciliar_efi():
+    """
+    Verifica automaticamente o status de um lote de boletos pendentes no EFI
+    e marca como pagos os que o provedor já registrou como 'paid'/'settled'.
+
+    Processa no máximo _BATCH_SIZE boletos por chamada (os mais antigos primeiro)
+    para evitar timeouts. Retorna JSON: {success, atualizados, erros, restantes, message}
+    """
+    import concurrent.futures as _cf
+    from datetime import datetime as _dt_cls
+
+    _BATCH_SIZE = 20      # boletos por chamada
+    _PER_CHARGE_TIMEOUT = 10  # segundos por consulta EFI
+
+    conn = None
+    cursor = None
+    try:
+        credentials = _get_efi_credentials()
+
+        # Aborta rapidamente se as credenciais não estiverem configuradas
+        if not credentials.get('client_id') or not credentials.get('client_secret'):
+            return jsonify({'success': False, 'atualizados': 0, 'erros': 0, 'restantes': 0,
+                            'message': 'Credenciais EFI não configuradas (EFI_CLIENT_ID / EFI_CLIENT_SECRET).'})
+
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+
+        # Busca apenas os próximos _BATCH_SIZE boletos pendentes/vencidos com charge_id
+        cursor.execute("""
+            SELECT id, charge_id, status, valor, data_vencimento
+            FROM cobrancas
+            WHERE charge_id IS NOT NULL
+              AND charge_id != ''
+              AND (status IS NULL OR status NOT IN ('pago', 'cancelado'))
+            ORDER BY data_vencimento ASC
+            LIMIT %s
+        """, (_BATCH_SIZE,))
+        lote = cursor.fetchall()
+
+        # Conta total de pendentes para informar ao usuário quantos restam
+        cursor.execute("""
+            SELECT COUNT(*) AS total
+            FROM cobrancas
+            WHERE charge_id IS NOT NULL
+              AND charge_id != ''
+              AND (status IS NULL OR status NOT IN ('pago', 'cancelado'))
+        """)
+        total_pendentes = cursor.fetchone()['total']
+
+        if not lote:
+            cursor.close()
+            conn.close()
+            return jsonify({'success': True, 'atualizados': 0, 'erros': 0, 'restantes': 0,
+                            'message': 'Nenhum boleto pendente para verificar.'})
+
+        hoje = date.today()
+        atualizados = 0
+        erros = 0
+
+        def _consultar(cobr):
+            """Consulta EFI para um boleto; retorna (cobr, charge_data) ou (cobr, None) em erro."""
+            try:
+                with _cf.ThreadPoolExecutor(max_workers=1) as ex:
+                    fut = ex.submit(fetch_charge, credentials, cobr['charge_id'])
+                    return cobr, fut.result(timeout=_PER_CHARGE_TIMEOUT)
+            except Exception as exc:
+                current_app.logger.warning(
+                    '[auto_conciliar_efi] charge_id=%s: %s', cobr.get('charge_id'), exc)
+                return cobr, None
+
+        # Consulta todos do lote em paralelo (máximo _BATCH_SIZE threads)
+        with _cf.ThreadPoolExecutor(max_workers=min(len(lote), 5)) as pool:
+            resultados = list(pool.map(_consultar, lote))
+
+        for cobr, charge_data in resultados:
+            if not charge_data or not isinstance(charge_data, dict):
+                erros += 1
+                continue
+
+            error_code = charge_data.get('http_status') or charge_data.get('code')
+            if error_code and error_code != 200:
+                erros += 1
+                continue
+
+            data = charge_data.get('data') or charge_data.get('charge') or charge_data
+            if not isinstance(data, dict):
+                erros += 1
+                continue
+
+            status_efi = (data.get('status') or '').lower()
+            if status_efi not in ('paid', 'settled'):
+                continue
+
+            payment = data.get('payment') or {}
+            if isinstance(payment, list) and payment:
+                payment = payment[0]
+            paid_at_str = (payment.get('paid_at') if isinstance(payment, dict) else None) \
+                          or data.get('paid_at')
+
+            try:
+                data_pag = _dt_cls.strptime(paid_at_str[:10], '%Y-%m-%d').date() if paid_at_str else hoje
+            except (ValueError, TypeError):
+                data_pag = hoje
+
+            cursor.execute("""
+                UPDATE cobrancas
+                SET status = 'pago',
+                    pago_via_provedor = 1,
+                    data_pagamento = %s
+                WHERE id = %s AND (status IS NULL OR status NOT IN ('pago', 'cancelado'))
+            """, (data_pag, cobr['id']))
+
+            if cursor.rowcount > 0:
+                atualizados += 1
+
+        if atualizados:
+            conn.commit()
+
+        # ── Fase 2: conciliar via bank_transactions importados ─────────────────
+        # Para contas onde o extrato já foi importado (OFX/CSV), os créditos EFI
+        # chegam com descrição "Recebimento de cobrança: <charge_id> de CLIENTE".
+        # Esta fase detecta essas transações e concilia tanto o boleto quanto a
+        # transação bancária, usando forma 'Compensação Cobrança'.
+        # Aceita tanto a codificação correta (cobrança) quanto a dupla-codificação
+        # que ocorre quando OFX UTF-8 é lido como Latin-1 (cobranÃ§a).
+        import re as _re
+        _CHARGE_RE_BT = _re.compile(
+            r'cobran(?:ça|Ã§a|ca)[:\s]+(\d{6,12})',
+            _re.IGNORECASE,
+        )
+        atualizados_bt = 0
+        bt_pendentes = []
+        try:
+            cursor.execute(
+                """SELECT bt.id, bt.descricao, bt.valor, bt.data_transacao
+                   FROM bank_transactions bt
+                   WHERE bt.tipo = 'CREDIT' AND bt.status = 'pendente'"""
+            )
+            bt_pendentes = cursor.fetchall()
+
+            # Obtém ou cria a forma 'Compensação Cobrança'
+            cursor.execute(
+                "SELECT id FROM formas_recebimento WHERE nome = 'Compensação Cobrança' LIMIT 1"
+            )
+            _fr = cursor.fetchone()
+            forma_comp_id = _fr['id'] if _fr else None
+            if not forma_comp_id:
+                cursor.execute(
+                    "INSERT INTO formas_recebimento (nome, ativo) VALUES ('Compensação Cobrança', 1)"
+                )
+                conn.commit()
+                forma_comp_id = cursor.lastrowid
+
+            agora_bt = _dt_cls.now()
+            for tx in bt_pendentes:
+                descricao = tx.get('descricao') or ''
+                m = _CHARGE_RE_BT.search(descricao)
+                if not m:
+                    continue
+                cid_str = m.group(1)
+
+                cursor.execute(
+                    """SELECT id, status FROM cobrancas
+                       WHERE charge_id = %s
+                         AND (status IS NULL OR status NOT IN ('pago', 'cancelado'))
+                       LIMIT 1""",
+                    (cid_str,),
+                )
+                cobr_bt = cursor.fetchone()
+                if not cobr_bt:
+                    # Cobrança já paga — só concilia a transação bancária
+                    if forma_comp_id:
+                        try:
+                            cursor.execute(
+                                """UPDATE bank_transactions
+                                   SET status = 'conciliado',
+                                       forma_recebimento_id = %s,
+                                       conciliado_em = %s,
+                                       conciliado_por = 'auto-efi-cobranca'
+                                   WHERE id = %s""",
+                                (forma_comp_id, agora_bt, tx['id']),
+                            )
+                        except Exception:
+                            cursor.execute(
+                                """UPDATE bank_transactions
+                                   SET status = 'conciliado',
+                                       conciliado_em = %s,
+                                       conciliado_por = 'auto-efi-cobranca'
+                                   WHERE id = %s""",
+                                (agora_bt, tx['id']),
+                            )
+                    continue
+
+                data_pag_bt = tx.get('data_transacao') or hoje
+                cursor.execute(
+                    """UPDATE cobrancas
+                       SET status = 'pago', pago_via_provedor = 1, data_pagamento = %s
+                       WHERE id = %s""",
+                    (data_pag_bt, cobr_bt['id']),
+                )
+                if cursor.rowcount > 0:
+                    atualizados_bt += 1
+
+                if forma_comp_id:
+                    try:
+                        cursor.execute(
+                            """UPDATE bank_transactions
+                               SET status = 'conciliado',
+                                   forma_recebimento_id = %s,
+                                   conciliado_em = %s,
+                                   conciliado_por = 'auto-efi-cobranca'
+                               WHERE id = %s""",
+                            (forma_comp_id, agora_bt, tx['id']),
+                        )
+                    except Exception:
+                        cursor.execute(
+                            """UPDATE bank_transactions
+                               SET status = 'conciliado',
+                                   conciliado_em = %s,
+                                   conciliado_por = 'auto-efi-cobranca'
+                               WHERE id = %s""",
+                            (agora_bt, tx['id']),
+                        )
+
+            if atualizados_bt:
+                conn.commit()
+                current_app.logger.info('[auto_conciliar_efi] fase2 bank_tx: %d conciliado(s)', atualizados_bt)
+            elif atualizados_bt == 0 and bt_pendentes:
+                # Mesmo sem novos pagamentos, bank_transactions de cobranças já pagas
+                # podem ter sido conciliadas — commitar para não perder essas atualizações.
+                try:
+                    conn.commit()
+                except Exception:
+                    pass
+        except Exception as _bt_exc:
+            current_app.logger.warning('[auto_conciliar_efi] fase2 bank_tx falhou: %s', _bt_exc)
+
+        atualizados += atualizados_bt
+
+        # Reconta após todas as atualizações para obter o número real de pendentes
+        try:
+            cursor.execute("""
+                SELECT COUNT(*) AS total
+                FROM cobrancas
+                WHERE charge_id IS NOT NULL
+                  AND charge_id != ''
+                  AND (status IS NULL OR status NOT IN ('pago', 'cancelado'))
+            """)
+            restantes = cursor.fetchone()['total']
+        except Exception:
+            restantes = max(0, total_pendentes - len(lote) - atualizados_bt)
+
+        cursor.close()
+        conn.close()
+
+        if atualizados > 0:
+            msg = f'{atualizados} boleto(s) marcado(s) como pago(s) via EFI.'
+        else:
+            msg = 'Nenhum boleto novo confirmado como pago no EFI neste lote.'
+        if restantes > 0:
+            msg += f' Clique novamente para verificar os {restantes} boleto(s) restante(s).'
+        if erros:
+            msg += f' ({erros} erro(s) ao consultar o provedor)'
+
+        return jsonify({'success': True, 'atualizados': atualizados, 'erros': erros,
+                        'restantes': restantes, 'message': msg})
+
+    except Exception as e:
+        current_app.logger.exception('[auto_conciliar_efi] erro: %s', e)
+        try:
+            if conn:
+                conn.rollback()
+            if cursor:
+                cursor.close()
+            if conn:
+                conn.close()
+        except Exception:
+            pass
+        return jsonify({'success': False, 'atualizados': 0, 'erros': 0, 'restantes': 0,
+                        'message': f'Erro interno: {str(e)}'}), 500
+
+
 @financeiro_bp.route('/reverter-conciliacao/<int:tx_id>/', methods=['POST'])
 @login_required
 def reverter_conciliacao(tx_id):
@@ -995,6 +1384,7 @@ def _get_bank_transactions(tipo, request_args, exclude_transfers=False):
     status = request_args.get('status', '').strip()
     data_inicio = request_args.get('data_inicio', '').strip()
     data_fim = request_args.get('data_fim', '').strip()
+    f_descricao = request_args.get('f_descricao', '').strip()
 
     try:
         # Require empresa or conta filter before querying (empty on first load)
@@ -1044,6 +1434,9 @@ def _get_bank_transactions(tipo, request_args, exclude_transfers=False):
         if data_fim:
             where.append("bt.data_transacao <= %s")
             params.append(data_fim)
+        if f_descricao:
+            where.append("bt.descricao LIKE %s")
+            params.append(f'%{f_descricao}%')
 
         # Exclui transferências entre contas da página de Pagamentos.
         # Só exclui DEBITs *conciliados* — transações pendentes nunca são excluídas,
@@ -1206,6 +1599,7 @@ def recebimento():
         status_filter=request.args.get('status', ''),
         data_inicio=request.args.get('data_inicio', ''),
         data_fim=request.args.get('data_fim', ''),
+        f_descricao=request.args.get('f_descricao', ''),
     )
 
 
@@ -1231,6 +1625,7 @@ def pagamentos():
         status_filter=request.args.get('status', ''),
         data_inicio=request.args.get('data_inicio', ''),
         data_fim=request.args.get('data_fim', ''),
+        f_descricao=request.args.get('f_descricao', ''),
     )
 
 
@@ -1238,21 +1633,46 @@ def pagamentos():
 @login_required
 def contas():
     """Lista as contas bancárias cadastradas no sistema de importação OFX."""
+    f_empresa = request.args.get('empresa_id', '').strip()
+
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
+
+    where = 'WHERE 1=1'
+    params = []
+    if f_empresa:
+        where += ' AND ba.cliente_id = %s'
+        params.append(int(f_empresa))
+
     cursor.execute(
-        """SELECT ba.id, ba.banco_nome, ba.agencia, ba.conta, ba.apelido,
+        f"""SELECT ba.id, ba.banco_nome, ba.agencia, ba.conta, ba.apelido,
                   ba.ativo, ba.criado_em, ba.cliente_id,
+                  ba.plano_contas_conta_id,
                   c.razao_social AS empresa_nome,
+                  pc.codigo AS plano_codigo, pc.nome AS plano_nome,
                   (SELECT COUNT(*) FROM bank_transactions bt WHERE bt.account_id = ba.id) AS total_transacoes
            FROM bank_accounts ba
            LEFT JOIN clientes c ON c.id = ba.cliente_id
-           ORDER BY ba.ativo DESC, ba.apelido, ba.banco_nome"""
+           LEFT JOIN plano_contas_contas pc ON pc.id = ba.plano_contas_conta_id
+           {where}
+           ORDER BY ba.ativo DESC, ba.apelido, ba.banco_nome""",
+        params,
     )
     contas_list = cursor.fetchall()
+
+    # Lista de empresas para o filtro (apenas as que têm contas cadastradas)
+    cursor.execute(
+        """SELECT DISTINCT c.id, c.razao_social
+           FROM clientes c
+           INNER JOIN bank_accounts ba ON ba.cliente_id = c.id
+           ORDER BY c.razao_social"""
+    )
+    empresas = cursor.fetchall()
+
     cursor.close()
     conn.close()
-    return render_template('financeiro/contas.html', contas=contas_list)
+    return render_template('financeiro/contas.html', contas=contas_list,
+                           empresas=empresas, f_empresa=f_empresa)
 
 
 @financeiro_bp.route('/transferencias/')
@@ -1265,6 +1685,7 @@ def transferencias():
     # Filtros — suporte a multi-select (getlist) para empresa e conta
     f_data_ini  = request.args.get('data_ini', '').strip()
     f_data_fim  = request.args.get('data_fim', '').strip()
+    f_descricao = request.args.get('f_descricao', '').strip()
     f_contas    = [c for c in request.args.getlist('account_id') if c and c.strip()]
     f_empresas  = [e for e in request.args.getlist('empresa_id') if e and e.strip()]
     # Compatibilidade com URLs antigas (parâmetro único)
@@ -1327,6 +1748,7 @@ def transferencias():
                 filtro_aplicado=False,
                 f_data_ini=f_data_ini,
                 f_data_fim=f_data_fim,
+                f_descricao=f_descricao,
                 f_contas=[str(c) for c in f_contas],
                 f_empresas=[str(e) for e in f_empresas],
                 f_conta=f_conta,
@@ -1350,6 +1772,9 @@ def transferencias():
             ph = ','.join(['%s'] * len(f_contas))
             where.append(f"(bt.account_id IN ({ph}) OR bt_orig.account_id IN ({ph}))")
             params += f_contas + f_contas
+        if f_descricao:
+            where.append("bt_orig.descricao LIKE %s")
+            params.append(f'%{f_descricao}%')
 
         where_sql = ' AND '.join(where)
 
@@ -1477,6 +1902,7 @@ def transferencias():
         filtro_aplicado=filtro_aplicado,
         f_data_ini=f_data_ini,
         f_data_fim=f_data_fim,
+        f_descricao=f_descricao,
         f_contas=[str(c) for c in f_contas],
         f_empresas=[str(e) for e in f_empresas],
         f_conta=f_conta,

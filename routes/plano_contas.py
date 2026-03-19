@@ -139,6 +139,22 @@ def _ensure_tables():
             ) COMMENT='Contas do Plano de Contas Contábil dentro de cada Grupo'
         """)
         conn.commit()
+
+        # 5. Coluna tipo_grupo em plano_contas_contas (idempotente)
+        cursor.execute("""
+            SELECT COUNT(*) FROM information_schema.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE()
+              AND TABLE_NAME   = 'plano_contas_contas'
+              AND COLUMN_NAME  = 'tipo_grupo'
+        """)
+        if cursor.fetchone()[0] == 0:
+            cursor.execute(
+                "ALTER TABLE plano_contas_contas "
+                "ADD COLUMN tipo_grupo VARCHAR(30) NOT NULL DEFAULT 'OUTROS' "
+                "COMMENT 'Classificação: ATIVO, PASSIVO, RECEITAS, DESPESAS, CUSTOS, OUTROS'"
+            )
+            conn.commit()
+
         _tables_ready = True
     except Exception:
         log.exception('_ensure_tables: falha ao inicializar tabelas do plano de contas')
@@ -361,16 +377,36 @@ def detalhe(id):
         flash('Grupo não encontrado.', 'danger')
         return redirect(url_for('plano_contas.lista'))
 
+    _ORDEM_TIPOS = ['ATIVO', 'PASSIVO', 'RECEITAS', 'CUSTOS', 'DESPESAS', 'OUTROS']
+
     cursor.execute(
         """SELECT * FROM plano_contas_contas
            WHERE grupo_id = %s
-           ORDER BY codigo""",
+           ORDER BY tipo_grupo, codigo""",
         (id,),
     )
     contas = cursor.fetchall()
     cursor.close()
     conn.close()
-    return render_template('plano_contas/detalhe.html', grupo=grupo, contas=contas)
+
+    # Organiza em dicionário ordenado por tipo
+    from collections import OrderedDict
+    contas_por_tipo = OrderedDict()
+    for tipo in _ORDEM_TIPOS:
+        contas_por_tipo[tipo] = []
+    for c in contas:
+        tipo = c.get('tipo_grupo') or 'OUTROS'
+        if tipo not in contas_por_tipo:
+            contas_por_tipo[tipo] = []
+        contas_por_tipo[tipo].append(c)
+    # Remove tipos sem contas
+    contas_por_tipo = OrderedDict(
+        (k, v) for k, v in contas_por_tipo.items() if v
+    )
+
+    return render_template('plano_contas/detalhe.html',
+                           grupo=grupo, contas=contas,
+                           contas_por_tipo=contas_por_tipo)
 
 
 # ─── Conta: nova / editar / excluir ─────────────────────────────────────────
@@ -391,10 +427,11 @@ def nova_conta(grupo_id):
         return redirect(url_for('plano_contas.lista'))
 
     if request.method == 'POST':
-        codigo    = request.form.get('codigo', '').strip()
-        nome      = request.form.get('nome', '').strip()
-        descricao = request.form.get('descricao', '').strip() or None
-        acao      = request.form.get('acao', 'salvar')
+        codigo     = request.form.get('codigo', '').strip()
+        nome       = request.form.get('nome', '').strip()
+        descricao  = request.form.get('descricao', '').strip() or None
+        tipo_grupo = request.form.get('tipo_grupo', 'OUTROS').strip() or 'OUTROS'
+        acao       = request.form.get('acao', 'salvar')
 
         if not codigo or not nome:
             flash('Código e Nome são obrigatórios.', 'danger')
@@ -415,8 +452,8 @@ def nova_conta(grupo_id):
                                        grupo=grupo, conta=None, form=request.form)
 
             cursor.execute(
-                "INSERT INTO plano_contas_contas (grupo_id, codigo, nome, descricao) VALUES (%s, %s, %s, %s)",
-                (grupo_id, codigo, nome, descricao),
+                "INSERT INTO plano_contas_contas (grupo_id, codigo, nome, descricao, tipo_grupo) VALUES (%s, %s, %s, %s, %s)",
+                (grupo_id, codigo, nome, descricao, tipo_grupo),
             )
             conn.commit()
             flash('Conta criada com sucesso!', 'success')
@@ -461,10 +498,11 @@ def editar_conta(conta_id):
              'codigo': conta['grupo_codigo']}
 
     if request.method == 'POST':
-        codigo    = request.form.get('codigo', '').strip()
-        nome      = request.form.get('nome', '').strip()
-        descricao = request.form.get('descricao', '').strip() or None
-        ativo     = 1 if request.form.get('ativo') else 0
+        codigo     = request.form.get('codigo', '').strip()
+        nome       = request.form.get('nome', '').strip()
+        descricao  = request.form.get('descricao', '').strip() or None
+        ativo      = 1 if request.form.get('ativo') else 0
+        tipo_grupo = request.form.get('tipo_grupo', 'OUTROS').strip() or 'OUTROS'
 
         if not codigo or not nome:
             flash('Código e Nome são obrigatórios.', 'danger')
@@ -486,9 +524,9 @@ def editar_conta(conta_id):
 
             cursor.execute(
                 """UPDATE plano_contas_contas
-                   SET codigo=%s, nome=%s, descricao=%s, ativo=%s
+                   SET codigo=%s, nome=%s, descricao=%s, ativo=%s, tipo_grupo=%s
                    WHERE id=%s""",
-                (codigo, nome, descricao, ativo, conta_id),
+                (codigo, nome, descricao, ativo, tipo_grupo, conta_id),
             )
             conn.commit()
             flash('Conta atualizada com sucesso!', 'success')

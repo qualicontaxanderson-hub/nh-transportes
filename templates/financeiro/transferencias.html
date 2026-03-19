@@ -1,40 +1,53 @@
 {% extends "base.html" %}
 {% block title %}Transferências entre Contas{% endblock %}
+
+{% block styles %}
+<style>
+  .page-hero {
+    background: linear-gradient(135deg, #1D63A5 0%, #1a4f82 60%, #154070 100%);
+    border-radius: .75rem; padding: 1.25rem 1.75rem; margin-bottom: 1.25rem; color: #fff;
+  }
+  .page-hero .hero-icon {
+    width: 2.75rem; height: 2.75rem; background: rgba(255,255,255,.15);
+    border-radius: .5rem; display: flex; align-items: center; justify-content: center;
+    font-size: 1.35rem; flex-shrink: 0;
+  }
+  .stat-card { border: none; border-radius: .55rem; box-shadow: 0 1px 5px rgba(0,0,0,.07); }
+  .stat-label { font-size: 0.68rem; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; opacity: .7; }
+  .stat-value { font-size: 1.3rem; font-weight: 700; line-height: 1; }
+  .flt-header { background: #1D63A5; color: #fff; font-size: 0.78rem; font-weight: 600; padding: .45rem .75rem; border-radius: .35rem .35rem 0 0; }
+  .tbl-transf thead th {
+    background: #1D63A5; color: #fff;
+    font-size: 0.68rem; font-weight: 700; text-transform: uppercase; letter-spacing: .04em;
+    padding: 0.45rem 0.5rem; border: none; white-space: nowrap;
+  }
+  .tbl-transf tbody td { padding: 0.35rem 0.5rem; vertical-align: middle; border-color: #f0f3f7; }
+</style>
+{% endblock %}
+
 {% block content %}
-<div class="container-fluid py-3">
-  <div class="d-flex justify-content-between align-items-center mb-3">
-    <h4 class="mb-0"><i class="bi bi-arrow-left-right text-primary"></i> Transferências entre Contas</h4>
+<div class="container-fluid">
+
+  <!-- Hero header -->
+  <div class="page-hero d-flex align-items-center gap-3 flex-wrap">
+    <div class="hero-icon"><i class="bi bi-arrow-left-right"></i></div>
+    <div class="flex-grow-1">
+      <h4 class="mb-0 fw-bold">Transferências entre Contas</h4>
+      <p class="mb-0 opacity-75" style="font-size:0.8rem;">Transferências bancárias conciliadas entre contas próprias.</p>
+    </div>
     <div class="d-flex gap-2">
-      <a href="/banco/api/debug-transferencias" target="_blank" class="btn btn-sm btn-outline-secondary" title="Ver diagnóstico do banco de dados">
+      <a href="/banco/api/debug-transferencias" target="_blank" class="btn btn-sm" style="background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.3);" title="Ver diagnóstico do banco de dados">
         <i class="bi bi-bug"></i> Diagnóstico
       </a>
-      <a href="/banco/conciliar" class="btn btn-sm btn-outline-primary">
+      <a href="/banco/conciliar" class="btn btn-sm" style="background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.3);">
         <i class="bi bi-check2-all"></i> Conciliação
       </a>
     </div>
   </div>
 
-  <!-- Cards de resumo -->
-  <div class="row g-3 mb-3">
-    <div class="col-sm-6 col-md-3">
-      <div class="card border-0 shadow-sm text-center py-3">
-        <div class="text-muted small">Total Transferido</div>
-        <div class="fw-bold fs-5 text-primary">R$ {{ "%.2f"|format(total_valor|float) | replace('.', ',') }}</div>
-      </div>
-    </div>
-    <div class="col-sm-6 col-md-3">
-      <div class="card border-0 shadow-sm text-center py-3">
-        <div class="text-muted small">Quantidade</div>
-        <div class="fw-bold fs-5">{{ total_qtd }}</div>
-      </div>
-    </div>
-  </div>
-
   <!-- Filtros -->
   <form method="get" class="card border-0 shadow-sm mb-3" id="form-filtros-transf">
-    <div class="card-header py-2" style="background:#1D63A5;color:white;">
-        <h6 class="mb-0"><i class="bi bi-funnel"></i> Filtros</h6>
-    </div>
+    <div class="flt-header"><i class="bi bi-funnel me-1"></i> Filtros</div>
     <div class="card-body py-2">
       <div class="row g-2">
         <!-- Empresa (multi-select com cascata em Conta) -->
@@ -65,6 +78,11 @@
             <div class="col-md-6">
               <label class="form-label form-label-sm mb-0">Data fim</label>
               <input type="date" name="data_fim" class="form-control form-control-sm" value="{{ f_data_fim }}">
+            </div>
+            <div class="col-12">
+              <label class="form-label form-label-sm mb-0">Descrição</label>
+              <input type="text" name="f_descricao" class="form-control form-control-sm"
+                     placeholder="Parte da descrição..." value="{{ f_descricao or '' }}">
             </div>
             <div class="col-12">
               <div class="d-flex gap-1 flex-wrap mb-1">
@@ -176,8 +194,8 @@
         <em>Se o débito for pagamento a fornecedor (combustível, serviço, etc.), <strong>ignore</strong> — ele já está correto em Pagamentos.</em>
       </div>
       <div class="table-responsive">
-        <table class="table table-sm table-hover mb-0 align-middle">
-          <thead class="table-light">
+        <table class="table table-sm table-hover mb-0 align-middle tbl-transf">
+          <thead>
             <tr>
               <th>Data</th><th class="text-end">Valor</th><th>Descrição</th>
               <th>Conta</th><th>Ação</th>
@@ -214,8 +232,8 @@
     </div>
     <div class="card-body p-0">
       <div class="table-responsive">
-        <table class="table table-sm table-hover mb-0 align-middle">
-          <thead class="table-light">
+        <table class="table table-sm table-hover mb-0 align-middle tbl-transf">
+          <thead>
             <tr><th>Data</th><th class="text-end">Valor</th><th>Descrição</th><th>Conta</th><th>Ação</th></tr>
           </thead>
           <tbody>
@@ -241,14 +259,14 @@
 
   <!-- TABELA PRINCIPAL: transferências -->
   <div class="card border-0 shadow-sm">
-    <div class="card-header fw-semibold bg-primary bg-opacity-10 text-primary-emphasis">
-      <i class="bi bi-check2-circle me-1"></i> Transferências Entre Contas
+    <div class="card-header d-flex justify-content-between align-items-center py-2" style="background:#1D63A5;color:#fff;font-size:0.78rem;font-weight:600;">
+      <span><i class="bi bi-check2-circle me-1"></i> Transferências Entre Contas</span>
     </div>
     <div class="card-body p-0">
       {% if transferencias %}
       <div class="table-responsive">
-        <table class="table table-sm table-hover mb-0 align-middle">
-          <thead class="table-light">
+        <table class="table table-sm table-hover mb-0 align-middle tbl-transf">
+          <thead>
             <tr>
               <th>Data</th>
               <th class="text-end">Valor</th>
@@ -321,6 +339,36 @@ SELECT 'OK' AS resultado;</pre>
         </div>
       </div>
       {% endif %}
+    </div>
+  </div>
+
+  <!-- Cards de resumo (após tabela) -->
+  <div class="row g-3 mt-3 mb-2">
+    <div class="col-sm-6 col-md-4">
+      <div class="card stat-card h-100">
+        <div class="card-body d-flex align-items-center gap-3 py-3">
+          <div style="width:2.5rem;height:2.5rem;background:#cce5ff;color:#004085;border-radius:.5rem;display:flex;align-items:center;justify-content:center;font-size:1.2rem;flex-shrink:0;">
+            <i class="bi bi-arrow-left-right"></i>
+          </div>
+          <div>
+            <div class="stat-label text-muted">Total Transferido</div>
+            <div class="stat-value text-primary">R$ {{ "%.2f"|format(total_valor|float) | replace('.', ',') }}</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="col-sm-6 col-md-4">
+      <div class="card stat-card h-100">
+        <div class="card-body d-flex align-items-center gap-3 py-3">
+          <div style="width:2.5rem;height:2.5rem;background:#d4edda;color:#155724;border-radius:.5rem;display:flex;align-items:center;justify-content:center;font-size:1.2rem;flex-shrink:0;">
+            <i class="bi bi-hash"></i>
+          </div>
+          <div>
+            <div class="stat-label text-muted">Quantidade</div>
+            <div class="stat-value">{{ total_qtd }}</div>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 

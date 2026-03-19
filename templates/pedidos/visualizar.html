@@ -2,202 +2,283 @@
 
 {% block title %}Pedido {{ pedido.numero }} - NH Transportes{% endblock %}
 
+{% block styles %}
+<style>
+  .page-hero {
+    background: linear-gradient(135deg, #1D63A5 0%, #1a4f82 60%, #154070 100%);
+    border-radius: .75rem;
+    padding: 1.25rem 1.75rem;
+    margin-bottom: 1.25rem;
+    color: #fff;
+  }
+  .page-hero .hero-icon {
+    width: 2.75rem; height: 2.75rem;
+    background: rgba(255,255,255,.15);
+    border-radius: .5rem;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1.35rem; flex-shrink: 0;
+  }
+  .stat-card { border: none; border-radius: .55rem; box-shadow: 0 1px 5px rgba(0,0,0,.07); }
+  .stat-label { font-size: 0.68rem; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; opacity: .7; }
+  .stat-value { font-size: 1.3rem; font-weight: 700; line-height: 1; }
+  .form-section-title {
+    font-size: 0.78rem; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.05em; color: #1D63A5;
+    padding-bottom: .35rem; border-bottom: 2px solid #e0eaf5; margin-bottom: .75rem;
+  }
+  .table th { font-weight: 700; font-size: 0.72rem; text-transform: uppercase; letter-spacing: .03em; color: #374151; background: #f8f9fb; }
+  .table td { font-size: 0.82rem; vertical-align: middle; }
+  .btn-act {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 1.65rem; height: 1.65rem; border-radius: 4px;
+    font-size: 0.72rem; border: none; cursor: pointer;
+    text-decoration: none; transition: opacity .12s; padding: 0;
+  }
+  .btn-act:hover { opacity: .75; }
+  .btn-act-view   { background: #d1ecf1; color: #0c5460; }
+  .btn-act-edit   { background: #cce5ff; color: #004085; }
+  .btn-act-truck  { background: #d4edda; color: #155724; }
+  .status-btn { font-size: 0.75rem; padding: .3rem .75rem; border-radius: .35rem; text-decoration: none; font-weight: 600; border: 1.5px solid transparent; transition: opacity .12s; }
+  .status-btn:hover { opacity: .8; }
+  .status-pendente  { background:#fff3cd; color:#856404; border-color:#ffc107; }
+  .status-confirmado{ background:#d4edda; color:#155724; border-color:#28a745; }
+  .status-faturado  { background:#cce5ff; color:#004085; border-color:#1D63A5; }
+  .status-cancelado { background:#f8d7da; color:#721c24; border-color:#dc3545; }
+  .status-btn.active { filter: brightness(.9); font-weight: 700; }
+  .forn-header { background: #1D63A5; color: #fff; font-size: 0.78rem; font-weight: 600; padding: .45rem .75rem; border-radius: .35rem .35rem 0 0; }
+</style>
+{% endblock %}
+
 {% block content %}
-<div class="container-fluid mt-4">
-    <div class="row mb-3">
-        <div class="col">
-            <h2><i class="bi bi-cart"></i> Pedido {{ pedido.numero }}</h2>
-        </div>
-       <div class="col-auto">
-    <a href="{{ url_for('fretes.novo', pedido_id=pedido.id) }}" class="btn btn-primary">
-        <i class="bi bi-truck"></i> Novo Frete
-    </a>
-    <a href="{{ url_for('pedidos.editar', id=pedido.id) }}" class="btn btn-warning">
-        <i class="bi bi-pencil"></i> Editar
-    </a>
-    <a href="{{ url_for('pedidos.index') }}" class="btn btn-secondary">
-        <i class="bi bi-arrow-left"></i> Voltar
-    </a>
-</div>
+<div class="container-fluid">
 
-
-    <!-- Dados do Pedido -->
-    <div class="card mb-4">
-        <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
-            <span><i class="bi bi-info-circle"></i> Dados do Pedido</span>
-            <span class="badge bg-{{ 'warning text-dark' if pedido.status == 'Pendente' else 'success' if pedido.status == 'Confirmado' else 'info' if pedido.status == 'Faturado' else 'danger' }}">
-                {{ pedido.status }}
-            </span>
-        </div>
-        <div class="card-body">
-            <div class="row">
-                <div class="col-md-2">
-                    <strong>Número:</strong> {{ pedido.numero }}
-                </div>
-                <div class="col-md-2">
-                    <strong>Data:</strong> {{ pedido.data_pedido.strftime('%d/%m/%Y') if pedido.data_pedido else '' }}
-                </div>
-                <div class="col-md-2">
-                    <strong>Motorista:</strong> {{ pedido.motorista_nome or 'Não definido' }}
-                </div>
-                <div class="col-md-3">
-                    <strong>Total Quantidade:</strong> {{ "{:,.2f}".format(total_quantidade).replace(',', 'X').replace('.', ',').replace('X', '.') }} m³
-                </div>
-                <div class="col-md-3">
-                    <strong>Total Valor:</strong> R$ {{ "{:,.2f}".format(total_valor).replace(',', 'X').replace('.', ',').replace('X', '.') }}
-                </div>
-            </div>
-            {% if pedido.observacoes %}
-            <div class="row mt-2">
-                <div class="col-12">
-                    <strong>Observações:</strong> {{ pedido.observacoes }}
-                </div>
-            </div>
-            {% endif %}
-        </div>
+  <!-- Hero header -->
+  <div class="page-hero d-flex align-items-center gap-3 flex-wrap">
+    <div class="hero-icon"><i class="bi bi-cart-check-fill"></i></div>
+    <div class="flex-grow-1">
+      <h4 class="mb-0 fw-bold">Pedido {{ pedido.numero }}</h4>
+      <p class="mb-0 opacity-75" style="font-size:0.8rem;">
+        {{ pedido.data_pedido.strftime('%d/%m/%Y') if pedido.data_pedido else '' }}
+        {% if pedido.motorista_nome %} &nbsp;·&nbsp; <i class="bi bi-person"></i> {{ pedido.motorista_nome }}{% endif %}
+        {% if pedido.veiculo_nome %} &nbsp;·&nbsp; <i class="bi bi-truck"></i> {{ pedido.veiculo_nome }}{% if pedido.veiculo_placa %} ({{ pedido.veiculo_placa }}){% endif %}{% endif %}
+      </p>
     </div>
-
-    <!-- Alterar Status -->
-    <div class="card mb-4">
-        <div class="card-header bg-light">
-            <i class="bi bi-arrow-repeat"></i> Alterar Status
-        </div>
-        <div class="card-body">
-            <a href="{{ url_for('pedidos.alterar_status', id=pedido.id, status='Pendente') }}" 
-               class="btn btn-outline-warning {{ 'active' if pedido.status == 'Pendente' else '' }}">
-                <i class="bi bi-clock"></i> Pendente
-            </a>
-            <a href="{{ url_for('pedidos.alterar_status', id=pedido.id, status='Confirmado') }}" 
-               class="btn btn-success {{ 'active' if pedido.status == 'Confirmado' else '' }}">
-                <i class="bi bi-check-circle"></i> Confirmado
-            </a>
-            <a href="{{ url_for('pedidos.alterar_status', id=pedido.id, status='Faturado') }}" 
-               class="btn btn-info {{ 'active' if pedido.status == 'Faturado' else '' }}">
-                <i class="bi bi-file-earmark-text"></i> Faturado
-            </a>
-            <a href="{{ url_for('pedidos.alterar_status', id=pedido.id, status='Cancelado') }}" 
-               class="btn btn-outline-danger {{ 'active' if pedido.status == 'Cancelado' else '' }}">
-                <i class="bi bi-x-circle"></i> Cancelado
-            </a>
-        </div>
+    <div class="d-flex gap-2 flex-wrap">
+      <a href="{{ url_for('fretes.novo', pedido_id=pedido.id) }}"
+         class="btn btn-sm px-3 fw-semibold" style="background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.35);">
+        <i class="bi bi-truck me-1"></i> Novo Frete
+      </a>
+      <a href="{{ url_for('pedidos.editar', id=pedido.id) }}"
+         class="btn btn-sm px-3 fw-semibold" style="background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.35);">
+        <i class="bi bi-pencil me-1"></i> Editar
+      </a>
+      <a href="{{ url_for('pedidos.index') }}"
+         class="btn btn-sm px-3 fw-semibold" style="background:rgba(255,255,255,.10);color:#fff;border:1px solid rgba(255,255,255,.25);">
+        <i class="bi bi-arrow-left me-1"></i> Voltar
+      </a>
     </div>
+  </div>
 
-    <!-- Copiar para WhatsApp -->
-    <div class="card mb-4">
-        <div class="card-header bg-success text-white">
-            <i class="bi bi-whatsapp"></i> Copiar para WhatsApp
-        </div>
-        <div class="card-body">
-            <button type="button" class="btn btn-outline-success" onclick="copiarTudo()">
-                <i class="bi bi-clipboard"></i> Copiar Tudo
-            </button>
-            <button type="button" class="btn btn-outline-primary" onclick="copiarPorFornecedor()">
-                <i class="bi bi-building"></i> Copiar por Fornecedor
-            </button>
-            
-            <div class="mt-3">
-                <strong>Copiar clientes individuais:</strong>
-                <div class="mt-2">
-                    {% for item in itens %}
-                    <button type="button" class="btn btn-outline-secondary btn-sm mb-1" 
-                            onclick="copiarCliente('{{ item.cliente_razao or item.cliente_fantasia }}', '{{ item.cliente_cnpj }}', '{{ item.produto_nome }}', '{{ item.fornecedor_fantasia or item.fornecedor_razao }}', '{{ item.origem_nome }}', '{{ item.base_nome or '' }}', {{ item.quantidade }}, {{ item.preco_unitario }}, {{ item.total_nf }})">
-                        {{ item.cliente_razao or item.cliente_fantasia }}
-                    </button>
-                    {% endfor %}
-                </div>
-            </div>
-        </div>
+  <!-- Stat cards -->
+  <div class="row g-3 mb-3">
+    <div class="col-6 col-md-3">
+      <div class="card stat-card p-3">
+        <div class="stat-label text-primary">Itens</div>
+        <div class="stat-value text-primary">{{ itens | length }}</div>
+        <div style="font-size:0.68rem;color:#6c757d;" class="mt-1">clientes no pedido</div>
+      </div>
     </div>
+    <div class="col-6 col-md-3">
+      <div class="card stat-card p-3">
+        <div class="stat-label" style="color:#1D63A5;">Quantidade Total</div>
+        <div class="stat-value" style="color:#1D63A5;font-size:1.05rem;">
+          {{ "{:,.2f}".format(total_quantidade).replace(',','X').replace('.',',').replace('X','.') }} m³
+        </div>
+        <div style="font-size:0.68rem;color:#6c757d;" class="mt-1">volume total</div>
+      </div>
+    </div>
+    <div class="col-6 col-md-3">
+      <div class="card stat-card p-3">
+        <div class="stat-label text-success">Valor Total</div>
+        <div class="stat-value text-success" style="font-size:1.05rem;">
+          R$ {{ "{:,.2f}".format(total_valor).replace(',','X').replace('.',',').replace('X','.') }}
+        </div>
+        <div style="font-size:0.68rem;color:#6c757d;" class="mt-1">total NF</div>
+      </div>
+    </div>
+    <div class="col-6 col-md-3">
+      <div class="card stat-card p-3">
+        <div class="stat-label">Status</div>
+        <div class="mt-1">
+          {% if pedido.status == 'Pendente' %}
+            <span class="badge bg-warning text-dark">Pendente</span>
+          {% elif pedido.status == 'Confirmado' %}
+            <span class="badge bg-success">Confirmado</span>
+          {% elif pedido.status == 'Faturado' %}
+            <span class="badge bg-primary">Faturado</span>
+          {% elif pedido.status == 'Cancelado' %}
+            <span class="badge bg-danger">Cancelado</span>
+          {% else %}
+            <span class="badge bg-secondary">{{ pedido.status }}</span>
+          {% endif %}
+        </div>
+        <div style="font-size:0.68rem;color:#6c757d;" class="mt-1">situação atual</div>
+      </div>
+    </div>
+  </div>
 
-    <!-- Itens do Pedido -->
-    <div class="card mb-4">
-        <div class="card-header bg-warning">
-            <i class="bi bi-list-ul"></i> Itens do Pedido
-        </div>
-        <div class="card-body p-0">
-            <div class="table-responsive">
-                <table class="table table-striped table-hover mb-0">
-                    <thead class="table-dark">
-                        <tr>
-                            <th>Cliente</th>
-                            <th>CNPJ</th>
-                            <th>Produto</th>
-                            <th>Fornecedor</th>
-                            <th>Origem</th>
-                            <th>Base</th>
-                            <th class="text-end">Qtd</th>
-                            <th class="text-end">Preço</th>
-                            <th class="text-end">Total NF</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for item in itens %}
-                        <tr>
-                            <td>{{ item.cliente_razao or item.cliente_fantasia }}</td>
-                            <td>{{ item.cliente_cnpj }}</td>
-                            <td>{{ item.produto_nome }}</td>
-                            <td>{{ item.fornecedor_fantasia or item.fornecedor_razao }}</td>
-                            <td>{{ item.origem_nome }}</td>
-                            <td>{{ item.base_nome or '-' }}</td>
-                            <td class="text-end">{{ "{:,.2f}".format(item.quantidade).replace(',', 'X').replace('.', ',').replace('X', '.') }}</td>
-                            <td class="text-end">R$ {{ "{:,.3f}".format(item.preco_unitario).replace(',', 'X').replace('.', ',').replace('X', '.') }}</td>
-                            <td class="text-end">R$ {{ "{:,.2f}".format(item.total_nf).replace(',', 'X').replace('.', ',').replace('X', '.') }}</td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                    <tfoot class="table-secondary">
-                        <tr>
-                            <th colspan="6" class="text-end">TOTAIS:</th>
-                            <th class="text-end">{{ "{:,.2f}".format(total_quantidade).replace(',', 'X').replace('.', ',').replace('X', '.') }}</th>
-                            <th></th>
-                            <th class="text-end">R$ {{ "{:,.2f}".format(total_valor).replace(',', 'X').replace('.', ',').replace('X', '.') }}</th>
-                        </tr>
-                    </tfoot>
-                </table>
-            </div>
-        </div>
+  <!-- Alterar Status -->
+  <div class="card shadow-sm mb-3">
+    <div class="card-body py-2 px-3">
+      <div class="form-section-title mb-2"><i class="bi bi-arrow-repeat me-1"></i>Alterar Status</div>
+      <div class="d-flex gap-2 flex-wrap">
+        <a href="{{ url_for('pedidos.alterar_status', id=pedido.id, status='Pendente') }}"
+           class="status-btn status-pendente {% if pedido.status == 'Pendente' %}active{% endif %}">
+          <i class="bi bi-clock me-1"></i> Pendente
+        </a>
+        <a href="{{ url_for('pedidos.alterar_status', id=pedido.id, status='Confirmado') }}"
+           class="status-btn status-confirmado {% if pedido.status == 'Confirmado' %}active{% endif %}">
+          <i class="bi bi-check-circle me-1"></i> Confirmado
+        </a>
+        <a href="{{ url_for('pedidos.alterar_status', id=pedido.id, status='Faturado') }}"
+           class="status-btn status-faturado {% if pedido.status == 'Faturado' %}active{% endif %}">
+          <i class="bi bi-file-earmark-text me-1"></i> Faturado
+        </a>
+        <a href="{{ url_for('pedidos.alterar_status', id=pedido.id, status='Cancelado') }}"
+           class="status-btn status-cancelado {% if pedido.status == 'Cancelado' %}active{% endif %}">
+          <i class="bi bi-x-circle me-1"></i> Cancelado
+        </a>
+      </div>
     </div>
+  </div>
 
-    <!-- Itens por Fornecedor -->
-    {% for fornecedor, itens_forn in itens_por_fornecedor.items() %}
-    <div class="card mb-3">
-        <div class="card-header bg-info text-white">
-            <i class="bi bi-building"></i> {{ fornecedor }}
+  <!-- Copiar para WhatsApp -->
+  <div class="card shadow-sm mb-3">
+    <div class="card-body py-2 px-3">
+      <div class="form-section-title mb-2"><i class="bi bi-whatsapp me-1"></i>Copiar para WhatsApp</div>
+      <div class="d-flex gap-2 flex-wrap">
+        <button type="button" class="btn btn-sm btn-outline-success" onclick="copiarTudo()">
+          <i class="bi bi-clipboard me-1"></i> Copiar Tudo
+        </button>
+        <button type="button" class="btn btn-sm btn-outline-primary" onclick="copiarPorFornecedor()">
+          <i class="bi bi-building me-1"></i> Copiar por Fornecedor
+        </button>
+      </div>
+      {% if itens %}
+      <div class="mt-2">
+        <span style="font-size:0.75rem;font-weight:600;color:#374151;">Copiar cliente individual:</span>
+        <div class="d-flex flex-wrap gap-1 mt-1">
+          {% for item in itens %}
+          <button type="button"
+                  class="btn btn-outline-secondary btn-sm py-0 px-2"
+                  style="font-size:0.72rem;"
+                  onclick="copiarCliente('{{ (item.cliente_razao or item.cliente_fantasia)|replace("'","\\'")|replace('"','\\"') }}', '{{ item.cliente_cnpj }}', '{{ item.produto_nome|replace("'","\\'")|replace('"','\\"') }}', '{{ ((item.fornecedor_fantasia or item.fornecedor_razao) or '')|replace("'","\\'")|replace('"','\\"') }}', '{{ item.origem_nome|replace("'","\\'")|replace('"','\\"') }}', '{{ (item.base_nome or '')|replace("'","\\'")|replace('"','\\"') }}', {{ item.quantidade }}, {{ item.preco_unitario }}, {{ item.total_nf }})">
+            {{ item.cliente_razao or item.cliente_fantasia }}
+          </button>
+          {% endfor %}
         </div>
-        <div class="card-body p-0">
-            <div class="table-responsive">
-                <table class="table table-sm mb-0">
-                    <thead>
-                        <tr>
-                            <th>Cliente</th>
-                            <th>CNPJ</th>
-                            <th>Produto</th>
-                            <th>Origem</th>
-                            <th>Base</th>
-                            <th class="text-end">Qtd</th>
-                            <th class="text-end">Preço</th>
-                            <th class="text-end">Total</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for item in itens_forn %}
-                        <tr>
-                            <td>{{ item.cliente_razao or item.cliente_fantasia }}</td>
-                            <td>{{ item.cliente_cnpj }}</td>
-                            <td>{{ item.produto_nome }}</td>
-                            <td>{{ item.origem_nome }}</td>
-                            <td>{{ item.base_nome or '-' }}</td>
-                            <td class="text-end">{{ "{:,.2f}".format(item.quantidade).replace(',', 'X').replace('.', ',').replace('X', '.') }}</td>
-                            <td class="text-end">R$ {{ "{:,.3f}".format(item.preco_unitario).replace(',', 'X').replace('.', ',').replace('X', '.') }}</td>
-                            <td class="text-end">R$ {{ "{:,.2f}".format(item.total_nf).replace(',', 'X').replace('.', ',').replace('X', '.') }}</td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
-        </div>
+      </div>
+      {% endif %}
     </div>
-    {% endfor %}
+  </div>
+
+  <!-- Itens do Pedido (tabela completa) -->
+  <div class="card shadow-sm mb-3">
+    <div class="card-header d-flex align-items-center py-2"
+         style="background:#1D63A5;color:white;font-size:0.82rem;font-weight:600;letter-spacing:0.02em;">
+      <i class="bi bi-list-ul me-2"></i> Itens do Pedido
+      <span class="badge ms-2" style="background:rgba(255,255,255,.2);font-size:0.78rem;">{{ itens | length }}</span>
+    </div>
+    <div class="card-body table-responsive p-0">
+      <table class="table table-hover table-sm mb-0">
+        <thead>
+          <tr>
+            <th class="ps-3">Cliente</th>
+            <th>CNPJ</th>
+            <th>Produto</th>
+            <th>Fornecedor</th>
+            <th>Origem</th>
+            <th>Base</th>
+            <th class="text-end">Qtd</th>
+            <th class="text-end">Preço</th>
+            <th class="text-end pe-3">Total NF</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for item in itens %}
+          <tr>
+            <td class="ps-3">{{ item.cliente_razao or item.cliente_fantasia }}</td>
+            <td>{{ item.cliente_cnpj }}</td>
+            <td>{{ item.produto_nome }}</td>
+            <td>{{ item.fornecedor_fantasia or item.fornecedor_razao }}</td>
+            <td>{{ item.origem_nome }}</td>
+            <td>{{ item.base_nome or '-' }}</td>
+            <td class="text-end">{{ "{:,.2f}".format(item.quantidade).replace(',','X').replace('.',',').replace('X','.') }}</td>
+            <td class="text-end">R$ {{ "{:,.3f}".format(item.preco_unitario).replace(',','X').replace('.',',').replace('X','.') }}</td>
+            <td class="text-end pe-3">R$ {{ "{:,.2f}".format(item.total_nf).replace(',','X').replace('.',',').replace('X','.') }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+        <tfoot style="background:#f8f9fb;">
+          <tr>
+            <th colspan="6" class="ps-3 text-end" style="font-size:0.78rem;">TOTAIS:</th>
+            <th class="text-end" style="font-size:0.78rem;">{{ "{:,.2f}".format(total_quantidade).replace(',','X').replace('.',',').replace('X','.') }}</th>
+            <th></th>
+            <th class="text-end pe-3" style="font-size:0.78rem;">R$ {{ "{:,.2f}".format(total_valor).replace(',','X').replace('.',',').replace('X','.') }}</th>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+  </div>
+
+  <!-- Itens por Fornecedor -->
+  {% for fornecedor, itens_forn in itens_por_fornecedor.items() %}
+  {% set sub_qtd = namespace(v=0.0) %}
+  {% set sub_val = namespace(v=0.0) %}
+  {% for i in itens_forn %}{% set sub_qtd.v = sub_qtd.v + i.quantidade|float %}{% set sub_val.v = sub_val.v + i.total_nf|float %}{% endfor %}
+  <div class="card shadow-sm mb-3">
+    <div class="forn-header d-flex align-items-center gap-2">
+      <i class="bi bi-building"></i>
+      <span>{{ fornecedor }}</span>
+      <span class="ms-auto" style="font-size:0.7rem;opacity:.8;">
+        {{ "{:,.2f}".format(sub_qtd.v).replace(',','X').replace('.',',').replace('X','.') }} m³
+        &nbsp;|&nbsp;
+        R$ {{ "{:,.2f}".format(sub_val.v).replace(',','X').replace('.',',').replace('X','.') }}
+      </span>
+    </div>
+    <div class="card-body table-responsive p-0">
+      <table class="table table-hover table-sm mb-0">
+        <thead>
+          <tr>
+            <th class="ps-3">Cliente</th>
+            <th>CNPJ</th>
+            <th>Produto</th>
+            <th>Origem</th>
+            <th>Base</th>
+            <th class="text-end">Qtd</th>
+            <th class="text-end">Preço</th>
+            <th class="text-end pe-3">Total</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for item in itens_forn %}
+          <tr>
+            <td class="ps-3">{{ item.cliente_razao or item.cliente_fantasia }}</td>
+            <td>{{ item.cliente_cnpj }}</td>
+            <td>{{ item.produto_nome }}</td>
+            <td>{{ item.origem_nome }}</td>
+            <td>{{ item.base_nome or '-' }}</td>
+            <td class="text-end">{{ "{:,.2f}".format(item.quantidade).replace(',','X').replace('.',',').replace('X','.') }}</td>
+            <td class="text-end">R$ {{ "{:,.3f}".format(item.preco_unitario).replace(',','X').replace('.',',').replace('X','.') }}</td>
+            <td class="text-end pe-3">R$ {{ "{:,.2f}".format(item.total_nf).replace(',','X').replace('.',',').replace('X','.') }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {% endfor %}
+
 </div>
 
 <script>
@@ -208,12 +289,12 @@ var pedidoMotorista = "{{ pedido.motorista_nome or 'Não definido' }}";
 var itens = [
     {% for item in itens %}
     {
-        cliente: "{{ item.cliente_razao or item.cliente_fantasia }}",
-        cnpj: "{{ item.cliente_cnpj }}",
-        produto: "{{ item.produto_nome }}",
-        fornecedor: "{{ item.fornecedor_fantasia or item.fornecedor_razao }}",
-        origem: "{{ item.origem_nome }}",
-        base: "{{ item.base_nome or '' }}",
+        cliente: {{ (item.cliente_razao or item.cliente_fantasia)|tojson }},
+        cnpj: {{ item.cliente_cnpj|tojson }},
+        produto: {{ item.produto_nome|tojson }},
+        fornecedor: {{ ((item.fornecedor_fantasia or item.fornecedor_razao) or '')|tojson }},
+        origem: {{ item.origem_nome|tojson }},
+        base: {{ (item.base_nome or '')|tojson }},
         quantidade: {{ item.quantidade }},
         preco: {{ item.preco_unitario }},
         total: {{ item.total_nf }}
@@ -223,14 +304,14 @@ var itens = [
 
 var itensPorFornecedor = {
     {% for fornecedor, itens_forn in itens_por_fornecedor.items() %}
-    "{{ fornecedor }}": [
+    {{ fornecedor|tojson }}: [
         {% for item in itens_forn %}
         {
-            cliente: "{{ item.cliente_razao or item.cliente_fantasia }}",
-            cnpj: "{{ item.cliente_cnpj }}",
-            produto: "{{ item.produto_nome }}",
-            origem: "{{ item.origem_nome }}",
-            base: "{{ item.base_nome or '' }}",
+            cliente: {{ (item.cliente_razao or item.cliente_fantasia)|tojson }},
+            cnpj: {{ item.cliente_cnpj|tojson }},
+            produto: {{ item.produto_nome|tojson }},
+            origem: {{ item.origem_nome|tojson }},
+            base: {{ (item.base_nome or '')|tojson }},
             quantidade: {{ item.quantidade }},
             preco: {{ item.preco_unitario }},
             total: {{ item.total_nf }}
@@ -251,7 +332,7 @@ function formatarNumero(valor, casas) {
 function copiarTexto(texto) {
     navigator.clipboard.writeText(texto).then(function() {
         alert('Copiado para a área de transferência!');
-    }).catch(function(err) {
+    }).catch(function() {
         var textarea = document.createElement('textarea');
         textarea.value = texto;
         document.body.appendChild(textarea);
@@ -266,102 +347,51 @@ function copiarTudo() {
     var texto = '*PEDIDO ' + pedidoNumero + '*\n';
     texto += 'Data: ' + pedidoData + '\n';
     texto += 'Motorista: ' + pedidoMotorista + '\n\n';
-    
     for (var fornecedor in itensPorFornecedor) {
         var itensF = itensPorFornecedor[fornecedor];
         texto += '*' + fornecedor + '*\n';
         texto += '━━━━━━━━━━━━━━━━━━\n';
-        
-        var subtotalQtd = 0;
-        var subtotalValor = 0;
-        
+        var subtotalQtd = 0, subtotalValor = 0;
         for (var i = 0; i < itensF.length; i++) {
             var item = itensF[i];
             texto += '📍 *' + item.cliente + '*\n';
             texto += '   CNPJ: ' + item.cnpj + '\n';
             texto += '   Produto: ' + item.produto + '\n';
             texto += '   Origem: ' + item.origem + '\n';
-            if (item.base) {
-                texto += '   Base: ' + item.base + '\n';
-            }
+            if (item.base) texto += '   Base: ' + item.base + '\n';
             texto += '   Qtd: ' + formatarNumero(item.quantidade) + ' | R$ ' + formatarNumero(item.preco, 3) + '\n';
             texto += '   Total: R$ ' + formatarNumero(item.total) + '\n\n';
-            
             subtotalQtd += item.quantidade;
             subtotalValor += item.total;
         }
-        
         texto += '*Subtotal ' + fornecedor + ':*\n';
         texto += 'Qtd: ' + formatarNumero(subtotalQtd) + ' | Valor: R$ ' + formatarNumero(subtotalValor) + '\n\n';
     }
-    
-    var totalQtd = 0;
-    var totalValor = 0;
-    for (var j = 0; j < itens.length; j++) {
-        totalQtd += itens[j].quantidade;
-        totalValor += itens[j].total;
-    }
-    
-    texto += '━━━━━━━━━━━━━━━━━━\n';
-    texto += '*TOTAL GERAL:*\n';
-    texto += 'Quantidade: ' + formatarNumero(totalQtd) + ' m³\n';
-    texto += 'Valor: R$ ' + formatarNumero(totalValor);
-    
+    var totalQtd = 0, totalValor = 0;
+    for (var j = 0; j < itens.length; j++) { totalQtd += itens[j].quantidade; totalValor += itens[j].total; }
+    texto += '━━━━━━━━━━━━━━━━━━\n*TOTAL GERAL:*\nQuantidade: ' + formatarNumero(totalQtd) + ' m³\nValor: R$ ' + formatarNumero(totalValor);
     copiarTexto(texto);
 }
 
 function copiarPorFornecedor() {
-    var texto = '*PEDIDO ' + pedidoNumero + '*\n';
-    texto += 'Data: ' + pedidoData + '\n';
-    texto += 'Motorista: ' + pedidoMotorista + '\n\n';
-    texto += '*RESUMO POR FORNECEDOR:*\n\n';
-    
+    var texto = '*PEDIDO ' + pedidoNumero + '*\nData: ' + pedidoData + '\nMotorista: ' + pedidoMotorista + '\n\n*RESUMO POR FORNECEDOR:*\n\n';
     for (var fornecedor in itensPorFornecedor) {
         var itensF = itensPorFornecedor[fornecedor];
-        var subtotalQtd = 0;
-        var subtotalValor = 0;
-        
-        for (var i = 0; i < itensF.length; i++) {
-            subtotalQtd += itensF[i].quantidade;
-            subtotalValor += itensF[i].total;
-        }
-        
-        texto += '*' + fornecedor + '*\n';
-        texto += 'Qtd: ' + formatarNumero(subtotalQtd) + ' m³\n';
-        texto += 'Valor: R$ ' + formatarNumero(subtotalValor) + '\n\n';
+        var subtotalQtd = 0, subtotalValor = 0;
+        for (var i = 0; i < itensF.length; i++) { subtotalQtd += itensF[i].quantidade; subtotalValor += itensF[i].total; }
+        texto += '*' + fornecedor + '*\nQtd: ' + formatarNumero(subtotalQtd) + ' m³\nValor: R$ ' + formatarNumero(subtotalValor) + '\n\n';
     }
-    
-    var totalQtd = 0;
-    var totalValor = 0;
-    for (var j = 0; j < itens.length; j++) {
-        totalQtd += itens[j].quantidade;
-        totalValor += itens[j].total;
-    }
-    
-    texto += '━━━━━━━━━━━━━━━━━━\n';
-    texto += '*TOTAL GERAL:*\n';
-    texto += 'Quantidade: ' + formatarNumero(totalQtd) + ' m³\n';
-    texto += 'Valor: R$ ' + formatarNumero(totalValor);
-    
+    var totalQtd = 0, totalValor = 0;
+    for (var j = 0; j < itens.length; j++) { totalQtd += itens[j].quantidade; totalValor += itens[j].total; }
+    texto += '━━━━━━━━━━━━━━━━━━\n*TOTAL GERAL:*\nQuantidade: ' + formatarNumero(totalQtd) + ' m³\nValor: R$ ' + formatarNumero(totalValor);
     copiarTexto(texto);
 }
 
 function copiarCliente(cliente, cnpj, produto, fornecedor, origem, base, quantidade, preco, total) {
-    var texto = '*PEDIDO ' + pedidoNumero + '*\n';
-    texto += 'Data: ' + pedidoData + '\n';
-    texto += 'Motorista: ' + pedidoMotorista + '\n\n';
-    texto += '📍 *' + cliente + '*\n';
-    texto += 'CNPJ: ' + cnpj + '\n';
-    texto += 'Produto: ' + produto + '\n';
-    texto += 'Fornecedor: ' + fornecedor + '\n';
-    texto += 'Origem: ' + origem + '\n';
-    if (base) {
-        texto += 'Base: ' + base + '\n';
-    }
-    texto += 'Quantidade: ' + formatarNumero(quantidade) + ' m³\n';
-    texto += 'Preço: R$ ' + formatarNumero(preco, 3) + '\n';
-    texto += 'Total NF: R$ ' + formatarNumero(total);
-    
+    var texto = '*PEDIDO ' + pedidoNumero + '*\nData: ' + pedidoData + '\nMotorista: ' + pedidoMotorista + '\n\n';
+    texto += '📍 *' + cliente + '*\nCNPJ: ' + cnpj + '\nProduto: ' + produto + '\nFornecedor: ' + fornecedor + '\nOrigem: ' + origem + '\n';
+    if (base) texto += 'Base: ' + base + '\n';
+    texto += 'Quantidade: ' + formatarNumero(quantidade) + ' m³\nPreço: R$ ' + formatarNumero(preco, 3) + '\nTotal NF: R$ ' + formatarNumero(total);
     copiarTexto(texto);
 }
 </script>
