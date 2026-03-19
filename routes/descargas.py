@@ -92,15 +92,29 @@ def _ensure_descargas_tables():
             COMMENT 'Litros descarregados nesta etapa'
         AFTER `data_descarga`
     """
+    # Migration: add numero_descarga and total_descargas if table already exists without them
+    alter_numero = """
+    ALTER TABLE `descargas`
+        ADD COLUMN IF NOT EXISTS `numero_descarga` INT NOT NULL DEFAULT 1
+            COMMENT 'Número desta etapa (1, 2, 3…)'
+        AFTER `frete_id`
+    """
+    alter_total = """
+    ALTER TABLE `descargas`
+        ADD COLUMN IF NOT EXISTS `total_descargas` INT NOT NULL DEFAULT 1
+            COMMENT 'Total de etapas previstas para este frete'
+        AFTER `numero_descarga`
+    """
     try:
         conn = get_db_connection()
         cur = conn.cursor()
         try:
             cur.execute(ddl)
-            try:
-                cur.execute(alter_volume)
-            except Exception:
-                pass  # ADD COLUMN IF NOT EXISTS may not be supported on older MySQL
+            for stmt in (alter_volume, alter_numero, alter_total):
+                try:
+                    cur.execute(stmt)
+                except Exception:
+                    pass  # ADD COLUMN IF NOT EXISTS may not be supported on older MySQL
             conn.commit()
         finally:
             cur.close()
