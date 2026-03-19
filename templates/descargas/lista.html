@@ -74,11 +74,11 @@
           </select>
         </div>
         <div class="col-6 col-md-2">
-          <label class="form-label form-label-sm mb-0">Data início (desc.)</label>
+          <label class="form-label form-label-sm mb-0">Data início (frete)</label>
           <input type="date" name="data_inicio" class="form-control form-control-sm" value="{{ data_inicio }}">
         </div>
         <div class="col-6 col-md-2">
-          <label class="form-label form-label-sm mb-0">Data fim (desc.)</label>
+          <label class="form-label form-label-sm mb-0">Data fim (frete)</label>
           <input type="date" name="data_fim" class="form-control form-control-sm" value="{{ data_fim }}">
         </div>
         <div class="col-6 col-md-2 d-flex gap-1 align-items-end">
@@ -168,7 +168,7 @@
               </td>
             </tr>
             {% else %}
-            <tr><td colspan="8" class="text-center text-muted py-4">Nenhum frete em trânsito nos últimos 5 dias.</td></tr>
+            <tr><td colspan="8" class="text-center text-muted py-4">Nenhum frete em trânsito no período filtrado.</td></tr>
             {% endfor %}
           </tbody>
         </table>

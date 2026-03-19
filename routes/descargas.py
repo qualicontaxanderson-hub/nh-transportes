@@ -627,14 +627,16 @@ def lista():
     di = _parse_date(data_inicio) if data_inicio else None
     df = _parse_date(data_fim) if data_fim else None
 
-    # Filtros comuns para descargas
+    # Filtros comuns para descargas — filtrados pela data do FRETE para que
+    # descargas cujo data_descarga difira da data do frete não desapareçam
+    # das abas Descarregados/Fracionado.
     desc_filters = []
     desc_params = []
     if di:
-        desc_filters.append("d.data_descarga >= %s")
+        desc_filters.append("f.data_frete >= %s")
         desc_params.append(di)
     if df:
-        desc_filters.append("d.data_descarga <= %s")
+        desc_filters.append("f.data_frete <= %s")
         desc_params.append(df)
     if frete_id_f:
         desc_filters.append("d.frete_id = %s")
@@ -651,9 +653,15 @@ def lista():
     cliente_ids_com_produtos = tuple(int(c['id']) for c in clientes) if clientes else ()
 
     try:
-        # ── Seção 1: Em Trânsito (fretes sem descarga nos últimos 5 dias) ──
-        frete_conds = [_FRETE_DATE_COND]
+        # ── Seção 1: Em Trânsito — usa o mesmo intervalo de datas do filtro do usuário ──
+        frete_conds = []
         frete_params = []
+        if di:
+            frete_conds.append("f.data_frete >= %s")
+            frete_params.append(di)
+        if df:
+            frete_conds.append("f.data_frete <= %s")
+            frete_params.append(df)
         if cliente_id_filtro:
             frete_conds.append("f.clientes_id = %s")
             frete_params.append(cliente_id_filtro)
@@ -662,7 +670,8 @@ def lista():
             placeholders = ','.join(['%s'] * len(cliente_ids_com_produtos))
             frete_conds.append(f"f.clientes_id IN ({placeholders})")
             frete_params.extend(cliente_ids_com_produtos)
-        frete_where = "WHERE " + " AND ".join(frete_conds)
+        base_conds = " AND ".join(frete_conds) if frete_conds else "1=1"
+        frete_where = f"WHERE {base_conds}"
         # Exclude only fully-discharged fretes (finalizado). Fretes with only
         # partial discharges (em_andamento) should still appear in the tab with
         # a "Fracionado" badge so the operator sees all pending work in one place.
