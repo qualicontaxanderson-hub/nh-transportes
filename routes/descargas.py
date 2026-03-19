@@ -485,8 +485,7 @@ def _gerar_mensagem_whatsapp(descarga, etapas=None):
         linhas.append(f"🏪 *Empresa:* {empresa}")
     if motorista:
         linhas.append(f"👷 *Motorista:* {motorista}")
-    if frentista:
-        linhas.append(f"🧑‍🔧 *Frentista:* {frentista}")
+    linhas.append(f"🧑‍🔧 *Frentista:* {frentista if frentista else 'Não informado'}")
 
     # Datas
     if data_carg and data_desc:
@@ -504,16 +503,13 @@ def _gerar_mensagem_whatsapp(descarga, etapas=None):
             vol_str += f"  _(NF total: {_fmt_num(volume_nf, 0)} L)_"
         linhas.append(f"📦 {vol_label} {vol_str}")
 
-    # Temperatura e densidade
+    # Temperatura e densidade — always shown
     temp = d.get('temperatura')
     dens = d.get('densidade')
-    if temp is not None or dens is not None:
-        partes = []
-        if temp is not None:
-            partes.append(f"🌡 Temp: {_fmt_num(temp, 1)}°C")
-        if dens is not None:
-            partes.append(f"⚖ Dens: {_fmt_num(dens, 4)}")
-        linhas.append("   ".join(partes))
+    partes = []
+    partes.append(f"🌡 Temp: {_fmt_num(temp, 1)}°C" if temp is not None else "🌡 Temp: Não informado")
+    partes.append(f"⚖ Dens: {_fmt_num(dens, 4)}" if dens is not None else "⚖ Dens: Não informado")
+    linhas.append("   ".join(partes))
 
     # --- Medidor Eletrônico ---
     med_antes  = d.get('medidor_antes')
@@ -640,6 +636,18 @@ def _gerar_mensagem_completa_frete(etapas, frete_info):
         if vol_e is not None:
             total_desc += float(vol_e)
             linhas.append(f"📦 Volume: *{_fmt_num(vol_e, 0)} L*")
+
+        # Frentista per-etapa — always shown
+        frentista_e = (e.get('frentista_nome') or '').strip()
+        linhas.append(f"🧑‍🔧 Frentista: {frentista_e if frentista_e else 'Não informado'}")
+
+        # Temperatura e densidade per-etapa — always shown
+        temp_e = e.get('temperatura')
+        dens_e = e.get('densidade')
+        partes_e = []
+        partes_e.append(f"🌡 Temp: {_fmt_num(temp_e, 1)}°C" if temp_e is not None else "🌡 Temp: Não informado")
+        partes_e.append(f"⚖ Dens: {_fmt_num(dens_e, 4)}" if dens_e is not None else "⚖ Dens: Não informado")
+        linhas.append("   ".join(partes_e))
 
         ma = e.get('medidor_antes')
         md = e.get('medidor_depois')
@@ -1207,8 +1215,10 @@ def detalhe(id):
     try:
         cursor.execute("""
             SELECT d.*,
-                   DATE_FORMAT(d.data_descarga, '%d/%m/%Y') AS data_descarga_fmt
+                   DATE_FORMAT(d.data_descarga, '%d/%m/%Y') AS data_descarga_fmt,
+                   COALESCE(fu.nome, '') AS frentista_nome
             FROM descargas d
+            LEFT JOIN funcionarios fu ON d.frentista_id = fu.id
             WHERE d.frete_id = %s
             ORDER BY d.numero_descarga, d.id
         """, (descarga['frete_id'],))
