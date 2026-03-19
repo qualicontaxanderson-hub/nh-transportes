@@ -113,6 +113,12 @@
               <div class="info-label">Motorista</div>
               <div class="info-value">{{ descarga.motorista or '—' }}</div>
             </div>
+            {% if descarga.frentista_nome %}
+            <div class="col-6 col-md-4">
+              <div class="info-label">Frentista</div>
+              <div class="info-value">{{ descarga.frentista_nome }}</div>
+            </div>
+            {% endif %}
             <div class="col-6 col-md-4">
               <div class="info-label">Data Carregamento</div>
               <div class="info-value">{{ descarga.data_frete_fmt or '—' }}</div>

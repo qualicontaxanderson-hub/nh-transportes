@@ -117,6 +117,9 @@ def _ensure_descargas_tables():
          "ALTER TABLE `descargas` ADD COLUMN `temperatura` DECIMAL(6,2) NULL"),
         ("densidade",
          "ALTER TABLE `descargas` ADD COLUMN `densidade` DECIMAL(8,4) NULL"),
+        ("frentista_id",
+         "ALTER TABLE `descargas` ADD COLUMN `frentista_id` INT NULL "
+         "COMMENT 'Funcionário/frentista que realizou a descarga' AFTER `observacoes`"),
     ]
     try:
         conn = get_db_connection()
@@ -243,6 +246,48 @@ def _get_motoristas_por_empresa(cliente_id=None):
             pass
 
 
+def _get_funcionarios():
+    """Retorna funcionários ativos para seleção de frentista."""
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        cursor.execute("SELECT id, nome FROM funcionarios WHERE ativo = 1 ORDER BY nome")
+        return cursor.fetchall()
+    except Exception:
+        return []
+    finally:
+        try:
+            cursor.close()
+            conn.close()
+        except Exception:
+            pass
+
+
+def _get_descargas_do_frete(frete_id):
+    """Retorna todas as descargas já registradas para um frete (para exibir progresso)."""
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        cursor.execute("""
+            SELECT d.id, d.numero_descarga, d.status,
+                   DATE_FORMAT(d.data_descarga, '%%d/%%m/%%Y') AS data_descarga_fmt,
+                   d.volume_descarga,
+                   d.medidor_antes, d.medidor_depois
+            FROM descargas d
+            WHERE d.frete_id = %s
+            ORDER BY d.numero_descarga, d.id
+        """, (frete_id,))
+        return cursor.fetchall()
+    except Exception:
+        return []
+    finally:
+        try:
+            cursor.close()
+            conn.close()
+        except Exception:
+            pass
+
+
 def _get_fretes_para_descarga(cliente_id=None, motorista_id=None):
     """Retorna fretes dos últimos 5 dias com informações para o formulário de descarga.
 
@@ -343,6 +388,7 @@ def _get_descarga(descarga_id):
                 COALESCE(fo.razao_social, '') AS distribuidora,
                 COALESCE(p.nome, '') AS produto,
                 COALESCE(m.nome, '') AS motorista,
+                COALESCE(fu.nome, '') AS frentista_nome,
                 COALESCE(f.quantidade_manual, 0) AS volume_nf,
                 f.clientes_id,
                 f.fornecedores_id,
@@ -354,6 +400,7 @@ def _get_descarga(descarga_id):
             LEFT JOIN fornecedores fo ON f.fornecedores_id = fo.id
             LEFT JOIN produto p ON f.produto_id = p.id
             LEFT JOIN motoristas m ON f.motoristas_id = m.id
+            LEFT JOIN funcionarios fu ON d.frentista_id = fu.id
             WHERE d.id = %s
         """, (descarga_id,))
         return cursor.fetchone()
@@ -390,27 +437,45 @@ def _diff_sign(val):
         return ''
 
 
-def _gerar_mensagem_whatsapp(descarga):
-    """Monta o texto formatado para WhatsApp a partir dos dados da descarga."""
+def _gerar_mensagem_whatsapp(descarga, etapas=None):
+    """Monta o texto formatado para WhatsApp a partir dos dados da descarga.
+
+    Args:
+        descarga: dict com dados da descarga atual.
+        etapas:   lista de todas as descargas do mesmo frete (incluindo a atual),
+                  usada para montar o histórico de etapas e resumo final.
+    """
     d = descarga
 
-    produto      = (d.get('produto')      or '').strip()
-    distribuidora= (d.get('distribuidora') or '').strip()
-    empresa      = (d.get('cliente')       or '').strip()
-    motorista    = (d.get('motorista')     or '').strip()
-    data_carg    = (d.get('data_frete_fmt') or '').strip()
-    data_desc    = (d.get('data_descarga_fmt') or '').strip()
+    produto       = (d.get('produto')          or '').strip()
+    distribuidora = (d.get('distribuidora')     or '').strip()
+    empresa       = (d.get('cliente')           or '').strip()
+    motorista     = (d.get('motorista')         or '').strip()
+    frentista     = (d.get('frentista_nome')    or '').strip()
+    data_carg     = (d.get('data_frete_fmt')    or '').strip()
+    data_desc     = (d.get('data_descarga_fmt') or '').strip()
 
     volume_desc = d.get('volume_descarga')
     volume_nf   = d.get('volume_nf')
     volume_ref  = volume_desc if volume_desc is not None else volume_nf
 
-    SEP = "━━━━━━━━━━━━━━━━━━━━━━"
+    total  = int(d.get('total_descargas') or 1)
+    numero = int(d.get('numero_descarga') or 1)
+    status = d.get('status', 'finalizado')
+    is_fracionada = (total > 1) or (status == 'em_andamento')
 
+    SEP = "━━━━━━━━━━━━━━━━━━━━━━"
     linhas = []
 
     # --- Cabeçalho ---
-    linhas.append(f"⛽ *DESCARGA — {produto.upper()}*")
+    if is_fracionada:
+        linhas.append(f"⛽ *DESCARGA FRACIONADA — {produto.upper()}*")
+        if total > 1:
+            linhas.append(f"📌 *Etapa {numero} de {total}*")
+        else:
+            linhas.append(f"📌 *Etapa {numero}*")
+    else:
+        linhas.append(f"⛽ *DESCARGA COMPLETA — {produto.upper()}*")
     linhas.append(SEP)
     linhas.append("")
 
@@ -420,6 +485,8 @@ def _gerar_mensagem_whatsapp(descarga):
         linhas.append(f"🏪 *Empresa:* {empresa}")
     if motorista:
         linhas.append(f"👷 *Motorista:* {motorista}")
+    if frentista:
+        linhas.append(f"🧑‍🔧 *Frentista:* {frentista}")
 
     # Datas
     if data_carg and data_desc:
@@ -429,18 +496,13 @@ def _gerar_mensagem_whatsapp(descarga):
     elif data_desc:
         linhas.append(f"📅 Descarga: {data_desc}")
 
-    # Volume
+    # Volume desta etapa
     if volume_ref:
+        vol_label = "*Volume nesta etapa:*" if is_fracionada else "*Volume descarregado:*"
         vol_str = f"*{_fmt_num(volume_ref, 0)} L*"
         if volume_nf and volume_desc and float(volume_nf) != float(volume_desc):
-            vol_str += f"  _(NF: {_fmt_num(volume_nf, 0)} L)_"
-        linhas.append(f"📦 *Volume descarregado:* {vol_str}")
-
-    # Etapa (descarga fracionada)
-    total  = d.get('total_descargas', 1)
-    numero = d.get('numero_descarga', 1)
-    if total and int(total) > 1:
-        linhas.append(f"🔢 *Etapa:* {numero} de {total}")
+            vol_str += f"  _(NF total: {_fmt_num(volume_nf, 0)} L)_"
+        linhas.append(f"📦 {vol_label} {vol_str}")
 
     # Temperatura e densidade
     temp = d.get('temperatura')
@@ -466,11 +528,12 @@ def _gerar_mensagem_whatsapp(descarga):
             linhas.append(f"├ Depois: {_fmt_num(med_depois)}")
         if med_antes is not None and med_depois is not None and volume_ref is not None:
             sobra = float(med_depois) - float(volume_ref) - float(med_antes)
-            linhas.append(f"└ Sobra:  *{_diff_sign(sobra)}*")
+            label = "✅ SOBRA/GANHO" if sobra >= 0 else "⚠️ PERDA"
+            linhas.append(f"└ {label}: *{_diff_sign(sobra)}*")
 
     # --- Régua Volumétrica ---
-    reg_antes_l  = d.get('regua_antes_litros')
-    reg_depois_l = d.get('regua_depois_litros')
+    reg_antes_l   = d.get('regua_antes_litros')
+    reg_depois_l  = d.get('regua_depois_litros')
     reg_antes_cm  = d.get('regua_antes_cm')
     reg_depois_cm = d.get('regua_depois_cm')
     if reg_antes_l is not None or reg_depois_l is not None:
@@ -485,7 +548,44 @@ def _gerar_mensagem_whatsapp(descarga):
             linhas.append(f"├ Depois: {_fmt_num(reg_depois_l)} L{cm_str}")
         if reg_antes_l is not None and reg_depois_l is not None and volume_ref is not None:
             diff_reg = float(reg_depois_l) - float(volume_ref) - float(reg_antes_l)
-            linhas.append(f"└ Sobra:  *{_diff_sign(diff_reg)} L*")
+            label = "✅ SOBRA/GANHO" if diff_reg >= 0 else "⚠️ PERDA"
+            linhas.append(f"└ {label}: *{_diff_sign(diff_reg)} L*")
+
+    # --- Histórico de etapas anteriores (quando etapa > 1) ---
+    if etapas and numero > 1:
+        cur_id = d.get('id')
+        prev_etapas = [e for e in etapas if e.get('id') != cur_id]
+        if prev_etapas:
+            linhas.append("")
+            linhas.append(SEP)
+            linhas.append("📋 *ETAPAS ANTERIORES*")
+            total_ant = 0.0
+            for e in prev_etapas:
+                vol_e = e.get('volume_descarga') or 0
+                total_ant += float(vol_e)
+                vol_e_fmt = _fmt_num(vol_e, 0) if vol_e else "—"
+                data_e = e.get('data_descarga_fmt', '')
+                sobra_str = ''
+                ma_e = e.get('medidor_antes')
+                md_e = e.get('medidor_depois')
+                if ma_e is not None and md_e is not None and vol_e:
+                    s = float(md_e) - float(vol_e) - float(ma_e)
+                    sobra_str = f"  ({'✅' if s >= 0 else '⚠️'} {_diff_sign(s)})"
+                linhas.append(f"  Etapa {e.get('numero_descarga', '-')}: {data_e} — {vol_e_fmt} L{sobra_str}")
+
+            # Resumo final acumulado
+            total_acum = total_ant + (float(volume_ref) if volume_ref else 0)
+            linhas.append("")
+            linhas.append(SEP)
+            linhas.append("📊 *RESUMO TOTAL DO FRETE*")
+            linhas.append(f"├ Descarregado: *{_fmt_num(total_acum, 0)} L*")
+            if volume_nf:
+                linhas.append(f"├ NF total: {_fmt_num(volume_nf, 0)} L")
+                restante = float(volume_nf) - total_acum
+                if restante > 0.01:
+                    linhas.append(f"└ ⏳ *Falta: {_fmt_num(restante, 0)} L*")
+                else:
+                    linhas.append("└ ✅ *Descarga concluída!*")
 
     obs = d.get('observacoes')
     if obs:
@@ -693,6 +793,7 @@ def nova():
             temperatura = request.form.get('temperatura') or None
             densidade = request.form.get('densidade') or None
             observacoes = request.form.get('observacoes') or None
+            frentista_id = request.form.get('frentista_id') or None
             # volume_descarga: para fracionada = informado pelo usuário;
             # para total = volume NF do frete (enviado como campo hidden)
             volume_descarga = request.form.get('volume_descarga') or None
@@ -717,8 +818,8 @@ def nova():
                     medidor_antes, medidor_depois,
                     regua_antes_cm, regua_antes_litros,
                     regua_depois_cm, regua_depois_litros,
-                    temperatura, densidade, status, observacoes
-                ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                    temperatura, densidade, status, observacoes, frentista_id
+                ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
             """, (
                 frete_id, numero_descarga, total_descargas, data_descarga,
                 _to_decimal(volume_descarga),
@@ -726,7 +827,7 @@ def nova():
                 regua_antes_cm or None, _to_decimal(regua_antes_litros),
                 regua_depois_cm or None, _to_decimal(regua_depois_litros),
                 _to_decimal(temperatura), _to_decimal(densidade),
-                status, observacoes,
+                status, observacoes, frentista_id or None,
             ))
             conn.commit()
             new_id = cursor.lastrowid
@@ -751,6 +852,7 @@ def nova():
     motorista_id_qs = request.args.get('motorista_id', '').strip()
     frete_id_qs = request.args.get('frete_id', '')
     frete_pre = None
+    descargas_existentes = []
     if frete_id_qs:
         frete_pre = _get_frete(frete_id_qs)
         if frete_pre:
@@ -758,9 +860,11 @@ def nova():
                 cliente_id_qs = str(frete_pre.get('clientes_id', ''))
             if not motorista_id_qs:
                 motorista_id_qs = str(frete_pre.get('motoristas_id', ''))
+        descargas_existentes = _get_descargas_do_frete(frete_id_qs)
 
     clientes = _get_clientes_com_produtos()
     motoristas = _get_motoristas_por_empresa(cliente_id_qs if cliente_id_qs else None)
+    funcionarios = _get_funcionarios()
     fretes = _get_fretes_para_descarga(
         cliente_id=cliente_id_qs if cliente_id_qs else None,
         motorista_id=motorista_id_qs if motorista_id_qs else None,
@@ -773,12 +877,14 @@ def nova():
         fretes=fretes,
         clientes=clientes,
         motoristas=motoristas,
+        funcionarios=funcionarios,
         frete_pre=frete_pre,
         frete_id_qs=frete_id_qs,
         cliente_id_qs=cliente_id_qs,
         motorista_id_qs=motorista_id_qs,
         tabela_volumetrica=tabela_js,
         hoje=hoje,
+        descargas_existentes=descargas_existentes,
     )
 
 
@@ -808,6 +914,7 @@ def editar(id):
             densidade = request.form.get('densidade') or None
             observacoes = request.form.get('observacoes') or None
             volume_descarga = request.form.get('volume_descarga') or None
+            frentista_id = request.form.get('frentista_id') or None
 
             def _to_decimal(v):
                 if v is None:
@@ -826,7 +933,7 @@ def editar(id):
                     regua_antes_cm=%s, regua_antes_litros=%s,
                     regua_depois_cm=%s, regua_depois_litros=%s,
                     temperatura=%s, densidade=%s,
-                    status=%s, observacoes=%s
+                    status=%s, observacoes=%s, frentista_id=%s
                 WHERE id=%s
             """, (
                 numero_descarga, total_descargas, data_descarga,
@@ -835,7 +942,7 @@ def editar(id):
                 regua_antes_cm or None, _to_decimal(regua_antes_litros),
                 regua_depois_cm or None, _to_decimal(regua_depois_litros),
                 _to_decimal(temperatura), _to_decimal(densidade),
-                status, observacoes, id,
+                status, observacoes, frentista_id or None, id,
             ))
             conn.commit()
             cursor.close()
@@ -854,10 +961,12 @@ def editar(id):
                 pass
 
     tabela_js = {str(k): v for k, v in TABELA_VOLUMETRICA_15M3.items()}
+    funcionarios = _get_funcionarios()
     return render_template(
         'descargas/editar.html',
         descarga=descarga,
         tabela_volumetrica=tabela_js,
+        funcionarios=funcionarios,
     )
 
 
@@ -890,7 +999,7 @@ def detalhe(id):
         except Exception:
             pass
 
-    mensagem = _gerar_mensagem_whatsapp(descarga)
+    mensagem = _gerar_mensagem_whatsapp(descarga, etapas=outras)
 
     # Calcular sobra medidor: Depois - Volume - Antes
     diff_medidor = None

@@ -141,6 +141,56 @@
           </div>
         </div>
 
+        <!-- Descargas já realizadas para este frete (quando frete_id vem pré-preenchido) -->
+        {% if descargas_existentes %}
+        <div class="mb-3" style="background:#fff8e1;border:1px solid #ffe082;border-radius:.5rem;padding:.75rem 1rem;font-size:.82rem;">
+          <div style="font-weight:700;color:#e65100;margin-bottom:.4rem;">
+            <i class="bi bi-layers me-1"></i> Descargas já realizadas para este frete
+          </div>
+          {% set vol_total_ant = namespace(v=0) %}
+          {% for e in descargas_existentes %}
+            {% if e.volume_descarga %}{% set vol_total_ant.v = vol_total_ant.v + e.volume_descarga|float %}{% endif %}
+          {% endfor %}
+          <table style="width:100%;font-size:.78rem;border-collapse:collapse;">
+            <thead>
+              <tr style="color:#6c757d;text-transform:uppercase;font-size:.65rem;">
+                <th style="padding:.15rem .4rem;">Etapa</th>
+                <th style="padding:.15rem .4rem;">Data</th>
+                <th style="padding:.15rem .4rem;">Volume</th>
+                <th style="padding:.15rem .4rem;">Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for e in descargas_existentes %}
+              <tr>
+                <td style="padding:.15rem .4rem;">{{ e.numero_descarga }}</td>
+                <td style="padding:.15rem .4rem;">{{ e.data_descarga_fmt }}</td>
+                <td style="padding:.15rem .4rem;">
+                  {% if e.volume_descarga %}{{ '{:,.0f}'.format(e.volume_descarga|float).replace(',','.') }} L{% else %}—{% endif %}
+                </td>
+                <td style="padding:.15rem .4rem;">
+                  {% if e.status == 'finalizado' %}
+                    <span style="color:#155724;font-weight:600;">✅ Finalizado</span>
+                  {% else %}
+                    <span style="color:#856404;font-weight:600;">⏳ Em andamento</span>
+                  {% endif %}
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+          <div style="margin-top:.4rem;font-weight:700;">
+            Total já descarregado: {{ '{:,.0f}'.format(vol_total_ant.v).replace(',','.') }} L
+            {% if frete_pre and frete_pre.volume_nf %}
+            &nbsp;|&nbsp; Falta: <span style="color:{% if frete_pre.volume_nf|float - vol_total_ant.v > 0 %}#c0392b{% else %}#27ae60{% endif %}">
+              {{ '{:,.0f}'.format([frete_pre.volume_nf|float - vol_total_ant.v, 0]|max).replace(',','.') }} L
+            </span>
+            (NF: {{ '{:,.0f}'.format(frete_pre.volume_nf|float).replace(',','.') }} L)
+            {% endif %}
+          </div>
+        </div>
+        {% endif %}
+
         <!-- ══ 4. TIPO DE DESCARGA ══ -->
         <div class="sec-header"><i class="bi bi-sliders me-1"></i>4. Tipo de Descarga</div>
         <input type="hidden" id="tipo_descarga" name="tipo_descarga" value="total">
@@ -254,7 +304,7 @@
 
         <!-- ══ TEMPERATURA E DENSIDADE ══ -->
         <div class="sec-header"><i class="bi bi-thermometer-half me-1"></i>Temperatura e Densidade</div>
-        <div class="row mb-4">
+        <div class="row mb-3">
           <div class="col-6 col-md-3">
             <label for="temperatura" class="form-label form-label-sm">Temperatura (°C)</label>
             <input type="number" id="temperatura" name="temperatura"
@@ -264,6 +314,20 @@
             <label for="densidade" class="form-label form-label-sm">Densidade</label>
             <input type="number" id="densidade" name="densidade"
                    class="form-control form-control-sm" step="0.0001" min="0" placeholder="ex: 0.8350">
+          </div>
+        </div>
+
+        <!-- ══ FRENTISTA ══ -->
+        <div class="sec-header"><i class="bi bi-person-badge me-1"></i>Frentista</div>
+        <div class="row mb-4">
+          <div class="col-md-5">
+            <label for="frentista_id" class="form-label form-label-sm">Frentista que realizou a descarga</label>
+            <select id="frentista_id" name="frentista_id" class="form-select form-select-sm">
+              <option value="">— selecione o frentista —</option>
+              {% for f in funcionarios %}
+              <option value="{{ f.id }}">{{ f.nome }}</option>
+              {% endfor %}
+            </select>
           </div>
         </div>
 
