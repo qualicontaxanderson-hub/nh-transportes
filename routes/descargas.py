@@ -138,7 +138,7 @@ def _ensure_descargas_tables():
             # Fix legacy NOT NULL columns that are no longer in the canonical schema and
             # would block INSERTs (MySQL 1364). Make them nullable so missing values default to NULL.
             # Add any newly-discovered legacy NOT NULL columns to this list.
-            _legacy_notnull = ["data_carregamento"]
+            _legacy_notnull = ["data_carregamento", "volume_total"]
             if _legacy_notnull:
                 placeholders = ",".join(["%s"] * len(_legacy_notnull))
                 cur.execute(
