@@ -136,16 +136,33 @@
           <tbody>
             {% for f in fretes_em_transito %}
             <tr class="row-item" data-url="{{ url_for('descargas.nova') }}?frete_id={{ f.id }}" title="Clique para registrar descarga">
-              <td><span class="badge-transito">Em Trânsito</span></td>
+              <td>
+                {% if f.tem_fracionada %}
+                  <span class="badge-em_andamento">Fracionado</span>
+                {% else %}
+                  <span class="badge-transito">Em Trânsito</span>
+                {% endif %}
+              </td>
               <td>{{ f.data_frete_fmt }}</td>
               <td>{{ f.cliente }}</td>
               <td>{{ f.produto }}</td>
-              <td>{% if f.volume_nf %}{{ '{:,.0f}'.format(f.volume_nf|float).replace(',','.') }} L{% endif %}</td>
+              <td>
+                {% if f.volume_nf %}
+                  {{ '{:,.0f}'.format(f.volume_nf|float).replace(',','.') }} L
+                  {% if f.tem_fracionada and f.volume_descarregado %}
+                    <br><small class="text-warning fw-semibold">
+                      Desc: {{ '{:,.0f}'.format(f.volume_descarregado|float).replace(',','.') }} L
+                      &nbsp;/&nbsp;
+                      Falta: {{ '{:,.0f}'.format([f.volume_nf|float - f.volume_descarregado|float, 0]|max).replace(',','.') }} L
+                    </small>
+                  {% endif %}
+                {% endif %}
+              </td>
               <td>{{ f.distribuidora }}</td>
               <td>{{ f.motorista }}</td>
               <td class="actions-cell" onclick="event.stopPropagation()">
                 <a href="{{ url_for('descargas.nova') }}?frete_id={{ f.id }}"
-                   class="btn-act btn-act-new" title="Registrar descarga">
+                   class="btn-act btn-act-new" title="{% if f.tem_fracionada %}Continuar descarga{% else %}Registrar descarga{% endif %}">
                   <i class="bi bi-plus"></i>
                 </a>
               </td>

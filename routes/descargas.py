@@ -663,7 +663,10 @@ def lista():
             frete_conds.append(f"f.clientes_id IN ({placeholders})")
             frete_params.extend(cliente_ids_com_produtos)
         frete_where = "WHERE " + " AND ".join(frete_conds)
-        frete_where += " AND NOT EXISTS (SELECT 1 FROM descargas d WHERE d.frete_id = f.id)"
+        # Exclude only fully-discharged fretes (finalizado). Fretes with only
+        # partial discharges (em_andamento) should still appear in the tab with
+        # a "Fracionado" badge so the operator sees all pending work in one place.
+        frete_where += " AND NOT EXISTS (SELECT 1 FROM descargas dx WHERE dx.frete_id = f.id AND dx.status = 'finalizado')"
         cursor.execute(f"""
             SELECT
                 f.id,
@@ -672,7 +675,16 @@ def lista():
                 COALESCE(fo.razao_social, '') AS distribuidora,
                 COALESCE(p.nome, '') AS produto,
                 COALESCE(m.nome, '') AS motorista,
-                COALESCE(f.quantidade_manual, 0) AS volume_nf
+                COALESCE(f.quantidade_manual, 0) AS volume_nf,
+                CASE WHEN EXISTS (
+                    SELECT 1 FROM descargas dx
+                    WHERE dx.frete_id = f.id AND dx.status = 'em_andamento'
+                ) THEN 1 ELSE 0 END AS tem_fracionada,
+                COALESCE((
+                    SELECT SUM(dx.volume_descarga)
+                    FROM descargas dx
+                    WHERE dx.frete_id = f.id AND dx.status = 'em_andamento'
+                ), 0) AS volume_descarregado
             FROM fretes f
             LEFT JOIN clientes c ON f.clientes_id = c.id
             LEFT JOIN fornecedores fo ON f.fornecedores_id = fo.id
