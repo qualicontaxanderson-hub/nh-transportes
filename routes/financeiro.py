@@ -1357,6 +1357,133 @@ def reverter_conciliacao(tx_id):
     return redirect(url_for('financeiro.recebimento'))
 
 
+@financeiro_bp.route('/reverter-conciliacao-lote/', methods=['POST'])
+@login_required
+def reverter_conciliacao_lote():
+    """Reverte a conciliação de múltiplas transações bancárias de uma só vez.
+    Recebe tx_ids[] via form POST e processa cada uma com a mesma lógica de
+    reverter_conciliacao, acumulando sucessos e erros.
+    """
+    tx_ids_raw = request.form.getlist('tx_ids[]')
+    tx_ids = []
+    for i in tx_ids_raw:
+        try:
+            tx_ids.append(int(i))
+        except (ValueError, TypeError):
+            pass
+
+    if not tx_ids:
+        flash("Nenhuma transação selecionada para reverter.", "warning")
+        return redirect(request.referrer or url_for('financeiro.recebimento'))
+
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    cursor_w = conn.cursor()
+    sucessos = 0
+    erros = []
+
+    try:
+        for tx_id in tx_ids:
+            try:
+                cursor.execute(
+                    "SELECT id, tipo, status, descricao FROM bank_transactions WHERE id = %s LIMIT 1",
+                    (tx_id,),
+                )
+                tx = cursor.fetchone()
+                if not tx:
+                    erros.append(f"#{tx_id}: não encontrada")
+                    continue
+                if tx['status'] != 'conciliado':
+                    erros.append(f"#{tx_id}: não está conciliada (status={tx['status']})")
+                    continue
+
+                # Reverter — tenta com tipo_conciliacao primeiro
+                try:
+                    cursor_w.execute(
+                        """UPDATE bank_transactions
+                           SET status = 'pendente',
+                               forma_recebimento_id = NULL,
+                               fornecedor_id        = NULL,
+                               conciliado_em        = NULL,
+                               conciliado_por       = NULL,
+                               tipo_conciliacao     = NULL
+                           WHERE id = %s""",
+                        (tx_id,),
+                    )
+                except Exception:
+                    conn.rollback()
+                    cursor_w.execute(
+                        """UPDATE bank_transactions
+                           SET status = 'pendente',
+                               forma_recebimento_id = NULL,
+                               fornecedor_id        = NULL,
+                               conciliado_em        = NULL,
+                               conciliado_por       = NULL
+                           WHERE id = %s""",
+                        (tx_id,),
+                    )
+
+                # Desvincular lancamentos_despesas
+                try:
+                    cursor_w.execute(
+                        "UPDATE lancamentos_despesas SET bank_transaction_id = NULL WHERE bank_transaction_id = %s",
+                        (tx_id,),
+                    )
+                except Exception as exc_ld:
+                    current_app.logger.warning("reverter_lote: lancamentos_despesas tx=%s: %s", tx_id, exc_ld)
+
+                # Desvincular troco_pix
+                try:
+                    cursor_w.execute(
+                        "UPDATE troco_pix SET bank_transaction_id = NULL WHERE bank_transaction_id = %s",
+                        (tx_id,),
+                    )
+                except Exception as exc_tp:
+                    current_app.logger.warning("reverter_lote: troco_pix tx=%s: %s", tx_id, exc_tp)
+
+                # Remover CREDIT sintético TRANSFER_<id> ainda pendente
+                cursor_w.execute(
+                    "DELETE FROM bank_transactions WHERE hash_dedup = %s AND tipo = 'CREDIT' AND status = 'pendente'",
+                    (f'TRANSFER_{tx_id}',),
+                )
+
+                sucessos += 1
+
+            except Exception as e_inner:
+                current_app.logger.exception("reverter_lote: erro tx_id=%s: %s", tx_id, e_inner)
+                erros.append(f"#{tx_id}: {e_inner}")
+
+        conn.commit()
+
+    except Exception as e:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        current_app.logger.exception("Erro em reverter_conciliacao_lote: %s", e)
+        flash(f"Erro ao reverter em lote: {e}", "danger")
+    finally:
+        try:
+            cursor.close()
+        except Exception:
+            pass
+        try:
+            cursor_w.close()
+        except Exception:
+            pass
+        try:
+            conn.close()
+        except Exception:
+            pass
+
+    if sucessos:
+        flash(f"{sucessos} conciliação(ões) revertida(s) com sucesso.", "success")
+    if erros:
+        flash("Erros: " + "; ".join(erros), "warning")
+
+    return redirect(request.referrer or url_for('financeiro.recebimento'))
+
+
 def _get_bank_transactions(tipo, request_args, exclude_transfers=False):
     """Busca transações bancárias filtradas por tipo (CREDIT ou DEBIT) com filtros opcionais.
 
