@@ -547,6 +547,10 @@ window.addEventListener('DOMContentLoaded', function() {
   if (selF.value) {
     selF.dispatchEvent(new Event('change'));
   }
+  {% if frete_tem_em_andamento %}
+  // Frete já tem etapas em andamento: pré-selecionar Fracionada automaticamente
+  selecionarTipo('fracionada');
+  {% endif %}
   calcDiffs();
 });
 </script>

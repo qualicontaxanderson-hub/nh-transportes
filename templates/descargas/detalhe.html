@@ -289,7 +289,7 @@
                   </td>
                   <td>
                     <span class="badge-{{ o.status }}" style="font-size:.63rem;">
-                      {{ 'Andamento' if o.status == 'em_andamento' else 'Finalizado' }}
+                      {{ 'Finalizado' if o.status == 'finalizado' else 'Descarregado' }}
                     </span>
                   </td>
                   <td>
@@ -300,6 +300,28 @@
                 </tr>
                 {% endfor %}
               </tbody>
+              {% set total_vol = namespace(v=0) %}
+              {% for o in outras %}
+                {% if o.volume_descarga %}{% set total_vol.v = total_vol.v + o.volume_descarga|float %}{% endif %}
+              {% endfor %}
+              <tfoot>
+                <tr style="background:#f0f3f7;font-weight:700;font-size:.73rem;">
+                  <td colspan="2" style="padding:.35rem .5rem;">Total</td>
+                  <td style="padding:.35rem .5rem;">{{ '{:,.0f}'.format(total_vol.v).replace(',','.') }} L</td>
+                  <td colspan="4" style="padding:.35rem .5rem;">
+                    {% if descarga.volume_nf %}
+                      {% set falta = descarga.volume_nf|float - total_vol.v %}
+                      NF: {{ '{:,.0f}'.format(descarga.volume_nf|float).replace(',','.') }} L
+                      &nbsp;|&nbsp;
+                      {% if falta > 0.01 %}
+                        <span style="color:#c0392b;">⏳ Falta: {{ '{:,.0f}'.format(falta).replace(',','.') }} L</span>
+                      {% else %}
+                        <span style="color:#27ae60;">✅ Concluído</span>
+                      {% endif %}
+                    {% endif %}
+                  </td>
+                </tr>
+              </tfoot>
             </table>
           </div>
         </div>
@@ -315,10 +337,59 @@
           <small class="fw-bold"><i class="bi bi-whatsapp me-1" style="color:#25D366;"></i>Mensagem para WhatsApp</small>
         </div>
         <div class="card-body">
+          {% if is_fracionada and mensagem_completa %}
+          <!-- Abas: etapa atual | resumo completo -->
+          <ul class="nav nav-tabs mb-2" style="font-size:.78rem;" id="wppTabs">
+            <li class="nav-item">
+              <button class="nav-link active" id="tab-etapa-btn" onclick="mostrarAba('etapa')" type="button"
+                style="padding:.25rem .65rem;">
+                📌 Esta etapa
+              </button>
+            </li>
+            <li class="nav-item">
+              <button class="nav-link" id="tab-completo-btn" onclick="mostrarAba('completo')" type="button"
+                style="padding:.25rem .65rem;">
+                📋 Resumo completo
+              </button>
+            </li>
+          </ul>
+          <div id="pane-etapa">
+            <div class="wpp-box" id="wpp-msg">{{ mensagem }}</div>
+            <div class="d-flex gap-2 mt-2 flex-wrap">
+              <button class="btn-wpp" onclick="copiarMensagem('wpp-msg', 'copied-etapa')">
+                <i class="bi bi-clipboard me-1"></i> Copiar
+              </button>
+              <a href="https://wa.me/?text={{ mensagem | urlencode }}"
+                 target="_blank" rel="noopener"
+                 class="btn-wpp" style="text-decoration:none;">
+                <i class="bi bi-send me-1"></i> Abrir WhatsApp
+              </a>
+            </div>
+            <div id="copied-etapa" style="display:none;font-size:.75rem;color:#155724;margin-top:.4rem;">
+              <i class="bi bi-check-circle me-1"></i> Copiado!
+            </div>
+          </div>
+          <div id="pane-completo" style="display:none;">
+            <div class="wpp-box" id="wpp-msg-completo">{{ mensagem_completa }}</div>
+            <div class="d-flex gap-2 mt-2 flex-wrap">
+              <button class="btn-wpp" onclick="copiarMensagem('wpp-msg-completo', 'copied-completo')">
+                <i class="bi bi-clipboard me-1"></i> Copiar
+              </button>
+              <a href="https://wa.me/?text={{ mensagem_completa | urlencode }}"
+                 target="_blank" rel="noopener"
+                 class="btn-wpp" style="text-decoration:none;">
+                <i class="bi bi-send me-1"></i> Abrir WhatsApp
+              </a>
+            </div>
+            <div id="copied-completo" style="display:none;font-size:.75rem;color:#155724;margin-top:.4rem;">
+              <i class="bi bi-check-circle me-1"></i> Copiado!
+            </div>
+          </div>
+          {% else %}
           <p style="font-size:.78rem;color:#6c757d;">Copie o texto abaixo e cole no grupo de WhatsApp.</p>
           <div class="wpp-box" id="wpp-msg">{{ mensagem }}</div>
           <div class="d-flex gap-2 mt-3 flex-wrap">
-            <button class="btn-wpp" onclick="copiarMensagem()">
+            <button class="btn-wpp" onclick="copiarMensagem('wpp-msg', 'copied-alert')">
               <i class="bi bi-clipboard me-1"></i> Copiar
             </button>
             <a href="https://wa.me/?text={{ mensagem | urlencode }}"
@@ -330,6 +401,7 @@
           <div id="copied-alert" style="display:none;font-size:.75rem;color:#155724;margin-top:.5rem;">
             <i class="bi bi-check-circle me-1"></i> Copiado!
           </div>
+          {% endif %}
         </div>
       </div>
     </div>
@@ -340,22 +412,40 @@
 
 {% block scripts %}
 <script>
-function copiarMensagem() {
-  const txt = document.getElementById('wpp-msg').innerText;
+function copiarMensagem(msgId, alertId) {
+  const elMsg = document.getElementById(msgId || 'wpp-msg');
+  const txt = elMsg ? elMsg.innerText : '';
   if (navigator.clipboard && navigator.clipboard.writeText) {
-    navigator.clipboard.writeText(txt).then(showCopied);
+    navigator.clipboard.writeText(txt).then(function() { showCopied(alertId || 'copied-alert'); });
   } else {
     const ta = document.createElement('textarea');
     ta.value = txt; ta.style.position='fixed'; ta.style.opacity='0';
     document.body.appendChild(ta); ta.focus(); ta.select();
-    try { document.execCommand('copy'); showCopied(); } catch(e) {}
+    try { document.execCommand('copy'); showCopied(alertId || 'copied-alert'); } catch(e) {}
     document.body.removeChild(ta);
   }
 }
-function showCopied() {
-  const el = document.getElementById('copied-alert');
+function showCopied(id) {
+  const el = document.getElementById(id || 'copied-alert');
+  if (!el) return;
   el.style.display = 'block';
   setTimeout(function() { el.style.display='none'; }, 3000);
+}
+function mostrarAba(aba) {
+  const paneE = document.getElementById('pane-etapa');
+  const paneC = document.getElementById('pane-completo');
+  const btnE  = document.getElementById('tab-etapa-btn');
+  const btnC  = document.getElementById('tab-completo-btn');
+  if (!paneE || !paneC) return;
+  if (aba === 'etapa') {
+    paneE.style.display = ''; paneC.style.display = 'none';
+    if (btnE) btnE.classList.add('active');
+    if (btnC) btnC.classList.remove('active');
+  } else {
+    paneE.style.display = 'none'; paneC.style.display = '';
+    if (btnE) btnE.classList.remove('active');
+    if (btnC) btnC.classList.add('active');
+  }
 }
 </script>
 {% endblock %}

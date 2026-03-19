@@ -270,7 +270,7 @@ def _get_descargas_do_frete(frete_id):
     try:
         cursor.execute("""
             SELECT d.id, d.numero_descarga, d.status,
-                   DATE_FORMAT(d.data_descarga, '%%d/%%m/%%Y') AS data_descarga_fmt,
+                   DATE_FORMAT(d.data_descarga, '%d/%m/%Y') AS data_descarga_fmt,
                    d.volume_descarga,
                    d.medidor_antes, d.medidor_depois
             FROM descargas d
@@ -595,6 +595,89 @@ def _gerar_mensagem_whatsapp(descarga, etapas=None):
     return "\n".join(linhas)
 
 
+def _gerar_mensagem_completa_frete(etapas, frete_info):
+    """Monta mensagem completa do frete com todas as etapas detalhadas.
+
+    Args:
+        etapas:     lista de descargas do frete em ordem de numero_descarga.
+        frete_info: dict com dados gerais do frete (produto, distribuidora, etc.)
+    """
+    if not etapas:
+        return ''
+
+    produto       = (frete_info.get('produto')       or '').strip()
+    distribuidora = (frete_info.get('distribuidora') or '').strip()
+    empresa       = (frete_info.get('cliente')       or '').strip()
+    motorista     = (frete_info.get('motorista')     or '').strip()
+    volume_nf     = frete_info.get('volume_nf')
+    data_carg     = (frete_info.get('data_frete_fmt') or '').strip()
+
+    SEP = "━━━━━━━━━━━━━━━━━━━━━━"
+    linhas = []
+
+    linhas.append(f"⛽ *RESUMO COMPLETO — {produto.upper()}*")
+    linhas.append(SEP)
+    if distribuidora:
+        linhas.append(f"🏢 *Distribuidora:* {distribuidora}")
+    if empresa:
+        linhas.append(f"🏪 *Empresa:* {empresa}")
+    if motorista:
+        linhas.append(f"👷 *Motorista:* {motorista}")
+    if data_carg:
+        linhas.append(f"📅 Carregamento: {data_carg}")
+    if volume_nf:
+        linhas.append(f"📦 *NF total:* {_fmt_num(volume_nf, 0)} L")
+
+    total_desc = 0.0
+    for e in etapas:
+        linhas.append("")
+        linhas.append(SEP)
+        num = e.get('numero_descarga', '-')
+        data_e = e.get('data_descarga_fmt') or ''
+        linhas.append(f"📌 *Etapa {num}*  — {data_e}")
+
+        vol_e = e.get('volume_descarga')
+        if vol_e is not None:
+            total_desc += float(vol_e)
+            linhas.append(f"📦 Volume: *{_fmt_num(vol_e, 0)} L*")
+
+        ma = e.get('medidor_antes')
+        md = e.get('medidor_depois')
+        if ma is not None and md is not None:
+            linhas.append(f"📊 *Medidor:* {_fmt_num(ma)} → {_fmt_num(md)}")
+            if vol_e is not None:
+                sobra_m = float(md) - float(vol_e) - float(ma)
+                label = "✅ SOBRA/GANHO" if sobra_m >= 0 else "⚠️ PERDA"
+                linhas.append(f"   └ {label}: *{_diff_sign(sobra_m)}*")
+
+        ra = e.get('regua_antes_litros')
+        rd = e.get('regua_depois_litros')
+        ra_cm = e.get('regua_antes_cm')
+        rd_cm = e.get('regua_depois_cm')
+        if ra is not None and rd is not None:
+            ra_str = f"{_fmt_num(ra)} L" + (f" ({ra_cm} cm)" if ra_cm else "")
+            rd_str = f"{_fmt_num(rd)} L" + (f" ({rd_cm} cm)" if rd_cm else "")
+            linhas.append(f"📏 *Régua:* {ra_str} → {rd_str}")
+            if vol_e is not None:
+                sobra_r = float(rd) - float(vol_e) - float(ra)
+                label = "✅ SOBRA/GANHO" if sobra_r >= 0 else "⚠️ PERDA"
+                linhas.append(f"   └ {label}: *{_diff_sign(sobra_r)} L*")
+
+    linhas.append("")
+    linhas.append(SEP)
+    linhas.append("📊 *RESUMO TOTAL DO FRETE*")
+    linhas.append(f"├ Total descarregado: *{_fmt_num(total_desc, 0)} L*")
+    if volume_nf:
+        linhas.append(f"├ NF total: {_fmt_num(volume_nf, 0)} L")
+        restante = float(volume_nf) - total_desc
+        if restante > 0.01:
+            linhas.append(f"└ ⏳ *Falta: {_fmt_num(restante, 0)} L*")
+        else:
+            linhas.append("└ ✅ *Descarga concluída!*")
+
+    return "\n".join(linhas)
+
+
 # ---------------------------------------------------------------------------
 # Routes
 # ---------------------------------------------------------------------------
@@ -906,6 +989,7 @@ def nova():
         tabela_volumetrica=tabela_js,
         hoje=hoje,
         descargas_existentes=descargas_existentes,
+        frete_tem_em_andamento=any(e.get('status') == 'em_andamento' for e in descargas_existentes),
     )
 
 
@@ -1022,6 +1106,14 @@ def detalhe(id):
 
     mensagem = _gerar_mensagem_whatsapp(descarga, etapas=outras)
 
+    # Mensagem completa com todas as etapas (para descargas fracionadas)
+    is_fracionada = (
+        len(outras) > 1
+        or (descarga.get('status') == 'em_andamento')
+        or (int(descarga.get('total_descargas') or 1) > 1)
+    )
+    mensagem_completa = _gerar_mensagem_completa_frete(outras, descarga) if is_fracionada else None
+
     # Calcular sobra medidor: Depois - Volume - Antes
     diff_medidor = None
     vol = descarga.get('volume_descarga') or descarga.get('volume_nf')
@@ -1045,6 +1137,8 @@ def detalhe(id):
         descarga=descarga,
         outras=outras,
         mensagem=mensagem,
+        mensagem_completa=mensagem_completa,
+        is_fracionada=is_fracionada,
         diff_medidor=diff_medidor,
         diff_regua=diff_regua,
         diff_med_regua=diff_med_regua,
