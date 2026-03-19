@@ -394,69 +394,103 @@ def _gerar_mensagem_whatsapp(descarga):
     """Monta o texto formatado para WhatsApp a partir dos dados da descarga."""
     d = descarga
 
-    linhas = []
-    linhas.append(f"*Distribuidora:* {d.get('distribuidora', '')}")
-    linhas.append(f"*Data de carregamento:* {d.get('data_frete_fmt', '')}")
-    linhas.append(f"*Data de descarga:* {d.get('data_descarga_fmt', '')}")
-    linhas.append(f"*Produto:* {d.get('produto', '')}")
+    produto      = (d.get('produto')      or '').strip()
+    distribuidora= (d.get('distribuidora') or '').strip()
+    empresa      = (d.get('cliente')       or '').strip()
+    motorista    = (d.get('motorista')     or '').strip()
+    data_carg    = (d.get('data_frete_fmt') or '').strip()
+    data_desc    = (d.get('data_descarga_fmt') or '').strip()
 
     volume_desc = d.get('volume_descarga')
-    volume_nf = d.get('volume_nf')
-    volume_ref = volume_desc if volume_desc is not None else volume_nf
+    volume_nf   = d.get('volume_nf')
+    volume_ref  = volume_desc if volume_desc is not None else volume_nf
+
+    SEP = "━━━━━━━━━━━━━━━━━━━━━━"
+
+    linhas = []
+
+    # --- Cabeçalho ---
+    linhas.append(f"⛽ *DESCARGA — {produto.upper()}*")
+    linhas.append(SEP)
+    linhas.append("")
+
+    if distribuidora:
+        linhas.append(f"🏢 *Distribuidora:* {distribuidora}")
+    if empresa:
+        linhas.append(f"🏪 *Empresa:* {empresa}")
+    if motorista:
+        linhas.append(f"👷 *Motorista:* {motorista}")
+
+    # Datas
+    if data_carg and data_desc:
+        linhas.append(f"📅 Carregamento: {data_carg}  →  Descarga: {data_desc}")
+    elif data_carg:
+        linhas.append(f"📅 Carregamento: {data_carg}")
+    elif data_desc:
+        linhas.append(f"📅 Descarga: {data_desc}")
+
+    # Volume
     if volume_ref:
-        linhas.append(f"*Litros descarregados:* {_fmt_num(volume_ref, 0)} L")
-    if volume_nf and volume_desc and float(volume_nf) != float(volume_desc):
-        linhas.append(f"*Volume NF:* {_fmt_num(volume_nf, 0)} L")
+        vol_str = f"*{_fmt_num(volume_ref, 0)} L*"
+        if volume_nf and volume_desc and float(volume_nf) != float(volume_desc):
+            vol_str += f"  _(NF: {_fmt_num(volume_nf, 0)} L)_"
+        linhas.append(f"📦 *Volume descarregado:* {vol_str}")
 
-    linhas.append(f"*Motorista:* {d.get('motorista', '')}")
-
-    total = d.get('total_descargas', 1)
+    # Etapa (descarga fracionada)
+    total  = d.get('total_descargas', 1)
     numero = d.get('numero_descarga', 1)
     if total and int(total) > 1:
-        linhas.append(f"*Descarga:* {numero} de {total}")
-
-    # Medidor eletrônico
-    med_antes = d.get('medidor_antes')
-    med_depois = d.get('medidor_depois')
-    if med_antes is not None or med_depois is not None:
-        linhas.append("*Medidor:*")
-        if med_antes is not None:
-            linhas.append(f"  Antes: {_fmt_num(med_antes)}")
-        if med_depois is not None:
-            linhas.append(f"  Depois: {_fmt_num(med_depois)}")
-        if med_antes is not None and med_depois is not None and volume_ref is not None:
-            # Fórmula: Depois - Volume - Antes = Sobra
-            sobra = float(med_depois) - float(volume_ref) - float(med_antes)
-            linhas.append(f"  Sobra: {_diff_sign(sobra)}")
+        linhas.append(f"🔢 *Etapa:* {numero} de {total}")
 
     # Temperatura e densidade
     temp = d.get('temperatura')
     dens = d.get('densidade')
-    if temp is not None:
-        linhas.append(f"*Temperatura:* {_fmt_num(temp, 1)}°C")
-    if dens is not None:
-        linhas.append(f"*Densidade:* {_fmt_num(dens, 4)}")
+    if temp is not None or dens is not None:
+        partes = []
+        if temp is not None:
+            partes.append(f"🌡 Temp: {_fmt_num(temp, 1)}°C")
+        if dens is not None:
+            partes.append(f"⚖ Dens: {_fmt_num(dens, 4)}")
+        linhas.append("   ".join(partes))
 
-    # Régua volumétrica
-    reg_antes_l = d.get('regua_antes_litros')
+    # --- Medidor Eletrônico ---
+    med_antes  = d.get('medidor_antes')
+    med_depois = d.get('medidor_depois')
+    if med_antes is not None or med_depois is not None:
+        linhas.append("")
+        linhas.append(SEP)
+        linhas.append("📊 *MEDIDOR ELETRÔNICO*")
+        if med_antes is not None:
+            linhas.append(f"├ Antes:  {_fmt_num(med_antes)}")
+        if med_depois is not None:
+            linhas.append(f"├ Depois: {_fmt_num(med_depois)}")
+        if med_antes is not None and med_depois is not None and volume_ref is not None:
+            sobra = float(med_depois) - float(volume_ref) - float(med_antes)
+            linhas.append(f"└ Sobra:  *{_diff_sign(sobra)}*")
+
+    # --- Régua Volumétrica ---
+    reg_antes_l  = d.get('regua_antes_litros')
     reg_depois_l = d.get('regua_depois_litros')
-    reg_antes_cm = d.get('regua_antes_cm')
+    reg_antes_cm  = d.get('regua_antes_cm')
     reg_depois_cm = d.get('regua_depois_cm')
     if reg_antes_l is not None or reg_depois_l is not None:
-        linhas.append("*Régua:*")
+        linhas.append("")
+        linhas.append(SEP)
+        linhas.append("📏 *RÉGUA VOLUMÉTRICA*")
         if reg_antes_l is not None:
             cm_str = f" ({reg_antes_cm} cm)" if reg_antes_cm else ""
-            linhas.append(f"  Antes: {_fmt_num(reg_antes_l)}{cm_str}")
+            linhas.append(f"├ Antes:  {_fmt_num(reg_antes_l)} L{cm_str}")
         if reg_depois_l is not None:
             cm_str = f" ({reg_depois_cm} cm)" if reg_depois_cm else ""
-            linhas.append(f"  Depois: {_fmt_num(reg_depois_l)}{cm_str}")
+            linhas.append(f"├ Depois: {_fmt_num(reg_depois_l)} L{cm_str}")
         if reg_antes_l is not None and reg_depois_l is not None and volume_ref is not None:
             diff_reg = float(reg_depois_l) - float(volume_ref) - float(reg_antes_l)
-            linhas.append(f"  Sobra: {_diff_sign(diff_reg)}")
+            linhas.append(f"└ Sobra:  *{_diff_sign(diff_reg)} L*")
 
     obs = d.get('observacoes')
     if obs:
-        linhas.append(f"*Observações:* {obs}")
+        linhas.append("")
+        linhas.append(f"📝 *Obs:* {obs}")
 
     return "\n".join(linhas)
 
@@ -511,6 +545,11 @@ def lista():
 
     desc_where = ("WHERE " + " AND ".join(desc_filters)) if desc_filters else ""
 
+    # Obter lista de clientes com produtos configurados (para o filtro e para
+    # restringir os fretes em trânsito a empresas com produtos)
+    clientes = _get_clientes_com_produtos()
+    cliente_ids_com_produtos = tuple(int(c['id']) for c in clientes) if clientes else ()
+
     try:
         # ── Seção 1: Em Trânsito (fretes sem descarga nos últimos 5 dias) ──
         frete_conds = [_FRETE_DATE_COND]
@@ -518,6 +557,11 @@ def lista():
         if cliente_id_filtro:
             frete_conds.append("f.clientes_id = %s")
             frete_params.append(cliente_id_filtro)
+        elif cliente_ids_com_produtos:
+            # Mostra apenas fretes de empresas que possuem produtos configurados
+            placeholders = ','.join(['%s'] * len(cliente_ids_com_produtos))
+            frete_conds.append(f"f.clientes_id IN ({placeholders})")
+            frete_params.extend(cliente_ids_com_produtos)
         frete_where = "WHERE " + " AND ".join(frete_conds)
         frete_where += " AND NOT EXISTS (SELECT 1 FROM descargas d WHERE d.frete_id = f.id)"
         cursor.execute(f"""
@@ -599,8 +643,6 @@ def lista():
 
         _enrich(descargas_finalizadas)
         _enrich(descargas_fracionadas)
-
-        clientes = _get_clientes_com_produtos()
 
     except Exception as exc:
         _log.warning("Erro na lista descargas: %s", exc, exc_info=True)
