@@ -863,7 +863,7 @@ def api_fretes_por_empresa(cliente_id):
     for f in fretes:
         vol = float(f['volume_nf']) if f['volume_nf'] else 0
         vol_fmt = f"{vol:,.0f}".replace(',', '.') if vol else '—'
-        label = (f"#{f['id']} — {f['data_frete_fmt']} | "
+        label = (f"{f['data_frete_fmt']} | "
                  f"{f['produto']} | {vol_fmt} L | {f['distribuidora']}")
         resultado.append({
             'id': f['id'],

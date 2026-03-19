@@ -115,7 +115,7 @@
                       data-data="{{ f.data_frete_fmt }}"
                       data-cliente-id="{{ f.clientes_id }}"
                       {% if frete_id_qs and f.id|string == frete_id_qs %}selected{% endif %}>
-                #{{ f.id }} — {{ f.data_frete_fmt }} | {{ f.produto }} |
+                {{ f.data_frete_fmt }} | {{ f.produto }} |
                 {% if f.volume_nf %}{{ '{:,.0f}'.format(f.volume_nf|float).replace(',','.') }} L{% else %}—{% endif %} |
                 {{ f.distribuidora }}
               </option>
