@@ -107,12 +107,46 @@ _ensure_descargas_tables()
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _get_fretes_para_descarga():
-    """Retorna fretes com informações úteis para o formulário de descarga."""
+def _get_clientes_com_produtos():
+    """Retorna somente clientes que possuem pelo menos 1 produto ativo vinculado."""
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
     try:
         cursor.execute("""
+            SELECT DISTINCT c.id, COALESCE(c.nome_fantasia, c.razao_social) AS nome
+            FROM clientes c
+            INNER JOIN cliente_produtos cp ON cp.cliente_id = c.id AND cp.ativo = 1
+            ORDER BY nome
+        """)
+        return cursor.fetchall()
+    except Exception:
+        # fallback: todos os clientes se a tabela cliente_produtos não existir
+        try:
+            cursor.execute(
+                "SELECT id, COALESCE(nome_fantasia, razao_social) AS nome FROM clientes ORDER BY nome"
+            )
+            return cursor.fetchall()
+        except Exception:
+            return []
+    finally:
+        try:
+            cursor.close()
+            conn.close()
+        except Exception:
+            pass
+
+
+def _get_fretes_para_descarga(cliente_id=None):
+    """Retorna fretes com informações úteis para o formulário de descarga.
+
+    Se ``cliente_id`` for fornecido, filtra apenas fretes desse cliente.
+    """
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        where = "WHERE f.clientes_id = %s" if cliente_id else ""
+        params = (cliente_id,) if cliente_id else ()
+        cursor.execute(f"""
             SELECT
                 f.id,
                 f.data_frete,
@@ -132,9 +166,10 @@ def _get_fretes_para_descarga():
             LEFT JOIN fornecedores fo ON f.fornecedores_id = fo.id
             LEFT JOIN produto p ON f.produto_id = p.id
             LEFT JOIN motoristas m ON f.motoristas_id = m.id
+            {where}
             ORDER BY f.data_frete DESC, f.id DESC
-            LIMIT 200
-        """)
+            LIMIT 300
+        """, params)
         return cursor.fetchall()
     finally:
         try:
@@ -321,10 +356,10 @@ def lista():
     data_fim = request.args.get('data_fim', '')
     frete_id = request.args.get('frete_id', '').strip()
     status_filtro = request.args.get('status', '').strip()
+    cliente_id_filtro = request.args.get('cliente_id', '').strip()
 
     if not data_inicio and not data_fim:
         hoje = date.today()
-        from datetime import timedelta
         data_inicio = (hoje.replace(day=1)).strftime('%Y-%m-%d')
         data_fim = hoje.strftime('%Y-%m-%d')
 
@@ -355,6 +390,10 @@ def lista():
         if status_filtro:
             filters.append("d.status = %s")
             params.append(status_filtro)
+
+        if cliente_id_filtro:
+            filters.append("f.clientes_id = %s")
+            params.append(cliente_id_filtro)
 
         where = ("WHERE " + " AND ".join(filters)) if filters else ""
 
@@ -400,8 +439,11 @@ def lista():
             else:
                 desc['diff_regua'] = None
 
+        clientes = _get_clientes_com_produtos()
+
     except Exception:
         descargas = []
+        clientes = []
     finally:
         try:
             cursor.close()
@@ -412,10 +454,12 @@ def lista():
     return render_template(
         'descargas/lista.html',
         descargas=descargas,
+        clientes=clientes,
         data_inicio=data_inicio,
         data_fim=data_fim,
         frete_id=frete_id,
         status_filtro=status_filtro,
+        cliente_id_filtro=cliente_id_filtro,
     )
 
 
@@ -426,9 +470,13 @@ def nova():
         conn = get_db_connection()
         try:
             frete_id = request.form.get('frete_id')
-            numero_descarga = request.form.get('numero_descarga') or 1
-            total_descargas = request.form.get('total_descargas') or 1
             data_descarga = request.form.get('data_descarga')
+            # tipo_descarga: 'total' → finalizado, 'fracionada' → em_andamento
+            tipo_descarga = request.form.get('tipo_descarga', 'total')
+            status = 'finalizado' if tipo_descarga == 'total' else 'em_andamento'
+            # etapas: sempre 1 na criação; número será incrementado ao adicionar etapas
+            numero_descarga = 1
+            total_descargas = 1
             medidor_antes = request.form.get('medidor_antes') or None
             medidor_depois = request.form.get('medidor_depois') or None
             regua_antes_cm = request.form.get('regua_antes_cm') or None
@@ -437,14 +485,12 @@ def nova():
             regua_depois_litros = request.form.get('regua_depois_litros') or None
             temperatura = request.form.get('temperatura') or None
             densidade = request.form.get('densidade') or None
-            status = request.form.get('status', 'em_andamento')
             observacoes = request.form.get('observacoes') or None
 
             if not frete_id or not data_descarga:
                 flash('Frete e data de descarga são obrigatórios.', 'danger')
                 return redirect(url_for('descargas.nova'))
 
-            # Converter valores numéricos
             def _to_decimal(v):
                 if v is None:
                     return None
@@ -489,20 +535,28 @@ def nova():
                 pass
 
     # GET
+    # cliente (empresa) selecionado — filtra fretes
+    cliente_id_qs = request.args.get('cliente_id', '').strip()
     frete_id_qs = request.args.get('frete_id', '')
     frete_pre = None
     if frete_id_qs:
         frete_pre = _get_frete(frete_id_qs)
+        # determinar empresa a partir do frete se não veio na query-string
+        if frete_pre and not cliente_id_qs:
+            cliente_id_qs = str(frete_pre.get('clientes_id', ''))
 
-    fretes = _get_fretes_para_descarga()
+    clientes = _get_clientes_com_produtos()
+    fretes = _get_fretes_para_descarga(cliente_id=cliente_id_qs if cliente_id_qs else None)
     tabela_js = {str(k): v for k, v in TABELA_VOLUMETRICA_15M3.items()}
     hoje = date.today().strftime('%Y-%m-%d')
 
     return render_template(
         'descargas/nova.html',
         fretes=fretes,
+        clientes=clientes,
         frete_pre=frete_pre,
         frete_id_qs=frete_id_qs,
+        cliente_id_qs=cliente_id_qs,
         tabela_volumetrica=tabela_js,
         hoje=hoje,
     )
@@ -519,6 +573,8 @@ def editar(id):
     if request.method == 'POST':
         conn = get_db_connection()
         try:
+            tipo_descarga = request.form.get('tipo_descarga', 'total')
+            status = 'finalizado' if tipo_descarga == 'total' else 'em_andamento'
             numero_descarga = request.form.get('numero_descarga') or 1
             total_descargas = request.form.get('total_descargas') or 1
             data_descarga = request.form.get('data_descarga')
@@ -530,7 +586,6 @@ def editar(id):
             regua_depois_litros = request.form.get('regua_depois_litros') or None
             temperatura = request.form.get('temperatura') or None
             densidade = request.form.get('densidade') or None
-            status = request.form.get('status', 'em_andamento')
             observacoes = request.form.get('observacoes') or None
 
             def _to_decimal(v):
@@ -662,6 +717,26 @@ def deletar(id):
 def api_tabela():
     """Retorna a tabela volumétrica como JSON para uso no frontend."""
     return jsonify(TABELA_VOLUMETRICA_15M3)
+
+
+@bp.route('/api/fretes_por_empresa/<int:cliente_id>', methods=['GET'])
+@login_required
+def api_fretes_por_empresa(cliente_id):
+    """Retorna fretes de um cliente específico como JSON (para filtro dinâmico)."""
+    fretes = _get_fretes_para_descarga(cliente_id=cliente_id)
+    resultado = []
+    for f in fretes:
+        resultado.append({
+            'id': f['id'],
+            'label': f"#{f['id']} — {f['data_frete_fmt']} | {f['produto']} | {f['motorista']}",
+            'cliente': f['cliente'],
+            'distribuidora': f['distribuidora'],
+            'produto': f['produto'],
+            'motorista': f['motorista'],
+            'volume_nf': float(f['volume_nf']) if f['volume_nf'] else 0,
+            'data_frete_fmt': f['data_frete_fmt'],
+        })
+    return jsonify(resultado)
 
 
 @bp.route('/api/frete/<int:frete_id>', methods=['GET'])

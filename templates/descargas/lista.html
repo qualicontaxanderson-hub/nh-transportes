@@ -4,43 +4,36 @@
 {% block styles %}
 <style>
   .page-hero {
-    background: linear-gradient(135deg, #1a6b3c 0%, #155c32 60%, #0f4525 100%);
-    border-radius: .75rem;
-    padding: 1.25rem 1.75rem;
-    margin-bottom: 1.25rem;
-    color: #fff;
+    background: linear-gradient(135deg, #1D63A5 0%, #1a4f82 60%, #154070 100%);
+    border-radius: .75rem; padding: 1.25rem 1.75rem; margin-bottom: 1.25rem; color: #fff;
   }
   .page-hero .hero-icon {
-    width: 2.75rem; height: 2.75rem;
-    background: rgba(255,255,255,.15);
-    border-radius: .5rem;
-    display: flex; align-items: center; justify-content: center;
+    width: 2.75rem; height: 2.75rem; background: rgba(255,255,255,.15);
+    border-radius: .5rem; display: flex; align-items: center; justify-content: center;
     font-size: 1.35rem; flex-shrink: 0;
   }
+  .flt-header { background: #1D63A5; color: #fff; font-size: 0.78rem; font-weight: 600; padding: .45rem .75rem; border-radius: .35rem .35rem 0 0; }
   #tbl-descargas { font-size: 0.72rem; }
   #tbl-descargas thead th {
-    background: #1a6b3c; color: #fff;
-    font-size: 0.68rem; font-weight: 700;
-    text-transform: uppercase; letter-spacing: .04em;
-    padding: 0.45rem 0.5rem; border: none; white-space: nowrap;
+    background: #1D63A5; color: #fff; font-size: 0.68rem; font-weight: 700;
+    text-transform: uppercase; letter-spacing: .04em; padding: 0.45rem 0.5rem; border: none; white-space: nowrap;
   }
   #tbl-descargas tbody td { padding: 0.35rem 0.5rem; vertical-align: middle; border-color: #f0f3f7; }
-  #tbl-descargas tbody tr:hover { background: #eeffee; }
-  .badge-status-em_andamento { background: #fff3cd; color: #856404; font-size: 0.62rem; padding:.2rem .45rem; border-radius:3px; font-weight:700; }
-  .badge-status-finalizado    { background: #d4edda; color: #155724; font-size: 0.62rem; padding:.2rem .45rem; border-radius:3px; font-weight:700; }
+  #tbl-descargas tbody tr:hover { background: #eef4ff; }
+  .badge-em_andamento { background: #fff3cd; color: #856404; font-size: 0.62rem; padding:.2rem .45rem; border-radius:3px; font-weight:700; }
+  .badge-finalizado   { background: #d4edda; color: #155724; font-size: 0.62rem; padding:.2rem .45rem; border-radius:3px; font-weight:700; }
   .diff-pos { color: #198754; font-weight: 600; }
   .diff-neg { color: #dc3545; font-weight: 600; }
-  .frt-filter-header { background: #1a6b3c; color: #fff; font-size: 0.78rem; font-weight: 600; padding: .45rem .75rem; border-radius: .35rem .35rem 0 0; }
   .btn-act {
     display: inline-flex; align-items: center; justify-content: center;
-    width: 1.55rem; height: 1.55rem; border-radius: 4px;
-    font-size: 0.68rem; border: none; cursor: pointer;
-    text-decoration: none; transition: opacity .12s; padding: 0;
+    width: 1.55rem; height: 1.55rem; border-radius: 4px; font-size: 0.68rem; border: none;
+    cursor: pointer; text-decoration: none; transition: opacity .12s; padding: 0;
   }
   .btn-act:hover { opacity: .75; }
   .btn-act-view  { background: #d1ecf1; color: #0c5460; }
   .btn-act-edit  { background: #cce5ff; color: #004085; }
   .btn-act-danger{ background: #f8d7da; color: #721c24; }
+  .btn-act-new   { background: #d4edda; color: #155724; }
 </style>
 {% endblock %}
 
@@ -48,7 +41,7 @@
 <div class="container-fluid">
 
   <!-- Hero -->
-  <div class="page-hero d-flex align-items-center gap-3 flex-wrap">
+  <div class="page-hero d-flex align-items-center gap-3 flex-wrap mt-2">
     <div class="hero-icon"><i class="bi bi-fuel-pump-fill"></i></div>
     <div class="flex-grow-1">
       <h4 class="mb-0 fw-bold">Controle de Descargas</h4>
@@ -62,58 +55,69 @@
   </div>
 
   <!-- Filtros -->
-  <div class="card shadow-sm mb-3">
-    <div class="frt-filter-header"><i class="bi bi-funnel me-1"></i>Filtros</div>
+  <form method="GET" action="{{ url_for('descargas.lista') }}" class="card shadow-sm mb-3">
+    <div class="flt-header"><i class="bi bi-funnel me-1"></i> Filtros</div>
     <div class="card-body py-2">
-      <form method="GET" action="{{ url_for('descargas.lista') }}" class="row g-2 align-items-end">
+      <div class="row g-2 align-items-end">
         <div class="col-6 col-md-2">
-          <label class="form-label form-label-sm mb-1">Data início</label>
-          <input type="date" name="data_inicio" class="form-control form-control-sm"
-                 value="{{ data_inicio }}">
+          <label class="form-label form-label-sm mb-0">Empresa</label>
+          <select name="cliente_id" class="form-select form-select-sm">
+            <option value="">Todas</option>
+            {% for c in clientes %}
+            <option value="{{ c.id }}" {% if c.id|string == cliente_id_filtro %}selected{% endif %}>{{ c.nome }}</option>
+            {% endfor %}
+          </select>
         </div>
         <div class="col-6 col-md-2">
-          <label class="form-label form-label-sm mb-1">Data fim</label>
-          <input type="date" name="data_fim" class="form-control form-control-sm"
-                 value="{{ data_fim }}">
+          <label class="form-label form-label-sm mb-0">Data início</label>
+          <input type="date" name="data_inicio" class="form-control form-control-sm" value="{{ data_inicio }}">
         </div>
         <div class="col-6 col-md-2">
-          <label class="form-label form-label-sm mb-1">Frete ID</label>
-          <input type="number" name="frete_id" class="form-control form-control-sm"
-                 value="{{ frete_id }}" placeholder="Nº do frete">
+          <label class="form-label form-label-sm mb-0">Data fim</label>
+          <input type="date" name="data_fim" class="form-control form-control-sm" value="{{ data_fim }}">
         </div>
         <div class="col-6 col-md-2">
-          <label class="form-label form-label-sm mb-1">Status</label>
+          <label class="form-label form-label-sm mb-0">Frete ID</label>
+          <input type="number" name="frete_id" class="form-control form-control-sm" value="{{ frete_id }}" placeholder="Nº do frete">
+        </div>
+        <div class="col-6 col-md-2">
+          <label class="form-label form-label-sm mb-0">Status</label>
           <select name="status" class="form-select form-select-sm">
             <option value="">Todos</option>
             <option value="em_andamento" {% if status_filtro == 'em_andamento' %}selected{% endif %}>Em andamento</option>
             <option value="finalizado"   {% if status_filtro == 'finalizado'   %}selected{% endif %}>Finalizado</option>
           </select>
         </div>
-        <div class="col-12 col-md-4 d-flex gap-2">
-          <button type="submit" class="btn btn-sm btn-primary">
-            <i class="bi bi-search me-1"></i> Filtrar
+        <div class="col-6 col-md-2 d-flex gap-1">
+          <button type="submit" class="btn btn-primary btn-sm flex-fill">
+            <i class="bi bi-search"></i> Filtrar
           </button>
-          <a href="{{ url_for('descargas.lista') }}" class="btn btn-sm btn-outline-secondary">
-            <i class="bi bi-x-circle me-1"></i> Limpar
+          <a href="{{ url_for('descargas.lista') }}" class="btn btn-outline-secondary btn-sm">
+            <i class="bi bi-x"></i>
           </a>
         </div>
-      </form>
+      </div>
     </div>
-  </div>
+  </form>
 
   <!-- Tabela -->
   <div class="card shadow-sm">
+    <div class="card-header py-2" style="background:#1D63A5;color:#fff;">
+      <h6 class="mb-0"><i class="bi bi-list-ul me-1"></i> Descargas Registradas
+        <span class="badge bg-warning text-dark ms-2">{{ descargas|length }}</span>
+      </h6>
+    </div>
     <div class="card-body p-0">
       <div class="table-responsive">
         <table id="tbl-descargas" class="table table-hover mb-0">
           <thead>
             <tr>
               <th>#</th>
-              <th>Descarga</th>
+              <th>Tipo</th>
               <th>Frete</th>
               <th>Data Desc.</th>
               <th>Data Carg.</th>
-              <th>Cliente</th>
+              <th>Empresa</th>
               <th>Produto</th>
               <th>Volume NF</th>
               <th>Motorista</th>
@@ -127,20 +131,24 @@
             {% for d in descargas %}
             <tr>
               <td>{{ d.id }}</td>
-              <td>{{ d.numero_descarga }}/{{ d.total_descargas }}</td>
               <td>
-                <a href="{{ url_for('fretes.editar', id=d.frete_id) }}" title="Ver frete">
-                  #{{ d.frete_id }}
-                </a>
+                {% if d.total_descargas and d.total_descargas > 1 %}
+                  <span style="font-size:.7rem;color:#6c757d;">{{ d.numero_descarga }}/{{ d.total_descargas }}</span>
+                {% elif d.status == 'em_andamento' %}
+                  <span style="font-size:.7rem;color:#856404;">Frac.</span>
+                {% else %}
+                  <span style="font-size:.7rem;color:#155724;">Total</span>
+                {% endif %}
+              </td>
+              <td>
+                <a href="{{ url_for('fretes.editar', id=d.frete_id) }}" title="Ver frete">#{{ d.frete_id }}</a>
               </td>
               <td>{{ d.data_descarga_fmt }}</td>
               <td>{{ d.data_frete_fmt }}</td>
               <td>{{ d.cliente }}</td>
               <td>{{ d.produto }}</td>
               <td>
-                {% if d.volume_nf %}
-                  {{ '{:,.0f}'.format(d.volume_nf|float).replace(',','.') }} L
-                {% endif %}
+                {% if d.volume_nf %}{{ '{:,.0f}'.format(d.volume_nf|float).replace(',','.') }} L{% endif %}
               </td>
               <td>{{ d.motorista }}</td>
               <td>
@@ -158,19 +166,22 @@
                 {% endif %}
               </td>
               <td>
-                <span class="badge-status-{{ d.status }}">
+                <span class="badge-{{ d.status }}">
                   {{ 'Em andamento' if d.status == 'em_andamento' else 'Finalizado' }}
                 </span>
               </td>
               <td class="d-flex gap-1">
-                <a href="{{ url_for('descargas.detalhe', id=d.id) }}"
-                   class="btn-act btn-act-view" title="Ver detalhes">
+                <a href="{{ url_for('descargas.detalhe', id=d.id) }}" class="btn-act btn-act-view" title="Ver detalhes">
                   <i class="bi bi-eye"></i>
                 </a>
-                <a href="{{ url_for('descargas.editar', id=d.id) }}"
-                   class="btn-act btn-act-edit" title="Editar">
+                <a href="{{ url_for('descargas.editar', id=d.id) }}" class="btn-act btn-act-edit" title="Editar">
                   <i class="bi bi-pencil"></i>
                 </a>
+                {% if d.status == 'em_andamento' %}
+                <a href="{{ url_for('descargas.nova') }}?frete_id={{ d.frete_id }}" class="btn-act btn-act-new" title="Adicionar etapa">
+                  <i class="bi bi-plus"></i>
+                </a>
+                {% endif %}
                 <form method="POST" action="{{ url_for('descargas.deletar', id=d.id) }}"
                       onsubmit="return confirm('Excluir descarga #{{ d.id }}?');" style="display:inline;">
                   <button type="submit" class="btn-act btn-act-danger" title="Excluir">
