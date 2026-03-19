@@ -61,7 +61,7 @@
       <p class="mb-0 opacity-75" style="font-size:.8rem;">
         Frete #{{ descarga.frete_id }} — {{ descarga.cliente }} — {{ descarga.produto }}
         {% if descarga.total_descargas and descarga.total_descargas > 1 %}
-        | Etapa {{ descarga.numero_descarga }} de {{ descarga.total_descargas }}
+        | {{ descarga.numero_descarga }}º Descarga de {{ descarga.total_descargas }}
         {% endif %}
       </p>
     </div>
@@ -75,7 +75,7 @@
       <a href="{{ url_for('descargas.nova') }}?frete_id={{ descarga.frete_id }}"
          class="btn btn-sm fw-semibold"
          style="background:rgba(255,255,255,.12);color:#fff;border:1px solid rgba(255,255,255,.3);">
-        <i class="bi bi-plus-circle me-1"></i> Nova etapa
+        <i class="bi bi-plus-circle me-1"></i> Nova descarga
       </a>
       {% endif %}
       <a href="{{ url_for('descargas.lista') }}"
@@ -254,7 +254,7 @@
       {% if outras | length > 1 %}
       <div class="card shadow-sm mb-3">
         <div class="card-header py-2" style="background:#1D63A5;color:#fff;">
-          <small class="fw-bold"><i class="bi bi-layers me-1"></i>Todas as Etapas — Frete #{{ descarga.frete_id }}</small>
+          <small class="fw-bold"><i class="bi bi-layers me-1"></i>Todas as Descargas — Frete #{{ descarga.frete_id }}</small>
         </div>
         <div class="card-body p-0">
           <div class="table-responsive">

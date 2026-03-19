@@ -437,6 +437,14 @@ def _diff_sign(val):
         return ''
 
 
+def _ordinal(n):
+    """Retorna número ordinal pt-BR: 1 → '1º', 2 → '2º', etc."""
+    try:
+        return f"{int(n)}º"
+    except Exception:
+        return str(n)
+
+
 def _gerar_mensagem_whatsapp(descarga, etapas=None):
     """Monta o texto formatado para WhatsApp a partir dos dados da descarga.
 
@@ -471,9 +479,9 @@ def _gerar_mensagem_whatsapp(descarga, etapas=None):
     if is_fracionada:
         linhas.append(f"⛽ *DESCARGA FRACIONADA — {produto.upper()}*")
         if total > 1:
-            linhas.append(f"📌 *Etapa {numero} de {total}*")
+            linhas.append(f"📌 *{_ordinal(numero)} Descarga de {total}*")
         else:
-            linhas.append(f"📌 *Etapa {numero}*")
+            linhas.append(f"📌 *{_ordinal(numero)} Descarga*")
     else:
         linhas.append(f"⛽ *DESCARGA COMPLETA — {produto.upper()}*")
     linhas.append(SEP)
@@ -514,6 +522,7 @@ def _gerar_mensagem_whatsapp(descarga, etapas=None):
     # --- Medidor Eletrônico ---
     med_antes  = d.get('medidor_antes')
     med_depois = d.get('medidor_depois')
+    sobra_med  = None
     if med_antes is not None or med_depois is not None:
         linhas.append("")
         linhas.append(SEP)
@@ -523,15 +532,16 @@ def _gerar_mensagem_whatsapp(descarga, etapas=None):
         if med_depois is not None:
             linhas.append(f"├ Depois: {_fmt_num(med_depois)}")
         if med_antes is not None and med_depois is not None and volume_ref is not None:
-            sobra = float(med_depois) - float(volume_ref) - float(med_antes)
-            label = "✅ SOBRA/GANHO" if sobra >= 0 else "⚠️ PERDA"
-            linhas.append(f"└ {label}: *{_diff_sign(sobra)}*")
+            sobra_med = float(med_depois) - float(volume_ref) - float(med_antes)
+            label = "✅ SOBRA/GANHO" if sobra_med >= 0 else "⚠️ PERDA"
+            linhas.append(f"└ {label}: *{_diff_sign(sobra_med)}*")
 
     # --- Régua Volumétrica ---
     reg_antes_l   = d.get('regua_antes_litros')
     reg_depois_l  = d.get('regua_depois_litros')
     reg_antes_cm  = d.get('regua_antes_cm')
     reg_depois_cm = d.get('regua_depois_cm')
+    sobra_reg = None
     if reg_antes_l is not None or reg_depois_l is not None:
         linhas.append("")
         linhas.append(SEP)
@@ -543,9 +553,18 @@ def _gerar_mensagem_whatsapp(descarga, etapas=None):
             cm_str = f" ({reg_depois_cm} cm)" if reg_depois_cm else ""
             linhas.append(f"├ Depois: {_fmt_num(reg_depois_l)} L{cm_str}")
         if reg_antes_l is not None and reg_depois_l is not None and volume_ref is not None:
-            diff_reg = float(reg_depois_l) - float(volume_ref) - float(reg_antes_l)
-            label = "✅ SOBRA/GANHO" if diff_reg >= 0 else "⚠️ PERDA"
-            linhas.append(f"└ {label}: *{_diff_sign(diff_reg)} L*")
+            sobra_reg = float(reg_depois_l) - float(volume_ref) - float(reg_antes_l)
+            label = "✅ SOBRA/GANHO" if sobra_reg >= 0 else "⚠️ PERDA"
+            linhas.append(f"└ {label}: *{_diff_sign(sobra_reg)} L*")
+
+    # --- Diferença Régua vs Medidor ---
+    if sobra_med is not None and sobra_reg is not None:
+        diff_rv_m = sobra_reg - sobra_med
+        linhas.append("")
+        linhas.append(SEP)
+        linhas.append("📐 *DIFERENÇA RÉGUA vs MEDIDOR*")
+        label = "✅ SOBRA/GANHO" if diff_rv_m >= 0 else "⚠️ PERDA"
+        linhas.append(f"└ {label}: *{_diff_sign(diff_rv_m)} L*")
 
     # --- Histórico de etapas anteriores (quando etapa > 1) ---
     if etapas and numero > 1:
@@ -554,7 +573,7 @@ def _gerar_mensagem_whatsapp(descarga, etapas=None):
         if prev_etapas:
             linhas.append("")
             linhas.append(SEP)
-            linhas.append("📋 *ETAPAS ANTERIORES*")
+            linhas.append("📋 *DESCARGAS ANTERIORES*")
             total_ant = 0.0
             for e in prev_etapas:
                 vol_e = e.get('volume_descarga') or 0
@@ -567,7 +586,7 @@ def _gerar_mensagem_whatsapp(descarga, etapas=None):
                 if ma_e is not None and md_e is not None and vol_e:
                     s = float(md_e) - float(vol_e) - float(ma_e)
                     sobra_str = f"  ({'✅' if s >= 0 else '⚠️'} {_diff_sign(s)})"
-                linhas.append(f"  Etapa {e.get('numero_descarga', '-')}: {data_e} — {vol_e_fmt} L{sobra_str}")
+                linhas.append(f"  {_ordinal(e.get('numero_descarga', '-'))} Descarga: {data_e} — {vol_e_fmt} L{sobra_str}")
 
             # Resumo final acumulado
             total_acum = total_ant + (float(volume_ref) if volume_ref else 0)
@@ -630,7 +649,7 @@ def _gerar_mensagem_completa_frete(etapas, frete_info):
         linhas.append(SEP)
         num = e.get('numero_descarga', '-')
         data_e = e.get('data_descarga_fmt') or ''
-        linhas.append(f"📌 *Etapa {num}*  — {data_e}")
+        linhas.append(f"📌 *{_ordinal(num)} Descarga*  — {data_e}")
 
         vol_e = e.get('volume_descarga')
         if vol_e is not None:
@@ -649,6 +668,7 @@ def _gerar_mensagem_completa_frete(etapas, frete_info):
         partes_e.append(f"⚖ Dens: {_fmt_num(dens_e, 4)}" if dens_e is not None else "⚖ Dens: Não informado")
         linhas.append("   ".join(partes_e))
 
+        sobra_m = None
         ma = e.get('medidor_antes')
         md = e.get('medidor_depois')
         if ma is not None and md is not None:
@@ -658,6 +678,7 @@ def _gerar_mensagem_completa_frete(etapas, frete_info):
                 label = "✅ SOBRA/GANHO" if sobra_m >= 0 else "⚠️ PERDA"
                 linhas.append(f"   └ {label}: *{_diff_sign(sobra_m)}*")
 
+        sobra_r = None
         ra = e.get('regua_antes_litros')
         rd = e.get('regua_depois_litros')
         ra_cm = e.get('regua_antes_cm')
@@ -670,6 +691,11 @@ def _gerar_mensagem_completa_frete(etapas, frete_info):
                 sobra_r = float(rd) - float(vol_e) - float(ra)
                 label = "✅ SOBRA/GANHO" if sobra_r >= 0 else "⚠️ PERDA"
                 linhas.append(f"   └ {label}: *{_diff_sign(sobra_r)} L*")
+
+        if sobra_m is not None and sobra_r is not None:
+            diff_rv_m = sobra_r - sobra_m
+            label = "✅ SOBRA/GANHO" if diff_rv_m >= 0 else "⚠️ PERDA"
+            linhas.append(f"📐 *Dif. Régua vs Medidor:* {label} *{_diff_sign(diff_rv_m)} L*")
 
     linhas.append("")
     linhas.append(SEP)
