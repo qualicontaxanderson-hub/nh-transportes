@@ -50,7 +50,7 @@ TABELA_VOLUMETRICA_15M3 = {
 
 
 def _ensure_descargas_tables():
-    """Cria as tabelas de descargas se ainda não existirem (idempotente)."""
+    """Cria as tabelas de descargas se ainda não existirem e aplica migrations (idempotente)."""
     ddl = """
     CREATE TABLE IF NOT EXISTS `descargas` (
         `id`                  INT AUTO_INCREMENT PRIMARY KEY,
@@ -60,6 +60,8 @@ def _ensure_descargas_tables():
         `total_descargas`     INT NOT NULL DEFAULT 1
             COMMENT 'Total de etapas previstas para este frete',
         `data_descarga`       DATE NOT NULL,
+        `volume_descarga`     DECIMAL(14,3) NULL
+            COMMENT 'Litros descarregados nesta etapa (preenchido pelo usuário em fracionada, ou volume NF em total)',
         -- Medidor eletrônico
         `medidor_antes`       DECIMAL(14,3) NULL,
         `medidor_depois`      DECIMAL(14,3) NULL,
@@ -83,11 +85,22 @@ def _ensure_descargas_tables():
         INDEX `idx_descargas_status` (`status`)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     """
+    # Migration: add volume_descarga column if table already exists without it
+    alter_volume = """
+    ALTER TABLE `descargas`
+        ADD COLUMN IF NOT EXISTS `volume_descarga` DECIMAL(14,3) NULL
+            COMMENT 'Litros descarregados nesta etapa'
+        AFTER `data_descarga`
+    """
     try:
         conn = get_db_connection()
         cur = conn.cursor()
         try:
             cur.execute(ddl)
+            try:
+                cur.execute(alter_volume)
+            except Exception:
+                pass  # ADD COLUMN IF NOT EXISTS may not be supported on older MySQL
             conn.commit()
         finally:
             cur.close()
@@ -95,12 +108,17 @@ def _ensure_descargas_tables():
     except Exception:
         import logging
         logging.getLogger(__name__).warning(
-            "Falha ao criar tabela descargas (não crítico).", exc_info=True
+            "Falha ao criar/migrar tabela descargas (não crítico).", exc_info=True
         )
 
 
 # Executar migration na importação do módulo
 _ensure_descargas_tables()
+
+# Janela de dias para exibição de fretes no módulo de descargas
+FRETES_WINDOW_DAYS = 5
+# Condição SQL reutilizável (evita número mágico espalhado)
+_FRETE_DATE_COND = f"f.data_frete >= CURDATE() - INTERVAL {FRETES_WINDOW_DAYS} DAY"
 
 
 # ---------------------------------------------------------------------------
@@ -136,30 +154,70 @@ def _get_clientes_com_produtos():
             pass
 
 
-def _get_fretes_para_descarga(cliente_id=None):
-    """Retorna fretes com informações úteis para o formulário de descarga.
+def _get_motoristas_por_empresa(cliente_id=None):
+    """Retorna motoristas que possuem fretes (últimos 5 dias) para a empresa informada."""
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        if cliente_id:
+            cursor.execute(f"""
+                SELECT DISTINCT m.id, m.nome
+                FROM motoristas m
+                INNER JOIN fretes f ON f.motoristas_id = m.id
+                WHERE f.clientes_id = %s
+                  AND {_FRETE_DATE_COND}
+                ORDER BY m.nome
+            """, (cliente_id,))
+        else:
+            cursor.execute(f"""
+                SELECT DISTINCT m.id, m.nome
+                FROM motoristas m
+                INNER JOIN fretes f ON f.motoristas_id = m.id
+                WHERE {_FRETE_DATE_COND}
+                ORDER BY m.nome
+            """)
+        return cursor.fetchall()
+    except Exception:
+        return []
+    finally:
+        try:
+            cursor.close()
+            conn.close()
+        except Exception:
+            pass
 
-    Se ``cliente_id`` for fornecido, filtra apenas fretes desse cliente.
+
+def _get_fretes_para_descarga(cliente_id=None, motorista_id=None):
+    """Retorna fretes dos últimos 5 dias com informações para o formulário de descarga.
+
+    Filtros opcionais: ``cliente_id`` (empresa) e ``motorista_id``.
     """
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
     try:
-        where = "WHERE f.clientes_id = %s" if cliente_id else ""
-        params = (cliente_id,) if cliente_id else ()
+        conditions = [_FRETE_DATE_COND]
+        params = []
+        if cliente_id:
+            conditions.append("f.clientes_id = %s")
+            params.append(cliente_id)
+        if motorista_id:
+            conditions.append("f.motoristas_id = %s")
+            params.append(motorista_id)
+        where = "WHERE " + " AND ".join(conditions)
         cursor.execute(f"""
             SELECT
                 f.id,
                 f.data_frete,
-                DATE_FORMAT(f.data_frete, '%%d/%%m/%%Y') AS data_frete_fmt,
+                DATE_FORMAT(f.data_frete, '%d/%m/%Y') AS data_frete_fmt,
                 COALESCE(c.razao_social, '') AS cliente,
                 COALESCE(fo.razao_social, '') AS distribuidora,
                 COALESCE(p.nome, '') AS produto,
                 COALESCE(m.nome, '') AS motorista,
                 COALESCE(f.quantidade_manual, 0) AS volume_nf,
                 f.clientes_id,
+                f.motoristas_id,
                 f.fornecedores_id,
                 f.produto_id,
-                f.motoristas_id,
                 f.status
             FROM fretes f
             LEFT JOIN clientes c ON f.clientes_id = c.id
@@ -169,7 +227,7 @@ def _get_fretes_para_descarga(cliente_id=None):
             {where}
             ORDER BY f.data_frete DESC, f.id DESC
             LIMIT 300
-        """, params)
+        """, tuple(params) if params else ())
         return cursor.fetchall()
     finally:
         try:
@@ -188,7 +246,7 @@ def _get_frete(frete_id):
             SELECT
                 f.id,
                 f.data_frete,
-                DATE_FORMAT(f.data_frete, '%%d/%%m/%%Y') AS data_frete_fmt,
+                DATE_FORMAT(f.data_frete, '%d/%m/%Y') AS data_frete_fmt,
                 COALESCE(c.razao_social, '') AS cliente,
                 COALESCE(fo.razao_social, '') AS distribuidora,
                 COALESCE(p.nome, '') AS produto,
@@ -222,9 +280,9 @@ def _get_descarga(descarga_id):
         cursor.execute("""
             SELECT
                 d.*,
-                DATE_FORMAT(d.data_descarga, '%%d/%%m/%%Y') AS data_descarga_fmt,
+                DATE_FORMAT(d.data_descarga, '%d/%m/%Y') AS data_descarga_fmt,
                 f.data_frete,
-                DATE_FORMAT(f.data_frete, '%%d/%%m/%%Y') AS data_frete_fmt,
+                DATE_FORMAT(f.data_frete, '%d/%m/%Y') AS data_frete_fmt,
                 COALESCE(c.razao_social, '') AS cliente,
                 COALESCE(fo.razao_social, '') AS distribuidora,
                 COALESCE(p.nome, '') AS produto,
@@ -286,8 +344,12 @@ def _gerar_mensagem_whatsapp(descarga):
     linhas.append(f"*Data de descarga:* {d.get('data_descarga_fmt', '')}")
     linhas.append(f"*Produto:* {d.get('produto', '')}")
 
+    volume_desc = d.get('volume_descarga')
     volume_nf = d.get('volume_nf')
-    if volume_nf:
+    volume_ref = volume_desc if volume_desc is not None else volume_nf
+    if volume_ref:
+        linhas.append(f"*Litros descarregados:* {_fmt_num(volume_ref, 0)} L")
+    if volume_nf and volume_desc and float(volume_nf) != float(volume_desc):
         linhas.append(f"*Volume NF:* {_fmt_num(volume_nf, 0)} L")
 
     linhas.append(f"*Motorista:* {d.get('motorista', '')}")
@@ -306,9 +368,10 @@ def _gerar_mensagem_whatsapp(descarga):
             linhas.append(f"  Antes: {_fmt_num(med_antes)}")
         if med_depois is not None:
             linhas.append(f"  Depois: {_fmt_num(med_depois)}")
-        if med_antes is not None and med_depois is not None:
-            diff_med = float(med_depois) - float(med_antes)
-            linhas.append(f"  Diferença: {_diff_sign(diff_med)}")
+        if med_antes is not None and med_depois is not None and volume_ref is not None:
+            # Fórmula: Depois + Volume - Antes = Sobra
+            sobra = float(med_depois) + float(volume_ref) - float(med_antes)
+            linhas.append(f"  Sobra: {_diff_sign(sobra)}")
 
     # Temperatura e densidade
     temp = d.get('temperatura')
@@ -354,95 +417,135 @@ def lista():
 
     data_inicio = request.args.get('data_inicio', '')
     data_fim = request.args.get('data_fim', '')
-    frete_id = request.args.get('frete_id', '').strip()
+    frete_id_f = request.args.get('frete_id', '').strip()
     status_filtro = request.args.get('status', '').strip()
     cliente_id_filtro = request.args.get('cliente_id', '').strip()
 
+    # Default: últimos 5 dias
     if not data_inicio and not data_fim:
+        from datetime import timedelta
         hoje = date.today()
-        data_inicio = (hoje.replace(day=1)).strftime('%Y-%m-%d')
+        data_inicio = (hoje - timedelta(days=5)).strftime('%Y-%m-%d')
         data_fim = hoje.strftime('%Y-%m-%d')
 
+    def _parse_date(s):
+        try:
+            return datetime.strptime(s, '%d/%m/%Y').strftime('%Y-%m-%d')
+        except Exception:
+            return s
+
+    di = _parse_date(data_inicio) if data_inicio else None
+    df = _parse_date(data_fim) if data_fim else None
+
+    # Filtros comuns para descargas
+    desc_filters = []
+    desc_params = []
+    if di:
+        desc_filters.append("d.data_descarga >= %s")
+        desc_params.append(di)
+    if df:
+        desc_filters.append("d.data_descarga <= %s")
+        desc_params.append(df)
+    if frete_id_f:
+        desc_filters.append("d.frete_id = %s")
+        desc_params.append(frete_id_f)
+    if cliente_id_filtro:
+        desc_filters.append("f.clientes_id = %s")
+        desc_params.append(cliente_id_filtro)
+
+    desc_where = ("WHERE " + " AND ".join(desc_filters)) if desc_filters else ""
+
     try:
-        filters = []
-        params = []
-
-        if data_inicio:
-            try:
-                di = datetime.strptime(data_inicio, '%d/%m/%Y').strftime('%Y-%m-%d')
-            except Exception:
-                di = data_inicio
-            filters.append("d.data_descarga >= %s")
-            params.append(di)
-
-        if data_fim:
-            try:
-                df = datetime.strptime(data_fim, '%d/%m/%Y').strftime('%Y-%m-%d')
-            except Exception:
-                df = data_fim
-            filters.append("d.data_descarga <= %s")
-            params.append(df)
-
-        if frete_id:
-            filters.append("d.frete_id = %s")
-            params.append(frete_id)
-
-        if status_filtro:
-            filters.append("d.status = %s")
-            params.append(status_filtro)
-
+        # ── Seção 1: Em Trânsito (fretes sem descarga nos últimos 5 dias) ──
+        frete_conds = [_FRETE_DATE_COND]
+        frete_params = []
         if cliente_id_filtro:
-            filters.append("f.clientes_id = %s")
-            params.append(cliente_id_filtro)
-
-        where = ("WHERE " + " AND ".join(filters)) if filters else ""
-
+            frete_conds.append("f.clientes_id = %s")
+            frete_params.append(cliente_id_filtro)
+        frete_where = "WHERE " + " AND ".join(frete_conds)
+        frete_where += " AND NOT EXISTS (SELECT 1 FROM descargas d WHERE d.frete_id = f.id)"
         cursor.execute(f"""
             SELECT
-                d.id,
-                d.frete_id,
-                d.numero_descarga,
-                d.total_descargas,
-                DATE_FORMAT(d.data_descarga, '%%d/%%m/%%Y') AS data_descarga_fmt,
-                d.medidor_antes,
-                d.medidor_depois,
-                d.regua_antes_litros,
-                d.regua_depois_litros,
-                d.temperatura,
-                d.densidade,
-                d.status,
+                f.id,
+                DATE_FORMAT(f.data_frete, '%d/%m/%Y') AS data_frete_fmt,
+                COALESCE(c.razao_social, '') AS cliente,
+                COALESCE(fo.razao_social, '') AS distribuidora,
+                COALESCE(p.nome, '') AS produto,
+                COALESCE(m.nome, '') AS motorista,
+                COALESCE(f.quantidade_manual, 0) AS volume_nf
+            FROM fretes f
+            LEFT JOIN clientes c ON f.clientes_id = c.id
+            LEFT JOIN fornecedores fo ON f.fornecedores_id = fo.id
+            LEFT JOIN produto p ON f.produto_id = p.id
+            LEFT JOIN motoristas m ON f.motoristas_id = m.id
+            {frete_where}
+            ORDER BY f.data_frete DESC, f.id DESC
+        """, tuple(frete_params) if frete_params else ())
+        fretes_em_transito = cursor.fetchall()
+
+        # ── Seção 2: Descarregados (status=finalizado) ──
+        w2 = desc_where
+        p2 = list(desc_params)
+        if status_filtro:
+            if w2:
+                w2 += " AND d.status = %s"
+            else:
+                w2 = "WHERE d.status = %s"
+            p2.append(status_filtro)
+        else:
+            finalizado_where = (desc_where + " AND d.status = 'finalizado'") if desc_where else "WHERE d.status = 'finalizado'"
+            fracionado_where = (desc_where + " AND d.status = 'em_andamento'") if desc_where else "WHERE d.status = 'em_andamento'"
+
+        select_descargas = """
+            SELECT
+                d.id, d.frete_id, d.numero_descarga, d.total_descargas,
+                DATE_FORMAT(d.data_descarga, '%d/%m/%Y') AS data_descarga_fmt,
+                d.medidor_antes, d.medidor_depois, d.volume_descarga,
+                d.regua_antes_litros, d.regua_depois_litros,
+                d.temperatura, d.densidade, d.status,
                 COALESCE(c.razao_social, '') AS cliente,
                 COALESCE(fo.razao_social, '') AS distribuidora,
                 COALESCE(p.nome, '') AS produto,
                 COALESCE(m.nome, '') AS motorista,
                 COALESCE(f.quantidade_manual, 0) AS volume_nf,
-                DATE_FORMAT(f.data_frete, '%%d/%%m/%%Y') AS data_frete_fmt
+                DATE_FORMAT(f.data_frete, '%d/%m/%Y') AS data_frete_fmt
             FROM descargas d
             JOIN fretes f ON d.frete_id = f.id
             LEFT JOIN clientes c ON f.clientes_id = c.id
             LEFT JOIN fornecedores fo ON f.fornecedores_id = fo.id
             LEFT JOIN produto p ON f.produto_id = p.id
             LEFT JOIN motoristas m ON f.motoristas_id = m.id
-            {where}
-            ORDER BY d.data_descarga DESC, d.id DESC
-        """, tuple(params))
-        descargas = cursor.fetchall()
+        """
+        cursor.execute(select_descargas + finalizado_where + " ORDER BY d.data_descarga DESC, d.id DESC", tuple(desc_params))
+        descargas_finalizadas = cursor.fetchall()
 
-        # calcula diferença em régua e medidor para exibição
-        for desc in descargas:
-            if desc.get('medidor_antes') is not None and desc.get('medidor_depois') is not None:
-                desc['diff_medidor'] = float(desc['medidor_depois']) - float(desc['medidor_antes'])
-            else:
-                desc['diff_medidor'] = None
-            if desc.get('regua_antes_litros') is not None and desc.get('regua_depois_litros') is not None:
-                desc['diff_regua'] = float(desc['regua_depois_litros']) - float(desc['regua_antes_litros'])
-            else:
-                desc['diff_regua'] = None
+        cursor.execute(select_descargas + fracionado_where + " ORDER BY d.data_descarga DESC, d.id DESC", tuple(desc_params))
+        descargas_fracionadas = cursor.fetchall()
+
+        def _enrich(rows):
+            for d in rows:
+                vol = d.get('volume_descarga') or d.get('volume_nf')
+                ma = d.get('medidor_antes')
+                md = d.get('medidor_depois')
+                if ma is not None and md is not None and vol is not None:
+                    d['diff_medidor'] = float(md) + float(vol) - float(ma)
+                else:
+                    d['diff_medidor'] = None
+                ra = d.get('regua_antes_litros')
+                rd = d.get('regua_depois_litros')
+                d['diff_regua'] = (float(rd) - float(ra)) if (ra is not None and rd is not None) else None
+
+        _enrich(descargas_finalizadas)
+        _enrich(descargas_fracionadas)
 
         clientes = _get_clientes_com_produtos()
 
-    except Exception:
-        descargas = []
+    except Exception as exc:
+        import logging
+        logging.getLogger(__name__).warning("Erro na lista descargas: %s", exc, exc_info=True)
+        fretes_em_transito = []
+        descargas_finalizadas = []
+        descargas_fracionadas = []
         clientes = []
     finally:
         try:
@@ -453,11 +556,13 @@ def lista():
 
     return render_template(
         'descargas/lista.html',
-        descargas=descargas,
+        fretes_em_transito=fretes_em_transito,
+        descargas_finalizadas=descargas_finalizadas,
+        descargas_fracionadas=descargas_fracionadas,
         clientes=clientes,
         data_inicio=data_inicio,
         data_fim=data_fim,
-        frete_id=frete_id,
+        frete_id=frete_id_f,
         status_filtro=status_filtro,
         cliente_id_filtro=cliente_id_filtro,
     )
@@ -474,7 +579,6 @@ def nova():
             # tipo_descarga: 'total' → finalizado, 'fracionada' → em_andamento
             tipo_descarga = request.form.get('tipo_descarga', 'total')
             status = 'finalizado' if tipo_descarga == 'total' else 'em_andamento'
-            # etapas: sempre 1 na criação; número será incrementado ao adicionar etapas
             numero_descarga = 1
             total_descargas = 1
             medidor_antes = request.form.get('medidor_antes') or None
@@ -486,6 +590,9 @@ def nova():
             temperatura = request.form.get('temperatura') or None
             densidade = request.form.get('densidade') or None
             observacoes = request.form.get('observacoes') or None
+            # volume_descarga: para fracionada = informado pelo usuário;
+            # para total = volume NF do frete (enviado como campo hidden)
+            volume_descarga = request.form.get('volume_descarga') or None
 
             if not frete_id or not data_descarga:
                 flash('Frete e data de descarga são obrigatórios.', 'danger')
@@ -503,13 +610,15 @@ def nova():
             cursor.execute("""
                 INSERT INTO descargas (
                     frete_id, numero_descarga, total_descargas, data_descarga,
+                    volume_descarga,
                     medidor_antes, medidor_depois,
                     regua_antes_cm, regua_antes_litros,
                     regua_depois_cm, regua_depois_litros,
                     temperatura, densidade, status, observacoes
-                ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
             """, (
                 frete_id, numero_descarga, total_descargas, data_descarga,
+                _to_decimal(volume_descarga),
                 _to_decimal(medidor_antes), _to_decimal(medidor_depois),
                 regua_antes_cm or None, _to_decimal(regua_antes_litros),
                 regua_depois_cm or None, _to_decimal(regua_depois_litros),
@@ -535,18 +644,24 @@ def nova():
                 pass
 
     # GET
-    # cliente (empresa) selecionado — filtra fretes
     cliente_id_qs = request.args.get('cliente_id', '').strip()
+    motorista_id_qs = request.args.get('motorista_id', '').strip()
     frete_id_qs = request.args.get('frete_id', '')
     frete_pre = None
     if frete_id_qs:
         frete_pre = _get_frete(frete_id_qs)
-        # determinar empresa a partir do frete se não veio na query-string
-        if frete_pre and not cliente_id_qs:
-            cliente_id_qs = str(frete_pre.get('clientes_id', ''))
+        if frete_pre:
+            if not cliente_id_qs:
+                cliente_id_qs = str(frete_pre.get('clientes_id', ''))
+            if not motorista_id_qs:
+                motorista_id_qs = str(frete_pre.get('motoristas_id', ''))
 
     clientes = _get_clientes_com_produtos()
-    fretes = _get_fretes_para_descarga(cliente_id=cliente_id_qs if cliente_id_qs else None)
+    motoristas = _get_motoristas_por_empresa(cliente_id_qs if cliente_id_qs else None)
+    fretes = _get_fretes_para_descarga(
+        cliente_id=cliente_id_qs if cliente_id_qs else None,
+        motorista_id=motorista_id_qs if motorista_id_qs else None,
+    )
     tabela_js = {str(k): v for k, v in TABELA_VOLUMETRICA_15M3.items()}
     hoje = date.today().strftime('%Y-%m-%d')
 
@@ -554,9 +669,11 @@ def nova():
         'descargas/nova.html',
         fretes=fretes,
         clientes=clientes,
+        motoristas=motoristas,
         frete_pre=frete_pre,
         frete_id_qs=frete_id_qs,
         cliente_id_qs=cliente_id_qs,
+        motorista_id_qs=motorista_id_qs,
         tabela_volumetrica=tabela_js,
         hoje=hoje,
     )
@@ -587,6 +704,7 @@ def editar(id):
             temperatura = request.form.get('temperatura') or None
             densidade = request.form.get('densidade') or None
             observacoes = request.form.get('observacoes') or None
+            volume_descarga = request.form.get('volume_descarga') or None
 
             def _to_decimal(v):
                 if v is None:
@@ -600,6 +718,7 @@ def editar(id):
             cursor.execute("""
                 UPDATE descargas SET
                     numero_descarga=%s, total_descargas=%s, data_descarga=%s,
+                    volume_descarga=%s,
                     medidor_antes=%s, medidor_depois=%s,
                     regua_antes_cm=%s, regua_antes_litros=%s,
                     regua_depois_cm=%s, regua_depois_litros=%s,
@@ -608,6 +727,7 @@ def editar(id):
                 WHERE id=%s
             """, (
                 numero_descarga, total_descargas, data_descarga,
+                _to_decimal(volume_descarga),
                 _to_decimal(medidor_antes), _to_decimal(medidor_depois),
                 regua_antes_cm or None, _to_decimal(regua_antes_litros),
                 regua_depois_cm or None, _to_decimal(regua_depois_litros),
@@ -652,7 +772,7 @@ def detalhe(id):
     try:
         cursor.execute("""
             SELECT d.*,
-                   DATE_FORMAT(d.data_descarga, '%%d/%%m/%%Y') AS data_descarga_fmt
+                   DATE_FORMAT(d.data_descarga, '%d/%m/%Y') AS data_descarga_fmt
             FROM descargas d
             WHERE d.frete_id = %s
             ORDER BY d.numero_descarga, d.id
@@ -669,10 +789,13 @@ def detalhe(id):
 
     mensagem = _gerar_mensagem_whatsapp(descarga)
 
-    # Calcular diferenças
+    # Calcular sobra medidor: Depois + Volume - Antes
     diff_medidor = None
-    if descarga.get('medidor_antes') is not None and descarga.get('medidor_depois') is not None:
-        diff_medidor = float(descarga['medidor_depois']) - float(descarga['medidor_antes'])
+    vol = descarga.get('volume_descarga') or descarga.get('volume_nf')
+    if (descarga.get('medidor_antes') is not None
+            and descarga.get('medidor_depois') is not None
+            and vol is not None):
+        diff_medidor = float(descarga['medidor_depois']) + float(vol) - float(descarga['medidor_antes'])
 
     diff_regua = None
     if descarga.get('regua_antes_litros') is not None and descarga.get('regua_depois_litros') is not None:
@@ -719,22 +842,40 @@ def api_tabela():
     return jsonify(TABELA_VOLUMETRICA_15M3)
 
 
+@bp.route('/api/motoristas_por_empresa/<int:cliente_id>', methods=['GET'])
+@login_required
+def api_motoristas_por_empresa(cliente_id):
+    """Retorna motoristas que têm fretes (últimos 5 dias) para o cliente como JSON."""
+    motoristas = _get_motoristas_por_empresa(cliente_id)
+    return jsonify([{'id': m['id'], 'nome': m['nome']} for m in motoristas])
+
+
 @bp.route('/api/fretes_por_empresa/<int:cliente_id>', methods=['GET'])
 @login_required
 def api_fretes_por_empresa(cliente_id):
-    """Retorna fretes de um cliente específico como JSON (para filtro dinâmico)."""
-    fretes = _get_fretes_para_descarga(cliente_id=cliente_id)
+    """Retorna fretes (últimos 5 dias) de um cliente como JSON.
+
+    Aceita parâmetro opcional ``?motorista_id=<id>`` para filtrar por motorista.
+    """
+    motorista_id = request.args.get('motorista_id', '').strip() or None
+    fretes = _get_fretes_para_descarga(cliente_id=cliente_id, motorista_id=motorista_id)
     resultado = []
     for f in fretes:
+        vol = float(f['volume_nf']) if f['volume_nf'] else 0
+        vol_fmt = f"{vol:,.0f}".replace(',', '.') if vol else '—'
+        label = (f"#{f['id']} — {f['data_frete_fmt']} | "
+                 f"{f['produto']} | {vol_fmt} L | {f['distribuidora']}")
         resultado.append({
             'id': f['id'],
-            'label': f"#{f['id']} — {f['data_frete_fmt']} | {f['produto']} | {f['motorista']}",
+            'label': label,
             'cliente': f['cliente'],
             'distribuidora': f['distribuidora'],
             'produto': f['produto'],
             'motorista': f['motorista'],
-            'volume_nf': float(f['volume_nf']) if f['volume_nf'] else 0,
+            'motorista_id': f['motoristas_id'],
+            'volume_nf': vol,
             'data_frete_fmt': f['data_frete_fmt'],
+            'clientes_id': f['clientes_id'],
         })
     return jsonify(resultado)
 
@@ -752,6 +893,8 @@ def api_frete(frete_id):
         'distribuidora': frete['distribuidora'],
         'produto': frete['produto'],
         'motorista': frete['motorista'],
+        'motoristas_id': frete['motoristas_id'],
+        'clientes_id': frete['clientes_id'],
         'volume_nf': float(frete['volume_nf']) if frete['volume_nf'] else 0,
         'data_frete_fmt': frete['data_frete_fmt'],
     })

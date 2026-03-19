@@ -25,6 +25,7 @@
   .diff-zero  { background: #e2e3e5; color: #383d41; }
   .diff-val   { font-size: 1.4rem; font-weight: 700; }
   .diff-lbl   { font-size: .7rem; font-weight: 600; text-transform: uppercase; }
+  .diff-formula { font-size: .72rem; font-family: monospace; margin-top:.2rem; }
   .wpp-box {
     background: #e8f5e9; border: 1px solid #a5d6a7;
     border-radius: .5rem; padding: 1rem; font-family: monospace;
@@ -121,9 +122,16 @@
               <div class="info-value">{{ descarga.data_descarga_fmt or '—' }}</div>
             </div>
             <div class="col-6 col-md-4">
-              <div class="info-label">Volume NF</div>
+              <div class="info-label">Volume NF (Comprado)</div>
               <div class="info-value">
                 {% if descarga.volume_nf %}{{ '{:,.0f}'.format(descarga.volume_nf|float).replace(',','.') }} L{% else %}—{% endif %}
+              </div>
+            </div>
+            <div class="col-6 col-md-4">
+              <div class="info-label">Volume Descarregado</div>
+              <div class="info-value">
+                {% set vd = descarga.volume_descarga or descarga.volume_nf %}
+                {% if vd %}{{ '{:,.0f}'.format(vd|float).replace(',','.') }} L{% else %}—{% endif %}
               </div>
             </div>
             <div class="col-6 col-md-4">
@@ -165,12 +173,20 @@
             </div>
             <div class="col-4">
               {% if diff_medidor is not none %}
+              {% set vd2 = descarga.volume_descarga or descarga.volume_nf %}
               <div class="diff-card {{ 'diff-pos' if diff_medidor >= 0 else 'diff-neg' }}">
-                <div class="diff-lbl">Diferença</div>
+                <div class="diff-lbl">Sobra</div>
                 <div class="diff-val">{{ '+' if diff_medidor >= 0 else '' }}{{ '{:,.3f}'.format(diff_medidor|float).replace(',','.') }}</div>
+                {% if vd2 %}
+                <div class="diff-formula">
+                  {{ '{:,.0f}'.format(descarga.medidor_depois|float).replace(',','.') }}
+                  + {{ '{:,.0f}'.format(vd2|float).replace(',','.') }}
+                  − {{ '{:,.0f}'.format(descarga.medidor_antes|float).replace(',','.') }}
+                </div>
+                {% endif %}
               </div>
               {% else %}
-              <div class="diff-card diff-zero"><div class="diff-lbl">Diferença</div><div class="diff-val">—</div></div>
+              <div class="diff-card diff-zero"><div class="diff-lbl">Sobra</div><div class="diff-val">—</div></div>
               {% endif %}
             </div>
           </div>
@@ -228,9 +244,8 @@
             <table class="table outras-tbl mb-0">
               <thead>
                 <tr>
-                  <th>#</th><th>Data</th>
-                  <th>Med. Antes</th><th>Med. Depois</th><th>Dif. Med.</th>
-                  <th>Régua Antes</th><th>Régua Depois</th><th>Dif. Régua</th>
+                  <th>#</th><th>Data</th><th>Vol. Desc.</th>
+                  <th>Med. Antes</th><th>Med. Depois</th><th>Sobra Med.</th>
                   <th>Status</th><th></th>
                 </tr>
               </thead>
@@ -240,33 +255,18 @@
                 <tr class="{{ 'row-current' if is_current else '' }}">
                   <td>{{ o.id }}</td>
                   <td>{{ o.data_descarga_fmt }}</td>
+                  <td>
+                    {% if o.volume_descarga is not none %}
+                      {{ '{:,.0f}'.format(o.volume_descarga|float).replace(',','.') }} L
+                    {% else %}—{% endif %}
+                  </td>
                   <td>{{ '{:,.3f}'.format(o.medidor_antes|float).replace(',','.') if o.medidor_antes is not none else '—' }}</td>
                   <td>{{ '{:,.3f}'.format(o.medidor_depois|float).replace(',','.') if o.medidor_depois is not none else '—' }}</td>
                   <td>
-                    {% if o.medidor_antes is not none and o.medidor_depois is not none %}
-                      {% set dm = o.medidor_depois|float - o.medidor_antes|float %}
-                      <span style="color:{{ '#198754' if dm >= 0 else '#dc3545' }};font-weight:600;">
-                        {{ '+' if dm >= 0 else '' }}{{ '{:,.3f}'.format(dm).replace(',','.') }}
-                      </span>
-                    {% else %}—{% endif %}
-                  </td>
-                  <td>
-                    {% if o.regua_antes_litros is not none %}
-                      {{ '{:,.2f}'.format(o.regua_antes_litros|float).replace(',','.') }}
-                      {% if o.regua_antes_cm %}<small class="text-muted">({{ o.regua_antes_cm }}cm)</small>{% endif %}
-                    {% else %}—{% endif %}
-                  </td>
-                  <td>
-                    {% if o.regua_depois_litros is not none %}
-                      {{ '{:,.2f}'.format(o.regua_depois_litros|float).replace(',','.') }}
-                      {% if o.regua_depois_cm %}<small class="text-muted">({{ o.regua_depois_cm }}cm)</small>{% endif %}
-                    {% else %}—{% endif %}
-                  </td>
-                  <td>
-                    {% if o.regua_antes_litros is not none and o.regua_depois_litros is not none %}
-                      {% set dr = o.regua_depois_litros|float - o.regua_antes_litros|float %}
-                      <span style="color:{{ '#198754' if dr >= 0 else '#dc3545' }};font-weight:600;">
-                        {{ '+' if dr >= 0 else '' }}{{ '{:,.2f}'.format(dr).replace(',','.') }}
+                    {% if o.medidor_antes is not none and o.medidor_depois is not none and o.volume_descarga is not none %}
+                      {% set sobra = o.medidor_depois|float + o.volume_descarga|float - o.medidor_antes|float %}
+                      <span style="color:{{ '#198754' if sobra >= 0 else '#dc3545' }};font-weight:600;">
+                        {{ '+' if sobra >= 0 else '' }}{{ '{:,.3f}'.format(sobra).replace(',','.') }}
                       </span>
                     {% else %}—{% endif %}
                   </td>

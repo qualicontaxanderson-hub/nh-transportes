@@ -24,17 +24,19 @@
   }
   .frete-info-box .fi-label { font-weight: 600; color: #1D63A5; }
   .calc-field { background: #fff8e1 !important; font-weight: 600; }
-  .hint      { font-size: 0.73rem; color: #6c757d; margin-bottom:.5rem; }
+  .hint { font-size: 0.73rem; color: #6c757d; margin-bottom:.5rem; }
   .tipo-card {
     border: 2px solid #dee2e6; border-radius: .5rem; padding: .9rem 1.1rem;
     cursor: pointer; transition: border-color .15s, background .15s;
     text-align: center; user-select: none;
   }
-  .tipo-card:hover          { border-color: #1D63A5; background: #eef4ff; }
-  .tipo-card.selected       { border-color: #1D63A5; background: #e8f0fe; }
-  .tipo-card .tipo-icon     { font-size: 1.5rem; }
-  .tipo-card .tipo-title    { font-size: .85rem; font-weight: 700; margin-top: .3rem; }
-  .tipo-card .tipo-desc     { font-size: .72rem; color: #6c757d; margin-top: .15rem; }
+  .tipo-card:hover        { border-color: #1D63A5; background: #eef4ff; }
+  .tipo-card.selected     { border-color: #1D63A5; background: #e8f0fe; }
+  .tipo-card .tipo-icon   { font-size: 1.5rem; }
+  .tipo-card .tipo-title  { font-size: .85rem; font-weight: 700; margin-top: .3rem; }
+  .tipo-card .tipo-desc   { font-size: .72rem; color: #6c757d; margin-top: .15rem; }
+  .sobra-pos { color: #198754; }
+  .sobra-neg { color: #dc3545; }
 </style>
 {% endblock %}
 
@@ -58,29 +60,47 @@
   <div class="card shadow-sm">
     <div class="card-body" style="padding:1.25rem;">
       <form method="POST" action="{{ url_for('descargas.nova') }}" id="frm-descarga">
+        <!-- campo hidden para volume NF do frete (total) ou volume fracionado -->
+        <input type="hidden" id="volume_descarga" name="volume_descarga" value="">
 
-        <!-- ══ EMPRESA ══ -->
-        <div class="sec-header"><i class="bi bi-building me-1"></i>Empresa (Posto)</div>
+        <!-- ══ 1. EMPRESA ══ -->
+        <div class="sec-header"><i class="bi bi-building me-1"></i>1. Empresa (Posto)</div>
         <div class="row mb-2">
-          <div class="col-md-5">
+          <div class="col-md-6">
             <label for="empresa_id" class="form-label form-label-sm">Selecionar Empresa <span class="text-danger">*</span></label>
             <select id="empresa_id" class="form-select form-select-sm">
               <option value="">— selecione uma empresa —</option>
               {% for c in clientes %}
-              <option value="{{ c.id }}"
-                      {% if c.id|string == cliente_id_qs %}selected{% endif %}>
+              <option value="{{ c.id }}" {% if c.id|string == cliente_id_qs %}selected{% endif %}>
                 {{ c.nome }}
               </option>
               {% endfor %}
             </select>
-            <div class="hint mt-1">Selecionar a empresa filtra os fretes disponíveis abaixo.</div>
+            <div class="hint mt-1">Selecionar a empresa filtra os motoristas e fretes disponíveis.</div>
           </div>
         </div>
 
-        <!-- ══ FRETE VINCULADO ══ -->
-        <div class="sec-header"><i class="bi bi-truck me-1"></i>Frete Vinculado</div>
+        <!-- ══ 2. MOTORISTA ══ -->
+        <div class="sec-header"><i class="bi bi-person-fill me-1"></i>2. Motorista</div>
         <div class="row mb-2">
-          <div class="col-md-7">
+          <div class="col-md-5">
+            <label for="motorista_id" class="form-label form-label-sm">Selecionar Motorista</label>
+            <select id="motorista_id" class="form-select form-select-sm">
+              <option value="">— todos os motoristas —</option>
+              {% for m in motoristas %}
+              <option value="{{ m.id }}" {% if m.id|string == motorista_id_qs %}selected{% endif %}>
+                {{ m.nome }}
+              </option>
+              {% endfor %}
+            </select>
+            <div class="hint mt-1">Opcional. Filtra os fretes pelo motorista selecionado.</div>
+          </div>
+        </div>
+
+        <!-- ══ 3. FRETE VINCULADO ══ -->
+        <div class="sec-header"><i class="bi bi-truck me-1"></i>3. Frete Vinculado</div>
+        <div class="row mb-2">
+          <div class="col-md-8">
             <label for="frete_id" class="form-label form-label-sm">Selecionar Frete <span class="text-danger">*</span></label>
             <select id="frete_id" name="frete_id" class="form-select form-select-sm" required>
               <option value="">— selecione um frete —</option>
@@ -90,14 +110,18 @@
                       data-distribuidora="{{ f.distribuidora }}"
                       data-produto="{{ f.produto }}"
                       data-motorista="{{ f.motorista }}"
+                      data-motorista-id="{{ f.motoristas_id }}"
                       data-volume="{{ f.volume_nf }}"
                       data-data="{{ f.data_frete_fmt }}"
                       data-cliente-id="{{ f.clientes_id }}"
                       {% if frete_id_qs and f.id|string == frete_id_qs %}selected{% endif %}>
-                #{{ f.id }} — {{ f.data_frete_fmt }} | {{ f.produto }} | {{ f.motorista }}
+                #{{ f.id }} — {{ f.data_frete_fmt }} | {{ f.produto }} |
+                {% if f.volume_nf %}{{ '{:,.0f}'.format(f.volume_nf|float).replace(',','.') }} L{% else %}—{% endif %} |
+                {{ f.distribuidora }}
               </option>
               {% endfor %}
             </select>
+            <div class="hint mt-1">Somente fretes dos últimos 5 dias.</div>
           </div>
           <div class="col-md-3">
             <label for="data_descarga" class="form-label form-label-sm">Data de Descarga <span class="text-danger">*</span></label>
@@ -117,22 +141,22 @@
           </div>
         </div>
 
-        <!-- ══ TIPO DE DESCARGA ══ -->
-        <div class="sec-header"><i class="bi bi-sliders me-1"></i>Tipo de Descarga</div>
+        <!-- ══ 4. TIPO DE DESCARGA ══ -->
+        <div class="sec-header"><i class="bi bi-sliders me-1"></i>4. Tipo de Descarga</div>
         <input type="hidden" id="tipo_descarga" name="tipo_descarga" value="total">
         <div class="row g-3 mb-2">
           <div class="col-6 col-md-3">
             <div class="tipo-card selected" id="card-total" onclick="selecionarTipo('total')">
               <div class="tipo-icon">🚛</div>
               <div class="tipo-title">Descarga Total</div>
-              <div class="tipo-desc">Todo o volume é descarregado de uma vez.</div>
+              <div class="tipo-desc">Todo o volume do frete é descarregado.</div>
             </div>
           </div>
           <div class="col-6 col-md-3">
             <div class="tipo-card" id="card-fracionada" onclick="selecionarTipo('fracionada')">
               <div class="tipo-icon">📦</div>
               <div class="tipo-title">Fracionada</div>
-              <div class="tipo-desc">Descarga em partes. Ficará disponível para continuar depois.</div>
+              <div class="tipo-desc">Descarga parcial. Poderá continuar em outro momento.</div>
             </div>
           </div>
           <div class="col-md-6">
@@ -142,30 +166,47 @@
           </div>
         </div>
 
+        <!-- Volume fracionado (aparece só para Fracionada) -->
+        <div id="div-volume-fracionado" class="row mb-2" style="display:none;">
+          <div class="col-md-4">
+            <label for="volume_fracionado_inp" class="form-label form-label-sm fw-semibold text-danger">
+              Volume sendo descarregado (L) <span class="text-danger">*</span>
+            </label>
+            <input type="number" id="volume_fracionado_inp"
+                   class="form-control form-control-sm border-danger"
+                   step="0.001" min="0" placeholder="ex: 5000">
+            <div class="hint mt-1 text-danger">Informe quantos litros estão sendo descarregados nesta etapa.</div>
+          </div>
+        </div>
+
         <!-- ══ MEDIDOR ELETRÔNICO ══ -->
         <div class="sec-header"><i class="bi bi-display me-1"></i>Medidor Eletrônico</div>
         <p class="hint">Informe as leituras do medidor eletrônico antes e depois da descarga.</p>
-        <div class="row mb-2">
+        <div class="row mb-1">
           <div class="col-6 col-md-3">
             <label for="medidor_antes" class="form-label form-label-sm">Medidor Antes</label>
             <input type="number" id="medidor_antes" name="medidor_antes"
-                   class="form-control form-control-sm" step="0.001" min="0" placeholder="ex: 5996.000">
+                   class="form-control form-control-sm" step="0.001" min="0" placeholder="ex: 1020">
           </div>
           <div class="col-6 col-md-3">
             <label for="medidor_depois" class="form-label form-label-sm">Medidor Depois</label>
             <input type="number" id="medidor_depois" name="medidor_depois"
-                   class="form-control form-control-sm" step="0.001" min="0" placeholder="ex: 11124.000">
+                   class="form-control form-control-sm" step="0.001" min="0" placeholder="ex: 3050">
           </div>
-          <div class="col-6 col-md-3">
-            <label class="form-label form-label-sm">Diferença Medidor</label>
+          <div class="col-6 col-md-4">
+            <label class="form-label form-label-sm">Sobra (Depois + Volume − Antes)</label>
             <input type="text" id="diff_medidor" class="form-control form-control-sm calc-field"
                    readonly placeholder="calculado automaticamente">
           </div>
         </div>
+        <div class="hint mb-2">
+          Fórmula: <strong>Medidor Depois + Litros chegando − Medidor Antes = Sobra</strong>
+          &nbsp;<span id="formula-inline" style="font-family:monospace;font-size:.8rem;"></span>
+        </div>
 
         <!-- ══ RÉGUA VOLUMÉTRICA ══ -->
         <div class="sec-header"><i class="bi bi-rulers me-1"></i>Régua Volumétrica (15M3 PLENO)</div>
-        <p class="hint">Selecione a altura em centímetros — o volume em litros é calculado automaticamente pela tabela 15M3 1,91 PLENO.</p>
+        <p class="hint">Selecione a altura em centímetros — o volume é calculado pela tabela 15M3 1,91 PLENO.</p>
         <div class="row mb-2">
           <div class="col-6 col-md-2">
             <label for="regua_antes_cm" class="form-label form-label-sm">Régua Antes (cm)</label>
@@ -221,7 +262,7 @@
 
         <hr class="my-3">
         <div class="d-flex gap-2">
-          <button type="submit" class="btn btn-primary btn-sm px-4">
+          <button type="submit" class="btn btn-primary btn-sm px-4" id="btnSalvar">
             <i class="bi bi-check-circle me-1"></i> Salvar Descarga
           </button>
           <a href="{{ url_for('descargas.lista') }}" class="btn btn-outline-secondary btn-sm">
@@ -239,7 +280,11 @@
 {% block scripts %}
 <script>
 const TABELA = {{ tabela_volumetrica | tojson }};
-const URL_FRETES_POR_EMPRESA = '/descargas/api/fretes_por_empresa/';
+const URL_MOTORISTAS = '/descargas/api/motoristas_por_empresa/';
+const URL_FRETES     = '/descargas/api/fretes_por_empresa/';
+
+let volumeNF = 0;      // volume do frete (NF)
+let tipoAtual = 'total';
 
 function fmtNum(val, dec) {
   if (val === null || val === undefined || val === '') return '';
@@ -250,21 +295,60 @@ function fmtNum(val, dec) {
 
 /* ── Tipo de descarga ── */
 function selecionarTipo(tipo) {
+  tipoAtual = tipo;
   document.getElementById('tipo_descarga').value = tipo;
   document.getElementById('card-total').classList.toggle('selected', tipo === 'total');
   document.getElementById('card-fracionada').classList.toggle('selected', tipo === 'fracionada');
+  const divFrac = document.getElementById('div-volume-fracionado');
+  divFrac.style.display = tipo === 'fracionada' ? '' : 'none';
+  syncVolumeDescarga();
 }
 
-/* ── Empresa → filtra fretes via AJAX ── */
+function syncVolumeDescarga() {
+  if (tipoAtual === 'total') {
+    document.getElementById('volume_descarga').value = volumeNF || '';
+  } else {
+    document.getElementById('volume_descarga').value =
+      document.getElementById('volume_fracionado_inp').value || '';
+  }
+  calcDiffs();
+}
+
+/* ── Empresa → motoristas (AJAX) ── */
 document.getElementById('empresa_id').addEventListener('change', function() {
   const cid = this.value;
-  const sel = document.getElementById('frete_id');
+  const selM = document.getElementById('motorista_id');
+  selM.innerHTML = '<option value="">— todos os motoristas —</option>';
   if (!cid) {
-    sel.innerHTML = '<option value="">— selecione um frete —</option>';
+    document.getElementById('frete_id').innerHTML = '<option value="">— selecione um frete —</option>';
     document.getElementById('frete-info-box').style.display = 'none';
     return;
   }
-  fetch(URL_FRETES_POR_EMPRESA + cid)
+  fetch(URL_MOTORISTAS + cid)
+    .then(r => r.json())
+    .then(function(data) {
+      data.forEach(function(m) {
+        const opt = document.createElement('option');
+        opt.value = m.id;
+        opt.textContent = m.nome;
+        selM.appendChild(opt);
+      });
+      carregarFretes(cid, '');
+    });
+});
+
+/* ── Motorista → fretes (AJAX) ── */
+document.getElementById('motorista_id').addEventListener('change', function() {
+  const cid = document.getElementById('empresa_id').value;
+  carregarFretes(cid, this.value);
+});
+
+function carregarFretes(clienteId, motoristaId) {
+  if (!clienteId) return;
+  const sel = document.getElementById('frete_id');
+  let url = URL_FRETES + clienteId;
+  if (motoristaId) url += '?motorista_id=' + motoristaId;
+  fetch(url)
     .then(r => r.json())
     .then(function(data) {
       sel.innerHTML = '<option value="">— selecione um frete —</option>';
@@ -276,36 +360,49 @@ document.getElementById('empresa_id').addEventListener('change', function() {
         opt.dataset.distribuidora= f.distribuidora;
         opt.dataset.produto      = f.produto;
         opt.dataset.motorista    = f.motorista;
+        opt.dataset.motoristaId  = f.motorista_id;
         opt.dataset.volume       = f.volume_nf;
         opt.dataset.data         = f.data_frete_fmt;
+        opt.dataset.clienteId    = f.clientes_id;
         sel.appendChild(opt);
       });
       document.getElementById('frete-info-box').style.display = 'none';
+      volumeNF = 0;
+      syncVolumeDescarga();
     })
     .catch(function() {
       sel.innerHTML = '<option value="">Erro ao carregar fretes</option>';
     });
-});
+}
 
-/* ── Frete → preenche info box ── */
+/* ── Frete → info box ── */
 document.getElementById('frete_id').addEventListener('change', function() {
   const opt = this.options[this.selectedIndex];
   if (!opt || !opt.value) {
     document.getElementById('frete-info-box').style.display = 'none';
+    volumeNF = 0;
+    syncVolumeDescarga();
     return;
   }
-  document.getElementById('fi-cliente').textContent        = opt.dataset.cliente || '';
-  document.getElementById('fi-distribuidora').textContent  = opt.dataset.distribuidora || '';
-  document.getElementById('fi-produto').textContent        = opt.dataset.produto || '';
-  document.getElementById('fi-motorista').textContent      = opt.dataset.motorista || '';
-  document.getElementById('fi-volume').textContent         = fmtNum(opt.dataset.volume, 0);
-  document.getElementById('frete-info-box').style.display  = 'block';
-  // sincronizar empresa ao selecionar frete
-  const cid = opt.dataset.clienteId || '';
-  if (cid) document.getElementById('empresa_id').value = cid;
+  document.getElementById('fi-cliente').textContent       = opt.dataset.cliente || '';
+  document.getElementById('fi-distribuidora').textContent = opt.dataset.distribuidora || '';
+  document.getElementById('fi-produto').textContent       = opt.dataset.produto || '';
+  document.getElementById('fi-motorista').textContent     = opt.dataset.motorista || '';
+  volumeNF = parseFloat(opt.dataset.volume) || 0;
+  document.getElementById('fi-volume').textContent        = fmtNum(volumeNF, 0);
+  document.getElementById('frete-info-box').style.display = 'block';
+  // sincronizar empresa/motorista
+  if (opt.dataset.clienteId) document.getElementById('empresa_id').value = opt.dataset.clienteId;
+  syncVolumeDescarga();
 });
 
-/* ── Régua volumétrica ── */
+/* ── Volume fracionado ── */
+document.getElementById('volume_fracionado_inp').addEventListener('input', function() {
+  document.getElementById('volume_descarga').value = this.value || '';
+  calcDiffs();
+});
+
+/* ── Régua ── */
 document.getElementById('regua_antes_cm').addEventListener('change', function() {
   const litros = TABELA[String(parseInt(this.value))];
   document.getElementById('regua_antes_litros').value = litros !== undefined ? litros : '';
@@ -317,22 +414,44 @@ document.getElementById('regua_depois_cm').addEventListener('change', function()
   calcDiffs();
 });
 
-/* ── Diferenças ── */
+/* ── Medidor ── */
 document.getElementById('medidor_antes').addEventListener('input', calcDiffs);
 document.getElementById('medidor_depois').addEventListener('input', calcDiffs);
 
 function calcDiffs() {
-  const ma = parseFloat(document.getElementById('medidor_antes').value);
-  const md = parseFloat(document.getElementById('medidor_depois').value);
-  const elM = document.getElementById('diff_medidor');
-  if (!isNaN(ma) && !isNaN(md)) {
-    const d = md - ma;
-    elM.value = (d >= 0 ? '+' : '') + fmtNum(d, 3);
-    elM.style.color = d >= 0 ? '#198754' : '#dc3545';
-  } else { elM.value = ''; elM.style.color = ''; }
+  const ma   = parseFloat(document.getElementById('medidor_antes').value);
+  const md   = parseFloat(document.getElementById('medidor_depois').value);
+  const elM  = document.getElementById('diff_medidor');
+  const elFI = document.getElementById('formula-inline');
 
-  const ra = parseFloat(document.getElementById('regua_antes_litros').value);
-  const rd = parseFloat(document.getElementById('regua_depois_litros').value);
+  // Volume: fracionada = input do usuário, total = volumeNF do frete
+  let vol = 0;
+  if (tipoAtual === 'fracionada') {
+    vol = parseFloat(document.getElementById('volume_fracionado_inp').value) || 0;
+  } else {
+    vol = volumeNF || 0;
+  }
+
+  if (!isNaN(ma) && !isNaN(md) && vol > 0) {
+    // Fórmula de sobra: Medidor_Depois + Litros_chegando - Medidor_Antes
+    // Valor positivo = sobra no tanque; negativo = faltou combustível
+    const sobra = md + vol - ma;
+    elM.value = (sobra >= 0 ? '+' : '') + fmtNum(sobra, 3);
+    elM.style.color = sobra >= 0 ? '#198754' : '#dc3545';
+    elFI.textContent = `= ${fmtNum(md,3)} + ${fmtNum(vol,0)} − ${fmtNum(ma,3)} = ${fmtNum(sobra,3)}`;
+  } else if (!isNaN(ma) && !isNaN(md) && vol === 0) {
+    elM.value = '';
+    elFI.textContent = 'aguardando volume...';
+    elM.style.color = '';
+  } else {
+    elM.value = '';
+    elFI.textContent = '';
+    elM.style.color = '';
+  }
+
+  // Régua
+  const ra  = parseFloat(document.getElementById('regua_antes_litros').value);
+  const rd  = parseFloat(document.getElementById('regua_depois_litros').value);
   const elR = document.getElementById('diff_regua');
   if (!isNaN(ra) && !isNaN(rd)) {
     const d = rd - ra;
@@ -343,14 +462,14 @@ function calcDiffs() {
 
 /* ── Init ── */
 window.addEventListener('DOMContentLoaded', function() {
-  const selF = document.getElementById('frete_id');
-  if (selF.value) selF.dispatchEvent(new Event('change'));
-  calcDiffs();
-
   {% if cliente_id_qs %}
-  /* empresa já selecionada via query-string — sincronizar select */
   document.getElementById('empresa_id').value = '{{ cliente_id_qs }}';
   {% endif %}
+  const selF = document.getElementById('frete_id');
+  if (selF.value) {
+    selF.dispatchEvent(new Event('change'));
+  }
+  calcDiffs();
 });
 </script>
 {% endblock %}

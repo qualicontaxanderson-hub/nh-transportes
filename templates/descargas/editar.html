@@ -68,11 +68,14 @@
   <!-- Info do frete (readonly) -->
   <div class="frete-info-box mb-3">
     <div class="row g-2">
-      <div class="col-6 col-md-3"><span class="fi-label">Frete:</span> #{{ descarga.frete_id }}</div>
+      <div class="col-6 col-md-2"><span class="fi-label">Frete:</span> #{{ descarga.frete_id }}</div>
       <div class="col-6 col-md-3"><span class="fi-label">Empresa:</span> {{ descarga.cliente }}</div>
       <div class="col-6 col-md-2"><span class="fi-label">Distribuidora:</span> {{ descarga.distribuidora }}</div>
       <div class="col-6 col-md-2"><span class="fi-label">Produto:</span> {{ descarga.produto }}</div>
       <div class="col-6 col-md-2"><span class="fi-label">Motorista:</span> {{ descarga.motorista }}</div>
+      <div class="col-6 col-md-1"><span class="fi-label">Vol. NF:</span>
+        {% if descarga.volume_nf %}{{ '{:,.0f}'.format(descarga.volume_nf|float).replace(',','.') }} L{% else %}—{% endif %}
+      </div>
     </div>
   </div>
 
@@ -120,9 +123,26 @@
           </div>
         </div>
 
+        <!-- ══ Volume Descarregado ══ -->
+        <div class="sec-header"><i class="bi bi-droplet-fill me-1"></i>Volume Descarregado</div>
+        <div class="row mb-2">
+          <div class="col-md-4">
+            <label for="volume_descarga" class="form-label form-label-sm">
+              Volume nesta descarga (L)
+            </label>
+            <input type="number" id="volume_descarga" name="volume_descarga"
+                   class="form-control form-control-sm" step="0.001" min="0"
+                   value="{{ descarga.volume_descarga if descarga.volume_descarga is not none else (descarga.volume_nf or '') }}"
+                   placeholder="ex: 10000">
+            <div class="hint mt-1" id="hint-volume">
+              Para descarga total, use o Volume NF do frete. Para fracionada, informe o volume desta etapa.
+            </div>
+          </div>
+        </div>
+
         <!-- ══ Medidor Eletrônico ══ -->
         <div class="sec-header"><i class="bi bi-display me-1"></i>Medidor Eletrônico</div>
-        <div class="row mb-2">
+        <div class="row mb-1">
           <div class="col-6 col-md-3">
             <label for="medidor_antes" class="form-label form-label-sm">Medidor Antes</label>
             <input type="number" id="medidor_antes" name="medidor_antes"
@@ -135,15 +155,15 @@
                    class="form-control form-control-sm" step="0.001" min="0"
                    value="{{ descarga.medidor_depois if descarga.medidor_depois is not none else '' }}">
           </div>
-          <div class="col-6 col-md-3">
-            <label class="form-label form-label-sm">Diferença Medidor</label>
+          <div class="col-6 col-md-4">
+            <label class="form-label form-label-sm">Sobra (Depois + Volume − Antes)</label>
             <input type="text" id="diff_medidor" class="form-control form-control-sm calc-field" readonly>
           </div>
         </div>
+        <div class="hint mb-2">Fórmula: <strong>Medidor Depois + Litros chegando − Medidor Antes = Sobra</strong></div>
 
         <!-- ══ Régua Volumétrica ══ -->
         <div class="sec-header"><i class="bi bi-rulers me-1"></i>Régua Volumétrica (15M3 PLENO)</div>
-        <p class="hint">Selecione a altura em centímetros — o volume é calculado automaticamente.</p>
         <div class="row mb-2">
           <div class="col-6 col-md-2">
             <label for="regua_antes_cm" class="form-label form-label-sm">Régua Antes (cm)</label>
@@ -228,6 +248,7 @@ function selecionarTipo(tipo) {
   document.getElementById('tipo_descarga').value = tipo;
   document.getElementById('card-total').classList.toggle('selected', tipo === 'total');
   document.getElementById('card-fracionada').classList.toggle('selected', tipo === 'fracionada');
+  calcDiffs();
 }
 
 document.getElementById('regua_antes_cm').addEventListener('change', function() {
@@ -242,19 +263,21 @@ document.getElementById('regua_depois_cm').addEventListener('change', function()
 });
 document.getElementById('medidor_antes').addEventListener('input', calcDiffs);
 document.getElementById('medidor_depois').addEventListener('input', calcDiffs);
+document.getElementById('volume_descarga').addEventListener('input', calcDiffs);
 
 function calcDiffs() {
-  const ma = parseFloat(document.getElementById('medidor_antes').value);
-  const md = parseFloat(document.getElementById('medidor_depois').value);
+  const ma  = parseFloat(document.getElementById('medidor_antes').value);
+  const md  = parseFloat(document.getElementById('medidor_depois').value);
+  const vol = parseFloat(document.getElementById('volume_descarga').value) || 0;
   const elM = document.getElementById('diff_medidor');
-  if (!isNaN(ma) && !isNaN(md)) {
-    const d = md - ma;
-    elM.value = (d >= 0 ? '+' : '') + fmtNum(d, 3);
-    elM.style.color = d >= 0 ? '#198754' : '#dc3545';
+  if (!isNaN(ma) && !isNaN(md) && vol > 0) {
+    const sobra = md + vol - ma;
+    elM.value = (sobra >= 0 ? '+' : '') + fmtNum(sobra, 3);
+    elM.style.color = sobra >= 0 ? '#198754' : '#dc3545';
   } else { elM.value = ''; elM.style.color = ''; }
 
-  const ra = parseFloat(document.getElementById('regua_antes_litros').value);
-  const rd = parseFloat(document.getElementById('regua_depois_litros').value);
+  const ra  = parseFloat(document.getElementById('regua_antes_litros').value);
+  const rd  = parseFloat(document.getElementById('regua_depois_litros').value);
   const elR = document.getElementById('diff_regua');
   if (!isNaN(ra) && !isNaN(rd)) {
     const d = rd - ra;

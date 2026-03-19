@@ -13,15 +13,17 @@
     font-size: 1.35rem; flex-shrink: 0;
   }
   .flt-header { background: #1D63A5; color: #fff; font-size: 0.78rem; font-weight: 600; padding: .45rem .75rem; border-radius: .35rem .35rem 0 0; }
-  #tbl-descargas { font-size: 0.72rem; }
-  #tbl-descargas thead th {
-    background: #1D63A5; color: #fff; font-size: 0.68rem; font-weight: 700;
-    text-transform: uppercase; letter-spacing: .04em; padding: 0.45rem 0.5rem; border: none; white-space: nowrap;
+  .tbl-desc { font-size: 0.72rem; }
+  .tbl-desc thead th {
+    background: #1D63A5; color: #fff; font-size: 0.67rem; font-weight: 700;
+    text-transform: uppercase; letter-spacing: .04em; padding: 0.4rem 0.5rem;
+    border: none; white-space: nowrap;
   }
-  #tbl-descargas tbody td { padding: 0.35rem 0.5rem; vertical-align: middle; border-color: #f0f3f7; }
-  #tbl-descargas tbody tr:hover { background: #eef4ff; }
-  .badge-em_andamento { background: #fff3cd; color: #856404; font-size: 0.62rem; padding:.2rem .45rem; border-radius:3px; font-weight:700; }
-  .badge-finalizado   { background: #d4edda; color: #155724; font-size: 0.62rem; padding:.2rem .45rem; border-radius:3px; font-weight:700; }
+  .tbl-desc tbody td { padding: 0.32rem 0.5rem; vertical-align: middle; border-color: #f0f3f7; }
+  .tbl-desc tbody tr:hover { background: #eef4ff; }
+  .badge-em_andamento { background:#fff3cd;color:#856404;padding:.2rem .45rem;border-radius:3px;font-weight:700;font-size:.62rem; }
+  .badge-finalizado   { background:#d4edda;color:#155724;padding:.2rem .45rem;border-radius:3px;font-weight:700;font-size:.62rem; }
+  .badge-transito     { background:#cfe2ff;color:#084298;padding:.2rem .45rem;border-radius:3px;font-weight:700;font-size:.62rem; }
   .diff-pos { color: #198754; font-weight: 600; }
   .diff-neg { color: #dc3545; font-weight: 600; }
   .btn-act {
@@ -34,6 +36,7 @@
   .btn-act-edit  { background: #cce5ff; color: #004085; }
   .btn-act-danger{ background: #f8d7da; color: #721c24; }
   .btn-act-new   { background: #d4edda; color: #155724; }
+  .tab-count { font-size:.72rem; }
 </style>
 {% endblock %}
 
@@ -45,7 +48,7 @@
     <div class="hero-icon"><i class="bi bi-fuel-pump-fill"></i></div>
     <div class="flex-grow-1">
       <h4 class="mb-0 fw-bold">Controle de Descargas</h4>
-      <p class="mb-0 opacity-75" style="font-size:0.8rem;">Registre e acompanhe as descargas de combustível recebidas.</p>
+      <p class="mb-0 opacity-75" style="font-size:0.8rem;">Acompanhe fretes em trânsito, descargas finalizadas e descargas fracionadas.</p>
     </div>
     <a href="{{ url_for('descargas.nova') }}"
        class="btn btn-sm px-3 fw-semibold"
@@ -69,26 +72,18 @@
           </select>
         </div>
         <div class="col-6 col-md-2">
-          <label class="form-label form-label-sm mb-0">Data início</label>
+          <label class="form-label form-label-sm mb-0">Data início (desc.)</label>
           <input type="date" name="data_inicio" class="form-control form-control-sm" value="{{ data_inicio }}">
         </div>
         <div class="col-6 col-md-2">
-          <label class="form-label form-label-sm mb-0">Data fim</label>
+          <label class="form-label form-label-sm mb-0">Data fim (desc.)</label>
           <input type="date" name="data_fim" class="form-control form-control-sm" value="{{ data_fim }}">
         </div>
         <div class="col-6 col-md-2">
           <label class="form-label form-label-sm mb-0">Frete ID</label>
           <input type="number" name="frete_id" class="form-control form-control-sm" value="{{ frete_id }}" placeholder="Nº do frete">
         </div>
-        <div class="col-6 col-md-2">
-          <label class="form-label form-label-sm mb-0">Status</label>
-          <select name="status" class="form-select form-select-sm">
-            <option value="">Todos</option>
-            <option value="em_andamento" {% if status_filtro == 'em_andamento' %}selected{% endif %}>Em andamento</option>
-            <option value="finalizado"   {% if status_filtro == 'finalizado'   %}selected{% endif %}>Finalizado</option>
-          </select>
-        </div>
-        <div class="col-6 col-md-2 d-flex gap-1">
+        <div class="col-6 col-md-2 d-flex gap-1 align-items-end">
           <button type="submit" class="btn btn-primary btn-sm flex-fill">
             <i class="bi bi-search"></i> Filtrar
           </button>
@@ -100,56 +95,91 @@
     </div>
   </form>
 
-  <!-- Tabela -->
-  <div class="card shadow-sm">
-    <div class="card-header py-2" style="background:#1D63A5;color:#fff;">
-      <h6 class="mb-0"><i class="bi bi-list-ul me-1"></i> Descargas Registradas
-        <span class="badge bg-warning text-dark ms-2">{{ descargas|length }}</span>
-      </h6>
-    </div>
-    <div class="card-body p-0">
+  <!-- Abas -->
+  <ul class="nav nav-tabs mb-0" id="tabsDescargas">
+    <li class="nav-item">
+      <button class="nav-link active" data-bs-toggle="tab" data-bs-target="#tabTransito">
+        <i class="bi bi-truck me-1 text-primary"></i>Em Trânsito
+        <span class="badge bg-primary ms-1 tab-count">{{ fretes_em_transito|length }}</span>
+      </button>
+    </li>
+    <li class="nav-item">
+      <button class="nav-link" data-bs-toggle="tab" data-bs-target="#tabDescarregados">
+        <i class="bi bi-check-circle me-1 text-success"></i>Descarregados
+        <span class="badge bg-success ms-1 tab-count">{{ descargas_finalizadas|length }}</span>
+      </button>
+    </li>
+    <li class="nav-item">
+      <button class="nav-link" data-bs-toggle="tab" data-bs-target="#tabFracionado">
+        <i class="bi bi-layers me-1 text-warning"></i>Fracionado
+        <span class="badge bg-warning text-dark ms-1 tab-count">{{ descargas_fracionadas|length }}</span>
+      </button>
+    </li>
+  </ul>
+
+  <div class="tab-content card shadow-sm border-top-0" style="border-top-left-radius:0;border-top-right-radius:0;">
+
+    <!-- ── Tab: Em Trânsito ── -->
+    <div class="tab-pane fade show active p-0" id="tabTransito">
       <div class="table-responsive">
-        <table id="tbl-descargas" class="table table-hover mb-0">
+        <table class="tbl-desc table table-hover mb-0">
           <thead>
             <tr>
-              <th>#</th>
-              <th>Tipo</th>
               <th>Frete</th>
-              <th>Data Desc.</th>
               <th>Data Carg.</th>
               <th>Empresa</th>
               <th>Produto</th>
               <th>Volume NF</th>
+              <th>Distribuidora</th>
               <th>Motorista</th>
-              <th>Dif. Medidor</th>
-              <th>Dif. Régua</th>
-              <th>Status</th>
-              <th>Ações</th>
+              <th>Ação</th>
             </tr>
           </thead>
           <tbody>
-            {% for d in descargas %}
+            {% for f in fretes_em_transito %}
+            <tr>
+              <td><a href="{{ url_for('fretes.editar', id=f.id) }}" title="Ver frete">#{{ f.id }}</a></td>
+              <td>{{ f.data_frete_fmt }}</td>
+              <td>{{ f.cliente }}</td>
+              <td>{{ f.produto }}</td>
+              <td>{% if f.volume_nf %}{{ '{:,.0f}'.format(f.volume_nf|float).replace(',','.') }} L{% endif %}</td>
+              <td>{{ f.distribuidora }}</td>
+              <td>{{ f.motorista }}</td>
+              <td>
+                <a href="{{ url_for('descargas.nova') }}?frete_id={{ f.id }}"
+                   class="btn-act btn-act-new" title="Registrar descarga">
+                  <i class="bi bi-plus"></i>
+                </a>
+              </td>
+            </tr>
+            {% else %}
+            <tr><td colspan="8" class="text-center text-muted py-4">Nenhum frete em trânsito nos últimos 5 dias.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ── Tab: Descarregados ── -->
+    <div class="tab-pane fade p-0" id="tabDescarregados">
+      <div class="table-responsive">
+        <table class="tbl-desc table table-hover mb-0">
+          <thead>
+            <tr>
+              <th>#</th><th>Frete</th><th>Data Desc.</th><th>Empresa</th>
+              <th>Produto</th><th>Volume NF</th><th>Motorista</th>
+              <th>Sobra Med.</th><th>Dif. Régua</th><th>Ações</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for d in descargas_finalizadas %}
             <tr>
               <td>{{ d.id }}</td>
-              <td>
-                {% if d.total_descargas and d.total_descargas > 1 %}
-                  <span style="font-size:.7rem;color:#6c757d;">{{ d.numero_descarga }}/{{ d.total_descargas }}</span>
-                {% elif d.status == 'em_andamento' %}
-                  <span style="font-size:.7rem;color:#856404;">Frac.</span>
-                {% else %}
-                  <span style="font-size:.7rem;color:#155724;">Total</span>
-                {% endif %}
-              </td>
-              <td>
-                <a href="{{ url_for('fretes.editar', id=d.frete_id) }}" title="Ver frete">#{{ d.frete_id }}</a>
-              </td>
+              <td><a href="{{ url_for('fretes.editar', id=d.frete_id) }}">#{{ d.frete_id }}</a></td>
               <td>{{ d.data_descarga_fmt }}</td>
-              <td>{{ d.data_frete_fmt }}</td>
               <td>{{ d.cliente }}</td>
               <td>{{ d.produto }}</td>
-              <td>
-                {% if d.volume_nf %}{{ '{:,.0f}'.format(d.volume_nf|float).replace(',','.') }} L{% endif %}
-              </td>
+              <td>{% if d.volume_nf %}{{ '{:,.0f}'.format(d.volume_nf|float).replace(',','.') }} L{% endif %}</td>
               <td>{{ d.motorista }}</td>
               <td>
                 {% if d.diff_medidor is not none %}
@@ -165,41 +195,73 @@
                   </span>
                 {% endif %}
               </td>
-              <td>
-                <span class="badge-{{ d.status }}">
-                  {{ 'Em andamento' if d.status == 'em_andamento' else 'Finalizado' }}
-                </span>
-              </td>
               <td class="d-flex gap-1">
-                <a href="{{ url_for('descargas.detalhe', id=d.id) }}" class="btn-act btn-act-view" title="Ver detalhes">
-                  <i class="bi bi-eye"></i>
-                </a>
-                <a href="{{ url_for('descargas.editar', id=d.id) }}" class="btn-act btn-act-edit" title="Editar">
-                  <i class="bi bi-pencil"></i>
-                </a>
-                {% if d.status == 'em_andamento' %}
-                <a href="{{ url_for('descargas.nova') }}?frete_id={{ d.frete_id }}" class="btn-act btn-act-new" title="Adicionar etapa">
-                  <i class="bi bi-plus"></i>
-                </a>
-                {% endif %}
+                <a href="{{ url_for('descargas.detalhe', id=d.id) }}" class="btn-act btn-act-view" title="Ver detalhes"><i class="bi bi-eye"></i></a>
+                <a href="{{ url_for('descargas.editar', id=d.id) }}" class="btn-act btn-act-edit" title="Editar"><i class="bi bi-pencil"></i></a>
                 <form method="POST" action="{{ url_for('descargas.deletar', id=d.id) }}"
                       onsubmit="return confirm('Excluir descarga #{{ d.id }}?');" style="display:inline;">
-                  <button type="submit" class="btn-act btn-act-danger" title="Excluir">
-                    <i class="bi bi-trash"></i>
-                  </button>
+                  <button type="submit" class="btn-act btn-act-danger" title="Excluir"><i class="bi bi-trash"></i></button>
                 </form>
               </td>
             </tr>
             {% else %}
-            <tr>
-              <td colspan="13" class="text-center text-muted py-4">Nenhuma descarga encontrada no período.</td>
-            </tr>
+            <tr><td colspan="10" class="text-center text-muted py-4">Nenhuma descarga finalizada no período.</td></tr>
             {% endfor %}
           </tbody>
         </table>
       </div>
     </div>
-  </div>
+
+    <!-- ── Tab: Fracionado ── -->
+    <div class="tab-pane fade p-0" id="tabFracionado">
+      <div class="table-responsive">
+        <table class="tbl-desc table table-hover mb-0">
+          <thead>
+            <tr>
+              <th>#</th><th>Frete</th><th>Data Desc.</th><th>Empresa</th>
+              <th>Produto</th><th>Vol. Desc.</th><th>Motorista</th>
+              <th>Sobra Med.</th><th>Ações</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for d in descargas_fracionadas %}
+            <tr>
+              <td>{{ d.id }}</td>
+              <td><a href="{{ url_for('fretes.editar', id=d.frete_id) }}">#{{ d.frete_id }}</a></td>
+              <td>{{ d.data_descarga_fmt }}</td>
+              <td>{{ d.cliente }}</td>
+              <td>{{ d.produto }}</td>
+              <td>
+                {% set vd = d.volume_descarga or d.volume_nf %}
+                {% if vd %}{{ '{:,.0f}'.format(vd|float).replace(',','.') }} L{% endif %}
+              </td>
+              <td>{{ d.motorista }}</td>
+              <td>
+                {% if d.diff_medidor is not none %}
+                  <span class="{{ 'diff-pos' if d.diff_medidor >= 0 else 'diff-neg' }}">
+                    {{ '+' if d.diff_medidor >= 0 else '' }}{{ '{:,.3f}'.format(d.diff_medidor|float).replace(',','.') }}
+                  </span>
+                {% endif %}
+              </td>
+              <td class="d-flex gap-1">
+                <a href="{{ url_for('descargas.detalhe', id=d.id) }}" class="btn-act btn-act-view" title="Ver detalhes"><i class="bi bi-eye"></i></a>
+                <a href="{{ url_for('descargas.editar', id=d.id) }}" class="btn-act btn-act-edit" title="Editar"><i class="bi bi-pencil"></i></a>
+                <a href="{{ url_for('descargas.nova') }}?frete_id={{ d.frete_id }}" class="btn-act btn-act-new" title="Continuar descarga"><i class="bi bi-plus"></i></a>
+                <form method="POST" action="{{ url_for('descargas.deletar', id=d.id) }}"
+                      onsubmit="return confirm('Excluir descarga #{{ d.id }}?');" style="display:inline;">
+                  <button type="submit" class="btn-act btn-act-danger" title="Excluir"><i class="bi bi-trash"></i></button>
+                </form>
+              </td>
+            </tr>
+            {% else %}
+            <tr><td colspan="9" class="text-center text-muted py-4">Nenhuma descarga fracionada em andamento.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+  </div><!-- /tab-content -->
 
 </div>
 {% endblock %}
