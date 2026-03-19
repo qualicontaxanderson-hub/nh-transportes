@@ -755,7 +755,9 @@ def lista():
             frete_params.extend(cliente_ids_com_produtos)
         base_conds = " AND ".join(frete_conds) if frete_conds else "1=1"
         frete_where = f"WHERE {base_conds}"
-        # SQL fragment: exclude fretes fully discharged via fracionada (SUM >= NF volume)
+        # SQL fragment reused in two places: excludes fretes where the sum of all
+        # fracionada (em_andamento) discharges already covers the full NF volume,
+        # i.e. SUM(volume_descarga) >= quantidade_manual → falta = 0 (fully done).
         _SQL_NOT_FRAC_COMPLETA = (
             " AND NOT ("
             "COALESCE(f.quantidade_manual, 0) > 0"
@@ -844,6 +846,8 @@ def lista():
         descargas_fracionadas = cursor.fetchall()
 
         # ── Fracionadas concluídas: fretes where all em_andamento steps total >= NF ──
+        # MAX(d.id) is used as the representative discharge ID so the detail page
+        # navigates to the most recent discharge step of the completed sequence.
         cursor.execute("""
             SELECT
                 MAX(d.id) AS id,
@@ -906,12 +910,66 @@ def lista():
             d['is_fracionada_concluida'] = True
         descargas_finalizadas = list(descargas_finalizadas) + list(fretes_fracionados_concluidos)
 
+        # ── Unified list: fretes pending (em_transito/fracionado) + completed (descarregado) ──
+        # _sort_date and _sort_id are temporary keys used only for sorting; they do
+        # not appear in the template. Invalid/missing dates fall back to a sentinel
+        # that sorts last (oldest possible date).
+        _SORT_DATE_FALLBACK = date(2000, 1, 1)
+
+        def _parse_dfmt(s):
+            try:
+                return datetime.strptime(s or '', '%d/%m/%Y').date()
+            except Exception:
+                return _SORT_DATE_FALLBACK
+
+        all_descargas = []
+        for f in fretes_em_transito:
+            all_descargas.append({
+                'situacao': 'fracionado' if f.get('tem_fracionada') else 'em_transito',
+                '_sort_date': _parse_dfmt(f.get('data_frete_fmt', '')),
+                '_sort_id': int(f.get('id') or 0),
+                'data_fmt': f.get('data_frete_fmt', ''),
+                'cliente': f.get('cliente', ''),
+                'distribuidora': f.get('distribuidora', ''),
+                'produto': f.get('produto', ''),
+                'motorista': f.get('motorista', ''),
+                'volume_nf': f.get('volume_nf'),
+                'volume_descarregado': f.get('volume_descarregado'),
+                'is_fracionada_concluida': False,
+                'diff_medidor': None,
+                'diff_regua': None,
+                'frete_id': f.get('id'),
+                'descarga_id': None,
+            })
+        for d in descargas_finalizadas:
+            all_descargas.append({
+                'situacao': 'descarregado',
+                '_sort_date': _parse_dfmt(d.get('data_descarga_fmt') or d.get('data_frete_fmt', '')),
+                '_sort_id': int(d.get('id') or 0),
+                'data_fmt': d.get('data_descarga_fmt') or d.get('data_frete_fmt', ''),
+                'cliente': d.get('cliente', ''),
+                'distribuidora': d.get('distribuidora', ''),
+                'produto': d.get('produto', ''),
+                'motorista': d.get('motorista', ''),
+                'volume_nf': d.get('volume_nf'),
+                'volume_descarregado': d.get('volume_descarga'),
+                'is_fracionada_concluida': d.get('is_fracionada_concluida', False),
+                'diff_medidor': d.get('diff_medidor'),
+                'diff_regua': d.get('diff_regua'),
+                'frete_id': d.get('frete_id'),
+                'descarga_id': d.get('id'),  # MAX(d.id) for fracionada_concluida, d.id otherwise
+            })
+        all_descargas.sort(
+            key=lambda x: (x['_sort_date'], x['_sort_id']), reverse=True
+        )
+
     except Exception as exc:
         _log.warning("Erro na lista descargas: %s", exc, exc_info=True)
         fretes_em_transito = []
         descargas_finalizadas = []
         descargas_fracionadas = []
         fretes_fracionados_concluidos = []
+        all_descargas = []
         clientes = []
     finally:
         try:
@@ -925,6 +983,7 @@ def lista():
         fretes_em_transito=fretes_em_transito,
         descargas_finalizadas=descargas_finalizadas,
         descargas_fracionadas=descargas_fracionadas,
+        all_descargas=all_descargas,
         clientes=clientes,
         data_inicio=data_inicio,
         data_fim=data_fim,
