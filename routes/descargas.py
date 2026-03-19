@@ -6,10 +6,14 @@ vinculadas a um frete. Suporta descarga total ou parcial (em etapas) e gera
 mensagem formatada para envio em grupos de WhatsApp.
 """
 
+import logging
+
 from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify
 from flask_login import login_required
 from datetime import datetime, date
 from utils.db import get_db_connection
+
+_log = logging.getLogger(__name__)
 
 bp = Blueprint('descargas', __name__, url_prefix='/descargas')
 
@@ -85,43 +89,58 @@ def _ensure_descargas_tables():
         INDEX `idx_descargas_status` (`status`)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     """
-    # Migration: add volume_descarga column if table already exists without it
-    alter_volume = """
-    ALTER TABLE `descargas`
-        ADD COLUMN IF NOT EXISTS `volume_descarga` DECIMAL(14,3) NULL
-            COMMENT 'Litros descarregados nesta etapa'
-        AFTER `data_descarga`
-    """
-    # Migration: add numero_descarga and total_descargas if table already exists without them
-    alter_numero = """
-    ALTER TABLE `descargas`
-        ADD COLUMN IF NOT EXISTS `numero_descarga` INT NOT NULL DEFAULT 1
-            COMMENT 'Número desta etapa (1, 2, 3…)'
-        AFTER `frete_id`
-    """
-    alter_total = """
-    ALTER TABLE `descargas`
-        ADD COLUMN IF NOT EXISTS `total_descargas` INT NOT NULL DEFAULT 1
-            COMMENT 'Total de etapas previstas para este frete'
-        AFTER `numero_descarga`
-    """
+    # Columns to add if missing: (column_name, ALTER TABLE … ADD COLUMN … definition)
+    # Uses INFORMATION_SCHEMA check instead of "ADD COLUMN IF NOT EXISTS" for MySQL < 8.0.3
+    _migrations = [
+        ("numero_descarga",
+         "ALTER TABLE `descargas` ADD COLUMN `numero_descarga` INT NOT NULL DEFAULT 1 "
+         "COMMENT 'Número desta etapa (1, 2, 3…)' AFTER `frete_id`"),
+        ("total_descargas",
+         "ALTER TABLE `descargas` ADD COLUMN `total_descargas` INT NOT NULL DEFAULT 1 "
+         "COMMENT 'Total de etapas previstas para este frete' AFTER `numero_descarga`"),
+        ("volume_descarga",
+         "ALTER TABLE `descargas` ADD COLUMN `volume_descarga` DECIMAL(14,3) NULL "
+         "COMMENT 'Litros descarregados nesta etapa' AFTER `data_descarga`"),
+        ("medidor_antes",
+         "ALTER TABLE `descargas` ADD COLUMN `medidor_antes` DECIMAL(14,3) NULL"),
+        ("medidor_depois",
+         "ALTER TABLE `descargas` ADD COLUMN `medidor_depois` DECIMAL(14,3) NULL"),
+        ("regua_antes_cm",
+         "ALTER TABLE `descargas` ADD COLUMN `regua_antes_cm` INT NULL"),
+        ("regua_antes_litros",
+         "ALTER TABLE `descargas` ADD COLUMN `regua_antes_litros` DECIMAL(14,3) NULL"),
+        ("regua_depois_cm",
+         "ALTER TABLE `descargas` ADD COLUMN `regua_depois_cm` INT NULL"),
+        ("regua_depois_litros",
+         "ALTER TABLE `descargas` ADD COLUMN `regua_depois_litros` DECIMAL(14,3) NULL"),
+        ("temperatura",
+         "ALTER TABLE `descargas` ADD COLUMN `temperatura` DECIMAL(6,2) NULL"),
+        ("densidade",
+         "ALTER TABLE `descargas` ADD COLUMN `densidade` DECIMAL(8,4) NULL"),
+    ]
     try:
         conn = get_db_connection()
         cur = conn.cursor()
         try:
             cur.execute(ddl)
-            for stmt in (alter_volume, alter_numero, alter_total):
-                try:
-                    cur.execute(stmt)
-                except Exception:
-                    pass  # ADD COLUMN IF NOT EXISTS may not be supported on older MySQL
+            # Check existing columns via INFORMATION_SCHEMA (compatible with all MySQL versions)
+            cur.execute(
+                "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS "
+                "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'descargas'"
+            )
+            existing_cols = {row[0] for row in cur.fetchall()}
+            for col_name, alter_sql in _migrations:
+                if col_name not in existing_cols:
+                    try:
+                        cur.execute(alter_sql)
+                    except Exception:
+                        _log.warning("Falha ao adicionar coluna '%s' em descargas.", col_name, exc_info=True)
             conn.commit()
         finally:
             cur.close()
             conn.close()
     except Exception:
-        import logging
-        logging.getLogger(__name__).warning(
+        _log.warning(
             "Falha ao criar/migrar tabela descargas (não crítico).", exc_info=True
         )
 
@@ -561,8 +580,7 @@ def lista():
         clientes = _get_clientes_com_produtos()
 
     except Exception as exc:
-        import logging
-        logging.getLogger(__name__).warning("Erro na lista descargas: %s", exc, exc_info=True)
+        _log.warning("Erro na lista descargas: %s", exc, exc_info=True)
         fretes_em_transito = []
         descargas_finalizadas = []
         descargas_fracionadas = []
