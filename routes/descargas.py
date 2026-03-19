@@ -135,6 +135,29 @@ def _ensure_descargas_tables():
                         cur.execute(alter_sql)
                     except Exception:
                         _log.warning("Falha ao adicionar coluna '%s' em descargas.", col_name, exc_info=True)
+            # Fix legacy NOT NULL columns that are no longer in the canonical schema and
+            # would block INSERTs (MySQL 1364). Make them nullable so missing values default to NULL.
+            # Add any newly-discovered legacy NOT NULL columns to this list.
+            _legacy_notnull = ["data_carregamento"]
+            if _legacy_notnull:
+                placeholders = ",".join(["%s"] * len(_legacy_notnull))
+                cur.execute(
+                    "SELECT COLUMN_NAME, COLUMN_TYPE FROM INFORMATION_SCHEMA.COLUMNS "
+                    "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'descargas' "
+                    f"AND IS_NULLABLE = 'NO' AND COLUMN_NAME IN ({placeholders})",
+                    tuple(_legacy_notnull),
+                )
+                for col_name, col_type in cur.fetchall():
+                    # Guard: only process columns we explicitly listed (defence-in-depth)
+                    if col_name not in _legacy_notnull:
+                        continue
+                    try:
+                        cur.execute(
+                            f"ALTER TABLE `descargas` MODIFY COLUMN `{col_name}` {col_type} NULL"
+                        )
+                        _log.info("Coluna '%s' em descargas tornada nullable (era NOT NULL sem default).", col_name)
+                    except Exception:
+                        _log.warning("Falha ao tornar coluna '%s' nullable em descargas.", col_name, exc_info=True)
             conn.commit()
         finally:
             cur.close()
