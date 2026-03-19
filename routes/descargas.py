@@ -755,10 +755,19 @@ def lista():
             frete_params.extend(cliente_ids_com_produtos)
         base_conds = " AND ".join(frete_conds) if frete_conds else "1=1"
         frete_where = f"WHERE {base_conds}"
-        # Exclude only fully-discharged fretes (finalizado). Fretes with only
-        # partial discharges (em_andamento) should still appear in the tab with
-        # a "Fracionado" badge so the operator sees all pending work in one place.
+        # SQL fragment: exclude fretes fully discharged via fracionada (SUM >= NF volume)
+        _SQL_NOT_FRAC_COMPLETA = (
+            " AND NOT ("
+            "COALESCE(f.quantidade_manual, 0) > 0"
+            " AND COALESCE((SELECT SUM(dx.volume_descarga) FROM descargas dx"
+            " WHERE dx.frete_id = f.id AND dx.status = 'em_andamento'), 0)"
+            " >= COALESCE(f.quantidade_manual, 0))"
+        )
+        # Exclude fretes that are fully discharged:
+        # (a) have a 'finalizado' discharge (total unload), or
+        # (b) all fracionada (em_andamento) steps total >= NF volume (falta=0)
         frete_where += " AND NOT EXISTS (SELECT 1 FROM descargas dx WHERE dx.frete_id = f.id AND dx.status = 'finalizado')"
+        frete_where += _SQL_NOT_FRAC_COMPLETA
         cursor.execute(f"""
             SELECT
                 f.id,
@@ -798,7 +807,15 @@ def lista():
             p2.append(status_filtro)
         else:
             finalizado_where = (desc_where + " AND d.status = 'finalizado'") if desc_where else "WHERE d.status = 'finalizado'"
-            fracionado_where = (desc_where + " AND d.status = 'em_andamento'") if desc_where else "WHERE d.status = 'em_andamento'"
+            # Fracionado: only em_andamento discharges from fretes where falta > 0
+            _frac_base = (desc_where + " AND d.status = 'em_andamento'") if desc_where else "WHERE d.status = 'em_andamento'"
+            fracionado_where = _frac_base + _SQL_NOT_FRAC_COMPLETA
+            # Fracionada concluida: fretes where total em_andamento >= NF volume
+            fracionada_concluida_where = (
+                (desc_where + " AND d.status = 'em_andamento' AND COALESCE(f.quantidade_manual, 0) > 0")
+                if desc_where else
+                "WHERE d.status = 'em_andamento' AND COALESCE(f.quantidade_manual, 0) > 0"
+            )
 
         select_descargas = """
             SELECT
@@ -826,6 +843,37 @@ def lista():
         cursor.execute(select_descargas + fracionado_where + " ORDER BY d.data_descarga DESC, d.id DESC", tuple(desc_params))
         descargas_fracionadas = cursor.fetchall()
 
+        # ── Fracionadas concluídas: fretes where all em_andamento steps total >= NF ──
+        cursor.execute("""
+            SELECT
+                MAX(d.id) AS id,
+                f.id AS frete_id,
+                DATE_FORMAT(MAX(d.data_descarga), '%d/%m/%Y') AS data_descarga_fmt,
+                DATE_FORMAT(f.data_frete, '%d/%m/%Y') AS data_frete_fmt,
+                COALESCE(c.razao_social, '') AS cliente,
+                COALESCE(fo.razao_social, '') AS distribuidora,
+                COALESCE(p.nome, '') AS produto,
+                COALESCE(m.nome, '') AS motorista,
+                COALESCE(f.quantidade_manual, 0) AS volume_nf,
+                COALESCE(SUM(d.volume_descarga), 0) AS volume_descarga,
+                NULL AS medidor_antes, NULL AS medidor_depois,
+                NULL AS regua_antes_litros, NULL AS regua_depois_litros,
+                NULL AS temperatura, NULL AS densidade,
+                'em_andamento' AS status
+            FROM descargas d
+            JOIN fretes f ON d.frete_id = f.id
+            LEFT JOIN clientes c ON f.clientes_id = c.id
+            LEFT JOIN fornecedores fo ON f.fornecedores_id = fo.id
+            LEFT JOIN produto p ON f.produto_id = p.id
+            LEFT JOIN motoristas m ON f.motoristas_id = m.id
+        """ + fracionada_concluida_where + """
+            GROUP BY f.id, c.razao_social, fo.razao_social, p.nome, m.nome,
+                     f.quantidade_manual, f.data_frete
+            HAVING SUM(d.volume_descarga) >= f.quantidade_manual
+            ORDER BY MAX(d.data_descarga) DESC, f.id DESC
+        """, tuple(desc_params))
+        fretes_fracionados_concluidos = cursor.fetchall()
+
         def _enrich(rows):
             for d in rows:
                 vol = d.get('volume_descarga') or d.get('volume_nf')
@@ -848,11 +896,22 @@ def lista():
         _enrich(descargas_finalizadas)
         _enrich(descargas_fracionadas)
 
+        # Tag and merge completed fracionadas into descargas_finalizadas
+        for d in descargas_finalizadas:
+            d['is_fracionada_concluida'] = False
+        for d in fretes_fracionados_concluidos:
+            d['diff_medidor'] = None
+            d['diff_regua'] = None
+            d['diff_med_regua'] = None
+            d['is_fracionada_concluida'] = True
+        descargas_finalizadas = list(descargas_finalizadas) + list(fretes_fracionados_concluidos)
+
     except Exception as exc:
         _log.warning("Erro na lista descargas: %s", exc, exc_info=True)
         fretes_em_transito = []
         descargas_finalizadas = []
         descargas_fracionadas = []
+        fretes_fracionados_concluidos = []
         clientes = []
     finally:
         try:

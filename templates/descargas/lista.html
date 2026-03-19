@@ -190,11 +190,23 @@
           <tbody>
             {% for d in descargas_finalizadas %}
             <tr class="row-item" data-url="{{ url_for('descargas.detalhe', id=d.id) }}" title="Clique para ver detalhes">
-              <td><span class="badge-finalizado">Descarregado</span></td>
+              <td>
+                <span class="badge-finalizado">Descarregado</span>
+                {% if d.is_fracionada_concluida %}
+                  <span style="font-size:.6rem;color:#6c757d;display:block;">fracionada</span>
+                {% endif %}
+              </td>
               <td>{{ d.data_descarga_fmt }}</td>
               <td>{{ d.cliente }}</td>
               <td>{{ d.produto }}</td>
-              <td>{% if d.volume_nf %}{{ '{:,.0f}'.format(d.volume_nf|float).replace(',','.') }} L{% endif %}</td>
+              <td>
+                {% if d.volume_nf %}{{ '{:,.0f}'.format(d.volume_nf|float).replace(',','.') }} L{% endif %}
+                {% if d.is_fracionada_concluida and d.volume_descarga %}
+                  <br><small class="text-success fw-semibold">
+                    Desc: {{ '{:,.0f}'.format(d.volume_descarga|float).replace(',','.') }} L
+                  </small>
+                {% endif %}
+              </td>
               <td>{{ d.motorista }}</td>
               <td>
                 {% if d.diff_medidor is not none %}
@@ -212,11 +224,13 @@
               </td>
               <td class="actions-cell d-flex gap-1" onclick="event.stopPropagation()">
                 <a href="{{ url_for('descargas.detalhe', id=d.id) }}" class="btn-act btn-act-view" title="Ver detalhes"><i class="bi bi-eye"></i></a>
+                {% if not d.is_fracionada_concluida %}
                 <a href="{{ url_for('descargas.editar', id=d.id) }}" class="btn-act btn-act-edit" title="Editar"><i class="bi bi-pencil"></i></a>
                 <form method="POST" action="{{ url_for('descargas.deletar', id=d.id) }}"
                       onsubmit="return confirm('Excluir descarga #{{ d.id }}?');" style="display:inline;">
                   <button type="submit" class="btn-act btn-act-danger" title="Excluir"><i class="bi bi-trash"></i></button>
                 </form>
+                {% endif %}
               </td>
             </tr>
             {% else %}
