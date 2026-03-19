@@ -1,0 +1,682 @@
+"""
+Módulo de Controle de Descargas de Combustível
+
+Permite registrar e acompanhar as descargas de produtos recebidos nos postos,
+vinculadas a um frete. Suporta descarga total ou parcial (em etapas) e gera
+mensagem formatada para envio em grupos de WhatsApp.
+"""
+
+from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify
+from flask_login import login_required
+from datetime import datetime, date
+from utils.db import get_db_connection
+
+bp = Blueprint('descargas', __name__, url_prefix='/descargas')
+
+# ---------------------------------------------------------------------------
+# Tabela Volumétrica 15M3 1,91 PLENO
+# Índice = altura em cm (1..137), valor = volume em litros
+# ---------------------------------------------------------------------------
+TABELA_VOLUMETRICA_15M3 = {
+    1: 9.73, 2: 27.46, 3: 50.37, 4: 77.43, 5: 108.04,
+    6: 141.79, 7: 178.39, 8: 217.60, 9: 259.23, 10: 303.12,
+    11: 349.13, 12: 397.15, 13: 447.08, 14: 498.82, 15: 552.29,
+    16: 607.41, 17: 664.12, 18: 722.36, 19: 782.07, 20: 843.18,
+    21: 905.67, 22: 969.47, 23: 1034.54, 24: 1100.84, 25: 1168.34,
+    26: 1236.99, 27: 1306.76, 28: 1377.62, 29: 1449.53, 30: 1522.47,
+    31: 1596.40, 32: 1671.30, 33: 1747.13, 34: 1823.88, 35: 1901.52,
+    36: 1980.02, 37: 2059.37, 38: 2139.52, 39: 2220.48, 40: 2302.21,
+    41: 2384.69, 42: 2467.90, 43: 2551.82, 44: 2636.44, 45: 2721.74,
+    46: 2807.68, 47: 2894.27, 48: 2981.48, 49: 3069.29, 50: 3157.69,
+    51: 3246.66, 52: 3336.18, 53: 3426.24, 54: 3516.82, 55: 3607.91,
+    56: 3699.50, 57: 3791.56, 58: 3884.08, 59: 3977.05, 60: 4070.45,
+    61: 4164.28, 62: 4258.51, 63: 4353.13, 64: 4448.13, 65: 4543.50,
+    66: 4639.22, 67: 4735.28, 68: 4831.67, 69: 4928.37, 70: 5025.38,
+    71: 5122.67, 72: 5220.24, 73: 5318.08, 74: 5416.16, 75: 5514.49,
+    76: 5613.04, 77: 5711.82, 78: 5810.79, 79: 5909.96, 80: 6009.31,
+    81: 6108.83, 82: 6208.51, 83: 6308.33, 84: 6408.29, 85: 6508.37,
+    86: 6608.57, 87: 6708.86, 88: 6809.25, 89: 6909.71, 90: 7010.24,
+    91: 7110.83, 92: 7211.46, 93: 7312.13, 94: 7412.81, 95: 7513.51,
+    96: 7614.21, 97: 7714.90, 98: 7815.56, 99: 7916.19, 100: 8016.78,
+    101: 8117.31, 102: 8217.77, 103: 8318.16, 104: 8418.45, 105: 8518.65,
+    106: 8618.73, 107: 8718.69, 108: 8818.51, 109: 8918.19, 110: 9017.71,
+    111: 9117.06, 112: 9216.23, 113: 9315.21, 114: 9413.98, 115: 9512.53,
+    116: 9610.86, 117: 9708.95, 118: 9806.78, 119: 9904.35, 120: 10001.64,
+    121: 10098.65, 122: 10195.35, 123: 10291.74, 124: 10387.80, 125: 10483.52,
+    126: 10578.89, 127: 10673.89, 128: 10768.52, 129: 10862.75, 130: 10956.57,
+    131: 11049.98, 132: 11142.95, 133: 11235.47, 134: 11327.53, 135: 11419.11,
+    136: 11510.20, 137: 11600.78,
+}
+
+
+def _ensure_descargas_tables():
+    """Cria as tabelas de descargas se ainda não existirem (idempotente)."""
+    ddl = """
+    CREATE TABLE IF NOT EXISTS `descargas` (
+        `id`                  INT AUTO_INCREMENT PRIMARY KEY,
+        `frete_id`            INT NOT NULL,
+        `numero_descarga`     INT NOT NULL DEFAULT 1
+            COMMENT 'Número desta etapa (1, 2, 3…)',
+        `total_descargas`     INT NOT NULL DEFAULT 1
+            COMMENT 'Total de etapas previstas para este frete',
+        `data_descarga`       DATE NOT NULL,
+        -- Medidor eletrônico
+        `medidor_antes`       DECIMAL(14,3) NULL,
+        `medidor_depois`      DECIMAL(14,3) NULL,
+        -- Régua volumétrica
+        `regua_antes_cm`      INT NULL,
+        `regua_antes_litros`  DECIMAL(14,3) NULL,
+        `regua_depois_cm`     INT NULL,
+        `regua_depois_litros` DECIMAL(14,3) NULL,
+        -- Propriedades físicas
+        `temperatura`         DECIMAL(6,2) NULL,
+        `densidade`           DECIMAL(8,4) NULL,
+        -- Controle
+        `status`              ENUM('em_andamento','finalizado') NOT NULL DEFAULT 'em_andamento',
+        `observacoes`         TEXT NULL,
+        `criado_em`           DATETIME DEFAULT CURRENT_TIMESTAMP,
+        `atualizado_em`       DATETIME NULL ON UPDATE CURRENT_TIMESTAMP,
+        CONSTRAINT `fk_descargas_frete`
+            FOREIGN KEY (`frete_id`) REFERENCES `fretes`(`id`) ON DELETE RESTRICT,
+        INDEX `idx_descargas_frete`  (`frete_id`),
+        INDEX `idx_descargas_data`   (`data_descarga`),
+        INDEX `idx_descargas_status` (`status`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    """
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        try:
+            cur.execute(ddl)
+            conn.commit()
+        finally:
+            cur.close()
+            conn.close()
+    except Exception:
+        import logging
+        logging.getLogger(__name__).warning(
+            "Falha ao criar tabela descargas (não crítico).", exc_info=True
+        )
+
+
+# Executar migration na importação do módulo
+_ensure_descargas_tables()
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+def _get_fretes_para_descarga():
+    """Retorna fretes com informações úteis para o formulário de descarga."""
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        cursor.execute("""
+            SELECT
+                f.id,
+                f.data_frete,
+                DATE_FORMAT(f.data_frete, '%%d/%%m/%%Y') AS data_frete_fmt,
+                COALESCE(c.razao_social, '') AS cliente,
+                COALESCE(fo.razao_social, '') AS distribuidora,
+                COALESCE(p.nome, '') AS produto,
+                COALESCE(m.nome, '') AS motorista,
+                COALESCE(f.quantidade_manual, 0) AS volume_nf,
+                f.clientes_id,
+                f.fornecedores_id,
+                f.produto_id,
+                f.motoristas_id,
+                f.status
+            FROM fretes f
+            LEFT JOIN clientes c ON f.clientes_id = c.id
+            LEFT JOIN fornecedores fo ON f.fornecedores_id = fo.id
+            LEFT JOIN produto p ON f.produto_id = p.id
+            LEFT JOIN motoristas m ON f.motoristas_id = m.id
+            ORDER BY f.data_frete DESC, f.id DESC
+            LIMIT 200
+        """)
+        return cursor.fetchall()
+    finally:
+        try:
+            cursor.close()
+            conn.close()
+        except Exception:
+            pass
+
+
+def _get_frete(frete_id):
+    """Retorna um frete com dados enriquecidos."""
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        cursor.execute("""
+            SELECT
+                f.id,
+                f.data_frete,
+                DATE_FORMAT(f.data_frete, '%%d/%%m/%%Y') AS data_frete_fmt,
+                COALESCE(c.razao_social, '') AS cliente,
+                COALESCE(fo.razao_social, '') AS distribuidora,
+                COALESCE(p.nome, '') AS produto,
+                COALESCE(m.nome, '') AS motorista,
+                COALESCE(f.quantidade_manual, 0) AS volume_nf,
+                f.clientes_id,
+                f.fornecedores_id,
+                f.produto_id,
+                f.motoristas_id
+            FROM fretes f
+            LEFT JOIN clientes c ON f.clientes_id = c.id
+            LEFT JOIN fornecedores fo ON f.fornecedores_id = fo.id
+            LEFT JOIN produto p ON f.produto_id = p.id
+            LEFT JOIN motoristas m ON f.motoristas_id = m.id
+            WHERE f.id = %s
+        """, (frete_id,))
+        return cursor.fetchone()
+    finally:
+        try:
+            cursor.close()
+            conn.close()
+        except Exception:
+            pass
+
+
+def _get_descarga(descarga_id):
+    """Retorna uma descarga com dados enriquecidos do frete."""
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        cursor.execute("""
+            SELECT
+                d.*,
+                DATE_FORMAT(d.data_descarga, '%%d/%%m/%%Y') AS data_descarga_fmt,
+                f.data_frete,
+                DATE_FORMAT(f.data_frete, '%%d/%%m/%%Y') AS data_frete_fmt,
+                COALESCE(c.razao_social, '') AS cliente,
+                COALESCE(fo.razao_social, '') AS distribuidora,
+                COALESCE(p.nome, '') AS produto,
+                COALESCE(m.nome, '') AS motorista,
+                COALESCE(f.quantidade_manual, 0) AS volume_nf,
+                f.clientes_id,
+                f.fornecedores_id,
+                f.produto_id,
+                f.motoristas_id
+            FROM descargas d
+            JOIN fretes f ON d.frete_id = f.id
+            LEFT JOIN clientes c ON f.clientes_id = c.id
+            LEFT JOIN fornecedores fo ON f.fornecedores_id = fo.id
+            LEFT JOIN produto p ON f.produto_id = p.id
+            LEFT JOIN motoristas m ON f.motoristas_id = m.id
+            WHERE d.id = %s
+        """, (descarga_id,))
+        return cursor.fetchone()
+    finally:
+        try:
+            cursor.close()
+            conn.close()
+        except Exception:
+            pass
+
+
+def _fmt_num(val, decimals=3):
+    """Formata número com separador de milhar pt-BR."""
+    if val is None:
+        return ''
+    try:
+        val = float(val)
+        fmt = f"{val:,.{decimals}f}"
+        # converter vírgula americana para pt-BR
+        return fmt.replace(',', 'X').replace('.', ',').replace('X', '.')
+    except Exception:
+        return str(val)
+
+
+def _diff_sign(val):
+    """Retorna '+N.NNN' ou '-N.NNN' para diferença."""
+    if val is None:
+        return ''
+    try:
+        v = float(val)
+        s = _fmt_num(abs(v))
+        return f"+{s}" if v >= 0 else f"-{s}"
+    except Exception:
+        return ''
+
+
+def _gerar_mensagem_whatsapp(descarga):
+    """Monta o texto formatado para WhatsApp a partir dos dados da descarga."""
+    d = descarga
+
+    linhas = []
+    linhas.append(f"*Distribuidora:* {d.get('distribuidora', '')}")
+    linhas.append(f"*Data de carregamento:* {d.get('data_frete_fmt', '')}")
+    linhas.append(f"*Data de descarga:* {d.get('data_descarga_fmt', '')}")
+    linhas.append(f"*Produto:* {d.get('produto', '')}")
+
+    volume_nf = d.get('volume_nf')
+    if volume_nf:
+        linhas.append(f"*Volume NF:* {_fmt_num(volume_nf, 0)} L")
+
+    linhas.append(f"*Motorista:* {d.get('motorista', '')}")
+
+    total = d.get('total_descargas', 1)
+    numero = d.get('numero_descarga', 1)
+    if total and int(total) > 1:
+        linhas.append(f"*Descarga:* {numero} de {total}")
+
+    # Medidor eletrônico
+    med_antes = d.get('medidor_antes')
+    med_depois = d.get('medidor_depois')
+    if med_antes is not None or med_depois is not None:
+        linhas.append("*Medidor:*")
+        if med_antes is not None:
+            linhas.append(f"  Antes: {_fmt_num(med_antes)}")
+        if med_depois is not None:
+            linhas.append(f"  Depois: {_fmt_num(med_depois)}")
+        if med_antes is not None and med_depois is not None:
+            diff_med = float(med_depois) - float(med_antes)
+            linhas.append(f"  Diferença: {_diff_sign(diff_med)}")
+
+    # Temperatura e densidade
+    temp = d.get('temperatura')
+    dens = d.get('densidade')
+    if temp is not None:
+        linhas.append(f"*Temperatura:* {_fmt_num(temp, 1)}°C")
+    if dens is not None:
+        linhas.append(f"*Densidade:* {_fmt_num(dens, 4)}")
+
+    # Régua volumétrica
+    reg_antes_l = d.get('regua_antes_litros')
+    reg_depois_l = d.get('regua_depois_litros')
+    reg_antes_cm = d.get('regua_antes_cm')
+    reg_depois_cm = d.get('regua_depois_cm')
+    if reg_antes_l is not None or reg_depois_l is not None:
+        linhas.append("*Régua:*")
+        if reg_antes_l is not None:
+            cm_str = f" ({reg_antes_cm} cm)" if reg_antes_cm else ""
+            linhas.append(f"  Antes: {_fmt_num(reg_antes_l)}{cm_str}")
+        if reg_depois_l is not None:
+            cm_str = f" ({reg_depois_cm} cm)" if reg_depois_cm else ""
+            linhas.append(f"  Depois: {_fmt_num(reg_depois_l)}{cm_str}")
+        if reg_antes_l is not None and reg_depois_l is not None:
+            diff_reg = float(reg_depois_l) - float(reg_antes_l)
+            linhas.append(f"  Diferença: {_diff_sign(diff_reg)}")
+
+    obs = d.get('observacoes')
+    if obs:
+        linhas.append(f"*Observações:* {obs}")
+
+    return "\n".join(linhas)
+
+
+# ---------------------------------------------------------------------------
+# Routes
+# ---------------------------------------------------------------------------
+
+@bp.route('/', methods=['GET'])
+@login_required
+def lista():
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+
+    data_inicio = request.args.get('data_inicio', '')
+    data_fim = request.args.get('data_fim', '')
+    frete_id = request.args.get('frete_id', '').strip()
+    status_filtro = request.args.get('status', '').strip()
+
+    if not data_inicio and not data_fim:
+        hoje = date.today()
+        from datetime import timedelta
+        data_inicio = (hoje.replace(day=1)).strftime('%Y-%m-%d')
+        data_fim = hoje.strftime('%Y-%m-%d')
+
+    try:
+        filters = []
+        params = []
+
+        if data_inicio:
+            try:
+                di = datetime.strptime(data_inicio, '%d/%m/%Y').strftime('%Y-%m-%d')
+            except Exception:
+                di = data_inicio
+            filters.append("d.data_descarga >= %s")
+            params.append(di)
+
+        if data_fim:
+            try:
+                df = datetime.strptime(data_fim, '%d/%m/%Y').strftime('%Y-%m-%d')
+            except Exception:
+                df = data_fim
+            filters.append("d.data_descarga <= %s")
+            params.append(df)
+
+        if frete_id:
+            filters.append("d.frete_id = %s")
+            params.append(frete_id)
+
+        if status_filtro:
+            filters.append("d.status = %s")
+            params.append(status_filtro)
+
+        where = ("WHERE " + " AND ".join(filters)) if filters else ""
+
+        cursor.execute(f"""
+            SELECT
+                d.id,
+                d.frete_id,
+                d.numero_descarga,
+                d.total_descargas,
+                DATE_FORMAT(d.data_descarga, '%%d/%%m/%%Y') AS data_descarga_fmt,
+                d.medidor_antes,
+                d.medidor_depois,
+                d.regua_antes_litros,
+                d.regua_depois_litros,
+                d.temperatura,
+                d.densidade,
+                d.status,
+                COALESCE(c.razao_social, '') AS cliente,
+                COALESCE(fo.razao_social, '') AS distribuidora,
+                COALESCE(p.nome, '') AS produto,
+                COALESCE(m.nome, '') AS motorista,
+                COALESCE(f.quantidade_manual, 0) AS volume_nf,
+                DATE_FORMAT(f.data_frete, '%%d/%%m/%%Y') AS data_frete_fmt
+            FROM descargas d
+            JOIN fretes f ON d.frete_id = f.id
+            LEFT JOIN clientes c ON f.clientes_id = c.id
+            LEFT JOIN fornecedores fo ON f.fornecedores_id = fo.id
+            LEFT JOIN produto p ON f.produto_id = p.id
+            LEFT JOIN motoristas m ON f.motoristas_id = m.id
+            {where}
+            ORDER BY d.data_descarga DESC, d.id DESC
+        """, tuple(params))
+        descargas = cursor.fetchall()
+
+        # calcula diferença em régua e medidor para exibição
+        for desc in descargas:
+            if desc.get('medidor_antes') is not None and desc.get('medidor_depois') is not None:
+                desc['diff_medidor'] = float(desc['medidor_depois']) - float(desc['medidor_antes'])
+            else:
+                desc['diff_medidor'] = None
+            if desc.get('regua_antes_litros') is not None and desc.get('regua_depois_litros') is not None:
+                desc['diff_regua'] = float(desc['regua_depois_litros']) - float(desc['regua_antes_litros'])
+            else:
+                desc['diff_regua'] = None
+
+    except Exception:
+        descargas = []
+    finally:
+        try:
+            cursor.close()
+            conn.close()
+        except Exception:
+            pass
+
+    return render_template(
+        'descargas/lista.html',
+        descargas=descargas,
+        data_inicio=data_inicio,
+        data_fim=data_fim,
+        frete_id=frete_id,
+        status_filtro=status_filtro,
+    )
+
+
+@bp.route('/nova', methods=['GET', 'POST'])
+@login_required
+def nova():
+    if request.method == 'POST':
+        conn = get_db_connection()
+        try:
+            frete_id = request.form.get('frete_id')
+            numero_descarga = request.form.get('numero_descarga') or 1
+            total_descargas = request.form.get('total_descargas') or 1
+            data_descarga = request.form.get('data_descarga')
+            medidor_antes = request.form.get('medidor_antes') or None
+            medidor_depois = request.form.get('medidor_depois') or None
+            regua_antes_cm = request.form.get('regua_antes_cm') or None
+            regua_antes_litros = request.form.get('regua_antes_litros') or None
+            regua_depois_cm = request.form.get('regua_depois_cm') or None
+            regua_depois_litros = request.form.get('regua_depois_litros') or None
+            temperatura = request.form.get('temperatura') or None
+            densidade = request.form.get('densidade') or None
+            status = request.form.get('status', 'em_andamento')
+            observacoes = request.form.get('observacoes') or None
+
+            if not frete_id or not data_descarga:
+                flash('Frete e data de descarga são obrigatórios.', 'danger')
+                return redirect(url_for('descargas.nova'))
+
+            # Converter valores numéricos
+            def _to_decimal(v):
+                if v is None:
+                    return None
+                try:
+                    return float(str(v).replace(',', '.'))
+                except Exception:
+                    return None
+
+            cursor = conn.cursor()
+            cursor.execute("""
+                INSERT INTO descargas (
+                    frete_id, numero_descarga, total_descargas, data_descarga,
+                    medidor_antes, medidor_depois,
+                    regua_antes_cm, regua_antes_litros,
+                    regua_depois_cm, regua_depois_litros,
+                    temperatura, densidade, status, observacoes
+                ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+            """, (
+                frete_id, numero_descarga, total_descargas, data_descarga,
+                _to_decimal(medidor_antes), _to_decimal(medidor_depois),
+                regua_antes_cm or None, _to_decimal(regua_antes_litros),
+                regua_depois_cm or None, _to_decimal(regua_depois_litros),
+                _to_decimal(temperatura), _to_decimal(densidade),
+                status, observacoes,
+            ))
+            conn.commit()
+            new_id = cursor.lastrowid
+            cursor.close()
+            flash('Descarga registrada com sucesso!', 'success')
+            return redirect(url_for('descargas.detalhe', id=new_id))
+        except Exception as e:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+            flash(f'Erro ao salvar descarga: {e}', 'danger')
+            return redirect(url_for('descargas.nova'))
+        finally:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+    # GET
+    frete_id_qs = request.args.get('frete_id', '')
+    frete_pre = None
+    if frete_id_qs:
+        frete_pre = _get_frete(frete_id_qs)
+
+    fretes = _get_fretes_para_descarga()
+    tabela_js = {str(k): v for k, v in TABELA_VOLUMETRICA_15M3.items()}
+    hoje = date.today().strftime('%Y-%m-%d')
+
+    return render_template(
+        'descargas/nova.html',
+        fretes=fretes,
+        frete_pre=frete_pre,
+        frete_id_qs=frete_id_qs,
+        tabela_volumetrica=tabela_js,
+        hoje=hoje,
+    )
+
+
+@bp.route('/editar/<int:id>', methods=['GET', 'POST'])
+@login_required
+def editar(id):
+    descarga = _get_descarga(id)
+    if not descarga:
+        flash('Descarga não encontrada.', 'danger')
+        return redirect(url_for('descargas.lista'))
+
+    if request.method == 'POST':
+        conn = get_db_connection()
+        try:
+            numero_descarga = request.form.get('numero_descarga') or 1
+            total_descargas = request.form.get('total_descargas') or 1
+            data_descarga = request.form.get('data_descarga')
+            medidor_antes = request.form.get('medidor_antes') or None
+            medidor_depois = request.form.get('medidor_depois') or None
+            regua_antes_cm = request.form.get('regua_antes_cm') or None
+            regua_antes_litros = request.form.get('regua_antes_litros') or None
+            regua_depois_cm = request.form.get('regua_depois_cm') or None
+            regua_depois_litros = request.form.get('regua_depois_litros') or None
+            temperatura = request.form.get('temperatura') or None
+            densidade = request.form.get('densidade') or None
+            status = request.form.get('status', 'em_andamento')
+            observacoes = request.form.get('observacoes') or None
+
+            def _to_decimal(v):
+                if v is None:
+                    return None
+                try:
+                    return float(str(v).replace(',', '.'))
+                except Exception:
+                    return None
+
+            cursor = conn.cursor()
+            cursor.execute("""
+                UPDATE descargas SET
+                    numero_descarga=%s, total_descargas=%s, data_descarga=%s,
+                    medidor_antes=%s, medidor_depois=%s,
+                    regua_antes_cm=%s, regua_antes_litros=%s,
+                    regua_depois_cm=%s, regua_depois_litros=%s,
+                    temperatura=%s, densidade=%s,
+                    status=%s, observacoes=%s
+                WHERE id=%s
+            """, (
+                numero_descarga, total_descargas, data_descarga,
+                _to_decimal(medidor_antes), _to_decimal(medidor_depois),
+                regua_antes_cm or None, _to_decimal(regua_antes_litros),
+                regua_depois_cm or None, _to_decimal(regua_depois_litros),
+                _to_decimal(temperatura), _to_decimal(densidade),
+                status, observacoes, id,
+            ))
+            conn.commit()
+            cursor.close()
+            flash('Descarga atualizada com sucesso!', 'success')
+            return redirect(url_for('descargas.detalhe', id=id))
+        except Exception as e:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+            flash(f'Erro ao atualizar descarga: {e}', 'danger')
+        finally:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+    tabela_js = {str(k): v for k, v in TABELA_VOLUMETRICA_15M3.items()}
+    return render_template(
+        'descargas/editar.html',
+        descarga=descarga,
+        tabela_volumetrica=tabela_js,
+    )
+
+
+@bp.route('/detalhe/<int:id>', methods=['GET'])
+@login_required
+def detalhe(id):
+    descarga = _get_descarga(id)
+    if not descarga:
+        flash('Descarga não encontrada.', 'danger')
+        return redirect(url_for('descargas.lista'))
+
+    # Buscar todas as descargas do mesmo frete
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        cursor.execute("""
+            SELECT d.*,
+                   DATE_FORMAT(d.data_descarga, '%%d/%%m/%%Y') AS data_descarga_fmt
+            FROM descargas d
+            WHERE d.frete_id = %s
+            ORDER BY d.numero_descarga, d.id
+        """, (descarga['frete_id'],))
+        outras = cursor.fetchall()
+    except Exception:
+        outras = []
+    finally:
+        try:
+            cursor.close()
+            conn.close()
+        except Exception:
+            pass
+
+    mensagem = _gerar_mensagem_whatsapp(descarga)
+
+    # Calcular diferenças
+    diff_medidor = None
+    if descarga.get('medidor_antes') is not None and descarga.get('medidor_depois') is not None:
+        diff_medidor = float(descarga['medidor_depois']) - float(descarga['medidor_antes'])
+
+    diff_regua = None
+    if descarga.get('regua_antes_litros') is not None and descarga.get('regua_depois_litros') is not None:
+        diff_regua = float(descarga['regua_depois_litros']) - float(descarga['regua_antes_litros'])
+
+    return render_template(
+        'descargas/detalhe.html',
+        descarga=descarga,
+        outras=outras,
+        mensagem=mensagem,
+        diff_medidor=diff_medidor,
+        diff_regua=diff_regua,
+    )
+
+
+@bp.route('/deletar/<int:id>', methods=['POST'])
+@login_required
+def deletar(id):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute("DELETE FROM descargas WHERE id = %s", (id,))
+        conn.commit()
+        flash('Descarga excluída.', 'success')
+    except Exception as e:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        flash(f'Erro ao excluir descarga: {e}', 'danger')
+    finally:
+        try:
+            cursor.close()
+            conn.close()
+        except Exception:
+            pass
+    return redirect(url_for('descargas.lista'))
+
+
+@bp.route('/api/tabela_volumetrica', methods=['GET'])
+@login_required
+def api_tabela():
+    """Retorna a tabela volumétrica como JSON para uso no frontend."""
+    return jsonify(TABELA_VOLUMETRICA_15M3)
+
+
+@bp.route('/api/frete/<int:frete_id>', methods=['GET'])
+@login_required
+def api_frete(frete_id):
+    """Retorna dados de um frete para pré-preenchimento do formulário."""
+    frete = _get_frete(frete_id)
+    if not frete:
+        return jsonify({'error': 'Frete não encontrado'}), 404
+    return jsonify({
+        'id': frete['id'],
+        'cliente': frete['cliente'],
+        'distribuidora': frete['distribuidora'],
+        'produto': frete['produto'],
+        'motorista': frete['motorista'],
+        'volume_nf': float(frete['volume_nf']) if frete['volume_nf'] else 0,
+        'data_frete_fmt': frete['data_frete_fmt'],
+    })

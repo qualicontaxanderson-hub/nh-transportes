@@ -1,0 +1,312 @@
+{% extends "base.html" %}
+{% block titulo %}Nova Descarga{% endblock %}
+
+{% block styles %}
+<style>
+  .page-hero {
+    background: linear-gradient(135deg, #1a6b3c 0%, #155c32 60%, #0f4525 100%);
+    border-radius: .75rem; padding: 1.25rem 1.75rem; margin-bottom: 1.25rem; color: #fff;
+  }
+  .page-hero .hero-icon {
+    width: 2.75rem; height: 2.75rem; background: rgba(255,255,255,.15);
+    border-radius: .5rem; display: flex; align-items: center; justify-content: center;
+    font-size: 1.35rem; flex-shrink: 0;
+  }
+  .section-header {
+    font-size: 0.7rem; font-weight: 700; text-transform: uppercase;
+    letter-spacing: .06em; color: #1a6b3c;
+    border-left: 3px solid #1a6b3c; padding-left: .5rem;
+    margin: 1rem 0 .6rem;
+  }
+  .frete-info-box {
+    background: #f0fff4; border: 1px solid #c3e6cb;
+    border-radius: .5rem; padding: .75rem 1rem;
+    font-size: .82rem; margin-bottom: .75rem;
+  }
+  .frete-info-box .fi-label { font-weight: 600; color: #155c32; }
+  .regua-lookup { background: #fff8e1 !important; font-weight: 600; }
+  .medidor-info { font-size: 0.75rem; color: #6c757d; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+
+  <!-- Hero -->
+  <div class="page-hero d-flex align-items-center gap-3 flex-wrap">
+    <div class="hero-icon"><i class="bi bi-fuel-pump-fill"></i></div>
+    <div class="flex-grow-1">
+      <h4 class="mb-0 fw-bold">Nova Descarga</h4>
+      <p class="mb-0 opacity-75" style="font-size:0.8rem;">Registre uma nova descarga de combustível.</p>
+    </div>
+    <a href="{{ url_for('descargas.lista') }}"
+       class="btn btn-sm fw-semibold"
+       style="background:rgba(255,255,255,.12);color:#fff;border:1px solid rgba(255,255,255,.35);">
+      <i class="bi bi-arrow-left me-1"></i> Voltar
+    </a>
+  </div>
+
+  <div class="card shadow-sm">
+    <div class="card-body" style="padding:1.25rem;">
+      <form method="POST" action="{{ url_for('descargas.nova') }}" id="frm-descarga">
+
+        <!-- ── SEÇÃO: Frete vinculado ── -->
+        <div class="section-header"><i class="bi bi-truck me-1"></i>Frete Vinculado</div>
+
+        <div class="row mb-2">
+          <div class="col-md-6">
+            <label for="frete_id" class="form-label">Selecionar Frete <span class="text-danger">*</span></label>
+            <select id="frete_id" name="frete_id" class="form-select form-select-sm" required>
+              <option value="">— selecione um frete —</option>
+              {% for f in fretes %}
+              <option value="{{ f.id }}"
+                      data-cliente="{{ f.cliente }}"
+                      data-distribuidora="{{ f.distribuidora }}"
+                      data-produto="{{ f.produto }}"
+                      data-motorista="{{ f.motorista }}"
+                      data-volume="{{ f.volume_nf }}"
+                      data-data="{{ f.data_frete_fmt }}"
+                      {% if frete_id_qs and f.id|string == frete_id_qs %}selected{% endif %}>
+                #{{ f.id }} — {{ f.data_frete_fmt }} | {{ f.cliente }} | {{ f.produto }} | {{ f.motorista }}
+              </option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-md-3">
+            <label for="data_descarga" class="form-label">Data de Descarga <span class="text-danger">*</span></label>
+            <input type="date" id="data_descarga" name="data_descarga"
+                   class="form-control form-control-sm"
+                   value="{{ hoje }}" required>
+          </div>
+          <div class="col-md-3">
+            <label class="form-label">Status</label>
+            <select name="status" class="form-select form-select-sm">
+              <option value="em_andamento">Em andamento</option>
+              <option value="finalizado">Finalizado</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Informações do frete selecionado -->
+        <div id="frete-info-box" class="frete-info-box" style="display:none;">
+          <div class="row g-2">
+            <div class="col-6 col-md-3"><span class="fi-label">Cliente:</span> <span id="fi-cliente"></span></div>
+            <div class="col-6 col-md-3"><span class="fi-label">Distribuidora:</span> <span id="fi-distribuidora"></span></div>
+            <div class="col-6 col-md-2"><span class="fi-label">Produto:</span> <span id="fi-produto"></span></div>
+            <div class="col-6 col-md-2"><span class="fi-label">Motorista:</span> <span id="fi-motorista"></span></div>
+            <div class="col-6 col-md-2"><span class="fi-label">Volume NF:</span> <span id="fi-volume"></span> L</div>
+          </div>
+        </div>
+
+        <!-- ── SEÇÃO: Etapas da descarga ── -->
+        <div class="section-header"><i class="bi bi-layers me-1"></i>Etapas</div>
+
+        <div class="row mb-2">
+          <div class="col-6 col-md-3">
+            <label for="total_descargas" class="form-label">Total de etapas</label>
+            <select id="total_descargas" name="total_descargas" class="form-select form-select-sm">
+              <option value="1">1 — Descarga total</option>
+              <option value="2">2 etapas</option>
+              <option value="3">3 etapas</option>
+              <option value="4">4 etapas</option>
+            </select>
+          </div>
+          <div class="col-6 col-md-3">
+            <label for="numero_descarga" class="form-label">Esta etapa é a nº</label>
+            <select id="numero_descarga" name="numero_descarga" class="form-select form-select-sm">
+              <option value="1">1</option>
+              <option value="2">2</option>
+              <option value="3">3</option>
+              <option value="4">4</option>
+            </select>
+          </div>
+          <div class="col-md-6">
+            <label for="observacoes" class="form-label">Observações</label>
+            <input type="text" id="observacoes" name="observacoes"
+                   class="form-control form-control-sm" placeholder="Observações adicionais...">
+          </div>
+        </div>
+
+        <!-- ── SEÇÃO: Medidor Eletrônico ── -->
+        <div class="section-header"><i class="bi bi-display me-1"></i>Medidor Eletrônico</div>
+        <p class="medidor-info mb-2">Informe as leituras do medidor eletrônico antes e depois da descarga.</p>
+
+        <div class="row mb-2">
+          <div class="col-6 col-md-3">
+            <label for="medidor_antes" class="form-label">Medidor Antes</label>
+            <input type="number" id="medidor_antes" name="medidor_antes"
+                   class="form-control form-control-sm"
+                   step="0.001" min="0" placeholder="ex: 5996.000">
+          </div>
+          <div class="col-6 col-md-3">
+            <label for="medidor_depois" class="form-label">Medidor Depois</label>
+            <input type="number" id="medidor_depois" name="medidor_depois"
+                   class="form-control form-control-sm"
+                   step="0.001" min="0" placeholder="ex: 11124.000">
+          </div>
+          <div class="col-6 col-md-3">
+            <label class="form-label">Diferença Medidor</label>
+            <input type="text" id="diff_medidor" class="form-control form-control-sm regua-lookup"
+                   readonly placeholder="calculado automaticamente">
+          </div>
+        </div>
+
+        <!-- ── SEÇÃO: Régua Volumétrica ── -->
+        <div class="section-header"><i class="bi bi-rulers me-1"></i>Régua Volumétrica (15M3 PLENO)</div>
+        <p class="medidor-info mb-2">Informe a altura em centímetros na régua — o volume em litros será calculado automaticamente.</p>
+
+        <div class="row mb-2">
+          <div class="col-6 col-md-2">
+            <label for="regua_antes_cm" class="form-label">Régua Antes (cm)</label>
+            <select id="regua_antes_cm" name="regua_antes_cm" class="form-select form-select-sm">
+              <option value="">— altura —</option>
+              {% for cm in range(1, 138) %}
+              <option value="{{ cm }}">{{ cm }} cm</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-6 col-md-3">
+            <label for="regua_antes_litros" class="form-label">Volume Antes (L)</label>
+            <input type="number" id="regua_antes_litros" name="regua_antes_litros"
+                   class="form-control form-control-sm regua-lookup"
+                   step="0.01" min="0" placeholder="auto-calculado" readonly>
+          </div>
+          <div class="col-6 col-md-2">
+            <label for="regua_depois_cm" class="form-label">Régua Depois (cm)</label>
+            <select id="regua_depois_cm" name="regua_depois_cm" class="form-select form-select-sm">
+              <option value="">— altura —</option>
+              {% for cm in range(1, 138) %}
+              <option value="{{ cm }}">{{ cm }} cm</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-6 col-md-3">
+            <label for="regua_depois_litros" class="form-label">Volume Depois (L)</label>
+            <input type="number" id="regua_depois_litros" name="regua_depois_litros"
+                   class="form-control form-control-sm regua-lookup"
+                   step="0.01" min="0" placeholder="auto-calculado" readonly>
+          </div>
+          <div class="col-6 col-md-2">
+            <label class="form-label">Diferença Régua (L)</label>
+            <input type="text" id="diff_regua" class="form-control form-control-sm regua-lookup"
+                   readonly placeholder="calculado automaticamente">
+          </div>
+        </div>
+
+        <!-- ── SEÇÃO: Temperatura e Densidade ── -->
+        <div class="section-header"><i class="bi bi-thermometer-half me-1"></i>Temperatura e Densidade</div>
+
+        <div class="row mb-3">
+          <div class="col-6 col-md-3">
+            <label for="temperatura" class="form-label">Temperatura (°C)</label>
+            <input type="number" id="temperatura" name="temperatura"
+                   class="form-control form-control-sm"
+                   step="0.1" placeholder="ex: 28.5">
+          </div>
+          <div class="col-6 col-md-3">
+            <label for="densidade" class="form-label">Densidade</label>
+            <input type="number" id="densidade" name="densidade"
+                   class="form-control form-control-sm"
+                   step="0.0001" min="0" placeholder="ex: 0.8350">
+          </div>
+        </div>
+
+        <div class="d-flex gap-2">
+          <button type="submit" class="btn btn-success btn-sm px-4">
+            <i class="bi bi-check-circle me-1"></i> Salvar Descarga
+          </button>
+          <a href="{{ url_for('descargas.lista') }}" class="btn btn-outline-secondary btn-sm">
+            Cancelar
+          </a>
+        </div>
+
+      </form>
+    </div>
+  </div>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const TABELA = {{ tabela_volumetrica | tojson }};
+
+function fmtNum(val, dec) {
+  if (val === null || val === undefined || val === '') return '';
+  val = parseFloat(val);
+  if (isNaN(val)) return '';
+  return val.toLocaleString('pt-BR', {minimumFractionDigits: dec, maximumFractionDigits: dec});
+}
+
+// Pré-preencher info do frete ao selecionar
+document.getElementById('frete_id').addEventListener('change', function() {
+  const opt = this.options[this.selectedIndex];
+  if (!opt || !opt.value) {
+    document.getElementById('frete-info-box').style.display = 'none';
+    return;
+  }
+  document.getElementById('fi-cliente').textContent       = opt.dataset.cliente || '';
+  document.getElementById('fi-distribuidora').textContent = opt.dataset.distribuidora || '';
+  document.getElementById('fi-produto').textContent       = opt.dataset.produto || '';
+  document.getElementById('fi-motorista').textContent     = opt.dataset.motorista || '';
+  document.getElementById('fi-volume').textContent        = fmtNum(opt.dataset.volume, 0);
+  document.getElementById('frete-info-box').style.display = 'block';
+});
+
+// Disparar ao carregar se já há frete pré-selecionado
+window.addEventListener('DOMContentLoaded', function() {
+  const sel = document.getElementById('frete_id');
+  if (sel.value) sel.dispatchEvent(new Event('change'));
+  calcDiffs();
+});
+
+// Lookup automático da régua
+document.getElementById('regua_antes_cm').addEventListener('change', function() {
+  const cm = parseInt(this.value);
+  const litros = TABELA[String(cm)];
+  const inp = document.getElementById('regua_antes_litros');
+  inp.value = litros !== undefined ? litros : '';
+  calcDiffs();
+});
+
+document.getElementById('regua_depois_cm').addEventListener('change', function() {
+  const cm = parseInt(this.value);
+  const litros = TABELA[String(cm)];
+  const inp = document.getElementById('regua_depois_litros');
+  inp.value = litros !== undefined ? litros : '';
+  calcDiffs();
+});
+
+// Diferença medidor
+document.getElementById('medidor_antes').addEventListener('input', calcDiffs);
+document.getElementById('medidor_depois').addEventListener('input', calcDiffs);
+
+function calcDiffs() {
+  // Diferença medidor
+  const ma = parseFloat(document.getElementById('medidor_antes').value);
+  const md = parseFloat(document.getElementById('medidor_depois').value);
+  const diffMedEl = document.getElementById('diff_medidor');
+  if (!isNaN(ma) && !isNaN(md)) {
+    const diff = md - ma;
+    diffMedEl.value = (diff >= 0 ? '+' : '') + fmtNum(diff, 3);
+    diffMedEl.style.color = diff >= 0 ? '#198754' : '#dc3545';
+  } else {
+    diffMedEl.value = '';
+    diffMedEl.style.color = '';
+  }
+
+  // Diferença régua
+  const ra = parseFloat(document.getElementById('regua_antes_litros').value);
+  const rd = parseFloat(document.getElementById('regua_depois_litros').value);
+  const diffRegEl = document.getElementById('diff_regua');
+  if (!isNaN(ra) && !isNaN(rd)) {
+    const diff = rd - ra;
+    diffRegEl.value = (diff >= 0 ? '+' : '') + fmtNum(diff, 2);
+    diffRegEl.style.color = diff >= 0 ? '#198754' : '#dc3545';
+  } else {
+    diffRegEl.value = '';
+    diffRegEl.style.color = '';
+  }
+}
+</script>
+{% endblock %}
