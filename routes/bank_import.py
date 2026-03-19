@@ -102,26 +102,59 @@ def _ensure_descricao_chave():
                 " ADD COLUMN descricao_chave VARCHAR(100) NOT NULL DEFAULT ''"
                 " COMMENT 'Prefixo normalizado da descrição para diferenciar entradas com mesmo CNPJ'"
             )
+            conn.commit()
+            logger.info("_ensure_descricao_chave: coluna descricao_chave criada com sucesso")
+
+        # 3b. Garante que a UNIQUE KEY seja composta (cnpj_cpf, descricao_chave).
+        #     Se a chave antiga for apenas (cnpj_cpf), transações sem CNPJ com
+        #     descrições diferentes não conseguem ter mapeamentos distintos, o que
+        #     impede que as sugestões de forma de recebimento apareçam corretamente.
+        #     Esta verificação roda sempre que o schema ainda não está completo.
+        try:
+            cursor.execute(
+                "SELECT COUNT(*) FROM information_schema.KEY_COLUMN_USAGE"
+                " WHERE TABLE_SCHEMA = DATABASE()"
+                " AND TABLE_NAME = 'bank_supplier_mapping'"
+                " AND CONSTRAINT_NAME = 'uq_bsm_chave'"
+                " AND COLUMN_NAME = 'descricao_chave'"
+            )
+            has_composite_key = cursor.fetchone()[0] > 0
+        except Exception:
+            has_composite_key = True  # assume OK se não puder verificar
+        if not has_composite_key:
             # Remove a constraint única antiga (somente cnpj_cpf) se existir
             try:
                 cursor.execute("ALTER TABLE bank_supplier_mapping DROP INDEX uq_bsm_chave")
+                conn.commit()
             except Exception:
-                pass
+                conn.rollback()
+            # Remove eventuais linhas fantasma com cnpj_cpf='' e descricao_chave=''
+            # que bloqueariam o INSERT de mapeamentos sem CNPJ via ON DUPLICATE KEY
+            try:
+                cursor.execute(
+                    "DELETE FROM bank_supplier_mapping"
+                    " WHERE cnpj_cpf = '' AND descricao_chave = ''"
+                )
+                conn.commit()
+            except Exception:
+                conn.rollback()
             # Cria nova constraint única composta
             try:
                 cursor.execute(
                     "ALTER TABLE bank_supplier_mapping"
                     " ADD UNIQUE KEY uq_bsm_chave (cnpj_cpf, descricao_chave)"
                 )
+                conn.commit()
             except Exception:
-                pass
-            # Remove trigger redundante se existir
-            try:
-                cursor.execute("DROP TRIGGER IF EXISTS tr_learn_supplier_mapping")
-            except Exception:
-                pass
+                conn.rollback()
+            logger.info("_ensure_descricao_chave: UNIQUE KEY composta (cnpj_cpf, descricao_chave) criada")
+
+        # Remove trigger redundante se existir
+        try:
+            cursor.execute("DROP TRIGGER IF EXISTS tr_learn_supplier_mapping")
             conn.commit()
-            logger.info("_ensure_descricao_chave: coluna descricao_chave e índice criados com sucesso")
+        except Exception:
+            conn.rollback()
 
         # 4. tipo_chave ENUM deve incluir 'descricao' (valor usado para transações sem CNPJ).
         #    O ENUM original tem apenas 'cnpj', 'cpf', 'texto'; inserir 'descricao' em
@@ -1229,13 +1262,14 @@ def _conciliar_tx(cursor, conn, tx_id, acao, tipo_tx,
                                             total_conciliacoes, forma_recebimento_id)
                                        VALUES (%s, %s, %s, 1, %s)
                                        ON DUPLICATE KEY UPDATE
-                                           forma_recebimento_id=%s,
+                                           descricao_chave=VALUES(descricao_chave),
+                                           forma_recebimento_id=VALUES(forma_recebimento_id),
                                            fornecedor_id=NULL, titulo_id=NULL,
                                            categoria_id=NULL, subcategoria_id=NULL,
                                            total_conciliacoes=total_conciliacoes+1,
                                            atualizado_em=NOW()""",
                                     (cnpj_save, desc_chave, tipo_chave_save,
-                                     forma_recebimento_id, forma_recebimento_id),
+                                     forma_recebimento_id),
                                 )
                         except mysql.connector.errors.ProgrammingError as _pe:
                             if _pe.errno == 1054:
