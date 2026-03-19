@@ -196,8 +196,14 @@
                    value="{{ descarga.regua_depois_litros if descarga.regua_depois_litros is not none else '' }}">
           </div>
           <div class="col-6 col-md-2">
-            <label class="form-label form-label-sm">Diferença Régua (L)</label>
+            <label class="form-label form-label-sm">Sobra Régua (L)</label>
             <input type="text" id="diff_regua" class="form-control form-control-sm calc-field" readonly>
+          </div>
+        </div>
+        <div class="row mb-2">
+          <div class="col-6 col-md-4">
+            <label class="form-label form-label-sm">Régua vs Medidor (L)</label>
+            <input type="text" id="diff_med_regua" class="form-control form-control-sm calc-field" readonly>
           </div>
         </div>
 
@@ -276,14 +282,21 @@ function calcDiffs() {
     elM.style.color = sobra >= 0 ? '#198754' : '#dc3545';
   } else { elM.value = ''; elM.style.color = ''; }
 
-  const ra  = parseFloat(document.getElementById('regua_antes_litros').value);
-  const rd  = parseFloat(document.getElementById('regua_depois_litros').value);
-  const elR = document.getElementById('diff_regua');
-  if (!isNaN(ra) && !isNaN(rd)) {
-    const d = rd - ra;
-    elR.value = (d >= 0 ? '+' : '') + fmtNum(d, 2);
-    elR.style.color = d >= 0 ? '#198754' : '#dc3545';
-  } else { elR.value = ''; elR.style.color = ''; }
+  const ra   = parseFloat(document.getElementById('regua_antes_litros').value);
+  const rd   = parseFloat(document.getElementById('regua_depois_litros').value);
+  const elR  = document.getElementById('diff_regua');
+  const elMR = document.getElementById('diff_med_regua');
+  if (!isNaN(ra) && !isNaN(rd) && vol > 0) {
+    const sobra_r = rd - vol - ra;
+    elR.value = (sobra_r >= 0 ? '+' : '') + fmtNum(sobra_r, 2);
+    elR.style.color = sobra_r >= 0 ? '#198754' : '#dc3545';
+    if (!isNaN(ma) && !isNaN(md)) {
+      const sobra_m = md - vol - ma;
+      const dmr = sobra_r - sobra_m;
+      elMR.value = (dmr >= 0 ? '+' : '') + fmtNum(dmr, 2);
+      elMR.style.color = dmr >= 0 ? '#198754' : '#dc3545';
+    } else { elMR.value = ''; elMR.style.color = ''; }
+  } else { elR.value = ''; elR.style.color = ''; elMR.value = ''; elMR.style.color = ''; }
 }
 
 window.addEventListener('DOMContentLoaded', calcDiffs);

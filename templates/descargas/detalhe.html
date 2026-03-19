@@ -221,15 +221,26 @@
             <div class="col-4">
               {% if diff_regua is not none %}
               <div class="diff-card {{ 'diff-pos' if diff_regua >= 0 else 'diff-neg' }}">
-                <div class="diff-lbl">Diferença</div>
+                <div class="diff-lbl">Sobra Régua</div>
                 <div class="diff-val">{{ '+' if diff_regua >= 0 else '' }}{{ '{:,.2f}'.format(diff_regua|float).replace(',','.') }}</div>
                 <div style="font-size:.7rem;">litros</div>
               </div>
               {% else %}
-              <div class="diff-card diff-zero"><div class="diff-lbl">Diferença</div><div class="diff-val">—</div></div>
+              <div class="diff-card diff-zero"><div class="diff-lbl">Sobra Régua</div><div class="diff-val">—</div></div>
               {% endif %}
             </div>
           </div>
+          {% if diff_med_regua is not none %}
+          <div class="row g-3 mt-1">
+            <div class="col-12">
+              <div class="diff-card {{ 'diff-pos' if diff_med_regua >= 0 else 'diff-neg' }}" style="max-width:220px;">
+                <div class="diff-lbl">Régua vs Medidor</div>
+                <div class="diff-val">{{ '+' if diff_med_regua >= 0 else '' }}{{ '{:,.2f}'.format(diff_med_regua|float).replace(',','.') }}</div>
+                <div style="font-size:.7rem;">litros</div>
+              </div>
+            </div>
+          </div>
+          {% endif %}
         </div>
       </div>
 

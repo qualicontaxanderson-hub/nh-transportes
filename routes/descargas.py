@@ -394,9 +394,9 @@ def _gerar_mensagem_whatsapp(descarga):
         if reg_depois_l is not None:
             cm_str = f" ({reg_depois_cm} cm)" if reg_depois_cm else ""
             linhas.append(f"  Depois: {_fmt_num(reg_depois_l)}{cm_str}")
-        if reg_antes_l is not None and reg_depois_l is not None:
-            diff_reg = float(reg_depois_l) - float(reg_antes_l)
-            linhas.append(f"  Diferença: {_diff_sign(diff_reg)}")
+        if reg_antes_l is not None and reg_depois_l is not None and volume_ref is not None:
+            diff_reg = float(reg_depois_l) - float(volume_ref) - float(reg_antes_l)
+            linhas.append(f"  Sobra: {_diff_sign(diff_reg)}")
 
     obs = d.get('observacoes')
     if obs:
@@ -533,7 +533,13 @@ def lista():
                     d['diff_medidor'] = None
                 ra = d.get('regua_antes_litros')
                 rd = d.get('regua_depois_litros')
-                d['diff_regua'] = (float(rd) - float(ra)) if (ra is not None and rd is not None) else None
+                if ra is not None and rd is not None and vol is not None:
+                    d['diff_regua'] = float(rd) - float(vol) - float(ra)
+                else:
+                    d['diff_regua'] = None
+                dm = d['diff_medidor']
+                dr = d['diff_regua']
+                d['diff_med_regua'] = (dr - dm) if (dm is not None and dr is not None) else None
 
         _enrich(descargas_finalizadas)
         _enrich(descargas_fracionadas)
@@ -798,8 +804,14 @@ def detalhe(id):
         diff_medidor = float(descarga['medidor_depois']) - float(vol) - float(descarga['medidor_antes'])
 
     diff_regua = None
-    if descarga.get('regua_antes_litros') is not None and descarga.get('regua_depois_litros') is not None:
-        diff_regua = float(descarga['regua_depois_litros']) - float(descarga['regua_antes_litros'])
+    if (descarga.get('regua_antes_litros') is not None
+            and descarga.get('regua_depois_litros') is not None
+            and vol is not None):
+        diff_regua = float(descarga['regua_depois_litros']) - float(vol) - float(descarga['regua_antes_litros'])
+
+    diff_med_regua = None
+    if diff_medidor is not None and diff_regua is not None:
+        diff_med_regua = diff_regua - diff_medidor
 
     return render_template(
         'descargas/detalhe.html',
@@ -808,6 +820,7 @@ def detalhe(id):
         mensagem=mensagem,
         diff_medidor=diff_medidor,
         diff_regua=diff_regua,
+        diff_med_regua=diff_med_regua,
     )
 
 
