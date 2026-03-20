@@ -3250,6 +3250,15 @@ def api_reimportar_duplicatas():
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
     ph = ','.join(['%s'] * len(ids))
+    # Count matching rows before the UPDATE.
+    # cursor.rowcount only reports rows that were actually *changed*, so transactions
+    # already in 'pendente' status would always count as 0 even though they matched.
+    cursor.execute(
+        f"SELECT COUNT(*) AS cnt FROM bank_transactions WHERE id IN ({ph}) AND status IN ('ignorado', 'pendente')",
+        ids,
+    )
+    row = cursor.fetchone()
+    reativados = row['cnt'] if row else 0
     cursor.execute(
         f"""UPDATE bank_transactions
                SET status='pendente', conciliado_em=NULL, conciliado_por=NULL
@@ -3257,7 +3266,6 @@ def api_reimportar_duplicatas():
                AND status IN ('ignorado', 'pendente')""",
         ids,
     )
-    reativados = cursor.rowcount
     conn.commit()
     cursor.close()
     conn.close()
