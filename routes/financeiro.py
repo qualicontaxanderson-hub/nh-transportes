@@ -1986,11 +1986,14 @@ def transferencias():
     f_data_ini  = request.args.get('data_ini', '').strip()
     f_data_fim  = request.args.get('data_fim', '').strip()
     f_descricao = request.args.get('f_descricao', '').strip()
-    f_contas    = [c for c in request.args.getlist('account_id') if c and c.strip()]
+    # Accept both 'conta_id' (new standard) and legacy 'account_id'
+    f_contas    = [c for c in request.args.getlist('conta_id') if c and c.strip()]
+    if not f_contas:
+        f_contas = [c for c in request.args.getlist('account_id') if c and c.strip()]
     f_empresas  = [e for e in request.args.getlist('empresa_id') if e and e.strip()]
     # Compatibilidade com URLs antigas (parâmetro único)
     if not f_contas:
-        _v = request.args.get('account_id', '').strip()
+        _v = request.args.get('conta_id', request.args.get('account_id', '')).strip()
         if _v:
             f_contas = [_v]
     if not f_empresas:
@@ -2072,6 +2075,10 @@ def transferencias():
             ph = ','.join(['%s'] * len(f_contas))
             where.append(f"(bt.account_id IN ({ph}) OR bt_orig.account_id IN ({ph}))")
             params += f_contas + f_contas
+        if f_empresas:
+            ph_e = ','.join(['%s'] * len(f_empresas))
+            where.append(f"(ba_dest.cliente_id IN ({ph_e}) OR ba_orig.cliente_id IN ({ph_e}))")
+            params += f_empresas + f_empresas
         if f_descricao:
             where.append("bt_orig.descricao LIKE %s")
             params.append(f'%{f_descricao}%')
@@ -2102,6 +2109,8 @@ def transferencias():
                 FROM bank_transactions bt
                 LEFT JOIN bank_transactions bt_orig
                        ON bt_orig.id = CAST(SUBSTRING(bt.hash_dedup, 10) AS UNSIGNED)
+                INNER JOIN bank_accounts ba_dest ON ba_dest.id = bt.account_id
+                LEFT  JOIN bank_accounts ba_orig ON ba_orig.id = bt_orig.account_id
                 WHERE {where_sql}""",
             params,
         )
