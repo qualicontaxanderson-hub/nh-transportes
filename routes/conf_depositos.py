@@ -254,11 +254,40 @@ def _fetch_caixa_deposits(conn, data_inicio, data_fim, empresa_ids):
     return rows
 
 
+def _get_contas_bancarias(conn, forma_ids):
+    """
+    Contas bancárias (bank_accounts) que têm créditos OFX classificados
+    com uma das formas de depósito vinculadas. Usado para popular o filtro de conta.
+    """
+    if not forma_ids:
+        return []
+    cur = conn.cursor(dictionary=True)
+    ph = ','.join(['%s'] * len(forma_ids))
+    try:
+        cur.execute(
+            f"""
+            SELECT DISTINCT ba.id,
+                   COALESCE(ba.apelido, ba.banco_nome) AS nome
+              FROM bank_accounts ba
+              JOIN bank_transactions bt ON bt.account_id = ba.id
+             WHERE bt.tipo = 'CREDIT'
+               AND bt.forma_recebimento_id IN ({ph})
+             ORDER BY nome
+            """,
+            list(forma_ids),
+        )
+        rows = cur.fetchall()
+    except Exception:
+        rows = []
+    cur.close()
+    return rows
+
+
 def _fetch_bank_deposits(conn, data_inicio, data_fim, forma_ids):
     """
     Créditos bancários individuais onde forma_recebimento_id é um dos
     IDs vinculados (ex: "Depósito em Dinheiro" ou "Depósito em Cheque").
-    Retorna uma linha por transação para mostrar Número Depósito e Conta Corrente.
+    Retorna uma linha por transação incluindo account_id para filtro de conta.
     """
     if not forma_ids:
         return []
@@ -272,6 +301,7 @@ def _fetch_bank_deposits(conn, data_inicio, data_fim, forma_ids):
                    bt.valor,
                    bt.descricao,
                    bt.forma_recebimento_id,
+                   bt.account_id,
                    COALESCE(ba.apelido, ba.banco_nome) AS conta_nome,
                    ba.cliente_id                       AS banco_empresa_id
               FROM bank_transactions bt
@@ -290,20 +320,26 @@ def _fetch_bank_deposits(conn, data_inicio, data_fim, forma_ids):
     return rows
 
 
-def _build_report(vinculos_list, caixa_rows, bank_rows):
+def _build_report(vinculos_list, caixa_rows, bank_rows, conta_ids=None):
     """
-    Para cada empresa com vínculo produz seções por tipo_deposito (DINHEIRO / CHEQUE),
-    cada uma contendo linhas cronológicas com Valor Sistema (caixa) e Valor Depósito
-    (banco) em colunas separadas, com saldo acumulado.
+    Para cada empresa com vínculo produz seções por tipo_deposito (DINHEIRO / CHEQUE).
+    Cada linha pode ser do tipo 'caixa' (valor lançado no fechamento) ou 'banco'
+    (crédito OFX individual), com saldo acumulado corrente.
+
+    conta_ids: set/list de account_id para filtrar créditos bancários (None = todos).
 
     Estrutura de cada linha:
+      tipo_row      : 'caixa' | 'banco'
       data          : DD/MM/YYYY
-      dia_semana    : str
-      val_sistema   : float  (caixa — 0 se não há lançamento do caixa nesta data)
-      val_deposito  : float  (banco — soma de todos os créditos OFX nesta data)
+      dia_semana    : str  (preenchido apenas em linhas caixa)
+      val_sistema   : float  (> 0 em linhas caixa)
+      conta         : str    (preenchido em linhas banco)
+      val_deposito  : float  (> 0 em linhas banco)
       saldo         : float acumulado (banco − caixa)
       saldo_pos/neg : bool
     """
+    conta_ids_set = set(int(c) for c in conta_ids) if conta_ids else None
+
     # ── índice caixa: (empresa_id, tipo_deposito, 'YYYY-MM-DD') → total
     caixa_idx = {}
     for r in caixa_rows:
@@ -313,13 +349,20 @@ def _build_report(vinculos_list, caixa_rows, bank_rows):
         tipo = r.get('tipo_deposito', 'DINHEIRO')
         caixa_idx[(int(r['empresa_id']), tipo, str(d))] = float(r['total_caixa'] or 0)
 
-    # ── índice banco: forma_recebimento_id → {data → total_valor}
-    bank_by_forma = defaultdict(lambda: defaultdict(float))
+    # ── índice banco: forma_recebimento_id → date → list of transactions
+    bank_by_forma = defaultdict(lambda: defaultdict(list))
     for r in bank_rows:
+        # Apply conta filter if set
+        if conta_ids_set and int(r.get('account_id') or 0) not in conta_ids_set:
+            continue
         d = r['data_transacao']
         if hasattr(d, 'isoformat'):
             d = d.isoformat()
-        bank_by_forma[int(r['forma_recebimento_id'])][str(d)] += float(r['valor'] or 0)
+        bank_by_forma[int(r['forma_recebimento_id'])][str(d)].append({
+            'valor':      float(r['valor'] or 0),
+            'conta_nome': r.get('conta_nome') or '',
+            'account_id': r.get('account_id'),
+        })
 
     # ── agrupar vínculos por (empresa_id, tipo_deposito)
     vinculos_by_empresa_tipo = defaultdict(list)
@@ -345,7 +388,7 @@ def _build_report(vinculos_list, caixa_rows, bank_rows):
             if not vincs:
                 continue
 
-            forma_ids  = [int(v['forma_recebimento_id']) for v in vincs]
+            forma_ids   = [int(v['forma_recebimento_id']) for v in vincs]
             forma_nomes = [v['forma_nome'] for v in vincs]
 
             # Datas com atividade no caixa para este empresa+tipo
@@ -377,31 +420,42 @@ def _build_report(vinculos_list, caixa_rows, bank_rows):
             linhas      = []
 
             for d in all_dates:
-                val_sistema  = caixa_idx.get((empresa_id, tipo, d), 0.0)
-                val_deposito = sum(
-                    bank_by_forma.get(fid, {}).get(d, 0.0)
-                    for fid in forma_ids
-                )
-
-                if not val_sistema and not val_deposito:
-                    continue
-
-                saldo       += val_deposito - val_sistema
-                total_caixa += val_sistema
-                total_banco += val_deposito
-
                 d_obj      = _parse_iso(d)
                 dia_semana = _DIAS_PT[d_obj.weekday()] if d_obj else ''
 
-                linhas.append({
-                    'data':         _fmt_date(d),
-                    'dia_semana':   dia_semana,
-                    'val_sistema':  val_sistema,
-                    'val_deposito': val_deposito,
-                    'saldo':        saldo,
-                    'saldo_pos':    saldo > 0.005,
-                    'saldo_neg':    saldo < -0.005,
-                })
+                # ── linha CAIXA (subtrai do saldo)
+                val_sistema = caixa_idx.get((empresa_id, tipo, d), 0.0)
+                if val_sistema:
+                    saldo       -= val_sistema
+                    total_caixa += val_sistema
+                    linhas.append({
+                        'tipo_row':    'caixa',
+                        'data':        _fmt_date(d),
+                        'dia_semana':  dia_semana,
+                        'val_sistema': val_sistema,
+                        'conta':       '',
+                        'val_deposito': 0.0,
+                        'saldo':       saldo,
+                        'saldo_pos':   saldo > 0.005,
+                        'saldo_neg':   saldo < -0.005,
+                    })
+
+                # ── linhas BANCO (somam ao saldo), uma por transação
+                for fid in forma_ids:
+                    for tx in bank_by_forma.get(fid, {}).get(d, []):
+                        saldo       += tx['valor']
+                        total_banco += tx['valor']
+                        linhas.append({
+                            'tipo_row':    'banco',
+                            'data':        _fmt_date(d),
+                            'dia_semana':  '',
+                            'val_sistema': 0.0,
+                            'conta':       tx['conta_nome'],
+                            'val_deposito': tx['valor'],
+                            'saldo':       saldo,
+                            'saldo_pos':   saldo > 0.005,
+                            'saldo_neg':   saldo < -0.005,
+                        })
 
             empresa_total_caixa += total_caixa
             empresa_total_banco += total_banco
@@ -445,6 +499,7 @@ def conf_depositos():
         data_inicio, data_fim = _default_period()
 
     empresa_ids = [e for e in args.getlist('empresa_ids[]') if e]
+    conta_ids   = [c for c in args.getlist('conta_ids[]')   if c]
 
     conn = get_db_connection()
     try:
@@ -475,6 +530,9 @@ def conf_depositos():
             for v in vinculos_filtered
         })
 
+        # Contas bancárias disponíveis para filtro (baseado nas formas vinculadas)
+        contas_bancarias = _get_contas_bancarias(conn, linked_forma_ids or [0])
+
         caixa_rows = _fetch_caixa_deposits(
             conn, data_inicio, data_fim,
             active_empresa_ids or linked_empresa_ids or [0],
@@ -484,7 +542,10 @@ def conf_depositos():
             linked_forma_ids or [0],
         )
 
-        sections = _build_report(vinculos_filtered, caixa_rows, bank_rows)
+        sections = _build_report(
+            vinculos_filtered, caixa_rows, bank_rows,
+            conta_ids=conta_ids or None,
+        )
 
     finally:
         conn.close()
@@ -495,9 +556,11 @@ def conf_depositos():
         empresas=empresas,
         deposit_formas=deposit_formas,
         vinculos_list=vinculos_list,
+        contas_bancarias=contas_bancarias,
         data_inicio=data_inicio,
         data_fim=data_fim,
         empresa_ids=empresa_ids,
+        conta_ids=conta_ids,
     )
 
 

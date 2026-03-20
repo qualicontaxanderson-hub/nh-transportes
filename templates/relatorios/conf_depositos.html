@@ -38,8 +38,7 @@
 .row-grand .saldo-neg,
 .row-grand .saldo-zero { color: #fff !important; }
 .dia-semana { font-size: .68rem; color: #888; font-weight: 600; margin-left: .15rem; }
-.col-sistema  { background: #e8f0fb; }
-.col-deposito { background: #f0faf0; }
+.row-caixa td { background-color: #e8f0fb !important; }
 </style>
 {% endblock %}
 
@@ -104,6 +103,21 @@
             {% for emp in empresas %}
             <option value="{{ emp.id }}" {% if emp.id|string in empresa_ids %}selected{% endif %}>
               {{ emp.nome }}
+            </option>
+            {% endfor %}
+          </select>
+          <div class="form-text" style="font-size:.7rem;"><i class="bi bi-info-circle me-1"></i>Ctrl+clique p/ múltiplos</div>
+        </div>
+
+        <div class="col-12 col-sm-6 col-md-3">
+          <label class="form-label small fw-semibold mb-1">
+            <i class="bi bi-bank me-1 text-primary"></i>Conta Bancária
+          </label>
+          <select name="conta_ids[]" class="form-select form-select-sm" multiple
+                  style="height:auto; min-height:2.1rem;">
+            {% for conta in contas_bancarias %}
+            <option value="{{ conta.id }}" {% if conta.id|string in conta_ids %}selected{% endif %}>
+              {{ conta.nome }}
             </option>
             {% endfor %}
           </select>
@@ -200,22 +214,27 @@
           <thead class="table-dark">
             <tr>
               <th style="width:100px;">Data</th>
-              <th class="text-end col-sistema"  style="width:120px;">Valor Sistema</th>
-              <th class="text-end col-deposito" style="width:120px;">Valor Depósito</th>
+              <th class="text-end" style="width:120px;">Valor Sistema</th>
+              <th style="width:160px;">Conta</th>
+              <th class="text-end" style="width:120px;">Valor Depósito</th>
               <th class="text-end" style="width:115px;">Saldo</th>
             </tr>
           </thead>
           <tbody>
             {% for linha in sub.linhas %}
-            <tr>
+            <tr{% if linha.tipo_row == 'caixa' %} class="row-caixa"{% endif %}>
               <td>
                 {{ linha.data }}
                 {% if linha.dia_semana %}<span class="dia-semana">{{ linha.dia_semana }}</span>{% endif %}
+                {% if linha.tipo_row == 'caixa' %}
+                  <span class="badge bg-secondary ms-1" style="font-size:.6rem;">caixa</span>
+                {% endif %}
               </td>
-              <td class="text-end col-sistema">
+              <td class="text-end">
                 {% if linha.val_sistema %}{{ linha.val_sistema | fmtmoney }}{% else %}<span class="text-muted">—</span>{% endif %}
               </td>
-              <td class="text-end col-deposito">
+              <td class="small text-muted">{{ linha.conta or '—' }}</td>
+              <td class="text-end">
                 {% if linha.val_deposito %}{{ linha.val_deposito | fmtmoney }}{% else %}<span class="text-muted">—</span>{% endif %}
               </td>
               <td class="text-end {% if linha.saldo_pos %}saldo-pos{% elif linha.saldo_neg %}saldo-neg{% else %}saldo-zero{% endif %}">
@@ -227,8 +246,9 @@
             <!-- Sub-total -->
             <tr class="row-grand">
               <td class="fw-bold">TOTAL {{ sub.tipo_label | upper }}</td>
-              <td class="text-end fw-bold col-sistema">{{ sub.total_caixa | fmtmoney }}</td>
-              <td class="text-end fw-bold col-deposito">{{ sub.total_banco | fmtmoney }}</td>
+              <td class="text-end fw-bold">{{ sub.total_caixa | fmtmoney }}</td>
+              <td></td>
+              <td class="text-end fw-bold">{{ sub.total_banco | fmtmoney }}</td>
               <td class="text-end fw-bold {% if sub.saldo_final > 0.005 %}saldo-pos{% elif sub.saldo_final < -0.005 %}saldo-neg{% else %}saldo-zero{% endif %}">
                 {{ sub.saldo_final | fmtmoney }}
               </td>
@@ -256,8 +276,9 @@
       <tbody>
         <tr class="row-grand">
           <td class="fw-bold">TOTAL GERAL</td>
-          <td class="text-end fw-bold col-sistema">Caixa: {{ grand_caixa | fmtmoney }}</td>
-          <td class="text-end fw-bold col-deposito">Banco: {{ grand_banco | fmtmoney }}</td>
+          <td class="text-end fw-bold">Caixa: {{ grand_caixa | fmtmoney }}</td>
+          <td></td>
+          <td class="text-end fw-bold">Banco: {{ grand_banco | fmtmoney }}</td>
           <td class="text-end fw-bold {% if grand_saldo > 0.005 %}saldo-pos{% elif grand_saldo < -0.005 %}saldo-neg{% else %}saldo-zero{% endif %}">
             Saldo: {{ grand_saldo | fmtmoney }}
           </td>
@@ -267,8 +288,8 @@
   </div>
 
   <div class="small text-muted mb-4 d-flex flex-wrap gap-3">
-    <span><span style="display:inline-block;width:12px;height:12px;background:#e8f0fb;border:1px solid #ccc;"></span> Coluna azul = Valor Sistema (lançamento do caixa)</span>
-    <span><span style="display:inline-block;width:12px;height:12px;background:#f0faf0;border:1px solid #ccc;"></span> Coluna verde = Valor Depósito (crédito bancário OFX)</span>
+    <span><span style="display:inline-block;width:12px;height:12px;background:#e8f0fb;border:1px solid #ccc;"></span> Linhas azuis = lançamento do caixa (Valor Sistema)</span>
+    <span>Linhas brancas = crédito bancário OFX (Valor Depósito + Conta)</span>
     <span><strong class="text-success">Saldo verde</strong> = banco recebeu mais que o caixa registrou.</span>
     <span><strong class="text-danger">Saldo vermelho</strong> = banco aguarda depósito registrado no caixa.</span>
   </div>
