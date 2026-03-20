@@ -23,11 +23,13 @@
 }
 .tbl-dep td { padding: .25rem .45rem; vertical-align: middle; }
 .row-caixa td { background-color: #e8f0fb !important; }
-.row-total { background: #e9ecef; font-weight: 700; }
 .row-grand { background: #1D63A5; color: #fff; font-weight: 700; }
 .saldo-pos  { color: #198754; font-weight: 700; }
 .saldo-neg  { color: #dc3545; font-weight: 700; }
 .saldo-zero { color: #6c757d; font-weight: 700; }
+.row-grand .saldo-pos,
+.row-grand .saldo-neg,
+.row-grand .saldo-zero { color: #fff !important; }
 .dia-semana { font-size: .68rem; color: #555; font-weight: 600; margin-left: .15rem; }
 </style>
 {% endblock %}
@@ -49,9 +51,13 @@
     <div class="hero-icon"><i class="bi bi-bank2"></i></div>
     <div class="flex-grow-1">
       <h4 class="mb-0 fw-bold">Conferência de Depósitos</h4>
-      <p class="mb-0 opacity-75 small">Cruza depósitos do Fechamento de Caixa com créditos bancários importados. Saldo = banco − caixa.</p>
+      <p class="mb-0 opacity-75 small">
+        Cruza depósitos do Fechamento de Caixa (Espécie, Cheque à Vista, Cheque a Prazo)
+        com os créditos bancários importados (Depósito em Dinheiro / Depósito em Cheque).
+        Saldo = banco − caixa.
+      </p>
     </div>
-    <div class="d-flex gap-2">
+    <div>
       <button class="btn btn-light btn-sm" data-bs-toggle="modal" data-bs-target="#modalVinculos">
         <i class="bi bi-link-45deg me-1"></i> Vínculos
       </button>
@@ -123,8 +129,9 @@
   {% if not vinculos_list %}
   <div class="alert alert-warning">
     <i class="bi bi-exclamation-triangle me-2"></i>
-    Nenhuma empresa está vinculada a uma conta bancária. Clique em
-    <strong>Vínculos</strong> (no cabeçalho) para configurar.
+    Nenhum vínculo configurado. Clique em <strong>Vínculos</strong> (no cabeçalho) e
+    associe cada empresa às formas de recebimento de depósito (ex: <em>Depósito em Dinheiro</em>,
+    <em>Depósito em Cheque</em>).
   </div>
 
   {% elif not sections or sections | selectattr('linhas') | list | length == 0 %}
@@ -138,12 +145,12 @@
   {% for sec in sections %}
   {% if sec.linhas %}
   <div class="mb-4">
-    <div class="sec-header d-flex justify-content-between align-items-center">
+    <div class="sec-header d-flex justify-content-between align-items-center flex-wrap gap-1">
       <span>
         <i class="bi bi-bank me-2"></i>{{ sec.empresa_nome }}
-        {% if sec.contas %}
+        {% if sec.formas %}
         <span class="opacity-75 small fw-normal ms-2">
-          — {{ sec.contas | join(' / ') }}
+          — {{ sec.formas | join(' / ') }}
         </span>
         {% endif %}
       </span>
@@ -152,19 +159,16 @@
         &nbsp;|&nbsp;
         Banco: <strong>{{ sec.total_banco | fmtmoney }}</strong>
         &nbsp;|&nbsp;
-        Saldo:
-        <strong class="{% if sec.saldo_final > 0.005 %}text-warning{% elif sec.saldo_final < -0.005 %}text-warning{% endif %}">
-          {{ sec.saldo_final | fmtmoney }}
-        </strong>
+        Saldo: <strong>{{ sec.saldo_final | fmtmoney }}</strong>
       </span>
     </div>
     <div class="table-responsive">
       <table class="table table-bordered table-sm tbl-dep mb-0">
         <thead class="table-dark">
           <tr>
-            <th style="width:95px;">Data Venda</th>
+            <th style="width:100px;">Data Venda</th>
             <th class="text-end" style="width:110px;">Valor</th>
-            <th style="width:100px;">Data Depósito</th>
+            <th style="width:105px;" class="text-center">Data Depósito</th>
             <th>Número Depósito</th>
             <th style="width:160px;">Conta Corrente</th>
             <th class="text-end" style="width:115px;">Saldo</th>
@@ -181,8 +185,9 @@
               {% endif %}
             </td>
             <td class="text-end">{{ linha.valor | fmtmoney }}</td>
-            <td class="text-center">{{ linha.data_deposito or '—' }}</td>
-            <td class="small text-muted">{{ linha.num_deposito or '—' }}</td>
+            <td class="text-center small text-muted">{{ linha.data_deposito or '—' }}</td>
+            <td class="small text-muted" style="max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"
+                title="{{ linha.num_deposito }}">{{ linha.num_deposito or '—' }}</td>
             <td class="small text-muted">{{ linha.conta_corrente or '—' }}</td>
             <td class="text-end {% if linha.saldo_pos %}saldo-pos{% elif linha.saldo_neg %}saldo-neg{% else %}saldo-zero{% endif %}">
               {{ linha.saldo | fmtmoney }}
@@ -191,13 +196,13 @@
           {% endfor %}
 
           <tr class="row-grand">
-            <td colspan="1" class="fw-bold">TOTAL {{ sec.empresa_nome }}</td>
+            <td class="fw-bold">TOTAL {{ sec.empresa_nome | truncate(25, true) }}</td>
             <td class="text-end fw-bold" colspan="4">
-              Caixa {{ sec.total_caixa | fmtmoney }} &nbsp;/&nbsp;
+              Caixa {{ sec.total_caixa | fmtmoney }}
+              &nbsp;/&nbsp;
               Banco {{ sec.total_banco | fmtmoney }}
             </td>
-            <td class="text-end fw-bold {% if sec.saldo_final > 0.005 %}saldo-pos{% elif sec.saldo_final < -0.005 %}saldo-neg{% else %}saldo-zero{% endif %}"
-                style="color:inherit!important;">
+            <td class="text-end fw-bold {% if sec.saldo_final > 0.005 %}saldo-pos{% elif sec.saldo_final < -0.005 %}saldo-neg{% else %}saldo-zero{% endif %}">
               {{ sec.saldo_final | fmtmoney }}
             </td>
           </tr>
@@ -209,20 +214,18 @@
   {% endfor %}
 
   <!-- Resumo geral -->
-  <div class="table-responsive mb-4">
+  {% set grand_caixa = sections | map(attribute='total_caixa') | sum %}
+  {% set grand_banco = sections | map(attribute='total_banco') | sum %}
+  {% set grand_saldo = sections | map(attribute='saldo_final') | sum %}
+  <div class="table-responsive mb-3">
     <table class="table table-bordered table-sm tbl-dep">
       <tbody>
         <tr class="row-grand">
           <td class="fw-bold">TOTAL GERAL</td>
-          <td class="text-end fw-bold">
-            Caixa: {{ sections | map(attribute='total_caixa') | sum | fmtmoney }}
-          </td>
-          <td class="text-end fw-bold">
-            Banco: {{ sections | map(attribute='total_banco') | sum | fmtmoney }}
-          </td>
-          <td class="text-end fw-bold {% if (sections | map(attribute='saldo_final') | sum) > 0.005 %}saldo-pos{% elif (sections | map(attribute='saldo_final') | sum) < -0.005 %}saldo-neg{% else %}saldo-zero{% endif %}"
-              style="color:inherit!important;">
-            Saldo: {{ sections | map(attribute='saldo_final') | sum | fmtmoney }}
+          <td class="text-end fw-bold">Caixa: {{ grand_caixa | fmtmoney }}</td>
+          <td class="text-end fw-bold">Banco: {{ grand_banco | fmtmoney }}</td>
+          <td class="text-end fw-bold {% if grand_saldo > 0.005 %}saldo-pos{% elif grand_saldo < -0.005 %}saldo-neg{% else %}saldo-zero{% endif %}">
+            Saldo: {{ grand_saldo | fmtmoney }}
           </td>
         </tr>
       </tbody>
@@ -232,9 +235,9 @@
   <div class="small text-muted mb-4">
     <span class="badge bg-secondary me-1" style="font-size:.68rem;">caixa</span>
     Linhas azul-claras = depósito registrado no Fechamento de Caixa (subtrai do saldo).
-    Linhas brancas = crédito importado do extrato bancário (soma ao saldo).
-    <strong>Saldo verde</strong> = banco recebeu mais que o caixa registrou.
-    <strong>Saldo vermelho</strong> = banco ainda não recebeu tudo o que foi registrado no caixa.
+    Linhas brancas = crédito bancário importado do extrato OFX (soma ao saldo).
+    <strong class="text-success">Saldo verde</strong> = banco recebeu mais do que o caixa registrou.
+    <strong class="text-danger">Saldo vermelho</strong> = banco ainda aguarda depósito registrado no caixa.
   </div>
 
   {% endif %}
@@ -247,15 +250,17 @@
     <div class="modal-content">
       <div class="modal-header" style="background:#1D63A5;color:#fff;">
         <h5 class="modal-title" id="labelModalVinculos">
-          <i class="bi bi-link-45deg me-2"></i>Vínculos Empresa → Conta Bancária
+          <i class="bi bi-link-45deg me-2"></i>Vínculos Empresa → Forma de Depósito
         </h5>
         <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
       </div>
       <div class="modal-body">
         <p class="small text-muted mb-3">
-          Vincule cada empresa ao(s) banco(s) que recebem seus depósitos.
-          O saldo será calculado comparando os depósitos do caixa desta empresa
-          com os créditos bancários nessa conta.
+          Associe cada empresa do Fechamento de Caixa à(s) forma(s) de recebimento bancário
+          que correspondem a depósitos (ex: <strong>Depósito em Dinheiro</strong>,
+          <strong>Depósito em Cheque</strong>). As regras do banco
+          (<a href="{{ url_for('conciliacao_regras.lista') }}" target="_blank">banco/regras</a>)
+          classificam os créditos OFX nessas formas automaticamente.
         </p>
 
         <span id="msg-vinculos" class="small d-block mb-2"></span>
@@ -263,7 +268,7 @@
         <!-- Formulário para adicionar vínculo -->
         <div class="row g-2 align-items-end mb-3 p-2 border rounded bg-light">
           <div class="col-12 col-md-4">
-            <label class="form-label small fw-semibold mb-1">Empresa</label>
+            <label class="form-label small fw-semibold mb-1">Empresa (Fechamento de Caixa)</label>
             <select id="sel-nova-empresa" class="form-select form-select-sm">
               <option value="">— Selecione —</option>
               {% for emp in empresas %}
@@ -272,13 +277,11 @@
             </select>
           </div>
           <div class="col-12 col-md-5">
-            <label class="form-label small fw-semibold mb-1">Conta Bancária</label>
-            <select id="sel-nova-conta" class="form-select form-select-sm">
+            <label class="form-label small fw-semibold mb-1">Forma de Recebimento (Depósito)</label>
+            <select id="sel-nova-forma" class="form-select form-select-sm">
               <option value="">— Selecione —</option>
-              {% for ba in banco_accounts %}
-              <option value="{{ ba.id }}" data-empresa="{{ ba.cliente_id }}">
-                {{ ba.empresa_nome or '—' }} — {{ ba.conta_nome }}
-              </option>
+              {% for fr in deposit_formas %}
+              <option value="{{ fr.id }}">{{ fr.nome }}</option>
               {% endfor %}
             </select>
           </div>
@@ -290,23 +293,23 @@
         </div>
 
         <!-- Lista de vínculos existentes -->
-        <table class="table table-sm table-bordered" id="tbl-vinculos" style="font-size:.82rem;">
+        <table class="table table-sm table-bordered" style="font-size:.82rem;">
           <thead class="table-dark">
             <tr>
               <th>Empresa</th>
-              <th>Conta Bancária</th>
+              <th>Forma de Recebimento</th>
               <th class="text-center" style="width:70px;">Remover</th>
             </tr>
           </thead>
           <tbody id="tbl-vinculos-body">
             {% for v in vinculos_list %}
-            <tr id="vinc-row-{{ v.empresa_id }}-{{ v.bank_account_id }}">
+            <tr id="vinc-row-{{ v.empresa_id }}-{{ v.forma_recebimento_id }}">
               <td>{{ v.empresa_nome }}</td>
-              <td>{{ v.conta_nome or v.banco_nome }}</td>
+              <td>{{ v.forma_nome }}</td>
               <td class="text-center">
                 <button class="btn btn-sm btn-outline-danger btn-desvincular"
                         data-empresa="{{ v.empresa_id }}"
-                        data-conta="{{ v.bank_account_id }}"
+                        data-forma="{{ v.forma_recebimento_id }}"
                         title="Remover vínculo">
                   <i class="bi bi-trash"></i>
                 </button>
@@ -314,9 +317,7 @@
             </tr>
             {% else %}
             <tr id="vinculos-empty-row">
-              <td colspan="3" class="text-center text-muted small">
-                Nenhum vínculo cadastrado.
-              </td>
+              <td colspan="3" class="text-center text-muted small">Nenhum vínculo cadastrado.</td>
             </tr>
             {% endfor %}
           </tbody>
@@ -368,71 +369,68 @@
   // Adicionar vínculo
   document.getElementById('btn-vincular-add').addEventListener('click', async function () {
     const empresaId = parseInt(document.getElementById('sel-nova-empresa').value) || null;
-    const contaId   = parseInt(document.getElementById('sel-nova-conta').value)   || null;
-    if (!empresaId || !contaId) {
-      showMsg('Selecione empresa e conta bancária.', false);
+    const formaId   = parseInt(document.getElementById('sel-nova-forma').value)   || null;
+    if (!empresaId || !formaId) {
+      showMsg('Selecione empresa e forma de recebimento.', false);
       return;
     }
     try {
       const res = await fetch('{{ url_for("conf_depositos.vincular_deposito") }}', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ empresa_id: empresaId, bank_account_id: contaId }),
+        body: JSON.stringify({ empresa_id: empresaId, forma_recebimento_id: formaId }),
       });
       const json = await res.json();
       if (!json.success) { showMsg(json.message || 'Erro.', false); return; }
 
-      // Remove linha "vazio" se existir
       const emptyRow = document.getElementById('vinculos-empty-row');
       if (emptyRow) emptyRow.remove();
 
-      // Pega textos dos selects
-      const selEmp  = document.getElementById('sel-nova-empresa');
-      const selCont = document.getElementById('sel-nova-conta');
-      const empNome  = selEmp.options[selEmp.selectedIndex].text;
-      const contNome = selCont.options[selCont.selectedIndex].text;
+      const selEmp   = document.getElementById('sel-nova-empresa');
+      const selForma = document.getElementById('sel-nova-forma');
+      const empNome   = selEmp.options[selEmp.selectedIndex].text;
+      const formaNome = selForma.options[selForma.selectedIndex].text;
 
-      const rowId = `vinc-row-${empresaId}-${contaId}`;
+      const rowId = `vinc-row-${empresaId}-${formaId}`;
       if (!document.getElementById(rowId)) {
         const tbody = document.getElementById('tbl-vinculos-body');
         const tr = document.createElement('tr');
         tr.id = rowId;
         tr.innerHTML = `
           <td>${empNome}</td>
-          <td>${contNome}</td>
+          <td>${formaNome}</td>
           <td class="text-center">
             <button class="btn btn-sm btn-outline-danger btn-desvincular"
-                    data-empresa="${empresaId}" data-conta="${contaId}" title="Remover vínculo">
+                    data-empresa="${empresaId}" data-forma="${formaId}" title="Remover">
               <i class="bi bi-trash"></i>
             </button>
           </td>`;
         tbody.appendChild(tr);
-        attachDelVinculo(tr.querySelector('.btn-desvincular'));
+        attachDel(tr.querySelector('.btn-desvincular'));
       }
 
-      // Limpa selects
-      selEmp.value  = '';
-      selCont.value = '';
-      showMsg('Vínculo adicionado com sucesso.', true);
+      selEmp.value   = '';
+      selForma.value = '';
+      showMsg('Vínculo adicionado.', true);
     } catch (e) {
       showMsg('Erro de comunicação.', false);
     }
   });
 
-  function attachDelVinculo(btn) {
+  function attachDel(btn) {
     btn.addEventListener('click', async function () {
       const empresaId = parseInt(this.dataset.empresa);
-      const contaId   = parseInt(this.dataset.conta);
+      const formaId   = parseInt(this.dataset.forma);
       if (!confirm('Remover este vínculo?')) return;
       try {
         const res = await fetch('{{ url_for("conf_depositos.desvincular_deposito") }}', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ empresa_id: empresaId, bank_account_id: contaId }),
+          body: JSON.stringify({ empresa_id: empresaId, forma_recebimento_id: formaId }),
         });
         const json = await res.json();
         if (json.success) {
-          const row = document.getElementById(`vinc-row-${empresaId}-${contaId}`);
+          const row = document.getElementById(`vinc-row-${empresaId}-${formaId}`);
           if (row) row.remove();
           const tbody = document.getElementById('tbl-vinculos-body');
           if (!tbody.querySelector('tr')) {
@@ -448,7 +446,7 @@
     });
   }
 
-  document.querySelectorAll('.btn-desvincular').forEach(attachDelVinculo);
+  document.querySelectorAll('.btn-desvincular').forEach(attachDel);
 })();
 </script>
 {% endblock %}
