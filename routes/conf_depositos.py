@@ -385,8 +385,6 @@ def _build_report(vinculos_list, caixa_rows, bank_rows, conta_ids=None):
 
         for tipo in ('DINHEIRO', 'CHEQUE'):
             vincs = vinculos_by_empresa_tipo.get((empresa_id, tipo), [])
-            if not vincs:
-                continue
 
             forma_ids   = [int(v['forma_recebimento_id']) for v in vincs]
             forma_nomes = [v['forma_nome'] for v in vincs]
