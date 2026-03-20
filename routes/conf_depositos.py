@@ -44,9 +44,10 @@ _DIAS_PT = ['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom']
 
 def _ensure_vinculos_table(conn):
     """
-    Cria conf_depositos_vinculos (empresa_id × forma_recebimento_id).
+    Cria conf_depositos_vinculos (empresa_id × forma_recebimento_id × tipo_deposito).
     Se a tabela já existir com o esquema antigo (bank_account_id), dropa e
     recria — os vínculos antigos eram inválidos de qualquer forma.
+    Se a tabela existir mas sem a coluna tipo_deposito, adiciona via ALTER TABLE.
 
     Usa INFORMATION_SCHEMA.COLUMNS para detectar o schema antigo sem disparar
     um ProgrammingError de "coluna desconhecida" que poderia corromper o estado
@@ -57,6 +58,7 @@ def _ensure_vinculos_table(conn):
             id                   INT AUTO_INCREMENT PRIMARY KEY,
             empresa_id           INT NOT NULL,
             forma_recebimento_id INT NOT NULL,
+            tipo_deposito        ENUM('DINHEIRO','CHEQUE') NOT NULL DEFAULT 'DINHEIRO',
             criado_em            DATETIME DEFAULT CURRENT_TIMESTAMP,
             UNIQUE KEY uk_dep_empresa_forma (empresa_id, forma_recebimento_id)
         )
@@ -82,11 +84,31 @@ def _ensure_vinculos_table(conn):
         has_old_col = bool(row and row[0])
 
         if has_old_col:
-            # 3. Esquema v1 detectado → recriar com schema correto
+            # 3. Esquema v1 detectado: a coluna bank_account_id nunca foi usada em
+            #    produção de forma válida, portanto é seguro dropar e recriar a tabela
+            #    (ALTER TABLE também funcionaria, mas a tabela estava vazia na prática).
             cur.execute("DROP TABLE conf_depositos_vinculos")
             conn.commit()
             cur.execute(_NEW_DDL.replace("IF NOT EXISTS ", ""))
             conn.commit()
+        else:
+            # 4. Verifica se a coluna tipo_deposito já existe; se não, adiciona
+            cur.execute(
+                """
+                SELECT COUNT(*) AS cnt
+                  FROM INFORMATION_SCHEMA.COLUMNS
+                 WHERE TABLE_SCHEMA = DATABASE()
+                   AND TABLE_NAME   = 'conf_depositos_vinculos'
+                   AND COLUMN_NAME  = 'tipo_deposito'
+                """
+            )
+            row2 = cur.fetchone()
+            if not (row2 and row2[0]):
+                cur.execute(
+                    """ALTER TABLE conf_depositos_vinculos
+                       ADD COLUMN tipo_deposito ENUM('DINHEIRO','CHEQUE') NOT NULL DEFAULT 'DINHEIRO'"""
+                )
+                conn.commit()
 
         cur.close()
     except Exception:
@@ -176,12 +198,13 @@ def _get_vinculos_list(conn):
             SELECT v.id,
                    v.empresa_id,
                    v.forma_recebimento_id,
+                   COALESCE(v.tipo_deposito, 'DINHEIRO')              AS tipo_deposito,
                    fr.nome                                           AS forma_nome,
                    COALESCE(c.nome_fantasia, c.razao_social)        AS empresa_nome
               FROM conf_depositos_vinculos v
               JOIN formas_recebimento fr ON fr.id = v.forma_recebimento_id
               JOIN clientes c            ON c.id  = v.empresa_id
-             ORDER BY empresa_nome, forma_nome
+             ORDER BY empresa_nome, tipo_deposito, forma_nome
             """
         )
         rows = cur.fetchall()
@@ -193,8 +216,10 @@ def _get_vinculos_list(conn):
 
 def _fetch_caixa_deposits(conn, data_inicio, data_fim, empresa_ids):
     """
-    Soma depósitos do caixa por (empresa_id, data).
-    Inclui DEPOSITO_ESPECIE + DEPOSITO_CHEQUE_VISTA + DEPOSITO_CHEQUE_PRAZO.
+    Soma depósitos do caixa por (empresa_id, data, tipo_deposito).
+    DEPOSITO_ESPECIE         → tipo_deposito = 'DINHEIRO'
+    DEPOSITO_CHEQUE_VISTA    → tipo_deposito = 'CHEQUE'
+    DEPOSITO_CHEQUE_PRAZO    → tipo_deposito = 'CHEQUE'
     """
     if not empresa_ids:
         return []
@@ -205,6 +230,10 @@ def _fetch_caixa_deposits(conn, data_inicio, data_fim, empresa_ids):
             f"""
             SELECT lc.data         AS data_venda,
                    lc.cliente_id   AS empresa_id,
+                   CASE fp.tipo
+                     WHEN 'DEPOSITO_ESPECIE' THEN 'DINHEIRO'
+                     ELSE 'CHEQUE'
+                   END             AS tipo_deposito,
                    SUM(lcc.valor)  AS total_caixa
               FROM lancamentos_caixa_comprovacao lcc
               JOIN lancamentos_caixa lc      ON lc.id  = lcc.lancamento_caixa_id
@@ -213,7 +242,7 @@ def _fetch_caixa_deposits(conn, data_inicio, data_fim, empresa_ids):
                AND lc.data BETWEEN %s AND %s
                AND lcc.valor > 0
                AND lc.cliente_id IN ({ph})
-             GROUP BY lc.data, lc.cliente_id
+             GROUP BY lc.data, lc.cliente_id, tipo_deposito
              ORDER BY lc.data
             """,
             [data_inicio, data_fim] + list(empresa_ids),
@@ -263,134 +292,139 @@ def _fetch_bank_deposits(conn, data_inicio, data_fim, forma_ids):
 
 def _build_report(vinculos_list, caixa_rows, bank_rows):
     """
-    Para cada empresa com vínculo produz uma lista de linhas cronológicas
-    mostrando depósitos do caixa e créditos bancários intercalados,
-    com saldo acumulado (banco − caixa), idêntico ao conf_cartoes.
-
-    vinculos_list: lista de {empresa_id, forma_recebimento_id, empresa_nome, forma_nome}
+    Para cada empresa com vínculo produz seções por tipo_deposito (DINHEIRO / CHEQUE),
+    cada uma contendo linhas cronológicas com Valor Sistema (caixa) e Valor Depósito
+    (banco) em colunas separadas, com saldo acumulado.
 
     Estrutura de cada linha:
-      tipo           : 'caixa' | 'banco'
-      data_venda     : DD/MM/YYYY  (linha caixa)
-      dia_semana     : str
-      valor          : float
-      data_deposito  : DD/MM/YYYY  (linha banco)
-      num_deposito   : str         (descricao da transação)
-      conta_corrente : str         (apelido/banco_nome da conta bancária)
-      saldo          : float acumulado
-      saldo_pos/neg  : bool
+      data          : DD/MM/YYYY
+      dia_semana    : str
+      val_sistema   : float  (caixa — 0 se não há lançamento do caixa nesta data)
+      val_deposito  : float  (banco — soma de todos os créditos OFX nesta data)
+      saldo         : float acumulado (banco − caixa)
+      saldo_pos/neg : bool
     """
-    # ── índice caixa: (empresa_id, 'YYYY-MM-DD') → total
+    # ── índice caixa: (empresa_id, tipo_deposito, 'YYYY-MM-DD') → total
     caixa_idx = {}
     for r in caixa_rows:
         d = r['data_venda']
         if hasattr(d, 'isoformat'):
             d = d.isoformat()
-        caixa_idx[(int(r['empresa_id']), str(d))] = float(r['total_caixa'] or 0)
+        tipo = r.get('tipo_deposito', 'DINHEIRO')
+        caixa_idx[(int(r['empresa_id']), tipo, str(d))] = float(r['total_caixa'] or 0)
 
-    # ── índice banco: forma_recebimento_id → lista de transações
-    bank_by_forma = defaultdict(list)
+    # ── índice banco: forma_recebimento_id → {data → total_valor}
+    bank_by_forma = defaultdict(lambda: defaultdict(float))
     for r in bank_rows:
         d = r['data_transacao']
         if hasattr(d, 'isoformat'):
             d = d.isoformat()
-        bank_by_forma[int(r['forma_recebimento_id'])].append({
-            'data':       str(d),
-            'valor':      float(r['valor'] or 0),
-            'descricao':  r.get('descricao') or '',
-            'conta_nome': r.get('conta_nome') or '',
-        })
+        bank_by_forma[int(r['forma_recebimento_id'])][str(d)] += float(r['valor'] or 0)
 
-    # ── agrupar vínculos por empresa
-    vinculos_by_empresa = defaultdict(list)
+    # ── agrupar vínculos por (empresa_id, tipo_deposito)
+    vinculos_by_empresa_tipo = defaultdict(list)
     for v in vinculos_list:
-        vinculos_by_empresa[int(v['empresa_id'])].append(v)
+        key = (int(v['empresa_id']), v.get('tipo_deposito', 'DINHEIRO'))
+        vinculos_by_empresa_tipo[key].append(v)
+
+    # ── agrupar por empresa para construir as seções
+    empresas_vistas = {}
+    for (empresa_id, tipo), vincs in vinculos_by_empresa_tipo.items():
+        if empresa_id not in empresas_vistas:
+            empresas_vistas[empresa_id] = vincs[0]['empresa_nome']
 
     sections = []
 
-    for empresa_id, vincs in vinculos_by_empresa.items():
-        empresa_nome = vincs[0]['empresa_nome']
-        forma_ids    = [int(v['forma_recebimento_id']) for v in vincs]
-        forma_nomes  = [v['forma_nome'] for v in vincs]
+    for empresa_id, empresa_nome in sorted(empresas_vistas.items(), key=lambda x: x[1]):
+        sub_sections = []
+        empresa_total_caixa = 0.0
+        empresa_total_banco = 0.0
 
-        # Datas com atividade no caixa para esta empresa
-        all_dates = set()
-        for (eid, d) in caixa_idx:
-            if eid == empresa_id:
-                all_dates.add(d)
+        for tipo in ('DINHEIRO', 'CHEQUE'):
+            vincs = vinculos_by_empresa_tipo.get((empresa_id, tipo), [])
+            if not vincs:
+                continue
 
-        # Datas com atividade nas formas vinculadas
-        for fid in forma_ids:
-            for tx in bank_by_forma.get(fid, []):
-                all_dates.add(tx['data'])
+            forma_ids  = [int(v['forma_recebimento_id']) for v in vincs]
+            forma_nomes = [v['forma_nome'] for v in vincs]
 
-        if not all_dates:
+            # Datas com atividade no caixa para este empresa+tipo
+            all_dates = set()
+            for (eid, tp, d) in caixa_idx:
+                if eid == empresa_id and tp == tipo:
+                    all_dates.add(d)
+            # Datas com atividade nas formas bancárias vinculadas
+            for fid in forma_ids:
+                for d in bank_by_forma.get(fid, {}):
+                    all_dates.add(d)
+
+            if not all_dates:
+                sub_sections.append({
+                    'tipo':        tipo,
+                    'tipo_label':  'Dinheiro' if tipo == 'DINHEIRO' else 'Cheque',
+                    'formas':      forma_nomes,
+                    'linhas':      [],
+                    'total_caixa': 0.0,
+                    'total_banco': 0.0,
+                    'saldo_final': 0.0,
+                })
+                continue
+
+            all_dates   = sorted(all_dates)
+            saldo       = 0.0
+            total_caixa = 0.0
+            total_banco = 0.0
+            linhas      = []
+
+            for d in all_dates:
+                val_sistema  = caixa_idx.get((empresa_id, tipo, d), 0.0)
+                val_deposito = sum(
+                    bank_by_forma.get(fid, {}).get(d, 0.0)
+                    for fid in forma_ids
+                )
+
+                if not val_sistema and not val_deposito:
+                    continue
+
+                saldo       += val_deposito - val_sistema
+                total_caixa += val_sistema
+                total_banco += val_deposito
+
+                d_obj      = _parse_iso(d)
+                dia_semana = _DIAS_PT[d_obj.weekday()] if d_obj else ''
+
+                linhas.append({
+                    'data':         _fmt_date(d),
+                    'dia_semana':   dia_semana,
+                    'val_sistema':  val_sistema,
+                    'val_deposito': val_deposito,
+                    'saldo':        saldo,
+                    'saldo_pos':    saldo > 0.005,
+                    'saldo_neg':    saldo < -0.005,
+                })
+
+            empresa_total_caixa += total_caixa
+            empresa_total_banco += total_banco
+
+            sub_sections.append({
+                'tipo':        tipo,
+                'tipo_label':  'Dinheiro' if tipo == 'DINHEIRO' else 'Cheque',
+                'formas':      forma_nomes,
+                'linhas':      linhas,
+                'total_caixa': total_caixa,
+                'total_banco': total_banco,
+                'saldo_final': saldo if linhas else 0.0,
+            })
+
+        if sub_sections:
             sections.append({
                 'empresa_id':   empresa_id,
                 'empresa_nome': empresa_nome,
-                'formas':       forma_nomes,
-                'linhas':       [],
-                'total_caixa':  0.0,
-                'total_banco':  0.0,
-                'saldo_final':  0.0,
+                'sub_sections': sub_sections,
+                'total_caixa':  empresa_total_caixa,
+                'total_banco':  empresa_total_banco,
+                'saldo_final':  empresa_total_banco - empresa_total_caixa,
             })
-            continue
-
-        all_dates   = sorted(all_dates)
-        saldo       = 0.0
-        total_caixa = 0.0
-        total_banco = 0.0
-        linhas      = []
-
-        for d in all_dates:
-            # ── linha CAIXA (subtrai do saldo)
-            caixa_val = caixa_idx.get((empresa_id, d), 0.0)
-            if caixa_val:
-                saldo       -= caixa_val
-                total_caixa += caixa_val
-                d_obj       = _parse_iso(d)
-                dia_semana  = _DIAS_PT[d_obj.weekday()] if d_obj else ''
-                linhas.append({
-                    'tipo':           'caixa',
-                    'data_venda':     _fmt_date(d),
-                    'dia_semana':     dia_semana,
-                    'valor':          caixa_val,
-                    'data_deposito':  '',
-                    'num_deposito':   '',
-                    'conta_corrente': '',
-                    'saldo':          saldo,
-                    'saldo_pos':      saldo > 0.005,
-                    'saldo_neg':      saldo < -0.005,
-                })
-
-            # ── linhas BANCO (somam ao saldo), uma por transação
-            for fid in forma_ids:
-                for tx in bank_by_forma.get(fid, []):
-                    if tx['data'] == d:
-                        saldo       += tx['valor']
-                        total_banco += tx['valor']
-                        linhas.append({
-                            'tipo':           'banco',
-                            'data_venda':     '',
-                            'dia_semana':     '',
-                            'valor':          tx['valor'],
-                            'data_deposito':  _fmt_date(tx['data']),
-                            'num_deposito':   tx['descricao'],
-                            'conta_corrente': tx['conta_nome'],
-                            'saldo':          saldo,
-                            'saldo_pos':      saldo > 0.005,
-                            'saldo_neg':      saldo < -0.005,
-                        })
-
-        sections.append({
-            'empresa_id':   empresa_id,
-            'empresa_nome': empresa_nome,
-            'formas':       forma_nomes,
-            'linhas':       linhas,
-            'total_caixa':  total_caixa,
-            'total_banco':  total_banco,
-            'saldo_final':  saldo,
-        })
 
     return sections
 
@@ -478,6 +512,9 @@ def vincular_deposito():
     data = request.get_json(force=True) or {}
     empresa_id           = data.get('empresa_id')
     forma_recebimento_id = data.get('forma_recebimento_id')
+    tipo_deposito        = data.get('tipo_deposito', 'DINHEIRO')
+    if tipo_deposito not in ('DINHEIRO', 'CHEQUE'):
+        tipo_deposito = 'DINHEIRO'
     if not empresa_id or not forma_recebimento_id:
         return jsonify({'success': False, 'message': 'Parâmetros inválidos.'}), 400
 
@@ -487,10 +524,11 @@ def vincular_deposito():
         cur = conn.cursor()
         cur.execute(
             """
-            INSERT IGNORE INTO conf_depositos_vinculos (empresa_id, forma_recebimento_id)
-            VALUES (%s, %s)
+            INSERT INTO conf_depositos_vinculos (empresa_id, forma_recebimento_id, tipo_deposito)
+            VALUES (%s, %s, %s)
+            ON DUPLICATE KEY UPDATE tipo_deposito = VALUES(tipo_deposito)
             """,
-            (int(empresa_id), int(forma_recebimento_id)),
+            (int(empresa_id), int(forma_recebimento_id), tipo_deposito),
         )
         conn.commit()
         cur.close()

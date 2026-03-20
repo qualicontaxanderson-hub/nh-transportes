@@ -16,13 +16,20 @@
   background: #1D63A5; color: #fff; padding: .4rem .85rem;
   border-radius: .4rem .4rem 0 0; font-weight: 700; font-size: .85rem;
 }
+.subsec-header-dinheiro {
+  background: #0d6e3f; color: #fff; padding: .3rem .75rem;
+  font-weight: 600; font-size: .78rem; display: flex; justify-content: space-between; align-items: center;
+}
+.subsec-header-cheque {
+  background: #6f42c1; color: #fff; padding: .3rem .75rem;
+  font-weight: 600; font-size: .78rem; display: flex; justify-content: space-between; align-items: center;
+}
 .tbl-dep { font-size: .78rem; }
 .tbl-dep thead th {
   font-size: .72rem; text-transform: uppercase; letter-spacing: .04em;
   white-space: nowrap; padding: .3rem .45rem;
 }
 .tbl-dep td { padding: .25rem .45rem; vertical-align: middle; }
-.row-caixa td { background-color: #e8f0fb !important; }
 .row-grand { background: #1D63A5; color: #fff; font-weight: 700; }
 .saldo-pos  { color: #198754; font-weight: 700; }
 .saldo-neg  { color: #dc3545; font-weight: 700; }
@@ -30,7 +37,9 @@
 .row-grand .saldo-pos,
 .row-grand .saldo-neg,
 .row-grand .saldo-zero { color: #fff !important; }
-.dia-semana { font-size: .68rem; color: #555; font-weight: 600; margin-left: .15rem; }
+.dia-semana { font-size: .68rem; color: #888; font-weight: 600; margin-left: .15rem; }
+.col-sistema  { background: #e8f0fb; }
+.col-deposito { background: #f0faf0; }
 </style>
 {% endblock %}
 
@@ -52,8 +61,8 @@
     <div class="flex-grow-1">
       <h4 class="mb-0 fw-bold">Conferência de Depósitos</h4>
       <p class="mb-0 opacity-75 small">
-        Cruza depósitos do Fechamento de Caixa (Espécie, Cheque à Vista, Cheque a Prazo)
-        com os créditos bancários importados (Depósito em Dinheiro / Depósito em Cheque).
+        Cruza depósitos do Fechamento de Caixa com os créditos bancários importados (OFX).
+        Separado por tipo: <strong>Dinheiro</strong> (Espécie) e <strong>Cheque</strong>.
         Saldo = banco − caixa.
       </p>
     </div>
@@ -130,11 +139,11 @@
   <div class="alert alert-warning">
     <i class="bi bi-exclamation-triangle me-2"></i>
     Nenhum vínculo configurado. Clique em <strong>Vínculos</strong> (no cabeçalho) e
-    associe cada empresa às formas de recebimento de depósito (ex: <em>Depósito em Dinheiro</em>,
-    <em>Depósito em Cheque</em>).
+    associe cada empresa às formas de recebimento de depósito, informando se é
+    <strong>Dinheiro</strong> ou <strong>Cheque</strong>.
   </div>
 
-  {% elif not sections or sections | selectattr('linhas') | list | length == 0 %}
+  {% elif not sections %}
   <div class="alert alert-info">
     <i class="bi bi-info-circle me-2"></i>
     Nenhum depósito encontrado para os filtros selecionados.
@@ -143,74 +152,99 @@
   {% else %}
 
   {% for sec in sections %}
-  {% if sec.linhas %}
   <div class="mb-4">
+    <!-- Cabeçalho da empresa -->
     <div class="sec-header d-flex justify-content-between align-items-center flex-wrap gap-1">
-      <span>
-        <i class="bi bi-bank me-2"></i>{{ sec.empresa_nome }}
-        {% if sec.formas %}
-        <span class="opacity-75 small fw-normal ms-2">
-          — {{ sec.formas | join(' / ') }}
-        </span>
-        {% endif %}
-      </span>
+      <span><i class="bi bi-bank me-2"></i>{{ sec.empresa_nome }}</span>
       <span class="small opacity-75">
         Caixa: <strong>{{ sec.total_caixa | fmtmoney }}</strong>
         &nbsp;|&nbsp;
         Banco: <strong>{{ sec.total_banco | fmtmoney }}</strong>
         &nbsp;|&nbsp;
-        Saldo: <strong>{{ sec.saldo_final | fmtmoney }}</strong>
+        Saldo:
+        <strong class="{% if sec.saldo_final > 0.005 %}text-warning{% elif sec.saldo_final < -0.005 %}text-warning{% endif %}">
+          {{ sec.saldo_final | fmtmoney }}
+        </strong>
       </span>
     </div>
-    <div class="table-responsive">
-      <table class="table table-bordered table-sm tbl-dep mb-0">
-        <thead class="table-dark">
-          <tr>
-            <th style="width:100px;">Data Venda</th>
-            <th class="text-end" style="width:110px;">Valor</th>
-            <th style="width:105px;" class="text-center">Data Depósito</th>
-            <th>Número Depósito</th>
-            <th style="width:160px;">Conta Corrente</th>
-            <th class="text-end" style="width:115px;">Saldo</th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for linha in sec.linhas %}
-          <tr{% if linha.tipo == 'caixa' %} class="row-caixa"{% endif %}>
-            <td>
-              {{ linha.data_venda }}
-              {% if linha.dia_semana %}<span class="dia-semana">{{ linha.dia_semana }}</span>{% endif %}
-              {% if linha.tipo == 'caixa' %}
-                <span class="badge bg-secondary ms-1" style="font-size:.62rem;">caixa</span>
-              {% endif %}
-            </td>
-            <td class="text-end">{{ linha.valor | fmtmoney }}</td>
-            <td class="text-center small text-muted">{{ linha.data_deposito or '—' }}</td>
-            <td class="small text-muted" style="max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"
-                title="{{ linha.num_deposito }}">{{ linha.num_deposito or '—' }}</td>
-            <td class="small text-muted">{{ linha.conta_corrente or '—' }}</td>
-            <td class="text-end {% if linha.saldo_pos %}saldo-pos{% elif linha.saldo_neg %}saldo-neg{% else %}saldo-zero{% endif %}">
-              {{ linha.saldo | fmtmoney }}
-            </td>
-          </tr>
-          {% endfor %}
 
-          <tr class="row-grand">
-            <td class="fw-bold">TOTAL {{ sec.empresa_nome | truncate(25, true) }}</td>
-            <td class="text-end fw-bold" colspan="4">
-              Caixa {{ sec.total_caixa | fmtmoney }}
-              &nbsp;/&nbsp;
-              Banco {{ sec.total_banco | fmtmoney }}
-            </td>
-            <td class="text-end fw-bold {% if sec.saldo_final > 0.005 %}saldo-pos{% elif sec.saldo_final < -0.005 %}saldo-neg{% else %}saldo-zero{% endif %}">
-              {{ sec.saldo_final | fmtmoney }}
-            </td>
-          </tr>
-        </tbody>
-      </table>
+    {% for sub in sec.sub_sections %}
+    <div class="mb-2">
+      <!-- Cabeçalho do sub-tipo (Dinheiro / Cheque) -->
+      <div class="subsec-header-{{ sub.tipo | lower }}">
+        <span>
+          {% if sub.tipo == 'DINHEIRO' %}
+            <i class="bi bi-cash-coin me-1"></i> Dinheiro (Espécie)
+          {% else %}
+            <i class="bi bi-journal-check me-1"></i> Cheque
+          {% endif %}
+          {% if sub.formas %}
+          <span class="opacity-75 fw-normal ms-2 small">— {{ sub.formas | join(' / ') }}</span>
+          {% endif %}
+        </span>
+        <span class="small">
+          Caixa: {{ sub.total_caixa | fmtmoney }}
+          &nbsp;|&nbsp;
+          Banco: {{ sub.total_banco | fmtmoney }}
+          &nbsp;|&nbsp;
+          Saldo:
+          <strong class="{% if sub.saldo_final > 0.005 %}text-warning{% elif sub.saldo_final < -0.005 %}text-warning{% else %}text-light{% endif %}">
+            {{ sub.saldo_final | fmtmoney }}
+          </strong>
+        </span>
+      </div>
+
+      {% if sub.linhas %}
+      <div class="table-responsive">
+        <table class="table table-bordered table-sm tbl-dep mb-0">
+          <thead class="table-dark">
+            <tr>
+              <th style="width:100px;">Data</th>
+              <th class="text-end col-sistema"  style="width:120px;">Valor Sistema</th>
+              <th class="text-end col-deposito" style="width:120px;">Valor Depósito</th>
+              <th class="text-end" style="width:115px;">Saldo</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for linha in sub.linhas %}
+            <tr>
+              <td>
+                {{ linha.data }}
+                {% if linha.dia_semana %}<span class="dia-semana">{{ linha.dia_semana }}</span>{% endif %}
+              </td>
+              <td class="text-end col-sistema">
+                {% if linha.val_sistema %}{{ linha.val_sistema | fmtmoney }}{% else %}<span class="text-muted">—</span>{% endif %}
+              </td>
+              <td class="text-end col-deposito">
+                {% if linha.val_deposito %}{{ linha.val_deposito | fmtmoney }}{% else %}<span class="text-muted">—</span>{% endif %}
+              </td>
+              <td class="text-end {% if linha.saldo_pos %}saldo-pos{% elif linha.saldo_neg %}saldo-neg{% else %}saldo-zero{% endif %}">
+                {{ linha.saldo | fmtmoney }}
+              </td>
+            </tr>
+            {% endfor %}
+
+            <!-- Sub-total -->
+            <tr class="row-grand">
+              <td class="fw-bold">TOTAL {{ sub.tipo_label | upper }}</td>
+              <td class="text-end fw-bold col-sistema">{{ sub.total_caixa | fmtmoney }}</td>
+              <td class="text-end fw-bold col-deposito">{{ sub.total_banco | fmtmoney }}</td>
+              <td class="text-end fw-bold {% if sub.saldo_final > 0.005 %}saldo-pos{% elif sub.saldo_final < -0.005 %}saldo-neg{% else %}saldo-zero{% endif %}">
+                {{ sub.saldo_final | fmtmoney }}
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <div class="alert alert-light border py-2 px-3 small mb-0">
+        <i class="bi bi-info-circle me-1 text-muted"></i>
+        Nenhum lançamento encontrado para este tipo no período.
+      </div>
+      {% endif %}
     </div>
+    {% endfor %}
   </div>
-  {% endif %}
   {% endfor %}
 
   <!-- Resumo geral -->
@@ -222,8 +256,8 @@
       <tbody>
         <tr class="row-grand">
           <td class="fw-bold">TOTAL GERAL</td>
-          <td class="text-end fw-bold">Caixa: {{ grand_caixa | fmtmoney }}</td>
-          <td class="text-end fw-bold">Banco: {{ grand_banco | fmtmoney }}</td>
+          <td class="text-end fw-bold col-sistema">Caixa: {{ grand_caixa | fmtmoney }}</td>
+          <td class="text-end fw-bold col-deposito">Banco: {{ grand_banco | fmtmoney }}</td>
           <td class="text-end fw-bold {% if grand_saldo > 0.005 %}saldo-pos{% elif grand_saldo < -0.005 %}saldo-neg{% else %}saldo-zero{% endif %}">
             Saldo: {{ grand_saldo | fmtmoney }}
           </td>
@@ -232,12 +266,11 @@
     </table>
   </div>
 
-  <div class="small text-muted mb-4">
-    <span class="badge bg-secondary me-1" style="font-size:.68rem;">caixa</span>
-    Linhas azul-claras = depósito registrado no Fechamento de Caixa (subtrai do saldo).
-    Linhas brancas = crédito bancário importado do extrato OFX (soma ao saldo).
-    <strong class="text-success">Saldo verde</strong> = banco recebeu mais do que o caixa registrou.
-    <strong class="text-danger">Saldo vermelho</strong> = banco ainda aguarda depósito registrado no caixa.
+  <div class="small text-muted mb-4 d-flex flex-wrap gap-3">
+    <span><span style="display:inline-block;width:12px;height:12px;background:#e8f0fb;border:1px solid #ccc;"></span> Coluna azul = Valor Sistema (lançamento do caixa)</span>
+    <span><span style="display:inline-block;width:12px;height:12px;background:#f0faf0;border:1px solid #ccc;"></span> Coluna verde = Valor Depósito (crédito bancário OFX)</span>
+    <span><strong class="text-success">Saldo verde</strong> = banco recebeu mais que o caixa registrou.</span>
+    <span><strong class="text-danger">Saldo vermelho</strong> = banco aguarda depósito registrado no caixa.</span>
   </div>
 
   {% endif %}
@@ -257,8 +290,8 @@
       <div class="modal-body">
         <p class="small text-muted mb-3">
           Associe cada empresa do Fechamento de Caixa à(s) forma(s) de recebimento bancário
-          que correspondem a depósitos (ex: <strong>Depósito em Dinheiro</strong>,
-          <strong>Depósito em Cheque</strong>). As regras do banco
+          que correspondem a depósitos, informando se é <strong>Dinheiro</strong> ou <strong>Cheque</strong>.
+          As regras do banco
           (<a href="{{ url_for('conciliacao_regras.lista') }}" target="_blank">banco/regras</a>)
           classificam os créditos OFX nessas formas automaticamente.
         </p>
@@ -267,7 +300,7 @@
 
         <!-- Formulário para adicionar vínculo -->
         <div class="row g-2 align-items-end mb-3 p-2 border rounded bg-light">
-          <div class="col-12 col-md-4">
+          <div class="col-12 col-md-3">
             <label class="form-label small fw-semibold mb-1">Empresa (Fechamento de Caixa)</label>
             <select id="sel-nova-empresa" class="form-select form-select-sm">
               <option value="">— Selecione —</option>
@@ -276,8 +309,15 @@
               {% endfor %}
             </select>
           </div>
-          <div class="col-12 col-md-5">
-            <label class="form-label small fw-semibold mb-1">Forma de Recebimento (Depósito)</label>
+          <div class="col-12 col-md-2">
+            <label class="form-label small fw-semibold mb-1">Tipo Depósito</label>
+            <select id="sel-nova-tipo" class="form-select form-select-sm">
+              <option value="DINHEIRO">💵 Dinheiro</option>
+              <option value="CHEQUE">📄 Cheque</option>
+            </select>
+          </div>
+          <div class="col-12 col-md-4">
+            <label class="form-label small fw-semibold mb-1">Forma de Recebimento (Banco)</label>
             <select id="sel-nova-forma" class="form-select form-select-sm">
               <option value="">— Selecione —</option>
               {% for fr in deposit_formas %}
@@ -297,6 +337,7 @@
           <thead class="table-dark">
             <tr>
               <th>Empresa</th>
+              <th>Tipo</th>
               <th>Forma de Recebimento</th>
               <th class="text-center" style="width:70px;">Remover</th>
             </tr>
@@ -305,6 +346,13 @@
             {% for v in vinculos_list %}
             <tr id="vinc-row-{{ v.empresa_id }}-{{ v.forma_recebimento_id }}">
               <td>{{ v.empresa_nome }}</td>
+              <td>
+                {% if v.tipo_deposito == 'CHEQUE' %}
+                  <span class="badge" style="background:#6f42c1;">📄 Cheque</span>
+                {% else %}
+                  <span class="badge bg-success">💵 Dinheiro</span>
+                {% endif %}
+              </td>
               <td>{{ v.forma_nome }}</td>
               <td class="text-center">
                 <button class="btn btn-sm btn-outline-danger btn-desvincular"
@@ -317,7 +365,7 @@
             </tr>
             {% else %}
             <tr id="vinculos-empty-row">
-              <td colspan="3" class="text-center text-muted small">Nenhum vínculo cadastrado.</td>
+              <td colspan="4" class="text-center text-muted small">Nenhum vínculo cadastrado.</td>
             </tr>
             {% endfor %}
           </tbody>
@@ -370,6 +418,7 @@
   document.getElementById('btn-vincular-add').addEventListener('click', async function () {
     const empresaId = parseInt(document.getElementById('sel-nova-empresa').value) || null;
     const formaId   = parseInt(document.getElementById('sel-nova-forma').value)   || null;
+    const tipo      = document.getElementById('sel-nova-tipo').value || 'DINHEIRO';
     if (!empresaId || !formaId) {
       showMsg('Selecione empresa e forma de recebimento.', false);
       return;
@@ -378,7 +427,7 @@
       const res = await fetch('{{ url_for("conf_depositos.vincular_deposito") }}', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ empresa_id: empresaId, forma_recebimento_id: formaId }),
+        body: JSON.stringify({ empresa_id: empresaId, forma_recebimento_id: formaId, tipo_deposito: tipo }),
       });
       const json = await res.json();
       if (!json.success) { showMsg(json.message || 'Erro.', false); return; }
@@ -390,14 +439,22 @@
       const selForma = document.getElementById('sel-nova-forma');
       const empNome   = selEmp.options[selEmp.selectedIndex].text;
       const formaNome = selForma.options[selForma.selectedIndex].text;
+      const tipoBadge = tipo === 'CHEQUE'
+        ? '<span class="badge" style="background:#6f42c1;">📄 Cheque</span>'
+        : '<span class="badge bg-success">💵 Dinheiro</span>';
 
       const rowId = `vinc-row-${empresaId}-${formaId}`;
-      if (!document.getElementById(rowId)) {
+      const existingRow = document.getElementById(rowId);
+      if (existingRow) {
+        // Update tipo badge in existing row
+        existingRow.cells[1].innerHTML = tipoBadge;
+      } else {
         const tbody = document.getElementById('tbl-vinculos-body');
         const tr = document.createElement('tr');
         tr.id = rowId;
         tr.innerHTML = `
           <td>${empNome}</td>
+          <td>${tipoBadge}</td>
           <td>${formaNome}</td>
           <td class="text-center">
             <button class="btn btn-sm btn-outline-danger btn-desvincular"
@@ -411,7 +468,7 @@
 
       selEmp.value   = '';
       selForma.value = '';
-      showMsg('Vínculo adicionado.', true);
+      showMsg('Vínculo salvo.', true);
     } catch (e) {
       showMsg('Erro de comunicação.', false);
     }
@@ -434,7 +491,7 @@
           if (row) row.remove();
           const tbody = document.getElementById('tbl-vinculos-body');
           if (!tbody.querySelector('tr')) {
-            tbody.innerHTML = '<tr id="vinculos-empty-row"><td colspan="3" class="text-center text-muted small">Nenhum vínculo cadastrado.</td></tr>';
+            tbody.innerHTML = '<tr id="vinculos-empty-row"><td colspan="4" class="text-center text-muted small">Nenhum vínculo cadastrado.</td></tr>';
           }
           showMsg('Vínculo removido.', true);
         } else {
@@ -450,3 +507,4 @@
 })();
 </script>
 {% endblock %}
+
