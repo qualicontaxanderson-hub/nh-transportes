@@ -37,6 +37,10 @@
 .saldo-zero { color: #6c757d; font-weight: 700; }
 .badge-debito  { background: #0d6efd; }
 .badge-credito { background: #6f42c1; }
+/* Weekend / holiday row highlight */
+.row-fds td { background-color: #d4edda !important; }
+.dia-semana { font-size: .68rem; color: #555; font-weight: 600; margin-left: .15rem; }
+.row-fds .dia-semana { color: #1a6a38; }
 </style>
 {% endblock %}
 
@@ -59,7 +63,10 @@
       <h4 class="mb-0 fw-bold">Conferência de Cartões</h4>
       <p class="mb-0 opacity-75 small">Cruza vendas de cartão (Fechamento de Caixa) com recebimentos bancários para conferir diferenças</p>
     </div>
-    <div>
+    <div class="d-flex gap-2">
+      <button class="btn btn-light btn-sm" data-bs-toggle="modal" data-bs-target="#modalFeriados">
+        <i class="bi bi-calendar-x"></i> Feriados
+      </button>
       <button class="btn btn-light btn-sm" data-bs-toggle="modal" data-bs-target="#modalVinculos">
         <i class="bi bi-link-45deg"></i> Gerenciar Vinculações
       </button>
@@ -210,10 +217,10 @@
         </thead>
         <tbody>
           {% for linha in card.linhas %}
-          <tr>
-            <td class="text-center">{{ linha.data_venda }}</td>
+          <tr{% if linha.is_destaque %} class="row-fds"{% endif %}>
+            <td class="text-center">{{ linha.data_venda }}{% if linha.data_venda %}<span class="dia-semana">{{ linha.dia_semana }}</span>{% endif %}</td>
             <td class="text-end">{% if linha.total_venda %}{{ linha.total_venda | fmtmoney }}{% endif %}</td>
-            <td class="text-center">{{ linha.data_recebimento }}</td>
+            <td class="text-center">{{ linha.data_recebimento }}{% if linha.data_recebimento %}<span class="dia-semana">{{ linha.dia_semana }}</span>{% endif %}</td>
             <td class="text-end">{% if linha.total_recebimento %}{{ linha.total_recebimento | fmtmoney }}{% endif %}</td>
             <td class="text-end {% if linha.saldo_acumulado > 0.005 %}saldo-pos{% elif linha.saldo_acumulado < -0.005 %}saldo-neg{% else %}saldo-zero{% endif %}">
               {{ linha.saldo_acumulado | fmtmoney }}
@@ -299,6 +306,7 @@
               <th style="width:70px;">Tipo</th>
               <th>Forma 1 de Recebimento (Banco)</th>
               <th>Forma 2 de Recebimento (Banco)</th>
+              <th class="text-center" style="width:110px;" title="Número de dias úteis até o depósito aparecer no banco">Prazo (dias úteis)</th>
               <th class="text-center" style="width:60px;">Salvar</th>
             </tr>
           </thead>
@@ -336,6 +344,14 @@
                 </select>
               </td>
               <td class="text-center">
+                <input type="number" min="0" max="60"
+                       class="form-control form-control-sm text-center inp-prazo"
+                       data-bandeira="{{ b.id }}"
+                       value="{{ b.prazo_compensacao_dias }}"
+                       style="width:70px; display:inline-block;"
+                       title="0 = mesmo dia, 1 = próximo dia útil, 2 = dois dias úteis, …">
+              </td>
+              <td class="text-center">
                 <button class="btn btn-sm btn-success btn-vincular" data-bandeira="{{ b.id }}" title="Salvar">
                   <i class="bi bi-check-lg"></i>
                 </button>
@@ -354,6 +370,73 @@
       </div>
       <div class="modal-footer">
         <span id="msg-vinculos" class="small text-success me-auto"></span>
+        <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Fechar</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── Modal de Feriados ──────────────────────────────────────────────────── -->
+<div class="modal fade" id="modalFeriados" tabindex="-1" aria-labelledby="labelModalFeriados" aria-hidden="true">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header" style="background:#198754;color:#fff;">
+        <h5 class="modal-title" id="labelModalFeriados">
+          <i class="bi bi-calendar-x me-2"></i>Feriados Municipais / Estaduais
+        </h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <p class="small text-muted mb-3">
+          Cadastre aqui os feriados municipais e estaduais para que as linhas correspondentes sejam
+          destacadas em <strong style="color:#198754;">verde</strong> no relatório.
+        </p>
+
+        <!-- Formulário de adição -->
+        <div class="row g-2 mb-3 align-items-end">
+          <div class="col-auto">
+            <label class="form-label small fw-semibold mb-1">Data do Feriado</label>
+            <input type="date" id="inp-feriado-data" class="form-control form-control-sm" style="width:160px;">
+          </div>
+          <div class="col">
+            <label class="form-label small fw-semibold mb-1">Descrição (opcional)</label>
+            <input type="text" id="inp-feriado-desc" class="form-control form-control-sm" placeholder="Ex: Aniversário da cidade">
+          </div>
+          <div class="col-auto">
+            <button class="btn btn-success btn-sm" id="btn-feriado-add">
+              <i class="bi bi-plus-lg me-1"></i>Adicionar
+            </button>
+          </div>
+        </div>
+        <span id="msg-feriados" class="small text-danger d-block mb-2"></span>
+
+        <!-- Lista de feriados cadastrados -->
+        <table class="table table-sm table-bordered" id="tbl-feriados" style="font-size:.82rem;">
+          <thead class="table-dark">
+            <tr>
+              <th style="width:120px;">Data</th>
+              <th>Descrição</th>
+              <th class="text-center" style="width:60px;">Excluir</th>
+            </tr>
+          </thead>
+          <tbody id="tbl-feriados-body">
+            {% for f in feriados %}
+            <tr id="feriado-row-{{ f.id }}">
+              <td>{{ f.data_iso[8:10] }}/{{ f.data_iso[5:7] }}/{{ f.data_iso[0:4] }}</td>
+              <td>{{ f.descricao }}</td>
+              <td class="text-center">
+                <button class="btn btn-sm btn-outline-danger btn-feriado-del" data-id="{{ f.id }}" title="Excluir">
+                  <i class="bi bi-trash"></i>
+                </button>
+              </td>
+            </tr>
+            {% else %}
+            <tr id="feriados-empty-row"><td colspan="3" class="text-center text-muted small">Nenhum feriado cadastrado.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <div class="modal-footer">
         <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Fechar</button>
       </div>
     </div>
@@ -400,15 +483,17 @@
     });
   }
 
-  // Salva vínculos (Forma 1 + Forma 2) para uma bandeira
+  // Salva vínculos (Forma 1 + Forma 2) e Prazo para uma bandeira
   document.querySelectorAll('.btn-vincular').forEach(btn => {
     btn.addEventListener('click', async function () {
       const bandeiraId = parseInt(this.dataset.bandeira);
       const row = document.getElementById('row-band-' + bandeiraId);
       const sel1 = row.querySelector('.sel-forma-1');
       const sel2 = row.querySelector('.sel-forma-2');
+      const inpPrazo = row.querySelector('.inp-prazo');
       const forma1 = parseInt(sel1.value) || null;
       const forma2 = parseInt(sel2.value) || null;
+      const prazoDias = parseInt(inpPrazo.value) || 0;
       const msgEl = document.getElementById('msg-vinculos');
       msgEl.textContent = '';
 
@@ -440,9 +525,16 @@
           }
         }
 
+        // Salva prazo de compensação
+        await fetch('{{ url_for("conf_cartoes.prazo_salvar") }}', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ bandeira_cartao_id: bandeiraId, prazo_dias: prazoDias }),
+        });
+
         // Atualiza data-vinculos para refletir o estado atual
         row.dataset.vinculos = novasFormas.join(',');
-        msgEl.textContent = 'Vinculação salva com sucesso.';
+        msgEl.textContent = 'Vinculação e prazo salvos com sucesso.';
         msgEl.className = 'small text-success me-auto';
         btn.classList.replace('btn-success', 'btn-outline-success');
         setTimeout(() => { btn.classList.replace('btn-outline-success', 'btn-success'); }, 1500);
@@ -462,6 +554,87 @@
     const v2 = parseInt(sel2.value) || 0;
     row.dataset.vinculos = [v1, v2].filter(Boolean).join(',');
   });
+
+  // ── Feriados modal ──────────────────────────────────────────────────────
+  const msgFeriados = document.getElementById('msg-feriados');
+
+  function showFeriadoMsg(text, ok) {
+    msgFeriados.textContent = text;
+    msgFeriados.className = 'small d-block mb-2 ' + (ok ? 'text-success' : 'text-danger');
+    setTimeout(() => { msgFeriados.textContent = ''; }, 3000);
+  }
+
+  function feriadoIsoToBr(iso) {
+    // iso = 'YYYY-MM-DD'
+    return iso.slice(8, 10) + '/' + iso.slice(5, 7) + '/' + iso.slice(0, 4);
+  }
+
+  // Adicionar feriado
+  document.getElementById('btn-feriado-add').addEventListener('click', async function () {
+    const data = document.getElementById('inp-feriado-data').value;
+    const desc = document.getElementById('inp-feriado-desc').value.trim();
+    if (!data) { showFeriadoMsg('Informe a data do feriado.', false); return; }
+
+    try {
+      const res = await fetch('{{ url_for("conf_cartoes.feriado_add") }}', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ data, descricao: desc }),
+      });
+      const json = await res.json();
+      if (!json.success) { showFeriadoMsg(json.message, false); return; }
+
+      // Remove linha "vazio" se presente
+      const emptyRow = document.getElementById('feriados-empty-row');
+      if (emptyRow) emptyRow.remove();
+
+      // Insere nova linha na tabela
+      const tbody = document.getElementById('tbl-feriados-body');
+      const tr = document.createElement('tr');
+      tr.id = 'feriado-row-' + json.id;
+      tr.innerHTML = `<td>${feriadoIsoToBr(data)}</td><td>${desc}</td>
+        <td class="text-center"><button class="btn btn-sm btn-outline-danger btn-feriado-del" data-id="${json.id}" title="Excluir"><i class="bi bi-trash"></i></button></td>`;
+      tbody.appendChild(tr);
+      attachDelHandler(tr.querySelector('.btn-feriado-del'));
+
+      document.getElementById('inp-feriado-data').value = '';
+      document.getElementById('inp-feriado-desc').value = '';
+      showFeriadoMsg('Feriado adicionado.', true);
+    } catch (e) {
+      showFeriadoMsg('Erro de comunicação.', false);
+    }
+  });
+
+  function attachDelHandler(btn) {
+    btn.addEventListener('click', async function () {
+      const id = parseInt(this.dataset.id);
+      if (!confirm('Remover este feriado?')) return;
+      try {
+        const res = await fetch('{{ url_for("conf_cartoes.feriado_del") }}', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id }),
+        });
+        const json = await res.json();
+        if (json.success) {
+          const row = document.getElementById('feriado-row-' + id);
+          if (row) row.remove();
+          // Se tabela ficou vazia, mostra mensagem
+          const tbody = document.getElementById('tbl-feriados-body');
+          if (!tbody.querySelector('tr')) {
+            tbody.innerHTML = '<tr id="feriados-empty-row"><td colspan="3" class="text-center text-muted small">Nenhum feriado cadastrado.</td></tr>';
+          }
+          showFeriadoMsg('Feriado removido.', true);
+        } else {
+          showFeriadoMsg(json.message, false);
+        }
+      } catch (e) {
+        showFeriadoMsg('Erro de comunicação.', false);
+      }
+    });
+  }
+
+  document.querySelectorAll('.btn-feriado-del').forEach(attachDelHandler);
 })();
 </script>
 {% endblock %}
