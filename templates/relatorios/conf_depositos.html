@@ -16,22 +16,19 @@
   background: #1D63A5; color: #fff; padding: .4rem .85rem;
   border-radius: .4rem .4rem 0 0; font-weight: 700; font-size: .85rem;
 }
-.sec-header.especie  { background: #1D63A5; }
-.sec-header.vista    { background: #0d6efd; }
-.sec-header.prazo    { background: #6f42c1; }
-.tbl-dep {
-  font-size: .78rem;
-}
+.tbl-dep { font-size: .78rem; }
 .tbl-dep thead th {
   font-size: .72rem; text-transform: uppercase; letter-spacing: .04em;
   white-space: nowrap; padding: .3rem .45rem;
 }
-.tbl-dep td {
-  padding: .25rem .45rem;
-  vertical-align: middle;
-}
+.tbl-dep td { padding: .25rem .45rem; vertical-align: middle; }
+.row-caixa td { background-color: #e8f0fb !important; }
 .row-total { background: #e9ecef; font-weight: 700; }
 .row-grand { background: #1D63A5; color: #fff; font-weight: 700; }
+.saldo-pos  { color: #198754; font-weight: 700; }
+.saldo-neg  { color: #dc3545; font-weight: 700; }
+.saldo-zero { color: #6c757d; font-weight: 700; }
+.dia-semana { font-size: .68rem; color: #555; font-weight: 600; margin-left: .15rem; }
 </style>
 {% endblock %}
 
@@ -52,7 +49,12 @@
     <div class="hero-icon"><i class="bi bi-bank2"></i></div>
     <div class="flex-grow-1">
       <h4 class="mb-0 fw-bold">Conferência de Depósitos</h4>
-      <p class="mb-0 opacity-75 small">Visualize os depósitos em espécie e cheques registrados no Fechamento de Caixa com data da venda, data de depósito e acumulado</p>
+      <p class="mb-0 opacity-75 small">Cruza depósitos do Fechamento de Caixa com créditos bancários importados. Saldo = banco − caixa.</p>
+    </div>
+    <div class="d-flex gap-2">
+      <button class="btn btn-light btn-sm" data-bs-toggle="modal" data-bs-target="#modalVinculos">
+        <i class="bi bi-link-45deg me-1"></i> Vínculos
+      </button>
     </div>
   </div>
 
@@ -64,7 +66,6 @@
     <div class="card-body py-3">
       <div class="row g-3 align-items-end">
 
-        <!-- Data Início -->
         <div class="col-6 col-sm-3 col-md-2">
           <label class="form-label small fw-semibold mb-1">
             <i class="bi bi-calendar-event me-1 text-primary"></i>Data Início
@@ -72,7 +73,6 @@
           <input type="date" name="data_inicio" value="{{ data_inicio }}" class="form-control form-control-sm">
         </div>
 
-        <!-- Data Fim -->
         <div class="col-6 col-sm-3 col-md-2">
           <label class="form-label small fw-semibold mb-1">
             <i class="bi bi-calendar-check me-1 text-primary"></i>Data Fim
@@ -80,23 +80,21 @@
           <input type="date" name="data_fim" value="{{ data_fim }}" class="form-control form-control-sm">
         </div>
 
-        <!-- Cliente / Empresa -->
         <div class="col-12 col-sm-6 col-md-3">
           <label class="form-label small fw-semibold mb-1">
             <i class="bi bi-building me-1 text-primary"></i>Empresa
           </label>
-          <select name="cliente_ids[]" class="form-select form-select-sm" multiple
+          <select name="empresa_ids[]" class="form-select form-select-sm" multiple
                   style="height:auto; min-height:2.1rem;">
-            {% for cli in clientes %}
-            <option value="{{ cli.id }}" {% if cli.id|string in cliente_ids %}selected{% endif %}>
-              {{ cli.nome }}
+            {% for emp in empresas %}
+            <option value="{{ emp.id }}" {% if emp.id|string in empresa_ids %}selected{% endif %}>
+              {{ emp.nome }}
             </option>
             {% endfor %}
           </select>
           <div class="form-text" style="font-size:.7rem;"><i class="bi bi-info-circle me-1"></i>Ctrl+clique p/ múltiplos</div>
         </div>
 
-        <!-- Botões -->
         <div class="col-12 col-sm-auto">
           <button type="submit" class="btn btn-primary btn-sm">
             <i class="bi bi-search me-1"></i> Filtrar
@@ -107,7 +105,6 @@
         </div>
       </div>
 
-      <!-- Quick period buttons -->
       <div class="mt-3 pt-2 border-top d-flex gap-1 flex-wrap align-items-center">
         <span class="text-muted small me-1"><i class="bi bi-clock-history me-1"></i>Atalhos:</span>
         <button type="button" class="btn btn-outline-primary btn-sm periodo-btn" data-periodo="mes_atual">
@@ -123,119 +120,335 @@
     </div>
   </form>
 
-  {% if not sections %}
+  {% if not vinculos_list %}
+  <div class="alert alert-warning">
+    <i class="bi bi-exclamation-triangle me-2"></i>
+    Nenhuma empresa está vinculada a uma conta bancária. Clique em
+    <strong>Vínculos</strong> (no cabeçalho) para configurar.
+  </div>
+
+  {% elif not sections or sections | selectattr('linhas') | list | length == 0 %}
   <div class="alert alert-info">
     <i class="bi bi-info-circle me-2"></i>
-    Nenhum depósito encontrado para os filtros selecionados. Registre depósitos no Fechamento de Caixa para que apareçam aqui.
+    Nenhum depósito encontrado para os filtros selecionados.
   </div>
+
   {% else %}
 
   {% for sec in sections %}
-  {% set header_class = 'especie' if sec.tipo == 'DEPOSITO_ESPECIE' else ('vista' if sec.tipo == 'DEPOSITO_CHEQUE_VISTA' else 'prazo') %}
+  {% if sec.linhas %}
   <div class="mb-4">
-    <div class="sec-header {{ header_class }} d-flex justify-content-between align-items-center">
+    <div class="sec-header d-flex justify-content-between align-items-center">
       <span>
-        <i class="bi bi-bank me-2"></i>{{ sec.label }}
+        <i class="bi bi-bank me-2"></i>{{ sec.empresa_nome }}
+        {% if sec.contas %}
+        <span class="opacity-75 small fw-normal ms-2">
+          — {{ sec.contas | join(' / ') }}
+        </span>
+        {% endif %}
       </span>
       <span class="small opacity-75">
-        Total: <span class="fw-bold">{{ sec.total | fmtmoney }}</span>
+        Caixa: <strong>{{ sec.total_caixa | fmtmoney }}</strong>
+        &nbsp;|&nbsp;
+        Banco: <strong>{{ sec.total_banco | fmtmoney }}</strong>
+        &nbsp;|&nbsp;
+        Saldo:
+        <strong class="{% if sec.saldo_final > 0.005 %}text-warning{% elif sec.saldo_final < -0.005 %}text-warning{% endif %}">
+          {{ sec.saldo_final | fmtmoney }}
+        </strong>
       </span>
     </div>
     <div class="table-responsive">
       <table class="table table-bordered table-sm tbl-dep mb-0">
         <thead class="table-dark">
           <tr>
-            <th class="text-center" style="width:88px;">Dt. Venda</th>
-            {% if clientes|length != 1 %}
-            <th style="width:140px;">Empresa</th>
-            {% endif %}
+            <th style="width:95px;">Data Venda</th>
             <th class="text-end" style="width:110px;">Valor</th>
-            <th class="text-center" style="width:100px;">Dt. Depósito</th>
-            <th>Descrição</th>
-            <th class="text-end" style="width:110px;">Acumulado</th>
+            <th style="width:100px;">Data Depósito</th>
+            <th>Número Depósito</th>
+            <th style="width:160px;">Conta Corrente</th>
+            <th class="text-end" style="width:115px;">Saldo</th>
           </tr>
         </thead>
         <tbody>
           {% for linha in sec.linhas %}
-          <tr>
-            <td class="text-center">{{ linha.data_venda }}</td>
-            {% if clientes|length != 1 %}
-            <td class="small text-muted">{{ linha.cliente_nome }}</td>
-            {% endif %}
-            <td class="text-end">{{ linha.valor | fmtmoney }}</td>
-            <td class="text-center">
-              {% if linha.data_deposito %}
-                {{ linha.data_deposito }}
-              {% else %}
-                <span class="text-muted">—</span>
+          <tr{% if linha.tipo == 'caixa' %} class="row-caixa"{% endif %}>
+            <td>
+              {{ linha.data_venda }}
+              {% if linha.dia_semana %}<span class="dia-semana">{{ linha.dia_semana }}</span>{% endif %}
+              {% if linha.tipo == 'caixa' %}
+                <span class="badge bg-secondary ms-1" style="font-size:.62rem;">caixa</span>
               {% endif %}
             </td>
-            <td class="text-muted small">{{ linha.descricao or '—' }}</td>
-            <td class="text-end fw-semibold">{{ linha.acumulado | fmtmoney }}</td>
+            <td class="text-end">{{ linha.valor | fmtmoney }}</td>
+            <td class="text-center">{{ linha.data_deposito or '—' }}</td>
+            <td class="small text-muted">{{ linha.num_deposito or '—' }}</td>
+            <td class="small text-muted">{{ linha.conta_corrente or '—' }}</td>
+            <td class="text-end {% if linha.saldo_pos %}saldo-pos{% elif linha.saldo_neg %}saldo-neg{% else %}saldo-zero{% endif %}">
+              {{ linha.saldo | fmtmoney }}
+            </td>
           </tr>
           {% endfor %}
-          <tr class="row-total">
-            <td class="fw-bold" {% if clientes|length != 1 %}colspan="2"{% endif %}>TOTAL {{ sec.label }}</td>
-            <td class="text-end">{{ sec.total | fmtmoney }}</td>
-            <td colspan="3"></td>
+
+          <tr class="row-grand">
+            <td colspan="1" class="fw-bold">TOTAL {{ sec.empresa_nome }}</td>
+            <td class="text-end fw-bold" colspan="4">
+              Caixa {{ sec.total_caixa | fmtmoney }} &nbsp;/&nbsp;
+              Banco {{ sec.total_banco | fmtmoney }}
+            </td>
+            <td class="text-end fw-bold {% if sec.saldo_final > 0.005 %}saldo-pos{% elif sec.saldo_final < -0.005 %}saldo-neg{% else %}saldo-zero{% endif %}"
+                style="color:inherit!important;">
+              {{ sec.saldo_final | fmtmoney }}
+            </td>
           </tr>
         </tbody>
       </table>
     </div>
   </div>
+  {% endif %}
   {% endfor %}
 
-  <!-- Totais gerais -->
+  <!-- Resumo geral -->
   <div class="table-responsive mb-4">
     <table class="table table-bordered table-sm tbl-dep">
-      <thead>
+      <tbody>
         <tr class="row-grand">
           <td class="fw-bold">TOTAL GERAL</td>
-          {% for sec in sections %}
-          <td class="text-end fw-bold">{{ sec.label }}: {{ sec.total | fmtmoney }}</td>
-          {% endfor %}
-          <td class="text-end fw-bold">{{ sections | map(attribute='total') | sum | fmtmoney }}</td>
+          <td class="text-end fw-bold">
+            Caixa: {{ sections | map(attribute='total_caixa') | sum | fmtmoney }}
+          </td>
+          <td class="text-end fw-bold">
+            Banco: {{ sections | map(attribute='total_banco') | sum | fmtmoney }}
+          </td>
+          <td class="text-end fw-bold {% if (sections | map(attribute='saldo_final') | sum) > 0.005 %}saldo-pos{% elif (sections | map(attribute='saldo_final') | sum) < -0.005 %}saldo-neg{% else %}saldo-zero{% endif %}"
+              style="color:inherit!important;">
+            Saldo: {{ sections | map(attribute='saldo_final') | sum | fmtmoney }}
+          </td>
         </tr>
-      </thead>
+      </tbody>
     </table>
   </div>
 
-  <!-- Legend -->
   <div class="small text-muted mb-4">
-    <strong>Dt. Venda</strong>: data do fechamento de caixa. &nbsp;
-    <strong>Dt. Depósito</strong>: data informada no lançamento do depósito. &nbsp;
-    <strong>Acumulado</strong>: soma acumulada dos depósitos do tipo, em ordem cronológica.
+    <span class="badge bg-secondary me-1" style="font-size:.68rem;">caixa</span>
+    Linhas azul-claras = depósito registrado no Fechamento de Caixa (subtrai do saldo).
+    Linhas brancas = crédito importado do extrato bancário (soma ao saldo).
+    <strong>Saldo verde</strong> = banco recebeu mais que o caixa registrou.
+    <strong>Saldo vermelho</strong> = banco ainda não recebeu tudo o que foi registrado no caixa.
   </div>
 
   {% endif %}
 
 </div>
+
+<!-- Modal Vínculos -->
+<div class="modal fade" id="modalVinculos" tabindex="-1" aria-labelledby="labelModalVinculos" aria-hidden="true">
+  <div class="modal-dialog modal-xl">
+    <div class="modal-content">
+      <div class="modal-header" style="background:#1D63A5;color:#fff;">
+        <h5 class="modal-title" id="labelModalVinculos">
+          <i class="bi bi-link-45deg me-2"></i>Vínculos Empresa → Conta Bancária
+        </h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <p class="small text-muted mb-3">
+          Vincule cada empresa ao(s) banco(s) que recebem seus depósitos.
+          O saldo será calculado comparando os depósitos do caixa desta empresa
+          com os créditos bancários nessa conta.
+        </p>
+
+        <span id="msg-vinculos" class="small d-block mb-2"></span>
+
+        <!-- Formulário para adicionar vínculo -->
+        <div class="row g-2 align-items-end mb-3 p-2 border rounded bg-light">
+          <div class="col-12 col-md-4">
+            <label class="form-label small fw-semibold mb-1">Empresa</label>
+            <select id="sel-nova-empresa" class="form-select form-select-sm">
+              <option value="">— Selecione —</option>
+              {% for emp in empresas %}
+              <option value="{{ emp.id }}">{{ emp.nome }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-12 col-md-5">
+            <label class="form-label small fw-semibold mb-1">Conta Bancária</label>
+            <select id="sel-nova-conta" class="form-select form-select-sm">
+              <option value="">— Selecione —</option>
+              {% for ba in banco_accounts %}
+              <option value="{{ ba.id }}" data-empresa="{{ ba.cliente_id }}">
+                {{ ba.empresa_nome or '—' }} — {{ ba.conta_nome }}
+              </option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-auto">
+            <button class="btn btn-primary btn-sm" id="btn-vincular-add">
+              <i class="bi bi-plus-lg me-1"></i>Vincular
+            </button>
+          </div>
+        </div>
+
+        <!-- Lista de vínculos existentes -->
+        <table class="table table-sm table-bordered" id="tbl-vinculos" style="font-size:.82rem;">
+          <thead class="table-dark">
+            <tr>
+              <th>Empresa</th>
+              <th>Conta Bancária</th>
+              <th class="text-center" style="width:70px;">Remover</th>
+            </tr>
+          </thead>
+          <tbody id="tbl-vinculos-body">
+            {% for v in vinculos_list %}
+            <tr id="vinc-row-{{ v.empresa_id }}-{{ v.bank_account_id }}">
+              <td>{{ v.empresa_nome }}</td>
+              <td>{{ v.conta_nome or v.banco_nome }}</td>
+              <td class="text-center">
+                <button class="btn btn-sm btn-outline-danger btn-desvincular"
+                        data-empresa="{{ v.empresa_id }}"
+                        data-conta="{{ v.bank_account_id }}"
+                        title="Remover vínculo">
+                  <i class="bi bi-trash"></i>
+                </button>
+              </td>
+            </tr>
+            {% else %}
+            <tr id="vinculos-empty-row">
+              <td colspan="3" class="text-center text-muted small">
+                Nenhum vínculo cadastrado.
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Fechar</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 {% endblock %}
 
 {% block scripts %}
 <script>
-// Quick period shortcuts
-document.querySelectorAll('.periodo-btn').forEach(function(btn) {
-    btn.addEventListener('click', function() {
-        const periodo = this.getAttribute('data-periodo');
-        const hoje = new Date();
-        let inicio, fim;
-        if (periodo === 'mes_atual') {
-            inicio = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
-            fim = hoje;
-        } else if (periodo === 'mes_anterior') {
-            inicio = new Date(hoje.getFullYear(), hoje.getMonth() - 1, 1);
-            fim = new Date(hoje.getFullYear(), hoje.getMonth(), 0);
-        } else if (periodo === 'ano_atual') {
-            inicio = new Date(hoje.getFullYear(), 0, 1);
-            fim = hoje;
-        }
-        if (inicio && fim) {
-            const fmt = d => d.toISOString().split('T')[0];
-            document.querySelector('[name=data_inicio]').value = fmt(inicio);
-            document.querySelector('[name=data_fim]').value = fmt(fim);
-        }
+(function () {
+  // Quick period shortcuts
+  const inp_ini = document.querySelector('[name="data_inicio"]');
+  const inp_fim = document.querySelector('[name="data_fim"]');
+
+  document.querySelectorAll('.periodo-btn').forEach(btn => {
+    btn.addEventListener('click', function () {
+      const today = new Date();
+      let ini, fim;
+      if (this.dataset.periodo === 'mes_atual') {
+        ini = new Date(today.getFullYear(), today.getMonth(), 1);
+        fim = today;
+      } else if (this.dataset.periodo === 'mes_anterior') {
+        ini = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+        fim = new Date(today.getFullYear(), today.getMonth(), 0);
+      } else {
+        ini = new Date(today.getFullYear(), 0, 1);
+        fim = today;
+      }
+      inp_ini.value = ini.toISOString().slice(0, 10);
+      inp_fim.value = fim.toISOString().slice(0, 10);
     });
-});
+  });
+
+  // ── Vínculos modal ─────────────────────────────────────────────────────────
+  const msgVinculos = document.getElementById('msg-vinculos');
+  function showMsg(text, ok) {
+    msgVinculos.textContent = text;
+    msgVinculos.className = 'small d-block mb-2 ' + (ok ? 'text-success' : 'text-danger');
+    if (ok) setTimeout(() => { msgVinculos.textContent = ''; }, 3000);
+  }
+
+  // Adicionar vínculo
+  document.getElementById('btn-vincular-add').addEventListener('click', async function () {
+    const empresaId = parseInt(document.getElementById('sel-nova-empresa').value) || null;
+    const contaId   = parseInt(document.getElementById('sel-nova-conta').value)   || null;
+    if (!empresaId || !contaId) {
+      showMsg('Selecione empresa e conta bancária.', false);
+      return;
+    }
+    try {
+      const res = await fetch('{{ url_for("conf_depositos.vincular_deposito") }}', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ empresa_id: empresaId, bank_account_id: contaId }),
+      });
+      const json = await res.json();
+      if (!json.success) { showMsg(json.message || 'Erro.', false); return; }
+
+      // Remove linha "vazio" se existir
+      const emptyRow = document.getElementById('vinculos-empty-row');
+      if (emptyRow) emptyRow.remove();
+
+      // Pega textos dos selects
+      const selEmp  = document.getElementById('sel-nova-empresa');
+      const selCont = document.getElementById('sel-nova-conta');
+      const empNome  = selEmp.options[selEmp.selectedIndex].text;
+      const contNome = selCont.options[selCont.selectedIndex].text;
+
+      const rowId = `vinc-row-${empresaId}-${contaId}`;
+      if (!document.getElementById(rowId)) {
+        const tbody = document.getElementById('tbl-vinculos-body');
+        const tr = document.createElement('tr');
+        tr.id = rowId;
+        tr.innerHTML = `
+          <td>${empNome}</td>
+          <td>${contNome}</td>
+          <td class="text-center">
+            <button class="btn btn-sm btn-outline-danger btn-desvincular"
+                    data-empresa="${empresaId}" data-conta="${contaId}" title="Remover vínculo">
+              <i class="bi bi-trash"></i>
+            </button>
+          </td>`;
+        tbody.appendChild(tr);
+        attachDelVinculo(tr.querySelector('.btn-desvincular'));
+      }
+
+      // Limpa selects
+      selEmp.value  = '';
+      selCont.value = '';
+      showMsg('Vínculo adicionado com sucesso.', true);
+    } catch (e) {
+      showMsg('Erro de comunicação.', false);
+    }
+  });
+
+  function attachDelVinculo(btn) {
+    btn.addEventListener('click', async function () {
+      const empresaId = parseInt(this.dataset.empresa);
+      const contaId   = parseInt(this.dataset.conta);
+      if (!confirm('Remover este vínculo?')) return;
+      try {
+        const res = await fetch('{{ url_for("conf_depositos.desvincular_deposito") }}', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ empresa_id: empresaId, bank_account_id: contaId }),
+        });
+        const json = await res.json();
+        if (json.success) {
+          const row = document.getElementById(`vinc-row-${empresaId}-${contaId}`);
+          if (row) row.remove();
+          const tbody = document.getElementById('tbl-vinculos-body');
+          if (!tbody.querySelector('tr')) {
+            tbody.innerHTML = '<tr id="vinculos-empty-row"><td colspan="3" class="text-center text-muted small">Nenhum vínculo cadastrado.</td></tr>';
+          }
+          showMsg('Vínculo removido.', true);
+        } else {
+          showMsg(json.message || 'Erro.', false);
+        }
+      } catch (e) {
+        showMsg('Erro de comunicação.', false);
+      }
+    });
+  }
+
+  document.querySelectorAll('.btn-desvincular').forEach(attachDelVinculo);
+})();
 </script>
 {% endblock %}
