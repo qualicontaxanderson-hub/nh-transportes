@@ -167,7 +167,7 @@
                                 </tr>
                                 {% for dep in depositos_especie %}
                                 <tr>
-                                    <td style="font-size: 0.85rem; padding-left: 2rem;">└ Depósito #{{ loop.index }}</td>
+                                    <td style="font-size: 0.85rem; padding-left: 2rem;">└ Depósito #{{ loop.index }}{% if dep.data_deposito %} <span class="text-muted">({{ dep.data_deposito.strftime('%d/%m/%Y') }})</span>{% endif %}</td>
                                     <td style="font-size: 0.85rem;">{{ dep.descricao if dep.descricao else '-' }}</td>
                                     <td style="font-size: 0.85rem; text-align: right;">R$ {{ "{:,.2f}".format(dep.valor|float).replace(',', 'X').replace('.', ',').replace('X', '.') }}</td>
                                 </tr>
@@ -184,7 +184,7 @@
                                 </tr>
                                 {% for dep in depositos_vista %}
                                 <tr>
-                                    <td style="font-size: 0.85rem; padding-left: 2rem;">└ Cheque #{{ loop.index }}</td>
+                                    <td style="font-size: 0.85rem; padding-left: 2rem;">└ Cheque #{{ loop.index }}{% if dep.data_deposito %} <span class="text-muted">({{ dep.data_deposito.strftime('%d/%m/%Y') }})</span>{% endif %}</td>
                                     <td style="font-size: 0.85rem;">{{ dep.descricao if dep.descricao else '-' }}</td>
                                     <td style="font-size: 0.85rem; text-align: right;">R$ {{ "{:,.2f}".format(dep.valor|float).replace(',', 'X').replace('.', ',').replace('X', '.') }}</td>
                                 </tr>
@@ -201,7 +201,7 @@
                                 </tr>
                                 {% for dep in depositos_prazo %}
                                 <tr>
-                                    <td style="font-size: 0.85rem; padding-left: 2rem;">└ Cheque #{{ loop.index }}</td>
+                                    <td style="font-size: 0.85rem; padding-left: 2rem;">└ Cheque #{{ loop.index }}{% if dep.data_deposito %} <span class="text-muted">({{ dep.data_deposito.strftime('%d/%m/%Y') }})</span>{% endif %}</td>
                                     <td style="font-size: 0.85rem;">{{ dep.descricao if dep.descricao else '-' }}</td>
                                     <td style="font-size: 0.85rem; text-align: right;">R$ {{ "{:,.2f}".format(dep.valor|float).replace(',', 'X').replace('.', ',').replace('X', '.') }}</td>
                                 </tr>

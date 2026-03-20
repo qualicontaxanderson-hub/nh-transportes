@@ -1,0 +1,243 @@
+{% extends 'base.html' %}
+{% block title %}Conf. Depósitos{% endblock %}
+
+{% block styles %}
+<style>
+.page-hero {
+  background: linear-gradient(135deg, #28a745 0%, #155724 100%);
+  border-radius: .75rem; padding: 1.5rem 2rem; margin-bottom: 1.5rem; color: #fff;
+}
+.page-hero .hero-icon {
+  width: 3rem; height: 3rem; background: rgba(255,255,255,.15);
+  border-radius: .6rem; display: flex; align-items: center; justify-content: center;
+  font-size: 1.5rem; flex-shrink: 0;
+}
+.sec-header {
+  background: #28a745; color: #fff; padding: .4rem .85rem;
+  border-radius: .4rem .4rem 0 0; font-weight: 700; font-size: .85rem;
+}
+.sec-header.especie  { background: #28a745; }
+.sec-header.vista    { background: #0d6efd; }
+.sec-header.prazo    { background: #6f42c1; }
+.tbl-dep {
+  font-size: .80rem;
+}
+.tbl-dep thead th {
+  font-size: .73rem; text-transform: uppercase; letter-spacing: .04em;
+  white-space: nowrap; padding: .3rem .5rem;
+}
+.tbl-dep td {
+  padding: .28rem .5rem;
+  vertical-align: middle;
+}
+.row-total { background: #e9ecef; font-weight: 700; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+
+  <!-- Breadcrumb -->
+  <nav aria-label="breadcrumb" class="mb-3">
+    <ol class="breadcrumb small">
+      <li class="breadcrumb-item"><a href="{{ url_for('index') }}" class="text-decoration-none">Dashboard</a></li>
+      <li class="breadcrumb-item">Relatórios</li>
+      <li class="breadcrumb-item active">Conf. Depósitos</li>
+    </ol>
+  </nav>
+
+  <!-- Hero -->
+  <div class="page-hero d-flex align-items-center gap-3 flex-wrap mb-3">
+    <div class="hero-icon"><i class="bi bi-bank2"></i></div>
+    <div class="flex-grow-1">
+      <h4 class="mb-0 fw-bold">Conferência de Depósitos</h4>
+      <p class="mb-0 opacity-75 small">Visualize os depósitos em espécie e cheques registrados no Fechamento de Caixa com data da venda, data de depósito e acumulado</p>
+    </div>
+  </div>
+
+  <!-- Filtros -->
+  <form method="get" class="card shadow-sm mb-4">
+    <div class="card-header py-2" style="background:#28a745;color:white;">
+      <h6 class="mb-0"><i class="bi bi-funnel me-1"></i> Filtros</h6>
+    </div>
+    <div class="card-body py-3">
+      <div class="row g-3 align-items-end">
+
+        <!-- Data Início -->
+        <div class="col-6 col-sm-3 col-md-2">
+          <label class="form-label small fw-semibold mb-1">
+            <i class="bi bi-calendar-event me-1 text-success"></i>Data Início
+          </label>
+          <input type="date" name="data_inicio" value="{{ data_inicio }}" class="form-control form-control-sm">
+        </div>
+
+        <!-- Data Fim -->
+        <div class="col-6 col-sm-3 col-md-2">
+          <label class="form-label small fw-semibold mb-1">
+            <i class="bi bi-calendar-check me-1 text-success"></i>Data Fim
+          </label>
+          <input type="date" name="data_fim" value="{{ data_fim }}" class="form-control form-control-sm">
+        </div>
+
+        <!-- Cliente / Empresa -->
+        <div class="col-12 col-sm-6 col-md-3">
+          <label class="form-label small fw-semibold mb-1">
+            <i class="bi bi-building me-1 text-success"></i>Empresa
+          </label>
+          <select name="cliente_ids[]" class="form-select form-select-sm" multiple
+                  style="height:auto; min-height:2.1rem;">
+            {% for cli in clientes %}
+            <option value="{{ cli.id }}" {% if cli.id|string in cliente_ids %}selected{% endif %}>
+              {{ cli.nome }}
+            </option>
+            {% endfor %}
+          </select>
+          <div class="form-text" style="font-size:.7rem;"><i class="bi bi-info-circle me-1"></i>Ctrl+clique p/ múltiplos</div>
+        </div>
+
+        <!-- Botões -->
+        <div class="col-12 col-sm-auto">
+          <button type="submit" class="btn btn-success btn-sm">
+            <i class="bi bi-search me-1"></i> Filtrar
+          </button>
+          <a href="{{ url_for('conf_depositos.conf_depositos') }}" class="btn btn-outline-secondary btn-sm">
+            <i class="bi bi-x-circle me-1"></i> Limpar
+          </a>
+        </div>
+      </div>
+
+      <!-- Quick period buttons -->
+      <div class="mt-3 pt-2 border-top d-flex gap-1 flex-wrap align-items-center">
+        <span class="text-muted small me-1"><i class="bi bi-clock-history me-1"></i>Atalhos:</span>
+        <button type="button" class="btn btn-outline-success btn-sm periodo-btn" data-periodo="mes_atual">
+          <i class="bi bi-calendar3 me-1"></i>Mês Atual
+        </button>
+        <button type="button" class="btn btn-outline-success btn-sm periodo-btn" data-periodo="mes_anterior">
+          <i class="bi bi-calendar3 me-1"></i>Mês Anterior
+        </button>
+        <button type="button" class="btn btn-outline-success btn-sm periodo-btn" data-periodo="ano_atual">
+          <i class="bi bi-calendar-range me-1"></i>Ano Atual
+        </button>
+      </div>
+    </div>
+  </form>
+
+  {% if not sections %}
+  <div class="alert alert-info">
+    <i class="bi bi-info-circle me-2"></i>
+    Nenhum depósito encontrado para os filtros selecionados. Registre depósitos no Fechamento de Caixa para que apareçam aqui.
+  </div>
+  {% else %}
+
+  {% for sec in sections %}
+  {% set header_class = 'especie' if sec.tipo == 'DEPOSITO_ESPECIE' else ('vista' if sec.tipo == 'DEPOSITO_CHEQUE_VISTA' else 'prazo') %}
+  <div class="mb-4">
+    <div class="sec-header {{ header_class }} d-flex justify-content-between align-items-center">
+      <span>
+        <i class="bi bi-bank me-2"></i>{{ sec.label }}
+      </span>
+      <span class="small opacity-75">
+        Total: <span class="fw-bold">{{ sec.total | fmtmoney }}</span>
+      </span>
+    </div>
+    <div class="table-responsive">
+      <table class="table table-bordered table-sm tbl-dep mb-0">
+        <thead class="table-dark">
+          <tr>
+            <th class="text-center" style="width:88px;">Dt. Venda</th>
+            {% if clientes|length != 1 %}
+            <th style="width:140px;">Empresa</th>
+            {% endif %}
+            <th class="text-end" style="width:110px;">Valor</th>
+            <th class="text-center" style="width:100px;">Dt. Depósito</th>
+            <th>Descrição</th>
+            <th class="text-end" style="width:110px;">Acumulado</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for linha in sec.linhas %}
+          <tr>
+            <td class="text-center">{{ linha.data_venda }}</td>
+            {% if clientes|length != 1 %}
+            <td class="small text-muted">{{ linha.cliente_nome }}</td>
+            {% endif %}
+            <td class="text-end">{{ linha.valor | fmtmoney }}</td>
+            <td class="text-center">
+              {% if linha.data_deposito %}
+                {{ linha.data_deposito }}
+              {% else %}
+                <span class="text-muted">—</span>
+              {% endif %}
+            </td>
+            <td class="text-muted small">{{ linha.descricao or '—' }}</td>
+            <td class="text-end fw-semibold">{{ linha.acumulado | fmtmoney }}</td>
+          </tr>
+          {% endfor %}
+          <tr class="row-total">
+            <td class="fw-bold" {% if clientes|length != 1 %}colspan="2"{% endif %}>TOTAL {{ sec.label }}</td>
+            <td class="text-end">{{ sec.total | fmtmoney }}</td>
+            <td colspan="3"></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {% endfor %}
+
+  <!-- Totais gerais -->
+  <div class="card shadow-sm mb-4">
+    <div class="card-header" style="background:#155724;color:white;">
+      <h6 class="mb-0"><i class="bi bi-calculator me-1"></i> Resumo Geral</h6>
+    </div>
+    <div class="card-body">
+      <div class="row g-3">
+        {% for sec in sections %}
+        <div class="col-sm-4">
+          <div class="border rounded p-3 text-center">
+            <div class="small text-muted mb-1">{{ sec.label }}</div>
+            <div class="fw-bold fs-5 text-success">{{ sec.total | fmtmoney }}</div>
+          </div>
+        </div>
+        {% endfor %}
+        <div class="col-sm-4">
+          <div class="border rounded p-3 text-center bg-success text-white">
+            <div class="small mb-1 opacity-75">Total Geral</div>
+            <div class="fw-bold fs-5">{{ sections | map(attribute='total') | sum | fmtmoney }}</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  {% endif %}
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Quick period shortcuts
+document.querySelectorAll('.periodo-btn').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+        const periodo = this.getAttribute('data-periodo');
+        const hoje = new Date();
+        let inicio, fim;
+        if (periodo === 'mes_atual') {
+            inicio = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
+            fim = hoje;
+        } else if (periodo === 'mes_anterior') {
+            inicio = new Date(hoje.getFullYear(), hoje.getMonth() - 1, 1);
+            fim = new Date(hoje.getFullYear(), hoje.getMonth(), 0);
+        } else if (periodo === 'ano_atual') {
+            inicio = new Date(hoje.getFullYear(), 0, 1);
+            fim = hoje;
+        }
+        if (inicio && fim) {
+            const fmt = d => d.toISOString().split('T')[0];
+            document.querySelector('[name=data_inicio]').value = fmt(inicio);
+            document.querySelector('[name=data_fim]').value = fmt(fim);
+        }
+    });
+});
+</script>
+{% endblock %}
