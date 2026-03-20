@@ -251,10 +251,36 @@
     }
 
     function confirmarReversaoLotePag() {
-        var cks = document.querySelectorAll('#tbl-pagamentos .row-chk:checked');
-        if (cks.length === 0) return false;
+        var cks = Array.from(document.querySelectorAll('#tbl-pagamentos .row-chk:checked')).filter(function(c) {
+            return c.dataset.status === 'conciliado' || c.dataset.status === 'ignorado';
+        });
+        if (cks.length === 0) {
+            alert('Nenhuma transação conciliada/ignorada selecionada para reverter.');
+            return false;
+        }
         if (!confirm('Reverter a conciliação de ' + cks.length + ' transação(ões) selecionada(s)?\n\nElas voltarão ao status Pendente.')) return false;
         var form = document.getElementById('form-reverter-lote-pag');
+        form.querySelectorAll('input[name="tx_ids[]"]').forEach(function(el) { el.remove(); });
+        cks.forEach(function(c) {
+            var inp = document.createElement('input');
+            inp.type = 'hidden'; inp.name = 'tx_ids[]'; inp.value = c.value;
+            form.appendChild(inp);
+        });
+        return true;
+    }
+
+    function confirmarExclusaoLotePag() {
+        var cks = document.querySelectorAll('#tbl-pagamentos .row-chk:checked');
+        if (cks.length === 0) return false;
+        var conciliadoCount = Array.from(cks).filter(function(c) {
+            return c.dataset.status === 'conciliado' || c.dataset.status === 'ignorado';
+        }).length;
+        var msg = 'Excluir permanentemente ' + cks.length + ' transação(ões) selecionada(s)?\n\nEsta ação não pode ser desfeita.';
+        if (conciliadoCount > 0) {
+            msg += '\n\n⚠️ Atenção: ' + conciliadoCount + ' transação(ões) conciliada(s)/ignorada(s) estão incluídas.';
+        }
+        if (!confirm(msg)) return false;
+        var form = document.getElementById('form-excluir-lote-pag');
         form.querySelectorAll('input[name="tx_ids[]"]').forEach(function(el) { el.remove(); });
         cks.forEach(function(c) {
             var inp = document.createElement('input');
@@ -281,8 +307,16 @@
                       action="{{ url_for('financeiro.reverter_conciliacao_lote') }}"
                       style="display:inline;"
                       onsubmit="return confirmarReversaoLotePag();">
-                    <button type="submit" class="btn btn-danger btn-sm">
+                    <button type="submit" class="btn btn-warning btn-sm">
                         <i class="bi bi-arrow-counterclockwise me-1"></i> Reverter selecionadas
+                    </button>
+                </form>
+                <form id="form-excluir-lote-pag" method="POST"
+                      action="{{ url_for('financeiro.excluir_transacao_lote') }}"
+                      style="display:inline;"
+                      onsubmit="return confirmarExclusaoLotePag();">
+                    <button type="submit" class="btn btn-danger btn-sm">
+                        <i class="bi bi-trash me-1"></i> Excluir selecionadas
                     </button>
                 </form>
                 <button type="button" class="btn btn-outline-secondary btn-sm" onclick="desmarcarTodosPag()">
@@ -312,10 +346,9 @@
                         {% for t in transacoes %}
                         <tr>
                             <td class="col-chk">
-                                {% if t.status == 'conciliado' or t.status == 'ignorado' %}
                                 <input type="checkbox" class="row-chk" value="{{ t.id }}"
+                                       data-status="{{ t.status }}"
                                        onchange="atualizarBulkPag()" style="cursor:pointer;">
-                                {% endif %}
                             </td>
                             <td>{{ t.data_transacao.strftime('%d/%m/%Y') if t.data_transacao else '—' }}</td>
                             <td style="max-width:260px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="{{ t.descricao or '' }}">
@@ -351,21 +384,29 @@
                                     <span class="badge bg-warning text-dark">Pendente</span>
                                 {% endif %}
                             </td>
-                            <td class="text-center text-nowrap">
+                            <td class="text-center" style="white-space:nowrap;">
                                 {% if t.status == 'conciliado' or t.status == 'ignorado' %}
                                 <form method="POST"
                                       action="{{ url_for('financeiro.reverter_conciliacao', tx_id=t.id) }}"
                                       style="display:inline;"
                                       onsubmit="return confirm('Reverter esta conciliação?\nO débito voltará para Pendente e poderá ser reconciliado corretamente.');">
-                                    <button type="submit" class="btn btn-sm btn-outline-warning" title="Reverter Conciliação">
-                                        <i class="bi bi-arrow-counterclockwise"></i> Reverter
+                                    <button type="submit" class="btn btn-sm btn-outline-warning btn-xs" title="Reverter Conciliação">
+                                        <i class="bi bi-arrow-counterclockwise"></i>
                                     </button>
                                 </form>
                                 {% else %}
-                                <a href="/banco/conciliar?tipo=DEBIT" class="btn btn-sm btn-outline-primary" title="Conciliar esta transação">
-                                    <i class="bi bi-check2-circle"></i> Conciliar
+                                <a href="/banco/conciliar?tipo=DEBIT" class="btn btn-sm btn-outline-primary btn-xs" title="Conciliar esta transação">
+                                    <i class="bi bi-check2-circle"></i>
                                 </a>
                                 {% endif %}
+                                <form method="POST"
+                                      action="{{ url_for('financeiro.excluir_transacao', tx_id=t.id) }}"
+                                      style="display:inline;"
+                                      onsubmit="return confirm('Excluir permanentemente a transação #{{ t.id }}?\n\nEsta ação não pode ser desfeita.');">
+                                    <button type="submit" class="btn btn-sm btn-outline-danger btn-xs" title="Excluir transação">
+                                        <i class="bi bi-trash"></i>
+                                    </button>
+                                </form>
                             </td>
                         </tr>
                         {% else %}
