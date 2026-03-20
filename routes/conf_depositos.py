@@ -47,11 +47,12 @@ def _ensure_vinculos_table(conn):
     Cria conf_depositos_vinculos (empresa_id × forma_recebimento_id).
     Se a tabela já existir com o esquema antigo (bank_account_id), dropa e
     recria — os vínculos antigos eram inválidos de qualquer forma.
+
+    Usa INFORMATION_SCHEMA.COLUMNS para detectar o schema antigo sem disparar
+    um ProgrammingError de "coluna desconhecida" que poderia corromper o estado
+    do cursor/conexão no mysql.connector.
     """
-    cur = conn.cursor()
-    # Cria com esquema correto (se já existir nada acontece por enquanto)
-    cur.execute(
-        """
+    _NEW_DDL = """
         CREATE TABLE IF NOT EXISTS conf_depositos_vinculos (
             id                   INT AUTO_INCREMENT PRIMARY KEY,
             empresa_id           INT NOT NULL,
@@ -59,30 +60,37 @@ def _ensure_vinculos_table(conn):
             criado_em            DATETIME DEFAULT CURRENT_TIMESTAMP,
             UNIQUE KEY uk_dep_empresa_forma (empresa_id, forma_recebimento_id)
         )
-        """
-    )
-    conn.commit()
-    # Migração: se a tabela tem coluna bank_account_id (esquema v1), dropar e recriar.
+    """
     try:
-        cur.execute("SELECT bank_account_id FROM conf_depositos_vinculos LIMIT 0")
-        # Chegou aqui → coluna antiga existe → recriar
-        cur.execute("DROP TABLE conf_depositos_vinculos")
+        cur = conn.cursor()
+        # 1. Garante que a tabela exista (com o esquema correto se for nova)
+        cur.execute(_NEW_DDL)
         conn.commit()
+
+        # 2. Verifica via INFORMATION_SCHEMA se ainda existe a coluna antiga
+        #    (nunca falha por "Unknown column"; apenas retorna 0 ou 1)
         cur.execute(
             """
-            CREATE TABLE conf_depositos_vinculos (
-                id                   INT AUTO_INCREMENT PRIMARY KEY,
-                empresa_id           INT NOT NULL,
-                forma_recebimento_id INT NOT NULL,
-                criado_em            DATETIME DEFAULT CURRENT_TIMESTAMP,
-                UNIQUE KEY uk_dep_empresa_forma (empresa_id, forma_recebimento_id)
-            )
+            SELECT COUNT(*) AS cnt
+              FROM INFORMATION_SCHEMA.COLUMNS
+             WHERE TABLE_SCHEMA = DATABASE()
+               AND TABLE_NAME   = 'conf_depositos_vinculos'
+               AND COLUMN_NAME  = 'bank_account_id'
             """
         )
-        conn.commit()
+        row = cur.fetchone()
+        has_old_col = bool(row and row[0])
+
+        if has_old_col:
+            # 3. Esquema v1 detectado → recriar com schema correto
+            cur.execute("DROP TABLE conf_depositos_vinculos")
+            conn.commit()
+            cur.execute(_NEW_DDL.replace("IF NOT EXISTS ", ""))
+            conn.commit()
+
+        cur.close()
     except Exception:
-        pass  # Coluna não existe → esquema já correto
-    cur.close()
+        pass  # Não crítico — a tabela pode já estar correta
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -120,16 +128,19 @@ def _fmt_date(d):
 def _get_empresas_caixa(conn):
     """Empresas que possuem fechamentos de caixa."""
     cur = conn.cursor(dictionary=True)
-    cur.execute(
-        """
-        SELECT DISTINCT c.id,
-               COALESCE(c.nome_fantasia, c.razao_social) AS nome
-          FROM clientes c
-          INNER JOIN lancamentos_caixa lc ON lc.cliente_id = c.id
-         ORDER BY nome
-        """
-    )
-    rows = cur.fetchall()
+    try:
+        cur.execute(
+            """
+            SELECT DISTINCT c.id,
+                   COALESCE(c.nome_fantasia, c.razao_social) AS nome
+              FROM clientes c
+              INNER JOIN lancamentos_caixa lc ON lc.cliente_id = c.id
+             ORDER BY nome
+            """
+        )
+        rows = cur.fetchall()
+    except Exception:
+        rows = []
     cur.close()
     return rows
 
@@ -189,24 +200,27 @@ def _fetch_caixa_deposits(conn, data_inicio, data_fim, empresa_ids):
         return []
     cur = conn.cursor(dictionary=True)
     ph = ','.join(['%s'] * len(empresa_ids))
-    cur.execute(
-        f"""
-        SELECT lc.data         AS data_venda,
-               lc.cliente_id   AS empresa_id,
-               SUM(lcc.valor)  AS total_caixa
-          FROM lancamentos_caixa_comprovacao lcc
-          JOIN lancamentos_caixa lc      ON lc.id  = lcc.lancamento_caixa_id
-          JOIN formas_pagamento_caixa fp ON fp.id  = lcc.forma_pagamento_id
-         WHERE fp.tipo IN ('DEPOSITO_ESPECIE','DEPOSITO_CHEQUE_VISTA','DEPOSITO_CHEQUE_PRAZO')
-           AND lc.data BETWEEN %s AND %s
-           AND lcc.valor > 0
-           AND lc.cliente_id IN ({ph})
-         GROUP BY lc.data, lc.cliente_id
-         ORDER BY lc.data
-        """,
-        [data_inicio, data_fim] + list(empresa_ids),
-    )
-    rows = cur.fetchall()
+    try:
+        cur.execute(
+            f"""
+            SELECT lc.data         AS data_venda,
+                   lc.cliente_id   AS empresa_id,
+                   SUM(lcc.valor)  AS total_caixa
+              FROM lancamentos_caixa_comprovacao lcc
+              JOIN lancamentos_caixa lc      ON lc.id  = lcc.lancamento_caixa_id
+              JOIN formas_pagamento_caixa fp ON fp.id  = lcc.forma_pagamento_id
+             WHERE fp.tipo IN ('DEPOSITO_ESPECIE','DEPOSITO_CHEQUE_VISTA','DEPOSITO_CHEQUE_PRAZO')
+               AND lc.data BETWEEN %s AND %s
+               AND lcc.valor > 0
+               AND lc.cliente_id IN ({ph})
+             GROUP BY lc.data, lc.cliente_id
+             ORDER BY lc.data
+            """,
+            [data_inicio, data_fim] + list(empresa_ids),
+        )
+        rows = cur.fetchall()
+    except Exception:
+        rows = []
     cur.close()
     return rows
 
