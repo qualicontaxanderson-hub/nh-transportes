@@ -362,6 +362,7 @@ def _build_report(vinculos_list, caixa_rows, bank_rows, conta_ids=None):
             'valor':      float(r['valor'] or 0),
             'conta_nome': r.get('conta_nome') or '',
             'account_id': r.get('account_id'),
+            'descricao':  r.get('descricao') or '',
         })
 
     # ── agrupar vínculos por (empresa_id, tipo_deposito)
@@ -432,6 +433,7 @@ def _build_report(vinculos_list, caixa_rows, bank_rows, conta_ids=None):
                         'dia_semana':  dia_semana,
                         'val_sistema': val_sistema,
                         'conta':       '',
+                        'descricao':   '',
                         'val_deposito': 0.0,
                         'saldo':       saldo,
                         'saldo_pos':   saldo > 0.005,
@@ -449,6 +451,7 @@ def _build_report(vinculos_list, caixa_rows, bank_rows, conta_ids=None):
                             'dia_semana':  '',
                             'val_sistema': 0.0,
                             'conta':       tx['conta_nome'],
+                            'descricao':   tx['descricao'],
                             'val_deposito': tx['valor'],
                             'saldo':       saldo,
                             'saldo_pos':   saldo > 0.005,
