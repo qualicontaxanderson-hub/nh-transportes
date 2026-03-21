@@ -110,6 +110,21 @@ def _ensure_vinculos_table(conn):
                 )
                 conn.commit()
 
+        # 5. Auto-corrição idempotente: qualquer vínculo cuja forma_recebimento
+        #    tenha "CHEQUE" no nome mas esteja marcado como DINHEIRO é corrigido
+        #    automaticamente.  Isso resolve o problema causado pelo DEFAULT
+        #    'DINHEIRO' da migration anterior que afetou todas as linhas existentes.
+        cur.execute(
+            """
+            UPDATE conf_depositos_vinculos cdv
+              JOIN formas_recebimento fr ON fr.id = cdv.forma_recebimento_id
+               SET cdv.tipo_deposito = 'CHEQUE'
+             WHERE UPPER(fr.nome) LIKE '%CHEQUE%'
+               AND cdv.tipo_deposito = 'DINHEIRO'
+            """
+        )
+        conn.commit()
+
         cur.close()
     except Exception:
         pass  # Não crítico — a tabela pode já estar correta
