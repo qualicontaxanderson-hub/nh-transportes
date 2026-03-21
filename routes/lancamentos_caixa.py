@@ -9,6 +9,20 @@ import json
 bp = Blueprint('lancamentos_caixa', __name__, url_prefix='/lancamentos_caixa')
 
 
+def _ensure_comprovacao_data_deposito(conn):
+    """Adiciona coluna data_deposito à tabela lancamentos_caixa_comprovacao se ainda não existir."""
+    cur = conn.cursor()
+    try:
+        cur.execute(
+            "ALTER TABLE lancamentos_caixa_comprovacao ADD COLUMN data_deposito DATE NULL"
+        )
+        conn.commit()
+    except Exception:
+        pass  # coluna já existe
+    finally:
+        cur.close()
+
+
 def parse_brazilian_currency(value_str):
     """
     Convert Brazilian currency format to Decimal.
@@ -446,6 +460,8 @@ def novo():
             flash('Esta funcionalidade requer a execução da migration SQL. O schema atual do banco não é compatível com o sistema de Fechamento de Caixa.', 'warning')
             return redirect(url_for('lancamentos_caixa.lista'))
         
+        _ensure_comprovacao_data_deposito(conn)
+
         if request.method == 'POST':
             # Get main data
             data = request.form.get('data', '')
@@ -523,13 +539,14 @@ def novo():
                     
                     cursor.execute("""
                         INSERT INTO lancamentos_caixa_comprovacao 
-                        (lancamento_caixa_id, forma_pagamento_id, bandeira_cartao_id, descricao, valor)
-                        VALUES (%s, %s, %s, %s, %s)
+                        (lancamento_caixa_id, forma_pagamento_id, bandeira_cartao_id, descricao, valor, data_deposito)
+                        VALUES (%s, %s, %s, %s, %s, %s)
                     """, (lancamento_id, 
                           int(forma_id) if forma_id and forma_id != '' else None,
                           int(cartao_id) if cartao_id and cartao_id != '' else None,
                           comprovacao.get('descricao', ''),
-                          float(parse_brazilian_currency(comprovacao['valor']))))
+                          float(parse_brazilian_currency(comprovacao['valor'])),
+                          comprovacao.get('data_deposito') or None))
             
             # Insert sobras de funcionários (receitas)
             for sobra in sobras_funcionarios:
@@ -917,6 +934,8 @@ def editar(id):
             flash('Esta funcionalidade requer a execução da migration SQL. O schema atual do banco não é compatível com o sistema de Fechamento de Caixa.', 'warning')
             return redirect(url_for('lancamentos_caixa.lista'))
         
+        _ensure_comprovacao_data_deposito(conn)
+
         if request.method == 'POST':
             # Get main data
             data = request.form.get('data', '')
@@ -1021,13 +1040,14 @@ def editar(id):
                     
                     cursor.execute("""
                         INSERT INTO lancamentos_caixa_comprovacao 
-                        (lancamento_caixa_id, forma_pagamento_id, bandeira_cartao_id, descricao, valor)
-                        VALUES (%s, %s, %s, %s, %s)
+                        (lancamento_caixa_id, forma_pagamento_id, bandeira_cartao_id, descricao, valor, data_deposito)
+                        VALUES (%s, %s, %s, %s, %s, %s)
                     """, (id, 
                           int(forma_id) if forma_id and forma_id != '' else None,
                           int(cartao_id) if cartao_id and cartao_id != '' else None,
                           comprovacao.get('descricao', ''),
-                          float(parse_brazilian_currency(comprovacao['valor']))))
+                          float(parse_brazilian_currency(comprovacao['valor'])),
+                          comprovacao.get('data_deposito') or None))
             
             # Insert sobras de funcionários (receitas)
             for sobra in sobras_funcionarios:

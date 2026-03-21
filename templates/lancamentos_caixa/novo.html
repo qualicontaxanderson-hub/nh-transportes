@@ -825,14 +825,18 @@ function addDepositoEntry(tipo, label) {
     entry.className = 'comprovacao-item';
     entry.id = `deposito-${tipo}-${entryIndex}`;
     entry.innerHTML = `
-        <div class="row align-items-center">
-            <div class="col-md-4">
+        <div class="row align-items-center g-1">
+            <div class="col-md-3">
                 <input type="text" class="form-control form-control-sm comprovacao-valor" 
                        data-tipo="${tipo}" data-comprovacao-forma="${tipo}" placeholder="0,00" 
                        oninput="formatNumberInput(this); calcularTotaisDeposito('${tipo}')" 
                        onchange="calcularTotais()">
             </div>
-            <div class="col-md-6">
+            <div class="col-md-3">
+                <input type="date" class="form-control form-control-sm comprovacao-data-deposito" 
+                       data-tipo="${tipo}" title="Data do depósito">
+            </div>
+            <div class="col-md-4">
                 <input type="text" class="form-control form-control-sm comprovacao-descricao" 
                        data-tipo="${tipo}" placeholder="Descrição">
             </div>
@@ -995,8 +999,13 @@ document.getElementById('formCaixa').addEventListener('submit', function(e) {
         
         if (tipo && valor && parseCurrency(valor) > 0) {
             // Check if this field has an associated description
-            const descricaoInput = input.parentElement.parentElement.querySelector('.comprovacao-descricao');
+            const row = input.closest('.row');
+            const descricaoInput = row ? row.querySelector('.comprovacao-descricao') : input.parentElement.parentElement.querySelector('.comprovacao-descricao');
             const descricao = descricaoInput ? descricaoInput.value : '';
+            
+            // Check if this field has an associated deposit date
+            const dataDepositoInput = row ? row.querySelector('.comprovacao-data-deposito') : null;
+            const dataDeposito = dataDepositoInput ? dataDepositoInput.value : '';
             
             // Map tipo to forma_pagamento_id
             const formaId = getFormaPagamentoIdByTipo(tipo);
@@ -1005,6 +1014,7 @@ document.getElementById('formCaixa').addEventListener('submit', function(e) {
                 forma_pagamento_id: formaId,
                 valor: valor,
                 descricao: descricao,
+                data_deposito: dataDeposito || null,
                 bandeira_cartao_id: null
             });
         }
@@ -1130,7 +1140,9 @@ document.addEventListener('DOMContentLoaded', function() {
                     setTimeout(() => {
                         const allInputs = document.querySelectorAll(`input[data-comprovacao-forma="${tipo}"]`);
                         const lastValorInput = allInputs[allInputs.length - 1];
-                        const lastDescInput = lastValorInput?.closest('.comprovacao-item').querySelector('input[placeholder*="Descrição"]');
+                        const lastItem = lastValorInput?.closest('.comprovacao-item');
+                        const lastDescInput = lastItem?.querySelector('input[placeholder*="Descrição"]');
+                        const lastDateInput = lastItem?.querySelector('.comprovacao-data-deposito');
                         console.log(`    After clicking Add, found ${allInputs.length} inputs, filling last one with ${comp.valor}`);
                         if (lastValorInput) {
                             lastValorInput.value = parseFloat(comp.valor).toLocaleString('pt-BR', {
@@ -1140,6 +1152,9 @@ document.addEventListener('DOMContentLoaded', function() {
                         }
                         if (lastDescInput && comp.descricao) {
                             lastDescInput.value = comp.descricao;
+                        }
+                        if (lastDateInput && comp.data_deposito) {
+                            lastDateInput.value = comp.data_deposito;
                         }
                         // Recalculate totals after filling
                         if (tipo === 'DEPOSITO_ESPECIE') calcularTotaisDeposito('DEPOSITO_ESPECIE');

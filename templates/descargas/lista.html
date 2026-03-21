@@ -1,0 +1,245 @@
+{% extends "base.html" %}
+{% block titulo %}Controle de Descargas{% endblock %}
+
+{% block styles %}
+<style>
+  .page-hero {
+    background: linear-gradient(135deg, #1D63A5 0%, #1a4f82 60%, #154070 100%);
+    border-radius: .75rem; padding: 1.25rem 1.75rem; margin-bottom: 1.25rem; color: #fff;
+  }
+  .page-hero .hero-icon {
+    width: 2.75rem; height: 2.75rem; background: rgba(255,255,255,.15);
+    border-radius: .5rem; display: flex; align-items: center; justify-content: center;
+    font-size: 1.35rem; flex-shrink: 0;
+  }
+  .flt-header { background: #1D63A5; color: #fff; font-size: 0.78rem; font-weight: 600; padding: .45rem .75rem; border-radius: .35rem .35rem 0 0; }
+  .tbl-desc { font-size: 0.72rem; }
+  .tbl-desc thead th {
+    background: #1D63A5; color: #fff; font-size: 0.67rem; font-weight: 700;
+    text-transform: uppercase; letter-spacing: .04em; padding: 0.4rem 0.5rem;
+    border: none; white-space: nowrap;
+  }
+  .tbl-desc tbody td { padding: 0.32rem 0.5rem; vertical-align: middle; border-color: #f0f3f7; }
+  .tbl-desc tbody tr.row-item { cursor: pointer; transition: background .1s; }
+  .tbl-desc tbody tr.row-item:hover td { background: #eef4ff; }
+  .badge-em_andamento { background:#fff3cd;color:#856404;padding:.2rem .45rem;border-radius:3px;font-weight:700;font-size:.62rem; }
+  .badge-finalizado   { background:#d4edda;color:#155724;padding:.2rem .45rem;border-radius:3px;font-weight:700;font-size:.62rem; }
+  .badge-transito     { background:#cfe2ff;color:#084298;padding:.2rem .45rem;border-radius:3px;font-weight:700;font-size:.62rem; }
+  .diff-pos { color: #198754; font-weight: 600; }
+  .diff-neg { color: #dc3545; font-weight: 600; }
+  .btn-act {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 1.55rem; height: 1.55rem; border-radius: 4px; font-size: 0.68rem; border: none;
+    cursor: pointer; text-decoration: none; transition: opacity .12s; padding: 0;
+  }
+  .btn-act:hover { opacity: .75; }
+  .btn-act-view  { background: #d1ecf1; color: #0c5460; }
+  .btn-act-edit  { background: #cce5ff; color: #004085; }
+  .btn-act-danger{ background: #f8d7da; color: #721c24; }
+  .btn-act-new   { background: #d4edda; color: #155724; }
+  .actions-cell { white-space: nowrap; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+
+  <!-- Hero -->
+  <div class="page-hero d-flex align-items-center gap-3 flex-wrap mt-2">
+    <div class="hero-icon"><i class="bi bi-fuel-pump-fill"></i></div>
+    <div class="flex-grow-1">
+      <h4 class="mb-0 fw-bold">Controle de Descargas</h4>
+      <p class="mb-0 opacity-75" style="font-size:0.8rem;">Acompanhe fretes em trânsito, descargas fracionadas e descargas finalizadas.</p>
+    </div>
+    <a href="{{ url_for('descargas.nova') }}"
+       class="btn btn-sm px-3 fw-semibold"
+       style="background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.35);">
+      <i class="bi bi-plus-circle me-1"></i> Nova Descarga
+    </a>
+  </div>
+
+  <!-- Filtros -->
+  <form method="GET" action="{{ url_for('descargas.lista') }}" class="card shadow-sm mb-3">
+    <div class="flt-header"><i class="bi bi-funnel me-1"></i> Filtros</div>
+    <div class="card-body py-2">
+      <div class="row g-2 align-items-end">
+        <div class="col-6 col-md-2">
+          <label class="form-label form-label-sm mb-0">Empresa</label>
+          <select name="cliente_id" class="form-select form-select-sm">
+            <option value="">Todas</option>
+            {% for c in clientes %}
+            <option value="{{ c.id }}" {% if c.id|string == cliente_id_filtro %}selected{% endif %}>{{ c.nome }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-6 col-md-2">
+          <label class="form-label form-label-sm mb-0">Data início (frete)</label>
+          <input type="date" name="data_inicio" class="form-control form-control-sm" value="{{ data_inicio }}">
+        </div>
+        <div class="col-6 col-md-2">
+          <label class="form-label form-label-sm mb-0">Data fim (frete)</label>
+          <input type="date" name="data_fim" class="form-control form-control-sm" value="{{ data_fim }}">
+        </div>
+        <div class="col-6 col-md-2 d-flex gap-1 align-items-end">
+          <button type="submit" class="btn btn-primary btn-sm flex-fill">
+            <i class="bi bi-search"></i> Filtrar
+          </button>
+          <a href="{{ url_for('descargas.lista') }}" class="btn btn-outline-secondary btn-sm">
+            <i class="bi bi-x"></i>
+          </a>
+        </div>
+      </div>
+    </div>
+  </form>
+
+  <!-- Resumo de contagens -->
+  {% set n_transito   = all_descargas | selectattr('situacao', 'eq', 'em_transito')  | list | length %}
+  {% set n_fracionado = all_descargas | selectattr('situacao', 'eq', 'fracionado')   | list | length %}
+  {% set n_desc       = all_descargas | selectattr('situacao', 'eq', 'descarregado') | list | length %}
+  <div class="d-flex gap-2 flex-wrap mb-2" style="font-size:.75rem;">
+    <span class="d-flex align-items-center gap-1">
+      <i class="bi bi-truck text-primary"></i>
+      <span class="fw-semibold">Em Trânsito:</span>
+      <span class="badge bg-primary">{{ n_transito }}</span>
+    </span>
+    <span class="text-muted">|</span>
+    <span class="d-flex align-items-center gap-1">
+      <i class="bi bi-layers text-warning"></i>
+      <span class="fw-semibold">Fracionado:</span>
+      <span class="badge bg-warning text-dark">{{ n_fracionado }}</span>
+    </span>
+    <span class="text-muted">|</span>
+    <span class="d-flex align-items-center gap-1">
+      <i class="bi bi-check-circle text-success"></i>
+      <span class="fw-semibold">Descarregados:</span>
+      <span class="badge bg-success">{{ n_desc }}</span>
+    </span>
+    <span class="text-muted">|</span>
+    <span class="d-flex align-items-center gap-1">
+      <span class="fw-semibold">Total:</span>
+      <span class="badge bg-secondary">{{ all_descargas | length }}</span>
+    </span>
+  </div>
+
+  <!-- Tabela unificada -->
+  <div class="card shadow-sm p-0">
+    <div class="table-responsive">
+      <table class="tbl-desc table table-hover mb-0">
+        <thead>
+          <tr>
+            <th>Situação</th>
+            <th>Data</th>
+            <th>Empresa</th>
+            <th>Produto</th>
+            <th>Volume NF</th>
+            <th>Distribuidora</th>
+            <th>Motorista</th>
+            <th>Sobra Med.</th>
+            <th class="actions-cell">Ações</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for item in all_descargas %}
+          <tr class="row-item"
+              {% if item.situacao == 'descarregado' and item.descarga_id %}
+                data-url="{{ url_for('descargas.detalhe', id=item.descarga_id) }}"
+                title="Clique para ver detalhes"
+              {% elif item.frete_id %}
+                data-url="{{ url_for('descargas.nova') }}?frete_id={{ item.frete_id }}"
+                title="Clique para registrar descarga"
+              {% endif %}>
+
+            <!-- Situação -->
+            <td>
+              {% if item.situacao == 'em_transito' %}
+                <span class="badge-transito">Em Trânsito</span>
+              {% elif item.situacao == 'fracionado' %}
+                <span class="badge-em_andamento">Fracionado</span>
+              {% else %}
+                <span class="badge-finalizado">Descarregado</span>
+                {% if item.is_fracionada_concluida %}
+                  <span style="font-size:.6rem;color:#6c757d;display:block;">fracionada</span>
+                {% endif %}
+              {% endif %}
+            </td>
+
+            <!-- Data -->
+            <td>{{ item.data_fmt }}</td>
+
+            <!-- Empresa -->
+            <td>{{ item.cliente }}</td>
+
+            <!-- Produto -->
+            <td>{{ item.produto }}</td>
+
+            <!-- Volume NF -->
+            <td>
+              {% if item.volume_nf %}
+                {{ '{:,.0f}'.format(item.volume_nf|float).replace(',','.') }} L
+              {% endif %}
+              {% if item.situacao == 'fracionado' and item.volume_descarregado %}
+                <br><small class="text-warning fw-semibold">
+                  Desc: {{ '{:,.0f}'.format(item.volume_descarregado|float).replace(',','.') }} L
+                  &nbsp;/&nbsp;
+                  Falta: {{ '{:,.0f}'.format([item.volume_nf|float - item.volume_descarregado|float, 0]|max).replace(',','.') }} L
+                </small>
+              {% elif item.situacao == 'descarregado' and item.is_fracionada_concluida and item.volume_descarregado %}
+                <br><small class="text-success fw-semibold">
+                  Desc: {{ '{:,.0f}'.format(item.volume_descarregado|float).replace(',','.') }} L
+                </small>
+              {% endif %}
+            </td>
+
+            <!-- Distribuidora -->
+            <td>{{ item.distribuidora }}</td>
+
+            <!-- Motorista -->
+            <td>{{ item.motorista }}</td>
+
+            <!-- Sobra Med. (only for descarregado) -->
+            <td>
+              {% if item.diff_medidor is not none %}
+                <span class="{{ 'diff-pos' if item.diff_medidor >= 0 else 'diff-neg' }}">
+                  {{ '+' if item.diff_medidor >= 0 else '' }}{{ '{:,.3f}'.format(item.diff_medidor|float).replace(',','.') }}
+                </span>
+              {% endif %}
+            </td>
+
+            <!-- Ações -->
+            <td class="actions-cell d-flex gap-1" onclick="event.stopPropagation()">
+              {% if item.situacao == 'descarregado' %}
+                {% if item.descarga_id %}
+                  <a href="{{ url_for('descargas.detalhe', id=item.descarga_id) }}" class="btn-act btn-act-view" title="Ver detalhes"><i class="bi bi-eye"></i></a>
+                  <a href="{{ url_for('descargas.editar', id=item.descarga_id) }}" class="btn-act btn-act-edit" title="Editar"><i class="bi bi-pencil"></i></a>
+                  <form method="POST" action="{{ url_for('descargas.deletar', id=item.descarga_id) }}"
+                        onsubmit="return confirm('Excluir descarga #{{ item.descarga_id }}?');" style="display:inline;">
+                    <button type="submit" class="btn-act btn-act-danger" title="Excluir"><i class="bi bi-trash"></i></button>
+                  </form>
+                {% endif %}
+              {% else %}
+                <a href="{{ url_for('descargas.nova') }}?frete_id={{ item.frete_id }}"
+                   class="btn-act btn-act-new"
+                   title="{% if item.situacao == 'fracionado' %}Continuar descarga{% else %}Registrar descarga{% endif %}">
+                  <i class="bi bi-plus"></i>
+                </a>
+              {% endif %}
+            </td>
+          </tr>
+          {% else %}
+          <tr><td colspan="9" class="text-center text-muted py-4">Nenhum registro no período filtrado.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.querySelectorAll('.row-item[data-url]').forEach(function(row) {
+  row.addEventListener('click', function() { window.location = this.dataset.url; });
+});
+</script>
+{% endblock %}

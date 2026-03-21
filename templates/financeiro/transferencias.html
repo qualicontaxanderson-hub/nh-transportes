@@ -64,7 +64,7 @@
         <!-- Conta Bancária (multi-select) -->
         <div class="col-md-3">
           <label class="form-label form-label-sm mb-0">Conta Bancária <small class="text-muted">(Ctrl+clique p/ múltiplas)</small></label>
-          <select name="account_id" id="selContasTransf" class="form-select form-select-sm" multiple size="4">
+          <select name="conta_id" id="selContasTransf" class="form-select form-select-sm" multiple size="4">
             <option value="" disabled>— Selecione uma empresa primeiro —</option>
           </select>
         </div>
@@ -107,6 +107,28 @@
   </form>
   <style>
   .btn-xs { padding:0.15rem 0.35rem; font-size:0.72rem; line-height:1.3; border-radius:0.2rem; }
+  /* Bulk-action toolbar */
+  #bulk-toolbar-transf {
+      display: none;
+      background: #fff8e1;
+      border: 1px solid #ffc107;
+      border-radius: .45rem;
+      padding: .45rem .75rem;
+      margin-bottom: .6rem;
+      font-size: .78rem;
+      align-items: center;
+      gap: .5rem;
+      flex-wrap: wrap;
+  }
+  #bulk-toolbar-transf.visible { display: flex; }
+  /* Checkbox column */
+  .tbl-transf thead th.col-chk,
+  .tbl-transf tbody td.col-chk {
+      width: 1.8rem;
+      text-align: center;
+      padding-left: .35rem;
+      padding-right: .35rem;
+  }
   </style>
   <script>
   const _todasContasTransf = {{ contas | tojson }};
@@ -264,10 +286,40 @@
     </div>
     <div class="card-body p-0">
       {% if transferencias %}
+
+      <!-- Bulk-action toolbar -->
+      <div id="bulk-toolbar-transf" class="mx-2 mt-2">
+          <i class="bi bi-check2-square text-warning"></i>
+          <strong id="bulk-count-transf">0</strong> selecionada(s)
+          <form id="form-reverter-lote-transf" method="POST"
+                action="{{ url_for('financeiro.reverter_conciliacao_lote') }}"
+                style="display:inline;"
+                onsubmit="return confirmarReversaoLoteTransf();">
+              <button type="submit" class="btn btn-warning btn-sm">
+                  <i class="bi bi-arrow-counterclockwise me-1"></i> Desfazer selecionadas
+              </button>
+          </form>
+          <form id="form-excluir-lote-transf" method="POST"
+                action="{{ url_for('financeiro.excluir_transacao_lote') }}"
+                style="display:inline;"
+                onsubmit="return confirmarExclusaoLoteTransf();">
+              <button type="submit" class="btn btn-danger btn-sm">
+                  <i class="bi bi-trash me-1"></i> Excluir selecionadas
+              </button>
+          </form>
+          <button type="button" class="btn btn-outline-secondary btn-sm" onclick="desmarcarTodosTransf()">
+              <i class="bi bi-x"></i> Desmarcar
+          </button>
+      </div>
+
       <div class="table-responsive">
-        <table class="table table-sm table-hover mb-0 align-middle tbl-transf">
+        <table class="table table-sm table-hover mb-0 align-middle tbl-transf" id="tbl-transferencias">
           <thead>
             <tr>
+              <th class="col-chk">
+                  <input type="checkbox" id="chk-all-transf" title="Selecionar todas"
+                         style="cursor:pointer;" onchange="toggleTodosTransf(this.checked)">
+              </th>
               <th>Data</th>
               <th class="text-end">Valor</th>
               <th>Descrição</th>
@@ -279,6 +331,10 @@
           <tbody>
             {% for t in transferencias %}
             <tr{% if t.credit_status == 'pendente' %} class="table-warning"{% endif %}>
+              <td class="col-chk">
+                  <input type="checkbox" class="row-chk-transf" value="{{ t.id }}"
+                         onchange="atualizarBulkTransf()" style="cursor:pointer;">
+              </td>
               <td class="text-nowrap">{{ t.data_transacao.strftime('%d/%m/%Y') if t.data_transacao else '—' }}</td>
               <td class="text-end fw-bold text-primary">R$ {{ "%.2f"|format(t.valor|float) | replace('.', ',') }}</td>
               <td class="text-truncate" style="max-width:220px" title="{{ t.descricao }}">{{ t.descricao or '—' }}</td>
@@ -289,15 +345,23 @@
                 <span class="badge text-white ms-1" style="background:#fd7e14;font-size:0.7rem;" title="Aguardando confirmação na conta destino">⏳ Aguardando</span>
                 {% endif %}
               </td>
-              <td class="text-center">
+              <td class="text-center" style="white-space:nowrap;">
                 {% if t.credit_status == 'pendente' %}
-                <a href="/banco/conciliar?status=pendente" class="btn btn-sm btn-warning me-1" title="Confirmar recebimento na conta destino">
-                  <i class="bi bi-check2"></i> Confirmar
+                <a href="/banco/conciliar?status=pendente" class="btn btn-sm btn-warning btn-xs me-1" title="Confirmar recebimento na conta destino">
+                  <i class="bi bi-check2"></i>
                 </a>
                 {% endif %}
-                <button class="btn btn-sm btn-outline-warning" onclick="desfazerConciliacao({{ t.id }}, this)">
-                  <i class="bi bi-arrow-counterclockwise"></i> Desfazer
+                <button class="btn btn-sm btn-outline-warning btn-xs" onclick="desfazerConciliacao({{ t.id }}, this)" title="Desfazer conciliação">
+                  <i class="bi bi-arrow-counterclockwise"></i>
                 </button>
+                <form method="POST"
+                      action="{{ url_for('financeiro.excluir_transacao', tx_id=t.id) }}"
+                      style="display:inline;"
+                      onsubmit="return confirm('Excluir permanentemente a transferência #{{ t.id }}?\n\nEsta ação não pode ser desfeita.');">
+                    <button type="submit" class="btn btn-sm btn-outline-danger btn-xs" title="Excluir transferência">
+                        <i class="bi bi-trash"></i>
+                    </button>
+                </form>
               </td>
             </tr>
             {% endfor %}
@@ -386,9 +450,10 @@ function desfazerConciliacao(txId, btn) {
   .then(d => {
     if (d.ok) {
       btn.closest('tr').innerHTML =
-        '<td colspan="6" class="text-success py-2 px-3"><i class="bi bi-check-circle"></i> ' +
+        '<td colspan="7" class="text-success py-2 px-3"><i class="bi bi-check-circle"></i> ' +
         'Conciliação desfeita! — <a href="/banco/conciliar" class="fw-semibold">Ir para Conciliação →</a>' +
         ' (aba "🔄 Transferência")</td>';
+      atualizarBulkTransf();
     } else {
       alert('Erro: ' + (d.erro || 'desconhecido'));
       btn.disabled = false;
@@ -397,6 +462,72 @@ function desfazerConciliacao(txId, btn) {
   })
   .catch(e => { alert('Erro de rede: ' + e); btn.disabled = false; });
 }
+
+/* ── Bulk-reversal helpers (transferências) ─────────────────────────────── */
+function atualizarBulkTransf() {
+    var cks = document.querySelectorAll('.row-chk-transf:checked');
+    var total = document.querySelectorAll('.row-chk-transf');
+    var toolbar = document.getElementById('bulk-toolbar-transf');
+    var countEl = document.getElementById('bulk-count-transf');
+    if (!toolbar || !countEl) return;
+    countEl.textContent = cks.length;
+    if (cks.length > 0) {
+        toolbar.classList.add('visible');
+    } else {
+        toolbar.classList.remove('visible');
+    }
+    var chkAll = document.getElementById('chk-all-transf');
+    if (chkAll) {
+        if (cks.length === 0) {
+            chkAll.checked = false; chkAll.indeterminate = false;
+        } else if (cks.length === total.length) {
+            chkAll.checked = true; chkAll.indeterminate = false;
+        } else {
+            chkAll.checked = false; chkAll.indeterminate = true;
+        }
+    }
+}
+
+function toggleTodosTransf(checked) {
+    document.querySelectorAll('.row-chk-transf').forEach(function(c) { c.checked = checked; });
+    atualizarBulkTransf();
+}
+
+function desmarcarTodosTransf() {
+    document.querySelectorAll('.row-chk-transf').forEach(function(c) { c.checked = false; });
+    var chkAll = document.getElementById('chk-all-transf');
+    if (chkAll) { chkAll.checked = false; chkAll.indeterminate = false; }
+    atualizarBulkTransf();
+}
+
+function confirmarReversaoLoteTransf() {
+    var cks = document.querySelectorAll('.row-chk-transf:checked');
+    if (cks.length === 0) return false;
+    if (!confirm('Desfazer a conciliação de ' + cks.length + ' transferência(s) selecionada(s)?\n\nElas voltarão ao status Pendente.')) return false;
+    var form = document.getElementById('form-reverter-lote-transf');
+    form.querySelectorAll('input[name="tx_ids[]"]').forEach(function(el) { el.remove(); });
+    cks.forEach(function(c) {
+        var inp = document.createElement('input');
+        inp.type = 'hidden'; inp.name = 'tx_ids[]'; inp.value = c.value;
+        form.appendChild(inp);
+    });
+    return true;
+}
+
+function confirmarExclusaoLoteTransf() {
+    var cks = document.querySelectorAll('.row-chk-transf:checked');
+    if (cks.length === 0) return false;
+    if (!confirm('Excluir permanentemente ' + cks.length + ' transferência(s) selecionada(s)?\n\nEsta ação não pode ser desfeita.')) return false;
+    var form = document.getElementById('form-excluir-lote-transf');
+    form.querySelectorAll('input[name="tx_ids[]"]').forEach(function(el) { el.remove(); });
+    cks.forEach(function(c) {
+        var inp = document.createElement('input');
+        inp.type = 'hidden'; inp.name = 'tx_ids[]'; inp.value = c.value;
+        form.appendChild(inp);
+    });
+    return true;
+}
+
 function copiarSQL() {
   const txt = document.getElementById('sqlText').textContent;
   navigator.clipboard.writeText(txt).then(() => alert('SQL copiado!'));

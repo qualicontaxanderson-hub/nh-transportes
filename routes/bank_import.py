@@ -276,8 +276,6 @@ def _save_transactions(cursor, conn, account_id, transactions):
 
     Estratégia:
       1. Verificação de duplicatas em lote por hash_dedup (sha256 de fitid+data+valor+desc).
-      1b. Verificação secundária por conteúdo (data+tipo+valor+cnpj+desc) para detectar a
-          mesma transação re-exportada com um FITID diferente pelo banco.
       2. Busca de mapeamento de fornecedores em lote – uma query IN para todos os CNPJs.
       3. INSERT único com executemany para todas as novas linhas.
       4. Até 3 tentativas em caso de deadlock MySQL (errno 1213).
@@ -296,32 +294,6 @@ def _save_transactions(cursor, conn, account_id, transactions):
         hashes,
     )
     existing_hashes = {row['hash_dedup'] for row in cursor.fetchall()}
-
-    # 1b. Deduplicação secundária por conteúdo: evita "lançamentos pendentes fantasmas"
-    # quando o banco re-exporta o mesmo extrato com FITIDs diferentes a cada download.
-    # A chave é: (data_transacao, tipo, valor, cnpj_cpf, primeiros 255 chars da descrição)
-    # - Para CREDIT com CPF: a combinação conta+data+tipo+valor+CPF é praticamente única.
-    # - Incluímos a descrição normalizada para lidar com transações sem CPF/CNPJ.
-    # Transações candidatas (que passaram no hash check) são filtradas por este critério.
-    candidate_dates = [
-        tx['data_transacao']
-        for tx in transactions
-        if tx['hash_dedup'] not in existing_hashes
-    ]
-    existing_content_keys: set = set()
-    if candidate_dates:
-        min_date = min(candidate_dates)
-        max_date = max(candidate_dates)
-        cursor.execute(
-            """SELECT CONCAT(data_transacao, '|', tipo, '|',
-                             CAST(valor AS CHAR), '|',
-                             COALESCE(cnpj_cpf,''), '|',
-                             UPPER(TRIM(LEFT(COALESCE(descricao,''), 255)))) AS ck
-               FROM bank_transactions
-               WHERE account_id = %s AND data_transacao BETWEEN %s AND %s""",
-            (account_id, min_date, max_date),
-        )
-        existing_content_keys = {row['ck'] for row in cursor.fetchall()}
 
     # 2. Busca de mapeamento de fornecedores/formas/despesas em lote (por CNPJ)
     cnpj_list = list({tx['cnpj_cpf'] for tx in transactions if tx.get('cnpj_cpf')})
@@ -358,35 +330,8 @@ def _save_transactions(cursor, conn, account_id, transactions):
                 'descricao': (tx.get('descricao') or '')[:120],
                 'cnpj_cpf': tx.get('cnpj_cpf') or '',
                 'hash_dedup': tx['hash_dedup'],
-                'por_hash': True,
             })
             continue
-        # Secondary content-based dedup.
-        # Key format must match the SQL CONCAT in the DB query above:
-        #   CONCAT(data_transacao, '|', tipo, '|', CAST(valor AS CHAR), '|', ...)
-        # MySQL DECIMAL(15,2) CAST returns exactly 2 decimal places (e.g., '79.20').
-        # round() prevents floating-point imprecision before {:.2f} formatting.
-        _ck = '{}|{}|{:.2f}|{}|{}'.format(
-            tx['data_transacao'],
-            tx.get('tipo', ''),
-            round(float(tx.get('valor', 0)), 2),
-            tx.get('cnpj_cpf') or '',
-            (tx.get('descricao') or '')[:255].upper().strip(),
-        )
-        if _ck in existing_content_keys:
-            duplicados += 1
-            duplicados_lista.append({
-                'data_transacao': str(tx['data_transacao']),
-                'tipo': tx.get('tipo', ''),
-                'valor': round(float(tx.get('valor', 0)), 2),
-                'descricao': (tx.get('descricao') or '')[:120],
-                'cnpj_cpf': tx.get('cnpj_cpf') or '',
-                'hash_dedup': tx.get('hash_dedup'),
-                'por_hash': False,
-            })
-            continue
-        # Add to existing_content_keys to catch duplicates within the same batch
-        existing_content_keys.add(_ck)
         cnpj = tx.get('cnpj_cpf') or ''
         desc = _desc_chave(tx.get('descricao') or '')
         m = mapping.get((cnpj, desc)) or mapping.get((cnpj, ''))
@@ -450,7 +395,7 @@ def _save_transactions(cursor, conn, account_id, transactions):
 
     # Enriquece duplicados_lista com informações do registro existente (id, status)
     if duplicados_lista:
-        hash_only = [d['hash_dedup'] for d in duplicados_lista if d.get('por_hash') and d.get('hash_dedup')]
+        hash_only = [d['hash_dedup'] for d in duplicados_lista if d.get('hash_dedup')]
         if hash_only:
             ph = ','.join(['%s'] * len(hash_only))
             cursor.execute(
@@ -459,31 +404,10 @@ def _save_transactions(cursor, conn, account_id, transactions):
             )
             hash_to_info = {r['hash_dedup']: r for r in cursor.fetchall()}
             for d in duplicados_lista:
-                if d.get('por_hash') and d.get('hash_dedup') in hash_to_info:
+                if d.get('hash_dedup') in hash_to_info:
                     info = hash_to_info[d['hash_dedup']]
                     d['existing_id'] = info['id']
                     d['existing_status'] = info['status']
-        # Para duplicatas por conteúdo, busca o registro existente individualmente
-        for d in duplicados_lista:
-            if not d.get('por_hash') and 'existing_id' not in d:
-                try:
-                    cursor.execute(
-                        """SELECT id, status FROM bank_transactions
-                           WHERE account_id = %s AND data_transacao = %s
-                             AND tipo = %s AND valor = %s
-                             AND COALESCE(cnpj_cpf,'') = %s
-                             AND UPPER(TRIM(LEFT(COALESCE(descricao,''),255))) = %s
-                           LIMIT 1""",
-                        (account_id, d['data_transacao'], d['tipo'], d['valor'],
-                         d.get('cnpj_cpf') or '',
-                         (d.get('descricao') or '')[:255].upper().strip()),
-                    )
-                    row = cursor.fetchone()
-                    if row:
-                        d['existing_id'] = row['id']
-                        d['existing_status'] = row['status']
-                except Exception:
-                    pass
 
     return inseridos, duplicados, duplicados_lista
 
@@ -1190,54 +1114,6 @@ def _conciliar_tx(cursor, conn, tx_id, acao, tipo_tx,
                    WHERE id=%s""",
                 (forma_recebimento_id, agora, usuario, tx_id),
             )
-            # Marca duplicatas pendentes com o mesmo conteúdo como 'ignorado'.
-            # Transações duplicadas podem existir quando o banco re-exportou o extrato OFX
-            # com FITIDs diferentes antes da deduplicação por conteúdo ser implementada.
-            # Usar um cursor separado para evitar conflito de result-set com o cursor principal.
-            try:
-                # dictionary=True necessário para acessar campos por nome no fetchone()
-                with conn.cursor(dictionary=True) as _dup_cur:
-                    _dup_cur.execute(
-                        "SELECT account_id, tipo, data_transacao, valor, "
-                        "COALESCE(cnpj_cpf,'') AS cnpj_cpf, "
-                        "UPPER(TRIM(LEFT(COALESCE(descricao,''),255))) AS desc_norm "
-                        "FROM bank_transactions WHERE id=%s",
-                        (tx_id,),
-                    )
-                    _tx_info = _dup_cur.fetchone()
-                if _tx_info:
-                    with conn.cursor() as _dup_upd:
-                        _dup_upd.execute(
-                            """UPDATE bank_transactions
-                               SET status='ignorado'
-                               WHERE id <> %s
-                                 AND account_id = %s
-                                 AND status = 'pendente'
-                                 AND tipo = %s
-                                 AND data_transacao = %s
-                                 AND valor = %s
-                                 AND COALESCE(cnpj_cpf,'') = %s
-                                 AND UPPER(TRIM(LEFT(COALESCE(descricao,''),255))) = %s""",
-                            (
-                                tx_id,
-                                _tx_info['account_id'],
-                                _tx_info['tipo'],
-                                _tx_info['data_transacao'],
-                                _tx_info['valor'],
-                                _tx_info['cnpj_cpf'],
-                                _tx_info['desc_norm'],
-                            ),
-                        )
-                        if _dup_upd.rowcount:
-                            logger.info(
-                                "_conciliar_tx: %d duplicata(s) pendente(s) marcadas como"
-                                " ignorado para tx_id=%s", _dup_upd.rowcount, tx_id
-                            )
-            except Exception as _dup_exc:
-                # Falha na deduplicação não impede a conciliação principal
-                logger.warning(
-                    "_conciliar_tx: erro ao marcar duplicatas, ignorando: %s", _dup_exc
-                )
             # Auto-aprender: salva CNPJ+Descrição → forma_recebimento para sugestões e
             # auto-conciliação em importações futuras com a mesma transação.
             # Qualquer falha aqui é recuperável — a conciliação principal já foi executada
@@ -3250,6 +3126,15 @@ def api_reimportar_duplicatas():
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
     ph = ','.join(['%s'] * len(ids))
+    # Count matching rows before the UPDATE.
+    # cursor.rowcount only reports rows that were actually *changed*, so transactions
+    # already in 'pendente' status would always count as 0 even though they matched.
+    cursor.execute(
+        f"SELECT COUNT(*) AS cnt FROM bank_transactions WHERE id IN ({ph}) AND status IN ('ignorado', 'pendente')",
+        ids,
+    )
+    row = cursor.fetchone()
+    reativados = row['cnt'] if row else 0
     cursor.execute(
         f"""UPDATE bank_transactions
                SET status='pendente', conciliado_em=NULL, conciliado_por=NULL
@@ -3257,7 +3142,6 @@ def api_reimportar_duplicatas():
                AND status IN ('ignorado', 'pendente')""",
         ids,
     )
-    reativados = cursor.rowcount
     conn.commit()
     cursor.close()
     conn.close()

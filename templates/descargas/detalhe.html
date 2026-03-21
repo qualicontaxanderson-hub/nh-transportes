@@ -1,0 +1,451 @@
+{% extends "base.html" %}
+{% block titulo %}Descarga #{{ descarga.id }} — Detalhe{% endblock %}
+
+{% block styles %}
+<style>
+  .page-hero {
+    background: linear-gradient(135deg, #1D63A5 0%, #1a4f82 60%, #154070 100%);
+    border-radius: .75rem; padding: 1.25rem 1.75rem; margin-bottom: 1.25rem; color: #fff;
+  }
+  .page-hero .hero-icon {
+    width: 2.75rem; height: 2.75rem; background: rgba(255,255,255,.15);
+    border-radius: .5rem; display: flex; align-items: center; justify-content: center;
+    font-size: 1.35rem; flex-shrink: 0;
+  }
+  .sec-header {
+    font-size: 0.7rem; font-weight: 700; text-transform: uppercase;
+    letter-spacing: .06em; color: #1D63A5;
+    border-left: 3px solid #1D63A5; padding-left: .5rem; margin: 1rem 0 .6rem;
+  }
+  .info-label { font-size: .73rem; color: #6c757d; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
+  .info-value { font-size: .9rem; font-weight: 500; }
+  .diff-card  { border-radius: .5rem; padding: .75rem 1rem; text-align: center; }
+  .diff-pos   { background: #d4edda; color: #155724; }
+  .diff-neg   { background: #f8d7da; color: #721c24; }
+  .diff-zero  { background: #e2e3e5; color: #383d41; }
+  .diff-val   { font-size: 1.4rem; font-weight: 700; }
+  .diff-lbl   { font-size: .7rem; font-weight: 600; text-transform: uppercase; }
+  .diff-formula { font-size: .72rem; font-family: monospace; margin-top:.2rem; }
+  .wpp-box {
+    background: #e8f5e9; border: 1px solid #a5d6a7;
+    border-radius: .5rem; padding: 1rem; font-family: monospace;
+    font-size: .85rem; white-space: pre-wrap; word-break: break-word;
+  }
+  .btn-wpp {
+    background: #25D366; color: #fff; border: none; border-radius: .4rem;
+    padding: .4rem .9rem; font-weight: 600; font-size: .82rem; cursor: pointer; transition: opacity .15s;
+  }
+  .btn-wpp:hover { opacity: .85; }
+  .badge-em_andamento { background:#fff3cd;color:#856404;padding:.25rem .55rem;border-radius:4px;font-weight:700;font-size:.75rem; }
+  .badge-finalizado   { background:#d4edda;color:#155724;padding:.25rem .55rem;border-radius:4px;font-weight:700;font-size:.75rem; }
+  .outras-tbl { font-size: .73rem; }
+  .outras-tbl thead th { background: #f0f3f7; font-weight: 700; text-transform: uppercase; font-size: .66rem; padding: .35rem .5rem; }
+  .outras-tbl tbody td { padding: .3rem .5rem; vertical-align: middle; }
+  .row-current { background: #fffde7; font-weight: 600; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+
+  <!-- Hero -->
+  <div class="page-hero d-flex align-items-center gap-3 flex-wrap mt-2">
+    <div class="hero-icon"><i class="bi bi-fuel-pump-fill"></i></div>
+    <div class="flex-grow-1">
+      <h4 class="mb-0 fw-bold">
+        Descarga #{{ descarga.id }}
+        <span class="ms-2 badge-{{ descarga.status }}">
+          {{ 'Em andamento' if descarga.status == 'em_andamento' else 'Finalizado' }}
+        </span>
+      </h4>
+      <p class="mb-0 opacity-75" style="font-size:.8rem;">
+        Frete #{{ descarga.frete_id }} — {{ descarga.cliente }} — {{ descarga.produto }}
+        {% if descarga.total_descargas and descarga.total_descargas > 1 %}
+        | {{ descarga.numero_descarga }}º Descarga de {{ descarga.total_descargas }}
+        {% endif %}
+      </p>
+    </div>
+    <div class="d-flex gap-2 flex-wrap">
+      <a href="{{ url_for('descargas.editar', id=descarga.id) }}"
+         class="btn btn-sm fw-semibold"
+         style="background:rgba(255,255,255,.18);color:#fff;border:1px solid rgba(255,255,255,.4);">
+        <i class="bi bi-pencil me-1"></i> Editar
+      </a>
+      {% if descarga.status == 'em_andamento' %}
+      <a href="{{ url_for('descargas.nova') }}?frete_id={{ descarga.frete_id }}"
+         class="btn btn-sm fw-semibold"
+         style="background:rgba(255,255,255,.12);color:#fff;border:1px solid rgba(255,255,255,.3);">
+        <i class="bi bi-plus-circle me-1"></i> Nova descarga
+      </a>
+      {% endif %}
+      <a href="{{ url_for('descargas.lista') }}"
+         class="btn btn-sm fw-semibold"
+         style="background:rgba(255,255,255,.1);color:#fff;border:1px solid rgba(255,255,255,.25);">
+        <i class="bi bi-arrow-left me-1"></i> Voltar
+      </a>
+    </div>
+  </div>
+
+  <div class="row g-3">
+    <!-- Coluna esquerda -->
+    <div class="col-lg-7">
+
+      <!-- Informações Gerais -->
+      <div class="card shadow-sm mb-3">
+        <div class="card-header py-2" style="background:#1D63A5;color:#fff;">
+          <small class="fw-bold"><i class="bi bi-info-circle me-1"></i>Informações Gerais</small>
+        </div>
+        <div class="card-body">
+          <div class="row g-3">
+            <div class="col-6 col-md-4">
+              <div class="info-label">Distribuidora</div>
+              <div class="info-value">{{ descarga.distribuidora or '—' }}</div>
+            </div>
+            <div class="col-6 col-md-4">
+              <div class="info-label">Empresa / Posto</div>
+              <div class="info-value">{{ descarga.cliente or '—' }}</div>
+            </div>
+            <div class="col-6 col-md-4">
+              <div class="info-label">Produto</div>
+              <div class="info-value">{{ descarga.produto or '—' }}</div>
+            </div>
+            <div class="col-6 col-md-4">
+              <div class="info-label">Motorista</div>
+              <div class="info-value">{{ descarga.motorista or '—' }}</div>
+            </div>
+            {% if descarga.frentista_nome %}
+            <div class="col-6 col-md-4">
+              <div class="info-label">Frentista</div>
+              <div class="info-value">{{ descarga.frentista_nome }}</div>
+            </div>
+            {% endif %}
+            <div class="col-6 col-md-4">
+              <div class="info-label">Data Carregamento</div>
+              <div class="info-value">{{ descarga.data_frete_fmt or '—' }}</div>
+            </div>
+            <div class="col-6 col-md-4">
+              <div class="info-label">Data Descarga</div>
+              <div class="info-value">{{ descarga.data_descarga_fmt or '—' }}</div>
+            </div>
+            <div class="col-6 col-md-4">
+              <div class="info-label">Volume NF (Comprado)</div>
+              <div class="info-value">
+                {% if descarga.volume_nf %}{{ '{:,.0f}'.format(descarga.volume_nf|float).replace(',','.') }} L{% else %}—{% endif %}
+              </div>
+            </div>
+            <div class="col-6 col-md-4">
+              <div class="info-label">Volume Descarregado</div>
+              <div class="info-value">
+                {% set vd = descarga.volume_descarga or descarga.volume_nf %}
+                {% if vd %}{{ '{:,.0f}'.format(vd|float).replace(',','.') }} L{% else %}—{% endif %}
+              </div>
+            </div>
+            <div class="col-6 col-md-4">
+              <div class="info-label">Temperatura</div>
+              <div class="info-value">{% if descarga.temperatura is not none %}{{ descarga.temperatura }}°C{% else %}—{% endif %}</div>
+            </div>
+            <div class="col-6 col-md-4">
+              <div class="info-label">Densidade</div>
+              <div class="info-value">{% if descarga.densidade is not none %}{{ descarga.densidade }}{% else %}—{% endif %}</div>
+            </div>
+            {% if descarga.observacoes %}
+            <div class="col-12">
+              <div class="info-label">Observações</div>
+              <div class="info-value">{{ descarga.observacoes }}</div>
+            </div>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+
+      <!-- Medidor Eletrônico -->
+      <div class="card shadow-sm mb-3">
+        <div class="card-header py-2" style="background:#1D63A5;color:#fff;">
+          <small class="fw-bold"><i class="bi bi-display me-1"></i>Medidor Eletrônico</small>
+        </div>
+        <div class="card-body">
+          <div class="row g-3">
+            <div class="col-4 text-center">
+              <div class="info-label">Antes</div>
+              <div class="info-value" style="font-size:1.1rem;">
+                {{ '{:,.3f}'.format(descarga.medidor_antes|float).replace(',','.') if descarga.medidor_antes is not none else '—' }}
+              </div>
+            </div>
+            <div class="col-4 text-center">
+              <div class="info-label">Depois</div>
+              <div class="info-value" style="font-size:1.1rem;">
+                {{ '{:,.3f}'.format(descarga.medidor_depois|float).replace(',','.') if descarga.medidor_depois is not none else '—' }}
+              </div>
+            </div>
+            <div class="col-4">
+              {% if diff_medidor is not none %}
+              {% set vd2 = descarga.volume_descarga or descarga.volume_nf %}
+              <div class="diff-card {{ 'diff-pos' if diff_medidor >= 0 else 'diff-neg' }}">
+                <div class="diff-lbl">Sobra</div>
+                <div class="diff-val">{{ '+' if diff_medidor >= 0 else '' }}{{ '{:,.3f}'.format(diff_medidor|float).replace(',','.') }}</div>
+                {% if vd2 %}
+                <div class="diff-formula">
+                  {{ '{:,.0f}'.format(descarga.medidor_depois|float).replace(',','.') }}
+                  + {{ '{:,.0f}'.format(vd2|float).replace(',','.') }}
+                  − {{ '{:,.0f}'.format(descarga.medidor_antes|float).replace(',','.') }}
+                </div>
+                {% endif %}
+              </div>
+              {% else %}
+              <div class="diff-card diff-zero"><div class="diff-lbl">Sobra</div><div class="diff-val">—</div></div>
+              {% endif %}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Régua Volumétrica -->
+      <div class="card shadow-sm mb-3">
+        <div class="card-header py-2" style="background:#1D63A5;color:#fff;">
+          <small class="fw-bold"><i class="bi bi-rulers me-1"></i>Régua Volumétrica</small>
+        </div>
+        <div class="card-body">
+          <div class="row g-3">
+            <div class="col-4 text-center">
+              <div class="info-label">Antes</div>
+              {% if descarga.regua_antes_litros is not none %}
+              <div class="info-value" style="font-size:1.1rem;">
+                {{ '{:,.2f}'.format(descarga.regua_antes_litros|float).replace(',','.') }} L
+              </div>
+              {% if descarga.regua_antes_cm %}<div style="font-size:.73rem;color:#6c757d;">{{ descarga.regua_antes_cm }} cm</div>{% endif %}
+              {% else %}<div class="info-value">—</div>{% endif %}
+            </div>
+            <div class="col-4 text-center">
+              <div class="info-label">Depois</div>
+              {% if descarga.regua_depois_litros is not none %}
+              <div class="info-value" style="font-size:1.1rem;">
+                {{ '{:,.2f}'.format(descarga.regua_depois_litros|float).replace(',','.') }} L
+              </div>
+              {% if descarga.regua_depois_cm %}<div style="font-size:.73rem;color:#6c757d;">{{ descarga.regua_depois_cm }} cm</div>{% endif %}
+              {% else %}<div class="info-value">—</div>{% endif %}
+            </div>
+            <div class="col-4">
+              {% if diff_regua is not none %}
+              <div class="diff-card {{ 'diff-pos' if diff_regua >= 0 else 'diff-neg' }}">
+                <div class="diff-lbl">Sobra Régua</div>
+                <div class="diff-val">{{ '+' if diff_regua >= 0 else '' }}{{ '{:,.2f}'.format(diff_regua|float).replace(',','.') }}</div>
+                <div style="font-size:.7rem;">litros</div>
+              </div>
+              {% else %}
+              <div class="diff-card diff-zero"><div class="diff-lbl">Sobra Régua</div><div class="diff-val">—</div></div>
+              {% endif %}
+            </div>
+          </div>
+          {% if diff_med_regua is not none %}
+          <div class="row g-3 mt-1">
+            <div class="col-12">
+              <div class="diff-card {{ 'diff-pos' if diff_med_regua >= 0 else 'diff-neg' }}" style="max-width:220px;">
+                <div class="diff-lbl">Régua vs Medidor</div>
+                <div class="diff-val">{{ '+' if diff_med_regua >= 0 else '' }}{{ '{:,.2f}'.format(diff_med_regua|float).replace(',','.') }}</div>
+                <div style="font-size:.7rem;">litros</div>
+              </div>
+            </div>
+          </div>
+          {% endif %}
+        </div>
+      </div>
+
+      <!-- Outras etapas do mesmo frete -->
+      {% if outras | length > 1 %}
+      <div class="card shadow-sm mb-3">
+        <div class="card-header py-2" style="background:#1D63A5;color:#fff;">
+          <small class="fw-bold"><i class="bi bi-layers me-1"></i>Todas as Descargas — Frete #{{ descarga.frete_id }}</small>
+        </div>
+        <div class="card-body p-0">
+          <div class="table-responsive">
+            <table class="table outras-tbl mb-0">
+              <thead>
+                <tr>
+                  <th>#</th><th>Data</th><th>Vol. Desc.</th>
+                  <th>Med. Antes</th><th>Med. Depois</th><th>Sobra Med.</th>
+                  <th>Status</th><th></th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for o in outras %}
+                {% set is_current = (o.id == descarga.id) %}
+                <tr class="{{ 'row-current' if is_current else '' }}">
+                  <td>{{ o.id }}</td>
+                  <td>{{ o.data_descarga_fmt }}</td>
+                  <td>
+                    {% if o.volume_descarga is not none %}
+                      {{ '{:,.0f}'.format(o.volume_descarga|float).replace(',','.') }} L
+                    {% else %}—{% endif %}
+                  </td>
+                  <td>{{ '{:,.3f}'.format(o.medidor_antes|float).replace(',','.') if o.medidor_antes is not none else '—' }}</td>
+                  <td>{{ '{:,.3f}'.format(o.medidor_depois|float).replace(',','.') if o.medidor_depois is not none else '—' }}</td>
+                  <td>
+                    {% if o.medidor_antes is not none and o.medidor_depois is not none and o.volume_descarga is not none %}
+                      {% set sobra = o.medidor_depois|float - o.volume_descarga|float - o.medidor_antes|float %}
+                      <span style="color:{{ '#198754' if sobra >= 0 else '#dc3545' }};font-weight:600;">
+                        {{ '+' if sobra >= 0 else '' }}{{ '{:,.3f}'.format(sobra).replace(',','.') }}
+                      </span>
+                    {% else %}—{% endif %}
+                  </td>
+                  <td>
+                    <span class="badge-{{ o.status }}" style="font-size:.63rem;">
+                      {{ 'Finalizado' if o.status == 'finalizado' else 'Descarregado' }}
+                    </span>
+                  </td>
+                  <td>
+                    {% if not is_current %}
+                    <a href="{{ url_for('descargas.detalhe', id=o.id) }}" style="font-size:.73rem;">Ver</a>
+                    {% else %}<span style="font-size:.73rem;color:#6c757d;">atual</span>{% endif %}
+                  </td>
+                </tr>
+                {% endfor %}
+              </tbody>
+              {% set total_vol = namespace(v=0) %}
+              {% for o in outras %}
+                {% if o.volume_descarga %}{% set total_vol.v = total_vol.v + o.volume_descarga|float %}{% endif %}
+              {% endfor %}
+              <tfoot>
+                <tr style="background:#f0f3f7;font-weight:700;font-size:.73rem;">
+                  <td colspan="2" style="padding:.35rem .5rem;">Total</td>
+                  <td style="padding:.35rem .5rem;">{{ '{:,.0f}'.format(total_vol.v).replace(',','.') }} L</td>
+                  <td colspan="4" style="padding:.35rem .5rem;">
+                    {% if descarga.volume_nf %}
+                      {% set falta = descarga.volume_nf|float - total_vol.v %}
+                      NF: {{ '{:,.0f}'.format(descarga.volume_nf|float).replace(',','.') }} L
+                      &nbsp;|&nbsp;
+                      {% if falta > 0.01 %}
+                        <span style="color:#c0392b;">⏳ Falta: {{ '{:,.0f}'.format(falta).replace(',','.') }} L</span>
+                      {% else %}
+                        <span style="color:#27ae60;">✅ Concluído</span>
+                      {% endif %}
+                    {% endif %}
+                  </td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        </div>
+      </div>
+      {% endif %}
+
+    </div>
+
+    <!-- Coluna direita: WhatsApp -->
+    <div class="col-lg-5">
+      <div class="card shadow-sm">
+        <div class="card-header py-2" style="background:#1D63A5;color:#fff;">
+          <small class="fw-bold"><i class="bi bi-whatsapp me-1" style="color:#25D366;"></i>Mensagem para WhatsApp</small>
+        </div>
+        <div class="card-body">
+          {% if is_fracionada and mensagem_completa %}
+          <!-- Abas: etapa atual | resumo completo -->
+          <ul class="nav nav-tabs mb-2" style="font-size:.78rem;" id="wppTabs">
+            <li class="nav-item">
+              <button class="nav-link active" id="tab-etapa-btn" onclick="mostrarAba('etapa')" type="button"
+                style="padding:.25rem .65rem;">
+                📌 Esta etapa
+              </button>
+            </li>
+            <li class="nav-item">
+              <button class="nav-link" id="tab-completo-btn" onclick="mostrarAba('completo')" type="button"
+                style="padding:.25rem .65rem;">
+                📋 Resumo completo
+              </button>
+            </li>
+          </ul>
+          <div id="pane-etapa">
+            <div class="wpp-box" id="wpp-msg">{{ mensagem }}</div>
+            <div class="d-flex gap-2 mt-2 flex-wrap">
+              <button class="btn-wpp" onclick="copiarMensagem('wpp-msg', 'copied-etapa')">
+                <i class="bi bi-clipboard me-1"></i> Copiar
+              </button>
+              <a href="https://wa.me/?text={{ mensagem | urlencode }}"
+                 target="_blank" rel="noopener"
+                 class="btn-wpp" style="text-decoration:none;">
+                <i class="bi bi-send me-1"></i> Abrir WhatsApp
+              </a>
+            </div>
+            <div id="copied-etapa" style="display:none;font-size:.75rem;color:#155724;margin-top:.4rem;">
+              <i class="bi bi-check-circle me-1"></i> Copiado!
+            </div>
+          </div>
+          <div id="pane-completo" style="display:none;">
+            <div class="wpp-box" id="wpp-msg-completo">{{ mensagem_completa }}</div>
+            <div class="d-flex gap-2 mt-2 flex-wrap">
+              <button class="btn-wpp" onclick="copiarMensagem('wpp-msg-completo', 'copied-completo')">
+                <i class="bi bi-clipboard me-1"></i> Copiar
+              </button>
+              <a href="https://wa.me/?text={{ mensagem_completa | urlencode }}"
+                 target="_blank" rel="noopener"
+                 class="btn-wpp" style="text-decoration:none;">
+                <i class="bi bi-send me-1"></i> Abrir WhatsApp
+              </a>
+            </div>
+            <div id="copied-completo" style="display:none;font-size:.75rem;color:#155724;margin-top:.4rem;">
+              <i class="bi bi-check-circle me-1"></i> Copiado!
+            </div>
+          </div>
+          {% else %}
+          <p style="font-size:.78rem;color:#6c757d;">Copie o texto abaixo e cole no grupo de WhatsApp.</p>
+          <div class="wpp-box" id="wpp-msg">{{ mensagem }}</div>
+          <div class="d-flex gap-2 mt-3 flex-wrap">
+            <button class="btn-wpp" onclick="copiarMensagem('wpp-msg', 'copied-alert')">
+              <i class="bi bi-clipboard me-1"></i> Copiar
+            </button>
+            <a href="https://wa.me/?text={{ mensagem | urlencode }}"
+               target="_blank" rel="noopener"
+               class="btn-wpp" style="text-decoration:none;">
+              <i class="bi bi-send me-1"></i> Abrir WhatsApp
+            </a>
+          </div>
+          <div id="copied-alert" style="display:none;font-size:.75rem;color:#155724;margin-top:.5rem;">
+            <i class="bi bi-check-circle me-1"></i> Copiado!
+          </div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function copiarMensagem(msgId, alertId) {
+  const elMsg = document.getElementById(msgId || 'wpp-msg');
+  const txt = elMsg ? elMsg.innerText : '';
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(txt).then(function() { showCopied(alertId || 'copied-alert'); });
+  } else {
+    const ta = document.createElement('textarea');
+    ta.value = txt; ta.style.position='fixed'; ta.style.opacity='0';
+    document.body.appendChild(ta); ta.focus(); ta.select();
+    try { document.execCommand('copy'); showCopied(alertId || 'copied-alert'); } catch(e) {}
+    document.body.removeChild(ta);
+  }
+}
+function showCopied(id) {
+  const el = document.getElementById(id || 'copied-alert');
+  if (!el) return;
+  el.style.display = 'block';
+  setTimeout(function() { el.style.display='none'; }, 3000);
+}
+function mostrarAba(aba) {
+  const paneE = document.getElementById('pane-etapa');
+  const paneC = document.getElementById('pane-completo');
+  const btnE  = document.getElementById('tab-etapa-btn');
+  const btnC  = document.getElementById('tab-completo-btn');
+  if (!paneE || !paneC) return;
+  if (aba === 'etapa') {
+    paneE.style.display = ''; paneC.style.display = 'none';
+    if (btnE) btnE.classList.add('active');
+    if (btnC) btnC.classList.remove('active');
+  } else {
+    paneE.style.display = 'none'; paneC.style.display = '';
+    if (btnE) btnE.classList.remove('active');
+    if (btnC) btnC.classList.add('active');
+  }
+}
+</script>
+{% endblock %}

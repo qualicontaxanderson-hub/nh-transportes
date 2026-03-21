@@ -1,0 +1,318 @@
+{% extends "base.html" %}
+{% block titulo %}Editar Descarga #{{ descarga.id }}{% endblock %}
+
+{% block styles %}
+<style>
+  .page-hero {
+    background: linear-gradient(135deg, #1D63A5 0%, #1a4f82 60%, #154070 100%);
+    border-radius: .75rem; padding: 1.25rem 1.75rem; margin-bottom: 1.25rem; color: #fff;
+  }
+  .page-hero .hero-icon {
+    width: 2.75rem; height: 2.75rem; background: rgba(255,255,255,.15);
+    border-radius: .5rem; display: flex; align-items: center; justify-content: center;
+    font-size: 1.35rem; flex-shrink: 0;
+  }
+  .sec-header {
+    font-size: 0.7rem; font-weight: 700; text-transform: uppercase;
+    letter-spacing: .06em; color: #1D63A5;
+    border-left: 3px solid #1D63A5; padding-left: .5rem; margin: 1.1rem 0 .65rem;
+  }
+  .frete-info-box {
+    background: #eef4ff; border: 1px solid #b8d0f8;
+    border-radius: .5rem; padding: .75rem 1rem; font-size: .82rem; margin-bottom: .75rem;
+  }
+  .frete-info-box .fi-label { font-weight: 600; color: #1D63A5; }
+  .calc-field { background: #fff8e1 !important; font-weight: 600; }
+  .hint { font-size: 0.73rem; color: #6c757d; margin-bottom:.5rem; }
+  .tipo-card {
+    border: 2px solid #dee2e6; border-radius: .5rem; padding: .9rem 1.1rem;
+    cursor: pointer; transition: border-color .15s, background .15s;
+    text-align: center; user-select: none;
+  }
+  .tipo-card:hover       { border-color: #1D63A5; background: #eef4ff; }
+  .tipo-card.selected    { border-color: #1D63A5; background: #e8f0fe; }
+  .tipo-card .tipo-icon  { font-size: 1.5rem; }
+  .tipo-card .tipo-title { font-size: .85rem; font-weight: 700; margin-top: .3rem; }
+  .tipo-card .tipo-desc  { font-size: .72rem; color: #6c757d; margin-top: .15rem; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+
+  <!-- Hero -->
+  <div class="page-hero d-flex align-items-center gap-3 flex-wrap mt-2">
+    <div class="hero-icon"><i class="bi bi-fuel-pump-fill"></i></div>
+    <div class="flex-grow-1">
+      <h4 class="mb-0 fw-bold">
+        Editar Descarga <span class="opacity-75" style="font-size:.9rem;">#{{ descarga.id }}</span>
+      </h4>
+      <p class="mb-0 opacity-75" style="font-size:0.8rem;">
+        Frete #{{ descarga.frete_id }} — {{ descarga.cliente }} — {{ descarga.produto }}
+      </p>
+    </div>
+    <div class="d-flex gap-2">
+      <a href="{{ url_for('descargas.detalhe', id=descarga.id) }}"
+         class="btn btn-sm fw-semibold"
+         style="background:rgba(255,255,255,.12);color:#fff;border:1px solid rgba(255,255,255,.35);">
+        <i class="bi bi-eye me-1"></i> Ver Detalhe
+      </a>
+      <a href="{{ url_for('descargas.lista') }}"
+         class="btn btn-sm fw-semibold"
+         style="background:rgba(255,255,255,.1);color:#fff;border:1px solid rgba(255,255,255,.25);">
+        <i class="bi bi-arrow-left me-1"></i> Voltar
+      </a>
+    </div>
+  </div>
+
+  <!-- Info do frete (readonly) -->
+  <div class="frete-info-box mb-3">
+    <div class="row g-2">
+      <div class="col-6 col-md-2"><span class="fi-label">Frete:</span> #{{ descarga.frete_id }}</div>
+      <div class="col-6 col-md-3"><span class="fi-label">Empresa:</span> {{ descarga.cliente }}</div>
+      <div class="col-6 col-md-2"><span class="fi-label">Distribuidora:</span> {{ descarga.distribuidora }}</div>
+      <div class="col-6 col-md-2"><span class="fi-label">Produto:</span> {{ descarga.produto }}</div>
+      <div class="col-6 col-md-2"><span class="fi-label">Motorista:</span> {{ descarga.motorista }}</div>
+      <div class="col-6 col-md-1"><span class="fi-label">Vol. NF:</span>
+        {% if descarga.volume_nf %}{{ '{:,.0f}'.format(descarga.volume_nf|float).replace(',','.') }} L{% else %}—{% endif %}
+      </div>
+    </div>
+  </div>
+
+  <div class="card shadow-sm">
+    <div class="card-body" style="padding:1.25rem;">
+      <form method="POST" action="{{ url_for('descargas.editar', id=descarga.id) }}">
+
+        <!-- ══ Informações Gerais ══ -->
+        <div class="sec-header"><i class="bi bi-info-circle me-1"></i>Informações Gerais</div>
+        <div class="row mb-2">
+          <div class="col-md-3">
+            <label for="data_descarga" class="form-label form-label-sm">Data de Descarga <span class="text-danger">*</span></label>
+            <input type="date" id="data_descarga" name="data_descarga"
+                   class="form-control form-control-sm"
+                   value="{{ descarga.data_descarga.strftime('%Y-%m-%d') if descarga.data_descarga else '' }}"
+                   required>
+          </div>
+          <div class="col-md-6">
+            <label for="observacoes" class="form-label form-label-sm">Observações</label>
+            <input type="text" id="observacoes" name="observacoes"
+                   class="form-control form-control-sm" value="{{ descarga.observacoes or '' }}">
+          </div>
+        </div>
+
+        <!-- ══ Tipo de Descarga ══ -->
+        <div class="sec-header"><i class="bi bi-sliders me-1"></i>Tipo de Descarga</div>
+        {% set tipo_atual = 'fracionada' if descarga.status == 'em_andamento' else 'total' %}
+        <input type="hidden" id="tipo_descarga" name="tipo_descarga" value="{{ tipo_atual }}">
+        <div class="row g-3 mb-2">
+          <div class="col-6 col-md-3">
+            <div class="tipo-card {{ 'selected' if tipo_atual == 'total' else '' }}"
+                 id="card-total" onclick="selecionarTipo('total')">
+              <div class="tipo-icon">🚛</div>
+              <div class="tipo-title">Descarga Total</div>
+              <div class="tipo-desc">Todo o volume descarregado.</div>
+            </div>
+          </div>
+          <div class="col-6 col-md-3">
+            <div class="tipo-card {{ 'selected' if tipo_atual == 'fracionada' else '' }}"
+                 id="card-fracionada" onclick="selecionarTipo('fracionada')">
+              <div class="tipo-icon">📦</div>
+              <div class="tipo-title">Fracionada</div>
+              <div class="tipo-desc">Ficará disponível para continuar depois.</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ══ Volume Descarregado ══ -->
+        <div class="sec-header"><i class="bi bi-droplet-fill me-1"></i>Volume Descarregado</div>
+        <div class="row mb-2">
+          <div class="col-md-4">
+            <label for="volume_descarga" class="form-label form-label-sm">
+              Volume nesta descarga (L)
+            </label>
+            <input type="number" id="volume_descarga" name="volume_descarga"
+                   class="form-control form-control-sm" step="0.001" min="0"
+                   value="{{ descarga.volume_descarga if descarga.volume_descarga is not none else (descarga.volume_nf or '') }}"
+                   placeholder="ex: 10000">
+            <div class="hint mt-1" id="hint-volume">
+              Para descarga total, use o Volume NF do frete. Para fracionada, informe o volume desta etapa.
+            </div>
+          </div>
+        </div>
+
+        <!-- ══ Medidor Eletrônico ══ -->
+        <div class="sec-header"><i class="bi bi-display me-1"></i>Medidor Eletrônico</div>
+        <div class="row mb-1">
+          <div class="col-6 col-md-3">
+            <label for="medidor_antes" class="form-label form-label-sm">Medidor Antes</label>
+            <input type="number" id="medidor_antes" name="medidor_antes"
+                   class="form-control form-control-sm" step="0.001" min="0"
+                   value="{{ descarga.medidor_antes if descarga.medidor_antes is not none else '' }}">
+          </div>
+          <div class="col-6 col-md-3">
+            <label for="medidor_depois" class="form-label form-label-sm">Medidor Depois</label>
+            <input type="number" id="medidor_depois" name="medidor_depois"
+                   class="form-control form-control-sm" step="0.001" min="0"
+                   value="{{ descarga.medidor_depois if descarga.medidor_depois is not none else '' }}">
+          </div>
+          <div class="col-6 col-md-4">
+            <label class="form-label form-label-sm">Sobra (Depois − Volume − Antes)</label>
+            <input type="text" id="diff_medidor" class="form-control form-control-sm calc-field" readonly>
+          </div>
+        </div>
+        <div class="hint mb-2">Fórmula: <strong>Medidor Depois + Litros chegando − Medidor Antes = Sobra</strong></div>
+
+        <!-- ══ Régua Volumétrica ══ -->
+        <div class="sec-header"><i class="bi bi-rulers me-1"></i>Régua Volumétrica (15M3 PLENO)</div>
+        <div class="row mb-2">
+          <div class="col-6 col-md-2">
+            <label for="regua_antes_cm" class="form-label form-label-sm">Régua Antes (cm)</label>
+            <select id="regua_antes_cm" name="regua_antes_cm" class="form-select form-select-sm">
+              <option value="">— altura —</option>
+              {% for cm in range(1, 192) %}
+              <option value="{{ cm }}" {% if descarga.regua_antes_cm == cm %}selected{% endif %}>{{ cm }} cm</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-6 col-md-3">
+            <label for="regua_antes_litros" class="form-label form-label-sm">Volume Antes (L)</label>
+            <input type="number" id="regua_antes_litros" name="regua_antes_litros"
+                   class="form-control form-control-sm calc-field" step="0.01" min="0" readonly
+                   value="{{ descarga.regua_antes_litros if descarga.regua_antes_litros is not none else '' }}">
+          </div>
+          <div class="col-6 col-md-2">
+            <label for="regua_depois_cm" class="form-label form-label-sm">Régua Depois (cm)</label>
+            <select id="regua_depois_cm" name="regua_depois_cm" class="form-select form-select-sm">
+              <option value="">— altura —</option>
+              {% for cm in range(1, 192) %}
+              <option value="{{ cm }}" {% if descarga.regua_depois_cm == cm %}selected{% endif %}>{{ cm }} cm</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-6 col-md-3">
+            <label for="regua_depois_litros" class="form-label form-label-sm">Volume Depois (L)</label>
+            <input type="number" id="regua_depois_litros" name="regua_depois_litros"
+                   class="form-control form-control-sm calc-field" step="0.01" min="0" readonly
+                   value="{{ descarga.regua_depois_litros if descarga.regua_depois_litros is not none else '' }}">
+          </div>
+          <div class="col-6 col-md-2">
+            <label class="form-label form-label-sm">Sobra Régua (L)</label>
+            <input type="text" id="diff_regua" class="form-control form-control-sm calc-field" readonly>
+          </div>
+        </div>
+        <div class="row mb-2">
+          <div class="col-6 col-md-4">
+            <label class="form-label form-label-sm">Régua vs Medidor (L)</label>
+            <input type="text" id="diff_med_regua" class="form-control form-control-sm calc-field" readonly>
+          </div>
+        </div>
+
+        <!-- ══ Temperatura e Densidade ══ -->
+        <div class="sec-header"><i class="bi bi-thermometer-half me-1"></i>Temperatura e Densidade</div>
+        <div class="row mb-3">
+          <div class="col-6 col-md-3">
+            <label for="temperatura" class="form-label form-label-sm">Temperatura (°C)</label>
+            <input type="number" id="temperatura" name="temperatura"
+                   class="form-control form-control-sm" step="0.1"
+                   value="{{ descarga.temperatura if descarga.temperatura is not none else '' }}">
+          </div>
+          <div class="col-6 col-md-3">
+            <label for="densidade" class="form-label form-label-sm">Densidade</label>
+            <input type="number" id="densidade" name="densidade"
+                   class="form-control form-control-sm" step="0.0001" min="0"
+                   value="{{ descarga.densidade if descarga.densidade is not none else '' }}">
+          </div>
+        </div>
+
+        <!-- ══ Frentista ══ -->
+        <div class="sec-header"><i class="bi bi-person-badge me-1"></i>Frentista</div>
+        <div class="row mb-4">
+          <div class="col-md-5">
+            <label for="frentista_id" class="form-label form-label-sm">Frentista que realizou a descarga</label>
+            <select id="frentista_id" name="frentista_id" class="form-select form-select-sm">
+              <option value="">— selecione o frentista —</option>
+              {% for f in funcionarios %}
+              <option value="{{ f.id }}" {% if descarga.frentista_id and descarga.frentista_id == f.id %}selected{% endif %}>{{ f.nome }}</option>
+              {% endfor %}
+            </select>
+          </div>
+        </div>
+
+        <hr class="my-3">
+        <div class="d-flex gap-2">
+          <button type="submit" class="btn btn-primary btn-sm px-4">
+            <i class="bi bi-check-circle me-1"></i> Salvar Alterações
+          </button>
+          <a href="{{ url_for('descargas.detalhe', id=descarga.id) }}" class="btn btn-outline-secondary btn-sm">
+            Cancelar
+          </a>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const TABELA = {{ tabela_volumetrica | tojson }};
+
+function fmtNum(val, dec) {
+  if (val === null || val === undefined || val === '') return '';
+  val = parseFloat(val);
+  if (isNaN(val)) return '';
+  return val.toLocaleString('pt-BR', {minimumFractionDigits: dec, maximumFractionDigits: dec});
+}
+
+function selecionarTipo(tipo) {
+  document.getElementById('tipo_descarga').value = tipo;
+  document.getElementById('card-total').classList.toggle('selected', tipo === 'total');
+  document.getElementById('card-fracionada').classList.toggle('selected', tipo === 'fracionada');
+  calcDiffs();
+}
+
+document.getElementById('regua_antes_cm').addEventListener('change', function() {
+  const litros = TABELA[String(parseInt(this.value))];
+  document.getElementById('regua_antes_litros').value = litros !== undefined ? litros : '';
+  calcDiffs();
+});
+document.getElementById('regua_depois_cm').addEventListener('change', function() {
+  const litros = TABELA[String(parseInt(this.value))];
+  document.getElementById('regua_depois_litros').value = litros !== undefined ? litros : '';
+  calcDiffs();
+});
+document.getElementById('medidor_antes').addEventListener('input', calcDiffs);
+document.getElementById('medidor_depois').addEventListener('input', calcDiffs);
+document.getElementById('volume_descarga').addEventListener('input', calcDiffs);
+
+function calcDiffs() {
+  const ma  = parseFloat(document.getElementById('medidor_antes').value);
+  const md  = parseFloat(document.getElementById('medidor_depois').value);
+  const vol = parseFloat(document.getElementById('volume_descarga').value) || 0;
+  const elM = document.getElementById('diff_medidor');
+  if (!isNaN(ma) && !isNaN(md) && vol > 0) {
+    const sobra = md - vol - ma;
+    elM.value = (sobra >= 0 ? '+' : '') + fmtNum(sobra, 3);
+    elM.style.color = sobra >= 0 ? '#198754' : '#dc3545';
+  } else { elM.value = ''; elM.style.color = ''; }
+
+  const ra   = parseFloat(document.getElementById('regua_antes_litros').value);
+  const rd   = parseFloat(document.getElementById('regua_depois_litros').value);
+  const elR  = document.getElementById('diff_regua');
+  const elMR = document.getElementById('diff_med_regua');
+  if (!isNaN(ra) && !isNaN(rd) && vol > 0) {
+    const sobra_r = rd - vol - ra;
+    elR.value = (sobra_r >= 0 ? '+' : '') + fmtNum(sobra_r, 2);
+    elR.style.color = sobra_r >= 0 ? '#198754' : '#dc3545';
+    if (!isNaN(ma) && !isNaN(md)) {
+      const sobra_m = md - vol - ma;
+      const dmr = sobra_r - sobra_m;
+      elMR.value = (dmr >= 0 ? '+' : '') + fmtNum(dmr, 2);
+      elMR.style.color = dmr >= 0 ? '#198754' : '#dc3545';
+    } else { elMR.value = ''; elMR.style.color = ''; }
+  } else { elR.value = ''; elR.style.color = ''; elMR.value = ''; elMR.style.color = ''; }
+}
+
+window.addEventListener('DOMContentLoaded', calcDiffs);
+</script>
+{% endblock %}

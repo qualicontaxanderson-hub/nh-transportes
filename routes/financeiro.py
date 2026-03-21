@@ -1357,6 +1357,306 @@ def reverter_conciliacao(tx_id):
     return redirect(url_for('financeiro.recebimento'))
 
 
+@financeiro_bp.route('/reverter-conciliacao-lote/', methods=['POST'])
+@login_required
+def reverter_conciliacao_lote():
+    """Reverte a conciliação de múltiplas transações bancárias de uma só vez.
+    Recebe tx_ids[] via form POST e processa cada uma com a mesma lógica de
+    reverter_conciliacao, acumulando sucessos e erros.
+    """
+    tx_ids_raw = request.form.getlist('tx_ids[]')
+    tx_ids = []
+    for i in tx_ids_raw:
+        try:
+            tx_ids.append(int(i))
+        except (ValueError, TypeError):
+            pass
+
+    if not tx_ids:
+        flash("Nenhuma transação selecionada para reverter.", "warning")
+        return redirect(request.referrer or url_for('financeiro.recebimento'))
+
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    cursor_w = conn.cursor()
+    sucessos = 0
+    erros = []
+
+    try:
+        for tx_id in tx_ids:
+            try:
+                cursor.execute(
+                    "SELECT id, tipo, status, descricao FROM bank_transactions WHERE id = %s LIMIT 1",
+                    (tx_id,),
+                )
+                tx = cursor.fetchone()
+                if not tx:
+                    erros.append(f"#{tx_id}: não encontrada")
+                    continue
+                if tx['status'] != 'conciliado':
+                    erros.append(f"#{tx_id}: não está conciliada (status={tx['status']})")
+                    continue
+
+                # Reverter — tenta com tipo_conciliacao primeiro
+                try:
+                    cursor_w.execute(
+                        """UPDATE bank_transactions
+                           SET status = 'pendente',
+                               forma_recebimento_id = NULL,
+                               fornecedor_id        = NULL,
+                               conciliado_em        = NULL,
+                               conciliado_por       = NULL,
+                               tipo_conciliacao     = NULL
+                           WHERE id = %s""",
+                        (tx_id,),
+                    )
+                except Exception:
+                    conn.rollback()
+                    cursor_w.execute(
+                        """UPDATE bank_transactions
+                           SET status = 'pendente',
+                               forma_recebimento_id = NULL,
+                               fornecedor_id        = NULL,
+                               conciliado_em        = NULL,
+                               conciliado_por       = NULL
+                           WHERE id = %s""",
+                        (tx_id,),
+                    )
+
+                # Desvincular lancamentos_despesas
+                try:
+                    cursor_w.execute(
+                        "UPDATE lancamentos_despesas SET bank_transaction_id = NULL WHERE bank_transaction_id = %s",
+                        (tx_id,),
+                    )
+                except Exception as exc_ld:
+                    current_app.logger.warning("reverter_lote: lancamentos_despesas tx=%s: %s", tx_id, exc_ld)
+
+                # Desvincular troco_pix
+                try:
+                    cursor_w.execute(
+                        "UPDATE troco_pix SET bank_transaction_id = NULL WHERE bank_transaction_id = %s",
+                        (tx_id,),
+                    )
+                except Exception as exc_tp:
+                    current_app.logger.warning("reverter_lote: troco_pix tx=%s: %s", tx_id, exc_tp)
+
+                # Remover CREDIT sintético TRANSFER_<id> ainda pendente
+                cursor_w.execute(
+                    "DELETE FROM bank_transactions WHERE hash_dedup = %s AND tipo = 'CREDIT' AND status = 'pendente'",
+                    (f'TRANSFER_{tx_id}',),
+                )
+
+                sucessos += 1
+
+            except Exception as e_inner:
+                current_app.logger.exception("reverter_lote: erro tx_id=%s: %s", tx_id, e_inner)
+                erros.append(f"#{tx_id}: {e_inner}")
+
+        conn.commit()
+
+    except Exception as e:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        current_app.logger.exception("Erro em reverter_conciliacao_lote: %s", e)
+        flash(f"Erro ao reverter em lote: {e}", "danger")
+    finally:
+        try:
+            cursor.close()
+        except Exception:
+            pass
+        try:
+            cursor_w.close()
+        except Exception:
+            pass
+        try:
+            conn.close()
+        except Exception:
+            pass
+
+    if sucessos:
+        flash(f"{sucessos} conciliação(ões) revertida(s) com sucesso.", "success")
+    if erros:
+        flash("Erros: " + "; ".join(erros), "warning")
+
+    return redirect(request.referrer or url_for('financeiro.recebimento'))
+
+
+@financeiro_bp.route('/excluir-transacao/<int:tx_id>/', methods=['POST'])
+@login_required
+def excluir_transacao(tx_id):
+    """Exclui permanentemente uma transação bancária importada via OFX.
+    Remove também os vínculos em lancamentos_despesas e troco_pix antes de deletar.
+    """
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        cursor.execute(
+            "SELECT id, tipo, status, descricao FROM bank_transactions WHERE id = %s LIMIT 1",
+            (tx_id,),
+        )
+        tx = cursor.fetchone()
+        if not tx:
+            flash("Transação não encontrada.", "danger")
+            return redirect(request.referrer or url_for('financeiro.recebimento'))
+
+        cursor_w = conn.cursor()
+
+        # Desvincular lancamentos_despesas
+        try:
+            cursor_w.execute(
+                "UPDATE lancamentos_despesas SET bank_transaction_id = NULL WHERE bank_transaction_id = %s",
+                (tx_id,),
+            )
+        except Exception as exc_ld:
+            current_app.logger.warning("excluir_transacao: lancamentos_despesas tx=%s: %s", tx_id, exc_ld)
+
+        # Desvincular troco_pix
+        try:
+            cursor_w.execute(
+                "UPDATE troco_pix SET bank_transaction_id = NULL WHERE bank_transaction_id = %s",
+                (tx_id,),
+            )
+        except Exception as exc_tp:
+            current_app.logger.warning("excluir_transacao: troco_pix tx=%s: %s", tx_id, exc_tp)
+
+        # Remover CREDIT sintético TRANSFER_<id> se existir
+        cursor_w.execute(
+            "DELETE FROM bank_transactions WHERE hash_dedup = %s",
+            (f'TRANSFER_{tx_id}',),
+        )
+
+        # Excluir a transação
+        cursor_w.execute("DELETE FROM bank_transactions WHERE id = %s", (tx_id,))
+        conn.commit()
+
+        flash(f"Transação #{tx_id} excluída com sucesso.", "success")
+    except Exception as e:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        current_app.logger.exception("Erro em excluir_transacao tx_id=%s: %s", tx_id, e)
+        flash(f"Erro ao excluir transação: {e}", "danger")
+    finally:
+        try:
+            cursor.close()
+        except Exception:
+            pass
+        try:
+            conn.close()
+        except Exception:
+            pass
+
+    referrer = request.referrer or ''
+    if 'pagamento' in referrer:
+        return redirect(url_for('financeiro.pagamentos'))
+    return redirect(url_for('financeiro.recebimento'))
+
+
+@financeiro_bp.route('/excluir-transacao-lote/', methods=['POST'])
+@login_required
+def excluir_transacao_lote():
+    """Exclui permanentemente múltiplas transações bancárias de uma só vez.
+    Recebe tx_ids[] via form POST e processa cada uma, acumulando sucessos e erros.
+    """
+    tx_ids_raw = request.form.getlist('tx_ids[]')
+    tx_ids = []
+    for i in tx_ids_raw:
+        try:
+            tx_ids.append(int(i))
+        except (ValueError, TypeError):
+            pass
+
+    if not tx_ids:
+        flash("Nenhuma transação selecionada para excluir.", "warning")
+        return redirect(request.referrer or url_for('financeiro.recebimento'))
+
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    cursor_w = conn.cursor()
+    sucessos = 0
+    erros = []
+
+    try:
+        for tx_id in tx_ids:
+            try:
+                cursor.execute(
+                    "SELECT id FROM bank_transactions WHERE id = %s LIMIT 1",
+                    (tx_id,),
+                )
+                tx = cursor.fetchone()
+                if not tx:
+                    erros.append(f"#{tx_id}: não encontrada")
+                    continue
+
+                # Desvincular lancamentos_despesas
+                try:
+                    cursor_w.execute(
+                        "UPDATE lancamentos_despesas SET bank_transaction_id = NULL WHERE bank_transaction_id = %s",
+                        (tx_id,),
+                    )
+                except Exception as exc_ld:
+                    current_app.logger.warning("excluir_lote: lancamentos_despesas tx=%s: %s", tx_id, exc_ld)
+
+                # Desvincular troco_pix
+                try:
+                    cursor_w.execute(
+                        "UPDATE troco_pix SET bank_transaction_id = NULL WHERE bank_transaction_id = %s",
+                        (tx_id,),
+                    )
+                except Exception as exc_tp:
+                    current_app.logger.warning("excluir_lote: troco_pix tx=%s: %s", tx_id, exc_tp)
+
+                # Remover CREDIT sintético TRANSFER_<id> se existir
+                cursor_w.execute(
+                    "DELETE FROM bank_transactions WHERE hash_dedup = %s",
+                    (f'TRANSFER_{tx_id}',),
+                )
+
+                cursor_w.execute("DELETE FROM bank_transactions WHERE id = %s", (tx_id,))
+                sucessos += 1
+
+            except Exception as e_inner:
+                current_app.logger.exception("excluir_lote: erro tx_id=%s: %s", tx_id, e_inner)
+                erros.append(f"#{tx_id}: {e_inner}")
+
+        conn.commit()
+
+    except Exception as e:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        current_app.logger.exception("Erro em excluir_transacao_lote: %s", e)
+        flash(f"Erro ao excluir em lote: {e}", "danger")
+    finally:
+        try:
+            cursor.close()
+        except Exception:
+            pass
+        try:
+            cursor_w.close()
+        except Exception:
+            pass
+        try:
+            conn.close()
+        except Exception:
+            pass
+
+    if sucessos:
+        flash(f"{sucessos} transação(ões) excluída(s) com sucesso.", "success")
+    if erros:
+        flash("Erros: " + "; ".join(erros), "warning")
+
+    referrer = request.referrer or ''
+    if 'pagamento' in referrer:
+        return redirect(url_for('financeiro.pagamentos'))
+    return redirect(url_for('financeiro.recebimento'))
+
+
 def _get_bank_transactions(tipo, request_args, exclude_transfers=False):
     """Busca transações bancárias filtradas por tipo (CREDIT ou DEBIT) com filtros opcionais.
 
@@ -1686,11 +1986,14 @@ def transferencias():
     f_data_ini  = request.args.get('data_ini', '').strip()
     f_data_fim  = request.args.get('data_fim', '').strip()
     f_descricao = request.args.get('f_descricao', '').strip()
-    f_contas    = [c for c in request.args.getlist('account_id') if c and c.strip()]
+    # Accept both 'conta_id' (new standard) and legacy 'account_id'
+    f_contas    = [c for c in request.args.getlist('conta_id') if c and c.strip()]
+    if not f_contas:
+        f_contas = [c for c in request.args.getlist('account_id') if c and c.strip()]
     f_empresas  = [e for e in request.args.getlist('empresa_id') if e and e.strip()]
     # Compatibilidade com URLs antigas (parâmetro único)
     if not f_contas:
-        _v = request.args.get('account_id', '').strip()
+        _v = request.args.get('conta_id', request.args.get('account_id', '')).strip()
         if _v:
             f_contas = [_v]
     if not f_empresas:
@@ -1772,6 +2075,10 @@ def transferencias():
             ph = ','.join(['%s'] * len(f_contas))
             where.append(f"(bt.account_id IN ({ph}) OR bt_orig.account_id IN ({ph}))")
             params += f_contas + f_contas
+        if f_empresas:
+            ph_e = ','.join(['%s'] * len(f_empresas))
+            where.append(f"(ba_dest.cliente_id IN ({ph_e}) OR ba_orig.cliente_id IN ({ph_e}))")
+            params += f_empresas + f_empresas
         if f_descricao:
             where.append("bt_orig.descricao LIKE %s")
             params.append(f'%{f_descricao}%')
@@ -1802,6 +2109,8 @@ def transferencias():
                 FROM bank_transactions bt
                 LEFT JOIN bank_transactions bt_orig
                        ON bt_orig.id = CAST(SUBSTRING(bt.hash_dedup, 10) AS UNSIGNED)
+                INNER JOIN bank_accounts ba_dest ON ba_dest.id = bt.account_id
+                LEFT  JOIN bank_accounts ba_orig ON ba_orig.id = bt_orig.account_id
                 WHERE {where_sql}""",
             params,
         )

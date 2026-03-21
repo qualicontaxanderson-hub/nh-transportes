@@ -1,0 +1,535 @@
+{% extends 'base.html' %}
+{% block title %}Conf. Depósitos{% endblock %}
+
+{% block styles %}
+<style>
+.page-hero {
+  background: linear-gradient(135deg, #1D63A5 0%, #154070 100%);
+  border-radius: .75rem; padding: 1.5rem 2rem; margin-bottom: 1.5rem; color: #fff;
+}
+.page-hero .hero-icon {
+  width: 3rem; height: 3rem; background: rgba(255,255,255,.15);
+  border-radius: .6rem; display: flex; align-items: center; justify-content: center;
+  font-size: 1.5rem; flex-shrink: 0;
+}
+.sec-header {
+  background: #1D63A5; color: #fff; padding: .4rem .85rem;
+  border-radius: .4rem .4rem 0 0; font-weight: 700; font-size: .85rem;
+}
+.subsec-header-dinheiro {
+  background: #0d6e3f; color: #fff; padding: .3rem .75rem;
+  font-weight: 600; font-size: .78rem; display: flex; justify-content: space-between; align-items: center;
+}
+.subsec-header-cheque {
+  background: #6f42c1; color: #fff; padding: .3rem .75rem;
+  font-weight: 600; font-size: .78rem; display: flex; justify-content: space-between; align-items: center;
+}
+.tbl-dep { font-size: .78rem; }
+.tbl-dep thead th {
+  font-size: .72rem; text-transform: uppercase; letter-spacing: .04em;
+  white-space: nowrap; padding: .3rem .45rem;
+}
+.tbl-dep td { padding: .25rem .45rem; vertical-align: middle; }
+.row-grand { background: #1D63A5; color: #fff; font-weight: 700; }
+.saldo-pos  { color: #198754; font-weight: 700; }
+.saldo-neg  { color: #dc3545; font-weight: 700; }
+.saldo-zero { color: #6c757d; font-weight: 700; }
+.row-grand .saldo-pos,
+.row-grand .saldo-neg,
+.row-grand .saldo-zero { color: #fff !important; }
+.dia-semana { font-size: .68rem; color: #888; font-weight: 600; margin-left: .15rem; }
+.row-caixa td { background-color: #e8f0fb !important; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+
+  <!-- Breadcrumb -->
+  <nav aria-label="breadcrumb" class="mb-3">
+    <ol class="breadcrumb small">
+      <li class="breadcrumb-item"><a href="{{ url_for('index') }}" class="text-decoration-none">Dashboard</a></li>
+      <li class="breadcrumb-item">Relatórios</li>
+      <li class="breadcrumb-item active">Conf. Depósitos</li>
+    </ol>
+  </nav>
+
+  <!-- Hero -->
+  <div class="page-hero d-flex align-items-center gap-3 flex-wrap mb-3">
+    <div class="hero-icon"><i class="bi bi-bank2"></i></div>
+    <div class="flex-grow-1">
+      <h4 class="mb-0 fw-bold">Conferência de Depósitos</h4>
+      <p class="mb-0 opacity-75 small">
+        Cruza depósitos do Fechamento de Caixa com os créditos bancários importados (OFX).
+        Separado por tipo: <strong>Dinheiro</strong> (Espécie) e <strong>Cheque</strong>.
+        Saldo = banco − caixa.
+      </p>
+    </div>
+    <div>
+      <button class="btn btn-light btn-sm" data-bs-toggle="modal" data-bs-target="#modalVinculos">
+        <i class="bi bi-link-45deg me-1"></i> Vínculos
+      </button>
+    </div>
+  </div>
+
+  <!-- Filtros -->
+  <form method="get" class="card shadow-sm mb-4">
+    <div class="card-header py-2" style="background:#1D63A5;color:white;">
+      <h6 class="mb-0"><i class="bi bi-funnel me-1"></i> Filtros</h6>
+    </div>
+    <div class="card-body py-3">
+      <div class="row g-3 align-items-end">
+
+        <div class="col-6 col-sm-3 col-md-2">
+          <label class="form-label small fw-semibold mb-1">
+            <i class="bi bi-calendar-event me-1 text-primary"></i>Data Início
+          </label>
+          <input type="date" name="data_inicio" value="{{ data_inicio }}" class="form-control form-control-sm">
+        </div>
+
+        <div class="col-6 col-sm-3 col-md-2">
+          <label class="form-label small fw-semibold mb-1">
+            <i class="bi bi-calendar-check me-1 text-primary"></i>Data Fim
+          </label>
+          <input type="date" name="data_fim" value="{{ data_fim }}" class="form-control form-control-sm">
+        </div>
+
+        <div class="col-12 col-sm-6 col-md-3">
+          <label class="form-label small fw-semibold mb-1">
+            <i class="bi bi-building me-1 text-primary"></i>Empresa
+          </label>
+          <select name="empresa_ids[]" class="form-select form-select-sm" multiple
+                  style="height:auto; min-height:2.1rem;">
+            {% for emp in empresas %}
+            <option value="{{ emp.id }}" {% if emp.id|string in empresa_ids %}selected{% endif %}>
+              {{ emp.nome }}
+            </option>
+            {% endfor %}
+          </select>
+          <div class="form-text" style="font-size:.7rem;"><i class="bi bi-info-circle me-1"></i>Ctrl+clique p/ múltiplos</div>
+        </div>
+
+        <div class="col-12 col-sm-6 col-md-3">
+          <label class="form-label small fw-semibold mb-1">
+            <i class="bi bi-bank me-1 text-primary"></i>Conta Bancária
+          </label>
+          <select name="conta_ids[]" class="form-select form-select-sm" multiple
+                  style="height:auto; min-height:2.1rem;">
+            {% for conta in contas_bancarias %}
+            <option value="{{ conta.id }}" {% if conta.id|string in conta_ids %}selected{% endif %}>
+              {{ conta.nome }}
+            </option>
+            {% endfor %}
+          </select>
+          <div class="form-text" style="font-size:.7rem;"><i class="bi bi-info-circle me-1"></i>Ctrl+clique p/ múltiplos</div>
+        </div>
+
+        <div class="col-12 col-sm-auto">
+          <button type="submit" class="btn btn-primary btn-sm">
+            <i class="bi bi-search me-1"></i> Filtrar
+          </button>
+          <a href="{{ url_for('conf_depositos.conf_depositos') }}" class="btn btn-outline-secondary btn-sm">
+            <i class="bi bi-x-circle me-1"></i> Limpar
+          </a>
+        </div>
+      </div>
+
+      <div class="mt-3 pt-2 border-top d-flex gap-1 flex-wrap align-items-center">
+        <span class="text-muted small me-1"><i class="bi bi-clock-history me-1"></i>Atalhos:</span>
+        <button type="button" class="btn btn-outline-primary btn-sm periodo-btn" data-periodo="mes_atual">
+          <i class="bi bi-calendar3 me-1"></i>Mês Atual
+        </button>
+        <button type="button" class="btn btn-outline-primary btn-sm periodo-btn" data-periodo="mes_anterior">
+          <i class="bi bi-calendar3 me-1"></i>Mês Anterior
+        </button>
+        <button type="button" class="btn btn-outline-primary btn-sm periodo-btn" data-periodo="ano_atual">
+          <i class="bi bi-calendar-range me-1"></i>Ano Atual
+        </button>
+      </div>
+    </div>
+  </form>
+
+  {% if not vinculos_list %}
+  <div class="alert alert-warning">
+    <i class="bi bi-exclamation-triangle me-2"></i>
+    Nenhum vínculo configurado. Clique em <strong>Vínculos</strong> (no cabeçalho) e
+    associe cada empresa às formas de recebimento de depósito, informando se é
+    <strong>Dinheiro</strong> ou <strong>Cheque</strong>.
+  </div>
+
+  {% elif not sections %}
+  <div class="alert alert-info">
+    <i class="bi bi-info-circle me-2"></i>
+    Nenhum depósito encontrado para os filtros selecionados.
+  </div>
+
+  {% else %}
+
+  {% for sec in sections %}
+  <div class="mb-4">
+    <!-- Cabeçalho da empresa -->
+    <div class="sec-header d-flex justify-content-between align-items-center flex-wrap gap-1">
+      <span><i class="bi bi-bank me-2"></i>{{ sec.empresa_nome }}</span>
+      <span class="small opacity-75">
+        Caixa: <strong>{{ sec.total_caixa | fmtmoney }}</strong>
+        &nbsp;|&nbsp;
+        Banco: <strong>{{ sec.total_banco | fmtmoney }}</strong>
+        &nbsp;|&nbsp;
+        Saldo:
+        <strong class="{% if sec.saldo_final > 0.005 %}text-warning{% elif sec.saldo_final < -0.005 %}text-warning{% endif %}">
+          {{ sec.saldo_final | fmtmoney }}
+        </strong>
+      </span>
+    </div>
+
+    {% for sub in sec.sub_sections %}
+    <div class="mb-2">
+      <!-- Cabeçalho do sub-tipo (Dinheiro / Cheque) -->
+      <div class="subsec-header-{{ sub.tipo | lower }}">
+        <span>
+          {% if sub.tipo == 'DINHEIRO' %}
+            <i class="bi bi-cash-coin me-1"></i> Dinheiro (Espécie)
+          {% else %}
+            <i class="bi bi-journal-check me-1"></i> Cheque
+          {% endif %}
+          {% if sub.formas %}
+          <span class="opacity-75 fw-normal ms-2 small">— {{ sub.formas | join(' / ') }}</span>
+          {% endif %}
+        </span>
+        <span class="small">
+          Caixa: {{ sub.total_caixa | fmtmoney }}
+          &nbsp;|&nbsp;
+          Banco: {{ sub.total_banco | fmtmoney }}
+          &nbsp;|&nbsp;
+          Saldo:
+          <strong class="{% if sub.saldo_final > 0.005 %}text-warning{% elif sub.saldo_final < -0.005 %}text-warning{% else %}text-light{% endif %}">
+            {{ sub.saldo_final | fmtmoney }}
+          </strong>
+        </span>
+      </div>
+
+      {% if sub.linhas %}
+      <div class="table-responsive">
+        <table class="table table-bordered table-sm tbl-dep mb-0">
+          <thead class="table-dark">
+            <tr>
+              <th style="width:100px;">Data</th>
+              <th class="text-end" style="width:120px;">Valor Sistema</th>
+              <th style="width:160px;">Conta</th>
+              <th>Descrição</th>
+              <th class="text-end" style="width:120px;">Valor Depósito</th>
+              <th class="text-end" style="width:115px;">Saldo</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for linha in sub.linhas %}
+            <tr{% if linha.tipo_row == 'caixa' %} class="row-caixa"{% endif %}>
+              <td>
+                {{ linha.data }}
+                {% if linha.dia_semana %}<span class="dia-semana">{{ linha.dia_semana }}</span>{% endif %}
+                {% if linha.tipo_row == 'caixa' %}
+                  <span class="badge bg-secondary ms-1" style="font-size:.6rem;">caixa</span>
+                {% endif %}
+              </td>
+              <td class="text-end">
+                {% if linha.val_sistema %}{{ linha.val_sistema | fmtmoney }}{% else %}<span class="text-muted">—</span>{% endif %}
+              </td>
+              <td class="small text-muted">{{ linha.conta or '—' }}</td>
+              <td class="small text-muted">{{ linha.descricao or '' }}</td>
+              <td class="text-end">
+                {% if linha.val_deposito %}{{ linha.val_deposito | fmtmoney }}{% else %}<span class="text-muted">—</span>{% endif %}
+              </td>
+              <td class="text-end {% if linha.saldo_pos %}saldo-pos{% elif linha.saldo_neg %}saldo-neg{% else %}saldo-zero{% endif %}">
+                {{ linha.saldo | fmtmoney }}
+              </td>
+            </tr>
+            {% endfor %}
+
+            <!-- Sub-total -->
+            <tr class="row-grand">
+              <td class="fw-bold">TOTAL {{ sub.tipo_label | upper }}</td>
+              <td class="text-end fw-bold">{{ sub.total_caixa | fmtmoney }}</td>
+              <td></td>
+              <td></td>
+              <td class="text-end fw-bold">{{ sub.total_banco | fmtmoney }}</td>
+              <td class="text-end fw-bold {% if sub.saldo_final > 0.005 %}saldo-pos{% elif sub.saldo_final < -0.005 %}saldo-neg{% else %}saldo-zero{% endif %}">
+                {{ sub.saldo_final | fmtmoney }}
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <div class="alert alert-light border py-2 px-3 small mb-0">
+        <i class="bi bi-info-circle me-1 text-muted"></i>
+        Nenhum lançamento encontrado para este tipo no período.
+      </div>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+  {% endfor %}
+
+  <!-- Resumo geral -->
+  {% set grand_caixa = sections | map(attribute='total_caixa') | sum %}
+  {% set grand_banco = sections | map(attribute='total_banco') | sum %}
+  {% set grand_saldo = sections | map(attribute='saldo_final') | sum %}
+  <div class="table-responsive mb-3">
+    <table class="table table-bordered table-sm tbl-dep">
+      <tbody>
+        <tr class="row-grand">
+          <td class="fw-bold">TOTAL GERAL</td>
+          <td class="text-end fw-bold">Caixa: {{ grand_caixa | fmtmoney }}</td>
+          <td></td>
+          <td></td>
+          <td class="text-end fw-bold">Banco: {{ grand_banco | fmtmoney }}</td>
+          <td class="text-end fw-bold {% if grand_saldo > 0.005 %}saldo-pos{% elif grand_saldo < -0.005 %}saldo-neg{% else %}saldo-zero{% endif %}">
+            Saldo: {{ grand_saldo | fmtmoney }}
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="small text-muted mb-4 d-flex flex-wrap gap-3">
+    <span><span style="display:inline-block;width:12px;height:12px;background:#e8f0fb;border:1px solid #ccc;"></span> Linhas azuis = lançamento do caixa (Valor Sistema)</span>
+    <span>Linhas brancas = crédito bancário OFX (Valor Depósito + Conta)</span>
+    <span><strong class="text-success">Saldo verde</strong> = banco recebeu mais que o caixa registrou.</span>
+    <span><strong class="text-danger">Saldo vermelho</strong> = banco aguarda depósito registrado no caixa.</span>
+  </div>
+
+  {% endif %}
+
+</div>
+
+<!-- Modal Vínculos -->
+<div class="modal fade" id="modalVinculos" tabindex="-1" aria-labelledby="labelModalVinculos" aria-hidden="true">
+  <div class="modal-dialog modal-xl">
+    <div class="modal-content">
+      <div class="modal-header" style="background:#1D63A5;color:#fff;">
+        <h5 class="modal-title" id="labelModalVinculos">
+          <i class="bi bi-link-45deg me-2"></i>Vínculos Empresa → Forma de Depósito
+        </h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <p class="small text-muted mb-3">
+          Associe cada empresa do Fechamento de Caixa à(s) forma(s) de recebimento bancário
+          que correspondem a depósitos, informando se é <strong>Dinheiro</strong> ou <strong>Cheque</strong>.
+          As regras do banco
+          (<a href="{{ url_for('conciliacao_regras.lista') }}" target="_blank">banco/regras</a>)
+          classificam os créditos OFX nessas formas automaticamente.
+        </p>
+
+        <span id="msg-vinculos" class="small d-block mb-2"></span>
+
+        <!-- Formulário para adicionar vínculo -->
+        <div class="row g-2 align-items-end mb-3 p-2 border rounded bg-light">
+          <div class="col-12 col-md-3">
+            <label class="form-label small fw-semibold mb-1">Empresa (Fechamento de Caixa)</label>
+            <select id="sel-nova-empresa" class="form-select form-select-sm">
+              <option value="">— Selecione —</option>
+              {% for emp in empresas %}
+              <option value="{{ emp.id }}">{{ emp.nome }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-12 col-md-2">
+            <label class="form-label small fw-semibold mb-1">Tipo Depósito</label>
+            <select id="sel-nova-tipo" class="form-select form-select-sm">
+              <option value="DINHEIRO">💵 Dinheiro</option>
+              <option value="CHEQUE">📄 Cheque</option>
+            </select>
+          </div>
+          <div class="col-12 col-md-4">
+            <label class="form-label small fw-semibold mb-1">Forma de Recebimento (Banco)</label>
+            <select id="sel-nova-forma" class="form-select form-select-sm">
+              <option value="">— Selecione —</option>
+              {% for fr in deposit_formas %}
+              <option value="{{ fr.id }}">{{ fr.nome }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-auto">
+            <button class="btn btn-primary btn-sm" id="btn-vincular-add">
+              <i class="bi bi-plus-lg me-1"></i>Vincular
+            </button>
+          </div>
+        </div>
+
+        <!-- Lista de vínculos existentes -->
+        <table class="table table-sm table-bordered" style="font-size:.82rem;">
+          <thead class="table-dark">
+            <tr>
+              <th>Empresa</th>
+              <th>Tipo</th>
+              <th>Forma de Recebimento</th>
+              <th class="text-center" style="width:70px;">Remover</th>
+            </tr>
+          </thead>
+          <tbody id="tbl-vinculos-body">
+            {% for v in vinculos_list %}
+            <tr id="vinc-row-{{ v.empresa_id }}-{{ v.forma_recebimento_id }}">
+              <td>{{ v.empresa_nome }}</td>
+              <td>
+                {% if v.tipo_deposito == 'CHEQUE' %}
+                  <span class="badge" style="background:#6f42c1;">📄 Cheque</span>
+                {% else %}
+                  <span class="badge bg-success">💵 Dinheiro</span>
+                {% endif %}
+              </td>
+              <td>{{ v.forma_nome }}</td>
+              <td class="text-center">
+                <button class="btn btn-sm btn-outline-danger btn-desvincular"
+                        data-empresa="{{ v.empresa_id }}"
+                        data-forma="{{ v.forma_recebimento_id }}"
+                        title="Remover vínculo">
+                  <i class="bi bi-trash"></i>
+                </button>
+              </td>
+            </tr>
+            {% else %}
+            <tr id="vinculos-empty-row">
+              <td colspan="4" class="text-center text-muted small">Nenhum vínculo cadastrado.</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Fechar</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  // Quick period shortcuts
+  const inp_ini = document.querySelector('[name="data_inicio"]');
+  const inp_fim = document.querySelector('[name="data_fim"]');
+
+  document.querySelectorAll('.periodo-btn').forEach(btn => {
+    btn.addEventListener('click', function () {
+      const today = new Date();
+      let ini, fim;
+      if (this.dataset.periodo === 'mes_atual') {
+        ini = new Date(today.getFullYear(), today.getMonth(), 1);
+        fim = today;
+      } else if (this.dataset.periodo === 'mes_anterior') {
+        ini = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+        fim = new Date(today.getFullYear(), today.getMonth(), 0);
+      } else {
+        ini = new Date(today.getFullYear(), 0, 1);
+        fim = today;
+      }
+      inp_ini.value = ini.toISOString().slice(0, 10);
+      inp_fim.value = fim.toISOString().slice(0, 10);
+    });
+  });
+
+  // ── Vínculos modal ─────────────────────────────────────────────────────────
+  const msgVinculos = document.getElementById('msg-vinculos');
+  function showMsg(text, ok) {
+    msgVinculos.textContent = text;
+    msgVinculos.className = 'small d-block mb-2 ' + (ok ? 'text-success' : 'text-danger');
+    if (ok) setTimeout(() => { msgVinculos.textContent = ''; }, 3000);
+  }
+
+  // Adicionar vínculo
+  document.getElementById('btn-vincular-add').addEventListener('click', async function () {
+    const empresaId = parseInt(document.getElementById('sel-nova-empresa').value) || null;
+    const formaId   = parseInt(document.getElementById('sel-nova-forma').value)   || null;
+    const tipo      = document.getElementById('sel-nova-tipo').value || 'DINHEIRO';
+    if (!empresaId || !formaId) {
+      showMsg('Selecione empresa e forma de recebimento.', false);
+      return;
+    }
+    try {
+      const res = await fetch('{{ url_for("conf_depositos.vincular_deposito") }}', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ empresa_id: empresaId, forma_recebimento_id: formaId, tipo_deposito: tipo }),
+      });
+      const json = await res.json();
+      if (!json.success) { showMsg(json.message || 'Erro.', false); return; }
+
+      const emptyRow = document.getElementById('vinculos-empty-row');
+      if (emptyRow) emptyRow.remove();
+
+      const selEmp   = document.getElementById('sel-nova-empresa');
+      const selForma = document.getElementById('sel-nova-forma');
+      const empNome   = selEmp.options[selEmp.selectedIndex].text;
+      const formaNome = selForma.options[selForma.selectedIndex].text;
+      const tipoBadge = tipo === 'CHEQUE'
+        ? '<span class="badge" style="background:#6f42c1;">📄 Cheque</span>'
+        : '<span class="badge bg-success">💵 Dinheiro</span>';
+
+      const rowId = `vinc-row-${empresaId}-${formaId}`;
+      const existingRow = document.getElementById(rowId);
+      if (existingRow) {
+        // Update tipo badge in existing row
+        existingRow.cells[1].innerHTML = tipoBadge;
+      } else {
+        const tbody = document.getElementById('tbl-vinculos-body');
+        const tr = document.createElement('tr');
+        tr.id = rowId;
+        tr.innerHTML = `
+          <td>${empNome}</td>
+          <td>${tipoBadge}</td>
+          <td>${formaNome}</td>
+          <td class="text-center">
+            <button class="btn btn-sm btn-outline-danger btn-desvincular"
+                    data-empresa="${empresaId}" data-forma="${formaId}" title="Remover">
+              <i class="bi bi-trash"></i>
+            </button>
+          </td>`;
+        tbody.appendChild(tr);
+        attachDel(tr.querySelector('.btn-desvincular'));
+      }
+
+      selEmp.value   = '';
+      selForma.value = '';
+      showMsg('Vínculo salvo.', true);
+    } catch (e) {
+      showMsg('Erro de comunicação.', false);
+    }
+  });
+
+  function attachDel(btn) {
+    btn.addEventListener('click', async function () {
+      const empresaId = parseInt(this.dataset.empresa);
+      const formaId   = parseInt(this.dataset.forma);
+      if (!confirm('Remover este vínculo?')) return;
+      try {
+        const res = await fetch('{{ url_for("conf_depositos.desvincular_deposito") }}', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ empresa_id: empresaId, forma_recebimento_id: formaId }),
+        });
+        const json = await res.json();
+        if (json.success) {
+          const row = document.getElementById(`vinc-row-${empresaId}-${formaId}`);
+          if (row) row.remove();
+          const tbody = document.getElementById('tbl-vinculos-body');
+          if (!tbody.querySelector('tr')) {
+            tbody.innerHTML = '<tr id="vinculos-empty-row"><td colspan="4" class="text-center text-muted small">Nenhum vínculo cadastrado.</td></tr>';
+          }
+          showMsg('Vínculo removido.', true);
+        } else {
+          showMsg(json.message || 'Erro.', false);
+        }
+      } catch (e) {
+        showMsg('Erro de comunicação.', false);
+      }
+    });
+  }
+
+  document.querySelectorAll('.btn-desvincular').forEach(attachDel);
+})();
+</script>
+{% endblock %}
+

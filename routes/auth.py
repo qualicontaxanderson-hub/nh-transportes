@@ -115,7 +115,11 @@ def login():
             if nivel == 'SUPERVISOR':
                 return redirect(url_for('lancamentos_caixa.lista'))
             
-            # ADMIN, GERENTE e outros vão para página solicitada ou index
+            # GERENTE vai direto para Descargas (acesso restrito)
+            if nivel == 'GERENTE':
+                return redirect(url_for('descargas.lista'))
+            
+            # ADMIN e outros vão para página solicitada ou index
             next_url = request.args.get('next') or url_for('index')
             return redirect(next_url)
         else:

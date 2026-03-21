@@ -9,9 +9,12 @@ forma de recebimento. Cada bandeira pode ter até 2 formas vinculadas
 (ex: regular + antecipado para cartão de crédito).
 
 Rota:
-  GET  /relatorios/conf_cartoes         – relatório
-  POST /relatorios/conf_cartoes/vincular – salva vinculação
-  POST /relatorios/conf_cartoes/desvincular – remove vinculação específica
+  GET  /relatorios/conf_cartoes               – relatório
+  POST /relatorios/conf_cartoes/vincular       – salva vinculação
+  POST /relatorios/conf_cartoes/desvincular   – remove vinculação específica
+  POST /relatorios/conf_cartoes/prazo_salvar  – salva prazo de compensação
+  POST /relatorios/conf_cartoes/feriado_add   – adiciona feriado
+  POST /relatorios/conf_cartoes/feriado_del   – remove feriado
 """
 from datetime import date, datetime
 from collections import defaultdict
@@ -21,6 +24,19 @@ from flask_login import login_required
 
 from routes.auth import admin_required
 from utils.db import get_db_connection
+
+# Abreviações dos dias da semana em português (weekday() 0=Seg … 6=Dom)
+_DIAS_PT = ['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom']
+
+
+def _parse_iso(d):
+    """Converte string ISO 'YYYY-MM-DD' ou date para objeto date."""
+    if isinstance(d, date):
+        return d
+    try:
+        return datetime.strptime(str(d), '%Y-%m-%d').date()
+    except Exception:
+        return None
 
 bp = Blueprint('conf_cartoes', __name__, url_prefix='/relatorios')
 
@@ -68,7 +84,50 @@ def _ensure_vinculos_table(conn):
         conn.commit()
     except Exception:
         pass  # índice já existe
+    # Migração: adiciona coluna prazo_compensacao_dias em bandeiras_cartao se não existir
+    try:
+        cur.execute(
+            "ALTER TABLE bandeiras_cartao "
+            "ADD COLUMN prazo_compensacao_dias INT NOT NULL DEFAULT 1"
+        )
+        conn.commit()
+    except Exception:
+        pass  # coluna já existe
     cur.close()
+
+
+def _ensure_feriados_table(conn):
+    """Cria a tabela de feriados municipais/estaduais se não existir."""
+    cur = conn.cursor()
+    cur.execute(
+        """
+        CREATE TABLE IF NOT EXISTS conf_cartoes_feriados (
+            id          INT AUTO_INCREMENT PRIMARY KEY,
+            data        DATE NOT NULL,
+            descricao   VARCHAR(200) NOT NULL DEFAULT '',
+            criado_em   DATETIME DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE KEY uk_feriado_data (data)
+        )
+        """
+    )
+    conn.commit()
+    cur.close()
+
+
+def _get_feriados(conn):
+    """Retorna lista de feriados e um set com as datas ISO."""
+    cur = conn.cursor(dictionary=True)
+    try:
+        cur.execute(
+            "SELECT id, DATE_FORMAT(data, '%Y-%m-%d') AS data_iso, descricao "
+            "FROM conf_cartoes_feriados ORDER BY data"
+        )
+        rows = cur.fetchall()
+    except Exception:
+        rows = []
+    cur.close()
+    feriados_set = {r['data_iso'] for r in rows}
+    return rows, feriados_set
 
 
 def _get_empresas(conn):
@@ -93,7 +152,8 @@ def _get_bandeiras(conn):
     # Busca as bandeiras
     cur.execute(
         """
-        SELECT bc.id, bc.nome, bc.tipo
+        SELECT bc.id, bc.nome, bc.tipo,
+               COALESCE(bc.prazo_compensacao_dias, 1) AS prazo_compensacao_dias
           FROM bandeiras_cartao bc
          WHERE bc.ativo = 1
          ORDER BY bc.tipo, bc.nome
@@ -234,13 +294,16 @@ def _fmt_date(d):
     return str(d)
 
 
-def _build_report(bandeiras, vinculos_map, vendas_rows, recebimentos_rows):
+def _build_report(bandeiras, vinculos_map, vendas_rows, recebimentos_rows, feriados_set=None):
     """
     Para cada bandeira vinculada, produz uma lista de linhas cronológicas
     mostrando vendas x recebimentos com diferença acumulada.
 
     vinculos_map: dict bandeira_id → [forma_recebimento_id, ...]
+    feriados_set: set of ISO date strings to highlight as holidays
     """
+    if feriados_set is None:
+        feriados_set = set()
     # Index vendas: (bandeira_id, data) → total_venda
     vendas_idx = {}
     for r in vendas_rows:
@@ -297,6 +360,12 @@ def _build_report(bandeiras, vinculos_map, vendas_rows, recebimentos_rows):
 
             pct = (receb / venda * 100) if venda else None
 
+            # Both data_venda and data_recebimento share the same calendar date d;
+            # day-of-week and holiday flag apply to that single date.
+            d_obj = _parse_iso(d)
+            dia_semana = _DIAS_PT[d_obj.weekday()] if d_obj else ''
+            is_destaque = (d_obj is not None and d_obj.weekday() >= 5) or (str(d) in feriados_set)
+
             linhas.append({
                 'data_venda': _fmt_date(d) if venda else '',
                 'total_venda': venda,
@@ -304,6 +373,9 @@ def _build_report(bandeiras, vinculos_map, vendas_rows, recebimentos_rows):
                 'total_recebimento': receb,
                 'saldo_acumulado': saldo,
                 'porcentagem': pct,
+                'data_iso': str(d),
+                'dia_semana': dia_semana,
+                'is_destaque': is_destaque,
             })
 
         grand_total_venda += total_venda
@@ -350,10 +422,12 @@ def conf_cartoes():
     conn = get_db_connection()
     try:
         _ensure_vinculos_table(conn)
+        _ensure_feriados_table(conn)
 
         empresas = _get_empresas(conn)
         bandeiras = _get_bandeiras(conn)
         formas_cartao = _get_formas_recebimento_cartao(conn)
+        feriados, feriados_set = _get_feriados(conn)
 
         # Apply bandeira filter if selected
         bandeiras_filtered = bandeiras
@@ -380,7 +454,7 @@ def conf_cartoes():
                 conn, data_inicio, data_fim, empresa_ids, forma_ids
             )
             report, grand_total_venda, grand_total_recebimento, grand_saldo = (
-                _build_report(bandeiras_filtered, vinculos_map, vendas_rows, receb_rows)
+                _build_report(bandeiras_filtered, vinculos_map, vendas_rows, receb_rows, feriados_set)
             )
     finally:
         conn.close()
@@ -390,6 +464,7 @@ def conf_cartoes():
         empresas=empresas,
         bandeiras=bandeiras,
         formas_cartao=formas_cartao,
+        feriados=feriados,
         report=report,
         data_inicio=data_inicio,
         data_fim=data_fim,
@@ -492,3 +567,104 @@ def desvincular_cartao():
         conn.close()
 
     return jsonify({'success': True, 'message': 'Vinculação removida.'})
+
+
+@bp.route('/conf_cartoes/prazo_salvar', methods=['POST'])
+@login_required
+@admin_required
+def prazo_salvar():
+    """Salva o prazo de compensação (dias úteis) para uma bandeira de cartão."""
+    data = request.get_json(silent=True) or {}
+    bandeira_id = data.get('bandeira_cartao_id')
+    prazo_dias = data.get('prazo_dias')
+
+    if not bandeira_id or prazo_dias is None:
+        return jsonify({'success': False, 'message': 'Parâmetros inválidos.'}), 400
+
+    try:
+        prazo_dias = int(prazo_dias)
+        if prazo_dias < 0:
+            raise ValueError
+    except (ValueError, TypeError):
+        return jsonify({'success': False, 'message': 'Prazo inválido.'}), 400
+
+    conn = get_db_connection()
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            "UPDATE bandeiras_cartao SET prazo_compensacao_dias = %s WHERE id = %s",
+            (prazo_dias, bandeira_id),
+        )
+        conn.commit()
+        cur.close()
+    finally:
+        conn.close()
+
+    return jsonify({'success': True, 'message': 'Prazo salvo.'})
+
+
+@bp.route('/conf_cartoes/feriado_add', methods=['POST'])
+@login_required
+@admin_required
+def feriado_add():
+    """Adiciona um feriado municipal/estadual."""
+    data = request.get_json(silent=True) or {}
+    data_feriado = (data.get('data') or '').strip()
+    descricao = (data.get('descricao') or '').strip()
+
+    if not data_feriado:
+        return jsonify({'success': False, 'message': 'Data obrigatória.'}), 400
+
+    # Valida formato da data
+    try:
+        datetime.strptime(data_feriado, '%Y-%m-%d')
+    except ValueError:
+        return jsonify({'success': False, 'message': 'Data inválida.'}), 400
+
+    conn = get_db_connection()
+    try:
+        _ensure_feriados_table(conn)
+        cur = conn.cursor(dictionary=True)
+        # Verifica se já existe
+        cur.execute(
+            "SELECT id FROM conf_cartoes_feriados WHERE data = %s",
+            (data_feriado,),
+        )
+        if cur.fetchone():
+            cur.close()
+            return jsonify({'success': False, 'message': 'Esta data já está cadastrada como feriado.'}), 400
+        cur.execute(
+            "INSERT INTO conf_cartoes_feriados (data, descricao) VALUES (%s, %s)",
+            (data_feriado, descricao),
+        )
+        new_id = cur.lastrowid
+        conn.commit()
+        cur.close()
+    finally:
+        conn.close()
+
+    return jsonify({'success': True, 'id': new_id, 'message': 'Feriado adicionado.'})
+
+
+@bp.route('/conf_cartoes/feriado_del', methods=['POST'])
+@login_required
+@admin_required
+def feriado_del():
+    """Remove um feriado pelo id."""
+    data = request.get_json(silent=True) or {}
+    feriado_id = data.get('id')
+
+    if not feriado_id:
+        return jsonify({'success': False, 'message': 'ID obrigatório.'}), 400
+
+    conn = get_db_connection()
+    try:
+        _ensure_feriados_table(conn)
+        cur = conn.cursor()
+        cur.execute("DELETE FROM conf_cartoes_feriados WHERE id = %s", (feriado_id,))
+        conn.commit()
+        cur.close()
+    finally:
+        conn.close()
+
+    return jsonify({'success': True, 'message': 'Feriado removido.'})

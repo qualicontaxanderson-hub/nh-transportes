@@ -45,6 +45,8 @@
             <i class="bi bi-journal-plus"></i> Lançamentos
           </a>
           <ul class="dropdown-menu" aria-labelledby="navLancamentos">
+            <li><a class="dropdown-item" href="/fretes/"><i class="bi bi-truck-front" style="color: #dc3545;"></i> Fretes</a></li>
+            <li><a class="dropdown-item" href="/descargas/"><i class="bi bi-fuel-pump-fill" style="color: #1a6b3c;"></i> Descargas</a></li>
             <li><a class="dropdown-item" href="/quilometragem/"><i class="bi bi-speedometer2" style="color: #17a2b8;"></i> Quilometragem</a></li>
             <li><a class="dropdown-item" href="/arla/"><i class="bi bi-droplet-half" style="color: #007bff;"></i> ARLA</a></li>
             <li><a class="dropdown-item" href="/lubrificantes/"><i class="bi bi-droplet" style="color: #ff6b6b;"></i> Lubrificantes</a></li>
@@ -55,8 +57,26 @@
           </ul>
         </li>
         
+        {% elif nivel_usuario == 'GERENTE' %}
+        <!-- Menu restrito para GERENTE (apenas Descargas e Troco PIX) -->
+        <li class="nav-item">
+          <a class="nav-link text-white" href="/descargas/" style="font-weight:600;">
+            <i class="bi bi-fuel-pump-fill"></i> Descargas
+          </a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link text-white" href="/troco_pix/" style="font-weight:600;">
+            <i class="bi bi-currency-exchange"></i> Troco PIX
+          </a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link text-white" href="/troco_pix/pista" style="font-weight:600;">
+            <i class="bi bi-fuel-pump-fill"></i> Troco PIX Pista
+          </a>
+        </li>
+
         {% else %}
-        <!-- Menu completo para ADMIN/GERENTE -->
+        <!-- Menu completo para ADMIN -->
         <!-- Cadastros (dropdown) -->
         <li class="nav-item dropdown">
           <a class="nav-link dropdown-toggle text-white" href="#" id="navCadastros" role="button" data-bs-toggle="dropdown" aria-expanded="false" style="font-weight:600;">
@@ -100,6 +120,7 @@
           <ul class="dropdown-menu" aria-labelledby="navLancamentos">
             <li><a class="dropdown-item" href="/pedidos/"><i class="bi bi-clipboard-check" style="color: #007bff;"></i> Pedidos</a></li>
             <li><a class="dropdown-item" href="/fretes/"><i class="bi bi-truck-front" style="color: #dc3545;"></i> Fretes</a></li>
+            <li><a class="dropdown-item" href="/descargas/"><i class="bi bi-fuel-pump-fill" style="color: #1a6b3c;"></i> Descargas</a></li>
             <li><a class="dropdown-item" href="/rotas/"><i class="bi bi-map" style="color: #ffc107;"></i> Rotas</a></li>
             <li><a class="dropdown-item" href="/quilometragem/"><i class="bi bi-speedometer2" style="color: #17a2b8;"></i> Quilometragem</a></li>
             <li><hr class="dropdown-divider"></li>
@@ -155,6 +176,7 @@
             {% if nivel_usuario == 'ADMIN' %}
             <li><hr class="dropdown-divider"></li>
             <li><a class="dropdown-item" href="/relatorios/conf_cartoes"><i class="bi bi-credit-card-2-front" style="color: #0d6efd;"></i> Conf. Cartões</a></li>
+            <li><a class="dropdown-item" href="/relatorios/conf_depositos"><i class="bi bi-bank2" style="color: #28a745;"></i> Conf. Depósitos</a></li>
             <li><a class="dropdown-item" href="/relatorios/conf_fornecedores"><i class="bi bi-people-fill" style="color: #6f42c1;"></i> Conf. Fornecedores</a></li>
             <li><a class="dropdown-item" href="/relatorios/lucro_postos"><i class="bi bi-fuel-pump-fill" style="color: #28a745;"></i> Lucro Postos</a></li>
             {% endif %}
