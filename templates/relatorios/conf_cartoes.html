@@ -216,6 +216,17 @@
           </tr>
         </thead>
         <tbody>
+          {% if card.saldo_anterior %}
+          <tr class="table-warning">
+            <td class="text-muted small fst-italic" colspan="2">Saldo Anterior</td>
+            <td></td>
+            <td></td>
+            <td class="text-end {% if card.saldo_anterior > 0.005 %}saldo-pos{% elif card.saldo_anterior < -0.005 %}saldo-neg{% else %}saldo-zero{% endif %}">
+              {{ card.saldo_anterior | fmtmoney }}
+            </td>
+            <td></td>
+          </tr>
+          {% endif %}
           {% for linha in card.linhas %}
           <tr{% if linha.is_destaque %} class="row-fds"{% endif %}>
             <td class="text-center">{{ linha.data_venda }}{% if linha.data_venda %}<span class="dia-semana">{{ linha.dia_semana }}</span>{% endif %}</td>
@@ -307,6 +318,7 @@
               <th>Forma 1 de Recebimento (Banco)</th>
               <th>Forma 2 de Recebimento (Banco)</th>
               <th class="text-center" style="width:110px;" title="Número de dias úteis até o depósito aparecer no banco">Prazo (dias úteis)</th>
+              <th class="text-end" style="width:130px;" title="Saldo acumulado de vendas anteriores ao período (ex: vendas de dez/2025 não recebidas). Use valor negativo para vendas pendentes.">Saldo Anterior (R$)</th>
               <th class="text-center" style="width:60px;">Salvar</th>
             </tr>
           </thead>
@@ -350,6 +362,14 @@
                        value="{{ b.prazo_compensacao_dias }}"
                        style="width:70px; display:inline-block;"
                        title="0 = mesmo dia, 1 = próximo dia útil, 2 = dois dias úteis, …">
+              </td>
+              <td class="text-end">
+                <input type="number" step="0.01"
+                       class="form-control form-control-sm text-end inp-saldo-anterior"
+                       data-bandeira="{{ b.id }}"
+                       value="{{ b.saldo_anterior }}"
+                       style="width:110px; display:inline-block;"
+                       title="Saldo de vendas pendentes anteriores ao período consultado. Valor negativo = ainda a receber.">
               </td>
               <td class="text-center">
                 <button class="btn btn-sm btn-success btn-vincular" data-bandeira="{{ b.id }}" title="Salvar">
@@ -491,9 +511,11 @@
       const sel1 = row.querySelector('.sel-forma-1');
       const sel2 = row.querySelector('.sel-forma-2');
       const inpPrazo = row.querySelector('.inp-prazo');
+      const inpSaldoAnterior = row.querySelector('.inp-saldo-anterior');
       const forma1 = parseInt(sel1.value) || null;
       const forma2 = parseInt(sel2.value) || null;
       const prazoDias = parseInt(inpPrazo.value) || 0;
+      const saldoAnterior = parseFloat(inpSaldoAnterior.value) || 0;
       const msgEl = document.getElementById('msg-vinculos');
       msgEl.textContent = '';
 
@@ -530,6 +552,13 @@
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ bandeira_cartao_id: bandeiraId, prazo_dias: prazoDias }),
+        });
+
+        // Salva saldo anterior
+        await fetch('{{ url_for("conf_cartoes.saldo_anterior_salvar") }}', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ bandeira_cartao_id: bandeiraId, saldo_anterior: saldoAnterior }),
         });
 
         // Atualiza data-vinculos para refletir o estado atual

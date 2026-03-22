@@ -12,9 +12,10 @@ Rota:
   GET  /relatorios/conf_cartoes               – relatório
   POST /relatorios/conf_cartoes/vincular       – salva vinculação
   POST /relatorios/conf_cartoes/desvincular   – remove vinculação específica
-  POST /relatorios/conf_cartoes/prazo_salvar  – salva prazo de compensação
-  POST /relatorios/conf_cartoes/feriado_add   – adiciona feriado
-  POST /relatorios/conf_cartoes/feriado_del   – remove feriado
+  POST /relatorios/conf_cartoes/prazo_salvar          – salva prazo de compensação
+  POST /relatorios/conf_cartoes/saldo_anterior_salvar – salva saldo anterior de vendas pendentes
+  POST /relatorios/conf_cartoes/feriado_add           – adiciona feriado
+  POST /relatorios/conf_cartoes/feriado_del           – remove feriado
 """
 from datetime import date, datetime
 from collections import defaultdict
@@ -93,6 +94,15 @@ def _ensure_vinculos_table(conn):
         conn.commit()
     except Exception:
         pass  # coluna já existe
+    # Migração: adiciona coluna saldo_anterior em bandeiras_cartao se não existir
+    try:
+        cur.execute(
+            "ALTER TABLE bandeiras_cartao "
+            "ADD COLUMN saldo_anterior DECIMAL(12,2) NOT NULL DEFAULT 0"
+        )
+        conn.commit()
+    except Exception:
+        pass  # coluna já existe
     cur.close()
 
 
@@ -153,7 +163,8 @@ def _get_bandeiras(conn):
     cur.execute(
         """
         SELECT bc.id, bc.nome, bc.tipo,
-               COALESCE(bc.prazo_compensacao_dias, 1) AS prazo_compensacao_dias
+               COALESCE(bc.prazo_compensacao_dias, 1) AS prazo_compensacao_dias,
+               COALESCE(bc.saldo_anterior, 0) AS saldo_anterior
           FROM bandeiras_cartao bc
          WHERE bc.ativo = 1
          ORDER BY bc.tipo, bc.nome
@@ -344,7 +355,7 @@ def _build_report(bandeiras, vinculos_map, vendas_rows, recebimentos_rows, feria
         if not all_dates:
             continue
 
-        saldo = 0.0
+        saldo = float(band.get('saldo_anterior', 0.0))
         total_venda = 0.0
         total_recebimento = 0.0
         linhas = []
@@ -393,6 +404,7 @@ def _build_report(bandeiras, vinculos_map, vendas_rows, recebimentos_rows, feria
             'linhas': linhas,
             'total_venda': total_venda,
             'total_recebimento': total_recebimento,
+            'saldo_anterior': float(band.get('saldo_anterior', 0.0)),
             'saldo_final': saldo,
         })
 
@@ -601,6 +613,38 @@ def prazo_salvar():
         conn.close()
 
     return jsonify({'success': True, 'message': 'Prazo salvo.'})
+
+
+@bp.route('/conf_cartoes/saldo_anterior_salvar', methods=['POST'])
+@login_required
+@admin_required
+def saldo_anterior_salvar():
+    """Salva o saldo anterior de vendas pendentes para uma bandeira de cartão."""
+    data = request.get_json(silent=True) or {}
+    bandeira_id = data.get('bandeira_cartao_id')
+    saldo_anterior = data.get('saldo_anterior')
+
+    if not bandeira_id or saldo_anterior is None:
+        return jsonify({'success': False, 'message': 'Parâmetros inválidos.'}), 400
+
+    try:
+        saldo_anterior = float(saldo_anterior)
+    except (ValueError, TypeError):
+        return jsonify({'success': False, 'message': 'Saldo inválido.'}), 400
+
+    conn = get_db_connection()
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            "UPDATE bandeiras_cartao SET saldo_anterior = %s WHERE id = %s",
+            (saldo_anterior, bandeira_id),
+        )
+        conn.commit()
+        cur.close()
+    finally:
+        conn.close()
+
+    return jsonify({'success': True, 'message': 'Saldo anterior salvo.'})
 
 
 @bp.route('/conf_cartoes/feriado_add', methods=['POST'])
