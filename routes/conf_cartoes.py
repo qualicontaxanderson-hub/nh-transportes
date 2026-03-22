@@ -17,7 +17,7 @@ Rota:
   POST /relatorios/conf_cartoes/feriado_add           – adiciona feriado
   POST /relatorios/conf_cartoes/feriado_del           – remove feriado
 """
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from collections import defaultdict
 
 from flask import Blueprint, render_template, request, jsonify
@@ -28,6 +28,8 @@ from utils.db import get_db_connection
 
 # Abreviações dos dias da semana em português (weekday() 0=Seg … 6=Dom)
 _DIAS_PT = ['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom']
+# Tolerância monetária para comparações de zero (evita erros de ponto flutuante)
+_MONETARY_EPSILON = 0.005
 
 
 def _parse_iso(d):
@@ -38,6 +40,16 @@ def _parse_iso(d):
         return datetime.strptime(str(d), '%Y-%m-%d').date()
     except Exception:
         return None
+
+
+def _next_business_day(d, n, feriados_set):
+    """Retorna a data que é exatamente n dias úteis após d (pula fins de semana e feriados)."""
+    count = 0
+    while count < n:
+        d = d + timedelta(days=1)
+        if d.weekday() < 5 and d.isoformat() not in feriados_set:
+            count += 1
+    return d
 
 bp = Blueprint('conf_cartoes', __name__, url_prefix='/relatorios')
 
@@ -307,15 +319,24 @@ def _fmt_date(d):
 
 def _build_report(bandeiras, vinculos_map, vendas_rows, recebimentos_rows, feriados_set=None):
     """
-    Para cada bandeira vinculada, produz uma lista de linhas cronológicas
-    mostrando vendas x recebimentos com diferença acumulada.
+    Para cada bandeira vinculada, organiza as vendas em ciclos de liquidação
+    (usando prazo_compensacao_dias e dias úteis).
 
-    vinculos_map: dict bandeira_id → [forma_recebimento_id, ...]
-    feriados_set: set of ISO date strings to highlight as holidays
+    Cada venda é mapeada à sua data de recebimento esperada. Vendas com a
+    mesma data esperada formam um ciclo. O recebimento real é comparado
+    contra a soma das vendas do ciclo (mais saldo_anterior no 1º ciclo).
+
+    Cada linha representa uma data de venda. Na última linha do ciclo são
+    exibidos o recebimento, a Dif. Acumulada e a % de taxa cobrada.
+
+    DIF (taxa):  +  = operadora descontou taxa  (venda > recebimento)
+                 −  = operadora pagou a mais    (recebimento > venda)
+    %  = (vendas_ciclo − recebimento) / vendas_ciclo × 100
     """
     if feriados_set is None:
         feriados_set = set()
-    # Index vendas: (bandeira_id, data) → total_venda
+
+    # Index vendas: (bandeira_id, data_iso) → total_venda
     vendas_idx = {}
     for r in vendas_rows:
         d = r['data_venda']
@@ -323,7 +344,7 @@ def _build_report(bandeiras, vinculos_map, vendas_rows, recebimentos_rows, feria
             d = d.isoformat()
         vendas_idx[(int(r['bandeira_id']), str(d))] = float(r['total_venda'] or 0)
 
-    # Index recebimentos: (forma_id, data) → total_recebimento
+    # Index recebimentos: (forma_id, data_iso) → total_recebimento
     receb_idx = {}
     for r in recebimentos_rows:
         d = r['data_recebimento']
@@ -332,62 +353,140 @@ def _build_report(bandeiras, vinculos_map, vendas_rows, recebimentos_rows, feria
         key = (int(r['forma_id']), str(d))
         receb_idx[key] = float(r['total_recebimento'] or 0)
 
-    # Collect all unique dates per bandeira (from vendas and from all linked formas)
-    dates_by_bandeira = defaultdict(set)
-    for (bid, d) in vendas_idx:
-        dates_by_bandeira[bid].add(d)
-    for bid, forma_ids in vinculos_map.items():
-        for fid in forma_ids:
-            for (fid2, d) in receb_idx:
-                if fid2 == fid:
-                    dates_by_bandeira[bid].add(d)
-
     report = []
     grand_total_venda = 0.0
     grand_total_recebimento = 0.0
 
     for band in bandeiras:
         bid = band['id']
+        prazo = int(band.get('prazo_compensacao_dias', 1))
         forma_ids = vinculos_map.get(bid, [])
+        saldo_anterior = float(band.get('saldo_anterior', 0.0))
 
-        all_dates = sorted(dates_by_bandeira.get(bid, set()))
+        # Todas as datas de venda desta bandeira no período
+        sale_dates = sorted(d for (b, d) in vendas_idx if b == bid)
 
-        if not all_dates:
+        # Todas as datas de recebimento real no período
+        all_receipt_dates = set()
+        for fid in forma_ids:
+            for (fid2, d) in receb_idx:
+                if fid2 == fid:
+                    all_receipt_dates.add(d)
+
+        if not sale_dates and not all_receipt_dates and saldo_anterior == 0.0:
             continue
 
-        saldo = float(band.get('saldo_anterior', 0.0))
+        # ── Mapeia cada data de venda → data esperada de recebimento ──────────
+        # cycles[receipt_date_iso] = [sale_date_iso, ...]
+        cycles = defaultdict(list)
+        for sd in sale_dates:
+            sd_obj = _parse_iso(sd)
+            if sd_obj:
+                rd_obj = sd_obj if prazo == 0 else _next_business_day(sd_obj, prazo, feriados_set)
+                cycles[rd_obj.isoformat()].append(sd)
+
+        # Recebimentos sem venda correspondente no período (ex: créditos avulsos)
+        for rd in all_receipt_dates:
+            if rd not in cycles:
+                cycles[rd] = []
+
+        sorted_cycle_dates = sorted(cycles.keys())
+        if not sorted_cycle_dates:
+            continue
+
+        # ── Monta as linhas agrupadas por ciclo ───────────────────────────────
+        linhas = []
         total_venda = 0.0
         total_recebimento = 0.0
-        linhas = []
+        saldo = 0.0          # DIF acumulada (sign: negativo = taxas cobradas)
+        is_first_cycle = True
 
-        for d in all_dates:
-            venda = vendas_idx.get((bid, d), 0.0)
-            # Sum receipts across ALL linked formas for this date
-            receb = sum(receb_idx.get((fid, d), 0.0) for fid in forma_ids)
+        for rd in sorted_cycle_dates:
+            cycle_sale_dates = sorted(cycles[rd])
+            actual_receipt = sum(receb_idx.get((fid, rd), 0.0) for fid in forma_ids)
+            cycle_venda = sum(vendas_idx.get((bid, sd), 0.0) for sd in cycle_sale_dates)
 
-            saldo += receb - venda
-            total_venda += venda
-            total_recebimento += receb
+            # No 1º ciclo: saldo_anterior compõe as vendas efetivas
+            # (pré-período pendentes de liquidação no primeiro recebimento)
+            effective_sales = cycle_venda
+            if is_first_cycle and saldo_anterior != 0.0:
+                effective_sales += saldo_anterior
+            is_first_cycle = False
 
-            pct = (receb / venda * 100) if venda else None
+            # Taxa do ciclo: positivo = operadora descontou; negativo = pagou a mais
+            # Só calculamos taxa e DIF quando há recebimento real
+            has_receipt = actual_receipt > _MONETARY_EPSILON
+            cycle_fee = (effective_sales - actual_receipt) if has_receipt else 0.0
+            pct = (cycle_fee / effective_sales * 100) if (has_receipt and effective_sales) else None
 
-            # Both data_venda and data_recebimento share the same calendar date d;
-            # day-of-week and holiday flag apply to that single date.
-            d_obj = _parse_iso(d)
-            dia_semana = _DIAS_PT[d_obj.weekday()] if d_obj else ''
-            is_destaque = (d_obj is not None and d_obj.weekday() >= 5) or (str(d) in feriados_set)
+            rd_obj = _parse_iso(rd)
+            dia_semana_rd = _DIAS_PT[rd_obj.weekday()] if rd_obj else ''
+            num_sale_rows = len(cycle_sale_dates)
 
-            linhas.append({
-                'data_venda': _fmt_date(d) if venda else '',
-                'total_venda': venda,
-                'data_recebimento': _fmt_date(d) if receb else '',
-                'total_recebimento': receb,
-                'saldo_acumulado': saldo,
-                'porcentagem': pct,
-                'data_iso': str(d),
-                'dia_semana': dia_semana,
-                'is_destaque': is_destaque,
-            })
+            if num_sale_rows == 0:
+                # Recebimento avulso sem vendas no período
+                if has_receipt:
+                    saldo += actual_receipt
+                is_destaque_rd = (rd_obj is not None and rd_obj.weekday() >= 5) or (rd in feriados_set)
+                linhas.append({
+                    'data_venda': '',
+                    'total_venda': 0.0,
+                    'data_recebimento': _fmt_date(rd) if has_receipt else '',
+                    'total_recebimento': actual_receipt,
+                    'saldo_acumulado': saldo if has_receipt else None,
+                    'porcentagem': None,
+                    'data_iso': rd,
+                    'dia_semana': '',
+                    'dia_semana_recebimento': dia_semana_rd,
+                    'is_destaque': is_destaque_rd,
+                })
+            else:
+                if has_receipt:
+                    saldo -= cycle_fee  # saldo += actual_receipt - effective_sales
+
+                for i, sd in enumerate(cycle_sale_dates):
+                    venda = vendas_idx.get((bid, sd), 0.0)
+                    is_last = (i == num_sale_rows - 1)
+
+                    sd_obj = _parse_iso(sd)
+                    dia_semana_sd = _DIAS_PT[sd_obj.weekday()] if sd_obj else ''
+                    is_destaque = (sd_obj is not None and sd_obj.weekday() >= 5) or (sd in feriados_set)
+
+                    if is_last:
+                        # Última venda do ciclo: exibe recebimento, DIF e %
+                        # Sempre mostra a data de recebimento esperada (mesmo sem recebimento)
+                        linhas.append({
+                            'data_venda': _fmt_date(sd),
+                            'total_venda': venda,
+                            'data_recebimento': _fmt_date(rd),
+                            'total_recebimento': actual_receipt,
+                            'saldo_acumulado': saldo if has_receipt else None,
+                            'porcentagem': pct,
+                            'data_iso': sd,
+                            'dia_semana': dia_semana_sd,
+                            'dia_semana_recebimento': dia_semana_rd,
+                            'is_destaque': is_destaque,
+                        })
+                    else:
+                        # Linhas intermediárias: mostra data esperada de recebimento, sem valor
+                        linhas.append({
+                            'data_venda': _fmt_date(sd),
+                            'total_venda': venda,
+                            'data_recebimento': _fmt_date(rd),
+                            'total_recebimento': 0.0,
+                            'saldo_acumulado': None,
+                            'porcentagem': None,
+                            'data_iso': sd,
+                            'dia_semana': dia_semana_sd,
+                            'dia_semana_recebimento': dia_semana_rd,
+                            'is_destaque': is_destaque,
+                        })
+
+            total_venda += cycle_venda
+            total_recebimento += actual_receipt
+
+        if not linhas:
+            continue
 
         grand_total_venda += total_venda
         grand_total_recebimento += total_recebimento
@@ -404,7 +503,7 @@ def _build_report(bandeiras, vinculos_map, vendas_rows, recebimentos_rows, feria
             'linhas': linhas,
             'total_venda': total_venda,
             'total_recebimento': total_recebimento,
-            'saldo_anterior': float(band.get('saldo_anterior', 0.0)),
+            'saldo_anterior': saldo_anterior,
             'saldo_final': saldo,
         })
 
@@ -624,7 +723,7 @@ def saldo_anterior_salvar():
     bandeira_id = data.get('bandeira_cartao_id')
     saldo_anterior = data.get('saldo_anterior')
 
-    if not bandeira_id or saldo_anterior is None:
+    if not bandeira_id or 'saldo_anterior' not in data:
         return jsonify({'success': False, 'message': 'Parâmetros inválidos.'}), 400
 
     try:
