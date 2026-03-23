@@ -31,6 +31,10 @@ from utils.db import get_db_connection
 _DIAS_PT = ['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom']
 # Tolerância monetária para comparações de zero (evita erros de ponto flutuante)
 _MONETARY_EPSILON = 0.005
+# Lookback máximo (dias corridos) antes de data_inicio para capturar vendas
+# pré-período cujo recebimento cai dentro da janela consultada.
+# Cobre prazo ≤ 5 dias úteis + até 9 dias de fins-de-semana/feriados.
+_MAX_LOOKBACK_DAYS = 14
 
 
 def _parse_iso(d):
@@ -266,10 +270,16 @@ def _get_formas_recebimento_cartao(conn):
     return rows
 
 
-def _fetch_vendas(conn, data_inicio, data_fim, empresa_ids):
-    """Soma de vendas de cartão por (data, bandeira_cartao_id)."""
+def _fetch_vendas(conn, data_inicio, data_fim, empresa_ids, data_inicio_extended=None):
+    """Soma de vendas de cartão por (data, bandeira_cartao_id).
+
+    data_inicio_extended permite buscar vendas de dias anteriores ao data_inicio
+    para capturar vendas pré-período cujo recebimento cai dentro do período
+    consultado (ex: vendas de sex/sáb que chegam na segunda-feira do período).
+    """
+    start = data_inicio_extended if data_inicio_extended else data_inicio
     where = ["lc.data BETWEEN %s AND %s", "lcc.bandeira_cartao_id IS NOT NULL"]
-    params = [data_inicio, data_fim]
+    params = [start, data_fim]
 
     if empresa_ids:
         ph = ','.join(['%s'] * len(empresa_ids))
@@ -426,11 +436,18 @@ def _build_report(bandeiras, vinculos_map, vendas_rows, recebimentos_rows, feria
 
         # ── Mapeia cada data de venda → data esperada de recebimento ──────────
         # cycles[receipt_date_iso] = [sale_date_iso, ...]
+        # Vendas pré-período (sale_date < data_inicio_obj) são incluídas SOMENTE se
+        # seu recebimento esperado cair dentro da janela consultada. Isso garante
+        # que o usuário veja as vendas de sex/sáb anteriores que chegam junto com
+        # a primeira segunda-feira do período, permitindo conferência correta.
         cycles = defaultdict(list)
         for sd in sale_dates:
             sd_obj = _parse_iso(sd)
             if sd_obj:
                 rd_obj = sd_obj if prazo == 0 else _next_business_day(sd_obj, prazo, feriados_set)
+                # Ignora vendas pré-período cujo recebimento já ocorreu antes do período
+                if data_inicio_obj and rd_obj < data_inicio_obj:
+                    continue
                 cycles[rd_obj.isoformat()].append(sd)
 
         # Recebimentos sem venda correspondente no período (ex: créditos avulsos)
@@ -493,6 +510,7 @@ def _build_report(bandeiras, vinculos_map, vendas_rows, recebimentos_rows, feria
                     'dia_semana': '',
                     'dia_semana_recebimento': dia_semana_rd,
                     'is_destaque': is_destaque_rd,
+                    'is_preperiodo': False,
                 })
             else:
                 if has_receipt:
@@ -506,6 +524,7 @@ def _build_report(bandeiras, vinculos_map, vendas_rows, recebimentos_rows, feria
                     sd_obj = _parse_iso(sd)
                     dia_semana_sd = _DIAS_PT[sd_obj.weekday()] if sd_obj else ''
                     is_destaque = (sd_obj is not None and sd_obj.weekday() >= 5) or (sd in feriados_set)
+                    is_preperiodo = data_inicio_obj is not None and sd_obj is not None and sd_obj < data_inicio_obj
 
                     if is_last:
                         # Última venda do ciclo: exibe recebimento, diferença, DIF e %
@@ -522,6 +541,7 @@ def _build_report(bandeiras, vinculos_map, vendas_rows, recebimentos_rows, feria
                             'dia_semana': dia_semana_sd,
                             'dia_semana_recebimento': dia_semana_rd,
                             'is_destaque': is_destaque,
+                            'is_preperiodo': is_preperiodo,
                         })
                     else:
                         # Linhas intermediárias: mostra data esperada de recebimento, sem valor
@@ -537,6 +557,7 @@ def _build_report(bandeiras, vinculos_map, vendas_rows, recebimentos_rows, feria
                             'dia_semana': dia_semana_sd,
                             'dia_semana_recebimento': dia_semana_rd,
                             'is_destaque': is_destaque,
+                            'is_preperiodo': is_preperiodo,
                         })
 
             total_venda += cycle_venda
@@ -621,11 +642,17 @@ def conf_cartoes():
         grand_saldo = 0.0
 
         if data_inicio and data_fim:
-            vendas_rows = _fetch_vendas(conn, data_inicio, data_fim, empresa_ids)
+            data_inicio_obj = _parse_iso(data_inicio)
+            # Busca vendas a partir de MAX_LOOKBACK_DAYS antes do início para capturar
+            # vendas pré-período cujo recebimento cai dentro da janela consultada.
+            data_inicio_extended = (
+                (data_inicio_obj - timedelta(days=_MAX_LOOKBACK_DAYS)).isoformat()
+                if data_inicio_obj else data_inicio
+            )
+            vendas_rows = _fetch_vendas(conn, data_inicio, data_fim, empresa_ids, data_inicio_extended)
             receb_rows = _fetch_recebimentos(
                 conn, data_inicio, data_fim, empresa_ids, forma_ids
             )
-            data_inicio_obj = _parse_iso(data_inicio)
             report, grand_total_venda, grand_total_recebimento, grand_total_diferenca, grand_saldo = (
                 _build_report(bandeiras_filtered, vinculos_map, vendas_rows, receb_rows, feriados_set, data_inicio_obj)
             )

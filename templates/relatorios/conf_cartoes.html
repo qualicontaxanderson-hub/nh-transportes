@@ -41,6 +41,12 @@
 .row-fds td { background-color: #d4edda !important; }
 .dia-semana { font-size: .68rem; color: #555; font-weight: 600; margin-left: .15rem; }
 .row-fds .dia-semana { color: #1a6a38; }
+/* Pre-period context rows (vendas fora do período que liquidam dentro da janela) */
+.row-preperiodo td { background-color: #f5f0ff !important; color: #6c757d; font-style: italic; }
+.row-preperiodo.row-fds td { background-color: #e8e0f7 !important; }
+.row-preperiodo .saldo-pos,
+.row-preperiodo .saldo-neg,
+.row-preperiodo .saldo-zero { opacity: .75; }
 </style>
 {% endblock %}
 
@@ -230,8 +236,8 @@
           </tr>
           {% endif %}
           {% for linha in card.linhas %}
-          <tr{% if linha.is_destaque %} class="row-fds"{% endif %}>
-            <td class="text-center">{{ linha.data_venda }}{% if linha.data_venda %}<span class="dia-semana">{{ linha.dia_semana }}</span>{% endif %}</td>
+          <tr{% if linha.is_preperiodo %} class="row-preperiodo{% if linha.is_destaque %} row-fds{% endif %}"{% elif linha.is_destaque %} class="row-fds"{% endif %}>
+            <td class="text-center">{% if linha.is_preperiodo %}<span class="badge bg-secondary" style="font-size:.6rem;vertical-align:middle;" title="Venda fora do período consultado — incluída para conferência do recebimento">anterior</span> {% endif %}{{ linha.data_venda }}{% if linha.data_venda %}<span class="dia-semana">{{ linha.dia_semana }}</span>{% endif %}</td>
             <td class="text-end">{% if linha.total_venda %}{{ linha.total_venda | fmtmoney }}{% endif %}</td>
             <td class="text-center">{{ linha.data_recebimento }}{% if linha.data_recebimento %}<span class="dia-semana">{{ linha.dia_semana_recebimento }}</span>{% endif %}</td>
             <td class="text-end">{% if linha.total_recebimento %}{{ linha.total_recebimento | fmtmoney }}{% endif %}</td>
