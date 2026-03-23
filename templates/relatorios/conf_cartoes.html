@@ -211,6 +211,7 @@
             <th class="text-end"   style="width:110px;">Venda</th>
             <th class="text-center" style="width:88px;">Dt. Recebimento</th>
             <th class="text-end"   style="width:110px;">Recebimento</th>
+            <th class="text-end"   style="width:110px;">Diferença</th>
             <th class="text-end"   style="width:110px;">Dif. Acumulada</th>
             <th class="text-end"   style="width:70px;">%</th>
           </tr>
@@ -219,6 +220,7 @@
           {% if card.saldo_anterior %}
           <tr class="table-warning">
             <td class="text-muted small fst-italic" colspan="2">Saldo Anterior</td>
+            <td></td>
             <td></td>
             <td></td>
             <td class="text-end {% if card.saldo_anterior > 0.005 %}saldo-pos{% elif card.saldo_anterior < -0.005 %}saldo-neg{% else %}saldo-zero{% endif %}">
@@ -233,6 +235,9 @@
             <td class="text-end">{% if linha.total_venda %}{{ linha.total_venda | fmtmoney }}{% endif %}</td>
             <td class="text-center">{{ linha.data_recebimento }}{% if linha.data_recebimento %}<span class="dia-semana">{{ linha.dia_semana_recebimento }}</span>{% endif %}</td>
             <td class="text-end">{% if linha.total_recebimento %}{{ linha.total_recebimento | fmtmoney }}{% endif %}</td>
+            <td class="text-end {% if linha.diferenca is not none %}{% if linha.diferenca > 0.005 %}saldo-neg{% elif linha.diferenca < -0.005 %}saldo-pos{% else %}saldo-zero{% endif %}{% endif %}">
+              {% if linha.diferenca is not none %}{{ linha.diferenca | fmtmoney }}{% endif %}
+            </td>
             <td class="text-end {% if linha.saldo_acumulado is not none %}{% if linha.saldo_acumulado > 0.005 %}saldo-neg{% elif linha.saldo_acumulado < -0.005 %}saldo-pos{% else %}saldo-zero{% endif %}{% endif %}">
               {% if linha.saldo_acumulado is not none %}{{ linha.saldo_acumulado | fmtmoney }}{% endif %}
             </td>
@@ -247,6 +252,9 @@
             <td class="text-end">{{ card.total_venda | fmtmoney }}</td>
             <td></td>
             <td class="text-end">{{ card.total_recebimento | fmtmoney }}</td>
+            <td class="text-end {% if card.total_diferenca > 0.005 %}saldo-neg{% elif card.total_diferenca < -0.005 %}saldo-pos{% else %}saldo-zero{% endif %}">
+              {{ card.total_diferenca | fmtmoney }}
+            </td>
             <td class="text-end {% if card.saldo_final < -0.005 %}saldo-pos{% elif card.saldo_final > 0.005 %}saldo-neg{% else %}saldo-zero{% endif %}">
               {{ card.saldo_final | fmtmoney }}
             </td>
@@ -270,6 +278,9 @@
           <td class="text-end fw-bold" style="width:110px;">{{ grand_total_venda | fmtmoney }}</td>
           <td style="width:88px;"></td>
           <td class="text-end fw-bold" style="width:110px;">{{ grand_total_recebimento | fmtmoney }}</td>
+          <td class="text-end fw-bold {% if grand_total_diferenca > 0.005 %}saldo-neg{% elif grand_total_diferenca < -0.005 %}saldo-pos{% else %}saldo-zero{% endif %}" style="width:110px;">
+            {{ grand_total_diferenca | fmtmoney }}
+          </td>
           <td class="text-end fw-bold {% if grand_saldo < -0.005 %}saldo-pos{% elif grand_saldo > 0.005 %}saldo-neg{% else %}saldo-zero{% endif %}" style="width:110px;">
             {{ grand_saldo | fmtmoney }}
           </td>
@@ -285,8 +296,9 @@
   <div class="small text-muted mb-4">
     <strong>Dt. Venda</strong>: data do fechamento de caixa. &nbsp;
     <strong>Dt. Recebimento</strong>: data esperada de liquidação (conforme prazo em dias úteis). &nbsp;
-    <strong>Dif. Acumulada</strong> = saldo acumulado de taxas (positivo = recebemos a mais; negativo = operadora cobrou taxa). &nbsp;
-    <strong>%</strong> = Taxa cobrada pela operadora no ciclo = (Venda − Recebimento) / Venda × 100.
+    <strong>Diferença</strong>: diferença do ciclo = Venda(s) do ciclo − Recebimento (positivo = taxa cobrada; negativo = operadora pagou a mais). &nbsp;
+    <strong>Dif. Acumulada</strong>: saldo acumulado de taxas ao longo dos ciclos. &nbsp;
+    <strong>%</strong> = Taxa cobrada pela operadora no ciclo = Diferença / Venda × 100.
   </div>
 
   {% endif %}

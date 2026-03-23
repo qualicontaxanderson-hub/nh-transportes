@@ -398,6 +398,7 @@ def _build_report(bandeiras, vinculos_map, vendas_rows, recebimentos_rows, feria
         linhas = []
         total_venda = 0.0
         total_recebimento = 0.0
+        total_diferenca = 0.0
         saldo = 0.0          # DIF acumulada (sign: negativo = taxas cobradas)
         is_first_cycle = True
 
@@ -427,12 +428,14 @@ def _build_report(bandeiras, vinculos_map, vendas_rows, recebimentos_rows, feria
                 # Recebimento avulso sem vendas no período
                 if has_receipt:
                     saldo += actual_receipt
+                    total_diferenca -= actual_receipt  # recebimento sem venda = overpayment (negative fee)
                 is_destaque_rd = (rd_obj is not None and rd_obj.weekday() >= 5) or (rd in feriados_set)
                 linhas.append({
                     'data_venda': '',
                     'total_venda': 0.0,
                     'data_recebimento': _fmt_date(rd) if has_receipt else '',
                     'total_recebimento': actual_receipt,
+                    'diferenca': -actual_receipt if has_receipt else None,
                     'saldo_acumulado': saldo if has_receipt else None,
                     'porcentagem': None,
                     'data_iso': rd,
@@ -443,6 +446,7 @@ def _build_report(bandeiras, vinculos_map, vendas_rows, recebimentos_rows, feria
             else:
                 if has_receipt:
                     saldo -= cycle_fee  # saldo += actual_receipt - effective_sales
+                    total_diferenca += cycle_fee
 
                 for i, sd in enumerate(cycle_sale_dates):
                     venda = vendas_idx.get((bid, sd), 0.0)
@@ -453,13 +457,14 @@ def _build_report(bandeiras, vinculos_map, vendas_rows, recebimentos_rows, feria
                     is_destaque = (sd_obj is not None and sd_obj.weekday() >= 5) or (sd in feriados_set)
 
                     if is_last:
-                        # Última venda do ciclo: exibe recebimento, DIF e %
+                        # Última venda do ciclo: exibe recebimento, diferença, DIF e %
                         # Sempre mostra a data de recebimento esperada (mesmo sem recebimento)
                         linhas.append({
                             'data_venda': _fmt_date(sd),
                             'total_venda': venda,
                             'data_recebimento': _fmt_date(rd),
                             'total_recebimento': actual_receipt,
+                            'diferenca': cycle_fee if has_receipt else None,
                             'saldo_acumulado': saldo if has_receipt else None,
                             'porcentagem': pct,
                             'data_iso': sd,
@@ -474,6 +479,7 @@ def _build_report(bandeiras, vinculos_map, vendas_rows, recebimentos_rows, feria
                             'total_venda': venda,
                             'data_recebimento': _fmt_date(rd),
                             'total_recebimento': 0.0,
+                            'diferenca': None,
                             'saldo_acumulado': None,
                             'porcentagem': None,
                             'data_iso': sd,
@@ -490,6 +496,7 @@ def _build_report(bandeiras, vinculos_map, vendas_rows, recebimentos_rows, feria
 
         grand_total_venda += total_venda
         grand_total_recebimento += total_recebimento
+        grand_total_diferenca += total_diferenca
 
         # Build names of linked formas for display
         forma_nomes = [v['forma_recebimento_nome'] for v in band.get('vinculos', [])]
@@ -503,13 +510,14 @@ def _build_report(bandeiras, vinculos_map, vendas_rows, recebimentos_rows, feria
             'linhas': linhas,
             'total_venda': total_venda,
             'total_recebimento': total_recebimento,
+            'total_diferenca': total_diferenca,
             'saldo_anterior': saldo_anterior,
             'saldo_final': saldo,
         })
 
     grand_saldo = grand_total_recebimento - grand_total_venda
 
-    return report, grand_total_venda, grand_total_recebimento, grand_saldo
+    return report, grand_total_venda, grand_total_recebimento, grand_total_diferenca, grand_saldo
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -557,6 +565,7 @@ def conf_cartoes():
         report = []
         grand_total_venda = 0.0
         grand_total_recebimento = 0.0
+        grand_total_diferenca = 0.0
         grand_saldo = 0.0
 
         if data_inicio and data_fim:
@@ -564,7 +573,7 @@ def conf_cartoes():
             receb_rows = _fetch_recebimentos(
                 conn, data_inicio, data_fim, empresa_ids, forma_ids
             )
-            report, grand_total_venda, grand_total_recebimento, grand_saldo = (
+            report, grand_total_venda, grand_total_recebimento, grand_total_diferenca, grand_saldo = (
                 _build_report(bandeiras_filtered, vinculos_map, vendas_rows, receb_rows, feriados_set)
             )
     finally:
@@ -583,6 +592,7 @@ def conf_cartoes():
         bandeira_ids=bandeira_ids,
         grand_total_venda=grand_total_venda,
         grand_total_recebimento=grand_total_recebimento,
+        grand_total_diferenca=grand_total_diferenca,
         grand_saldo=grand_saldo,
     )
 
