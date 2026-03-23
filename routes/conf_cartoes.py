@@ -18,6 +18,7 @@ Rota:
   POST /relatorios/conf_cartoes/feriado_del           – remove feriado
 """
 from datetime import date, datetime, timedelta
+from calendar import monthrange
 from collections import defaultdict
 
 from flask import Blueprint, render_template, request, jsonify
@@ -50,6 +51,16 @@ def _next_business_day(d, n, feriados_set):
         if d.weekday() < 5 and d.isoformat() not in feriados_set:
             count += 1
     return d
+
+
+def _last_day_of_next_month(d):
+    """Retorna o último dia do mês seguinte ao mês de d."""
+    if d.month == 12:
+        year, month = d.year + 1, 1
+    else:
+        year, month = d.year, d.month + 1
+    _, last = monthrange(year, month)
+    return date(year, month, last)
 
 bp = Blueprint('conf_cartoes', __name__, url_prefix='/relatorios')
 
@@ -115,6 +126,28 @@ def _ensure_vinculos_table(conn):
         conn.commit()
     except Exception:
         pass  # coluna já existe
+    # Migração: adiciona coluna saldo_anterior_data em bandeiras_cartao se não existir
+    # Armazena a data de referência do saldo (ex: 2025-12-31 para saldo do encerramento do ano).
+    # O saldo só é aplicado em relatórios cujo data_inicio esteja dentro do mês seguinte a esta data.
+    try:
+        cur.execute(
+            "ALTER TABLE bandeiras_cartao "
+            "ADD COLUMN saldo_anterior_data DATE NULL"
+        )
+        conn.commit()
+    except Exception:
+        pass  # coluna já existe
+    # Popula saldo_anterior_data para registros já existentes com saldo != 0 (retroativo).
+    # Usa 31/12/2025 como data de referência padrão (encerramento do exercício 2025).
+    try:
+        cur.execute(
+            "UPDATE bandeiras_cartao "
+            "SET saldo_anterior_data = '2025-12-31' "
+            "WHERE ABS(saldo_anterior) > 0.005 AND saldo_anterior_data IS NULL"
+        )
+        conn.commit()
+    except Exception:
+        pass
     cur.close()
 
 
@@ -176,7 +209,8 @@ def _get_bandeiras(conn):
         """
         SELECT bc.id, bc.nome, bc.tipo,
                COALESCE(bc.prazo_compensacao_dias, 1) AS prazo_compensacao_dias,
-               COALESCE(bc.saldo_anterior, 0) AS saldo_anterior
+               COALESCE(bc.saldo_anterior, 0)         AS saldo_anterior,
+               bc.saldo_anterior_data
           FROM bandeiras_cartao bc
          WHERE bc.ativo = 1
          ORDER BY bc.tipo, bc.nome
@@ -317,7 +351,7 @@ def _fmt_date(d):
     return str(d)
 
 
-def _build_report(bandeiras, vinculos_map, vendas_rows, recebimentos_rows, feriados_set=None):
+def _build_report(bandeiras, vinculos_map, vendas_rows, recebimentos_rows, feriados_set=None, data_inicio_obj=None):
     """
     Para cada bandeira vinculada, organiza as vendas em ciclos de liquidação
     (usando prazo_compensacao_dias e dias úteis).
@@ -364,6 +398,19 @@ def _build_report(bandeiras, vinculos_map, vendas_rows, recebimentos_rows, feria
         forma_ids = vinculos_map.get(bid, [])
         saldo_anterior = float(band.get('saldo_anterior', 0.0))
 
+        # Determina se o saldo_anterior é aplicável para este relatório.
+        # O saldo só é aplicado quando data_inicio estiver dentro do mês seguinte
+        # à data de referência do saldo (ex: saldo de 31/12/2025 aplica-se apenas
+        # a relatórios com data_inicio em janeiro/2026 ou anterior).
+        saldo_anterior_data = band.get('saldo_anterior_data')  # date ou None (do DB)
+        if saldo_anterior != 0.0 and saldo_anterior_data and data_inicio_obj:
+            if isinstance(saldo_anterior_data, str):
+                saldo_anterior_data = _parse_iso(saldo_anterior_data)
+            ultimo_dia_aplicavel = _last_day_of_next_month(saldo_anterior_data)
+            saldo_aplicavel = data_inicio_obj <= ultimo_dia_aplicavel
+        else:
+            saldo_aplicavel = False
+
         # Todas as datas de venda desta bandeira no período
         sale_dates = sorted(d for (b, d) in vendas_idx if b == bid)
 
@@ -374,7 +421,7 @@ def _build_report(bandeiras, vinculos_map, vendas_rows, recebimentos_rows, feria
                 if fid2 == fid:
                     all_receipt_dates.add(d)
 
-        if not sale_dates and not all_receipt_dates and saldo_anterior == 0.0:
+        if not sale_dates and not all_receipt_dates and (saldo_anterior == 0.0 or not saldo_aplicavel):
             continue
 
         # ── Mapeia cada data de venda → data esperada de recebimento ──────────
@@ -408,10 +455,13 @@ def _build_report(bandeiras, vinculos_map, vendas_rows, recebimentos_rows, feria
             actual_receipt = sum(receb_idx.get((fid, rd), 0.0) for fid in forma_ids)
             cycle_venda = sum(vendas_idx.get((bid, sd), 0.0) for sd in cycle_sale_dates)
 
-            # No 1º ciclo: saldo_anterior compõe as vendas efetivas
-            # (pré-período pendentes de liquidação no primeiro recebimento)
+            # No 1º ciclo: se o saldo_anterior for aplicável para o período consultado,
+            # soma-o às vendas efetivas (pré-período pendentes de liquidação no 1º recebimento).
+            # O saldo NÃO é aplicado quando data_inicio está fora do mês de aplicabilidade
+            # (ex: saldo de dez/2025 não se aplica a consultas de fev/2026 em diante, pois os
+            # recebimentos de janeiro já liquidaram esse saldo).
             effective_sales = cycle_venda
-            if is_first_cycle and saldo_anterior != 0.0:
+            if is_first_cycle and saldo_aplicavel:
                 effective_sales += saldo_anterior
             is_first_cycle = False
 
@@ -513,6 +563,7 @@ def _build_report(bandeiras, vinculos_map, vendas_rows, recebimentos_rows, feria
             'total_recebimento': total_recebimento,
             'total_diferenca': total_diferenca,
             'saldo_anterior': saldo_anterior,
+            'saldo_anterior_aplicavel': saldo_aplicavel,
             'saldo_final': saldo,
         })
 
@@ -574,8 +625,9 @@ def conf_cartoes():
             receb_rows = _fetch_recebimentos(
                 conn, data_inicio, data_fim, empresa_ids, forma_ids
             )
+            data_inicio_obj = _parse_iso(data_inicio)
             report, grand_total_venda, grand_total_recebimento, grand_total_diferenca, grand_saldo = (
-                _build_report(bandeiras_filtered, vinculos_map, vendas_rows, receb_rows, feriados_set)
+                _build_report(bandeiras_filtered, vinculos_map, vendas_rows, receb_rows, feriados_set, data_inicio_obj)
             )
     finally:
         conn.close()
@@ -733,6 +785,7 @@ def saldo_anterior_salvar():
     data = request.get_json(silent=True) or {}
     bandeira_id = data.get('bandeira_cartao_id')
     saldo_anterior = data.get('saldo_anterior')
+    saldo_anterior_data = (data.get('saldo_anterior_data') or '').strip() or None
 
     if not bandeira_id or 'saldo_anterior' not in data:
         return jsonify({'success': False, 'message': 'Parâmetros inválidos.'}), 400
@@ -742,12 +795,18 @@ def saldo_anterior_salvar():
     except (ValueError, TypeError):
         return jsonify({'success': False, 'message': 'Saldo inválido.'}), 400
 
+    if saldo_anterior_data:
+        try:
+            datetime.strptime(saldo_anterior_data, '%Y-%m-%d')
+        except ValueError:
+            return jsonify({'success': False, 'message': 'Data de referência inválida.'}), 400
+
     conn = get_db_connection()
     try:
         cur = conn.cursor()
         cur.execute(
-            "UPDATE bandeiras_cartao SET saldo_anterior = %s WHERE id = %s",
-            (saldo_anterior, bandeira_id),
+            "UPDATE bandeiras_cartao SET saldo_anterior = %s, saldo_anterior_data = %s WHERE id = %s",
+            (saldo_anterior, saldo_anterior_data, bandeira_id),
         )
         conn.commit()
         cur.close()
