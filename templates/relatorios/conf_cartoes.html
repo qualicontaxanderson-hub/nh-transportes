@@ -259,8 +259,7 @@
               {{ card.saldo_final | fmtmoney }}
             </td>
             <td class="text-end">
-              {% set eff_venda = card.total_venda + card.saldo_anterior %}
-              {% if eff_venda > 0.005 %}{{ "%.2f"|format((eff_venda - card.total_recebimento) / eff_venda * 100) }}%{% endif %}
+              {% if card.total_venda %}{{ "%.2f"|format(card.total_diferenca / card.total_venda * 100) }}%{% endif %}
             </td>
           </tr>
         </tbody>
@@ -285,7 +284,7 @@
             {{ grand_saldo | fmtmoney }}
           </td>
           <td class="text-end fw-bold" style="width:70px;">
-            {% if grand_total_venda %}{{ "%.2f"|format((grand_total_venda - grand_total_recebimento) / grand_total_venda * 100) }}%{% endif %}
+            {% if grand_total_venda %}{{ "%.2f"|format(grand_total_diferenca / grand_total_venda * 100) }}%{% endif %}
           </td>
         </tr>
       </thead>
