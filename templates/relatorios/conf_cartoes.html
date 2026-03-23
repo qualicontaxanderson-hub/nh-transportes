@@ -198,7 +198,7 @@
       </span>
       <span class="small opacity-75">
         Saldo Final:
-        <span class="fw-bold {% if card.saldo_final > 0.005 %}text-success{% elif card.saldo_final < -0.005 %}text-warning{% else %}text-light{% endif %}">
+        <span class="fw-bold {% if card.saldo_final < -0.005 %}text-success{% elif card.saldo_final > 0.005 %}text-warning{% else %}text-light{% endif %}">
           {{ card.saldo_final | fmtmoney }}
         </span>
       </span>
@@ -211,22 +211,38 @@
             <th class="text-end"   style="width:110px;">Venda</th>
             <th class="text-center" style="width:88px;">Dt. Recebimento</th>
             <th class="text-end"   style="width:110px;">Recebimento</th>
+            <th class="text-end"   style="width:110px;">Diferença</th>
             <th class="text-end"   style="width:110px;">Dif. Acumulada</th>
             <th class="text-end"   style="width:70px;">%</th>
           </tr>
         </thead>
         <tbody>
+          {% if card.saldo_anterior %}
+          <tr class="table-warning">
+            <td class="text-muted small fst-italic" colspan="2">Saldo Anterior</td>
+            <td></td>
+            <td></td>
+            <td></td>
+            <td class="text-end {% if card.saldo_anterior > 0.005 %}saldo-pos{% elif card.saldo_anterior < -0.005 %}saldo-neg{% else %}saldo-zero{% endif %}">
+              {{ card.saldo_anterior | fmtmoney }}
+            </td>
+            <td></td>
+          </tr>
+          {% endif %}
           {% for linha in card.linhas %}
           <tr{% if linha.is_destaque %} class="row-fds"{% endif %}>
             <td class="text-center">{{ linha.data_venda }}{% if linha.data_venda %}<span class="dia-semana">{{ linha.dia_semana }}</span>{% endif %}</td>
             <td class="text-end">{% if linha.total_venda %}{{ linha.total_venda | fmtmoney }}{% endif %}</td>
-            <td class="text-center">{{ linha.data_recebimento }}{% if linha.data_recebimento %}<span class="dia-semana">{{ linha.dia_semana }}</span>{% endif %}</td>
+            <td class="text-center">{{ linha.data_recebimento }}{% if linha.data_recebimento %}<span class="dia-semana">{{ linha.dia_semana_recebimento }}</span>{% endif %}</td>
             <td class="text-end">{% if linha.total_recebimento %}{{ linha.total_recebimento | fmtmoney }}{% endif %}</td>
-            <td class="text-end {% if linha.saldo_acumulado > 0.005 %}saldo-pos{% elif linha.saldo_acumulado < -0.005 %}saldo-neg{% else %}saldo-zero{% endif %}">
-              {{ linha.saldo_acumulado | fmtmoney }}
+            <td class="text-end {% if linha.diferenca is not none %}{% if linha.diferenca > 0.005 %}saldo-neg{% elif linha.diferenca < -0.005 %}saldo-pos{% else %}saldo-zero{% endif %}{% endif %}">
+              {% if linha.diferenca is not none %}{{ linha.diferenca | fmtmoney }}{% endif %}
             </td>
-            <td class="text-end {% if linha.porcentagem is not none %}{% if linha.porcentagem >= 99 %}saldo-pos{% elif linha.porcentagem >= 90 %}text-warning{% else %}saldo-neg{% endif %}{% endif %}">
-              {% if linha.porcentagem is not none %}{{ "%.1f"|format(linha.porcentagem) }}%{% endif %}
+            <td class="text-end {% if linha.saldo_acumulado is not none %}{% if linha.saldo_acumulado > 0.005 %}saldo-neg{% elif linha.saldo_acumulado < -0.005 %}saldo-pos{% else %}saldo-zero{% endif %}{% endif %}">
+              {% if linha.saldo_acumulado is not none %}{{ linha.saldo_acumulado | fmtmoney }}{% endif %}
+            </td>
+            <td class="text-end {% if linha.porcentagem is not none %}{% if linha.porcentagem < 0 %}text-info{% elif linha.porcentagem <= 2 %}saldo-pos{% elif linha.porcentagem <= 5 %}text-warning{% else %}saldo-neg{% endif %}{% endif %}">
+              {% if linha.porcentagem is not none %}{{ "%.2f"|format(linha.porcentagem) }}%{% endif %}
             </td>
           </tr>
           {% endfor %}
@@ -236,11 +252,15 @@
             <td class="text-end">{{ card.total_venda | fmtmoney }}</td>
             <td></td>
             <td class="text-end">{{ card.total_recebimento | fmtmoney }}</td>
-            <td class="text-end {% if card.saldo_final > 0.005 %}saldo-pos{% elif card.saldo_final < -0.005 %}saldo-neg{% else %}saldo-zero{% endif %}">
+            <td class="text-end {% if card.total_diferenca > 0.005 %}saldo-neg{% elif card.total_diferenca < -0.005 %}saldo-pos{% else %}saldo-zero{% endif %}">
+              {{ card.total_diferenca | fmtmoney }}
+            </td>
+            <td class="text-end {% if card.saldo_final < -0.005 %}saldo-pos{% elif card.saldo_final > 0.005 %}saldo-neg{% else %}saldo-zero{% endif %}">
               {{ card.saldo_final | fmtmoney }}
             </td>
             <td class="text-end">
-              {% if card.total_venda %}{{ "%.1f"|format(card.total_recebimento / card.total_venda * 100) }}%{% endif %}
+              {% set eff_venda = card.total_venda + card.saldo_anterior %}
+              {% if eff_venda > 0.005 %}{{ "%.2f"|format((eff_venda - card.total_recebimento) / eff_venda * 100) }}%{% endif %}
             </td>
           </tr>
         </tbody>
@@ -258,11 +278,14 @@
           <td class="text-end fw-bold" style="width:110px;">{{ grand_total_venda | fmtmoney }}</td>
           <td style="width:88px;"></td>
           <td class="text-end fw-bold" style="width:110px;">{{ grand_total_recebimento | fmtmoney }}</td>
-          <td class="text-end fw-bold {% if grand_saldo > 0.005 %}saldo-pos{% elif grand_saldo < -0.005 %}saldo-neg{% else %}saldo-zero{% endif %}" style="width:110px;">
+          <td class="text-end fw-bold {% if grand_total_diferenca > 0.005 %}saldo-neg{% elif grand_total_diferenca < -0.005 %}saldo-pos{% else %}saldo-zero{% endif %}" style="width:110px;">
+            {{ grand_total_diferenca | fmtmoney }}
+          </td>
+          <td class="text-end fw-bold {% if grand_saldo < -0.005 %}saldo-pos{% elif grand_saldo > 0.005 %}saldo-neg{% else %}saldo-zero{% endif %}" style="width:110px;">
             {{ grand_saldo | fmtmoney }}
           </td>
           <td class="text-end fw-bold" style="width:70px;">
-            {% if grand_total_venda %}{{ "%.1f"|format(grand_total_recebimento / grand_total_venda * 100) }}%{% endif %}
+            {% if grand_total_venda %}{{ "%.2f"|format((grand_total_venda - grand_total_recebimento) / grand_total_venda * 100) }}%{% endif %}
           </td>
         </tr>
       </thead>
@@ -272,10 +295,10 @@
   <!-- Legend -->
   <div class="small text-muted mb-4">
     <strong>Dt. Venda</strong>: data do fechamento de caixa. &nbsp;
-    <strong>Dt. Recebimento</strong>: data do crédito bancário. &nbsp;
-    <strong>Dif. Acumulada</strong> = Recebimento − Venda acumulados
-    (<span class="text-success">verde = crédito a favor</span> / <span class="text-danger">vermelho = déficit</span>). &nbsp;
-    <strong>%</strong> = Recebimento / Venda × 100 (taxa líquida).
+    <strong>Dt. Recebimento</strong>: data esperada de liquidação (conforme prazo em dias úteis). &nbsp;
+    <strong>Diferença</strong>: diferença do ciclo = Venda(s) do ciclo − Recebimento (positivo = taxa cobrada; negativo = operadora pagou a mais). &nbsp;
+    <strong>Dif. Acumulada</strong>: saldo acumulado de taxas ao longo dos ciclos. &nbsp;
+    <strong>%</strong> = Taxa cobrada pela operadora no ciclo = Diferença / Venda × 100.
   </div>
 
   {% endif %}
@@ -307,6 +330,7 @@
               <th>Forma 1 de Recebimento (Banco)</th>
               <th>Forma 2 de Recebimento (Banco)</th>
               <th class="text-center" style="width:110px;" title="Número de dias úteis até o depósito aparecer no banco">Prazo (dias úteis)</th>
+              <th class="text-end" style="width:130px;" title="Saldo acumulado de vendas anteriores ao período (ex: vendas de dez/2025 não recebidas). Use valor negativo para vendas pendentes.">Saldo Anterior (R$)</th>
               <th class="text-center" style="width:60px;">Salvar</th>
             </tr>
           </thead>
@@ -350,6 +374,14 @@
                        value="{{ b.prazo_compensacao_dias }}"
                        style="width:70px; display:inline-block;"
                        title="0 = mesmo dia, 1 = próximo dia útil, 2 = dois dias úteis, …">
+              </td>
+              <td class="text-end">
+                <input type="number" step="0.01"
+                       class="form-control form-control-sm text-end inp-saldo-anterior"
+                       data-bandeira="{{ b.id }}"
+                       value="{{ b.saldo_anterior }}"
+                       style="width:110px; display:inline-block;"
+                       title="Saldo de vendas pendentes anteriores ao período consultado. Valor negativo = ainda a receber.">
               </td>
               <td class="text-center">
                 <button class="btn btn-sm btn-success btn-vincular" data-bandeira="{{ b.id }}" title="Salvar">
@@ -491,9 +523,11 @@
       const sel1 = row.querySelector('.sel-forma-1');
       const sel2 = row.querySelector('.sel-forma-2');
       const inpPrazo = row.querySelector('.inp-prazo');
+      const inpSaldoAnterior = row.querySelector('.inp-saldo-anterior');
       const forma1 = parseInt(sel1.value) || null;
       const forma2 = parseInt(sel2.value) || null;
       const prazoDias = parseInt(inpPrazo.value) || 0;
+      const saldoAnterior = parseFloat(inpSaldoAnterior.value) || 0;
       const msgEl = document.getElementById('msg-vinculos');
       msgEl.textContent = '';
 
@@ -530,6 +564,13 @@
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ bandeira_cartao_id: bandeiraId, prazo_dias: prazoDias }),
+        });
+
+        // Salva saldo anterior
+        await fetch('{{ url_for("conf_cartoes.saldo_anterior_salvar") }}', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ bandeira_cartao_id: bandeiraId, saldo_anterior: saldoAnterior }),
         });
 
         // Atualiza data-vinculos para refletir o estado atual
