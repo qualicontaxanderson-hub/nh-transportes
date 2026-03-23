@@ -11,6 +11,32 @@ VALID_TIPOS = {'DEBITO', 'CREDITO'}
 MAX_NOME_LENGTH = 50
 
 
+def _ensure_cabal_debito():
+    """Insere a bandeira 'CABAL / OUTROS' (DÉBITO) se ainda não existir no banco."""
+    conn = None
+    cur = None
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        cur.execute(
+            """
+            INSERT INTO bandeiras_cartao (nome, tipo, ativo)
+            SELECT 'CABAL / OUTROS', 'DEBITO', 1
+            WHERE NOT EXISTS (
+                SELECT 1 FROM bandeiras_cartao WHERE nome = 'CABAL / OUTROS' AND tipo = 'DEBITO'
+            )
+            """
+        )
+        conn.commit()
+    except Exception:
+        pass  # tabela ainda não existe ou registro já presente
+    finally:
+        if cur is not None:
+            cur.close()
+        if conn is not None:
+            conn.close()
+
+
 def validate_card_input(nome, tipo):
     """
     Validate card brand input fields.

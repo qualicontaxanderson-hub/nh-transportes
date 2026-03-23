@@ -354,6 +354,18 @@ def create_app():
     with app.app_context():
         _ensure_lucro_postos_tables(app)
 
+    # Garante que a bandeira de cartão 'CABAL / OUTROS' (DÉBITO) exista no banco.
+    with app.app_context():
+        try:
+            from routes.cartoes import _ensure_cabal_debito
+            _ensure_cabal_debito()
+            app.logger.info("Seed de bandeira CABAL / OUTROS executado na inicialização.")
+        except Exception:
+            app.logger.warning(
+                "Seed de bandeira CABAL / OUTROS falhou na inicialização (não crítico).",
+                exc_info=True,
+            )
+
     # Registrar filtro e helpers de template
     app.jinja_env.filters['formatar_moeda'] = formatar_moeda
 
