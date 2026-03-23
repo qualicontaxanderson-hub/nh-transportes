@@ -356,6 +356,7 @@ def _build_report(bandeiras, vinculos_map, vendas_rows, recebimentos_rows, feria
     report = []
     grand_total_venda = 0.0
     grand_total_recebimento = 0.0
+    grand_total_diferenca = 0.0
 
     for band in bandeiras:
         bid = band['id']
