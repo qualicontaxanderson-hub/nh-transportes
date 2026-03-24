@@ -1,0 +1,557 @@
+{% extends "base.html" %}
+
+{% block title %}Depósitos{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+
+  <!-- Header -->
+  <div class="d-flex justify-content-between align-items-center mt-2 mb-3">
+    <div>
+      <h2 style="color:#1D63A5;font-size:1.25rem;margin:0;"><i class="bi bi-bank2"></i> Depósitos</h2>
+      <p class="text-muted mb-0" style="font-size:0.78rem;">Depósitos em espécie e cheque registrados no Fechamento de Caixa</p>
+    </div>
+    <div>
+      <a href="{{ url_for('lancamentos_caixa.novo') }}" class="btn btn-outline-primary btn-sm" style="font-size:0.78rem;">
+        <i class="bi bi-plus-circle"></i> Novo Fechamento de Caixa
+      </a>
+    </div>
+  </div>
+
+  <!-- Stat cards -->
+  <div class="row g-2 mb-3">
+    <div class="col-6 col-md-3">
+      <div class="dep-stat-card">
+        <span class="dep-icon dep-warn"><i class="bi bi-hourglass-split"></i></span>
+        <div>
+          <div class="dep-label">Pendentes</div>
+          <div class="dep-value">{{ qtd_pendente }}</div>
+        </div>
+      </div>
+    </div>
+    <div class="col-6 col-md-3">
+      <div class="dep-stat-card">
+        <span class="dep-icon dep-ok"><i class="bi bi-check-circle"></i></span>
+        <div>
+          <div class="dep-label">Conciliados</div>
+          <div class="dep-value">{{ qtd_conciliado }}</div>
+        </div>
+      </div>
+    </div>
+    <div class="col-6 col-md-3">
+      <div class="dep-stat-card">
+        <span class="dep-icon dep-danger"><i class="bi bi-currency-dollar"></i></span>
+        <div>
+          <div class="dep-label">Total Pendente</div>
+          <div class="dep-value" style="font-size:0.82rem;">{{ total_pendente | formatar_moeda }}</div>
+        </div>
+      </div>
+    </div>
+    <div class="col-6 col-md-3">
+      <div class="dep-stat-card">
+        <span class="dep-icon dep-info"><i class="bi bi-wallet2"></i></span>
+        <div>
+          <div class="dep-label">Total Geral</div>
+          <div class="dep-value" style="font-size:0.82rem;">{{ total_geral | formatar_moeda }}</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Filtros -->
+  <div class="card shadow-sm mb-3">
+    <div class="card-header py-2 d-flex align-items-center" style="background:#1D63A5;color:white;font-size:0.78rem;font-weight:600;">
+      <i class="bi bi-funnel me-1"></i> Filtros
+    </div>
+    <div class="card-body py-2 px-3" style="font-size:0.78rem;">
+      <form method="GET" action="{{ url_for('depositos.listar') }}">
+        <div class="row g-2 align-items-end">
+          <div class="col-md-2">
+            <label class="form-label mb-1 fw-semibold" style="font-size:0.72rem;">Data Início</label>
+            <input type="date" class="form-control form-control-sm" name="data_inicio"
+                   value="{{ data_inicio }}" style="font-size:0.75rem;">
+          </div>
+          <div class="col-md-2">
+            <label class="form-label mb-1 fw-semibold" style="font-size:0.72rem;">Data Fim</label>
+            <input type="date" class="form-control form-control-sm" name="data_fim"
+                   value="{{ data_fim }}" style="font-size:0.75rem;">
+          </div>
+          <div class="col-md-3">
+            <label class="form-label mb-1 fw-semibold" style="font-size:0.72rem;">Posto/Cliente</label>
+            <select class="form-select form-select-sm" name="cliente_ids[]" style="font-size:0.75rem;" multiple size="1">
+              <option value="">Todos</option>
+              {% for c in clientes %}
+              <option value="{{ c.id }}" {% if c.id|string in cliente_ids %}selected{% endif %}>{{ c.nome }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-md-2">
+            <label class="form-label mb-1 fw-semibold" style="font-size:0.72rem;">Tipo</label>
+            <select class="form-select form-select-sm" name="tipo_grupo" style="font-size:0.75rem;">
+              <option value="">Todos</option>
+              <option value="ESPECIE"  {% if tipo_grupo == 'ESPECIE'  %}selected{% endif %}>Espécie</option>
+              <option value="CHEQUE"   {% if tipo_grupo == 'CHEQUE'   %}selected{% endif %}>Cheque</option>
+            </select>
+          </div>
+          <div class="col-md-2">
+            <label class="form-label mb-1 fw-semibold" style="font-size:0.72rem;">Status</label>
+            <select class="form-select form-select-sm" name="status" style="font-size:0.75rem;">
+              <option value="">Todos</option>
+              <option value="pendente"   {% if status == 'pendente'   %}selected{% endif %}>Pendente</option>
+              <option value="conciliado" {% if status == 'conciliado' %}selected{% endif %}>Conciliado</option>
+            </select>
+          </div>
+          <div class="col-md-1 d-flex gap-1">
+            <button type="submit" class="btn btn-primary btn-sm px-2" title="Filtrar" style="font-size:0.75rem;">
+              <i class="bi bi-search"></i>
+            </button>
+            <a href="{{ url_for('depositos.listar') }}" class="btn btn-outline-secondary btn-sm px-2" title="Limpar" style="font-size:0.75rem;">
+              <i class="bi bi-x"></i>
+            </a>
+          </div>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Seleção múltipla (aparece quando há checks) -->
+  <div id="barraSelecao" class="alert alert-info py-2 px-3 mb-2 d-none" style="font-size:0.78rem;">
+    <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
+      <span>
+        <i class="bi bi-check2-square me-1"></i>
+        <strong id="qtdSelecionados">0</strong> depósito(s) selecionado(s) —
+        Tipo: <strong id="tipoSelecionados">—</strong>
+        | Total: <strong id="totalSelecionados">R$ 0,00</strong>
+      </span>
+      <button type="button" class="btn btn-success btn-sm" style="font-size:0.75rem;" onclick="abrirModalVincular()">
+        <i class="bi bi-link-45deg"></i> Vincular ao Banco
+      </button>
+    </div>
+  </div>
+
+  <!-- Tabela -->
+  <div class="card shadow-sm">
+    <div class="card-header py-2 d-flex justify-content-between align-items-center"
+         style="background:#1D63A5;color:white;font-size:0.78rem;font-weight:600;">
+      <span><i class="bi bi-list-ul me-1"></i> Depósitos</span>
+      {% if depositos %}<span class="badge bg-white text-secondary" style="font-size:0.68rem;">{{ depositos|length }}</span>{% endif %}
+    </div>
+    <div class="card-body p-0">
+      {% if depositos %}
+      <div class="table-responsive">
+        <table class="table table-hover mb-0 dep-table">
+          <thead>
+            <tr>
+              <th style="width:2rem;"><input type="checkbox" id="checkAll" title="Selecionar todos pendentes"></th>
+              <th>Data Caixa</th>
+              <th>Posto</th>
+              <th>Tipo</th>
+              <th>Descrição</th>
+              <th class="text-end">Valor</th>
+              <th>Data Depósito</th>
+              <th class="text-center">Conc. Bancária</th>
+              <th class="text-center">Ações</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for d in depositos %}
+            <tr class="{% if d.bank_transaction_id %}dep-conciliado{% else %}dep-pendente{% endif %}">
+              <td>
+                {% if not d.bank_transaction_id %}
+                <input type="checkbox" class="dep-check"
+                       data-id="{{ d.id }}"
+                       data-valor="{{ d.valor }}"
+                       data-grupo="{{ d.tipo_grupo }}"
+                       title="Selecionar para vincular em grupo">
+                {% endif %}
+              </td>
+              <td>
+                <a href="{{ url_for('lancamentos_caixa.visualizar', id=d.lancamento_caixa_id) }}"
+                   class="text-decoration-none text-dark fw-semibold" style="font-size:0.75rem;">
+                  {{ d.data_caixa_br }}
+                </a>
+              </td>
+              <td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ d.cliente_nome }}</td>
+              <td>
+                {% if d.tipo_grupo == 'CHEQUE' %}
+                  <span class="dep-badge dep-badge-cheque">{{ d.forma_tipo_label }}</span>
+                {% else %}
+                  <span class="dep-badge dep-badge-especie">{{ d.forma_tipo_label }}</span>
+                {% endif %}
+              </td>
+              <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#555;">
+                {{ d.descricao or '—' }}
+              </td>
+              <td class="text-end fw-semibold">{{ d.valor | formatar_moeda }}</td>
+              <td>{{ d.data_deposito_br or '<span class="text-muted">—</span>'|safe }}</td>
+              <td class="text-center">
+                {% if d.bank_transaction_id %}
+                  <span class="dep-badge dep-badge-ok"
+                        title="{{ d.banco_descricao or '' }}{% if d.banco_conta_apelido %} · {{ d.banco_conta_apelido }}{% endif %}">
+                    <i class="bi bi-check-circle"></i> Conciliado
+                  </span>
+                  <br>
+                  <small class="text-muted" style="font-size:0.65rem;">
+                    {{ d.banco_data_br }} {{ d.banco_valor | formatar_moeda if d.banco_valor }}
+                  </small>
+                {% else %}
+                  <div class="concil-auto"
+                       data-id="{{ d.id }}"
+                       data-valor="{{ d.valor }}"
+                       data-grupo="{{ d.tipo_grupo }}">
+                    <span class="text-muted" style="font-size:0.72rem;"><i class="bi bi-hourglass-split"></i></span>
+                  </div>
+                {% endif %}
+              </td>
+              <td class="text-center">
+                <div class="d-flex justify-content-center gap-1">
+                  <a href="{{ url_for('lancamentos_caixa.visualizar', id=d.lancamento_caixa_id) }}"
+                     class="btn-dep btn-dep-info" title="Ver Fechamento de Caixa">
+                    <i class="bi bi-eye"></i>
+                  </a>
+                  {% if d.bank_transaction_id %}
+                  <form method="POST"
+                        action="{{ url_for('depositos.desvincular', comprovacao_id=d.id) }}"
+                        style="display:inline;"
+                        onsubmit="return confirm('Remover vínculo bancário deste depósito?');">
+                    <button type="submit" class="btn-dep btn-dep-ghost" title="Remover vínculo">
+                      <i class="bi bi-x-circle"></i>
+                    </button>
+                  </form>
+                  {% else %}
+                  <button type="button" class="btn-dep btn-dep-primary btn-vincular-solo"
+                          data-id="{{ d.id }}" data-valor="{{ d.valor }}" data-grupo="{{ d.tipo_grupo }}"
+                          title="Vincular ao banco">
+                    <i class="bi bi-link-45deg"></i>
+                  </button>
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <div class="text-center text-muted py-4">
+        <i class="bi bi-inbox" style="font-size:1.8rem;opacity:0.4;"></i>
+        <div class="mt-2" style="font-size:0.8rem;">Nenhum depósito encontrado para os filtros selecionados.</div>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+
+</div>
+
+<!-- ── Styles ── -->
+<style>
+.dep-stat-card {
+  display:flex; align-items:center; gap:0.6rem;
+  background:#fff; border:1px solid #e4e9f0; border-radius:6px; padding:0.5rem 0.75rem;
+}
+.dep-icon {
+  display:inline-flex; align-items:center; justify-content:center;
+  width:2rem; height:2rem; border-radius:6px; font-size:1rem; flex-shrink:0;
+}
+.dep-warn   { background:#fff3cd; color:#856404; }
+.dep-ok     { background:#d1e7dd; color:#0f5132; }
+.dep-danger { background:#f8d7da; color:#721c24; }
+.dep-info   { background:#cce5ff; color:#004085; }
+.dep-label  { font-size:0.68rem; color:#6c757d; font-weight:600; text-transform:uppercase; letter-spacing:0.04em; }
+.dep-value  { font-size:1rem; font-weight:700; color:#212529; line-height:1.1; }
+
+.dep-table { font-size:0.75rem; }
+.dep-table thead tr { background:#f0f4f8; }
+.dep-table thead th {
+  font-size:0.65rem; font-weight:700; text-transform:uppercase;
+  letter-spacing:0.05em; color:#5a6a7a; padding:0.45rem 0.6rem;
+  border-bottom:2px solid #dee2e6; white-space:nowrap;
+}
+.dep-table tbody tr { border-bottom:1px solid #f0f4f8; }
+.dep-table tbody td { padding:0.35rem 0.6rem; vertical-align:middle; }
+.dep-table tbody tr:hover { background:#f7faff; }
+.dep-conciliado td { opacity:0.75; }
+
+.dep-badge {
+  display:inline-block; font-size:0.65rem; font-weight:600;
+  padding:0.15rem 0.4rem; border-radius:3px; white-space:nowrap;
+}
+.dep-badge-ok      { background:#d1e7dd; color:#0f5132; }
+.dep-badge-cheque  { background:#dde5f8; color:#1240aa; }
+.dep-badge-especie { background:#e6f4ea; color:#1a6a3c; }
+
+.btn-dep {
+  display:inline-flex; align-items:center; justify-content:center;
+  width:1.55rem; height:1.55rem; border-radius:4px; font-size:0.7rem;
+  border:none; cursor:pointer; text-decoration:none;
+  transition:opacity 0.12s; background:transparent; padding:0;
+}
+.btn-dep:hover { opacity:0.72; }
+.btn-dep-info    { background:#cce5ff; color:#004085; }
+.btn-dep-primary { background:#cfe2ff; color:#084298; }
+.btn-dep-ghost   { background:#e9ecef; color:#495057; }
+
+tr.dep-selecionado td { background:#fffbe6 !important; }
+</style>
+
+<!-- ── Modal: Vincular Banco ── -->
+<div class="modal fade" id="modalVincular" tabindex="-1">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header" style="background:#1D63A5;color:white;">
+        <h5 class="modal-title"><i class="bi bi-link-45deg"></i> Vincular ao Banco</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <!-- Resumo dos depósitos selecionados -->
+        <div class="mb-3 p-2 bg-light rounded" style="font-size:0.8rem;">
+          <strong>Depósitos selecionados:</strong>
+          <div id="resumoDepositos" class="mt-1 text-muted"></div>
+          <div class="mt-1">Total: <strong id="totalVincular">R$ 0,00</strong></div>
+        </div>
+        <!-- Sugestões bancárias -->
+        <div class="mb-2" style="font-size:0.78rem;font-weight:600;color:#1D63A5;">
+          <i class="bi bi-bank me-1"></i> Transações Bancárias (CRÉDITO)
+        </div>
+        <input type="text" id="buscaBanco" class="form-control form-control-sm mb-2"
+               placeholder="Buscar por descrição ou valor..." style="font-size:0.75rem;"
+               oninput="filtrarBanco()">
+        <div id="loadingBanco" class="text-center py-3 d-none">
+          <span class="spinner-border spinner-border-sm me-1"></span> Buscando transações…
+        </div>
+        <div id="listaBanco"
+             style="max-height:280px;overflow-y:auto;border:1px solid #dee2e6;border-radius:4px;font-size:0.78rem;">
+          <div class="text-center text-muted py-3" id="msgSemMatch">Clique em "Vincular" em um depósito para carregar sugestões.</div>
+        </div>
+        <div class="mt-2 small text-muted">
+          Não encontrou? <a href="{{ url_for('bank_import.conciliar') }}">Abrir conciliação bancária</a>.
+        </div>
+      </div>
+      <!-- Hidden form submitted on confirmation -->
+      <form id="formVincular" method="POST" action="{{ url_for('depositos.vincular') }}">
+        <input type="hidden" name="bank_transaction_id" id="inputBankTxId">
+        <div id="inputsComprovacao"></div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Fechar</button>
+          <button type="submit" class="btn btn-success btn-sm" id="btnConfirmarVincular" disabled>
+            <i class="bi bi-check-lg"></i> Confirmar Vínculo
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- ── Scripts ── -->
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function() {
+  /* ── Selection ── */
+  const checkAll = document.getElementById('checkAll');
+  const barraSelecao = document.getElementById('barraSelecao');
+
+  function updateBarra() {
+    const checked = document.querySelectorAll('.dep-check:checked');
+    const n = checked.length;
+
+    // highlight rows
+    document.querySelectorAll('.dep-pendente').forEach(tr => tr.classList.remove('dep-selecionado'));
+    checked.forEach(cb => cb.closest('tr').classList.add('dep-selecionado'));
+
+    if (n === 0) {
+      barraSelecao.classList.add('d-none');
+      return;
+    }
+    barraSelecao.classList.remove('d-none');
+
+    const total = Array.from(checked).reduce((s, cb) => s + parseFloat(cb.dataset.valor || 0), 0);
+    const grupos = new Set(Array.from(checked).map(cb => cb.dataset.grupo));
+    const tipoLabel = grupos.size === 1 ? (grupos.values().next().value === 'CHEQUE' ? 'Cheque' : 'Espécie') : '⚠ Tipos mistos!';
+
+    document.getElementById('qtdSelecionados').textContent = n;
+    document.getElementById('tipoSelecionados').textContent = tipoLabel;
+    document.getElementById('totalSelecionados').textContent = 'R$ ' + total.toLocaleString('pt-BR', {minimumFractionDigits:2, maximumFractionDigits:2});
+  }
+
+  document.querySelectorAll('.dep-check').forEach(cb => cb.addEventListener('change', updateBarra));
+
+  if (checkAll) {
+    checkAll.addEventListener('change', function() {
+      document.querySelectorAll('.dep-check').forEach(cb => { cb.checked = checkAll.checked; });
+      updateBarra();
+    });
+  }
+
+  /* ── Modal Vincular ── */
+  let _allBancoRows = [];
+
+  const URL_API = '{{ url_for("depositos.api_candidatos", comprovacao_id=0) }}'.replace('/0', '/');
+
+  function fmtMoeda(v) {
+    return 'R$ ' + parseFloat(v || 0).toLocaleString('pt-BR', {minimumFractionDigits:2, maximumFractionDigits:2});
+  }
+
+  function renderBancoRows(rows) {
+    const lista = document.getElementById('listaBanco');
+    if (!rows.length) {
+      lista.innerHTML = '<div class="text-center text-muted py-3 small">Nenhuma transação encontrada para este valor/data.</div>';
+      return;
+    }
+    lista.innerHTML = rows.map(tx => `
+      <div class="banco-item d-flex align-items-center px-2 py-1 border-bottom"
+           data-id="${tx.id}" data-valor="${tx.valor}" data-desc="${(tx.descricao||'').toLowerCase()}"
+           style="cursor:pointer; font-size:0.78rem;">
+        <input type="radio" name="banco_radio" class="me-2" value="${tx.id}" onchange="selecionarBanco(${tx.id})">
+        <div class="flex-grow-1">
+          <strong>${tx.data_transacao || '-'}</strong>
+          <span class="text-muted mx-1">${tx.conta_apelido || tx.banco_nome || ''}</span>
+          <span style="max-width:220px;display:inline-block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:bottom;">${tx.descricao || '-'}</span>
+        </div>
+        <span class="fw-bold text-success ms-2 text-nowrap">${fmtMoeda(tx.valor)}</span>
+      </div>
+    `).join('');
+  }
+
+  function carregarCandidatos(comprovacaoId) {
+    const loading = document.getElementById('loadingBanco');
+    const lista   = document.getElementById('listaBanco');
+    loading.classList.remove('d-none');
+    lista.innerHTML = '';
+    document.getElementById('btnConfirmarVincular').disabled = true;
+    document.getElementById('inputBankTxId').value = '';
+
+    fetch(URL_API + comprovacaoId)
+      .then(r => r.json())
+      .then(rows => {
+        _allBancoRows = rows;
+        loading.classList.add('d-none');
+        renderBancoRows(rows);
+      })
+      .catch(() => {
+        loading.classList.add('d-none');
+        lista.innerHTML = '<div class="text-danger small p-2">Erro ao buscar transações.</div>';
+      });
+  }
+
+  window.filtrarBanco = function() {
+    const q = document.getElementById('buscaBanco').value.toLowerCase();
+    if (!q) { renderBancoRows(_allBancoRows); return; }
+    renderBancoRows(_allBancoRows.filter(r =>
+      (r.descricao || '').toLowerCase().includes(q) ||
+      String(r.valor).includes(q)
+    ));
+  };
+
+  window.selecionarBanco = function(txId) {
+    document.getElementById('inputBankTxId').value = txId;
+    document.getElementById('btnConfirmarVincular').disabled = false;
+    document.querySelectorAll('.banco-item').forEach(el => {
+      el.style.background = el.dataset.id == txId ? '#e8f4fd' : '';
+    });
+  };
+
+  /* Populate form inputs from selected deposits */
+  function popularFormVincular(ids, total) {
+    const container = document.getElementById('inputsComprovacao');
+    container.innerHTML = ids.map(id =>
+      `<input type="hidden" name="comprovacao_ids[]" value="${id}">`
+    ).join('');
+    document.getElementById('totalVincular').textContent = fmtMoeda(total);
+  }
+
+  /* Open modal for a single deposit (Vincular button in row) */
+  document.addEventListener('click', function(e) {
+    const btn = e.target.closest('.btn-vincular-solo');
+    if (!btn) return;
+    const id    = btn.dataset.id;
+    const valor = parseFloat(btn.dataset.valor || 0);
+    const grupo = btn.dataset.grupo;
+
+    document.getElementById('resumoDepositos').textContent =
+      `1 depósito — Tipo: ${grupo === 'CHEQUE' ? 'Cheque' : 'Espécie'}`;
+    document.getElementById('buscaBanco').value = '';
+    popularFormVincular([id], valor);
+    carregarCandidatos(id);
+
+    const modal = new bootstrap.Modal(document.getElementById('modalVincular'));
+    modal.show();
+  });
+
+  /* Open modal for multiple selected deposits */
+  window.abrirModalVincular = function() {
+    const checked = document.querySelectorAll('.dep-check:checked');
+    if (!checked.length) return;
+
+    const grupos = new Set(Array.from(checked).map(cb => cb.dataset.grupo));
+    if (grupos.size > 1) {
+      alert('Não é possível vincular espécie e cheque juntos. Selecione apenas um tipo por vez.');
+      return;
+    }
+
+    const ids   = Array.from(checked).map(cb => cb.dataset.id);
+    const total = Array.from(checked).reduce((s, cb) => s + parseFloat(cb.dataset.valor || 0), 0);
+    const grupo = grupos.values().next().value;
+
+    document.getElementById('resumoDepositos').innerHTML = ids.map((id, i) => {
+      const cb = document.querySelector(`.dep-check[data-id="${id}"]`);
+      const v  = parseFloat(cb ? cb.dataset.valor : 0);
+      return `<div>• Depósito #${id} — ${fmtMoeda(v)}</div>`;
+    }).join('');
+
+    document.getElementById('buscaBanco').value = '';
+    popularFormVincular(ids, total);
+
+    // Load candidates using the first deposit as reference
+    carregarCandidatos(ids[0]);
+
+    const modal = new bootstrap.Modal(document.getElementById('modalVincular'));
+    modal.show();
+  };
+
+  /* Auto-load matches for pending rows */
+  document.querySelectorAll('.concil-auto').forEach(function(cell) {
+    const id    = cell.dataset.id;
+    const valor = parseFloat(cell.dataset.valor || 0);
+    const grupo = cell.dataset.grupo;
+
+    fetch(URL_API + id)
+      .then(r => r.json())
+      .then(rows => {
+        // Only show a match suggestion if first row value is within 1% of deposit value
+        if (!rows.length) {
+          cell.innerHTML =
+            `<span class="badge bg-secondary" style="font-size:0.65rem;">Sem match</span>` +
+            `<button type="button" class="btn btn-xs btn-outline-primary ms-1 btn-vincular-solo" ` +
+            `data-id="${id}" data-valor="${valor}" data-grupo="${grupo}" ` +
+            `style="font-size:0.68rem;padding:1px 5px;" title="Vincular manualmente">` +
+            `<i class="bi bi-link-45deg"></i> Vincular</button>`;
+          return;
+        }
+        const tx     = rows[0];
+        const diff   = Math.abs(tx.valor - valor);
+        const pct    = valor > 0 ? diff / valor : 1;
+        const isGood = pct < 0.005; // exact match (within 0.5%)
+        const badgeClass = isGood ? 'bg-warning text-dark' : 'bg-secondary';
+        const label  = isGood ? '<i class="bi bi-search"></i> Match' : '<i class="bi bi-search"></i> Parcial';
+        const extra  = rows.length > 1
+          ? `<span class="text-muted ms-1" style="font-size:0.65rem;">+${rows.length - 1}</span>`
+          : '';
+
+        cell.innerHTML =
+          `<span class="badge ${badgeClass} me-1" style="font-size:0.65rem;">${label}${extra}</span>` +
+          `<br><small class="text-muted" style="font-size:0.65rem;">${tx.data_transacao || ''} ${fmtMoeda(tx.valor)}</small>` +
+          `<br><button type="button" class="btn btn-xs btn-outline-success mt-1 btn-vincular-solo" ` +
+          `data-id="${id}" data-valor="${valor}" data-grupo="${grupo}" ` +
+          `style="font-size:0.68rem;padding:1px 5px;" title="Ver sugestões e confirmar">` +
+          `<i class="bi bi-link-45deg"></i> Vincular</button>`;
+      })
+      .catch(() => {
+        cell.innerHTML = `<span class="badge bg-secondary" style="font-size:0.65rem;">Não conciliado</span>`;
+      });
+  });
+
+})();
+</script>
+{% endblock %}
