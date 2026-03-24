@@ -179,8 +179,9 @@
                   <span class="dep-badge dep-badge-especie">{{ d.forma_tipo_label }}</span>
                 {% endif %}
               </td>
-              <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#555;">
-                {{ d.descricao or '—' }}
+              <td style="max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#555;"
+                  title="{{ d.banco_descricao or d.descricao or '' }}">
+                {{ d.banco_descricao or d.descricao or '—' }}
               </td>
               <td class="text-end fw-semibold">{{ d.valor | formatar_moeda }}</td>
               <td>{{ d.data_deposito_br or '<span class="text-muted">—</span>'|safe }}</td>
