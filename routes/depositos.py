@@ -296,7 +296,7 @@ def api_candidatos(comprovacao_id):
         if not dep:
             return jsonify([])
 
-        valor     = float(dep['valor']) if dep['valor'] else 0
+        valor     = float(dep['valor'] or 0)
         data_ref  = dep['data_caixa']
         if hasattr(data_ref, 'isoformat'):
             data_ref = data_ref.isoformat()
