@@ -137,7 +137,11 @@ def _fetch_depositos(conn, data_inicio, data_fim, cliente_ids=None,
     status:     'pendente' | 'conciliado' | None (todos)
     """
     where = ["lc.data BETWEEN %s AND %s",
-             "fpc.tipo IN ('DEPOSITO_ESPECIE','DEPOSITO_CHEQUE_VISTA','DEPOSITO_CHEQUE_PRAZO')"]
+             "fpc.tipo IN ('DEPOSITO_ESPECIE','DEPOSITO_CHEQUE_VISTA','DEPOSITO_CHEQUE_PRAZO')",
+             # Exclui caixas gerados automaticamente pelo módulo Troco PIX:
+             # sua data é a data da transação (não de um fechamento real), o que
+             # causaria DATA CAIXA incorreta na listagem de depósitos.
+             "NOT EXISTS (SELECT 1 FROM troco_pix tp WHERE tp.lancamento_caixa_id = lc.id)"]
     params = [data_inicio, data_fim]
 
     if cliente_ids:
@@ -268,22 +272,25 @@ def listar():
 @login_required
 def api_candidatos(comprovacao_id):
     """
-    API: retorna transações bancárias CREDIT pendentes que podem ser matches
-    para o depósito informado.
+    API: retorna transações bancárias CREDIT que podem ser matches para o
+    depósito informado.
 
-    Busca transações dentro de ±MATCH_WINDOW_DAYS da data do caixa e, quando
-    o tipo_grupo é CHEQUE, filtra por formas de recebimento com 'CHEQUE' no
-    nome (via formas_recebimento ligadas a bank_accounts — heurística simples).
+    Busca transações dentro de ±MATCH_WINDOW_DAYS da data do caixa.
+    Filtra por tipo de depósito (CHEQUE ou ESPÉCIE) usando conf_depositos_vinculos;
+    quando não configurado, cai no fallback por nome de formas_recebimento.
+    Inclui transações pendentes e conciliadas para recebimento (que ainda não
+    foram vinculadas como depósito).
     Ordenado por proximidade de valor e data.
     """
     conn = get_db_connection()
     cur  = conn.cursor(dictionary=True)
     try:
-        # Carrega o depósito
+        # Carrega o depósito (inclui cliente_id para filtrar por tipo)
         cur.execute(
             """
             SELECT lcc.id, lcc.valor, lcc.bank_transaction_id,
                    lc.data AS data_caixa,
+                   lc.cliente_id,
                    fpc.tipo AS forma_tipo
               FROM lancamentos_caixa_comprovacao lcc
               JOIN lancamentos_caixa      lc  ON lc.id  = lcc.lancamento_caixa_id
@@ -296,8 +303,9 @@ def api_candidatos(comprovacao_id):
         if not dep:
             return jsonify([])
 
-        valor     = float(dep['valor'] or 0)
-        data_ref  = dep['data_caixa']
+        valor      = float(dep['valor'] or 0)
+        data_ref   = dep['data_caixa']
+        cliente_id = dep.get('cliente_id')
         if hasattr(data_ref, 'isoformat'):
             data_ref = data_ref.isoformat()
 
@@ -306,19 +314,75 @@ def api_candidatos(comprovacao_id):
         data_fim = (datetime.strptime(data_ref, '%Y-%m-%d').date()
                     + timedelta(days=_MATCH_WINDOW_DAYS)).isoformat()
 
+        dep_tipo_grupo   = _TIPO_GRUPO.get(dep['forma_tipo'], 'ESPECIE')
+        tipo_dep_vinculo = 'CHEQUE' if dep_tipo_grupo == 'CHEQUE' else 'DINHEIRO'
+
+        # Resolve formas_recebimento_ids que correspondem ao tipo de depósito
+        # 1) via conf_depositos_vinculos (configuração explícita por empresa)
+        forma_ids = []
+        if cliente_id:
+            try:
+                cur.execute(
+                    """
+                    SELECT forma_recebimento_id
+                      FROM conf_depositos_vinculos
+                     WHERE empresa_id = %s AND tipo_deposito = %s
+                    """,
+                    (cliente_id, tipo_dep_vinculo),
+                )
+                forma_ids = [r['forma_recebimento_id'] for r in cur.fetchall()]
+            except Exception:
+                forma_ids = []
+
+        # 2) fallback: busca por nome da forma_recebimento
+        if not forma_ids:
+            try:
+                if dep_tipo_grupo == 'CHEQUE':
+                    cur.execute(
+                        "SELECT id FROM formas_recebimento WHERE nome LIKE %s AND ativo = 1",
+                        ('%CHEQUE%',),
+                    )
+                else:
+                    cur.execute(
+                        "SELECT id FROM formas_recebimento WHERE (nome LIKE %s OR nome LIKE %s OR nome LIKE %s) AND ativo = 1",
+                        ('%DINHEIRO%', '%ESPÉCIE%', '%ESPECIE%'),
+                    )
+                forma_ids = [r['id'] for r in cur.fetchall()]
+            except Exception:
+                forma_ids = []
+
+        # Monta filtro de forma_recebimento (se encontrado algum)
+        forma_filter = ''
+        forma_params = []
+        if forma_ids:
+            ph = ','.join(['%s'] * len(forma_ids))
+            forma_filter = f'AND bt.forma_recebimento_id IN ({ph})'
+            forma_params = forma_ids
+
+        # Inclui: pendente OU conciliado-para-recebimento (ainda não vinculado como depósito)
+        status_filter = (
+            "(bt.status = 'pendente' OR "
+            "(bt.status = 'conciliado' AND "
+            " (bt.tipo_conciliacao IS NULL OR "
+            "  bt.tipo_conciliacao NOT IN ('deposito','transferencia','troco_pix'))))"
+        )
+
         cur.execute(
-            """
+            f"""
             SELECT bt.id, bt.data_transacao, bt.valor, bt.descricao,
-                   ba.apelido AS conta_apelido, ba.banco_nome
+                   ba.apelido AS conta_apelido, ba.banco_nome,
+                   fr.nome    AS forma_recebimento_nome
               FROM bank_transactions bt
-              JOIN bank_accounts ba ON ba.id = bt.account_id
-             WHERE bt.tipo   = 'CREDIT'
-               AND bt.status = 'pendente'
+              JOIN bank_accounts     ba ON ba.id  = bt.account_id
+              LEFT JOIN formas_recebimento fr ON fr.id = bt.forma_recebimento_id
+             WHERE bt.tipo = 'CREDIT'
+               AND {status_filter}
                AND bt.data_transacao BETWEEN %s AND %s
+               {forma_filter}
              ORDER BY ABS(bt.valor - %s), ABS(DATEDIFF(bt.data_transacao, %s))
              LIMIT 30
             """,
-            (data_ini, data_fim, valor, data_ref),
+            [data_ini, data_fim] + forma_params + [valor, data_ref],
         )
         rows = cur.fetchall()
         for r in rows:
