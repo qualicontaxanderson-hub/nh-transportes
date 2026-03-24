@@ -456,18 +456,27 @@ function copiarParaWhatsApp(event) {
     {% if depositos_especie|length > 0 %}
     {% set total_especie = depositos_especie|map(attribute='valor')|map('float')|sum %}
     texto += `• *Depósitos em Espécie ({{ depositos_especie|length }}): R$ {{ "{:,.2f}".format(total_especie).replace(',', 'X').replace('.', ',').replace('X', '.') }}*\n`;
+    {% for dep in depositos_especie %}
+    texto += `  └ Depósito #{{ loop.index }}{% if dep.data_deposito %} ({{ dep.data_deposito.strftime('%d/%m/%Y') if dep.data_deposito else '' }}){% endif %}: R$ {{ "{:,.2f}".format(dep.valor|float).replace(',', 'X').replace('.', ',').replace('X', '.') }}{% if dep.descricao %} — {{ dep.descricao }}{% endif %}\n`;
+    {% endfor %}
     {% endif %}
     
     {% set depositos_vista = comprovacoes|selectattr('forma_tipo', 'equalto', 'DEPOSITO_CHEQUE_VISTA')|list %}
     {% if depositos_vista|length > 0 %}
     {% set total_vista = depositos_vista|map(attribute='valor')|map('float')|sum %}
     texto += `• *Depósitos em Cheques À Vista ({{ depositos_vista|length }}): R$ {{ "{:,.2f}".format(total_vista).replace(',', 'X').replace('.', ',').replace('X', '.') }}*\n`;
+    {% for dep in depositos_vista %}
+    texto += `  └ Cheque #{{ loop.index }}{% if dep.data_deposito %} ({{ dep.data_deposito.strftime('%d/%m/%Y') if dep.data_deposito else '' }}){% endif %}: R$ {{ "{:,.2f}".format(dep.valor|float).replace(',', 'X').replace('.', ',').replace('X', '.') }}{% if dep.descricao %} — {{ dep.descricao }}{% endif %}\n`;
+    {% endfor %}
     {% endif %}
     
     {% set depositos_prazo = comprovacoes|selectattr('forma_tipo', 'equalto', 'DEPOSITO_CHEQUE_PRAZO')|list %}
     {% if depositos_prazo|length > 0 %}
     {% set total_prazo = depositos_prazo|map(attribute='valor')|map('float')|sum %}
     texto += `• *Depósitos em Cheques A Prazo ({{ depositos_prazo|length }}): R$ {{ "{:,.2f}".format(total_prazo).replace(',', 'X').replace('.', ',').replace('X', '.') }}*\n`;
+    {% for dep in depositos_prazo %}
+    texto += `  └ Cheque #{{ loop.index }}{% if dep.data_deposito %} ({{ dep.data_deposito.strftime('%d/%m/%Y') if dep.data_deposito else '' }}){% endif %}: R$ {{ "{:,.2f}".format(dep.valor|float).replace(',', 'X').replace('.', ',').replace('X', '.') }}{% if dep.descricao %} — {{ dep.descricao }}{% endif %}\n`;
+    {% endfor %}
     {% endif %}
     
     {% if depositos_cheques and depositos_cheques|length > 0 %}

@@ -1126,43 +1126,38 @@ document.addEventListener('DOMContentLoaded', function() {
         
         // Handle different types of formas_pagamento
         if (tipo === 'DEPOSITO_ESPECIE' || tipo === 'DEPOSITO_CHEQUE_VISTA' || tipo === 'DEPOSITO_CHEQUE_PRAZO') {
-            // Multiple entries allowed - add each one by clicking the Add button
+            // Multiple entries allowed - create each entry directly (no click+setTimeout race)
             console.log(`  Loading ${comps.length} deposits of tipo: ${tipo}`);
-            for (let i = 0; i < comps.length; i++) {
-                const comp = comps[i];
-                console.log(`    Deposit ${i}: valor=${comp.valor}, descricao="${comp.descricao}"`);
-                
-                // For ALL deposits (including first), click Add button to create the input
-                const addButton = document.querySelector(`button[onclick*="addDepositoEntry"][onclick*="${tipo}"]`);
-                if (addButton) {
-                    addButton.click();
-                    // Wait a bit for DOM to update, then fill
-                    setTimeout(() => {
-                        const allInputs = document.querySelectorAll(`input[data-comprovacao-forma="${tipo}"]`);
-                        const lastValorInput = allInputs[allInputs.length - 1];
-                        const lastItem = lastValorInput?.closest('.comprovacao-item');
-                        const lastDescInput = lastItem?.querySelector('input[placeholder*="Descrição"]');
-                        const lastDateInput = lastItem?.querySelector('.comprovacao-data-deposito');
-                        console.log(`    After clicking Add, found ${allInputs.length} inputs, filling last one with ${comp.valor}`);
-                        if (lastValorInput) {
-                            lastValorInput.value = parseFloat(comp.valor).toLocaleString('pt-BR', {
-                                minimumFractionDigits: 2,
-                                maximumFractionDigits: 2
-                            });
-                        }
-                        if (lastDescInput && comp.descricao) {
-                            lastDescInput.value = comp.descricao;
-                        }
-                        if (lastDateInput && comp.data_deposito) {
-                            lastDateInput.value = comp.data_deposito;
-                        }
-                        // Recalculate totals after filling
-                        if (tipo === 'DEPOSITO_ESPECIE') calcularTotaisDeposito('DEPOSITO_ESPECIE');
-                        if (tipo === 'DEPOSITO_CHEQUE_VISTA') calcularTotaisDeposito('DEPOSITO_CHEQUE_VISTA');
-                        if (tipo === 'DEPOSITO_CHEQUE_PRAZO') calcularTotaisDeposito('DEPOSITO_CHEQUE_PRAZO');
-                        calcularTotais();
-                    }, 100 * (i + 1)); // Add 1 to ensure first deposit also waits
+            const depositosContainer = document.getElementById(`depositos-${tipo}`);
+            if (!depositosContainer) {
+                console.warn(`  Container #depositos-${tipo} not found`);
+            } else {
+                for (let i = 0; i < comps.length; i++) {
+                    const comp = comps[i];
+                    console.log(`    Deposit ${i}: valor=${comp.valor}, data=${comp.data_deposito}, descricao="${comp.descricao}"`);
+                    // Create the entry directly via addDepositoEntry (synchronous DOM append)
+                    addDepositoEntry(tipo, tipo);
+                    // Immediately fill the last-appended row
+                    const allValorInputs = depositosContainer.querySelectorAll('input.comprovacao-valor');
+                    const lastValorInput = allValorInputs[allValorInputs.length - 1];
+                    const lastItem = lastValorInput?.closest('.comprovacao-item');
+                    const lastDescInput = lastItem?.querySelector('input.comprovacao-descricao');
+                    const lastDateInput = lastItem?.querySelector('input.comprovacao-data-deposito');
+                    if (lastValorInput) {
+                        lastValorInput.value = parseFloat(comp.valor).toLocaleString('pt-BR', {
+                            minimumFractionDigits: 2,
+                            maximumFractionDigits: 2
+                        });
+                    }
+                    if (lastDescInput && comp.descricao) {
+                        lastDescInput.value = comp.descricao;
+                    }
+                    if (lastDateInput && comp.data_deposito) {
+                        lastDateInput.value = comp.data_deposito;
+                    }
                 }
+                calcularTotaisDeposito(tipo);
+                calcularTotais();
             }
         } else if (tipo === 'CARTAO') {
             // Card with bandeira - find the input by bandeira_cartao_id
@@ -1180,47 +1175,6 @@ document.addEventListener('DOMContentLoaded', function() {
             // Calculate totals for both debit and credit (the function will handle which one)
             calcularTotaisCartao('DEBITO');
             calcularTotaisCartao('CREDITO');
-        } else if (tipo === 'DEPOSITO_ESPECIE' || tipo === 'DEPOSITO_CHEQUE_VISTA' || tipo === 'DEPOSITO_CHEQUE_PRAZO') {
-            // Deposits - tipo directly tells us which deposit type it is
-            console.log(`Found ${comps.length} deposits of tipo ${tipo}`);
-            
-            for (const comp of comps) {
-                console.log(`Adding deposit entry for ${tipo}, valor: ${comp.valor}`);
-                
-                // Find the "add" button for this deposit type and click it to create an entry
-                const addButton = document.querySelector(`button[onclick*="addDeposito"][onclick*="${tipo}"]`);
-                if (addButton) {
-                    console.log(`Found add button for ${tipo}, clicking it`);
-                    addButton.click();
-                    
-                    // Wait a bit for the new input to be created
-                    setTimeout(() => {
-                        // Find the last (most recently added) input for this deposit type
-                        const container = addButton.closest('.comprovacao-item');
-                        const inputs = container.querySelectorAll('input[type="number"]');
-                        const lastInput = inputs[inputs.length - 1];
-                        
-                        if (lastInput) {
-                            lastInput.value = parseFloat(comp.valor).toLocaleString('pt-BR', {
-                                minimumFractionDigits: 2,
-                                maximumFractionDigits: 2
-                            });
-                            console.log(`Set deposit ${tipo} to ${lastInput.value}`);
-                        } else {
-                            console.log(`Could not find input in container for ${tipo}`);
-                        }
-                    }, 100);
-                } else {
-                    console.log(`Add button NOT FOUND for ${tipo}`);
-                }
-            }
-            
-            // Calculate totals for all deposit types
-            setTimeout(() => {
-                calcularTotaisDeposito('DEPOSITO_ESPECIE');
-                calcularTotaisDeposito('DEPOSITO_CHEQUE_VISTA');
-                calcularTotaisDeposito('DEPOSITO_CHEQUE_PRAZO');
-            }, 200);
         } else if (tipo === 'RETIRADA_PAGAMENTO') {
             // RETIRADA_PAGAMENTO has multiple fields with same tipo but different descriptions
             // Need to match by description to fill the correct field
