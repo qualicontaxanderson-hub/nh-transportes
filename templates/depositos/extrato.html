@@ -1,0 +1,265 @@
+{% extends "base.html" %}
+
+{% block title %}Extrato OFX – Depósitos{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+
+  <!-- Header -->
+  <div class="d-flex justify-content-between align-items-center mt-2 mb-3">
+    <div>
+      <h2 style="color:#1D63A5;font-size:1.25rem;margin:0;">
+        <i class="bi bi-journal-text"></i> Extrato OFX – Créditos Bancários
+      </h2>
+      <p class="text-muted mb-0" style="font-size:0.78rem;">
+        Transações de crédito importadas via OFX e seu status de vinculação aos depósitos do Fechamento de Caixa
+      </p>
+    </div>
+    <div>
+      <a href="{{ url_for('depositos.listar', data_inicio=data_inicio, data_fim=data_fim) }}"
+         class="btn btn-outline-secondary btn-sm" style="font-size:0.78rem;">
+        <i class="bi bi-arrow-left"></i> Voltar para Depósitos
+      </a>
+    </div>
+  </div>
+
+  <!-- Stat cards -->
+  <div class="row g-2 mb-3">
+    <div class="col-6 col-md-3">
+      <div class="ext-stat-card">
+        <span class="ext-icon ext-warn"><i class="bi bi-hourglass-split"></i></span>
+        <div>
+          <div class="ext-label">Sem Vinculação</div>
+          <div class="ext-value">{{ qtd_nao_vinculado }}</div>
+        </div>
+      </div>
+    </div>
+    <div class="col-6 col-md-3">
+      <div class="ext-stat-card">
+        <span class="ext-icon ext-ok"><i class="bi bi-check-circle"></i></span>
+        <div>
+          <div class="ext-label">Vinculados</div>
+          <div class="ext-value">{{ qtd_vinculado }}</div>
+        </div>
+      </div>
+    </div>
+    <div class="col-6 col-md-3">
+      <div class="ext-stat-card">
+        <span class="ext-icon ext-danger"><i class="bi bi-currency-dollar"></i></span>
+        <div>
+          <div class="ext-label">Total Não Vinculado</div>
+          <div class="ext-value" style="font-size:0.82rem;">{{ total_nao_vinculado | formatar_moeda }}</div>
+        </div>
+      </div>
+    </div>
+    <div class="col-6 col-md-3">
+      <div class="ext-stat-card">
+        <span class="ext-icon ext-info"><i class="bi bi-wallet2"></i></span>
+        <div>
+          <div class="ext-label">Total Geral</div>
+          <div class="ext-value" style="font-size:0.82rem;">{{ total_geral | formatar_moeda }}</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Filtros -->
+  <div class="card shadow-sm mb-3">
+    <div class="card-header py-2 d-flex align-items-center" style="background:#1D63A5;color:white;font-size:0.78rem;font-weight:600;">
+      <i class="bi bi-funnel me-1"></i> Filtros
+    </div>
+    <div class="card-body py-2 px-3" style="font-size:0.78rem;">
+      <form method="GET" action="{{ url_for('depositos.extrato') }}">
+        <div class="row g-2 align-items-end">
+          <div class="col-md-2">
+            <label class="form-label mb-1 fw-semibold" style="font-size:0.72rem;">Data Início</label>
+            <input type="date" class="form-control form-control-sm" name="data_inicio"
+                   value="{{ data_inicio }}" style="font-size:0.75rem;">
+          </div>
+          <div class="col-md-2">
+            <label class="form-label mb-1 fw-semibold" style="font-size:0.72rem;">Data Fim</label>
+            <input type="date" class="form-control form-control-sm" name="data_fim"
+                   value="{{ data_fim }}" style="font-size:0.75rem;">
+          </div>
+          <div class="col-md-4">
+            <label class="form-label mb-1 fw-semibold" style="font-size:0.72rem;">Conta Bancária</label>
+            <select class="form-select form-select-sm" name="conta_ids[]" style="font-size:0.75rem;" multiple size="1">
+              <option value="">Todas</option>
+              {% for c in contas %}
+              <option value="{{ c.id }}" {% if c.id|string in conta_ids %}selected{% endif %}>{{ c.nome }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-md-1 d-flex gap-1">
+            <button type="submit" class="btn btn-primary btn-sm px-2" title="Filtrar" style="font-size:0.75rem;">
+              <i class="bi bi-search"></i>
+            </button>
+            <a href="{{ url_for('depositos.extrato') }}" class="btn btn-outline-secondary btn-sm px-2" title="Limpar" style="font-size:0.75rem;">
+              <i class="bi bi-x"></i>
+            </a>
+          </div>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Tabela -->
+  <div class="card shadow-sm">
+    <div class="card-header py-2 d-flex justify-content-between align-items-center"
+         style="background:#1D63A5;color:white;font-size:0.78rem;font-weight:600;">
+      <span><i class="bi bi-list-ul me-1"></i> Transações de Crédito (OFX)</span>
+      {% if transacoes %}
+      <span class="badge bg-white text-secondary" style="font-size:0.68rem;">{{ transacoes|length }}</span>
+      {% endif %}
+    </div>
+    <div class="card-body p-0">
+      {% if transacoes %}
+      <div class="table-responsive">
+        <table class="table table-hover mb-0 ext-table">
+          <thead>
+            <tr>
+              <th>Data</th>
+              <th>Conta</th>
+              <th>Forma Recebimento</th>
+              <th>Descrição</th>
+              <th class="text-end">Valor OFX</th>
+              <th class="text-center">Status</th>
+              <th class="text-end">Total Vinculado</th>
+              <th class="text-end">Diferença</th>
+              <th class="text-center">Ações</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for t in transacoes %}
+            {% set diferenca = t.valor - t.total_depositos_vinculados %}
+            <tr class="{% if t.vinculado %}ext-vinculado{% else %}ext-pendente{% endif %}">
+              <td class="fw-semibold">{{ t.data_transacao_br }}</td>
+              <td style="max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+                {{ t.conta_apelido or t.banco_nome or '—' }}
+              </td>
+              <td>
+                {% if t.forma_recebimento_nome %}
+                <span class="ext-badge ext-badge-forma">{{ t.forma_recebimento_nome }}</span>
+                {% else %}
+                <span class="text-muted">—</span>
+                {% endif %}
+              </td>
+              <td style="max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#555;"
+                  title="{{ t.descricao or '' }}">
+                {{ t.descricao or '—' }}
+              </td>
+              <td class="text-end fw-semibold">{{ t.valor | formatar_moeda }}</td>
+              <td class="text-center">
+                {% if t.vinculado %}
+                  <span class="ext-badge ext-badge-ok">
+                    <i class="bi bi-check-circle"></i> Vinculado
+                    {% if t.qtd_depositos_vinculados > 1 %}
+                    <span class="ms-1">({{ t.qtd_depositos_vinculados }})</span>
+                    {% endif %}
+                  </span>
+                {% else %}
+                  <span class="ext-badge ext-badge-warn">
+                    <i class="bi bi-hourglass-split"></i> Pendente
+                  </span>
+                {% endif %}
+              </td>
+              <td class="text-end">
+                {% if t.vinculado %}
+                <span class="{% if t.total_depositos_vinculados == t.valor %}text-success{% else %}text-warning{% endif %}">
+                  {{ t.total_depositos_vinculados | formatar_moeda }}
+                </span>
+                {% else %}
+                <span class="text-muted">—</span>
+                {% endif %}
+              </td>
+              <td class="text-end">
+                {% if t.vinculado and diferenca != 0 %}
+                  <span class="{% if diferenca > 0 %}text-danger{% else %}text-warning{% endif %} fw-semibold" style="font-size:0.72rem;">
+                    {{ diferenca | formatar_moeda }}
+                  </span>
+                {% elif t.vinculado %}
+                  <span class="text-success" style="font-size:0.72rem;"><i class="bi bi-check2"></i> Ok</span>
+                {% else %}
+                  <span class="text-muted">—</span>
+                {% endif %}
+              </td>
+              <td class="text-center">
+                {% if not t.vinculado %}
+                <a href="{{ url_for('bank_import.conciliar') }}"
+                   class="btn-ext btn-ext-primary" title="Conciliar esta transação">
+                  <i class="bi bi-link-45deg"></i>
+                </a>
+                {% else %}
+                <a href="{{ url_for('depositos.listar', data_inicio=t.data_transacao, data_fim=t.data_transacao, status='conciliado') }}"
+                   class="btn-ext btn-ext-info" title="Ver depósitos vinculados">
+                  <i class="bi bi-eye"></i>
+                </a>
+                {% endif %}
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <div class="text-center text-muted py-4">
+        <i class="bi bi-inbox" style="font-size:1.8rem;opacity:0.4;"></i>
+        <div class="mt-2" style="font-size:0.8rem;">Nenhuma transação OFX de crédito encontrada para o período selecionado.</div>
+        <div class="mt-1" style="font-size:0.75rem;">
+          <a href="{{ url_for('bank_import.index') }}">Importar extrato OFX</a>
+        </div>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+
+</div>
+
+<!-- ── Styles ── -->
+<style>
+.ext-stat-card {
+  display:flex; align-items:center; gap:0.6rem;
+  background:#fff; border:1px solid #e4e9f0; border-radius:6px; padding:0.5rem 0.75rem;
+}
+.ext-icon {
+  display:inline-flex; align-items:center; justify-content:center;
+  width:2rem; height:2rem; border-radius:6px; font-size:1rem; flex-shrink:0;
+}
+.ext-warn   { background:#fff3cd; color:#856404; }
+.ext-ok     { background:#d1e7dd; color:#0f5132; }
+.ext-danger { background:#f8d7da; color:#721c24; }
+.ext-info   { background:#cce5ff; color:#004085; }
+.ext-label  { font-size:0.68rem; color:#6c757d; font-weight:600; text-transform:uppercase; letter-spacing:0.04em; }
+.ext-value  { font-size:1rem; font-weight:700; color:#212529; line-height:1.1; }
+
+.ext-table { font-size:0.75rem; }
+.ext-table thead tr { background:#f0f4f8; }
+.ext-table thead th {
+  font-size:0.65rem; font-weight:700; text-transform:uppercase;
+  letter-spacing:0.05em; color:#5a6a7a; padding:0.45rem 0.6rem;
+  border-bottom:2px solid #dee2e6; white-space:nowrap;
+}
+.ext-table tbody tr { border-bottom:1px solid #f0f4f8; }
+.ext-table tbody td { padding:0.35rem 0.6rem; vertical-align:middle; }
+.ext-table tbody tr:hover { background:#f7faff; }
+.ext-vinculado td { opacity:0.80; }
+
+.ext-badge {
+  display:inline-block; font-size:0.65rem; font-weight:600;
+  padding:0.15rem 0.4rem; border-radius:3px; white-space:nowrap;
+}
+.ext-badge-ok    { background:#d1e7dd; color:#0f5132; }
+.ext-badge-warn  { background:#fff3cd; color:#856404; }
+.ext-badge-forma { background:#e9ecef; color:#495057; }
+
+.btn-ext {
+  display:inline-flex; align-items:center; justify-content:center;
+  width:1.55rem; height:1.55rem; border-radius:4px; font-size:0.7rem;
+  border:none; cursor:pointer; text-decoration:none;
+  transition:opacity 0.12s; background:transparent; padding:0;
+}
+.btn-ext:hover { opacity:0.72; }
+.btn-ext-info    { background:#cce5ff; color:#004085; }
+.btn-ext-primary { background:#cfe2ff; color:#084298; }
+</style>
+{% endblock %}

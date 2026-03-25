@@ -542,3 +542,130 @@ def desvincular(comprovacao_id):
         conn.close()
 
     return redirect(url_for('depositos.listar'))
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Extrato bancário – transações OFX CREDIT com status de vinculação
+# ──────────────────────────────────────────────────────────────────────────────
+
+def _fetch_extrato_bancario(conn, data_inicio, data_fim, conta_ids=None):
+    """
+    Retorna transações bancárias de CRÉDITO importadas via OFX no período.
+    Indica para cada transação se já está vinculada a algum depósito do caixa,
+    e o total de depósitos vinculados.
+    """
+    where = ["bt.tipo = 'CREDIT'",
+             "bt.data_transacao BETWEEN %s AND %s"]
+    params = [data_inicio, data_fim]
+
+    if conta_ids:
+        ph = ','.join(['%s'] * len(conta_ids))
+        where.append(f"bt.account_id IN ({ph})")
+        params.extend(int(x) for x in conta_ids)
+
+    sql = f"""
+        SELECT
+            bt.id,
+            bt.data_transacao,
+            bt.valor,
+            bt.descricao,
+            bt.status,
+            bt.tipo_conciliacao,
+            ba.apelido                AS conta_apelido,
+            ba.banco_nome,
+            fr.nome                   AS forma_recebimento_nome,
+            (SELECT COUNT(*)
+               FROM lancamentos_caixa_comprovacao lcc2
+              WHERE lcc2.bank_transaction_id = bt.id) AS qtd_depositos_vinculados,
+            (SELECT COALESCE(SUM(lcc2.valor), 0)
+               FROM lancamentos_caixa_comprovacao lcc2
+              WHERE lcc2.bank_transaction_id = bt.id) AS total_depositos_vinculados
+        FROM bank_transactions bt
+        JOIN bank_accounts     ba ON ba.id  = bt.account_id
+        LEFT JOIN formas_recebimento fr ON fr.id = bt.forma_recebimento_id
+        WHERE {' AND '.join(where)}
+        ORDER BY bt.data_transacao DESC, bt.id DESC
+    """
+    cur = conn.cursor(dictionary=True)
+    try:
+        cur.execute(sql, params)
+        rows = cur.fetchall()
+    except Exception:
+        rows = []
+    finally:
+        cur.close()
+
+    for r in rows:
+        if r.get('valor') is not None:
+            r['valor'] = float(r['valor'])
+        if r.get('total_depositos_vinculados') is not None:
+            r['total_depositos_vinculados'] = float(r['total_depositos_vinculados'])
+        if r.get('data_transacao') and not isinstance(r['data_transacao'], str):
+            r['data_transacao'] = (
+                r['data_transacao'].isoformat()
+                if hasattr(r['data_transacao'], 'isoformat')
+                else str(r['data_transacao'])
+            )
+        r['data_transacao_br'] = _fmt_br(r.get('data_transacao'))
+        r['vinculado'] = r.get('qtd_depositos_vinculados', 0) > 0
+    return rows
+
+
+def _get_contas_bancarias(conn):
+    cur = conn.cursor(dictionary=True)
+    try:
+        cur.execute(
+            "SELECT id, COALESCE(apelido, banco_nome) AS nome FROM bank_accounts ORDER BY nome"
+        )
+        return cur.fetchall()
+    except Exception:
+        return []
+    finally:
+        cur.close()
+
+
+@bp.route('/extrato')
+@login_required
+@admin_required
+def extrato():
+    """
+    Extrato bancário: mostra as transações CREDIT importadas via OFX no período,
+    indicando quais já estão vinculadas a depósitos do Fechamento de Caixa e
+    quais ainda estão sem destinação — permitindo ao usuário identificar e
+    conciliar transações pendentes.
+    """
+    args = request.args
+
+    data_inicio = args.get('data_inicio', '').strip()
+    data_fim    = args.get('data_fim',    '').strip()
+    if not data_inicio and not data_fim:
+        data_inicio, data_fim = _default_period()
+
+    conta_ids = [c for c in args.getlist('conta_ids[]') if c]
+
+    conn = get_db_connection()
+    try:
+        contas     = _get_contas_bancarias(conn)
+        transacoes = _fetch_extrato_bancario(conn, data_inicio, data_fim, conta_ids=conta_ids)
+    finally:
+        conn.close()
+
+    total_vinculado     = sum(t['valor'] for t in transacoes if t['vinculado'])
+    total_nao_vinculado = sum(t['valor'] for t in transacoes if not t['vinculado'])
+    total_geral         = sum(t['valor'] for t in transacoes)
+    qtd_vinculado       = sum(1 for t in transacoes if t['vinculado'])
+    qtd_nao_vinculado   = sum(1 for t in transacoes if not t['vinculado'])
+
+    return render_template(
+        'depositos/extrato.html',
+        transacoes=transacoes,
+        contas=contas,
+        data_inicio=data_inicio,
+        data_fim=data_fim,
+        conta_ids=conta_ids,
+        total_vinculado=total_vinculado,
+        total_nao_vinculado=total_nao_vinculado,
+        total_geral=total_geral,
+        qtd_vinculado=qtd_vinculado,
+        qtd_nao_vinculado=qtd_nao_vinculado,
+    )

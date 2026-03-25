@@ -1012,6 +1012,46 @@ def editar(id):
             resultado = cursor.fetchone()
             print(f"[DEBUG EDIT] Após UPDATE - status={resultado['status']}, observacao={resultado.get('observacao', 'NULL')[:50] if resultado.get('observacao') else 'NULL'}")
             
+            # Before deleting comprovacoes, reset bank_transactions that become orphaned
+            # (i.e. no other lancamento_caixa still references the same bank_transaction_id)
+            try:
+                cursor.execute(
+                    """SELECT DISTINCT bank_transaction_id
+                         FROM lancamentos_caixa_comprovacao
+                        WHERE lancamento_caixa_id = %s
+                          AND bank_transaction_id IS NOT NULL""",
+                    (id,),
+                )
+                bt_ids = [r['bank_transaction_id'] for r in cursor.fetchall()]
+                for bt_id in bt_ids:
+                    cursor.execute(
+                        """SELECT COUNT(*) AS cnt
+                             FROM lancamentos_caixa_comprovacao
+                            WHERE bank_transaction_id = %s
+                              AND lancamento_caixa_id <> %s""",
+                        (bt_id, id),
+                    )
+                    still_linked = (cursor.fetchone() or {}).get('cnt', 0)
+                    if not still_linked:
+                        try:
+                            cursor.execute(
+                                """UPDATE bank_transactions
+                                      SET status='pendente', conciliado_em=NULL,
+                                          conciliado_por=NULL, tipo_conciliacao=NULL
+                                    WHERE id=%s""",
+                                (bt_id,),
+                            )
+                        except Exception:
+                            cursor.execute(
+                                """UPDATE bank_transactions
+                                      SET status='pendente', conciliado_em=NULL,
+                                          conciliado_por=NULL
+                                    WHERE id=%s""",
+                                (bt_id,),
+                            )
+            except Exception:
+                pass  # Non-critical: don't block the edit if migration hasn't run yet
+
             # Delete old receitas and comprovacoes
             cursor.execute("DELETE FROM lancamentos_caixa_receitas WHERE lancamento_caixa_id = %s", (id,))
             cursor.execute("DELETE FROM lancamentos_caixa_comprovacao WHERE lancamento_caixa_id = %s", (id,))
