@@ -10,13 +10,20 @@ bp = Blueprint('lancamentos_funcionarios', __name__, url_prefix='/lancamentos-fu
 
 def _ensure_tipo_funcionario(conn):
     """
-    Adiciona coluna tipo_funcionario à tabela lancamentosfuncionarios_v2 se
-    ainda não existir e faz o backfill dos dados existentes.
+    Garante que a coluna tipo_funcionario existe em lancamentosfuncionarios_v2 e
+    que todos os registros estão corretamente classificados.
 
-    Regras de backfill (aplicadas na ordem):
-    1. funcionarioid existe APENAS em motoristas → 'motorista'
-    2. funcionarioid está em ambas as tabelas e a rubrica é Comissão → 'motorista'
-    3. Todos os demais → 'funcionario'
+    Regras de classificação (aplicadas em ordem de prioridade):
+    1. funcionarioid existe APENAS em motoristas (sem colisão de ID) → 'motorista'
+    2. funcionarioid existe em AMBAS as tabelas (colisão) e há pelo menos uma
+       rubrica de Comissão para esse ID → TODOS os registros desse ID = 'motorista'
+    3. Demais → 'funcionario' (DEFAULT da coluna)
+
+    A etapa 2 é executada SEMPRE (não só na criação da coluna) para corrigir
+    registros que possam ter ficado como 'funcionario' em backfills anteriores —
+    p.ex. linhas de Salário/Vale Alimentação de motoristas cujo ID colide com um
+    frentista, cujas linhas de Comissão foram marcadas corretamente mas as demais
+    linhas permaneceram como 'funcionario'.
     """
     cur = conn.cursor()
     cur.execute(
@@ -33,7 +40,8 @@ def _ensure_tipo_funcionario(conn):
         )
         conn.commit()
 
-        # Backfill 1: IDs que existem APENAS em motoristas (sem colisão)
+        # Backfill 1: IDs que existem APENAS em motoristas (sem colisão) →
+        # todas as linhas desse ID recebem 'motorista'
         cur.execute("""
             UPDATE lancamentosfuncionarios_v2 lf
             JOIN  motoristas   m ON m.id = lf.funcionarioid
@@ -43,16 +51,27 @@ def _ensure_tipo_funcionario(conn):
         """)
         conn.commit()
 
-        # Backfill 2: IDs colidente (em ambas as tabelas) mas rubrica = Comissão → motorista
-        cur.execute("""
-            UPDATE lancamentosfuncionarios_v2 lf
-            JOIN  motoristas   m ON m.id = lf.funcionarioid
-            JOIN  funcionarios f ON f.id = lf.funcionarioid
-            JOIN  rubricas     r ON r.id = lf.rubricaid
-            SET   lf.tipo_funcionario = 'motorista'
-            WHERE r.nome IN ('Comissão', 'Comissão / Aj. Custo')
-        """)
-        conn.commit()
+    # Repair (executa SEMPRE, é no-op quando já está correto):
+    # Para IDs colidentes, usa a presença de rubrica de Comissão como
+    # desambiguador ao nível do ID — marca TODAS as linhas do motorista
+    # (Salário, Vale Alimentação, Comissão, etc.) como 'motorista'.
+    # Usa subconsulta envolta em alias para contornar restrição MySQL de
+    # UPDATE + SELECT na mesma tabela.
+    cur.execute("""
+        UPDATE lancamentosfuncionarios_v2
+        SET    tipo_funcionario = 'motorista'
+        WHERE  tipo_funcionario != 'motorista'
+        AND    funcionarioid IN (
+            SELECT id FROM (
+                SELECT DISTINCT m.id
+                FROM   motoristas m
+                JOIN   lancamentosfuncionarios_v2 lf2 ON lf2.funcionarioid = m.id
+                JOIN   rubricas r                     ON r.id = lf2.rubricaid
+                WHERE  r.nome IN ('Comissão', 'Comissão / Aj. Custo')
+            ) AS motoristas_com_comissao
+        )
+    """)
+    conn.commit()
     cur.close()
 
 
