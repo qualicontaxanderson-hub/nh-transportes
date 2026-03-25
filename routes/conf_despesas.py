@@ -257,6 +257,248 @@ def _build_category_matrix(lancamentos, months):
     return blocks, grand_by_month, grand_total
 
 
+def _fetch_func_lancamentos(conn, months, empresa_ids):
+    """
+    Retorna lançamentos de funcionários (lancamentosfuncionarios_v2) para os
+    meses do período, com metadados de funcionário, categoria, veículo e rubrica.
+
+    O campo ``mes`` nessa tabela é 'MM/YYYY'; convertemos para a chave YYYYMM
+    antes de retornar.
+    """
+    if not months:
+        return []
+
+    # Constrói lista de strings 'MM/YYYY' para o período
+    mes_list = [f"{m['month']:02d}/{m['year']}" for m in months]
+    ph       = ','.join(['%s'] * len(mes_list))
+    params   = list(mes_list)
+
+    where = [f"lf.mes IN ({ph})"]
+    if empresa_ids:
+        ph2 = ','.join(['%s'] * len(empresa_ids))
+        where.append(f"lf.clienteid IN ({ph2})")
+        params.extend(empresa_ids)
+
+    sql = f"""
+        SELECT
+            lf.funcionarioid,
+            f.nome                                                         AS funcionario_nome,
+            UPPER(COALESCE(f.categoria, 'OUTROS'))                        AS categoria_func,
+            lf.caminhaoid                                                  AS veiculo_id,
+            COALESCE(
+                CONCAT(v.caminhao,
+                       CASE WHEN v.modelo IS NOT NULL AND v.modelo != ''
+                            THEN CONCAT(' ', v.modelo) ELSE '' END),
+                'SEM CAMINHÃO'
+            )                                                              AS veiculo_nome,
+            lf.mes,
+            COALESCE(r.nome, 'OUTROS')                                    AS rubrica_nome,
+            COALESCE(r.tipo, 'PROVENTO')                                  AS rubrica_tipo,
+            lf.valor
+        FROM lancamentosfuncionarios_v2 lf
+        INNER JOIN funcionarios f ON f.id = lf.funcionarioid
+        LEFT  JOIN veiculos v     ON v.id = lf.caminhaoid
+        LEFT  JOIN rubricas r     ON r.id = lf.rubricaid
+        WHERE {' AND '.join(where)}
+        ORDER BY f.categoria, f.nome, lf.mes
+    """
+    cur = conn.cursor(dictionary=True)
+    cur.execute(sql, params)
+    rows = cur.fetchall()
+    cur.close()
+    return rows
+
+
+def _build_func_blocks(func_rows, months):
+    """
+    Constrói blocos sintéticos de custo de pessoal para o relatório conf_despesas.
+
+    Regras:
+      - Funcionários com categoria 'MOTORISTA' → bloco "MOTORISTAS (CUSTO POR CAMINHÃO)"
+        Categorias (linhas) = cada caminhão; subcategorias = cada motorista no caminhão.
+      - Todos os demais (FRENTISTA, OUTROS, …) → um bloco por categoria funcional,
+        e.g. "FRENTISTAS"; categorias (linhas) = cada funcionário;
+        subcategorias = cada rubrica do funcionário.
+
+    Retorna (blocks_list, combined_by_month, combined_total).
+    Os blocos devem ser ADICIONADOS ao grand_total do relatório.
+    """
+    month_keys_set = {m['key'] for m in months}
+
+    def _mes_to_mk(mes_str):
+        """'MM/YYYY' → 'YYYYMM'"""
+        try:
+            parts = mes_str.split('/')
+            return f"{parts[1]}{parts[0]}"
+        except Exception:
+            return None
+
+    # Separa MOTORISTAS dos demais
+    motorista_rows = [r for r in func_rows if r.get('categoria_func') == 'MOTORISTA']
+    outros_rows    = [r for r in func_rows if r.get('categoria_func') != 'MOTORISTA']
+
+    # ── 1. Blocos de categorias não-motorista (ex.: FRENTISTAS) ─────────────
+    # Agrupa por categoria_func → funcionarioid → rubrica_nome → mk → float
+    cat_func_tree  = {}   # cat_func → fid → rubrica → mk → float
+    cat_func_names = {}   # cat_func → True (ordering)
+    func_names     = {}   # fid → nome
+    func_cat_map   = {}   # fid → cat_func
+
+    for row in outros_rows:
+        fid      = row['funcionarioid']
+        nome     = row['funcionario_nome']
+        cat_func = row['categoria_func']
+        rub      = row['rubrica_nome']
+        mes      = row['mes']
+        mk       = _mes_to_mk(mes)
+        if not mk or mk not in month_keys_set:
+            continue
+        val = float(row['valor'])
+
+        cat_func_names[cat_func] = True
+        func_names[fid]          = nome
+        func_cat_map[fid]        = cat_func
+
+        cat_func_tree.setdefault(cat_func, {})
+        cat_func_tree[cat_func].setdefault(fid, {})
+        cat_func_tree[cat_func][fid].setdefault(rub, {})
+        cat_func_tree[cat_func][fid][rub][mk] = (
+            cat_func_tree[cat_func][fid][rub].get(mk, 0.0) + val
+        )
+
+    outros_blocks  = []
+    outros_by_month = {m['key']: 0.0 for m in months}
+
+    for cat_func in sorted(cat_func_names):
+        block_by_month = {m['key']: 0.0 for m in months}
+        rows_out       = []
+
+        for fid in sorted(cat_func_tree[cat_func], key=lambda x: func_names.get(x, '')):
+            func_nome    = func_names.get(fid, str(fid))
+            cat_by_month = {m['key']: 0.0 for m in months}
+            subcats      = []
+
+            for rub in sorted(cat_func_tree[cat_func][fid]):
+                rub_by_month = {}
+                rub_total    = 0.0
+                for m in months:
+                    v = cat_func_tree[cat_func][fid][rub].get(m['key'], 0.0)
+                    rub_by_month[m['key']] = v
+                    rub_total             += v
+                    cat_by_month[m['key']] += v
+                subcats.append({
+                    'subcat_id':   f'func_{fid}_{rub}',
+                    'subcat_nome': rub,
+                    'by_month':    rub_by_month,
+                    'total':       rub_total,
+                })
+
+            cat_total = sum(cat_by_month.values())
+            for mk, v in cat_by_month.items():
+                block_by_month[mk] = block_by_month.get(mk, 0.0) + v
+
+            rows_out.append({
+                'categoria_id':   f'func_{fid}',
+                'categoria_nome': func_nome,
+                'by_month':       cat_by_month,
+                'total':          cat_total,
+                'subcats':        subcats,
+            })
+
+        block_total = sum(block_by_month.values())
+        for mk, v in block_by_month.items():
+            outros_by_month[mk] = outros_by_month.get(mk, 0.0) + v
+
+        outros_blocks.append({
+            'titulo_id':      f'func_{cat_func.lower()}',
+            'titulo_nome':    cat_func + 'S' if not cat_func.endswith('S') else cat_func,
+            'rows':           rows_out,
+            'total_by_month': block_by_month,
+            'total':          block_total,
+        })
+
+    # ── 2. Bloco MOTORISTAS POR CAMINHÃO ─────────────────────────────────────
+    # Agrupa por veiculo_id → funcionarioid → mk → float
+    mot_veiculo_meta = {}    # veiculo_id → veiculo_nome
+    mot_func_meta    = {}    # (veiculo_id, fid) → func_nome
+    mot_tree         = {}    # veiculo_id → fid → mk → float
+
+    for row in motorista_rows:
+        fid   = row['funcionarioid']
+        nome  = row['funcionario_nome']
+        vid   = row['veiculo_id'] if row['veiculo_id'] is not None else 'sem'
+        vnome = row['veiculo_nome'] or 'SEM CAMINHÃO'
+        mes   = row['mes']
+        mk    = _mes_to_mk(mes)
+        if not mk or mk not in month_keys_set:
+            continue
+        val = float(row['valor'])
+
+        mot_veiculo_meta[vid]      = vnome
+        mot_func_meta[(vid, fid)]  = nome
+        mot_tree.setdefault(vid, {})
+        mot_tree[vid].setdefault(fid, {})
+        mot_tree[vid][fid][mk] = mot_tree[vid][fid].get(mk, 0.0) + val
+
+    mot_rows_out = []
+    mot_by_month = {m['key']: 0.0 for m in months}
+
+    for vid in sorted(mot_veiculo_meta, key=lambda x: mot_veiculo_meta[x]):
+        vnome        = mot_veiculo_meta[vid]
+        cat_by_month = {m['key']: 0.0 for m in months}
+        subcats      = []
+
+        for fid in sorted(mot_tree.get(vid, {}),
+                          key=lambda x: mot_func_meta.get((vid, x), '')):
+            func_nome    = mot_func_meta.get((vid, fid), str(fid))
+            sub_by_month = {}
+            sub_total    = 0.0
+            for m in months:
+                v = mot_tree[vid][fid].get(m['key'], 0.0)
+                sub_by_month[m['key']] = v
+                sub_total             += v
+                cat_by_month[m['key']] += v
+            subcats.append({
+                'subcat_id':   f'mot_{vid}_{fid}',
+                'subcat_nome': func_nome,
+                'by_month':    sub_by_month,
+                'total':       sub_total,
+            })
+
+        cat_total = sum(cat_by_month.values())
+        for mk, v in cat_by_month.items():
+            mot_by_month[mk] = mot_by_month.get(mk, 0.0) + v
+
+        mot_rows_out.append({
+            'categoria_id':   f'mot_{vid}',
+            'categoria_nome': vnome,
+            'by_month':       cat_by_month,
+            'total':          cat_total,
+            'subcats':        subcats,
+        })
+
+    mot_total = sum(mot_by_month.values())
+    mot_block = {
+        'titulo_id':      'func_motoristas',
+        'titulo_nome':    'MOTORISTAS (CUSTO POR CAMINHÃO)',
+        'rows':           mot_rows_out,
+        'total_by_month': mot_by_month,
+        'total':          mot_total,
+    }
+
+    # ── Combina resultados ───────────────────────────────────────────────────
+    combined_by_month = {m['key']: 0.0 for m in months}
+    for mk in combined_by_month:
+        combined_by_month[mk] = outros_by_month.get(mk, 0.0) + mot_by_month.get(mk, 0.0)
+    combined_total = sum(combined_by_month.values())
+
+    out_blocks = list(outros_blocks)
+    if mot_rows_out:
+        out_blocks.append(mot_block)
+
+    return out_blocks, combined_by_month, combined_total
+
+
 # ──────────────────────────────────────────────────────────────────────────────
 # Route
 # ──────────────────────────────────────────────────────────────────────────────
@@ -297,6 +539,18 @@ def conf_despesas():
             blocks, grand_by_month, grand_total = _build_category_matrix(
                 lancamentos, months
             )
+
+            # ── Adiciona custo de pessoal (lancamentosfuncionarios_v2) ──────
+            func_rows = _fetch_func_lancamentos(conn, months, empresa_ids)
+            func_blocks, func_by_month, func_total = _build_func_blocks(
+                func_rows, months
+            )
+            blocks.extend(func_blocks)
+            for m in months:
+                mk = m['key']
+                grand_by_month[mk] = grand_by_month.get(mk, 0.0) + func_by_month.get(mk, 0.0)
+            grand_total    += func_total
+            total_lancamentos += len(func_rows)
     finally:
         conn.close()
 
