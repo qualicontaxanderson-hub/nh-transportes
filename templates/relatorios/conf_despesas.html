@@ -15,29 +15,75 @@
 .stat-card {
   border: none; border-radius: .6rem; box-shadow: 0 1px 6px rgba(0,0,0,.08);
 }
-.stat-card .stat-label { font-size:.72rem; font-weight:700; text-transform:uppercase; letter-spacing:.05em; opacity:.7; }
-.stat-card .stat-value { font-size:1.45rem; font-weight:700; line-height:1; }
-/* Table styles */
-.tbl-conf { font-size:.78rem; }
-.tbl-conf thead th {
-  font-size:.72rem; text-transform:uppercase; letter-spacing:.04em;
-  white-space:nowrap; padding:.3rem .45rem;
+.stat-card .stat-label {
+  font-size: .72rem; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .05em; opacity: .7;
 }
-.tbl-conf td { padding:.28rem .45rem; vertical-align:middle; }
-/* Row types */
-.row-titulo   { background:#e9f2fb; font-weight:700; }
-.row-cat      { background:#f0fdf4; }
-.row-subcat   { background:#fafafa; }
-.row-total-emp{ background:#1D63A5; color:#fff; font-weight:700; }
-.row-grand    { background:#0d3257; color:#fff; font-weight:700; }
-/* Empresa header */
-.emp-header {
-  background:#1D63A5; color:#fff; padding:.45rem .85rem;
-  border-radius:.4rem .4rem 0 0; font-weight:700; font-size:.88rem;
+.stat-card .stat-value { font-size: 1.45rem; font-weight: 700; line-height: 1; }
+
+/* ── Matrix table ── */
+.tbl-matrix {
+  font-size: .73rem;
+  border-collapse: collapse;
+  width: 100%;
 }
-/* Indent levels */
-.indent-1 { padding-left:1.5rem !important; }
-.indent-2 { padding-left:2.75rem !important; }
+.tbl-matrix th, .tbl-matrix td {
+  padding: .22rem .38rem;
+  border: 1px solid #dee2e6;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+/* sticky first column */
+.tbl-matrix td.col-desc, .tbl-matrix th.col-desc {
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  min-width: 180px;
+  max-width: 260px;
+  white-space: normal;
+  word-break: break-word;
+}
+/* column header */
+.tbl-matrix thead tr th {
+  text-align: center;
+  background: #343a40;
+  color: #fff;
+  font-size: .68rem;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+}
+.tbl-matrix thead tr th.col-desc { text-align: left; background: #343a40; }
+/* titulo block header */
+.row-titulo-hdr td {
+  background: #c0392b;
+  color: #fff;
+  font-weight: 700;
+  font-size: .78rem;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+}
+/* category data rows */
+.row-cat td { background: #fff; }
+.row-cat:hover td { background: #f0f4ff; }
+/* total per block */
+.row-block-total td {
+  background: #1D63A5;
+  color: #fff;
+  font-weight: 700;
+}
+/* grand total */
+.row-grand td {
+  background: #0d3257;
+  color: #fff;
+  font-weight: 700;
+  font-size: .82rem;
+}
+/* zero value muted */
+.val-zero { color: #bbb; }
+/* acum column emphasis */
+.col-acum { background: #f8f5e4 !important; font-weight: 600; }
+.row-block-total .col-acum,
+.row-grand .col-acum { background: rgba(255,255,255,.15) !important; }
 </style>
 {% endblock %}
 
@@ -58,7 +104,7 @@
     <div class="hero-icon"><i class="bi bi-wallet2"></i></div>
     <div class="flex-grow-1">
       <h4 class="mb-0 fw-bold">Conferência de Despesas</h4>
-      <p class="mb-0 opacity-75 small">Visualize e confira os lançamentos de despesas por empresa, título e categoria</p>
+      <p class="mb-0 opacity-75 small">Matriz mensal por categoria — blocos por título, colunas por mês</p>
     </div>
     <a href="/lancamentos_despesas/" class="btn btn-sm px-3 fw-semibold"
        style="background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.35);">
@@ -70,8 +116,10 @@
   <div class="row g-3 mb-4">
     <div class="col-6 col-md-3">
       <div class="card stat-card p-3">
-        <div class="stat-label" style="color:#1D63A5;">Empresas</div>
-        <div class="stat-value" style="color:#1D63A5;">{{ empresas_data | length }}</div>
+        <div class="stat-label" style="color:#1D63A5;">Categorias</div>
+        <div class="stat-value" style="color:#1D63A5;">
+          {{ blocks | map(attribute='rows') | map('length') | sum if blocks else 0 }}
+        </div>
         <div class="small text-muted mt-1">com despesas no período</div>
       </div>
     </div>
@@ -93,11 +141,10 @@
       <div class="card stat-card p-3">
         <div class="stat-label text-muted">Período</div>
         <div class="stat-value text-muted" style="font-size:.9rem;">
-          {% if data_inicio %}{{ data_inicio[8:10] }}/{{ data_inicio[5:7] }}/{{ data_inicio[:4] }}{% endif %}
-          –
-          {% if data_fim %}{{ data_fim[8:10] }}/{{ data_fim[5:7] }}/{{ data_fim[:4] }}{% endif %}
+          {% if months %}{{ months[0].label }}{% if months[0].year != months[-1].year %}/{{ months[0].year }}{% endif %}
+          – {{ months[-1].label }}/{{ months[-1].year }}{% endif %}
         </div>
-        <div class="small text-muted mt-1">intervalo filtrado</div>
+        <div class="small text-muted mt-1">{{ months | length }} mês(es)</div>
       </div>
     </div>
   </div>
@@ -146,21 +193,14 @@
             <div class="form-text">Ctrl+clique p/ múltiplos</div>
           </div>
 
-          <!-- Agrupamento + Botões -->
-          <div class="col-12 col-md-2">
-            <label class="form-label small fw-semibold mb-1">Agrupar por</label>
-            <select name="agrupar" class="form-select form-select-sm mb-2">
-              <option value="empresa" {% if agrupar == 'empresa' %}selected{% endif %}>Empresa</option>
-              <option value="titulo"  {% if agrupar == 'titulo'  %}selected{% endif %}>Título</option>
-            </select>
-            <div class="d-flex gap-2">
-              <button type="submit" class="btn btn-primary btn-sm flex-grow-1">
-                <i class="bi bi-search"></i> Filtrar
-              </button>
-              <a href="{{ url_for('conf_despesas.conf_despesas') }}" class="btn btn-outline-secondary btn-sm">
-                <i class="bi bi-x-circle"></i>
-              </a>
-            </div>
+          <!-- Botões -->
+          <div class="col-12 col-md-2 d-flex gap-2 align-items-end">
+            <button type="submit" class="btn btn-primary btn-sm flex-grow-1">
+              <i class="bi bi-search"></i> Filtrar
+            </button>
+            <a href="{{ url_for('conf_despesas.conf_despesas') }}" class="btn btn-outline-secondary btn-sm">
+              <i class="bi bi-x-circle"></i>
+            </a>
           </div>
 
         </div>
@@ -171,161 +211,89 @@
           <button type="button" class="btn btn-outline-secondary btn-sm periodo-btn" data-periodo="mes_atual">Mês Atual</button>
           <button type="button" class="btn btn-outline-secondary btn-sm periodo-btn" data-periodo="mes_anterior">Mês Anterior</button>
           <button type="button" class="btn btn-outline-secondary btn-sm periodo-btn" data-periodo="ano_atual">Ano Atual</button>
+          <button type="button" class="btn btn-outline-secondary btn-sm periodo-btn" data-periodo="ano_anterior">Ano Anterior</button>
         </div>
       </form>
     </div>
   </div>
 
-  <!-- ── No results ─────────────────────────────────────────────────────────── -->
-  {% if not empresas_data %}
+  <!-- ── No results ────────────────────────────────────────────────────────── -->
+  {% if not blocks %}
   <div class="alert alert-info">
     <i class="bi bi-info-circle me-2"></i>
     Nenhum lançamento de despesa encontrado para os filtros selecionados.
   </div>
 
-  {% elif agrupar == 'titulo' %}
-  <!-- ── View grouped by TÍTULO across all companies ──────────────────────── -->
-  {% set titulo_map = {} %}
-  {% for emp in empresas_data %}
-    {% for tg in emp.titulo_groups %}
-      {# collect per-titulo lines across all empresas #}
-    {% endfor %}
-  {% endfor %}
-
-  {# Build a flat summary by titulo with empresa subtotals #}
-  {% set ns = namespace(seen_titulos=[]) %}
-  {% for emp in empresas_data %}
-    {% for tg in emp.titulo_groups %}
-      {% if tg.titulo_id not in ns.seen_titulos %}
-        {% set _ = ns.seen_titulos.append(tg.titulo_id) %}
-        <div class="mb-4">
-          <div class="emp-header d-flex justify-content-between align-items-center">
-            <span><i class="bi bi-tag me-2"></i>{{ tg.titulo_nome }}</span>
-            <span class="small opacity-75">Total: <strong>{{ titulo_totals.get(tg.titulo_id, 0) | formatar_moeda }}</strong></span>
-          </div>
-          <div class="table-responsive">
-            <table class="table table-bordered table-sm tbl-conf mb-0">
-              <thead class="table-dark">
-                <tr>
-                  <th style="width:160px;">Empresa</th>
-                  <th>Categoria</th>
-                  <th>Subcategoria</th>
-                  <th class="text-end" style="width:130px;">Total</th>
-                </tr>
-              </thead>
-              <tbody>
-                {% for emp2 in empresas_data %}
-                  {% for tg2 in emp2.titulo_groups if tg2.titulo_id == tg.titulo_id %}
-                    {% for cg in tg2.categoria_groups %}
-                      {% if cg.has_subcats %}
-                        {% for sg in cg.subcategoria_groups %}
-                        <tr>
-                          <td>{{ emp2.empresa_nome }}</td>
-                          <td>{{ cg.categoria_nome }}</td>
-                          <td class="text-muted">{{ sg.subcategoria_nome or '—' }}</td>
-                          <td class="text-end">{{ sg.total | formatar_moeda }}</td>
-                        </tr>
-                        {% endfor %}
-                      {% else %}
-                        <tr>
-                          <td>{{ emp2.empresa_nome }}</td>
-                          <td>{{ cg.categoria_nome }}</td>
-                          <td class="text-muted">—</td>
-                          <td class="text-end">{{ cg.total | formatar_moeda }}</td>
-                        </tr>
-                      {% endif %}
-                    {% endfor %}
-                    <!-- subtotal empresa dentro do título -->
-                    <tr class="row-titulo">
-                      <td colspan="3" class="text-end">Total {{ emp2.empresa_nome }}</td>
-                      <td class="text-end">{{ tg2.total | formatar_moeda }}</td>
-                    </tr>
-                  {% endfor %}
-                {% endfor %}
-                <!-- titulo grand total -->
-                <tr class="row-total-emp">
-                  <td colspan="3" class="text-end">TOTAL {{ tg.titulo_nome }}</td>
-                  <td class="text-end">{{ titulo_totals.get(tg.titulo_id, 0) | formatar_moeda }}</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
-      {% endif %}
-    {% endfor %}
-  {% endfor %}
-
   {% else %}
-  <!-- ── Default view: grouped by EMPRESA ─────────────────────────────────── -->
-  {% for emp in empresas_data %}
-  <div class="mb-4">
-    <div class="emp-header d-flex justify-content-between align-items-center">
-      <span><i class="bi bi-building me-2"></i>{{ emp.empresa_nome }}</span>
-      <span class="small opacity-75">Total: <strong>{{ emp.total | formatar_moeda }}</strong></span>
-    </div>
-    <div class="table-responsive">
-      <table class="table table-bordered table-sm tbl-conf mb-0">
-        <thead class="table-dark">
-          <tr>
-            <th>Título / Categoria</th>
-            <th>Subcategoria</th>
-            <th class="text-end" style="width:130px;">Total</th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for tg in emp.titulo_groups %}
-          <!-- Título header row -->
-          <tr class="row-titulo">
-            <td colspan="2" class="fw-bold">
-              <i class="bi bi-tag-fill me-1 opacity-75"></i>{{ tg.titulo_nome }}
-            </td>
-            <td class="text-end">{{ tg.total | formatar_moeda }}</td>
-          </tr>
-          {% for cg in tg.categoria_groups %}
-            {% if cg.has_subcats %}
-              <!-- Category label row (no amount — subcats have the amounts) -->
-              <tr class="row-cat">
-                <td class="indent-1 fw-semibold" colspan="2">{{ cg.categoria_nome }}</td>
-                <td class="text-end text-muted" style="font-size:.72rem;">{{ cg.total | formatar_moeda }}</td>
-              </tr>
-              {% for sg in cg.subcategoria_groups %}
-              <tr class="row-subcat">
-                <td class="indent-2 text-muted">{{ sg.subcategoria_nome or '—' }}</td>
-                <td class="text-muted" style="font-size:.72rem;">{{ sg.linhas | length }} lançamento(s)</td>
-                <td class="text-end">{{ sg.total | formatar_moeda }}</td>
-              </tr>
-              {% endfor %}
-            {% else %}
-              <!-- Category with no subcategories -->
-              <tr class="row-cat">
-                <td class="indent-1 fw-semibold">{{ cg.categoria_nome }}</td>
-                <td class="text-muted" style="font-size:.72rem;">{{ cg.subcategoria_groups[0].linhas | length }} lançamento(s)</td>
-                <td class="text-end">{{ cg.total | formatar_moeda }}</td>
-              </tr>
-            {% endif %}
+  <!-- ── Matrix table ──────────────────────────────────────────────────────── -->
+  <div class="table-responsive mb-4" style="overflow-x:auto;">
+    <table class="tbl-matrix">
+      <!-- Column headers -->
+      <thead>
+        <tr>
+          <th class="col-desc">Categoria</th>
+          {% for m in months %}
+          <th style="min-width:78px;">{{ m.label }}{% if months|length > 1 and months[0].year != months[-1].year %}<br><span style="font-size:.6rem;opacity:.7;">{{ m.year }}</span>{% endif %}</th>
           {% endfor %}
-          {% endfor %}
-          <!-- Empresa total -->
-          <tr class="row-total-emp">
-            <td colspan="2" class="text-end fw-bold">TOTAL {{ emp.empresa_nome }}</td>
-            <td class="text-end fw-bold">{{ emp.total | formatar_moeda }}</td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
-  </div>
-  {% endfor %}
-  {% endif %}
-
-  {% if empresas_data %}
-  <!-- ── Grand Total ─────────────────────────────────────────────────────── -->
-  <div class="table-responsive mb-4">
-    <table class="table table-bordered table-sm tbl-conf">
-      <tbody>
-        <tr class="row-grand">
-          <td class="fw-bold fs-6">TOTAL GERAL</td>
-          <td class="text-end fw-bold fs-6" style="width:160px;">{{ grand_total | formatar_moeda }}</td>
+          <th class="col-acum" style="min-width:90px;">ACUM</th>
         </tr>
+      </thead>
+      <tbody>
+
+        {# ── Per-block (Título) section ── #}
+        {% for block in blocks %}
+
+        {# Block header spanning all columns #}
+        <tr class="row-titulo-hdr">
+          <td class="col-desc"><i class="bi bi-tag-fill me-1"></i>{{ block.titulo_nome }}</td>
+          {% for m in months %}
+          <td class="text-end"></td>
+          {% endfor %}
+          <td class="text-end col-acum"></td>
+        </tr>
+
+        {# Category rows #}
+        {% for row in block.rows %}
+        <tr class="row-cat">
+          <td class="col-desc ps-3">{{ row.categoria_nome }}</td>
+          {% for m in months %}
+            {% set v = row.by_month.get(m.key, 0) %}
+            <td class="text-end {% if v == 0 %}val-zero{% endif %}">
+              {% if v != 0 %}{{ v | formatar_moeda }}{% else %}—{% endif %}
+            </td>
+          {% endfor %}
+          <td class="text-end col-acum">{{ row.total | formatar_moeda }}</td>
+        </tr>
+        {% endfor %}
+
+        {# Block total row #}
+        <tr class="row-block-total">
+          <td class="col-desc">TOTAL {{ block.titulo_nome }}</td>
+          {% for m in months %}
+            {% set v = block.total_by_month.get(m.key, 0) %}
+            <td class="text-end">{% if v != 0 %}{{ v | formatar_moeda }}{% else %}—{% endif %}</td>
+          {% endfor %}
+          <td class="text-end col-acum">{{ block.total | formatar_moeda }}</td>
+        </tr>
+
+        {# Spacer row between blocks #}
+        {% if not loop.last %}
+        <tr style="height:6px;"><td colspan="{{ months|length + 2 }}" style="background:#f8f9fa;border:none;"></td></tr>
+        {% endif %}
+
+        {% endfor %}
+
+        {# ── Grand total ── #}
+        <tr style="height:4px;"><td colspan="{{ months|length + 2 }}" style="background:#f8f9fa;border:none;"></td></tr>
+        <tr class="row-grand">
+          <td class="col-desc">TOTAL GERAL</td>
+          {% for m in months %}
+            {% set v = grand_by_month.get(m.key, 0) %}
+            <td class="text-end">{% if v != 0 %}{{ v | formatar_moeda }}{% else %}—{% endif %}</td>
+          {% endfor %}
+          <td class="text-end col-acum">{{ grand_total | formatar_moeda }}</td>
+        </tr>
+
       </tbody>
     </table>
   </div>
@@ -344,15 +312,25 @@
     btn.addEventListener('click', function () {
       const today = new Date();
       let ini, fim;
-      if (this.dataset.periodo === 'mes_atual') {
-        ini = new Date(today.getFullYear(), today.getMonth(), 1);
-        fim = today;
-      } else if (this.dataset.periodo === 'mes_anterior') {
-        ini = new Date(today.getFullYear(), today.getMonth() - 1, 1);
-        fim = new Date(today.getFullYear(), today.getMonth(), 0);
-      } else {
-        ini = new Date(today.getFullYear(), 0, 1);
-        fim = today;
+      switch (this.dataset.periodo) {
+        case 'mes_atual':
+          ini = new Date(today.getFullYear(), today.getMonth(), 1);
+          fim = today;
+          break;
+        case 'mes_anterior':
+          ini = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+          fim = new Date(today.getFullYear(), today.getMonth(), 0);
+          break;
+        case 'ano_atual':
+          ini = new Date(today.getFullYear(), 0, 1);
+          fim = new Date(today.getFullYear(), 11, 31);
+          break;
+        case 'ano_anterior':
+          ini = new Date(today.getFullYear() - 1, 0, 1);
+          fim = new Date(today.getFullYear() - 1, 11, 31);
+          break;
+        default:
+          return;
       }
       inp_ini.value = ini.toISOString().slice(0, 10);
       inp_fim.value = fim.toISOString().slice(0, 10);
