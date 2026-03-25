@@ -20,7 +20,7 @@ def _ensure_veiculo_id(conn):
             "ALTER TABLE motoristas"
             " ADD COLUMN veiculo_id INT NULL,"
             " ADD CONSTRAINT fk_motoristas_veiculo"
-            "   FOREIGN KEY (veiculo_id) REFERENCES veiculos(id) ON DELETE SET NULL"
+            " FOREIGN KEY (veiculo_id) REFERENCES veiculos(id) ON DELETE SET NULL"
         )
         conn.commit()
     cur.close()
