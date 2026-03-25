@@ -602,15 +602,26 @@ def desvincular(comprovacao_id):
 # Extrato bancário – transações OFX CREDIT com status de vinculação
 # ──────────────────────────────────────────────────────────────────────────────
 
-def _fetch_extrato_bancario(conn, data_inicio, data_fim, conta_ids=None):
+def _fetch_extrato_bancario(conn, data_inicio, data_fim, conta_ids=None, forma_ids=None):
     """
-    Retorna transações bancárias de CRÉDITO importadas via OFX no período.
+    Retorna transações bancárias de CRÉDITO importadas via OFX no período,
+    limitadas a formas de recebimento do tipo depósito bancário
+    (Espécie ou Cheque).
     Indica para cada transação se já está vinculada a algum depósito do caixa,
     e o total de depósitos vinculados.
     """
     where = ["bt.tipo = 'CREDIT'",
              "bt.data_transacao BETWEEN %s AND %s"]
     params = [data_inicio, data_fim]
+
+    if forma_ids:
+        ph = ','.join(['%s'] * len(forma_ids))
+        where.append(f"bt.forma_recebimento_id IN ({ph})")
+        params.extend(int(x) for x in forma_ids)
+    else:
+        # Se nenhuma forma de depósito configurada, não retorna nenhuma linha
+        # (evita mostrar recebimentos não relacionados a depósitos bancários)
+        where.append("1 = 0")
 
     if conta_ids:
         ph = ','.join(['%s'] * len(conta_ids))
@@ -665,6 +676,41 @@ def _fetch_extrato_bancario(conn, data_inicio, data_fim, conta_ids=None):
     return rows
 
 
+def _get_deposit_forma_ids(conn):
+    """
+    Retorna os IDs de formas_recebimento que representam depósitos bancários
+    (Espécie ou Cheque).
+
+    Estratégia:
+    1. Consulta conf_depositos_vinculos (qualquer tipo_deposito) — configuração explícita.
+    2. Fallback por nome da forma_recebimento quando a tabela de vínculos está vazia.
+    """
+    cur = conn.cursor(dictionary=True)
+    try:
+        try:
+            cur.execute(
+                "SELECT DISTINCT forma_recebimento_id FROM conf_depositos_vinculos"
+            )
+            ids = [r['forma_recebimento_id'] for r in cur.fetchall()]
+        except Exception:
+            ids = []
+
+        if not ids:
+            cur.execute(
+                """SELECT id FROM formas_recebimento
+                    WHERE (nome LIKE %s OR nome LIKE %s OR nome LIKE %s
+                        OR nome LIKE %s OR nome LIKE %s)
+                      AND ativo = 1""",
+                ('%DEPOSITO%', '%DEPÓSITO%', '%CHEQUE%', '%DINHEIRO%', '%ESPECIE%'),
+            )
+            ids = [r['id'] for r in cur.fetchall()]
+    except Exception:
+        ids = []
+    finally:
+        cur.close()
+    return ids
+
+
 def _get_contas_bancarias(conn):
     cur = conn.cursor(dictionary=True)
     try:
@@ -699,8 +745,13 @@ def extrato():
 
     conn = get_db_connection()
     try:
+        deposit_forma_ids = _get_deposit_forma_ids(conn)
         contas     = _get_contas_bancarias(conn)
-        transacoes = _fetch_extrato_bancario(conn, data_inicio, data_fim, conta_ids=conta_ids)
+        transacoes = _fetch_extrato_bancario(
+            conn, data_inicio, data_fim,
+            conta_ids=conta_ids,
+            forma_ids=deposit_forma_ids,
+        )
     finally:
         conn.close()
 
