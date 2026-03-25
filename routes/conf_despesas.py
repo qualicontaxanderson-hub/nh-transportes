@@ -365,9 +365,16 @@ def _fetch_func_lancamentos(conn, months, empresa_ids):
     antes de retornar.
 
     IMPORTANTE: lf.funcionarioid pode referenciar funcionarios.id (frentistas/
-    outros) OU motoristas.id (motoristas). Por isso usamos dois LEFT JOINs e
-    resolvemos o nome/categoria com COALESCE — igual ao que faz o route editar.
-    Um INNER JOIN em funcionarios excluiria todas as linhas de motoristas.
+    outros) OU motoristas.id (motoristas). Ambas as tabelas têm auto-increment
+    iniciando em 1, portanto os IDs colidem (ex.: funcionarios.id=1=BRENA e
+    motoristas.id=1=MARCOS ANTONIO coexistem). Por isso:
+      - Usamos dois LEFT JOINs (f = funcionarios, m = motoristas).
+      - Resolvemos o nome com CASE WHEN m.id IS NOT NULL THEN m.nome ELSE f.nome
+        para garantir que entradas de motoristas usem o nome correto mesmo quando
+        o mesmo funcionarioid existe em ambas as tabelas (colisão de IDs).
+      - COALESCE(f.nome, m.nome) daria o nome errado no caso de colisão, pois
+        f.nome seria não-NULL e retornaria o nome do frentista, causando falha
+        no lookup nome_to_vid → salary map vazio.
     """
     if not months:
         return []
@@ -386,7 +393,10 @@ def _fetch_func_lancamentos(conn, months, empresa_ids):
     sql = f"""
         SELECT
             lf.funcionarioid,
-            COALESCE(f.nome, m.nome)                                       AS funcionario_nome,
+            CASE
+                WHEN m.id IS NOT NULL THEN m.nome
+                ELSE f.nome
+            END                                                            AS funcionario_nome,
             CASE
                 WHEN m.id IS NOT NULL THEN 'MOTORISTA'
                 ELSE UPPER(COALESCE(f.categoria, 'OUTROS'))
@@ -408,7 +418,7 @@ def _fetch_func_lancamentos(conn, months, empresa_ids):
         LEFT  JOIN veiculos v     ON v.id = lf.caminhaoid
         LEFT  JOIN rubricas r     ON r.id = lf.rubricaid
         WHERE {' AND '.join(where)}
-        ORDER BY categoria_func, COALESCE(f.nome, m.nome), lf.mes
+        ORDER BY categoria_func, funcionario_nome, lf.mes
     """
     cur = conn.cursor(dictionary=True)
     cur.execute(sql, params)
