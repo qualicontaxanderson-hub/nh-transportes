@@ -124,6 +124,71 @@ def _fetch_veiculos_motoristas(conn):
     return by_caminhao, nome_to_vid
 
 
+def _build_motorista_salary_rows(func_rows, months):
+    """
+    Constrói um mapa de linhas de salário por motorista.
+    Retorna {motorista_nome_ascii_upper: row_dict} onde cada row_dict tem a
+    mesma estrutura das linhas de categoria do relatório (categoria_nome,
+    by_month, total, subcats) e pode ser injetado diretamente em block.rows
+    logo após a linha do caminhão vinculado.
+    """
+    month_keys_set = {m['key'] for m in months}
+
+    def _mes_to_mk(mes_str):
+        try:
+            parts = mes_str.split('/')
+            return f"{parts[1]}{parts[0]}"
+        except Exception:
+            return None
+
+    # nome_upper → rubrica → mk → float
+    tree     = {}
+    nome_map = {}  # nome_upper → nome para exibição
+
+    for row in func_rows:
+        if row['categoria_func'] != 'MOTORISTA':
+            continue
+        nome   = row['funcionario_nome'] or ''
+        nome_up = _ascii_upper(nome)
+        rub    = row['rubrica_nome']
+        mk     = _mes_to_mk(row['mes'])
+        if not mk or mk not in month_keys_set:
+            continue
+        val = float(row['valor'])
+        nome_map[nome_up] = nome
+        tree.setdefault(nome_up, {})
+        tree[nome_up].setdefault(rub, {})
+        tree[nome_up][rub][mk] = tree[nome_up][rub].get(mk, 0.0) + val
+
+    result = {}
+    for nome_up, rubs in tree.items():
+        cat_by_month = {m['key']: 0.0 for m in months}
+        subcats      = []
+        for rub in sorted(rubs):
+            rub_by_month = {}
+            rub_total    = 0.0
+            for m in months:
+                v = rubs[rub].get(m['key'], 0.0)
+                rub_by_month[m['key']] = v
+                rub_total             += v
+                cat_by_month[m['key']] += v
+            subcats.append({
+                'subcat_id':   f'mot_{nome_up}_{rub}',
+                'subcat_nome': rub,
+                'by_month':    rub_by_month,
+                'total':       rub_total,
+            })
+        cat_total = sum(cat_by_month.values())
+        result[nome_up] = {
+            'categoria_id':   f'mot_{nome_up}',
+            'categoria_nome': nome_map[nome_up],
+            'by_month':       cat_by_month,
+            'total':          cat_total,
+            'subcats':        subcats,
+        }
+    return result
+
+
 def _fetch_lancamentos(conn, data_inicio, data_fim, empresa_ids, titulo_ids):
     """Retorna lançamentos de despesas filtrados com metadados de título, categoria e subcategoria."""
     where = ["ld.data BETWEEN %s AND %s"]
@@ -420,8 +485,12 @@ def _build_func_blocks(func_rows, months):
     out_blocks        = []
 
     # Ordena categorias: FRENTISTA antes de MOTORISTA, demais no final
+    # MOTORISTA é pulado aqui — o custo de pessoal de motoristas é injetado
+    # diretamente no bloco CAMINHÕES, logo após a linha do caminhão vinculado.
     cat_order = {'FRENTISTA': 0, 'MOTORISTA': 1}
     for cat_func in sorted(cat_func_names, key=lambda c: (cat_order.get(c, 99), c)):
+        if cat_func == 'MOTORISTA':
+            continue  # exibido inline no bloco CAMINHÕES
         block_by_month = {m['key']: 0.0 for m in months}
         rows_out       = []
 
@@ -530,10 +599,13 @@ def conf_despesas():
             grand_total    += func_total
             total_lancamentos += len(func_rows)
 
-            # ── Anota linhas de caminhão com o nome do motorista (badge) ─────
+            # ── Anota linhas de caminhão com motorista (badge) e injeta salário ──
             # Restringe a blocos cujo título contenha "CAMINHÃO"/"CAMINHÕES"
             # para não vazar badges em blocos como INVESTIMENTOS.
+            # Após cada linha de caminhão, insere uma linha-motorista com suas
+            # rubricas (Salário, Comissão, Vale Alimentação, …) como sub-linhas.
             veiculo_mot, _ = _fetch_veiculos_motoristas(conn)
+            mot_salary_rows = _build_motorista_salary_rows(func_rows, months)
             if veiculo_mot:
                 # Pré-compila os padrões regex uma única vez
                 veiculo_patterns = {
@@ -544,12 +616,25 @@ def conf_despesas():
                     titulo_norm = _ascii_upper(block['titulo_nome'])
                     if 'CAMINHAO' not in titulo_norm and 'CAMINHOES' not in titulo_norm:
                         continue
+                    new_rows = []
                     for row in block.get('rows', []):
+                        new_rows.append(row)
                         nome_up = row.get('categoria_nome', '').upper()
                         for caminhao_up, vdata in veiculo_mot.items():
                             if veiculo_patterns[caminhao_up].search(nome_up):
                                 row['motorista_nome'] = vdata['nome']
+                                # Injeta linha de salário do motorista logo após o caminhão
+                                mot_key = _ascii_upper(vdata['nome'])
+                                if mot_key in mot_salary_rows:
+                                    sal_row = mot_salary_rows[mot_key]
+                                    new_rows.append(sal_row)
+                                    block['total'] += sal_row['total']
+                                    for mk, v in sal_row['by_month'].items():
+                                        block['total_by_month'][mk] = block['total_by_month'].get(mk, 0.0) + v
+                                        grand_by_month[mk]          = grand_by_month.get(mk, 0.0) + v
+                                    grand_total += sal_row['total']
                                 break
+                    block['rows'] = new_rows
     finally:
         conn.close()
 
