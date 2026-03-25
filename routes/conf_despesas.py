@@ -90,9 +90,12 @@ def _titulos_list(conn):
 
 def _fetch_veiculos_motoristas(conn):
     """
-    Retorna um dicionário {caminhao_upper: {nome, veiculo_id}} para todos os veículos
-    que possuem um motorista vinculado via motoristas.veiculo_id.
-    Usado para anotar as linhas da seção CAMINHÕES no relatório conf_despesas.
+    Retorna uma tupla (by_caminhao, nome_to_vid):
+      by_caminhao  – {caminhao_upper: {nome, veiculo_id}}
+      nome_to_vid  – {motorista_nome_upper: veiculo_id}
+
+    Usado para anotar as linhas da seção CAMINHÕES no relatório conf_despesas
+    e como fallback de lookup por nome quando lf.caminhaoid é NULL.
     """
     cur = conn.cursor(dictionary=True)
     cur.execute("""
@@ -105,17 +108,30 @@ def _fetch_veiculos_motoristas(conn):
     """)
     rows = cur.fetchall()
     cur.close()
-    return {
+    by_caminhao = {
         r['caminhao_upper']: {'nome': r['motorista_nome'], 'veiculo_id': r['veiculo_id']}
         for r in rows
     }
+    # Normaliza acentos para comparação robusta com funcionarios.nome
+    def _ascii_upper(s):
+        return (unicodedata.normalize('NFD', s.upper())
+                .encode('ascii', 'ignore').decode('ascii'))
+    nome_to_vid = {
+        _ascii_upper(r['motorista_nome']): r['veiculo_id']
+        for r in rows
+    }
+    return by_caminhao, nome_to_vid
 
 
-def _build_motorista_salary_map(func_rows, months):
+def _build_motorista_salary_map(func_rows, months, nome_to_vid=None):
     """
     Constrói mapa de sub-linhas de salário para motoristas por veiculo_id.
     Retorna {veiculo_id: (subcats_list, by_month_dict, total_float)}.
-    Considera apenas registros de categoria MOTORISTA com veiculo_id não nulo.
+
+    Usa lf.caminhaoid como veiculo_id primário. Quando caminhaoid é NULL
+    (salário registrado sem vínculo de caminhão), faz fallback por nome do
+    funcionário usando o dicionário nome_to_vid {motorista_nome_upper: veiculo_id}
+    fornecido por _fetch_veiculos_motoristas().
     """
     month_keys_set = {m['key'] for m in months}
 
@@ -132,6 +148,9 @@ def _build_motorista_salary_map(func_rows, months):
         if row['categoria_func'] != 'MOTORISTA':
             continue
         vid = row.get('veiculo_id')
+        if not vid and nome_to_vid:
+            nome_up = unicodedata.normalize('NFD', (row.get('funcionario_nome') or '').upper()).encode('ascii', 'ignore').decode('ascii')
+            vid = nome_to_vid.get(nome_up)
         if not vid:
             continue
         mk = _mes_to_mk(row['mes'])
@@ -557,9 +576,14 @@ def conf_despesas():
             # ── Anota linhas de caminhão com motorista e salário ─────────────
             # Restringe a blocos cujo título contenha "CAMINHÃO"/"CAMINHÕES"
             # para não vazar badges em blocos como INVESTIMENTOS.
-            veiculo_mot    = _fetch_veiculos_motoristas(conn)
-            mot_salary_map = _build_motorista_salary_map(func_rows, months)
+            veiculo_mot, nome_to_vid = _fetch_veiculos_motoristas(conn)
+            mot_salary_map = _build_motorista_salary_map(func_rows, months, nome_to_vid)
             if veiculo_mot:
+                # Pré-compila os padrões regex uma única vez
+                veiculo_patterns = {
+                    caminhao_up: re.compile(r'\b' + re.escape(caminhao_up) + r'\b')
+                    for caminhao_up in veiculo_mot
+                }
                 for block in blocks:
                     titulo_norm = (
                         unicodedata.normalize('NFD', block['titulo_nome'].upper())
@@ -570,8 +594,7 @@ def conf_despesas():
                     for row in block.get('rows', []):
                         nome_up = row.get('categoria_nome', '').upper()
                         for caminhao_up, vdata in veiculo_mot.items():
-                            pattern = r'\b' + re.escape(caminhao_up) + r'\b'
-                            if re.search(pattern, nome_up):
+                            if veiculo_patterns[caminhao_up].search(nome_up):
                                 row['motorista_nome'] = vdata['nome']
                                 vid = vdata['veiculo_id']
                                 if vid in mot_salary_map:
