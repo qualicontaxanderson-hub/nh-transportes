@@ -19,14 +19,13 @@ def _ensure_tipo_funcionario(conn):
     2. Demais → 'funcionario' (DEFAULT da coluna)
 
     Repair (executado SEMPRE):
-    - Reverte para 'funcionario' qualquer linha marcada como 'motorista' cujo
-      funcionarioid NÃO pertença a um motorista com paga_comissao=1.
-      Isso corrige colisões onde o ID do frentista coincide com um motorista
-      sem comissão na tabela motoristas — esses registros sempre pertencem ao
-      frentista, não ao motorista.
-    - Registros com tipo_funcionario='motorista' e funcionarioid pertencente a
-      um motorista com paga_comissao=1 são preservados (MARCOS ANTONIO, VALMIR…).
-      Esses foram corretamente definidos via formulário ou backfill anterior.
+    - Reverte para 'funcionario' qualquer linha cujo funcionarioid existe na tabela
+      funcionarios. Frentistas/outros sempre estão em funcionarios; motoristas NÃO
+      estão. Isso corrige promoções incorretas de frentistas causadas por heurísticas
+      anteriores baseadas em Comissão (que confundiam frentistas com motoristas
+      quando IDs colidem entre as duas tabelas).
+    - VALMIR, MARCOS ANTONIO e demais motoristas reais NÃO estão na tabela
+      funcionarios, portanto suas linhas com tipo='motorista' são preservadas.
 
     NOTA: frentistas podem ter rubricas de Comissão (comissões manuais).
     Por isso a presença de Comissão NÃO é usada como desambiguador de tipo.
@@ -58,18 +57,28 @@ def _ensure_tipo_funcionario(conn):
         conn.commit()
 
     # Repair (executa SEMPRE, é no-op quando já está correto):
-    # Reverte 'motorista' → 'funcionario' para linhas cujo funcionarioid não
-    # pertence a nenhum motorista com paga_comissao=1.
-    # Isso corrige registros de frentistas que foram incorretamente promovidos
-    # por heurísticas baseadas em Comissão quando o ID colide com um motorista
-    # sem comissão (paga_comissao=0 ou inexistente na tabela motoristas).
+    # Se funcionarioid existe na tabela funcionarios, a linha pertence a um
+    # frentista/outro — NUNCA a um motorista. Reverte tipo='motorista' → 'funcionario'
+    # para essas linhas, corrigindo promoções incorretas causadas por heurísticas
+    # anteriores baseadas em Comissão (que confundiam frentistas com motoristas
+    # quando o ID de funcionarios colide com um motoristas.id).
+    # Motoristas reais (VALMIR, MARCOS ANTONIO, …) NÃO estão na tabela funcionarios,
+    # portanto suas linhas não são afetadas por este repair.
+    cur.execute("""
+        UPDATE lancamentosfuncionarios_v2 lf
+        INNER JOIN funcionarios f ON f.id = lf.funcionarioid
+        SET    lf.tipo_funcionario = 'funcionario'
+        WHERE  lf.tipo_funcionario = 'motorista'
+    """)
+    conn.commit()
+
+    # Repair adicional: reverte linhas cujo funcionarioid não pertence a nenhum
+    # motorista (IDs sem vínculo com motoristas não devem ter tipo='motorista').
     cur.execute("""
         UPDATE lancamentosfuncionarios_v2
         SET    tipo_funcionario = 'funcionario'
         WHERE  tipo_funcionario = 'motorista'
-        AND    funcionarioid NOT IN (
-            SELECT id FROM motoristas WHERE paga_comissao = 1
-        )
+        AND    funcionarioid NOT IN (SELECT id FROM motoristas)
     """)
     conn.commit()
     cur.close()
@@ -100,8 +109,7 @@ def lista():
     mes_filtro = request.args.get('mes')
     cliente_filtro = request.args.get('clienteid')
     
-    # Build query - now separated by category (FRENTISTAS vs MOTORISTAS)
-    # Build WHERE clause for subquery
+    # Build WHERE clause
     where_conditions = ["1=1"]
     params = []
     
@@ -115,36 +123,19 @@ def lista():
     
     where_clause = " AND ".join(where_conditions)
     
-    # Use subquery to classify each employee individually BEFORE grouping.
-    # tipo_funcionario determina se é motorista ou frentista/outro.
     query = f"""
-        SELECT 
-            sub.mes,
-            sub.clienteid,
-            sub.cliente_nome,
-            sub.categoria,
-            COUNT(DISTINCT sub.funcionarioid) as total_funcionarios,
-            SUM(sub.valor) as total_valor,
-            sub.statuslancamento
-        FROM (
-            SELECT 
-                l.mes,
-                l.clienteid,
-                c.razao_social as cliente_nome,
-                l.funcionarioid,
-                CASE
-                    WHEN l.tipo_funcionario = 'motorista' THEN 'MOTORISTA'
-                    ELSE UPPER(COALESCE(f.categoria, 'OUTROS'))
-                END as categoria,
-                l.valor,
-                l.statuslancamento
-            FROM lancamentosfuncionarios_v2 l
-            LEFT JOIN clientes c ON l.clienteid = c.id
-            LEFT JOIN funcionarios f ON l.funcionarioid = f.id
-            WHERE {where_clause}
-        ) as sub
-        GROUP BY sub.mes, sub.clienteid, sub.cliente_nome, sub.categoria, sub.statuslancamento
-        ORDER BY sub.mes DESC, sub.cliente_nome, sub.categoria
+        SELECT
+            l.mes,
+            l.clienteid,
+            c.razao_social as cliente_nome,
+            COUNT(DISTINCT l.funcionarioid) as total_funcionarios,
+            SUM(l.valor) as total_valor,
+            l.statuslancamento
+        FROM lancamentosfuncionarios_v2 l
+        LEFT JOIN clientes c ON l.clienteid = c.id
+        WHERE {where_clause}
+        GROUP BY l.mes, l.clienteid, c.razao_social, l.statuslancamento
+        ORDER BY l.mes DESC, c.razao_social
     """
     
     cursor.execute(query, params)
