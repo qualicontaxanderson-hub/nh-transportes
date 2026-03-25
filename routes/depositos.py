@@ -82,6 +82,54 @@ def _ensure_bank_tx_col(conn):
     except Exception:
         pass  # Não crítico
 
+
+def _reset_orphaned_deposit_transactions(conn):
+    """
+    Corrige bank_transactions que estão marcadas como status='conciliado' /
+    tipo_conciliacao='deposito' mas cujo depósito foi removido ou re-criado
+    (por edição do Fechamento de Caixa) — deixando a transação bancária sem
+    nenhum lancamentos_caixa_comprovacao vinculado.
+
+    Essas transações "órfãs" ficam invisíveis no fluxo de conciliação porque o
+    filtro padrão exclui conciliado+deposito.  Este helper as devolve ao estado
+    'pendente' para que voltem a aparecer como candidatos.
+    """
+    try:
+        cur = conn.cursor()
+        try:
+            cur.execute(
+                """UPDATE bank_transactions bt
+                      SET bt.status            = 'pendente',
+                          bt.conciliado_em     = NULL,
+                          bt.conciliado_por    = NULL,
+                          bt.tipo_conciliacao  = NULL
+                    WHERE bt.tipo_conciliacao = 'deposito'
+                      AND bt.status           = 'conciliado'
+                      AND NOT EXISTS (
+                            SELECT 1
+                              FROM lancamentos_caixa_comprovacao lcc
+                             WHERE lcc.bank_transaction_id = bt.id
+                          )"""
+            )
+        except Exception:
+            # Fallback for DB schemas without tipo_conciliacao column
+            cur.execute(
+                """UPDATE bank_transactions bt
+                      SET bt.status         = 'pendente',
+                          bt.conciliado_em  = NULL,
+                          bt.conciliado_por = NULL
+                    WHERE bt.status = 'conciliado'
+                      AND NOT EXISTS (
+                            SELECT 1
+                              FROM lancamentos_caixa_comprovacao lcc
+                             WHERE lcc.bank_transaction_id = bt.id
+                          )"""
+            )
+        conn.commit()
+        cur.close()
+    except Exception:
+        pass  # Não crítico
+
 # ──────────────────────────────────────────────────────────────────────────────
 # Helpers
 # ──────────────────────────────────────────────────────────────────────────────
@@ -235,6 +283,7 @@ def listar():
     conn = get_db_connection()
     try:
         _ensure_bank_tx_col(conn)
+        _reset_orphaned_deposit_transactions(conn)
         clientes   = _get_clientes(conn)
         depositos  = _fetch_depositos(
             conn, data_inicio, data_fim,
@@ -360,11 +409,16 @@ def api_candidatos(comprovacao_id):
             forma_params = forma_ids
 
         # Inclui: pendente OU conciliado-para-recebimento (ainda não vinculado como depósito)
+        # Também inclui conciliado+deposito sem nenhum comprovacao vinculado
+        # (transações "órfãs" que perderam o vínculo por edição do Fechamento de Caixa)
         status_filter = (
             "(bt.status = 'pendente' OR "
             "(bt.status = 'conciliado' AND "
             " (bt.tipo_conciliacao IS NULL OR "
-            "  bt.tipo_conciliacao NOT IN ('deposito','transferencia','troco_pix'))))"
+            "  bt.tipo_conciliacao NOT IN ('deposito','transferencia','troco_pix') OR "
+            "  (bt.tipo_conciliacao = 'deposito' AND "
+            "   NOT EXISTS (SELECT 1 FROM lancamentos_caixa_comprovacao lcc_chk "
+            "               WHERE lcc_chk.bank_transaction_id = bt.id)))))"
         )
 
         cur.execute(
