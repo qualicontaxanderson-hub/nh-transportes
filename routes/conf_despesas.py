@@ -12,6 +12,7 @@ Rota:
   GET /relatorios/conf_despesas
 """
 import re
+import unicodedata
 from datetime import date, datetime
 
 from flask import Blueprint, render_template, request
@@ -89,13 +90,14 @@ def _titulos_list(conn):
 
 def _fetch_veiculos_motoristas(conn):
     """
-    Retorna um dicionário {caminhao_upper: motorista_nome} para todos os veículos
+    Retorna um dicionário {caminhao_upper: {nome, veiculo_id}} para todos os veículos
     que possuem um motorista vinculado via motoristas.veiculo_id.
     Usado para anotar as linhas da seção CAMINHÕES no relatório conf_despesas.
     """
     cur = conn.cursor(dictionary=True)
     cur.execute("""
-        SELECT UPPER(v.caminhao) AS caminhao_upper,
+        SELECT v.id              AS veiculo_id,
+               UPPER(v.caminhao) AS caminhao_upper,
                m.nome            AS motorista_nome
         FROM   veiculos  v
         INNER  JOIN motoristas m ON m.veiculo_id = v.id
@@ -103,7 +105,64 @@ def _fetch_veiculos_motoristas(conn):
     """)
     rows = cur.fetchall()
     cur.close()
-    return {r['caminhao_upper']: r['motorista_nome'] for r in rows}
+    return {
+        r['caminhao_upper']: {'nome': r['motorista_nome'], 'veiculo_id': r['veiculo_id']}
+        for r in rows
+    }
+
+
+def _build_motorista_salary_map(func_rows, months):
+    """
+    Constrói mapa de sub-linhas de salário para motoristas por veiculo_id.
+    Retorna {veiculo_id: (subcats_list, by_month_dict, total_float)}.
+    Considera apenas registros de categoria MOTORISTA com veiculo_id não nulo.
+    """
+    month_keys_set = {m['key'] for m in months}
+
+    def _mes_to_mk(mes_str):
+        try:
+            parts = mes_str.split('/')
+            return f"{parts[1]}{parts[0]}"
+        except Exception:
+            return None
+
+    # veiculo_id → rubrica → mk → float
+    tree = {}
+    for row in func_rows:
+        if row['categoria_func'] != 'MOTORISTA':
+            continue
+        vid = row.get('veiculo_id')
+        if not vid:
+            continue
+        mk = _mes_to_mk(row['mes'])
+        if not mk or mk not in month_keys_set:
+            continue
+        rub = row['rubrica_nome']
+        val = float(row['valor'])
+        tree.setdefault(vid, {})
+        tree[vid].setdefault(rub, {})
+        tree[vid][rub][mk] = tree[vid][rub].get(mk, 0.0) + val
+
+    result = {}
+    for vid, rubs in tree.items():
+        subcats  = []
+        by_month = {m['key']: 0.0 for m in months}
+        for rub in sorted(rubs):
+            rub_by_month = {}
+            rub_total    = 0.0
+            for m in months:
+                v = rubs[rub].get(m['key'], 0.0)
+                rub_by_month[m['key']] = v
+                rub_total             += v
+                by_month[m['key']]    += v
+            subcats.append({
+                'subcat_id':   f'mot_{vid}_{rub}',
+                'subcat_nome': rub,
+                'by_month':    rub_by_month,
+                'total':       rub_total,
+            })
+        result[vid] = (subcats, by_month, sum(by_month.values()))
+    return result
 
 
 def _fetch_lancamentos(conn, data_inicio, data_fim, empresa_ids, titulo_ids):
@@ -385,6 +444,8 @@ def _build_func_blocks(func_rows, months):
     # Ordena categorias: FRENTISTA antes de MOTORISTA, demais no final
     cat_order = {'FRENTISTA': 0, 'MOTORISTA': 1}
     for cat_func in sorted(cat_func_names, key=lambda c: (cat_order.get(c, 99), c)):
+        if cat_func == 'MOTORISTA':
+            continue  # salário exibido inline no bloco CAMINHÕES (evita dupla contagem)
         block_by_month = {m['key']: 0.0 for m in months}
         rows_out       = []
 
@@ -493,16 +554,36 @@ def conf_despesas():
             grand_total    += func_total
             total_lancamentos += len(func_rows)
 
-            # ── Anota linhas de caminhão com o nome do motorista vinculado ──
-            veiculo_mot = _fetch_veiculos_motoristas(conn)
+            # ── Anota linhas de caminhão com motorista e salário ─────────────
+            # Restringe a blocos cujo título contenha "CAMINHÃO"/"CAMINHÕES"
+            # para não vazar badges em blocos como INVESTIMENTOS.
+            veiculo_mot    = _fetch_veiculos_motoristas(conn)
+            mot_salary_map = _build_motorista_salary_map(func_rows, months)
             if veiculo_mot:
                 for block in blocks:
+                    titulo_norm = (
+                        unicodedata.normalize('NFD', block['titulo_nome'].upper())
+                        .encode('ascii', 'ignore').decode('ascii')
+                    )
+                    if 'CAMINHAO' not in titulo_norm and 'CAMINHOES' not in titulo_norm:
+                        continue
                     for row in block.get('rows', []):
                         nome_up = row.get('categoria_nome', '').upper()
-                        for caminhao_up, mot_nome in veiculo_mot.items():
+                        for caminhao_up, vdata in veiculo_mot.items():
                             pattern = r'\b' + re.escape(caminhao_up) + r'\b'
                             if re.search(pattern, nome_up):
-                                row['motorista_nome'] = mot_nome
+                                row['motorista_nome'] = vdata['nome']
+                                vid = vdata['veiculo_id']
+                                if vid in mot_salary_map:
+                                    sal_subcats, sal_by_month, sal_total = mot_salary_map[vid]
+                                    row['subcats'].extend(sal_subcats)
+                                    row['total'] += sal_total
+                                    for mk, v in sal_by_month.items():
+                                        row['by_month'][mk]         = row['by_month'].get(mk, 0.0) + v
+                                        block['total_by_month'][mk] = block['total_by_month'].get(mk, 0.0) + v
+                                        grand_by_month[mk]          = grand_by_month.get(mk, 0.0) + v
+                                    block['total'] += sal_total
+                                    grand_total    += sal_total
                                 break
     finally:
         conn.close()
