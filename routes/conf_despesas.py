@@ -26,10 +26,15 @@ bp = Blueprint('conf_despesas', __name__, url_prefix='/relatorios')
 _MES_LABELS = ['JAN', 'FEV', 'MAR', 'ABR', 'MAI', 'JUN',
                'JUL', 'AGO', 'SET', 'OUT', 'NOV', 'DEZ']
 
-
 # ──────────────────────────────────────────────────────────────────────────────
 # Helpers
 # ──────────────────────────────────────────────────────────────────────────────
+
+def _ascii_upper(s):
+    """Converte para maiúsculas e remove acentos para comparação robusta."""
+    return (unicodedata.normalize('NFD', (s or '').upper())
+            .encode('ascii', 'ignore').decode('ascii'))
+
 
 def _default_period():
     """Padrão: ano corrente completo (01/01 – 31/12)."""
@@ -112,10 +117,6 @@ def _fetch_veiculos_motoristas(conn):
         r['caminhao_upper']: {'nome': r['motorista_nome'], 'veiculo_id': r['veiculo_id']}
         for r in rows
     }
-    # Normaliza acentos para comparação robusta com funcionarios.nome
-    def _ascii_upper(s):
-        return (unicodedata.normalize('NFD', s.upper())
-                .encode('ascii', 'ignore').decode('ascii'))
     nome_to_vid = {
         _ascii_upper(r['motorista_nome']): r['veiculo_id']
         for r in rows
@@ -149,7 +150,7 @@ def _build_motorista_salary_map(func_rows, months, nome_to_vid=None):
             continue
         vid = row.get('veiculo_id')
         if not vid and nome_to_vid:
-            nome_up = unicodedata.normalize('NFD', (row.get('funcionario_nome') or '').upper()).encode('ascii', 'ignore').decode('ascii')
+            nome_up = _ascii_upper(row.get('funcionario_nome') or '')
             vid = nome_to_vid.get(nome_up)
         if not vid:
             continue
@@ -362,6 +363,11 @@ def _fetch_func_lancamentos(conn, months, empresa_ids):
 
     O campo ``mes`` nessa tabela é 'MM/YYYY'; convertemos para a chave YYYYMM
     antes de retornar.
+
+    IMPORTANTE: lf.funcionarioid pode referenciar funcionarios.id (frentistas/
+    outros) OU motoristas.id (motoristas). Por isso usamos dois LEFT JOINs e
+    resolvemos o nome/categoria com COALESCE — igual ao que faz o route editar.
+    Um INNER JOIN em funcionarios excluiria todas as linhas de motoristas.
     """
     if not months:
         return []
@@ -380,8 +386,11 @@ def _fetch_func_lancamentos(conn, months, empresa_ids):
     sql = f"""
         SELECT
             lf.funcionarioid,
-            f.nome                                                         AS funcionario_nome,
-            UPPER(COALESCE(f.categoria, 'OUTROS'))                        AS categoria_func,
+            COALESCE(f.nome, m.nome)                                       AS funcionario_nome,
+            CASE
+                WHEN m.id IS NOT NULL THEN 'MOTORISTA'
+                ELSE UPPER(COALESCE(f.categoria, 'OUTROS'))
+            END                                                            AS categoria_func,
             lf.caminhaoid                                                  AS veiculo_id,
             COALESCE(
                 CONCAT(v.caminhao,
@@ -394,11 +403,12 @@ def _fetch_func_lancamentos(conn, months, empresa_ids):
             COALESCE(r.tipo, 'PROVENTO')                                  AS rubrica_tipo,
             lf.valor
         FROM lancamentosfuncionarios_v2 lf
-        INNER JOIN funcionarios f ON f.id = lf.funcionarioid
+        LEFT  JOIN funcionarios f ON f.id = lf.funcionarioid
+        LEFT  JOIN motoristas   m ON m.id = lf.funcionarioid
         LEFT  JOIN veiculos v     ON v.id = lf.caminhaoid
         LEFT  JOIN rubricas r     ON r.id = lf.rubricaid
         WHERE {' AND '.join(where)}
-        ORDER BY f.categoria, f.nome, lf.mes
+        ORDER BY categoria_func, COALESCE(f.nome, m.nome), lf.mes
     """
     cur = conn.cursor(dictionary=True)
     cur.execute(sql, params)
@@ -585,10 +595,7 @@ def conf_despesas():
                     for caminhao_up in veiculo_mot
                 }
                 for block in blocks:
-                    titulo_norm = (
-                        unicodedata.normalize('NFD', block['titulo_nome'].upper())
-                        .encode('ascii', 'ignore').decode('ascii')
-                    )
+                    titulo_norm = _ascii_upper(block['titulo_nome'])
                     if 'CAMINHAO' not in titulo_norm and 'CAMINHOES' not in titulo_norm:
                         continue
                     for row in block.get('rows', []):
