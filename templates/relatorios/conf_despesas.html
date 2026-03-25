@@ -53,9 +53,9 @@
   letter-spacing: .04em;
 }
 .tbl-matrix thead tr th.col-desc { text-align: left; background: #343a40; }
-/* titulo block header */
+/* titulo block header — softer terracotta */
 .row-titulo-hdr td {
-  background: #c0392b;
+  background: #d9534f;
   color: #fff;
   font-weight: 700;
   font-size: .78rem;
@@ -63,17 +63,20 @@
   letter-spacing: .05em;
 }
 /* category data rows */
-.row-cat td { background: #fff; }
+.row-cat td { background: #fff; font-weight: 700; }
 .row-cat:hover td { background: #f0f4ff; }
-/* total per block */
+/* sub-category rows */
+.row-subcat td { background: #fafafa; font-weight: 400; color: #444; }
+.row-subcat:hover td { background: #f0f4ff; }
+/* total per block — lighter steel-blue */
 .row-block-total td {
-  background: #1D63A5;
+  background: #4a86c8;
   color: #fff;
   font-weight: 700;
 }
 /* grand total */
 .row-grand td {
-  background: #0d3257;
+  background: #1e5591;
   color: #fff;
   font-weight: 700;
   font-size: .82rem;
@@ -264,6 +267,19 @@
           {% endfor %}
           <td class="text-end col-acum">{{ row.total | formatar_moeda }}</td>
         </tr>
+        {# Sub-category rows (if any) #}
+        {% for sc in row.subcats %}
+        <tr class="row-subcat">
+          <td class="col-desc" style="padding-left:2.2rem;">↳ {{ sc.subcat_nome }}</td>
+          {% for m in months %}
+            {% set v = sc.by_month.get(m.key, 0) %}
+            <td class="text-end {% if v == 0 %}val-zero{% endif %}">
+              {% if v != 0 %}{{ v | formatar_moeda }}{% else %}—{% endif %}
+            </td>
+          {% endfor %}
+          <td class="text-end col-acum" style="font-weight:400;">{{ sc.total | formatar_moeda }}</td>
+        </tr>
+        {% endfor %}
         {% endfor %}
 
         {# Block total row #}

@@ -87,7 +87,7 @@ def _titulos_list(conn):
 
 
 def _fetch_lancamentos(conn, data_inicio, data_fim, empresa_ids, titulo_ids):
-    """Retorna lançamentos de despesas filtrados com metadados de título e categoria."""
+    """Retorna lançamentos de despesas filtrados com metadados de título, categoria e subcategoria."""
     where = ["ld.data BETWEEN %s AND %s"]
     params = [data_inicio, data_fim]
 
@@ -111,12 +111,17 @@ def _fetch_lancamentos(conn, data_inicio, data_fim, empresa_ids, titulo_ids):
             t.nome                                              AS titulo_nome,
             ld.categoria_id,
             COALESCE(c.ordem,  9999)                            AS categoria_ordem,
-            c.nome                                              AS categoria_nome
+            c.nome                                              AS categoria_nome,
+            ld.subcategoria_id,
+            COALESCE(s.ordem,  9999)                            AS subcategoria_ordem,
+            s.nome                                              AS subcategoria_nome
         FROM lancamentos_despesas ld
-        INNER JOIN titulos_despesas    t ON t.id = ld.titulo_id
-        INNER JOIN categorias_despesas c ON c.id = ld.categoria_id
+        INNER JOIN titulos_despesas      t ON t.id = ld.titulo_id
+        INNER JOIN categorias_despesas   c ON c.id = ld.categoria_id
+        LEFT  JOIN subcategorias_despesas s ON s.id = ld.subcategoria_id
         WHERE {' AND '.join(where)}
-        ORDER BY titulo_ordem, t.nome, categoria_ordem, c.nome, ld.data
+        ORDER BY titulo_ordem, t.nome, categoria_ordem, c.nome,
+                 COALESCE(s.ordem, 9999), COALESCE(s.nome, ''), ld.data
     """
     cur = conn.cursor(dictionary=True)
     cur.execute(sql, params)
@@ -129,16 +134,19 @@ def _build_category_matrix(lancamentos, months):
     """
     Constrói a matriz pivot:
 
-        bloco  = Título  (grupo de despesa, ex.: FUNCIONÁRIOS, CAMINHÃO)
-        linha  = Categoria dentro do título
-        coluna = mês  (chave YYYYMM)
+        bloco    = Título  (grupo de despesa, ex.: FUNCIONÁRIOS, CAMINHÃO)
+        linha    = Categoria dentro do título  (totais em negrito)
+        sub-linha = Subcategoria dentro da categoria (sem negrito, indentada)
+        coluna   = mês  (chave YYYYMM)
 
     Retorna:
         blocks (list) – cada elemento:
           titulo_id, titulo_nome,
           rows (list):
             categoria_id, categoria_nome,
-            by_month {key: float}, total (float)
+            by_month {key: float}, total (float),
+            subcats (list):  ← [] se a categoria não tem subcategorias nomeadas
+              subcat_id, subcat_nome, by_month {key: float}, total (float)
           total_by_month {key: float}, total (float)
 
         grand_by_month {key: float}
@@ -150,12 +158,16 @@ def _build_category_matrix(lancamentos, months):
     titulo_meta = {}
     # cat_id → (nome, titulo_id, ordem)
     cat_meta    = {}
-    # titulo_id → cat_id → month_key → float
-    tree        = {}
+    # sub_key → (nome, ordem)
+    subcat_meta = {}
+    # titulo_id → cat_id → sub_key → month_key → float
+    #   sub_key = subcategoria_id  or  None  (for rows without subcategoria)
+    tree = {}
 
     for row in lancamentos:
         tit_id  = row['titulo_id']
         cat_id  = row['categoria_id']
+        sub_id  = row['subcategoria_id']   # may be None
         d       = row['data']
         if isinstance(d, str):
             try:
@@ -168,12 +180,15 @@ def _build_category_matrix(lancamentos, months):
 
         titulo_meta.setdefault(tit_id, (row['titulo_nome'], row['titulo_ordem']))
         cat_meta.setdefault(cat_id,    (row['categoria_nome'], tit_id, row['categoria_ordem']))
+        if sub_id is not None:
+            subcat_meta.setdefault(sub_id, (row['subcategoria_nome'] or '', row['subcategoria_ordem']))
 
-        if tit_id not in tree:
-            tree[tit_id] = {}
-        if cat_id not in tree[tit_id]:
-            tree[tit_id][cat_id] = {}
-        tree[tit_id][cat_id][mk] = tree[tit_id][cat_id].get(mk, 0.0) + float(row['valor'])
+        tree.setdefault(tit_id, {})
+        tree[tit_id].setdefault(cat_id, {})
+        tree[tit_id][cat_id].setdefault(sub_id, {})
+        tree[tit_id][cat_id][sub_id][mk] = (
+            tree[tit_id][cat_id][sub_id].get(mk, 0.0) + float(row['valor'])
+        )
 
     grand_by_month = {m['key']: 0.0 for m in months}
     grand_total    = 0.0
@@ -187,18 +202,43 @@ def _build_category_matrix(lancamentos, months):
             tree[tit_id],
             key=lambda x: (cat_meta[x][2], cat_meta[x][0]),
         ):
-            row_by_month = {}
-            row_total    = 0.0
+            cat_by_month = {m['key']: 0.0 for m in months}
+            subcats      = []
+
+            # sub_keys: None first (rows without subcategoria), then named subcats sorted by ordem/nome
+            sub_keys_sorted = sorted(
+                tree[tit_id][cat_id].keys(),
+                key=lambda x: subcat_meta.get(x, (9999, '')) if x is not None else (-1, ''),
+            )
+
+            for sub_id in sub_keys_sorted:
+                sub_by_month = {}
+                sub_total    = 0.0
+                for m in months:
+                    val = tree[tit_id][cat_id][sub_id].get(m['key'], 0.0)
+                    sub_by_month[m['key']] = val
+                    sub_total             += val
+                    cat_by_month[m['key']] += val
+
+                if sub_id is not None:
+                    subcats.append({
+                        'subcat_id':   sub_id,
+                        'subcat_nome': subcat_meta[sub_id][0],
+                        'by_month':    sub_by_month,
+                        'total':       sub_total,
+                    })
+                # (if sub_id is None the values are already accumulated into cat_by_month)
+
+            cat_total = sum(cat_by_month.values())
             for m in months:
-                val = tree[tit_id][cat_id].get(m['key'], 0.0)
-                row_by_month[m['key']]  = val
-                row_total              += val
-                block_by_month[m['key']] += val
+                block_by_month[m['key']] += cat_by_month[m['key']]
+
             rows.append({
                 'categoria_id':   cat_id,
                 'categoria_nome': cat_meta[cat_id][0],
-                'by_month':       row_by_month,
-                'total':          row_total,
+                'by_month':       cat_by_month,
+                'total':          cat_total,
+                'subcats':        subcats,
             })
 
         block_total = sum(block_by_month.values())
