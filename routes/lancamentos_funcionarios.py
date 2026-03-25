@@ -15,15 +15,21 @@ def _ensure_tipo_funcionario(conn):
 
     Regras de classificação (aplicadas em ordem de prioridade):
     1. funcionarioid existe APENAS em motoristas (sem colisão de ID) → 'motorista'
-    2. funcionarioid existe em AMBAS as tabelas (colisão) e há pelo menos uma
-       rubrica de Comissão para esse ID → TODOS os registros desse ID = 'motorista'
-    3. Demais → 'funcionario' (DEFAULT da coluna)
+       (executado apenas na criação da coluna, como backfill inicial)
+    2. Demais → 'funcionario' (DEFAULT da coluna)
 
-    A etapa 2 é executada SEMPRE (não só na criação da coluna) para corrigir
-    registros que possam ter ficado como 'funcionario' em backfills anteriores —
-    p.ex. linhas de Salário/Vale Alimentação de motoristas cujo ID colide com um
-    frentista, cujas linhas de Comissão foram marcadas corretamente mas as demais
-    linhas permaneceram como 'funcionario'.
+    Repair (executado SEMPRE):
+    - Reverte para 'funcionario' qualquer linha marcada como 'motorista' cujo
+      funcionarioid NÃO pertença a um motorista com paga_comissao=1.
+      Isso corrige colisões onde o ID do frentista coincide com um motorista
+      sem comissão na tabela motoristas — esses registros sempre pertencem ao
+      frentista, não ao motorista.
+    - Registros com tipo_funcionario='motorista' e funcionarioid pertencente a
+      um motorista com paga_comissao=1 são preservados (MARCOS ANTONIO, VALMIR…).
+      Esses foram corretamente definidos via formulário ou backfill anterior.
+
+    NOTA: frentistas podem ter rubricas de Comissão (comissões manuais).
+    Por isso a presença de Comissão NÃO é usada como desambiguador de tipo.
     """
     cur = conn.cursor()
     cur.execute(
@@ -52,23 +58,17 @@ def _ensure_tipo_funcionario(conn):
         conn.commit()
 
     # Repair (executa SEMPRE, é no-op quando já está correto):
-    # Para IDs colidentes, usa a presença de rubrica de Comissão como
-    # desambiguador ao nível do ID — marca TODAS as linhas do motorista
-    # (Salário, Vale Alimentação, Comissão, etc.) como 'motorista'.
-    # Usa subconsulta envolta em alias para contornar restrição MySQL de
-    # UPDATE + SELECT na mesma tabela.
+    # Reverte 'motorista' → 'funcionario' para linhas cujo funcionarioid não
+    # pertence a nenhum motorista com paga_comissao=1.
+    # Isso corrige registros de frentistas que foram incorretamente promovidos
+    # por heurísticas baseadas em Comissão quando o ID colide com um motorista
+    # sem comissão (paga_comissao=0 ou inexistente na tabela motoristas).
     cur.execute("""
         UPDATE lancamentosfuncionarios_v2
-        SET    tipo_funcionario = 'motorista'
-        WHERE  tipo_funcionario != 'motorista'
-        AND    funcionarioid IN (
-            SELECT id FROM (
-                SELECT DISTINCT m.id
-                FROM   motoristas m
-                JOIN   lancamentosfuncionarios_v2 lf2 ON lf2.funcionarioid = m.id
-                JOIN   rubricas r                     ON r.id = lf2.rubricaid
-                WHERE  r.nome IN ('Comissão', 'Comissão / Aj. Custo')
-            ) AS motoristas_com_comissao
+        SET    tipo_funcionario = 'funcionario'
+        WHERE  tipo_funcionario = 'motorista'
+        AND    funcionarioid NOT IN (
+            SELECT id FROM motoristas WHERE paga_comissao = 1
         )
     """)
     conn.commit()
@@ -115,7 +115,8 @@ def lista():
     
     where_clause = " AND ".join(where_conditions)
     
-    # Use subquery to classify each employee individually BEFORE grouping
+    # Use subquery to classify each employee individually BEFORE grouping.
+    # tipo_funcionario determina se é motorista ou frentista/outro.
     query = f"""
         SELECT 
             sub.mes,
@@ -131,7 +132,10 @@ def lista():
                 l.clienteid,
                 c.razao_social as cliente_nome,
                 l.funcionarioid,
-                COALESCE(f.categoria, 'OUTROS') as categoria,
+                CASE
+                    WHEN l.tipo_funcionario = 'motorista' THEN 'MOTORISTA'
+                    ELSE UPPER(COALESCE(f.categoria, 'OUTROS'))
+                END as categoria,
                 l.valor,
                 l.statuslancamento
             FROM lancamentosfuncionarios_v2 l
@@ -666,11 +670,16 @@ def editar(mes, cliente_id):
 @admin_required
 def limpar_comissoes_frentistas():
     """
-    Rota administrativa para limpar comissões incorretas de frentistas do banco de dados.
-    Remove todos os lançamentos de comissões para funcionários que não são motoristas.
-    
-    IMPORTANTE: Funcionários estão na tabela 'funcionarios', motoristas na tabela 'motoristas'.
-    Comissões devem existir APENAS para IDs que estão na tabela 'motoristas'.
+    Rota administrativa desativada.
+
+    ATENÇÃO: frentistas podem ter lançamentos de Comissão legítimos
+    (comissões manuais inseridas pelo formulário). A limpeza indiscriminada de
+    comissões para todo funcionarioid presente na tabela 'funcionarios' apagaria
+    dados válidos de frentistas como ROBERTA FERREIRA, RODRIGO CUNHA, JOÃO BATISTA.
+
+    A classificação correta entre frentistas e motoristas é gerida pela coluna
+    tipo_funcionario em lancamentosfuncionarios_v2, mantida por
+    _ensure_tipo_funcionario().
     """
     conn = None
     cursor = None
@@ -678,32 +687,24 @@ def limpar_comissoes_frentistas():
         conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)
 
-        # First, count how many will be affected
-        # Query corrigida: verifica se funcionarioid está na tabela 'funcionarios'
+        # Apenas conta registros que seriam afetados; NÃO deleta nada.
+        # Frentistas têm comissões legítimas — a deleção foi desativada.
         cursor.execute("""
             SELECT COUNT(*) as total
             FROM lancamentosfuncionarios_v2
             WHERE rubricaid IN (SELECT id FROM rubricas WHERE nome IN ('Comissão', 'Comissão / Aj. Custo'))
-            AND funcionarioid IN (SELECT id FROM funcionarios)
+            AND tipo_funcionario = 'funcionario'
         """)
-        count_before = cursor.fetchone()['total']
-
-        # Delete commissions for funcionarios (non-motoristas)
-        # Query corrigida: deleta se funcionarioid está na tabela 'funcionarios'
-        cursor.execute("""
-            DELETE FROM lancamentosfuncionarios_v2
-            WHERE rubricaid IN (SELECT id FROM rubricas WHERE nome IN ('Comissão', 'Comissão / Aj. Custo'))
-            AND funcionarioid IN (SELECT id FROM funcionarios)
-        """)
-
-        conn.commit()
-        deleted_count = cursor.rowcount
+        count_frentista_comissoes = cursor.fetchone()['total']
 
         return jsonify({
-            'success': True,
-            'message': f'Limpeza concluída com sucesso!',
-            'registros_esperados': count_before,
-            'registros_deletados': deleted_count
+            'success': False,
+            'message': (
+                'Esta operação foi desativada. Frentistas podem ter comissões legítimas '
+                'e a deleção automática apagaria dados válidos. '
+                f'({count_frentista_comissoes} lançamentos de comissão de frentistas encontrados — mantidos.)'
+            ),
+            'registros_deletados': 0
         }), 200
 
     except Exception as e:
