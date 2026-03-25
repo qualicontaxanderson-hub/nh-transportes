@@ -11,6 +11,7 @@ contribuem com dados; os valores são somados em uma única matriz.
 Rota:
   GET /relatorios/conf_despesas
 """
+import re
 from datetime import date, datetime
 
 from flask import Blueprint, render_template, request
@@ -84,6 +85,25 @@ def _titulos_list(conn):
     result = cur.fetchall()
     cur.close()
     return result
+
+
+def _fetch_veiculos_motoristas(conn):
+    """
+    Retorna um dicionário {caminhao_upper: motorista_nome} para todos os veículos
+    que possuem um motorista vinculado via motoristas.veiculo_id.
+    Usado para anotar as linhas da seção CAMINHÕES no relatório conf_despesas.
+    """
+    cur = conn.cursor(dictionary=True)
+    cur.execute("""
+        SELECT UPPER(v.caminhao) AS caminhao_upper,
+               m.nome            AS motorista_nome
+        FROM   veiculos  v
+        INNER  JOIN motoristas m ON m.veiculo_id = v.id
+        WHERE  v.caminhao IS NOT NULL
+    """)
+    rows = cur.fetchall()
+    cur.close()
+    return {r['caminhao_upper']: r['motorista_nome'] for r in rows}
 
 
 def _fetch_lancamentos(conn, data_inicio, data_fim, empresa_ids, titulo_ids):
@@ -472,6 +492,18 @@ def conf_despesas():
                 grand_by_month[mk] = grand_by_month.get(mk, 0.0) + func_by_month.get(mk, 0.0)
             grand_total    += func_total
             total_lancamentos += len(func_rows)
+
+            # ── Anota linhas de caminhão com o nome do motorista vinculado ──
+            veiculo_mot = _fetch_veiculos_motoristas(conn)
+            if veiculo_mot:
+                for block in blocks:
+                    for row in block.get('rows', []):
+                        nome_up = row.get('categoria_nome', '').upper()
+                        for caminhao_up, mot_nome in veiculo_mot.items():
+                            pattern = r'\b' + re.escape(caminhao_up) + r'\b'
+                            if re.search(pattern, nome_up):
+                                row['motorista_nome'] = mot_nome
+                                break
     finally:
         conn.close()
 

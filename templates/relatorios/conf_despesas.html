@@ -258,7 +258,7 @@
         {# Category rows #}
         {% for row in block.rows %}
         <tr class="row-cat">
-          <td class="col-desc ps-3">{{ row.categoria_nome }}</td>
+          <td class="col-desc ps-3">{{ row.categoria_nome }}{% if row.motorista_nome %} <span class="badge bg-success ms-1" style="font-size:.72em;font-weight:600;vertical-align:middle;"><i class="bi bi-person-fill me-1"></i>{{ row.motorista_nome }}</span>{% endif %}</td>
           {% for m in months %}
             {% set v = row.by_month.get(m.key, 0) %}
             <td class="text-end {% if v == 0 %}val-zero{% endif %}">
