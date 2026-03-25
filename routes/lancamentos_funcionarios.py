@@ -7,6 +7,55 @@ import calendar
 
 bp = Blueprint('lancamentos_funcionarios', __name__, url_prefix='/lancamentos-funcionarios')
 
+
+def _ensure_tipo_funcionario(conn):
+    """
+    Adiciona coluna tipo_funcionario à tabela lancamentosfuncionarios_v2 se
+    ainda não existir e faz o backfill dos dados existentes.
+
+    Regras de backfill (aplicadas na ordem):
+    1. funcionarioid existe APENAS em motoristas → 'motorista'
+    2. funcionarioid está em ambas as tabelas e a rubrica é Comissão → 'motorista'
+    3. Todos os demais → 'funcionario'
+    """
+    cur = conn.cursor()
+    cur.execute(
+        "SELECT COUNT(*) FROM information_schema.COLUMNS"
+        " WHERE TABLE_SCHEMA = DATABASE()"
+        " AND TABLE_NAME = 'lancamentosfuncionarios_v2'"
+        " AND COLUMN_NAME = 'tipo_funcionario'"
+    )
+    if cur.fetchone()[0] == 0:
+        # Adiciona a coluna com DEFAULT 'funcionario'
+        cur.execute(
+            "ALTER TABLE lancamentosfuncionarios_v2"
+            " ADD COLUMN tipo_funcionario VARCHAR(12) NOT NULL DEFAULT 'funcionario'"
+        )
+        conn.commit()
+
+        # Backfill 1: IDs que existem APENAS em motoristas (sem colisão)
+        cur.execute("""
+            UPDATE lancamentosfuncionarios_v2 lf
+            JOIN  motoristas   m ON m.id = lf.funcionarioid
+            LEFT  JOIN funcionarios f ON f.id = lf.funcionarioid
+            SET   lf.tipo_funcionario = 'motorista'
+            WHERE f.id IS NULL
+        """)
+        conn.commit()
+
+        # Backfill 2: IDs colidente (em ambas as tabelas) mas rubrica = Comissão → motorista
+        cur.execute("""
+            UPDATE lancamentosfuncionarios_v2 lf
+            JOIN  motoristas   m ON m.id = lf.funcionarioid
+            JOIN  funcionarios f ON f.id = lf.funcionarioid
+            JOIN  rubricas     r ON r.id = lf.rubricaid
+            SET   lf.tipo_funcionario = 'motorista'
+            WHERE r.nome IN ('Comissão', 'Comissão / Aj. Custo')
+        """)
+        conn.commit()
+    cur.close()
+
+
 def get_previous_month():
     """Get previous month in MM/YYYY format"""
     today = datetime.now()
@@ -107,6 +156,7 @@ def novo():
     try:
         conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)
+        _ensure_tipo_funcionario(conn)
 
         if request.method == 'POST':
             mes = request.form.get('mes')
@@ -114,8 +164,10 @@ def novo():
 
             # Process each employee's data
             funcionarios_ids = request.form.getlist('funcionarioid[]')
+            funcionario_tipos = request.form.getlist('funcionario_tipo[]')
 
-            for func_id in funcionarios_ids:
+            for idx, func_id in enumerate(funcionarios_ids):
+                tipo = funcionario_tipos[idx] if idx < len(funcionario_tipos) else 'funcionario'
                 # Get all rubrica values for this employee
                 rubricas = request.form.getlist(f'rubrica_{func_id}[]')
                 valores = request.form.getlist(f'valor_{func_id}[]')
@@ -126,11 +178,12 @@ def novo():
                         if valor != 0:
                             cursor.execute("""
                                 INSERT INTO lancamentosfuncionarios_v2 (
-                                    clienteid, funcionarioid, mes, rubricaid, valor, 
-                                    statuslancamento
-                                ) VALUES (%s, %s, %s, %s, %s, %s)
-                                ON DUPLICATE KEY UPDATE 
+                                    clienteid, funcionarioid, mes, rubricaid, valor,
+                                    statuslancamento, tipo_funcionario
+                                ) VALUES (%s, %s, %s, %s, %s, %s, %s)
+                                ON DUPLICATE KEY UPDATE
                                     valor = VALUES(valor),
+                                    tipo_funcionario = VALUES(tipo_funcionario),
                                     atualizadoem = CURRENT_TIMESTAMP
                             """, (
                                 clienteid,
@@ -138,7 +191,8 @@ def novo():
                                 mes,
                                 rubricaid,
                                 valor,
-                                'PENDENTE'
+                                'PENDENTE',
+                                tipo,
                             ))
 
             conn.commit()
@@ -478,6 +532,7 @@ def editar(mes, cliente_id):
     try:
         conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)
+        _ensure_tipo_funcionario(conn)
 
         if request.method == 'POST':
             mes_form = request.form.get('mes')
@@ -485,9 +540,10 @@ def editar(mes, cliente_id):
 
             # Process each employee's data
             funcionarios_ids = request.form.getlist('funcionarioid[]')
+            funcionario_tipos = request.form.getlist('funcionario_tipo[]')
 
-            for func_id in funcionarios_ids:
-                # Get all rubrica values for this employee
+            for idx, func_id in enumerate(funcionarios_ids):
+                tipo = funcionario_tipos[idx] if idx < len(funcionario_tipos) else 'funcionario'
                 rubricas = request.form.getlist(f'rubrica_{func_id}[]')
                 valores = request.form.getlist(f'valor_{func_id}[]')
 
@@ -501,11 +557,12 @@ def editar(mes, cliente_id):
                             # Insert or update the value
                             cursor.execute("""
                                 INSERT INTO lancamentosfuncionarios_v2 (
-                                    clienteid, funcionarioid, mes, rubricaid, valor, 
-                                    statuslancamento
-                                ) VALUES (%s, %s, %s, %s, %s, %s)
-                                ON DUPLICATE KEY UPDATE 
+                                    clienteid, funcionarioid, mes, rubricaid, valor,
+                                    statuslancamento, tipo_funcionario
+                                ) VALUES (%s, %s, %s, %s, %s, %s, %s)
+                                ON DUPLICATE KEY UPDATE
                                     valor = VALUES(valor),
+                                    tipo_funcionario = VALUES(tipo_funcionario),
                                     atualizadoem = CURRENT_TIMESTAMP
                             """, (
                                 clienteid,
@@ -513,15 +570,16 @@ def editar(mes, cliente_id):
                                 mes_form,
                                 rubricaid,
                                 valor,
-                                'PENDENTE'
+                                'PENDENTE',
+                                tipo,
                             ))
                         else:
                             # If valor is 0 or empty, DELETE the record to truly remove it
                             cursor.execute("""
                                 DELETE FROM lancamentosfuncionarios_v2
-                                WHERE clienteid = %s 
-                                  AND funcionarioid = %s 
-                                  AND mes = %s 
+                                WHERE clienteid = %s
+                                  AND funcionarioid = %s
+                                  AND mes = %s
                                   AND rubricaid = %s
                             """, (
                                 clienteid,

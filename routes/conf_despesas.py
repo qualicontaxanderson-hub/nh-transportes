@@ -370,18 +370,16 @@ def _fetch_func_lancamentos(conn, months, empresa_ids):
 
     IMPORTANTE: lf.funcionarioid pode referenciar funcionarios.id (frentistas/
     outros) OU motoristas.id (motoristas). Ambas as tabelas têm auto-increment
-    iniciando em 1, portanto os IDs colidem (ex.: funcionarios.id=1=BRENA e
-    motoristas.id=1=MARCOS ANTONIO coexistem). Por isso:
-      - Usamos dois LEFT JOINs (f = funcionarios, m = motoristas).
-      - Resolvemos o nome com CASE WHEN m.id IS NOT NULL THEN m.nome ELSE f.nome
-        para garantir que entradas de motoristas usem o nome correto mesmo quando
-        o mesmo funcionarioid existe em ambas as tabelas (colisão de IDs).
-      - COALESCE(f.nome, m.nome) daria o nome errado no caso de colisão, pois
-        f.nome seria não-NULL e retornaria o nome do frentista, causando falha
-        no lookup nome_to_vid → salary map vazio.
+    iniciando em 1, portanto os IDs colidem. A coluna tipo_funcionario
+    (adicionada via _ensure_tipo_funcionario) resolve a ambiguidade: 'motorista'
+    para motoristas, 'funcionario' para todos os demais.
     """
     if not months:
         return []
+
+    # Garante que a coluna tipo_funcionario existe e está backfilled
+    from routes.lancamentos_funcionarios import _ensure_tipo_funcionario
+    _ensure_tipo_funcionario(conn)
 
     # Constrói lista de strings 'MM/YYYY' para o período
     mes_list = [f"{m['month']:02d}/{m['year']}" for m in months]
@@ -398,11 +396,11 @@ def _fetch_func_lancamentos(conn, months, empresa_ids):
         SELECT
             lf.funcionarioid,
             CASE
-                WHEN m.id IS NOT NULL THEN m.nome
+                WHEN lf.tipo_funcionario = 'motorista' THEN m.nome
                 ELSE f.nome
             END                                                            AS funcionario_nome,
             CASE
-                WHEN m.id IS NOT NULL THEN 'MOTORISTA'
+                WHEN lf.tipo_funcionario = 'motorista' THEN 'MOTORISTA'
                 ELSE UPPER(COALESCE(f.categoria, 'OUTROS'))
             END                                                            AS categoria_func,
             lf.caminhaoid                                                  AS veiculo_id,

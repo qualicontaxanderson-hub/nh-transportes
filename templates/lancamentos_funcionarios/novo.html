@@ -299,7 +299,7 @@ function checkAndLoadFuncionarios() {
                     <td>
                         ${func.nome}
                         <input type="hidden" name="funcionarioid[]" value="${func.id}">
-                        <input type="hidden" name="funcionario_tipo_${func.id}" value="${func.tipo}">
+                        <input type="hidden" name="funcionario_tipo[]" value="${func.tipo}">
                     </td>
                     <td>
                         <span class="badge bg-info">${func.categoria || 'N/A'}</span>
