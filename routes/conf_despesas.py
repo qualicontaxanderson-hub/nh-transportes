@@ -223,7 +223,7 @@ def _build_category_matrix(lancamentos, months):
                 if sub_id is not None:
                     subcats.append({
                         'subcat_id':   sub_id,
-                        'subcat_nome': subcat_meta[sub_id][0],
+                        'subcat_nome': subcat_meta[sub_id][1],
                         'by_month':    sub_by_month,
                         'total':       sub_total,
                     })
