@@ -158,7 +158,7 @@ def _build_category_matrix(lancamentos, months):
     titulo_meta = {}
     # cat_id → (nome, titulo_id, ordem)
     cat_meta    = {}
-    # sub_key → (nome, ordem)
+    # sub_key → (ordem, nome)
     subcat_meta = {}
     # titulo_id → cat_id → sub_key → month_key → float
     #   sub_key = subcategoria_id  or  None  (for rows without subcategoria)
@@ -181,7 +181,7 @@ def _build_category_matrix(lancamentos, months):
         titulo_meta.setdefault(tit_id, (row['titulo_nome'], row['titulo_ordem']))
         cat_meta.setdefault(cat_id,    (row['categoria_nome'], tit_id, row['categoria_ordem']))
         if sub_id is not None:
-            subcat_meta.setdefault(sub_id, (row['subcategoria_nome'] or '', row['subcategoria_ordem']))
+            subcat_meta.setdefault(sub_id, (row['subcategoria_ordem'], row['subcategoria_nome'] or ''))
 
         tree.setdefault(tit_id, {})
         tree[tit_id].setdefault(cat_id, {})
