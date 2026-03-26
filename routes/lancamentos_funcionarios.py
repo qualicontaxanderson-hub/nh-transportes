@@ -55,6 +55,17 @@ def _ensure_tipo_funcionario(conn):
             WHERE f.id IS NULL
         """)
         conn.commit()
+
+        # Repair: Reverte para 'funcionario' qualquer linha cujo funcionarioid
+    # existe na tabela funcionarios (frentistas/outros sempre estão lá;
+    # motoristas reais NÃO estão).
+    cur.execute("""
+        UPDATE lancamentosfuncionarios_v2 lf
+        JOIN funcionarios f ON f.id = lf.funcionarioid
+        SET lf.tipo_funcionario = 'funcionario'
+        WHERE lf.tipo_funcionario != 'funcionario'
+    """)
+    conn.commit()
     cur.close()
 
 
