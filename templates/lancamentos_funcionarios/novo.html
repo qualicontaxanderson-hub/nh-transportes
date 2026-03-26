@@ -131,8 +131,9 @@ const rubricas = {{ rubricas|tojson|safe }};
 // funcionarios.id and motoristas.id (both auto-increment from 1).
 const valoresFuncionario = {{ valores_funcionario|tojson|safe if valores_funcionario is defined else '{}' }};
 const valoresMotorista   = {{ valores_motorista|tojson|safe   if valores_motorista   is defined else '{}' }};
-// Legacy alias kept for PRIORITY-3 blocks that reference valoresExistentes
-// directly — will be overridden per-employee inside the loop.
+// Per-employee alias that is re-assigned inside the forEach loop so that
+// the existing PRIORITY 3 lookup (else if modoEdicao && valoresExistentes…)
+// always reads from the correct tipo-specific dict without touching that logic.
 let valoresExistentes = {};
 const modoEdicao = {{ 'true' if modo_edicao else 'false' }};
 let comissoesData = {};
