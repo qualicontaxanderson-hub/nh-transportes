@@ -55,7 +55,7 @@ def _ensure_tipo_funcionario(conn):
             WHERE f.id IS NULL
         """)
         conn.commit()
-            cur.close()
+    cur.close()
 
 
 def get_previous_month():
