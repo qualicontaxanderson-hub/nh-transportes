@@ -56,9 +56,26 @@ def _ensure_tipo_funcionario(conn):
         """)
         conn.commit()
 
-    # Repair (executado SEMPRE): reverte para 'funcionario' qualquer linha cujo
-    # funcionarioid existe na tabela funcionarios (frentistas/outros sempre
-    # estão lá; motoristas reais NÃO estão).
+    # Repair (executado SEMPRE):
+    # Passo 1 — Deleta linhas de frentista marcadas como 'motorista' quando
+    # já existe uma linha idêntica com tipo='funcionario' para o mesmo
+    # (funcionarioid, rubricaid, mes, clienteid). Uma UPDATE direta causaria
+    # Duplicate Key, então removemos o duplicado incorreto antes de atualizar.
+    cur.execute("""
+        DELETE lf FROM lancamentosfuncionarios_v2 lf
+        JOIN funcionarios f ON f.id = lf.funcionarioid
+        JOIN lancamentosfuncionarios_v2 lf2
+            ON  lf2.funcionarioid = lf.funcionarioid
+            AND lf2.rubricaid     = lf.rubricaid
+            AND lf2.mes           = lf.mes
+            AND lf2.clienteid     = lf.clienteid
+            AND lf2.tipo_funcionario = 'funcionario'
+        WHERE lf.tipo_funcionario = 'motorista'
+    """)
+    conn.commit()
+
+    # Passo 2 — Atualiza linhas restantes de frentista ainda marcadas como
+    # 'motorista' (sem duplicata conflitante) → 'funcionario'.
     cur.execute("""
         UPDATE lancamentosfuncionarios_v2 lf
         JOIN funcionarios f ON f.id = lf.funcionarioid
@@ -423,21 +440,19 @@ def detalhe(mes, cliente_id):
     # Filter out commissions for non-motoristas
     lancamentos_filtrados = []
     motoristas_com_lancamentos = set()
-    
+
     for lanc in lancamentos:
         func_id = lanc['funcionarioid']
-        
-        # Check if this is a commission rubrica
-        rubrica_nome = lanc.get('rubrica_nome', '')
-        is_comissao = rubrica_nome in ['Comissão', 'Comissão / Aj. Custo']
-        
-        # Only exclude if it's a commission AND funcionario is not a motorista
-        if is_comissao and func_id not in motoristas:
-            continue  # Skip this lancamento (commission for non-motorista)
-        
-        # Track motoristas that already have lancamentos (only motoristas!)
-        if func_id in motoristas:
+        tipo_func = lanc.get('tipo_funcionario', 'funcionario')
+
+        # Track motoristas that already have lancamentos
+        if tipo_func == 'motorista':
             motoristas_com_lancamentos.add(func_id)
+
+        # All DB entries are explicitly saved via the form — include them all.
+        # Frentistas may have Comissão entries (manual commissions) which must
+        # NOT be filtered out. No ID-based lookup needed; tipo_funcionario
+        # already disambiguates the two tables that share auto-increment IDs.
         
         lancamentos_filtrados.append(lanc)
     
@@ -473,6 +488,7 @@ def detalhe(mes, cliente_id):
                         # Create a lancamento entry for this commission
                         lancamento_comissao = {
                             'funcionarioid': motorista_id_int,
+                            'tipo_funcionario': 'motorista',
                             'funcionario_nome': motoristas.get(motorista_id_int, f'Motorista {motorista_id}'),
                             'rubricaid': rubrica_comissao['id'],
                             'rubrica_nome': rubrica_comissao['nome'],
@@ -492,27 +508,32 @@ def detalhe(mes, cliente_id):
     
     lancamentos = lancamentos_filtrados
     
-    # Sort lancamentos by funcionarioid for consistent ordering
-    # This ensures that each employee's data is grouped correctly
-    lancamentos.sort(key=lambda x: x['funcionarioid'])
+    # Sort lancamentos by (funcionarioid, tipo_funcionario) to keep frentistas
+    # and motoristas with the same numeric ID in separate, consistent groups.
+    lancamentos.sort(key=lambda x: (x['funcionarioid'], x.get('tipo_funcionario', '')))
     
-    # Group by employee
+    # Group by (funcionarioid, tipo_funcionario) to prevent ID collision between
+    # funcionarios and motoristas tables (both auto-increment from 1).
+    # E.g. João Batista (frentista id=1) and VALMIR (motorista id=1) must be
+    # shown as separate employees.
     funcionarios_data = {}
     for lanc in lancamentos:
         func_id = lanc['funcionarioid']
-        if func_id not in funcionarios_data:
-            funcionarios_data[func_id] = {
+        tipo = lanc.get('tipo_funcionario', 'funcionario')
+        key = (func_id, tipo)
+        if key not in funcionarios_data:
+            funcionarios_data[key] = {
                 'nome': lanc['funcionario_nome'],
                 'rubricas': [],
                 'total': 0
             }
-        funcionarios_data[func_id]['rubricas'].append(lanc)
+        funcionarios_data[key]['rubricas'].append(lanc)
         
         # Calculate total (positive for benefits, negative for discounts)
         if lanc['rubrica_tipo'] in ['DESCONTO', 'IMPOSTO']:
-            funcionarios_data[func_id]['total'] -= float(lanc['valor'])
+            funcionarios_data[key]['total'] -= float(lanc['valor'])
         else:
-            funcionarios_data[func_id]['total'] += float(lanc['valor'])
+            funcionarios_data[key]['total'] += float(lanc['valor'])
     
     return render_template('lancamentos_funcionarios/detalhe.html',
                          mes=mes,
