@@ -55,23 +55,7 @@ def _ensure_tipo_funcionario(conn):
             WHERE f.id IS NULL
         """)
         conn.commit()
-
-        # Repair (executa SEMPRE): apaga comissoes de frentistas que colidiram
-        # com motoristas. Ocorre quando funcionarioid existe em AMBAS as tabelas
-        # (funcionarios e motoristas) e o registro foi gravado com tipo='funcionario'
-        # mas o valor e o mesmo de um motorista. Safe: preserva comissoes manuais
-        # (ex: Rodrigo) pois ele NAO esta na tabela motoristas.
-        cur.execute("""
-            DELETE lf FROM lancamentosfuncionarios_v2 lf
-            INNER JOIN funcionarios f ON f.id = lf.funcionarioid
-            INNER JOIN motoristas m ON m.id = lf.funcionarioid
-            INNER JOIN rubricas r ON r.id = lf.rubricaid
-                AND r.nome IN ('Comissao', 'Comissao / Aj. Custo',
-                                                              'Comissão', 'Comissão / Aj. Custo')
-            WHERE lf.tipo_funcionario = 'funcionario'
-        """)
-        conn.commit()
-    cur.close()
+            cur.close()
 
 
 def get_previous_month():
