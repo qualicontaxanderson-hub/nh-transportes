@@ -13,22 +13,29 @@ def _ensure_tipo_funcionario(conn):
     Garante que a coluna tipo_funcionario existe em lancamentosfuncionarios_v2 e
     que todos os registros estão corretamente classificados.
 
-    Regras de classificação (aplicadas em ordem de prioridade):
-    1. funcionarioid existe APENAS em motoristas (sem colisão de ID) → 'motorista'
-       (executado apenas na criação da coluna, como backfill inicial)
-    2. Demais → 'funcionario' (DEFAULT da coluna)
+    Backfill inicial (apenas quando a coluna é criada):
+    - IDs que existem APENAS em motoristas (sem colisão) → tipo='motorista'
+    - Demais → tipo='funcionario' (DEFAULT)
 
-    Repair (executado SEMPRE):
-    - Reverte para 'funcionario' qualquer linha cujo funcionarioid existe na tabela
-      funcionarios. Frentistas/outros sempre estão em funcionarios; motoristas NÃO
-      estão. Isso corrige promoções incorretas de frentistas causadas por heurísticas
-      anteriores baseadas em Comissão (que confundiam frentistas com motoristas
-      quando IDs colidem entre as duas tabelas).
-    - VALMIR, MARCOS ANTONIO e demais motoristas reais NÃO estão na tabela
-      funcionarios, portanto suas linhas com tipo='motorista' são preservadas.
+    Repair (executado SEMPRE) — 3 passos para tratar colisão de IDs:
 
-    NOTA: frentistas podem ter rubricas de Comissão (comissões manuais).
-    Por isso a presença de Comissão NÃO é usada como desambiguador de tipo.
+    PROBLEMA: funcionarios.id e motoristas.id são auto_increment independentes
+    e podem ter o mesmo número (ex.: Roberta/funcionarios.id=2 colide com
+    Marcos Antonio/motoristas.id=2; João/funcionarios.id=1 colide com
+    Valmir/motoristas.id=1). O critério CORRETO de desambiguação:
+    - Para um mesmo (funcionarioid, rubricaid, mes, clienteid), se existem
+      DUAS linhas — uma tipo='motorista' e outra tipo='funcionario' — a linha
+      tipo='funcionario' é a cópia corrompida (gerada por colisão de IDs) e
+      deve ser removida; a linha tipo='motorista' é a correta.
+    - Para IDs sem colisão (existem apenas em uma tabela), o tipo é determinado
+      pela tabela em que o ID existe.
+
+    Passo 1: DELETE tipo='funcionario' duplicatas de dados de motoristas.
+    Passo 2: UPDATE tipo='motorista'→'funcionario' para IDs sem colisão em funcionarios.
+    Passo 3: UPDATE tipo='funcionario'→'motorista' para IDs sem colisão em motoristas.
+
+    NOTA: frentistas podem ter rubricas de Comissão (comissões manuais); a
+    presença de Comissão NÃO é usada como critério de tipo.
     """
     cur = conn.cursor()
     cur.execute(
@@ -56,31 +63,61 @@ def _ensure_tipo_funcionario(conn):
         """)
         conn.commit()
 
-    # Repair (executado SEMPRE):
-    # Passo 1 — Deleta linhas de frentista marcadas como 'motorista' quando
-    # já existe uma linha idêntica com tipo='funcionario' para o mesmo
-    # (funcionarioid, rubricaid, mes, clienteid). Uma UPDATE direta causaria
-    # Duplicate Key, então removemos o duplicado incorreto antes de atualizar.
+    # Repair (executado SEMPRE) — 3 passos para lidar com colisão de IDs:
+    #
+    # Problema: funcionarios.id e motoristas.id são auto_increment independentes
+    # e podem ter o mesmo número (ex.: Roberta/funcionarios.id=2 e
+    # Marcos Antonio/motoristas.id=2).  Versões anteriores do repair usavam
+    # apenas o JOIN por ID para decidir o tipo, o que causava:
+    #   - tipo='motorista' para linhas de frentistas (rubricas de salário/VA)
+    #   - tipo='funcionario' para linhas de motoristas (comissão)
+    # O critério correto é: se existe uma linha tipo='motorista' E uma linha
+    # tipo='funcionario' para EXATAMENTE o mesmo (fid, rubrica, mes, cliente),
+    # a linha tipo='funcionario' é a cópia corrompida → deve ser removida.
+
+    # Passo 1 — Deleta tipo='funcionario' duplicatas de dados de motoristas.
+    # Quando o mesmo (funcionarioid, rubricaid, mes, clienteid) existe como
+    # tipo='motorista' (correto) E tipo='funcionario' (corrompido), remove o
+    # tipo='funcionario'. Apenas para IDs que existem em motoristas.
     cur.execute("""
         DELETE lf FROM lancamentosfuncionarios_v2 lf
-        JOIN funcionarios f ON f.id = lf.funcionarioid
-        JOIN lancamentosfuncionarios_v2 lf2
-            ON  lf2.funcionarioid = lf.funcionarioid
-            AND lf2.rubricaid     = lf.rubricaid
-            AND lf2.mes           = lf.mes
-            AND lf2.clienteid     = lf.clienteid
-            AND lf2.tipo_funcionario = 'funcionario'
-        WHERE lf.tipo_funcionario = 'motorista'
+        INNER JOIN motoristas m ON m.id = lf.funcionarioid
+        INNER JOIN lancamentosfuncionarios_v2 lf2
+            ON  lf2.funcionarioid    = lf.funcionarioid
+            AND lf2.rubricaid        = lf.rubricaid
+            AND lf2.mes              = lf.mes
+            AND lf2.clienteid        = lf.clienteid
+            AND lf2.tipo_funcionario = 'motorista'
+        WHERE lf.tipo_funcionario = 'funcionario'
     """)
     conn.commit()
 
-    # Passo 2 — Atualiza linhas restantes de frentista ainda marcadas como
-    # 'motorista' (sem duplicata conflitante) → 'funcionario'.
+    # Passo 2 — Corrige tipo='motorista' para linhas de frentistas sem colisão.
+    # Para IDs que existem APENAS em funcionarios (não em motoristas), qualquer
+    # linha tipo='motorista' é classificação errada → muda para 'funcionario'.
+    # IDs com colisão são preservados: se fid=X está em AMBAS as tabelas, o
+    # LEFT JOIN encontra m.id IS NOT NULL e a linha NÃO é alterada.
     cur.execute("""
         UPDATE lancamentosfuncionarios_v2 lf
-        JOIN funcionarios f ON f.id = lf.funcionarioid
-        SET lf.tipo_funcionario = 'funcionario'
+        JOIN  funcionarios f ON f.id = lf.funcionarioid
+        LEFT  JOIN motoristas m ON m.id = lf.funcionarioid
+        SET   lf.tipo_funcionario = 'funcionario'
         WHERE lf.tipo_funcionario = 'motorista'
+          AND m.id IS NULL
+    """)
+    conn.commit()
+
+    # Passo 3 — Corrige tipo='funcionario' para linhas de motoristas sem colisão.
+    # Para IDs que existem APENAS em motoristas (não em funcionarios), qualquer
+    # linha tipo='funcionario' é classificação errada → muda para 'motorista'.
+    # Recupera dados que versões anteriores do repair converteram incorretamente.
+    cur.execute("""
+        UPDATE lancamentosfuncionarios_v2 lf
+        JOIN  motoristas m ON m.id = lf.funcionarioid
+        LEFT  JOIN funcionarios f ON f.id = lf.funcionarioid
+        SET   lf.tipo_funcionario = 'motorista'
+        WHERE lf.tipo_funcionario = 'funcionario'
+          AND f.id IS NULL
     """)
     conn.commit()
     cur.close()
