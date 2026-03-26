@@ -11,7 +11,12 @@ def lista():
     try:
         conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)
-        cursor.execute("SELECT * FROM veiculos ORDER BY placa")
+        cursor.execute("""
+            SELECT v.*, m.nome AS motorista_nome, m.id AS motorista_id
+            FROM veiculos v
+            LEFT JOIN motoristas m ON m.veiculo_id = v.id
+            ORDER BY v.placa
+        """)
         veiculos = cursor.fetchall()
         cursor.close()
         conn.close()

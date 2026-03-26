@@ -2,113 +2,156 @@
 
 {% block title %}Depósitos{% endblock %}
 
+{% block styles %}
+<style>
+  .page-hero {
+    background: linear-gradient(135deg, #1D63A5 0%, #1a4f82 60%, #154070 100%);
+    border-radius: .75rem;
+    padding: 1.5rem 2rem;
+    margin-bottom: 1.5rem;
+    color: #fff;
+  }
+  .page-hero .hero-icon {
+    width: 3rem; height: 3rem;
+    background: rgba(255,255,255,.15);
+    border-radius: .6rem;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1.5rem;
+    flex-shrink: 0;
+  }
+  .stat-card {
+    border: none;
+    border-radius: .6rem;
+    box-shadow: 0 1px 6px rgba(0,0,0,.08);
+  }
+  .stat-card .stat-label { font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; opacity: .7; }
+  .stat-card .stat-value { font-size: 1.45rem; font-weight: 700; line-height: 1; }
+  .form-section-title {
+    font-size: 0.78rem; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.05em; color: #1D63A5;
+    padding-bottom: .4rem; border-bottom: 2px solid #e0eaf5; margin-bottom: 1rem;
+  }
+  .table th { font-weight: 700; font-size: 0.8rem; text-transform: uppercase; letter-spacing: .03em; color: #374151; }
+  .table td { font-size: 0.87rem; vertical-align: middle; }
+  .btn-act {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 1.65rem; height: 1.65rem; border-radius: 4px;
+    font-size: 0.72rem; border: none; cursor: pointer;
+    text-decoration: none; transition: opacity .12s; padding: 0;
+  }
+  .btn-act:hover { opacity: .75; }
+  .btn-act-view   { background: #d1ecf1; color: #0c5460; }
+  .btn-act-edit   { background: #cce5ff; color: #004085; }
+  .btn-act-danger { background: #f8d7da; color: #721c24; }
+  .dep-badge {
+    display:inline-block; font-size:0.65rem; font-weight:600;
+    padding:0.15rem 0.4rem; border-radius:3px; white-space:nowrap;
+  }
+  .dep-badge-ok      { background:#d1e7dd; color:#0f5132; }
+  .dep-badge-cheque  { background:#dde5f8; color:#1240aa; }
+  .dep-badge-especie { background:#e6f4ea; color:#1a6a3c; }
+  tr.dep-selecionado td { background:#fffbe6 !important; }
+  .dep-conciliado td { opacity:0.75; }
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="container-fluid">
 
-  <!-- Header -->
-  <div class="d-flex justify-content-between align-items-center mt-2 mb-3">
-    <div>
-      <h2 style="color:#1D63A5;font-size:1.25rem;margin:0;"><i class="bi bi-bank2"></i> Depósitos</h2>
-      <p class="text-muted mb-0" style="font-size:0.78rem;">Depósitos em espécie e cheque registrados no Fechamento de Caixa</p>
+  <!-- Hero header -->
+  <div class="page-hero d-flex align-items-center gap-3 flex-wrap">
+    <div class="hero-icon"><i class="bi bi-bank2"></i></div>
+    <div class="flex-grow-1">
+      <h4 class="mb-0 fw-bold">Depósitos</h4>
+      <p class="mb-0 opacity-75 small">Depósitos em espécie e cheque registrados no Fechamento de Caixa.</p>
     </div>
-    <div>
-      <a href="{{ url_for('lancamentos_caixa.novo') }}" class="btn btn-outline-primary btn-sm" style="font-size:0.78rem;">
-        <i class="bi bi-plus-circle"></i> Novo Fechamento de Caixa
-      </a>
-    </div>
+    <a href="{{ url_for('depositos.extrato', data_inicio=data_inicio, data_fim=data_fim) }}"
+       class="btn btn-sm px-3 fw-semibold" style="background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.35);">
+      <i class="bi bi-journal-text me-1"></i> Extrato OFX
+    </a>
+    <a href="{{ url_for('lancamentos_caixa.novo') }}"
+       class="btn btn-sm px-3 fw-semibold" style="background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.35);">
+      <i class="bi bi-plus-circle me-1"></i> Novo Fechamento de Caixa
+    </a>
   </div>
 
   <!-- Stat cards -->
-  <div class="row g-2 mb-3">
+  <div class="row g-3 mb-4">
     <div class="col-6 col-md-3">
-      <div class="dep-stat-card">
-        <span class="dep-icon dep-warn"><i class="bi bi-hourglass-split"></i></span>
-        <div>
-          <div class="dep-label">Pendentes</div>
-          <div class="dep-value">{{ qtd_pendente }}</div>
-        </div>
+      <div class="card stat-card p-3">
+        <div class="stat-label" style="color:#b45309;">Pendentes</div>
+        <div class="stat-value" style="color:#b45309;">{{ qtd_pendente }}</div>
+        <div class="small text-muted mt-1">aguardando conciliação</div>
       </div>
     </div>
     <div class="col-6 col-md-3">
-      <div class="dep-stat-card">
-        <span class="dep-icon dep-ok"><i class="bi bi-check-circle"></i></span>
-        <div>
-          <div class="dep-label">Conciliados</div>
-          <div class="dep-value">{{ qtd_conciliado }}</div>
-        </div>
+      <div class="card stat-card p-3">
+        <div class="stat-label text-success">Conciliados</div>
+        <div class="stat-value text-success">{{ qtd_conciliado }}</div>
+        <div class="small text-muted mt-1">depósitos conciliados</div>
       </div>
     </div>
     <div class="col-6 col-md-3">
-      <div class="dep-stat-card">
-        <span class="dep-icon dep-danger"><i class="bi bi-currency-dollar"></i></span>
-        <div>
-          <div class="dep-label">Total Pendente</div>
-          <div class="dep-value" style="font-size:0.82rem;">{{ total_pendente | formatar_moeda }}</div>
-        </div>
+      <div class="card stat-card p-3">
+        <div class="stat-label text-danger">Total Pendente</div>
+        <div class="stat-value text-danger" style="font-size:1.1rem;">{{ total_pendente | formatar_moeda }}</div>
+        <div class="small text-muted mt-1">a conciliar</div>
       </div>
     </div>
     <div class="col-6 col-md-3">
-      <div class="dep-stat-card">
-        <span class="dep-icon dep-info"><i class="bi bi-wallet2"></i></span>
-        <div>
-          <div class="dep-label">Total Geral</div>
-          <div class="dep-value" style="font-size:0.82rem;">{{ total_geral | formatar_moeda }}</div>
-        </div>
+      <div class="card stat-card p-3">
+        <div class="stat-label" style="color:#1D63A5;">Total Geral</div>
+        <div class="stat-value" style="color:#1D63A5;font-size:1.1rem;">{{ total_geral | formatar_moeda }}</div>
+        <div class="small text-muted mt-1">no período</div>
       </div>
     </div>
   </div>
 
   <!-- Filtros -->
   <div class="card shadow-sm mb-3">
-    <div class="card-header py-2 d-flex align-items-center" style="background:#1D63A5;color:white;font-size:0.78rem;font-weight:600;">
-      <i class="bi bi-funnel me-1"></i> Filtros
-    </div>
-    <div class="card-body py-2 px-3" style="font-size:0.78rem;">
-      <form method="GET" action="{{ url_for('depositos.listar') }}">
-        <div class="row g-2 align-items-end">
-          <div class="col-md-2">
-            <label class="form-label mb-1 fw-semibold" style="font-size:0.72rem;">Data Início</label>
-            <input type="date" class="form-control form-control-sm" name="data_inicio"
-                   value="{{ data_inicio }}" style="font-size:0.75rem;">
-          </div>
-          <div class="col-md-2">
-            <label class="form-label mb-1 fw-semibold" style="font-size:0.72rem;">Data Fim</label>
-            <input type="date" class="form-control form-control-sm" name="data_fim"
-                   value="{{ data_fim }}" style="font-size:0.75rem;">
-          </div>
-          <div class="col-md-3">
-            <label class="form-label mb-1 fw-semibold" style="font-size:0.72rem;">Posto/Cliente</label>
-            <select class="form-select form-select-sm" name="cliente_ids[]" style="font-size:0.75rem;" multiple size="1">
-              <option value="">Todos</option>
-              {% for c in clientes %}
-              <option value="{{ c.id }}" {% if c.id|string in cliente_ids %}selected{% endif %}>{{ c.nome }}</option>
-              {% endfor %}
-            </select>
-          </div>
-          <div class="col-md-2">
-            <label class="form-label mb-1 fw-semibold" style="font-size:0.72rem;">Tipo</label>
-            <select class="form-select form-select-sm" name="tipo_grupo" style="font-size:0.75rem;">
-              <option value="">Todos</option>
-              <option value="ESPECIE"  {% if tipo_grupo == 'ESPECIE'  %}selected{% endif %}>Espécie</option>
-              <option value="CHEQUE"   {% if tipo_grupo == 'CHEQUE'   %}selected{% endif %}>Cheque</option>
-            </select>
-          </div>
-          <div class="col-md-2">
-            <label class="form-label mb-1 fw-semibold" style="font-size:0.72rem;">Status</label>
-            <select class="form-select form-select-sm" name="status" style="font-size:0.75rem;">
-              <option value="">Todos</option>
-              <option value="pendente"   {% if status == 'pendente'   %}selected{% endif %}>Pendente</option>
-              <option value="conciliado" {% if status == 'conciliado' %}selected{% endif %}>Conciliado</option>
-            </select>
-          </div>
-          <div class="col-md-1 d-flex gap-1">
-            <button type="submit" class="btn btn-primary btn-sm px-2" title="Filtrar" style="font-size:0.75rem;">
-              <i class="bi bi-search"></i>
-            </button>
-            <a href="{{ url_for('depositos.listar') }}" class="btn btn-outline-secondary btn-sm px-2" title="Limpar" style="font-size:0.75rem;">
-              <i class="bi bi-x"></i>
-            </a>
-          </div>
+    <div class="card-body">
+      <div class="form-section-title mb-3"><i class="bi bi-funnel me-1"></i>Filtros</div>
+      <form method="GET" action="{{ url_for('depositos.listar') }}" class="row g-2 align-items-end">
+        <div class="col-md-2">
+          <label class="form-label" style="font-size:0.83rem;font-weight:600;color:#374151;">Data Inicial</label>
+          <input type="date" class="form-control form-control-sm" name="data_inicio" value="{{ data_inicio }}">
+        </div>
+        <div class="col-md-2">
+          <label class="form-label" style="font-size:0.83rem;font-weight:600;color:#374151;">Data Final</label>
+          <input type="date" class="form-control form-control-sm" name="data_fim" value="{{ data_fim }}">
+        </div>
+        <div class="col-md-3">
+          <label class="form-label" style="font-size:0.83rem;font-weight:600;color:#374151;">Posto/Cliente</label>
+          <select class="form-select form-select-sm" name="cliente_ids[]" multiple size="1">
+            <option value="">Todos</option>
+            {% for c in clientes %}
+            <option value="{{ c.id }}" {% if c.id|string in cliente_ids %}selected{% endif %}>{{ c.nome }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-md-2">
+          <label class="form-label" style="font-size:0.83rem;font-weight:600;color:#374151;">Tipo</label>
+          <select class="form-select form-select-sm" name="tipo_grupo">
+            <option value="">Todos</option>
+            <option value="ESPECIE"  {% if tipo_grupo == 'ESPECIE'  %}selected{% endif %}>Espécie</option>
+            <option value="CHEQUE"   {% if tipo_grupo == 'CHEQUE'   %}selected{% endif %}>Cheque</option>
+          </select>
+        </div>
+        <div class="col-md-2">
+          <label class="form-label" style="font-size:0.83rem;font-weight:600;color:#374151;">Status</label>
+          <select class="form-select form-select-sm" name="status">
+            <option value="">Todos</option>
+            <option value="pendente"   {% if status == 'pendente'   %}selected{% endif %}>Pendente</option>
+            <option value="conciliado" {% if status == 'conciliado' %}selected{% endif %}>Conciliado</option>
+          </select>
+        </div>
+        <div class="col-md-1 d-flex gap-2">
+          <button type="submit" class="btn btn-primary btn-sm">
+            <i class="bi bi-search me-1"></i> Filtrar
+          </button>
+          <a href="{{ url_for('depositos.listar') }}" class="btn btn-secondary btn-sm">
+            <i class="bi bi-x-circle me-1"></i> Limpar
+          </a>
         </div>
       </form>
     </div>
@@ -131,18 +174,17 @@
 
   <!-- Tabela -->
   <div class="card shadow-sm">
-    <div class="card-header py-2 d-flex justify-content-between align-items-center"
-         style="background:#1D63A5;color:white;font-size:0.78rem;font-weight:600;">
-      <span><i class="bi bi-list-ul me-1"></i> Depósitos</span>
-      {% if depositos %}<span class="badge bg-white text-secondary" style="font-size:0.68rem;">{{ depositos|length }}</span>{% endif %}
+    <div class="card-header d-flex align-items-center py-2"
+         style="background:#1D63A5;color:white;font-size:0.82rem;font-weight:600;letter-spacing:0.02em;">
+      <i class="bi bi-list-ul me-2"></i> Lista de Depósitos
+      {% if depositos %}<span class="badge ms-2" style="background:rgba(255,255,255,.2);font-size:0.78rem;">{{ depositos|length }}</span>{% endif %}
     </div>
-    <div class="card-body p-0">
+    <div class="card-body table-responsive p-0">
       {% if depositos %}
-      <div class="table-responsive">
-        <table class="table table-hover mb-0 dep-table">
-          <thead>
+        <table class="table table-hover table-sm mb-0">
+          <thead style="background:#f8f9fb;">
             <tr>
-              <th style="width:2rem;"><input type="checkbox" id="checkAll" title="Selecionar todos pendentes"></th>
+              <th class="ps-3" style="width:2rem;"><input type="checkbox" id="checkAll" title="Selecionar todos pendentes"></th>
               <th>Data Caixa</th>
               <th>Posto</th>
               <th>Tipo</th>
@@ -150,13 +192,13 @@
               <th class="text-end">Valor</th>
               <th>Data Depósito</th>
               <th class="text-center">Conc. Bancária</th>
-              <th class="text-center">Ações</th>
+              <th class="text-center pe-3">Ações</th>
             </tr>
           </thead>
           <tbody>
             {% for d in depositos %}
             <tr class="{% if d.bank_transaction_id %}dep-conciliado{% else %}dep-pendente{% endif %}">
-              <td>
+              <td class="ps-3">
                 {% if not d.bank_transaction_id %}
                 <input type="checkbox" class="dep-check"
                        data-id="{{ d.id }}"
@@ -167,7 +209,7 @@
               </td>
               <td>
                 <a href="{{ url_for('lancamentos_caixa.visualizar', id=d.lancamento_caixa_id) }}"
-                   class="text-decoration-none text-dark fw-semibold" style="font-size:0.75rem;">
+                   class="text-decoration-none text-dark fw-semibold">
                   {{ d.data_caixa_br }}
                 </a>
               </td>
@@ -204,10 +246,10 @@
                   </div>
                 {% endif %}
               </td>
-              <td class="text-center">
+              <td class="text-center pe-3" onclick="event.stopPropagation()">
                 <div class="d-flex justify-content-center gap-1">
                   <a href="{{ url_for('lancamentos_caixa.visualizar', id=d.lancamento_caixa_id) }}"
-                     class="btn-dep btn-dep-info" title="Ver Fechamento de Caixa">
+                     class="btn-act btn-act-view" title="Ver Fechamento de Caixa">
                     <i class="bi bi-eye"></i>
                   </a>
                   {% if d.bank_transaction_id %}
@@ -215,12 +257,12 @@
                         action="{{ url_for('depositos.desvincular', comprovacao_id=d.id) }}"
                         style="display:inline;"
                         onsubmit="return confirm('Remover vínculo bancário deste depósito?');">
-                    <button type="submit" class="btn-dep btn-dep-ghost" title="Remover vínculo">
+                    <button type="submit" class="btn-act btn-act-danger" title="Remover vínculo">
                       <i class="bi bi-x-circle"></i>
                     </button>
                   </form>
                   {% else %}
-                  <button type="button" class="btn-dep btn-dep-primary btn-vincular-solo"
+                  <button type="button" class="btn-act btn-act-edit btn-vincular-solo"
                           data-id="{{ d.id }}" data-valor="{{ d.valor }}" data-grupo="{{ d.tipo_grupo }}"
                           title="Vincular ao banco">
                     <i class="bi bi-link-45deg"></i>
@@ -232,68 +274,16 @@
             {% endfor %}
           </tbody>
         </table>
-      </div>
       {% else %}
       <div class="text-center text-muted py-4">
-        <i class="bi bi-inbox" style="font-size:1.8rem;opacity:0.4;"></i>
-        <div class="mt-2" style="font-size:0.8rem;">Nenhum depósito encontrado para os filtros selecionados.</div>
+        <i class="bi bi-inbox" style="font-size:2rem;"></i><br>
+        Nenhum depósito encontrado para os filtros selecionados.
       </div>
       {% endif %}
     </div>
   </div>
 
 </div>
-
-<!-- ── Styles ── -->
-<style>
-.dep-stat-card {
-  display:flex; align-items:center; gap:0.6rem;
-  background:#fff; border:1px solid #e4e9f0; border-radius:6px; padding:0.5rem 0.75rem;
-}
-.dep-icon {
-  display:inline-flex; align-items:center; justify-content:center;
-  width:2rem; height:2rem; border-radius:6px; font-size:1rem; flex-shrink:0;
-}
-.dep-warn   { background:#fff3cd; color:#856404; }
-.dep-ok     { background:#d1e7dd; color:#0f5132; }
-.dep-danger { background:#f8d7da; color:#721c24; }
-.dep-info   { background:#cce5ff; color:#004085; }
-.dep-label  { font-size:0.68rem; color:#6c757d; font-weight:600; text-transform:uppercase; letter-spacing:0.04em; }
-.dep-value  { font-size:1rem; font-weight:700; color:#212529; line-height:1.1; }
-
-.dep-table { font-size:0.75rem; }
-.dep-table thead tr { background:#f0f4f8; }
-.dep-table thead th {
-  font-size:0.65rem; font-weight:700; text-transform:uppercase;
-  letter-spacing:0.05em; color:#5a6a7a; padding:0.45rem 0.6rem;
-  border-bottom:2px solid #dee2e6; white-space:nowrap;
-}
-.dep-table tbody tr { border-bottom:1px solid #f0f4f8; }
-.dep-table tbody td { padding:0.35rem 0.6rem; vertical-align:middle; }
-.dep-table tbody tr:hover { background:#f7faff; }
-.dep-conciliado td { opacity:0.75; }
-
-.dep-badge {
-  display:inline-block; font-size:0.65rem; font-weight:600;
-  padding:0.15rem 0.4rem; border-radius:3px; white-space:nowrap;
-}
-.dep-badge-ok      { background:#d1e7dd; color:#0f5132; }
-.dep-badge-cheque  { background:#dde5f8; color:#1240aa; }
-.dep-badge-especie { background:#e6f4ea; color:#1a6a3c; }
-
-.btn-dep {
-  display:inline-flex; align-items:center; justify-content:center;
-  width:1.55rem; height:1.55rem; border-radius:4px; font-size:0.7rem;
-  border:none; cursor:pointer; text-decoration:none;
-  transition:opacity 0.12s; background:transparent; padding:0;
-}
-.btn-dep:hover { opacity:0.72; }
-.btn-dep-info    { background:#cce5ff; color:#004085; }
-.btn-dep-primary { background:#cfe2ff; color:#084298; }
-.btn-dep-ghost   { background:#e9ecef; color:#495057; }
-
-tr.dep-selecionado td { background:#fffbe6 !important; }
-</style>
 
 <!-- ── Modal: Vincular Banco ── -->
 <div class="modal fade" id="modalVincular" tabindex="-1">

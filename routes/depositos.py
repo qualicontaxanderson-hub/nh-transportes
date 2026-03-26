@@ -82,6 +82,54 @@ def _ensure_bank_tx_col(conn):
     except Exception:
         pass  # Não crítico
 
+
+def _reset_orphaned_deposit_transactions(conn):
+    """
+    Corrige bank_transactions que estão marcadas como status='conciliado' /
+    tipo_conciliacao='deposito' mas cujo depósito foi removido ou re-criado
+    (por edição do Fechamento de Caixa) — deixando a transação bancária sem
+    nenhum lancamentos_caixa_comprovacao vinculado.
+
+    Essas transações "órfãs" ficam invisíveis no fluxo de conciliação porque o
+    filtro padrão exclui conciliado+deposito.  Este helper as devolve ao estado
+    'pendente' para que voltem a aparecer como candidatos.
+    """
+    try:
+        cur = conn.cursor()
+        try:
+            cur.execute(
+                """UPDATE bank_transactions bt
+                      SET bt.status            = 'pendente',
+                          bt.conciliado_em     = NULL,
+                          bt.conciliado_por    = NULL,
+                          bt.tipo_conciliacao  = NULL
+                    WHERE bt.tipo_conciliacao = 'deposito'
+                      AND bt.status           = 'conciliado'
+                      AND NOT EXISTS (
+                            SELECT 1
+                              FROM lancamentos_caixa_comprovacao lcc
+                             WHERE lcc.bank_transaction_id = bt.id
+                          )"""
+            )
+        except Exception:
+            # Fallback for DB schemas without tipo_conciliacao column
+            cur.execute(
+                """UPDATE bank_transactions bt
+                      SET bt.status         = 'pendente',
+                          bt.conciliado_em  = NULL,
+                          bt.conciliado_por = NULL
+                    WHERE bt.status = 'conciliado'
+                      AND NOT EXISTS (
+                            SELECT 1
+                              FROM lancamentos_caixa_comprovacao lcc
+                             WHERE lcc.bank_transaction_id = bt.id
+                          )"""
+            )
+        conn.commit()
+        cur.close()
+    except Exception:
+        pass  # Não crítico
+
 # ──────────────────────────────────────────────────────────────────────────────
 # Helpers
 # ──────────────────────────────────────────────────────────────────────────────
@@ -235,6 +283,7 @@ def listar():
     conn = get_db_connection()
     try:
         _ensure_bank_tx_col(conn)
+        _reset_orphaned_deposit_transactions(conn)
         clientes   = _get_clientes(conn)
         depositos  = _fetch_depositos(
             conn, data_inicio, data_fim,
@@ -360,11 +409,16 @@ def api_candidatos(comprovacao_id):
             forma_params = forma_ids
 
         # Inclui: pendente OU conciliado-para-recebimento (ainda não vinculado como depósito)
+        # Também inclui conciliado+deposito sem nenhum comprovacao vinculado
+        # (transações "órfãs" que perderam o vínculo por edição do Fechamento de Caixa)
         status_filter = (
             "(bt.status = 'pendente' OR "
             "(bt.status = 'conciliado' AND "
             " (bt.tipo_conciliacao IS NULL OR "
-            "  bt.tipo_conciliacao NOT IN ('deposito','transferencia','troco_pix'))))"
+            "  bt.tipo_conciliacao NOT IN ('deposito','transferencia','troco_pix') OR "
+            "  (bt.tipo_conciliacao = 'deposito' AND "
+            "   NOT EXISTS (SELECT 1 FROM lancamentos_caixa_comprovacao lcc_chk "
+            "               WHERE lcc_chk.bank_transaction_id = bt.id)))))"
         )
 
         cur.execute(
@@ -542,3 +596,181 @@ def desvincular(comprovacao_id):
         conn.close()
 
     return redirect(url_for('depositos.listar'))
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Extrato bancário – transações OFX CREDIT com status de vinculação
+# ──────────────────────────────────────────────────────────────────────────────
+
+def _fetch_extrato_bancario(conn, data_inicio, data_fim, conta_ids=None, forma_ids=None):
+    """
+    Retorna transações bancárias de CRÉDITO importadas via OFX no período,
+    limitadas a formas de recebimento do tipo depósito bancário
+    (Espécie ou Cheque).
+    Indica para cada transação se já está vinculada a algum depósito do caixa,
+    e o total de depósitos vinculados.
+    """
+    where = ["bt.tipo = 'CREDIT'",
+             "bt.data_transacao BETWEEN %s AND %s"]
+    params = [data_inicio, data_fim]
+
+    if forma_ids:
+        ph = ','.join(['%s'] * len(forma_ids))
+        where.append(f"bt.forma_recebimento_id IN ({ph})")
+        params.extend(int(x) for x in forma_ids)
+    else:
+        # Se nenhuma forma de depósito configurada, não retorna nenhuma linha
+        # (evita mostrar recebimentos não relacionados a depósitos bancários)
+        where.append("1 = 0")
+
+    if conta_ids:
+        ph = ','.join(['%s'] * len(conta_ids))
+        where.append(f"bt.account_id IN ({ph})")
+        params.extend(int(x) for x in conta_ids)
+
+    sql = f"""
+        SELECT
+            bt.id,
+            bt.data_transacao,
+            bt.valor,
+            bt.descricao,
+            bt.status,
+            bt.tipo_conciliacao,
+            ba.apelido                AS conta_apelido,
+            ba.banco_nome,
+            fr.nome                   AS forma_recebimento_nome,
+            (SELECT COUNT(*)
+               FROM lancamentos_caixa_comprovacao lcc2
+              WHERE lcc2.bank_transaction_id = bt.id) AS qtd_depositos_vinculados,
+            (SELECT COALESCE(SUM(lcc2.valor), 0)
+               FROM lancamentos_caixa_comprovacao lcc2
+              WHERE lcc2.bank_transaction_id = bt.id) AS total_depositos_vinculados
+        FROM bank_transactions bt
+        JOIN bank_accounts     ba ON ba.id  = bt.account_id
+        LEFT JOIN formas_recebimento fr ON fr.id = bt.forma_recebimento_id
+        WHERE {' AND '.join(where)}
+        ORDER BY bt.data_transacao DESC, bt.id DESC
+    """
+    cur = conn.cursor(dictionary=True)
+    try:
+        cur.execute(sql, params)
+        rows = cur.fetchall()
+    except Exception:
+        rows = []
+    finally:
+        cur.close()
+
+    for r in rows:
+        if r.get('valor') is not None:
+            r['valor'] = float(r['valor'])
+        if r.get('total_depositos_vinculados') is not None:
+            r['total_depositos_vinculados'] = float(r['total_depositos_vinculados'])
+        if r.get('data_transacao') and not isinstance(r['data_transacao'], str):
+            r['data_transacao'] = (
+                r['data_transacao'].isoformat()
+                if hasattr(r['data_transacao'], 'isoformat')
+                else str(r['data_transacao'])
+            )
+        r['data_transacao_br'] = _fmt_br(r.get('data_transacao'))
+        r['vinculado'] = r.get('qtd_depositos_vinculados', 0) > 0
+    return rows
+
+
+def _get_deposit_forma_ids(conn):
+    """
+    Retorna os IDs de formas_recebimento que representam depósitos bancários
+    (Espécie ou Cheque).
+
+    Estratégia:
+    1. Consulta conf_depositos_vinculos (qualquer tipo_deposito) — configuração explícita.
+    2. Fallback por nome da forma_recebimento quando a tabela de vínculos está vazia.
+    """
+    cur = conn.cursor(dictionary=True)
+    try:
+        try:
+            cur.execute(
+                "SELECT DISTINCT forma_recebimento_id FROM conf_depositos_vinculos"
+            )
+            ids = [r['forma_recebimento_id'] for r in cur.fetchall()]
+        except Exception:
+            ids = []
+
+        if not ids:
+            cur.execute(
+                """SELECT id FROM formas_recebimento
+                    WHERE (nome LIKE %s OR nome LIKE %s OR nome LIKE %s
+                        OR nome LIKE %s OR nome LIKE %s)
+                      AND ativo = 1""",
+                ('%DEPOSITO%', '%DEPÓSITO%', '%CHEQUE%', '%DINHEIRO%', '%ESPECIE%'),
+            )
+            ids = [r['id'] for r in cur.fetchall()]
+    except Exception:
+        ids = []
+    finally:
+        cur.close()
+    return ids
+
+
+def _get_contas_bancarias(conn):
+    cur = conn.cursor(dictionary=True)
+    try:
+        cur.execute(
+            "SELECT id, COALESCE(apelido, banco_nome) AS nome FROM bank_accounts ORDER BY nome"
+        )
+        return cur.fetchall()
+    except Exception:
+        return []
+    finally:
+        cur.close()
+
+
+@bp.route('/extrato')
+@login_required
+@admin_required
+def extrato():
+    """
+    Extrato bancário: mostra as transações CREDIT importadas via OFX no período,
+    indicando quais já estão vinculadas a depósitos do Fechamento de Caixa e
+    quais ainda estão sem destinação — permitindo ao usuário identificar e
+    conciliar transações pendentes.
+    """
+    args = request.args
+
+    data_inicio = args.get('data_inicio', '').strip()
+    data_fim    = args.get('data_fim',    '').strip()
+    if not data_inicio and not data_fim:
+        data_inicio, data_fim = _default_period()
+
+    conta_ids = [c for c in args.getlist('conta_ids[]') if c]
+
+    conn = get_db_connection()
+    try:
+        deposit_forma_ids = _get_deposit_forma_ids(conn)
+        contas     = _get_contas_bancarias(conn)
+        transacoes = _fetch_extrato_bancario(
+            conn, data_inicio, data_fim,
+            conta_ids=conta_ids,
+            forma_ids=deposit_forma_ids,
+        )
+    finally:
+        conn.close()
+
+    total_vinculado     = sum(t['valor'] for t in transacoes if t['vinculado'])
+    total_nao_vinculado = sum(t['valor'] for t in transacoes if not t['vinculado'])
+    total_geral         = sum(t['valor'] for t in transacoes)
+    qtd_vinculado       = sum(1 for t in transacoes if t['vinculado'])
+    qtd_nao_vinculado   = sum(1 for t in transacoes if not t['vinculado'])
+
+    return render_template(
+        'depositos/extrato.html',
+        transacoes=transacoes,
+        contas=contas,
+        data_inicio=data_inicio,
+        data_fim=data_fim,
+        conta_ids=conta_ids,
+        total_vinculado=total_vinculado,
+        total_nao_vinculado=total_nao_vinculado,
+        total_geral=total_geral,
+        qtd_vinculado=qtd_vinculado,
+        qtd_nao_vinculado=qtd_nao_vinculado,
+    )

@@ -58,7 +58,6 @@
                         <tr>
                             <th>Mês</th>
                             <th>Cliente</th>
-                            <th>Categoria</th>
                             <th>Total de Funcionários</th>
                             <th>Valor Total</th>
                             <th>Status</th>
@@ -70,15 +69,6 @@
                         <tr>
                             <td><strong>{{ lanc.mes }}</strong></td>
                             <td>{{ lanc.cliente_nome or 'N/A' }}</td>
-                            <td>
-                                {% if lanc.categoria == 'FRENTISTAS' %}
-                                    <span class="badge bg-primary">{{ lanc.categoria }}</span>
-                                {% elif lanc.categoria == 'MOTORISTAS' %}
-                                    <span class="badge bg-success">{{ lanc.categoria }}</span>
-                                {% else %}
-                                    <span class="badge bg-secondary">{{ lanc.categoria }}</span>
-                                {% endif %}
-                            </td>
                             <td>{{ lanc.total_funcionarios }}</td>
                             <td>{{ lanc.total_valor|formatar_moeda }}</td>
                             <td>
@@ -103,7 +93,7 @@
                         </tr>
                         {% else %}
                         <tr>
-                            <td colspan="7" class="text-center">Nenhum lançamento encontrado</td>
+                            <td colspan="6" class="text-center">Nenhum lançamento encontrado</td>
                         </tr>
                         {% endfor %}
                     </tbody>

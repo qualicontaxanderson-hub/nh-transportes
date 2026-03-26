@@ -127,7 +127,14 @@
 
 <script>
 const rubricas = {{ rubricas|tojson|safe }};
-const valoresExistentes = {{ valores_existentes|tojson|safe if valores_existentes else '{}' }};
+// Separate lookups keyed by funcionarioid to avoid collisions between
+// funcionarios.id and motoristas.id (both auto-increment from 1).
+const valoresFuncionario = {{ valores_funcionario|tojson|safe if valores_funcionario is defined else '{}' }};
+const valoresMotorista   = {{ valores_motorista|tojson|safe   if valores_motorista   is defined else '{}' }};
+// Per-employee alias that is re-assigned inside the forEach loop so that
+// the existing PRIORITY 3 lookup (else if modoEdicao && valoresExistentes…)
+// always reads from the correct tipo-specific dict without touching that logic.
+let valoresExistentes = {};
 const modoEdicao = {{ 'true' if modo_edicao else 'false' }};
 let comissoesData = {};
 let emprestimosData = {};
@@ -275,6 +282,11 @@ function checkAndLoadFuncionarios() {
                 console.log(`Processando funcionário: ${func.nome} (ID: ${func.id}, Tipo: ${func.tipo})`);
                 const row = document.createElement('tr');
                 const isMotorista = func.tipo === 'motorista';
+
+                // Use the per-type lookup to prevent ID collisions between
+                // funcionarios and motoristas that share the same numeric ID.
+                const tipoPrefix = isMotorista ? 'm' : 'f';
+                valoresExistentes = isMotorista ? valoresMotorista : valoresFuncionario;
                 
                 // Debug commission lookup
                 if (isMotorista) {
@@ -299,7 +311,7 @@ function checkAndLoadFuncionarios() {
                     <td>
                         ${func.nome}
                         <input type="hidden" name="funcionarioid[]" value="${func.id}">
-                        <input type="hidden" name="funcionario_tipo_${func.id}" value="${func.tipo}">
+                        <input type="hidden" name="funcionario_tipo[]" value="${func.tipo}">
                     </td>
                     <td>
                         <span class="badge bg-info">${func.categoria || 'N/A'}</span>
@@ -354,9 +366,9 @@ function checkAndLoadFuncionarios() {
                         
                         return `
                         <td>
-                            <input type="hidden" name="rubrica_${func.id}[]" value="${rubrica.id}">
+                            <input type="hidden" name="rubrica_${tipoPrefix}_${func.id}[]" value="${rubrica.id}">
                             <input type="text" 
-                                   name="valor_${func.id}[]" 
+                                   name="valor_${tipoPrefix}_${func.id}[]" 
                                    class="form-control form-control-sm valor-input ${isReadonly ? 'bg-light' : ''}" 
                                    data-funcionario="${func.id}"
                                    data-rubrica-tipo="${rubrica.tipo}"

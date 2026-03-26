@@ -7,6 +7,67 @@ import calendar
 
 bp = Blueprint('lancamentos_funcionarios', __name__, url_prefix='/lancamentos-funcionarios')
 
+
+def _ensure_tipo_funcionario(conn):
+    """
+    Garante que a coluna tipo_funcionario existe em lancamentosfuncionarios_v2 e
+    que todos os registros estão corretamente classificados.
+
+    Regras de classificação (aplicadas em ordem de prioridade):
+    1. funcionarioid existe APENAS em motoristas (sem colisão de ID) → 'motorista'
+       (executado apenas na criação da coluna, como backfill inicial)
+    2. Demais → 'funcionario' (DEFAULT da coluna)
+
+    Repair (executado SEMPRE):
+    - Reverte para 'funcionario' qualquer linha cujo funcionarioid existe na tabela
+      funcionarios. Frentistas/outros sempre estão em funcionarios; motoristas NÃO
+      estão. Isso corrige promoções incorretas de frentistas causadas por heurísticas
+      anteriores baseadas em Comissão (que confundiam frentistas com motoristas
+      quando IDs colidem entre as duas tabelas).
+    - VALMIR, MARCOS ANTONIO e demais motoristas reais NÃO estão na tabela
+      funcionarios, portanto suas linhas com tipo='motorista' são preservadas.
+
+    NOTA: frentistas podem ter rubricas de Comissão (comissões manuais).
+    Por isso a presença de Comissão NÃO é usada como desambiguador de tipo.
+    """
+    cur = conn.cursor()
+    cur.execute(
+        "SELECT COUNT(*) FROM information_schema.COLUMNS"
+        " WHERE TABLE_SCHEMA = DATABASE()"
+        " AND TABLE_NAME = 'lancamentosfuncionarios_v2'"
+        " AND COLUMN_NAME = 'tipo_funcionario'"
+    )
+    if cur.fetchone()[0] == 0:
+        # Adiciona a coluna com DEFAULT 'funcionario'
+        cur.execute(
+            "ALTER TABLE lancamentosfuncionarios_v2"
+            " ADD COLUMN tipo_funcionario VARCHAR(12) NOT NULL DEFAULT 'funcionario'"
+        )
+        conn.commit()
+
+        # Backfill 1: IDs que existem APENAS em motoristas (sem colisão) →
+        # todas as linhas desse ID recebem 'motorista'
+        cur.execute("""
+            UPDATE lancamentosfuncionarios_v2 lf
+            JOIN  motoristas   m ON m.id = lf.funcionarioid
+            LEFT  JOIN funcionarios f ON f.id = lf.funcionarioid
+            SET   lf.tipo_funcionario = 'motorista'
+            WHERE f.id IS NULL
+        """)
+        conn.commit()
+
+        # Repair: Reverte para 'funcionario' qualquer linha cujo funcionarioid
+    # existe na tabela funcionarios (frentistas/outros sempre estão lá;
+    # motoristas reais NÃO estão).
+    # Deleta registros incorretos (motoristas que na verdade são funcionarios)
+    cur.execute("""
+        DELETE lf FROM lancamentosfuncionarios_v2 lf
+        JOIN funcionarios f ON f.id = lf.funcionarioid
+        WHERE lf.tipo_funcionario = 'motorista'
+    """)
+    conn.commit()
+        cur.close()
+
 def get_previous_month():
     """Get previous month in MM/YYYY format"""
     today = datetime.now()
@@ -32,8 +93,7 @@ def lista():
     mes_filtro = request.args.get('mes')
     cliente_filtro = request.args.get('clienteid')
     
-    # Build query - now separated by category (FRENTISTAS vs MOTORISTAS)
-    # Build WHERE clause for subquery
+    # Build WHERE clause
     where_conditions = ["1=1"]
     params = []
     
@@ -47,32 +107,19 @@ def lista():
     
     where_clause = " AND ".join(where_conditions)
     
-    # Use subquery to classify each employee individually BEFORE grouping
     query = f"""
-        SELECT 
-            sub.mes,
-            sub.clienteid,
-            sub.cliente_nome,
-            sub.categoria,
-            COUNT(DISTINCT sub.funcionarioid) as total_funcionarios,
-            SUM(sub.valor) as total_valor,
-            sub.statuslancamento
-        FROM (
-            SELECT 
-                l.mes,
-                l.clienteid,
-                c.razao_social as cliente_nome,
-                l.funcionarioid,
-                COALESCE(f.categoria, 'OUTROS') as categoria,
-                l.valor,
-                l.statuslancamento
-            FROM lancamentosfuncionarios_v2 l
-            LEFT JOIN clientes c ON l.clienteid = c.id
-            LEFT JOIN funcionarios f ON l.funcionarioid = f.id
-            WHERE {where_clause}
-        ) as sub
-        GROUP BY sub.mes, sub.clienteid, sub.cliente_nome, sub.categoria, sub.statuslancamento
-        ORDER BY sub.mes DESC, sub.cliente_nome, sub.categoria
+        SELECT
+            l.mes,
+            l.clienteid,
+            c.razao_social as cliente_nome,
+            COUNT(DISTINCT l.funcionarioid) as total_funcionarios,
+            SUM(l.valor) as total_valor,
+            l.statuslancamento
+        FROM lancamentosfuncionarios_v2 l
+        LEFT JOIN clientes c ON l.clienteid = c.id
+        WHERE {where_clause}
+        GROUP BY l.mes, l.clienteid, c.razao_social, l.statuslancamento
+        ORDER BY l.mes DESC, c.razao_social
     """
     
     cursor.execute(query, params)
@@ -107,6 +154,7 @@ def novo():
     try:
         conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)
+        _ensure_tipo_funcionario(conn)
 
         if request.method == 'POST':
             mes = request.form.get('mes')
@@ -114,11 +162,15 @@ def novo():
 
             # Process each employee's data
             funcionarios_ids = request.form.getlist('funcionarioid[]')
+            funcionario_tipos = request.form.getlist('funcionario_tipo[]')
 
-            for func_id in funcionarios_ids:
-                # Get all rubrica values for this employee
-                rubricas = request.form.getlist(f'rubrica_{func_id}[]')
-                valores = request.form.getlist(f'valor_{func_id}[]')
+            for idx, func_id in enumerate(funcionarios_ids):
+                tipo = funcionario_tipos[idx] if idx < len(funcionario_tipos) else 'funcionario'
+                # Use namespaced field names to avoid collision between
+                # funcionarios and motoristas that share the same numeric ID.
+                tipo_prefix = 'm' if tipo == 'motorista' else 'f'
+                rubricas = request.form.getlist(f'rubrica_{tipo_prefix}_{func_id}[]')
+                valores = request.form.getlist(f'valor_{tipo_prefix}_{func_id}[]')
 
                 for i, rubricaid in enumerate(rubricas):
                     if rubricaid and valores[i]:
@@ -126,11 +178,12 @@ def novo():
                         if valor != 0:
                             cursor.execute("""
                                 INSERT INTO lancamentosfuncionarios_v2 (
-                                    clienteid, funcionarioid, mes, rubricaid, valor, 
-                                    statuslancamento
-                                ) VALUES (%s, %s, %s, %s, %s, %s)
-                                ON DUPLICATE KEY UPDATE 
+                                    clienteid, funcionarioid, mes, rubricaid, valor,
+                                    statuslancamento, tipo_funcionario
+                                ) VALUES (%s, %s, %s, %s, %s, %s, %s)
+                                ON DUPLICATE KEY UPDATE
                                     valor = VALUES(valor),
+                                    tipo_funcionario = VALUES(tipo_funcionario),
                                     atualizadoem = CURRENT_TIMESTAMP
                             """, (
                                 clienteid,
@@ -138,7 +191,8 @@ def novo():
                                 mes,
                                 rubricaid,
                                 valor,
-                                'PENDENTE'
+                                'PENDENTE',
+                                tipo,
                             ))
 
             conn.commit()
@@ -342,8 +396,8 @@ def detalhe(mes, cliente_id):
             r.tipo as rubrica_tipo,
             v.caminhao
         FROM lancamentosfuncionarios_v2 l
-        LEFT JOIN funcionarios f ON l.funcionarioid = f.id
-        LEFT JOIN motoristas m ON l.funcionarioid = m.id
+        LEFT JOIN funcionarios f ON l.funcionarioid = f.id AND l.tipo_funcionario = 'funcionario'
+        LEFT JOIN motoristas m ON l.funcionarioid = m.id AND l.tipo_funcionario = 'motorista'
         INNER JOIN rubricas r ON l.rubricaid = r.id
         LEFT JOIN veiculos v ON l.caminhaoid = v.id
         WHERE l.mes = %s AND l.clienteid = %s
@@ -478,6 +532,7 @@ def editar(mes, cliente_id):
     try:
         conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)
+        _ensure_tipo_funcionario(conn)
 
         if request.method == 'POST':
             mes_form = request.form.get('mes')
@@ -485,11 +540,15 @@ def editar(mes, cliente_id):
 
             # Process each employee's data
             funcionarios_ids = request.form.getlist('funcionarioid[]')
+            funcionario_tipos = request.form.getlist('funcionario_tipo[]')
 
-            for func_id in funcionarios_ids:
-                # Get all rubrica values for this employee
-                rubricas = request.form.getlist(f'rubrica_{func_id}[]')
-                valores = request.form.getlist(f'valor_{func_id}[]')
+            for idx, func_id in enumerate(funcionarios_ids):
+                tipo = funcionario_tipos[idx] if idx < len(funcionario_tipos) else 'funcionario'
+                # Use namespaced field names to avoid collision between
+                # funcionarios and motoristas that share the same numeric ID.
+                tipo_prefix = 'm' if tipo == 'motorista' else 'f'
+                rubricas = request.form.getlist(f'rubrica_{tipo_prefix}_{func_id}[]')
+                valores = request.form.getlist(f'valor_{tipo_prefix}_{func_id}[]')
 
                 for i, rubricaid in enumerate(rubricas):
                     if rubricaid:
@@ -501,11 +560,12 @@ def editar(mes, cliente_id):
                             # Insert or update the value
                             cursor.execute("""
                                 INSERT INTO lancamentosfuncionarios_v2 (
-                                    clienteid, funcionarioid, mes, rubricaid, valor, 
-                                    statuslancamento
-                                ) VALUES (%s, %s, %s, %s, %s, %s)
-                                ON DUPLICATE KEY UPDATE 
+                                    clienteid, funcionarioid, mes, rubricaid, valor,
+                                    statuslancamento, tipo_funcionario
+                                ) VALUES (%s, %s, %s, %s, %s, %s, %s)
+                                ON DUPLICATE KEY UPDATE
                                     valor = VALUES(valor),
+                                    tipo_funcionario = VALUES(tipo_funcionario),
                                     atualizadoem = CURRENT_TIMESTAMP
                             """, (
                                 clienteid,
@@ -513,21 +573,27 @@ def editar(mes, cliente_id):
                                 mes_form,
                                 rubricaid,
                                 valor,
-                                'PENDENTE'
+                                'PENDENTE',
+                                tipo,
                             ))
                         else:
-                            # If valor is 0 or empty, DELETE the record to truly remove it
+                            # If valor is 0 or empty, DELETE the record.
+                            # Filter by tipo_funcionario to avoid accidentally
+                            # deleting the colliding motorista/funcionario row
+                            # when both share the same numeric funcionarioid.
                             cursor.execute("""
                                 DELETE FROM lancamentosfuncionarios_v2
-                                WHERE clienteid = %s 
-                                  AND funcionarioid = %s 
-                                  AND mes = %s 
+                                WHERE clienteid = %s
+                                  AND funcionarioid = %s
+                                  AND mes = %s
                                   AND rubricaid = %s
+                                  AND tipo_funcionario = %s
                             """, (
                                 clienteid,
                                 func_id,
                                 mes_form,
-                                rubricaid
+                                rubricaid,
+                                tipo,
                             ))
 
             conn.commit()
@@ -549,28 +615,38 @@ def editar(mes, cliente_id):
         cursor.execute("SELECT * FROM rubricas WHERE ativo = 1 ORDER BY ordem, nome")
         rubricas = cursor.fetchall()
 
-        # Get existing lancamentos for this month and client
+        # Get existing lancamentos for this month and client.
+        # Fetch tipo_funcionario so we can split the lookup by type and avoid
+        # collisions between funcionarios.id and motoristas.id (both start at 1).
         cursor.execute("""
-            SELECT funcionarioid, rubricaid, valor
+            SELECT funcionarioid, rubricaid, valor, tipo_funcionario
             FROM lancamentosfuncionarios_v2
             WHERE mes = %s AND clienteid = %s
         """, (mes, cliente_id))
         lancamentos_existentes = cursor.fetchall()
 
-        # Convert to dict for easy lookup: {funcionario_id: {rubrica_id: valor}}
-        valores_existentes = {}
+        # Build two separate dicts keyed by funcionarioid:
+        #   valores_funcionario  — rows where tipo_funcionario = 'funcionario'
+        #   valores_motorista    — rows where tipo_funcionario = 'motorista'
+        # This prevents a frentista (e.g. João, funcionarios.id=3) from
+        # inheriting a motorista's value (e.g. Valmir, motoristas.id=3).
+        valores_funcionario = {}
+        valores_motorista = {}
         for lanc in lancamentos_existentes:
             func_id = lanc['funcionarioid']
-            if func_id not in valores_existentes:
-                valores_existentes[func_id] = {}
-            valores_existentes[func_id][lanc['rubricaid']] = float(lanc['valor'])
+            tipo = lanc['tipo_funcionario']
+            target = valores_motorista if tipo == 'motorista' else valores_funcionario
+            if func_id not in target:
+                target[func_id] = {}
+            target[func_id][lanc['rubricaid']] = float(lanc['valor'])
 
         return render_template('lancamentos_funcionarios/novo.html',
                              mes_padrao=mes,
                              cliente_selecionado=cliente_id,
                              clientes=clientes,
                              rubricas=rubricas,
-                             valores_existentes=valores_existentes,
+                             valores_funcionario=valores_funcionario,
+                             valores_motorista=valores_motorista,
                              modo_edicao=True)
     except Exception as e:
         if conn:
@@ -589,11 +665,16 @@ def editar(mes, cliente_id):
 @admin_required
 def limpar_comissoes_frentistas():
     """
-    Rota administrativa para limpar comissões incorretas de frentistas do banco de dados.
-    Remove todos os lançamentos de comissões para funcionários que não são motoristas.
-    
-    IMPORTANTE: Funcionários estão na tabela 'funcionarios', motoristas na tabela 'motoristas'.
-    Comissões devem existir APENAS para IDs que estão na tabela 'motoristas'.
+    Rota administrativa desativada.
+
+    ATENÇÃO: frentistas podem ter lançamentos de Comissão legítimos
+    (comissões manuais inseridas pelo formulário). A limpeza indiscriminada de
+    comissões para todo funcionarioid presente na tabela 'funcionarios' apagaria
+    dados válidos de frentistas como ROBERTA FERREIRA, RODRIGO CUNHA, JOÃO BATISTA.
+
+    A classificação correta entre frentistas e motoristas é gerida pela coluna
+    tipo_funcionario em lancamentosfuncionarios_v2, mantida por
+    _ensure_tipo_funcionario().
     """
     conn = None
     cursor = None
@@ -601,32 +682,24 @@ def limpar_comissoes_frentistas():
         conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)
 
-        # First, count how many will be affected
-        # Query corrigida: verifica se funcionarioid está na tabela 'funcionarios'
+        # Apenas conta registros que seriam afetados; NÃO deleta nada.
+        # Frentistas têm comissões legítimas — a deleção foi desativada.
         cursor.execute("""
             SELECT COUNT(*) as total
             FROM lancamentosfuncionarios_v2
             WHERE rubricaid IN (SELECT id FROM rubricas WHERE nome IN ('Comissão', 'Comissão / Aj. Custo'))
-            AND funcionarioid IN (SELECT id FROM funcionarios)
+            AND tipo_funcionario = 'funcionario'
         """)
-        count_before = cursor.fetchone()['total']
-
-        # Delete commissions for funcionarios (non-motoristas)
-        # Query corrigida: deleta se funcionarioid está na tabela 'funcionarios'
-        cursor.execute("""
-            DELETE FROM lancamentosfuncionarios_v2
-            WHERE rubricaid IN (SELECT id FROM rubricas WHERE nome IN ('Comissão', 'Comissão / Aj. Custo'))
-            AND funcionarioid IN (SELECT id FROM funcionarios)
-        """)
-
-        conn.commit()
-        deleted_count = cursor.rowcount
+        count_frentista_comissoes = cursor.fetchone()['total']
 
         return jsonify({
-            'success': True,
-            'message': f'Limpeza concluída com sucesso!',
-            'registros_esperados': count_before,
-            'registros_deletados': deleted_count
+            'success': False,
+            'message': (
+                'Esta operação foi desativada. Frentistas podem ter comissões legítimas '
+                'e a deleção automática apagaria dados válidos. '
+                f'({count_frentista_comissoes} lançamentos de comissão de frentistas encontrados — mantidos.)'
+            ),
+            'registros_deletados': 0
         }), 200
 
     except Exception as e:

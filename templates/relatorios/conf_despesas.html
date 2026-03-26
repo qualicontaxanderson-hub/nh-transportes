@@ -1,0 +1,357 @@
+{% extends 'base.html' %}
+{% block title %}Conf. Despesas{% endblock %}
+
+{% block styles %}
+<style>
+.page-hero {
+  background: linear-gradient(135deg, #1D63A5 0%, #154070 100%);
+  border-radius: .75rem; padding: 1.5rem 2rem; margin-bottom: 1.5rem; color: #fff;
+}
+.page-hero .hero-icon {
+  width: 3rem; height: 3rem; background: rgba(255,255,255,.15);
+  border-radius: .6rem; display: flex; align-items: center; justify-content: center;
+  font-size: 1.5rem; flex-shrink: 0;
+}
+.stat-card {
+  border: none; border-radius: .6rem; box-shadow: 0 1px 6px rgba(0,0,0,.08);
+}
+.stat-card .stat-label {
+  font-size: .72rem; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .05em; opacity: .7;
+}
+.stat-card .stat-value { font-size: 1.45rem; font-weight: 700; line-height: 1; }
+
+/* ── Matrix table ── */
+.tbl-matrix {
+  font-size: .73rem;
+  border-collapse: collapse;
+  width: 100%;
+}
+.tbl-matrix th, .tbl-matrix td {
+  padding: .22rem .38rem;
+  border: 1px solid #dee2e6;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+/* sticky first column */
+.tbl-matrix td.col-desc, .tbl-matrix th.col-desc {
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  min-width: 180px;
+  max-width: 260px;
+  white-space: normal;
+  word-break: break-word;
+}
+/* column header */
+.tbl-matrix thead tr th {
+  text-align: center;
+  background: #343a40;
+  color: #fff;
+  font-size: .68rem;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+}
+.tbl-matrix thead tr th.col-desc { text-align: left; background: #343a40; }
+/* titulo block header — softer terracotta */
+.row-titulo-hdr td {
+  background: #d9534f;
+  color: #fff;
+  font-weight: 700;
+  font-size: .78rem;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+}
+/* category data rows */
+.row-cat td { background: #fff; font-weight: 700; }
+.row-cat:hover td { background: #f0f4ff; }
+/* sub-category rows */
+.row-subcat td { background: #fafafa; font-weight: 400; color: #444; }
+.row-subcat:hover td { background: #f0f4ff; }
+/* total per block — lighter steel-blue */
+.row-block-total td {
+  background: #4a86c8;
+  color: #fff;
+  font-weight: 700;
+}
+/* grand total */
+.row-grand td {
+  background: #1e5591;
+  color: #fff;
+  font-weight: 700;
+  font-size: .82rem;
+}
+/* zero value muted */
+.val-zero { color: #bbb; }
+/* acum column emphasis */
+.col-acum { background: #f8f5e4 !important; font-weight: 600; }
+.row-block-total .col-acum,
+.row-grand .col-acum { background: rgba(255,255,255,.15) !important; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+
+  <!-- Breadcrumb -->
+  <nav aria-label="breadcrumb" class="mb-3">
+    <ol class="breadcrumb small">
+      <li class="breadcrumb-item"><a href="{{ url_for('index') }}" class="text-decoration-none">Dashboard</a></li>
+      <li class="breadcrumb-item">Relatórios</li>
+      <li class="breadcrumb-item active">Conf. Despesas</li>
+    </ol>
+  </nav>
+
+  <!-- Hero -->
+  <div class="page-hero d-flex align-items-center gap-3 flex-wrap mb-3">
+    <div class="hero-icon"><i class="bi bi-wallet2"></i></div>
+    <div class="flex-grow-1">
+      <h4 class="mb-0 fw-bold">Conferência de Despesas</h4>
+      <p class="mb-0 opacity-75 small">Matriz mensal por categoria — blocos por título, colunas por mês</p>
+    </div>
+    <a href="/lancamentos_despesas/" class="btn btn-sm px-3 fw-semibold"
+       style="background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.35);">
+      <i class="bi bi-plus-circle me-1"></i> Novo Lançamento
+    </a>
+  </div>
+
+  <!-- ── Stat cards ────────────────────────────────────────────────────────── -->
+  <div class="row g-3 mb-4">
+    <div class="col-6 col-md-3">
+      <div class="card stat-card p-3">
+        <div class="stat-label" style="color:#1D63A5;">Categorias</div>
+        <div class="stat-value" style="color:#1D63A5;">
+          {{ blocks | map(attribute='rows') | map('length') | sum if blocks else 0 }}
+        </div>
+        <div class="small text-muted mt-1">com despesas no período</div>
+      </div>
+    </div>
+    <div class="col-6 col-md-3">
+      <div class="card stat-card p-3">
+        <div class="stat-label" style="color:#b45309;">Lançamentos</div>
+        <div class="stat-value" style="color:#b45309;">{{ total_lancamentos }}</div>
+        <div class="small text-muted mt-1">registros no período</div>
+      </div>
+    </div>
+    <div class="col-6 col-md-3">
+      <div class="card stat-card p-3">
+        <div class="stat-label text-danger">Total Geral</div>
+        <div class="stat-value text-danger">{{ grand_total | formatar_moeda }}</div>
+        <div class="small text-muted mt-1">soma de todas as despesas</div>
+      </div>
+    </div>
+    <div class="col-6 col-md-3">
+      <div class="card stat-card p-3">
+        <div class="stat-label text-muted">Período</div>
+        <div class="stat-value text-muted" style="font-size:.9rem;">
+          {% if months %}{{ months[0].label }}{% if months[0].year != months[-1].year %}/{{ months[0].year }}{% endif %}
+          – {{ months[-1].label }}/{{ months[-1].year }}{% endif %}
+        </div>
+        <div class="small text-muted mt-1">{{ months | length }} mês(es)</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Filtros ──────────────────────────────────────────────────────────── -->
+  <div class="card shadow-sm mb-4">
+    <div class="card-body">
+      <form method="get" id="form-filtros">
+        <div class="row g-3 align-items-end">
+
+          <!-- Data Início -->
+          <div class="col-6 col-md-2">
+            <label class="form-label small fw-semibold mb-1">Data Início</label>
+            <input type="date" name="data_inicio" value="{{ data_inicio }}" class="form-control form-control-sm">
+          </div>
+
+          <!-- Data Fim -->
+          <div class="col-6 col-md-2">
+            <label class="form-label small fw-semibold mb-1">Data Fim</label>
+            <input type="date" name="data_fim" value="{{ data_fim }}" class="form-control form-control-sm">
+          </div>
+
+          <!-- Empresa (multi-select) -->
+          <div class="col-12 col-md-3">
+            <label class="form-label small fw-semibold mb-1">Empresa</label>
+            <select name="empresa_ids[]" id="sel-empresas" class="form-select form-select-sm" multiple size="3">
+              {% for emp in empresas %}
+              <option value="{{ emp.id }}" {% if emp.id|string in empresa_ids %}selected{% endif %}>
+                {{ emp.nome }}
+              </option>
+              {% endfor %}
+            </select>
+            <div class="form-text">Ctrl+clique p/ múltiplos</div>
+          </div>
+
+          <!-- Título (multi-select) -->
+          <div class="col-12 col-md-3">
+            <label class="form-label small fw-semibold mb-1">Título</label>
+            <select name="titulo_ids[]" id="sel-titulos" class="form-select form-select-sm" multiple size="3">
+              {% for t in titulos %}
+              <option value="{{ t.id }}" {% if t.id|string in titulo_ids %}selected{% endif %}>
+                {{ t.nome }}
+              </option>
+              {% endfor %}
+            </select>
+            <div class="form-text">Ctrl+clique p/ múltiplos</div>
+          </div>
+
+          <!-- Botões -->
+          <div class="col-12 col-md-2 d-flex gap-2 align-items-end">
+            <button type="submit" class="btn btn-primary btn-sm flex-grow-1">
+              <i class="bi bi-search"></i> Filtrar
+            </button>
+            <a href="{{ url_for('conf_despesas.conf_despesas') }}" class="btn btn-outline-secondary btn-sm">
+              <i class="bi bi-x-circle"></i>
+            </a>
+          </div>
+
+        </div>
+
+        <!-- Quick period buttons -->
+        <div class="mt-2 d-flex gap-1 flex-wrap">
+          <span class="text-muted small me-1 align-self-center">Período:</span>
+          <button type="button" class="btn btn-outline-secondary btn-sm periodo-btn" data-periodo="mes_atual">Mês Atual</button>
+          <button type="button" class="btn btn-outline-secondary btn-sm periodo-btn" data-periodo="mes_anterior">Mês Anterior</button>
+          <button type="button" class="btn btn-outline-secondary btn-sm periodo-btn" data-periodo="ano_atual">Ano Atual</button>
+          <button type="button" class="btn btn-outline-secondary btn-sm periodo-btn" data-periodo="ano_anterior">Ano Anterior</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ── No results ────────────────────────────────────────────────────────── -->
+  {% if not blocks %}
+  <div class="alert alert-info">
+    <i class="bi bi-info-circle me-2"></i>
+    Nenhum lançamento de despesa encontrado para os filtros selecionados.
+  </div>
+
+  {% else %}
+  <!-- ── Matrix table ──────────────────────────────────────────────────────── -->
+  <div class="table-responsive mb-4" style="overflow-x:auto;">
+    <table class="tbl-matrix">
+      <!-- Column headers -->
+      <thead>
+        <tr>
+          <th class="col-desc">Categoria</th>
+          {% for m in months %}
+          <th style="min-width:78px;">{{ m.label }}{% if months|length > 1 and months[0].year != months[-1].year %}<br><span style="font-size:.6rem;opacity:.7;">{{ m.year }}</span>{% endif %}</th>
+          {% endfor %}
+          <th class="col-acum" style="min-width:90px;">ACUM</th>
+        </tr>
+      </thead>
+      <tbody>
+
+        {# ── Per-block (Título) section ── #}
+        {% for block in blocks %}
+
+        {# Block header spanning all columns #}
+        <tr class="row-titulo-hdr">
+          <td class="col-desc"><i class="bi bi-tag-fill me-1"></i>{{ block.titulo_nome }}</td>
+          {% for m in months %}
+          <td class="text-end"></td>
+          {% endfor %}
+          <td class="text-end col-acum"></td>
+        </tr>
+
+        {# Category rows #}
+        {% for row in block.rows %}
+        <tr class="row-cat">
+          <td class="col-desc ps-3">{{ row.categoria_nome }}{% if row.motorista_nome %} <span class="badge bg-success ms-1" style="font-size:.72em;font-weight:600;vertical-align:middle;"><i class="bi bi-person-fill me-1"></i>{{ row.motorista_nome }}</span>{% endif %}</td>
+          {% for m in months %}
+            {% set v = row.by_month.get(m.key, 0) %}
+            <td class="text-end {% if v == 0 %}val-zero{% endif %}">
+              {% if v != 0 %}{{ v | formatar_moeda }}{% else %}—{% endif %}
+            </td>
+          {% endfor %}
+          <td class="text-end col-acum">{{ row.total | formatar_moeda }}</td>
+        </tr>
+        {# Sub-category rows (if any) #}
+        {% for sc in row.subcats %}
+        <tr class="row-subcat">
+          <td class="col-desc" style="padding-left:2.2rem;">↳ {{ sc.subcat_nome }}</td>
+          {% for m in months %}
+            {% set v = sc.by_month.get(m.key, 0) %}
+            <td class="text-end {% if v == 0 %}val-zero{% endif %}">
+              {% if v != 0 %}{{ v | formatar_moeda }}{% else %}—{% endif %}
+            </td>
+          {% endfor %}
+          <td class="text-end col-acum" style="font-weight:400;">{{ sc.total | formatar_moeda }}</td>
+        </tr>
+        {% endfor %}
+        {% endfor %}
+
+        {# Block total row #}
+        <tr class="row-block-total">
+          <td class="col-desc">TOTAL {{ block.titulo_nome }}</td>
+          {% for m in months %}
+            {% set v = block.total_by_month.get(m.key, 0) %}
+            <td class="text-end">{% if v != 0 %}{{ v | formatar_moeda }}{% else %}—{% endif %}</td>
+          {% endfor %}
+          <td class="text-end col-acum">{{ block.total | formatar_moeda }}</td>
+        </tr>
+
+        {# Spacer row between blocks #}
+        {% if not loop.last %}
+        <tr style="height:6px;"><td colspan="{{ months|length + 2 }}" style="background:#f8f9fa;border:none;"></td></tr>
+        {% endif %}
+
+        {% endfor %}
+
+        {# ── Grand total ── #}
+        <tr style="height:4px;"><td colspan="{{ months|length + 2 }}" style="background:#f8f9fa;border:none;"></td></tr>
+        <tr class="row-grand">
+          <td class="col-desc">TOTAL GERAL</td>
+          {% for m in months %}
+            {% set v = grand_by_month.get(m.key, 0) %}
+            <td class="text-end">{% if v != 0 %}{{ v | formatar_moeda }}{% else %}—{% endif %}</td>
+          {% endfor %}
+          <td class="text-end col-acum">{{ grand_total | formatar_moeda }}</td>
+        </tr>
+
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  const inp_ini = document.querySelector('[name="data_inicio"]');
+  const inp_fim = document.querySelector('[name="data_fim"]');
+
+  document.querySelectorAll('.periodo-btn').forEach(btn => {
+    btn.addEventListener('click', function () {
+      const today = new Date();
+      let ini, fim;
+      switch (this.dataset.periodo) {
+        case 'mes_atual':
+          ini = new Date(today.getFullYear(), today.getMonth(), 1);
+          fim = today;
+          break;
+        case 'mes_anterior':
+          ini = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+          fim = new Date(today.getFullYear(), today.getMonth(), 0);
+          break;
+        case 'ano_atual':
+          ini = new Date(today.getFullYear(), 0, 1);
+          fim = new Date(today.getFullYear(), 11, 31);
+          break;
+        case 'ano_anterior':
+          ini = new Date(today.getFullYear() - 1, 0, 1);
+          fim = new Date(today.getFullYear() - 1, 11, 31);
+          break;
+        default:
+          return;
+      }
+      inp_ini.value = ini.toISOString().slice(0, 10);
+      inp_fim.value = fim.toISOString().slice(0, 10);
+    });
+  });
+})();
+</script>
+{% endblock %}
