@@ -56,59 +56,21 @@ def _ensure_tipo_funcionario(conn):
         """)
         conn.commit()
 
-    # Repair (executa SEMPRE, é no-op quando já está correto):
-    # Se funcionarioid existe na tabela funcionarios, a linha pertence a um
-    # frentista/outro — NUNCA a um motorista. Reverte tipo='motorista' → 'funcionario'
-    # para essas linhas, corrigindo promoções incorretas causadas por heurísticas
-    # anteriores baseadas em Comissão (que confundiam frentistas com motoristas
-    # quando o ID de funcionarios colide com um motoristas.id).
-    # Motoristas reais (VALMIR, MARCOS ANTONIO, …) NÃO estão na tabela funcionarios,
-    # portanto suas linhas não são afetadas por este repair.
-    cur.execute("""
-        UPDATE lancamentosfuncionarios_v2 lf
-        INNER JOIN funcionarios f ON f.id = lf.funcionarioid
-        SET    lf.tipo_funcionario = 'funcionario'
-        WHERE  lf.tipo_funcionario = 'motorista'
-    """)
-    conn.commit()
-
-    # Repair adicional: reverte linhas cujo funcionarioid não pertence a nenhum
-    # motorista (IDs sem vínculo com motoristas não devem ter tipo='motorista').
-    cur.execute("""
-        UPDATE lancamentosfuncionarios_v2
-        SET    tipo_funcionario = 'funcionario'
-        WHERE  tipo_funcionario = 'motorista'
-        AND    funcionarioid NOT IN (SELECT id FROM motoristas)
-    """)
-    conn.commit()
-    
-    # Repair final (executa SEMPRE): apaga registros de Comissão de frentistas
-    # que foram inseridos incorretamente com tipo_funcionario='funcionario'
-    # mas cujo valor bate com a comissão de um motorista. Esses registros foram
-    # gravados por versões anteriores do código que não usavam o prefixo por tipo
-    # (f_/m_) e acabaram associando comissões de motoristas a frentistas de mesmo ID.
-    # Regra: deleta lançamentos de Comissão cujo funcionarioid existe na tabela
-    # funcionarios (= é frentista) E cujo valor exato consta como comissão_motorista
-    # em algum frete do mesmo mês. Isso preserva comissões manuais legítimas
-    # (como Rodrigo = 1000,00) que não batem com nenhuma comissão de motorista.
-    cur.execute("""
-        DELETE lf FROM lancamentosfuncionarios_v2 lf
-        INNER JOIN funcionarios func ON func.id = lf.funcionarioid
-        INNER JOIN rubricas r ON r.id = lf.rubricaid
-            AND r.nome IN ('Comissão', 'Comissão / Aj. Custo')
-        WHERE lf.tipo_funcionario = 'funcionario'
-          AND lf.valor IN (
-              SELECT comissao_total FROM (
-                  SELECT COALESCE(SUM(f.comissao_motorista), 0) AS comissao_total
-                  FROM motoristas m
-                  LEFT JOIN fretes f ON m.id = f.motoristas_id
-                  WHERE m.paga_comissao = 1
-                  GROUP BY m.id
-                  HAVING comissao_total > 0
-              ) AS comissoes_motoristas
-          )
-    """)
-    conn.commit()
+        # Repair (executa SEMPRE): apaga comissoes de frentistas que colidiram
+        # com motoristas. Ocorre quando funcionarioid existe em AMBAS as tabelas
+        # (funcionarios e motoristas) e o registro foi gravado com tipo='funcionario'
+        # mas o valor e o mesmo de um motorista. Safe: preserva comissoes manuais
+        # (ex: Rodrigo) pois ele NAO esta na tabela motoristas.
+        cur.execute("""
+            DELETE lf FROM lancamentosfuncionarios_v2 lf
+            INNER JOIN funcionarios f ON f.id = lf.funcionarioid
+            INNER JOIN motoristas m ON m.id = lf.funcionarioid
+            INNER JOIN rubricas r ON r.id = lf.rubricaid
+                AND r.nome IN ('Comissao', 'Comissao / Aj. Custo',
+                                                              'Comissão', 'Comissão / Aj. Custo')
+            WHERE lf.tipo_funcionario = 'funcionario'
+        """)
+        conn.commit()
     cur.close()
 
 
