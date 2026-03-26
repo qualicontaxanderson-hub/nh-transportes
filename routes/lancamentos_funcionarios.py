@@ -81,6 +81,34 @@ def _ensure_tipo_funcionario(conn):
         AND    funcionarioid NOT IN (SELECT id FROM motoristas)
     """)
     conn.commit()
+    
+    # Repair final (executa SEMPRE): apaga registros de Comissão de frentistas
+    # que foram inseridos incorretamente com tipo_funcionario='funcionario'
+    # mas cujo valor bate com a comissão de um motorista. Esses registros foram
+    # gravados por versões anteriores do código que não usavam o prefixo por tipo
+    # (f_/m_) e acabaram associando comissões de motoristas a frentistas de mesmo ID.
+    # Regra: deleta lançamentos de Comissão cujo funcionarioid existe na tabela
+    # funcionarios (= é frentista) E cujo valor exato consta como comissão_motorista
+    # em algum frete do mesmo mês. Isso preserva comissões manuais legítimas
+    # (como Rodrigo = 1000,00) que não batem com nenhuma comissão de motorista.
+    cur.execute("""
+        DELETE lf FROM lancamentosfuncionarios_v2 lf
+        INNER JOIN funcionarios func ON func.id = lf.funcionarioid
+        INNER JOIN rubricas r ON r.id = lf.rubricaid
+            AND r.nome IN ('Comissão', 'Comissão / Aj. Custo')
+        WHERE lf.tipo_funcionario = 'funcionario'
+          AND lf.valor IN (
+              SELECT comissao_total FROM (
+                  SELECT COALESCE(SUM(f.comissao_motorista), 0) AS comissao_total
+                  FROM motoristas m
+                  LEFT JOIN fretes f ON m.id = f.motoristas_id
+                  WHERE m.paga_comissao = 1
+                  GROUP BY m.id
+                  HAVING comissao_total > 0
+              ) AS comissoes_motoristas
+          )
+    """)
+    conn.commit()
     cur.close()
 
 
