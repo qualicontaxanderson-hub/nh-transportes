@@ -386,8 +386,8 @@ def detalhe(mes, cliente_id):
             r.tipo as rubrica_tipo,
             v.caminhao
         FROM lancamentosfuncionarios_v2 l
-        LEFT JOIN funcionarios f ON l.funcionarioid = f.id
-        LEFT JOIN motoristas m ON l.funcionarioid = m.id
+        LEFT JOIN funcionarios f ON l.funcionarioid = f.id AND l.tipo_funcionario = 'funcionario'
+        LEFT JOIN motoristas m ON l.funcionarioid = m.id AND l.tipo_funcionario = 'motorista'
         INNER JOIN rubricas r ON l.rubricaid = r.id
         LEFT JOIN veiculos v ON l.caminhaoid = v.id
         WHERE l.mes = %s AND l.clienteid = %s
