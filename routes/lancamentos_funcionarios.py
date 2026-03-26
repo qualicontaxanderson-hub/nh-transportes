@@ -56,17 +56,17 @@ def _ensure_tipo_funcionario(conn):
         """)
         conn.commit()
 
-        # Repair: Reverte para 'funcionario' qualquer linha cujo funcionarioid
-    # existe na tabela funcionarios (frentistas/outros sempre estão lá;
-    # motoristas reais NÃO estão).
-    # Deleta registros incorretos (motoristas que na verdade são funcionarios)
+    # Repair (executado SEMPRE): reverte para 'funcionario' qualquer linha cujo
+    # funcionarioid existe na tabela funcionarios (frentistas/outros sempre
+    # estão lá; motoristas reais NÃO estão).
     cur.execute("""
-        DELETE lf FROM lancamentosfuncionarios_v2 lf
+        UPDATE lancamentosfuncionarios_v2 lf
         JOIN funcionarios f ON f.id = lf.funcionarioid
+        SET lf.tipo_funcionario = 'funcionario'
         WHERE lf.tipo_funcionario = 'motorista'
     """)
     conn.commit()
-        cur.close()
+    cur.close()
 
 def get_previous_month():
     """Get previous month in MM/YYYY format"""
