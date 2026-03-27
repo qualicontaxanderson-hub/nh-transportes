@@ -162,6 +162,34 @@ def _fetch_frete_data_by_vehicle(conn, data_inicio, data_fim):
     return result
 
 
+def _fetch_litros_comprados(conn, data_inicio, data_fim, empresa_ids):
+    """
+    Retorna litros comprados (entregues) pelas empresas selecionadas, por mês.
+
+    Filtra a tabela fretes por clientes_id IN (empresa_ids) — os clientes
+    dos fretes são os postos/empresas que receberam a carga.
+    Retorna {mk: float} onde mk = 'YYYYMM'.
+    Retorna {} se empresa_ids for vazio.
+    """
+    if not empresa_ids:
+        return {}
+    cur = conn.cursor(dictionary=True)
+    ph  = ','.join(['%s'] * len(empresa_ids))
+    cur.execute(f"""
+        SELECT
+            DATE_FORMAT(f.data_frete, '%Y%m')                           AS mk,
+            COALESCE(SUM(COALESCE(f.quantidade_manual, q.valor, 0)), 0) AS litros
+        FROM fretes f
+        LEFT JOIN quantidades q ON q.id = f.quantidade_id
+        WHERE f.data_frete BETWEEN %s AND %s
+          AND f.clientes_id IN ({ph})
+        GROUP BY DATE_FORMAT(f.data_frete, '%Y%m')
+    """, [data_inicio, data_fim] + list(empresa_ids))
+    rows = cur.fetchall()
+    cur.close()
+    return {r['mk']: float(r['litros']) for r in rows}
+
+
 def _build_motorista_salary_rows(func_rows, months):
     """
     Constrói um mapa de linhas de salário por motorista.
@@ -613,6 +641,11 @@ def conf_despesas():
         grand_total       = 0.0
         total_lancamentos = 0
 
+        litros_comprados_by_month = {}
+        litros_comprados_total    = 0.0
+        custo_por_litro_by_month  = {}
+        custo_por_litro_acum      = 0.0
+
         if data_inicio and data_fim:
             months = _months_in_range(data_inicio, data_fim)
             lancamentos = _fetch_lancamentos(
@@ -656,6 +689,7 @@ def conf_despesas():
                     titulo_norm = _ascii_upper(block['titulo_nome'])
                     if 'CAMINHAO' not in titulo_norm and 'CAMINHOES' not in titulo_norm:
                         continue
+                    block['is_caminhoes'] = True
                     new_rows = []
                     for row in block.get('rows', []):
                         new_rows.append(row)
@@ -728,6 +762,28 @@ def conf_despesas():
                                     grand_total += sal_row['total']
                                 break
                     block['rows'] = new_rows
+
+            # ── Litros comprados pela empresa selecionada e custo por litro ──
+            litros_comprados_by_month = _fetch_litros_comprados(
+                conn, data_inicio, data_fim, empresa_ids
+            )
+            litros_comprados_total = sum(litros_comprados_by_month.values())
+            # Encontra total_by_month do bloco CAMINHÕES para calcular custo/litro
+            caminhoes_total_by_month = {}
+            for _blk in blocks:
+                if _blk.get('is_caminhoes'):
+                    caminhoes_total_by_month = _blk['total_by_month']
+                    break
+            custo_por_litro_by_month = {}
+            for m in months:
+                mk = m['key']
+                lit  = litros_comprados_by_month.get(mk, 0.0)
+                cost = caminhoes_total_by_month.get(mk, 0.0)
+                custo_por_litro_by_month[mk] = (cost / lit) if lit else 0.0
+            custo_por_litro_acum = (
+                sum(caminhoes_total_by_month.get(m['key'], 0.0) for m in months)
+                / litros_comprados_total
+            ) if litros_comprados_total else 0.0
     finally:
         conn.close()
 
@@ -744,4 +800,8 @@ def conf_despesas():
         empresa_ids=empresa_ids,
         titulo_ids=titulo_ids,
         total_lancamentos=total_lancamentos,
+        litros_comprados_by_month=litros_comprados_by_month,
+        litros_comprados_total=litros_comprados_total,
+        custo_por_litro_by_month=custo_por_litro_by_month,
+        custo_por_litro_acum=custo_por_litro_acum,
     )

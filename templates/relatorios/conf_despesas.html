@@ -92,6 +92,20 @@
 .col-acum { background: #f8f5e4 !important; font-weight: 600; }
 .row-block-total .col-acum,
 .row-grand .col-acum { background: rgba(255,255,255,.15) !important; }
+/* litros comprados + custo por litro */
+.row-litros-comprados td {
+  background: #eef5fb;
+  color: #555;
+  font-size: .82rem;
+}
+.row-litros-comprados .col-acum { background: #dce9f5 !important; }
+.row-custo-litro td {
+  background: #d1ecf1;
+  color: #0c5460;
+  font-weight: 700;
+  font-size: .84rem;
+}
+.row-custo-litro .col-acum { background: #b8dde4 !important; }
 </style>
 {% endblock %}
 
@@ -306,6 +320,34 @@
           {% endfor %}
           <td class="text-end col-acum">{{ block.total | formatar_moeda }}</td>
         </tr>
+
+        {# Litros comprados + custo por litro — apenas no bloco CAMINHÕES e com empresa selecionada #}
+        {% if block.is_caminhoes and litros_comprados_by_month %}
+        <tr class="row-litros-comprados">
+          <td class="col-desc" style="padding-left:1.4rem;font-style:italic;color:#555;">↳ LITROS COMPRADOS</td>
+          {% for m in months %}
+            {% set v = litros_comprados_by_month.get(m.key, 0) %}
+            <td class="text-end {% if v == 0 %}val-zero{% endif %}">
+              {% if v != 0 %}{{ v | fmtnum(0) }} L{% else %}—{% endif %}
+            </td>
+          {% endfor %}
+          <td class="text-end col-acum" style="font-style:italic;font-weight:400;">
+            {% if litros_comprados_total != 0 %}{{ litros_comprados_total | fmtnum(0) }} L{% else %}—{% endif %}
+          </td>
+        </tr>
+        <tr class="row-custo-litro">
+          <td class="col-desc" style="font-weight:700;">CUSTO POR LITRO TRANSPORTADO</td>
+          {% for m in months %}
+            {% set v = custo_por_litro_by_month.get(m.key, 0) %}
+            <td class="text-end {% if v == 0 %}val-zero{% endif %}">
+              {% if v != 0 %}R$ {{ "%.4f"|format(v)|replace('.', ',') }}{% else %}—{% endif %}
+            </td>
+          {% endfor %}
+          <td class="text-end col-acum" style="font-weight:700;">
+            {% if custo_por_litro_acum != 0 %}R$ {{ "%.4f"|format(custo_por_litro_acum)|replace('.', ',') }}{% else %}—{% endif %}
+          </td>
+        </tr>
+        {% endif %}
 
         {# Spacer row between blocks #}
         {% if not loop.last %}
