@@ -612,11 +612,8 @@ def detalhe(mes, cliente_id):
             }
         funcionarios_data[key]['rubricas'].append(lanc)
         
-        # Calculate total (positive for benefits, negative for discounts)
-        if lanc['rubrica_tipo'] in ['DESCONTO', 'IMPOSTO']:
-            funcionarios_data[key]['total'] -= float(lanc['valor'])
-        else:
-            funcionarios_data[key]['total'] += float(lanc['valor'])
+        # All rubricas always add to the employee's total cost
+        funcionarios_data[key]['total'] += float(lanc['valor'])
     
     return render_template('lancamentos_funcionarios/detalhe.html',
                          mes=mes,
