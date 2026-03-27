@@ -106,6 +106,26 @@
                                    placeholder="Parte da descrição..." value="{{ f_descricao or '' }}">
                         </div>
                         <div class="col-12">
+                            <label class="form-label form-label-sm mb-0">Categoria de Despesa</label>
+                            <select name="f_categoria_id" class="form-select form-select-sm">
+                                <option value="">— Todas as categorias —</option>
+                                {% set ns = namespace(last_titulo='') %}
+                                {% for cat in categorias_despesa %}
+                                  {% if cat.titulo_nome != ns.last_titulo %}
+                                    {% if ns.last_titulo %}
+                                    </optgroup>
+                                    {% endif %}
+                                    <optgroup label="{{ cat.titulo_nome }}">
+                                    {% set ns.last_titulo = cat.titulo_nome %}
+                                  {% endif %}
+                                  <option value="{{ cat.id }}" {% if cat.id|string == f_categoria_id %}selected{% endif %}>
+                                    {{ cat.categoria_nome }}
+                                  </option>
+                                {% endfor %}
+                                {% if categorias_despesa %}</optgroup>{% endif %}
+                            </select>
+                        </div>
+                        <div class="col-12">
                             <div class="d-flex gap-1 flex-wrap mb-1">
                                 <span class="text-muted" style="font-size:0.78rem; line-height:1.8;">Período:</span>
                                 <button type="button" class="btn btn-outline-secondary btn-xs" onclick="setPeriodoPag('mes_atual')">Este mês</button>
