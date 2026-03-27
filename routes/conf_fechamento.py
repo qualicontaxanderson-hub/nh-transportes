@@ -79,28 +79,42 @@ def _months_in_year(year):
 def _fetch_receitas(conn, data_inicio, data_fim, empresa_ids):
     """
     Retorna SUM(valor) agrupado por (tipo_nome, data) para receitas.
-    Usa tipos_receita_caixa.nome quando disponível; caso contrário o campo
-    tipo bruto de lancamentos_caixa_receitas.
+
+    Inclui:
+      - lancamentos_caixa_receitas  (tipos normais de receita)
+      - lancamentos_caixa_sobras_funcionarios  (sobras de caixa dos funcionários)
     """
     cur = conn.cursor(dictionary=True)
     ph_emp = ','.join(['%s'] * len(empresa_ids)) if empresa_ids else None
     emp_cond = f"AND lc.cliente_id IN ({ph_emp})" if ph_emp else ""
     params = [data_inicio, data_fim] + (list(empresa_ids) if empresa_ids else [])
     cur.execute(
-        f"""SELECT
-               lc.data,
-               COALESCE(tr.nome, lcr.tipo) AS tipo_nome,
-               COALESCE(tr.id, 0)          AS tipo_id,
-               SUM(lcr.valor)              AS valor
-             FROM lancamentos_caixa_receitas lcr
-             INNER JOIN lancamentos_caixa lc ON lc.id = lcr.lancamento_caixa_id
-             LEFT  JOIN tipos_receita_caixa tr ON tr.nome = lcr.tipo OR tr.tipo = lcr.tipo
-             WHERE lc.data BETWEEN %s AND %s
-               AND lc.status = 'FECHADO'
-               {emp_cond}
-             GROUP BY lc.data, tipo_nome, tipo_id
-             ORDER BY tipo_id, tipo_nome, lc.data""",
-        params,
+        f"""SELECT data, tipo_nome, SUM(valor) AS valor
+             FROM (
+               -- Receitas normais
+               SELECT lc.data,
+                      COALESCE(tr.nome, lcr.tipo) AS tipo_nome,
+                      lcr.valor
+                 FROM lancamentos_caixa_receitas lcr
+                 INNER JOIN lancamentos_caixa lc ON lc.id = lcr.lancamento_caixa_id
+                 LEFT  JOIN tipos_receita_caixa tr ON tr.nome = lcr.tipo
+                 WHERE lc.data BETWEEN %s AND %s
+                   AND lc.status = 'FECHADO'
+                   {emp_cond}
+               UNION ALL
+               -- Sobras de caixa por funcionário
+               SELECT lc.data,
+                      'SOBRAS DE CAIXA' AS tipo_nome,
+                      s.valor
+                 FROM lancamentos_caixa_sobras_funcionarios s
+                 INNER JOIN lancamentos_caixa lc ON lc.id = s.lancamento_caixa_id
+                 WHERE lc.data BETWEEN %s AND %s
+                   AND lc.status = 'FECHADO'
+                   {emp_cond}
+             ) sub
+             GROUP BY data, tipo_nome
+             ORDER BY tipo_nome, data""",
+        params * 2,
     )
     rows = cur.fetchall()
     cur.close()
@@ -110,28 +124,62 @@ def _fetch_receitas(conn, data_inicio, data_fim, empresa_ids):
 def _fetch_comprovacoes(conn, data_inicio, data_fim, empresa_ids):
     """
     Retorna SUM(valor) agrupado por (forma_nome, data) para comprovações.
+
+    Inclui:
+      - lancamentos_caixa_comprovacao  (formas de pagamento e bandeiras de cartão)
+        → itens do tipo RETIRADA_PAGAMENTO são separados por lcc.descricao
+          (Desconto Cadastros, Desconto Gerais, Empréstimo Funcionários, Retirada Aluguel, …)
+      - lancamentos_caixa_perdas_funcionarios  (perdas de caixa por funcionário)
+      - lancamentos_caixa_vales_funcionarios   (vales / quebras de caixa por funcionário)
     """
     cur = conn.cursor(dictionary=True)
     ph_emp = ','.join(['%s'] * len(empresa_ids)) if empresa_ids else None
     emp_cond = f"AND lc.cliente_id IN ({ph_emp})" if ph_emp else ""
     params = [data_inicio, data_fim] + (list(empresa_ids) if empresa_ids else [])
     cur.execute(
-        f"""SELECT
-               lc.data,
-               COALESCE(fp.nome, bc.nome, 'OUTROS') AS forma_nome,
-               COALESCE(fp.id, 0)                   AS forma_id,
-               COALESCE(bc.id, 0)                   AS bandeira_id,
-               SUM(lcc.valor)                        AS valor
-             FROM lancamentos_caixa_comprovacao lcc
-             INNER JOIN lancamentos_caixa lc      ON lc.id = lcc.lancamento_caixa_id
-             LEFT  JOIN formas_pagamento_caixa fp  ON fp.id = lcc.forma_pagamento_id
-             LEFT  JOIN bandeiras_cartao bc        ON bc.id = lcc.bandeira_cartao_id
-             WHERE lc.data BETWEEN %s AND %s
-               AND lc.status = 'FECHADO'
-               {emp_cond}
-             GROUP BY lc.data, forma_nome, forma_id, bandeira_id
-             ORDER BY forma_id, bandeira_id, forma_nome, lc.data""",
-        params,
+        f"""SELECT data, forma_nome, SUM(valor) AS valor
+             FROM (
+               -- Formas de pagamento e cartões (RETIRADA_PAGAMENTO separada por descrição)
+               SELECT lc.data,
+                      CASE
+                        WHEN fp.tipo = 'RETIRADA_PAGAMENTO'
+                             AND lcc.descricao IS NOT NULL
+                             AND lcc.descricao <> ''
+                          THEN lcc.descricao
+                        ELSE COALESCE(fp.nome, bc.nome, 'OUTROS')
+                      END AS forma_nome,
+                      lcc.valor
+                 FROM lancamentos_caixa_comprovacao lcc
+                 INNER JOIN lancamentos_caixa lc ON lc.id = lcc.lancamento_caixa_id
+                 LEFT  JOIN formas_pagamento_caixa fp ON fp.id = lcc.forma_pagamento_id
+                 LEFT  JOIN bandeiras_cartao bc ON bc.id = lcc.bandeira_cartao_id
+                 WHERE lc.data BETWEEN %s AND %s
+                   AND lc.status = 'FECHADO'
+                   {emp_cond}
+               UNION ALL
+               -- Perdas de caixa por funcionário
+               SELECT lc.data,
+                      'PERDAS DE CAIXA' AS forma_nome,
+                      p.valor
+                 FROM lancamentos_caixa_perdas_funcionarios p
+                 INNER JOIN lancamentos_caixa lc ON lc.id = p.lancamento_caixa_id
+                 WHERE lc.data BETWEEN %s AND %s
+                   AND lc.status = 'FECHADO'
+                   {emp_cond}
+               UNION ALL
+               -- Vales / quebras de caixa por funcionário
+               SELECT lc.data,
+                      'VALES FUNCIONÁRIOS' AS forma_nome,
+                      v.valor
+                 FROM lancamentos_caixa_vales_funcionarios v
+                 INNER JOIN lancamentos_caixa lc ON lc.id = v.lancamento_caixa_id
+                 WHERE lc.data BETWEEN %s AND %s
+                   AND lc.status = 'FECHADO'
+                   {emp_cond}
+             ) sub
+             GROUP BY data, forma_nome
+             ORDER BY forma_nome, data""",
+        params * 3,
     )
     rows = cur.fetchall()
     cur.close()
