@@ -303,6 +303,7 @@ _RECEITAS_ORDER = {
     'VENDAS POSTO':          '01',
     'ARLA':                  '02',
     'LUBRIFICANTES':         '03',
+    'ANTECIPAÇÃO CLIENTE':   '03a',
     'RECEBIMENTOS':          '04',
     'ACRÉSCIMOS CADASTROS':  '05',
     'ACRÉSCIMOS GERAIS':     '06',
@@ -348,6 +349,7 @@ _COMPROV_ORDER = {
     'EMPRESTIMOS FUNCIONÁRIOS':      '12',
     'EMPRÉSTIMOS FUNCIONÁRIOS':      '12',
     'PERDAS DE CAIXA':               '13',
+    'VENDA PROGRAMADA':              '13a',
     'RETIRADAS PARA PAGAMENTO':      '14',
 }
 
