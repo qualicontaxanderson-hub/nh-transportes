@@ -298,18 +298,49 @@ def _fetch_totais(conn, data_inicio, data_fim, empresa_ids):
     return rows
 
 
+# Canonical sort order for receita categories.
+_RECEITAS_ORDER = {
+    'VENDAS POSTO':          '01',
+    'ARLA':                  '02',
+    'LUBRIFICANTES':         '03',
+    'RECEBIMENTOS':          '04',
+    'ACRÉSCIMOS CADASTROS':  '05',
+    'ACRÉSCIMOS GERAIS':     '06',
+    'TROCO PIX':             '07',
+    'TROCO PIX (AUTO)':      '08',
+    'EMPRESTIMOS':           '09',
+    'EMPRÉSTIMOS':           '09',
+    'OUTROS':                '10',
+    'SOBRAS DE CAIXA':       '11',
+}
+
+
+def _receitas_sort_key(nome):
+    return _RECEITAS_ORDER.get(nome, '50_' + nome)
+
+
 # Custom sort order for known comprovação categories.
 # Lower number → appears earlier in the table.
 _COMPROV_ORDER = {
-    'CARTÕES DÉBITO':            '01',
-    'CARTÕES CRÉDITO':           '02',
-    'DESCONTO CADASTROS':        '50',
-    'DESCONTO GERAIS':           '51',
-    'EMPRÉSTIMO FUNCIONÁRIOS':   '52',
-    'RETIRADA ALUGUEL':          '53',
-    'RETIRADAS PARA PAGAMENTO':  '54',
-    'PERDAS DE CAIXA':           '90',
-    'VALES FUNCIONÁRIOS':        '91',
+    'PRAZO':                         '01',
+    'DEPOSITO EM ESPECIE':           '02',
+    'DEPÓSITO EM ESPÉCIE':           '02',
+    'DEPOSITO EM CHEQUE A VISTA':    '03',
+    'DEPÓSITO EM CHEQUE À VISTA':    '03',
+    'DEPOSITOS EM CHEQUE A PRAZO':   '04',
+    'DEPÓSITOS EM CHEQUE A PRAZO':   '04',
+    'RECEBIMENTO VIA PIX':           '05',
+    'CARTÕES CRÉDITO':               '06',
+    'CARTÕES DÉBITO':                '07',
+    'DESCONTO CADASTROS':            '08',
+    'DESCONTOS CADASTROS':           '08',
+    'DESCONTO GERAIS':               '09',
+    'DESCONTOS GERAIS':              '09',
+    'EMPRÉSTIMO FUNCIONÁRIOS':       '10',
+    'RETIRADA ALUGUEL':              '11',
+    'VALES FUNCIONÁRIOS':            '12',
+    'PERDAS DE CAIXA':               '13',
+    'RETIRADAS PARA PAGAMENTO':      '14',
 }
 
 
@@ -346,7 +377,7 @@ def _build_matrix(receitas_rows, comprovacoes_rows, totais_rows, col_key_fn):
         rec_map[nome][ck] = rec_map[nome].get(ck, 0.0) + val
 
     receitas_block = []
-    for nome in sorted(rec_map.keys()):
+    for nome in sorted(rec_map.keys(), key=_receitas_sort_key):
         by_col = rec_map[nome]
         receitas_block.append({'nome': nome, 'by_col': by_col, 'total': sum(by_col.values())})
 
