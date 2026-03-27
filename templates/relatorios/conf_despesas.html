@@ -68,6 +68,11 @@
 /* sub-category rows */
 .row-subcat td { background: #fafafa; font-weight: 400; color: #444; }
 .row-subcat:hover td { background: #f0f4ff; }
+/* receita subcat — verde: indica receita que deduz do custo */
+.row-subcat-receita td { background: #f0fff4; color: #198754; }
+.row-subcat-receita:hover td { background: #d4edda; }
+/* litros subcat — cinza-azulado: informativa, sem impacto monetário */
+.row-subcat-litros td { background: #f0f4ff; color: #0d6efd; font-style: italic; }
 /* total per block — lighter steel-blue */
 .row-block-total td {
   background: #4a86c8;
@@ -269,15 +274,25 @@
         </tr>
         {# Sub-category rows (if any) #}
         {% for sc in row.subcats %}
-        <tr class="row-subcat">
+        <tr class="row-subcat{% if sc.is_receita %} row-subcat-receita{% elif sc.is_litros %} row-subcat-litros{% endif %}">
           <td class="col-desc" style="padding-left:2.2rem;">↳ {{ sc.subcat_nome }}</td>
           {% for m in months %}
             {% set v = sc.by_month.get(m.key, 0) %}
             <td class="text-end {% if v == 0 %}val-zero{% endif %}">
-              {% if v != 0 %}{{ v | formatar_moeda }}{% else %}—{% endif %}
+              {% if sc.is_litros %}
+                {% if v != 0 %}{{ v | fmtnum(0) }} L{% else %}—{% endif %}
+              {% else %}
+                {% if v != 0 %}{{ v | formatar_moeda }}{% else %}—{% endif %}
+              {% endif %}
             </td>
           {% endfor %}
-          <td class="text-end col-acum" style="font-weight:400;">{{ sc.total | formatar_moeda }}</td>
+          <td class="text-end col-acum" style="font-weight:400;">
+            {% if sc.is_litros %}
+              {% if sc.total != 0 %}{{ sc.total | fmtnum(0) }} L{% else %}—{% endif %}
+            {% else %}
+              {{ sc.total | formatar_moeda }}
+            {% endif %}
+          </td>
         </tr>
         {% endfor %}
         {% endfor %}
