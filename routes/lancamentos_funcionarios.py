@@ -438,8 +438,9 @@ def detalhe(mes, cliente_id):
     mes = mes.replace('-', '/')
     
     conn = get_db_connection()
+    _ensure_tipo_funcionario(conn)
     cursor = conn.cursor(dictionary=True)
-    
+
     # Get all lancamentos for this month and client
     # Using LEFT JOINs to handle both funcionarios and motoristas
     cursor.execute("""
@@ -547,7 +548,7 @@ def detalhe(mes, cliente_id):
     
     # Sort lancamentos by (funcionarioid, tipo_funcionario) to keep frentistas
     # and motoristas with the same numeric ID in separate, consistent groups.
-    lancamentos.sort(key=lambda x: (x['funcionarioid'], x.get('tipo_funcionario', '')))
+    lancamentos.sort(key=lambda x: (x['funcionarioid'], x.get('tipo_funcionario', 'funcionario')))
     
     # Group by (funcionarioid, tipo_funcionario) to prevent ID collision between
     # funcionarios and motoristas tables (both auto-increment from 1).
