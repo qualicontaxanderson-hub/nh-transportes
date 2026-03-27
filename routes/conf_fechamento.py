@@ -287,6 +287,8 @@ def conf_fechamento_mensal():
 
     anos_list = list(range(date.today().year - 3, date.today().year + 1))
     meses_list = [(i, _MONTHS_PT[i - 1]) for i in range(1, 13)]
+    _MESES_NOME = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho',
+                   'Julho','Agosto','Setembro','Outubro','Novembro','Dezembro']
 
     return render_template(
         'relatorios/conf_fechamento_mensal.html',
@@ -294,6 +296,7 @@ def conf_fechamento_mensal():
         empresa_ids_filter=empresa_ids,
         ano=ano,
         mes=mes,
+        mes_nome=_MESES_NOME[mes - 1],
         days=days,
         receitas_block=receitas_block,
         comprov_block=comprov_block,
