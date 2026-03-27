@@ -512,8 +512,8 @@ function calculateTotals() {
                 rubricaTotals[rubricaNome] += valor;
             }
             
-            // EMPRÉSTIMOS (DESCONTO) and advances (ADIANTAMENTO) subtract; everything else adds
-            if (rubricaTipo === 'DESCONTO' || rubricaTipo === 'ADIANTAMENTO') {
+            // Only EMPRÉSTIMOS subtracts (by name, robust to DB tipo variations); everything else adds
+            if (rubricaNome === 'EMPRÉSTIMOS' || rubricaNome === 'Empréstimos') {
                 totalDescontos += valor;
             } else {
                 totalProventos += valor;

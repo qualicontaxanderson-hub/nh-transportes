@@ -61,7 +61,7 @@
                                     {% endif %}
                                 </td>
                                 <td class="text-end">
-                                    {% if rubrica.rubrica_tipo in ['DESCONTO', 'ADIANTAMENTO'] %}
+                                    {% if rubrica.rubrica_nome in ['EMPRÉSTIMOS', 'Empréstimos'] %}
                                         <span class="text-danger">- {{ rubrica.valor|formatar_moeda }}</span>
                                     {% else %}
                                         <span class="text-success">{{ rubrica.valor|formatar_moeda }}</span>

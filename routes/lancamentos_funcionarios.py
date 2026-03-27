@@ -612,8 +612,8 @@ def detalhe(mes, cliente_id):
             }
         funcionarios_data[key]['rubricas'].append(lanc)
         
-        # EMPRÉSTIMOS/ADIANTAMENTO subtract; all other rubricas (including FGTS/IMPOSTO) add
-        if lanc['rubrica_tipo'] in ['DESCONTO', 'ADIANTAMENTO']:
+        # Only EMPRÉSTIMOS subtracts; all other rubricas add (by name, not tipo — robust to DB tipo variations)
+        if lanc['rubrica_nome'] in ('EMPRÉSTIMOS', 'Empréstimos'):
             funcionarios_data[key]['total'] -= float(lanc['valor'])
         else:
             funcionarios_data[key]['total'] += float(lanc['valor'])
