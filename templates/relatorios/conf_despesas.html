@@ -4,7 +4,7 @@
 {% block styles %}
 <style>
 .page-hero {
-  background: linear-gradient(135deg, #157347 0%, #0d4a2e 100%);
+  background: linear-gradient(135deg, #1D63A5 0%, #154070 100%);
   border-radius: .75rem; padding: 1.5rem 2rem; margin-bottom: 1.5rem; color: #fff;
 }
 .page-hero .hero-icon {
@@ -55,7 +55,7 @@
 .tbl-matrix thead tr th.col-desc { text-align: left; background: #343a40; }
 /* titulo block header */
 .row-titulo-hdr td {
-  background: #157347;
+  background: #1D63A5;
   color: #fff;
   font-weight: 700;
   font-size: .78rem;
@@ -64,24 +64,24 @@
 }
 /* category data rows */
 .row-cat td { background: #fff; font-weight: 700; }
-.row-cat:hover td { background: #f0fff4; }
+.row-cat:hover td { background: #f0f4ff; }
 /* sub-category rows */
 .row-subcat td { background: #fafafa; font-weight: 400; color: #444; }
-.row-subcat:hover td { background: #f0fff4; }
+.row-subcat:hover td { background: #f0f4ff; }
 /* receita subcat — verde: indica receita que deduz do custo */
-.row-subcat-receita td { background: #f0fff4; color: #198754; }
-.row-subcat-receita:hover td { background: #d4edda; }
+.row-subcat-receita td { background: #f0f4ff; color: #198754; }
+.row-subcat-receita:hover td { background: #dce9f5; }
 /* litros subcat — cinza-azulado: informativa, sem impacto monetário */
 .row-subcat-litros td { background: #f0f4ff; color: #0d6efd; font-style: italic; }
 /* total per block */
 .row-block-total td {
-  background: #28a745;
+  background: #4a86c8;
   color: #fff;
   font-weight: 700;
 }
 /* grand total */
 .row-grand td {
-  background: #0d4a2e;
+  background: #154070;
   color: #fff;
   font-weight: 700;
   font-size: .82rem;
@@ -94,18 +94,18 @@
 .row-grand .col-acum { background: rgba(255,255,255,.15) !important; }
 /* litros comprados + custo por litro */
 .row-litros-comprados td {
-  background: #f0fff4;
+  background: #f0f4ff;
   color: #555;
   font-size: .82rem;
 }
-.row-litros-comprados .col-acum { background: #d4edda !important; }
+.row-litros-comprados .col-acum { background: #dce9f5 !important; }
 .row-custo-litro td {
-  background: #c3e6cb;
-  color: #155724;
+  background: #d1ecf1;
+  color: #0c5460;
   font-weight: 700;
   font-size: .84rem;
 }
-.row-custo-litro .col-acum { background: #b1dfbb !important; }
+.row-custo-litro .col-acum { background: #b8dde4 !important; }
 </style>
 {% endblock %}
 
@@ -138,8 +138,8 @@
   <div class="row g-3 mb-4">
     <div class="col-6 col-md-3">
       <div class="card stat-card p-3">
-        <div class="stat-label" style="color:#157347;">Categorias</div>
-        <div class="stat-value" style="color:#157347;">
+        <div class="stat-label" style="color:#1D63A5;">Categorias</div>
+        <div class="stat-value" style="color:#1D63A5;">
           {{ blocks | map(attribute='rows') | map('length') | sum if blocks else 0 }}
         </div>
         <div class="small text-muted mt-1">com despesas no período</div>
@@ -217,7 +217,7 @@
 
           <!-- Botões -->
           <div class="col-12 col-md-2 d-flex gap-2 align-items-end">
-            <button type="submit" class="btn btn-success btn-sm flex-grow-1">
+            <button type="submit" class="btn btn-primary btn-sm flex-grow-1">
               <i class="bi bi-search"></i> Filtrar
             </button>
             <a href="{{ url_for('conf_despesas.conf_despesas') }}" class="btn btn-outline-secondary btn-sm" title="Limpar todos os filtros">

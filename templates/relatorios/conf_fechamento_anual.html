@@ -4,7 +4,7 @@
 {% block styles %}
 <style>
 .page-hero {
-  background: linear-gradient(135deg, #0f5132 0%, #082619 100%);
+  background: linear-gradient(135deg, #1D63A5 0%, #154070 100%);
   border-radius: .75rem; padding: 1.5rem 2rem; margin-bottom: 1.5rem; color: #fff;
 }
 .page-hero .hero-icon {
@@ -12,7 +12,7 @@
   border-radius: .6rem; display: flex; align-items: center; justify-content: center;
   font-size: 1.5rem; flex-shrink: 0;
 }
-.flt-header { background: #0f5132; color: #fff; font-size: .78rem; font-weight: 600; padding: .45rem .75rem; border-radius: .35rem .35rem 0 0; }
+.flt-header { background: #1D63A5; color: #fff; font-size: .78rem; font-weight: 600; padding: .45rem .75rem; border-radius: .35rem .35rem 0 0; }
 .tbl-matrix {
   font-size: .72rem; border-collapse: collapse; width: 100%;
 }
@@ -29,25 +29,25 @@
 }
 .tbl-matrix thead tr th.col-desc { text-align: left; background: #343a40; }
 .row-section td {
-  background: #0f5132; color: #fff; font-weight: 700; font-size: .76rem;
+  background: #1D63A5; color: #fff; font-weight: 700; font-size: .76rem;
   text-transform: uppercase; letter-spacing: .05em;
 }
 .row-item td { background: #fff; font-weight: 400; }
-.row-item:hover td { background: #f0fff4; }
-.row-block-total td { background: #198754; color: #fff; font-weight: 700; }
-.row-diferenca td { background: #082619; color: #fff; font-weight: 700; font-size: .8rem; }
-.dif-pos { color: #d1fae5; font-weight: 700; }
-.dif-neg { color: #fca5a5; font-weight: 700; }
+.row-item:hover td { background: #f0f4ff; }
+.row-block-total td { background: #4a86c8; color: #fff; font-weight: 700; }
+.row-diferenca td { background: #154070; color: #fff; font-weight: 700; font-size: .8rem; }
+.dif-pos { color: #198754; font-weight: 700; }
+.dif-neg { color: #dc3545; font-weight: 700; }
 .val-zero { color: #bbb; }
 .col-acum { background: #f8f5e4 !important; font-weight: 600; }
 .row-block-total .col-acum, .row-diferenca .col-acum { background: rgba(255,255,255,.15) !important; }
 /* collapsible parent rows */
-.row-parent td { background: #e8f5e9 !important; font-weight: 600; }
-.row-parent:hover td { background: #d4edda !important; }
+.row-parent td { background: #e8f0ff !important; font-weight: 600; }
+.row-parent:hover td { background: #d0e4f7 !important; }
 .row-parent .col-desc { user-select: none; }
-.toggle-icon { display: inline-block; width: 1em; font-size: .75em; color: #0f5132; margin-right: .2em; }
+.toggle-icon { display: inline-block; width: 1em; font-size: .75em; color: #1D63A5; margin-right: .2em; }
 /* child rows (hidden by default) */
-.row-child td { background: #f9fbf9; font-size: .70rem; }
+.row-child td { background: #f9fbff; font-size: .70rem; }
 .row-child .col-desc { padding-left: 1.5rem !important; }
 </style>
 {% endblock %}
@@ -99,13 +99,13 @@
           </select>
         </div>
         <div class="col-md-3 d-flex gap-1 align-items-end">
-          <button type="submit" class="btn btn-success btn-sm flex-fill">
+          <button type="submit" class="btn btn-primary btn-sm flex-fill">
             <i class="bi bi-search"></i> Filtrar
           </button>
           <a href="{{ url_for('conf_fechamento.conf_fechamento_anual') }}" class="btn btn-outline-secondary btn-sm">
             <i class="bi bi-x"></i> Limpar
           </a>
-          <a href="{{ url_for('conf_fechamento.conf_fechamento_mensal') }}{% if empresa_ids_filter %}?{% for e in empresa_ids_filter %}empresa_ids[]={{ e }}{% if not loop.last %}&{% endif %}{% endfor %}&ano={{ ano }}{% endif %}" class="btn btn-outline-success btn-sm">
+          <a href="{{ url_for('conf_fechamento.conf_fechamento_mensal') }}{% if empresa_ids_filter %}?{% for e in empresa_ids_filter %}empresa_ids[]={{ e }}{% if not loop.last %}&{% endif %}{% endfor %}&ano={{ ano }}{% endif %}" class="btn btn-outline-primary btn-sm">
             <i class="bi bi-calendar3"></i> Ver Mensal
           </a>
         </div>
@@ -115,7 +115,7 @@
 
   <!-- TABELA -->
   <div class="card shadow-sm">
-    <div class="card-header py-2" style="background:#0f5132;color:#fff;font-size:.78rem;font-weight:600;">
+    <div class="card-header py-2" style="background:#1D63A5;color:#fff;font-size:.78rem;font-weight:600;">
       <i class="bi bi-table me-1"></i> Fechamentos de Caixa — {{ ano }}
     </div>
     <div class="card-body p-0" style="overflow-x:auto;">
