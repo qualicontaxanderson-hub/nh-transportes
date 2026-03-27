@@ -1,0 +1,240 @@
+{% extends 'base.html' %}
+{% block title %}Conf. Fechamento Mensal{% endblock %}
+
+{% block styles %}
+<style>
+.page-hero {
+  background: linear-gradient(135deg, #157347 0%, #0d4a2e 100%);
+  border-radius: .75rem; padding: 1.5rem 2rem; margin-bottom: 1.5rem; color: #fff;
+}
+.page-hero .hero-icon {
+  width: 3rem; height: 3rem; background: rgba(255,255,255,.15);
+  border-radius: .6rem; display: flex; align-items: center; justify-content: center;
+  font-size: 1.5rem; flex-shrink: 0;
+}
+.flt-header { background: #157347; color: #fff; font-size: .78rem; font-weight: 600; padding: .45rem .75rem; border-radius: .35rem .35rem 0 0; }
+.tbl-matrix {
+  font-size: .72rem; border-collapse: collapse; width: 100%;
+}
+.tbl-matrix th, .tbl-matrix td {
+  padding: .22rem .38rem; border: 1px solid #dee2e6; white-space: nowrap; vertical-align: middle;
+}
+.tbl-matrix td.col-desc, .tbl-matrix th.col-desc {
+  position: sticky; left: 0; z-index: 2; min-width: 180px; max-width: 240px;
+  white-space: normal; word-break: break-word;
+}
+.tbl-matrix thead tr th {
+  text-align: center; background: #343a40; color: #fff; font-size: .66rem;
+  text-transform: uppercase; letter-spacing: .04em;
+}
+.tbl-matrix thead tr th.col-desc { text-align: left; background: #343a40; }
+/* section header */
+.row-section td {
+  background: #157347; color: #fff; font-weight: 700; font-size: .76rem;
+  text-transform: uppercase; letter-spacing: .05em;
+}
+/* data rows */
+.row-item td { background: #fff; font-weight: 400; }
+.row-item:hover td { background: #f0fff4; }
+/* block totals */
+.row-block-total td { background: #28a745; color: #fff; font-weight: 700; }
+/* diferença row */
+.row-diferenca td { background: #0d4a2e; color: #fff; font-weight: 700; font-size: .8rem; }
+/* positive/negative difference coloring */
+.dif-pos { color: #198754; font-weight: 700; }
+.dif-neg { color: #dc3545; font-weight: 700; }
+.val-zero { color: #bbb; }
+/* acum column */
+.col-acum { background: #f8f5e4 !important; font-weight: 600; }
+.row-block-total .col-acum, .row-diferenca .col-acum { background: rgba(255,255,255,.15) !important; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+
+  <!-- Breadcrumb -->
+  <nav aria-label="breadcrumb" class="mb-3">
+    <ol class="breadcrumb small">
+      <li class="breadcrumb-item"><a href="{{ url_for('index') }}" class="text-decoration-none">Dashboard</a></li>
+      <li class="breadcrumb-item">Relatórios</li>
+      <li class="breadcrumb-item active">Conf. Fechamento Mensal</li>
+    </ol>
+  </nav>
+
+  <!-- Hero -->
+  <div class="page-hero d-flex align-items-center gap-3 flex-wrap mb-3">
+    <div class="hero-icon"><i class="bi bi-calendar3"></i></div>
+    <div class="flex-grow-1">
+      <h4 class="mb-0 fw-bold">Conf. Fechamento Mensal</h4>
+      <p class="mb-0 opacity-75" style="font-size:.8rem;">
+        Receitas e comprovações do fechamento de caixa dia a dia.
+      </p>
+    </div>
+  </div>
+
+  <!-- FILTROS -->
+  <form method="GET" class="card shadow-sm mb-3">
+    <div class="flt-header"><i class="bi bi-funnel me-1"></i> Filtros</div>
+    <div class="card-body py-2">
+      <div class="row g-2 align-items-end">
+        <div class="col-md-3">
+          <label class="form-label form-label-sm mb-0">Empresa <small class="text-muted">(Ctrl+clique p/ múltiplas)</small></label>
+          <select name="empresa_ids[]" class="form-select form-select-sm" multiple size="4">
+            {% for e in empresas %}
+            <option value="{{ e.id }}" {% if e.id|string in (empresa_ids_filter or []) %}selected{% endif %}>
+              {{ e.nome }}
+            </option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-md-2">
+          <label class="form-label form-label-sm mb-0">Ano</label>
+          <select name="ano" class="form-select form-select-sm">
+            {% for a in anos_list %}
+            <option value="{{ a }}" {% if a == ano %}selected{% endif %}>{{ a }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-md-2">
+          <label class="form-label form-label-sm mb-0">Mês</label>
+          <select name="mes" class="form-select form-select-sm">
+            {% for num, nome in meses_list %}
+            <option value="{{ num }}" {% if num == mes %}selected{% endif %}>{{ nome }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-md-3 d-flex gap-1 align-items-end">
+          <button type="submit" class="btn btn-success btn-sm flex-fill">
+            <i class="bi bi-search"></i> Filtrar
+          </button>
+          <a href="{{ url_for('conf_fechamento.conf_fechamento_mensal') }}" class="btn btn-outline-secondary btn-sm">
+            <i class="bi bi-x"></i> Limpar
+          </a>
+          <a href="{{ url_for('conf_fechamento.conf_fechamento_anual') }}{% if empresa_ids_filter %}?{% for e in empresa_ids_filter %}empresa_ids[]={{ e }}{% if not loop.last %}&{% endif %}{% endfor %}&ano={{ ano }}{% endif %}" class="btn btn-outline-success btn-sm">
+            <i class="bi bi-calendar4"></i> Ver Anual
+          </a>
+        </div>
+      </div>
+    </div>
+  </form>
+
+  {% if not days %}
+  <div class="alert alert-info">Selecione os filtros e clique em Filtrar.</div>
+  {% else %}
+
+  <!-- TABELA -->
+  <div class="card shadow-sm">
+    <div class="card-header py-2" style="background:#157347;color:#fff;font-size:.78rem;font-weight:600;">
+      <i class="bi bi-table me-1"></i>
+      Fechamentos de Caixa — {{ ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'][mes-1] }}/{{ ano }}
+    </div>
+    <div class="card-body p-0" style="overflow-x:auto;">
+      <table class="tbl-matrix">
+        <thead>
+          <tr>
+            <th class="col-desc">Descrição</th>
+            {% for d in days %}<th>{{ d.label }}</th>{% endfor %}
+            <th class="col-acum">TOTAL</th>
+          </tr>
+        </thead>
+        <tbody>
+
+          {# ── RECEITAS ── #}
+          <tr class="row-section">
+            <td class="col-desc" colspan="{{ days|length + 2 }}">
+              <i class="bi bi-arrow-up-circle me-1"></i> RECEITAS
+            </td>
+          </tr>
+          {% for row in receitas_block %}
+          <tr class="row-item">
+            <td class="col-desc">{{ row.nome }}</td>
+            {% for d in days %}
+              {% set v = row.by_col.get(d.key, 0) %}
+              <td class="text-end {% if v == 0 %}val-zero{% endif %}">
+                {% if v != 0 %}{{ 'R$ {:,.2f}'.format(v).replace(',','X').replace('.',',').replace('X','.') }}{% else %}—{% endif %}
+              </td>
+            {% endfor %}
+            <td class="text-end col-acum">
+              {% if row.total != 0 %}{{ 'R$ {:,.2f}'.format(row.total).replace(',','X').replace('.',',').replace('X','.') }}{% else %}<span class="val-zero">—</span>{% endif %}
+            </td>
+          </tr>
+          {% else %}
+          <tr><td class="col-desc text-muted" colspan="{{ days|length + 2 }}"><em>Nenhuma receita no período.</em></td></tr>
+          {% endfor %}
+
+          {# TOTAL RECEITAS #}
+          <tr class="row-block-total">
+            <td class="col-desc">TOTAL RECEITAS</td>
+            {% for d in days %}
+              {% set v = total_receitas_col.get(d.key, 0) %}
+              <td class="text-end {% if v == 0 %}val-zero{% endif %}">
+                {% if v != 0 %}{{ 'R$ {:,.2f}'.format(v).replace(',','X').replace('.',',').replace('X','.') }}{% else %}—{% endif %}
+              </td>
+            {% endfor %}
+            <td class="text-end col-acum">{{ 'R$ {:,.2f}'.format(grand_receitas).replace(',','X').replace('.',',').replace('X','.') }}</td>
+          </tr>
+
+          {# ── COMPROVAÇÕES ── #}
+          <tr class="row-section">
+            <td class="col-desc" colspan="{{ days|length + 2 }}">
+              <i class="bi bi-check2-circle me-1"></i> COMPROVAÇÕES
+            </td>
+          </tr>
+          {% for row in comprov_block %}
+          <tr class="row-item">
+            <td class="col-desc">{{ row.nome }}</td>
+            {% for d in days %}
+              {% set v = row.by_col.get(d.key, 0) %}
+              <td class="text-end {% if v == 0 %}val-zero{% endif %}">
+                {% if v != 0 %}{{ 'R$ {:,.2f}'.format(v).replace(',','X').replace('.',',').replace('X','.') }}{% else %}—{% endif %}
+              </td>
+            {% endfor %}
+            <td class="text-end col-acum">
+              {% if row.total != 0 %}{{ 'R$ {:,.2f}'.format(row.total).replace(',','X').replace('.',',').replace('X','.') }}{% else %}<span class="val-zero">—</span>{% endif %}
+            </td>
+          </tr>
+          {% else %}
+          <tr><td class="col-desc text-muted" colspan="{{ days|length + 2 }}"><em>Nenhuma comprovação no período.</em></td></tr>
+          {% endfor %}
+
+          {# TOTAL COMPROVAÇÕES #}
+          <tr class="row-block-total">
+            <td class="col-desc">TOTAL COMPROVAÇÕES</td>
+            {% for d in days %}
+              {% set v = total_comprov_col.get(d.key, 0) %}
+              <td class="text-end {% if v == 0 %}val-zero{% endif %}">
+                {% if v != 0 %}{{ 'R$ {:,.2f}'.format(v).replace(',','X').replace('.',',').replace('X','.') }}{% else %}—{% endif %}
+              </td>
+            {% endfor %}
+            <td class="text-end col-acum">{{ 'R$ {:,.2f}'.format(grand_comprov).replace(',','X').replace('.',',').replace('X','.') }}</td>
+          </tr>
+
+          {# ── DIFERENÇA ── #}
+          <tr class="row-diferenca">
+            <td class="col-desc">DIFERENÇA (Receitas − Comprovações)</td>
+            {% for d in days %}
+              {% set v = diferenca_col.get(d.key, 0) %}
+              <td class="text-end">
+                {% if v != 0 %}
+                  <span class="{% if v > 0 %}dif-pos{% else %}dif-neg{% endif %}">
+                    {{ 'R$ {:,.2f}'.format(v).replace(',','X').replace('.',',').replace('X','.') }}
+                  </span>
+                {% else %}—{% endif %}
+              </td>
+            {% endfor %}
+            <td class="text-end col-acum">
+              <span class="{% if grand_diferenca > 0 %}dif-pos{% elif grand_diferenca < 0 %}dif-neg{% endif %}">
+                {{ 'R$ {:,.2f}'.format(grand_diferenca).replace(',','X').replace('.',',').replace('X','.') }}
+              </span>
+            </td>
+          </tr>
+
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {% endif %}
+
+</div>
+{% endblock %}
