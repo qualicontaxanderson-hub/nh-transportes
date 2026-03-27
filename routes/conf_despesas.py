@@ -661,11 +661,23 @@ def conf_despesas():
             func_blocks, func_by_month, func_total = _build_func_blocks(
                 func_rows, months
             )
-            blocks.extend(func_blocks)
-            for m in months:
-                mk = m['key']
-                grand_by_month[mk] = grand_by_month.get(mk, 0.0) + func_by_month.get(mk, 0.0)
-            grand_total    += func_total
+            # Só inclui os blocos de pessoal (FRENTISTAS, OUTROS…) quando nenhum
+            # filtro de título está ativo OU quando um dos títulos selecionados
+            # corresponde a "FUNCIONÁRIOS" (dados de lancamentosfuncionarios_v2).
+            _titulo_nome_by_id = {str(t['id']): t['nome'] for t in titulos}
+            include_func_blocks = (
+                not titulo_ids
+                or any(
+                    'FUNCIONARI' in _ascii_upper(_titulo_nome_by_id.get(tid, ''))
+                    for tid in titulo_ids
+                )
+            )
+            if include_func_blocks:
+                blocks.extend(func_blocks)
+                for m in months:
+                    mk = m['key']
+                    grand_by_month[mk] = grand_by_month.get(mk, 0.0) + func_by_month.get(mk, 0.0)
+                grand_total    += func_total
             total_lancamentos += len(func_rows)
 
             # ── Anota linhas de caminhão com motorista (badge), injeta salário, receita e litros ──
