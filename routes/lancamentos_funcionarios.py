@@ -23,16 +23,22 @@ def _ensure_tipo_funcionario(conn):
     e podem ter o mesmo número (ex.: Roberta/funcionarios.id=2 colide com
     Marcos Antonio/motoristas.id=2; João/funcionarios.id=1 colide com
     Valmir/motoristas.id=1). O critério CORRETO de desambiguação:
-    - Para um mesmo (funcionarioid, rubricaid, mes, clienteid), se existem
-      DUAS linhas — uma tipo='motorista' e outra tipo='funcionario' — a linha
-      tipo='funcionario' é a cópia corrompida (gerada por colisão de IDs) e
-      deve ser removida; a linha tipo='motorista' é a correta.
     - Para IDs sem colisão (existem apenas em uma tabela), o tipo é determinado
       pela tabela em que o ID existe.
+    - Para IDs com colisão (existem em AMBAS as tabelas), ambos os registros
+      (tipo='funcionario' e tipo='motorista') podem ser legítimos — um pertence
+      ao frentista e o outro ao motorista. NÃO se deve apagar nenhum deles.
+    - Linhas tipo='funcionario' duplicadas (mesmo tipo) para IDs exclusivos de
+      motoristas são artefatos de código antigo → apagadas pelo Passo 1.
 
-    Passo 1: DELETE tipo='funcionario' duplicatas de dados de motoristas.
+    Passo 1: DELETE tipo='funcionario' duplicatas APENAS para IDs exclusivos de
+             motoristas (f.id IS NULL). IDs com colisão são preservados.
     Passo 2: UPDATE tipo='motorista'→'funcionario' para IDs sem colisão em funcionarios.
     Passo 3: UPDATE tipo='funcionario'→'motorista' para IDs sem colisão em motoristas.
+
+    Unique key: cria uq_lancamento_tipo(clienteid, funcionarioid, mes, rubricaid,
+    tipo_funcionario) se ainda não existir, permitindo que João (frentista id=1)
+    e Valmir (motorista id=1) coexistam com a mesma rubrica/mês sem colisão.
 
     NOTA: frentistas podem ter rubricas de Comissão (comissões manuais); a
     presença de Comissão NÃO é usada como critério de tipo.
@@ -78,10 +84,14 @@ def _ensure_tipo_funcionario(conn):
     # Passo 1 — Deleta tipo='funcionario' duplicatas de dados de motoristas.
     # Quando o mesmo (funcionarioid, rubricaid, mes, clienteid) existe como
     # tipo='motorista' (correto) E tipo='funcionario' (corrompido), remove o
-    # tipo='funcionario'. Apenas para IDs que existem em motoristas.
+    # tipo='funcionario'. Apenas para IDs que existem EXCLUSIVAMENTE em
+    # motoristas (f.id IS NULL): IDs com colisão (fid presente em AMBAS as
+    # tabelas, ex.: João=1 e Valmir=1) são preservados — o tipo='funcionario'
+    # é legítimo de João e não deve ser apagado.
     cur.execute("""
         DELETE lf FROM lancamentosfuncionarios_v2 lf
-        INNER JOIN motoristas m ON m.id = lf.funcionarioid
+        INNER JOIN motoristas   m ON m.id = lf.funcionarioid
+        LEFT  JOIN funcionarios f ON f.id = lf.funcionarioid
         INNER JOIN lancamentosfuncionarios_v2 lf2
             ON  lf2.funcionarioid    = lf.funcionarioid
             AND lf2.rubricaid        = lf.rubricaid
@@ -89,6 +99,7 @@ def _ensure_tipo_funcionario(conn):
             AND lf2.clienteid        = lf.clienteid
             AND lf2.tipo_funcionario = 'motorista'
         WHERE lf.tipo_funcionario = 'funcionario'
+          AND f.id IS NULL
     """)
     conn.commit()
 
@@ -120,6 +131,40 @@ def _ensure_tipo_funcionario(conn):
           AND f.id IS NULL
     """)
     conn.commit()
+
+    # Garante constraint unique que inclui tipo_funcionario — essencial para que
+    # ON DUPLICATE KEY UPDATE funcione corretamente e para que dois funcionários
+    # com o mesmo ID numérico (ex.: João=frentista id=1 e Valmir=motorista id=1)
+    # possam coexistir com rubrica/mês/cliente iguais sem se sobrescrever.
+    #
+    # Antes de criar o índice: remove eventuais linhas duplicadas dentro do mesmo
+    # tipo (artefato de código antigo sem constraint), mantendo o registro mais
+    # recente (maior id).
+    cur.execute("""
+        SELECT COUNT(*) FROM information_schema.STATISTICS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME   = 'lancamentosfuncionarios_v2'
+          AND INDEX_NAME   = 'uq_lancamento_tipo'
+    """)
+    if cur.fetchone()[0] == 0:
+        cur.execute("""
+            DELETE lf1 FROM lancamentosfuncionarios_v2 lf1
+            INNER JOIN lancamentosfuncionarios_v2 lf2
+                ON  lf1.clienteid        = lf2.clienteid
+                AND lf1.funcionarioid    = lf2.funcionarioid
+                AND lf1.mes              = lf2.mes
+                AND lf1.rubricaid        = lf2.rubricaid
+                AND lf1.tipo_funcionario = lf2.tipo_funcionario
+                AND lf1.id < lf2.id
+        """)
+        conn.commit()
+        cur.execute("""
+            ALTER TABLE lancamentosfuncionarios_v2
+            ADD UNIQUE KEY uq_lancamento_tipo
+                (clienteid, funcionarioid, mes, rubricaid, tipo_funcionario)
+        """)
+        conn.commit()
+
     cur.close()
 
 def get_previous_month():
