@@ -255,7 +255,7 @@ const formasPagamento = {{ formas_pagamento_json|safe }};
 const cartoes = {{ cartoes_json|safe }};
 
 // Definir ordem preferida para tipos conhecidos (tipos AUTO primeiro, depois tipos MANUAL específicos)
-const preferredOrder = ['VENDAS POSTO', 'ARLA', 'LUBRIFICANTES', 'TROCO PIX (AUTO)', 'RECEBIMENTOS', 'ACRÉSCIMOS GERAIS', 'ACRÉSCIMOS CADASTROS', 'TROCO PIX (MANUAL)', 'EMPRESTIMOS', 'OUTROS'];
+const preferredOrder = ['VENDAS POSTO', 'ARLA', 'LUBRIFICANTES', 'TROCO PIX (AUTO)', 'ANTECIPAÇÃO CLIENTE', 'RECEBIMENTOS', 'ACRÉSCIMOS GERAIS', 'ACRÉSCIMOS CADASTROS', 'TROCO PIX (MANUAL)', 'EMPRESTIMOS', 'OUTROS'];
 
 // Ordenar tipos de receita: tipos preferidos em ordem, depois outros alfabeticamente
 const sortedTiposReceita = [...tiposReceita].sort((a, b) => {
@@ -662,18 +662,19 @@ function initializeComprovacoes() {
     // 5. RECEBIMENTOS PIX - single field
     addComprovacaoSingle(container, 'PIX', 'Recebimentos PIX');
     
-    // 6. CARTÃO DE DÉBITO - lines for each brand + total
-    addComprovacaoCartoes(container, 'DEBITO', 'Cartão de Débito');
-    
-    // 7. CARTÃO DE CRÉDITO - lines for each brand + total
+    // 6. CARTÃO DE CRÉDITO - lines for each brand + total
     addComprovacaoCartoes(container, 'CREDITO', 'Cartão de Crédito');
+    
+    // 7. CARTÃO DE DÉBITO - lines for each brand + total
+    addComprovacaoCartoes(container, 'DEBITO', 'Cartão de Débito');
     
     // 8-12: Other payment types (will use RETIRADA_PAGAMENTO as fallback)
     // These will be saved with descriptions to differentiate them
     addComprovacaoSingleComDescricao(container, 'RETIRADA_PAGAMENTO', 'Descontos Cadastros', 'Desconto Cadastros');
     addComprovacaoSingleComDescricao(container, 'RETIRADA_PAGAMENTO', 'Descontos Gerais', 'Desconto Gerais');
-    addComprovacaoSingleComDescricao(container, 'RETIRADA_PAGAMENTO', 'Empréstimos Entre Funcionários', 'Empréstimo Funcionários');
     addComprovacaoSingleComDescricao(container, 'RETIRADA_PAGAMENTO', 'Retiradas para Aluguel', 'Retirada Aluguel');
+    addComprovacaoSingleComDescricao(container, 'RETIRADA_PAGAMENTO', 'Empréstimos Entre Funcionários', 'Empréstimo Funcionários');
+    addComprovacaoSingleComDescricao(container, 'VENDA_PROGRAMADA', 'Venda Programada', 'VENDA PROGRAMADA');
     addComprovacaoSingleComDescricao(container, 'RETIRADA_PAGAMENTO', 'Retiradas para Pagamento');
 }
 

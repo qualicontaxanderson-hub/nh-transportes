@@ -13,22 +13,35 @@ def _ensure_tipo_funcionario(conn):
     Garante que a coluna tipo_funcionario existe em lancamentosfuncionarios_v2 e
     que todos os registros estão corretamente classificados.
 
-    Regras de classificação (aplicadas em ordem de prioridade):
-    1. funcionarioid existe APENAS em motoristas (sem colisão de ID) → 'motorista'
-       (executado apenas na criação da coluna, como backfill inicial)
-    2. Demais → 'funcionario' (DEFAULT da coluna)
+    Backfill inicial (apenas quando a coluna é criada):
+    - IDs que existem APENAS em motoristas (sem colisão) → tipo='motorista'
+    - Demais → tipo='funcionario' (DEFAULT)
 
-    Repair (executado SEMPRE):
-    - Reverte para 'funcionario' qualquer linha cujo funcionarioid existe na tabela
-      funcionarios. Frentistas/outros sempre estão em funcionarios; motoristas NÃO
-      estão. Isso corrige promoções incorretas de frentistas causadas por heurísticas
-      anteriores baseadas em Comissão (que confundiam frentistas com motoristas
-      quando IDs colidem entre as duas tabelas).
-    - VALMIR, MARCOS ANTONIO e demais motoristas reais NÃO estão na tabela
-      funcionarios, portanto suas linhas com tipo='motorista' são preservadas.
+    Repair (executado SEMPRE) — 3 passos para tratar colisão de IDs:
 
-    NOTA: frentistas podem ter rubricas de Comissão (comissões manuais).
-    Por isso a presença de Comissão NÃO é usada como desambiguador de tipo.
+    PROBLEMA: funcionarios.id e motoristas.id são auto_increment independentes
+    e podem ter o mesmo número (ex.: Roberta/funcionarios.id=2 colide com
+    Marcos Antonio/motoristas.id=2; João/funcionarios.id=1 colide com
+    Valmir/motoristas.id=1). O critério CORRETO de desambiguação:
+    - Para IDs sem colisão (existem apenas em uma tabela), o tipo é determinado
+      pela tabela em que o ID existe.
+    - Para IDs com colisão (existem em AMBAS as tabelas), ambos os registros
+      (tipo='funcionario' e tipo='motorista') podem ser legítimos — um pertence
+      ao frentista e o outro ao motorista. NÃO se deve apagar nenhum deles.
+    - Linhas tipo='funcionario' duplicadas (mesmo tipo) para IDs exclusivos de
+      motoristas são artefatos de código antigo → apagadas pelo Passo 1.
+
+    Passo 1: DELETE tipo='funcionario' duplicatas APENAS para IDs exclusivos de
+             motoristas (f.id IS NULL). IDs com colisão são preservados.
+    Passo 2: UPDATE tipo='motorista'→'funcionario' para IDs sem colisão em funcionarios.
+    Passo 3: UPDATE tipo='funcionario'→'motorista' para IDs sem colisão em motoristas.
+
+    Unique key: cria uq_lancamento_tipo(clienteid, funcionarioid, mes, rubricaid,
+    tipo_funcionario) se ainda não existir, permitindo que João (frentista id=1)
+    e Valmir (motorista id=1) coexistam com a mesma rubrica/mês sem colisão.
+
+    NOTA: frentistas podem ter rubricas de Comissão (comissões manuais); a
+    presença de Comissão NÃO é usada como critério de tipo.
     """
     cur = conn.cursor()
     cur.execute(
@@ -56,17 +69,103 @@ def _ensure_tipo_funcionario(conn):
         """)
         conn.commit()
 
-        # Repair: Reverte para 'funcionario' qualquer linha cujo funcionarioid
-    # existe na tabela funcionarios (frentistas/outros sempre estão lá;
-    # motoristas reais NÃO estão).
-    # Deleta registros incorretos (motoristas que na verdade são funcionarios)
+    # Repair (executado SEMPRE) — 3 passos para lidar com colisão de IDs:
+    #
+    # Problema: funcionarios.id e motoristas.id são auto_increment independentes
+    # e podem ter o mesmo número (ex.: Roberta/funcionarios.id=2 e
+    # Marcos Antonio/motoristas.id=2).  Versões anteriores do repair usavam
+    # apenas o JOIN por ID para decidir o tipo, o que causava:
+    #   - tipo='motorista' para linhas de frentistas (rubricas de salário/VA)
+    #   - tipo='funcionario' para linhas de motoristas (comissão)
+    # O critério correto é: se existe uma linha tipo='motorista' E uma linha
+    # tipo='funcionario' para EXATAMENTE o mesmo (fid, rubrica, mes, cliente),
+    # a linha tipo='funcionario' é a cópia corrompida → deve ser removida.
+
+    # Passo 1 — Deleta tipo='funcionario' duplicatas de dados de motoristas.
+    # Quando o mesmo (funcionarioid, rubricaid, mes, clienteid) existe como
+    # tipo='motorista' (correto) E tipo='funcionario' (corrompido), remove o
+    # tipo='funcionario'. Apenas para IDs que existem EXCLUSIVAMENTE em
+    # motoristas (f.id IS NULL): IDs com colisão (fid presente em AMBAS as
+    # tabelas, ex.: João=1 e Valmir=1) são preservados — o tipo='funcionario'
+    # é legítimo de João e não deve ser apagado.
     cur.execute("""
         DELETE lf FROM lancamentosfuncionarios_v2 lf
-        JOIN funcionarios f ON f.id = lf.funcionarioid
-        WHERE lf.tipo_funcionario = 'motorista'
+        INNER JOIN motoristas   m ON m.id = lf.funcionarioid
+        LEFT  JOIN funcionarios f ON f.id = lf.funcionarioid
+        INNER JOIN lancamentosfuncionarios_v2 lf2
+            ON  lf2.funcionarioid    = lf.funcionarioid
+            AND lf2.rubricaid        = lf.rubricaid
+            AND lf2.mes              = lf.mes
+            AND lf2.clienteid        = lf.clienteid
+            AND lf2.tipo_funcionario = 'motorista'
+        WHERE lf.tipo_funcionario = 'funcionario'
+          AND f.id IS NULL
     """)
     conn.commit()
-        cur.close()
+
+    # Passo 2 — Corrige tipo='motorista' para linhas de frentistas sem colisão.
+    # Para IDs que existem APENAS em funcionarios (não em motoristas), qualquer
+    # linha tipo='motorista' é classificação errada → muda para 'funcionario'.
+    # IDs com colisão são preservados: se fid=X está em AMBAS as tabelas, o
+    # LEFT JOIN encontra m.id IS NOT NULL e a linha NÃO é alterada.
+    cur.execute("""
+        UPDATE lancamentosfuncionarios_v2 lf
+        JOIN  funcionarios f ON f.id = lf.funcionarioid
+        LEFT  JOIN motoristas m ON m.id = lf.funcionarioid
+        SET   lf.tipo_funcionario = 'funcionario'
+        WHERE lf.tipo_funcionario = 'motorista'
+          AND m.id IS NULL
+    """)
+    conn.commit()
+
+    # Passo 3 — Corrige tipo='funcionario' para linhas de motoristas sem colisão.
+    # Para IDs que existem APENAS em motoristas (não em funcionarios), qualquer
+    # linha tipo='funcionario' é classificação errada → muda para 'motorista'.
+    # Recupera dados que versões anteriores do repair converteram incorretamente.
+    cur.execute("""
+        UPDATE lancamentosfuncionarios_v2 lf
+        JOIN  motoristas m ON m.id = lf.funcionarioid
+        LEFT  JOIN funcionarios f ON f.id = lf.funcionarioid
+        SET   lf.tipo_funcionario = 'motorista'
+        WHERE lf.tipo_funcionario = 'funcionario'
+          AND f.id IS NULL
+    """)
+    conn.commit()
+
+    # Garante constraint unique que inclui tipo_funcionario — essencial para que
+    # ON DUPLICATE KEY UPDATE funcione corretamente e para que dois funcionários
+    # com o mesmo ID numérico (ex.: João=frentista id=1 e Valmir=motorista id=1)
+    # possam coexistir com rubrica/mês/cliente iguais sem se sobrescrever.
+    #
+    # Antes de criar o índice: remove eventuais linhas duplicadas dentro do mesmo
+    # tipo (artefato de código antigo sem constraint), mantendo o registro mais
+    # recente (maior id).
+    cur.execute("""
+        SELECT COUNT(*) FROM information_schema.STATISTICS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME   = 'lancamentosfuncionarios_v2'
+          AND INDEX_NAME   = 'uq_lancamento_tipo'
+    """)
+    if cur.fetchone()[0] == 0:
+        cur.execute("""
+            DELETE lf1 FROM lancamentosfuncionarios_v2 lf1
+            INNER JOIN lancamentosfuncionarios_v2 lf2
+                ON  lf1.clienteid        = lf2.clienteid
+                AND lf1.funcionarioid    = lf2.funcionarioid
+                AND lf1.mes              = lf2.mes
+                AND lf1.rubricaid        = lf2.rubricaid
+                AND lf1.tipo_funcionario = lf2.tipo_funcionario
+                AND lf1.id < lf2.id
+        """)
+        conn.commit()
+        cur.execute("""
+            ALTER TABLE lancamentosfuncionarios_v2
+            ADD UNIQUE KEY uq_lancamento_tipo
+                (clienteid, funcionarioid, mes, rubricaid, tipo_funcionario)
+        """)
+        conn.commit()
+
+    cur.close()
 
 def get_previous_month():
     """Get previous month in MM/YYYY format"""
@@ -384,8 +483,9 @@ def detalhe(mes, cliente_id):
     mes = mes.replace('-', '/')
     
     conn = get_db_connection()
+    _ensure_tipo_funcionario(conn)
     cursor = conn.cursor(dictionary=True)
-    
+
     # Get all lancamentos for this month and client
     # Using LEFT JOINs to handle both funcionarios and motoristas
     cursor.execute("""
@@ -423,21 +523,19 @@ def detalhe(mes, cliente_id):
     # Filter out commissions for non-motoristas
     lancamentos_filtrados = []
     motoristas_com_lancamentos = set()
-    
+
     for lanc in lancamentos:
         func_id = lanc['funcionarioid']
-        
-        # Check if this is a commission rubrica
-        rubrica_nome = lanc.get('rubrica_nome', '')
-        is_comissao = rubrica_nome in ['Comissão', 'Comissão / Aj. Custo']
-        
-        # Only exclude if it's a commission AND funcionario is not a motorista
-        if is_comissao and func_id not in motoristas:
-            continue  # Skip this lancamento (commission for non-motorista)
-        
-        # Track motoristas that already have lancamentos (only motoristas!)
-        if func_id in motoristas:
+        tipo_func = lanc.get('tipo_funcionario', 'funcionario')
+
+        # Track motoristas that already have lancamentos
+        if tipo_func == 'motorista':
             motoristas_com_lancamentos.add(func_id)
+
+        # All DB entries are explicitly saved via the form — include them all.
+        # Frentistas may have Comissão entries (manual commissions) which must
+        # NOT be filtered out. No ID-based lookup needed; tipo_funcionario
+        # already disambiguates the two tables that share auto-increment IDs.
         
         lancamentos_filtrados.append(lanc)
     
@@ -473,6 +571,7 @@ def detalhe(mes, cliente_id):
                         # Create a lancamento entry for this commission
                         lancamento_comissao = {
                             'funcionarioid': motorista_id_int,
+                            'tipo_funcionario': 'motorista',
                             'funcionario_nome': motoristas.get(motorista_id_int, f'Motorista {motorista_id}'),
                             'rubricaid': rubrica_comissao['id'],
                             'rubrica_nome': rubrica_comissao['nome'],
@@ -492,27 +591,32 @@ def detalhe(mes, cliente_id):
     
     lancamentos = lancamentos_filtrados
     
-    # Sort lancamentos by funcionarioid for consistent ordering
-    # This ensures that each employee's data is grouped correctly
-    lancamentos.sort(key=lambda x: x['funcionarioid'])
+    # Sort lancamentos by (funcionarioid, tipo_funcionario) to keep frentistas
+    # and motoristas with the same numeric ID in separate, consistent groups.
+    lancamentos.sort(key=lambda x: (x['funcionarioid'], x.get('tipo_funcionario', 'funcionario')))
     
-    # Group by employee
+    # Group by (funcionarioid, tipo_funcionario) to prevent ID collision between
+    # funcionarios and motoristas tables (both auto-increment from 1).
+    # E.g. João Batista (frentista id=1) and VALMIR (motorista id=1) must be
+    # shown as separate employees.
     funcionarios_data = {}
     for lanc in lancamentos:
         func_id = lanc['funcionarioid']
-        if func_id not in funcionarios_data:
-            funcionarios_data[func_id] = {
+        tipo = lanc.get('tipo_funcionario', 'funcionario')
+        key = (func_id, tipo)
+        if key not in funcionarios_data:
+            funcionarios_data[key] = {
                 'nome': lanc['funcionario_nome'],
                 'rubricas': [],
                 'total': 0
             }
-        funcionarios_data[func_id]['rubricas'].append(lanc)
+        funcionarios_data[key]['rubricas'].append(lanc)
         
-        # Calculate total (positive for benefits, negative for discounts)
-        if lanc['rubrica_tipo'] in ['DESCONTO', 'IMPOSTO']:
-            funcionarios_data[func_id]['total'] -= float(lanc['valor'])
+        # Only EMPRÉSTIMOS subtracts; all other rubricas add (by name, not tipo — robust to DB tipo variations)
+        if lanc['rubrica_nome'] in ('EMPRÉSTIMOS', 'Empréstimos'):
+            funcionarios_data[key]['total'] -= float(lanc['valor'])
         else:
-            funcionarios_data[func_id]['total'] += float(lanc['valor'])
+            funcionarios_data[key]['total'] += float(lanc['valor'])
     
     return render_template('lancamentos_funcionarios/detalhe.html',
                          mes=mes,

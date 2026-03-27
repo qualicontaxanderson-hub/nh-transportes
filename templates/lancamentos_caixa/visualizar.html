@@ -208,23 +208,6 @@
                                 {% endfor %}
                             {% endif %}
                             
-                            {# Process CARTAO DEBITO #}
-                            {% set cartoes_debito = comprovacoes|selectattr('forma_tipo', 'equalto', 'CARTAO')|selectattr('cartao_tipo', 'equalto', 'DEBITO')|list %}
-                            {% if cartoes_debito|length > 0 %}
-                                {% set total_debito = cartoes_debito|map(attribute='valor')|map('float')|sum %}
-                                <tr style="background:#e3f2fd;">
-                                    <td colspan="2" style="font-size: 0.85rem;"><strong>Cartão Débito</strong></td>
-                                    <td style="font-size: 0.85rem; text-align: right;"><strong>R$ {{ "{:,.2f}".format(total_debito).replace(',', 'X').replace('.', ',').replace('X', '.') }}</strong></td>
-                                </tr>
-                                {% for cartao in cartoes_debito %}
-                                <tr>
-                                    <td style="font-size: 0.85rem; padding-left: 2rem;">└ {{ cartao.cartao_nome }}</td>
-                                    <td style="font-size: 0.85rem;">{{ cartao.descricao if cartao.descricao else '-' }}</td>
-                                    <td style="font-size: 0.85rem; text-align: right;">R$ {{ "{:,.2f}".format(cartao.valor|float).replace(',', 'X').replace('.', ',').replace('X', '.') }}</td>
-                                </tr>
-                                {% endfor %}
-                            {% endif %}
-                            
                             {# Process CARTAO CREDITO #}
                             {% set cartoes_credito = comprovacoes|selectattr('forma_tipo', 'equalto', 'CARTAO')|selectattr('cartao_tipo', 'equalto', 'CREDITO')|list %}
                             {% if cartoes_credito|length > 0 %}
@@ -234,6 +217,23 @@
                                     <td style="font-size: 0.85rem; text-align: right;"><strong>R$ {{ "{:,.2f}".format(total_credito).replace(',', 'X').replace('.', ',').replace('X', '.') }}</strong></td>
                                 </tr>
                                 {% for cartao in cartoes_credito %}
+                                <tr>
+                                    <td style="font-size: 0.85rem; padding-left: 2rem;">└ {{ cartao.cartao_nome }}</td>
+                                    <td style="font-size: 0.85rem;">{{ cartao.descricao if cartao.descricao else '-' }}</td>
+                                    <td style="font-size: 0.85rem; text-align: right;">R$ {{ "{:,.2f}".format(cartao.valor|float).replace(',', 'X').replace('.', ',').replace('X', '.') }}</td>
+                                </tr>
+                                {% endfor %}
+                            {% endif %}
+                            
+                            {# Process CARTAO DEBITO #}
+                            {% set cartoes_debito = comprovacoes|selectattr('forma_tipo', 'equalto', 'CARTAO')|selectattr('cartao_tipo', 'equalto', 'DEBITO')|list %}
+                            {% if cartoes_debito|length > 0 %}
+                                {% set total_debito = cartoes_debito|map(attribute='valor')|map('float')|sum %}
+                                <tr style="background:#e3f2fd;">
+                                    <td colspan="2" style="font-size: 0.85rem;"><strong>Cartão Débito</strong></td>
+                                    <td style="font-size: 0.85rem; text-align: right;"><strong>R$ {{ "{:,.2f}".format(total_debito).replace(',', 'X').replace('.', ',').replace('X', '.') }}</strong></td>
+                                </tr>
+                                {% for cartao in cartoes_debito %}
                                 <tr>
                                     <td style="font-size: 0.85rem; padding-left: 2rem;">└ {{ cartao.cartao_nome }}</td>
                                     <td style="font-size: 0.85rem;">{{ cartao.descricao if cartao.descricao else '-' }}</td>
@@ -257,8 +257,8 @@
                                 {% set ordem_retiradas = {
                                     'DESCONTO CADASTROS': 1,
                                     'DESCONTO GERAIS': 2,
-                                    'EMPRÉSTIMO FUNCIONÁRIOS': 3,
-                                    'RETIRADA ALUGUEL': 4
+                                    'RETIRADA ALUGUEL': 3,
+                                    'EMPRÉSTIMO FUNCIONÁRIOS': 4
                                 } %}
                                 
                                 {# Sort retiradas by custom order #}
@@ -544,16 +544,6 @@ function copiarParaWhatsApp(event) {
     {% endif %}
     {% endif %}
     
-    {% set cartoes_debito = comprovacoes|selectattr('forma_tipo', 'equalto', 'CARTAO')|selectattr('cartao_tipo', 'equalto', 'DEBITO')|list %}
-    {% if cartoes_debito|length > 0 %}
-    {% set total_debito = cartoes_debito|map(attribute='valor')|map('float')|sum %}
-    texto += `• *Cartão Débito:*\n`;
-    {% for cartao in cartoes_debito %}
-    texto += `  - {{ cartao.cartao_nome }}: R$ {{ "{:,.2f}".format(cartao.valor|float).replace(',', 'X').replace('.', ',').replace('X', '.') }}\n`;
-    {% endfor %}
-    texto += `  *Subtotal: R$ {{ "{:,.2f}".format(total_debito).replace(',', 'X').replace('.', ',').replace('X', '.') }}*\n`;
-    {% endif %}
-    
     {% set cartoes_credito = comprovacoes|selectattr('forma_tipo', 'equalto', 'CARTAO')|selectattr('cartao_tipo', 'equalto', 'CREDITO')|list %}
     {% if cartoes_credito|length > 0 %}
     {% set total_credito = cartoes_credito|map(attribute='valor')|map('float')|sum %}
@@ -562,6 +552,16 @@ function copiarParaWhatsApp(event) {
     texto += `  - {{ cartao.cartao_nome }}: R$ {{ "{:,.2f}".format(cartao.valor|float).replace(',', 'X').replace('.', ',').replace('X', '.') }}\n`;
     {% endfor %}
     texto += `  *Subtotal: R$ {{ "{:,.2f}".format(total_credito).replace(',', 'X').replace('.', ',').replace('X', '.') }}*\n`;
+    {% endif %}
+    
+    {% set cartoes_debito = comprovacoes|selectattr('forma_tipo', 'equalto', 'CARTAO')|selectattr('cartao_tipo', 'equalto', 'DEBITO')|list %}
+    {% if cartoes_debito|length > 0 %}
+    {% set total_debito = cartoes_debito|map(attribute='valor')|map('float')|sum %}
+    texto += `• *Cartão Débito:*\n`;
+    {% for cartao in cartoes_debito %}
+    texto += `  - {{ cartao.cartao_nome }}: R$ {{ "{:,.2f}".format(cartao.valor|float).replace(',', 'X').replace('.', ',').replace('X', '.') }}\n`;
+    {% endfor %}
+    texto += `  *Subtotal: R$ {{ "{:,.2f}".format(total_debito).replace(',', 'X').replace('.', ',').replace('X', '.') }}*\n`;
     {% endif %}
     
     {# Process RETIRADA_PAGAMENTO in WhatsApp with friendly names #}
@@ -578,8 +578,8 @@ function copiarParaWhatsApp(event) {
         {% set ordem_retiradas_wa = {
             'DESCONTO CADASTROS': 1,
             'DESCONTO GERAIS': 2,
-            'EMPRÉSTIMO FUNCIONÁRIOS': 3,
-            'RETIRADA ALUGUEL': 4
+            'RETIRADA ALUGUEL': 3,
+            'EMPRÉSTIMO FUNCIONÁRIOS': 4
         } %}
         {# Sort retiradas #}
         {% set retiradas_wa_sorted = [] %}

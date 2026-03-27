@@ -512,14 +512,12 @@ function calculateTotals() {
                 rubricaTotals[rubricaNome] += valor;
             }
             
-            // Proventos: SALARIO, BENEFICIO
-            // Descontos: DESCONTO, IMPOSTO, ADIANTAMENTO
-            if (rubricaTipo === 'DESCONTO' || rubricaTipo === 'IMPOSTO' || rubricaTipo === 'ADIANTAMENTO') {
+            // Only EMPRÉSTIMOS subtracts (by name, robust to DB tipo variations); everything else adds
+            if (rubricaNome === 'EMPRÉSTIMOS' || rubricaNome === 'Empréstimos') {
                 totalDescontos += valor;
-            } else if (rubricaTipo === 'SALARIO' || rubricaTipo === 'BENEFICIO') {
+            } else {
                 totalProventos += valor;
             }
-            // OUTRO type doesn't affect calculation
         });
         
         const totalLiquido = totalProventos - totalDescontos;

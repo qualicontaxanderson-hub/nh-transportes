@@ -1685,6 +1685,7 @@ def _get_bank_transactions(tipo, request_args, exclude_transfers=False):
     data_inicio = request_args.get('data_inicio', '').strip()
     data_fim = request_args.get('data_fim', '').strip()
     f_descricao = request_args.get('f_descricao', '').strip()
+    f_categoria_id = request_args.get('f_categoria_id', '').strip()
 
     try:
         # Require empresa or conta filter before querying (empty on first load)
@@ -1737,6 +1738,15 @@ def _get_bank_transactions(tipo, request_args, exclude_transfers=False):
         if f_descricao:
             where.append("bt.descricao LIKE %s")
             params.append(f'%{f_descricao}%')
+        if f_categoria_id:
+            # Filtra apenas transações conciliadas como despesa na categoria selecionada.
+            # Usa EXISTS para não excluir transações sem lancamentos_despesas vinculados.
+            where.append(
+                "EXISTS (SELECT 1 FROM lancamentos_despesas _ld"
+                " WHERE _ld.bank_transaction_id = bt.id"
+                " AND _ld.categoria_id = %s)"
+            )
+            params.append(f_categoria_id)
 
         # Exclui transferências entre contas da página de Pagamentos.
         # Só exclui DEBITs *conciliados* — transações pendentes nunca são excluídas,
@@ -1910,7 +1920,27 @@ def pagamentos():
     transacoes, totais, contas, empresas, formas = _get_bank_transactions('DEBIT', request.args, exclude_transfers=True)
     empresa_ids_filter = [str(e) for e in request.args.getlist('empresa_id') if e]
     conta_ids_filter   = [str(c) for c in request.args.getlist('conta_id') if c]
+    f_categoria_id     = request.args.get('f_categoria_id', '').strip()
     filtro_aplicado = bool(empresa_ids_filter or conta_ids_filter)
+
+    # Busca categorias de despesas para o filtro (com nome do título para contexto)
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        cursor.execute(
+            """SELECT c.id, c.nome AS categoria_nome, t.nome AS titulo_nome
+               FROM categorias_despesas c
+               INNER JOIN titulos_despesas t ON t.id = c.titulo_id
+               WHERE c.ativo = 1 AND t.ativo = 1
+               ORDER BY t.ordem, t.nome, c.nome"""
+        )
+        categorias_despesa = cursor.fetchall()
+    except Exception:
+        categorias_despesa = []
+    finally:
+        cursor.close()
+        conn.close()
+
     return render_template(
         'financeiro/pagamentos.html',
         transacoes=transacoes,
@@ -1926,6 +1956,8 @@ def pagamentos():
         data_inicio=request.args.get('data_inicio', ''),
         data_fim=request.args.get('data_fim', ''),
         f_descricao=request.args.get('f_descricao', ''),
+        f_categoria_id=f_categoria_id,
+        categorias_despesa=categorias_despesa,
     )
 
 
