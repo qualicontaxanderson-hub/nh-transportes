@@ -415,8 +415,8 @@ def _fetch_func_lancamentos(conn, months, empresa_ids):
             COALESCE(r.tipo, 'PROVENTO')                                  AS rubrica_tipo,
             lf.valor
         FROM lancamentosfuncionarios_v2 lf
-        LEFT  JOIN funcionarios f ON f.id = lf.funcionarioid
-        LEFT  JOIN motoristas   m ON m.id = lf.funcionarioid
+        LEFT  JOIN funcionarios f ON f.id = lf.funcionarioid AND lf.tipo_funcionario = 'funcionario'
+        LEFT  JOIN motoristas   m ON m.id = lf.funcionarioid AND lf.tipo_funcionario = 'motorista'
         LEFT  JOIN veiculos v     ON v.id = lf.caminhaoid
         LEFT  JOIN rubricas r     ON r.id = lf.rubricaid
         WHERE {' AND '.join(where)}
@@ -470,7 +470,7 @@ def _build_func_blocks(func_rows, months):
         val = float(row['valor'])
 
         cat_func_names[cat_func] = True
-        func_names[fid]          = nome
+        func_names[(fid, cat_func)] = nome  # keyed by (fid, cat_func) to prevent collision-ID name bleed
 
         cat_func_tree.setdefault(cat_func, {})
         cat_func_tree[cat_func].setdefault(fid, {})
@@ -492,8 +492,8 @@ def _build_func_blocks(func_rows, months):
         block_by_month = {m['key']: 0.0 for m in months}
         rows_out       = []
 
-        for fid in sorted(cat_func_tree[cat_func], key=lambda x: func_names.get(x, '')):
-            func_nome    = func_names.get(fid, str(fid))
+        for fid in sorted(cat_func_tree[cat_func], key=lambda x: func_names.get((x, cat_func), '')):
+            func_nome    = func_names.get((fid, cat_func), str(fid))
             cat_by_month = {m['key']: 0.0 for m in months}
             subcats      = []
 
