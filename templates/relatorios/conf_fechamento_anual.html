@@ -41,6 +41,14 @@
 .val-zero { color: #bbb; }
 .col-acum { background: #f8f5e4 !important; font-weight: 600; }
 .row-block-total .col-acum, .row-diferenca .col-acum { background: rgba(255,255,255,.15) !important; }
+/* collapsible parent rows */
+.row-parent td { background: #e8f5e9 !important; font-weight: 600; }
+.row-parent:hover td { background: #d4edda !important; }
+.row-parent .col-desc { user-select: none; }
+.toggle-icon { display: inline-block; width: 1em; font-size: .75em; color: #0f5132; margin-right: .2em; }
+/* child rows (hidden by default) */
+.row-child td { background: #f9fbf9; font-size: .70rem; }
+.row-child .col-desc { padding-left: 1.5rem !important; }
 </style>
 {% endblock %}
 
@@ -163,8 +171,18 @@
             </td>
           </tr>
           {% for row in comprov_block %}
-          <tr class="row-item">
-            <td class="col-desc">{{ row.nome }}</td>
+          <tr class="row-item{% if row.row_type == 'parent' %} row-parent{% elif row.row_type == 'child' %} row-child{% endif %}"
+            {% if row.row_type == 'parent' %}onclick="toggleGroup('{{ row.group_id }}')" style="cursor:pointer;"{% endif %}
+            {% if row.row_type == 'child' %}data-group="{{ row.group_id }}" style="display:none;"{% endif %}>
+            <td class="col-desc">
+              {% if row.row_type == 'parent' %}
+              <span class="toggle-icon" id="icon-{{ row.group_id }}">▶</span><strong>{{ row.nome }}</strong>
+              {% elif row.row_type == 'child' %}
+              └ {{ row.nome }}
+              {% else %}
+              {{ row.nome }}
+              {% endif %}
+            </td>
             {% for m in months %}
               {% set v = row.by_col.get(m.key, 0) %}
               <td class="text-end {% if v == 0 %}val-zero{% endif %}">
@@ -217,4 +235,14 @@
   </div>
 
 </div>
+
+<script>
+function toggleGroup(gid) {
+  var rows = document.querySelectorAll('[data-group="' + gid + '"]');
+  var icon = document.getElementById('icon-' + gid);
+  var isHidden = rows.length > 0 && rows[0].style.display === 'none';
+  rows.forEach(function(r) { r.style.display = isHidden ? '' : 'none'; });
+  if (icon) icon.textContent = isHidden ? '▼' : '▶';
+}
+</script>
 {% endblock %}

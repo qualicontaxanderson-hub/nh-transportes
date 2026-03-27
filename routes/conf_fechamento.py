@@ -121,33 +121,39 @@ def _fetch_receitas(conn, data_inicio, data_fim, empresa_ids):
     return rows
 
 
+# RETIRADA_PAGAMENTO descriptions treated as standalone rows (not collapsed under parent)
+_FIXED_RETIRADA_CATEGORIES = (
+    'DESCONTO CADASTROS',
+    'DESCONTO GERAIS',
+    'EMPRÉSTIMO FUNCIONÁRIOS',
+    'RETIRADA ALUGUEL',
+)
+
+
 def _fetch_comprovacoes(conn, data_inicio, data_fim, empresa_ids):
     """
-    Retorna SUM(valor) agrupado por (forma_nome, data) para comprovações.
+    Retorna linhas (data, forma_nome, parent_nome, valor) para comprovações.
 
-    Inclui:
-      - lancamentos_caixa_comprovacao  (formas de pagamento e bandeiras de cartão)
-        → itens do tipo RETIRADA_PAGAMENTO são separados por lcc.descricao
-          (Desconto Cadastros, Desconto Gerais, Empréstimo Funcionários, Retirada Aluguel, …)
-      - lancamentos_caixa_perdas_funcionarios  (perdas de caixa por funcionário)
-      - lancamentos_caixa_vales_funcionarios   (vales / quebras de caixa por funcionário)
+    Estrutura hierárquica:
+      • Cartões → parent "CARTÕES DÉBITO" / "CARTÕES CRÉDITO" + children por bandeira
+      • _FIXED_RETIRADA_CATEGORIES → linhas autônomas (sem parent)
+      • Outros itens RETIRADA_PAGAMENTO → parent "RETIRADAS PARA PAGAMENTO" + children
+      • Demais formas de pagamento → linhas autônomas
+      • Perdas e vales de funcionários → linhas autônomas
     """
     cur = conn.cursor(dictionary=True)
     ph_emp = ','.join(['%s'] * len(empresa_ids)) if empresa_ids else None
     emp_cond = f"AND lc.cliente_id IN ({ph_emp})" if ph_emp else ""
     params = [data_inicio, data_fim] + (list(empresa_ids) if empresa_ids else [])
+    # Build SQL IN list for fixed categories (hardcoded strings, safe)
+    fixed_in = ','.join(f"'{c}'" for c in _FIXED_RETIRADA_CATEGORIES)
     cur.execute(
-        f"""SELECT data, forma_nome, SUM(valor) AS valor
+        f"""SELECT data, forma_nome, parent_nome, SUM(valor) AS valor
              FROM (
-               -- Formas de pagamento e cartões (RETIRADA_PAGAMENTO separada por descrição)
+               -- Formas de pagamento normais (não CARTAO, não RETIRADA_PAGAMENTO)
                SELECT lc.data,
-                      CASE
-                        WHEN fp.tipo = 'RETIRADA_PAGAMENTO'
-                             AND lcc.descricao IS NOT NULL
-                             AND lcc.descricao <> ''
-                          THEN lcc.descricao
-                        ELSE COALESCE(fp.nome, bc.nome, 'OUTROS')
-                      END AS forma_nome,
+                      COALESCE(fp.nome, bc.nome, 'OUTROS') AS forma_nome,
+                      NULL AS parent_nome,
                       lcc.valor
                  FROM lancamentos_caixa_comprovacao lcc
                  INNER JOIN lancamentos_caixa lc ON lc.id = lcc.lancamento_caixa_id
@@ -156,20 +162,101 @@ def _fetch_comprovacoes(conn, data_inicio, data_fim, empresa_ids):
                  WHERE lc.data BETWEEN %s AND %s
                    AND lc.status = 'FECHADO'
                    {emp_cond}
+                   AND (fp.tipo IS NULL
+                        OR fp.tipo NOT IN ('CARTAO','RETIRADA_PAGAMENTO'))
+
+               UNION ALL
+               -- Cartões: linha totalizadora pai (CARTÕES DÉBITO / CARTÕES CRÉDITO)
+               SELECT lc.data,
+                      CONCAT('CARTÕES ', COALESCE(bc.tipo,'')) AS forma_nome,
+                      NULL AS parent_nome,
+                      lcc.valor
+                 FROM lancamentos_caixa_comprovacao lcc
+                 INNER JOIN lancamentos_caixa lc ON lc.id = lcc.lancamento_caixa_id
+                 LEFT  JOIN formas_pagamento_caixa fp ON fp.id = lcc.forma_pagamento_id
+                 LEFT  JOIN bandeiras_cartao bc ON bc.id = lcc.bandeira_cartao_id
+                 WHERE lc.data BETWEEN %s AND %s
+                   AND lc.status = 'FECHADO'
+                   {emp_cond}
+                   AND fp.tipo = 'CARTAO'
+
+               UNION ALL
+               -- Cartões: linhas filho por bandeira
+               SELECT lc.data,
+                      COALESCE(bc.nome,'Cartão s/ Bandeira') AS forma_nome,
+                      CONCAT('CARTÕES ', COALESCE(bc.tipo,'')) AS parent_nome,
+                      lcc.valor
+                 FROM lancamentos_caixa_comprovacao lcc
+                 INNER JOIN lancamentos_caixa lc ON lc.id = lcc.lancamento_caixa_id
+                 LEFT  JOIN formas_pagamento_caixa fp ON fp.id = lcc.forma_pagamento_id
+                 LEFT  JOIN bandeiras_cartao bc ON bc.id = lcc.bandeira_cartao_id
+                 WHERE lc.data BETWEEN %s AND %s
+                   AND lc.status = 'FECHADO'
+                   {emp_cond}
+                   AND fp.tipo = 'CARTAO'
+
+               UNION ALL
+               -- Categorias fixas de RETIRADA_PAGAMENTO → linhas autônomas
+               SELECT lc.data,
+                      UPPER(TRIM(COALESCE(lcc.descricao,''))) AS forma_nome,
+                      NULL AS parent_nome,
+                      lcc.valor
+                 FROM lancamentos_caixa_comprovacao lcc
+                 INNER JOIN lancamentos_caixa lc ON lc.id = lcc.lancamento_caixa_id
+                 LEFT  JOIN formas_pagamento_caixa fp ON fp.id = lcc.forma_pagamento_id
+                 WHERE lc.data BETWEEN %s AND %s
+                   AND lc.status = 'FECHADO'
+                   {emp_cond}
+                   AND fp.tipo = 'RETIRADA_PAGAMENTO'
+                   AND UPPER(TRIM(COALESCE(lcc.descricao,''))) IN ({fixed_in})
+
+               UNION ALL
+               -- Retiradas para Pagamento: linha pai totalizadora
+               SELECT lc.data,
+                      'RETIRADAS PARA PAGAMENTO' AS forma_nome,
+                      NULL AS parent_nome,
+                      lcc.valor
+                 FROM lancamentos_caixa_comprovacao lcc
+                 INNER JOIN lancamentos_caixa lc ON lc.id = lcc.lancamento_caixa_id
+                 LEFT  JOIN formas_pagamento_caixa fp ON fp.id = lcc.forma_pagamento_id
+                 WHERE lc.data BETWEEN %s AND %s
+                   AND lc.status = 'FECHADO'
+                   {emp_cond}
+                   AND fp.tipo = 'RETIRADA_PAGAMENTO'
+                   AND UPPER(TRIM(COALESCE(lcc.descricao,''))) NOT IN ({fixed_in})
+
+               UNION ALL
+               -- Retiradas para Pagamento: linhas filho por descrição
+               SELECT lc.data,
+                      COALESCE(lcc.descricao,'Sem Descrição') AS forma_nome,
+                      'RETIRADAS PARA PAGAMENTO' AS parent_nome,
+                      lcc.valor
+                 FROM lancamentos_caixa_comprovacao lcc
+                 INNER JOIN lancamentos_caixa lc ON lc.id = lcc.lancamento_caixa_id
+                 LEFT  JOIN formas_pagamento_caixa fp ON fp.id = lcc.forma_pagamento_id
+                 WHERE lc.data BETWEEN %s AND %s
+                   AND lc.status = 'FECHADO'
+                   {emp_cond}
+                   AND fp.tipo = 'RETIRADA_PAGAMENTO'
+                   AND UPPER(TRIM(COALESCE(lcc.descricao,''))) NOT IN ({fixed_in})
+
                UNION ALL
                -- Perdas de caixa por funcionário
                SELECT lc.data,
                       'PERDAS DE CAIXA' AS forma_nome,
+                      NULL AS parent_nome,
                       p.valor
                  FROM lancamentos_caixa_perdas_funcionarios p
                  INNER JOIN lancamentos_caixa lc ON lc.id = p.lancamento_caixa_id
                  WHERE lc.data BETWEEN %s AND %s
                    AND lc.status = 'FECHADO'
                    {emp_cond}
+
                UNION ALL
                -- Vales / quebras de caixa por funcionário
                SELECT lc.data,
                       'VALES FUNCIONÁRIOS' AS forma_nome,
+                      NULL AS parent_nome,
                       v.valor
                  FROM lancamentos_caixa_vales_funcionarios v
                  INNER JOIN lancamentos_caixa lc ON lc.id = v.lancamento_caixa_id
@@ -177,9 +264,10 @@ def _fetch_comprovacoes(conn, data_inicio, data_fim, empresa_ids):
                    AND lc.status = 'FECHADO'
                    {emp_cond}
              ) sub
-             GROUP BY data, forma_nome
-             ORDER BY forma_nome, data""",
-        params * 3,
+             GROUP BY data, forma_nome, parent_nome
+             ORDER BY COALESCE(parent_nome, forma_nome), parent_nome IS NULL DESC,
+                      forma_nome, data""",
+        params * 8,
     )
     rows = cur.fetchall()
     cur.close()
@@ -208,6 +296,26 @@ def _fetch_totais(conn, data_inicio, data_fim, empresa_ids):
     rows = cur.fetchall()
     cur.close()
     return rows
+
+
+# Custom sort order for known comprovação categories.
+# Lower number → appears earlier in the table.
+_COMPROV_ORDER = {
+    'CARTÕES DÉBITO':            '01',
+    'CARTÕES CRÉDITO':           '02',
+    'DESCONTO CADASTROS':        '50',
+    'DESCONTO GERAIS':           '51',
+    'EMPRÉSTIMO FUNCIONÁRIOS':   '52',
+    'RETIRADA ALUGUEL':          '53',
+    'RETIRADAS PARA PAGAMENTO':  '54',
+    'PERDAS DE CAIXA':           '90',
+    'VALES FUNCIONÁRIOS':        '91',
+}
+
+
+def _comprov_sort_key(nome):
+    """Return a sort key so known rows appear in canonical order."""
+    return _COMPROV_ORDER.get(nome, '30_' + nome)
 
 
 def _build_matrix(receitas_rows, comprovacoes_rows, totais_rows, col_key_fn):
@@ -242,20 +350,61 @@ def _build_matrix(receitas_rows, comprovacoes_rows, totais_rows, col_key_fn):
         by_col = rec_map[nome]
         receitas_block.append({'nome': nome, 'by_col': by_col, 'total': sum(by_col.values())})
 
-    # --- COMPROVAÇÕES ---
-    comp_map = {}  # forma_nome → {col_key → float}
+    # --- COMPROVAÇÕES with parent/child hierarchy ---
+    # comprovacoes_rows have: data, forma_nome, parent_nome (None|str), valor
+    row_data   = {}   # (forma_nome, parent_nome) → {col_key → float}
+    children_of = {}  # parent_nome → set of child forma_nomes
+
     for r in comprovacoes_rows:
-        nome = r['forma_nome']
-        ck   = col_key_fn(r['data'])
-        val  = float(r['valor'] or 0)
-        if nome not in comp_map:
-            comp_map[nome] = {}
-        comp_map[nome][ck] = comp_map[nome].get(ck, 0.0) + val
+        nome   = r['forma_nome']
+        parent = r.get('parent_nome')   # None means this row is a parent or normal row
+        ck     = col_key_fn(r['data'])
+        val    = float(r['valor'] or 0)
+        key    = (nome, parent)
+        if key not in row_data:
+            row_data[key] = {}
+        row_data[key][ck] = row_data[key].get(ck, 0.0) + val
+        if parent:
+            if parent not in children_of:
+                children_of[parent] = set()
+            children_of[parent].add(nome)
+
+    # Separate top-level rows (parent_nome is None) and build comprov_block
+    top_rows = [(nome, by_col)
+                for (nome, parent), by_col in row_data.items()
+                if parent is None]
+    top_rows.sort(key=lambda t: _comprov_sort_key(t[0]))
 
     comprov_block = []
-    for nome in sorted(comp_map.keys()):
-        by_col = comp_map[nome]
-        comprov_block.append({'nome': nome, 'by_col': by_col, 'total': sum(by_col.values())})
+    grp_counter   = 0
+    for nome, by_col in top_rows:
+        total    = sum(by_col.values())
+        is_parent = nome in children_of
+        if is_parent:
+            grp_counter += 1
+            gid = f'grp{grp_counter}'
+        else:
+            gid = None
+        comprov_block.append({
+            'nome':       nome,
+            'by_col':     by_col,
+            'total':      total,
+            'row_type':   'parent' if is_parent else 'normal',
+            'group_id':   gid,
+            'parent_nome': None,
+        })
+        if is_parent:
+            child_nomes = sorted(children_of[nome])
+            for cname in child_nomes:
+                child_by_col = row_data.get((cname, nome), {})
+                comprov_block.append({
+                    'nome':        cname,
+                    'by_col':      child_by_col,
+                    'total':       sum(child_by_col.values()),
+                    'row_type':    'child',
+                    'group_id':    gid,
+                    'parent_nome': nome,
+                })
 
     # --- TOTAIS por coluna ---
     total_receitas_col = {}
