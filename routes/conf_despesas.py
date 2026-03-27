@@ -714,6 +714,13 @@ def conf_despesas():
                                 if mot_key in mot_salary_rows:
                                     sal_row = mot_salary_rows[mot_key]
                                     new_rows.append(sal_row)
+                                    # Incorpora salário no total da linha do caminhão (custo líquido
+                                    # do veículo = despesas + salário motorista − receita de frete)
+                                    for mk_, v in sal_row['by_month'].items():
+                                        row['by_month'][mk_] = row['by_month'].get(mk_, 0.0) + v
+                                    row['total'] += sal_row['total']
+                                    # Mantém block/grand corretos (são variáveis independentes
+                                    # de row['total'] — não há dupla contagem)
                                     block['total'] += sal_row['total']
                                     for mk_, v in sal_row['by_month'].items():
                                         block['total_by_month'][mk_] = block['total_by_month'].get(mk_, 0.0) + v
