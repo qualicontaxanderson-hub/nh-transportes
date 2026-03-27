@@ -662,18 +662,18 @@ function initializeComprovacoes() {
     // 5. RECEBIMENTOS PIX - single field
     addComprovacaoSingle(container, 'PIX', 'Recebimentos PIX');
     
-    // 6. CARTÃO DE DÉBITO - lines for each brand + total
-    addComprovacaoCartoes(container, 'DEBITO', 'Cartão de Débito');
-    
-    // 7. CARTÃO DE CRÉDITO - lines for each brand + total
+    // 6. CARTÃO DE CRÉDITO - lines for each brand + total
     addComprovacaoCartoes(container, 'CREDITO', 'Cartão de Crédito');
+    
+    // 7. CARTÃO DE DÉBITO - lines for each brand + total
+    addComprovacaoCartoes(container, 'DEBITO', 'Cartão de Débito');
     
     // 8-12: Other payment types (will use RETIRADA_PAGAMENTO as fallback)
     // These will be saved with descriptions to differentiate them
     addComprovacaoSingleComDescricao(container, 'RETIRADA_PAGAMENTO', 'Descontos Cadastros', 'Desconto Cadastros');
     addComprovacaoSingleComDescricao(container, 'RETIRADA_PAGAMENTO', 'Descontos Gerais', 'Desconto Gerais');
-    addComprovacaoSingleComDescricao(container, 'RETIRADA_PAGAMENTO', 'Empréstimos Entre Funcionários', 'Empréstimo Funcionários');
     addComprovacaoSingleComDescricao(container, 'RETIRADA_PAGAMENTO', 'Retiradas para Aluguel', 'Retirada Aluguel');
+    addComprovacaoSingleComDescricao(container, 'RETIRADA_PAGAMENTO', 'Empréstimos Entre Funcionários', 'Empréstimo Funcionários');
     addComprovacaoSingleComDescricao(container, 'RETIRADA_PAGAMENTO', 'Retiradas para Pagamento');
 }
 
