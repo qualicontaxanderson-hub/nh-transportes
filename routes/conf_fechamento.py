@@ -336,9 +336,11 @@ _COMPROV_ORDER = {
     'DESCONTOS CADASTROS':           '08',
     'DESCONTO GERAIS':               '09',
     'DESCONTOS GERAIS':              '09',
-    'EMPRÉSTIMO FUNCIONÁRIOS':       '10',
+    'VALES FUNCIONÁRIOS':            '10',
     'RETIRADA ALUGUEL':              '11',
-    'VALES FUNCIONÁRIOS':            '12',
+    'EMPRÉSTIMO FUNCIONÁRIOS':       '12',
+    'EMPRESTIMOS FUNCIONÁRIOS':      '12',
+    'EMPRÉSTIMOS FUNCIONÁRIOS':      '12',
     'PERDAS DE CAIXA':               '13',
     'RETIRADAS PARA PAGAMENTO':      '14',
 }
