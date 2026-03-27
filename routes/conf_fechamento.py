@@ -327,10 +327,16 @@ _COMPROV_ORDER = {
     'DEPÓSITO EM ESPÉCIE':           '02',
     'DEPOSITO EM CHEQUE A VISTA':    '03',
     'DEPÓSITO EM CHEQUE À VISTA':    '03',
+    # Cheque à prazo — singular and plural, accented and unaccented
+    'DEPOSITO EM CHEQUE A PRAZO':    '04',
+    'DEPÓSITO EM CHEQUE À PRAZO':    '04',
     'DEPOSITOS EM CHEQUE A PRAZO':   '04',
     'DEPÓSITOS EM CHEQUE A PRAZO':   '04',
     'RECEBIMENTO VIA PIX':           '05',
+    # Cartões — CONCAT('CARTÕES ', bc.tipo) produces 'CARTÕES CREDITO'/'CARTÕES DEBITO'
+    'CARTÕES CREDITO':               '06',
     'CARTÕES CRÉDITO':               '06',
+    'CARTÕES DEBITO':                '07',
     'CARTÕES DÉBITO':                '07',
     'DESCONTO CADASTROS':            '08',
     'DESCONTOS CADASTROS':           '08',
