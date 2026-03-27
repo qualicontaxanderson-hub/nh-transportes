@@ -61,7 +61,11 @@
                                     {% endif %}
                                 </td>
                                 <td class="text-end">
-                                    <span class="text-success">{{ rubrica.valor|formatar_moeda }}</span>
+                                    {% if rubrica.rubrica_tipo in ['DESCONTO', 'ADIANTAMENTO'] %}
+                                        <span class="text-danger">- {{ rubrica.valor|formatar_moeda }}</span>
+                                    {% else %}
+                                        <span class="text-success">{{ rubrica.valor|formatar_moeda }}</span>
+                                    {% endif %}
                                 </td>
                                 <td>{{ rubrica.referencia or '-' }}</td>
                                 <td>{{ rubrica.caminhao or '-' }}</td>
@@ -71,9 +75,9 @@
                         </tbody>
                         <tfoot>
                             <tr class="table-secondary">
-                                <td colspan="2"><strong>TOTAL</strong></td>
+                                <td colspan="2"><strong>TOTAL LÍQUIDO</strong></td>
                                 <td class="text-end">
-                                    <strong class="text-success">
+                                    <strong class="{% if func_data.total < 0 %}text-danger{% else %}text-success{% endif %}">
                                         R$ {{ "%.2f"|format(func_data.total) }}
                                     </strong>
                                 </td>

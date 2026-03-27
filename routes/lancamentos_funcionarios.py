@@ -612,8 +612,11 @@ def detalhe(mes, cliente_id):
             }
         funcionarios_data[key]['rubricas'].append(lanc)
         
-        # All rubricas always add to the employee's total cost
-        funcionarios_data[key]['total'] += float(lanc['valor'])
+        # EMPRÉSTIMOS/ADIANTAMENTO subtract; all other rubricas (including FGTS/IMPOSTO) add
+        if lanc['rubrica_tipo'] in ['DESCONTO', 'ADIANTAMENTO']:
+            funcionarios_data[key]['total'] -= float(lanc['valor'])
+        else:
+            funcionarios_data[key]['total'] += float(lanc['valor'])
     
     return render_template('lancamentos_funcionarios/detalhe.html',
                          mes=mes,

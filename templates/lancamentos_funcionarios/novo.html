@@ -512,11 +512,15 @@ function calculateTotals() {
                 rubricaTotals[rubricaNome] += valor;
             }
             
-            // All rubricas always add to the employee's total cost
-            totalProventos += valor;
+            // EMPRÉSTIMOS (DESCONTO) and advances (ADIANTAMENTO) subtract; everything else adds
+            if (rubricaTipo === 'DESCONTO' || rubricaTipo === 'ADIANTAMENTO') {
+                totalDescontos += valor;
+            } else {
+                totalProventos += valor;
+            }
         });
         
-        const totalLiquido = totalProventos;
+        const totalLiquido = totalProventos - totalDescontos;
         
         // Find the total element in THIS row
         const totalElement = row.querySelector('.total-funcionario');
@@ -542,7 +546,7 @@ function calculateTotals() {
     // Update grand total in footer (total of all TOTAL column)
     const grandTotalElement = document.getElementById('grand-total-all');
     if (grandTotalElement) {
-        const grandTotal = grandTotalProventos;
+        const grandTotal = grandTotalProventos - grandTotalDescontos;
         grandTotalElement.textContent = `R$ ${grandTotal.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
         grandTotalElement.style.color = grandTotal < 0 ? 'red' : 'green';
     }
@@ -550,8 +554,8 @@ function calculateTotals() {
     // Update summary box
     document.getElementById('total-funcionarios').textContent = totalFuncionarios;
     document.getElementById('total-proventos').textContent = `R$ ${grandTotalProventos.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
-    document.getElementById('total-descontos').textContent = `R$ 0,00`;
-    document.getElementById('total-liquido').textContent = `R$ ${grandTotalProventos.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+    document.getElementById('total-descontos').textContent = `R$ ${grandTotalDescontos.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+    document.getElementById('total-liquido').textContent = `R$ ${(grandTotalProventos - grandTotalDescontos).toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
 }
 
 // Form submission handler - convert formatted values to numeric
