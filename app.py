@@ -366,6 +366,23 @@ def create_app():
                 exc_info=True,
             )
 
+    # Garante que VENDA PROGRAMADA (forma_pagamento) e ANTECIPAÇÃO CLIENTE
+    # (tipo_receita) existam no banco — equivalente à migration 20260327 mas
+    # executado automaticamente a cada deploy para não depender de script manual.
+    with app.app_context():
+        try:
+            from routes.lancamentos_caixa import _ensure_caixa_formas_tipos
+            _ensure_caixa_formas_tipos()
+            app.logger.info(
+                "Seed de VENDA PROGRAMADA / ANTECIPAÇÃO CLIENTE executado na inicialização."
+            )
+        except Exception:
+            app.logger.warning(
+                "Seed de VENDA PROGRAMADA / ANTECIPAÇÃO CLIENTE falhou na inicialização "
+                "(não crítico).",
+                exc_info=True,
+            )
+
     # Registrar filtro e helpers de template
     app.jinja_env.filters['formatar_moeda'] = formatar_moeda
 

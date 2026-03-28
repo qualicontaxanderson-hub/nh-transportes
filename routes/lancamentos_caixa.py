@@ -1,3 +1,6 @@
+import re
+import logging
+
 from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify
 from flask_login import login_required, current_user
 from utils.db import get_db_connection
@@ -5,6 +8,8 @@ from utils.decorators import admin_required, supervisor_or_admin_required
 from datetime import datetime, timedelta
 from decimal import Decimal
 import json
+
+_logger = logging.getLogger(__name__)
 
 bp = Blueprint('lancamentos_caixa', __name__, url_prefix='/lancamentos_caixa')
 
@@ -21,6 +26,95 @@ def _ensure_comprovacao_data_deposito(conn):
         pass  # coluna já existe
     finally:
         cur.close()
+
+
+def _ensure_caixa_formas_tipos():
+    """
+    Garante que as linhas 'VENDA PROGRAMADA' (formas_pagamento_caixa) e
+    'ANTECIPAÇÃO CLIENTE' (tipos_receita_caixa) existam no banco de dados.
+
+    Também estende o ENUM formas_pagamento_caixa.tipo para incluir
+    'VENDA_PROGRAMADA' caso ainda não esteja presente, preservando todos os
+    valores já existentes.
+
+    Idempotente — pode ser chamado a cada inicialização do app sem efeitos
+    colaterais.
+    """
+    # Pattern for valid ENUM identifiers (alphanumeric + underscore only).
+    # Validates each extracted value before interpolating into ALTER TABLE.
+    _ENUM_VAL_RE = re.compile(r'^[A-Za-z0-9_]+$')
+
+    conn = None
+    cur = None
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor(dictionary=True)
+
+        # ── 1. VENDA_PROGRAMADA em formas_pagamento_caixa ──────────────────
+        # Verifica se 'VENDA_PROGRAMADA' já está na definição do ENUM.
+        cur.execute(
+            """SELECT COLUMN_TYPE
+               FROM information_schema.COLUMNS
+               WHERE TABLE_SCHEMA = DATABASE()
+                 AND TABLE_NAME   = 'formas_pagamento_caixa'
+                 AND COLUMN_NAME  = 'tipo'"""
+        )
+        row = cur.fetchone()
+        if row:
+            col_type = row.get('COLUMN_TYPE') or b''
+            if isinstance(col_type, (bytes, bytearray)):
+                col_type = col_type.decode('utf-8', errors='replace')
+            if 'VENDA_PROGRAMADA' not in col_type.upper():
+                # Preserva os valores já existentes e adiciona VENDA_PROGRAMADA.
+                # Validate each value: only allow alphanumeric+underscore identifiers
+                # (standard MySQL ENUM values) to prevent SQL injection.
+                raw_vals = re.findall(r"'([^']+)'", col_type)
+                vals = [v for v in raw_vals if _ENUM_VAL_RE.match(v)]
+                if 'VENDA_PROGRAMADA' not in vals:
+                    vals.append('VENDA_PROGRAMADA')
+                enum_def = ','.join(f"'{v}'" for v in vals)
+                cur.execute(
+                    f"ALTER TABLE formas_pagamento_caixa "
+                    f"MODIFY COLUMN tipo ENUM({enum_def}) NULL"
+                )
+                conn.commit()
+
+        # Insere a linha se ainda não existir.
+        cur.execute(
+            """INSERT INTO formas_pagamento_caixa (nome, tipo, ativo)
+               SELECT 'VENDA PROGRAMADA', 'VENDA_PROGRAMADA', 1
+               WHERE NOT EXISTS (
+                   SELECT 1 FROM formas_pagamento_caixa WHERE tipo = 'VENDA_PROGRAMADA'
+               )"""
+        )
+        conn.commit()
+
+        # ── 2. ANTECIPAÇÃO CLIENTE em tipos_receita_caixa ──────────────────
+        cur.execute(
+            """INSERT INTO tipos_receita_caixa (nome, tipo, ativo)
+               SELECT 'ANTECIPAÇÃO CLIENTE', 'MANUAL', 1
+               WHERE NOT EXISTS (
+                   SELECT 1 FROM tipos_receita_caixa WHERE nome = 'ANTECIPAÇÃO CLIENTE'
+               )"""
+        )
+        conn.commit()
+
+    except Exception:
+        _logger.warning(
+            "_ensure_caixa_formas_tipos: falhou ao garantir VENDA PROGRAMADA / "
+            "ANTECIPAÇÃO CLIENTE (não crítico — será reexecutado no próximo deploy).",
+            exc_info=True,
+        )
+        if conn:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+    finally:
+        if cur is not None:
+            cur.close()
+        if conn is not None:
+            conn.close()
 
 
 def parse_brazilian_currency(value_str):
