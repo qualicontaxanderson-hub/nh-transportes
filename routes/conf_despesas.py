@@ -865,7 +865,7 @@ def _fetch_taxas_cartao(conn, data_inicio, data_fim, empresa_ids, months):
         forma_ids = vinculos_map.get(bid, [])
 
         # Determina se saldo_anterior é aplicável para este período
-        saldo_anterior    = band.get('saldo_anterior') or 0.0
+        saldo_anterior    = float(band.get('saldo_anterior') or 0)
         sad_raw           = band.get('saldo_anterior_data')
         saldo_aplicavel   = False
         if saldo_anterior != 0.0 and sad_raw and d_ini:
