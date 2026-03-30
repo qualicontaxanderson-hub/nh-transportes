@@ -11,6 +11,11 @@ import json
 
 _logger = logging.getLogger(__name__)
 
+# Module-level flag so _ensure_caixa_formas_tipos() only hits the DB once per
+# process.  Cleared to False if the function fails so it retries on the next
+# request.
+_caixa_formas_tipos_ready = False
+
 bp = Blueprint('lancamentos_caixa', __name__, url_prefix='/lancamentos_caixa')
 
 
@@ -37,9 +42,15 @@ def _ensure_caixa_formas_tipos():
     'VENDA_PROGRAMADA' caso ainda não esteja presente, preservando todos os
     valores já existentes.
 
-    Idempotente — pode ser chamado a cada inicialização do app sem efeitos
-    colaterais.
+    Usa um flag de módulo (_caixa_formas_tipos_ready) para ser idempotente e
+    barato: após a primeira execução bem-sucedida, retorna imediatamente sem
+    abrir novas conexões.  Se falhar, o flag permanece False e a função será
+    reexecutada na próxima chamada (próxima request).
     """
+    global _caixa_formas_tipos_ready
+    if _caixa_formas_tipos_ready:
+        return
+
     # Pattern for valid ENUM identifiers (alphanumeric + underscore only).
     # Validates each extracted value before interpolating into ALTER TABLE.
     _ENUM_VAL_RE = re.compile(r'^[A-Za-z0-9_]+$')
@@ -99,10 +110,12 @@ def _ensure_caixa_formas_tipos():
         )
         conn.commit()
 
+        _caixa_formas_tipos_ready = True
+
     except Exception:
         _logger.warning(
             "_ensure_caixa_formas_tipos: falhou ao garantir VENDA PROGRAMADA / "
-            "ANTECIPAÇÃO CLIENTE (não crítico — será reexecutado no próximo deploy).",
+            "ANTECIPAÇÃO CLIENTE (não crítico — será reexecutado na próxima request).",
             exc_info=True,
         )
         if conn:
@@ -555,6 +568,7 @@ def novo():
             return redirect(url_for('lancamentos_caixa.lista'))
         
         _ensure_comprovacao_data_deposito(conn)
+        _ensure_caixa_formas_tipos()
 
         if request.method == 'POST':
             # Get main data
@@ -1029,6 +1043,7 @@ def editar(id):
             return redirect(url_for('lancamentos_caixa.lista'))
         
         _ensure_comprovacao_data_deposito(conn)
+        _ensure_caixa_formas_tipos()
 
         if request.method == 'POST':
             # Get main data
