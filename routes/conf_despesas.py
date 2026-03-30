@@ -13,6 +13,7 @@ Rota:
 """
 import re
 import unicodedata
+from calendar import monthrange
 from collections import defaultdict
 from datetime import date, datetime, timedelta
 
@@ -698,6 +699,16 @@ def _add_business_days(d, n):
     return d
 
 
+def _last_day_of_next_month(d):
+    """Retorna o último dia do mês seguinte ao mês de d."""
+    if d.month == 12:
+        year, month = d.year + 1, 1
+    else:
+        year, month = d.year, d.month + 1
+    _, last = monthrange(year, month)
+    return date(year, month, last)
+
+
 def _fetch_taxas_cartao(conn, data_inicio, data_fim, empresa_ids, months):
     """
     Calcula as taxas de cartão para injeção no bloco FINANCEIRO do conf_despesas.
@@ -720,18 +731,20 @@ def _fetch_taxas_cartao(conn, data_inicio, data_fim, empresa_ids, months):
     """
     cur = conn.cursor(dictionary=True)
 
-    # Bandeiras ativas com prazo de compensação
+    # Bandeiras ativas com prazo de compensação e saldo anterior
     try:
         cur.execute("""
             SELECT id, nome, tipo,
-                   COALESCE(prazo_compensacao_dias, 1) AS prazo
+                   COALESCE(prazo_compensacao_dias, 1)  AS prazo,
+                   COALESCE(saldo_anterior, 0)          AS saldo_anterior,
+                   saldo_anterior_data
               FROM bandeiras_cartao
              WHERE ativo = 1
              ORDER BY tipo, nome
         """)
     except Exception:
         cur.execute(
-            "SELECT id, nome, tipo, 1 AS prazo "
+            "SELECT id, nome, tipo, 1 AS prazo, 0 AS saldo_anterior, NULL AS saldo_anterior_data "
             "FROM bandeiras_cartao WHERE ativo = 1 ORDER BY tipo, nome"
         )
     bandeiras = {b['id']: b for b in cur.fetchall()}
@@ -844,9 +857,27 @@ def _fetch_taxas_cartao(conn, data_inicio, data_fim, empresa_ids, months):
         vendas_by_band_mk[bid][mk_exp] += float(r['valor'])
 
     # Calcula taxa por bandeira e mês
+    # O primeiro mês do período recebe o saldo_anterior (igual ao conf_cartoes),
+    # que representa vendas pré-período cujo recebimento chega no início do período.
+    first_mk = months[0]['key'] if months else None
     result = []
     for bid, band in bandeiras.items():
         forma_ids = vinculos_map.get(bid, [])
+
+        # Determina se saldo_anterior é aplicável para este período
+        saldo_anterior    = band.get('saldo_anterior') or 0.0
+        sad_raw           = band.get('saldo_anterior_data')
+        saldo_aplicavel   = False
+        if saldo_anterior != 0.0 and sad_raw and d_ini:
+            if isinstance(sad_raw, str):
+                try:
+                    sad_raw = datetime.strptime(sad_raw, '%Y-%m-%d').date()
+                except Exception:
+                    sad_raw = None
+            if sad_raw:
+                ultimo_dia_aplicavel = _last_day_of_next_month(sad_raw)
+                saldo_aplicavel = d_ini <= ultimo_dia_aplicavel
+
         fee_by_month = {}
         fee_total    = 0.0
         has_data     = False
@@ -854,6 +885,9 @@ def _fetch_taxas_cartao(conn, data_inicio, data_fim, empresa_ids, months):
         for m in months:
             mk    = m['key']
             venda = vendas_by_band_mk.get(bid, {}).get(mk, 0.0)
+            # Adiciona saldo_anterior ao primeiro mês (mesmo critério que conf_cartoes)
+            if saldo_aplicavel and mk == first_mk:
+                venda += saldo_anterior
             receb = sum(receb_idx.get((fid, mk), 0.0) for fid in forma_ids)
             fee   = venda - receb
             fee_by_month[mk] = fee
