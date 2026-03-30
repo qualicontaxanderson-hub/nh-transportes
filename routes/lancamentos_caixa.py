@@ -16,6 +16,11 @@ _logger = logging.getLogger(__name__)
 # request.
 _caixa_formas_tipos_ready = False
 
+# Pre-compiled regex for validating ENUM identifiers (alphanumeric + underscore).
+# Used in _ensure_caixa_formas_tipos() to prevent SQL injection when rebuilding
+# the ENUM definition from information_schema data.
+_ENUM_VAL_RE = re.compile(r'^[A-Za-z0-9_]+$')
+
 bp = Blueprint('lancamentos_caixa', __name__, url_prefix='/lancamentos_caixa')
 
 
@@ -51,10 +56,6 @@ def _ensure_caixa_formas_tipos():
     if _caixa_formas_tipos_ready:
         return
 
-    # Pattern for valid ENUM identifiers (alphanumeric + underscore only).
-    # Validates each extracted value before interpolating into ALTER TABLE.
-    _ENUM_VAL_RE = re.compile(r'^[A-Za-z0-9_]+$')
-
     conn = None
     cur = None
     try:
@@ -72,7 +73,11 @@ def _ensure_caixa_formas_tipos():
         )
         row = cur.fetchone()
         if row:
-            col_type = row.get('COLUMN_TYPE') or b''
+            # information_schema column names are UPPERCASE in MySQL 5.7 and
+            # lowercase in MySQL 8.0.  Use a case-insensitive lookup so we
+            # work on both versions without hard-coding either casing.
+            row_lower = {k.lower(): v for k, v in row.items()}
+            col_type = row_lower.get('column_type') or b''
             if isinstance(col_type, (bytes, bytearray)):
                 col_type = col_type.decode('utf-8', errors='replace')
             if 'VENDA_PROGRAMADA' not in col_type.upper():
@@ -81,14 +86,19 @@ def _ensure_caixa_formas_tipos():
                 # (standard MySQL ENUM values) to prevent SQL injection.
                 raw_vals = re.findall(r"'([A-Za-z0-9_]+)'", col_type)
                 vals = [v for v in raw_vals if _ENUM_VAL_RE.match(v)]
-                if 'VENDA_PROGRAMADA' not in vals:
-                    vals.append('VENDA_PROGRAMADA')
-                enum_def = ','.join(f"'{v}'" for v in vals)
-                cur.execute(
-                    f"ALTER TABLE formas_pagamento_caixa "
-                    f"MODIFY COLUMN tipo ENUM({enum_def}) NULL"
-                )
-                conn.commit()
+                # Guard: only ALTER if we successfully extracted existing ENUM
+                # values.  An empty vals list means the column type string was
+                # unreadable (e.g. not an ENUM), so we skip the ALTER to avoid
+                # producing ENUM('VENDA_PROGRAMADA') which would destroy data.
+                if vals:
+                    if 'VENDA_PROGRAMADA' not in vals:
+                        vals.append('VENDA_PROGRAMADA')
+                    enum_def = ','.join(f"'{v}'" for v in vals)
+                    cur.execute(
+                        f"ALTER TABLE formas_pagamento_caixa "
+                        f"MODIFY COLUMN tipo ENUM({enum_def}) NULL"
+                    )
+                    conn.commit()
 
         # Insere a linha se ainda não existir.
         cur.execute(
@@ -653,7 +663,8 @@ def novo():
             # Insert comprovacoes
             for comprovacao in comprovacoes:
                 if comprovacao.get('valor'):
-                    forma_id = comprovacao.get('forma_pagamento_id') or \
+                    raw_id = comprovacao.get('forma_pagamento_id')
+                    forma_id = raw_id if raw_id is not None else \
                                _fp_by_tipo.get(comprovacao.get('forma_pagamento_tipo', ''))
                     if not forma_id:
                         continue
@@ -1203,7 +1214,8 @@ def editar(id):
             # Insert new comprovacoes
             for comprovacao in comprovacoes:
                 if comprovacao.get('valor'):
-                    forma_id = comprovacao.get('forma_pagamento_id') or \
+                    raw_id = comprovacao.get('forma_pagamento_id')
+                    forma_id = raw_id if raw_id is not None else \
                                _fp_by_tipo.get(comprovacao.get('forma_pagamento_tipo', ''))
                     if not forma_id:
                         continue
