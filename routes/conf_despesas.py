@@ -14,7 +14,7 @@ Rota:
 import re
 import unicodedata
 from collections import defaultdict
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 
 from flask import Blueprint, render_template, request
 from flask_login import login_required
@@ -688,27 +688,53 @@ def _build_func_blocks(func_rows, months):
     return out_blocks, combined_by_month, combined_total
 
 
+def _add_business_days(d, n):
+    """Adiciona n dias úteis à data d, pulando fins de semana. Ignora feriados."""
+    count = 0
+    while count < n:
+        d = d + timedelta(days=1)
+        if d.weekday() < 5:   # Segunda = 0, Sexta = 4
+            count += 1
+    return d
+
+
 def _fetch_taxas_cartao(conn, data_inicio, data_fim, empresa_ids, months):
     """
-    Calcula as taxas de cartão (diferença entre vendas e recebimentos) por
-    bandeira e mês, para injeção no bloco FINANCEIRO do conf_despesas.
+    Calcula as taxas de cartão para injeção no bloco FINANCEIRO do conf_despesas.
 
-    Para cada bandeira ativa com vínculos a formas de recebimento:
-      fee[mk] = SUM(vendas do mês mk) − SUM(recebimentos do mês mk)
+    Para cada bandeira ativa:
+      taxa[mk] = SUM(vendas cujo recebimento ESPERADO cai no mês mk)
+                 − SUM(recebimentos REAIS recebidos no mês mk)
+
+    O recebimento esperado é calculado adicionando prazo_compensacao_dias dias
+    úteis à data de venda (mesmo critério do conf_cartoes). Isso alinha os valores
+    com a coluna DIF do conf_cartoes para cada mês.
+
+    Inclui lookback de 14 dias para capturar vendas pré-período cujo recebimento
+    esperado cai dentro do período consultado (ex.: sextas de dezembro que chegam
+    na segunda de janeiro).
 
     Retorna lista de dicts:
       {'bid': int, 'nome': str, 'tipo': str,
        'fee_by_month': {mk: float}, 'fee_total': float}
-
-    Bandeiras sem vendas NEM recebimentos no período são omitidas.
     """
     cur = conn.cursor(dictionary=True)
 
-    # Bandeiras ativas
-    cur.execute(
-        "SELECT id, nome, tipo FROM bandeiras_cartao WHERE ativo = 1 ORDER BY tipo, nome"
-    )
-    bandeiras = cur.fetchall()
+    # Bandeiras ativas com prazo de compensação
+    try:
+        cur.execute("""
+            SELECT id, nome, tipo,
+                   COALESCE(prazo_compensacao_dias, 1) AS prazo
+              FROM bandeiras_cartao
+             WHERE ativo = 1
+             ORDER BY tipo, nome
+        """)
+    except Exception:
+        cur.execute(
+            "SELECT id, nome, tipo, 1 AS prazo "
+            "FROM bandeiras_cartao WHERE ativo = 1 ORDER BY tipo, nome"
+        )
+    bandeiras = {b['id']: b for b in cur.fetchall()}
 
     # Vínculos bandeira → formas_recebimento
     try:
@@ -722,28 +748,41 @@ def _fetch_taxas_cartao(conn, data_inicio, data_fim, empresa_ids, months):
     for v in vinculos_rows:
         vinculos_map[v['bandeira_cartao_id']].append(v['forma_recebimento_id'])
 
-    # Vendas por bandeira por mês
+    # Janela de datas
+    try:
+        d_ini = datetime.strptime(data_inicio, '%Y-%m-%d').date()
+        d_fim = datetime.strptime(data_fim,    '%Y-%m-%d').date()
+    except Exception:
+        cur.close()
+        return []
+
+    # Lookback: captura vendas pré-período cujo recebimento esperado cai no período.
+    # 14 dias cobre até prazo=5 dias úteis + fins de semana adjacentes (5 dias úteis
+    # = no máximo ~8 dias corridos mais folga). Bandeiras com prazo > 7 dias úteis
+    # são raras no mercado brasileiro de cartões de débito/crédito.
+    _LOOKBACK = 14
+    data_inicio_ext = (d_ini - timedelta(days=_LOOKBACK)).isoformat()
+
+    # Vendas individuais por (bandeira, data_venda)
     where_v = ["lc.data BETWEEN %s AND %s", "lcc.bandeira_cartao_id IS NOT NULL"]
-    params_v = [data_inicio, data_fim]
+    params_v = [data_inicio_ext, data_fim]
     if empresa_ids:
         ph = ','.join(['%s'] * len(empresa_ids))
         where_v.append(f"lc.cliente_id IN ({ph})")
         params_v.extend(empresa_ids)
 
     cur.execute(f"""
-        SELECT lcc.bandeira_cartao_id              AS bandeira_id,
-               DATE_FORMAT(lc.data, '%Y%m')        AS mk,
-               COALESCE(SUM(lcc.valor), 0)         AS total_venda
+        SELECT lcc.bandeira_cartao_id          AS bandeira_id,
+               lc.data                         AS data_venda,
+               COALESCE(SUM(lcc.valor), 0)     AS valor
           FROM lancamentos_caixa_comprovacao lcc
           JOIN lancamentos_caixa lc ON lc.id = lcc.lancamento_caixa_id
          WHERE {' AND '.join(where_v)}
-         GROUP BY lcc.bandeira_cartao_id, DATE_FORMAT(lc.data, '%Y%m')
+         GROUP BY lcc.bandeira_cartao_id, lc.data
     """, params_v)
-    vendas_idx = {}
-    for r in cur.fetchall():
-        vendas_idx[(int(r['bandeira_id']), str(r['mk']))] = float(r['total_venda'])
+    sale_rows = cur.fetchall()
 
-    # Recebimentos por forma_recebimento por mês (todas as formas vinculadas a alguma bandeira)
+    # Recebimentos por (forma_recebimento, mês)
     all_forma_ids = list({fid for fids in vinculos_map.values() for fid in fids})
     receb_idx = {}
     if all_forma_ids:
@@ -760,25 +799,53 @@ def _fetch_taxas_cartao(conn, data_inicio, data_fim, empresa_ids, months):
             params_r.extend(empresa_ids)
         try:
             cur.execute(f"""
-                SELECT bt.forma_recebimento_id      AS forma_id,
+                SELECT bt.forma_recebimento_id               AS forma_id,
                        DATE_FORMAT(bt.data_transacao, '%Y%m') AS mk,
-                       COALESCE(SUM(bt.valor), 0)  AS total_recebimento
+                       COALESCE(SUM(bt.valor), 0)            AS total
                   FROM bank_transactions bt
                   JOIN bank_accounts ba ON ba.id = bt.account_id
                  WHERE {' AND '.join(where_r)}
-                 GROUP BY bt.forma_recebimento_id, DATE_FORMAT(bt.data_transacao, '%Y%m')
+                 GROUP BY bt.forma_recebimento_id,
+                          DATE_FORMAT(bt.data_transacao, '%Y%m')
             """, params_r)
             for r in cur.fetchall():
-                key = (int(r['forma_id']), str(r['mk']))
-                receb_idx[key] = receb_idx.get(key, 0.0) + float(r['total_recebimento'])
+                receb_idx[(int(r['forma_id']), str(r['mk']))] = float(r['total'])
         except Exception:
             pass
 
     cur.close()
 
+    # Atribui cada venda ao mês de recebimento ESPERADO (cycle attribution)
+    month_keys_set = {m['key'] for m in months}
+    vendas_by_band_mk = defaultdict(lambda: defaultdict(float))
+
+    for r in sale_rows:
+        bid = int(r['bandeira_id'])
+        if bid not in bandeiras:
+            continue
+        prazo = int(bandeiras[bid].get('prazo', 1))
+        dv = r['data_venda']
+        if isinstance(dv, str):
+            try:
+                dv = datetime.strptime(dv, '%Y-%m-%d').date()
+            except Exception:
+                continue
+
+        # Calcula data de recebimento esperada
+        expected = dv if prazo == 0 else _add_business_days(dv, prazo)
+
+        # Só inclui se o recebimento esperado cai dentro do período consultado
+        if expected < d_ini or expected > d_fim:
+            continue
+        mk_exp = f'{expected.year}{expected.month:02d}'
+        if mk_exp not in month_keys_set:
+            continue
+
+        vendas_by_band_mk[bid][mk_exp] += float(r['valor'])
+
+    # Calcula taxa por bandeira e mês
     result = []
-    for band in bandeiras:
-        bid       = band['id']
+    for bid, band in bandeiras.items():
         forma_ids = vinculos_map.get(bid, [])
         fee_by_month = {}
         fee_total    = 0.0
@@ -786,12 +853,12 @@ def _fetch_taxas_cartao(conn, data_inicio, data_fim, empresa_ids, months):
 
         for m in months:
             mk    = m['key']
-            venda = vendas_idx.get((bid, mk), 0.0)
+            venda = vendas_by_band_mk.get(bid, {}).get(mk, 0.0)
             receb = sum(receb_idx.get((fid, mk), 0.0) for fid in forma_ids)
             fee   = venda - receb
             fee_by_month[mk] = fee
             fee_total += fee
-            if venda != 0.0 or receb != 0.0:
+            if abs(venda) > 0.005 or abs(receb) > 0.005:
                 has_data = True
 
         if not has_data:
@@ -808,33 +875,49 @@ def _fetch_taxas_cartao(conn, data_inicio, data_fim, empresa_ids, months):
     return result
 
 
+# Bandeiras que devem aparecer como linhas STANDALONE (não agrupadas por tipo)
+_STANDALONE_CARD_PATTERNS = ('BARATAO', 'X7')
+
+
+def _is_standalone_bandeira(nome):
+    """Retorna True se a bandeira deve ser exibida como linha standalone."""
+    norm = _ascii_upper(nome)
+    return any(p in norm for p in _STANDALONE_CARD_PATTERNS)
+
+
 def _build_taxas_cartao_rows(taxas_data, months):
     """
-    Constrói linhas de taxa de cartão agrupadas por tipo (DEBITO/CREDITO) para
-    injeção no bloco FINANCEIRO do conf_despesas.
+    Constrói linhas de taxa de cartão para o bloco FINANCEIRO:
 
-    Retorna (rows, combined_by_month, combined_total) onde:
-      rows             – lista de linhas categoria (com subcats por bandeira)
-      combined_by_month – {mk: float} totais somados por mês
-      combined_total   – float total geral
+      - DÉBITO:  linha pai "CARTÃO DE DÉBITO"  + sub-linhas por bandeira
+      - CRÉDITO (exceto standalone): linha pai "CARTÃO DE CRÉDITO" + sub-linhas
+      - Standalone (BARATÃO, X7 BANK): linha única sem subcats
+
+    Retorna (rows, combined_by_month, combined_total).
     """
     if not taxas_data:
         return [], {m['key']: 0.0 for m in months}, 0.0
 
-    by_tipo = defaultdict(list)
-    for t in taxas_data:
-        by_tipo[t['tipo']].append(t)
-
-    _TIPO_LABEL = {'DEBITO': 'Cartão de Débito', 'CREDITO': 'Cartão de Crédito'}
+    _TIPO_LABEL = {'DEBITO': 'CARTÃO DE DÉBITO', 'CREDITO': 'CARTÃO DE CRÉDITO'}
     _TIPO_ORDER = {'DEBITO': 0, 'CREDITO': 1}
+
+    # Separa standalone das demais
+    grouped    = defaultdict(list)   # tipo → [band]
+    standalones = []
+    for t in taxas_data:
+        if _is_standalone_bandeira(t['nome']):
+            standalones.append(t)
+        else:
+            grouped[t['tipo']].append(t)
 
     rows              = []
     combined_by_month = {m['key']: 0.0 for m in months}
     combined_total    = 0.0
 
-    for tipo in sorted(by_tipo, key=lambda t: (_TIPO_ORDER.get(t, 99), t)):
-        bands = by_tipo[tipo]
-        label = _TIPO_LABEL.get(tipo, f'Cartão {tipo}')
+    # Grupos DÉBITO / CRÉDITO com sub-linhas por bandeira
+    for tipo in sorted(grouped, key=lambda t: (_TIPO_ORDER.get(t, 99), t)):
+        bands = grouped[tipo]
+        label = _TIPO_LABEL.get(tipo, f'CARTÃO {tipo}')
 
         grp_by_month = {m['key']: 0.0 for m in months}
         grp_total    = 0.0
@@ -845,11 +928,10 @@ def _build_taxas_cartao_rows(taxas_data, months):
                 grp_by_month[mk] = grp_by_month.get(mk, 0.0) + v
             grp_total += band['fee_total']
             subcats.append({
-                'subcat_id':      f'taxa_cartao_{band["bid"]}',
-                'subcat_nome':    band['nome'],
-                'by_month':       band['fee_by_month'],
-                'total':          band['fee_total'],
-                'is_taxa_cartao': True,
+                'subcat_id':   f'taxa_cartao_{band["bid"]}',
+                'subcat_nome': band['nome'],
+                'by_month':    band['fee_by_month'],
+                'total':       band['fee_total'],
             })
 
         for mk, v in grp_by_month.items():
@@ -862,7 +944,19 @@ def _build_taxas_cartao_rows(taxas_data, months):
             'by_month':       grp_by_month,
             'total':          grp_total,
             'subcats':        subcats,
-            'is_taxa_cartao': True,
+        })
+
+    # Standalones (BARATÃO, X7 BANK) – linha única sem subcats
+    for band in sorted(standalones, key=lambda b: b['nome']):
+        for mk, v in band['fee_by_month'].items():
+            combined_by_month[mk] = combined_by_month.get(mk, 0.0) + v
+        combined_total += band['fee_total']
+        rows.append({
+            'categoria_id':   f'taxa_cartao_{band["bid"]}',
+            'categoria_nome': band['nome'],
+            'by_month':       band['fee_by_month'],
+            'total':          band['fee_total'],
+            'subcats':        [],
         })
 
     return rows, combined_by_month, combined_total
