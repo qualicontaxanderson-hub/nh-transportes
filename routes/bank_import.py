@@ -24,12 +24,79 @@ _MYSQL_ERRNO_TABLE_NOT_FOUND = 1146  # Table doesn't exist (schema not yet migra
 # (ADD COLUMN IF NOT EXISTS), so a double-run in concurrent requests is harmless.
 _ld_bank_tx_id_ready = False
 _bsm_descricao_chave_ready = False
+_orphaned_ld_cleanup_done = False
 # Timestamp-based retry cooldown: after a failed attempt, wait _MIGRATION_RETRY_DELAY
 # seconds before retrying.  This avoids hammering the DB on every request but still
 # allows recovery from transient errors (e.g., DB temporarily unavailable at startup).
 _MIGRATION_RETRY_DELAY = 60  # seconds
 _bsm_descricao_chave_retry_after = 0.0   # epoch timestamp; 0 = may run immediately
 _ld_bank_tx_id_retry_after       = 0.0
+
+
+def _cleanup_orphaned_lancamentos_despesas():
+    """Remove lancamentos_despesas orphaned by the old 'SET NULL' revert behavior.
+
+    The old code in reverter_conciliacao / reverter_conciliacao_lote /
+    excluir_transacao did:
+        UPDATE lancamentos_despesas SET bank_transaction_id = NULL
+        WHERE bank_transaction_id = <tx_id>
+
+    instead of DELETE.  This left ghost rows (bank_transaction_id = NULL)
+    that still appeared in conf_despesas even after the transaction was
+    re-categorized to a different category.
+
+    The code was fixed to DELETE (commit 8f2c997).  This function purges
+    the records already in the database from the old behavior.
+
+    Criteria (conservative):
+      - bank_transaction_id IS NULL
+      - fornecedor IS NOT NULL  (set automatically from the bank-tx description)
+      - An exact duplicate exists with bank_transaction_id IS NOT NULL sharing
+        the same (data, cliente_id, valor, fornecedor).
+
+    Idempotent: safe to run multiple times; module-level flag prevents re-running.
+    """
+    global _orphaned_ld_cleanup_done
+    if _orphaned_ld_cleanup_done:
+        return
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            """DELETE ld_old
+               FROM lancamentos_despesas ld_old
+               WHERE ld_old.bank_transaction_id IS NULL
+                 AND ld_old.fornecedor IS NOT NULL
+                 AND EXISTS (
+                     SELECT 1
+                     FROM lancamentos_despesas ld_new
+                     WHERE ld_new.bank_transaction_id IS NOT NULL
+                       AND ld_new.data       = ld_old.data
+                       AND ld_new.cliente_id <=> ld_old.cliente_id
+                       AND ld_new.valor      = ld_old.valor
+                       AND ld_new.fornecedor = ld_old.fornecedor
+                       AND ld_new.id        <> ld_old.id
+                 )"""
+        )
+        deleted = cursor.rowcount
+        conn.commit()
+        cursor.close()
+        _orphaned_ld_cleanup_done = True
+        if deleted:
+            logger.info(
+                "_cleanup_orphaned_lancamentos_despesas: %d registro(s) fantasma removido(s).",
+                deleted,
+            )
+        else:
+            logger.info("_cleanup_orphaned_lancamentos_despesas: nenhum registro fantasma encontrado.")
+    except Exception:
+        logger.warning(
+            "_cleanup_orphaned_lancamentos_despesas: falhou (não crítico).", exc_info=True
+        )
+    finally:
+        if conn:
+            conn.close()
 
 
 def _ensure_descricao_chave():

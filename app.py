@@ -327,9 +327,10 @@ def create_app():
     # lentidão de 10-30 s no primeiro acesso após cada deployment.
     with app.app_context():
         try:
-            from routes.bank_import import _ensure_ld_bank_tx_id, _ensure_descricao_chave
+            from routes.bank_import import _ensure_ld_bank_tx_id, _ensure_descricao_chave, _cleanup_orphaned_lancamentos_despesas
             _ensure_ld_bank_tx_id()
             _ensure_descricao_chave()
+            _cleanup_orphaned_lancamentos_despesas()
             app.logger.info("Migrations de schema de bank_import executadas na inicialização.")
         except Exception:
             app.logger.warning(
