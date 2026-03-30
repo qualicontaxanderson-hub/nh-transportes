@@ -255,6 +255,84 @@ def _build_motorista_salary_rows(func_rows, months):
     return result
 
 
+def _fetch_aluguel_from_caixa(conn, data_inicio, data_fim, empresa_ids):
+    """
+    Retorna lançamentos sintéticos de ALUGUEL provenientes de comprovações
+    'RETIRADA ALUGUEL' em lancamentos_caixa_comprovacao.
+
+    O formato do retorno é compatível com o de _fetch_lancamentos, para que
+    os valores possam ser mesclados antes de _build_category_matrix.
+    """
+    cur = conn.cursor(dictionary=True)
+
+    # Busca a categoria ALUGUEL e o seu título pai
+    cur.execute("""
+        SELECT c.id     AS categoria_id,
+               c.nome   AS categoria_nome,
+               c.ordem  AS categoria_ordem,
+               t.id     AS titulo_id,
+               t.nome   AS titulo_nome,
+               t.ordem  AS titulo_ordem
+          FROM categorias_despesas c
+          INNER JOIN titulos_despesas t ON t.id = c.titulo_id
+         WHERE UPPER(c.nome) = 'ALUGUEL'
+           AND c.ativo = 1
+         LIMIT 1
+    """)
+    cat_row = cur.fetchone()
+    cur.close()
+
+    if not cat_row:
+        return []
+
+    # Filtra comprovações do caixa por tipo e descrição
+    where = [
+        "lc.data BETWEEN %s AND %s",
+        "fp.tipo = 'RETIRADA_PAGAMENTO'",
+        "UPPER(TRIM(COALESCE(lcc.descricao, ''))) = 'RETIRADA ALUGUEL'",
+    ]
+    params = [data_inicio, data_fim]
+
+    if empresa_ids:
+        ph = ','.join(['%s'] * len(empresa_ids))
+        where.append(f"lc.cliente_id IN ({ph})")
+        params.extend(empresa_ids)
+
+    sql = f"""
+        SELECT lcc.valor, lc.data
+          FROM lancamentos_caixa_comprovacao lcc
+          INNER JOIN lancamentos_caixa lc
+                  ON lc.id = lcc.lancamento_caixa_id
+          INNER JOIN formas_pagamento_caixa fp
+                  ON fp.id = lcc.forma_pagamento_id
+         WHERE {' AND '.join(where)}
+           AND lcc.valor > 0
+    """
+    cur = conn.cursor(dictionary=True)
+    cur.execute(sql, params)
+    rows = cur.fetchall()
+    cur.close()
+
+    # Monta linhas sintéticas no mesmo formato que _fetch_lancamentos retorna
+    result = []
+    for i, row in enumerate(rows):
+        result.append({
+            'id':                 f'caixa_aluguel_{i}',
+            'data':               row['data'],
+            'valor':              float(row['valor']),
+            'titulo_id':          cat_row['titulo_id'],
+            'titulo_ordem':       cat_row['titulo_ordem'],
+            'titulo_nome':        cat_row['titulo_nome'],
+            'categoria_id':       cat_row['categoria_id'],
+            'categoria_ordem':    cat_row['categoria_ordem'],
+            'categoria_nome':     cat_row['categoria_nome'],
+            'subcategoria_id':    None,
+            'subcategoria_ordem': 9999,
+            'subcategoria_nome':  None,
+        })
+    return result
+
+
 def _fetch_lancamentos(conn, data_inicio, data_fim, empresa_ids, titulo_ids):
     """Retorna lançamentos de despesas filtrados com metadados de título, categoria e subcategoria."""
     where = ["ld.data BETWEEN %s AND %s"]
@@ -651,6 +729,22 @@ def conf_despesas():
             lancamentos = _fetch_lancamentos(
                 conn, data_inicio, data_fim, empresa_ids, titulo_ids,
             )
+
+            # ── Inclui ALUGUEL proveniente de RETIRADA ALUGUEL do caixa ─────
+            # Só inclui quando nenhum filtro de título está ativo OU quando o
+            # título selecionado corresponde à categoria ALUGUEL
+            # (identificado comparando titulo_id dos dados sintéticos).
+            aluguel_caixa = _fetch_aluguel_from_caixa(
+                conn, data_inicio, data_fim, empresa_ids,
+            )
+            if aluguel_caixa:
+                if not titulo_ids:
+                    lancamentos = list(lancamentos) + aluguel_caixa
+                else:
+                    aluguel_titulo_id = str(aluguel_caixa[0]['titulo_id'])
+                    if aluguel_titulo_id in titulo_ids:
+                        lancamentos = list(lancamentos) + aluguel_caixa
+
             total_lancamentos = len(lancamentos)
             blocks, grand_by_month, grand_total = _build_category_matrix(
                 lancamentos, months
