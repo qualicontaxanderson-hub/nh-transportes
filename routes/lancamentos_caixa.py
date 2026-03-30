@@ -79,7 +79,7 @@ def _ensure_caixa_formas_tipos():
                 # Preserva os valores já existentes e adiciona VENDA_PROGRAMADA.
                 # Validate each value: only allow alphanumeric+underscore identifiers
                 # (standard MySQL ENUM values) to prevent SQL injection.
-                raw_vals = re.findall(r"'([^']+)'", col_type)
+                raw_vals = re.findall(r"'([A-Za-z0-9_]+)'", col_type)
                 vals = [v for v in raw_vals if _ENUM_VAL_RE.match(v)]
                 if 'VENDA_PROGRAMADA' not in vals:
                     vals.append('VENDA_PROGRAMADA')
@@ -128,6 +128,12 @@ def _ensure_caixa_formas_tipos():
             cur.close()
         if conn is not None:
             conn.close()
+
+
+def _build_fp_by_tipo(cursor):
+    """Return a dict mapping formas_pagamento_caixa.tipo → id for all active rows."""
+    cursor.execute("SELECT id, tipo FROM formas_pagamento_caixa WHERE ativo = 1")
+    return {row['tipo']: row['id'] for row in cursor.fetchall()}
 
 
 def parse_brazilian_currency(value_str):
@@ -639,10 +645,18 @@ def novo():
                           receita.get('descricao', ''), 
                           float(parse_brazilian_currency(receita['valor']))))
             
+            # Build a forma_pagamento tipo→id lookup for fallback resolution.
+            # Used when forma_pagamento_id is null because the DB row did not exist
+            # when the form was loaded in the browser (e.g., VENDA_PROGRAMADA).
+            _fp_by_tipo = _build_fp_by_tipo(cursor)
+
             # Insert comprovacoes
             for comprovacao in comprovacoes:
-                if comprovacao.get('forma_pagamento_id') and comprovacao.get('valor'):
-                    forma_id = comprovacao['forma_pagamento_id']
+                if comprovacao.get('valor'):
+                    forma_id = comprovacao.get('forma_pagamento_id') or \
+                               _fp_by_tipo.get(comprovacao.get('forma_pagamento_tipo', ''))
+                    if not forma_id:
+                        continue
                     cartao_id = comprovacao.get('bandeira_cartao_id')
                     
                     cursor.execute("""
@@ -1181,10 +1195,18 @@ def editar(id):
                           receita.get('descricao', ''), 
                           float(parse_brazilian_currency(receita['valor']))))
             
+            # Build a forma_pagamento tipo→id lookup for fallback resolution.
+            # Used when forma_pagamento_id is null because the DB row did not exist
+            # when the form was loaded in the browser (e.g., VENDA_PROGRAMADA).
+            _fp_by_tipo = _build_fp_by_tipo(cursor)
+
             # Insert new comprovacoes
             for comprovacao in comprovacoes:
-                if comprovacao.get('forma_pagamento_id') and comprovacao.get('valor'):
-                    forma_id = comprovacao['forma_pagamento_id']
+                if comprovacao.get('valor'):
+                    forma_id = comprovacao.get('forma_pagamento_id') or \
+                               _fp_by_tipo.get(comprovacao.get('forma_pagamento_tipo', ''))
+                    if not forma_id:
+                        continue
                     cartao_id = comprovacao.get('bandeira_cartao_id')
                     
                     cursor.execute("""
