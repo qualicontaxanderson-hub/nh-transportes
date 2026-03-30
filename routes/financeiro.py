@@ -1303,14 +1303,14 @@ def reverter_conciliacao(tx_id):
                 (tx_id,),
             )
 
-        # Desvincular lancamentos_despesas (graceful: tabela pode não ter a coluna)
+        # Excluir lancamentos_despesas criados pela conciliação (graceful: tabela pode não ter a coluna)
         try:
             cursor_w.execute(
-                "UPDATE lancamentos_despesas SET bank_transaction_id = NULL WHERE bank_transaction_id = %s",
+                "DELETE FROM lancamentos_despesas WHERE bank_transaction_id = %s",
                 (tx_id,),
             )
         except Exception as exc_ld:
-            current_app.logger.warning("reverter_conciliacao: não foi possível desvincular lancamentos_despesas tx=%s: %s", tx_id, exc_ld)
+            current_app.logger.warning("reverter_conciliacao: não foi possível excluir lancamentos_despesas tx=%s: %s", tx_id, exc_ld)
 
         # Desvincular troco_pix (graceful: coluna pode não existir ainda)
         try:
@@ -1423,10 +1423,10 @@ def reverter_conciliacao_lote():
                         (tx_id,),
                     )
 
-                # Desvincular lancamentos_despesas
+                # Excluir lancamentos_despesas criados pela conciliação
                 try:
                     cursor_w.execute(
-                        "UPDATE lancamentos_despesas SET bank_transaction_id = NULL WHERE bank_transaction_id = %s",
+                        "DELETE FROM lancamentos_despesas WHERE bank_transaction_id = %s",
                         (tx_id,),
                     )
                 except Exception as exc_ld:
@@ -1504,10 +1504,10 @@ def excluir_transacao(tx_id):
 
         cursor_w = conn.cursor()
 
-        # Desvincular lancamentos_despesas
+        # Excluir lancamentos_despesas criados pela conciliação (a transação está sendo removida)
         try:
             cursor_w.execute(
-                "UPDATE lancamentos_despesas SET bank_transaction_id = NULL WHERE bank_transaction_id = %s",
+                "DELETE FROM lancamentos_despesas WHERE bank_transaction_id = %s",
                 (tx_id,),
             )
         except Exception as exc_ld:
