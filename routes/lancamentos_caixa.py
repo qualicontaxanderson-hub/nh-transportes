@@ -664,8 +664,8 @@ def novo():
             for comprovacao in comprovacoes:
                 if comprovacao.get('valor'):
                     raw_id = comprovacao.get('forma_pagamento_id')
-                    forma_id = raw_id if raw_id is not None else \
-                               _fp_by_tipo.get(comprovacao.get('forma_pagamento_tipo', ''))
+                    forma_id = (raw_id if raw_id is not None
+                                else _fp_by_tipo.get(comprovacao.get('forma_pagamento_tipo', '')))
                     if not forma_id:
                         continue
                     cartao_id = comprovacao.get('bandeira_cartao_id')
@@ -1215,8 +1215,8 @@ def editar(id):
             for comprovacao in comprovacoes:
                 if comprovacao.get('valor'):
                     raw_id = comprovacao.get('forma_pagamento_id')
-                    forma_id = raw_id if raw_id is not None else \
-                               _fp_by_tipo.get(comprovacao.get('forma_pagamento_tipo', ''))
+                    forma_id = (raw_id if raw_id is not None
+                                else _fp_by_tipo.get(comprovacao.get('forma_pagamento_tipo', '')))
                     if not forma_id:
                         continue
                     cartao_id = comprovacao.get('bandeira_cartao_id')

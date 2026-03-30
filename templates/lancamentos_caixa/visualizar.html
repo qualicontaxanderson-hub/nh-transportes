@@ -139,7 +139,7 @@
                             
                             {# Process non-card payments first (PRAZO, PIX) #}
                             {% for comp in comprovacoes %}
-                                {% if comp.forma_tipo and comp.forma_tipo not in ['CARTAO', 'DEPOSITO_ESPECIE', 'DEPOSITO_CHEQUE_VISTA', 'DEPOSITO_CHEQUE_PRAZO', 'RETIRADA_PAGAMENTO'] %}
+                                {% if comp.forma_tipo and comp.forma_tipo not in ['CARTAO', 'DEPOSITO_ESPECIE', 'DEPOSITO_CHEQUE_VISTA', 'DEPOSITO_CHEQUE_PRAZO', 'RETIRADA_PAGAMENTO', 'VENDA_PROGRAMADA'] %}
                                     {% if comp.forma_tipo not in processed_tipos %}
                                         {% set _ = processed_tipos.append(comp.forma_tipo) %}
                                         {# Linha pai (categoria) #}
@@ -242,9 +242,11 @@
                                 {% endfor %}
                             {% endif %}
                             
+                            {# VENDA_PROGRAMADA and RETIRADA_PAGAMENTO rendered together in order #}
+                            {% set vp_list = comprovacoes|selectattr('forma_tipo', 'equalto', 'VENDA_PROGRAMADA')|list %}
                             {# Process RETIRADA_PAGAMENTO - Show ALL items with friendly names and custom order #}
                             {% set retiradas = comprovacoes|selectattr('forma_tipo', 'equalto', 'RETIRADA_PAGAMENTO')|list %}
-                            {% if retiradas|length > 0 %}
+                            {% if retiradas|length > 0 or vp_list|length > 0 %}
                                 {# Define friendly names mapping #}
                                 {% set nomes_retiradas = {
                                     'DESCONTO CADASTROS': 'Descontos Cadastro',
@@ -270,20 +272,48 @@
                                 {% endfor %}
                                 {% set retiradas_sorted = retiradas_sorted|sort(attribute='0') %}
                                 
-                                {# Render with friendly names in hierarchical format #}
+                                {# Named retiradas first: Descontos, Aluguel, Empréstimos (ordem <= 4) #}
                                 {% for ordem, ret in retiradas_sorted %}
+                                    {% if ordem <= 4 %}
                                     {% set desc_upper = ret.descricao.upper() if ret.descricao else '' %}
                                     {% set nome_amigavel = nomes_retiradas.get(desc_upper, 'Retiradas para Pagamentos') %}
-                                    {# Linha pai (categoria) #}
                                     <tr style="background:#f8f9fa;">
                                         <td colspan="3" style="font-size: 0.85rem;"><strong>{{ nome_amigavel|upper }}</strong></td>
                                     </tr>
-                                    {# Linha filho (item) #}
                                     <tr>
                                         <td style="font-size: 0.85rem;">└ {{ (ret.descricao if ret.descricao else nome_amigavel)|title }}</td>
                                         <td style="font-size: 0.85rem;">-</td>
                                         <td style="font-size: 0.85rem; text-align: right;">R$ {{ "{:,.2f}".format(ret.valor|float).replace(',', 'X').replace('.', ',').replace('X', '.') }}</td>
                                     </tr>
+                                    {% endif %}
+                                {% endfor %}
+                                
+                                {# VENDA_PROGRAMADA between named and generic retiradas #}
+                                {% for vp in vp_list %}
+                                <tr style="background:#f8f9fa;">
+                                    <td colspan="3" style="font-size: 0.85rem;"><strong>VENDA PROGRAMADA</strong></td>
+                                </tr>
+                                <tr>
+                                    <td style="font-size: 0.85rem;">└ Venda Programada</td>
+                                    <td style="font-size: 0.85rem;">-</td>
+                                    <td style="font-size: 0.85rem; text-align: right;">R$ {{ "{:,.2f}".format(vp.valor|float).replace(',', 'X').replace('.', ',').replace('X', '.') }}</td>
+                                </tr>
+                                {% endfor %}
+                                
+                                {# Generic retiradas last: Retiradas para Pagamento (ordem > 4) #}
+                                {% for ordem, ret in retiradas_sorted %}
+                                    {% if ordem > 4 %}
+                                    {% set desc_upper = ret.descricao.upper() if ret.descricao else '' %}
+                                    {% set nome_amigavel = nomes_retiradas.get(desc_upper, 'Retiradas para Pagamentos') %}
+                                    <tr style="background:#f8f9fa;">
+                                        <td colspan="3" style="font-size: 0.85rem;"><strong>{{ nome_amigavel|upper }}</strong></td>
+                                    </tr>
+                                    <tr>
+                                        <td style="font-size: 0.85rem;">└ {{ (ret.descricao if ret.descricao else nome_amigavel)|title }}</td>
+                                        <td style="font-size: 0.85rem;">-</td>
+                                        <td style="font-size: 0.85rem; text-align: right;">R$ {{ "{:,.2f}".format(ret.valor|float).replace(',', 'X').replace('.', ',').replace('X', '.') }}</td>
+                                    </tr>
+                                    {% endif %}
                                 {% endfor %}
                             {% endif %}
                         </tbody>
@@ -443,7 +473,7 @@ function copiarParaWhatsApp(event) {
     
     {% set processed_tipos = [] %}
     {% for comp in comprovacoes %}
-        {% if comp.forma_tipo and comp.forma_tipo not in ['CARTAO', 'DEPOSITO_ESPECIE', 'DEPOSITO_CHEQUE_VISTA', 'DEPOSITO_CHEQUE_PRAZO', 'RETIRADA_PAGAMENTO'] %}
+        {% if comp.forma_tipo and comp.forma_tipo not in ['CARTAO', 'DEPOSITO_ESPECIE', 'DEPOSITO_CHEQUE_VISTA', 'DEPOSITO_CHEQUE_PRAZO', 'RETIRADA_PAGAMENTO', 'VENDA_PROGRAMADA'] %}
             {% if comp.forma_tipo not in processed_tipos %}
                 {% set _ = processed_tipos.append(comp.forma_tipo) %}
     texto += `• *{{ comp.forma_pagamento_nome|upper }}: R$ {{ "{:,.2f}".format(comp.valor|float).replace(',', 'X').replace('.', ',').replace('X', '.') }}*\n`;
@@ -564,9 +594,10 @@ function copiarParaWhatsApp(event) {
     texto += `  *Subtotal: R$ {{ "{:,.2f}".format(total_debito).replace(',', 'X').replace('.', ',').replace('X', '.') }}*\n`;
     {% endif %}
     
-    {# Process RETIRADA_PAGAMENTO in WhatsApp with friendly names #}
+    {# Process RETIRADA_PAGAMENTO in WhatsApp with friendly names, with VENDA_PROGRAMADA interleaved #}
+    {% set vp_list_wa = comprovacoes|selectattr('forma_tipo', 'equalto', 'VENDA_PROGRAMADA')|list %}
     {% set retiradas_wa = comprovacoes|selectattr('forma_tipo', 'equalto', 'RETIRADA_PAGAMENTO')|list %}
-    {% if retiradas_wa|length > 0 %}
+    {% if retiradas_wa|length > 0 or vp_list_wa|length > 0 %}
         {# Define friendly names #}
         {% set nomes_retiradas_wa = {
             'DESCONTO CADASTROS': 'Descontos Cadastro',
@@ -589,12 +620,28 @@ function copiarParaWhatsApp(event) {
             {% set _ = retiradas_wa_sorted.append((ordem, ret)) %}
         {% endfor %}
         {% set retiradas_wa_sorted = retiradas_wa_sorted|sort(attribute='0') %}
-        {# Output with friendly names #}
+        {# Named retiradas first (ordem <= 4) #}
         {% for ordem, ret in retiradas_wa_sorted %}
+            {% if ordem <= 4 %}
             {% set desc_upper = ret.descricao.upper() if ret.descricao else '' %}
             {% set nome_amigavel = nomes_retiradas_wa.get(desc_upper, 'Retiradas para Pagamentos') %}
     texto += `• *{{ nome_amigavel|upper }}: R$ {{ "{:,.2f}".format(ret.valor|float).replace(',', 'X').replace('.', ',').replace('X', '.') }}*\n`;
     texto += `  └ {{ (ret.descricao if ret.descricao else '-')|title }}\n`;
+            {% endif %}
+        {% endfor %}
+        {# VENDA_PROGRAMADA between named and generic retiradas #}
+        {% for vp in vp_list_wa %}
+    texto += `• *VENDA PROGRAMADA: R$ {{ "{:,.2f}".format(vp.valor|float).replace(',', 'X').replace('.', ',').replace('X', '.') }}*\n`;
+    texto += `  └ Venda Programada\n`;
+        {% endfor %}
+        {# Generic retiradas last (ordem > 4) #}
+        {% for ordem, ret in retiradas_wa_sorted %}
+            {% if ordem > 4 %}
+            {% set desc_upper = ret.descricao.upper() if ret.descricao else '' %}
+            {% set nome_amigavel = nomes_retiradas_wa.get(desc_upper, 'Retiradas para Pagamentos') %}
+    texto += `• *{{ nome_amigavel|upper }}: R$ {{ "{:,.2f}".format(ret.valor|float).replace(',', 'X').replace('.', ',').replace('X', '.') }}*\n`;
+    texto += `  └ {{ (ret.descricao if ret.descricao else '-')|title }}\n`;
+            {% endif %}
         {% endfor %}
     {% endif %}
     
