@@ -795,12 +795,9 @@ def _fetch_taxas_cartao(conn, data_inicio, data_fim, empresa_ids, months):
     """, params_v)
     sale_rows = cur.fetchall()
 
-    # Recebimentos por (forma_recebimento, data) — granularidade diária para
-    # verificação de ciclos com recebimento (espelho de conf_cartoes._build_report),
-    # e por mês (receb_idx) para o cálculo da taxa mensal.
+    # Recebimentos por (forma_recebimento, mês)
     all_forma_ids = list({fid for fids in vinculos_map.values() for fid in fids})
-    receb_by_date = defaultdict(float)   # (forma_id, date_iso) → total
-    receb_idx     = {}                   # (forma_id, mk)       → total
+    receb_idx = {}
     if all_forma_ids:
         ph  = ','.join(['%s'] * len(all_forma_ids))
         where_r = [
@@ -815,31 +812,27 @@ def _fetch_taxas_cartao(conn, data_inicio, data_fim, empresa_ids, months):
             params_r.extend(empresa_ids)
         try:
             cur.execute(f"""
-                SELECT bt.forma_recebimento_id                    AS forma_id,
-                       DATE_FORMAT(bt.data_transacao, '%Y-%m-%d') AS dt,
-                       DATE_FORMAT(bt.data_transacao, '%Y%m')     AS mk,
-                       COALESCE(SUM(bt.valor), 0)                 AS total
+                SELECT bt.forma_recebimento_id               AS forma_id,
+                       DATE_FORMAT(bt.data_transacao, '%Y%m') AS mk,
+                       COALESCE(SUM(bt.valor), 0)            AS total
                   FROM bank_transactions bt
                   JOIN bank_accounts ba ON ba.id = bt.account_id
                  WHERE {' AND '.join(where_r)}
-                 GROUP BY bt.forma_recebimento_id, bt.data_transacao
+                 GROUP BY bt.forma_recebimento_id,
+                          DATE_FORMAT(bt.data_transacao, '%Y%m')
             """, params_r)
             for r in cur.fetchall():
-                fid = int(r['forma_id'])
-                v   = float(r['total'])
-                receb_by_date[(fid, str(r['dt']))] += v
-                mk = str(r['mk'])
-                receb_idx[(fid, mk)] = receb_idx.get((fid, mk), 0.0) + v
+                receb_idx[(int(r['forma_id']), str(r['mk']))] = float(r['total'])
         except Exception:
             pass
 
     cur.close()
 
-    # Atribui cada venda ao mês de recebimento ESPERADO (cycle attribution),
-    # mas SOMENTE se o ciclo já tiver recebimento real nessa data.
-    # Mirrors conf_cartoes._build_report: ciclos sem recebimento (has_receipt=False)
-    # têm cycle_fee=0 e não contribuem para o total_diferenca do mês.
-    _MONETARY_EPSILON = 0.005
+    # Atribui cada venda ao mês de recebimento ESPERADO (cycle attribution).
+    # Ciclos cujo recebimento esperado ainda não chegou (expected >= hoje) são
+    # excluídos: espelha conf_cartoes que atribui cycle_fee=0 quando has_receipt=False.
+    # Meses já fechados não são afetados pois todos os expected estão no passado.
+    _today = date.today()
     month_keys_set = {m['key'] for m in months}
     vendas_by_band_mk = defaultdict(lambda: defaultdict(float))
 
@@ -865,12 +858,8 @@ def _fetch_taxas_cartao(conn, data_inicio, data_fim, empresa_ids, months):
         if mk_exp not in month_keys_set:
             continue
 
-        # Só contabiliza a venda se o ciclo tiver recebimento real nessa data
-        # (ciclos pendentes ainda não liquidados não devem inflar o mês corrente).
-        forma_ids_bid  = vinculos_map.get(bid, [])
-        expected_iso   = expected.isoformat()
-        cycle_receipt  = sum(receb_by_date.get((fid, expected_iso), 0.0) for fid in forma_ids_bid)
-        if cycle_receipt <= _MONETARY_EPSILON:
+        # Exclui ciclos ainda pendentes: recebimento esperado hoje ou no futuro
+        if expected >= _today:
             continue
 
         vendas_by_band_mk[bid][mk_exp] += float(r['valor'])
