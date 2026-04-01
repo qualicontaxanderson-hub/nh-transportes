@@ -4,7 +4,7 @@
 {% block styles %}
 <style>
 .page-hero {
-  background: linear-gradient(135deg, #198754 0%, #0f5132 100%);
+  background: linear-gradient(135deg, #1D63A5 0%, #154070 100%);
   border-radius: .75rem; padding: 1.5rem 2rem; margin-bottom: 1.5rem; color: #fff;
 }
 .page-hero .hero-icon {
@@ -55,7 +55,7 @@
 .tbl-matrix thead tr th.col-desc { text-align: left; background: #343a40; }
 /* block header */
 .row-block-hdr td {
-  background: #198754;
+  background: #1D63A5;
   color: #fff;
   font-weight: 700;
   font-size: .78rem;
@@ -64,16 +64,16 @@
 }
 /* forma rows */
 .row-forma td { background: #fff; font-weight: 600; }
-.row-forma:hover td { background: #f0faf5; }
+.row-forma:hover td { background: #f0f4ff; }
 /* block total */
 .row-block-total td {
-  background: #4aad78;
+  background: #4a86c8;
   color: #fff;
   font-weight: 700;
 }
 /* grand total */
 .row-grand td {
-  background: #0f5132;
+  background: #154070;
   color: #fff;
   font-weight: 700;
   font-size: .82rem;
@@ -112,22 +112,22 @@
   <div class="row g-3 mb-4">
     <div class="col-6 col-md-3">
       <div class="card stat-card p-3">
-        <div class="stat-label" style="color:#198754;">Formas Ativas</div>
-        <div class="stat-value" style="color:#198754;">{{ total_formas }}</div>
+        <div class="stat-label" style="color:#1D63A5;">Formas Ativas</div>
+        <div class="stat-value" style="color:#1D63A5;">{{ total_formas }}</div>
         <div class="small text-muted mt-1">com recebimentos no período</div>
       </div>
     </div>
     <div class="col-6 col-md-3">
       <div class="card stat-card p-3">
-        <div class="stat-label" style="color:#0f5132;">Total Geral</div>
-        <div class="stat-value" style="color:#0f5132;">{{ grand_total | formatar_moeda }}</div>
+        <div class="stat-label" style="color:#154070;">Total Geral</div>
+        <div class="stat-value" style="color:#154070;">{{ grand_total | formatar_moeda }}</div>
         <div class="small text-muted mt-1">soma de todos os recebimentos</div>
       </div>
     </div>
     <div class="col-6 col-md-3">
       <div class="card stat-card p-3">
-        <div class="stat-label" style="color:#198754;">Aluguéis</div>
-        <div class="stat-value" style="color:#198754;">
+        <div class="stat-label" style="color:#1D63A5;">Aluguéis</div>
+        <div class="stat-value" style="color:#1D63A5;">
           {% set aluguel_block = blocks | selectattr('label', 'equalto', 'RECEBIMENTO DE ALUGUEL') | first %}
           {% if aluguel_block %}{{ aluguel_block.total | formatar_moeda }}{% else %}—{% endif %}
         </div>
@@ -136,8 +136,8 @@
     </div>
     <div class="col-6 col-md-3">
       <div class="card stat-card p-3">
-        <div class="stat-label" style="color:#0d6efd;">Clientes à Prazo</div>
-        <div class="stat-value" style="color:#0d6efd;">
+        <div class="stat-label" style="color:#154070;">Clientes à Prazo</div>
+        <div class="stat-value" style="color:#154070;">
           {% set prazo_block = blocks | selectattr('label', 'equalto', 'CLIENTES À PRAZO') | first %}
           {% if prazo_block %}{{ prazo_block.total | formatar_moeda }}{% else %}—{% endif %}
         </div>
@@ -175,7 +175,7 @@
           </div>
 
           <div class="col-12 col-md-4 d-flex gap-2 align-items-end">
-            <button type="submit" class="btn btn-success btn-sm flex-grow-1">
+            <button type="submit" class="btn btn-primary btn-sm flex-grow-1">
               <i class="bi bi-search"></i> Filtrar
             </button>
             <a href="{{ url_for('conf_recebimentos.conf_recebimentos') }}" class="btn btn-outline-secondary btn-sm" title="Limpar filtros">

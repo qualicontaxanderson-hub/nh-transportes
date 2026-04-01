@@ -65,20 +65,25 @@ def _cleanup_orphaned_lancamentos_despesas():
         conn = get_db_connection()
         cursor = conn.cursor()
         cursor.execute(
-            """DELETE ld_old
-               FROM lancamentos_despesas ld_old
-               WHERE ld_old.bank_transaction_id IS NULL
-                 AND ld_old.fornecedor IS NOT NULL
-                 AND EXISTS (
-                     SELECT 1
-                     FROM lancamentos_despesas ld_new
-                     WHERE ld_new.bank_transaction_id IS NOT NULL
-                       AND ld_new.data       = ld_old.data
-                       AND ld_new.cliente_id <=> ld_old.cliente_id
-                       AND ld_new.valor      = ld_old.valor
-                       AND ld_new.fornecedor = ld_old.fornecedor
-                       AND ld_new.id        <> ld_old.id
-                 )"""
+            """DELETE FROM lancamentos_despesas
+               WHERE id IN (
+                   SELECT id FROM (
+                       SELECT ld_old.id
+                       FROM lancamentos_despesas ld_old
+                       WHERE ld_old.bank_transaction_id IS NULL
+                         AND ld_old.fornecedor IS NOT NULL
+                         AND EXISTS (
+                             SELECT 1
+                             FROM lancamentos_despesas ld_new
+                             WHERE ld_new.bank_transaction_id IS NOT NULL
+                               AND ld_new.data       = ld_old.data
+                               AND ld_new.cliente_id <=> ld_old.cliente_id
+                               AND ld_new.valor      = ld_old.valor
+                               AND ld_new.fornecedor = ld_old.fornecedor
+                               AND ld_new.id        <> ld_old.id
+                         )
+                   ) AS ld_to_delete
+               )"""
         )
         deleted = cursor.rowcount
         conn.commit()

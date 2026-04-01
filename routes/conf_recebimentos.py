@@ -88,6 +88,9 @@ def _classify_forma(nome):
 def _build_block(formas_dict, label):
     """Monta estrutura de bloco a partir do dicionário de formas."""
     rows_list = sorted(formas_dict.values(), key=lambda r: r['nome'])
+    # Convert defaultdict to plain dict for clean template access
+    for r in rows_list:
+        r['by_month'] = dict(r['by_month'])
     total_by_month = defaultdict(float)
     total = 0.0
     for r in rows_list:
@@ -159,7 +162,7 @@ def conf_recebimentos():
                 continue
             fid   = row['forma_id']
             fname = row['forma_nome']
-            mk    = row['month_key']
+            mk    = str(row['month_key'] or '')
             val   = float(row['total'] or 0)
 
             store = aluguel_formas if grupo == 'aluguel' else cliente_prazo_formas
