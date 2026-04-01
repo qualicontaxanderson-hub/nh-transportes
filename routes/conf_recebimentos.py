@@ -134,7 +134,8 @@ def conf_recebimentos():
         cursor = conn.cursor(dictionary=True)
         cursor.execute(
             f"""SELECT
-                    DATE_FORMAT(bt.data_transacao, '%%Y%%m') AS month_key,
+                    YEAR(bt.data_transacao)  AS yr,
+                    MONTH(bt.data_transacao) AS mo,
                     fr.id   AS forma_id,
                     fr.nome AS forma_nome,
                     SUM(bt.valor) AS total
@@ -145,8 +146,8 @@ def conf_recebimentos():
                   AND bt.status != 'ignorado'
                   AND bt.data_transacao BETWEEN %s AND %s
                   {emp_clause}
-                GROUP BY month_key, fr.id, fr.nome
-                ORDER BY fr.nome, month_key""",
+                GROUP BY yr, mo, fr.id, fr.nome
+                ORDER BY fr.nome, yr, mo""",
             [data_inicio, data_fim] + emp_params,
         )
         rows = cursor.fetchall()
@@ -162,7 +163,7 @@ def conf_recebimentos():
                 continue
             fid   = row['forma_id']
             fname = row['forma_nome']
-            mk    = str(row['month_key'] or '')
+            mk    = f"{int(row['yr'])}{int(row['mo']):02d}"
             val   = float(row['total'] or 0)
 
             store = aluguel_formas if grupo == 'aluguel' else cliente_prazo_formas
