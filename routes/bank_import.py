@@ -37,7 +37,7 @@ def _cleanup_orphaned_lancamentos_despesas():
     """Remove lancamentos_despesas orphaned by the old 'SET NULL' revert behavior.
 
     The old code in reverter_conciliacao / reverter_conciliacao_lote /
-    excluir_transacao did:
+    excluir_transacao / excluir_transacao_lote did:
         UPDATE lancamentos_despesas SET bank_transaction_id = NULL
         WHERE bank_transaction_id = <tx_id>
 
@@ -45,7 +45,7 @@ def _cleanup_orphaned_lancamentos_despesas():
     that still appeared in conf_despesas even after the transaction was
     re-categorized to a different category.
 
-    The code was fixed to DELETE (commit 8f2c997).  This function purges
+    All four routes were fixed to use DELETE instead.  This function purges
     the records already in the database from the old behavior.
 
     Criteria (conservative):

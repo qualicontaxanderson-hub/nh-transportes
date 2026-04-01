@@ -1592,10 +1592,10 @@ def excluir_transacao_lote():
                     erros.append(f"#{tx_id}: não encontrada")
                     continue
 
-                # Desvincular lancamentos_despesas
+                # Remover lancamentos_despesas vinculados (DELETE para não deixar registros fantasma)
                 try:
                     cursor_w.execute(
-                        "UPDATE lancamentos_despesas SET bank_transaction_id = NULL WHERE bank_transaction_id = %s",
+                        "DELETE FROM lancamentos_despesas WHERE bank_transaction_id = %s",
                         (tx_id,),
                     )
                 except Exception as exc_ld:
