@@ -60,15 +60,17 @@ def _months_in_range(data_inicio_str, data_fim_str):
 
 def _empresas_list(conn):
     cursor = conn.cursor(dictionary=True)
-    cursor.execute(
-        """SELECT DISTINCT c.id,
-                  COALESCE(c.nome_fantasia, c.razao_social) AS nome
-           FROM clientes c
-           INNER JOIN bank_accounts ba ON ba.cliente_id = c.id
-           WHERE c.ativo = 1
-           ORDER BY nome"""
-    )
-    rows = cursor.fetchall()
+    try:
+        cursor.execute(
+            """SELECT DISTINCT c.id,
+                      COALESCE(c.nome_fantasia, c.razao_social) AS nome
+               FROM clientes c
+               INNER JOIN bank_accounts ba ON ba.cliente_id = c.id
+               ORDER BY nome"""
+        )
+        rows = cursor.fetchall()
+    except Exception:
+        rows = []
     cursor.close()
     return rows
 
