@@ -813,16 +813,20 @@ def _fetch_taxas_cartao(conn, data_inicio, data_fim, empresa_ids, months):
         try:
             cur.execute(f"""
                 SELECT bt.forma_recebimento_id               AS forma_id,
-                       DATE_FORMAT(bt.data_transacao, '%Y%m') AS mk,
+                       YEAR(bt.data_transacao)               AS yr,
+                       MONTH(bt.data_transacao)              AS mo,
                        COALESCE(SUM(bt.valor), 0)            AS total
                   FROM bank_transactions bt
                   JOIN bank_accounts ba ON ba.id = bt.account_id
                  WHERE {' AND '.join(where_r)}
                  GROUP BY bt.forma_recebimento_id,
-                          DATE_FORMAT(bt.data_transacao, '%Y%m')
+                          YEAR(bt.data_transacao),
+                          MONTH(bt.data_transacao)
             """, params_r)
             for r in cur.fetchall():
-                receb_idx[(int(r['forma_id']), str(r['mk']))] = float(r['total'])
+                # YEAR/MONTH integers avoid DATE_FORMAT type ambiguity (bytes vs str)
+                mk_r = f"{int(r['yr'])}{int(r['mo']):02d}"
+                receb_idx[(int(r['forma_id']), mk_r)] = float(r['total'])
         except Exception:
             pass
 
@@ -893,8 +897,11 @@ def _fetch_taxas_cartao(conn, data_inicio, data_fim, empresa_ids, months):
         for m in months:
             mk    = m['key']
             venda = vendas_by_band_mk.get(bid, {}).get(mk, 0.0)
-            # Adiciona saldo_anterior ao primeiro mês (mesmo critério que conf_cartoes)
-            if saldo_aplicavel and mk == first_mk:
+            # Adiciona saldo_anterior ao primeiro mês (mesmo critério que conf_cartoes).
+            # Somente quando NÃO há filtro por empresa: saldo_anterior é global
+            # (consolidado de todas as empresas) e não deve ser aplicado a uma empresa
+            # específica, pois causaria valores fictícios para empresas sem cartão.
+            if saldo_aplicavel and mk == first_mk and not empresa_ids:
                 venda += saldo_anterior
             receb = sum(receb_idx.get((fid, mk), 0.0) for fid in forma_ids)
             fee   = venda - receb
