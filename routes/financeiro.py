@@ -1797,7 +1797,7 @@ def _get_bank_transactions(tipo, request_args, exclude_transfers=False):
                             LEFT JOIN formas_recebimento fr ON fr.id = bt.forma_recebimento_id
                             WHERE {w}
                             ORDER BY bt.data_transacao DESC
-                            LIMIT 500""",
+                            LIMIT 5000""",
                         params,
                     )
                     return cursor.fetchall()
@@ -1822,7 +1822,7 @@ def _get_bank_transactions(tipo, request_args, exclude_transfers=False):
                     LEFT JOIN formas_recebimento fr ON fr.id = bt.forma_recebimento_id
                     WHERE {w}
                     ORDER BY bt.data_transacao DESC
-                    LIMIT 500""",
+                    LIMIT 5000""",
                 params,
             )
             return cursor.fetchall()
