@@ -1350,10 +1350,10 @@ def reverter_conciliacao(tx_id):
         except Exception:
             pass
 
-    # Redireciona de volta à página de origem (recebimento ou pagamentos)
+    # Redireciona de volta à página de origem (recebimento ou pagamentos), preservando filtros
     referrer = request.referrer or ''
     if 'pagamento' in referrer:
-        return redirect(url_for('financeiro.pagamentos'))
+        return redirect(referrer)
     return redirect(url_for('financeiro.recebimento'))
 
 
@@ -1552,7 +1552,7 @@ def excluir_transacao(tx_id):
 
     referrer = request.referrer or ''
     if 'pagamento' in referrer:
-        return redirect(url_for('financeiro.pagamentos'))
+        return redirect(referrer)
     return redirect(url_for('financeiro.recebimento'))
 
 
@@ -1653,7 +1653,7 @@ def excluir_transacao_lote():
 
     referrer = request.referrer or ''
     if 'pagamento' in referrer:
-        return redirect(url_for('financeiro.pagamentos'))
+        return redirect(referrer)
     return redirect(url_for('financeiro.recebimento'))
 
 
