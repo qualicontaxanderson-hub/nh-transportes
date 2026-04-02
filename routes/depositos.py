@@ -450,6 +450,18 @@ def api_candidatos(comprovacao_id):
         conn.close()
 
 
+def _redirect_listar_with_filters(form=None):
+    """Redirect back to listar preserving the active filter params."""
+    src = form if form is not None else request.form
+    params = {
+        'data_inicio': src.get('data_inicio', '').strip() or None,
+        'data_fim':    src.get('data_fim',    '').strip() or None,
+        'tipo_grupo':  src.get('tipo_grupo',  '').strip() or None,
+        'status':      src.get('status',      '').strip() or None,
+    }
+    return redirect(url_for('depositos.listar', **{k: v for k, v in params.items() if v}))
+
+
 @bp.route('/vincular', methods=['POST'])
 @login_required
 @admin_required
@@ -467,7 +479,7 @@ def vincular():
 
     if not bank_tx_id or not comprovacao_ids:
         flash('Selecione a transação bancária e pelo menos um depósito.', 'warning')
-        return redirect(url_for('depositos.listar'))
+        return _redirect_listar_with_filters()
 
     conn = get_db_connection()
     cur  = conn.cursor(dictionary=True)
@@ -486,7 +498,7 @@ def vincular():
         tipos = {_TIPO_GRUPO.get(r['tipo'], 'ESPECIE') for r in cur.fetchall()}
         if len(tipos) > 1:
             flash('Não é possível juntar depósitos em espécie com depósitos em cheque.', 'danger')
-            return redirect(url_for('depositos.listar'))
+            return _redirect_listar_with_filters()
 
         agora   = datetime.now()
         usuario = current_user.email if hasattr(current_user, 'email') else str(current_user.id)
@@ -528,7 +540,7 @@ def vincular():
         cur.close()
         conn.close()
 
-    return redirect(url_for('depositos.listar'))
+    return _redirect_listar_with_filters()
 
 
 @bp.route('/desvincular/<int:comprovacao_id>', methods=['POST'])
@@ -550,7 +562,7 @@ def desvincular(comprovacao_id):
         row = cur.fetchone()
         if not row or not row.get('bank_transaction_id'):
             flash('Nenhum vínculo bancário encontrado.', 'warning')
-            return redirect(url_for('depositos.listar'))
+            return _redirect_listar_with_filters()
 
         bank_tx_id = row['bank_transaction_id']
 
@@ -595,7 +607,7 @@ def desvincular(comprovacao_id):
         cur.close()
         conn.close()
 
-    return redirect(url_for('depositos.listar'))
+    return _redirect_listar_with_filters()
 
 
 # ──────────────────────────────────────────────────────────────────────────────

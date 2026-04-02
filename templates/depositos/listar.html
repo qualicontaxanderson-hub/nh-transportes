@@ -257,6 +257,10 @@
                         action="{{ url_for('depositos.desvincular', comprovacao_id=d.id) }}"
                         style="display:inline;"
                         onsubmit="return confirm('Remover vínculo bancário deste depósito?');">
+                    <input type="hidden" name="data_inicio" value="{{ data_inicio }}">
+                    <input type="hidden" name="data_fim" value="{{ data_fim }}">
+                    <input type="hidden" name="tipo_grupo" value="{{ tipo_grupo }}">
+                    <input type="hidden" name="status" value="{{ status }}">
                     <button type="submit" class="btn-act btn-act-danger" title="Remover vínculo">
                       <i class="bi bi-x-circle"></i>
                     </button>
@@ -321,6 +325,10 @@
       <!-- Hidden form submitted on confirmation -->
       <form id="formVincular" method="POST" action="{{ url_for('depositos.vincular') }}">
         <input type="hidden" name="bank_transaction_id" id="inputBankTxId">
+        <input type="hidden" name="data_inicio" value="{{ data_inicio }}">
+        <input type="hidden" name="data_fim" value="{{ data_fim }}">
+        <input type="hidden" name="tipo_grupo" value="{{ tipo_grupo }}">
+        <input type="hidden" name="status" value="{{ status }}">
         <div id="inputsComprovacao"></div>
         <div class="modal-footer">
           <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Fechar</button>
@@ -337,6 +345,26 @@
 {% endblock %}
 
 {% block scripts %}
+<script>
+/* ── Scroll-position restoration after vincular/desvincular ── */
+(function() {
+  var SCROLL_KEY = 'depositos_listar_scroll';
+  window.addEventListener('load', function() {
+    var y = sessionStorage.getItem(SCROLL_KEY);
+    if (y !== null) {
+      sessionStorage.removeItem(SCROLL_KEY);
+      window.scrollTo(0, parseInt(y, 10));
+    }
+  });
+  document.addEventListener('submit', function(e) {
+    /* Only save scroll for POST forms (vincular / desvincular), not the GET filter form */
+    var form = e.target;
+    if (form && form.method && form.method.toLowerCase() === 'post') {
+      sessionStorage.setItem(SCROLL_KEY, window.scrollY);
+    }
+  });
+})();
+</script>
 <script>
 (function() {
   /* ── Selection ── */
