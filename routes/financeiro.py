@@ -2112,7 +2112,8 @@ def transferencias():
             where.append(f"(ba_dest.cliente_id IN ({ph_e}) OR ba_orig.cliente_id IN ({ph_e}))")
             params += f_empresas + f_empresas
         if f_descricao:
-            where.append("bt_orig.descricao LIKE %s")
+            where.append("(COALESCE(bt_orig.descricao, '') LIKE %s OR COALESCE(bt.descricao, '') LIKE %s)")
+            params.append(f'%{f_descricao}%')
             params.append(f'%{f_descricao}%')
 
         where_sql = ' AND '.join(where)
@@ -2130,7 +2131,7 @@ def transferencias():
                 LEFT  JOIN bank_accounts ba_orig ON ba_orig.id = bt_orig.account_id
                 WHERE {where_sql}
                 ORDER BY bt.data_transacao DESC
-                LIMIT 500""",
+                LIMIT 5000""",
             params,
         )
         lista = cursor.fetchall()
@@ -2148,13 +2149,26 @@ def transferencias():
         )
         totais = cursor.fetchone() or {}
 
+        # Build extra WHERE for orfaos/candidatos based on current empresa/conta filter
+        _oc_extra_parts = []
+        _oc_extra_params = []
+        if f_contas:
+            ph = ','.join(['%s'] * len(f_contas))
+            _oc_extra_parts.append(f"bt.account_id IN ({ph})")
+            _oc_extra_params.extend(f_contas)
+        elif f_empresas:
+            ph_e = ','.join(['%s'] * len(f_empresas))
+            _oc_extra_parts.append(f"ba.cliente_id IN ({ph_e})")
+            _oc_extra_params.extend(f_empresas)
+        _oc_extra_where = (" AND " + " AND ".join(_oc_extra_parts)) if _oc_extra_parts else ""
+
         # DEBITs "órfãos": só DEBITs com tipo_conciliacao='transferencia' explícito
         # (coluna adicionada pela migration 20260224_add_tipo_conciliacao.sql).
         # Sem fallback — antes da migration, orfaos fica [] para não mostrar despesas.
         migration_aplicada = False
         try:
             cursor.execute(
-                """SELECT bt.id, bt.data_transacao, bt.valor, bt.descricao, bt.cnpj_cpf,
+                f"""SELECT bt.id, bt.data_transacao, bt.valor, bt.descricao, bt.cnpj_cpf,
                           ba.apelido AS conta_apelido, ba.banco_nome,
                           'novo' AS origem_orfao
                    FROM bank_transactions bt
@@ -2167,8 +2181,10 @@ def transferencias():
                          WHERE cr.hash_dedup = CONCAT('TRANSFER_', bt.id)
                            AND cr.tipo = 'CREDIT'
                      )
+                     {_oc_extra_where}
                    ORDER BY bt.data_transacao DESC
-                   LIMIT 200"""
+                   LIMIT 500""",
+                _oc_extra_params,
             )
             orfaos = cursor.fetchall()
             migration_aplicada = True  # query com tipo_conciliacao funcionou
@@ -2179,7 +2195,7 @@ def transferencias():
         # Inclui também aqueles com tipo_conciliacao='transferencia' sem CREDIT criado
         try:
             cursor.execute(
-                """SELECT bt.id, bt.data_transacao, bt.valor, bt.descricao, bt.cnpj_cpf,
+                f"""SELECT bt.id, bt.data_transacao, bt.valor, bt.descricao, bt.cnpj_cpf,
                           ba.apelido AS conta_apelido, ba.banco_nome,
                           bt.tipo_conciliacao, bt.conciliado_por
                    FROM bank_transactions bt
@@ -2198,14 +2214,16 @@ def transferencias():
                          SELECT 1 FROM bank_transactions cr
                          WHERE cr.hash_dedup = CONCAT('TRANSFER_', bt.id)
                      )
+                     {_oc_extra_where}
                    ORDER BY bt.data_transacao DESC
-                   LIMIT 200"""
+                   LIMIT 500""",
+                _oc_extra_params,
             )
             candidatos = cursor.fetchall()
         except Exception:
             try:
                 cursor.execute(
-                    """SELECT bt.id, bt.data_transacao, bt.valor, bt.descricao, bt.cnpj_cpf,
+                    f"""SELECT bt.id, bt.data_transacao, bt.valor, bt.descricao, bt.cnpj_cpf,
                               ba.apelido AS conta_apelido, ba.banco_nome,
                               NULL AS tipo_conciliacao, bt.conciliado_por
                        FROM bank_transactions bt
@@ -2214,8 +2232,10 @@ def transferencias():
                          AND bt.status = 'conciliado'
                          AND bt.conciliado_por NOT IN ('auto', 'auto-regra')
                          AND bt.descricao LIKE '%Transf%'
+                         {_oc_extra_where}
                        ORDER BY bt.data_transacao DESC
-                       LIMIT 200"""
+                       LIMIT 500""",
+                    _oc_extra_params,
                 )
                 candidatos = cursor.fetchall()
             except Exception:
