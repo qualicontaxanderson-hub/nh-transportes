@@ -619,13 +619,11 @@ def dre_postos():
             )
 
         recebimentos = {
-            'aluguel':                _sorted_formas_list({}),   # placeholder
+            'aluguel':                dict(agg_aluguel_mk),
             'aluguel_formas':         _sorted_formas_list(agg_aluguel_formas),
             'cliente_a_prazo':        dict(agg_prazo_mk),
             'cliente_a_prazo_formas': _sorted_formas_list(agg_prazo_formas),
         }
-        # Overwrite aluguel totals properly
-        recebimentos['aluguel'] = dict(agg_aluguel_mk)
 
         vendas_reais_by_month  = dict(agg_vendas_reais)
         vendas_litros_by_month = {mk: dict(pd) for mk, pd in agg_vendas_litros.items()}

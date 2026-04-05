@@ -584,9 +584,9 @@ function renderEmpresaCards() {
       preserved[eid] = {
         titulo_ids:      titEl ? Array.from(titEl.selectedOptions).map(o => o.value) : [],
         forma_ids:       forEl ? Array.from(forEl.selectedOptions).map(o => o.value) : [],
-        include_vendas:  document.getElementById('chkV_' + eid)?.checked !== false,
-        include_aluguel: document.getElementById('chkA_' + eid)?.checked !== false,
-        include_prazo:   document.getElementById('chkP_' + eid)?.checked !== false,
+        include_vendas:  document.getElementById('chkV_' + eid)?.checked === true,
+        include_aluguel: document.getElementById('chkA_' + eid)?.checked === true,
+        include_prazo:   document.getElementById('chkP_' + eid)?.checked === true,
       };
     }
   });
@@ -614,9 +614,9 @@ function salvarFiltro() {
     cfgs[eid] = {
       titulo_ids:      titEl ? Array.from(titEl.selectedOptions).map(o => o.value) : [],
       forma_ids:       forEl ? Array.from(forEl.selectedOptions).map(o => o.value) : [],
-      include_vendas:  document.getElementById('chkV_' + eid)?.checked !== false,
-      include_aluguel: document.getElementById('chkA_' + eid)?.checked !== false,
-      include_prazo:   document.getElementById('chkP_' + eid)?.checked !== false,
+      include_vendas:  document.getElementById('chkV_' + eid)?.checked === true,
+      include_aluguel: document.getElementById('chkA_' + eid)?.checked === true,
+      include_prazo:   document.getElementById('chkP_' + eid)?.checked === true,
     };
   });
 
