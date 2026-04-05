@@ -1,0 +1,324 @@
+{% extends 'base.html' %}
+{% block title %}Conf. Recebimentos{% endblock %}
+
+{% block styles %}
+<style>
+.page-hero {
+  background: linear-gradient(135deg, #1D63A5 0%, #154070 100%);
+  border-radius: .75rem; padding: 1.5rem 2rem; margin-bottom: 1.5rem; color: #fff;
+}
+.page-hero .hero-icon {
+  width: 3rem; height: 3rem; background: rgba(255,255,255,.15);
+  border-radius: .6rem; display: flex; align-items: center; justify-content: center;
+  font-size: 1.5rem; flex-shrink: 0;
+}
+.stat-card {
+  border: none; border-radius: .6rem; box-shadow: 0 1px 6px rgba(0,0,0,.08);
+}
+.stat-card .stat-label {
+  font-size: .72rem; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .05em; opacity: .7;
+}
+.stat-card .stat-value { font-size: 1.45rem; font-weight: 700; line-height: 1; }
+
+/* ── Matrix table ── */
+.tbl-matrix {
+  font-size: .73rem;
+  border-collapse: collapse;
+  width: 100%;
+}
+.tbl-matrix th, .tbl-matrix td {
+  padding: .22rem .38rem;
+  border: 1px solid #dee2e6;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+/* sticky first column */
+.tbl-matrix td.col-desc, .tbl-matrix th.col-desc {
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  min-width: 200px;
+  max-width: 300px;
+  white-space: normal;
+  word-break: break-word;
+}
+/* column header */
+.tbl-matrix thead tr th {
+  text-align: center;
+  background: #343a40;
+  color: #fff;
+  font-size: .68rem;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+}
+.tbl-matrix thead tr th.col-desc { text-align: left; background: #343a40; }
+/* block header */
+.row-block-hdr td {
+  background: #1D63A5;
+  color: #fff;
+  font-weight: 700;
+  font-size: .78rem;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+}
+/* forma rows */
+.row-forma td { background: #fff; font-weight: 600; }
+.row-forma:hover td { background: #f0f4ff; }
+/* block total */
+.row-block-total td {
+  background: #4a86c8;
+  color: #fff;
+  font-weight: 700;
+}
+/* grand total */
+.row-grand td {
+  background: #154070;
+  color: #fff;
+  font-weight: 700;
+  font-size: .82rem;
+}
+/* zero value muted */
+.val-zero { color: #bbb; }
+/* acum column */
+.col-acum { background: #f8f5e4 !important; font-weight: 600; }
+.row-block-total .col-acum,
+.row-grand .col-acum { background: rgba(255,255,255,.15) !important; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+
+  <!-- Breadcrumb -->
+  <nav aria-label="breadcrumb" class="mb-3">
+    <ol class="breadcrumb small">
+      <li class="breadcrumb-item"><a href="{{ url_for('index') }}" class="text-decoration-none">Dashboard</a></li>
+      <li class="breadcrumb-item">Relatórios</li>
+      <li class="breadcrumb-item active">Conf. Recebimentos</li>
+    </ol>
+  </nav>
+
+  <!-- Hero -->
+  <div class="page-hero d-flex align-items-center gap-3 flex-wrap mb-3">
+    <div class="hero-icon"><i class="bi bi-receipt"></i></div>
+    <div class="flex-grow-1">
+      <h4 class="mb-0 fw-bold">Conferência de Recebimentos</h4>
+      <p class="mb-0 opacity-75 small">Matriz mensal por forma de recebimento — Aluguéis e Clientes à Prazo</p>
+    </div>
+  </div>
+
+  <!-- ── Stat cards ── -->
+  <div class="row g-3 mb-4">
+    <div class="col-6 col-md-3">
+      <div class="card stat-card p-3">
+        <div class="stat-label" style="color:#1D63A5;">Formas Ativas</div>
+        <div class="stat-value" style="color:#1D63A5;">{{ total_formas }}</div>
+        <div class="small text-muted mt-1">com recebimentos no período</div>
+      </div>
+    </div>
+    <div class="col-6 col-md-3">
+      <div class="card stat-card p-3">
+        <div class="stat-label" style="color:#154070;">Total Geral</div>
+        <div class="stat-value" style="color:#154070;">{{ grand_total | formatar_moeda }}</div>
+        <div class="small text-muted mt-1">soma de todos os recebimentos</div>
+      </div>
+    </div>
+    <div class="col-6 col-md-3">
+      <div class="card stat-card p-3">
+        <div class="stat-label" style="color:#1D63A5;">Aluguéis</div>
+        <div class="stat-value" style="color:#1D63A5;">
+          {% set aluguel_block = blocks | selectattr('label', 'equalto', 'RECEBIMENTO DE ALUGUEL') | first %}
+          {% if aluguel_block %}{{ aluguel_block.total | formatar_moeda }}{% else %}—{% endif %}
+        </div>
+        <div class="small text-muted mt-1">recebimento de aluguel</div>
+      </div>
+    </div>
+    <div class="col-6 col-md-3">
+      <div class="card stat-card p-3">
+        <div class="stat-label" style="color:#154070;">Clientes à Prazo</div>
+        <div class="stat-value" style="color:#154070;">
+          {% set prazo_block = blocks | selectattr('label', 'equalto', 'CLIENTES À PRAZO') | first %}
+          {% if prazo_block %}{{ prazo_block.total | formatar_moeda }}{% else %}—{% endif %}
+        </div>
+        <div class="small text-muted mt-1">cobrança a prazo</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Filtros ── -->
+  <div class="card shadow-sm mb-4">
+    <div class="card-body">
+      <form method="get" id="form-filtros">
+        <div class="row g-3 align-items-end">
+
+          <div class="col-6 col-md-2">
+            <label class="form-label small fw-semibold mb-1">Data Início</label>
+            <input type="date" name="data_inicio" value="{{ data_inicio }}" class="form-control form-control-sm">
+          </div>
+
+          <div class="col-6 col-md-2">
+            <label class="form-label small fw-semibold mb-1">Data Fim</label>
+            <input type="date" name="data_fim" value="{{ data_fim }}" class="form-control form-control-sm">
+          </div>
+
+          <div class="col-12 col-md-4">
+            <label class="form-label small fw-semibold mb-1">Empresa</label>
+            <select name="empresa_ids[]" id="sel-empresas" class="form-select form-select-sm" multiple size="3">
+              {% for emp in empresas %}
+              <option value="{{ emp.id }}" {% if emp.id|string in empresa_ids %}selected{% endif %}>
+                {{ emp.nome }}
+              </option>
+              {% endfor %}
+            </select>
+            <div class="form-text">Ctrl+clique p/ múltiplos</div>
+          </div>
+
+          <div class="col-12 col-md-4 d-flex gap-2 align-items-end">
+            <button type="submit" class="btn btn-primary btn-sm flex-grow-1">
+              <i class="bi bi-search"></i> Filtrar
+            </button>
+            <a href="{{ url_for('conf_recebimentos.conf_recebimentos') }}" class="btn btn-outline-secondary btn-sm" title="Limpar filtros">
+              <i class="bi bi-x-circle me-1"></i>Limpar
+            </a>
+          </div>
+
+        </div>
+
+        <!-- Quick period buttons -->
+        <div class="mt-2 d-flex gap-1 flex-wrap">
+          <span class="text-muted small me-1 align-self-center">Período:</span>
+          <button type="button" class="btn btn-outline-secondary btn-sm periodo-btn" data-periodo="mes_atual">Mês Atual</button>
+          <button type="button" class="btn btn-outline-secondary btn-sm periodo-btn" data-periodo="mes_anterior">Mês Anterior</button>
+          <button type="button" class="btn btn-outline-secondary btn-sm periodo-btn" data-periodo="ano_atual">Ano Atual</button>
+          <button type="button" class="btn btn-outline-secondary btn-sm periodo-btn" data-periodo="ano_anterior">Ano Anterior</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ── No results ── -->
+  {% set has_data = blocks | selectattr('rows') | list | length > 0 %}
+  {% if not has_data %}
+  <div class="alert alert-info">
+    <i class="bi bi-info-circle me-2"></i>
+    Nenhum recebimento encontrado para os filtros selecionados.
+    Verifique se as transações bancárias estão conciliadas com uma Forma de Recebimento de Aluguel ou Cliente à Prazo.
+  </div>
+
+  {% else %}
+  <!-- ── Matrix table ── -->
+  <div class="table-responsive mb-4" style="overflow-x:auto;">
+    <table class="tbl-matrix">
+      <thead>
+        <tr>
+          <th class="col-desc">Forma de Recebimento</th>
+          {% for m in months %}
+          <th style="min-width:78px;">{{ m.label }}{% if months|length > 1 and months[0].year != months[-1].year %}<br><span style="font-size:.6rem;opacity:.7;">{{ m.year }}</span>{% endif %}</th>
+          {% endfor %}
+          <th class="col-acum" style="min-width:90px;">ACUM</th>
+        </tr>
+      </thead>
+      <tbody>
+
+        {% for block in blocks %}
+        {% if block.rows %}
+
+        {# Block header #}
+        <tr class="row-block-hdr">
+          <td class="col-desc"><i class="bi bi-receipt me-1"></i>{{ block.label }}</td>
+          {% for m in months %}
+          <td class="text-end"></td>
+          {% endfor %}
+          <td class="text-end col-acum"></td>
+        </tr>
+
+        {# Forma rows #}
+        {% for row in block.rows %}
+        <tr class="row-forma">
+          <td class="col-desc ps-3">{{ row.nome }}</td>
+          {% for m in months %}
+            {% set v = row.by_month.get(m.key, 0) %}
+            <td class="text-end {% if v == 0 %}val-zero{% endif %}">
+              {% if v != 0 %}{{ v | formatar_moeda }}{% else %}—{% endif %}
+            </td>
+          {% endfor %}
+          <td class="text-end col-acum">{{ row.total | formatar_moeda }}</td>
+        </tr>
+        {% endfor %}
+
+        {# Block total row #}
+        <tr class="row-block-total">
+          <td class="col-desc">TOTAL {{ block.label }}</td>
+          {% for m in months %}
+            {% set v = block.total_by_month.get(m.key, 0) %}
+            <td class="text-end {% if v == 0 %}val-zero{% endif %}">
+              {% if v != 0 %}{{ v | formatar_moeda }}{% else %}—{% endif %}
+            </td>
+          {% endfor %}
+          <td class="text-end col-acum">{{ block.total | formatar_moeda }}</td>
+        </tr>
+
+        {% endif %}
+        {% endfor %}
+
+        {# Grand total #}
+        <tr class="row-grand">
+          <td class="col-desc">TOTAL GERAL</td>
+          {% for m in months %}
+            {% set v = grand_by_month.get(m.key, 0) %}
+            <td class="text-end {% if v == 0 %}val-zero{% endif %}">
+              {% if v != 0 %}{{ v | formatar_moeda }}{% else %}—{% endif %}
+            </td>
+          {% endfor %}
+          <td class="text-end col-acum">{{ grand_total | formatar_moeda }}</td>
+        </tr>
+
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  'use strict';
+  const form    = document.getElementById('form-filtros');
+  const inp_ini = form ? form.querySelector('[name="data_inicio"]') : null;
+  const inp_fim = form ? form.querySelector('[name="data_fim"]') : null;
+  if (!inp_ini || !inp_fim) return;
+
+  document.querySelectorAll('.periodo-btn').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      const today = new Date();
+      let ini, fim;
+      switch (this.dataset.periodo) {
+        case 'mes_atual':
+          ini = new Date(today.getFullYear(), today.getMonth(), 1);
+          fim = today;
+          break;
+        case 'mes_anterior':
+          ini = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+          fim = new Date(today.getFullYear(), today.getMonth(), 0);
+          break;
+        case 'ano_atual':
+          ini = new Date(today.getFullYear(), 0, 1);
+          fim = new Date(today.getFullYear(), 11, 31);
+          break;
+        case 'ano_anterior':
+          ini = new Date(today.getFullYear() - 1, 0, 1);
+          fim = new Date(today.getFullYear() - 1, 11, 31);
+          break;
+        default:
+          return;
+      }
+      inp_ini.value = ini.toISOString().slice(0, 10);
+      inp_fim.value = fim.toISOString().slice(0, 10);
+    });
+  });
+})();
+</script>
+{% endblock %}

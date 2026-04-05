@@ -13,7 +13,9 @@ Rota:
 """
 import re
 import unicodedata
-from datetime import date, datetime
+from calendar import monthrange
+from collections import defaultdict
+from datetime import date, datetime, timedelta
 
 from flask import Blueprint, render_template, request
 from flask_login import login_required
@@ -252,6 +254,84 @@ def _build_motorista_salary_rows(func_rows, months):
             'total':          cat_total,
             'subcats':        subcats,
         }
+    return result
+
+
+def _fetch_aluguel_from_caixa(conn, data_inicio, data_fim, empresa_ids):
+    """
+    Retorna lançamentos sintéticos de ALUGUEL provenientes de comprovações
+    'RETIRADA ALUGUEL' em lancamentos_caixa_comprovacao.
+
+    O formato do retorno é compatível com o de _fetch_lancamentos, para que
+    os valores possam ser mesclados antes de _build_category_matrix.
+    """
+    cur = conn.cursor(dictionary=True)
+
+    # Busca a categoria ALUGUEL e o seu título pai
+    cur.execute("""
+        SELECT c.id     AS categoria_id,
+               c.nome   AS categoria_nome,
+               c.ordem  AS categoria_ordem,
+               t.id     AS titulo_id,
+               t.nome   AS titulo_nome,
+               t.ordem  AS titulo_ordem
+          FROM categorias_despesas c
+          INNER JOIN titulos_despesas t ON t.id = c.titulo_id
+         WHERE UPPER(c.nome) = 'ALUGUEL'
+           AND c.ativo = 1
+         LIMIT 1
+    """)
+    cat_row = cur.fetchone()
+    cur.close()
+
+    if not cat_row:
+        return []
+
+    # Filtra comprovações do caixa por tipo e descrição
+    where = [
+        "lc.data BETWEEN %s AND %s",
+        "fp.tipo = 'RETIRADA_PAGAMENTO'",
+        "UPPER(TRIM(COALESCE(lcc.descricao, ''))) = 'RETIRADA ALUGUEL'",
+    ]
+    params = [data_inicio, data_fim]
+
+    if empresa_ids:
+        ph = ','.join(['%s'] * len(empresa_ids))
+        where.append(f"lc.cliente_id IN ({ph})")
+        params.extend(empresa_ids)
+
+    sql = f"""
+        SELECT lcc.valor, lc.data
+          FROM lancamentos_caixa_comprovacao lcc
+          INNER JOIN lancamentos_caixa lc
+                  ON lc.id = lcc.lancamento_caixa_id
+          INNER JOIN formas_pagamento_caixa fp
+                  ON fp.id = lcc.forma_pagamento_id
+         WHERE {' AND '.join(where)}
+           AND lcc.valor > 0
+    """
+    cur = conn.cursor(dictionary=True)
+    cur.execute(sql, params)
+    rows = cur.fetchall()
+    cur.close()
+
+    # Monta linhas sintéticas no mesmo formato que _fetch_lancamentos retorna
+    result = []
+    for i, row in enumerate(rows):
+        result.append({
+            'id':                 f'caixa_aluguel_{i}',
+            'data':               row['data'],
+            'valor':              float(row['valor']),
+            'titulo_id':          cat_row['titulo_id'],
+            'titulo_ordem':       cat_row['titulo_ordem'],
+            'titulo_nome':        cat_row['titulo_nome'],
+            'categoria_id':       cat_row['categoria_id'],
+            'categoria_ordem':    cat_row['categoria_ordem'],
+            'categoria_nome':     cat_row['categoria_nome'],
+            'subcategoria_id':    None,
+            'subcategoria_ordem': 9999,
+            'subcategoria_nome':  None,
+        })
     return result
 
 
@@ -609,6 +689,327 @@ def _build_func_blocks(func_rows, months):
     return out_blocks, combined_by_month, combined_total
 
 
+def _add_business_days(d, n):
+    """Adiciona n dias úteis à data d, pulando fins de semana. Ignora feriados."""
+    count = 0
+    while count < n:
+        d = d + timedelta(days=1)
+        if d.weekday() < 5:   # Segunda = 0, Sexta = 4
+            count += 1
+    return d
+
+
+def _last_day_of_next_month(d):
+    """Retorna o último dia do mês seguinte ao mês de d."""
+    if d.month == 12:
+        year, month = d.year + 1, 1
+    else:
+        year, month = d.year, d.month + 1
+    _, last = monthrange(year, month)
+    return date(year, month, last)
+
+
+def _fetch_taxas_cartao(conn, data_inicio, data_fim, empresa_ids, months):
+    """
+    Calcula as taxas de cartão para injeção no bloco FINANCEIRO do conf_despesas.
+
+    Para cada bandeira ativa:
+      taxa[mk] = SUM(vendas cujo recebimento ESPERADO cai no mês mk)
+                 − SUM(recebimentos REAIS recebidos no mês mk)
+
+    O recebimento esperado é calculado adicionando prazo_compensacao_dias dias
+    úteis à data de venda (mesmo critério do conf_cartoes). Isso alinha os valores
+    com a coluna DIF do conf_cartoes para cada mês.
+
+    Inclui lookback de 14 dias para capturar vendas pré-período cujo recebimento
+    esperado cai dentro do período consultado (ex.: sextas de dezembro que chegam
+    na segunda de janeiro).
+
+    Retorna lista de dicts:
+      {'bid': int, 'nome': str, 'tipo': str,
+       'fee_by_month': {mk: float}, 'fee_total': float}
+    """
+    cur = conn.cursor(dictionary=True)
+
+    # Bandeiras ativas com prazo de compensação e saldo anterior
+    try:
+        cur.execute("""
+            SELECT id, nome, tipo,
+                   COALESCE(prazo_compensacao_dias, 1)  AS prazo,
+                   COALESCE(saldo_anterior, 0)          AS saldo_anterior,
+                   saldo_anterior_data
+              FROM bandeiras_cartao
+             WHERE ativo = 1
+             ORDER BY tipo, nome
+        """)
+    except Exception:
+        cur.execute(
+            "SELECT id, nome, tipo, 1 AS prazo, 0 AS saldo_anterior, NULL AS saldo_anterior_data "
+            "FROM bandeiras_cartao WHERE ativo = 1 ORDER BY tipo, nome"
+        )
+    bandeiras = {b['id']: b for b in cur.fetchall()}
+
+    # Vínculos bandeira → formas_recebimento
+    try:
+        cur.execute(
+            "SELECT bandeira_cartao_id, forma_recebimento_id FROM conf_cartoes_vinculos"
+        )
+        vinculos_rows = cur.fetchall()
+    except Exception:
+        vinculos_rows = []
+    vinculos_map = defaultdict(list)
+    for v in vinculos_rows:
+        vinculos_map[v['bandeira_cartao_id']].append(v['forma_recebimento_id'])
+
+    # Janela de datas
+    try:
+        d_ini = datetime.strptime(data_inicio, '%Y-%m-%d').date()
+        d_fim = datetime.strptime(data_fim,    '%Y-%m-%d').date()
+    except Exception:
+        cur.close()
+        return []
+
+    # Lookback: captura vendas pré-período cujo recebimento esperado cai no período.
+    # 14 dias cobre até prazo=5 dias úteis + fins de semana adjacentes (5 dias úteis
+    # = no máximo ~8 dias corridos mais folga). Bandeiras com prazo > 7 dias úteis
+    # são raras no mercado brasileiro de cartões de débito/crédito.
+    _LOOKBACK = 14
+    data_inicio_ext = (d_ini - timedelta(days=_LOOKBACK)).isoformat()
+
+    # Vendas individuais por (bandeira, data_venda)
+    where_v = ["lc.data BETWEEN %s AND %s", "lcc.bandeira_cartao_id IS NOT NULL"]
+    params_v = [data_inicio_ext, data_fim]
+    if empresa_ids:
+        ph = ','.join(['%s'] * len(empresa_ids))
+        where_v.append(f"lc.cliente_id IN ({ph})")
+        params_v.extend(empresa_ids)
+
+    cur.execute(f"""
+        SELECT lcc.bandeira_cartao_id          AS bandeira_id,
+               lc.data                         AS data_venda,
+               COALESCE(SUM(lcc.valor), 0)     AS valor
+          FROM lancamentos_caixa_comprovacao lcc
+          JOIN lancamentos_caixa lc ON lc.id = lcc.lancamento_caixa_id
+         WHERE {' AND '.join(where_v)}
+         GROUP BY lcc.bandeira_cartao_id, lc.data
+    """, params_v)
+    sale_rows = cur.fetchall()
+
+    # Recebimentos por (forma_recebimento, mês)
+    all_forma_ids = list({fid for fids in vinculos_map.values() for fid in fids})
+    receb_idx = {}
+    if all_forma_ids:
+        ph  = ','.join(['%s'] * len(all_forma_ids))
+        where_r = [
+            "bt.tipo = 'CREDIT'",
+            f"bt.forma_recebimento_id IN ({ph})",
+            "bt.data_transacao BETWEEN %s AND %s",
+        ]
+        params_r = list(all_forma_ids) + [data_inicio, data_fim]
+        if empresa_ids:
+            ep = ','.join(['%s'] * len(empresa_ids))
+            where_r.append(f"ba.cliente_id IN ({ep})")
+            params_r.extend(empresa_ids)
+        try:
+            cur.execute(f"""
+                SELECT bt.forma_recebimento_id               AS forma_id,
+                       YEAR(bt.data_transacao)               AS yr,
+                       MONTH(bt.data_transacao)              AS mo,
+                       COALESCE(SUM(bt.valor), 0)            AS total
+                  FROM bank_transactions bt
+                  JOIN bank_accounts ba ON ba.id = bt.account_id
+                 WHERE {' AND '.join(where_r)}
+                 GROUP BY bt.forma_recebimento_id,
+                          YEAR(bt.data_transacao),
+                          MONTH(bt.data_transacao)
+            """, params_r)
+            for r in cur.fetchall():
+                # YEAR/MONTH integers avoid DATE_FORMAT type ambiguity (bytes vs str)
+                mk_r = f"{int(r['yr'])}{int(r['mo']):02d}"
+                receb_idx[(int(r['forma_id']), mk_r)] = float(r['total'])
+        except Exception:
+            pass
+
+    cur.close()
+
+    # Atribui cada venda ao mês de recebimento ESPERADO (cycle attribution).
+    # Ciclos cujo recebimento esperado ainda não chegou (expected >= hoje) são
+    # excluídos: espelha conf_cartoes que atribui cycle_fee=0 quando has_receipt=False.
+    # Meses já fechados não são afetados pois todos os expected estão no passado.
+    _today = date.today()
+    month_keys_set = {m['key'] for m in months}
+    vendas_by_band_mk = defaultdict(lambda: defaultdict(float))
+
+    for r in sale_rows:
+        bid = int(r['bandeira_id'])
+        if bid not in bandeiras:
+            continue
+        prazo = int(bandeiras[bid].get('prazo', 1))
+        dv = r['data_venda']
+        if isinstance(dv, str):
+            try:
+                dv = datetime.strptime(dv, '%Y-%m-%d').date()
+            except Exception:
+                continue
+
+        # Calcula data de recebimento esperada
+        expected = dv if prazo == 0 else _add_business_days(dv, prazo)
+
+        # Só inclui se o recebimento esperado cai dentro do período consultado
+        if expected < d_ini or expected > d_fim:
+            continue
+        mk_exp = f'{expected.year}{expected.month:02d}'
+        if mk_exp not in month_keys_set:
+            continue
+
+        # Exclui ciclos ainda pendentes: recebimento esperado hoje ou no futuro
+        if expected >= _today:
+            continue
+
+        vendas_by_band_mk[bid][mk_exp] += float(r['valor'])
+
+    # Calcula taxa por bandeira e mês
+    # O primeiro mês do período recebe o saldo_anterior (igual ao conf_cartoes),
+    # que representa vendas pré-período cujo recebimento chega no início do período.
+    first_mk = months[0]['key'] if months else None
+    result = []
+    for bid, band in bandeiras.items():
+        forma_ids = vinculos_map.get(bid, [])
+
+        # Determina se saldo_anterior é aplicável para este período
+        saldo_anterior    = float(band.get('saldo_anterior') or 0)
+        sad_raw           = band.get('saldo_anterior_data')
+        saldo_aplicavel   = False
+        if saldo_anterior != 0.0 and sad_raw and d_ini:
+            if isinstance(sad_raw, str):
+                try:
+                    sad_raw = datetime.strptime(sad_raw, '%Y-%m-%d').date()
+                except Exception:
+                    sad_raw = None
+            if sad_raw:
+                ultimo_dia_aplicavel = _last_day_of_next_month(sad_raw)
+                saldo_aplicavel = d_ini <= ultimo_dia_aplicavel
+
+        fee_by_month = {}
+        fee_total    = 0.0
+        has_data     = False
+
+        for m in months:
+            mk    = m['key']
+            venda = vendas_by_band_mk.get(bid, {}).get(mk, 0.0)
+            # Adiciona saldo_anterior ao primeiro mês (mesmo critério que conf_cartoes).
+            # Somente quando NÃO há filtro por empresa: saldo_anterior é global
+            # (consolidado de todas as empresas) e não deve ser aplicado a uma empresa
+            # específica, pois causaria valores fictícios para empresas sem cartão.
+            if saldo_aplicavel and mk == first_mk and not empresa_ids:
+                venda += saldo_anterior
+            receb = sum(receb_idx.get((fid, mk), 0.0) for fid in forma_ids)
+            fee   = venda - receb
+            fee_by_month[mk] = fee
+            fee_total += fee
+            if abs(venda) > 0.005 or abs(receb) > 0.005:
+                has_data = True
+
+        if not has_data:
+            continue
+
+        result.append({
+            'bid':          bid,
+            'nome':         band['nome'],
+            'tipo':         band['tipo'],
+            'fee_by_month': fee_by_month,
+            'fee_total':    fee_total,
+        })
+
+    return result
+
+
+# Bandeiras que devem aparecer como linhas STANDALONE (não agrupadas por tipo)
+_STANDALONE_CARD_PATTERNS = ('BARATAO', 'X7')
+
+
+def _is_standalone_bandeira(nome):
+    """Retorna True se a bandeira deve ser exibida como linha standalone."""
+    norm = _ascii_upper(nome)
+    return any(p in norm for p in _STANDALONE_CARD_PATTERNS)
+
+
+def _build_taxas_cartao_rows(taxas_data, months):
+    """
+    Constrói linhas de taxa de cartão para o bloco FINANCEIRO:
+
+      - DÉBITO:  linha pai "CARTÃO DE DÉBITO"  + sub-linhas por bandeira
+      - CRÉDITO (exceto standalone): linha pai "CARTÃO DE CRÉDITO" + sub-linhas
+      - Standalone (BARATÃO, X7 BANK): linha única sem subcats
+
+    Retorna (rows, combined_by_month, combined_total).
+    """
+    if not taxas_data:
+        return [], {m['key']: 0.0 for m in months}, 0.0
+
+    _TIPO_LABEL = {'DEBITO': 'CARTÃO DE DÉBITO', 'CREDITO': 'CARTÃO DE CRÉDITO'}
+    _TIPO_ORDER = {'DEBITO': 0, 'CREDITO': 1}
+
+    # Separa standalone das demais
+    grouped    = defaultdict(list)   # tipo → [band]
+    standalones = []
+    for t in taxas_data:
+        if _is_standalone_bandeira(t['nome']):
+            standalones.append(t)
+        else:
+            grouped[t['tipo']].append(t)
+
+    rows              = []
+    combined_by_month = {m['key']: 0.0 for m in months}
+    combined_total    = 0.0
+
+    # Grupos DÉBITO / CRÉDITO com sub-linhas por bandeira
+    for tipo in sorted(grouped, key=lambda t: (_TIPO_ORDER.get(t, 99), t)):
+        bands = grouped[tipo]
+        label = _TIPO_LABEL.get(tipo, f'CARTÃO {tipo}')
+
+        grp_by_month = {m['key']: 0.0 for m in months}
+        grp_total    = 0.0
+        subcats      = []
+
+        for band in bands:
+            for mk, v in band['fee_by_month'].items():
+                grp_by_month[mk] = grp_by_month.get(mk, 0.0) + v
+            grp_total += band['fee_total']
+            subcats.append({
+                'subcat_id':   f'taxa_cartao_{band["bid"]}',
+                'subcat_nome': band['nome'],
+                'by_month':    band['fee_by_month'],
+                'total':       band['fee_total'],
+            })
+
+        for mk, v in grp_by_month.items():
+            combined_by_month[mk] = combined_by_month.get(mk, 0.0) + v
+        combined_total += grp_total
+
+        rows.append({
+            'categoria_id':   f'taxa_cartao_{tipo.lower()}',
+            'categoria_nome': label,
+            'by_month':       grp_by_month,
+            'total':          grp_total,
+            'subcats':        subcats,
+        })
+
+    # Standalones (BARATÃO, X7 BANK) – linha única sem subcats
+    for band in sorted(standalones, key=lambda b: b['nome']):
+        for mk, v in band['fee_by_month'].items():
+            combined_by_month[mk] = combined_by_month.get(mk, 0.0) + v
+        combined_total += band['fee_total']
+        rows.append({
+            'categoria_id':   f'taxa_cartao_{band["bid"]}',
+            'categoria_nome': band['nome'],
+            'by_month':       band['fee_by_month'],
+            'total':          band['fee_total'],
+            'subcats':        [],
+        })
+
+    return rows, combined_by_month, combined_total
+
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Route
@@ -651,6 +1052,22 @@ def conf_despesas():
             lancamentos = _fetch_lancamentos(
                 conn, data_inicio, data_fim, empresa_ids, titulo_ids,
             )
+
+            # ── Inclui ALUGUEL proveniente de RETIRADA ALUGUEL do caixa ─────
+            # Só inclui quando nenhum filtro de título está ativo OU quando o
+            # título selecionado corresponde à categoria ALUGUEL
+            # (identificado comparando titulo_id dos dados sintéticos).
+            aluguel_caixa = _fetch_aluguel_from_caixa(
+                conn, data_inicio, data_fim, empresa_ids,
+            )
+            if aluguel_caixa:
+                if not titulo_ids:
+                    lancamentos = list(lancamentos) + aluguel_caixa
+                else:
+                    aluguel_titulo_id = str(aluguel_caixa[0]['titulo_id'])
+                    if aluguel_titulo_id in titulo_ids:
+                        lancamentos = list(lancamentos) + aluguel_caixa
+
             total_lancamentos = len(lancamentos)
             blocks, grand_by_month, grand_total = _build_category_matrix(
                 lancamentos, months
@@ -796,6 +1213,51 @@ def conf_despesas():
                 sum(caminhoes_total_by_month.get(m['key'], 0.0) for m in months)
                 / litros_comprados_total
             ) if litros_comprados_total else 0.0
+
+            # ── Taxas de cartão (diferença vendas − recebimentos, por bandeira) ──
+            # Injetadas no bloco FINANCEIRO como linhas agrupadas por tipo.
+            # Só inclui quando nenhum filtro de título está ativo OU quando o
+            # título FINANCEIRO está entre os selecionados.
+            include_taxas = (
+                not titulo_ids
+                or any(
+                    'FINANCEIRO' in _ascii_upper(_titulo_nome_by_id.get(tid, ''))
+                    for tid in titulo_ids
+                )
+            )
+            if include_taxas:
+                taxas_data = _fetch_taxas_cartao(
+                    conn, data_inicio, data_fim, empresa_ids, months
+                )
+                if taxas_data:
+                    taxa_rows, taxa_by_month, taxa_total = _build_taxas_cartao_rows(
+                        taxas_data, months
+                    )
+                    if taxa_rows:
+                        # Encontra o bloco FINANCEIRO; cria um sintético se não existir
+                        fin_block = None
+                        for _blk in blocks:
+                            if 'FINANCEIRO' in _ascii_upper(_blk.get('titulo_nome', '')):
+                                fin_block = _blk
+                                break
+                        if fin_block is None:
+                            fin_block = {
+                                'titulo_id':      'taxa_financeiro',
+                                'titulo_nome':    'FINANCEIRO',
+                                'rows':           [],
+                                'total_by_month': {m['key']: 0.0 for m in months},
+                                'total':          0.0,
+                            }
+                            blocks.append(fin_block)
+
+                        fin_block['rows'].extend(taxa_rows)
+                        for mk, v in taxa_by_month.items():
+                            fin_block['total_by_month'][mk] = (
+                                fin_block['total_by_month'].get(mk, 0.0) + v
+                            )
+                            grand_by_month[mk] = grand_by_month.get(mk, 0.0) + v
+                        fin_block['total'] += taxa_total
+                        grand_total        += taxa_total
     finally:
         conn.close()
 

@@ -327,9 +327,11 @@ def create_app():
     # lentidão de 10-30 s no primeiro acesso após cada deployment.
     with app.app_context():
         try:
-            from routes.bank_import import _ensure_ld_bank_tx_id, _ensure_descricao_chave
+            from routes.bank_import import _ensure_ld_bank_tx_id, _ensure_descricao_chave, _cleanup_orphaned_lancamentos_despesas, _fix_auto_regra_subcategoria
             _ensure_ld_bank_tx_id()
             _ensure_descricao_chave()
+            _cleanup_orphaned_lancamentos_despesas()
+            _fix_auto_regra_subcategoria()
             app.logger.info("Migrations de schema de bank_import executadas na inicialização.")
         except Exception:
             app.logger.warning(
@@ -363,6 +365,23 @@ def create_app():
         except Exception:
             app.logger.warning(
                 "Seed de bandeira CABAL / OUTROS falhou na inicialização (não crítico).",
+                exc_info=True,
+            )
+
+    # Garante que VENDA PROGRAMADA (forma_pagamento) e ANTECIPAÇÃO CLIENTE
+    # (tipo_receita) existam no banco — equivalente à migration 20260327 mas
+    # executado automaticamente a cada deploy para não depender de script manual.
+    with app.app_context():
+        try:
+            from routes.lancamentos_caixa import _ensure_caixa_formas_tipos
+            _ensure_caixa_formas_tipos()
+            app.logger.info(
+                "Seed de VENDA PROGRAMADA / ANTECIPAÇÃO CLIENTE executado na inicialização."
+            )
+        except Exception:
+            app.logger.warning(
+                "Seed de VENDA PROGRAMADA / ANTECIPAÇÃO CLIENTE falhou na inicialização "
+                "(não crítico).",
                 exc_info=True,
             )
 

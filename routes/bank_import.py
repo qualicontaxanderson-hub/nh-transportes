@@ -24,12 +24,212 @@ _MYSQL_ERRNO_TABLE_NOT_FOUND = 1146  # Table doesn't exist (schema not yet migra
 # (ADD COLUMN IF NOT EXISTS), so a double-run in concurrent requests is harmless.
 _ld_bank_tx_id_ready = False
 _bsm_descricao_chave_ready = False
+_orphaned_ld_cleanup_done = False
+_auto_regra_subcategoria_fixed = False
 # Timestamp-based retry cooldown: after a failed attempt, wait _MIGRATION_RETRY_DELAY
 # seconds before retrying.  This avoids hammering the DB on every request but still
 # allows recovery from transient errors (e.g., DB temporarily unavailable at startup).
 _MIGRATION_RETRY_DELAY = 60  # seconds
 _bsm_descricao_chave_retry_after = 0.0   # epoch timestamp; 0 = may run immediately
 _ld_bank_tx_id_retry_after       = 0.0
+
+
+def _cleanup_orphaned_lancamentos_despesas():
+    """Remove lancamentos_despesas orphaned by the old 'SET NULL' revert behavior.
+
+    The old code in reverter_conciliacao / reverter_conciliacao_lote /
+    excluir_transacao / excluir_transacao_lote did:
+        UPDATE lancamentos_despesas SET bank_transaction_id = NULL
+        WHERE bank_transaction_id = <tx_id>
+
+    instead of DELETE.  This left ghost rows (bank_transaction_id = NULL)
+    that still appeared in conf_despesas even after the transaction was
+    re-categorized to a different category.
+
+    All four routes were fixed to use DELETE instead.  This function purges
+    the records already in the database from the old behavior.
+
+    Criteria (conservative):
+      - bank_transaction_id IS NULL
+      - fornecedor IS NOT NULL  (set automatically from the bank-tx description)
+      - An exact duplicate exists with bank_transaction_id IS NOT NULL sharing
+        the same (data, cliente_id, valor, fornecedor).
+
+    Idempotent: safe to run multiple times; module-level flag prevents re-running.
+    """
+    global _orphaned_ld_cleanup_done
+    if _orphaned_ld_cleanup_done:
+        return
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            """DELETE FROM lancamentos_despesas
+               WHERE id IN (
+                   SELECT id FROM (
+                       SELECT ld_old.id
+                       FROM lancamentos_despesas ld_old
+                       WHERE ld_old.bank_transaction_id IS NULL
+                         AND ld_old.fornecedor IS NOT NULL
+                         AND EXISTS (
+                             SELECT 1
+                             FROM lancamentos_despesas ld_new
+                             WHERE ld_new.bank_transaction_id IS NOT NULL
+                               AND ld_new.data       = ld_old.data
+                               AND ld_new.cliente_id <=> ld_old.cliente_id
+                               AND ld_new.valor      = ld_old.valor
+                               AND ld_new.fornecedor = ld_old.fornecedor
+                               AND ld_new.id        <> ld_old.id
+                         )
+                   ) AS ld_to_delete
+               )"""
+        )
+        deleted = cursor.rowcount
+        conn.commit()
+        cursor.close()
+        _orphaned_ld_cleanup_done = True
+        if deleted:
+            logger.info(
+                "_cleanup_orphaned_lancamentos_despesas: %d registro(s) fantasma removido(s).",
+                deleted,
+            )
+        else:
+            logger.info("_cleanup_orphaned_lancamentos_despesas: nenhum registro fantasma encontrado.")
+    except Exception:
+        logger.warning(
+            "_cleanup_orphaned_lancamentos_despesas: falhou (não crítico).", exc_info=True
+        )
+    finally:
+        if conn:
+            conn.close()
+
+
+def _fix_auto_regra_subcategoria():
+    """Retroactively applies subcategoria_id to lancamentos_despesas created by
+    auto-rules before the fix that started propagating subcategoria_id.
+
+    The old _auto_conciliar_por_regras code inserted lancamentos_despesas rows
+    without subcategoria_id even when the matching rule had one set.  This meant
+    the expense appeared in conf_despesas under the category total without a
+    visible subcategory row (e.g. BOLETOS total included SICREDI charges but
+    SICREDI never appeared as a named sub-row).
+
+    Strategy: for each lancamentos_despesas where subcategoria_id IS NULL and
+    bank_transaction_id IS NOT NULL (i.e. rule-matched) with conciliado_por =
+    'auto-regra', try to re-match the bank transaction description against the
+    current active rules.  If the matching rule has a subcategoria_id, update
+    the lancamentos_despesas record.
+
+    Idempotent: safe to run multiple times.
+    """
+    global _auto_regra_subcategoria_fixed
+    if _auto_regra_subcategoria_fixed:
+        return
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+
+        # Load active rules that have both a categoria_id and a subcategoria_id
+        cursor.execute(
+            """SELECT id, padrao_descricao, padrao_secundario, tipo_match,
+                      tipo_transacao, account_id,
+                      titulo_id, categoria_id, subcategoria_id
+               FROM bank_conciliacao_regras
+               WHERE ativo = 1
+                 AND titulo_id IS NOT NULL
+                 AND categoria_id IS NOT NULL
+                 AND subcategoria_id IS NOT NULL
+               ORDER BY
+                   (account_id IS NOT NULL) DESC,
+                   (padrao_secundario IS NOT NULL AND padrao_secundario <> '') DESC,
+                   id"""
+        )
+        regras = cursor.fetchall()
+        if not regras:
+            _auto_regra_subcategoria_fixed = True
+            return
+
+        # Load lancamentos_despesas without subcategoria that were created by rules
+        cursor.execute(
+            """SELECT ld.id AS ld_id,
+                      bt.descricao AS bt_descricao,
+                      bt.account_id AS bt_account_id,
+                      bt.tipo AS bt_tipo,
+                      ld.titulo_id, ld.categoria_id
+               FROM lancamentos_despesas ld
+               JOIN bank_transactions bt ON bt.id = ld.bank_transaction_id
+               WHERE ld.subcategoria_id IS NULL
+                 AND bt.conciliado_por = 'auto-regra'"""
+        )
+        candidatos = cursor.fetchall()
+        if not candidatos:
+            _auto_regra_subcategoria_fixed = True
+            cursor.close()
+            conn.close()
+            return
+
+        cursor_w = conn.cursor()
+        updated = 0
+        for ld in candidatos:
+            descricao_upper = (ld['bt_descricao'] or '').upper()
+            for regra in regras:
+                # Skip rules that don't match the stored titulo/categoria
+                if int(regra['titulo_id']) != int(ld['titulo_id']):
+                    continue
+                if int(regra['categoria_id']) != int(ld['categoria_id']):
+                    continue
+                # Account filter
+                regra_acct = regra.get('account_id')
+                if regra_acct and int(regra_acct) != int(ld['bt_account_id']):
+                    continue
+                # Description match
+                padrao = (regra['padrao_descricao'] or '').upper()
+                if not padrao:
+                    continue
+                if regra['tipo_match'] == 'exato':
+                    bate = descricao_upper == padrao
+                else:
+                    bate = padrao in descricao_upper
+                if not bate:
+                    continue
+                # Secondary pattern
+                padrao2 = (regra.get('padrao_secundario') or '').upper()
+                if padrao2 and padrao2 not in descricao_upper:
+                    continue
+                # Match found — update
+                cursor_w.execute(
+                    "UPDATE lancamentos_despesas SET subcategoria_id=%s WHERE id=%s",
+                    (regra['subcategoria_id'], ld['ld_id']),
+                )
+                updated += 1
+                break
+
+        conn.commit()
+        cursor_w.close()
+        cursor.close()
+        _auto_regra_subcategoria_fixed = True
+        if updated:
+            logger.info(
+                "_fix_auto_regra_subcategoria: %d registro(s) de lancamentos_despesas "
+                "atualizados com subcategoria_id da regra correspondente.",
+                updated,
+            )
+        else:
+            logger.info(
+                "_fix_auto_regra_subcategoria: nenhum registro sem subcategoria encontrado."
+            )
+    except Exception:
+        logger.warning(
+            "_fix_auto_regra_subcategoria: falhou (não crítico).", exc_info=True
+        )
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
 
 
 def _ensure_descricao_chave():
@@ -706,8 +906,9 @@ def _auto_conciliar_por_regras(cursor, conn, account_id=None):
             # Determina o que vincular
             forma_id     = regra.get('forma_recebimento_id')
             forn_id      = regra.get('fornecedor_id')
-            titulo_id    = regra.get('titulo_id')
-            categoria_id = regra.get('categoria_id')
+            titulo_id       = regra.get('titulo_id')
+            categoria_id    = regra.get('categoria_id')
+            subcategoria_id = regra.get('subcategoria_id')
 
             if titulo_id and categoria_id and tipo == 'DEBIT':
                 # Regra de despesa → acumula INSERT lancamentos_despesas
@@ -715,7 +916,7 @@ def _auto_conciliar_por_regras(cursor, conn, account_id=None):
                 batch_despesa_insert.append((
                     tx['data_transacao'],
                     conta_cliente_id,
-                    titulo_id, categoria_id,
+                    titulo_id, categoria_id, subcategoria_id,
                     tx['valor'],
                     (tx.get('descricao') or '')[:255],
                     tx.get('descricao') or '',
@@ -749,9 +950,9 @@ def _auto_conciliar_por_regras(cursor, conn, account_id=None):
     if batch_despesa_insert:
         cursor.executemany(
             """INSERT INTO lancamentos_despesas
-               (data, cliente_id, titulo_id, categoria_id, valor,
-                fornecedor, observacao, bank_transaction_id)
-               VALUES (%s, %s, %s, %s, %s, %s, %s, %s)""",
+               (data, cliente_id, titulo_id, categoria_id, subcategoria_id,
+                valor, fornecedor, observacao, bank_transaction_id)
+               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)""",
             batch_despesa_insert,
         )
         cursor.executemany(
