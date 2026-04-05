@@ -50,6 +50,11 @@ def _default_period():
     return f'{hoje.year}-01-01', f'{hoje.year}-12-31'
 
 
+def _make_month_key(year, month):
+    """Constrói a chave de mês 'YYYYMM' a partir de inteiros year e month."""
+    return f'{int(year)}{int(month):02d}'
+
+
 def _months_in_range(data_inicio_str, data_fim_str):
     """Retorna lista de dicts {year, month, label, key} para cada mês do intervalo."""
     try:
@@ -64,7 +69,7 @@ def _months_in_range(data_inicio_str, data_fim_str):
             'year':  y,
             'month': m,
             'label': _MES_LABELS[m - 1],
-            'key':   f'{y}{m:02d}',
+            'key':   _make_month_key(y, m),
         })
         m += 1
         if m > 12:
@@ -161,7 +166,7 @@ def _fetch_vendas_reais(conn, data_inicio, data_fim, empresa_ids):
     cur.close()
     result = {}
     for r in rows:
-        mk = f"{int(r['yr'])}{int(r['mo']):02d}"
+        mk = _make_month_key(r['yr'], r['mo'])
         result[mk] = float(r['total'] or 0)
     return result
 
@@ -289,7 +294,7 @@ def _fetch_recebimentos(conn, data_inicio, data_fim, empresa_ids, forma_ids):
         grupo = _classify_forma(row['forma_nome'])
         if grupo is None:
             continue
-        mk   = f"{int(row['yr'])}{int(row['mo']):02d}"
+        mk   = _make_month_key(row['yr'], row['mo'])
         val  = float(row['total'] or 0)
         nome = row['forma_nome']
         store = aluguel_acc if grupo == 'aluguel' else prazo_acc
@@ -374,10 +379,10 @@ def _build_despesas_blocks(lancamentos, months):
 
     Retorna (blocks, grand_by_month, grand_total).
     """
-    month_keys  = {m['key'] for m in months}
-    titulo_meta = {}   # tit_id → (nome, ordem)
-    cat_meta    = {}   # cat_id → (nome, tit_id, ordem)
-    tree: dict  = {}   # tit_id → cat_id → mk → float
+    month_keys      = {m['key'] for m in months}
+    titulo_meta     = {}   # tit_id → (nome, ordem)
+    categoria_meta  = {}   # cat_id → (nome, tit_id, ordem)
+    tree: dict      = {}   # tit_id → cat_id → mk → float
 
     for row in lancamentos:
         tit_id = row['titulo_id']
@@ -388,12 +393,12 @@ def _build_despesas_blocks(lancamentos, months):
                 d = datetime.strptime(d, '%Y-%m-%d').date()
             except ValueError:
                 continue
-        mk = f'{d.year}{d.month:02d}'
+        mk = _make_month_key(d.year, d.month)
         if mk not in month_keys:
             continue
 
-        titulo_meta.setdefault(tit_id, (row['titulo_nome'], row['titulo_ordem']))
-        cat_meta.setdefault(cat_id,    (row['categoria_nome'], tit_id, row['categoria_ordem']))
+        titulo_meta.setdefault(tit_id,    (row['titulo_nome'],    row['titulo_ordem']))
+        categoria_meta.setdefault(cat_id, (row['categoria_nome'], tit_id, row['categoria_ordem']))
 
         tree.setdefault(tit_id, {})
         tree[tit_id].setdefault(cat_id, {})
@@ -411,7 +416,7 @@ def _build_despesas_blocks(lancamentos, months):
 
         for cat_id in sorted(
             tree[tit_id],
-            key=lambda x: (cat_meta[x][2], cat_meta[x][0]),
+            key=lambda x: (categoria_meta[x][2], categoria_meta[x][0]),
         ):
             cat_by_month = {m['key']: 0.0 for m in months}
             for m in months:
@@ -421,7 +426,7 @@ def _build_despesas_blocks(lancamentos, months):
             cat_total = sum(cat_by_month.values())
             rows_out.append({
                 'categoria_id':   cat_id,
-                'categoria_nome': cat_meta[cat_id][0],
+                'categoria_nome': categoria_meta[cat_id][0],
                 'by_month':       cat_by_month,
                 'total':          cat_total,
             })

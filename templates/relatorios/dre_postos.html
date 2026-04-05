@@ -375,12 +375,9 @@
           <tr class="row-block-total">
             <td class="col-desc"><i class="bi bi-plus-circle-fill me-1"></i> TOTAL RECEITAS</td>
             {% for m in months %}
-              {% set v = receitas_by_month.get(m.key, 0) %}
-              <td class="text-end {% if v == 0 %}val-zero{% endif %}">
-                {% if v != 0 %}R$ {{ '{:,.2f}'.format(v).replace(',','X').replace('.',',').replace('X','.') }}{% else %}—{% endif %}
-              </td>
+              <td class="text-end">{{ fmt(receitas_by_month.get(m.key, 0)) }}</td>
             {% endfor %}
-            <td class="text-end col-acum">R$ {{ '{:,.2f}'.format(grand_receitas).replace(',','X').replace('.',',').replace('X','.') }}</td>
+            <td class="text-end col-acum">{{ fmt(grand_receitas) }}</td>
           </tr>
 
           {# ══════════════════════════════════════════════════════
@@ -408,12 +405,9 @@
               {{ block.titulo_nome }}
             </td>
             {% for m in months %}
-              {% set v = block.total_by_month.get(m.key, 0) %}
-              <td class="text-end {% if v == 0 %}val-zero{% endif %}">
-                {% if v != 0 %}R$ {{ '{:,.2f}'.format(v).replace(',','X').replace('.',',').replace('X','.') }}{% else %}—{% endif %}
-              </td>
+              <td class="text-end">{{ fmt(block.total_by_month.get(m.key, 0)) }}</td>
             {% endfor %}
-            <td class="text-end col-acum">R$ {{ '{:,.2f}'.format(block.total).replace(',','X').replace('.',',').replace('X','.') }}</td>
+            <td class="text-end col-acum">{{ fmt(block.total) }}</td>
           </tr>
           {# Linhas de categoria (ocultas por padrão) #}
           {% for row in block.rows %}
@@ -432,12 +426,9 @@
           <tr class="row-desp-total">
             <td class="col-desc"><i class="bi bi-dash-circle-fill me-1"></i> TOTAL DESPESAS</td>
             {% for m in months %}
-              {% set v = grand_despesas_by_month.get(m.key, 0) %}
-              <td class="text-end {% if v == 0 %}val-zero{% endif %}">
-                {% if v != 0 %}R$ {{ '{:,.2f}'.format(v).replace(',','X').replace('.',',').replace('X','.') }}{% else %}—{% endif %}
-              </td>
+              <td class="text-end">{{ fmt(grand_despesas_by_month.get(m.key, 0)) }}</td>
             {% endfor %}
-            <td class="text-end col-acum">R$ {{ '{:,.2f}'.format(grand_despesas).replace(',','X').replace('.',',').replace('X','.') }}</td>
+            <td class="text-end col-acum">{{ fmt(grand_despesas) }}</td>
           </tr>
 
           {# ══════════════════════════════════════════════════════
