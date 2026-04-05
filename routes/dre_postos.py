@@ -136,6 +136,55 @@ def _formas_recebimento_aluguel_prazo(conn):
 
 
 # ──────────────────────────────────────────────────────────────────────────────
+# Configuração por empresa
+# ──────────────────────────────────────────────────────────────────────────────
+
+def _parse_empresa_configs(args, empresa_ids):
+    """
+    Retorna {eid: config_dict} com as configurações individuais por empresa.
+
+    Formato novo (por empresa):
+      cf_{eid}_submitted=1       — sentinel que indica que a config foi enviada
+      cf_{eid}_titulos[]         — IDs dos títulos de despesa (vazio = todos)
+      cf_{eid}_formas[]          — IDs das formas de recebimento (vazio = todas)
+      cf_{eid}_vendas=0|1        — incluir vendas   (hidden 0 + checkbox 1)
+      cf_{eid}_aluguel=0|1       — incluir aluguel
+      cf_{eid}_prazo=0|1         — incluir clientes à prazo
+
+    Backward compat: se o sentinel cf_{eid}_submitted não existir,
+    usa os parâmetros globais antigos (titulo_ids[], forma_ids[], include_*).
+    """
+    # Fallback global (parâmetros do formato anterior)
+    global_titulo_ids      = [t for t in args.getlist('titulo_ids[]') if t]
+    global_forma_ids       = [f for f in args.getlist('forma_ids[]')  if f]
+    global_include_vendas  = args.get('include_vendas',  '1') == '1'
+    global_include_aluguel = args.get('include_aluguel', '1') == '1'
+    global_include_prazo   = args.get('include_prazo',   '1') == '1'
+
+    configs = {}
+    for eid in empresa_ids:
+        if f'cf_{eid}_submitted' in args:
+            # Configuração nova por empresa
+            configs[eid] = {
+                'titulo_ids':      [t for t in args.getlist(f'cf_{eid}_titulos[]') if t],
+                'forma_ids':       [f for f in args.getlist(f'cf_{eid}_formas[]')  if f],
+                'include_vendas':  '1' in args.getlist(f'cf_{eid}_vendas'),
+                'include_aluguel': '1' in args.getlist(f'cf_{eid}_aluguel'),
+                'include_prazo':   '1' in args.getlist(f'cf_{eid}_prazo'),
+            }
+        else:
+            # Fallback para parâmetros globais (compatibilidade com URLs antigas)
+            configs[eid] = {
+                'titulo_ids':      global_titulo_ids,
+                'forma_ids':       global_forma_ids,
+                'include_vendas':  global_include_vendas,
+                'include_aluguel': global_include_aluguel,
+                'include_prazo':   global_include_prazo,
+            }
+    return configs
+
+
+# ──────────────────────────────────────────────────────────────────────────────
 # Receitas: Vendas de Combustíveis (R$)
 # ──────────────────────────────────────────────────────────────────────────────
 
@@ -464,13 +513,6 @@ def dre_postos():
         data_inicio, data_fim = _default_period()
 
     empresa_ids = [e for e in args.getlist('empresa_ids[]') if e]
-    titulo_ids  = [t for t in args.getlist('titulo_ids[]')  if t]
-    forma_ids   = [f for f in args.getlist('forma_ids[]')   if f]
-
-    # Flags para incluir/excluir blocos de receita
-    include_vendas  = args.get('include_vendas',  '1') == '1'
-    include_aluguel = args.get('include_aluguel', '1') == '1'
-    include_prazo   = args.get('include_prazo',   '1') == '1'
 
     conn = get_db_connection()
     try:
@@ -479,42 +521,127 @@ def dre_postos():
         formas   = _formas_recebimento_aluguel_prazo(conn)
         months   = _months_in_range(data_inicio, data_fim)
 
-        # ── Dados ────────────────────────────────────────────────────────────
-        vendas_reais_by_month:  dict = {}
-        vendas_litros_by_month: dict = {}
-        recebimentos:           dict = {
-            'aluguel': {}, 'aluguel_formas': [],
-            'cliente_a_prazo': {}, 'cliente_a_prazo_formas': [],
+        empresas_por_id = {str(e['id']): e['nome'] for e in empresas}
+
+        # ── Configurações por empresa ─────────────────────────────────────
+        empresa_configs = _parse_empresa_configs(args, empresa_ids)
+
+        # Versão JSON-serializável para o template/JS
+        empresa_configs_for_js = {
+            eid: {
+                'titulo_ids':      cfg['titulo_ids'],
+                'forma_ids':       cfg['forma_ids'],
+                'include_vendas':  cfg['include_vendas'],
+                'include_aluguel': cfg['include_aluguel'],
+                'include_prazo':   cfg['include_prazo'],
+            }
+            for eid, cfg in empresa_configs.items()
         }
-        despesas_blocks:           list = []
-        grand_despesas_by_month:   dict = {}
-        grand_despesas:            float = 0.0
 
-        if months:
-            vendas_reais_by_month  = _fetch_vendas_reais(
-                conn, data_inicio, data_fim, empresa_ids)
-            vendas_litros_by_month = _fetch_vendas_litros(
-                conn, data_inicio, data_fim, empresa_ids)
-            recebimentos = _fetch_recebimentos(
-                conn, data_inicio, data_fim, empresa_ids, forma_ids)
+        # Flags agregadas (True se ao menos uma empresa inclui o bloco)
+        any_include_vendas  = any(
+            cfg['include_vendas']  for cfg in empresa_configs.values()
+        ) if empresa_configs else False
+        any_include_aluguel = any(
+            cfg['include_aluguel'] for cfg in empresa_configs.values()
+        ) if empresa_configs else False
+        any_include_prazo   = any(
+            cfg['include_prazo']   for cfg in empresa_configs.values()
+        ) if empresa_configs else False
 
-            lancamentos = _fetch_despesas_lancamentos(
-                conn, data_inicio, data_fim, empresa_ids, titulo_ids)
-            despesas_blocks, grand_despesas_by_month, grand_despesas = (
-                _build_despesas_blocks(lancamentos, months)
+        # ── Acumuladores por empresa ──────────────────────────────────────
+        agg_vendas_reais: dict    = defaultdict(float)
+        agg_vendas_litros: dict   = defaultdict(lambda: defaultdict(float))
+        agg_aluguel_mk: dict      = defaultdict(float)
+        agg_prazo_mk: dict        = defaultdict(float)
+        agg_aluguel_formas: dict  = {}   # nome → {by_month, total}
+        agg_prazo_formas: dict    = {}
+        all_lancamentos: list     = []
+
+        if months and empresa_configs:
+            for eid, cfg in empresa_configs.items():
+                eid_list = [eid]
+
+                # Vendas (R$ e Litros)
+                if cfg['include_vendas']:
+                    for mk, v in _fetch_vendas_reais(
+                            conn, data_inicio, data_fim, eid_list).items():
+                        agg_vendas_reais[mk] += v
+                    for mk, prod_map in _fetch_vendas_litros(
+                            conn, data_inicio, data_fim, eid_list).items():
+                        for prod, lts in prod_map.items():
+                            agg_vendas_litros[mk][prod] += lts
+
+                # Recebimentos bancários
+                receb = _fetch_recebimentos(
+                    conn, data_inicio, data_fim, eid_list, cfg['forma_ids'])
+
+                if cfg['include_aluguel']:
+                    for mk, v in receb['aluguel'].items():
+                        agg_aluguel_mk[mk] += v
+                    for f in receb['aluguel_formas']:
+                        n = f['nome']
+                        if n not in agg_aluguel_formas:
+                            agg_aluguel_formas[n] = {
+                                'nome':     n,
+                                'by_month': defaultdict(float),
+                                'total':    0.0,
+                            }
+                        for mk, v in f['by_month'].items():
+                            agg_aluguel_formas[n]['by_month'][mk] += v
+                        agg_aluguel_formas[n]['total'] += f['total']
+
+                if cfg['include_prazo']:
+                    for mk, v in receb['cliente_a_prazo'].items():
+                        agg_prazo_mk[mk] += v
+                    for f in receb['cliente_a_prazo_formas']:
+                        n = f['nome']
+                        if n not in agg_prazo_formas:
+                            agg_prazo_formas[n] = {
+                                'nome':     n,
+                                'by_month': defaultdict(float),
+                                'total':    0.0,
+                            }
+                        for mk, v in f['by_month'].items():
+                            agg_prazo_formas[n]['by_month'][mk] += v
+                        agg_prazo_formas[n]['total'] += f['total']
+
+                # Despesas (lançamentos)
+                lancamentos = _fetch_despesas_lancamentos(
+                    conn, data_inicio, data_fim, eid_list, cfg['titulo_ids'])
+                all_lancamentos.extend(lancamentos)
+
+        def _sorted_formas_list(acc):
+            return sorted(
+                [{'nome': n, 'by_month': dict(d['by_month']), 'total': d['total']}
+                 for n, d in acc.items()],
+                key=lambda x: x['nome'],
             )
+
+        recebimentos = {
+            'aluguel':                _sorted_formas_list({}),   # placeholder
+            'aluguel_formas':         _sorted_formas_list(agg_aluguel_formas),
+            'cliente_a_prazo':        dict(agg_prazo_mk),
+            'cliente_a_prazo_formas': _sorted_formas_list(agg_prazo_formas),
+        }
+        # Overwrite aluguel totals properly
+        recebimentos['aluguel'] = dict(agg_aluguel_mk)
+
+        vendas_reais_by_month  = dict(agg_vendas_reais)
+        vendas_litros_by_month = {mk: dict(pd) for mk, pd in agg_vendas_litros.items()}
+
+        despesas_blocks, grand_despesas_by_month, grand_despesas = (
+            _build_despesas_blocks(all_lancamentos, months)
+        )
 
         # ── Totais de receita por mês ─────────────────────────────────────
         receitas_by_month: dict = {}
         for m in months:
             mk    = m['key']
             total = 0.0
-            if include_vendas:
-                total += vendas_reais_by_month.get(mk, 0.0)
-            if include_aluguel:
-                total += recebimentos['aluguel'].get(mk, 0.0)
-            if include_prazo:
-                total += recebimentos['cliente_a_prazo'].get(mk, 0.0)
+            total += vendas_reais_by_month.get(mk, 0.0)
+            total += recebimentos['aluguel'].get(mk, 0.0)
+            total += recebimentos['cliente_a_prazo'].get(mk, 0.0)
             receitas_by_month[mk] = total
 
         grand_receitas = sum(receitas_by_month.values())
@@ -529,15 +656,14 @@ def dre_postos():
             )
         grand_lucro = grand_receitas - grand_despesas
 
-        # ── Acumulados para a coluna TOTAL ────────────────────────────────
-        grand_vendas_reais  = sum(
+        # ── Totais acumulados ─────────────────────────────────────────────
+        grand_vendas_reais = sum(
             vendas_reais_by_month.get(m['key'], 0.0) for m in months)
-        grand_aluguel       = sum(
+        grand_aluguel      = sum(
             recebimentos['aluguel'].get(m['key'], 0.0) for m in months)
-        grand_prazo         = sum(
+        grand_prazo        = sum(
             recebimentos['cliente_a_prazo'].get(m['key'], 0.0) for m in months)
 
-        # litros acumulados por produto
         grand_vendas_litros: dict = {}
         for m in months:
             for prod, lts in vendas_litros_by_month.get(m['key'], {}).items():
@@ -549,18 +675,19 @@ def dre_postos():
 
     return render_template(
         'relatorios/dre_postos.html',
-        # filtros
+        # filtros / estado do formulário
         empresas=empresas,
         titulos=titulos,
         formas=formas,
         data_inicio=data_inicio,
         data_fim=data_fim,
         empresa_ids=empresa_ids,
-        titulo_ids=titulo_ids,
-        forma_ids=forma_ids,
-        include_vendas=include_vendas,
-        include_aluguel=include_aluguel,
-        include_prazo=include_prazo,
+        empresa_configs_for_js=empresa_configs_for_js,
+        empresas_por_id=empresas_por_id,
+        # flags agregadas para controle de exibição das linhas
+        any_include_vendas=any_include_vendas,
+        any_include_aluguel=any_include_aluguel,
+        any_include_prazo=any_include_prazo,
         # meses
         months=months,
         # receitas

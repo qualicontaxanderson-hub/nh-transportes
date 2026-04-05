@@ -137,14 +137,15 @@
   <form method="GET" id="formFiltro" class="card shadow-sm mb-3">
     <div class="flt-header"><i class="bi bi-funnel me-1"></i> Filtros</div>
     <div class="card-body py-2">
-      <div class="row g-2 align-items-start">
+      <div class="row g-2 align-items-end">
 
         <!-- Empresa -->
         <div class="col-md-3">
           <label class="form-label form-label-sm mb-0 fw-semibold">
             Empresa <small class="text-muted fw-normal">(Ctrl+clique p/ múltiplas)</small>
           </label>
-          <select name="empresa_ids[]" id="sel_empresas" class="form-select form-select-sm" multiple size="5">
+          <select name="empresa_ids[]" id="sel_empresas"
+                  class="form-select form-select-sm" multiple size="5">
             {% for e in empresas %}
             <option value="{{ e.id }}" {% if e.id|string in empresa_ids %}selected{% endif %}>
               {{ e.nome }}
@@ -159,9 +160,15 @@
           <input type="date" name="data_inicio" id="data_inicio"
                  value="{{ data_inicio }}" class="form-control form-control-sm">
           <div class="mt-1 d-flex gap-1 flex-wrap">
-            <button type="button" class="btn btn-outline-secondary btn-sm" style="font-size:.7rem;padding:.15rem .4rem;" onclick="setPeriodo('mes')">Este mês</button>
-            <button type="button" class="btn btn-outline-secondary btn-sm" style="font-size:.7rem;padding:.15rem .4rem;" onclick="setPeriodo('mes_ant')">Mês ant.</button>
-            <button type="button" class="btn btn-outline-secondary btn-sm" style="font-size:.7rem;padding:.15rem .4rem;" onclick="setPeriodo('ano')">Este ano</button>
+            <button type="button" class="btn btn-outline-secondary btn-sm"
+                    style="font-size:.7rem;padding:.15rem .4rem;"
+                    onclick="setPeriodo('mes')">Este mês</button>
+            <button type="button" class="btn btn-outline-secondary btn-sm"
+                    style="font-size:.7rem;padding:.15rem .4rem;"
+                    onclick="setPeriodo('mes_ant')">Mês ant.</button>
+            <button type="button" class="btn btn-outline-secondary btn-sm"
+                    style="font-size:.7rem;padding:.15rem .4rem;"
+                    onclick="setPeriodo('ano')">Este ano</button>
           </div>
         </div>
         <div class="col-md-2">
@@ -170,74 +177,38 @@
                  value="{{ data_fim }}" class="form-control form-control-sm">
         </div>
 
-        <!-- Títulos de despesa -->
-        <div class="col-md-2">
-          <label class="form-label form-label-sm mb-0 fw-semibold">
-            Categorias Despesa <small class="text-muted fw-normal">(Ctrl+clique)</small>
-          </label>
-          <select name="titulo_ids[]" id="sel_titulos" class="form-select form-select-sm" multiple size="5">
-            {% for t in titulos %}
-            <option value="{{ t.id }}" {% if t.id|string in titulo_ids %}selected{% endif %}>
-              {{ t.nome }}
-            </option>
-            {% endfor %}
-          </select>
-        </div>
-
-        <!-- Formas de recebimento -->
-        {% if formas %}
-        <div class="col-md-2">
-          <label class="form-label form-label-sm mb-0 fw-semibold">
-            Formas Receb. <small class="text-muted fw-normal">(Ctrl+clique)</small>
-          </label>
-          <select name="forma_ids[]" id="sel_formas" class="form-select form-select-sm" multiple size="5">
-            {% for f in formas %}
-            <option value="{{ f.id }}" {% if f.id|string in forma_ids %}selected{% endif %}>
-              {{ f.nome }}
-            </option>
-            {% endfor %}
-          </select>
-        </div>
-        {% endif %}
-
-        <!-- Incluir blocos -->
-        <div class="col-md-1">
-          <label class="form-label form-label-sm mb-1 fw-semibold d-block">Incluir</label>
-          <div class="form-check form-check-sm">
-            <input class="form-check-input" type="checkbox" name="include_vendas"  value="1" id="chk_vendas"
-                   {% if include_vendas %}checked{% endif %}>
-            <label class="form-check-label small" for="chk_vendas">Vendas</label>
-          </div>
-          <div class="form-check form-check-sm">
-            <input class="form-check-input" type="checkbox" name="include_aluguel" value="1" id="chk_aluguel"
-                   {% if include_aluguel %}checked{% endif %}>
-            <label class="form-check-label small" for="chk_aluguel">Aluguel</label>
-          </div>
-          <div class="form-check form-check-sm">
-            <input class="form-check-input" type="checkbox" name="include_prazo"   value="1" id="chk_prazo"
-                   {% if include_prazo %}checked{% endif %}>
-            <label class="form-check-label small" for="chk_prazo">Clientes Prazo</label>
-          </div>
-        </div>
-
         <!-- Ações -->
-        <div class="col-12 d-flex gap-2 flex-wrap align-items-center mt-1">
+        <div class="col-md-5 d-flex gap-2 flex-wrap align-items-end">
           <button type="submit" class="btn btn-success btn-sm px-4">
             <i class="bi bi-search me-1"></i> Filtrar
           </button>
-          <a href="{{ url_for('dre_postos.dre_postos') }}" class="btn btn-outline-secondary btn-sm px-3">
+          <a href="{{ url_for('dre_postos.dre_postos') }}"
+             class="btn btn-outline-secondary btn-sm px-3">
             <i class="bi bi-x-circle me-1"></i> Limpar
           </a>
-          <button type="button" class="btn btn-outline-primary btn-sm px-3" onclick="salvarFiltro()">
+          <button type="button" class="btn btn-outline-primary btn-sm px-3"
+                  onclick="salvarFiltro()">
             <i class="bi bi-bookmark-fill me-1"></i> Salvar Filtro
           </button>
-          <button type="button" class="btn btn-outline-warning btn-sm px-3" onclick="carregarFiltro()">
+          <button type="button" class="btn btn-outline-warning btn-sm px-3"
+                  onclick="carregarFiltro()">
             <i class="bi bi-bookmark me-1"></i> Carregar Filtro
           </button>
           <span id="msg_filtro" class="text-muted small"></span>
         </div>
 
       </div>
+
+      <!-- ── Configuração por empresa ──────────────────────────────────────── -->
+      <div class="mt-3" id="empresa-configs-wrap" style="display:none;">
+        <div class="mb-1 fw-semibold small" style="color:#198754;">
+          <i class="bi bi-sliders me-1"></i>
+          Configuração individual por empresa
+          <small class="text-muted fw-normal ms-1">(vazio = sem restrição)</small>
+        </div>
+        <div id="empresa-configs" class="d-flex flex-wrap gap-2"></div>
+      </div>
+
     </div>
   </form>
 
@@ -270,7 +241,7 @@
           </tr>
 
           {# ── Vendas de Combustíveis (R$) ─────────────────── #}
-          {% if include_vendas %}
+          {% if any_include_vendas %}
           <tr class="row-item">
             <td class="col-desc fw-semibold">
               <i class="bi bi-fuel-pump-fill me-1 text-success"></i> Vendas de Combustíveis
@@ -319,10 +290,10 @@
           </tr>
           {% endfor %}
           {% endif %}{# if vendas_litros_by_month #}
-          {% endif %}{# if include_vendas #}
+          {% endif %}{# if any_include_vendas #}
 
           {# ── Recebimento de Aluguel ──────────────────────── #}
-          {% if include_aluguel %}
+          {% if any_include_aluguel %}
           <tr class="row-item" onclick="toggleGroup('aluguel')" style="cursor:pointer;">
             <td class="col-desc fw-semibold">
               <span class="toggle-icon" id="icon-aluguel">▶</span>
@@ -344,10 +315,10 @@
             <td class="text-end col-acum">{{ fmt(f.total) }}</td>
           </tr>
           {% endfor %}
-          {% endif %}{# if include_aluguel #}
+          {% endif %}{# if any_include_aluguel #}
 
           {# ── Clientes à Prazo ────────────────────────────── #}
-          {% if include_prazo %}
+          {% if any_include_prazo %}
           <tr class="row-item" onclick="toggleGroup('prazo')" style="cursor:pointer;">
             <td class="col-desc fw-semibold">
               <span class="toggle-icon" id="icon-prazo">▶</span>
@@ -369,7 +340,7 @@
             <td class="text-end col-acum">{{ fmt(f.total) }}</td>
           </tr>
           {% endfor %}
-          {% endif %}{# if include_prazo #}
+          {% endif %}{# if any_include_prazo #}
 
           {# TOTAL RECEITAS #}
           <tr class="row-block-total">
@@ -458,6 +429,12 @@
 </div>{# container-fluid #}
 
 <script>
+// ── Dados dos filtros (injetados pelo servidor) ───────────────────────────
+var TITULOS = {{ titulos | tojson }};
+var FORMAS  = {{ formas  | tojson }};
+var EMPRESA_NAMES   = {{ empresas_por_id    | tojson }};
+var EMPRESA_CONFIGS = {{ empresa_configs_for_js | tojson }};
+
 // ── Toggle rows de grupo ──────────────────────────────────────────────────
 function toggleGroup(gid) {
   var rows  = document.querySelectorAll('[data-group="' + gid + '"]');
@@ -481,40 +458,176 @@ function setPeriodo(tipo) {
     ini = new Date(hoje.getFullYear(), 0, 1);
     fim = new Date(hoje.getFullYear(), 11, 31);
   }
-  document.getElementById('data_inicio').value = fmtDate(ini);
-  document.getElementById('data_fim').value    = fmtDate(fim);
+  document.getElementById('data_inicio').value = _fmtDate(ini);
+  document.getElementById('data_fim').value    = _fmtDate(fim);
 }
-function fmtDate(d) {
+function _fmtDate(d) {
   return d.getFullYear() + '-' +
          String(d.getMonth() + 1).padStart(2,'0') + '-' +
          String(d.getDate()).padStart(2,'0');
 }
 
+// ── Opções multi-select em HTML (helper) ─────────────────────────────────
+function _buildOptions(items, selectedVals) {
+  return items.map(function(item) {
+    var sel = selectedVals.indexOf(String(item.id)) >= 0 ? ' selected' : '';
+    var nome = item.nome.replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    return '<option value="' + item.id + '"' + sel + '>' + nome + '</option>';
+  }).join('');
+}
+
+// ── Card por empresa ──────────────────────────────────────────────────────
+function buildEmpresaCard(eid, eName, cfg) {
+  cfg = cfg || {};
+  var tituloSel = cfg.titulo_ids  || [];
+  var formaSel  = cfg.forma_ids   || [];
+  var incV  = cfg.include_vendas  !== false;
+  var incA  = cfg.include_aluguel !== false;
+  var incP  = cfg.include_prazo   !== false;
+
+  var titulosHtml = TITULOS.length
+    ? '<select name="cf_' + eid + '_titulos[]" multiple class="form-select form-select-sm" size="4">' +
+      _buildOptions(TITULOS, tituloSel.map(String)) + '</select>'
+    : '<p class="text-muted small mb-0">Nenhum título.</p>';
+
+  var formasHtml = FORMAS.length
+    ? '<select name="cf_' + eid + '_formas[]" multiple class="form-select form-select-sm" size="4">' +
+      _buildOptions(FORMAS, formaSel.map(String)) + '</select>'
+    : '<p class="text-muted small mb-0">Nenhuma forma.</p>';
+
+  var chkV = incV  ? ' checked' : '';
+  var chkA = incA  ? ' checked' : '';
+  var chkP = incP  ? ' checked' : '';
+
+  return [
+    '<div class="card" style="min-width:320px;max-width:440px;border:1px solid #1D63A5;">',
+    '  <div class="card-header d-flex align-items-center py-1 px-3" style="background:#1D63A5;color:#fff;font-size:.78rem;font-weight:600;">',
+    '    <i class="bi bi-building me-1"></i>', eName,
+    '  </div>',
+    '  <input type="hidden" name="cf_' + eid + '_submitted" value="1">',
+    '  <div class="card-body py-2 px-3">',
+    '    <div class="row g-2">',
+
+    '      <div class="col-5">',
+    '        <label class="form-label form-label-sm mb-0 fw-semibold">Cat. Despesa</label>',
+    '        <div class="form-text mt-0 mb-1" style="font-size:.67rem;">vazio = todas</div>',
+    titulosHtml,
+    '      </div>',
+
+    '      <div class="col-5">',
+    '        <label class="form-label form-label-sm mb-0 fw-semibold">Forma Receb.</label>',
+    '        <div class="form-text mt-0 mb-1" style="font-size:.67rem;">vazio = todas</div>',
+    formasHtml,
+    '      </div>',
+
+    '      <div class="col-2 d-flex flex-column justify-content-start pt-1">',
+    '        <div class="form-text mb-1 fw-semibold" style="font-size:.72rem;">Incluir</div>',
+
+    '        <input type="hidden" name="cf_' + eid + '_vendas" value="0">',
+    '        <div class="form-check form-check-sm mb-1">',
+    '          <input class="form-check-input" type="checkbox"',
+    '                 name="cf_' + eid + '_vendas" value="1"',
+    '                 id="chkV_' + eid + '"' + chkV + '>',
+    '          <label class="form-check-label" for="chkV_' + eid + '" style="font-size:.7rem;">',
+    '            <i class="bi bi-fuel-pump-fill text-success"></i> Vendas</label>',
+    '        </div>',
+
+    '        <input type="hidden" name="cf_' + eid + '_aluguel" value="0">',
+    '        <div class="form-check form-check-sm mb-1">',
+    '          <input class="form-check-input" type="checkbox"',
+    '                 name="cf_' + eid + '_aluguel" value="1"',
+    '                 id="chkA_' + eid + '"' + chkA + '>',
+    '          <label class="form-check-label" for="chkA_' + eid + '" style="font-size:.7rem;">',
+    '            <i class="bi bi-house-door text-primary"></i> Aluguel</label>',
+    '        </div>',
+
+    '        <input type="hidden" name="cf_' + eid + '_prazo" value="0">',
+    '        <div class="form-check form-check-sm">',
+    '          <input class="form-check-input" type="checkbox"',
+    '                 name="cf_' + eid + '_prazo" value="1"',
+    '                 id="chkP_' + eid + '"' + chkP + '>',
+    '          <label class="form-check-label" for="chkP_' + eid + '" style="font-size:.7rem;">',
+    '            <i class="bi bi-person-lines-fill text-info"></i> Prazo</label>',
+    '        </div>',
+
+    '      </div>',   // col-2
+    '    </div>',     // row
+    '  </div>',       // card-body
+    '</div>',
+  ].join('\n');
+}
+
+// ── Renderiza (ou re-renderiza) todos os cards por empresa ─────────────────
+function renderEmpresaCards() {
+  var container = document.getElementById('empresa-configs');
+  var wrap      = document.getElementById('empresa-configs-wrap');
+  if (!container) return;
+
+  var selectedEids = Array.from(
+    document.getElementById('sel_empresas').selectedOptions
+  ).map(function(o) { return o.value; });
+
+  if (selectedEids.length === 0) {
+    container.innerHTML = '';
+    wrap.style.display = 'none';
+    return;
+  }
+
+  wrap.style.display = '';
+
+  // Preserve existing configs from current cards before re-rendering
+  var preserved = {};
+  selectedEids.forEach(function(eid) {
+    var titEl = document.querySelector('[name="cf_' + eid + '_titulos[]"]');
+    var forEl = document.querySelector('[name="cf_' + eid + '_formas[]"]');
+    if (titEl || forEl) {
+      preserved[eid] = {
+        titulo_ids:      titEl ? Array.from(titEl.selectedOptions).map(o => o.value) : [],
+        forma_ids:       forEl ? Array.from(forEl.selectedOptions).map(o => o.value) : [],
+        include_vendas:  document.getElementById('chkV_' + eid)?.checked !== false,
+        include_aluguel: document.getElementById('chkA_' + eid)?.checked !== false,
+        include_prazo:   document.getElementById('chkP_' + eid)?.checked !== false,
+      };
+    }
+  });
+
+  container.innerHTML = '';
+  selectedEids.forEach(function(eid) {
+    var cfg = preserved[eid] || EMPRESA_CONFIGS[eid] || {};
+    var name = EMPRESA_NAMES[eid] || ('Empresa ' + eid);
+    container.insertAdjacentHTML('beforeend', buildEmpresaCard(eid, name, cfg));
+  });
+}
+
 // ── Salvar / Carregar filtro via localStorage ─────────────────────────────
-var LS_KEY = 'dre_postos_filtro';
+var LS_KEY = 'dre_postos_filtro_v2';
 
 function salvarFiltro() {
-  var sel = function(id) {
-    var el = document.getElementById(id);
-    if (!el) return [];
-    return Array.from(el.selectedOptions).map(function(o){ return o.value; });
-  };
-  var chk = function(id) {
-    var el = document.getElementById(id);
-    return el ? el.checked : true;
-  };
-  var data = {
-    empresas:        sel('sel_empresas'),
-    titulos:         sel('sel_titulos'),
-    formas:          sel('sel_formas'),
-    data_inicio:     document.getElementById('data_inicio').value,
-    data_fim:        document.getElementById('data_fim').value,
-    include_vendas:  chk('chk_vendas'),
-    include_aluguel: chk('chk_aluguel'),
-    include_prazo:   chk('chk_prazo'),
+  var selectedEids = Array.from(
+    document.getElementById('sel_empresas').selectedOptions
+  ).map(function(o) { return o.value; });
+
+  var cfgs = {};
+  selectedEids.forEach(function(eid) {
+    var titEl = document.querySelector('[name="cf_' + eid + '_titulos[]"]');
+    var forEl = document.querySelector('[name="cf_' + eid + '_formas[]"]');
+    cfgs[eid] = {
+      titulo_ids:      titEl ? Array.from(titEl.selectedOptions).map(o => o.value) : [],
+      forma_ids:       forEl ? Array.from(forEl.selectedOptions).map(o => o.value) : [],
+      include_vendas:  document.getElementById('chkV_' + eid)?.checked !== false,
+      include_aluguel: document.getElementById('chkA_' + eid)?.checked !== false,
+      include_prazo:   document.getElementById('chkP_' + eid)?.checked !== false,
+    };
+  });
+
+  var payload = {
+    empresas:    selectedEids,
+    data_inicio: document.getElementById('data_inicio').value,
+    data_fim:    document.getElementById('data_fim').value,
+    configs:     cfgs,
   };
   try {
-    localStorage.setItem(LS_KEY, JSON.stringify(data));
+    localStorage.setItem(LS_KEY, JSON.stringify(payload));
     document.getElementById('msg_filtro').textContent = '✔ Filtro salvo!';
     setTimeout(function(){ document.getElementById('msg_filtro').textContent = ''; }, 2500);
   } catch(e) {
@@ -525,9 +638,28 @@ function salvarFiltro() {
 function carregarFiltro() {
   try {
     var saved = localStorage.getItem(LS_KEY);
-    if (!saved) { document.getElementById('msg_filtro').textContent = 'Nenhum filtro salvo.'; return; }
+    if (!saved) {
+      document.getElementById('msg_filtro').textContent = 'Nenhum filtro salvo.';
+      return;
+    }
     var data = JSON.parse(saved);
-    _applyFiltro(data);
+
+    // Aplica seleção de empresas
+    var sel = document.getElementById('sel_empresas');
+    Array.from(sel.options).forEach(function(o) {
+      o.selected = (data.empresas || []).indexOf(o.value) >= 0;
+    });
+
+    // Restaura configs salvas
+    EMPRESA_CONFIGS = data.configs || {};
+
+    // Re-renderiza cards
+    renderEmpresaCards();
+
+    // Aplica datas
+    if (data.data_inicio) document.getElementById('data_inicio').value = data.data_inicio;
+    if (data.data_fim)    document.getElementById('data_fim').value    = data.data_fim;
+
     document.getElementById('msg_filtro').textContent = '✔ Filtro carregado!';
     setTimeout(function(){ document.getElementById('msg_filtro').textContent = ''; }, 2500);
   } catch(e) {
@@ -535,26 +667,11 @@ function carregarFiltro() {
   }
 }
 
-function _applyFiltro(data) {
-  var setMulti = function(id, vals) {
-    var el = document.getElementById(id);
-    if (!el) return;
-    Array.from(el.options).forEach(function(o) {
-      o.selected = vals.indexOf(o.value) >= 0;
-    });
-  };
-  setMulti('sel_empresas', data.empresas || []);
-  setMulti('sel_titulos',  data.titulos  || []);
-  setMulti('sel_formas',   data.formas   || []);
-  if (data.data_inicio) document.getElementById('data_inicio').value = data.data_inicio;
-  if (data.data_fim)    document.getElementById('data_fim').value    = data.data_fim;
-  var setChk = function(id, val) {
-    var el = document.getElementById(id);
-    if (el) el.checked = !!val;
-  };
-  setChk('chk_vendas',  data.include_vendas  !== false);
-  setChk('chk_aluguel', data.include_aluguel !== false);
-  setChk('chk_prazo',   data.include_prazo   !== false);
-}
+// ── Inicialização ─────────────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', function() {
+  renderEmpresaCards();
+  document.getElementById('sel_empresas')
+    .addEventListener('change', renderEmpresaCards);
+});
 </script>
 {% endblock %}
