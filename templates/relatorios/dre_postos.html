@@ -1,0 +1,569 @@
+{% extends 'base.html' %}
+{% block title %}DRE Postos{% endblock %}
+
+{% block styles %}
+<style>
+/* ── Hero ────────────────────────────────────────────────────────────────── */
+.page-hero {
+  background: linear-gradient(135deg, #155a1e 0%, #198754 100%);
+  border-radius: .75rem; padding: 1.5rem 2rem; margin-bottom: 1.5rem; color: #fff;
+}
+.page-hero .hero-icon {
+  width: 3rem; height: 3rem; background: rgba(255,255,255,.15);
+  border-radius: .6rem; display: flex; align-items: center; justify-content: center;
+  font-size: 1.5rem; flex-shrink: 0;
+}
+
+/* ── Cabeçalho de filtros ─────────────────────────────────────────────────── */
+.flt-header {
+  background: #198754; color: #fff; font-size: .78rem; font-weight: 600;
+  padding: .45rem .75rem; border-radius: .35rem .35rem 0 0;
+}
+
+/* ── Tabela matriz ────────────────────────────────────────────────────────── */
+.tbl-dre {
+  font-size: .72rem; border-collapse: collapse; width: 100%;
+}
+.tbl-dre th, .tbl-dre td {
+  padding: .22rem .38rem; border: 1px solid #dee2e6; white-space: nowrap; vertical-align: middle;
+}
+.tbl-dre td.col-desc, .tbl-dre th.col-desc {
+  position: sticky; left: 0; z-index: 2; min-width: 200px; max-width: 260px;
+  white-space: normal; word-break: break-word;
+}
+.tbl-dre thead tr th {
+  text-align: center; background: #343a40; color: #fff; font-size: .66rem;
+  text-transform: uppercase; letter-spacing: .04em;
+}
+.tbl-dre thead tr th.col-desc { text-align: left; background: #343a40; }
+
+/* ── Tipos de linha ───────────────────────────────────────────────────────── */
+.row-section td {
+  background: #198754; color: #fff; font-weight: 700; font-size: .76rem;
+  text-transform: uppercase; letter-spacing: .05em;
+}
+.row-titulo td {
+  background: #1D63A5; color: #fff; font-weight: 700; font-size: .74rem;
+  text-transform: uppercase; letter-spacing: .04em; cursor: pointer;
+}
+.row-titulo:hover td { background: #154f91; }
+.row-item td   { background: #fff; font-weight: 400; }
+.row-item:hover td { background: #f0f4ff; }
+.row-child td  { background: #f9fbff; font-size: .70rem; }
+.row-child .col-desc { padding-left: 1.6rem !important; }
+.row-block-total td { background: #4a86c8; color: #fff; font-weight: 700; }
+.row-desp-total td  { background: #dc3545; color: #fff; font-weight: 700; }
+.row-lucro td {
+  background: #155a1e; color: #fff; font-weight: 700; font-size: .82rem;
+  text-transform: uppercase;
+}
+.row-lucro-neg td { background: #a31a1a !important; }
+
+/* ── Litros (linha informativa) ───────────────────────────────────────────── */
+.row-litros td   { background: #f8f5e4; color: #5a4500; font-style: italic; }
+.row-litros:hover td { background: #f0e9c5; }
+.row-litros-child td { background: #fffde7; font-size: .70rem; font-style: italic; }
+.row-litros-child .col-desc { padding-left: 1.6rem !important; }
+
+/* ── Valores ──────────────────────────────────────────────────────────────── */
+.val-zero { color: #bbb; }
+.col-acum { background: #f8f5e4 !important; font-weight: 600; }
+.row-block-total .col-acum,
+.row-desp-total .col-acum,
+.row-lucro .col-acum { background: rgba(255,255,255,.15) !important; }
+.dif-pos  { color: #5fffaa; font-weight: 700; }
+.dif-neg  { color: #ff8080; font-weight: 700; }
+
+/* ── Toggle icon ────────────────────────────────────────────────────────────*/
+.toggle-icon {
+  display: inline-block; width: 1em; font-size: .75em;
+  color: rgba(255,255,255,.8); margin-right: .2em;
+}
+</style>
+{% endblock %}
+
+{% macro fmt(v) %}
+  {%- if v is not none and v != 0 -%}
+    R$ {{ '{:,.2f}'.format(v).replace(',','X').replace('.',',').replace('X','.') }}
+  {%- else -%}<span class="val-zero">—</span>
+  {%- endif -%}
+{% endmacro %}
+
+{% macro fmtL(v) %}
+  {%- if v is not none and v != 0 -%}
+    {{ '{:,.3f}'.format(v).replace(',','X').replace('.',',').replace('X','.') }} L
+  {%- else -%}<span class="val-zero">—</span>
+  {%- endif -%}
+{% endmacro %}
+
+{% macro fmtResult(v) %}
+  {%- if v is not none and v != 0 -%}
+    <span class="{{ 'dif-pos' if v > 0 else 'dif-neg' }}">
+      R$ {{ '{:,.2f}'.format(v).replace(',','X').replace('.',',').replace('X','.') }}
+    </span>
+  {%- else -%}<span class="val-zero">—</span>
+  {%- endif -%}
+{% endmacro %}
+
+{% block content %}
+<div class="container-fluid">
+
+  <!-- Breadcrumb -->
+  <nav aria-label="breadcrumb" class="mb-3">
+    <ol class="breadcrumb small">
+      <li class="breadcrumb-item"><a href="{{ url_for('index') }}" class="text-decoration-none">Dashboard</a></li>
+      <li class="breadcrumb-item">Relatórios</li>
+      <li class="breadcrumb-item active">DRE Postos</li>
+    </ol>
+  </nav>
+
+  <!-- Hero -->
+  <div class="page-hero d-flex align-items-center gap-3 flex-wrap mb-3">
+    <div class="hero-icon"><i class="bi bi-graph-up-arrow"></i></div>
+    <div class="flex-grow-1">
+      <h4 class="mb-0 fw-bold">DRE — Demonstração do Resultado</h4>
+      <p class="mb-0 opacity-75" style="font-size:.8rem;">
+        Vendas · Recebimentos · Despesas · Lucro Operacional por mês
+      </p>
+    </div>
+    <a href="{{ url_for('relatorios.lucro_postos') }}"
+       class="btn btn-sm px-3"
+       style="background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.35);">
+      <i class="bi bi-fuel-pump-fill me-1"></i> Lucro Postos
+    </a>
+  </div>
+
+  <!-- ── FILTROS ──────────────────────────────────────────────────────────── -->
+  <form method="GET" id="formFiltro" class="card shadow-sm mb-3">
+    <div class="flt-header"><i class="bi bi-funnel me-1"></i> Filtros</div>
+    <div class="card-body py-2">
+      <div class="row g-2 align-items-start">
+
+        <!-- Empresa -->
+        <div class="col-md-3">
+          <label class="form-label form-label-sm mb-0 fw-semibold">
+            Empresa <small class="text-muted fw-normal">(Ctrl+clique p/ múltiplas)</small>
+          </label>
+          <select name="empresa_ids[]" id="sel_empresas" class="form-select form-select-sm" multiple size="5">
+            {% for e in empresas %}
+            <option value="{{ e.id }}" {% if e.id|string in empresa_ids %}selected{% endif %}>
+              {{ e.nome }}
+            </option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <!-- Datas -->
+        <div class="col-md-2">
+          <label class="form-label form-label-sm mb-0 fw-semibold">Data início</label>
+          <input type="date" name="data_inicio" id="data_inicio"
+                 value="{{ data_inicio }}" class="form-control form-control-sm">
+          <div class="mt-1 d-flex gap-1 flex-wrap">
+            <button type="button" class="btn btn-outline-secondary btn-sm" style="font-size:.7rem;padding:.15rem .4rem;" onclick="setPeriodo('mes')">Este mês</button>
+            <button type="button" class="btn btn-outline-secondary btn-sm" style="font-size:.7rem;padding:.15rem .4rem;" onclick="setPeriodo('mes_ant')">Mês ant.</button>
+            <button type="button" class="btn btn-outline-secondary btn-sm" style="font-size:.7rem;padding:.15rem .4rem;" onclick="setPeriodo('ano')">Este ano</button>
+          </div>
+        </div>
+        <div class="col-md-2">
+          <label class="form-label form-label-sm mb-0 fw-semibold">Data fim</label>
+          <input type="date" name="data_fim" id="data_fim"
+                 value="{{ data_fim }}" class="form-control form-control-sm">
+        </div>
+
+        <!-- Títulos de despesa -->
+        <div class="col-md-2">
+          <label class="form-label form-label-sm mb-0 fw-semibold">
+            Categorias Despesa <small class="text-muted fw-normal">(Ctrl+clique)</small>
+          </label>
+          <select name="titulo_ids[]" id="sel_titulos" class="form-select form-select-sm" multiple size="5">
+            {% for t in titulos %}
+            <option value="{{ t.id }}" {% if t.id|string in titulo_ids %}selected{% endif %}>
+              {{ t.nome }}
+            </option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <!-- Formas de recebimento -->
+        {% if formas %}
+        <div class="col-md-2">
+          <label class="form-label form-label-sm mb-0 fw-semibold">
+            Formas Receb. <small class="text-muted fw-normal">(Ctrl+clique)</small>
+          </label>
+          <select name="forma_ids[]" id="sel_formas" class="form-select form-select-sm" multiple size="5">
+            {% for f in formas %}
+            <option value="{{ f.id }}" {% if f.id|string in forma_ids %}selected{% endif %}>
+              {{ f.nome }}
+            </option>
+            {% endfor %}
+          </select>
+        </div>
+        {% endif %}
+
+        <!-- Incluir blocos -->
+        <div class="col-md-1">
+          <label class="form-label form-label-sm mb-1 fw-semibold d-block">Incluir</label>
+          <div class="form-check form-check-sm">
+            <input class="form-check-input" type="checkbox" name="include_vendas"  value="1" id="chk_vendas"
+                   {% if include_vendas %}checked{% endif %}>
+            <label class="form-check-label small" for="chk_vendas">Vendas</label>
+          </div>
+          <div class="form-check form-check-sm">
+            <input class="form-check-input" type="checkbox" name="include_aluguel" value="1" id="chk_aluguel"
+                   {% if include_aluguel %}checked{% endif %}>
+            <label class="form-check-label small" for="chk_aluguel">Aluguel</label>
+          </div>
+          <div class="form-check form-check-sm">
+            <input class="form-check-input" type="checkbox" name="include_prazo"   value="1" id="chk_prazo"
+                   {% if include_prazo %}checked{% endif %}>
+            <label class="form-check-label small" for="chk_prazo">Clientes Prazo</label>
+          </div>
+        </div>
+
+        <!-- Ações -->
+        <div class="col-12 d-flex gap-2 flex-wrap align-items-center mt-1">
+          <button type="submit" class="btn btn-success btn-sm px-4">
+            <i class="bi bi-search me-1"></i> Filtrar
+          </button>
+          <a href="{{ url_for('dre_postos.dre_postos') }}" class="btn btn-outline-secondary btn-sm px-3">
+            <i class="bi bi-x-circle me-1"></i> Limpar
+          </a>
+          <button type="button" class="btn btn-outline-primary btn-sm px-3" onclick="salvarFiltro()">
+            <i class="bi bi-bookmark-fill me-1"></i> Salvar Filtro
+          </button>
+          <button type="button" class="btn btn-outline-warning btn-sm px-3" onclick="carregarFiltro()">
+            <i class="bi bi-bookmark me-1"></i> Carregar Filtro
+          </button>
+          <span id="msg_filtro" class="text-muted small"></span>
+        </div>
+
+      </div>
+    </div>
+  </form>
+
+  <!-- ── TABELA DRE ───────────────────────────────────────────────────────── -->
+  {% if months %}
+  <div class="card shadow-sm">
+    <div class="card-header py-2" style="background:#198754;color:#fff;font-size:.78rem;font-weight:600;">
+      <i class="bi bi-table me-1"></i>
+      DRE — {{ data_inicio|replace('-','/') }} a {{ data_fim|replace('-','/') }}
+      {% if empresa_ids %}<span class="ms-2 opacity-75 small">({{ empresa_ids|length }} empresa{{ 's' if empresa_ids|length > 1 else '' }})</span>{% endif %}
+    </div>
+    <div class="card-body p-0" style="overflow-x:auto;">
+      <table class="tbl-dre">
+        <thead>
+          <tr>
+            <th class="col-desc">Descrição</th>
+            {% for m in months %}<th>{{ m.label }}{{ '/'+m.year|string if months|length > 12 else '' }}</th>{% endfor %}
+            <th class="col-acum">TOTAL</th>
+          </tr>
+        </thead>
+        <tbody>
+
+          {# ══════════════════════════════════════════════════════
+             BLOCO: RECEITAS
+          ══════════════════════════════════════════════════════ #}
+          <tr class="row-section">
+            <td class="col-desc" colspan="{{ months|length + 2 }}">
+              <i class="bi bi-arrow-up-circle me-1"></i> RECEITAS
+            </td>
+          </tr>
+
+          {# ── Vendas de Combustíveis (R$) ─────────────────── #}
+          {% if include_vendas %}
+          <tr class="row-item">
+            <td class="col-desc fw-semibold">
+              <i class="bi bi-fuel-pump-fill me-1 text-success"></i> Vendas de Combustíveis
+            </td>
+            {% for m in months %}
+              {% set v = vendas_reais_by_month.get(m.key, 0) %}
+              <td class="text-end">{{ fmt(v) }}</td>
+            {% endfor %}
+            <td class="text-end col-acum">{{ fmt(grand_vendas_reais) }}</td>
+          </tr>
+
+          {# ── Vendas em Litros (informativo, expandível por produto) ── #}
+          {% if vendas_litros_by_month %}
+          <tr class="row-litros" onclick="toggleGroup('litros')" style="cursor:pointer;">
+            <td class="col-desc">
+              <span class="toggle-icon" id="icon-litros" style="color:#5a4500;">▶</span>
+              <i class="bi bi-droplet me-1"></i> Litros Vendidos <em class="text-muted small">(informativo)</em>
+            </td>
+            {% set total_litros_linha = namespace(v={}) %}
+            {% for m in months %}
+              {% set mk = m.key %}
+              {% set mes_litros = vendas_litros_by_month.get(mk, {}) %}
+              {% set soma = namespace(s=0) %}
+              {% for prod, lts in mes_litros.items() %}{% set soma.s = soma.s + lts %}{% endfor %}
+              <td class="text-end">{{ fmtL(soma.s) }}</td>
+            {% endfor %}
+            {% set total_all = namespace(t=0) %}
+            {% for prod, lts in grand_vendas_litros.items() %}{% set total_all.t = total_all.t + lts %}{% endfor %}
+            <td class="text-end col-acum">{{ fmtL(total_all.t) }}</td>
+          </tr>
+          {# Linhas filhas por produto #}
+          {% set all_prods = [] %}
+          {% for mk, prod_map in vendas_litros_by_month.items() %}
+            {% for prod in prod_map.keys() %}
+              {% if prod not in all_prods %}{% set _ = all_prods.append(prod) %}{% endif %}
+            {% endfor %}
+          {% endfor %}
+          {% for prod in all_prods | sort %}
+          <tr class="row-litros-child" data-group="litros" style="display:none;">
+            <td class="col-desc">└ {{ prod }}</td>
+            {% for m in months %}
+              {% set lts = vendas_litros_by_month.get(m.key, {}).get(prod, 0) %}
+              <td class="text-end">{{ fmtL(lts) }}</td>
+            {% endfor %}
+            <td class="text-end col-acum">{{ fmtL(grand_vendas_litros.get(prod, 0)) }}</td>
+          </tr>
+          {% endfor %}
+          {% endif %}{# if vendas_litros_by_month #}
+          {% endif %}{# if include_vendas #}
+
+          {# ── Recebimento de Aluguel ──────────────────────── #}
+          {% if include_aluguel %}
+          <tr class="row-item" onclick="toggleGroup('aluguel')" style="cursor:pointer;">
+            <td class="col-desc fw-semibold">
+              <span class="toggle-icon" id="icon-aluguel">▶</span>
+              <i class="bi bi-house-door me-1 text-primary"></i> Recebimento de Aluguel
+            </td>
+            {% for m in months %}
+              {% set v = recebimentos.aluguel.get(m.key, 0) %}
+              <td class="text-end">{{ fmt(v) }}</td>
+            {% endfor %}
+            <td class="text-end col-acum">{{ fmt(grand_aluguel) }}</td>
+          </tr>
+          {% for f in recebimentos.aluguel_formas %}
+          <tr class="row-child" data-group="aluguel" style="display:none;">
+            <td class="col-desc">└ {{ f.nome }}</td>
+            {% for m in months %}
+              {% set v = f.by_month.get(m.key, 0) %}
+              <td class="text-end">{{ fmt(v) }}</td>
+            {% endfor %}
+            <td class="text-end col-acum">{{ fmt(f.total) }}</td>
+          </tr>
+          {% endfor %}
+          {% endif %}{# if include_aluguel #}
+
+          {# ── Clientes à Prazo ────────────────────────────── #}
+          {% if include_prazo %}
+          <tr class="row-item" onclick="toggleGroup('prazo')" style="cursor:pointer;">
+            <td class="col-desc fw-semibold">
+              <span class="toggle-icon" id="icon-prazo">▶</span>
+              <i class="bi bi-person-lines-fill me-1 text-info"></i> Clientes à Prazo
+            </td>
+            {% for m in months %}
+              {% set v = recebimentos.cliente_a_prazo.get(m.key, 0) %}
+              <td class="text-end">{{ fmt(v) }}</td>
+            {% endfor %}
+            <td class="text-end col-acum">{{ fmt(grand_prazo) }}</td>
+          </tr>
+          {% for f in recebimentos.cliente_a_prazo_formas %}
+          <tr class="row-child" data-group="prazo" style="display:none;">
+            <td class="col-desc">└ {{ f.nome }}</td>
+            {% for m in months %}
+              {% set v = f.by_month.get(m.key, 0) %}
+              <td class="text-end">{{ fmt(v) }}</td>
+            {% endfor %}
+            <td class="text-end col-acum">{{ fmt(f.total) }}</td>
+          </tr>
+          {% endfor %}
+          {% endif %}{# if include_prazo #}
+
+          {# TOTAL RECEITAS #}
+          <tr class="row-block-total">
+            <td class="col-desc"><i class="bi bi-plus-circle-fill me-1"></i> TOTAL RECEITAS</td>
+            {% for m in months %}
+              {% set v = receitas_by_month.get(m.key, 0) %}
+              <td class="text-end {% if v == 0 %}val-zero{% endif %}">
+                {% if v != 0 %}R$ {{ '{:,.2f}'.format(v).replace(',','X').replace('.',',').replace('X','.') }}{% else %}—{% endif %}
+              </td>
+            {% endfor %}
+            <td class="text-end col-acum">R$ {{ '{:,.2f}'.format(grand_receitas).replace(',','X').replace('.',',').replace('X','.') }}</td>
+          </tr>
+
+          {# ══════════════════════════════════════════════════════
+             BLOCO: DESPESAS
+          ══════════════════════════════════════════════════════ #}
+          <tr class="row-section">
+            <td class="col-desc" colspan="{{ months|length + 2 }}">
+              <i class="bi bi-dash-circle me-1"></i> DESPESAS
+            </td>
+          </tr>
+
+          {% if not despesas_blocks %}
+          <tr>
+            <td class="col-desc text-muted" colspan="{{ months|length + 2 }}">
+              <em>Nenhuma despesa encontrada no período / filtros selecionados.</em>
+            </td>
+          </tr>
+          {% endif %}
+
+          {% for block in despesas_blocks %}
+          {# Título do bloco (expansível) #}
+          <tr class="row-titulo" onclick="toggleGroup('tit_{{ block.titulo_id }}')">
+            <td class="col-desc">
+              <span class="toggle-icon" id="icon-tit_{{ block.titulo_id }}">▶</span>
+              {{ block.titulo_nome }}
+            </td>
+            {% for m in months %}
+              {% set v = block.total_by_month.get(m.key, 0) %}
+              <td class="text-end {% if v == 0 %}val-zero{% endif %}">
+                {% if v != 0 %}R$ {{ '{:,.2f}'.format(v).replace(',','X').replace('.',',').replace('X','.') }}{% else %}—{% endif %}
+              </td>
+            {% endfor %}
+            <td class="text-end col-acum">R$ {{ '{:,.2f}'.format(block.total).replace(',','X').replace('.',',').replace('X','.') }}</td>
+          </tr>
+          {# Linhas de categoria (ocultas por padrão) #}
+          {% for row in block.rows %}
+          <tr class="row-item row-child" data-group="tit_{{ block.titulo_id }}" style="display:none;">
+            <td class="col-desc">└ {{ row.categoria_nome }}</td>
+            {% for m in months %}
+              {% set v = row.by_month.get(m.key, 0) %}
+              <td class="text-end {% if v == 0 %}val-zero{% endif %}">{{ fmt(v) }}</td>
+            {% endfor %}
+            <td class="text-end col-acum">{{ fmt(row.total) }}</td>
+          </tr>
+          {% endfor %}
+          {% endfor %}{# for block in despesas_blocks #}
+
+          {# TOTAL DESPESAS #}
+          <tr class="row-desp-total">
+            <td class="col-desc"><i class="bi bi-dash-circle-fill me-1"></i> TOTAL DESPESAS</td>
+            {% for m in months %}
+              {% set v = grand_despesas_by_month.get(m.key, 0) %}
+              <td class="text-end {% if v == 0 %}val-zero{% endif %}">
+                {% if v != 0 %}R$ {{ '{:,.2f}'.format(v).replace(',','X').replace('.',',').replace('X','.') }}{% else %}—{% endif %}
+              </td>
+            {% endfor %}
+            <td class="text-end col-acum">R$ {{ '{:,.2f}'.format(grand_despesas).replace(',','X').replace('.',',').replace('X','.') }}</td>
+          </tr>
+
+          {# ══════════════════════════════════════════════════════
+             LUCRO OPERACIONAL
+          ══════════════════════════════════════════════════════ #}
+          <tr class="row-lucro {% if grand_lucro < 0 %}row-lucro-neg{% endif %}">
+            <td class="col-desc"><i class="bi bi-trophy-fill me-1"></i> LUCRO OPERACIONAL</td>
+            {% for m in months %}
+              {% set v = lucro_by_month.get(m.key, 0) %}
+              <td class="text-end">{{ fmtResult(v) }}</td>
+            {% endfor %}
+            <td class="text-end col-acum">{{ fmtResult(grand_lucro) }}</td>
+          </tr>
+
+        </tbody>
+      </table>
+    </div><!-- card-body -->
+  </div><!-- card -->
+
+  {% else %}
+  <div class="alert alert-info d-flex align-items-center gap-2">
+    <i class="bi bi-info-circle-fill fs-5"></i>
+    <span>Selecione o <strong>período</strong> e ao menos uma <strong>Empresa</strong> e clique em <strong>Filtrar</strong>.</span>
+  </div>
+  {% endif %}
+
+</div>{# container-fluid #}
+
+<script>
+// ── Toggle rows de grupo ──────────────────────────────────────────────────
+function toggleGroup(gid) {
+  var rows  = document.querySelectorAll('[data-group="' + gid + '"]');
+  var icon  = document.getElementById('icon-' + gid);
+  var shown = rows.length > 0 && rows[0].style.display !== 'none';
+  rows.forEach(function(r) { r.style.display = shown ? 'none' : ''; });
+  if (icon) icon.textContent = shown ? '▶' : '▼';
+}
+
+// ── Período rápido ────────────────────────────────────────────────────────
+function setPeriodo(tipo) {
+  var hoje = new Date();
+  var ini, fim;
+  if (tipo === 'mes') {
+    ini = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
+    fim = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0);
+  } else if (tipo === 'mes_ant') {
+    ini = new Date(hoje.getFullYear(), hoje.getMonth() - 1, 1);
+    fim = new Date(hoje.getFullYear(), hoje.getMonth(), 0);
+  } else {
+    ini = new Date(hoje.getFullYear(), 0, 1);
+    fim = new Date(hoje.getFullYear(), 11, 31);
+  }
+  document.getElementById('data_inicio').value = fmtDate(ini);
+  document.getElementById('data_fim').value    = fmtDate(fim);
+}
+function fmtDate(d) {
+  return d.getFullYear() + '-' +
+         String(d.getMonth() + 1).padStart(2,'0') + '-' +
+         String(d.getDate()).padStart(2,'0');
+}
+
+// ── Salvar / Carregar filtro via localStorage ─────────────────────────────
+var LS_KEY = 'dre_postos_filtro';
+
+function salvarFiltro() {
+  var sel = function(id) {
+    var el = document.getElementById(id);
+    if (!el) return [];
+    return Array.from(el.selectedOptions).map(function(o){ return o.value; });
+  };
+  var chk = function(id) {
+    var el = document.getElementById(id);
+    return el ? el.checked : true;
+  };
+  var data = {
+    empresas:        sel('sel_empresas'),
+    titulos:         sel('sel_titulos'),
+    formas:          sel('sel_formas'),
+    data_inicio:     document.getElementById('data_inicio').value,
+    data_fim:        document.getElementById('data_fim').value,
+    include_vendas:  chk('chk_vendas'),
+    include_aluguel: chk('chk_aluguel'),
+    include_prazo:   chk('chk_prazo'),
+  };
+  try {
+    localStorage.setItem(LS_KEY, JSON.stringify(data));
+    document.getElementById('msg_filtro').textContent = '✔ Filtro salvo!';
+    setTimeout(function(){ document.getElementById('msg_filtro').textContent = ''; }, 2500);
+  } catch(e) {
+    document.getElementById('msg_filtro').textContent = 'Erro ao salvar.';
+  }
+}
+
+function carregarFiltro() {
+  try {
+    var saved = localStorage.getItem(LS_KEY);
+    if (!saved) { document.getElementById('msg_filtro').textContent = 'Nenhum filtro salvo.'; return; }
+    var data = JSON.parse(saved);
+    _applyFiltro(data);
+    document.getElementById('msg_filtro').textContent = '✔ Filtro carregado!';
+    setTimeout(function(){ document.getElementById('msg_filtro').textContent = ''; }, 2500);
+  } catch(e) {
+    document.getElementById('msg_filtro').textContent = 'Erro ao carregar filtro.';
+  }
+}
+
+function _applyFiltro(data) {
+  var setMulti = function(id, vals) {
+    var el = document.getElementById(id);
+    if (!el) return;
+    Array.from(el.options).forEach(function(o) {
+      o.selected = vals.indexOf(o.value) >= 0;
+    });
+  };
+  setMulti('sel_empresas', data.empresas || []);
+  setMulti('sel_titulos',  data.titulos  || []);
+  setMulti('sel_formas',   data.formas   || []);
+  if (data.data_inicio) document.getElementById('data_inicio').value = data.data_inicio;
+  if (data.data_fim)    document.getElementById('data_fim').value    = data.data_fim;
+  var setChk = function(id, val) {
+    var el = document.getElementById(id);
+    if (el) el.checked = !!val;
+  };
+  setChk('chk_vendas',  data.include_vendas  !== false);
+  setChk('chk_aluguel', data.include_aluguel !== false);
+  setChk('chk_prazo',   data.include_prazo   !== false);
+}
+</script>
+{% endblock %}
