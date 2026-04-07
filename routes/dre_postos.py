@@ -33,6 +33,16 @@ bp = Blueprint('dre_postos', __name__, url_prefix='/relatorios')
 _MES_LABELS = ['JAN', 'FEV', 'MAR', 'ABR', 'MAI', 'JUN',
                'JUL', 'AGO', 'SET', 'OUT', 'NOV', 'DEZ']
 
+# Matches the same logic used in the lancamentos_caixa lista route:
+# include FECHADO, legacy NULL, and ABERTO records that are not auto-generated Troco PIX.
+_LC_STATUS_COND = (
+    "(lc.status = 'FECHADO'"
+    " OR lc.status IS NULL"
+    " OR (lc.status = 'ABERTO'"
+    "     AND (lc.observacao IS NULL"
+    "          OR lc.observacao NOT LIKE 'Lançamento automático - Troco PIX%')))"
+)
+
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Helpers genéricos
@@ -208,7 +218,7 @@ def _fetch_vendas_reais(conn, data_inicio, data_fim, empresa_ids):
             FROM lancamentos_caixa_receitas lcr
             INNER JOIN lancamentos_caixa lc ON lc.id = lcr.lancamento_caixa_id
             WHERE lc.data BETWEEN %s AND %s
-              AND lc.status = 'FECHADO'
+              AND {_LC_STATUS_COND}
               AND UPPER(TRIM(lcr.tipo)) = 'VENDAS POSTO'
               {emp_cond}
             GROUP BY yr, mo
