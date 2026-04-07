@@ -27,6 +27,16 @@ _MONTHS_PT = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun',
 
 bp = Blueprint('conf_fechamento', __name__, url_prefix='/relatorios')
 
+# Matches the same logic used in the lancamentos_caixa lista route:
+# include FECHADO, legacy NULL, and ABERTO records that are not auto-generated Troco PIX.
+_LC_STATUS_COND = (
+    "(lc.status = 'FECHADO'"
+    " OR lc.status IS NULL"
+    " OR (lc.status = 'ABERTO'"
+    "     AND (lc.observacao IS NULL"
+    "          OR lc.observacao NOT LIKE 'Lançamento automático - Troco PIX%')))"
+)
+
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Helpers
@@ -99,7 +109,7 @@ def _fetch_receitas(conn, data_inicio, data_fim, empresa_ids):
                  INNER JOIN lancamentos_caixa lc ON lc.id = lcr.lancamento_caixa_id
                  LEFT  JOIN tipos_receita_caixa tr ON tr.nome = lcr.tipo
                  WHERE lc.data BETWEEN %s AND %s
-                   AND lc.status = 'FECHADO'
+                   AND {_LC_STATUS_COND}
                    {emp_cond}
                UNION ALL
                -- Sobras de caixa por funcionário
@@ -109,7 +119,7 @@ def _fetch_receitas(conn, data_inicio, data_fim, empresa_ids):
                  FROM lancamentos_caixa_sobras_funcionarios s
                  INNER JOIN lancamentos_caixa lc ON lc.id = s.lancamento_caixa_id
                  WHERE lc.data BETWEEN %s AND %s
-                   AND lc.status = 'FECHADO'
+                   AND {_LC_STATUS_COND}
                    {emp_cond}
              ) sub
              GROUP BY data, tipo_nome
@@ -160,7 +170,7 @@ def _fetch_comprovacoes(conn, data_inicio, data_fim, empresa_ids):
                  LEFT  JOIN formas_pagamento_caixa fp ON fp.id = lcc.forma_pagamento_id
                  LEFT  JOIN bandeiras_cartao bc ON bc.id = lcc.bandeira_cartao_id
                  WHERE lc.data BETWEEN %s AND %s
-                   AND lc.status = 'FECHADO'
+                   AND {_LC_STATUS_COND}
                    {emp_cond}
                    AND (fp.tipo IS NULL
                         OR fp.tipo NOT IN ('CARTAO','RETIRADA_PAGAMENTO'))
@@ -176,7 +186,7 @@ def _fetch_comprovacoes(conn, data_inicio, data_fim, empresa_ids):
                  LEFT  JOIN formas_pagamento_caixa fp ON fp.id = lcc.forma_pagamento_id
                  LEFT  JOIN bandeiras_cartao bc ON bc.id = lcc.bandeira_cartao_id
                  WHERE lc.data BETWEEN %s AND %s
-                   AND lc.status = 'FECHADO'
+                   AND {_LC_STATUS_COND}
                    {emp_cond}
                    AND fp.tipo = 'CARTAO'
 
@@ -191,7 +201,7 @@ def _fetch_comprovacoes(conn, data_inicio, data_fim, empresa_ids):
                  LEFT  JOIN formas_pagamento_caixa fp ON fp.id = lcc.forma_pagamento_id
                  LEFT  JOIN bandeiras_cartao bc ON bc.id = lcc.bandeira_cartao_id
                  WHERE lc.data BETWEEN %s AND %s
-                   AND lc.status = 'FECHADO'
+                   AND {_LC_STATUS_COND}
                    {emp_cond}
                    AND fp.tipo = 'CARTAO'
 
@@ -205,7 +215,7 @@ def _fetch_comprovacoes(conn, data_inicio, data_fim, empresa_ids):
                  INNER JOIN lancamentos_caixa lc ON lc.id = lcc.lancamento_caixa_id
                  LEFT  JOIN formas_pagamento_caixa fp ON fp.id = lcc.forma_pagamento_id
                  WHERE lc.data BETWEEN %s AND %s
-                   AND lc.status = 'FECHADO'
+                   AND {_LC_STATUS_COND}
                    {emp_cond}
                    AND fp.tipo = 'RETIRADA_PAGAMENTO'
                    AND UPPER(TRIM(COALESCE(lcc.descricao,''))) IN ({fixed_in})
@@ -220,7 +230,7 @@ def _fetch_comprovacoes(conn, data_inicio, data_fim, empresa_ids):
                  INNER JOIN lancamentos_caixa lc ON lc.id = lcc.lancamento_caixa_id
                  LEFT  JOIN formas_pagamento_caixa fp ON fp.id = lcc.forma_pagamento_id
                  WHERE lc.data BETWEEN %s AND %s
-                   AND lc.status = 'FECHADO'
+                   AND {_LC_STATUS_COND}
                    {emp_cond}
                    AND fp.tipo = 'RETIRADA_PAGAMENTO'
                    AND UPPER(TRIM(COALESCE(lcc.descricao,''))) NOT IN ({fixed_in})
@@ -235,7 +245,7 @@ def _fetch_comprovacoes(conn, data_inicio, data_fim, empresa_ids):
                  INNER JOIN lancamentos_caixa lc ON lc.id = lcc.lancamento_caixa_id
                  LEFT  JOIN formas_pagamento_caixa fp ON fp.id = lcc.forma_pagamento_id
                  WHERE lc.data BETWEEN %s AND %s
-                   AND lc.status = 'FECHADO'
+                   AND {_LC_STATUS_COND}
                    {emp_cond}
                    AND fp.tipo = 'RETIRADA_PAGAMENTO'
                    AND UPPER(TRIM(COALESCE(lcc.descricao,''))) NOT IN ({fixed_in})
@@ -249,7 +259,7 @@ def _fetch_comprovacoes(conn, data_inicio, data_fim, empresa_ids):
                  FROM lancamentos_caixa_perdas_funcionarios p
                  INNER JOIN lancamentos_caixa lc ON lc.id = p.lancamento_caixa_id
                  WHERE lc.data BETWEEN %s AND %s
-                   AND lc.status = 'FECHADO'
+                   AND {_LC_STATUS_COND}
                    {emp_cond}
 
                UNION ALL
@@ -261,7 +271,7 @@ def _fetch_comprovacoes(conn, data_inicio, data_fim, empresa_ids):
                  FROM lancamentos_caixa_vales_funcionarios v
                  INNER JOIN lancamentos_caixa lc ON lc.id = v.lancamento_caixa_id
                  WHERE lc.data BETWEEN %s AND %s
-                   AND lc.status = 'FECHADO'
+                   AND {_LC_STATUS_COND}
                    {emp_cond}
              ) sub
              GROUP BY data, forma_nome, parent_nome
@@ -287,7 +297,7 @@ def _fetch_totais(conn, data_inicio, data_fim, empresa_ids):
                    SUM(lc.diferenca)         AS diferenca
              FROM lancamentos_caixa lc
              WHERE lc.data BETWEEN %s AND %s
-               AND lc.status = 'FECHADO'
+               AND {_LC_STATUS_COND}
                {emp_cond}
              GROUP BY lc.data
              ORDER BY lc.data""",
