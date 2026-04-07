@@ -165,6 +165,7 @@
             <th class="text-center" style="width:88px;">Tipo</th>
             <th class="text-center" style="width:88px;">Dt. Pagto</th>
             <th class="text-center" style="width:88px;">Dt. Carga</th>
+            <th style="min-width:100px;">Produto</th>
             <th class="text-end"   style="width:80px;">Qtd</th>
             <th class="text-end"   style="width:78px;">Vlr Unit.</th>
             <th class="text-end"   style="width:105px;">Vlr Compra</th>
@@ -184,6 +185,7 @@
             </td>
             <td class="text-center">{{ linha.data_pagto }}</td>
             <td class="text-center">{{ linha.data_carregamento }}</td>
+            <td>{{ linha.produto_nome }}</td>
             <td class="text-end">
               {% if linha.quantidade %}{{ linha.quantidade | fmtnum(3) }}{% endif %}
             </td>
@@ -203,7 +205,7 @@
           {% endfor %}
           <!-- Supplier total row -->
           <tr class="row-total">
-            <td colspan="3" class="text-end fw-bold">TOTAL {{ forn.fornecedor_nome }}</td>
+            <td colspan="4" class="text-end fw-bold">TOTAL {{ forn.fornecedor_nome }}</td>
             <td class="text-end">{{ forn.total_qtd | fmtnum(3) }}</td>
             <td></td>
             <td class="text-end">{{ forn.total_compra | fmtmoney }}</td>
@@ -228,6 +230,7 @@
           <th class="text-center" style="width:88px;">Tipo</th>
           <th class="text-center" style="width:88px;">Dt. Pagto</th>
           <th class="text-center" style="width:88px;">Dt. Carga</th>
+          <th style="min-width:100px;">Produto</th>
           <th class="text-end"   style="width:80px;">Qtd</th>
           <th class="text-end"   style="width:78px;">Vlr Unit.</th>
           <th class="text-end"   style="width:105px;">Vlr Compra</th>
@@ -249,6 +252,7 @@
           </td>
           <td class="text-center">{{ linha.data_pagto }}</td>
           <td class="text-center">{{ linha.data_carregamento }}</td>
+          <td>{{ linha.produto_nome }}</td>
           <td class="text-end">
             {% if linha.quantidade %}{{ linha.quantidade | fmtnum(3) }}{% endif %}
           </td>
@@ -277,7 +281,7 @@
     <table class="table table-bordered table-sm tbl-conf">
       <thead>
         <tr class="row-grand">
-          <td colspan="3" class="fw-bold fs-6">TOTAL GERAL</td>
+          <td colspan="4" class="fw-bold fs-6">TOTAL GERAL</td>
           <td class="text-end fw-bold">{{ grand_total_qtd | fmtnum(3) }}</td>
           <td></td>
           <td class="text-end fw-bold">{{ grand_total_compra | fmtmoney }}</td>

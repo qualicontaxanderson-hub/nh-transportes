@@ -80,10 +80,12 @@ def _fetch_carregamentos(conn, data_inicio, data_fim, cliente_ids, fornecedor_id
             f.fornecedores_id                               AS fornecedor_id,
             fo.razao_social                                 AS fornecedor_nome,
             'carregamento'                                  AS tipo,
-            COALESCE(c.nome_fantasia, c.razao_social)       AS empresa_nome
+            COALESCE(c.nome_fantasia, c.razao_social)       AS empresa_nome,
+            COALESCE(p.nome, '')                            AS produto_nome
         FROM fretes f
         JOIN fornecedores fo ON fo.id = f.fornecedores_id
         LEFT JOIN clientes c ON c.id = f.clientes_id
+        LEFT JOIN produto p ON p.id = f.produto_id
         WHERE {' AND '.join(where)}
         ORDER BY f.data_frete, f.id
     """
@@ -125,7 +127,8 @@ def _fetch_pagamentos(conn, data_inicio, data_fim, cliente_ids, fornecedor_ids):
             bt.fornecedor_id                                AS fornecedor_id,
             fo.razao_social                                 AS fornecedor_nome,
             'pagamento'                                     AS tipo,
-            COALESCE(c.nome_fantasia, c.razao_social)       AS empresa_nome
+            COALESCE(c.nome_fantasia, c.razao_social)       AS empresa_nome,
+            ''                                              AS produto_nome
         FROM bank_transactions bt
         JOIN bank_accounts ba ON ba.id = bt.account_id
         JOIN fornecedores fo ON fo.id = bt.fornecedor_id
@@ -210,6 +213,7 @@ def _build_linhas(carregamentos, pagamentos):
                 'tipo': ev['tipo'],
                 'data_pagto': _fmt(ev.get('data_pagto')),
                 'data_carregamento': _fmt(ev.get('data_carregamento')),
+                'produto_nome': ev.get('produto_nome') or '',
                 'quantidade': qtd,
                 'vlr_uni': vlr_uni,
                 'vlr_compra_total': vlr_compra,
