@@ -240,38 +240,28 @@ def _fetch_vendas_reais(conn, data_inicio, data_fim, empresa_ids):
 
 def _fetch_vendas_por_produto(conn, data_inicio, data_fim, empresa_ids):
     """
-    Retorna vendas por produto por mês via fifo_resumo_mensal.
+    Retorna vendas por produto por mês via vendas_posto (cobre meses ABERTO e FECHADO).
     Retorna {mk: {produto_nome: {'litros': float, 'reais': float}}}.
-    mk = 'YYYYMM'  (calculado a partir de fifo_competencia.ano_mes 'YYYY-MM')
+    mk = 'YYYYMM'
     """
-    try:
-        d_ini = datetime.strptime(data_inicio, '%Y-%m-%d').date()
-        d_fim = datetime.strptime(data_fim,    '%Y-%m-%d').date()
-    except (ValueError, TypeError):
-        return {}
-
-    ano_mes_ini = f'{d_ini.year}-{d_ini.month:02d}'
-    ano_mes_fim = f'{d_fim.year}-{d_fim.month:02d}'
-
     cur = conn.cursor(dictionary=True)
     ph_emp = ','.join(['%s'] * len(empresa_ids)) if empresa_ids else None
-    emp_cond = f'AND fc.cliente_id IN ({ph_emp})' if ph_emp else ''
-    params = [ano_mes_ini, ano_mes_fim] + (list(empresa_ids) if empresa_ids else [])
+    emp_cond = f'AND vp.cliente_id IN ({ph_emp})' if ph_emp else ''
+    params = [data_inicio, data_fim] + (list(empresa_ids) if empresa_ids else [])
 
     try:
         cur.execute(f"""
-            SELECT fc.ano_mes,
-                   p.nome AS produto_nome,
-                   SUM(r.qtde_saida)          AS litros,
-                   SUM(r.receita_saida_total)  AS reais
-            FROM fifo_resumo_mensal r
-            INNER JOIN fifo_competencia fc ON fc.id = r.competencia_id
-            INNER JOIN produto p ON p.id = r.produto_id
-            WHERE fc.ano_mes BETWEEN %s AND %s
-              AND r.substituido = 0
+            SELECT YEAR(vp.data_movimento)  AS yr,
+                   MONTH(vp.data_movimento) AS mo,
+                   p.nome                   AS produto_nome,
+                   SUM(COALESCE(vp.quantidade_litros, 0)) AS litros,
+                   SUM(COALESCE(vp.valor_total, 0))       AS reais
+            FROM vendas_posto vp
+            INNER JOIN produto p ON p.id = vp.produto_id
+            WHERE vp.data_movimento BETWEEN %s AND %s
               {emp_cond}
-            GROUP BY fc.ano_mes, p.nome
-            ORDER BY fc.ano_mes, p.nome
+            GROUP BY yr, mo, p.nome
+            ORDER BY yr, mo, p.nome
         """, params)
         rows = cur.fetchall()
     except Exception:
@@ -280,7 +270,7 @@ def _fetch_vendas_por_produto(conn, data_inicio, data_fim, empresa_ids):
 
     result: dict = {}
     for r in rows:
-        mk   = r['ano_mes'].replace('-', '')
+        mk   = _make_month_key(r['yr'], r['mo'])
         prod = r['produto_nome']
         entry = result.setdefault(mk, {}).setdefault(
             prod, {'litros': 0.0, 'reais': 0.0})
