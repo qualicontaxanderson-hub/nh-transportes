@@ -219,7 +219,7 @@ def _fetch_vendas_reais(conn, data_inicio, data_fim, empresa_ids):
             INNER JOIN lancamentos_caixa lc ON lc.id = lcr.lancamento_caixa_id
             WHERE lc.data BETWEEN %s AND %s
               AND {_LC_STATUS_COND}
-              AND UPPER(TRIM(lcr.tipo)) = 'VENDAS POSTO'
+              AND UPPER(TRIM(lcr.tipo)) IN ('VENDAS POSTO', 'ARLA', 'LUBRIFICANTES')
               {emp_cond}
             GROUP BY yr, mo
         """, params)
@@ -276,6 +276,49 @@ def _fetch_vendas_por_produto(conn, data_inicio, data_fim, empresa_ids):
             prod, {'litros': 0.0, 'reais': 0.0})
         entry['litros'] += float(r['litros'] or 0)
         entry['reais']  += float(r['reais']  or 0)
+    return result
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Receitas: Vendas extras (ARLA, Lubrificantes) — somente R$
+# ──────────────────────────────────────────────────────────────────────────────
+
+def _fetch_vendas_extras_caixa(conn, data_inicio, data_fim, empresa_ids):
+    """
+    Retorna ARLA e LUBRIFICANTES de lancamentos_caixa_receitas por mês (somente R$).
+    Retorna {mk: {tipo_nome: {'litros': 0.0, 'reais': float}}}.
+    """
+    cur = conn.cursor(dictionary=True)
+    ph_emp = ','.join(['%s'] * len(empresa_ids)) if empresa_ids else None
+    emp_cond = f'AND lc.cliente_id IN ({ph_emp})' if ph_emp else ''
+    params = [data_inicio, data_fim] + (list(empresa_ids) if empresa_ids else [])
+    try:
+        cur.execute(f"""
+            SELECT YEAR(lc.data)  AS yr,
+                   MONTH(lc.data) AS mo,
+                   UPPER(TRIM(lcr.tipo)) AS tipo_nome,
+                   SUM(lcr.valor)        AS reais
+            FROM lancamentos_caixa_receitas lcr
+            INNER JOIN lancamentos_caixa lc ON lc.id = lcr.lancamento_caixa_id
+            WHERE lc.data BETWEEN %s AND %s
+              AND {_LC_STATUS_COND}
+              AND UPPER(TRIM(lcr.tipo)) IN ('ARLA', 'LUBRIFICANTES')
+              {emp_cond}
+            GROUP BY yr, mo, tipo_nome
+            ORDER BY yr, mo, tipo_nome
+        """, params)
+        rows = cur.fetchall()
+    except Exception:
+        rows = []
+    cur.close()
+
+    result: dict = {}
+    for r in rows:
+        mk   = _make_month_key(r['yr'], r['mo'])
+        prod = r['tipo_nome']  # 'ARLA' or 'LUBRIFICANTES'
+        entry = result.setdefault(mk, {}).setdefault(
+            prod, {'litros': 0.0, 'reais': 0.0})
+        entry['reais'] += float(r['reais'] or 0)
     return result
 
 
@@ -652,6 +695,10 @@ def dre_postos():
                     _agg_por_produto(
                         agg_vendas_por_produto,
                         _fetch_vendas_por_produto(
+                            conn, data_inicio, data_fim, eid_list))
+                    _agg_por_produto(
+                        agg_vendas_por_produto,
+                        _fetch_vendas_extras_caixa(
                             conn, data_inicio, data_fim, eid_list))
 
                 # Compras (fretes)

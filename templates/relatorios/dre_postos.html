@@ -285,7 +285,8 @@
             {% endfor %}
             <td class="text-end col-acum">{{ fmt(grand_vendas_por_produto.get(prod, {}).get('reais', 0)) }}</td>
           </tr>
-          {# Litros row per product (indented italic) #}
+          {# Litros row per product (indented italic) — only when product has litros #}
+          {% if grand_vendas_por_produto.get(prod, {}).get('litros', 0) > 0 %}
           <tr class="row-litros-child" data-group="vendas">
             <td class="col-desc" style="padding-left:3rem !important;">└─ Litros</td>
             {% for m in months %}
@@ -294,6 +295,7 @@
             {% endfor %}
             <td class="text-end col-acum">{{ fmtL(grand_vendas_por_produto.get(prod, {}).get('litros', 0)) }}</td>
           </tr>
+          {% endif %}
           {% endfor %}
           {% endif %}{# if any_include_vendas #}
 
