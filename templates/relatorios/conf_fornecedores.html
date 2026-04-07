@@ -12,32 +12,79 @@
   border-radius: .6rem; display: flex; align-items: center; justify-content: center;
   font-size: 1.5rem; flex-shrink: 0;
 }
-.forn-header {
-  background: #1D63A5; color: #fff; padding: .4rem .85rem;
-  border-radius: .4rem .4rem 0 0; font-weight: 700; font-size: .85rem;
+/* ── supplier card ── */
+.forn-card {
+  border: 1px solid #c9d6e3;
+  border-radius: .4rem;
+  overflow: hidden;
+  box-shadow: 0 1px 4px rgba(0,0,0,.07);
 }
-/* compact table */
+.forn-header {
+  background: #1D63A5; color: #fff; padding: .45rem .85rem;
+  font-weight: 700; font-size: .82rem;
+  display: flex; justify-content: space-between; align-items: center;
+  flex-wrap: wrap; gap: .25rem;
+}
+.forn-header .saldo-pill {
+  font-size: .75rem; font-weight: 700;
+  padding: .18em .6em; border-radius: 2rem;
+  background: rgba(255,255,255,.18);
+}
+.forn-header .saldo-pill.ok   { background: rgba(25,135,84,.5); }
+.forn-header .saldo-pill.warn { background: rgba(220,53,69,.4); }
+/* ── compact table ── */
 .tbl-conf {
-  font-size: .78rem;
+  font-size: .76rem;
+  width: 100%;
+  table-layout: fixed;
+  margin-bottom: 0;
 }
 .tbl-conf thead th {
-  font-size: .72rem; text-transform: uppercase; letter-spacing: .04em;
-  white-space: nowrap; padding: .3rem .45rem;
+  font-size: .68rem; text-transform: uppercase; letter-spacing: .04em;
+  white-space: nowrap; padding: .28rem .4rem; overflow: hidden;
 }
 .tbl-conf td {
-  padding: .25rem .45rem;
+  padding: .22rem .4rem;
   vertical-align: middle;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 .tbl-conf .badge {
-  font-size: .68rem; padding: .2em .5em;
+  font-size: .65rem; padding: .2em .45em;
 }
-.row-pagto   { background: #eef4fc; }
-.row-carga   { background: #f0fdf4; }
-.row-total   { background: #e9ecef; font-weight: 700; }
-.row-grand   { background: #1D63A5; color: #fff; font-weight: 700; }
-.saldo-pos   { color: #dc3545; font-weight: 700; }
-.saldo-neg   { color: #dc3545; font-weight: 700; }
-.saldo-zero  { color: #198754; font-weight: 700; }
+/* column widths (sum ≈ 560px — fits in half a 1200px screen) */
+.col-tipo   { width: 72px; }
+.col-data   { width: 72px; }
+.col-prod   { width: 88px; }
+.col-qtd    { width: 68px; }
+.col-uni    { width: 62px; }
+.col-compra { width: 82px; }
+.col-pago   { width: 82px; }
+.col-saldo  { width: 80px; }
+/* row colours */
+.row-pagto  { background: #eef4fc; }
+.row-carga  { background: #f0fdf4; }
+.row-total  { background: #e9ecef; font-weight: 700; }
+.row-grand  { background: #1D63A5; color: #fff; font-weight: 700; }
+.saldo-pos  { color: #dc3545; font-weight: 700; }
+.saldo-neg  { color: #dc3545; font-weight: 700; }
+.saldo-zero { color: #198754; font-weight: 700; }
+/* totals footer inside card */
+.forn-totals {
+  display: flex; flex-wrap: wrap; gap: .35rem;
+  padding: .4rem .6rem;
+  background: #f1f3f5;
+  border-top: 1px solid #dee2e6;
+  font-size: .72rem;
+}
+.forn-totals .tot-item {
+  display: flex; flex-direction: column; align-items: center;
+  min-width: 80px; padding: .2rem .4rem;
+  background: #fff; border: 1px solid #dee2e6; border-radius: .3rem;
+}
+.forn-totals .tot-label { color: #6c757d; font-size: .64rem; text-transform: uppercase; letter-spacing: .03em; }
+.forn-totals .tot-val   { font-weight: 700; font-size: .78rem; }
 </style>
 {% endblock %}
 
@@ -145,114 +192,133 @@
   </div>
   {% else %}
 
-  <!-- ── Per-supplier tables ─────────────────────────────────────────────── -->
+  <!-- ── Per-supplier cards (2 per row on xl+) ─────────────────────────── -->
   {% if agrupar == '1' %}
 
+  <div class="row row-cols-1 row-cols-xl-2 g-3 mb-4">
   {% for forn in fornecedores_data %}
-  <div class="mb-4">
-    <div class="forn-header d-flex justify-content-between align-items-center">
-      <span><i class="bi bi-building me-2"></i>{{ forn.fornecedor_nome }}</span>
-      <span class="small opacity-75">Saldo Final:
-        <span class="{% if forn.saldo_final > 0.005 %}text-warning{% elif forn.saldo_final < -0.005 %}text-danger{% else %}text-success{% endif %} fw-bold">
-          {{ forn.saldo_final | fmtmoney }}
-        </span>
-      </span>
-    </div>
-    <div class="table-responsive">
-      <table class="table table-bordered table-sm tbl-conf mb-0">
-        <thead class="table-dark">
-          <tr>
-            <th class="text-center" style="width:88px;">Tipo</th>
-            <th class="text-center" style="width:88px;">Dt. Pagto</th>
-            <th class="text-center" style="width:88px;">Dt. Carga</th>
-            <th style="min-width:100px;">Produto</th>
-            <th class="text-end"   style="width:80px;">Qtd</th>
-            <th class="text-end"   style="width:78px;">Vlr Unit.</th>
-            <th class="text-end"   style="width:105px;">Vlr Compra</th>
-            <th class="text-end"   style="width:105px;">Vlr Pago</th>
-            <th class="text-end"   style="width:105px;">Saldo</th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for linha in forn.linhas %}
-          <tr class="{% if linha.tipo == 'pagamento' %}row-pagto{% else %}row-carga{% endif %}">
-            <td class="text-center">
-              {% if linha.tipo == 'pagamento' %}
-              <span class="badge bg-primary">Pagamento</span>
-              {% else %}
-              <span class="badge bg-success">Carregamento</span>
-              {% endif %}
-            </td>
-            <td class="text-center">{{ linha.data_pagto }}</td>
-            <td class="text-center">{{ linha.data_carregamento }}</td>
-            <td>{{ linha.produto_nome }}</td>
-            <td class="text-end">
-              {% if linha.quantidade %}{{ linha.quantidade | fmtnum(3) }}{% endif %}
-            </td>
-            <td class="text-end">
-              {% if linha.vlr_uni %}{{ linha.vlr_uni | fmtmoney }}{% endif %}
-            </td>
-            <td class="text-end">
-              {% if linha.vlr_compra_total %}{{ linha.vlr_compra_total | fmtmoney }}{% endif %}
-            </td>
-            <td class="text-end">
-              {% if linha.valor_pago %}{{ linha.valor_pago | fmtmoney }}{% endif %}
-            </td>
-            <td class="text-end {% if linha.saldo > 0.005 %}saldo-pos{% elif linha.saldo < -0.005 %}saldo-neg{% else %}saldo-zero{% endif %}">
-              {{ linha.saldo | fmtmoney }}
-            </td>
-          </tr>
-          {% endfor %}
-          <!-- Supplier total row -->
-          <tr class="row-total">
-            <td colspan="4" class="text-end fw-bold">TOTAL {{ forn.fornecedor_nome }}</td>
-            <td class="text-end">{{ forn.total_qtd | fmtnum(3) }}</td>
-            <td></td>
-            <td class="text-end">{{ forn.total_compra | fmtmoney }}</td>
-            <td class="text-end">{{ forn.total_pago | fmtmoney }}</td>
-            <td class="text-end {% if forn.saldo_final > 0.005 %}saldo-pos{% elif forn.saldo_final < -0.005 %}saldo-neg{% else %}saldo-zero{% endif %}">
+    <div class="col">
+      <div class="forn-card">
+
+        <!-- Card header -->
+        <div class="forn-header">
+          <span><i class="bi bi-building me-1"></i>{{ forn.fornecedor_nome }}</span>
+          <span class="saldo-pill {% if forn.saldo_final > 0.005 %}warn{% elif forn.saldo_final < -0.005 %}warn{% else %}ok{% endif %}">
+            Saldo: {{ forn.saldo_final | fmtmoney }}
+          </span>
+        </div>
+
+        <!-- Compact table: Tipo | Data | Produto | Qtd | R$/L | Compra | Pago | Saldo -->
+        <div class="table-responsive">
+          <table class="table table-bordered table-sm tbl-conf mb-0">
+            <colgroup>
+              <col class="col-tipo"><col class="col-data"><col class="col-prod">
+              <col class="col-qtd"><col class="col-uni">
+              <col class="col-compra"><col class="col-pago"><col class="col-saldo">
+            </colgroup>
+            <thead class="table-dark">
+              <tr>
+                <th class="text-center">Tipo</th>
+                <th class="text-center">Data</th>
+                <th>Produto</th>
+                <th class="text-end">Qtd</th>
+                <th class="text-end">R$/L</th>
+                <th class="text-end">Compra</th>
+                <th class="text-end">Pago</th>
+                <th class="text-end">Saldo</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for linha in forn.linhas %}
+              <tr class="{% if linha.tipo == 'pagamento' %}row-pagto{% else %}row-carga{% endif %}">
+                <td class="text-center">
+                  {% if linha.tipo == 'pagamento' %}
+                  <span class="badge bg-primary">Pagto</span>
+                  {% else %}
+                  <span class="badge bg-success">Carga</span>
+                  {% endif %}
+                </td>
+                <td class="text-center">{{ linha.data_pagto or linha.data_carregamento }}</td>
+                <td title="{{ linha.produto_nome }}">{{ linha.produto_nome }}</td>
+                <td class="text-end">
+                  {% if linha.quantidade %}{{ linha.quantidade | fmtnum(3) }}{% endif %}
+                </td>
+                <td class="text-end">
+                  {% if linha.vlr_uni %}{{ linha.vlr_uni | fmtmoney }}{% endif %}
+                </td>
+                <td class="text-end">
+                  {% if linha.vlr_compra_total %}{{ linha.vlr_compra_total | fmtmoney }}{% endif %}
+                </td>
+                <td class="text-end">
+                  {% if linha.valor_pago %}{{ linha.valor_pago | fmtmoney }}{% endif %}
+                </td>
+                <td class="text-end {% if linha.saldo > 0.005 %}saldo-pos{% elif linha.saldo < -0.005 %}saldo-neg{% else %}saldo-zero{% endif %}">
+                  {{ linha.saldo | fmtmoney }}
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Totals footer -->
+        <div class="forn-totals">
+          <div class="tot-item">
+            <span class="tot-label">Qtd Total</span>
+            <span class="tot-val">{{ forn.total_qtd | fmtnum(3) }}</span>
+          </div>
+          <div class="tot-item">
+            <span class="tot-label">Total Compra</span>
+            <span class="tot-val">{{ forn.total_compra | fmtmoney }}</span>
+          </div>
+          <div class="tot-item">
+            <span class="tot-label">Total Pago</span>
+            <span class="tot-val">{{ forn.total_pago | fmtmoney }}</span>
+          </div>
+          <div class="tot-item">
+            <span class="tot-label">Saldo Final</span>
+            <span class="tot-val {% if forn.saldo_final > 0.005 %}saldo-pos{% elif forn.saldo_final < -0.005 %}saldo-neg{% else %}saldo-zero{% endif %}">
               {{ forn.saldo_final | fmtmoney }}
-            </td>
-          </tr>
-        </tbody>
-      </table>
+            </span>
+          </div>
+        </div>
+
+      </div>
     </div>
-  </div>
   {% endfor %}
+  </div>
 
   {% else %}
   <!-- ── Flat (running) view ─────────────────────────────────────────────── -->
   <div class="table-responsive mb-4">
-    <table class="table table-bordered table-sm tbl-conf">
+    <table class="table table-bordered table-sm tbl-conf" style="table-layout:auto;">
       <thead class="table-dark">
         <tr>
-          <th>Fornecedor</th>
-          <th class="text-center" style="width:88px;">Tipo</th>
-          <th class="text-center" style="width:88px;">Dt. Pagto</th>
-          <th class="text-center" style="width:88px;">Dt. Carga</th>
-          <th style="min-width:100px;">Produto</th>
-          <th class="text-end"   style="width:80px;">Qtd</th>
-          <th class="text-end"   style="width:78px;">Vlr Unit.</th>
-          <th class="text-end"   style="width:105px;">Vlr Compra</th>
-          <th class="text-end"   style="width:105px;">Vlr Pago</th>
-          <th class="text-end"   style="width:105px;">Saldo</th>
+          <th style="width:160px;">Fornecedor</th>
+          <th class="text-center" style="width:72px;">Tipo</th>
+          <th class="text-center" style="width:74px;">Data</th>
+          <th style="width:90px;">Produto</th>
+          <th class="text-end" style="width:68px;">Qtd</th>
+          <th class="text-end" style="width:62px;">R$/L</th>
+          <th class="text-end" style="width:82px;">Compra</th>
+          <th class="text-end" style="width:82px;">Pago</th>
+          <th class="text-end" style="width:82px;">Saldo</th>
         </tr>
       </thead>
       <tbody>
         {% for forn in fornecedores_data %}
         {% for linha in forn.linhas %}
         <tr class="{% if linha.tipo == 'pagamento' %}row-pagto{% else %}row-carga{% endif %}">
-          <td>{{ forn.fornecedor_nome }}</td>
+          <td title="{{ forn.fornecedor_nome }}">{{ forn.fornecedor_nome }}</td>
           <td class="text-center">
             {% if linha.tipo == 'pagamento' %}
-            <span class="badge bg-primary">Pagamento</span>
+            <span class="badge bg-primary">Pagto</span>
             {% else %}
-            <span class="badge bg-success">Carregamento</span>
+            <span class="badge bg-success">Carga</span>
             {% endif %}
           </td>
-          <td class="text-center">{{ linha.data_pagto }}</td>
-          <td class="text-center">{{ linha.data_carregamento }}</td>
-          <td>{{ linha.produto_nome }}</td>
+          <td class="text-center">{{ linha.data_pagto or linha.data_carregamento }}</td>
+          <td title="{{ linha.produto_nome }}">{{ linha.produto_nome }}</td>
           <td class="text-end">
             {% if linha.quantidade %}{{ linha.quantidade | fmtnum(3) }}{% endif %}
           </td>
@@ -277,29 +343,34 @@
   {% endif %}
 
   <!-- ── Grand total ────────────────────────────────────────────────────── -->
-  <div class="table-responsive mb-4">
-    <table class="table table-bordered table-sm tbl-conf">
-      <thead>
-        <tr class="row-grand">
-          <td colspan="4" class="fw-bold fs-6">TOTAL GERAL</td>
-          <td class="text-end fw-bold">{{ grand_total_qtd | fmtnum(3) }}</td>
-          <td></td>
-          <td class="text-end fw-bold">{{ grand_total_compra | fmtmoney }}</td>
-          <td class="text-end fw-bold">{{ grand_total_pago | fmtmoney }}</td>
-          <td class="text-end fw-bold {% if grand_saldo > 0.005 %}saldo-pos{% elif grand_saldo < -0.005 %}saldo-neg{% else %}saldo-zero{% endif %}">
-            {{ grand_saldo | fmtmoney }}
-          </td>
-        </tr>
-      </thead>
-    </table>
+  <div class="d-flex flex-wrap gap-3 mb-4 p-3 rounded" style="background:#1D63A5; color:#fff;">
+    <span class="fw-bold fs-6 me-2 align-self-center">TOTAL GERAL</span>
+    <div class="tot-item" style="background:rgba(255,255,255,.15);border-color:rgba(255,255,255,.3);">
+      <span class="tot-label" style="color:rgba(255,255,255,.75);">Qtd Total</span>
+      <span class="tot-val">{{ grand_total_qtd | fmtnum(3) }}</span>
+    </div>
+    <div class="tot-item" style="background:rgba(255,255,255,.15);border-color:rgba(255,255,255,.3);">
+      <span class="tot-label" style="color:rgba(255,255,255,.75);">Total Compra</span>
+      <span class="tot-val">{{ grand_total_compra | fmtmoney }}</span>
+    </div>
+    <div class="tot-item" style="background:rgba(255,255,255,.15);border-color:rgba(255,255,255,.3);">
+      <span class="tot-label" style="color:rgba(255,255,255,.75);">Total Pago</span>
+      <span class="tot-val">{{ grand_total_pago | fmtmoney }}</span>
+    </div>
+    <div class="tot-item" style="background:rgba(255,255,255,.15);border-color:rgba(255,255,255,.3);">
+      <span class="tot-label" style="color:rgba(255,255,255,.75);">Saldo Geral</span>
+      <span class="tot-val {% if grand_saldo > 0.005 %}saldo-pos{% elif grand_saldo < -0.005 %}saldo-neg{% else %}saldo-zero{% endif %}">
+        {{ grand_saldo | fmtmoney }}
+      </span>
+    </div>
   </div>
 
   <!-- Legend -->
   <div class="small text-muted mb-4">
-    <span class="badge bg-primary me-2">Pagamento</span> Dinheiro saído para o fornecedor · aumenta o saldo credor.&nbsp;&nbsp;
-    <span class="badge bg-success me-2">Carregamento</span> Produto retirado · reduz o saldo.&nbsp;&nbsp;
-    <strong>Saldo positivo</strong> = você pagou mais do que retirou (crédito a favor).&nbsp;&nbsp;
-    <strong>Saldo negativo</strong> = você retirou mais do que pagou (débito em aberto).
+    <span class="badge bg-primary me-1">Pagto</span> Dinheiro saído → aumenta crédito.&nbsp;&nbsp;
+    <span class="badge bg-success me-1">Carga</span> Produto retirado → reduz saldo.&nbsp;&nbsp;
+    <strong>Saldo positivo</strong> = pagou mais do que retirou.&nbsp;&nbsp;
+    <strong>Saldo negativo</strong> = retirou mais do que pagou.
   </div>
 
   {% endif %}
