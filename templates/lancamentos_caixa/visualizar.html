@@ -5,7 +5,7 @@
     <nav aria-label="breadcrumb" class="mt-2 mb-3">
         <ol class="breadcrumb" style="font-size: 0.85rem;">
             <li class="breadcrumb-item"><a href="/">Dashboard</a></li>
-            <li class="breadcrumb-item"><a href="{{ url_for('lancamentos_caixa.lista') }}">Lançamentos de Caixa</a></li>
+            <li class="breadcrumb-item"><a href="{{ url_for('lancamentos_caixa.lista', data_inicio=return_filtros.data_inicio, data_fim=return_filtros.data_fim, cliente_id=return_filtros.cliente_id) if return_filtros else url_for('lancamentos_caixa.lista') }}">Lançamentos de Caixa</a></li>
             <li class="breadcrumb-item active" aria-current="page">Visualizar</li>
         </ol>
     </nav>
@@ -418,7 +418,7 @@
 
     <!-- Actions -->
     <div class="d-flex justify-content-between mb-3">
-        <a href="{{ url_for('lancamentos_caixa.lista') }}" class="btn btn-secondary btn-sm">
+        <a href="{{ url_for('lancamentos_caixa.lista', data_inicio=return_filtros.data_inicio, data_fim=return_filtros.data_fim, cliente_id=return_filtros.cliente_id) if return_filtros else url_for('lancamentos_caixa.lista') }}" class="btn btn-secondary btn-sm">
             <i class="bi bi-arrow-left"></i> Voltar
         </a>
         <button onclick="copiarParaWhatsApp(event)" class="btn btn-success btn-sm">

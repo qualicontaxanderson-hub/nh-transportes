@@ -998,7 +998,12 @@ def visualizar(id):
                              sobras_funcionarios=sobras_funcionarios,
                              perdas_funcionarios=perdas_funcionarios,
                              vales_funcionarios=vales_funcionarios,
-                             depositos_cheques=depositos_cheques)
+                             depositos_cheques=depositos_cheques,
+                             return_filtros={
+                                 'data_inicio': request.args.get('data_inicio', ''),
+                                 'data_fim': request.args.get('data_fim', ''),
+                                 'cliente_id': request.args.get('cliente_id', ''),
+                             })
     except Exception as e:
         flash(f'Erro ao visualizar lançamento: {str(e)}', 'danger')
         return redirect(url_for('lancamentos_caixa.lista'))
@@ -1270,7 +1275,12 @@ def editar(id):
             
             conn.commit()
             flash('Lançamento de caixa atualizado com sucesso!', 'success')
-            return redirect(url_for('lancamentos_caixa.lista'))
+            _rf = {
+                'data_inicio': request.form.get('_rf_data_inicio', ''),
+                'data_fim': request.form.get('_rf_data_fim', ''),
+                'cliente_id': request.form.get('_rf_cliente_id', ''),
+            }
+            return redirect(url_for('lancamentos_caixa.lista', **{k: v for k, v in _rf.items() if v}))
         
         # GET request - load existing data
         # Get lancamento
@@ -1466,7 +1476,12 @@ def editar(id):
                              formas_pagamento_json=formas_pagamento_json,
                              bandeiras_cartao_json=bandeiras_cartao_json,
                              cartoes_json=bandeiras_cartao_json,  # Alias for template compatibility  
-                             tipos_receita_json=tipos_receita_json)
+                             tipos_receita_json=tipos_receita_json,
+                             return_filtros={
+                                 'data_inicio': request.args.get('data_inicio', ''),
+                                 'data_fim': request.args.get('data_fim', ''),
+                                 'cliente_id': request.args.get('cliente_id', ''),
+                             })
         
     except Exception as e:
         if conn:
