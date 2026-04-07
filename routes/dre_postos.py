@@ -150,6 +150,7 @@ def _parse_empresa_configs(args, empresa_ids):
       cf_{eid}_vendas=0|1        — incluir vendas   (hidden 0 + checkbox 1)
       cf_{eid}_aluguel=0|1       — incluir aluguel
       cf_{eid}_prazo=0|1         — incluir clientes à prazo
+      cf_{eid}_compras=0|1       — incluir compras (fretes)
 
     Backward compat: se o sentinel cf_{eid}_submitted não existir,
     usa os parâmetros globais antigos (titulo_ids[], forma_ids[], include_*).
@@ -160,6 +161,7 @@ def _parse_empresa_configs(args, empresa_ids):
     global_include_vendas  = args.get('include_vendas',  '1') == '1'
     global_include_aluguel = args.get('include_aluguel', '1') == '1'
     global_include_prazo   = args.get('include_prazo',   '1') == '1'
+    global_include_compras = args.get('include_compras', '1') == '1'
 
     configs = {}
     for eid in empresa_ids:
@@ -171,6 +173,7 @@ def _parse_empresa_configs(args, empresa_ids):
                 'include_vendas':  '1' in args.getlist(f'cf_{eid}_vendas'),
                 'include_aluguel': '1' in args.getlist(f'cf_{eid}_aluguel'),
                 'include_prazo':   '1' in args.getlist(f'cf_{eid}_prazo'),
+                'include_compras': '1' in args.getlist(f'cf_{eid}_compras'),
             }
         else:
             # Fallback para parâmetros globais (compatibilidade com URLs antigas)
@@ -180,6 +183,7 @@ def _parse_empresa_configs(args, empresa_ids):
                 'include_vendas':  global_include_vendas,
                 'include_aluguel': global_include_aluguel,
                 'include_prazo':   global_include_prazo,
+                'include_compras': global_include_compras,
             }
     return configs
 
@@ -221,13 +225,13 @@ def _fetch_vendas_reais(conn, data_inicio, data_fim, empresa_ids):
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Receitas: Vendas de Combustíveis (Litros)
+# Receitas: Vendas de Combustíveis (por produto — Litros + R$)
 # ──────────────────────────────────────────────────────────────────────────────
 
-def _fetch_vendas_litros(conn, data_inicio, data_fim, empresa_ids):
+def _fetch_vendas_por_produto(conn, data_inicio, data_fim, empresa_ids):
     """
-    Retorna litros vendidos por produto por mês via fifo_resumo_mensal.
-    Retorna {mk: {produto_nome: float}}.
+    Retorna vendas por produto por mês via fifo_resumo_mensal.
+    Retorna {mk: {produto_nome: {'litros': float, 'reais': float}}}.
     mk = 'YYYYMM'  (calculado a partir de fifo_competencia.ano_mes 'YYYY-MM')
     """
     try:
@@ -248,7 +252,8 @@ def _fetch_vendas_litros(conn, data_inicio, data_fim, empresa_ids):
         cur.execute(f"""
             SELECT fc.ano_mes,
                    p.nome AS produto_nome,
-                   SUM(r.qtde_saida) AS litros
+                   SUM(r.qtde_saida)          AS litros,
+                   SUM(r.receita_saida_total)  AS reais
             FROM fifo_resumo_mensal r
             INNER JOIN fifo_competencia fc ON fc.id = r.competencia_id
             INNER JOIN produto p ON p.id = r.produto_id
@@ -263,13 +268,85 @@ def _fetch_vendas_litros(conn, data_inicio, data_fim, empresa_ids):
         rows = []
     cur.close()
 
-    result = defaultdict(dict)
+    result: dict = {}
     for r in rows:
-        # 'YYYY-MM' → 'YYYYMM'
-        mk = r['ano_mes'].replace('-', '')
+        mk   = r['ano_mes'].replace('-', '')
         prod = r['produto_nome']
-        result[mk][prod] = result[mk].get(prod, 0.0) + float(r['litros'] or 0)
-    return dict(result)
+        entry = result.setdefault(mk, {}).setdefault(
+            prod, {'litros': 0.0, 'reais': 0.0})
+        entry['litros'] += float(r['litros'] or 0)
+        entry['reais']  += float(r['reais']  or 0)
+    return result
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Compras: fretes por produto (Litros + R$)
+# ──────────────────────────────────────────────────────────────────────────────
+
+def _fetch_compras(conn, data_inicio, data_fim, empresa_ids):
+    """
+    Retorna compras de combustíveis por produto por mês via tabela fretes.
+    Retorna {mk: {produto_nome: {'litros': float, 'reais': float}}}.
+    O filtro de empresa usa fretes.clientes_id.
+    """
+    cur = conn.cursor(dictionary=True)
+    ph_emp = ','.join(['%s'] * len(empresa_ids)) if empresa_ids else None
+    emp_cond = f'AND f.clientes_id IN ({ph_emp})' if ph_emp else ''
+    params = [data_inicio, data_fim] + (list(empresa_ids) if empresa_ids else [])
+
+    try:
+        cur.execute(f"""
+            SELECT YEAR(f.data_frete)  AS yr,
+                   MONTH(f.data_frete) AS mo,
+                   COALESCE(p.nome, 'Sem produto') AS produto_nome,
+                   SUM(COALESCE(f.quantidade_manual, q.valor, 0)) AS litros,
+                   SUM(COALESCE(f.total_nf_compra, 0))            AS reais
+            FROM fretes f
+            LEFT JOIN produto    p ON p.id = f.produto_id
+            LEFT JOIN quantidades q ON q.id = f.quantidade_id
+            WHERE f.data_frete BETWEEN %s AND %s
+              {emp_cond}
+            GROUP BY yr, mo, p.nome
+            ORDER BY yr, mo, p.nome
+        """, params)
+        rows = cur.fetchall()
+    except Exception:
+        rows = []
+    cur.close()
+
+    result: dict = {}
+    for r in rows:
+        mk   = _make_month_key(r['yr'], r['mo'])
+        prod = r['produto_nome']
+        entry = result.setdefault(mk, {}).setdefault(
+            prod, {'litros': 0.0, 'reais': 0.0})
+        entry['litros'] += float(r['litros'] or 0)
+        entry['reais']  += float(r['reais']  or 0)
+    return result
+
+
+def _agg_por_produto(agg: dict, new_data: dict) -> None:
+    """Agrega new_data {mk: {prod: {litros, reais}}} no dicionário agg (in-place)."""
+    for mk, prod_map in new_data.items():
+        for prod, vals in prod_map.items():
+            entry = agg.setdefault(mk, {}).setdefault(
+                prod, {'litros': 0.0, 'reais': 0.0})
+            entry['litros'] += vals['litros']
+            entry['reais']  += vals['reais']
+
+
+def _grand_por_produto(por_produto: dict, months) -> dict:
+    """Acumula totais por produto em todos os meses. Retorna {prod: {litros, reais}}."""
+    grand: dict = {}
+    month_keys = {m['key'] for m in months}
+    for mk, prod_map in por_produto.items():
+        if mk not in month_keys:
+            continue
+        for prod, vals in prod_map.items():
+            entry = grand.setdefault(prod, {'litros': 0.0, 'reais': 0.0})
+            entry['litros'] += vals['litros']
+            entry['reais']  += vals['reais']
+    return grand
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -534,6 +611,7 @@ def dre_postos():
                 'include_vendas':  cfg['include_vendas'],
                 'include_aluguel': cfg['include_aluguel'],
                 'include_prazo':   cfg['include_prazo'],
+                'include_compras': cfg['include_compras'],
             }
             for eid, cfg in empresa_configs.items()
         }
@@ -548,10 +626,14 @@ def dre_postos():
         any_include_prazo   = any(
             cfg['include_prazo']   for cfg in empresa_configs.values()
         ) if empresa_configs else False
+        any_include_compras = any(
+            cfg['include_compras'] for cfg in empresa_configs.values()
+        ) if empresa_configs else False
 
         # ── Acumuladores por empresa ──────────────────────────────────────
         agg_vendas_reais: dict    = defaultdict(float)
-        agg_vendas_litros: dict   = defaultdict(lambda: defaultdict(float))
+        agg_vendas_por_produto: dict = {}   # {mk: {prod: {litros, reais}}}
+        agg_compras_por_produto: dict = {}  # {mk: {prod: {litros, reais}}}
         agg_aluguel_mk: dict      = defaultdict(float)
         agg_prazo_mk: dict        = defaultdict(float)
         agg_aluguel_formas: dict  = {}   # nome → {by_month, total}
@@ -562,15 +644,21 @@ def dre_postos():
             for eid, cfg in empresa_configs.items():
                 eid_list = [eid]
 
-                # Vendas (R$ e Litros)
+                # Vendas (R$ total + por produto)
                 if cfg['include_vendas']:
                     for mk, v in _fetch_vendas_reais(
                             conn, data_inicio, data_fim, eid_list).items():
                         agg_vendas_reais[mk] += v
-                    for mk, prod_map in _fetch_vendas_litros(
-                            conn, data_inicio, data_fim, eid_list).items():
-                        for prod, lts in prod_map.items():
-                            agg_vendas_litros[mk][prod] += lts
+                    _agg_por_produto(
+                        agg_vendas_por_produto,
+                        _fetch_vendas_por_produto(
+                            conn, data_inicio, data_fim, eid_list))
+
+                # Compras (fretes)
+                if cfg['include_compras']:
+                    _agg_por_produto(
+                        agg_compras_por_produto,
+                        _fetch_compras(conn, data_inicio, data_fim, eid_list))
 
                 # Recebimentos bancários
                 receb = _fetch_recebimentos(
@@ -626,11 +714,22 @@ def dre_postos():
         }
 
         vendas_reais_by_month  = dict(agg_vendas_reais)
-        vendas_litros_by_month = {mk: dict(pd) for mk, pd in agg_vendas_litros.items()}
+        vendas_por_produto     = agg_vendas_por_produto
+        compras_por_produto    = agg_compras_por_produto
 
         despesas_blocks, grand_despesas_by_month, grand_despesas = (
             _build_despesas_blocks(all_lancamentos, months)
         )
+
+        # ── Compras por mês (total R$) ────────────────────────────────────
+        compras_by_month: dict = {}
+        for m in months:
+            mk = m['key']
+            compras_by_month[mk] = sum(
+                v['reais']
+                for v in compras_por_produto.get(mk, {}).values()
+            )
+        grand_compras = sum(compras_by_month.values())
 
         # ── Totais de receita por mês ─────────────────────────────────────
         receitas_by_month: dict = {}
@@ -644,15 +743,16 @@ def dre_postos():
 
         grand_receitas = sum(receitas_by_month.values())
 
-        # ── Lucro = Receitas − Despesas ───────────────────────────────────
+        # ── Lucro = Receitas − Compras − Despesas ─────────────────────────
         lucro_by_month: dict = {}
         for m in months:
             mk = m['key']
             lucro_by_month[mk] = (
                 receitas_by_month.get(mk, 0.0)
+                - compras_by_month.get(mk, 0.0)
                 - grand_despesas_by_month.get(mk, 0.0)
             )
-        grand_lucro = grand_receitas - grand_despesas
+        grand_lucro = grand_receitas - grand_compras - grand_despesas
 
         # ── Totais acumulados ─────────────────────────────────────────────
         grand_vendas_reais = sum(
@@ -662,11 +762,8 @@ def dre_postos():
         grand_prazo        = sum(
             recebimentos['cliente_a_prazo'].get(m['key'], 0.0) for m in months)
 
-        grand_vendas_litros: dict = {}
-        for m in months:
-            for prod, lts in vendas_litros_by_month.get(m['key'], {}).items():
-                grand_vendas_litros[prod] = (
-                    grand_vendas_litros.get(prod, 0.0) + lts)
+        grand_vendas_por_produto  = _grand_por_produto(vendas_por_produto,  months)
+        grand_compras_por_produto = _grand_por_produto(compras_por_produto, months)
 
     finally:
         conn.close()
@@ -686,18 +783,24 @@ def dre_postos():
         any_include_vendas=any_include_vendas,
         any_include_aluguel=any_include_aluguel,
         any_include_prazo=any_include_prazo,
+        any_include_compras=any_include_compras,
         # meses
         months=months,
         # receitas
         vendas_reais_by_month=vendas_reais_by_month,
-        vendas_litros_by_month=vendas_litros_by_month,
+        vendas_por_produto=vendas_por_produto,
+        grand_vendas_por_produto=grand_vendas_por_produto,
         recebimentos=recebimentos,
         receitas_by_month=receitas_by_month,
         grand_vendas_reais=grand_vendas_reais,
-        grand_vendas_litros=grand_vendas_litros,
         grand_aluguel=grand_aluguel,
         grand_prazo=grand_prazo,
         grand_receitas=grand_receitas,
+        # compras
+        compras_por_produto=compras_por_produto,
+        grand_compras_por_produto=grand_compras_por_produto,
+        compras_by_month=compras_by_month,
+        grand_compras=grand_compras,
         # despesas
         despesas_blocks=despesas_blocks,
         grand_despesas_by_month=grand_despesas_by_month,

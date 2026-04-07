@@ -65,6 +65,19 @@
 .row-litros-child td { background: #fffde7; font-size: .70rem; font-style: italic; }
 .row-litros-child .col-desc { padding-left: 1.6rem !important; }
 
+/* ── Compras ──────────────────────────────────────────────────────────────── */
+.row-compras-section td {
+  background: #e65100; color: #fff; font-weight: 700; font-size: .76rem;
+  text-transform: uppercase; letter-spacing: .05em;
+}
+.row-compras-item td { background: #fff7f0; font-weight: 500; }
+.row-compras-item:hover td { background: #fff0e0; }
+.row-compras-child td { background: #fffaf5; font-size: .70rem; }
+.row-compras-child .col-desc { padding-left: 1.6rem !important; }
+.row-compras-litros td { background: #fff8ee; color: #7a3900; font-style: italic; font-size: .69rem; }
+.row-compras-litros .col-desc { padding-left: 3rem !important; }
+.row-compras-total td { background: #bf360c; color: #fff; font-weight: 700; }
+
 /* ── Valores ──────────────────────────────────────────────────────────────── */
 .val-zero { color: #bbb; }
 .col-acum { background: #f8f5e4 !important; font-weight: 600; }
@@ -242,8 +255,10 @@
 
           {# ── Vendas de Combustíveis (R$) ─────────────────── #}
           {% if any_include_vendas %}
-          <tr class="row-item">
+          {# Main row — toggle expands per-product sub-rows #}
+          <tr class="row-item" onclick="toggleGroup('vendas')" style="cursor:pointer;">
             <td class="col-desc fw-semibold">
+              <span class="toggle-icon" id="icon-vendas">▶</span>
               <i class="bi bi-fuel-pump-fill me-1 text-success"></i> Vendas de Combustíveis
             </td>
             {% for m in months %}
@@ -253,43 +268,33 @@
             <td class="text-end col-acum">{{ fmt(grand_vendas_reais) }}</td>
           </tr>
 
-          {# ── Vendas em Litros (informativo, expandível por produto) ── #}
-          {% if vendas_litros_by_month %}
-          <tr class="row-litros" onclick="toggleGroup('litros')" style="cursor:pointer;">
-            <td class="col-desc">
-              <span class="toggle-icon" id="icon-litros" style="color:#5a4500;">▶</span>
-              <i class="bi bi-droplet me-1"></i> Litros Vendidos <em class="text-muted small">(informativo)</em>
-            </td>
-            {% set total_litros_linha = namespace(v={}) %}
-            {% for m in months %}
-              {% set mk = m.key %}
-              {% set mes_litros = vendas_litros_by_month.get(mk, {}) %}
-              {% set soma = namespace(s=0) %}
-              {% for prod, lts in mes_litros.items() %}{% set soma.s = soma.s + lts %}{% endfor %}
-              <td class="text-end">{{ fmtL(soma.s) }}</td>
-            {% endfor %}
-            {% set total_all = namespace(t=0) %}
-            {% for prod, lts in grand_vendas_litros.items() %}{% set total_all.t = total_all.t + lts %}{% endfor %}
-            <td class="text-end col-acum">{{ fmtL(total_all.t) }}</td>
-          </tr>
-          {# Linhas filhas por produto #}
-          {% set all_prods = [] %}
-          {% for mk, prod_map in vendas_litros_by_month.items() %}
-            {% for prod in prod_map.keys() %}
-              {% if prod not in all_prods %}{% set _ = all_prods.append(prod) %}{% endif %}
+          {# Per-product sub-rows (hidden by default) #}
+          {% set all_vendas_prods = [] %}
+          {% for mk, pm in vendas_por_produto.items() %}
+            {% for prod in pm.keys() %}
+              {% if prod not in all_vendas_prods %}{% set _ = all_vendas_prods.append(prod) %}{% endif %}
             {% endfor %}
           {% endfor %}
-          {% for prod in all_prods | sort %}
-          <tr class="row-litros-child" data-group="litros" style="display:none;">
+          {% for prod in all_vendas_prods | sort %}
+          {# R$ row per product #}
+          <tr class="row-child" data-group="vendas" style="display:none;">
             <td class="col-desc">└ {{ prod }}</td>
             {% for m in months %}
-              {% set lts = vendas_litros_by_month.get(m.key, {}).get(prod, 0) %}
-              <td class="text-end">{{ fmtL(lts) }}</td>
+              {% set v = vendas_por_produto.get(m.key, {}).get(prod, {}).get('reais', 0) %}
+              <td class="text-end {% if v == 0 %}val-zero{% endif %}">{{ fmt(v) }}</td>
             {% endfor %}
-            <td class="text-end col-acum">{{ fmtL(grand_vendas_litros.get(prod, 0)) }}</td>
+            <td class="text-end col-acum">{{ fmt(grand_vendas_por_produto.get(prod, {}).get('reais', 0)) }}</td>
+          </tr>
+          {# Litros row per product (indented italic) #}
+          <tr class="row-litros-child" data-group="vendas" style="display:none;">
+            <td class="col-desc" style="padding-left:3rem !important;">└─ Litros</td>
+            {% for m in months %}
+              {% set v = vendas_por_produto.get(m.key, {}).get(prod, {}).get('litros', 0) %}
+              <td class="text-end">{{ fmtL(v) }}</td>
+            {% endfor %}
+            <td class="text-end col-acum">{{ fmtL(grand_vendas_por_produto.get(prod, {}).get('litros', 0)) }}</td>
           </tr>
           {% endfor %}
-          {% endif %}{# if vendas_litros_by_month #}
           {% endif %}{# if any_include_vendas #}
 
           {# ── Recebimento de Aluguel ──────────────────────── #}
@@ -350,6 +355,75 @@
             {% endfor %}
             <td class="text-end col-acum">{{ fmt(grand_receitas) }}</td>
           </tr>
+
+          {# ══════════════════════════════════════════════════════
+             BLOCO: COMPRAS
+          ══════════════════════════════════════════════════════ #}
+          {% if any_include_compras %}
+          <tr class="row-compras-section">
+            <td class="col-desc" colspan="{{ months|length + 2 }}">
+              <i class="bi bi-cart-fill me-1"></i> COMPRAS
+            </td>
+          </tr>
+
+          {# ── Compras de Combustíveis (expansível por produto) ── #}
+          {% set all_compras_prods = [] %}
+          {% for mk, pm in compras_por_produto.items() %}
+            {% for prod in pm.keys() %}
+              {% if prod not in all_compras_prods %}{% set _ = all_compras_prods.append(prod) %}{% endif %}
+            {% endfor %}
+          {% endfor %}
+
+          <tr class="row-compras-item" onclick="toggleGroup('compras')" style="cursor:pointer;">
+            <td class="col-desc fw-semibold">
+              <span class="toggle-icon" id="icon-compras" style="color:#e65100;">▶</span>
+              <i class="bi bi-fuel-pump me-1" style="color:#e65100;"></i> Compras de Combustíveis
+            </td>
+            {% for m in months %}
+              {% set v = compras_by_month.get(m.key, 0) %}
+              <td class="text-end">{{ fmt(v) }}</td>
+            {% endfor %}
+            <td class="text-end col-acum">{{ fmt(grand_compras) }}</td>
+          </tr>
+
+          {% for prod in all_compras_prods | sort %}
+          {# R$ row per product #}
+          <tr class="row-compras-child" data-group="compras" style="display:none;">
+            <td class="col-desc">└ {{ prod }}</td>
+            {% for m in months %}
+              {% set v = compras_por_produto.get(m.key, {}).get(prod, {}).get('reais', 0) %}
+              <td class="text-end {% if v == 0 %}val-zero{% endif %}">{{ fmt(v) }}</td>
+            {% endfor %}
+            <td class="text-end col-acum">{{ fmt(grand_compras_por_produto.get(prod, {}).get('reais', 0)) }}</td>
+          </tr>
+          {# Litros row per product (indented italic) #}
+          <tr class="row-compras-litros" data-group="compras" style="display:none;">
+            <td class="col-desc">└─ Litros</td>
+            {% for m in months %}
+              {% set v = compras_por_produto.get(m.key, {}).get(prod, {}).get('litros', 0) %}
+              <td class="text-end">{{ fmtL(v) }}</td>
+            {% endfor %}
+            <td class="text-end col-acum">{{ fmtL(grand_compras_por_produto.get(prod, {}).get('litros', 0)) }}</td>
+          </tr>
+          {% endfor %}
+
+          {% if not all_compras_prods %}
+          <tr>
+            <td class="col-desc text-muted" colspan="{{ months|length + 2 }}">
+              <em>Nenhuma compra encontrada no período / filtros selecionados.</em>
+            </td>
+          </tr>
+          {% endif %}
+
+          {# TOTAL COMPRAS #}
+          <tr class="row-compras-total">
+            <td class="col-desc"><i class="bi bi-cart-check-fill me-1"></i> TOTAL COMPRAS</td>
+            {% for m in months %}
+              <td class="text-end">{{ fmt(compras_by_month.get(m.key, 0)) }}</td>
+            {% endfor %}
+            <td class="text-end col-acum">{{ fmt(grand_compras) }}</td>
+          </tr>
+          {% endif %}{# if any_include_compras #}
 
           {# ══════════════════════════════════════════════════════
              BLOCO: DESPESAS
@@ -484,6 +558,7 @@ function buildEmpresaCard(eid, eName, cfg) {
   var incV  = cfg.include_vendas  !== false;
   var incA  = cfg.include_aluguel !== false;
   var incP  = cfg.include_prazo   !== false;
+  var incC  = cfg.include_compras !== false;
 
   var titulosHtml = TITULOS.length
     ? '<select name="cf_' + eid + '_titulos[]" multiple class="form-select form-select-sm" size="4">' +
@@ -498,6 +573,7 @@ function buildEmpresaCard(eid, eName, cfg) {
   var chkV = incV  ? ' checked' : '';
   var chkA = incA  ? ' checked' : '';
   var chkP = incP  ? ' checked' : '';
+  var chkC = incC  ? ' checked' : '';
 
   return [
     '<div class="card" style="min-width:320px;max-width:440px;border:1px solid #1D63A5;">',
@@ -530,6 +606,15 @@ function buildEmpresaCard(eid, eName, cfg) {
     '                 id="chkV_' + eid + '"' + chkV + '>',
     '          <label class="form-check-label" for="chkV_' + eid + '" style="font-size:.7rem;">',
     '            <i class="bi bi-fuel-pump-fill text-success"></i> Vendas</label>',
+    '        </div>',
+
+    '        <input type="hidden" name="cf_' + eid + '_compras" value="0">',
+    '        <div class="form-check form-check-sm mb-1">',
+    '          <input class="form-check-input" type="checkbox"',
+    '                 name="cf_' + eid + '_compras" value="1"',
+    '                 id="chkC_' + eid + '"' + chkC + '>',
+    '          <label class="form-check-label" for="chkC_' + eid + '" style="font-size:.7rem;">',
+    '            <i class="bi bi-cart-fill" style="color:#e65100;"></i> Compras</label>',
     '        </div>',
 
     '        <input type="hidden" name="cf_' + eid + '_aluguel" value="0">',
@@ -585,6 +670,7 @@ function renderEmpresaCards() {
         titulo_ids:      titEl ? Array.from(titEl.selectedOptions).map(o => o.value) : [],
         forma_ids:       forEl ? Array.from(forEl.selectedOptions).map(o => o.value) : [],
         include_vendas:  document.getElementById('chkV_' + eid)?.checked === true,
+        include_compras: document.getElementById('chkC_' + eid)?.checked === true,
         include_aluguel: document.getElementById('chkA_' + eid)?.checked === true,
         include_prazo:   document.getElementById('chkP_' + eid)?.checked === true,
       };
@@ -615,6 +701,7 @@ function salvarFiltro() {
       titulo_ids:      titEl ? Array.from(titEl.selectedOptions).map(o => o.value) : [],
       forma_ids:       forEl ? Array.from(forEl.selectedOptions).map(o => o.value) : [],
       include_vendas:  document.getElementById('chkV_' + eid)?.checked === true,
+      include_compras: document.getElementById('chkC_' + eid)?.checked === true,
       include_aluguel: document.getElementById('chkA_' + eid)?.checked === true,
       include_prazo:   document.getElementById('chkP_' + eid)?.checked === true,
     };
