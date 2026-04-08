@@ -224,7 +224,7 @@ def _fetch_vendas_reais(conn, data_inicio, data_fim, empresa_ids):
             INNER JOIN lancamentos_caixa lc ON lc.id = lcr.lancamento_caixa_id
             WHERE lc.data BETWEEN %s AND %s
               AND {_LC_STATUS_COND}
-              AND UPPER(TRIM(lcr.tipo)) IN ('VENDAS POSTO', 'ARLA', 'LUBRIFICANTES')
+              AND UPPER(TRIM(lcr.tipo)) = 'VENDAS POSTO'
               {emp_cond}
             GROUP BY yr, mo
         """, params)
@@ -778,7 +778,9 @@ def dre_postos():
 
         # ── Acumuladores por empresa ──────────────────────────────────────
         agg_vendas_reais: dict    = defaultdict(float)
-        agg_vendas_por_produto: dict = {}   # {mk: {prod: {litros, reais}}}
+        agg_vendas_por_produto: dict = {}   # {mk: {prod: {litros, reais}}} — apenas combustíveis
+        agg_arla_mk: dict         = defaultdict(float)   # ARLA por mês (R$)
+        agg_lubrif_mk: dict       = defaultdict(float)   # LUBRIFICANTES por mês (R$)
         agg_compras_por_produto: dict = {}  # {mk: {prod: {litros, reais}}}
         agg_estoque_ei: dict      = {}   # {mk: {prod: {litros, reais}}}
         agg_estoque_ef: dict      = {}   # {mk: {prod: {litros, reais}}}
@@ -801,10 +803,11 @@ def dre_postos():
                         agg_vendas_por_produto,
                         _fetch_vendas_por_produto(
                             conn, data_inicio, data_fim, eid_list))
-                    _agg_por_produto(
-                        agg_vendas_por_produto,
-                        _fetch_vendas_extras_caixa(
-                            conn, data_inicio, data_fim, eid_list))
+                    # ARLA e LUBRIFICANTES — mantidos separados
+                    for mk, prods in _fetch_vendas_extras_caixa(
+                            conn, data_inicio, data_fim, eid_list).items():
+                        agg_arla_mk[mk]   += prods.get('ARLA',          {}).get('reais', 0.0)
+                        agg_lubrif_mk[mk] += prods.get('LUBRIFICANTES', {}).get('reais', 0.0)
 
                 # Compras (fretes) + Estoque para CMV
                 if cfg['include_compras']:
@@ -918,6 +921,8 @@ def dre_postos():
             mk    = m['key']
             total = 0.0
             total += vendas_reais_by_month.get(mk, 0.0)
+            total += agg_arla_mk.get(mk, 0.0)
+            total += agg_lubrif_mk.get(mk, 0.0)
             total += recebimentos['aluguel'].get(mk, 0.0)
             total += recebimentos['cliente_a_prazo'].get(mk, 0.0)
             receitas_by_month[mk] = total
@@ -938,6 +943,8 @@ def dre_postos():
         # ── Totais acumulados ─────────────────────────────────────────────
         grand_vendas_reais = sum(
             vendas_reais_by_month.get(m['key'], 0.0) for m in months)
+        grand_arla    = sum(agg_arla_mk.get(m['key'], 0.0)   for m in months)
+        grand_lubrif  = sum(agg_lubrif_mk.get(m['key'], 0.0) for m in months)
         grand_aluguel      = sum(
             recebimentos['aluguel'].get(m['key'], 0.0) for m in months)
         grand_prazo        = sum(
@@ -971,6 +978,10 @@ def dre_postos():
         vendas_reais_by_month=vendas_reais_by_month,
         vendas_por_produto=vendas_por_produto,
         grand_vendas_por_produto=grand_vendas_por_produto,
+        arla_by_month=dict(agg_arla_mk),
+        lubrif_by_month=dict(agg_lubrif_mk),
+        grand_arla=grand_arla,
+        grand_lubrif=grand_lubrif,
         recebimentos=recebimentos,
         receitas_by_month=receitas_by_month,
         grand_vendas_reais=grand_vendas_reais,

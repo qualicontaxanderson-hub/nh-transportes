@@ -353,6 +353,35 @@
           </tr>
           {% endif %}
           {% endfor %}
+
+          {# ── ARLA ──────────────────────────────────────────── #}
+          {% if grand_arla > 0 %}
+          <tr class="row-item">
+            <td class="col-desc fw-semibold">
+              <i class="bi bi-droplet-fill me-1 text-info"></i> ARLA
+            </td>
+            {% for m in months %}
+              {% set v = arla_by_month.get(m.key, 0) %}
+              <td class="text-end {% if v == 0 %}val-zero{% endif %}">{{ fmt(v) }}</td>
+            {% endfor %}
+            <td class="text-end col-acum">{{ fmt(grand_arla) }}</td>
+          </tr>
+          {% endif %}
+
+          {# ── LUBRIFICANTES ─────────────────────────────────── #}
+          {% if grand_lubrif > 0 %}
+          <tr class="row-item">
+            <td class="col-desc fw-semibold">
+              <i class="bi bi-gear-fill me-1 text-secondary"></i> LUBRIFICANTES
+            </td>
+            {% for m in months %}
+              {% set v = lubrif_by_month.get(m.key, 0) %}
+              <td class="text-end {% if v == 0 %}val-zero{% endif %}">{{ fmt(v) }}</td>
+            {% endfor %}
+            <td class="text-end col-acum">{{ fmt(grand_lubrif) }}</td>
+          </tr>
+          {% endif %}
+
           {% endif %}{# if any_include_vendas #}
 
           {# ── Recebimento de Aluguel ──────────────────────── #}
