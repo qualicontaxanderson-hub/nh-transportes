@@ -5,7 +5,7 @@
 <style>
 /* ── Hero ────────────────────────────────────────────────────────────────── */
 .page-hero {
-  background: linear-gradient(135deg, #155a1e 0%, #198754 100%);
+  background: linear-gradient(135deg, #1D63A5 0%, #154070 100%);
   border-radius: .75rem; padding: 1.5rem 2rem; margin-bottom: 1.5rem; color: #fff;
 }
 .page-hero .hero-icon {
@@ -16,7 +16,7 @@
 
 /* ── Cabeçalho de filtros ─────────────────────────────────────────────────── */
 .flt-header {
-  background: #198754; color: #fff; font-size: .78rem; font-weight: 600;
+  background: #1D63A5; color: #fff; font-size: .78rem; font-weight: 600;
   padding: .45rem .75rem; border-radius: .35rem .35rem 0 0;
 }
 
@@ -39,7 +39,7 @@
 
 /* ── Tipos de linha ───────────────────────────────────────────────────────── */
 .row-section td {
-  background: #198754; color: #fff; font-weight: 700; font-size: .76rem;
+  background: #1D63A5; color: #fff; font-weight: 700; font-size: .76rem;
   text-transform: uppercase; letter-spacing: .05em;
 }
 .row-titulo td {
@@ -54,7 +54,7 @@
 .row-block-total td { background: #4a86c8; color: #fff; font-weight: 700; }
 .row-desp-total td  { background: #dc3545; color: #fff; font-weight: 700; }
 .row-lucro td {
-  background: #155a1e; color: #fff; font-weight: 700; font-size: .82rem;
+  background: #154070; color: #fff; font-weight: 700; font-size: .82rem;
   text-transform: uppercase;
 }
 .row-lucro-neg td { background: #a31a1a !important; }
@@ -90,7 +90,11 @@
 /* ── Valores ──────────────────────────────────────────────────────────────── */
 .val-zero { color: #bbb; }
 .col-acum { background: #f8f5e4 !important; font-weight: 600; }
+.row-section .col-acum,
+.row-compras-section .col-acum,
 .row-block-total .col-acum,
+.row-compras-total .col-acum,
+.row-cmv-total .col-acum,
 .row-desp-total .col-acum,
 .row-lucro .col-acum { background: rgba(255,255,255,.15) !important; }
 .dif-pos  { color: #5fffaa; font-weight: 700; }
@@ -201,7 +205,7 @@
 
         <!-- Ações -->
         <div class="col-md-5 d-flex gap-2 flex-wrap align-items-end">
-          <button type="submit" class="btn btn-success btn-sm px-4">
+          <button type="submit" class="btn btn-primary btn-sm px-4">
             <i class="bi bi-search me-1"></i> Filtrar
           </button>
           <a href="{{ url_for('dre_postos.dre_postos') }}"
@@ -209,21 +213,64 @@
             <i class="bi bi-x-circle me-1"></i> Limpar
           </a>
           <button type="button" class="btn btn-outline-primary btn-sm px-3"
-                  onclick="salvarFiltro()">
+                  data-bs-toggle="modal" data-bs-target="#modalSalvarFiltro">
             <i class="bi bi-bookmark-fill me-1"></i> Salvar Filtro
           </button>
           <button type="button" class="btn btn-outline-warning btn-sm px-3"
-                  onclick="carregarFiltro()">
+                  data-bs-toggle="modal" data-bs-target="#modalCarregarFiltro"
+                  onclick="abrirModalCarregar()">
             <i class="bi bi-bookmark me-1"></i> Carregar Filtro
           </button>
           <span id="msg_filtro" class="text-muted small"></span>
+        </div>
+
+        <!-- Modal: Salvar Filtro -->
+        <div class="modal fade" id="modalSalvarFiltro" tabindex="-1">
+          <div class="modal-dialog modal-sm">
+            <div class="modal-content">
+              <div class="modal-header py-2" style="background:#1D63A5;color:#fff;">
+                <h6 class="modal-title mb-0"><i class="bi bi-bookmark-fill me-1"></i> Salvar Filtro</h6>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+              </div>
+              <div class="modal-body">
+                <label class="form-label form-label-sm mb-1">Nome do preset</label>
+                <input type="text" id="inputNomeFiltro" class="form-control form-control-sm"
+                       placeholder="Ex: DRE Anual Completo" maxlength="60">
+              </div>
+              <div class="modal-footer py-1">
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-primary btn-sm"
+                        onclick="confirmarSalvarFiltro()">
+                  <i class="bi bi-floppy me-1"></i> Salvar
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Modal: Carregar Filtro -->
+        <div class="modal fade" id="modalCarregarFiltro" tabindex="-1">
+          <div class="modal-dialog">
+            <div class="modal-content">
+              <div class="modal-header py-2" style="background:#1D63A5;color:#fff;">
+                <h6 class="modal-title mb-0"><i class="bi bi-bookmark me-1"></i> Filtros Salvos</h6>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+              </div>
+              <div class="modal-body p-2" id="listaPresets">
+                <p class="text-muted small mb-0">Nenhum filtro salvo.</p>
+              </div>
+              <div class="modal-footer py-1">
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Fechar</button>
+              </div>
+            </div>
+          </div>
         </div>
 
       </div>
 
       <!-- ── Configuração por empresa ──────────────────────────────────────── -->
       <div class="mt-3" id="empresa-configs-wrap" style="display:none;">
-        <div class="mb-1 fw-semibold small" style="color:#198754;">
+        <div class="mb-1 fw-semibold small" style="color:#1D63A5;">
           <i class="bi bi-sliders me-1"></i>
           Configuração individual por empresa
           <small class="text-muted fw-normal ms-1">(vazio = sem restrição)</small>
@@ -237,7 +284,7 @@
   <!-- ── TABELA DRE ───────────────────────────────────────────────────────── -->
   {% if months %}
   <div class="card shadow-sm">
-    <div class="card-header py-2" style="background:#198754;color:#fff;font-size:.78rem;font-weight:600;">
+    <div class="card-header py-2" style="background:#1D63A5;color:#fff;font-size:.78rem;font-weight:600;">
       <i class="bi bi-table me-1"></i>
       DRE — {{ data_inicio|replace('-','/') }} a {{ data_fim|replace('-','/') }}
       {% if empresa_ids %}<span class="ms-2 opacity-75 small">({{ empresa_ids|length }} empresa{{ 's' if empresa_ids|length > 1 else '' }})</span>{% endif %}
@@ -760,10 +807,19 @@ function renderEmpresaCards() {
   });
 }
 
-// ── Salvar / Carregar filtro via localStorage ─────────────────────────────
-var LS_KEY = 'dre_postos_filtro_v2';
+// ── Filtros múltiplos (localStorage) ─────────────────────────────────────
+var LS_PRESETS_KEY = 'dre_postos_presets_v1';
 
-function salvarFiltro() {
+function _lerPresets() {
+  try { return JSON.parse(localStorage.getItem(LS_PRESETS_KEY) || '{}'); }
+  catch(e) { return {}; }
+}
+
+function _salvarPresets(presets) {
+  localStorage.setItem(LS_PRESETS_KEY, JSON.stringify(presets));
+}
+
+function _coletarFiltroAtual() {
   var selectedEids = Array.from(
     document.getElementById('sel_empresas').selectedOptions
   ).map(function(o) { return o.value; });
@@ -773,60 +829,87 @@ function salvarFiltro() {
     var titEl = document.querySelector('[name="cf_' + eid + '_titulos[]"]');
     var forEl = document.querySelector('[name="cf_' + eid + '_formas[]"]');
     cfgs[eid] = {
-      titulo_ids:      titEl ? Array.from(titEl.selectedOptions).map(o => o.value) : [],
-      forma_ids:       forEl ? Array.from(forEl.selectedOptions).map(o => o.value) : [],
-      include_vendas:  document.getElementById('chkV_' + eid)?.checked === true,
-      include_compras: document.getElementById('chkC_' + eid)?.checked === true,
-      include_aluguel: document.getElementById('chkA_' + eid)?.checked === true,
-      include_prazo:   document.getElementById('chkP_' + eid)?.checked === true,
+      titulo_ids:      titEl ? Array.from(titEl.selectedOptions).map(function(o){ return o.value; }) : [],
+      forma_ids:       forEl ? Array.from(forEl.selectedOptions).map(function(o){ return o.value; }) : [],
+      include_vendas:  document.getElementById('chkV_' + eid) ? document.getElementById('chkV_' + eid).checked : false,
+      include_compras: document.getElementById('chkC_' + eid) ? document.getElementById('chkC_' + eid).checked : false,
+      include_aluguel: document.getElementById('chkA_' + eid) ? document.getElementById('chkA_' + eid).checked : false,
+      include_prazo:   document.getElementById('chkP_' + eid) ? document.getElementById('chkP_' + eid).checked : false,
     };
   });
 
-  var payload = {
+  return {
     empresas:    selectedEids,
     data_inicio: document.getElementById('data_inicio').value,
     data_fim:    document.getElementById('data_fim').value,
     configs:     cfgs,
   };
-  try {
-    localStorage.setItem(LS_KEY, JSON.stringify(payload));
-    document.getElementById('msg_filtro').textContent = '✔ Filtro salvo!';
-    setTimeout(function(){ document.getElementById('msg_filtro').textContent = ''; }, 2500);
-  } catch(e) {
-    document.getElementById('msg_filtro').textContent = 'Erro ao salvar.';
-  }
 }
 
-function carregarFiltro() {
-  try {
-    var saved = localStorage.getItem(LS_KEY);
-    if (!saved) {
-      document.getElementById('msg_filtro').textContent = 'Nenhum filtro salvo.';
-      return;
-    }
-    var data = JSON.parse(saved);
+function confirmarSalvarFiltro() {
+  var nome = (document.getElementById('inputNomeFiltro').value || '').trim();
+  if (!nome) {
+    document.getElementById('inputNomeFiltro').focus();
+    return;
+  }
+  var presets = _lerPresets();
+  presets[nome] = _coletarFiltroAtual();
+  _salvarPresets(presets);
+  bootstrap.Modal.getInstance(document.getElementById('modalSalvarFiltro')).hide();
+  document.getElementById('inputNomeFiltro').value = '';
+  document.getElementById('msg_filtro').textContent = '✔ Filtro "' + nome + '" salvo!';
+  setTimeout(function(){ document.getElementById('msg_filtro').textContent = ''; }, 2500);
+}
 
-    // Aplica seleção de empresas
+function abrirModalCarregar() {
+  var presets = _lerPresets();
+  var names = Object.keys(presets).sort();
+  var container = document.getElementById('listaPresets');
+  if (!names.length) {
+    container.innerHTML = '<p class="text-muted small mb-0">Nenhum filtro salvo.</p>';
+    return;
+  }
+  var html = '<div class="list-group list-group-flush">';
+  names.forEach(function(nome) {
+    html += '<div class="list-group-item list-group-item-action d-flex justify-content-between align-items-center py-2 px-2">'
+          + '<span class="small fw-semibold text-truncate" style="max-width:260px;" title="' + nome.replace(/"/g,'&quot;') + '">' + nome + '</span>'
+          + '<span class="d-flex gap-1">'
+          + '<button type="button" class="btn btn-primary btn-sm py-0 px-2" onclick="aplicarPreset(' + JSON.stringify(nome) + ')"><i class="bi bi-arrow-up-circle"></i> Carregar</button>'
+          + '<button type="button" class="btn btn-outline-danger btn-sm py-0 px-2" onclick="excluirPreset(' + JSON.stringify(nome) + ')"><i class="bi bi-trash"></i></button>'
+          + '</span>'
+          + '</div>';
+  });
+  html += '</div>';
+  container.innerHTML = html;
+}
+
+function aplicarPreset(nome) {
+  var presets = _lerPresets();
+  var data = presets[nome];
+  if (!data) return;
+  try {
     var sel = document.getElementById('sel_empresas');
     Array.from(sel.options).forEach(function(o) {
       o.selected = (data.empresas || []).indexOf(o.value) >= 0;
     });
-
-    // Restaura configs salvas
     EMPRESA_CONFIGS = data.configs || {};
-
-    // Re-renderiza cards
     renderEmpresaCards();
-
-    // Aplica datas
     if (data.data_inicio) document.getElementById('data_inicio').value = data.data_inicio;
     if (data.data_fim)    document.getElementById('data_fim').value    = data.data_fim;
-
-    document.getElementById('msg_filtro').textContent = '✔ Filtro carregado!';
+    bootstrap.Modal.getInstance(document.getElementById('modalCarregarFiltro')).hide();
+    document.getElementById('msg_filtro').textContent = '✔ Filtro "' + nome + '" carregado!';
     setTimeout(function(){ document.getElementById('msg_filtro').textContent = ''; }, 2500);
   } catch(e) {
     document.getElementById('msg_filtro').textContent = 'Erro ao carregar filtro.';
   }
+}
+
+function excluirPreset(nome) {
+  if (!confirm('Excluir o filtro "' + nome + '"?')) return;
+  var presets = _lerPresets();
+  delete presets[nome];
+  _salvarPresets(presets);
+  abrirModalCarregar();
 }
 
 // ── Inicialização ─────────────────────────────────────────────────────────
