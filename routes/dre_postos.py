@@ -645,6 +645,90 @@ def _fetch_despesas_lancamentos(conn, data_inicio, data_fim, empresa_ids, titulo
     return rows
 
 
+def _lookup_aluguel_categoria(conn):
+    """
+    Retorna metadados (tit_id, tit_nome, tit_ordem, cat_id, cat_nome, cat_ordem)
+    da primeira categoria de despesa cujo nome seja 'ALUGUEL' (case-insensitive),
+    ou None se não existir.
+    """
+    cur = conn.cursor(dictionary=True)
+    try:
+        cur.execute("""
+            SELECT c.id   AS cat_id,
+                   c.nome AS cat_nome,
+                   COALESCE(c.ordem, 9999) AS cat_ordem,
+                   t.id   AS tit_id,
+                   t.nome AS tit_nome,
+                   COALESCE(t.ordem, 9999) AS tit_ordem
+            FROM categorias_despesas c
+            JOIN titulos_despesas t ON t.id = c.titulo_id
+            WHERE UPPER(TRIM(c.nome)) = 'ALUGUEL'
+            LIMIT 1
+        """)
+        row = cur.fetchone()
+    except Exception:
+        row = None
+    cur.close()
+    return row
+
+
+def _fetch_despesas_retirada_aluguel_caixa(conn, data_inicio, data_fim, empresa_ids,
+                                           aluguel_cat):
+    """
+    Busca pagamentos de RETIRADA ALUGUEL feitos em caixa
+    (lancamentos_caixa_comprovacao com formas_pagamento_caixa.tipo='RETIRADA_PAGAMENTO'
+    e lcc.descricao='RETIRADA ALUGUEL') e retorna linhas no mesmo formato que
+    _fetch_despesas_lancamentos, usando os metadados de aluguel_cat.
+
+    Isso garante que o aluguel pago em espécie aparece na mesma linha ALUGUEL
+    do bloco DESPESAS do DRE, ao lado do aluguel pago via banco.
+    """
+    if not aluguel_cat:
+        return []
+
+    emp_clause = ''
+    params: list = [data_inicio, data_fim]
+    if empresa_ids:
+        ph = ','.join(['%s'] * len(empresa_ids))
+        emp_clause = f'AND lc.cliente_id IN ({ph})'
+        params.extend([int(e) for e in empresa_ids])
+
+    cur = conn.cursor(dictionary=True)
+    try:
+        cur.execute(f"""
+            SELECT lc.data,
+                   SUM(lcc.valor) AS valor
+            FROM lancamentos_caixa_comprovacao lcc
+            INNER JOIN lancamentos_caixa lc ON lc.id = lcc.lancamento_caixa_id
+            LEFT  JOIN formas_pagamento_caixa fp ON fp.id = lcc.forma_pagamento_id
+            WHERE lc.data BETWEEN %s AND %s
+              AND {_LC_STATUS_COND}
+              {emp_clause}
+              AND fp.tipo = 'RETIRADA_PAGAMENTO'
+              AND UPPER(TRIM(COALESCE(lcc.descricao, ''))) = 'RETIRADA ALUGUEL'
+            GROUP BY lc.data
+            ORDER BY lc.data
+        """, params)
+        rows = cur.fetchall()
+    except Exception:
+        rows = []
+    cur.close()
+
+    result = []
+    for row in rows:
+        result.append({
+            'data':           row['data'],
+            'valor':          float(row['valor'] or 0),
+            'titulo_id':      aluguel_cat['tit_id'],
+            'titulo_ordem':   aluguel_cat['tit_ordem'],
+            'titulo_nome':    aluguel_cat['tit_nome'],
+            'categoria_id':   aluguel_cat['cat_id'],
+            'categoria_ordem': aluguel_cat['cat_ordem'],
+            'categoria_nome': aluguel_cat['cat_nome'],
+        })
+    return result
+
+
 def _build_despesas_blocks(lancamentos, months):
     """
     Constrói blocos de despesas por Título (bloco) → Categoria (linha).
@@ -790,6 +874,9 @@ def dre_postos():
         agg_prazo_formas: dict    = {}
         all_lancamentos: list     = []
 
+        # Lookup da categoria ALUGUEL para mapear retiradas de caixa
+        aluguel_cat = _lookup_aluguel_categoria(conn)
+
         if months and empresa_configs:
             for eid, cfg in empresa_configs.items():
                 eid_list = [eid]
@@ -853,10 +940,24 @@ def dre_postos():
                             agg_prazo_formas[n]['by_month'][mk] += v
                         agg_prazo_formas[n]['total'] += f['total']
 
-                # Despesas (lançamentos)
+                # Despesas (lançamentos bancários)
                 lancamentos = _fetch_despesas_lancamentos(
                     conn, data_inicio, data_fim, eid_list, cfg['titulo_ids'])
                 all_lancamentos.extend(lancamentos)
+
+                # Despesas de caixa: RETIRADA ALUGUEL
+                # Incluir se: a categoria ALUGUEL existe E (sem filtro de título
+                # OU o título da categoria ALUGUEL está no filtro da empresa)
+                titulo_ids_set = set(str(t) for t in cfg['titulo_ids'])
+                aluguel_titulo_ok = (
+                    aluguel_cat is not None
+                    and (not titulo_ids_set
+                         or str(aluguel_cat['tit_id']) in titulo_ids_set)
+                )
+                if aluguel_titulo_ok:
+                    retirada_rows = _fetch_despesas_retirada_aluguel_caixa(
+                        conn, data_inicio, data_fim, eid_list, aluguel_cat)
+                    all_lancamentos.extend(retirada_rows)
 
         def _sorted_formas_list(acc):
             return sorted(
