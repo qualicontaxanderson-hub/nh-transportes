@@ -930,6 +930,10 @@ function aplicarPreset(nome) {
       o.selected = (data.empresas || []).indexOf(o.value) >= 0;
     });
     EMPRESA_CONFIGS = data.configs || {};
+    // Limpa cards existentes para que renderEmpresaCards use EMPRESA_CONFIGS
+    // (sem isso, a lógica de "preserved" lê o DOM atual e ignora o preset)
+    var _econt = document.getElementById('empresa-configs');
+    if (_econt) _econt.innerHTML = '';
     renderEmpresaCards();
     if (data.data_inicio) document.getElementById('data_inicio').value = data.data_inicio;
     if (data.data_fim)    document.getElementById('data_fim').value    = data.data_fim;
