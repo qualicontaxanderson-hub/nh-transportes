@@ -882,6 +882,9 @@ function confirmarSalvarFiltro() {
     return;
   }
   var presets = _lerPresets();
+  if (presets[nome] && !confirm('Já existe um filtro com o nome "' + nome + '". Deseja substituí-lo?')) {
+    return;
+  }
   presets[nome] = _coletarFiltroAtual();
   _salvarPresets(presets);
   bootstrap.Modal.getInstance(document.getElementById('modalSalvarFiltro')).hide();
@@ -890,10 +893,11 @@ function confirmarSalvarFiltro() {
   setTimeout(function(){ document.getElementById('msg_filtro').textContent = ''; }, 2500);
 }
 
-function abrirModalCarregar() {
+function _renderListaPresets() {
   var presets = _lerPresets();
   var names = Object.keys(presets).sort();
   var container = document.getElementById('listaPresets');
+  if (!container) return;
   if (!names.length) {
     container.innerHTML = '<p class="text-muted small mb-0">Nenhum filtro salvo.</p>';
     return;
@@ -912,6 +916,10 @@ function abrirModalCarregar() {
   container.innerHTML = html;
 }
 
+function abrirModalCarregar() {
+  _renderListaPresets();
+}
+
 function aplicarPreset(nome) {
   var presets = _lerPresets();
   var data = presets[nome];
@@ -925,9 +933,8 @@ function aplicarPreset(nome) {
     renderEmpresaCards();
     if (data.data_inicio) document.getElementById('data_inicio').value = data.data_inicio;
     if (data.data_fim)    document.getElementById('data_fim').value    = data.data_fim;
-    bootstrap.Modal.getInstance(document.getElementById('modalCarregarFiltro')).hide();
-    document.getElementById('msg_filtro').textContent = '✔ Filtro "' + nome + '" carregado!';
-    setTimeout(function(){ document.getElementById('msg_filtro').textContent = ''; }, 2500);
+    // Submete o formulário para recarregar o relatório com o filtro carregado
+    document.getElementById('formFiltro').submit();
   } catch(e) {
     document.getElementById('msg_filtro').textContent = 'Erro ao carregar filtro.';
   }
@@ -938,7 +945,7 @@ function excluirPreset(nome) {
   var presets = _lerPresets();
   delete presets[nome];
   _salvarPresets(presets);
-  abrirModalCarregar();
+  _renderListaPresets();
 }
 
 // ── Inicialização ─────────────────────────────────────────────────────────
@@ -946,6 +953,11 @@ document.addEventListener('DOMContentLoaded', function() {
   renderEmpresaCards();
   document.getElementById('sel_empresas')
     .addEventListener('change', renderEmpresaCards);
+  // Re-render lista sempre que o modal de carregar for aberto (inclusive via data-bs-toggle)
+  var elModal = document.getElementById('modalCarregarFiltro');
+  if (elModal) {
+    elModal.addEventListener('show.bs.modal', function() { _renderListaPresets(); });
+  }
 });
 </script>
 {% endblock %}
