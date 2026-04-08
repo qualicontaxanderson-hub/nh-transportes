@@ -78,6 +78,15 @@
 .row-compras-litros .col-desc { padding-left: 3rem !important; }
 .row-compras-total td { background: #bf360c; color: #fff; font-weight: 700; }
 
+/* ── Estoque (EI / EF dentro do bloco CMV) ────────────────────────────────── */
+.row-estoque-item td { background: #e8f5e9; font-weight: 500; color: #1b5e20; }
+.row-estoque-item:hover td { background: #c8e6c9; }
+.row-estoque-child td { background: #f1f8e9; font-size: .70rem; }
+.row-estoque-child .col-desc { padding-left: 1.6rem !important; }
+.row-estoque-litros td { background: #f9fbe7; color: #33691e; font-style: italic; font-size: .69rem; }
+.row-estoque-litros .col-desc { padding-left: 3rem !important; }
+.row-cmv-total td { background: #4a148c; color: #fff; font-weight: 700; }
+
 /* ── Valores ──────────────────────────────────────────────────────────────── */
 .val-zero { color: #bbb; }
 .col-acum { background: #f8f5e4 !important; font-weight: 600; }
@@ -359,27 +368,69 @@
           </tr>
 
           {# ══════════════════════════════════════════════════════
-             BLOCO: COMPRAS
+             BLOCO: CMV — Custo da Mercadoria Vendida
           ══════════════════════════════════════════════════════ #}
           {% if any_include_compras %}
           <tr class="row-compras-section">
             <td class="col-desc" colspan="{{ months|length + 2 }}">
-              <i class="bi bi-cart-fill me-1"></i> COMPRAS
+              <i class="bi bi-calculator-fill me-1"></i> CMV — CUSTO DA MERCADORIA VENDIDA
             </td>
           </tr>
 
-          {# ── Compras de Combustíveis (expansível por produto) ── #}
-          {% set all_compras_prods = [] %}
+          {# ── Coleta todos os produtos para EI, Compras e EF ── #}
+          {% set all_cmv_prods = [] %}
+          {% for mk, pm in estoque_ei.items() %}
+            {% for prod in pm.keys() %}
+              {% if prod not in all_cmv_prods %}{% set _ = all_cmv_prods.append(prod) %}{% endif %}
+            {% endfor %}
+          {% endfor %}
           {% for mk, pm in compras_por_produto.items() %}
             {% for prod in pm.keys() %}
-              {% if prod not in all_compras_prods %}{% set _ = all_compras_prods.append(prod) %}{% endif %}
+              {% if prod not in all_cmv_prods %}{% set _ = all_cmv_prods.append(prod) %}{% endif %}
+            {% endfor %}
+          {% endfor %}
+          {% for mk, pm in estoque_ef.items() %}
+            {% for prod in pm.keys() %}
+              {% if prod not in all_cmv_prods %}{% set _ = all_cmv_prods.append(prod) %}{% endif %}
             {% endfor %}
           {% endfor %}
 
+          {# ══ ESTOQUE INICIAL ══ #}
+          <tr class="row-estoque-item" onclick="toggleGroup('estoque_ei')" style="cursor:pointer;">
+            <td class="col-desc fw-semibold">
+              <span class="toggle-icon" id="icon-estoque_ei">▶</span>
+              <i class="bi bi-box-seam me-1"></i> (+) Estoque Inicial
+            </td>
+            {% for m in months %}
+              {% set v = estoque_ei_by_month.get(m.key, 0) %}
+              <td class="text-end {% if v == 0 %}val-zero{% endif %}">{{ fmt(v) }}</td>
+            {% endfor %}
+            <td class="text-end col-acum">{{ fmt(grand_estoque_ei_total) }}</td>
+          </tr>
+          {% for prod in all_cmv_prods | sort %}
+          <tr class="row-estoque-child" data-group="estoque_ei" style="display:none;">
+            <td class="col-desc">└ {{ prod }}</td>
+            {% for m in months %}
+              {% set v = estoque_ei.get(m.key, {}).get(prod, {}).get('reais', 0) %}
+              <td class="text-end {% if v == 0 %}val-zero{% endif %}">{{ fmt(v) }}</td>
+            {% endfor %}
+            <td class="text-end col-acum">{{ fmt(grand_estoque_ei.get(prod, {}).get('reais', 0)) }}</td>
+          </tr>
+          <tr class="row-estoque-litros" data-group="estoque_ei" style="display:none;">
+            <td class="col-desc">└─ Litros</td>
+            {% for m in months %}
+              {% set v = estoque_ei.get(m.key, {}).get(prod, {}).get('litros', 0) %}
+              <td class="text-end">{{ fmtL(v) }}</td>
+            {% endfor %}
+            <td class="text-end col-acum">{{ fmtL(grand_estoque_ei.get(prod, {}).get('litros', 0)) }}</td>
+          </tr>
+          {% endfor %}
+
+          {# ══ COMPRAS ══ #}
           <tr class="row-compras-item" onclick="toggleGroup('compras')" style="cursor:pointer;">
             <td class="col-desc fw-semibold">
               <span class="toggle-icon" id="icon-compras" style="color:#e65100;">▶</span>
-              <i class="bi bi-fuel-pump me-1" style="color:#e65100;"></i> Compras de Combustíveis
+              <i class="bi bi-fuel-pump me-1" style="color:#e65100;"></i> (+) Compras de Combustíveis
             </td>
             {% for m in months %}
               {% set v = compras_by_month.get(m.key, 0) %}
@@ -387,9 +438,7 @@
             {% endfor %}
             <td class="text-end col-acum">{{ fmt(grand_compras) }}</td>
           </tr>
-
-          {% for prod in all_compras_prods | sort %}
-          {# R$ row per product #}
+          {% for prod in all_cmv_prods | sort %}
           <tr class="row-compras-child" data-group="compras" style="display:none;">
             <td class="col-desc">└ {{ prod }}</td>
             {% for m in months %}
@@ -398,7 +447,6 @@
             {% endfor %}
             <td class="text-end col-acum">{{ fmt(grand_compras_por_produto.get(prod, {}).get('reais', 0)) }}</td>
           </tr>
-          {# Litros row per product (indented italic) #}
           <tr class="row-compras-litros" data-group="compras" style="display:none;">
             <td class="col-desc">└─ Litros</td>
             {% for m in months %}
@@ -409,21 +457,46 @@
           </tr>
           {% endfor %}
 
-          {% if not all_compras_prods %}
-          <tr>
-            <td class="col-desc text-muted" colspan="{{ months|length + 2 }}">
-              <em>Nenhuma compra encontrada no período / filtros selecionados.</em>
+          {# ══ ESTOQUE FINAL ══ #}
+          <tr class="row-estoque-item" onclick="toggleGroup('estoque_ef')" style="cursor:pointer;">
+            <td class="col-desc fw-semibold">
+              <span class="toggle-icon" id="icon-estoque_ef">▶</span>
+              <i class="bi bi-box-seam me-1"></i> (−) Estoque Final
             </td>
-          </tr>
-          {% endif %}
-
-          {# TOTAL COMPRAS #}
-          <tr class="row-compras-total">
-            <td class="col-desc"><i class="bi bi-cart-check-fill me-1"></i> TOTAL COMPRAS</td>
             {% for m in months %}
-              <td class="text-end">{{ fmt(compras_by_month.get(m.key, 0)) }}</td>
+              {% set v = estoque_ef_by_month.get(m.key, 0) %}
+              <td class="text-end {% if v == 0 %}val-zero{% endif %}">{{ fmt(v) }}</td>
             {% endfor %}
-            <td class="text-end col-acum">{{ fmt(grand_compras) }}</td>
+            <td class="text-end col-acum">{{ fmt(grand_estoque_ef_total) }}</td>
+          </tr>
+          {% for prod in all_cmv_prods | sort %}
+          <tr class="row-estoque-child" data-group="estoque_ef" style="display:none;">
+            <td class="col-desc">└ {{ prod }}</td>
+            {% for m in months %}
+              {% set v = estoque_ef.get(m.key, {}).get(prod, {}).get('reais', 0) %}
+              <td class="text-end {% if v == 0 %}val-zero{% endif %}">{{ fmt(v) }}</td>
+            {% endfor %}
+            <td class="text-end col-acum">{{ fmt(grand_estoque_ef.get(prod, {}).get('reais', 0)) }}</td>
+          </tr>
+          <tr class="row-estoque-litros" data-group="estoque_ef" style="display:none;">
+            <td class="col-desc">└─ Litros</td>
+            {% for m in months %}
+              {% set v = estoque_ef.get(m.key, {}).get(prod, {}).get('litros', 0) %}
+              <td class="text-end">{{ fmtL(v) }}</td>
+            {% endfor %}
+            <td class="text-end col-acum">{{ fmtL(grand_estoque_ef.get(prod, {}).get('litros', 0)) }}</td>
+          </tr>
+          {% endfor %}
+
+          {# ══ CMV TOTAL ══ #}
+          <tr class="row-cmv-total">
+            <td class="col-desc">
+              <i class="bi bi-calculator-fill me-1"></i> CMV = EI + Compras − EF
+            </td>
+            {% for m in months %}
+              <td class="text-end">{{ fmt(cmv_by_month.get(m.key, 0)) }}</td>
+            {% endfor %}
+            <td class="text-end col-acum">{{ fmt(grand_cmv) }}</td>
           </tr>
           {% endif %}{# if any_include_compras #}
 

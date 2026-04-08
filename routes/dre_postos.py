@@ -3,13 +3,18 @@ DRE Postos — Demonstração do Resultado do Exercício.
 
 Combina num único relatório em formato de matriz mensal:
   1. RECEITAS
-     - Vendas de Combustíveis em R$ (lancamentos_caixa_receitas, tipo='VENDAS POSTO')
-     - Vendas de Combustíveis em Litros (fifo_resumo_mensal.qtde_saida)
+     - Vendas de Combustíveis em R$ (lancamentos_caixa_receitas, tipo='VENDAS POSTO'/'ARLA'/'LUBRIFICANTES')
+     - Vendas de Combustíveis em Litros (vendas_posto)
      - Recebimentos de Aluguel (bank_transactions + formas_recebimento)
      - Clientes à Prazo       (bank_transactions + formas_recebimento)
-  2. DESPESAS
+  2. CMV — CUSTO DA MERCADORIA VENDIDA
+     - Estoque Inicial (vendas_posto.estoque_inicial no dia 01 do mês, em Litros e R$)
+     - Compras         (fretes, em Litros e R$)
+     - Estoque Final   (vendas_posto.estoque_inicial no dia 01 do mês seguinte, em Litros e R$)
+     - CMV = Estoque Inicial + Compras − Estoque Final
+  3. DESPESAS
      - lancamentos_despesas agrupados por Título / Categoria
-  3. LUCRO OPERACIONAL = RECEITAS − DESPESAS
+  4. LUCRO OPERACIONAL = RECEITAS − CMV − DESPESAS
 
 Multi-empresa: empresa_ids[] restringe quais empresas contribuem com dados.
 Filtros adicionais: titulo_ids[] filtra quais títulos de despesa incluir.
@@ -368,6 +373,104 @@ def _fetch_compras(conn, data_inicio, data_fim, empresa_ids):
     return result
 
 
+def _fetch_estoque_mensal(conn, data_inicio, data_fim, empresa_ids, months):
+    """
+    Retorna estoque inicial (EI) e final (EF) por produto para cada mês do período.
+
+    EI[M] = MAX(vendas_posto.estoque_inicial) no dia 01 do mês M.
+    EF[M] = MAX(vendas_posto.estoque_inicial) no dia 01 do mês M+1.
+    Valor R$ = litros × custo médio ponderado das compras do período (fretes).
+
+    Retorna {
+        'ei': {mk: {produto_nome: {'litros': float, 'reais': float}}},
+        'ef': {mk: {produto_nome: {'litros': float, 'reais': float}}},
+    }.
+    """
+    if not months:
+        return {'ei': {}, 'ef': {}}
+
+    cur = conn.cursor(dictionary=True)
+    ph_emp = ','.join(['%s'] * len(empresa_ids)) if empresa_ids else None
+    emp_cond_vp = f'AND vp.cliente_id IN ({ph_emp})' if ph_emp else ''
+    emp_cond_f  = f'AND f.clientes_id IN ({ph_emp})' if ph_emp else ''
+    emp_params  = list(empresa_ids) if empresa_ids else []
+
+    # Collect all dates needed: 1st of each month + 1st of next month
+    date_to_roles: dict = {}
+    for m in months:
+        yr, mo = m['year'], m['month']
+        mk = m['key']
+        d_ei = date(yr, mo, 1)
+        d_ef = date(yr + 1, 1, 1) if mo == 12 else date(yr, mo + 1, 1)
+        date_to_roles.setdefault(d_ei, []).append((mk, 'ei'))
+        date_to_roles.setdefault(d_ef, []).append((mk, 'ef'))
+
+    all_dates = sorted(date_to_roles.keys())
+
+    # ── Estoque (litros) por produto por data ────────────────────────────────
+    stock_by_date: dict = {}
+    try:
+        ph_dates = ','.join(['%s'] * len(all_dates))
+        params = all_dates + emp_params
+        cur.execute(f"""
+            SELECT vp.data_movimento,
+                   COALESCE(p.nome, 'Sem produto') AS produto_nome,
+                   SUM(vp.estoque_inicial)          AS litros
+            FROM vendas_posto vp
+            LEFT JOIN produto p ON p.id = vp.produto_id
+            WHERE vp.data_movimento IN ({ph_dates})
+              AND vp.estoque_inicial IS NOT NULL
+              {emp_cond_vp}
+            GROUP BY vp.data_movimento, p.nome
+        """, params)
+        for r in cur.fetchall():
+            d = r['data_movimento']
+            stock_by_date.setdefault(d, {})[r['produto_nome']] = float(r['litros'] or 0)
+    except Exception:
+        pass
+
+    # ── Custo médio ponderado por produto (R$/litro) via fretes ─────────────
+    avg_cost: dict = {}
+    try:
+        params_f = [data_inicio, data_fim] + emp_params
+        cur.execute(f"""
+            SELECT COALESCE(p.nome, 'Sem produto')                AS produto_nome,
+                   SUM(COALESCE(f.total_nf_compra, 0))            AS total_reais,
+                   SUM(COALESCE(f.quantidade_manual, q.valor, 0)) AS total_litros
+            FROM fretes f
+            LEFT JOIN produto    p ON p.id = f.produto_id
+            LEFT JOIN quantidades q ON q.id = f.quantidade_id
+            WHERE f.data_frete BETWEEN %s AND %s
+              {emp_cond_f}
+              AND COALESCE(f.quantidade_manual, q.valor, 0) > 0
+            GROUP BY p.nome
+        """, params_f)
+        for r in cur.fetchall():
+            litros = float(r['total_litros'] or 0)
+            reais  = float(r['total_reais']  or 0)
+            avg_cost[r['produto_nome']] = reais / litros if litros > 0 else 0.0
+    except Exception:
+        pass
+
+    cur.close()
+
+    # ── Monta resultado EI / EF ──────────────────────────────────────────────
+    result_ei: dict = {}
+    result_ef: dict = {}
+    for d, roles in date_to_roles.items():
+        prods = stock_by_date.get(d, {})
+        for mk, role in roles:
+            target = result_ei if role == 'ei' else result_ef
+            for prod, litros in prods.items():
+                cost  = avg_cost.get(prod, 0.0)
+                entry = target.setdefault(mk, {}).setdefault(
+                    prod, {'litros': 0.0, 'reais': 0.0})
+                entry['litros'] += litros
+                entry['reais']  += litros * cost
+
+    return {'ei': result_ei, 'ef': result_ef}
+
+
 def _agg_por_produto(agg: dict, new_data: dict) -> None:
     """Agrega new_data {mk: {prod: {litros, reais}}} no dicionário agg (in-place)."""
     for mk, prod_map in new_data.items():
@@ -677,6 +780,8 @@ def dre_postos():
         agg_vendas_reais: dict    = defaultdict(float)
         agg_vendas_por_produto: dict = {}   # {mk: {prod: {litros, reais}}}
         agg_compras_por_produto: dict = {}  # {mk: {prod: {litros, reais}}}
+        agg_estoque_ei: dict      = {}   # {mk: {prod: {litros, reais}}}
+        agg_estoque_ef: dict      = {}   # {mk: {prod: {litros, reais}}}
         agg_aluguel_mk: dict      = defaultdict(float)
         agg_prazo_mk: dict        = defaultdict(float)
         agg_aluguel_formas: dict  = {}   # nome → {by_month, total}
@@ -701,11 +806,15 @@ def dre_postos():
                         _fetch_vendas_extras_caixa(
                             conn, data_inicio, data_fim, eid_list))
 
-                # Compras (fretes)
+                # Compras (fretes) + Estoque para CMV
                 if cfg['include_compras']:
                     _agg_por_produto(
                         agg_compras_por_produto,
                         _fetch_compras(conn, data_inicio, data_fim, eid_list))
+                    estoque = _fetch_estoque_mensal(
+                        conn, data_inicio, data_fim, eid_list, months)
+                    _agg_por_produto(agg_estoque_ei, estoque['ei'])
+                    _agg_por_produto(agg_estoque_ef, estoque['ef'])
 
                 # Recebimentos bancários
                 receb = _fetch_recebimentos(
@@ -778,6 +887,31 @@ def dre_postos():
             )
         grand_compras = sum(compras_by_month.values())
 
+        # ── CMV = Estoque Inicial + Compras − Estoque Final ───────────────
+        estoque_ei_by_month: dict = {}
+        estoque_ef_by_month: dict = {}
+        for m in months:
+            mk = m['key']
+            estoque_ei_by_month[mk] = sum(
+                v['reais'] for v in agg_estoque_ei.get(mk, {}).values())
+            estoque_ef_by_month[mk] = sum(
+                v['reais'] for v in agg_estoque_ef.get(mk, {}).values())
+
+        cmv_by_month: dict = {}
+        for m in months:
+            mk = m['key']
+            cmv_by_month[mk] = (
+                estoque_ei_by_month.get(mk, 0.0)
+                + compras_by_month.get(mk, 0.0)
+                - estoque_ef_by_month.get(mk, 0.0)
+            )
+        grand_cmv = sum(cmv_by_month.values())
+
+        grand_estoque_ei = _grand_por_produto(agg_estoque_ei, months)
+        grand_estoque_ef = _grand_por_produto(agg_estoque_ef, months)
+        grand_estoque_ei_total = sum(v['reais'] for v in grand_estoque_ei.values())
+        grand_estoque_ef_total = sum(v['reais'] for v in grand_estoque_ef.values())
+
         # ── Totais de receita por mês ─────────────────────────────────────
         receitas_by_month: dict = {}
         for m in months:
@@ -790,16 +924,16 @@ def dre_postos():
 
         grand_receitas = sum(receitas_by_month.values())
 
-        # ── Lucro = Receitas − Compras − Despesas ─────────────────────────
+        # ── Lucro = Receitas − CMV − Despesas ─────────────────────────────
         lucro_by_month: dict = {}
         for m in months:
             mk = m['key']
             lucro_by_month[mk] = (
                 receitas_by_month.get(mk, 0.0)
-                - compras_by_month.get(mk, 0.0)
+                - cmv_by_month.get(mk, 0.0)
                 - grand_despesas_by_month.get(mk, 0.0)
             )
-        grand_lucro = grand_receitas - grand_compras - grand_despesas
+        grand_lucro = grand_receitas - grand_cmv - grand_despesas
 
         # ── Totais acumulados ─────────────────────────────────────────────
         grand_vendas_reais = sum(
@@ -843,11 +977,22 @@ def dre_postos():
         grand_aluguel=grand_aluguel,
         grand_prazo=grand_prazo,
         grand_receitas=grand_receitas,
-        # compras
+        # compras (componente do CMV)
         compras_por_produto=compras_por_produto,
         grand_compras_por_produto=grand_compras_por_produto,
         compras_by_month=compras_by_month,
         grand_compras=grand_compras,
+        # CMV
+        estoque_ei=agg_estoque_ei,
+        estoque_ef=agg_estoque_ef,
+        estoque_ei_by_month=estoque_ei_by_month,
+        estoque_ef_by_month=estoque_ef_by_month,
+        grand_estoque_ei=grand_estoque_ei,
+        grand_estoque_ef=grand_estoque_ef,
+        grand_estoque_ei_total=grand_estoque_ei_total,
+        grand_estoque_ef_total=grand_estoque_ef_total,
+        cmv_by_month=cmv_by_month,
+        grand_cmv=grand_cmv,
         # despesas
         despesas_blocks=despesas_blocks,
         grand_despesas_by_month=grand_despesas_by_month,
