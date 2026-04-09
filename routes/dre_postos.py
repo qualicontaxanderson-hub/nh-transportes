@@ -743,6 +743,11 @@ def _fetch_frete_receita_empresa_dre(conn, data_inicio, data_fim, empresa_ids):
     """
     Retorna receita total de fretes por mês para veículos associados aos motoristas
     da(s) empresa(s) indicada(s).
+
+    Usa lf.caminhaoid (campo direto em lancamentosfuncionarios_v2, mesmo critério
+    que conf_despesas usa em _fetch_func_lancamentos / _fetch_frete_data_by_vehicle)
+    para identificar os veículos relevantes.
+
     Retorna {mk: float} onde mk = 'YYYYMM'.
     """
     if not empresa_ids:
@@ -752,12 +757,11 @@ def _fetch_frete_receita_empresa_dre(conn, data_inicio, data_fim, empresa_ids):
     cur = conn.cursor(dictionary=True)
     try:
         cur.execute(f"""
-            SELECT DISTINCT m.veiculo_id
+            SELECT DISTINCT lf.caminhaoid AS veiculo_id
             FROM lancamentosfuncionarios_v2 lf
-            JOIN motoristas m ON m.id = lf.funcionarioid
-                              AND lf.tipo_funcionario = 'motorista'
-            WHERE lf.clienteid IN ({ph_emp})
-              AND m.veiculo_id IS NOT NULL
+            WHERE lf.tipo_funcionario = 'motorista'
+              AND lf.caminhaoid IS NOT NULL
+              AND lf.clienteid IN ({ph_emp})
         """, list(empresa_ids))
         vid_rows = cur.fetchall()
     except Exception:
