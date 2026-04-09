@@ -663,6 +663,17 @@
             <td class="text-end col-acum">{{ fmtResult(grand_lucro) }}</td>
           </tr>
 
+          {# LUCRO ACUMULADO (YTD) #}
+          {% set last_acum = lucro_acumulado_by_month[months[-1].key] if months else 0 %}
+          <tr class="row-lucro {% if last_acum < 0 %}row-lucro-neg{% endif %}" style="font-style:italic; opacity:.85;">
+            <td class="col-desc"><i class="bi bi-graph-up-arrow me-1"></i> LUCRO ACUMULADO</td>
+            {% for m in months %}
+              {% set v = lucro_acumulado_by_month.get(m.key, 0) %}
+              <td class="text-end">{{ fmtResult(v) }}</td>
+            {% endfor %}
+            <td class="text-end col-acum">{{ fmtResult(last_acum) }}</td>
+          </tr>
+
         </tbody>
       </table>
     </div><!-- card-body -->

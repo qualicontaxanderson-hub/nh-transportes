@@ -1377,6 +1377,13 @@ def dre_postos():
             )
         grand_lucro = grand_receitas - grand_cmv - grand_despesas
 
+        # ── Lucro acumulado (YTD) ─────────────────────────────────────────
+        lucro_acumulado_by_month: dict = {}
+        _acum = 0.0
+        for m in months:
+            _acum += lucro_by_month.get(m['key'], 0.0)
+            lucro_acumulado_by_month[m['key']] = _acum
+
         # ── Totais acumulados ─────────────────────────────────────────────
         grand_vendas_reais = sum(
             vendas_reais_by_month.get(m['key'], 0.0) for m in months)
@@ -1450,5 +1457,6 @@ def dre_postos():
         grand_despesas=grand_despesas,
         # resultado
         lucro_by_month=lucro_by_month,
+        lucro_acumulado_by_month=lucro_acumulado_by_month,
         grand_lucro=grand_lucro,
     )
