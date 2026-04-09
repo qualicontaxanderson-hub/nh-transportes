@@ -31,6 +31,7 @@ from flask import Blueprint, render_template, request
 from flask_login import login_required
 
 from routes.auth import admin_required
+from routes.conf_despesas import _fetch_taxas_cartao
 from utils.db import get_db_connection
 
 bp = Blueprint('dre_postos', __name__, url_prefix='/relatorios')
@@ -1296,6 +1297,26 @@ def dre_postos():
             _build_despesas_blocks(all_lancamentos, months)
         )
 
+        # ── Taxas de cartão (CARTÕES) — igual a conf_cartoes, global ─────
+        # Sempre calculadas sem filtro de empresa (maquininhas são infra
+        # compartilhada entre todas as empresas, assim como em conf_cartoes).
+        _taxas_list = _fetch_taxas_cartao(
+            conn, data_inicio, data_fim, [], months
+        ) if months else []
+        cartoes_by_month: dict = {m['key']: 0.0 for m in months}
+        for band in _taxas_list:
+            for mk, fee in band['fee_by_month'].items():
+                if mk in cartoes_by_month:
+                    cartoes_by_month[mk] += fee
+        grand_cartoes: float = sum(cartoes_by_month.values())
+        # Incorpora as taxas no total de despesas para que TOTAL DESPESAS e
+        # LUCRO reflitam o custo real das taxas de cartão.
+        for mk in cartoes_by_month:
+            grand_despesas_by_month[mk] = (
+                grand_despesas_by_month.get(mk, 0.0) + cartoes_by_month[mk]
+            )
+        grand_despesas += grand_cartoes
+
         # ── Compras por mês (total R$) ────────────────────────────────────
         compras_by_month: dict = {}
         for m in months:
@@ -1422,6 +1443,8 @@ def dre_postos():
         grand_cmv=grand_cmv,
         # despesas
         despesas_blocks=despesas_blocks,
+        cartoes_by_month=cartoes_by_month,
+        grand_cartoes=grand_cartoes,
         grand_despesas_by_month=grand_despesas_by_month,
         grand_despesas=grand_despesas,
         # resultado

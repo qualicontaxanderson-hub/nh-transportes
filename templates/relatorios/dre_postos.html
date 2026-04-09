@@ -618,6 +618,19 @@
           {% endfor %}
           {% endfor %}{# for block in despesas_blocks #}
 
+          {# CARTÕES — taxas globais de cartão (igual a conf_cartoes) #}
+          {% if grand_cartoes %}
+          <tr class="row-titulo">
+            <td class="col-desc">
+              <i class="bi bi-credit-card me-1"></i> CARTÕES
+            </td>
+            {% for m in months %}
+              <td class="text-end">{{ fmt(cartoes_by_month.get(m.key, 0)) }}</td>
+            {% endfor %}
+            <td class="text-end col-acum">{{ fmt(grand_cartoes) }}</td>
+          </tr>
+          {% endif %}
+
           {# TOTAL DESPESAS #}
           <tr class="row-desp-total">
             <td class="col-desc"><i class="bi bi-dash-circle-fill me-1"></i> TOTAL DESPESAS</td>
