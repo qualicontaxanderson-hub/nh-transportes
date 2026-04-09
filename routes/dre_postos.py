@@ -739,6 +739,31 @@ def _fetch_motorista_salary_empresa_dre(conn, months, empresa_ids):
     return result
 
 
+def _lookup_caminhoes_titulo(conn):
+    """
+    Retorna metadados (id, nome, ordem) do título de despesa cujo nome contenha
+    'CAMINHÃO' / 'CAMINHAO' (case-insensitive, ignora acentos).
+
+    NÃO filtra por ativo — o título pode estar marcado como inativo no filtro do
+    relatório e mesmo assim ter lançamentos que precisam da injeção salary/receita.
+    Retorna None se não encontrado.
+    """
+    cur = conn.cursor(dictionary=True)
+    try:
+        cur.execute(
+            "SELECT id, nome, COALESCE(ordem, 9999) AS ordem"
+            " FROM titulos_despesas"
+            " ORDER BY ordem, nome"
+        )
+        rows = cur.fetchall()
+    except Exception:
+        rows = []
+    cur.close()
+    return next(
+        (r for r in rows if 'CAMINHAO' in _ascii_upper(r['nome'])), None
+    )
+
+
 def _fetch_frete_receita_empresa_dre(conn, data_inicio, data_fim, empresa_ids):
     """
     Retorna receita total de fretes por mês para veículos associados aos motoristas
@@ -1067,9 +1092,9 @@ def dre_postos():
         _titulo_nome_by_id = {str(t['id']): t['nome'] for t in titulos}
 
         # Metadados do título CAMINHÕES (para injeção de motoristas e receita)
-        _caminhoes_tit = next(
-            (t for t in titulos if 'CAMINHAO' in _ascii_upper(t['nome'])), None
-        )
+        # Usa lookup direto sem filtro ativo=1 — o título pode estar inativo no
+        # filtro do relatório mas ainda ter lançamentos que precisam do ajuste.
+        _caminhoes_tit = _lookup_caminhoes_titulo(conn)
 
         if months and empresa_configs:
             for eid, cfg in empresa_configs.items():
@@ -1171,10 +1196,21 @@ def dre_postos():
                 # Motoristas são excluídos do bloco FUNCIONÁRIOS (já ignorados em
                 # _fetch_func_lancamentos_dre) e tratados aqui, exatamente como faz
                 # o conf_despesas: salário soma ao custo, receita de frete subtrai.
+                # Nota: o título CAMINHÕES pode estar ativo=0 no filtro, então não
+                # está em titulo_ids_set — mas ainda pode ter lançamentos. Injetamos
+                # sempre que o título existe E há lançamentos de CAMINHÕES presentes.
+                caminhoes_lancamentos_present = (
+                    _caminhoes_tit is not None
+                    and any(
+                        str(row.get('titulo_id')) == str(_caminhoes_tit['id'])
+                        for row in lancamentos
+                    )
+                )
                 caminhoes_ok = (
                     _caminhoes_tit is not None
                     and (not titulo_ids_set
-                         or str(_caminhoes_tit['id']) in titulo_ids_set)
+                         or str(_caminhoes_tit['id']) in titulo_ids_set
+                         or caminhoes_lancamentos_present)
                 )
                 if caminhoes_ok:
                     ct        = _caminhoes_tit
