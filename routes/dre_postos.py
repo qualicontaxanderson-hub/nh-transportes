@@ -126,7 +126,8 @@ def _titulos_list(conn):
     cur = conn.cursor(dictionary=True)
     try:
         cur.execute(
-            "SELECT id, nome FROM titulos_despesas WHERE ativo = 1 ORDER BY ordem, nome"
+            "SELECT id, nome, COALESCE(ordem, 9999) AS ordem"
+            " FROM titulos_despesas WHERE ativo = 1 ORDER BY ordem, nome"
         )
         rows = cur.fetchall()
     except Exception:
@@ -670,6 +671,10 @@ def _fetch_func_lancamentos_dre(conn, months, empresa_ids):
         fid      = row['funcionarioid']
         nome     = row['funcionario_nome'] or str(fid)
         cat_func = row['categoria_func'] or 'OUTROS'
+        # Motoristas são incorporados no bloco CAMINHÕES (não aparecem como bloco
+        # independente no DRE — a mesma lógica do conf_despesas).
+        if cat_func == 'MOTORISTA':
+            continue
         # Pluraliza: FRENTISTA→FRENTISTAS, MOTORISTA→MOTORISTAS, OUTROS→OUTROS
         titulo_nome = cat_func + 'S' if not cat_func.endswith('S') else cat_func
 
@@ -684,6 +689,102 @@ def _fetch_func_lancamentos_dre(conn, months, empresa_ids):
             'categoria_nome':  nome,
         })
     return result
+
+
+def _fetch_motorista_salary_empresa_dre(conn, months, empresa_ids):
+    """
+    Retorna salário total de motoristas por mês para a(s) empresa(s) indicada(s).
+    Usado para injetar o custo de pessoal no bloco CAMINHÕES do DRE.
+    Retorna {mk: float} onde mk = 'YYYYMM'.
+    """
+    if not months:
+        return {}
+
+    from routes.lancamentos_funcionarios import _ensure_tipo_funcionario
+    _ensure_tipo_funcionario(conn)
+
+    mes_list = [f"{m['month']:02d}/{m['year']}" for m in months]
+    ph       = ','.join(['%s'] * len(mes_list))
+    params: list = list(mes_list)
+
+    where = [f"lf.mes IN ({ph})", "lf.tipo_funcionario = 'motorista'"]
+    if empresa_ids:
+        ph2 = ','.join(['%s'] * len(empresa_ids))
+        where.append(f"lf.clienteid IN ({ph2})")
+        params.extend(empresa_ids)
+
+    sql = f"""
+        SELECT lf.mes, COALESCE(SUM(lf.valor), 0) AS total
+        FROM lancamentosfuncionarios_v2 lf
+        WHERE {' AND '.join(where)}
+        GROUP BY lf.mes
+    """
+    cur = conn.cursor(dictionary=True)
+    try:
+        cur.execute(sql, params)
+        rows = cur.fetchall()
+    except Exception:
+        rows = []
+    cur.close()
+
+    result = {}
+    for r in rows:
+        mes = r['mes'] or ''
+        try:
+            parts = mes.split('/')
+            mk = f"{parts[1]}{int(parts[0]):02d}"
+            result[mk] = result.get(mk, 0.0) + float(r['total'] or 0)
+        except Exception:
+            continue
+    return result
+
+
+def _fetch_frete_receita_empresa_dre(conn, data_inicio, data_fim, empresa_ids):
+    """
+    Retorna receita total de fretes por mês para veículos associados aos motoristas
+    da(s) empresa(s) indicada(s).
+    Retorna {mk: float} onde mk = 'YYYYMM'.
+    """
+    if not empresa_ids:
+        return {}
+
+    ph_emp = ','.join(['%s'] * len(empresa_ids))
+    cur = conn.cursor(dictionary=True)
+    try:
+        cur.execute(f"""
+            SELECT DISTINCT m.veiculo_id
+            FROM lancamentosfuncionarios_v2 lf
+            JOIN motoristas m ON m.id = lf.funcionarioid
+                              AND lf.tipo_funcionario = 'motorista'
+            WHERE lf.clienteid IN ({ph_emp})
+              AND m.veiculo_id IS NOT NULL
+        """, list(empresa_ids))
+        vid_rows = cur.fetchall()
+    except Exception:
+        cur.close()
+        return {}
+
+    if not vid_rows:
+        cur.close()
+        return {}
+
+    vids   = [r['veiculo_id'] for r in vid_rows]
+    ph_v   = ','.join(['%s'] * len(vids))
+    try:
+        cur.execute(f"""
+            SELECT DATE_FORMAT(f.data_frete, '%Y%m')          AS mk,
+                   COALESCE(SUM(f.valor_total_frete), 0)      AS receita
+            FROM fretes f
+            WHERE f.data_frete BETWEEN %s AND %s
+              AND f.veiculos_id IN ({ph_v})
+            GROUP BY DATE_FORMAT(f.data_frete, '%Y%m')
+        """, [data_inicio, data_fim] + vids)
+        rows = cur.fetchall()
+    except Exception:
+        rows = []
+    cur.close()
+
+    return {str(r['mk'] or ''): float(r['receita'] or 0) for r in rows}
 
 
 def _fetch_despesas_lancamentos(conn, data_inicio, data_fim, empresa_ids, titulo_ids):
@@ -961,6 +1062,11 @@ def dre_postos():
         # Mapa título_id → nome (para detectar o título FUNCIONÁRIOS por nome)
         _titulo_nome_by_id = {str(t['id']): t['nome'] for t in titulos}
 
+        # Metadados do título CAMINHÕES (para injeção de motoristas e receita)
+        _caminhoes_tit = next(
+            (t for t in titulos if 'CAMINHAO' in _ascii_upper(t['nome'])), None
+        )
+
         if months and empresa_configs:
             for eid, cfg in empresa_configs.items():
                 eid_list = [eid]
@@ -1056,6 +1162,52 @@ def dre_postos():
                 if include_func:
                     func_rows = _fetch_func_lancamentos_dre(conn, months, eid_list)
                     all_lancamentos.extend(func_rows)
+
+                # Custo de motoristas + receita de frete → injeta no bloco CAMINHÕES
+                # Motoristas são excluídos do bloco FUNCIONÁRIOS (já ignorados em
+                # _fetch_func_lancamentos_dre) e tratados aqui, exatamente como faz
+                # o conf_despesas: salário soma ao custo, receita de frete subtrai.
+                caminhoes_ok = (
+                    _caminhoes_tit is not None
+                    and (not titulo_ids_set
+                         or str(_caminhoes_tit['id']) in titulo_ids_set)
+                )
+                if caminhoes_ok:
+                    ct        = _caminhoes_tit
+                    salary_mk = _fetch_motorista_salary_empresa_dre(
+                        conn, months, eid_list)
+                    frete_mk  = _fetch_frete_receita_empresa_dre(
+                        conn, data_inicio, data_fim, eid_list)
+
+                    for m in months:
+                        mk = m['key']
+                        d  = date(m['year'], m['month'], 1)
+
+                        sal = salary_mk.get(mk, 0.0)
+                        if sal:
+                            all_lancamentos.append({
+                                'data':            d,
+                                'valor':           sal,
+                                'titulo_id':       ct['id'],
+                                'titulo_ordem':    int(ct['ordem']),
+                                'titulo_nome':     ct['nome'],
+                                'categoria_id':    'caminhoes_motoristas',
+                                'categoria_ordem': 9998,
+                                'categoria_nome':  'MOTORISTAS',
+                            })
+
+                        rec = frete_mk.get(mk, 0.0)
+                        if rec:
+                            all_lancamentos.append({
+                                'data':            d,
+                                'valor':           -rec,   # negativo — reduz custo líquido
+                                'titulo_id':       ct['id'],
+                                'titulo_ordem':    int(ct['ordem']),
+                                'titulo_nome':     ct['nome'],
+                                'categoria_id':    'caminhoes_receita',
+                                'categoria_ordem': 9999,
+                                'categoria_nome':  'RECEITA',
+                            })
 
         def _sorted_formas_list(acc):
             return sorted(
