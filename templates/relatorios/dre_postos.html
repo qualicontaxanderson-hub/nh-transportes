@@ -1,0 +1,967 @@
+{% extends 'base.html' %}
+{% block title %}DRE Postos{% endblock %}
+
+{% block styles %}
+<style>
+/* ── Hero ────────────────────────────────────────────────────────────────── */
+.page-hero {
+  background: linear-gradient(135deg, #1D63A5 0%, #154070 100%);
+  border-radius: .75rem; padding: 1.5rem 2rem; margin-bottom: 1.5rem; color: #fff;
+}
+.page-hero .hero-icon {
+  width: 3rem; height: 3rem; background: rgba(255,255,255,.15);
+  border-radius: .6rem; display: flex; align-items: center; justify-content: center;
+  font-size: 1.5rem; flex-shrink: 0;
+}
+
+/* ── Cabeçalho de filtros ─────────────────────────────────────────────────── */
+.flt-header {
+  background: #1D63A5; color: #fff; font-size: .78rem; font-weight: 600;
+  padding: .45rem .75rem; border-radius: .35rem .35rem 0 0;
+}
+
+/* ── Tabela matriz ────────────────────────────────────────────────────────── */
+.tbl-dre {
+  font-size: .72rem; border-collapse: collapse; width: 100%;
+}
+.tbl-dre th, .tbl-dre td {
+  padding: .22rem .38rem; border: 1px solid #dee2e6; white-space: nowrap; vertical-align: middle;
+}
+.tbl-dre td.col-desc, .tbl-dre th.col-desc {
+  position: sticky; left: 0; z-index: 2; min-width: 200px; max-width: 260px;
+  white-space: normal; word-break: break-word;
+}
+.tbl-dre thead tr th {
+  text-align: center; background: #343a40; color: #fff; font-size: .66rem;
+  text-transform: uppercase; letter-spacing: .04em;
+}
+.tbl-dre thead tr th.col-desc { text-align: left; background: #343a40; }
+
+/* ── Tipos de linha ───────────────────────────────────────────────────────── */
+.row-section td {
+  background: #1D63A5; color: #fff; font-weight: 700; font-size: .76rem;
+  text-transform: uppercase; letter-spacing: .05em;
+}
+.row-titulo td {
+  background: #1D63A5; color: #fff; font-weight: 700; font-size: .74rem;
+  text-transform: uppercase; letter-spacing: .04em; cursor: pointer;
+}
+.row-titulo:hover td { background: #154f91; }
+.row-item td   { background: #fff; font-weight: 400; }
+.row-item:hover td { background: #f0f4ff; }
+.row-child td  { background: #f9fbff; font-size: .70rem; }
+.row-child .col-desc { padding-left: 1.6rem !important; }
+.row-block-total td { background: #4a86c8; color: #fff; font-weight: 700; }
+.row-desp-total td  { background: #dc3545; color: #fff; font-weight: 700; }
+.row-lucro td {
+  background: #154070; color: #fff; font-weight: 700; font-size: .82rem;
+  text-transform: uppercase;
+}
+.row-lucro-neg td { background: #a31a1a !important; }
+
+/* ── Litros (linha informativa) ───────────────────────────────────────────── */
+.row-litros td   { background: #f8f5e4; color: #5a4500; font-style: italic; }
+.row-litros:hover td { background: #f0e9c5; }
+.row-litros-child td { background: #fffde7; font-size: .70rem; font-style: italic; }
+.row-litros-child .col-desc { padding-left: 1.6rem !important; }
+
+/* ── Compras ──────────────────────────────────────────────────────────────── */
+.row-compras-section td {
+  background: #e65100; color: #fff; font-weight: 700; font-size: .76rem;
+  text-transform: uppercase; letter-spacing: .05em;
+}
+.row-compras-item td { background: #fff7f0; font-weight: 500; }
+.row-compras-item:hover td { background: #fff0e0; }
+.row-compras-child td { background: #fffaf5; font-size: .70rem; }
+.row-compras-child .col-desc { padding-left: 1.6rem !important; }
+.row-compras-litros td { background: #fff8ee; color: #7a3900; font-style: italic; font-size: .69rem; }
+.row-compras-litros .col-desc { padding-left: 3rem !important; }
+.row-compras-total td { background: #bf360c; color: #fff; font-weight: 700; }
+
+/* ── Estoque (EI / EF dentro do bloco CMV) ────────────────────────────────── */
+.row-estoque-item td { background: #e8f5e9; font-weight: 500; color: #1b5e20; }
+.row-estoque-item:hover td { background: #c8e6c9; }
+.row-estoque-child td { background: #f1f8e9; font-size: .70rem; }
+.row-estoque-child .col-desc { padding-left: 1.6rem !important; }
+.row-estoque-litros td { background: #f9fbe7; color: #33691e; font-style: italic; font-size: .69rem; }
+.row-estoque-litros .col-desc { padding-left: 3rem !important; }
+.row-cmv-total td { background: #4a148c; color: #fff; font-weight: 700; }
+
+/* ── Valores ──────────────────────────────────────────────────────────────── */
+.val-zero { color: #bbb; }
+.col-acum { background: #f8f5e4 !important; font-weight: 600; }
+.row-section .col-acum,
+.row-compras-section .col-acum,
+.row-block-total .col-acum,
+.row-compras-total .col-acum,
+.row-cmv-total .col-acum,
+.row-desp-total .col-acum,
+.row-lucro .col-acum { background: rgba(255,255,255,.15) !important; }
+.dif-pos  { color: #5fffaa; font-weight: 700; }
+.dif-neg  { color: #ff8080; font-weight: 700; }
+
+/* ── Toggle icon ────────────────────────────────────────────────────────────*/
+.toggle-icon {
+  display: inline-block; width: 1em; font-size: .75em;
+  color: rgba(255,255,255,.8); margin-right: .2em;
+}
+</style>
+{% endblock %}
+
+{% macro fmt(v) %}
+  {%- if v is not none and v != 0 -%}
+    R$ {{ '{:,.2f}'.format(v).replace(',','X').replace('.',',').replace('X','.') }}
+  {%- else -%}<span class="val-zero">—</span>
+  {%- endif -%}
+{% endmacro %}
+
+{% macro fmtL(v) %}
+  {%- if v is not none and v != 0 -%}
+    {{ '{:,.3f}'.format(v).replace(',','X').replace('.',',').replace('X','.') }} L
+  {%- else -%}<span class="val-zero">—</span>
+  {%- endif -%}
+{% endmacro %}
+
+{% macro fmtResult(v) %}
+  {%- if v is not none and v != 0 -%}
+    <span class="{{ 'dif-pos' if v > 0 else 'dif-neg' }}">
+      R$ {{ '{:,.2f}'.format(v).replace(',','X').replace('.',',').replace('X','.') }}
+    </span>
+  {%- else -%}<span class="val-zero">—</span>
+  {%- endif -%}
+{% endmacro %}
+
+{% block content %}
+<div class="container-fluid">
+
+  <!-- Breadcrumb -->
+  <nav aria-label="breadcrumb" class="mb-3">
+    <ol class="breadcrumb small">
+      <li class="breadcrumb-item"><a href="{{ url_for('index') }}" class="text-decoration-none">Dashboard</a></li>
+      <li class="breadcrumb-item">Relatórios</li>
+      <li class="breadcrumb-item active">DRE Postos</li>
+    </ol>
+  </nav>
+
+  <!-- Hero -->
+  <div class="page-hero d-flex align-items-center gap-3 flex-wrap mb-3">
+    <div class="hero-icon"><i class="bi bi-graph-up-arrow"></i></div>
+    <div class="flex-grow-1">
+      <h4 class="mb-0 fw-bold">DRE — Demonstração do Resultado</h4>
+      <p class="mb-0 opacity-75" style="font-size:.8rem;">
+        Vendas · Recebimentos · Despesas · Lucro Operacional por mês
+      </p>
+    </div>
+    <a href="{{ url_for('relatorios.lucro_postos') }}"
+       class="btn btn-sm px-3"
+       style="background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.35);">
+      <i class="bi bi-fuel-pump-fill me-1"></i> Lucro Postos
+    </a>
+  </div>
+
+  <!-- ── FILTROS ──────────────────────────────────────────────────────────── -->
+  <form method="GET" id="formFiltro" class="card shadow-sm mb-3">
+    <div class="flt-header"><i class="bi bi-funnel me-1"></i> Filtros</div>
+    <div class="card-body py-2">
+      <div class="row g-2 align-items-end">
+
+        <!-- Empresa -->
+        <div class="col-md-3">
+          <label class="form-label form-label-sm mb-0 fw-semibold">
+            Empresa <small class="text-muted fw-normal">(Ctrl+clique p/ múltiplas)</small>
+          </label>
+          <select name="empresa_ids[]" id="sel_empresas"
+                  class="form-select form-select-sm" multiple size="5">
+            {% for e in empresas %}
+            <option value="{{ e.id }}" {% if e.id|string in empresa_ids %}selected{% endif %}>
+              {{ e.nome }}
+            </option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <!-- Datas -->
+        <div class="col-md-2">
+          <label class="form-label form-label-sm mb-0 fw-semibold">Data início</label>
+          <input type="date" name="data_inicio" id="data_inicio"
+                 value="{{ data_inicio }}" class="form-control form-control-sm">
+          <div class="mt-1 d-flex gap-1 flex-wrap">
+            <button type="button" class="btn btn-outline-secondary btn-sm"
+                    style="font-size:.7rem;padding:.15rem .4rem;"
+                    onclick="setPeriodo('mes')">Este mês</button>
+            <button type="button" class="btn btn-outline-secondary btn-sm"
+                    style="font-size:.7rem;padding:.15rem .4rem;"
+                    onclick="setPeriodo('mes_ant')">Mês ant.</button>
+            <button type="button" class="btn btn-outline-secondary btn-sm"
+                    style="font-size:.7rem;padding:.15rem .4rem;"
+                    onclick="setPeriodo('ano')">Este ano</button>
+          </div>
+        </div>
+        <div class="col-md-2">
+          <label class="form-label form-label-sm mb-0 fw-semibold">Data fim</label>
+          <input type="date" name="data_fim" id="data_fim"
+                 value="{{ data_fim }}" class="form-control form-control-sm">
+        </div>
+
+        <!-- Ações -->
+        <div class="col-md-5 d-flex gap-2 flex-wrap align-items-end">
+          <button type="submit" class="btn btn-primary btn-sm px-4">
+            <i class="bi bi-search me-1"></i> Filtrar
+          </button>
+          <a href="{{ url_for('dre_postos.dre_postos') }}"
+             class="btn btn-outline-secondary btn-sm px-3">
+            <i class="bi bi-x-circle me-1"></i> Limpar
+          </a>
+          <button type="button" class="btn btn-outline-primary btn-sm px-3"
+                  data-bs-toggle="modal" data-bs-target="#modalSalvarFiltro">
+            <i class="bi bi-bookmark-fill me-1"></i> Salvar Filtro
+          </button>
+          <button type="button" class="btn btn-outline-warning btn-sm px-3"
+                  data-bs-toggle="modal" data-bs-target="#modalCarregarFiltro"
+                  onclick="abrirModalCarregar()">
+            <i class="bi bi-bookmark me-1"></i> Carregar Filtro
+          </button>
+          <span id="msg_filtro" class="text-muted small"></span>
+        </div>
+
+        <!-- Modal: Salvar Filtro -->
+        <div class="modal fade" id="modalSalvarFiltro" tabindex="-1">
+          <div class="modal-dialog modal-sm">
+            <div class="modal-content">
+              <div class="modal-header py-2" style="background:#1D63A5;color:#fff;">
+                <h6 class="modal-title mb-0"><i class="bi bi-bookmark-fill me-1"></i> Salvar Filtro</h6>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+              </div>
+              <div class="modal-body">
+                <label class="form-label form-label-sm mb-1">Nome do preset</label>
+                <input type="text" id="inputNomeFiltro" class="form-control form-control-sm"
+                       placeholder="Ex: DRE Anual Completo" maxlength="60">
+              </div>
+              <div class="modal-footer py-1">
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-primary btn-sm"
+                        onclick="confirmarSalvarFiltro()">
+                  <i class="bi bi-floppy me-1"></i> Salvar
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Modal: Carregar Filtro -->
+        <div class="modal fade" id="modalCarregarFiltro" tabindex="-1">
+          <div class="modal-dialog">
+            <div class="modal-content">
+              <div class="modal-header py-2" style="background:#1D63A5;color:#fff;">
+                <h6 class="modal-title mb-0"><i class="bi bi-bookmark me-1"></i> Filtros Salvos</h6>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+              </div>
+              <div class="modal-body p-2" id="listaPresets">
+                <p class="text-muted small mb-0">Nenhum filtro salvo.</p>
+              </div>
+              <div class="modal-footer py-1">
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Fechar</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- ── Configuração por empresa ──────────────────────────────────────── -->
+      <div class="mt-3" id="empresa-configs-wrap" style="display:none;">
+        <div class="mb-1 fw-semibold small" style="color:#1D63A5;">
+          <i class="bi bi-sliders me-1"></i>
+          Configuração individual por empresa
+          <small class="text-muted fw-normal ms-1">(vazio = sem restrição)</small>
+        </div>
+        <div id="empresa-configs" class="d-flex flex-wrap gap-2"></div>
+      </div>
+
+    </div>
+  </form>
+
+  <!-- ── TABELA DRE ───────────────────────────────────────────────────────── -->
+  {% if months %}
+  <div class="card shadow-sm">
+    <div class="card-header py-2" style="background:#1D63A5;color:#fff;font-size:.78rem;font-weight:600;">
+      <i class="bi bi-table me-1"></i>
+      DRE — {{ data_inicio|replace('-','/') }} a {{ data_fim|replace('-','/') }}
+      {% if empresa_ids %}<span class="ms-2 opacity-75 small">({{ empresa_ids|length }} empresa{{ 's' if empresa_ids|length > 1 else '' }})</span>{% endif %}
+    </div>
+    <div class="card-body p-0" style="overflow-x:auto;">
+      <table class="tbl-dre">
+        <thead>
+          <tr>
+            <th class="col-desc">Descrição</th>
+            {% for m in months %}<th>{{ m.label }}{{ '/'+m.year|string if months|length > 12 else '' }}</th>{% endfor %}
+            <th class="col-acum">TOTAL</th>
+          </tr>
+        </thead>
+        <tbody>
+
+          {# ══════════════════════════════════════════════════════
+             BLOCO: RECEITAS
+          ══════════════════════════════════════════════════════ #}
+          <tr class="row-section">
+            <td class="col-desc" colspan="{{ months|length + 2 }}">
+              <i class="bi bi-arrow-up-circle me-1"></i> RECEITAS
+            </td>
+          </tr>
+
+          {# ── Vendas de Combustíveis (R$) ─────────────────── #}
+          {% if any_include_vendas %}
+          {# Main row — toggle expands per-product sub-rows #}
+          <tr class="row-item" onclick="toggleGroup('vendas')" style="cursor:pointer;">
+            <td class="col-desc fw-semibold">
+              <span class="toggle-icon" id="icon-vendas">▼</span>
+              <i class="bi bi-fuel-pump-fill me-1 text-success"></i> Vendas de Combustíveis
+            </td>
+            {% for m in months %}
+              {% set v = vendas_reais_by_month.get(m.key, 0) %}
+              <td class="text-end">{{ fmt(v) }}</td>
+            {% endfor %}
+            <td class="text-end col-acum">{{ fmt(grand_vendas_reais) }}</td>
+          </tr>
+
+          {# Per-product sub-rows (expanded by default) #}
+          {% set all_vendas_prods = [] %}
+          {% for mk, pm in vendas_por_produto.items() %}
+            {% for prod in pm.keys() %}
+              {% if prod not in all_vendas_prods %}{% set _ = all_vendas_prods.append(prod) %}{% endif %}
+            {% endfor %}
+          {% endfor %}
+          {% for prod in all_vendas_prods | sort %}
+          {# R$ row per product #}
+          <tr class="row-child" data-group="vendas">
+            <td class="col-desc">└ {{ prod }}</td>
+            {% for m in months %}
+              {% set v = vendas_por_produto.get(m.key, {}).get(prod, {}).get('reais', 0) %}
+              <td class="text-end {% if v == 0 %}val-zero{% endif %}">{{ fmt(v) }}</td>
+            {% endfor %}
+            <td class="text-end col-acum">{{ fmt(grand_vendas_por_produto.get(prod, {}).get('reais', 0)) }}</td>
+          </tr>
+          {# Litros row per product (indented italic) — only when product has litros #}
+          {% if grand_vendas_por_produto.get(prod, {}).get('litros', 0) > 0 %}
+          <tr class="row-litros-child" data-group="vendas">
+            <td class="col-desc" style="padding-left:3rem !important;">└─ Litros</td>
+            {% for m in months %}
+              {% set v = vendas_por_produto.get(m.key, {}).get(prod, {}).get('litros', 0) %}
+              <td class="text-end">{{ fmtL(v) }}</td>
+            {% endfor %}
+            <td class="text-end col-acum">{{ fmtL(grand_vendas_por_produto.get(prod, {}).get('litros', 0)) }}</td>
+          </tr>
+          {% endif %}
+          {% endfor %}
+
+          {# ── ARLA ──────────────────────────────────────────── #}
+          {% if grand_arla > 0 %}
+          <tr class="row-item">
+            <td class="col-desc fw-semibold">
+              <i class="bi bi-droplet-fill me-1 text-info"></i> ARLA
+            </td>
+            {% for m in months %}
+              {% set v = arla_by_month.get(m.key, 0) %}
+              <td class="text-end {% if v == 0 %}val-zero{% endif %}">{{ fmt(v) }}</td>
+            {% endfor %}
+            <td class="text-end col-acum">{{ fmt(grand_arla) }}</td>
+          </tr>
+          {% endif %}
+
+          {# ── LUBRIFICANTES ─────────────────────────────────── #}
+          {% if grand_lubrif > 0 %}
+          <tr class="row-item">
+            <td class="col-desc fw-semibold">
+              <i class="bi bi-gear-fill me-1 text-secondary"></i> LUBRIFICANTES
+            </td>
+            {% for m in months %}
+              {% set v = lubrif_by_month.get(m.key, 0) %}
+              <td class="text-end {% if v == 0 %}val-zero{% endif %}">{{ fmt(v) }}</td>
+            {% endfor %}
+            <td class="text-end col-acum">{{ fmt(grand_lubrif) }}</td>
+          </tr>
+          {% endif %}
+
+          {% endif %}{# if any_include_vendas #}
+
+          {# ── Recebimento de Aluguel ──────────────────────── #}
+          {% if any_include_aluguel %}
+          <tr class="row-item" onclick="toggleGroup('aluguel')" style="cursor:pointer;">
+            <td class="col-desc fw-semibold">
+              <span class="toggle-icon" id="icon-aluguel">▶</span>
+              <i class="bi bi-house-door me-1 text-primary"></i> Recebimento de Aluguel
+            </td>
+            {% for m in months %}
+              {% set v = recebimentos.aluguel.get(m.key, 0) %}
+              <td class="text-end">{{ fmt(v) }}</td>
+            {% endfor %}
+            <td class="text-end col-acum">{{ fmt(grand_aluguel) }}</td>
+          </tr>
+          {% for f in recebimentos.aluguel_formas %}
+          <tr class="row-child" data-group="aluguel" style="display:none;">
+            <td class="col-desc">└ {{ f.nome }}</td>
+            {% for m in months %}
+              {% set v = f.by_month.get(m.key, 0) %}
+              <td class="text-end">{{ fmt(v) }}</td>
+            {% endfor %}
+            <td class="text-end col-acum">{{ fmt(f.total) }}</td>
+          </tr>
+          {% endfor %}
+          {% endif %}{# if any_include_aluguel #}
+
+          {# ── Clientes à Prazo ────────────────────────────── #}
+          {% if any_include_prazo %}
+          <tr class="row-item" onclick="toggleGroup('prazo')" style="cursor:pointer;">
+            <td class="col-desc fw-semibold">
+              <span class="toggle-icon" id="icon-prazo">▶</span>
+              <i class="bi bi-person-lines-fill me-1 text-info"></i> Clientes à Prazo
+            </td>
+            {% for m in months %}
+              {% set v = recebimentos.cliente_a_prazo.get(m.key, 0) %}
+              <td class="text-end">{{ fmt(v) }}</td>
+            {% endfor %}
+            <td class="text-end col-acum">{{ fmt(grand_prazo) }}</td>
+          </tr>
+          {% for f in recebimentos.cliente_a_prazo_formas %}
+          <tr class="row-child" data-group="prazo" style="display:none;">
+            <td class="col-desc">└ {{ f.nome }}</td>
+            {% for m in months %}
+              {% set v = f.by_month.get(m.key, 0) %}
+              <td class="text-end">{{ fmt(v) }}</td>
+            {% endfor %}
+            <td class="text-end col-acum">{{ fmt(f.total) }}</td>
+          </tr>
+          {% endfor %}
+          {% endif %}{# if any_include_prazo #}
+
+          {# TOTAL RECEITAS #}
+          <tr class="row-block-total">
+            <td class="col-desc"><i class="bi bi-plus-circle-fill me-1"></i> TOTAL RECEITAS</td>
+            {% for m in months %}
+              <td class="text-end">{{ fmt(receitas_by_month.get(m.key, 0)) }}</td>
+            {% endfor %}
+            <td class="text-end col-acum">{{ fmt(grand_receitas) }}</td>
+          </tr>
+
+          {# ══════════════════════════════════════════════════════
+             BLOCO: CMV — Custo da Mercadoria Vendida
+          ══════════════════════════════════════════════════════ #}
+          {% if any_include_compras %}
+          <tr class="row-compras-section">
+            <td class="col-desc" colspan="{{ months|length + 2 }}">
+              <i class="bi bi-calculator-fill me-1"></i> CMV — CUSTO DA MERCADORIA VENDIDA
+            </td>
+          </tr>
+
+          {# ── Coleta todos os produtos para EI, Compras e EF ── #}
+          {% set all_cmv_prods = [] %}
+          {% for mk, pm in estoque_ei.items() %}
+            {% for prod in pm.keys() %}
+              {% if prod not in all_cmv_prods %}{% set _ = all_cmv_prods.append(prod) %}{% endif %}
+            {% endfor %}
+          {% endfor %}
+          {% for mk, pm in compras_por_produto.items() %}
+            {% for prod in pm.keys() %}
+              {% if prod not in all_cmv_prods %}{% set _ = all_cmv_prods.append(prod) %}{% endif %}
+            {% endfor %}
+          {% endfor %}
+          {% for mk, pm in estoque_ef.items() %}
+            {% for prod in pm.keys() %}
+              {% if prod not in all_cmv_prods %}{% set _ = all_cmv_prods.append(prod) %}{% endif %}
+            {% endfor %}
+          {% endfor %}
+
+          {# ══ ESTOQUE INICIAL ══ #}
+          <tr class="row-estoque-item" onclick="toggleGroup('estoque_ei')" style="cursor:pointer;">
+            <td class="col-desc fw-semibold">
+              <span class="toggle-icon" id="icon-estoque_ei">▶</span>
+              <i class="bi bi-box-seam me-1"></i> (+) Estoque Inicial
+            </td>
+            {% for m in months %}
+              {% set v = estoque_ei_by_month.get(m.key, 0) %}
+              <td class="text-end {% if v == 0 %}val-zero{% endif %}">{{ fmt(v) }}</td>
+            {% endfor %}
+            <td class="text-end col-acum">{{ fmt(grand_estoque_ei_total) }}</td>
+          </tr>
+          {% for prod in all_cmv_prods | sort %}
+          <tr class="row-estoque-child" data-group="estoque_ei" style="display:none;">
+            <td class="col-desc">└ {{ prod }}</td>
+            {% for m in months %}
+              {% set v = estoque_ei.get(m.key, {}).get(prod, {}).get('reais', 0) %}
+              <td class="text-end {% if v == 0 %}val-zero{% endif %}">{{ fmt(v) }}</td>
+            {% endfor %}
+            <td class="text-end col-acum">{{ fmt(grand_estoque_ei.get(prod, {}).get('reais', 0)) }}</td>
+          </tr>
+          <tr class="row-estoque-litros" data-group="estoque_ei" style="display:none;">
+            <td class="col-desc">└─ Litros</td>
+            {% for m in months %}
+              {% set v = estoque_ei.get(m.key, {}).get(prod, {}).get('litros', 0) %}
+              <td class="text-end">{{ fmtL(v) }}</td>
+            {% endfor %}
+            <td class="text-end col-acum">{{ fmtL(grand_estoque_ei.get(prod, {}).get('litros', 0)) }}</td>
+          </tr>
+          {% endfor %}
+
+          {# ══ COMPRAS ══ #}
+          <tr class="row-compras-item" onclick="toggleGroup('compras')" style="cursor:pointer;">
+            <td class="col-desc fw-semibold">
+              <span class="toggle-icon" id="icon-compras" style="color:#e65100;">▶</span>
+              <i class="bi bi-fuel-pump me-1" style="color:#e65100;"></i> (+) Compras de Combustíveis
+            </td>
+            {% for m in months %}
+              {% set v = compras_by_month.get(m.key, 0) %}
+              <td class="text-end">{{ fmt(v) }}</td>
+            {% endfor %}
+            <td class="text-end col-acum">{{ fmt(grand_compras) }}</td>
+          </tr>
+          {% for prod in all_cmv_prods | sort %}
+          <tr class="row-compras-child" data-group="compras" style="display:none;">
+            <td class="col-desc">└ {{ prod }}</td>
+            {% for m in months %}
+              {% set v = compras_por_produto.get(m.key, {}).get(prod, {}).get('reais', 0) %}
+              <td class="text-end {% if v == 0 %}val-zero{% endif %}">{{ fmt(v) }}</td>
+            {% endfor %}
+            <td class="text-end col-acum">{{ fmt(grand_compras_por_produto.get(prod, {}).get('reais', 0)) }}</td>
+          </tr>
+          <tr class="row-compras-litros" data-group="compras" style="display:none;">
+            <td class="col-desc">└─ Litros</td>
+            {% for m in months %}
+              {% set v = compras_por_produto.get(m.key, {}).get(prod, {}).get('litros', 0) %}
+              <td class="text-end">{{ fmtL(v) }}</td>
+            {% endfor %}
+            <td class="text-end col-acum">{{ fmtL(grand_compras_por_produto.get(prod, {}).get('litros', 0)) }}</td>
+          </tr>
+          {% endfor %}
+
+          {# ══ ESTOQUE FINAL ══ #}
+          <tr class="row-estoque-item" onclick="toggleGroup('estoque_ef')" style="cursor:pointer;">
+            <td class="col-desc fw-semibold">
+              <span class="toggle-icon" id="icon-estoque_ef">▶</span>
+              <i class="bi bi-box-seam me-1"></i> (−) Estoque Final
+            </td>
+            {% for m in months %}
+              {% set v = estoque_ef_by_month.get(m.key, 0) %}
+              <td class="text-end {% if v == 0 %}val-zero{% endif %}">{{ fmt(v) }}</td>
+            {% endfor %}
+            <td class="text-end col-acum">{{ fmt(grand_estoque_ef_total) }}</td>
+          </tr>
+          {% for prod in all_cmv_prods | sort %}
+          <tr class="row-estoque-child" data-group="estoque_ef" style="display:none;">
+            <td class="col-desc">└ {{ prod }}</td>
+            {% for m in months %}
+              {% set v = estoque_ef.get(m.key, {}).get(prod, {}).get('reais', 0) %}
+              <td class="text-end {% if v == 0 %}val-zero{% endif %}">{{ fmt(v) }}</td>
+            {% endfor %}
+            <td class="text-end col-acum">{{ fmt(grand_estoque_ef.get(prod, {}).get('reais', 0)) }}</td>
+          </tr>
+          <tr class="row-estoque-litros" data-group="estoque_ef" style="display:none;">
+            <td class="col-desc">└─ Litros</td>
+            {% for m in months %}
+              {% set v = estoque_ef.get(m.key, {}).get(prod, {}).get('litros', 0) %}
+              <td class="text-end">{{ fmtL(v) }}</td>
+            {% endfor %}
+            <td class="text-end col-acum">{{ fmtL(grand_estoque_ef.get(prod, {}).get('litros', 0)) }}</td>
+          </tr>
+          {% endfor %}
+
+          {# ══ CMV TOTAL ══ #}
+          <tr class="row-cmv-total">
+            <td class="col-desc">
+              <i class="bi bi-calculator-fill me-1"></i> CMV = EI + Compras − EF
+            </td>
+            {% for m in months %}
+              <td class="text-end">{{ fmt(cmv_by_month.get(m.key, 0)) }}</td>
+            {% endfor %}
+            <td class="text-end col-acum">{{ fmt(grand_cmv) }}</td>
+          </tr>
+          {% endif %}{# if any_include_compras #}
+
+          {# ══════════════════════════════════════════════════════
+             BLOCO: DESPESAS
+          ══════════════════════════════════════════════════════ #}
+          <tr class="row-section">
+            <td class="col-desc" colspan="{{ months|length + 2 }}">
+              <i class="bi bi-dash-circle me-1"></i> DESPESAS
+            </td>
+          </tr>
+
+          {% if not despesas_blocks %}
+          <tr>
+            <td class="col-desc text-muted" colspan="{{ months|length + 2 }}">
+              <em>Nenhuma despesa encontrada no período / filtros selecionados.</em>
+            </td>
+          </tr>
+          {% endif %}
+
+          {% for block in despesas_blocks %}
+          {# Título do bloco (expansível) #}
+          <tr class="row-titulo" onclick="toggleGroup('tit_{{ block.titulo_id }}')">
+            <td class="col-desc">
+              <span class="toggle-icon" id="icon-tit_{{ block.titulo_id }}">▶</span>
+              {{ block.titulo_nome }}
+            </td>
+            {% for m in months %}
+              <td class="text-end">{{ fmt(block.total_by_month.get(m.key, 0)) }}</td>
+            {% endfor %}
+            <td class="text-end col-acum">{{ fmt(block.total) }}</td>
+          </tr>
+          {# Linhas de categoria (ocultas por padrão) #}
+          {% for row in block.rows %}
+          <tr class="row-item row-child" data-group="tit_{{ block.titulo_id }}" style="display:none;">
+            <td class="col-desc">└ {{ row.categoria_nome }}</td>
+            {% for m in months %}
+              {% set v = row.by_month.get(m.key, 0) %}
+              <td class="text-end {% if v == 0 %}val-zero{% endif %}">{{ fmt(v) }}</td>
+            {% endfor %}
+            <td class="text-end col-acum">{{ fmt(row.total) }}</td>
+          </tr>
+          {% endfor %}
+          {% endfor %}{# for block in despesas_blocks #}
+
+          {# TOTAL DESPESAS #}
+          <tr class="row-desp-total">
+            <td class="col-desc"><i class="bi bi-dash-circle-fill me-1"></i> TOTAL DESPESAS</td>
+            {% for m in months %}
+              <td class="text-end">{{ fmt(grand_despesas_by_month.get(m.key, 0)) }}</td>
+            {% endfor %}
+            <td class="text-end col-acum">{{ fmt(grand_despesas) }}</td>
+          </tr>
+
+          {# ══════════════════════════════════════════════════════
+             LUCRO OPERACIONAL
+          ══════════════════════════════════════════════════════ #}
+          <tr class="row-lucro {% if grand_lucro < 0 %}row-lucro-neg{% endif %}">
+            <td class="col-desc"><i class="bi bi-trophy-fill me-1"></i> LUCRO OPERACIONAL</td>
+            {% for m in months %}
+              {% set v = lucro_by_month.get(m.key, 0) %}
+              <td class="text-end">{{ fmtResult(v) }}</td>
+            {% endfor %}
+            <td class="text-end col-acum">{{ fmtResult(grand_lucro) }}</td>
+          </tr>
+
+        </tbody>
+      </table>
+    </div><!-- card-body -->
+  </div><!-- card -->
+
+  {% else %}
+  <div class="alert alert-info d-flex align-items-center gap-2">
+    <i class="bi bi-info-circle-fill fs-5"></i>
+    <span>Selecione o <strong>período</strong> e ao menos uma <strong>Empresa</strong> e clique em <strong>Filtrar</strong>.</span>
+  </div>
+  {% endif %}
+
+</div>{# container-fluid #}
+
+<script>
+// ── Dados dos filtros (injetados pelo servidor) ───────────────────────────
+var TITULOS = {{ titulos | tojson }};
+var FORMAS  = {{ formas  | tojson }};
+var EMPRESA_NAMES   = {{ empresas_por_id    | tojson }};
+var EMPRESA_CONFIGS = {{ empresa_configs_for_js | tojson }};
+
+// ── Toggle rows de grupo ──────────────────────────────────────────────────
+function toggleGroup(gid) {
+  var rows  = document.querySelectorAll('[data-group="' + gid + '"]');
+  var icon  = document.getElementById('icon-' + gid);
+  var shown = rows.length > 0 && rows[0].style.display !== 'none';
+  rows.forEach(function(r) { r.style.display = shown ? 'none' : ''; });
+  if (icon) icon.textContent = shown ? '▶' : '▼';
+}
+
+// ── Período rápido ────────────────────────────────────────────────────────
+function setPeriodo(tipo) {
+  var hoje = new Date();
+  var ini, fim;
+  if (tipo === 'mes') {
+    ini = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
+    fim = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0);
+  } else if (tipo === 'mes_ant') {
+    ini = new Date(hoje.getFullYear(), hoje.getMonth() - 1, 1);
+    fim = new Date(hoje.getFullYear(), hoje.getMonth(), 0);
+  } else {
+    ini = new Date(hoje.getFullYear(), 0, 1);
+    fim = new Date(hoje.getFullYear(), 11, 31);
+  }
+  document.getElementById('data_inicio').value = _fmtDate(ini);
+  document.getElementById('data_fim').value    = _fmtDate(fim);
+}
+function _fmtDate(d) {
+  return d.getFullYear() + '-' +
+         String(d.getMonth() + 1).padStart(2,'0') + '-' +
+         String(d.getDate()).padStart(2,'0');
+}
+
+// ── Opções multi-select em HTML (helper) ─────────────────────────────────
+function _buildOptions(items, selectedVals) {
+  return items.map(function(item) {
+    var sel = selectedVals.indexOf(String(item.id)) >= 0 ? ' selected' : '';
+    var nome = item.nome.replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    return '<option value="' + item.id + '"' + sel + '>' + nome + '</option>';
+  }).join('');
+}
+
+// ── Card por empresa ──────────────────────────────────────────────────────
+function buildEmpresaCard(eid, eName, cfg) {
+  cfg = cfg || {};
+  var tituloSel = cfg.titulo_ids  || [];
+  var formaSel  = cfg.forma_ids   || [];
+  var incV  = cfg.include_vendas  !== false;
+  var incA  = cfg.include_aluguel !== false;
+  var incP  = cfg.include_prazo   !== false;
+  var incC  = cfg.include_compras !== false;
+
+  var titulosHtml = TITULOS.length
+    ? '<select name="cf_' + eid + '_titulos[]" multiple class="form-select form-select-sm" size="4">' +
+      _buildOptions(TITULOS, tituloSel.map(String)) + '</select>'
+    : '<p class="text-muted small mb-0">Nenhum título.</p>';
+
+  var formasHtml = FORMAS.length
+    ? '<select name="cf_' + eid + '_formas[]" multiple class="form-select form-select-sm" size="4">' +
+      _buildOptions(FORMAS, formaSel.map(String)) + '</select>'
+    : '<p class="text-muted small mb-0">Nenhuma forma.</p>';
+
+  var chkV = incV  ? ' checked' : '';
+  var chkA = incA  ? ' checked' : '';
+  var chkP = incP  ? ' checked' : '';
+  var chkC = incC  ? ' checked' : '';
+
+  return [
+    '<div class="card" style="min-width:320px;max-width:440px;border:1px solid #1D63A5;">',
+    '  <div class="card-header d-flex align-items-center py-1 px-3" style="background:#1D63A5;color:#fff;font-size:.78rem;font-weight:600;">',
+    '    <i class="bi bi-building me-1"></i>', eName,
+    '  </div>',
+    '  <input type="hidden" name="cf_' + eid + '_submitted" value="1">',
+    '  <div class="card-body py-2 px-3">',
+    '    <div class="row g-2">',
+
+    '      <div class="col-5">',
+    '        <label class="form-label form-label-sm mb-0 fw-semibold">Cat. Despesa</label>',
+    '        <div class="form-text mt-0 mb-1" style="font-size:.67rem;">vazio = todas</div>',
+    titulosHtml,
+    '      </div>',
+
+    '      <div class="col-5">',
+    '        <label class="form-label form-label-sm mb-0 fw-semibold">Forma Receb.</label>',
+    '        <div class="form-text mt-0 mb-1" style="font-size:.67rem;">vazio = todas</div>',
+    formasHtml,
+    '      </div>',
+
+    '      <div class="col-2 d-flex flex-column justify-content-start pt-1">',
+    '        <div class="form-text mb-1 fw-semibold" style="font-size:.72rem;">Incluir</div>',
+
+    '        <input type="hidden" name="cf_' + eid + '_vendas" value="0">',
+    '        <div class="form-check form-check-sm mb-1">',
+    '          <input class="form-check-input" type="checkbox"',
+    '                 name="cf_' + eid + '_vendas" value="1"',
+    '                 id="chkV_' + eid + '"' + chkV + '>',
+    '          <label class="form-check-label" for="chkV_' + eid + '" style="font-size:.7rem;">',
+    '            <i class="bi bi-fuel-pump-fill text-success"></i> Vendas</label>',
+    '        </div>',
+
+    '        <input type="hidden" name="cf_' + eid + '_compras" value="0">',
+    '        <div class="form-check form-check-sm mb-1">',
+    '          <input class="form-check-input" type="checkbox"',
+    '                 name="cf_' + eid + '_compras" value="1"',
+    '                 id="chkC_' + eid + '"' + chkC + '>',
+    '          <label class="form-check-label" for="chkC_' + eid + '" style="font-size:.7rem;">',
+    '            <i class="bi bi-cart-fill" style="color:#e65100;"></i> Compras</label>',
+    '        </div>',
+
+    '        <input type="hidden" name="cf_' + eid + '_aluguel" value="0">',
+    '        <div class="form-check form-check-sm mb-1">',
+    '          <input class="form-check-input" type="checkbox"',
+    '                 name="cf_' + eid + '_aluguel" value="1"',
+    '                 id="chkA_' + eid + '"' + chkA + '>',
+    '          <label class="form-check-label" for="chkA_' + eid + '" style="font-size:.7rem;">',
+    '            <i class="bi bi-house-door text-primary"></i> Aluguel</label>',
+    '        </div>',
+
+    '        <input type="hidden" name="cf_' + eid + '_prazo" value="0">',
+    '        <div class="form-check form-check-sm">',
+    '          <input class="form-check-input" type="checkbox"',
+    '                 name="cf_' + eid + '_prazo" value="1"',
+    '                 id="chkP_' + eid + '"' + chkP + '>',
+    '          <label class="form-check-label" for="chkP_' + eid + '" style="font-size:.7rem;">',
+    '            <i class="bi bi-person-lines-fill text-info"></i> Prazo</label>',
+    '        </div>',
+
+    '      </div>',   // col-2
+    '    </div>',     // row
+    '  </div>',       // card-body
+    '</div>',
+  ].join('\n');
+}
+
+// ── Renderiza (ou re-renderiza) todos os cards por empresa ─────────────────
+function renderEmpresaCards() {
+  var container = document.getElementById('empresa-configs');
+  var wrap      = document.getElementById('empresa-configs-wrap');
+  if (!container) return;
+
+  var selectedEids = Array.from(
+    document.getElementById('sel_empresas').selectedOptions
+  ).map(function(o) { return o.value; });
+
+  if (selectedEids.length === 0) {
+    container.innerHTML = '';
+    wrap.style.display = 'none';
+    return;
+  }
+
+  wrap.style.display = '';
+
+  // Preserve existing configs from current cards before re-rendering
+  var preserved = {};
+  selectedEids.forEach(function(eid) {
+    var titEl = document.querySelector('[name="cf_' + eid + '_titulos[]"]');
+    var forEl = document.querySelector('[name="cf_' + eid + '_formas[]"]');
+    if (titEl || forEl) {
+      preserved[eid] = {
+        titulo_ids:      titEl ? Array.from(titEl.selectedOptions).map(o => o.value) : [],
+        forma_ids:       forEl ? Array.from(forEl.selectedOptions).map(o => o.value) : [],
+        include_vendas:  document.getElementById('chkV_' + eid)?.checked === true,
+        include_compras: document.getElementById('chkC_' + eid)?.checked === true,
+        include_aluguel: document.getElementById('chkA_' + eid)?.checked === true,
+        include_prazo:   document.getElementById('chkP_' + eid)?.checked === true,
+      };
+    }
+  });
+
+  container.innerHTML = '';
+  selectedEids.forEach(function(eid) {
+    var cfg = preserved[eid] || EMPRESA_CONFIGS[eid] || {};
+    var name = EMPRESA_NAMES[eid] || ('Empresa ' + eid);
+    container.insertAdjacentHTML('beforeend', buildEmpresaCard(eid, name, cfg));
+  });
+}
+
+// ── Filtros múltiplos (localStorage) ─────────────────────────────────────
+var LS_PRESETS_KEY = 'dre_postos_presets_v1';
+
+function _lerPresets() {
+  try { return JSON.parse(localStorage.getItem(LS_PRESETS_KEY) || '{}'); }
+  catch(e) { return {}; }
+}
+
+function _salvarPresets(presets) {
+  localStorage.setItem(LS_PRESETS_KEY, JSON.stringify(presets));
+}
+
+function _coletarFiltroAtual() {
+  var selectedEids = Array.from(
+    document.getElementById('sel_empresas').selectedOptions
+  ).map(function(o) { return o.value; });
+
+  var cfgs = {};
+  selectedEids.forEach(function(eid) {
+    var titEl = document.querySelector('[name="cf_' + eid + '_titulos[]"]');
+    var forEl = document.querySelector('[name="cf_' + eid + '_formas[]"]');
+    cfgs[eid] = {
+      titulo_ids:      titEl ? Array.from(titEl.selectedOptions).map(function(o){ return o.value; }) : [],
+      forma_ids:       forEl ? Array.from(forEl.selectedOptions).map(function(o){ return o.value; }) : [],
+      include_vendas:  document.getElementById('chkV_' + eid) ? document.getElementById('chkV_' + eid).checked : false,
+      include_compras: document.getElementById('chkC_' + eid) ? document.getElementById('chkC_' + eid).checked : false,
+      include_aluguel: document.getElementById('chkA_' + eid) ? document.getElementById('chkA_' + eid).checked : false,
+      include_prazo:   document.getElementById('chkP_' + eid) ? document.getElementById('chkP_' + eid).checked : false,
+    };
+  });
+
+  return {
+    empresas:    selectedEids,
+    data_inicio: document.getElementById('data_inicio').value,
+    data_fim:    document.getElementById('data_fim').value,
+    configs:     cfgs,
+  };
+}
+
+function confirmarSalvarFiltro() {
+  var nome = (document.getElementById('inputNomeFiltro').value || '').trim();
+  if (!nome) {
+    document.getElementById('inputNomeFiltro').focus();
+    return;
+  }
+  var presets = _lerPresets();
+  if (presets[nome] && !confirm('Já existe um filtro com o nome "' + nome + '". Deseja substituí-lo?')) {
+    return;
+  }
+  presets[nome] = _coletarFiltroAtual();
+  _salvarPresets(presets);
+  bootstrap.Modal.getInstance(document.getElementById('modalSalvarFiltro')).hide();
+  document.getElementById('inputNomeFiltro').value = '';
+  document.getElementById('msg_filtro').textContent = '✔ Filtro "' + nome + '" salvo!';
+  setTimeout(function(){ document.getElementById('msg_filtro').textContent = ''; }, 2500);
+}
+
+function _renderListaPresets() {
+  var presets = _lerPresets();
+  var names = Object.keys(presets).sort();
+  var container = document.getElementById('listaPresets');
+  if (!container) return;
+  if (!names.length) {
+    container.innerHTML = '<p class="text-muted small mb-0">Nenhum filtro salvo.</p>';
+    return;
+  }
+  var html = '<div class="list-group list-group-flush">';
+  names.forEach(function(nome) {
+    html += '<div class="list-group-item list-group-item-action d-flex justify-content-between align-items-center py-2 px-2">'
+          + '<span class="small fw-semibold text-truncate" style="max-width:260px;" title="' + nome.replace(/"/g,'&quot;') + '">' + nome + '</span>'
+          + '<span class="d-flex gap-1">'
+          + '<button type="button" class="btn btn-primary btn-sm py-0 px-2" onclick="aplicarPreset(' + JSON.stringify(nome) + ')"><i class="bi bi-arrow-up-circle"></i> Carregar</button>'
+          + '<button type="button" class="btn btn-outline-danger btn-sm py-0 px-2" onclick="excluirPreset(' + JSON.stringify(nome) + ')"><i class="bi bi-trash"></i></button>'
+          + '</span>'
+          + '</div>';
+  });
+  html += '</div>';
+  container.innerHTML = html;
+}
+
+function abrirModalCarregar() {
+  _renderListaPresets();
+}
+
+function aplicarPreset(nome) {
+  var presets = _lerPresets();
+  var data = presets[nome];
+  if (!data) return;
+  try {
+    var sel = document.getElementById('sel_empresas');
+    Array.from(sel.options).forEach(function(o) {
+      o.selected = (data.empresas || []).indexOf(o.value) >= 0;
+    });
+    EMPRESA_CONFIGS = data.configs || {};
+    // Limpa cards existentes para que renderEmpresaCards use EMPRESA_CONFIGS
+    // (sem isso, a lógica de "preserved" lê o DOM atual e ignora o preset)
+    var _econt = document.getElementById('empresa-configs');
+    if (_econt) _econt.innerHTML = '';
+    renderEmpresaCards();
+    if (data.data_inicio) document.getElementById('data_inicio').value = data.data_inicio;
+    if (data.data_fim)    document.getElementById('data_fim').value    = data.data_fim;
+    // Submete o formulário para recarregar o relatório com o filtro carregado
+    document.getElementById('formFiltro').submit();
+  } catch(e) {
+    document.getElementById('msg_filtro').textContent = 'Erro ao carregar filtro.';
+  }
+}
+
+function excluirPreset(nome) {
+  if (!confirm('Excluir o filtro "' + nome + '"?')) return;
+  var presets = _lerPresets();
+  delete presets[nome];
+  _salvarPresets(presets);
+  _renderListaPresets();
+}
+
+// ── Inicialização ─────────────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', function() {
+  renderEmpresaCards();
+  document.getElementById('sel_empresas')
+    .addEventListener('change', renderEmpresaCards);
+  // Re-render lista sempre que o modal de carregar for aberto (inclusive via data-bs-toggle)
+  var elModal = document.getElementById('modalCarregarFiltro');
+  if (elModal) {
+    elModal.addEventListener('show.bs.modal', function() { _renderListaPresets(); });
+  }
+});
+</script>
+{% endblock %}
