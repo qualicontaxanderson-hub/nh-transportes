@@ -1297,11 +1297,14 @@ def dre_postos():
             _build_despesas_blocks(all_lancamentos, months)
         )
 
-        # ── Taxas de cartão (CARTÕES) — igual a conf_cartoes, global ─────
-        # Sempre calculadas sem filtro de empresa (maquininhas são infra
-        # compartilhada entre todas as empresas, assim como em conf_cartoes).
+        # ── Taxas de cartão (CARTÕES) — filtradas pelas empresas selecionadas ──
+        # Quando o usuário filtra por empresa(s) específica(s), exibe apenas as
+        # taxas de cartão cujas vendas/recebimentos pertencem àquelas empresas.
+        # Empresas sem maquininha vinculada resultam em _taxas_list vazio e a
+        # linha CARTÕES não aparece no DRE.  Quando nenhuma empresa é filtrada
+        # (todos), comporta-se como antes (global).
         _taxas_list = _fetch_taxas_cartao(
-            conn, data_inicio, data_fim, [], months
+            conn, data_inicio, data_fim, empresa_ids, months
         ) if months else []
         cartoes_by_month: dict = {m['key']: 0.0 for m in months}
         for band in _taxas_list:
