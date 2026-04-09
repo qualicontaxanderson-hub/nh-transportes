@@ -893,6 +893,10 @@ function confirmarSalvarFiltro() {
   setTimeout(function(){ document.getElementById('msg_filtro').textContent = ''; }, 2500);
 }
 
+function _escHtml(str) {
+  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
 function _renderListaPresets() {
   var presets = _lerPresets();
   var names = Object.keys(presets).sort();
@@ -905,10 +909,10 @@ function _renderListaPresets() {
   var html = '<div class="list-group list-group-flush">';
   names.forEach(function(nome) {
     html += '<div class="list-group-item list-group-item-action d-flex justify-content-between align-items-center py-2 px-2">'
-          + '<span class="small fw-semibold text-truncate" style="max-width:260px;" title="' + nome.replace(/"/g,'&quot;') + '">' + nome + '</span>'
+          + '<span class="small fw-semibold text-truncate" style="max-width:260px;" title="' + _escHtml(nome) + '">' + _escHtml(nome) + '</span>'
           + '<span class="d-flex gap-1">'
-          + '<button type="button" class="btn btn-primary btn-sm py-0 px-2" onclick="aplicarPreset(' + JSON.stringify(nome) + ')"><i class="bi bi-arrow-up-circle"></i> Carregar</button>'
-          + '<button type="button" class="btn btn-outline-danger btn-sm py-0 px-2" onclick="excluirPreset(' + JSON.stringify(nome) + ')"><i class="bi bi-trash"></i></button>'
+          + '<button type="button" class="btn btn-primary btn-sm py-0 px-2" data-preset-action="carregar" data-preset-name="' + _escHtml(nome) + '"><i class="bi bi-arrow-up-circle"></i> Carregar</button>'
+          + '<button type="button" class="btn btn-outline-danger btn-sm py-0 px-2" data-preset-action="excluir" data-preset-name="' + _escHtml(nome) + '"><i class="bi bi-trash"></i></button>'
           + '</span>'
           + '</div>';
   });
@@ -961,6 +965,15 @@ document.addEventListener('DOMContentLoaded', function() {
   var elModal = document.getElementById('modalCarregarFiltro');
   if (elModal) {
     elModal.addEventListener('show.bs.modal', function() { _renderListaPresets(); });
+    // Delegação de eventos para botões Carregar/Excluir gerados dinamicamente
+    elModal.addEventListener('click', function(e) {
+      var btn = e.target.closest('[data-preset-action]');
+      if (!btn) return;
+      var action = btn.getAttribute('data-preset-action');
+      var nome   = btn.getAttribute('data-preset-name');
+      if (action === 'carregar') aplicarPreset(nome);
+      else if (action === 'excluir') excluirPreset(nome);
+    });
   }
 });
 </script>
