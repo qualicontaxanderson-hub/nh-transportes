@@ -314,7 +314,7 @@
           {# Main row — toggle expands per-product sub-rows #}
           <tr class="row-item" onclick="toggleGroup('vendas')" style="cursor:pointer;">
             <td class="col-desc fw-semibold">
-              <span class="toggle-icon" id="icon-vendas">▼</span>
+              <span class="toggle-icon" id="icon-vendas">▶</span>
               <i class="bi bi-fuel-pump-fill me-1 text-success"></i> Vendas de Combustíveis
             </td>
             {% for m in months %}
@@ -324,7 +324,7 @@
             <td class="text-end col-acum">{{ fmt(grand_vendas_reais) }}</td>
           </tr>
 
-          {# Per-product sub-rows (expanded by default) #}
+          {# Per-product sub-rows (collapsed by default — click header to expand) #}
           {% set all_vendas_prods = [] %}
           {% for mk, pm in vendas_por_produto.items() %}
             {% for prod in pm.keys() %}
@@ -333,7 +333,7 @@
           {% endfor %}
           {% for prod in all_vendas_prods | sort %}
           {# R$ row per product #}
-          <tr class="row-child" data-group="vendas">
+          <tr class="row-child" data-group="vendas" style="display:none;">
             <td class="col-desc">└ {{ prod }}</td>
             {% for m in months %}
               {% set v = vendas_por_produto.get(m.key, {}).get(prod, {}).get('reais', 0) %}
@@ -343,7 +343,7 @@
           </tr>
           {# Litros row per product (indented italic) — only when product has litros #}
           {% if grand_vendas_por_produto.get(prod, {}).get('litros', 0) > 0 %}
-          <tr class="row-litros-child" data-group="vendas">
+          <tr class="row-litros-child" data-group="vendas" style="display:none;">
             <td class="col-desc" style="padding-left:3rem !important;">└─ Litros</td>
             {% for m in months %}
               {% set v = vendas_por_produto.get(m.key, {}).get(prod, {}).get('litros', 0) %}
