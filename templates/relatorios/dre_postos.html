@@ -620,8 +620,9 @@
 
           {# CARTÕES — taxas globais de cartão (igual a conf_cartoes) #}
           {% if grand_cartoes %}
-          <tr class="row-titulo">
+          <tr class="row-titulo" onclick="toggleGroup('cartoes_block')">
             <td class="col-desc">
+              <span class="toggle-icon" id="icon-cartoes_block">▶</span>
               <i class="bi bi-credit-card me-1"></i> CARTÕES
             </td>
             {% for m in months %}
@@ -629,6 +630,16 @@
             {% endfor %}
             <td class="text-end col-acum">{{ fmt(grand_cartoes) }}</td>
           </tr>
+          {% for band in cartoes_taxas_list %}
+          <tr class="row-item row-child" data-group="cartoes_block" style="display:none;">
+            <td class="col-desc">└ {{ band.nome }}</td>
+            {% for m in months %}
+              {% set v = band.fee_by_month.get(m.key, 0) %}
+              <td class="text-end {% if v == 0 %}val-zero{% endif %}">{{ fmt(v) }}</td>
+            {% endfor %}
+            <td class="text-end col-acum">{{ fmt(band.fee_total) }}</td>
+          </tr>
+          {% endfor %}
           {% endif %}
 
           {# TOTAL DESPESAS #}

@@ -1445,6 +1445,7 @@ def dre_postos():
         despesas_blocks=despesas_blocks,
         cartoes_by_month=cartoes_by_month,
         grand_cartoes=grand_cartoes,
+        cartoes_taxas_list=_taxas_list,
         grand_despesas_by_month=grand_despesas_by_month,
         grand_despesas=grand_despesas,
         # resultado
