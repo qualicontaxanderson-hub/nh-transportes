@@ -314,7 +314,7 @@
           {# Main row — toggle expands per-product sub-rows #}
           <tr class="row-item" onclick="toggleGroup('vendas')" style="cursor:pointer;">
             <td class="col-desc fw-semibold">
-              <span class="toggle-icon" id="icon-vendas">▼</span>
+              <span class="toggle-icon" id="icon-vendas">▶</span>
               <i class="bi bi-fuel-pump-fill me-1 text-success"></i> Vendas de Combustíveis
             </td>
             {% for m in months %}
@@ -324,7 +324,7 @@
             <td class="text-end col-acum">{{ fmt(grand_vendas_reais) }}</td>
           </tr>
 
-          {# Per-product sub-rows (expanded by default) #}
+          {# Per-product sub-rows (collapsed by default — click header to expand) #}
           {% set all_vendas_prods = [] %}
           {% for mk, pm in vendas_por_produto.items() %}
             {% for prod in pm.keys() %}
@@ -333,7 +333,7 @@
           {% endfor %}
           {% for prod in all_vendas_prods | sort %}
           {# R$ row per product #}
-          <tr class="row-child" data-group="vendas">
+          <tr class="row-child" data-group="vendas" style="display:none;">
             <td class="col-desc">└ {{ prod }}</td>
             {% for m in months %}
               {% set v = vendas_por_produto.get(m.key, {}).get(prod, {}).get('reais', 0) %}
@@ -343,7 +343,7 @@
           </tr>
           {# Litros row per product (indented italic) — only when product has litros #}
           {% if grand_vendas_por_produto.get(prod, {}).get('litros', 0) > 0 %}
-          <tr class="row-litros-child" data-group="vendas">
+          <tr class="row-litros-child" data-group="vendas" style="display:none;">
             <td class="col-desc" style="padding-left:3rem !important;">└─ Litros</td>
             {% for m in months %}
               {% set v = vendas_por_produto.get(m.key, {}).get(prod, {}).get('litros', 0) %}
@@ -618,6 +618,30 @@
           {% endfor %}
           {% endfor %}{# for block in despesas_blocks #}
 
+          {# CARTÕES — taxas globais de cartão (igual a conf_cartoes) #}
+          {% if grand_cartoes %}
+          <tr class="row-titulo" onclick="toggleGroup('cartoes_block')">
+            <td class="col-desc">
+              <span class="toggle-icon" id="icon-cartoes_block">▶</span>
+              <i class="bi bi-credit-card me-1"></i> CARTÕES
+            </td>
+            {% for m in months %}
+              <td class="text-end">{{ fmt(cartoes_by_month.get(m.key, 0)) }}</td>
+            {% endfor %}
+            <td class="text-end col-acum">{{ fmt(grand_cartoes) }}</td>
+          </tr>
+          {% for band in cartoes_taxas_list %}
+          <tr class="row-item row-child" data-group="cartoes_block" style="display:none;">
+            <td class="col-desc">└ {{ band.nome }}</td>
+            {% for m in months %}
+              {% set v = band.fee_by_month.get(m.key, 0) %}
+              <td class="text-end {% if v == 0 %}val-zero{% endif %}">{{ fmt(v) }}</td>
+            {% endfor %}
+            <td class="text-end col-acum">{{ fmt(band.fee_total) }}</td>
+          </tr>
+          {% endfor %}
+          {% endif %}
+
           {# TOTAL DESPESAS #}
           <tr class="row-desp-total">
             <td class="col-desc"><i class="bi bi-dash-circle-fill me-1"></i> TOTAL DESPESAS</td>
@@ -637,6 +661,17 @@
               <td class="text-end">{{ fmtResult(v) }}</td>
             {% endfor %}
             <td class="text-end col-acum">{{ fmtResult(grand_lucro) }}</td>
+          </tr>
+
+          {# LUCRO ACUMULADO (YTD) #}
+          {% set last_acum = lucro_acumulado_by_month[months[-1].key] if months else 0 %}
+          <tr class="row-lucro {% if last_acum < 0 %}row-lucro-neg{% endif %}" style="font-style:italic; opacity:.85;">
+            <td class="col-desc"><i class="bi bi-graph-up-arrow me-1"></i> LUCRO ACUMULADO</td>
+            {% for m in months %}
+              {% set v = lucro_acumulado_by_month.get(m.key, 0) %}
+              <td class="text-end">{{ fmtResult(v) }}</td>
+            {% endfor %}
+            <td class="text-end col-acum">{{ fmtResult(last_acum) }}</td>
           </tr>
 
         </tbody>
@@ -893,6 +928,10 @@ function confirmarSalvarFiltro() {
   setTimeout(function(){ document.getElementById('msg_filtro').textContent = ''; }, 2500);
 }
 
+function _escHtml(str) {
+  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
 function _renderListaPresets() {
   var presets = _lerPresets();
   var names = Object.keys(presets).sort();
@@ -905,10 +944,10 @@ function _renderListaPresets() {
   var html = '<div class="list-group list-group-flush">';
   names.forEach(function(nome) {
     html += '<div class="list-group-item list-group-item-action d-flex justify-content-between align-items-center py-2 px-2">'
-          + '<span class="small fw-semibold text-truncate" style="max-width:260px;" title="' + nome.replace(/"/g,'&quot;') + '">' + nome + '</span>'
+          + '<span class="small fw-semibold text-truncate" style="max-width:260px;" title="' + _escHtml(nome) + '">' + _escHtml(nome) + '</span>'
           + '<span class="d-flex gap-1">'
-          + '<button type="button" class="btn btn-primary btn-sm py-0 px-2" onclick="aplicarPreset(' + JSON.stringify(nome) + ')"><i class="bi bi-arrow-up-circle"></i> Carregar</button>'
-          + '<button type="button" class="btn btn-outline-danger btn-sm py-0 px-2" onclick="excluirPreset(' + JSON.stringify(nome) + ')"><i class="bi bi-trash"></i></button>'
+          + '<button type="button" class="btn btn-primary btn-sm py-0 px-2" data-preset-action="carregar" data-preset-name="' + _escHtml(nome) + '"><i class="bi bi-arrow-up-circle"></i> Carregar</button>'
+          + '<button type="button" class="btn btn-outline-danger btn-sm py-0 px-2" data-preset-action="excluir" data-preset-name="' + _escHtml(nome) + '"><i class="bi bi-trash"></i></button>'
           + '</span>'
           + '</div>';
   });
@@ -961,6 +1000,15 @@ document.addEventListener('DOMContentLoaded', function() {
   var elModal = document.getElementById('modalCarregarFiltro');
   if (elModal) {
     elModal.addEventListener('show.bs.modal', function() { _renderListaPresets(); });
+    // Delegação de eventos para botões Carregar/Excluir gerados dinamicamente
+    elModal.addEventListener('click', function(e) {
+      var btn = e.target.closest('[data-preset-action]');
+      if (!btn) return;
+      var action = btn.getAttribute('data-preset-action');
+      var nome   = btn.getAttribute('data-preset-name');
+      if (action === 'carregar') aplicarPreset(nome);
+      else if (action === 'excluir') excluirPreset(nome);
+    });
   }
 });
 </script>

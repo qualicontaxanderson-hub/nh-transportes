@@ -31,6 +31,7 @@ from flask import Blueprint, render_template, request
 from flask_login import login_required
 
 from routes.auth import admin_required
+from routes.conf_despesas import _fetch_taxas_cartao
 from utils.db import get_db_connection
 
 bp = Blueprint('dre_postos', __name__, url_prefix='/relatorios')
@@ -126,7 +127,8 @@ def _titulos_list(conn):
     cur = conn.cursor(dictionary=True)
     try:
         cur.execute(
-            "SELECT id, nome FROM titulos_despesas WHERE ativo = 1 ORDER BY ordem, nome"
+            "SELECT id, nome, COALESCE(ordem, 9999) AS ordem"
+            " FROM titulos_despesas WHERE ativo = 1 ORDER BY ordem, nome"
         )
         rows = cur.fetchall()
     except Exception:
@@ -605,6 +607,234 @@ def _fetch_recebimentos(conn, data_inicio, data_fim, empresa_ids, forma_ids):
 # Despesas: lancamentos_despesas agrupados por Título / Categoria
 # ──────────────────────────────────────────────────────────────────────────────
 
+def _fetch_func_lancamentos_dre(conn, months, empresa_ids):
+    """
+    Busca lançamentos de funcionários (lancamentosfuncionarios_v2) e os converte
+    em dicts sintéticos compatíveis com _build_despesas_blocks.
+
+    Cada funcionário vira uma "categoria" dentro de um bloco cujo nome é a
+    categoria funcional pluralizada (FRENTISTAS, OUTROS…).
+
+    Motoristas são excluídos do bloco FUNCIONÁRIOS — o custo de pessoal deles é
+    injetado no bloco CAMINHÕES via salary_mk.
+
+    Retorna (func_rows, salary_mk) onde:
+      func_rows   – lista de dicts sintéticos para _build_despesas_blocks (sem motoristas)
+      salary_mk   – {mk: float} total de salário de motoristas por mês ('YYYYMM')
+    """
+    if not months:
+        return []
+
+    from routes.lancamentos_funcionarios import _ensure_tipo_funcionario
+    _ensure_tipo_funcionario(conn)
+
+    mes_list = [f"{m['month']:02d}/{m['year']}" for m in months]
+    ph       = ','.join(['%s'] * len(mes_list))
+    params: list = list(mes_list)
+
+    where = [f"lf.mes IN ({ph})"]
+    if empresa_ids:
+        ph2 = ','.join(['%s'] * len(empresa_ids))
+        where.append(f"lf.clienteid IN ({ph2})")
+        params.extend(empresa_ids)
+
+    sql = f"""
+        SELECT lf.funcionarioid,
+               CASE
+                   WHEN lf.tipo_funcionario = 'motorista' THEN m.nome
+                   ELSE f.nome
+               END                                    AS funcionario_nome,
+               CASE
+                   WHEN lf.tipo_funcionario = 'motorista' THEN 'MOTORISTA'
+                   ELSE UPPER(COALESCE(f.categoria, 'OUTROS'))
+               END                                    AS categoria_func,
+               lf.mes,
+               COALESCE(lf.valor, 0)                 AS valor
+        FROM lancamentosfuncionarios_v2 lf
+        LEFT JOIN funcionarios f ON f.id = lf.funcionarioid
+                                 AND lf.tipo_funcionario = 'funcionario'
+        LEFT JOIN motoristas   m ON m.id = lf.funcionarioid
+                                 AND lf.tipo_funcionario = 'motorista'
+        WHERE {' AND '.join(where)}
+        ORDER BY categoria_func, funcionario_nome, lf.mes
+    """
+    cur = conn.cursor(dictionary=True)
+    try:
+        cur.execute(sql, params)
+        rows = cur.fetchall()
+    except Exception:
+        rows = []
+    cur.close()
+
+    result:     list = []
+    salary_mk:  dict = {}   # mk → total salary de motoristas
+
+    for row in rows:
+        mes = row['mes'] or ''
+        try:
+            parts = mes.split('/')
+            mo, yr = int(parts[0]), int(parts[1])
+            d = date(yr, mo, 1)
+        except Exception:
+            continue
+
+        mk       = _make_month_key(yr, mo)
+        fid      = row['funcionarioid']
+        nome     = row['funcionario_nome'] or str(fid)
+        cat_func = row['categoria_func'] or 'OUTROS'
+        valor    = float(row['valor'] or 0)
+
+        if cat_func == 'MOTORISTA':
+            # Motoristas não aparecem como bloco independente no DRE, mas o
+            # salário é acumulado para injeção no bloco CAMINHÕES.
+            salary_mk[mk] = salary_mk.get(mk, 0.0) + valor
+            continue
+
+        # Pluraliza: FRENTISTA→FRENTISTAS, OUTROS→OUTROS, etc.
+        titulo_nome = cat_func + 'S' if not cat_func.endswith('S') else cat_func
+
+        result.append({
+            'data':            d,
+            'valor':           valor,
+            'titulo_id':       f'func_{cat_func.lower()}',
+            'titulo_ordem':    9999,
+            'titulo_nome':     titulo_nome,
+            'categoria_id':    f'func_{cat_func}_{fid}',
+            'categoria_ordem': 0,
+            'categoria_nome':  nome,
+        })
+    return result, salary_mk
+
+
+def _fetch_motorista_salary_empresa_dre(conn, months, empresa_ids):
+    """
+    Retorna salário total de motoristas por mês para a(s) empresa(s) indicada(s).
+    Usado para injetar o custo de pessoal no bloco CAMINHÕES do DRE.
+    Retorna {mk: float} onde mk = 'YYYYMM'.
+    """
+    if not months:
+        return {}
+
+    from routes.lancamentos_funcionarios import _ensure_tipo_funcionario
+    _ensure_tipo_funcionario(conn)
+
+    mes_list = [f"{m['month']:02d}/{m['year']}" for m in months]
+    ph       = ','.join(['%s'] * len(mes_list))
+    params: list = list(mes_list)
+
+    where = [f"lf.mes IN ({ph})", "lf.tipo_funcionario = 'motorista'"]
+    if empresa_ids:
+        ph2 = ','.join(['%s'] * len(empresa_ids))
+        where.append(f"lf.clienteid IN ({ph2})")
+        params.extend(empresa_ids)
+
+    sql = f"""
+        SELECT lf.mes, COALESCE(SUM(lf.valor), 0) AS total
+        FROM lancamentosfuncionarios_v2 lf
+        WHERE {' AND '.join(where)}
+        GROUP BY lf.mes
+    """
+    cur = conn.cursor(dictionary=True)
+    try:
+        cur.execute(sql, params)
+        rows = cur.fetchall()
+    except Exception:
+        rows = []
+    cur.close()
+
+    result = {}
+    for r in rows:
+        mes = r['mes'] or ''
+        try:
+            parts = mes.split('/')
+            mk = f"{parts[1]}{int(parts[0]):02d}"
+            result[mk] = result.get(mk, 0.0) + float(r['total'] or 0)
+        except Exception:
+            continue
+    return result
+
+
+def _lookup_caminhoes_titulo(conn):
+    """
+    Retorna metadados (id, nome, ordem) do título de despesa cujo nome contenha
+    'CAMINHÃO' / 'CAMINHAO' (case-insensitive, ignora acentos).
+
+    NÃO filtra por ativo — o título pode estar marcado como inativo no filtro do
+    relatório e mesmo assim ter lançamentos que precisam da injeção salary/receita.
+    Retorna None se não encontrado.
+    """
+    cur = conn.cursor(dictionary=True)
+    try:
+        cur.execute(
+            "SELECT id, nome, COALESCE(ordem, 9999) AS ordem"
+            " FROM titulos_despesas"
+            " ORDER BY ordem, nome"
+        )
+        rows = cur.fetchall()
+    except Exception:
+        rows = []
+    cur.close()
+    return next(
+        (r for r in rows
+         if 'CAMINHAO' in _ascii_upper(r['nome'])
+         or 'CAMINHOES' in _ascii_upper(r['nome'])), None
+    )
+
+
+def _fetch_frete_receita_empresa_dre(conn, data_inicio, data_fim, empresa_ids):
+    """
+    Retorna receita total de fretes por mês para veículos associados aos motoristas
+    da(s) empresa(s) indicada(s).
+
+    Usa motoristas.veiculo_id (atribuição permanente do veículo ao motorista),
+    exactamente como conf_despesas faz em _fetch_veiculos_motoristas + _fetch_frete_data_by_vehicle.
+    lf.caminhaoid NÃO é usado aqui porque frequentemente é NULL e causaria perda
+    de receita de frete.
+
+    Retorna {mk: float} onde mk = 'YYYYMM'.
+    """
+    if not empresa_ids:
+        return {}
+
+    ph_emp = ','.join(['%s'] * len(empresa_ids))
+    cur = conn.cursor(dictionary=True)
+    try:
+        cur.execute(f"""
+            SELECT DISTINCT m.veiculo_id
+            FROM motoristas m
+            INNER JOIN lancamentosfuncionarios_v2 lf
+                ON lf.funcionarioid = m.id AND lf.tipo_funcionario = 'motorista'
+            WHERE lf.clienteid IN ({ph_emp})
+              AND m.veiculo_id IS NOT NULL
+        """, list(empresa_ids))
+        vid_rows = cur.fetchall()
+    except Exception:
+        cur.close()
+        return {}
+
+    if not vid_rows:
+        cur.close()
+        return {}
+
+    vids   = [r['veiculo_id'] for r in vid_rows]
+    ph_v   = ','.join(['%s'] * len(vids))
+    try:
+        cur.execute(f"""
+            SELECT DATE_FORMAT(f.data_frete, '%Y%m')          AS mk,
+                   COALESCE(SUM(f.valor_total_frete), 0)      AS receita
+            FROM fretes f
+            WHERE f.data_frete BETWEEN %s AND %s
+              AND f.veiculos_id IN ({ph_v})
+            GROUP BY DATE_FORMAT(f.data_frete, '%Y%m')
+        """, [data_inicio, data_fim] + vids)
+        rows = cur.fetchall()
+    except Exception:
+        rows = []
+    cur.close()
+
+    return {str(r['mk'] or ''): float(r['receita'] or 0) for r in rows}
+
+
 def _fetch_despesas_lancamentos(conn, data_inicio, data_fim, empresa_ids, titulo_ids):
     """Retorna lançamentos de despesas filtrados com metadados de título e categoria."""
     where  = ["ld.data BETWEEN %s AND %s"]
@@ -877,6 +1107,14 @@ def dre_postos():
         # Lookup da categoria ALUGUEL para mapear retiradas de caixa
         aluguel_cat = _lookup_aluguel_categoria(conn)
 
+        # Mapa título_id → nome (para detectar o título FUNCIONÁRIOS por nome)
+        _titulo_nome_by_id = {str(t['id']): t['nome'] for t in titulos}
+
+        # Metadados do título CAMINHÕES (para injeção de motoristas e receita)
+        # Usa lookup direto sem filtro ativo=1 — o título pode estar inativo no
+        # filtro do relatório mas ainda ter lançamentos que precisam do ajuste.
+        _caminhoes_tit = _lookup_caminhoes_titulo(conn)
+
         if months and empresa_configs:
             for eid, cfg in empresa_configs.items():
                 eid_list = [eid]
@@ -959,6 +1197,84 @@ def dre_postos():
                         conn, data_inicio, data_fim, eid_list, aluguel_cat)
                     all_lancamentos.extend(retirada_rows)
 
+                # Despesas de pessoal: lancamentosfuncionarios_v2
+                # Incluir se: sem filtro de título OU algum título selecionado
+                # corresponde a "FUNCIONÁRIOS".
+                # _fetch_func_lancamentos_dre também devolve salary_mk com os
+                # salários de motoristas (mesmo query, evita segunda viagem ao DB
+                # e elimina o risco de falha silenciosa da query separada).
+                include_func = (
+                    not titulo_ids_set
+                    or any(
+                        'FUNCIONARI' in _ascii_upper(_titulo_nome_by_id.get(tid, ''))
+                        for tid in titulo_ids_set
+                    )
+                )
+                func_salary_mk: dict = {}
+                if include_func:
+                    func_rows, func_salary_mk = _fetch_func_lancamentos_dre(
+                        conn, months, eid_list)
+                    all_lancamentos.extend(func_rows)
+                else:
+                    # Mesmo sem incluir o bloco FUNCIONÁRIOS, ainda precisamos
+                    # dos salários de motoristas para o bloco CAMINHÕES.
+                    _, func_salary_mk = _fetch_func_lancamentos_dre(
+                        conn, months, eid_list)
+
+                # Custo de motoristas + receita de frete → injeta no bloco CAMINHÕES
+                # salary_mk vem do resultado de _fetch_func_lancamentos_dre acima
+                # (mesma fonte de dados do bloco FRENTISTAS — sem risco de falha silenciosa).
+                # O título CAMINHÕES pode estar ativo=0 no filtro; usamos
+                # _lookup_caminhoes_titulo para encontrá-lo independente do ativo.
+                caminhoes_lancamentos_present = (
+                    _caminhoes_tit is not None
+                    and any(
+                        str(row.get('titulo_id')) == str(_caminhoes_tit['id'])
+                        for row in lancamentos
+                    )
+                )
+                caminhoes_ok = (
+                    _caminhoes_tit is not None
+                    and (not titulo_ids_set
+                         or str(_caminhoes_tit['id']) in titulo_ids_set
+                         or caminhoes_lancamentos_present)
+                )
+                if caminhoes_ok:
+                    ct        = _caminhoes_tit
+                    salary_mk = func_salary_mk   # já calculado acima
+                    frete_mk  = _fetch_frete_receita_empresa_dre(
+                        conn, data_inicio, data_fim, eid_list)
+
+                    for m in months:
+                        mk = m['key']
+                        d  = date(m['year'], m['month'], 1)
+
+                        sal = salary_mk.get(mk, 0.0)
+                        if sal:
+                            all_lancamentos.append({
+                                'data':            d,
+                                'valor':           sal,
+                                'titulo_id':       ct['id'],
+                                'titulo_ordem':    int(ct['ordem']),
+                                'titulo_nome':     ct['nome'],
+                                'categoria_id':    'caminhoes_motoristas',
+                                'categoria_ordem': 9998,
+                                'categoria_nome':  'MOTORISTAS',
+                            })
+
+                        rec = frete_mk.get(mk, 0.0)
+                        if rec:
+                            all_lancamentos.append({
+                                'data':            d,
+                                'valor':           -rec,   # negativo — reduz custo líquido
+                                'titulo_id':       ct['id'],
+                                'titulo_ordem':    int(ct['ordem']),
+                                'titulo_nome':     ct['nome'],
+                                'categoria_id':    'caminhoes_receita',
+                                'categoria_ordem': 9999,
+                                'categoria_nome':  'RECEITA',
+                            })
+
         def _sorted_formas_list(acc):
             return sorted(
                 [{'nome': n, 'by_month': dict(d['by_month']), 'total': d['total']}
@@ -980,6 +1296,26 @@ def dre_postos():
         despesas_blocks, grand_despesas_by_month, grand_despesas = (
             _build_despesas_blocks(all_lancamentos, months)
         )
+
+        # ── Taxas de cartão (CARTÕES) — igual a conf_cartoes, global ─────
+        # Sempre calculadas sem filtro de empresa (maquininhas são infra
+        # compartilhada entre todas as empresas, assim como em conf_cartoes).
+        _taxas_list = _fetch_taxas_cartao(
+            conn, data_inicio, data_fim, [], months
+        ) if months else []
+        cartoes_by_month: dict = {m['key']: 0.0 for m in months}
+        for band in _taxas_list:
+            for mk, fee in band['fee_by_month'].items():
+                if mk in cartoes_by_month:
+                    cartoes_by_month[mk] += fee
+        grand_cartoes: float = sum(cartoes_by_month.values())
+        # Incorpora as taxas no total de despesas para que TOTAL DESPESAS e
+        # LUCRO reflitam o custo real das taxas de cartão.
+        for mk in cartoes_by_month:
+            grand_despesas_by_month[mk] = (
+                grand_despesas_by_month.get(mk, 0.0) + cartoes_by_month[mk]
+            )
+        grand_despesas += grand_cartoes
 
         # ── Compras por mês (total R$) ────────────────────────────────────
         compras_by_month: dict = {}
@@ -1040,6 +1376,13 @@ def dre_postos():
                 - grand_despesas_by_month.get(mk, 0.0)
             )
         grand_lucro = grand_receitas - grand_cmv - grand_despesas
+
+        # ── Lucro acumulado (YTD) ─────────────────────────────────────────
+        lucro_acumulado_by_month: dict = {}
+        _acum = 0.0
+        for m in months:
+            _acum += lucro_by_month.get(m['key'], 0.0)
+            lucro_acumulado_by_month[m['key']] = _acum
 
         # ── Totais acumulados ─────────────────────────────────────────────
         grand_vendas_reais = sum(
@@ -1107,9 +1450,13 @@ def dre_postos():
         grand_cmv=grand_cmv,
         # despesas
         despesas_blocks=despesas_blocks,
+        cartoes_by_month=cartoes_by_month,
+        grand_cartoes=grand_cartoes,
+        cartoes_taxas_list=_taxas_list,
         grand_despesas_by_month=grand_despesas_by_month,
         grand_despesas=grand_despesas,
         # resultado
         lucro_by_month=lucro_by_month,
+        lucro_acumulado_by_month=lucro_acumulado_by_month,
         grand_lucro=grand_lucro,
     )
