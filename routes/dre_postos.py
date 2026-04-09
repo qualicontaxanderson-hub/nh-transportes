@@ -612,7 +612,14 @@ def _fetch_func_lancamentos_dre(conn, months, empresa_ids):
     em dicts sintéticos compatíveis com _build_despesas_blocks.
 
     Cada funcionário vira uma "categoria" dentro de um bloco cujo nome é a
-    categoria funcional pluralizada (FRENTISTAS, MOTORISTAS, OUTROS…).
+    categoria funcional pluralizada (FRENTISTAS, OUTROS…).
+
+    Motoristas são excluídos do bloco FUNCIONÁRIOS — o custo de pessoal deles é
+    injetado no bloco CAMINHÕES via salary_mk.
+
+    Retorna (func_rows, salary_mk) onde:
+      func_rows   – lista de dicts sintéticos para _build_despesas_blocks (sem motoristas)
+      salary_mk   – {mk: float} total de salário de motoristas por mês ('YYYYMM')
     """
     if not months:
         return []
@@ -658,7 +665,9 @@ def _fetch_func_lancamentos_dre(conn, months, empresa_ids):
         rows = []
     cur.close()
 
-    result = []
+    result:     list = []
+    salary_mk:  dict = {}   # mk → total salary de motoristas
+
     for row in rows:
         mes = row['mes'] or ''
         try:
@@ -668,19 +677,24 @@ def _fetch_func_lancamentos_dre(conn, months, empresa_ids):
         except Exception:
             continue
 
+        mk       = _make_month_key(yr, mo)
         fid      = row['funcionarioid']
         nome     = row['funcionario_nome'] or str(fid)
         cat_func = row['categoria_func'] or 'OUTROS'
-        # Motoristas são incorporados no bloco CAMINHÕES (não aparecem como bloco
-        # independente no DRE — a mesma lógica do conf_despesas).
+        valor    = float(row['valor'] or 0)
+
         if cat_func == 'MOTORISTA':
+            # Motoristas não aparecem como bloco independente no DRE, mas o
+            # salário é acumulado para injeção no bloco CAMINHÕES.
+            salary_mk[mk] = salary_mk.get(mk, 0.0) + valor
             continue
-        # Pluraliza: FRENTISTA→FRENTISTAS, MOTORISTA→MOTORISTAS, OUTROS→OUTROS
+
+        # Pluraliza: FRENTISTA→FRENTISTAS, OUTROS→OUTROS, etc.
         titulo_nome = cat_func + 'S' if not cat_func.endswith('S') else cat_func
 
         result.append({
             'data':            d,
-            'valor':           float(row['valor'] or 0),
+            'valor':           valor,
             'titulo_id':       f'func_{cat_func.lower()}',
             'titulo_ordem':    9999,
             'titulo_nome':     titulo_nome,
@@ -688,7 +702,7 @@ def _fetch_func_lancamentos_dre(conn, months, empresa_ids):
             'categoria_ordem': 0,
             'categoria_nome':  nome,
         })
-    return result
+    return result, salary_mk
 
 
 def _fetch_motorista_salary_empresa_dre(conn, months, empresa_ids):
@@ -1181,6 +1195,9 @@ def dre_postos():
                 # Despesas de pessoal: lancamentosfuncionarios_v2
                 # Incluir se: sem filtro de título OU algum título selecionado
                 # corresponde a "FUNCIONÁRIOS".
+                # _fetch_func_lancamentos_dre também devolve salary_mk com os
+                # salários de motoristas (mesmo query, evita segunda viagem ao DB
+                # e elimina o risco de falha silenciosa da query separada).
                 include_func = (
                     not titulo_ids_set
                     or any(
@@ -1188,17 +1205,22 @@ def dre_postos():
                         for tid in titulo_ids_set
                     )
                 )
+                func_salary_mk: dict = {}
                 if include_func:
-                    func_rows = _fetch_func_lancamentos_dre(conn, months, eid_list)
+                    func_rows, func_salary_mk = _fetch_func_lancamentos_dre(
+                        conn, months, eid_list)
                     all_lancamentos.extend(func_rows)
+                else:
+                    # Mesmo sem incluir o bloco FUNCIONÁRIOS, ainda precisamos
+                    # dos salários de motoristas para o bloco CAMINHÕES.
+                    _, func_salary_mk = _fetch_func_lancamentos_dre(
+                        conn, months, eid_list)
 
                 # Custo de motoristas + receita de frete → injeta no bloco CAMINHÕES
-                # Motoristas são excluídos do bloco FUNCIONÁRIOS (já ignorados em
-                # _fetch_func_lancamentos_dre) e tratados aqui, exatamente como faz
-                # o conf_despesas: salário soma ao custo, receita de frete subtrai.
-                # Nota: o título CAMINHÕES pode estar ativo=0 no filtro, então não
-                # está em titulo_ids_set — mas ainda pode ter lançamentos. Injetamos
-                # sempre que o título existe E há lançamentos de CAMINHÕES presentes.
+                # salary_mk vem do resultado de _fetch_func_lancamentos_dre acima
+                # (mesma fonte de dados do bloco FRENTISTAS — sem risco de falha silenciosa).
+                # O título CAMINHÕES pode estar ativo=0 no filtro; usamos
+                # _lookup_caminhoes_titulo para encontrá-lo independente do ativo.
                 caminhoes_lancamentos_present = (
                     _caminhoes_tit is not None
                     and any(
@@ -1214,8 +1236,7 @@ def dre_postos():
                 )
                 if caminhoes_ok:
                     ct        = _caminhoes_tit
-                    salary_mk = _fetch_motorista_salary_empresa_dre(
-                        conn, months, eid_list)
+                    salary_mk = func_salary_mk   # já calculado acima
                     frete_mk  = _fetch_frete_receita_empresa_dre(
                         conn, data_inicio, data_fim, eid_list)
 
