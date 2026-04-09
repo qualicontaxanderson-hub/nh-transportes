@@ -774,7 +774,9 @@ def _lookup_caminhoes_titulo(conn):
         rows = []
     cur.close()
     return next(
-        (r for r in rows if 'CAMINHAO' in _ascii_upper(r['nome'])), None
+        (r for r in rows
+         if 'CAMINHAO' in _ascii_upper(r['nome'])
+         or 'CAMINHOES' in _ascii_upper(r['nome'])), None
     )
 
 
