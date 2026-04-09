@@ -605,6 +605,87 @@ def _fetch_recebimentos(conn, data_inicio, data_fim, empresa_ids, forma_ids):
 # Despesas: lancamentos_despesas agrupados por Título / Categoria
 # ──────────────────────────────────────────────────────────────────────────────
 
+def _fetch_func_lancamentos_dre(conn, months, empresa_ids):
+    """
+    Busca lançamentos de funcionários (lancamentosfuncionarios_v2) e os converte
+    em dicts sintéticos compatíveis com _build_despesas_blocks.
+
+    Cada funcionário vira uma "categoria" dentro de um bloco cujo nome é a
+    categoria funcional pluralizada (FRENTISTAS, MOTORISTAS, OUTROS…).
+    """
+    if not months:
+        return []
+
+    from routes.lancamentos_funcionarios import _ensure_tipo_funcionario
+    _ensure_tipo_funcionario(conn)
+
+    mes_list = [f"{m['month']:02d}/{m['year']}" for m in months]
+    ph       = ','.join(['%s'] * len(mes_list))
+    params: list = list(mes_list)
+
+    where = [f"lf.mes IN ({ph})"]
+    if empresa_ids:
+        ph2 = ','.join(['%s'] * len(empresa_ids))
+        where.append(f"lf.clienteid IN ({ph2})")
+        params.extend(empresa_ids)
+
+    sql = f"""
+        SELECT lf.funcionarioid,
+               CASE
+                   WHEN lf.tipo_funcionario = 'motorista' THEN m.nome
+                   ELSE f.nome
+               END                                    AS funcionario_nome,
+               CASE
+                   WHEN lf.tipo_funcionario = 'motorista' THEN 'MOTORISTA'
+                   ELSE UPPER(COALESCE(f.categoria, 'OUTROS'))
+               END                                    AS categoria_func,
+               lf.mes,
+               COALESCE(lf.valor, 0)                 AS valor
+        FROM lancamentosfuncionarios_v2 lf
+        LEFT JOIN funcionarios f ON f.id = lf.funcionarioid
+                                 AND lf.tipo_funcionario = 'funcionario'
+        LEFT JOIN motoristas   m ON m.id = lf.funcionarioid
+                                 AND lf.tipo_funcionario = 'motorista'
+        WHERE {' AND '.join(where)}
+        ORDER BY categoria_func, funcionario_nome, lf.mes
+    """
+    cur = conn.cursor(dictionary=True)
+    try:
+        cur.execute(sql, params)
+        rows = cur.fetchall()
+    except Exception:
+        rows = []
+    cur.close()
+
+    result = []
+    for row in rows:
+        mes = row['mes'] or ''
+        try:
+            parts = mes.split('/')
+            mo, yr = int(parts[0]), int(parts[1])
+            d = date(yr, mo, 1)
+        except Exception:
+            continue
+
+        fid      = row['funcionarioid']
+        nome     = row['funcionario_nome'] or str(fid)
+        cat_func = row['categoria_func'] or 'OUTROS'
+        # Pluraliza: FRENTISTA→FRENTISTAS, MOTORISTA→MOTORISTAS, OUTROS→OUTROS
+        titulo_nome = cat_func + 'S' if not cat_func.endswith('S') else cat_func
+
+        result.append({
+            'data':            d,
+            'valor':           float(row['valor'] or 0),
+            'titulo_id':       f'func_{cat_func.lower()}',
+            'titulo_ordem':    9999,
+            'titulo_nome':     titulo_nome,
+            'categoria_id':    f'func_{cat_func}_{fid}',
+            'categoria_ordem': 0,
+            'categoria_nome':  nome,
+        })
+    return result
+
+
 def _fetch_despesas_lancamentos(conn, data_inicio, data_fim, empresa_ids, titulo_ids):
     """Retorna lançamentos de despesas filtrados com metadados de título e categoria."""
     where  = ["ld.data BETWEEN %s AND %s"]
@@ -877,6 +958,9 @@ def dre_postos():
         # Lookup da categoria ALUGUEL para mapear retiradas de caixa
         aluguel_cat = _lookup_aluguel_categoria(conn)
 
+        # Mapa título_id → nome (para detectar o título FUNCIONÁRIOS por nome)
+        _titulo_nome_by_id = {str(t['id']): t['nome'] for t in titulos}
+
         if months and empresa_configs:
             for eid, cfg in empresa_configs.items():
                 eid_list = [eid]
@@ -958,6 +1042,20 @@ def dre_postos():
                     retirada_rows = _fetch_despesas_retirada_aluguel_caixa(
                         conn, data_inicio, data_fim, eid_list, aluguel_cat)
                     all_lancamentos.extend(retirada_rows)
+
+                # Despesas de pessoal: lancamentosfuncionarios_v2
+                # Incluir se: sem filtro de título OU algum título selecionado
+                # corresponde a "FUNCIONÁRIOS".
+                include_func = (
+                    not titulo_ids_set
+                    or any(
+                        'FUNCIONARI' in _ascii_upper(_titulo_nome_by_id.get(tid, ''))
+                        for tid in titulo_ids_set
+                    )
+                )
+                if include_func:
+                    func_rows = _fetch_func_lancamentos_dre(conn, months, eid_list)
+                    all_lancamentos.extend(func_rows)
 
         def _sorted_formas_list(acc):
             return sorted(
