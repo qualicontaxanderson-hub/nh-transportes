@@ -898,10 +898,10 @@ def _fetch_taxas_cartao(conn, data_inicio, data_fim, empresa_ids, months):
             mk    = m['key']
             venda = vendas_by_band_mk.get(bid, {}).get(mk, 0.0)
             # Adiciona saldo_anterior ao primeiro mês (mesmo critério que conf_cartoes).
-            # Somente quando NÃO há filtro por empresa: saldo_anterior é global
-            # (consolidado de todas as empresas) e não deve ser aplicado a uma empresa
-            # específica, pois causaria valores fictícios para empresas sem cartão.
-            if saldo_aplicavel and mk == first_mk and not empresa_ids:
+            # saldo_anterior é global (consolidado de todas as empresas) e aplica-se
+            # ao primeiro mês do período para equilibrar os recebimentos bancários de
+            # ciclos pré-período (ex: vendas de dezembro liquidadas em janeiro).
+            if saldo_aplicavel and mk == first_mk:
                 venda += saldo_anterior
             receb = sum(receb_idx.get((fid, mk), 0.0) for fid in forma_ids)
             fee   = venda - receb
@@ -1226,8 +1226,12 @@ def conf_despesas():
                 )
             )
             if include_taxas:
+                # Taxas de cartão são sempre calculadas globalmente (sem filtro de
+                # empresa) para coincidir com conf_cartoes e garantir que
+                # saldo_anterior seja aplicado no primeiro mês (janeiro). Card
+                # machines are shared infrastructure across all empresas.
                 taxas_data = _fetch_taxas_cartao(
-                    conn, data_inicio, data_fim, empresa_ids, months
+                    conn, data_inicio, data_fim, [], months
                 )
                 if taxas_data:
                     taxa_rows, taxa_by_month, taxa_total = _build_taxas_cartao_rows(
