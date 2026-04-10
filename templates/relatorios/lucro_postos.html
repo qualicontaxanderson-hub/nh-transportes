@@ -415,7 +415,15 @@ td.sec-result   { background:#f0fdf4; }
                           </span>
                         {% else %}<span class="text-muted">—</span>{% endif %}
                       </td>
-                      <td></td>
+                      <td class="text-end sec-result">
+                        {# R$ da sobra calculada (sem ajuste) na coluna Var.Acum. #}
+                        {% if total_var.has > 0 %}
+                          {% set _sobra_r_calc = total_var.v * prod_diario.ef_mes_custo_unit %}
+                          <span class="{% if total_var.v >= -0.001 %}variacao-ok{% else %}variacao-mal{% endif %}" style="font-size:.8em;">
+                            R$ {{ _sobra_r_calc | fmtmoney }}
+                          </span>
+                        {% endif %}
+                      </td>
                       <td class="text-end sec-result fw-bold {% if prod_diario.dias | sum(attribute='lucro_diario') >= 0 %}text-success{% else %}text-danger{% endif %}">
                         R$ {{ prod_diario.dias | sum(attribute='lucro_diario') | fmtmoney }}
                       </td>
@@ -454,11 +462,21 @@ td.sec-result   { background:#f0fdf4; }
                         <button type="button"
                                 class="btn btn-outline-warning btn-sm ms-2 py-0 px-1"
                                 style="font-size:.7rem;"
-                                onclick="openAjuste({{ cid }}, {{ pid }}, {{ prod_diario.nome | tojson }}, {{ total_var.v }}, {{ prod_diario.ef_mes_custo_unit }}, '{{ data_inicio.strftime('%Y-%m-%d') }}', '{{ data_fim.strftime('%Y-%m-%d') }}', {{ sobra_ajuste }}, {{ (_aj_pid.observacao if _aj_pid and _aj_pid.observacao else '') | tojson }})"
+                                data-cid="{{ cid }}"
+                                data-pid="{{ pid }}"
+                                data-nome="{{ prod_diario.nome | e }}"
+                                data-sobra-calc="{{ total_var.v }}"
+                                data-custo-unit="{{ prod_diario.ef_mes_custo_unit }}"
+                                data-ini="{{ data_inicio.strftime('%Y-%m-%d') }}"
+                                data-fim="{{ data_fim.strftime('%Y-%m-%d') }}"
+                                data-ajuste="{{ sobra_ajuste }}"
+                                data-obs="{{ (_aj_pid.observacao if _aj_pid and _aj_pid.observacao else '') | e }}"
+                                onclick="openAjuste(this)"
                                 title="Ajustar sobra/perda manualmente">
                           <i class="bi bi-pencil-fill"></i> Ajustar
                         </button>
                       </td>
+                      <td colspan="13"></td>
                       <td class="text-end fw-bold {% if sobra_final >= -0.001 %}text-success{% else %}text-danger{% endif %}">
                         {% if sobra_final >= 0 %}+{% endif %}{{ sobra_final | fmtnum }} L
                         {% if sobra_ajuste != 0 %}
@@ -468,7 +486,7 @@ td.sec-result   { background:#f0fdf4; }
                       <td class="text-end fw-bold {% if sobra_r >= -0.001 %}text-success{% else %}text-danger{% endif %}">
                         R$ {{ sobra_r | fmtmoney }}
                       </td>
-                      <td colspan="15"></td>
+                      <td colspan="2"></td>
                     </tr>
                     {% endif %}
                   </tfoot>
@@ -607,13 +625,22 @@ function fmt(d) {
 // ── Ajuste de sobra/perda ────────────────────────────────────────────────────
 let _aj = {};
 
-function openAjuste(cid, pid, nome, sobraCalc, custoUnit, dataInicio, dataFim, ajusteAtual, obsAtual) {
-  _aj = { cid, pid, sobraCalc, custoUnit, dataInicio, dataFim };
-  document.getElementById('aj-produto-nome').textContent = nome;
+function openAjuste(btn) {
+  const d = btn.dataset;
+  _aj = {
+    cid:       parseInt(d.cid),
+    pid:       parseInt(d.pid),
+    sobraCalc: parseFloat(d.sobraCalc),
+    custoUnit: parseFloat(d.custoUnit),
+    dataInicio: d.ini,
+    dataFim:    d.fim
+  };
+  document.getElementById('aj-produto-nome').textContent = d.nome;
   document.getElementById('aj-sobra-calc').textContent =
-    (sobraCalc >= 0 ? '+' : '') + sobraCalc.toFixed(3) + ' L';
-  document.getElementById('aj-ajuste').value = ajusteAtual ? Number(ajusteAtual).toFixed(3) : '';
-  document.getElementById('aj-obs').value = obsAtual || '';
+    (_aj.sobraCalc >= 0 ? '+' : '') + _aj.sobraCalc.toFixed(3) + ' L';
+  const ajAtual = parseFloat(d.ajuste) || 0;
+  document.getElementById('aj-ajuste').value = ajAtual ? ajAtual.toFixed(3) : '';
+  document.getElementById('aj-obs').value = d.obs || '';
   atualizarPreviewSobra();
   new bootstrap.Modal(document.getElementById('modalAjusteSobra')).show();
 }
