@@ -1130,12 +1130,15 @@
             // ── Date badge logic ──
             const tdData = document.createElement('td');
             const fDate = _parseIso(f.data_arquivo);
-            let badgeHtml = '<span class="text-muted" style="font-size:0.8rem;">—</span>';
+            let badgeHtml = '<span class="badge bg-danger" title="Nome do arquivo sem data — obrigatório incluir DDMMAAAA no nome"><i class="bi bi-calendar-x"></i> sem data (obrigatório)</span>';
             let bloqueado = false;
             let aviso90 = false;
             let dataArquivoIso = f.data_arquivo || null;
 
-            if (fDate) {
+            if (!fDate) {
+                // Sem data no nome — bloquear
+                bloqueado = true;
+            } else {
                 const fDateStr = f.data_arquivo.split('-').reverse().join('/');
                 if (fDate > hoje) {
                     // Futuro — bloquear

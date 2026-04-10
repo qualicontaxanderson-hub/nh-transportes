@@ -501,7 +501,11 @@ def _validar_data_importacao(nome_arquivo, account_id, cursor):
     data_arquivo = _extrair_data_arquivo(nome_arquivo)
 
     if data_arquivo is None:
-        return None, None  # sem data no nome — sem restrição
+        return None, (
+            'O nome do arquivo não contém uma data (formato DDMMAAAA obrigatório). '
+            'Renomeie o arquivo incluindo a data do período, ex: '
+            '"extrato Sicredi 09042026.ofx", e tente novamente.'
+        )
 
     hoje = _dt.date.today()
 
