@@ -1,4 +1,4 @@
-from flask import Blueprint, render_template, request, redirect, url_for, Response
+from flask import Blueprint, render_template, request, redirect, url_for, Response, jsonify
 from flask_login import login_required
 from utils.db import get_db_connection
 from datetime import datetime, date
@@ -1039,9 +1039,114 @@ def _calcular_diario_cliente(cur, cliente_id, data_inicio, data_fim, produto_ids
     return resultado
 
 
+# ── Ajuste manual de sobra/perda ─────────────────────────────────────────────
+
+_lucro_ajuste_table_ready = False
+
+
+def _ensure_lucro_ajuste_table():
+    """Cria tabela lucro_postos_ajuste_sobra se ainda não existir. Idempotente."""
+    global _lucro_ajuste_table_ready
+    if _lucro_ajuste_table_ready:
+        return
+    conn = None
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS `lucro_postos_ajuste_sobra` (
+                `id` INT AUTO_INCREMENT PRIMARY KEY,
+                `cliente_id` INT NOT NULL,
+                `produto_id` INT NOT NULL,
+                `data_inicio` DATE NOT NULL,
+                `data_fim`    DATE NOT NULL,
+                `ajuste_litros` DECIMAL(12,3) NOT NULL DEFAULT 0,
+                `observacao` TEXT NULL,
+                `criado_em`     DATETIME DEFAULT CURRENT_TIMESTAMP,
+                `atualizado_em` DATETIME NULL ON UPDATE CURRENT_TIMESTAMP,
+                UNIQUE KEY `uk_ajuste_sobra` (`cliente_id`, `produto_id`, `data_inicio`, `data_fim`),
+                INDEX `idx_ajuste_sobra_cliente` (`cliente_id`)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+        """)
+        conn.commit()
+        cur.close()
+        _lucro_ajuste_table_ready = True
+    except Exception:
+        logger.warning("_ensure_lucro_ajuste_table: falha ao criar tabela", exc_info=True)
+    finally:
+        if conn:
+            conn.close()
+
+
+@bp.route('/api/ajuste_sobra', methods=['GET'])
+@admin_required
+def api_ajuste_sobra_get():
+    """Retorna o ajuste de sobra/perda salvo para um cliente/produto/período."""
+    _ensure_lucro_ajuste_table()
+    cliente_id = request.args.get('cliente_id', type=int)
+    produto_id  = request.args.get('produto_id', type=int)
+    data_inicio = request.args.get('data_inicio')
+    data_fim    = request.args.get('data_fim')
+    if not all([cliente_id, produto_id, data_inicio, data_fim]):
+        return jsonify({'error': 'Parâmetros obrigatórios: cliente_id, produto_id, data_inicio, data_fim'}), 400
+    conn = get_db_connection()
+    cur = conn.cursor(dictionary=True)
+    try:
+        cur.execute("""
+            SELECT ajuste_litros, observacao
+            FROM lucro_postos_ajuste_sobra
+            WHERE cliente_id = %s AND produto_id = %s
+              AND data_inicio = %s AND data_fim = %s
+        """, (cliente_id, produto_id, data_inicio, data_fim))
+        row = cur.fetchone()
+        if row:
+            return jsonify({'ajuste_litros': float(row['ajuste_litros']), 'observacao': row['observacao'] or ''})
+        return jsonify({'ajuste_litros': 0.0, 'observacao': ''})
+    finally:
+        cur.close()
+        conn.close()
+
+
+@bp.route('/api/ajuste_sobra', methods=['POST'])
+@admin_required
+def api_ajuste_sobra_post():
+    """Salva ou atualiza o ajuste de sobra/perda de um cliente/produto/período."""
+    _ensure_lucro_ajuste_table()
+    data = request.get_json(silent=True) or {}
+    cliente_id     = data.get('cliente_id')
+    produto_id     = data.get('produto_id')
+    data_inicio    = data.get('data_inicio')
+    data_fim       = data.get('data_fim')
+    ajuste_litros  = data.get('ajuste_litros', 0)
+    observacao     = data.get('observacao', '')
+    if not all([cliente_id, produto_id, data_inicio, data_fim]):
+        return jsonify({'error': 'Campos obrigatórios: cliente_id, produto_id, data_inicio, data_fim'}), 400
+    conn = get_db_connection()
+    cur = conn.cursor()
+    try:
+        cur.execute("""
+            INSERT INTO lucro_postos_ajuste_sobra
+                (cliente_id, produto_id, data_inicio, data_fim, ajuste_litros, observacao)
+            VALUES (%s, %s, %s, %s, %s, %s)
+            ON DUPLICATE KEY UPDATE
+                ajuste_litros = VALUES(ajuste_litros),
+                observacao    = VALUES(observacao)
+        """, (cliente_id, produto_id, data_inicio, data_fim, ajuste_litros, observacao))
+        conn.commit()
+        return jsonify({'ok': True})
+    except Exception as e:
+        conn.rollback()
+        logger.error("api_ajuste_sobra_post: %s", e, exc_info=True)
+        return jsonify({'error': str(e)}), 500
+    finally:
+        cur.close()
+        conn.close()
+
+
 @bp.route('/lucro_postos', methods=['GET'])
 @admin_required
 def lucro_postos():
+    _ensure_lucro_ajuste_table()
     hoje = date.today()
     # Padrão: mês corrente
     data_inicio_default = date(hoje.year, hoje.month, 1)
@@ -1206,6 +1311,31 @@ def lucro_postos():
         label = f"{data_inicio.strftime('%Y%m%d')}_{data_fim.strftime('%Y%m%d')}"
         return _exportar_csv(resultados_por_cliente, consolidado, label)
 
+    # Carregar ajustes de sobra/perda salvos para este período
+    ajustes_sobra = {}  # {cid: {pid: {ajuste_litros, observacao}}}
+    if filtrou and cliente_ids:
+        try:
+            conn2 = get_db_connection()
+            cur2 = conn2.cursor(dictionary=True)
+            fmt_ids = ','.join(['%s'] * len(cliente_ids))
+            cur2.execute(f"""
+                SELECT cliente_id, produto_id, ajuste_litros, observacao
+                FROM lucro_postos_ajuste_sobra
+                WHERE cliente_id IN ({fmt_ids})
+                  AND data_inicio = %s AND data_fim = %s
+            """, (*cliente_ids, data_inicio, data_fim))
+            for row in cur2.fetchall():
+                cid_r = row['cliente_id']
+                pid_r = row['produto_id']
+                ajustes_sobra.setdefault(cid_r, {})[pid_r] = {
+                    'ajuste_litros': float(row['ajuste_litros']),
+                    'observacao': row['observacao'] or '',
+                }
+            cur2.close()
+            conn2.close()
+        except Exception:
+            logger.warning("lucro_postos: falha ao carregar ajustes_sobra", exc_info=True)
+
     return render_template(
         'relatorios/lucro_postos.html',
         data_inicio=data_inicio,
@@ -1218,6 +1348,7 @@ def lucro_postos():
         consolidado=consolidado,
         diario_por_cliente=diario_por_cliente,
         filtrou=filtrou,
+        ajustes_sobra=ajustes_sobra,
     )
 
 
