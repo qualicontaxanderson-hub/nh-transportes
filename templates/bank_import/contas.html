@@ -510,10 +510,10 @@ function salvarEdicao() {
   // Collect per-coligada configs from the rendered table
   const coligadas = [];
   document.querySelectorAll('#ed_coligadas_container .col-deb').forEach(sel => {
-    const coligadaId = parseInt(sel.dataset.coligadaId);
-    const debId  = sel.value ? parseInt(sel.value) : null;
+    const coligadaId = parseInt(sel.dataset.coligadaId, 10);
+    const debId  = sel.value ? parseInt(sel.value, 10) : null;
     const credEl = document.querySelector(`#ed_coligadas_container .col-cred[data-coligada-id="${coligadaId}"]`);
-    const credId = credEl && credEl.value ? parseInt(credEl.value) : null;
+    const credId = credEl && credEl.value ? parseInt(credEl.value, 10) : null;
     coligadas.push({ coligada_cliente_id: coligadaId, conta_debito_id: debId, conta_credito_id: credId });
   });
 

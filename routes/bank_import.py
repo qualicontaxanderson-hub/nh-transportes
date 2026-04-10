@@ -2684,7 +2684,7 @@ def exportar_contabil():
                pc_ba.nome   AS conta_banco_nome,
                -- Empresa destino (para débitos/transferências)
                ba_dest.cliente_id AS destino_cliente_id,
-               -- Empresa origem (para créditos/transferências) stored in conta_origem_id
+               -- Empresa origem (para créditos/transferências via conta_origem_id)
                ba_orig.cliente_id AS origem_cliente_id,
                -- Empresa
                c.razao_social AS empresa_nome,
@@ -2701,15 +2701,7 @@ def exportar_contabil():
                ON fre.forma_recebimento_id = fr.id AND fre.cliente_id = ba.cliente_id
            LEFT JOIN plano_contas_contas pc_fr ON pc_fr.id = fre.conta_contabil_id
            LEFT JOIN bank_accounts ba_dest ON ba_dest.id = bt.conta_destino_id
-           LEFT JOIN bank_accounts ba_orig ON ba_orig.id = (
-               SELECT bt2.conta_destino_id FROM bank_transactions bt2
-               WHERE bt2.tipo = 'DEBIT'
-                 AND bt2.data_transacao = bt.data_transacao
-                 AND ABS(bt2.valor - bt.valor) < 0.01
-                 AND bt2.account_id != bt.account_id
-                 AND bt2.tipo_conciliacao = 'transferencia'
-               LIMIT 1
-           )
+           LEFT JOIN bank_accounts ba_orig ON ba_orig.id = bt.conta_origem_id
            """
         + where_sql
         + ' ORDER BY bt.data_transacao ASC, bt.id ASC',
@@ -2854,8 +2846,6 @@ def _resolver_contas_contabeis(row, despesa_conta_map, coligada_map=None):
     conta_banco = _fmt(row.get('conta_banco_codigo'), row.get('conta_banco_nome'))
     tipo = row.get('tipo', '')
     tipo_conc = row.get('tipo_conciliacao') or ''
-    account_id = row.get('account_id') or (row.get('conta_apelido') and None)
-    # account_id may not be in the row dict; use banco_cliente_id for coligada lookup
     banco_cliente_id = row.get('banco_cliente_id')
 
     if tipo == 'DEBIT':
@@ -3458,14 +3448,14 @@ def api_salvar_coligadas(conta_id):
     except Exception as e:
         conn.rollback()
         logger.error("api_salvar_coligadas: erro ao salvar: %s", e)
-        return jsonify({'success': False, 'message': str(e)}), 500
+        return jsonify({'success': False, 'message': 'Erro interno ao salvar configuração de coligadas.'}), 500
     finally:
         cursor.close()
         conn.close()
     return jsonify({'success': True})
 
 
-
+def _get_inbox_dirs() -> tuple:
     """
     Retorna (inbox_dir, processed_dir), criando ambos se não existirem.
 
