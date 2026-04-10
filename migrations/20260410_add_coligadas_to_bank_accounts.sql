@@ -5,11 +5,15 @@
 
 ALTER TABLE bank_accounts
     ADD COLUMN IF NOT EXISTS conta_coligada_debito_id INT NULL
-        COMMENT 'FK plano_contas_contas – conta contábil usada como DÉBITO em transferências entre coligadas'
-        REFERENCES plano_contas_contas(id) ON DELETE SET NULL,
+        COMMENT 'FK plano_contas_contas – conta contábil usada como DÉBITO em transferências entre coligadas',
     ADD COLUMN IF NOT EXISTS conta_coligada_credito_id INT NULL
-        COMMENT 'FK plano_contas_contas – conta contábil usada como CRÉDITO em transferências entre coligadas'
-        REFERENCES plano_contas_contas(id) ON DELETE SET NULL;
+        COMMENT 'FK plano_contas_contas – conta contábil usada como CRÉDITO em transferências entre coligadas';
+
+ALTER TABLE bank_accounts
+    ADD CONSTRAINT IF NOT EXISTS fk_ba_coligada_deb
+        FOREIGN KEY (conta_coligada_debito_id) REFERENCES plano_contas_contas(id) ON DELETE SET NULL,
+    ADD CONSTRAINT IF NOT EXISTS fk_ba_coligada_cred
+        FOREIGN KEY (conta_coligada_credito_id) REFERENCES plano_contas_contas(id) ON DELETE SET NULL;
 
 CREATE INDEX IF NOT EXISTS idx_ba_coligada_deb ON bank_accounts(conta_coligada_debito_id);
 CREATE INDEX IF NOT EXISTS idx_ba_coligada_cred ON bank_accounts(conta_coligada_credito_id);

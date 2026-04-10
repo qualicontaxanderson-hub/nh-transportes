@@ -473,7 +473,11 @@ def _ensure_bank_accounts_coligadas():
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
-        for col in ('conta_coligada_debito_id', 'conta_coligada_credito_id'):
+        _col_fk = {
+            'conta_coligada_debito_id':  'fk_ba_coligada_deb',
+            'conta_coligada_credito_id': 'fk_ba_coligada_cred',
+        }
+        for col, fk_name in _col_fk.items():
             cursor.execute(
                 "SELECT COUNT(*) FROM information_schema.COLUMNS"
                 " WHERE TABLE_SCHEMA = DATABASE()"
@@ -482,12 +486,22 @@ def _ensure_bank_accounts_coligadas():
                 (col,),
             )
             if cursor.fetchone()[0] == 0:
+                # ADD COLUMN without inline REFERENCES (not supported by MySQL)
                 cursor.execute(
-                    f"ALTER TABLE bank_accounts"
-                    f" ADD COLUMN {col} INT NULL"
-                    f" REFERENCES plano_contas_contas(id) ON DELETE SET NULL"
+                    f"ALTER TABLE bank_accounts ADD COLUMN {col} INT NULL"
                 )
                 conn.commit()
+                # Add FK separately; ignore error if it already exists
+                try:
+                    cursor.execute(
+                        f"ALTER TABLE bank_accounts"
+                        f" ADD CONSTRAINT {fk_name}"
+                        f" FOREIGN KEY ({col})"
+                        f" REFERENCES plano_contas_contas(id) ON DELETE SET NULL"
+                    )
+                    conn.commit()
+                except Exception:
+                    conn.rollback()
                 logger.info("_ensure_bank_accounts_coligadas: coluna %s criada", col)
         cursor.close()
         _bank_accounts_coligadas_ready = True
@@ -2724,8 +2738,12 @@ def exportar_contabil():
     buf.seek(0)
 
     periodo = ''
-    if data_ini or data_fim:
-        periodo = f'_{data_ini or ""}_{data_fim or ""}'.replace('/', '-')
+    if data_ini and data_fim:
+        periodo = f'_{data_ini}_{data_fim}'.replace('/', '-')
+    elif data_ini:
+        periodo = f'_a_partir_{data_ini}'.replace('/', '-')
+    elif data_fim:
+        periodo = f'_ate_{data_fim}'.replace('/', '-')
     filename = f'exportacao_contabil{periodo}.xlsx'
 
     return Response(
