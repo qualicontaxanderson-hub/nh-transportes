@@ -3247,7 +3247,7 @@ def api_ultimo_dia_importado():
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
     try:
-        _ensure_bank_accounts_ultima_data(cursor, conn)
+        _ensure_bank_accounts_ultima_data()
 
         cursor.execute(
             """SELECT ba.id,
