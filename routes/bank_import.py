@@ -35,6 +35,7 @@ _orphaned_ld_cleanup_done = False
 _auto_regra_subcategoria_fixed = False
 _bank_accounts_ultima_data_ready = False
 _bank_accounts_coligadas_ready = False
+_bank_account_coligadas_table_ready = False
 # Timestamp-based retry cooldown: after a failed attempt, wait _MIGRATION_RETRY_DELAY
 # seconds before retrying.  This avoids hammering the DB on every request but still
 # allows recovery from transient errors (e.g., DB temporarily unavailable at startup).
@@ -43,6 +44,7 @@ _bsm_descricao_chave_retry_after = 0.0   # epoch timestamp; 0 = may run immediat
 _ld_bank_tx_id_retry_after       = 0.0
 _bank_accounts_ultima_data_retry_after = 0.0
 _bank_accounts_coligadas_retry_after   = 0.0
+_bank_account_coligadas_table_retry_after = 0.0
 
 # Regex to extract DDMMYYYY date patterns from OFX filenames.
 # Uses word-boundary-like anchors (no surrounding digits) to avoid false positives.
@@ -513,6 +515,56 @@ def _ensure_bank_accounts_coligadas():
             conn.close()
 
 
+def _ensure_bank_account_coligadas_table():
+    """Garante que a tabela bank_account_coligadas existe. Idempotente."""
+    global _bank_account_coligadas_table_ready, _bank_account_coligadas_table_retry_after
+    if _bank_account_coligadas_table_ready:
+        return
+    if _bank_account_coligadas_table_retry_after > time.time():
+        return
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT COUNT(*) FROM information_schema.TABLES"
+            " WHERE TABLE_SCHEMA = DATABASE()"
+            " AND TABLE_NAME = 'bank_account_coligadas'"
+        )
+        if cursor.fetchone()[0] == 0:
+            cursor.execute(
+                """CREATE TABLE bank_account_coligadas (
+                    id                   INT AUTO_INCREMENT PRIMARY KEY,
+                    bank_account_id      INT NOT NULL,
+                    coligada_cliente_id  INT NOT NULL,
+                    conta_debito_id      INT NULL,
+                    conta_credito_id     INT NULL,
+                    criado_em            DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    atualizado_em        DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+                                         ON UPDATE CURRENT_TIMESTAMP,
+                    UNIQUE KEY uq_bac_conta_coligada (bank_account_id, coligada_cliente_id),
+                    CONSTRAINT fk_bac_account  FOREIGN KEY (bank_account_id)
+                        REFERENCES bank_accounts(id) ON DELETE CASCADE,
+                    CONSTRAINT fk_bac_coligada FOREIGN KEY (coligada_cliente_id)
+                        REFERENCES clientes(id) ON DELETE CASCADE,
+                    CONSTRAINT fk_bac_debito   FOREIGN KEY (conta_debito_id)
+                        REFERENCES plano_contas_contas(id) ON DELETE SET NULL,
+                    CONSTRAINT fk_bac_credito  FOREIGN KEY (conta_credito_id)
+                        REFERENCES plano_contas_contas(id) ON DELETE SET NULL
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4"""
+            )
+            conn.commit()
+            logger.info("_ensure_bank_account_coligadas_table: tabela bank_account_coligadas criada")
+        cursor.close()
+        _bank_account_coligadas_table_ready = True
+    except Exception:
+        logger.warning(
+            "_ensure_bank_account_coligadas_table: falha ao criar tabela", exc_info=True
+        )
+        _bank_account_coligadas_table_retry_after = time.time() + _MIGRATION_RETRY_DELAY
+    finally:
+        if conn:
+            conn.close()
 
 
 
@@ -2578,14 +2630,15 @@ def exportar_contabil():
 
     Regras de CONTA CRÉDITO / CONTA DÉBITO:
     - DEBIT  (saída):  CONTA CRÉDITO = plano_contas da conta bancária
-                       CONTA DÉBITO  = conta coligada (débito) para transferências,
-                                       ou conta contábil da categoria de despesa,
-                                       ou conta contábil do fornecedor
+                       CONTA DÉBITO  = conta coligada da empresa destino (débito)
+                                       ou conta contábil da categoria de despesa
     - CREDIT (entrada): CONTA DÉBITO  = plano_contas da conta bancária
-                        CONTA CRÉDITO = conta coligada (crédito) para transferências,
+                        CONTA CRÉDITO = conta coligada da empresa origem (crédito)
                                         ou conta contábil da forma de recebimento
+    Per-company coligada config fetched from bank_account_coligadas table.
     """
     _ensure_bank_accounts_coligadas()
+    _ensure_bank_account_coligadas_table()
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
 
@@ -2622,16 +2675,17 @@ def exportar_contabil():
                bt.tipo_conciliacao,
                bt.forma_recebimento_id,
                bt.fornecedor_id,
+               bt.conta_destino_id,
                -- Conta bancária
                ba.apelido  AS conta_apelido,
                ba.banco_nome,
+               ba.cliente_id AS banco_cliente_id,
                pc_ba.codigo AS conta_banco_codigo,
                pc_ba.nome   AS conta_banco_nome,
-               -- Coligadas configuradas na conta bancária
-               pc_deb.codigo AS conta_coligada_debito_codigo,
-               pc_deb.nome   AS conta_coligada_debito_nome,
-               pc_cred.codigo AS conta_coligada_credito_codigo,
-               pc_cred.nome   AS conta_coligada_credito_nome,
+               -- Empresa destino (para débitos/transferências)
+               ba_dest.cliente_id AS destino_cliente_id,
+               -- Empresa origem (para créditos/transferências) stored in conta_origem_id
+               ba_orig.cliente_id AS origem_cliente_id,
                -- Empresa
                c.razao_social AS empresa_nome,
                -- Forma de recebimento e seu plano de contas (créditos normais)
@@ -2640,20 +2694,50 @@ def exportar_contabil():
                pc_fr.nome   AS conta_fr_nome
            FROM bank_transactions bt
            INNER JOIN bank_accounts ba ON ba.id = bt.account_id
-           LEFT JOIN plano_contas_contas pc_ba   ON pc_ba.id   = ba.plano_contas_conta_id
-           LEFT JOIN plano_contas_contas pc_deb  ON pc_deb.id  = ba.conta_coligada_debito_id
-           LEFT JOIN plano_contas_contas pc_cred ON pc_cred.id = ba.conta_coligada_credito_id
+           LEFT JOIN plano_contas_contas pc_ba ON pc_ba.id = ba.plano_contas_conta_id
            LEFT JOIN clientes c ON c.id = ba.cliente_id
            LEFT JOIN formas_recebimento fr ON fr.id = bt.forma_recebimento_id
            LEFT JOIN formas_recebimento_empresas fre
                ON fre.forma_recebimento_id = fr.id AND fre.cliente_id = ba.cliente_id
            LEFT JOIN plano_contas_contas pc_fr ON pc_fr.id = fre.conta_contabil_id
+           LEFT JOIN bank_accounts ba_dest ON ba_dest.id = bt.conta_destino_id
+           LEFT JOIN bank_accounts ba_orig ON ba_orig.id = (
+               SELECT bt2.conta_destino_id FROM bank_transactions bt2
+               WHERE bt2.tipo = 'DEBIT'
+                 AND bt2.data_transacao = bt.data_transacao
+                 AND ABS(bt2.valor - bt.valor) < 0.01
+                 AND bt2.account_id != bt.account_id
+                 AND bt2.tipo_conciliacao = 'transferencia'
+               LIMIT 1
+           )
            """
         + where_sql
         + ' ORDER BY bt.data_transacao ASC, bt.id ASC',
         params,
     )
     rows = cursor.fetchall()
+
+    # Load ALL per-company coligada configs for these bank accounts into a dict:
+    # {(bank_account_id, coligada_cliente_id): {debito: (cod, nome), credito: (cod, nome)}}
+    try:
+        cursor.execute(
+            """SELECT bac.bank_account_id, bac.coligada_cliente_id,
+                      pd.codigo AS debito_codigo, pd.nome AS debito_nome,
+                      pc.codigo AS credito_codigo, pc.nome AS credito_nome
+               FROM bank_account_coligadas bac
+               LEFT JOIN plano_contas_contas pd ON pd.id = bac.conta_debito_id
+               LEFT JOIN plano_contas_contas pc ON pc.id = bac.conta_credito_id"""
+        )
+        coligada_map = {}
+        for row in cursor.fetchall():
+            key = (row['bank_account_id'], row['coligada_cliente_id'])
+            coligada_map[key] = {
+                'debito':  (row['debito_codigo'] or '', row['debito_nome'] or ''),
+                'credito': (row['credito_codigo'] or '', row['credito_nome'] or ''),
+            }
+    except Exception:
+        logger.warning("exportar_contabil: falha ao carregar bank_account_coligadas", exc_info=True)
+        coligada_map = {}
 
     # Fetch categoria/subcategoria accounting codes for despesas
     # Build a mapping: bank_transaction_id → conta_contabil code
@@ -2684,7 +2768,7 @@ def exportar_contabil():
         w = csv.writer(out, delimiter=';')
         w.writerow(['DATA', 'DESCRIÇÃO', 'VALOR', 'CONTA CRÉDITO', 'CONTA DÉBITO'])
         for r in rows:
-            conta_debito, conta_credito = _resolver_contas_contabeis(r, despesa_conta_map)
+            conta_debito, conta_credito = _resolver_contas_contabeis(r, despesa_conta_map, coligada_map)
             valor = r['valor']
             w.writerow([
                 r['data_transacao'].strftime('%d/%m/%Y') if r['data_transacao'] else '',
@@ -2722,7 +2806,7 @@ def exportar_contabil():
 
     money_fmt = '#,##0.00'
     for row_idx, r in enumerate(rows, start=2):
-        conta_debito, conta_credito = _resolver_contas_contabeis(r, despesa_conta_map)
+        conta_debito, conta_credito = _resolver_contas_contabeis(r, despesa_conta_map, coligada_map)
         valor = r['valor']
         data_str = r['data_transacao'].strftime('%d/%m/%Y') if r['data_transacao'] else ''
 
@@ -2753,26 +2837,48 @@ def exportar_contabil():
     )
 
 
-def _resolver_contas_contabeis(row, despesa_conta_map):
-    """Retorna (conta_debito, conta_credito) formatados como 'CODIGO – NOME' para exportação contábil."""
+def _resolver_contas_contabeis(row, despesa_conta_map, coligada_map=None):
+    """Retorna (conta_debito, conta_credito) formatados como 'CODIGO – NOME' para exportação contábil.
+
+    coligada_map: {(bank_account_id, coligada_cliente_id): {'debito': (cod,nome), 'credito': (cod,nome)}}
+    Para transferências, lookup é feito usando o cliente da conta destino/origem.
+    """
     def _fmt(codigo, nome):
         if codigo:
             return f'{codigo} – {nome}' if nome else codigo
         return ''
 
+    if coligada_map is None:
+        coligada_map = {}
+
     conta_banco = _fmt(row.get('conta_banco_codigo'), row.get('conta_banco_nome'))
     tipo = row.get('tipo', '')
     tipo_conc = row.get('tipo_conciliacao') or ''
+    account_id = row.get('account_id') or (row.get('conta_apelido') and None)
+    # account_id may not be in the row dict; use banco_cliente_id for coligada lookup
+    banco_cliente_id = row.get('banco_cliente_id')
 
     if tipo == 'DEBIT':
         # Crédito = a conta bancária (dinheiro sai da conta → crédito no ativo)
         conta_credito = conta_banco
         # Débito = conta de despesa/coligada
         if 'transferen' in tipo_conc.lower():
-            conta_debito = _fmt(
-                row.get('conta_coligada_debito_codigo'),
-                row.get('conta_coligada_debito_nome'),
-            )
+            # Use per-company coligada config: find by destino_cliente_id
+            destino_cliente_id = row.get('destino_cliente_id')
+            coligada_cfg = None
+            if destino_cliente_id and banco_cliente_id:
+                # Look up by bank_account_id not available directly; try coligada_cliente_id
+                # We stored coligada_map by (bank_account_id, coligada_cliente_id), but
+                # we don't have the exact bank_account_id here. Use banco_cliente_id fallback:
+                # find any entry where coligada_cliente_id == destino_cliente_id for this bank's owner
+                for (ba_id, col_id), cfg in coligada_map.items():
+                    if col_id == destino_cliente_id:
+                        coligada_cfg = cfg
+                        break
+            if coligada_cfg:
+                conta_debito = _fmt(*coligada_cfg['debito'])
+            else:
+                conta_debito = ''
         else:
             dmap = despesa_conta_map.get(row.get('id'))
             if dmap:
@@ -2784,10 +2890,18 @@ def _resolver_contas_contabeis(row, despesa_conta_map):
         conta_debito = conta_banco
         # Crédito = receita/coligada
         if 'transferen' in tipo_conc.lower():
-            conta_credito = _fmt(
-                row.get('conta_coligada_credito_codigo'),
-                row.get('conta_coligada_credito_nome'),
-            )
+            # Use per-company coligada config: find by origem_cliente_id
+            origem_cliente_id = row.get('origem_cliente_id')
+            coligada_cfg = None
+            if origem_cliente_id:
+                for (ba_id, col_id), cfg in coligada_map.items():
+                    if col_id == origem_cliente_id:
+                        coligada_cfg = cfg
+                        break
+            if coligada_cfg:
+                conta_credito = _fmt(*coligada_cfg['credito'])
+            else:
+                conta_credito = ''
         else:
             conta_credito = _fmt(
                 row.get('conta_fr_codigo'),
@@ -3130,6 +3244,7 @@ def api_criar_conta():
 def gerenciar_contas():
     """Página de gerenciamento de contas bancárias (lista, edita, exclui)."""
     _ensure_bank_accounts_coligadas()
+    _ensure_bank_account_coligadas_table()
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
     cursor.execute(
@@ -3148,6 +3263,9 @@ def gerenciar_contas():
     )
     contas = cursor.fetchall()
     clientes = _get_clientes_com_produtos(cursor)
+    # Load ALL clients for the coligadas per-company table (not just those with products)
+    cursor.execute("SELECT id, razao_social FROM clientes WHERE ativo=1 ORDER BY razao_social")
+    todos_clientes = cursor.fetchall()
     cursor.execute(
         """SELECT pcc.id, pcc.codigo, pcc.nome, g.nome AS grupo_nome
            FROM plano_contas_contas pcc
@@ -3159,7 +3277,7 @@ def gerenciar_contas():
     cursor.close()
     conn.close()
     return render_template('bank_import/contas.html', contas=contas, clientes=clientes,
-                           plano_contas=plano_contas)
+                           todos_clientes=todos_clientes, plano_contas=plano_contas)
 
 
 @bp.route('/api/contas/<int:conta_id>', methods=['PUT'])
@@ -3244,8 +3362,110 @@ def api_excluir_conta(conta_id):
     return jsonify({'success': True})
 
 
+@bp.route('/api/contas/<int:conta_id>/coligadas', methods=['GET'])
+@login_required
+def api_get_coligadas(conta_id):
+    """API: retorna a configuração contábil por empresa coligada para uma conta bancária."""
+    _ensure_bank_account_coligadas_table()
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        cursor.execute(
+            """SELECT bac.coligada_cliente_id,
+                      bac.conta_debito_id,
+                      bac.conta_credito_id,
+                      c.razao_social AS coligada_nome,
+                      pd.codigo AS debito_codigo, pd.nome AS debito_nome,
+                      pc.codigo AS credito_codigo, pc.nome AS credito_nome
+               FROM bank_account_coligadas bac
+               INNER JOIN clientes c ON c.id = bac.coligada_cliente_id
+               LEFT JOIN plano_contas_contas pd ON pd.id = bac.conta_debito_id
+               LEFT JOIN plano_contas_contas pc ON pc.id = bac.conta_credito_id
+               WHERE bac.bank_account_id = %s
+               ORDER BY c.razao_social""",
+            (conta_id,),
+        )
+        rows = cursor.fetchall()
+    except Exception as e:
+        logger.warning("api_get_coligadas: erro ao buscar dados: %s", e)
+        rows = []
+    finally:
+        cursor.close()
+        conn.close()
+    return jsonify(rows)
 
-def _get_inbox_dirs() -> tuple:
+
+@bp.route('/api/contas/<int:conta_id>/coligadas', methods=['POST'])
+@login_required
+def api_salvar_coligadas(conta_id):
+    """API: salva (upsert) a configuração contábil por empresa coligada para uma conta bancária.
+
+    Body JSON: lista de objetos com:
+        coligada_cliente_id: int  (obrigatório)
+        conta_debito_id: int|null
+        conta_credito_id: int|null
+
+    Somente as entradas com ao menos uma conta configurada são persistidas.
+    Entradas com ambas as contas nulas para uma coligada são excluídas (limpeza).
+    """
+    _ensure_bank_account_coligadas_table()
+    data = request.get_json() or []
+    if not isinstance(data, list):
+        return jsonify({'success': False, 'message': 'Body deve ser uma lista JSON'}), 400
+
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        for item in data:
+            coligada_id  = item.get('coligada_cliente_id')
+            debito_id    = item.get('conta_debito_id') or None
+            credito_id   = item.get('conta_credito_id') or None
+            if not coligada_id:
+                continue
+            try:
+                coligada_id = int(coligada_id)
+            except (ValueError, TypeError):
+                continue
+
+            if debito_id is None and credito_id is None:
+                # Remove o vínculo se ambas as contas foram limpas
+                cursor.execute(
+                    "DELETE FROM bank_account_coligadas"
+                    " WHERE bank_account_id=%s AND coligada_cliente_id=%s",
+                    (conta_id, coligada_id),
+                )
+            else:
+                if debito_id is not None:
+                    try:
+                        debito_id = int(debito_id)
+                    except (ValueError, TypeError):
+                        debito_id = None
+                if credito_id is not None:
+                    try:
+                        credito_id = int(credito_id)
+                    except (ValueError, TypeError):
+                        credito_id = None
+                cursor.execute(
+                    """INSERT INTO bank_account_coligadas
+                           (bank_account_id, coligada_cliente_id, conta_debito_id, conta_credito_id)
+                       VALUES (%s, %s, %s, %s)
+                       ON DUPLICATE KEY UPDATE
+                           conta_debito_id  = VALUES(conta_debito_id),
+                           conta_credito_id = VALUES(conta_credito_id)""",
+                    (conta_id, coligada_id, debito_id, credito_id),
+                )
+        conn.commit()
+    except Exception as e:
+        conn.rollback()
+        logger.error("api_salvar_coligadas: erro ao salvar: %s", e)
+        return jsonify({'success': False, 'message': str(e)}), 500
+    finally:
+        cursor.close()
+        conn.close()
+    return jsonify({'success': True})
+
+
+
     """
     Retorna (inbox_dir, processed_dir), criando ambos se não existirem.
 
