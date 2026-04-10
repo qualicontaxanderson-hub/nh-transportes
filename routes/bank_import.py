@@ -3254,7 +3254,7 @@ def gerenciar_contas():
     contas = cursor.fetchall()
     clientes = _get_clientes_com_produtos(cursor)
     # Load ALL clients for the coligadas per-company table (not just those with products)
-    cursor.execute("SELECT id, razao_social FROM clientes WHERE ativo=1 ORDER BY razao_social")
+    cursor.execute("SELECT id, razao_social FROM clientes ORDER BY razao_social")
     todos_clientes = cursor.fetchall()
     cursor.execute(
         """SELECT pcc.id, pcc.codigo, pcc.nome, g.nome AS grupo_nome
