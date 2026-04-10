@@ -23,9 +23,12 @@ Filtro de formas: forma_ids[] filtra formas de recebimento de banco.
 Rota:
   GET /relatorios/dre_postos
 """
+import logging
 import unicodedata
 from collections import defaultdict
 from datetime import date, datetime
+
+import mysql.connector
 
 from flask import Blueprint, render_template, request
 from flask_login import login_required
@@ -35,6 +38,9 @@ from routes.conf_despesas import _fetch_taxas_cartao
 from utils.db import get_db_connection
 
 bp = Blueprint('dre_postos', __name__, url_prefix='/relatorios')
+
+# MySQL server error numbers used in this module
+_MYSQL_ERR_UNKNOWN_COLUMN = 1054  # "Unknown column '…' in field list"
 
 _MES_LABELS = ['JAN', 'FEV', 'MAR', 'ABR', 'MAI', 'JUN',
                'JUL', 'AGO', 'SET', 'OUT', 'NOV', 'DEZ']
@@ -837,6 +843,8 @@ def _fetch_frete_receita_empresa_dre(conn, data_inicio, data_fim, empresa_ids):
 
 def _fetch_despesas_lancamentos(conn, data_inicio, data_fim, empresa_ids, titulo_ids):
     """Retorna lançamentos de despesas filtrados com metadados de título e categoria."""
+    log = logging.getLogger(__name__)
+
     where  = ["ld.data BETWEEN %s AND %s"]
     params = [data_inicio, data_fim]
 
@@ -850,7 +858,7 @@ def _fetch_despesas_lancamentos(conn, data_inicio, data_fim, empresa_ids, titulo
         where.append(f"ld.titulo_id IN ({ph})")
         params.extend(titulo_ids)
 
-    sql = f"""
+    _base_select = """
         SELECT ld.data,
                COALESCE(ld.valor, 0)           AS valor,
                ld.titulo_id,
@@ -862,18 +870,39 @@ def _fetch_despesas_lancamentos(conn, data_inicio, data_fim, empresa_ids, titulo
         FROM lancamentos_despesas ld
         INNER JOIN titulos_despesas    t ON t.id = ld.titulo_id
         INNER JOIN categorias_despesas c ON c.id = ld.categoria_id
-        WHERE {' AND '.join(where)}
-          AND COALESCE(c.exibir_dre, 1) = 1
+        WHERE {where_clause}
+          {exibir_filter}
         ORDER BY titulo_ordem, t.nome, categoria_ordem, c.nome, ld.data
     """
-    cur = conn.cursor(dictionary=True)
+
+    def _run(include_exibir_filter):
+        # exibir_dre=1 means "show in DRE"; 0 means hidden
+        ef = "AND COALESCE(c.exibir_dre, 1) = 1" if include_exibir_filter else ""
+        sql = _base_select.format(where_clause=' AND '.join(where), exibir_filter=ef)
+        cur = conn.cursor(dictionary=True)
+        try:
+            cur.execute(sql, params)
+            return cur.fetchall()
+        finally:
+            cur.close()
+
     try:
-        cur.execute(sql, params)
-        rows = cur.fetchall()
+        return _run(include_exibir_filter=True)
+    except mysql.connector.errors.DatabaseError as exc:
+        if exc.errno == _MYSQL_ERR_UNKNOWN_COLUMN:
+            # exibir_dre column not yet added — fall back to showing all categories
+            log.warning('_fetch_despesas_lancamentos: coluna exibir_dre ausente, '
+                        'exibindo todas as categorias (migração pendente)')
+            try:
+                return _run(include_exibir_filter=False)
+            except mysql.connector.errors.DatabaseError:
+                log.exception('_fetch_despesas_lancamentos: falha no fallback sem exibir_dre')
+                return []
+        log.exception('_fetch_despesas_lancamentos: erro inesperado (errno=%s)', exc.errno)
+        return []
     except Exception:
-        rows = []
-    cur.close()
-    return rows
+        log.exception('_fetch_despesas_lancamentos: erro inesperado')
+        return []
 
 
 def _lookup_aluguel_categoria(conn):

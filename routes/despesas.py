@@ -9,6 +9,9 @@ from utils.decorators import admin_required
 
 bp = Blueprint('despesas', __name__, url_prefix='/despesas')
 
+# MySQL server error numbers used in this module
+_MYSQL_ERR_DUPLICATE_COLUMN = 1060  # "Duplicate column name '…'"
+
 _tables_ready = False
 
 
@@ -44,7 +47,7 @@ def _ensure_tables():
                 COMMENT 'Se 1, a categoria aparece no DRE; se 0, é omitida do DRE'
             """)
         except mysql.connector.errors.DatabaseError as exc:
-            if exc.errno != 1060:  # 1060 = Duplicate column name
+            if exc.errno != _MYSQL_ERR_DUPLICATE_COLUMN:
                 raise
         conn.commit()
         _tables_ready = True
