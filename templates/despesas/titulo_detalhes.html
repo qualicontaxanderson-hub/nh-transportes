@@ -85,6 +85,7 @@
             <th>Conta Contábil</th>
             <th class="text-center">Subcategorias</th>
             <th class="text-center">Ordem</th>
+            <th class="text-center">DRE</th>
             <th class="text-center pe-3">Ações</th>
           </tr>
         </thead>
@@ -107,6 +108,13 @@
               <span class="badge bg-secondary">{{ categoria.total_subcategorias or 0 }}</span>
             </td>
             <td class="text-center text-muted small">{{ categoria.ordem }}</td>
+            <td class="text-center">
+              {% if categoria.get('exibir_dre', 1) %}
+              <span class="badge bg-success" title="Exibe no DRE"><i class="bi bi-check-lg"></i></span>
+              {% else %}
+              <span class="badge bg-secondary" title="Oculto no DRE"><i class="bi bi-eye-slash"></i></span>
+              {% endif %}
+            </td>
             <td class="text-center pe-3">
               <a href="{{ url_for('despesas.categoria_detalhes', categoria_id=categoria.id) }}"
                  class="btn btn-acao btn-info text-white" title="Ver Detalhes">

@@ -415,7 +415,15 @@ td.sec-result   { background:#f0fdf4; }
                           </span>
                         {% else %}<span class="text-muted">—</span>{% endif %}
                       </td>
-                      <td></td>
+                      <td class="text-end sec-result">
+                        {# R$ da sobra calculada (sem ajuste) na coluna Var.Acum. #}
+                        {% if total_var.has > 0 %}
+                          {% set _sobra_r_calc = total_var.v * prod_diario.ef_mes_custo_unit %}
+                          <span class="{% if total_var.v >= -0.001 %}variacao-ok{% else %}variacao-mal{% endif %}" style="font-size:.8em;">
+                            R$ {{ _sobra_r_calc | fmtmoney }}
+                          </span>
+                        {% endif %}
+                      </td>
                       <td class="text-end sec-result fw-bold {% if prod_diario.dias | sum(attribute='lucro_diario') >= 0 %}text-success{% else %}text-danger{% endif %}">
                         R$ {{ prod_diario.dias | sum(attribute='lucro_diario') | fmtmoney }}
                       </td>
@@ -441,6 +449,46 @@ td.sec-result   { background:#f0fdf4; }
                       <td class="text-end text-primary">R$ {{ prod_diario.ef_mes_custo_unit | fmtnum }}</td>
                       <td colspan="10"></td>
                     </tr>
+                    {# ── Sobra/Perda (calculada + ajuste manual) ── #}
+                    {% if total_var.has > 0 %}
+                    {% set _aj_cid = ajustes_sobra.get(cid, {}) if ajustes_sobra is defined else {} %}
+                    {% set _aj_pid = _aj_cid.get(pid, none) %}
+                    {% set sobra_ajuste = _aj_pid.ajuste_litros if _aj_pid else 0.0 %}
+                    {% set sobra_final = total_var.v + sobra_ajuste %}
+                    {% set sobra_r = sobra_final * prod_diario.ef_mes_custo_unit %}
+                    <tr style="background:#f0fdf4;border-top:2px solid #16a34a;">
+                      <td class="px-3 fw-bold" style="color:#16a34a;">
+                        Sobra/Perda
+                        <button type="button"
+                                class="btn btn-outline-warning btn-sm ms-2 py-0 px-1"
+                                style="font-size:.7rem;"
+                                data-cid="{{ cid }}"
+                                data-pid="{{ pid }}"
+                                data-nome="{{ prod_diario.nome | e }}"
+                                data-sobra-calc="{{ total_var.v }}"
+                                data-custo-unit="{{ prod_diario.ef_mes_custo_unit }}"
+                                data-ini="{{ data_inicio.strftime('%Y-%m-%d') }}"
+                                data-fim="{{ data_fim.strftime('%Y-%m-%d') }}"
+                                data-ajuste="{{ sobra_ajuste }}"
+                                data-obs="{{ (_aj_pid.observacao if _aj_pid and _aj_pid.observacao else '') | e }}"
+                                onclick="openAjuste(this)"
+                                title="Ajustar sobra/perda manualmente">
+                          <i class="bi bi-pencil-fill"></i> Ajustar
+                        </button>
+                      </td>
+                      <td colspan="13"></td>
+                      <td class="text-end fw-bold {% if sobra_final >= -0.001 %}text-success{% else %}text-danger{% endif %}">
+                        {% if sobra_final >= 0 %}+{% endif %}{{ sobra_final | fmtnum }} L
+                        {% if sobra_ajuste != 0 %}
+                          <small class="text-warning ms-1" title="Ajuste aplicado: {{ sobra_ajuste | fmtnum }} L">✱</small>
+                        {% endif %}
+                      </td>
+                      <td class="text-end fw-bold {% if sobra_r >= -0.001 %}text-success{% else %}text-danger{% endif %}">
+                        R$ {{ sobra_r | fmtmoney }}
+                      </td>
+                      <td colspan="2"></td>
+                    </tr>
+                    {% endif %}
                   </tfoot>
                 </table>
               </div>
@@ -573,5 +621,122 @@ function fmt(d) {
          String(d.getMonth() + 1).padStart(2, '0') + '-' +
          String(d.getDate()).padStart(2, '0');
 }
+
+// ── Ajuste de sobra/perda ────────────────────────────────────────────────────
+let _aj = {};
+
+function openAjuste(btn) {
+  const d = btn.dataset;
+  _aj = {
+    cid:       parseInt(d.cid),
+    pid:       parseInt(d.pid),
+    sobraCalc: parseFloat(d.sobraCalc),
+    custoUnit: parseFloat(d.custoUnit),
+    dataInicio: d.ini,
+    dataFim:    d.fim
+  };
+  document.getElementById('aj-produto-nome').textContent = d.nome;
+  document.getElementById('aj-sobra-calc').textContent =
+    (_aj.sobraCalc >= 0 ? '+' : '') + _aj.sobraCalc.toFixed(3) + ' L';
+  const ajAtual = parseFloat(d.ajuste) || 0;
+  document.getElementById('aj-ajuste').value = ajAtual ? ajAtual.toFixed(3) : '';
+  document.getElementById('aj-obs').value = d.obs || '';
+  atualizarPreviewSobra();
+  new bootstrap.Modal(document.getElementById('modalAjusteSobra')).show();
+}
+
+function atualizarPreviewSobra() {
+  const ajuste = parseFloat(document.getElementById('aj-ajuste').value) || 0;
+  const sobraFinal = _aj.sobraCalc + ajuste;
+  const sobraR = sobraFinal * _aj.custoUnit;
+  document.getElementById('aj-sobra-final').textContent =
+    (sobraFinal >= 0 ? '+' : '') + sobraFinal.toFixed(3);
+  document.getElementById('aj-sobra-r').textContent =
+    sobraR.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const cls = sobraFinal >= -0.001 ? 'text-success' : 'text-danger';
+  const el = document.getElementById('aj-preview-alert');
+  el.className = 'alert py-2 small ' + (sobraFinal >= -0.001 ? 'alert-success' : 'alert-danger');
+}
+
+async function salvarAjuste() {
+  const ajuste = parseFloat(document.getElementById('aj-ajuste').value) || 0;
+  const obs = document.getElementById('aj-obs').value;
+  const btn = document.getElementById('aj-btn-salvar');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Salvando…';
+  try {
+    const resp = await fetch('/relatorios/api/ajuste_sobra', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        cliente_id: _aj.cid,
+        produto_id: _aj.pid,
+        data_inicio: _aj.dataInicio,
+        data_fim: _aj.dataFim,
+        ajuste_litros: ajuste,
+        observacao: obs
+      })
+    });
+    const json = await resp.json();
+    if (!resp.ok || json.error) throw new Error(json.error || 'Erro ao salvar');
+    window.location.reload();
+  } catch (e) {
+    btn.disabled = false;
+    btn.innerHTML = '<i class="bi bi-floppy me-1"></i> Salvar Ajuste';
+    alert('Erro ao salvar ajuste: ' + e.message);
+  }
+}
 </script>
+
+{# ── Modal Ajuste Sobra/Perda ────────────────────────────────────────────── #}
+<div class="modal fade" id="modalAjusteSobra" tabindex="-1" aria-labelledby="modalAjusteLabel" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header" style="background:#16a34a;color:#fff;">
+        <h5 class="modal-title" id="modalAjusteLabel">
+          <i class="bi bi-pencil-fill me-2"></i>Ajuste de Sobra/Perda
+        </h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="mb-3">
+          <label class="form-label fw-semibold small text-muted text-uppercase">Produto</label>
+          <div id="aj-produto-nome" class="fw-bold fs-6"></div>
+        </div>
+        <div class="mb-3">
+          <label class="form-label fw-semibold small text-muted text-uppercase">Sobra/Perda Calculada</label>
+          <div id="aj-sobra-calc" class="fw-semibold"></div>
+        </div>
+        <div class="mb-3">
+          <label for="aj-ajuste" class="form-label fw-semibold">
+            Ajuste de Saldo (L)
+            <small class="text-muted fw-normal ms-1">— somado ao cálculo automático</small>
+          </label>
+          <input type="number" id="aj-ajuste" class="form-control" step="0.001"
+                 placeholder="0.000" oninput="atualizarPreviewSobra()">
+          <div class="form-text">
+            Positivo → adiciona litros à sobra &nbsp;|&nbsp; Negativo → reduz sobra (aumenta perda).<br>
+            Ex.: se chegou compra de 04/04 que ainda consta como EF, informe <code>-19000</code>.
+          </div>
+        </div>
+        <div class="mb-3">
+          <label for="aj-obs" class="form-label fw-semibold">Observação</label>
+          <textarea id="aj-obs" class="form-control" rows="2"
+                    placeholder="Ex.: compra de 04/04 não entrou até 31/03"></textarea>
+        </div>
+        <div id="aj-preview-alert" class="alert alert-success py-2 small">
+          Sobra/Perda final: <strong id="aj-sobra-final"></strong> L
+          &nbsp;=&nbsp; R$ <strong id="aj-sobra-r"></strong>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+        <button type="button" id="aj-btn-salvar" class="btn btn-success" onclick="salvarAjuste()">
+          <i class="bi bi-floppy me-1"></i> Salvar Ajuste
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
 {% endblock %}
