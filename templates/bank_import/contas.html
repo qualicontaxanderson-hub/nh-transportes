@@ -131,7 +131,9 @@
                   data-conta="{{ (c.conta or '')|e }}"
                   data-apelido="{{ (c.apelido or '')|e }}"
                   data-cliente-id="{{ c.cliente_id or '' }}"
-                  data-plano-id="{{ c.plano_contas_conta_id or '' }}">
+                  data-plano-id="{{ c.plano_contas_conta_id or '' }}"
+                  data-coligada-debito-id="{{ c.conta_coligada_debito_id or '' }}"
+                  data-coligada-credito-id="{{ c.conta_coligada_credito_id or '' }}">
                 <td>
                   <strong>{{ c.apelido or c.banco_nome }}</strong>
                   {% if c.apelido and c.apelido != c.banco_nome %}
@@ -160,7 +162,7 @@
                 </td>
                 <td class="text-center actions-cell" onclick="event.stopPropagation()">
                   <button class="btn-acao btn-editar"
-                          onclick="abrirEditar({{ c.id }}, '{{ c.banco_nome|e }}', '{{ (c.agencia or '')|e }}', '{{ (c.conta or '')|e }}', '{{ (c.apelido or '')|e }}', {{ c.cliente_id or 'null' }}, {{ c.plano_contas_conta_id or 'null' }})"
+                          onclick="abrirEditar({{ c.id }}, '{{ c.banco_nome|e }}', '{{ (c.agencia or '')|e }}', '{{ (c.conta or '')|e }}', '{{ (c.apelido or '')|e }}', {{ c.cliente_id or 'null' }}, {{ c.plano_contas_conta_id or 'null' }}, {{ c.conta_coligada_debito_id or 'null' }}, {{ c.conta_coligada_credito_id or 'null' }})"
                           title="Editar">
                     <i class="bi bi-pencil"></i>
                   </button>
@@ -236,6 +238,28 @@
           <label class="form-label form-label-sm">Apelido</label>
           <input type="text" id="nc_apelido" class="form-control form-control-sm" placeholder="Ex: Conta Corrente Principal">
         </div>
+        <hr class="my-3">
+        <p class="text-muted small mb-2"><i class="bi bi-building me-1"></i> <strong>Contas Contábeis para Operações entre Coligadas</strong><br>Configure as contas a usar quando esta conta receber ou enviar valores para empresas do mesmo grupo.</p>
+        <div class="mb-3">
+          <label class="form-label fw-semibold form-label-sm">Conta Contábil Coligada – Débito</label>
+          <select id="nc_conta_coligada_debito_id" class="form-select form-select-sm">
+            <option value="">— Não configurado —</option>
+            {% for pc in plano_contas %}
+            <option value="{{ pc.id }}">{{ pc.codigo }} – {{ pc.nome }} <small>({{ pc.grupo_nome }})</small></option>
+            {% endfor %}
+          </select>
+          <div class="form-text">Conta usada como DÉBITO quando esta conta enviar valores a uma coligada.</div>
+        </div>
+        <div class="mb-3">
+          <label class="form-label fw-semibold form-label-sm">Conta Contábil Coligada – Crédito</label>
+          <select id="nc_conta_coligada_credito_id" class="form-select form-select-sm">
+            <option value="">— Não configurado —</option>
+            {% for pc in plano_contas %}
+            <option value="{{ pc.id }}">{{ pc.codigo }} – {{ pc.nome }} <small>({{ pc.grupo_nome }})</small></option>
+            {% endfor %}
+          </select>
+          <div class="form-text">Conta usada como CRÉDITO quando esta conta receber valores de uma coligada.</div>
+        </div>
       </div>
       <div class="modal-footer py-2">
         <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Cancelar</button>
@@ -294,6 +318,28 @@
           <label class="form-label form-label-sm">Apelido</label>
           <input type="text" id="ed_apelido" class="form-control form-control-sm">
         </div>
+        <hr class="my-3">
+        <p class="text-muted small mb-2"><i class="bi bi-building me-1"></i> <strong>Contas Contábeis para Operações entre Coligadas</strong><br>Configure as contas a usar quando esta conta receber ou enviar valores para empresas do mesmo grupo.</p>
+        <div class="mb-3">
+          <label class="form-label fw-semibold form-label-sm">Conta Contábil Coligada – Débito</label>
+          <select id="ed_conta_coligada_debito_id" class="form-select form-select-sm">
+            <option value="">— Não configurado —</option>
+            {% for pc in plano_contas %}
+            <option value="{{ pc.id }}">{{ pc.codigo }} – {{ pc.nome }} <small>({{ pc.grupo_nome }})</small></option>
+            {% endfor %}
+          </select>
+          <div class="form-text">Conta usada como DÉBITO quando esta conta enviar valores a uma coligada.</div>
+        </div>
+        <div class="mb-3">
+          <label class="form-label fw-semibold form-label-sm">Conta Contábil Coligada – Crédito</label>
+          <select id="ed_conta_coligada_credito_id" class="form-select form-select-sm">
+            <option value="">— Não configurado —</option>
+            {% for pc in plano_contas %}
+            <option value="{{ pc.id }}">{{ pc.codigo }} – {{ pc.nome }} <small>({{ pc.grupo_nome }})</small></option>
+            {% endfor %}
+          </select>
+          <div class="form-text">Conta usada como CRÉDITO quando esta conta receber valores de uma coligada.</div>
+        </div>
       </div>
       <div class="modal-footer py-2">
         <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Cancelar</button>
@@ -328,7 +374,9 @@ document.querySelectorAll('#tbl-lista tbody tr.row-item').forEach(function(row) 
       d.conta,
       d.apelido,
       d.clienteId ? parseInt(d.clienteId) : null,
-      d.planoId   ? parseInt(d.planoId)   : null
+      d.planoId   ? parseInt(d.planoId)   : null,
+      d.coligadaDebitoId  ? parseInt(d.coligadaDebitoId)  : null,
+      d.coligadaCreditoId ? parseInt(d.coligadaCreditoId) : null
     );
   });
 });
@@ -360,6 +408,8 @@ function salvarNovaConta() {
 
   const cliente_id_raw = document.getElementById('nc_cliente_id').value;
   const plano_raw = document.getElementById('nc_plano_contas_conta_id').value;
+  const col_deb_raw = document.getElementById('nc_conta_coligada_debito_id').value;
+  const col_cred_raw = document.getElementById('nc_conta_coligada_credito_id').value;
   fetch(BASE, {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
@@ -370,6 +420,8 @@ function salvarNovaConta() {
       apelido: document.getElementById('nc_apelido').value.trim(),
       cliente_id: cliente_id_raw ? parseInt(cliente_id_raw) : null,
       plano_contas_conta_id: plano_raw ? parseInt(plano_raw) : null,
+      conta_coligada_debito_id: col_deb_raw ? parseInt(col_deb_raw) : null,
+      conta_coligada_credito_id: col_cred_raw ? parseInt(col_cred_raw) : null,
     })
   })
   .then(r => r.json())
@@ -380,7 +432,7 @@ function salvarNovaConta() {
 }
 
 // ---- Editar ----
-function abrirEditar(id, banco, agencia, conta, apelido, clienteId, planoId) {
+function abrirEditar(id, banco, agencia, conta, apelido, clienteId, planoId, coligadaDebitoId, coligadaCreditoId) {
   document.getElementById('ed_id').value = id;
   document.getElementById('ed_banco').value = banco;
   document.getElementById('ed_agencia').value = agencia;
@@ -388,6 +440,8 @@ function abrirEditar(id, banco, agencia, conta, apelido, clienteId, planoId) {
   document.getElementById('ed_apelido').value = apelido;
   document.getElementById('ed_cliente_id').value = clienteId !== null ? String(clienteId) : '';
   document.getElementById('ed_plano_contas_conta_id').value = planoId !== null ? String(planoId) : '';
+  document.getElementById('ed_conta_coligada_debito_id').value  = coligadaDebitoId  !== null ? String(coligadaDebitoId)  : '';
+  document.getElementById('ed_conta_coligada_credito_id').value = coligadaCreditoId !== null ? String(coligadaCreditoId) : '';
   new bootstrap.Modal(document.getElementById('modalEditarConta')).show();
 }
 
@@ -399,6 +453,8 @@ function salvarEdicao() {
 
   const cliente_id_raw = document.getElementById('ed_cliente_id').value;
   const plano_raw = document.getElementById('ed_plano_contas_conta_id').value;
+  const col_deb_raw = document.getElementById('ed_conta_coligada_debito_id').value;
+  const col_cred_raw = document.getElementById('ed_conta_coligada_credito_id').value;
   fetch(`/banco/api/contas/${id}`, {
     method: 'PUT',
     headers: {'Content-Type': 'application/json'},
@@ -409,6 +465,8 @@ function salvarEdicao() {
       apelido: document.getElementById('ed_apelido').value.trim(),
       cliente_id: cliente_id_raw ? parseInt(cliente_id_raw) : null,
       plano_contas_conta_id: plano_raw ? parseInt(plano_raw) : null,
+      conta_coligada_debito_id: col_deb_raw ? parseInt(col_deb_raw) : null,
+      conta_coligada_credito_id: col_cred_raw ? parseInt(col_cred_raw) : null,
     })
   })
   .then(r => r.json())
