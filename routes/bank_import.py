@@ -3232,6 +3232,52 @@ def api_dias_importados():
     })
 
 
+@bp.route('/api/ultimo-dia-importado')
+@login_required
+def api_ultimo_dia_importado():
+    """
+    Retorna todas as contas bancárias ativas de uma empresa com seu último dia importado.
+    GET params:
+      - empresa_id (int, obrigatório)
+    """
+    empresa_id = request.args.get('empresa_id', type=int)
+    if not empresa_id:
+        return jsonify({'success': False, 'message': 'Informe empresa_id'}), 400
+
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        _ensure_bank_accounts_ultima_data(cursor, conn)
+
+        cursor.execute(
+            """SELECT ba.id,
+                      COALESCE(ba.apelido, ba.banco_nome) AS titulo,
+                      ba.banco_nome, ba.agencia, ba.conta,
+                      ba.ultima_data_importacao
+               FROM bank_accounts ba
+               WHERE ba.ativo = 1 AND ba.cliente_id = %s
+               ORDER BY titulo""",
+            (empresa_id,),
+        )
+        rows = cursor.fetchall()
+    finally:
+        cursor.close()
+        conn.close()
+
+    contas = []
+    for r in rows:
+        raw = r.get('ultima_data_importacao')
+        ultima = raw.isoformat() if raw else None
+        label = r['titulo'] or r['banco_nome'] or f"Conta #{r['id']}"
+        if r.get('agencia'):
+            label += f" – Ag {r['agencia']}"
+        if r.get('conta'):
+            label += f" / {r['conta']}"
+        contas.append({'id': r['id'], 'titulo': label, 'ultima_data_importacao': ultima})
+
+    return jsonify({'success': True, 'contas': contas})
+
+
 # ---------------------------------------------------------------------------
 # Integração Dropbox API
 # ---------------------------------------------------------------------------
