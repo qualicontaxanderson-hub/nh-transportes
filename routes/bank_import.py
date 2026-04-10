@@ -26,12 +26,18 @@ _ld_bank_tx_id_ready = False
 _bsm_descricao_chave_ready = False
 _orphaned_ld_cleanup_done = False
 _auto_regra_subcategoria_fixed = False
+_bank_accounts_ultima_data_ready = False
 # Timestamp-based retry cooldown: after a failed attempt, wait _MIGRATION_RETRY_DELAY
 # seconds before retrying.  This avoids hammering the DB on every request but still
 # allows recovery from transient errors (e.g., DB temporarily unavailable at startup).
 _MIGRATION_RETRY_DELAY = 60  # seconds
 _bsm_descricao_chave_retry_after = 0.0   # epoch timestamp; 0 = may run immediately
 _ld_bank_tx_id_retry_after       = 0.0
+_bank_accounts_ultima_data_retry_after = 0.0
+
+# Regex to extract DDMMYYYY date patterns from OFX filenames.
+# Uses word-boundary-like anchors (no surrounding digits) to avoid false positives.
+_RE_DATA_ARQUIVO = re.compile(r'(?<!\d)(\d{2})(\d{2})(\d{4})(?!\d)')
 
 
 def _cleanup_orphaned_lancamentos_despesas():
@@ -412,6 +418,41 @@ def _ensure_ld_bank_tx_id():
             conn.close()
 
 
+def _ensure_bank_accounts_ultima_data():
+    """Garante que bank_accounts.ultima_data_importacao existe. Idempotente."""
+    global _bank_accounts_ultima_data_ready, _bank_accounts_ultima_data_retry_after
+    if _bank_accounts_ultima_data_ready:
+        return
+    if _bank_accounts_ultima_data_retry_after > time.time():
+        return
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT COUNT(*) FROM information_schema.COLUMNS"
+            " WHERE TABLE_SCHEMA = DATABASE()"
+            " AND TABLE_NAME = 'bank_accounts'"
+            " AND COLUMN_NAME = 'ultima_data_importacao'"
+        )
+        if cursor.fetchone()[0] == 0:
+            cursor.execute(
+                "ALTER TABLE bank_accounts"
+                " ADD COLUMN ultima_data_importacao DATE NULL"
+                " COMMENT 'Data extraída do último arquivo OFX importado com sucesso'"
+            )
+            conn.commit()
+            logger.info("_ensure_bank_accounts_ultima_data: coluna ultima_data_importacao criada")
+        cursor.close()
+        _bank_accounts_ultima_data_ready = True
+    except Exception:
+        logger.warning("_ensure_bank_accounts_ultima_data: falha ao criar coluna", exc_info=True)
+        _bank_accounts_ultima_data_retry_after = time.time() + _MIGRATION_RETRY_DELAY
+    finally:
+        if conn:
+            conn.close()
+
+
 # ---------------------------------------------------------------------------
 # Funções auxiliares
 # ---------------------------------------------------------------------------
@@ -425,6 +466,107 @@ def _desc_chave(descricao: str) -> str:
     distintos (ex: mesma empresa pagando por categorias diferentes de despesas).
     """
     return (descricao or '').upper().strip()[:100]
+
+
+def _extrair_data_arquivo(nome: str):
+    """Extrai a última data no formato DDMMYYYY do nome de um arquivo OFX.
+
+    Suporta nomes com múltiplas datas (ex: "cora nh gtba 01042026 a 09042026"):
+    retorna a ÚLTIMA data encontrada, que representa o fim do período do extrato.
+
+    Retorna um objeto ``datetime.date`` ou ``None`` se nenhuma data válida for encontrada.
+    """
+    stem = os.path.splitext(nome)[0]
+    matches = _RE_DATA_ARQUIVO.findall(stem)
+    for dia, mes, ano in reversed(matches):
+        try:
+            return _dt.date(int(ano), int(mes), int(dia))
+        except ValueError:
+            continue
+    return None
+
+
+def _validar_data_importacao(nome_arquivo, account_id, cursor):
+    """Valida as regras de data de importação para um arquivo OFX.
+
+    Regras:
+      1. Data extraída do nome do arquivo não pode ser futura.
+      2. Data não pode ser menor ou igual à ``ultima_data_importacao`` já registrada
+         para a conta (período já importado).
+
+    Retorna ``(data_arquivo, error_message)``.
+    ``data_arquivo`` é o objeto ``date`` extraído (ou None).
+    ``error_message`` é uma string de erro ou None quando não há erro.
+    """
+    data_arquivo = _extrair_data_arquivo(nome_arquivo)
+
+    if data_arquivo is None:
+        return None, None  # sem data no nome — sem restrição
+
+    hoje = _dt.date.today()
+
+    # Regra 1: data futura
+    if data_arquivo > hoje:
+        data_str = data_arquivo.strftime('%d/%m/%Y')
+        return data_arquivo, (
+            f'A data do arquivo ({data_str}) é futura. '
+            'Só é possível importar extratos com data de hoje ou anterior.'
+        )
+
+    # Regra 2: período já importado
+    try:
+        cursor.execute(
+            "SELECT ultima_data_importacao FROM bank_accounts WHERE id = %s",
+            (account_id,),
+        )
+        row = cursor.fetchone()
+    except Exception:
+        row = None
+
+    if row:
+        ultima = row.get('ultima_data_importacao') if isinstance(row, dict) else (row[0] if row else None)
+        if ultima:
+            if isinstance(ultima, str):
+                try:
+                    ultima = _dt.date.fromisoformat(ultima)
+                except ValueError:
+                    ultima = None
+            if ultima and data_arquivo <= ultima:
+                ultima_str = ultima.strftime('%d/%m/%Y')
+                data_str = data_arquivo.strftime('%d/%m/%Y')
+                return data_arquivo, (
+                    f'Verifique o arquivo — período já importado. '
+                    f'O último extrato importado para esta conta tinha data {ultima_str}. '
+                    f'O arquivo selecionado tem data {data_str}, que é igual ou anterior.'
+                )
+
+    return data_arquivo, None
+
+
+def _atualizar_ultima_data_importacao(cursor, conn, account_id, data_arquivo):
+    """Atualiza ultima_data_importacao da conta se data_arquivo for mais recente."""
+    if not data_arquivo:
+        return
+    try:
+        cursor.execute(
+            "UPDATE bank_accounts"
+            " SET ultima_data_importacao = %s"
+            " WHERE id = %s"
+            "   AND (ultima_data_importacao IS NULL OR ultima_data_importacao < %s)",
+            (data_arquivo, account_id, data_arquivo),
+        )
+        conn.commit()
+    except Exception:
+        logger.warning(
+            "_atualizar_ultima_data_importacao: falha ao atualizar account_id=%s", account_id,
+            exc_info=True,
+        )
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+
+
 
 
 def _get_accounts(cursor, cliente_id=None):
@@ -2948,8 +3090,23 @@ def scan_inbox():
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
 
+    # ── Validação de data do arquivo ──────────────────────────────────────────
+    _ensure_bank_accounts_ultima_data()
+    data_arquivo, erro_data = _validar_data_importacao(nome_arquivo, account_id, cursor)
+    if erro_data:
+        cursor.close()
+        conn.close()
+        if request.is_json:
+            return jsonify({'success': False, 'message': erro_data}), 422
+        flash(erro_data, 'danger')
+        return redirect(url_for('bank_import.index'))
+    # ─────────────────────────────────────────────────────────────────────────
+
     _ensure_descricao_chave()
     inseridos, duplicados, duplicados_lista = _save_transactions(cursor, conn, account_id, transactions)
+
+    # Atualiza a data do último extrato importado para esta conta
+    _atualizar_ultima_data_importacao(cursor, conn, account_id, data_arquivo)
 
     cursor.close()
     conn.close()
@@ -3095,17 +3252,25 @@ def api_dropbox_files():
 
     filtrado = False
     filtrado_sem_resultado = False
+    ultima_data_importacao = None
     if account_id:
+        _ensure_bank_accounts_ultima_data()
         conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)
         cursor.execute(
-            "SELECT banco_nome, agencia, conta, apelido FROM bank_accounts WHERE id = %s",
+            "SELECT banco_nome, agencia, conta, apelido, ultima_data_importacao"
+            " FROM bank_accounts WHERE id = %s",
             (account_id,),
         )
         acc = cursor.fetchone()
         cursor.close()
         conn.close()
         if acc:
+            raw_ult = acc.get('ultima_data_importacao')
+            if raw_ult:
+                ultima_data_importacao = (
+                    raw_ult.isoformat() if hasattr(raw_ult, 'isoformat') else str(raw_ult)
+                )
             # Tokens de busca: sinais específicos do BANCO e CONTA para localizar o arquivo.
             # Tokens de dígitos (conta/agência) são altamente confiáveis — match direto.
             # Tokens de texto (banco, apelido) são ambíguos e requerem verificação de ACCTID:
@@ -3236,6 +3401,11 @@ def api_dropbox_files():
                     # front-end informe o usuário e permita selecionar manualmente.
                     filtrado_sem_resultado = True
 
+    # Enrich each file with the date parsed from its filename
+    for f in arquivos:
+        d = _extrair_data_arquivo(f.get('nome', ''))
+        f['data_arquivo'] = d.isoformat() if d else None
+
     return jsonify({
         'success': True,
         'files': arquivos,
@@ -3243,6 +3413,7 @@ def api_dropbox_files():
         'pasta_processados': processed,
         'filtrado': filtrado,
         'filtrado_sem_resultado': filtrado_sem_resultado,
+        'ultima_data_importacao': ultima_data_importacao,
     })
 
 
@@ -3273,10 +3444,26 @@ def importar_dropbox():
         flash('Nenhum arquivo especificado.', 'warning')
         return redirect(url_for('bank_import.index'))
 
+    # ── Validação de data do arquivo ──────────────────────────────────────────
+    _ensure_bank_accounts_ultima_data()
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    data_arquivo, erro_data = _validar_data_importacao(nome_arquivo, account_id, cursor)
+    if erro_data:
+        cursor.close()
+        conn.close()
+        if request.is_json:
+            return jsonify({'success': False, 'message': erro_data}), 422
+        flash(erro_data, 'danger')
+        return redirect(url_for('bank_import.index'))
+    # ─────────────────────────────────────────────────────────────────────────
+
     from integrations.dropbox_ofx import baixar_arquivo, mover_para_processados
     try:
         content = baixar_arquivo(nome_arquivo)
     except RuntimeError as exc:
+        cursor.close()
+        conn.close()
         if request.is_json:
             return jsonify({'success': False, 'message': str(exc)}), 400
         flash(f'Erro ao baixar arquivo do Dropbox: {exc}', 'danger')
@@ -3286,15 +3473,19 @@ def importar_dropbox():
     transactions = OFXParser(content).get_transactions()
 
     if not transactions:
+        cursor.close()
+        conn.close()
         if request.is_json:
             return jsonify({'success': False, 'message': 'Nenhuma transação encontrada no arquivo OFX.'}), 422
         flash('Nenhuma transação encontrada no arquivo OFX.', 'warning')
         return redirect(url_for('bank_import.index'))
 
-    conn = get_db_connection()
-    cursor = conn.cursor(dictionary=True)
     _ensure_descricao_chave()
     inseridos, duplicados, duplicados_lista = _save_transactions(cursor, conn, account_id, transactions)
+
+    # Atualiza a data do último extrato importado para esta conta
+    _atualizar_ultima_data_importacao(cursor, conn, account_id, data_arquivo)
+
     cursor.close()
     conn.close()
 

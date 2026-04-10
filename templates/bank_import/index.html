@@ -1064,14 +1064,14 @@
                         </div>`;
                     return;
                 }
-                renderDropboxFiles(data.files, data.filtrado, data.filtrado_sem_resultado);
+                renderDropboxFiles(data.files, data.filtrado, data.filtrado_sem_resultado, data.ultima_data_importacao || null);
             })
             .catch(err => {
                 listDiv.innerHTML = `<div class="alert alert-danger py-2">Erro ao verificar Dropbox: ${err}</div>`;
             });
     }
 
-    function renderDropboxFiles(files, filtrado, filtradoSemResultado) {
+    function renderDropboxFiles(files, filtrado, filtradoSemResultado, ultimaDataImportacao) {
         const listDiv = document.getElementById('dbxFileList');
         const wrap = document.createElement('div');
 
@@ -1088,18 +1088,33 @@
             return;
         } else {
             header.className = filtrado ? 'alert alert-success py-2 mb-3' : 'alert alert-info py-2 mb-3';
-            header.innerHTML = filtrado
+            let headerHtml = filtrado
                 ? `<i class="bi bi-funnel-fill text-success"></i> <strong>${files.length}</strong> arquivo(s) encontrado(s) para a conta selecionada.`
                 : `<i class="bi bi-check-circle"></i> <strong>${files.length}</strong> arquivo(s) OFX encontrado(s) no Dropbox. <small class="text-muted">(selecione uma conta para filtrar)</small>`;
+            if (ultimaDataImportacao) {
+                const ultFormatted = ultimaDataImportacao.split('-').reverse().join('/');
+                headerHtml += ` <span class="ms-2 badge bg-secondary" title="Último extrato já importado para esta conta"><i class="bi bi-calendar-check"></i> Último importado: ${ultFormatted}</span>`;
+            }
+            header.innerHTML = headerHtml;
         }
         wrap.appendChild(header);
+
+        // Helper: parse ISO date string to Date (noon UTC to avoid TZ shifts)
+        function _parseIso(s) {
+            if (!s) return null;
+            const p = s.split('-');
+            return p.length === 3 ? new Date(Date.UTC(+p[0], +p[1]-1, +p[2], 12)) : null;
+        }
+        const hoje = new Date(); hoje.setHours(12, 0, 0, 0);
+        const ultDate = _parseIso(ultimaDataImportacao);
+        const dias90 = new Date(hoje); dias90.setDate(hoje.getDate() - 90);
 
         const tableWrap = document.createElement('div');
         tableWrap.className = 'table-responsive';
         const t = document.createElement('table');
         t.className = 'table table-sm table-hover';
         t.style.fontSize = '0.88rem';
-        t.innerHTML = `<thead class="table-light"><tr><th>Arquivo</th><th>Modificado</th><th>Tamanho</th><th class="text-center">Ação</th></tr></thead>`;
+        t.innerHTML = `<thead class="table-light"><tr><th>Arquivo</th><th>Data (extrato)</th><th>Modificado</th><th>Tamanho</th><th class="text-center">Ação</th></tr></thead>`;
         const tbody = document.createElement('tbody');
 
         files.forEach(f => {
@@ -1112,6 +1127,36 @@
             strong.textContent = f.nome;
             tdNome.appendChild(strong);
 
+            // ── Date badge logic ──
+            const tdData = document.createElement('td');
+            const fDate = _parseIso(f.data_arquivo);
+            let badgeHtml = '<span class="text-muted" style="font-size:0.8rem;">—</span>';
+            let bloqueado = false;
+            let aviso90 = false;
+            let dataArquivoIso = f.data_arquivo || null;
+
+            if (fDate) {
+                const fDateStr = f.data_arquivo.split('-').reverse().join('/');
+                if (fDate > hoje) {
+                    // Futuro — bloquear
+                    badgeHtml = `<span class="badge bg-danger" title="Data futura — não é possível importar"><i class="bi bi-calendar-x"></i> ${fDateStr} (futuro)</span>`;
+                    bloqueado = true;
+                } else if (ultDate && fDate <= ultDate) {
+                    // Período já importado — bloquear
+                    const ultStr = ultimaDataImportacao.split('-').reverse().join('/');
+                    badgeHtml = `<span class="badge bg-warning text-dark" title="Período já importado (último: ${ultStr})"><i class="bi bi-lock-fill"></i> ${fDateStr} (já importado)</span>`;
+                    bloqueado = true;
+                } else if (fDate < dias90) {
+                    // Mais de 90 dias — aviso (não bloqueia)
+                    badgeHtml = `<span class="badge bg-secondary" title="Data com mais de 90 dias — confirme antes de importar"><i class="bi bi-exclamation-circle"></i> ${fDateStr} (&gt;90 dias)</span>`;
+                    aviso90 = true;
+                } else {
+                    // OK
+                    badgeHtml = `<span class="badge bg-success"><i class="bi bi-calendar-check"></i> ${fDateStr}</span>`;
+                }
+            }
+            tdData.innerHTML = badgeHtml;
+
             const tdMod = document.createElement('td');
             tdMod.textContent = f.modificado;
 
@@ -1121,15 +1166,25 @@
             const tdAcao = document.createElement('td');
             tdAcao.className = 'text-center';
             const btn = document.createElement('button');
-            btn.className = 'btn btn-sm btn-success';
             btn.dataset.nomeArquivo = f.nome;
-            btn.innerHTML = '<i class="bi bi-cloud-download"></i> Importar do Dropbox';
-            btn.addEventListener('click', function() {
-                importarDropbox(this.dataset.nomeArquivo);
-            });
+            btn.dataset.dataArquivo = dataArquivoIso || '';
+            btn.dataset.aviso90 = aviso90 ? '1' : '';
+            if (bloqueado) {
+                btn.className = 'btn btn-sm btn-secondary';
+                btn.disabled = true;
+                btn.title = 'Importação bloqueada para este arquivo';
+                btn.innerHTML = '<i class="bi bi-lock"></i> Bloqueado';
+            } else {
+                btn.className = 'btn btn-sm btn-success';
+                btn.innerHTML = '<i class="bi bi-cloud-download"></i> Importar do Dropbox';
+                btn.addEventListener('click', function() {
+                    importarDropbox(this.dataset.nomeArquivo, this.dataset.dataArquivo, this.dataset.aviso90 === '1');
+                });
+            }
             tdAcao.appendChild(btn);
 
             tr.appendChild(tdNome);
+            tr.appendChild(tdData);
             tr.appendChild(tdMod);
             tr.appendChild(tdSize);
             tr.appendChild(tdAcao);
@@ -1143,13 +1198,24 @@
         listDiv.appendChild(wrap);
     }
 
-    function importarDropbox(nomeArquivo) {
+    function importarDropbox(nomeArquivo, dataArquivoIso, aviso90) {
         const sel = document.getElementById('dbxAccountId');
         const accountId = sel ? sel.value : '';
         if (!accountId) {
             alert('Selecione uma conta bancária antes de importar.');
             return;
         }
+
+        // Aviso para extratos muito antigos (>90 dias)
+        if (aviso90 && dataArquivoIso) {
+            const dataStr = dataArquivoIso.split('-').reverse().join('/');
+            if (!confirm(
+                `Atenção: o extrato "${nomeArquivo}" tem data ${dataStr}, que é há mais de 90 dias.\n\n` +
+                `Tem certeza que deseja importar este período?\n\n` +
+                `Clique em OK para confirmar ou Cancelar para revisar.`
+            )) return;
+        }
+
         if (!confirm(`Importar "${nomeArquivo}" do Dropbox para a conta selecionada?\n\nO arquivo será movido para a pasta IMPORTADOS do Dropbox após a importação.`)) return;
 
         fetch('{{ url_for("bank_import.importar_dropbox") }}', {
