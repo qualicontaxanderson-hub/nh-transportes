@@ -863,6 +863,7 @@ def _fetch_despesas_lancamentos(conn, data_inicio, data_fim, empresa_ids, titulo
         INNER JOIN titulos_despesas    t ON t.id = ld.titulo_id
         INNER JOIN categorias_despesas c ON c.id = ld.categoria_id
         WHERE {' AND '.join(where)}
+          AND COALESCE(c.exibir_dre, 1) = 1
         ORDER BY titulo_ordem, t.nome, categoria_ordem, c.nome, ld.data
     """
     cur = conn.cursor(dictionary=True)

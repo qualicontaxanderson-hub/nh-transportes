@@ -1,5 +1,7 @@
 import logging
 
+import mysql.connector
+
 from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify
 from flask_login import login_required, current_user
 from utils.db import get_db_connection
@@ -34,6 +36,16 @@ def _ensure_tables():
                     REFERENCES plano_contas_contas(id) ON DELETE SET NULL
             ) COMMENT='Vínculo por empresa entre categorias de despesas e contas contábeis'
         """)
+        # Adiciona coluna exibir_dre se ainda não existir (idempotente)
+        try:
+            cursor.execute("""
+                ALTER TABLE categorias_despesas
+                ADD COLUMN exibir_dre TINYINT(1) NOT NULL DEFAULT 1
+                COMMENT 'Se 1, a categoria aparece no DRE; se 0, é omitida do DRE'
+            """)
+        except mysql.connector.errors.DatabaseError as exc:
+            if exc.errno != 1060:  # 1060 = Duplicate column name
+                raise
         conn.commit()
         _tables_ready = True
     except Exception:
@@ -331,14 +343,16 @@ def nova_categoria():
 
         if request.method == 'POST':
             titulo_id = request.form.get('titulo_id')
+            exibir_dre = 1 if request.form.get('exibir_dre') else 0
             cursor.execute("""
-                INSERT INTO categorias_despesas (titulo_id, nome, ordem, ativo)
-                VALUES (%s, %s, %s, %s)
+                INSERT INTO categorias_despesas (titulo_id, nome, ordem, ativo, exibir_dre)
+                VALUES (%s, %s, %s, %s, %s)
             """, (
                 titulo_id,
                 request.form.get('nome'),
                 request.form.get('ordem', 0),
-                1
+                1,
+                exibir_dre,
             ))
             conn.commit()
             nova_id = cursor.lastrowid
@@ -400,14 +414,16 @@ def editar_categoria(id):
         cursor = conn.cursor(dictionary=True)
 
         if request.method == 'POST':
+            exibir_dre = 1 if request.form.get('exibir_dre') else 0
             cursor.execute("""
                 UPDATE categorias_despesas 
-                SET titulo_id = %s, nome = %s, ordem = %s
+                SET titulo_id = %s, nome = %s, ordem = %s, exibir_dre = %s
                 WHERE id = %s
             """, (
                 request.form.get('titulo_id'),
                 request.form.get('nome'),
                 request.form.get('ordem', 0),
+                exibir_dre,
                 id
             ))
             conn.commit()
