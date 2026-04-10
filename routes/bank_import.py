@@ -524,7 +524,7 @@ def _validar_data_importacao(nome_arquivo, account_id, cursor):
         row = None
 
     if row:
-        ultima = row.get('ultima_data_importacao') if isinstance(row, dict) else (row[0] if row else None)
+        ultima = row.get('ultima_data_importacao') if row else None
         if ultima:
             if isinstance(ultima, str):
                 try:
@@ -3448,46 +3448,41 @@ def importar_dropbox():
     _ensure_bank_accounts_ultima_data()
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
-    data_arquivo, erro_data = _validar_data_importacao(nome_arquivo, account_id, cursor)
-    if erro_data:
-        cursor.close()
-        conn.close()
-        if request.is_json:
-            return jsonify({'success': False, 'message': erro_data}), 422
-        flash(erro_data, 'danger')
-        return redirect(url_for('bank_import.index'))
-    # ─────────────────────────────────────────────────────────────────────────
-
-    from integrations.dropbox_ofx import baixar_arquivo, mover_para_processados
     try:
-        content = baixar_arquivo(nome_arquivo)
-    except RuntimeError as exc:
+        data_arquivo, erro_data = _validar_data_importacao(nome_arquivo, account_id, cursor)
+        if erro_data:
+            if request.is_json:
+                return jsonify({'success': False, 'message': erro_data}), 422
+            flash(erro_data, 'danger')
+            return redirect(url_for('bank_import.index'))
+        # ─────────────────────────────────────────────────────────────────────
+
+        from integrations.dropbox_ofx import baixar_arquivo, mover_para_processados
+        try:
+            content = baixar_arquivo(nome_arquivo)
+        except RuntimeError as exc:
+            if request.is_json:
+                return jsonify({'success': False, 'message': str(exc)}), 400
+            flash(f'Erro ao baixar arquivo do Dropbox: {exc}', 'danger')
+            return redirect(url_for('bank_import.index'))
+
+        from integrations.ofx_parser import OFXParser
+        transactions = OFXParser(content).get_transactions()
+
+        if not transactions:
+            if request.is_json:
+                return jsonify({'success': False, 'message': 'Nenhuma transação encontrada no arquivo OFX.'}), 422
+            flash('Nenhuma transação encontrada no arquivo OFX.', 'warning')
+            return redirect(url_for('bank_import.index'))
+
+        _ensure_descricao_chave()
+        inseridos, duplicados, duplicados_lista = _save_transactions(cursor, conn, account_id, transactions)
+
+        # Atualiza a data do último extrato importado para esta conta
+        _atualizar_ultima_data_importacao(cursor, conn, account_id, data_arquivo)
+    finally:
         cursor.close()
         conn.close()
-        if request.is_json:
-            return jsonify({'success': False, 'message': str(exc)}), 400
-        flash(f'Erro ao baixar arquivo do Dropbox: {exc}', 'danger')
-        return redirect(url_for('bank_import.index'))
-
-    from integrations.ofx_parser import OFXParser
-    transactions = OFXParser(content).get_transactions()
-
-    if not transactions:
-        cursor.close()
-        conn.close()
-        if request.is_json:
-            return jsonify({'success': False, 'message': 'Nenhuma transação encontrada no arquivo OFX.'}), 422
-        flash('Nenhuma transação encontrada no arquivo OFX.', 'warning')
-        return redirect(url_for('bank_import.index'))
-
-    _ensure_descricao_chave()
-    inseridos, duplicados, duplicados_lista = _save_transactions(cursor, conn, account_id, transactions)
-
-    # Atualiza a data do último extrato importado para esta conta
-    _atualizar_ultima_data_importacao(cursor, conn, account_id, data_arquivo)
-
-    cursor.close()
-    conn.close()
 
     # Move para pasta de processados no Dropbox (não crítico)
     mover_para_processados(nome_arquivo)
