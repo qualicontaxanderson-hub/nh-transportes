@@ -3253,8 +3253,15 @@ def gerenciar_contas():
     )
     contas = cursor.fetchall()
     clientes = _get_clientes_com_produtos(cursor)
-    # Load ALL clients for the coligadas per-company table (not just those with products)
-    cursor.execute("SELECT id, razao_social FROM clientes ORDER BY razao_social")
+    # Load clients eligible as coligadas: must have products AND a Plano de Contas linked
+    cursor.execute(
+        """SELECT DISTINCT c.id, c.razao_social
+           FROM clientes c
+           INNER JOIN cliente_produtos cp ON c.id = cp.cliente_id
+           WHERE cp.ativo = 1
+             AND c.grupo_contabil_id IS NOT NULL
+           ORDER BY c.razao_social"""
+    )
     todos_clientes = cursor.fetchall()
     cursor.execute(
         """SELECT pcc.id, pcc.codigo, pcc.nome, g.nome AS grupo_nome
