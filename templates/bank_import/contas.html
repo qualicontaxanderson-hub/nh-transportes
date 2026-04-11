@@ -32,6 +32,16 @@
   .btn-desativar:hover { background:#dc3545; color:#fff; }
   .actions-cell { white-space: nowrap; }
   .filter-bar { background: #f8fbff; border: 1px solid #d9e8f5; border-radius: .5rem; padding: .6rem 1rem; margin-bottom: 1rem; }
+  /* Searchable dropdown for coligadas table */
+  .csel-wrap { position: relative; min-width: 200px; }
+  .csel-drop { display:none; position:absolute; z-index:1055; background:#fff;
+               border:1px solid #dee2e6; border-radius:4px;
+               max-height:220px; overflow-y:auto; min-width:100%;
+               width:max-content; left:0; top:100%;
+               box-shadow:0 4px 12px rgba(0,0,0,.15); }
+  .csel-item { padding: 4px 10px; cursor:pointer; font-size:0.73rem; white-space:nowrap; }
+  .csel-item:hover, .csel-item.active { background:#e8f0fe; }
+  .csel-empty { padding:6px 10px; color:#6c757d; font-size:0.73rem; font-style:italic; }
 </style>
 {% endblock %}
 
@@ -406,6 +416,89 @@ function buildPlanoOptions(selectedId) {
   return html;
 }
 
+// ---- Searchable dropdown helpers (for coligadas table) ----
+const _PLANO_BY_ID = {};
+PLANO_CONTAS.forEach(pc => { _PLANO_BY_ID[pc.id] = pc; });
+
+function _planoText(id) {
+  if (!id) return '';
+  const pc = _PLANO_BY_ID[parseInt(id, 10)];
+  return pc ? `${pc.codigo} – ${pc.nome} (${pc.grupo_nome})` : '';
+}
+
+function _buildCselItems(query) {
+  const q = (query || '').trim().toLowerCase();
+  const items = [{ id: '', text: '— Não configurado —' }];
+  PLANO_CONTAS.forEach(pc => {
+    const text = `${pc.codigo} – ${pc.nome} (${pc.grupo_nome})`;
+    if (!q || text.toLowerCase().includes(q)) items.push({ id: String(pc.id), text });
+  });
+  return items;
+}
+
+function _renderCselDrop(drop, query) {
+  const items = _buildCselItems(query);
+  if (items.length === 0) {
+    drop.innerHTML = '<div class="csel-empty">Nenhuma conta encontrada</div>';
+  } else {
+    drop.innerHTML = items.map(it =>
+      `<div class="csel-item" data-id="${it.id}" onmousedown="selectCselItem(event,this)">${it.text}</div>`
+    ).join('');
+  }
+}
+
+function openCsel(inputEl) {
+  const wrap = inputEl.closest('.csel-wrap');
+  const drop = wrap.querySelector('.csel-drop');
+  // Close all others first
+  document.querySelectorAll('.csel-drop').forEach(d => { if (d !== drop) d.style.display = 'none'; });
+  _renderCselDrop(drop, inputEl.value);
+  drop.style.display = 'block';
+}
+
+function filterCsel(inputEl) {
+  const wrap = inputEl.closest('.csel-wrap');
+  const drop = wrap.querySelector('.csel-drop');
+  _renderCselDrop(drop, inputEl.value);
+  drop.style.display = 'block';
+}
+
+function selectCselItem(evt, itemEl) {
+  evt.preventDefault();
+  const wrap = itemEl.closest('.csel-wrap');
+  const txtEl = wrap.querySelector('.csel-txt');
+  const hidEl = wrap.querySelector('input[type=hidden]');
+  const drop  = wrap.querySelector('.csel-drop');
+  hidEl.value = itemEl.dataset.id;
+  txtEl.value = itemEl.dataset.id ? itemEl.textContent : '';
+  drop.style.display = 'none';
+}
+
+// Close dropdowns when clicking outside
+document.addEventListener('click', function(e) {
+  if (!e.target.closest('.csel-wrap')) {
+    document.querySelectorAll('.csel-drop').forEach(d => { d.style.display = 'none'; });
+    // Reset text field to current hidden value (in case user typed but didn't select)
+    document.querySelectorAll('.csel-wrap').forEach(wrap => {
+      const hid = wrap.querySelector('input[type=hidden]');
+      const txt = wrap.querySelector('.csel-txt');
+      if (hid && txt) txt.value = _planoText(hid.value ? hid.value : null);
+    });
+  }
+});
+
+function _renderSearchableSelect(cls, coligadaId, selectedId) {
+  const txt = _planoText(selectedId);
+  return `<div class="csel-wrap">
+    <input type="text" class="form-control form-control-sm csel-txt"
+           placeholder="Buscar conta…" autocomplete="off" value="${txt}"
+           style="font-size:0.73rem;"
+           onfocus="openCsel(this)" oninput="filterCsel(this)">
+    <input type="hidden" class="${cls}" data-coligada-id="${coligadaId}" value="${selectedId || ''}">
+    <div class="csel-drop"></div>
+  </div>`;
+}
+
 // ---- Render per-company coligadas table ----
 function renderColigadasTable(contaClienteId, configMap) {
   // configMap: {coligada_cliente_id: {conta_debito_id, conta_credito_id}}
@@ -422,32 +515,22 @@ function renderColigadasTable(contaClienteId, configMap) {
     rows += `
       <tr>
         <td class="align-middle fw-semibold" style="font-size:0.78rem;">${cl.razao_social}</td>
-        <td>
-          <select class="form-select form-select-sm col-deb" data-coligada-id="${cl.id}"
-                  style="font-size:0.75rem;">
-            ${buildPlanoOptions(debId)}
-          </select>
-        </td>
-        <td>
-          <select class="form-select form-select-sm col-cred" data-coligada-id="${cl.id}"
-                  style="font-size:0.75rem;">
-            ${buildPlanoOptions(credId)}
-          </select>
-        </td>
+        <td>${_renderSearchableSelect('col-deb', cl.id, debId)}</td>
+        <td>${_renderSearchableSelect('col-cred', cl.id, credId)}</td>
       </tr>`;
   });
 
   return `
-    <div class="table-responsive" style="max-height:280px;overflow-y:auto;">
+    <div class="table-responsive">
       <table class="table table-sm mb-0" style="font-size:0.78rem;">
         <thead class="table-light sticky-top">
           <tr>
             <th style="min-width:140px;">Empresa Coligada</th>
-            <th style="min-width:200px;">
+            <th style="min-width:220px;">
               <span class="text-danger"><i class="bi bi-arrow-up-right-circle me-1"></i></span>
               Débito – ao <strong>enviar</strong>
             </th>
-            <th style="min-width:200px;">
+            <th style="min-width:220px;">
               <span class="text-success"><i class="bi bi-arrow-down-left-circle me-1"></i></span>
               Crédito – ao <strong>receber</strong>
             </th>
