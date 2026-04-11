@@ -221,10 +221,7 @@
         <div class="mb-3">
           <label class="form-label fw-semibold form-label-sm">Plano de Contas</label>
           <select id="nc_plano_contas_conta_id" class="form-select form-select-sm">
-            <option value="">— Sem vínculo —</option>
-            {% for pc in plano_contas %}
-            <option value="{{ pc.id }}">{{ pc.codigo }} – {{ pc.nome }} <small>({{ pc.grupo_nome }})</small></option>
-            {% endfor %}
+            <option value="">— Selecione uma empresa primeiro —</option>
           </select>
         </div>
         <div class="mb-3">
@@ -284,9 +281,6 @@
           <label class="form-label fw-semibold form-label-sm">Plano de Contas</label>
           <select id="ed_plano_contas_conta_id" class="form-select form-select-sm">
             <option value="">— Sem vínculo —</option>
-            {% for pc in plano_contas %}
-            <option value="{{ pc.id }}">{{ pc.codigo }} – {{ pc.nome }} <small>({{ pc.grupo_nome }})</small></option>
-            {% endfor %}
           </select>
         </div>
         <div class="mb-3">
@@ -336,6 +330,7 @@ const BASE = '{{ url_for("bank_import.api_contas") }}';
 // Embed server-side data for JS use
 const TODOS_CLIENTES = {{ todos_clientes | tojson }};
 const PLANO_CONTAS   = {{ plano_contas   | tojson }};
+const CLIENTE_GRUPO_MAP = {{ cliente_grupo_map | tojson }};
 
 function showAlert(msg, type) {
   const box = document.getElementById('alertBox');
@@ -343,6 +338,37 @@ function showAlert(msg, type) {
       ${msg}<button type="button" class="btn-close" data-bs-dismiss="alert"></button></div>`;
   setTimeout(() => box.innerHTML = '', 5000);
 }
+
+// ---- Populate "Plano de Contas" select filtered by empresa's grupo_contabil_id ----
+function _populatePlanoSelect(selectEl, clienteId, selectedId) {
+  const grupoId = clienteId ? (CLIENTE_GRUPO_MAP[clienteId] || null) : null;
+  const filtered = grupoId
+    ? PLANO_CONTAS.filter(pc => pc.grupo_id === grupoId)
+    : [];
+  let html = '';
+  if (!grupoId) {
+    html = '<option value="">— Empresa sem Plano de Contas —</option>';
+  } else if (filtered.length === 0) {
+    html = '<option value="">— Nenhuma conta neste plano —</option>';
+  } else {
+    html = '<option value="">— Sem vínculo —</option>';
+    filtered.forEach(pc => {
+      const sel = selectedId && String(pc.id) === String(selectedId) ? ' selected' : '';
+      html += `<option value="${pc.id}"${sel}>${pc.codigo} – ${pc.nome} (${pc.grupo_nome})</option>`;
+    });
+  }
+  selectEl.innerHTML = html;
+}
+
+// Wire empresa dropdowns → filter plano de contas options
+document.getElementById('nc_cliente_id').addEventListener('change', function() {
+  const clienteId = this.value ? parseInt(this.value, 10) : null;
+  _populatePlanoSelect(document.getElementById('nc_plano_contas_conta_id'), clienteId, null);
+});
+document.getElementById('ed_cliente_id').addEventListener('change', function() {
+  const clienteId = this.value ? parseInt(this.value, 10) : null;
+  _populatePlanoSelect(document.getElementById('ed_plano_contas_conta_id'), clienteId, null);
+});
 
 // ---- Row click → open edit modal ----
 document.querySelectorAll('#tbl-lista tbody tr.row-item').forEach(function(row) {
@@ -378,6 +404,16 @@ function limparFiltro() {
   document.querySelectorAll('#tbl-lista tbody tr.row-item').forEach(r => r.style.display = '');
   document.getElementById('badgeTotal').textContent = '{{ total }}';
 }
+
+// Reset nova conta modal fields on open
+document.getElementById('modalNovaConta').addEventListener('show.bs.modal', function() {
+  document.getElementById('nc_cliente_id').value = '';
+  document.getElementById('nc_banco').value = '';
+  document.getElementById('nc_agencia').value = '';
+  document.getElementById('nc_conta').value = '';
+  document.getElementById('nc_apelido').value = '';
+  _populatePlanoSelect(document.getElementById('nc_plano_contas_conta_id'), null, null);
+});
 
 // ---- Nova Conta ----
 function salvarNovaConta() {
@@ -550,7 +586,8 @@ function abrirEditar(id, banco, agencia, conta, apelido, clienteId, planoId) {
   document.getElementById('ed_conta').value = conta;
   document.getElementById('ed_apelido').value = apelido;
   document.getElementById('ed_cliente_id').value = clienteId !== null ? String(clienteId) : '';
-  document.getElementById('ed_plano_contas_conta_id').value = planoId !== null ? String(planoId) : '';
+  // Populate plano de contas filtered by this empresa's grupo_contabil_id
+  _populatePlanoSelect(document.getElementById('ed_plano_contas_conta_id'), clienteId, planoId);
 
   // Reset coligadas section
   const container = document.getElementById('ed_coligadas_container');

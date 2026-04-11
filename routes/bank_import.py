@@ -3264,17 +3264,21 @@ def gerenciar_contas():
     )
     todos_clientes = cursor.fetchall()
     cursor.execute(
-        """SELECT pcc.id, pcc.codigo, pcc.nome, g.nome AS grupo_nome
+        """SELECT pcc.id, pcc.codigo, pcc.nome, pcc.grupo_id, g.nome AS grupo_nome
            FROM plano_contas_contas pcc
            JOIN plano_contas_grupos g ON g.id = pcc.grupo_id
            WHERE pcc.ativo = 1
            ORDER BY pcc.codigo"""
     )
     plano_contas = cursor.fetchall()
+    # Map cliente_id → grupo_contabil_id so JS can filter plano options per empresa
+    cursor.execute("SELECT id, grupo_contabil_id FROM clientes WHERE grupo_contabil_id IS NOT NULL")
+    cliente_grupo_map = {row['id']: row['grupo_contabil_id'] for row in cursor.fetchall()}
     cursor.close()
     conn.close()
     return render_template('bank_import/contas.html', contas=contas, clientes=clientes,
-                           todos_clientes=todos_clientes, plano_contas=plano_contas)
+                           todos_clientes=todos_clientes, plano_contas=plano_contas,
+                           cliente_grupo_map=cliente_grupo_map)
 
 
 @bp.route('/api/contas/<int:conta_id>', methods=['PUT'])
