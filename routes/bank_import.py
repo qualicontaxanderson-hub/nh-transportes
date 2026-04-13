@@ -1572,6 +1572,16 @@ def _conciliar_transferencia(cursor, conn, tx_id, conta_destino_id, usuario,
             (conta_destino_id, tx['data_transacao'], tx['valor'],
              descricao_dest, hash_destino),
         )
+    # Vincula a conta de origem no CREDIT recém-criado para que exportar_contabil
+    # possa resolver as contas contábeis via coligada_map (origem_cliente_id).
+    credit_id = cursor.lastrowid
+    try:
+        cursor.execute(
+            "UPDATE bank_transactions SET conta_origem_id=%s WHERE id=%s",
+            (tx['account_id'], credit_id),
+        )
+    except mysql.connector.errors.ProgrammingError:
+        logger.debug("conta_origem_id column not yet available; skipping")
     # Auto-aprender: salva CNPJ+descrição→conta_destino para sugestão nas próximas importações.
     # Quando não há CNPJ, usa cnpj_cpf='' com descricao_chave como chave de match — isso
     # permite que transações sem CPF/CNPJ (ex: Pix sem identificação) recebam sugestão de
@@ -2753,10 +2763,12 @@ def exportar_contabil():
     cursor.execute(
         """SELECT
                bt.id,
+               bt.account_id,
                bt.data_transacao,
                bt.tipo,
                bt.valor,
                bt.descricao,
+               bt.cnpj_cpf,
                bt.tipo_conciliacao,
                bt.forma_recebimento_id,
                bt.fornecedor_id,
@@ -2853,6 +2865,29 @@ def exportar_contabil():
     except Exception:
         logger.warning("exportar_contabil: falha ao carregar fornecedor_conta_map", exc_info=True)
 
+    # Fetch CNPJ-based accounting codes: (cnpj, cliente_id) → (codigo, nome)
+    # Used as a fallback when fornecedor_id is not set on the transaction.
+    cnpj_conta_map = {}
+    try:
+        cursor.execute(
+            """SELECT REPLACE(REPLACE(REPLACE(REPLACE(f.cnpj, '.', ''), '/', ''), '-', ''), ' ', '') AS cnpj_digits,
+                      fe.cliente_id,
+                      pc.codigo AS conta_codigo, pc.nome AS conta_nome
+               FROM fornecedores f
+               JOIN fornecedor_empresas fe ON fe.fornecedor_id = f.id
+               JOIN plano_contas_contas pc ON pc.id = fe.conta_contabil_id
+               WHERE fe.conta_contabil_id IS NOT NULL
+                 AND f.cnpj IS NOT NULL AND f.cnpj <> ''"""
+        )
+        for r in cursor.fetchall():
+            cnpj_d = r['cnpj_digits'] or ''
+            if cnpj_d:
+                key = (cnpj_d, r['cliente_id'])
+                if key not in cnpj_conta_map:
+                    cnpj_conta_map[key] = (r['conta_codigo'] or '', r['conta_nome'] or '')
+    except Exception:
+        logger.warning("exportar_contabil: falha ao carregar cnpj_conta_map", exc_info=True)
+
     cursor.close()
     conn.close()
 
@@ -2865,7 +2900,7 @@ def exportar_contabil():
                     'Nº CONTA DÉBITO',  'DESCRIÇÃO CONTA DÉBITO'])
         for r in rows:
             debito_cod, debito_nome, credito_cod, credito_nome = \
-                _resolver_contas_contabeis(r, despesa_conta_map, coligada_map, fornecedor_conta_map)
+                _resolver_contas_contabeis(r, despesa_conta_map, coligada_map, fornecedor_conta_map, cnpj_conta_map)
             valor = r['valor']
             w.writerow([
                 r['data_transacao'].strftime('%d/%m/%Y') if r['data_transacao'] else '',
@@ -2908,7 +2943,7 @@ def exportar_contabil():
     money_fmt = '#,##0.00'
     for row_idx, r in enumerate(rows, start=2):
         debito_cod, debito_nome, credito_cod, credito_nome = \
-            _resolver_contas_contabeis(r, despesa_conta_map, coligada_map, fornecedor_conta_map)
+            _resolver_contas_contabeis(r, despesa_conta_map, coligada_map, fornecedor_conta_map, cnpj_conta_map)
         valor = r['valor']
         data_str = r['data_transacao'].strftime('%d/%m/%Y') if r['data_transacao'] else ''
 
@@ -2941,7 +2976,8 @@ def exportar_contabil():
     )
 
 
-def _resolver_contas_contabeis(row, despesa_conta_map, coligada_map=None, fornecedor_conta_map=None):
+def _resolver_contas_contabeis(row, despesa_conta_map, coligada_map=None,
+                               fornecedor_conta_map=None, cnpj_conta_map=None):
     """Retorna (debito_cod, debito_nome, credito_cod, credito_nome) para exportação contábil.
 
     Cada par representa o número e a descrição da conta contábil, separados para que
@@ -2951,17 +2987,38 @@ def _resolver_contas_contabeis(row, despesa_conta_map, coligada_map=None, fornec
     Para transferências, lookup é feito usando o cliente da conta destino/origem.
     fornecedor_conta_map: {(fornecedor_id, cliente_id): (codigo, nome)}
     Usado como fallback para débitos sem lançamento de despesa vinculado.
+    cnpj_conta_map: {(cnpj, cliente_id): (codigo, nome)}
+    Usado como fallback adicional quando fornecedor_id não está disponível mas o CNPJ está.
     """
     if coligada_map is None:
         coligada_map = {}
     if fornecedor_conta_map is None:
         fornecedor_conta_map = {}
+    if cnpj_conta_map is None:
+        cnpj_conta_map = {}
 
     banco_cod  = row.get('conta_banco_codigo') or ''
     banco_nome = row.get('conta_banco_nome')   or ''
     tipo       = row.get('tipo', '')
     tipo_conc  = row.get('tipo_conciliacao') or ''
     banco_cliente_id = row.get('banco_cliente_id')
+    account_id = row.get('account_id')
+
+    def _lookup_coligada(cliente_id):
+        """Encontra cfg da coligada: primeiro tenta combinação exata (ba_id + cliente_id),
+        depois usa somente cliente_id como fallback (para contas sem account_id no row)."""
+        if not cliente_id:
+            return None
+        exact = None
+        fallback = None
+        for (ba_id, col_id), cfg in coligada_map.items():
+            if col_id == cliente_id:
+                if account_id and ba_id == account_id:
+                    exact = cfg
+                    break
+                if fallback is None:
+                    fallback = cfg
+        return exact or fallback
 
     if tipo == 'DEBIT':
         # Crédito = a conta bancária (dinheiro sai → crédito no ativo)
@@ -2969,12 +3026,7 @@ def _resolver_contas_contabeis(row, despesa_conta_map, coligada_map=None, fornec
         # Débito = conta de despesa/coligada
         if 'transferen' in tipo_conc.lower():
             destino_cliente_id = row.get('destino_cliente_id')
-            coligada_cfg = None
-            if destino_cliente_id and banco_cliente_id:
-                for (ba_id, col_id), cfg in coligada_map.items():
-                    if col_id == destino_cliente_id:
-                        coligada_cfg = cfg
-                        break
+            coligada_cfg = _lookup_coligada(destino_cliente_id)
             if coligada_cfg:
                 debito_cod, debito_nome = coligada_cfg['debito']
             else:
@@ -2984,28 +3036,27 @@ def _resolver_contas_contabeis(row, despesa_conta_map, coligada_map=None, fornec
             if dmap:
                 debito_cod, debito_nome = dmap[0] or '', dmap[1] or ''
             else:
-                # Fallback: use supplier's conta_contabil if available
+                debito_cod, debito_nome = '', ''
+                # Fallback 1: use supplier's conta_contabil by fornecedor_id
                 fornecedor_id = row.get('fornecedor_id')
                 if fornecedor_id and banco_cliente_id:
                     fmap = fornecedor_conta_map.get((fornecedor_id, banco_cliente_id))
                     if fmap:
                         debito_cod, debito_nome = fmap[0] or '', fmap[1] or ''
-                    else:
-                        debito_cod, debito_nome = '', ''
-                else:
-                    debito_cod, debito_nome = '', ''
+                # Fallback 2: use supplier's conta_contabil by CNPJ
+                if not debito_cod:
+                    cnpj = row.get('cnpj_cpf') or ''
+                    if cnpj and banco_cliente_id:
+                        cmap = cnpj_conta_map.get((cnpj, banco_cliente_id))
+                        if cmap:
+                            debito_cod, debito_nome = cmap[0] or '', cmap[1] or ''
     else:
         # CREDIT: Débito = conta bancária (dinheiro entra → débito no ativo)
         debito_cod, debito_nome = banco_cod, banco_nome
         # Crédito = receita/coligada
         if 'transferen' in tipo_conc.lower():
             origem_cliente_id = row.get('origem_cliente_id')
-            coligada_cfg = None
-            if origem_cliente_id:
-                for (ba_id, col_id), cfg in coligada_map.items():
-                    if col_id == origem_cliente_id:
-                        coligada_cfg = cfg
-                        break
+            coligada_cfg = _lookup_coligada(origem_cliente_id)
             if coligada_cfg:
                 credito_cod, credito_nome = coligada_cfg['credito']
             else:
