@@ -2149,9 +2149,15 @@ def transferencias():
         )
         totais = cursor.fetchone() or {}
 
-        # Build extra WHERE for orfaos/candidatos based on current empresa/conta filter
+        # Build extra WHERE for orfaos/candidatos based on current empresa/conta/date filter
         _oc_extra_parts = []
         _oc_extra_params = []
+        if f_data_ini:
+            _oc_extra_parts.append("bt.data_transacao >= %s")
+            _oc_extra_params.append(f_data_ini)
+        if f_data_fim:
+            _oc_extra_parts.append("bt.data_transacao <= %s")
+            _oc_extra_params.append(f_data_fim)
         if f_contas:
             ph = ','.join(['%s'] * len(f_contas))
             _oc_extra_parts.append(f"bt.account_id IN ({ph})")
