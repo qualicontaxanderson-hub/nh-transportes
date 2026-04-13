@@ -2836,6 +2836,23 @@ def exportar_contabil():
                 r['conta_codigo'] or '', r['conta_nome'] or ''
             )
 
+    # Fetch supplier accounting codes: (fornecedor_id, cliente_id) → (codigo, nome)
+    fornecedor_conta_map = {}
+    try:
+        cursor.execute(
+            """SELECT fe.fornecedor_id, fe.cliente_id,
+                      pc.codigo AS conta_codigo, pc.nome AS conta_nome
+               FROM fornecedor_empresas fe
+               LEFT JOIN plano_contas_contas pc ON pc.id = fe.conta_contabil_id
+               WHERE fe.conta_contabil_id IS NOT NULL"""
+        )
+        for r in cursor.fetchall():
+            key = (r['fornecedor_id'], r['cliente_id'])
+            if key not in fornecedor_conta_map:
+                fornecedor_conta_map[key] = (r['conta_codigo'] or '', r['conta_nome'] or '')
+    except Exception:
+        logger.warning("exportar_contabil: falha ao carregar fornecedor_conta_map", exc_info=True)
+
     cursor.close()
     conn.close()
 
@@ -2848,7 +2865,7 @@ def exportar_contabil():
                     'Nº CONTA DÉBITO',  'DESCRIÇÃO CONTA DÉBITO'])
         for r in rows:
             debito_cod, debito_nome, credito_cod, credito_nome = \
-                _resolver_contas_contabeis(r, despesa_conta_map, coligada_map)
+                _resolver_contas_contabeis(r, despesa_conta_map, coligada_map, fornecedor_conta_map)
             valor = r['valor']
             w.writerow([
                 r['data_transacao'].strftime('%d/%m/%Y') if r['data_transacao'] else '',
@@ -2891,7 +2908,7 @@ def exportar_contabil():
     money_fmt = '#,##0.00'
     for row_idx, r in enumerate(rows, start=2):
         debito_cod, debito_nome, credito_cod, credito_nome = \
-            _resolver_contas_contabeis(r, despesa_conta_map, coligada_map)
+            _resolver_contas_contabeis(r, despesa_conta_map, coligada_map, fornecedor_conta_map)
         valor = r['valor']
         data_str = r['data_transacao'].strftime('%d/%m/%Y') if r['data_transacao'] else ''
 
@@ -2924,7 +2941,7 @@ def exportar_contabil():
     )
 
 
-def _resolver_contas_contabeis(row, despesa_conta_map, coligada_map=None):
+def _resolver_contas_contabeis(row, despesa_conta_map, coligada_map=None, fornecedor_conta_map=None):
     """Retorna (debito_cod, debito_nome, credito_cod, credito_nome) para exportação contábil.
 
     Cada par representa o número e a descrição da conta contábil, separados para que
@@ -2932,9 +2949,13 @@ def _resolver_contas_contabeis(row, despesa_conta_map, coligada_map=None):
 
     coligada_map: {(bank_account_id, coligada_cliente_id): {'debito': (cod,nome), 'credito': (cod,nome)}}
     Para transferências, lookup é feito usando o cliente da conta destino/origem.
+    fornecedor_conta_map: {(fornecedor_id, cliente_id): (codigo, nome)}
+    Usado como fallback para débitos sem lançamento de despesa vinculado.
     """
     if coligada_map is None:
         coligada_map = {}
+    if fornecedor_conta_map is None:
+        fornecedor_conta_map = {}
 
     banco_cod  = row.get('conta_banco_codigo') or ''
     banco_nome = row.get('conta_banco_nome')   or ''
@@ -2963,7 +2984,16 @@ def _resolver_contas_contabeis(row, despesa_conta_map, coligada_map=None):
             if dmap:
                 debito_cod, debito_nome = dmap[0] or '', dmap[1] or ''
             else:
-                debito_cod, debito_nome = '', ''
+                # Fallback: use supplier's conta_contabil if available
+                fornecedor_id = row.get('fornecedor_id')
+                if fornecedor_id and banco_cliente_id:
+                    fmap = fornecedor_conta_map.get((fornecedor_id, banco_cliente_id))
+                    if fmap:
+                        debito_cod, debito_nome = fmap[0] or '', fmap[1] or ''
+                    else:
+                        debito_cod, debito_nome = '', ''
+                else:
+                    debito_cod, debito_nome = '', ''
     else:
         # CREDIT: Débito = conta bancária (dinheiro entra → débito no ativo)
         debito_cod, debito_nome = banco_cod, banco_nome
