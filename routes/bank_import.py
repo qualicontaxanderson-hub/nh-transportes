@@ -2708,7 +2708,8 @@ def relatorio_exportar_csv():
 def exportar_contabil():
     """Exporta lançamentos bancários no formato contábil (Excel).
 
-    Colunas: DATA / DESCRIÇÃO / VALOR / CONTA CRÉDITO / CONTA DÉBITO
+    Colunas: DATA / DESCRIÇÃO / VALOR / Nº CONTA CRÉDITO / DESCRIÇÃO CONTA CRÉDITO /
+             Nº CONTA DÉBITO / DESCRIÇÃO CONTA DÉBITO
 
     Regras de CONTA CRÉDITO / CONTA DÉBITO:
     - DEBIT  (saída):  CONTA CRÉDITO = plano_contas da conta bancária
@@ -2842,16 +2843,21 @@ def exportar_contabil():
         # Fallback: CSV if openpyxl not installed
         out = io.StringIO()
         w = csv.writer(out, delimiter=';')
-        w.writerow(['DATA', 'DESCRIÇÃO', 'VALOR', 'CONTA CRÉDITO', 'CONTA DÉBITO'])
+        w.writerow(['DATA', 'DESCRIÇÃO', 'VALOR',
+                    'Nº CONTA CRÉDITO', 'DESCRIÇÃO CONTA CRÉDITO',
+                    'Nº CONTA DÉBITO',  'DESCRIÇÃO CONTA DÉBITO'])
         for r in rows:
-            conta_debito, conta_credito = _resolver_contas_contabeis(r, despesa_conta_map, coligada_map)
+            debito_cod, debito_nome, credito_cod, credito_nome = \
+                _resolver_contas_contabeis(r, despesa_conta_map, coligada_map)
             valor = r['valor']
             w.writerow([
                 r['data_transacao'].strftime('%d/%m/%Y') if r['data_transacao'] else '',
                 r['descricao'] or '',
                 str(valor).replace('.', ',') if valor is not None else '',
-                conta_credito,
-                conta_debito,
+                credito_cod,
+                credito_nome,
+                debito_cod,
+                debito_nome,
             ])
         out.seek(0)
         return Response(
@@ -2869,8 +2875,10 @@ def exportar_contabil():
     header_font = Font(color='FFFFFF', bold=True, size=10)
     header_align = Alignment(horizontal='center', vertical='center', wrap_text=True)
 
-    headers = ['DATA', 'DESCRIÇÃO', 'VALOR', 'CONTA CRÉDITO', 'CONTA DÉBITO']
-    col_widths = [12, 55, 14, 30, 30]
+    headers = ['DATA', 'DESCRIÇÃO', 'VALOR',
+               'Nº CONTA CRÉDITO', 'DESCRIÇÃO CONTA CRÉDITO',
+               'Nº CONTA DÉBITO',  'DESCRIÇÃO CONTA DÉBITO']
+    col_widths = [12, 55, 14, 18, 32, 18, 32]
     for col_idx, (h, w) in enumerate(zip(headers, col_widths), start=1):
         cell = ws.cell(row=1, column=col_idx, value=h)
         cell.fill = header_fill
@@ -2882,7 +2890,8 @@ def exportar_contabil():
 
     money_fmt = '#,##0.00'
     for row_idx, r in enumerate(rows, start=2):
-        conta_debito, conta_credito = _resolver_contas_contabeis(r, despesa_conta_map, coligada_map)
+        debito_cod, debito_nome, credito_cod, credito_nome = \
+            _resolver_contas_contabeis(r, despesa_conta_map, coligada_map)
         valor = r['valor']
         data_str = r['data_transacao'].strftime('%d/%m/%Y') if r['data_transacao'] else ''
 
@@ -2890,8 +2899,10 @@ def exportar_contabil():
         ws.cell(row=row_idx, column=2, value=r['descricao'] or '')
         val_cell = ws.cell(row=row_idx, column=3, value=float(valor) if valor is not None else 0)
         val_cell.number_format = money_fmt
-        ws.cell(row=row_idx, column=4, value=conta_credito)
-        ws.cell(row=row_idx, column=5, value=conta_debito)
+        ws.cell(row=row_idx, column=4, value=credito_cod)
+        ws.cell(row=row_idx, column=5, value=credito_nome)
+        ws.cell(row=row_idx, column=6, value=debito_cod)
+        ws.cell(row=row_idx, column=7, value=debito_nome)
 
     buf = io.BytesIO()
     wb.save(buf)
@@ -2914,57 +2925,50 @@ def exportar_contabil():
 
 
 def _resolver_contas_contabeis(row, despesa_conta_map, coligada_map=None):
-    """Retorna (conta_debito, conta_credito) formatados como 'CODIGO – NOME' para exportação contábil.
+    """Retorna (debito_cod, debito_nome, credito_cod, credito_nome) para exportação contábil.
+
+    Cada par representa o número e a descrição da conta contábil, separados para que
+    a planilha possa exibir cada campo em sua própria coluna.
 
     coligada_map: {(bank_account_id, coligada_cliente_id): {'debito': (cod,nome), 'credito': (cod,nome)}}
     Para transferências, lookup é feito usando o cliente da conta destino/origem.
     """
-    def _fmt(codigo, nome):
-        if codigo:
-            return f'{codigo} – {nome}' if nome else codigo
-        return ''
-
     if coligada_map is None:
         coligada_map = {}
 
-    conta_banco = _fmt(row.get('conta_banco_codigo'), row.get('conta_banco_nome'))
-    tipo = row.get('tipo', '')
-    tipo_conc = row.get('tipo_conciliacao') or ''
+    banco_cod  = row.get('conta_banco_codigo') or ''
+    banco_nome = row.get('conta_banco_nome')   or ''
+    tipo       = row.get('tipo', '')
+    tipo_conc  = row.get('tipo_conciliacao') or ''
     banco_cliente_id = row.get('banco_cliente_id')
 
     if tipo == 'DEBIT':
-        # Crédito = a conta bancária (dinheiro sai da conta → crédito no ativo)
-        conta_credito = conta_banco
+        # Crédito = a conta bancária (dinheiro sai → crédito no ativo)
+        credito_cod, credito_nome = banco_cod, banco_nome
         # Débito = conta de despesa/coligada
         if 'transferen' in tipo_conc.lower():
-            # Use per-company coligada config: find by destino_cliente_id
             destino_cliente_id = row.get('destino_cliente_id')
             coligada_cfg = None
             if destino_cliente_id and banco_cliente_id:
-                # Look up by bank_account_id not available directly; try coligada_cliente_id
-                # We stored coligada_map by (bank_account_id, coligada_cliente_id), but
-                # we don't have the exact bank_account_id here. Use banco_cliente_id fallback:
-                # find any entry where coligada_cliente_id == destino_cliente_id for this bank's owner
                 for (ba_id, col_id), cfg in coligada_map.items():
                     if col_id == destino_cliente_id:
                         coligada_cfg = cfg
                         break
             if coligada_cfg:
-                conta_debito = _fmt(*coligada_cfg['debito'])
+                debito_cod, debito_nome = coligada_cfg['debito']
             else:
-                conta_debito = ''
+                debito_cod, debito_nome = '', ''
         else:
             dmap = despesa_conta_map.get(row.get('id'))
             if dmap:
-                conta_debito = _fmt(dmap[0], dmap[1])
+                debito_cod, debito_nome = dmap[0] or '', dmap[1] or ''
             else:
-                conta_debito = ''
+                debito_cod, debito_nome = '', ''
     else:
         # CREDIT: Débito = conta bancária (dinheiro entra → débito no ativo)
-        conta_debito = conta_banco
+        debito_cod, debito_nome = banco_cod, banco_nome
         # Crédito = receita/coligada
         if 'transferen' in tipo_conc.lower():
-            # Use per-company coligada config: find by origem_cliente_id
             origem_cliente_id = row.get('origem_cliente_id')
             coligada_cfg = None
             if origem_cliente_id:
@@ -2973,16 +2977,19 @@ def _resolver_contas_contabeis(row, despesa_conta_map, coligada_map=None):
                         coligada_cfg = cfg
                         break
             if coligada_cfg:
-                conta_credito = _fmt(*coligada_cfg['credito'])
+                credito_cod, credito_nome = coligada_cfg['credito']
             else:
-                conta_credito = ''
+                credito_cod, credito_nome = '', ''
         else:
-            conta_credito = _fmt(
-                row.get('conta_fr_codigo'),
-                row.get('conta_fr_nome'),
-            )
+            credito_cod  = row.get('conta_fr_codigo') or ''
+            credito_nome = row.get('conta_fr_nome')   or ''
 
-    return conta_debito, conta_credito
+    return (
+        debito_cod  if debito_cod  else '',
+        debito_nome if debito_nome else '',
+        credito_cod  if credito_cod  else '',
+        credito_nome if credito_nome else '',
+    )
 
 
 
