@@ -36,6 +36,7 @@ _auto_regra_subcategoria_fixed = False
 _bank_accounts_ultima_data_ready = False
 _bank_accounts_coligadas_ready = False
 _bank_account_coligadas_table_ready = False
+_bt_conta_origem_id_ready = False
 # Timestamp-based retry cooldown: after a failed attempt, wait _MIGRATION_RETRY_DELAY
 # seconds before retrying.  This avoids hammering the DB on every request but still
 # allows recovery from transient errors (e.g., DB temporarily unavailable at startup).
@@ -45,6 +46,7 @@ _ld_bank_tx_id_retry_after       = 0.0
 _bank_accounts_ultima_data_retry_after = 0.0
 _bank_accounts_coligadas_retry_after   = 0.0
 _bank_account_coligadas_table_retry_after = 0.0
+_bt_conta_origem_id_retry_after = 0.0
 
 # Regex to extract DDMMYYYY date patterns from OFX filenames.
 # Uses word-boundary-like anchors (no surrounding digits) to avoid false positives.
@@ -567,8 +569,38 @@ def _ensure_bank_account_coligadas_table():
             conn.close()
 
 
-
-def _desc_chave(descricao: str) -> str:
+def _ensure_bt_conta_origem_id():
+    """Garante que bank_transactions.conta_origem_id existe. Idempotente."""
+    global _bt_conta_origem_id_ready, _bt_conta_origem_id_retry_after
+    if _bt_conta_origem_id_ready:
+        return
+    if _bt_conta_origem_id_retry_after > time.time():
+        return
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT COUNT(*) FROM information_schema.COLUMNS"
+            " WHERE TABLE_SCHEMA = DATABASE()"
+            " AND TABLE_NAME = 'bank_transactions'"
+            " AND COLUMN_NAME = 'conta_origem_id'"
+        )
+        if cursor.fetchone()[0] == 0:
+            cursor.execute(
+                "ALTER TABLE bank_transactions"
+                " ADD COLUMN conta_origem_id INT NULL"
+            )
+            conn.commit()
+            logger.info("_ensure_bt_conta_origem_id: coluna conta_origem_id criada")
+        cursor.close()
+        _bt_conta_origem_id_ready = True
+    except Exception:
+        logger.warning("_ensure_bt_conta_origem_id: falha ao criar coluna", exc_info=True)
+        _bt_conta_origem_id_retry_after = time.time() + _MIGRATION_RETRY_DELAY
+    finally:
+        if conn:
+            conn.close()
     """Normaliza a descrição para chave de memorização: primeiros 100 chars em maiúsculas.
 
     Usada como parte da chave composta (cnpj_cpf, descricao_chave) na tabela
@@ -2639,6 +2671,7 @@ def exportar_contabil():
     """
     _ensure_bank_accounts_coligadas()
     _ensure_bank_account_coligadas_table()
+    _ensure_bt_conta_origem_id()
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
 
