@@ -3014,20 +3014,22 @@ def _resolver_contas_contabeis(row, despesa_conta_map, coligada_map=None,
     account_id = row.get('account_id')
 
     def _lookup_coligada(cliente_id):
-        """Encontra cfg da coligada: primeiro tenta combinação exata (ba_id + cliente_id),
-        depois usa somente cliente_id como fallback (para contas sem account_id no row)."""
+        """Encontra cfg da coligada pela combinação exata (ba_id enviador + cliente_id destino).
+        Quando account_id é conhecido, nunca usa entrada de outra conta como fallback, para
+        evitar que a configuração de uma conta diferente (ex: CORA-PREST) seja aplicada
+        erroneamente a uma transferência do Sicredi."""
         if not cliente_id:
             return None
-        exact = None
-        fallback = None
         for (ba_id, col_id), cfg in coligada_map.items():
             if col_id == cliente_id:
-                if account_id and ba_id == account_id:
-                    exact = cfg
-                    break
-                if fallback is None:
-                    fallback = cfg
-        return exact or fallback
+                if account_id:
+                    # Só retorna se for exatamente esta conta enviadora
+                    if ba_id == account_id:
+                        return cfg
+                else:
+                    # account_id desconhecido: usa qualquer entrada como fallback
+                    return cfg
+        return None
 
     if tipo == 'DEBIT':
         # Crédito = a conta bancária (dinheiro sai → crédito no ativo)
@@ -3036,10 +3038,11 @@ def _resolver_contas_contabeis(row, despesa_conta_map, coligada_map=None,
         if 'transferen' in tipo_conc.lower():
             destino_cliente_id = row.get('destino_cliente_id')
             coligada_cfg = _lookup_coligada(destino_cliente_id)
+            debito_cod, debito_nome = '', ''
             if coligada_cfg:
                 debito_cod, debito_nome = coligada_cfg['debito']
-            else:
-                # Fallback: usa diretamente o plano_contas da conta destino
+            # Sempre em cascata: se coligada não tem conta configurada, usa a conta destino direta
+            if not debito_cod:
                 debito_cod  = row.get('conta_destino_codigo') or ''
                 debito_nome = row.get('conta_destino_nome')   or ''
         else:
@@ -3068,10 +3071,11 @@ def _resolver_contas_contabeis(row, despesa_conta_map, coligada_map=None,
         if 'transferen' in tipo_conc.lower():
             origem_cliente_id = row.get('origem_cliente_id')
             coligada_cfg = _lookup_coligada(origem_cliente_id)
+            credito_cod, credito_nome = '', ''
             if coligada_cfg:
                 credito_cod, credito_nome = coligada_cfg['credito']
-            else:
-                # Fallback: usa diretamente o plano_contas da conta origem
+            # Sempre em cascata: se coligada não tem conta configurada, usa a conta origem direta
+            if not credito_cod:
                 credito_cod  = row.get('conta_origem_codigo') or ''
                 credito_nome = row.get('conta_origem_nome')   or ''
         else:
