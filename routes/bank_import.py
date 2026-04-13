@@ -37,6 +37,7 @@ _bank_accounts_ultima_data_ready = False
 _bank_accounts_coligadas_ready = False
 _bank_account_coligadas_table_ready = False
 _bt_conta_origem_id_ready = False
+_bt_conta_destino_id_ready = False
 # Timestamp-based retry cooldown: after a failed attempt, wait _MIGRATION_RETRY_DELAY
 # seconds before retrying.  This avoids hammering the DB on every request but still
 # allows recovery from transient errors (e.g., DB temporarily unavailable at startup).
@@ -47,6 +48,7 @@ _bank_accounts_ultima_data_retry_after = 0.0
 _bank_accounts_coligadas_retry_after   = 0.0
 _bank_account_coligadas_table_retry_after = 0.0
 _bt_conta_origem_id_retry_after = 0.0
+_bt_conta_destino_id_retry_after = 0.0
 
 # Regex to extract DDMMYYYY date patterns from OFX filenames.
 # Uses word-boundary-like anchors (no surrounding digits) to avoid false positives.
@@ -601,6 +603,44 @@ def _ensure_bt_conta_origem_id():
     finally:
         if conn:
             conn.close()
+
+
+def _ensure_bt_conta_destino_id():
+    """Garante que bank_transactions.conta_destino_id existe. Idempotente."""
+    global _bt_conta_destino_id_ready, _bt_conta_destino_id_retry_after
+    if _bt_conta_destino_id_ready:
+        return
+    if _bt_conta_destino_id_retry_after > time.time():
+        return
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT COUNT(*) FROM information_schema.COLUMNS"
+            " WHERE TABLE_SCHEMA = DATABASE()"
+            " AND TABLE_NAME = 'bank_transactions'"
+            " AND COLUMN_NAME = 'conta_destino_id'"
+        )
+        if cursor.fetchone()[0] == 0:
+            cursor.execute(
+                "ALTER TABLE bank_transactions"
+                " ADD COLUMN conta_destino_id INT NULL"
+                " COMMENT 'Conta bancária de destino para transferências enviadas (DEBIT)'"
+            )
+            conn.commit()
+            logger.info("_ensure_bt_conta_destino_id: coluna conta_destino_id criada")
+        cursor.close()
+        _bt_conta_destino_id_ready = True
+    except Exception:
+        logger.warning("_ensure_bt_conta_destino_id: falha ao criar coluna", exc_info=True)
+        _bt_conta_destino_id_retry_after = time.time() + _MIGRATION_RETRY_DELAY
+    finally:
+        if conn:
+            conn.close()
+
+
+def _desc_chave(descricao: str) -> str:
     """Normaliza a descrição para chave de memorização: primeiros 100 chars em maiúsculas.
 
     Usada como parte da chave composta (cnpj_cpf, descricao_chave) na tabela
@@ -1498,6 +1538,16 @@ def _conciliar_transferencia(cursor, conn, tx_id, conta_destino_id, usuario,
                WHERE id=%s""",
             (agora, usuario, tx_id),
         )
+    # Armazena conta destino no DEBIT para que exportar_contabil possa resolver
+    # as contas contábeis da empresa destinatária nas transferências.
+    try:
+        cursor.execute(
+            "UPDATE bank_transactions SET conta_destino_id=%s WHERE id=%s",
+            (conta_destino_id, tx_id),
+        )
+    except mysql.connector.errors.ProgrammingError:
+        # Coluna pode não existir ainda (migration pendente) — ignora
+        logger.debug("conta_destino_id column not yet available; skipping")
     # Cria CREDIT na conta destino. Usa TRANSFER_<id> para garantir que cabe
     # em VARCHAR(64) (SHA-256 = 64 chars; '_transfer' causaria overflow).
     # Cria como 'pendente' para que apareça na fila de conciliação da conta destino.
@@ -2672,6 +2722,7 @@ def exportar_contabil():
     _ensure_bank_accounts_coligadas()
     _ensure_bank_account_coligadas_table()
     _ensure_bt_conta_origem_id()
+    _ensure_bt_conta_destino_id()
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
 
