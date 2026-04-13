@@ -2742,7 +2742,10 @@ def exportar_contabil():
     data_ini   = request.args.get('data_ini', '')
     data_fim   = request.args.get('data_fim', '')
 
-    where_parts = ['bt.status = %s']
+    where_parts = ['bt.status = %s',
+                   # Exclui as linhas espelho CREDIT criadas automaticamente em transferências;
+                   # a linha DEBIT já contém toda a informação contábil (débito+crédito).
+                   "NOT (bt.tipo = 'CREDIT' AND COALESCE(bt.tipo_conciliacao,'') = 'transferencia')"]
     params      = ['conciliado']
 
     if account_id:
@@ -2781,8 +2784,12 @@ def exportar_contabil():
                pc_ba.nome   AS conta_banco_nome,
                -- Empresa destino (para débitos/transferências)
                ba_dest.cliente_id AS destino_cliente_id,
+               pc_ba_dest.codigo  AS conta_destino_codigo,
+               pc_ba_dest.nome    AS conta_destino_nome,
                -- Empresa origem (para créditos/transferências via conta_origem_id)
                ba_orig.cliente_id AS origem_cliente_id,
+               pc_ba_orig.codigo  AS conta_origem_codigo,
+               pc_ba_orig.nome    AS conta_origem_nome,
                -- Empresa
                c.razao_social AS empresa_nome,
                -- Forma de recebimento e seu plano de contas (créditos normais)
@@ -2798,7 +2805,9 @@ def exportar_contabil():
                ON fre.forma_recebimento_id = fr.id AND fre.cliente_id = ba.cliente_id
            LEFT JOIN plano_contas_contas pc_fr ON pc_fr.id = fre.conta_contabil_id
            LEFT JOIN bank_accounts ba_dest ON ba_dest.id = bt.conta_destino_id
+           LEFT JOIN plano_contas_contas pc_ba_dest ON pc_ba_dest.id = ba_dest.plano_contas_conta_id
            LEFT JOIN bank_accounts ba_orig ON ba_orig.id = bt.conta_origem_id
+           LEFT JOIN plano_contas_contas pc_ba_orig ON pc_ba_orig.id = ba_orig.plano_contas_conta_id
            """
         + where_sql
         + ' ORDER BY bt.data_transacao ASC, bt.id ASC',
@@ -3030,7 +3039,9 @@ def _resolver_contas_contabeis(row, despesa_conta_map, coligada_map=None,
             if coligada_cfg:
                 debito_cod, debito_nome = coligada_cfg['debito']
             else:
-                debito_cod, debito_nome = '', ''
+                # Fallback: usa diretamente o plano_contas da conta destino
+                debito_cod  = row.get('conta_destino_codigo') or ''
+                debito_nome = row.get('conta_destino_nome')   or ''
         else:
             dmap = despesa_conta_map.get(row.get('id'))
             if dmap:
@@ -3060,7 +3071,9 @@ def _resolver_contas_contabeis(row, despesa_conta_map, coligada_map=None,
             if coligada_cfg:
                 credito_cod, credito_nome = coligada_cfg['credito']
             else:
-                credito_cod, credito_nome = '', ''
+                # Fallback: usa diretamente o plano_contas da conta origem
+                credito_cod  = row.get('conta_origem_codigo') or ''
+                credito_nome = row.get('conta_origem_nome')   or ''
         else:
             credito_cod  = row.get('conta_fr_codigo') or ''
             credito_nome = row.get('conta_fr_nome')   or ''
