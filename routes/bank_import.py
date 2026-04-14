@@ -1395,17 +1395,27 @@ def upload():
     arquivo = request.files.get('ofx_file')
     account_id = request.form.get('account_id')
 
+    wants_json = request.headers.get('X-Requested-With') == 'XMLHttpRequest'
+
     if not arquivo or not arquivo.filename:
+        if wants_json:
+            return jsonify({'success': False, 'message': 'Nenhum arquivo selecionado.'}), 400
         flash('Nenhum arquivo selecionado.', 'warning')
         return redirect(url_for('bank_import.index'))
 
     if not account_id:
+        if wants_json:
+            return jsonify({'success': False, 'message': 'Selecione uma conta bancária.'}), 400
         flash('Selecione uma conta bancária.', 'warning')
         return redirect(url_for('bank_import.index'))
+
+    nome_arquivo = os.path.basename(arquivo.filename)
 
     try:
         content = arquivo.read().decode('latin-1', errors='replace')
     except Exception as exc:
+        if wants_json:
+            return jsonify({'success': False, 'message': f'Erro ao ler arquivo: {exc}'}), 500
         flash(f'Erro ao ler arquivo: {exc}', 'danger')
         return redirect(url_for('bank_import.index'))
 
@@ -1414,20 +1424,43 @@ def upload():
     transactions = parser.get_transactions()
 
     if not transactions:
+        if wants_json:
+            return jsonify({'success': False, 'message': 'Nenhuma transação encontrada no arquivo OFX.'}), 422
         flash('Nenhuma transação encontrada no arquivo OFX.', 'warning')
         return redirect(url_for('bank_import.index'))
 
+    _ensure_bank_accounts_ultima_data()
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
+    try:
+        # Valida data do arquivo (evita importação futura ou período já importado)
+        data_arquivo, erro_data = _validar_data_importacao(nome_arquivo, account_id, cursor)
+        if erro_data:
+            cursor.close()
+            conn.close()
+            if wants_json:
+                return jsonify({'success': False, 'message': erro_data}), 422
+            flash(erro_data, 'danger')
+            return redirect(url_for('bank_import.index'))
 
-    _ensure_descricao_chave()
-    inseridos, duplicados, duplicados_lista = _save_transactions(cursor, conn, account_id, transactions)
+        _ensure_descricao_chave()
+        inseridos, duplicados, duplicados_lista = _save_transactions(cursor, conn, account_id, transactions)
 
-    cursor.close()
-    conn.close()
+        # Atualiza a data do último extrato importado para esta conta
+        _atualizar_ultima_data_importacao(cursor, conn, account_id, data_arquivo)
+    finally:
+        cursor.close()
+        conn.close()
+
+    # Move o arquivo do Dropbox NOVO para IMPORTADOS (não crítico – falha é ignorada)
+    try:
+        from integrations.dropbox_ofx import mover_para_processados, is_configured
+        if is_configured():
+            mover_para_processados(nome_arquivo)
+    except Exception:
+        pass
 
     msg = f'Importação concluída: {inseridos} transação(ões) importada(s), {duplicados} duplicata(s) ignorada(s).'
-    wants_json = request.headers.get('X-Requested-With') == 'XMLHttpRequest'
     if wants_json:
         return jsonify({
             'success': True,
