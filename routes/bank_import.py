@@ -2988,6 +2988,11 @@ def exportar_contabil():
     cursor.close()
     conn.close()
 
+    def _export_sort_key(r):
+        """Sort key for unified bank+card row list – uses whichever date field exists."""
+        d = r.get('data_transacao') or r.get('data_venda')
+        return d if d else _dt.date.min
+
     if not _OPENPYXL_AVAILABLE:
         # Fallback: CSV if openpyxl not installed
         out = io.StringIO()
@@ -2996,13 +3001,9 @@ def exportar_contabil():
                     'Nº CONTA CRÉDITO', 'DESCRIÇÃO CONTA CRÉDITO',
                     'Nº CONTA DÉBITO',  'DESCRIÇÃO CONTA DÉBITO'])
 
-        def _csv_sort_key(r):
-            d = r.get('data_transacao') or r.get('data_venda')
-            return d if d else _dt.date.min
-
         csv_rows_bank = [dict(r, _kind='bank') for r in rows]
         csv_rows_card = [dict(r, _kind='card') for r in card_sale_rows]
-        all_csv_rows = sorted(csv_rows_bank + csv_rows_card, key=_csv_sort_key)
+        all_csv_rows = sorted(csv_rows_bank + csv_rows_card, key=_export_sort_key)
         for r in all_csv_rows:
             if r['_kind'] == 'card':
                 d = r['data_venda']
@@ -3068,10 +3069,6 @@ def exportar_contabil():
 
     # Build unified sorted row list: bank transactions + card sale rows
     # Each entry is either a bank-tx dict (has 'data_transacao') or a card-sale dict (has 'data_venda').
-    def _row_sort_key(r):
-        d = r.get('data_transacao') or r.get('data_venda')
-        return d if d else _dt.date.min
-
     all_export_rows = []
     for r in rows:
         r['_kind'] = 'bank'
@@ -3079,7 +3076,7 @@ def exportar_contabil():
     for r in card_sale_rows:
         r['_kind'] = 'card'
         all_export_rows.append(r)
-    all_export_rows.sort(key=_row_sort_key)
+    all_export_rows.sort(key=_export_sort_key)
 
     # collect (conta_apelido, banco_nome, tipo_problema) for warning sheet
     _warn_accounts = []

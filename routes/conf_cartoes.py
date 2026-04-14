@@ -27,6 +27,9 @@ from flask_login import login_required
 from routes.auth import admin_required
 from utils.db import get_db_connection
 
+import logging
+_logger = logging.getLogger(__name__)
+
 # Abreviações dos dias da semana em português (weekday() 0=Seg … 6=Dom)
 _DIAS_PT = ['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom']
 # Tolerância monetária para comparações de zero (evita erros de ponto flutuante)
@@ -800,7 +803,8 @@ def config_contabil_salvar():
         return jsonify({'success': True})
     except Exception as e:
         conn.rollback()
-        return jsonify({'success': False, 'message': str(e)}), 500
+        _logger.error("config_contabil_salvar: erro ao salvar: %s", e, exc_info=True)
+        return jsonify({'success': False, 'message': 'Erro ao salvar configuração.'}), 500
     finally:
         conn.close()
 
