@@ -2775,7 +2775,7 @@ def exportar_contabil():
                bt.tipo_conciliacao,
                bt.forma_recebimento_id,
                bt.fornecedor_id,
-               bt.conta_destino_id,
+               COALESCE(bt.conta_destino_id, bt_mirror.account_id) AS conta_destino_id,
                -- Conta bancária
                ba.apelido  AS conta_apelido,
                ba.banco_nome,
@@ -2805,7 +2805,8 @@ def exportar_contabil():
            LEFT JOIN formas_recebimento_empresas fre
                ON fre.forma_recebimento_id = fr.id AND fre.cliente_id = ba.cliente_id
            LEFT JOIN plano_contas_contas pc_fr ON pc_fr.id = fre.conta_contabil_id
-           LEFT JOIN bank_accounts ba_dest ON ba_dest.id = bt.conta_destino_id
+           LEFT JOIN bank_transactions bt_mirror ON bt_mirror.hash_dedup = CONCAT('TRANSFER_', bt.id)
+           LEFT JOIN bank_accounts ba_dest ON ba_dest.id = COALESCE(bt.conta_destino_id, bt_mirror.account_id)
            LEFT JOIN plano_contas_contas pc_ba_dest ON pc_ba_dest.id = ba_dest.plano_contas_conta_id
            LEFT JOIN bank_accounts ba_orig ON ba_orig.id = bt.conta_origem_id
            LEFT JOIN plano_contas_contas pc_ba_orig ON pc_ba_orig.id = ba_orig.plano_contas_conta_id
