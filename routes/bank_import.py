@@ -1414,8 +1414,9 @@ def upload():
     try:
         content = arquivo.read().decode('latin-1', errors='replace')
     except Exception as exc:
+        logger.warning("upload: erro ao ler arquivo OFX: %s", exc)
         if wants_json:
-            return jsonify({'success': False, 'message': f'Erro ao ler arquivo: {exc}'}), 500
+            return jsonify({'success': False, 'message': 'Erro ao ler o arquivo OFX. Verifique se o arquivo é válido.'}), 500
         flash(f'Erro ao ler arquivo: {exc}', 'danger')
         return redirect(url_for('bank_import.index'))
 
@@ -1436,8 +1437,6 @@ def upload():
         # Valida data do arquivo (evita importação futura ou período já importado)
         data_arquivo, erro_data = _validar_data_importacao(nome_arquivo, account_id, cursor)
         if erro_data:
-            cursor.close()
-            conn.close()
             if wants_json:
                 return jsonify({'success': False, 'message': erro_data}), 422
             flash(erro_data, 'danger')
