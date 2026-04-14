@@ -668,13 +668,14 @@ def _extrair_data_arquivo(nome: str):
     return None
 
 
-def _validar_data_importacao(nome_arquivo, account_id, cursor):
+def _validar_data_importacao(nome_arquivo, account_id, cursor, verificar_periodo=True):
     """Valida as regras de data de importação para um arquivo OFX.
 
     Regras:
       1. Data extraída do nome do arquivo não pode ser futura.
       2. Data não pode ser menor ou igual à ``ultima_data_importacao`` já registrada
-         para a conta (período já importado).
+         para a conta (período já importado). Aplicada apenas quando
+         ``verificar_periodo=True`` (padrão).
 
     Retorna ``(data_arquivo, error_message)``.
     ``data_arquivo`` é o objeto ``date`` extraído (ou None).
@@ -699,32 +700,33 @@ def _validar_data_importacao(nome_arquivo, account_id, cursor):
             'Só é possível importar extratos com data de hoje ou anterior.'
         )
 
-    # Regra 2: período já importado
-    try:
-        cursor.execute(
-            "SELECT ultima_data_importacao FROM bank_accounts WHERE id = %s",
-            (account_id,),
-        )
-        row = cursor.fetchone()
-    except Exception:
-        row = None
+    # Regra 2: período já importado (apenas na importação automática / Dropbox)
+    if verificar_periodo:
+        try:
+            cursor.execute(
+                "SELECT ultima_data_importacao FROM bank_accounts WHERE id = %s",
+                (account_id,),
+            )
+            row = cursor.fetchone()
+        except Exception:
+            row = None
 
-    if row:
-        ultima = row.get('ultima_data_importacao') if row else None
-        if ultima:
-            if isinstance(ultima, str):
-                try:
-                    ultima = _dt.date.fromisoformat(ultima)
-                except ValueError:
-                    ultima = None
-            if ultima and data_arquivo <= ultima:
-                ultima_str = ultima.strftime('%d/%m/%Y')
-                data_str = data_arquivo.strftime('%d/%m/%Y')
-                return data_arquivo, (
-                    f'Verifique o arquivo — período já importado. '
-                    f'O último extrato importado para esta conta tinha data {ultima_str}. '
-                    f'O arquivo selecionado tem data {data_str}, que é igual ou anterior.'
-                )
+        if row:
+            ultima = row.get('ultima_data_importacao') if row else None
+            if ultima:
+                if isinstance(ultima, str):
+                    try:
+                        ultima = _dt.date.fromisoformat(ultima)
+                    except ValueError:
+                        ultima = None
+                if ultima and data_arquivo <= ultima:
+                    ultima_str = ultima.strftime('%d/%m/%Y')
+                    data_str = data_arquivo.strftime('%d/%m/%Y')
+                    return data_arquivo, (
+                        f'Verifique o arquivo — período já importado. '
+                        f'O último extrato importado para esta conta tinha data {ultima_str}. '
+                        f'O arquivo selecionado tem data {data_str}, que é igual ou anterior.'
+                    )
 
     return data_arquivo, None
 
@@ -1434,8 +1436,12 @@ def upload():
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
     try:
-        # Valida data do arquivo (evita importação futura ou período já importado)
-        data_arquivo, erro_data = _validar_data_importacao(nome_arquivo, account_id, cursor)
+        # Valida data do arquivo (evita importação futura; períodos anteriores são permitidos
+        # no upload manual — a verificação de período já importado aplica-se apenas ao
+        # importador automático / Dropbox)
+        data_arquivo, erro_data = _validar_data_importacao(
+            nome_arquivo, account_id, cursor, verificar_periodo=False
+        )
         if erro_data:
             if wants_json:
                 return jsonify({'success': False, 'message': erro_data}), 422
