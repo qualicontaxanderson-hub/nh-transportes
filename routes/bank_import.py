@@ -3041,10 +3041,19 @@ def _resolver_contas_contabeis(row, despesa_conta_map, coligada_map=None,
             debito_cod, debito_nome = '', ''
             if coligada_cfg:
                 debito_cod, debito_nome = coligada_cfg['debito']
-            # Sempre em cascata: se coligada não tem conta configurada, usa a conta destino direta
+            # Cascata 1: usa o plano de contas da conta destino diretamente
             if not debito_cod:
                 debito_cod  = row.get('conta_destino_codigo') or ''
                 debito_nome = row.get('conta_destino_nome')   or ''
+            # Cascata 2 (recíproca): procura na config de coligadas da conta destino
+            # para a empresa enviadora.  Ex.: CORA-PREST configurou "ao receber de GOIATUBA →
+            # crédito=22145"; o recíproco é que GOIATUBA debita 22145 ao enviar a CORA-PREST.
+            if not debito_cod:
+                dest_ba_id = row.get('conta_destino_id')
+                if dest_ba_id and banco_cliente_id:
+                    recip_cfg = coligada_map.get((dest_ba_id, banco_cliente_id))
+                    if recip_cfg:
+                        debito_cod, debito_nome = recip_cfg['credito']
         else:
             dmap = despesa_conta_map.get(row.get('id'))
             if dmap:
