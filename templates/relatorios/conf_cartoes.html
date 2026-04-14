@@ -47,6 +47,14 @@
 .row-preperiodo .saldo-pos,
 .row-preperiodo .saldo-neg,
 .row-preperiodo .saldo-zero { opacity: .75; }
+/* Searchable select (csel) - used in Config. Contábil modal */
+.csel-wrap  { position: relative; }
+.csel-drop  { display:none; position:absolute; z-index:1090; background:#fff;
+              border:1px solid #ced4da; border-radius:.35rem; min-width:260px;
+              max-height:200px; overflow-y:auto; box-shadow:0 4px 12px rgba(0,0,0,.15); }
+.csel-item  { padding:4px 10px; cursor:pointer; font-size:.73rem; white-space:nowrap; }
+.csel-item:hover { background:#e8f0fe; }
+.csel-empty { padding:6px 10px; color:#6c757d; font-size:.73rem; font-style:italic; }
 </style>
 {% endblock %}
 
@@ -72,6 +80,9 @@
     <div class="d-flex gap-2">
       <button class="btn btn-light btn-sm" data-bs-toggle="modal" data-bs-target="#modalFeriados">
         <i class="bi bi-calendar-x"></i> Feriados
+      </button>
+      <button class="btn btn-light btn-sm" data-bs-toggle="modal" data-bs-target="#modalContasContabeis">
+        <i class="bi bi-gear"></i> Config. Contábil
       </button>
       <button class="btn btn-light btn-sm" data-bs-toggle="modal" data-bs-target="#modalVinculos">
         <i class="bi bi-link-45deg"></i> Gerenciar Vinculações
@@ -308,6 +319,90 @@
 
   {% endif %}
 
+</div>
+
+<!-- ── Modal de Config. Contábil de Cartões ───────────────────────────────── -->
+<div class="modal fade" id="modalContasContabeis" tabindex="-1" aria-labelledby="labelModalCC" aria-hidden="true">
+  <div class="modal-dialog modal-xxl" style="max-width:min(1400px,96vw);">
+    <div class="modal-content">
+      <div class="modal-header" style="background:#1D63A5;color:#fff;">
+        <h5 class="modal-title" id="labelModalCC">
+          <i class="bi bi-gear me-2"></i>Configurar Contas Contábeis – Vendas de Cartão
+        </h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body" style="max-height:75vh;overflow-y:auto;">
+        <p class="small text-muted mb-3">
+          Configure a <strong>Conta Crédito</strong> e a <strong>Conta Débito</strong> de cada bandeira de cartão
+          por empresa. Quando realizar a <strong>exportação contábil</strong> no Banco, as vendas de cartão
+          serão incluídas como uma linha por dia.
+        </p>
+        {% if not empresas %}
+        <div class="alert alert-warning small">Nenhuma empresa encontrada.</div>
+        {% else %}
+        <table class="table table-sm table-bordered align-middle" style="font-size:.80rem;">
+          <thead class="table-dark sticky-top">
+            <tr>
+              <th style="min-width:130px;">Empresa</th>
+              <th style="min-width:110px;">Bandeira</th>
+              <th style="width:65px;">Tipo</th>
+              <th style="min-width:240px;">Conta Crédito (plano de contas)</th>
+              <th style="min-width:240px;">Conta Débito (plano de contas)</th>
+              <th style="width:60px;" class="text-center">Salvar</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for emp in empresas %}
+            {% for b in bandeiras %}
+            <tr>
+              {% if loop.first %}<td class="fw-semibold" rowspan="{{ bandeiras|length }}">{{ emp.nome }}</td>{% endif %}
+              <td>{{ b.nome }}</td>
+              <td>
+                <span class="badge {% if b.tipo == 'DEBITO' %}bg-primary{% else %}bg-purple text-white{% endif %}"
+                      style="{% if b.tipo == 'CREDITO' %}background:#6f42c1{% endif %};font-size:.66rem;">
+                  {{ b.tipo }}
+                </span>
+              </td>
+              <td>
+                <div class="csel-wrap cc-csel-wrap" style="min-width:220px;">
+                  <input type="text" class="form-control form-control-sm csel-txt cc-csel-txt"
+                         placeholder="Buscar conta crédito…" autocomplete="off" style="font-size:.76rem;"
+                         onfocus="ccOpenCsel(this)" oninput="ccFilterCsel(this)">
+                  <input type="hidden" class="csel-hid cc-credito-hid"
+                         data-bandeira="{{ b.id }}" data-empresa="{{ emp.id }}" data-tipo="credito">
+                  <div class="csel-drop cc-csel-drop"></div>
+                </div>
+              </td>
+              <td>
+                <div class="csel-wrap cc-csel-wrap" style="min-width:220px;">
+                  <input type="text" class="form-control form-control-sm csel-txt cc-csel-txt"
+                         placeholder="Buscar conta débito…" autocomplete="off" style="font-size:.76rem;"
+                         onfocus="ccOpenCsel(this)" oninput="ccFilterCsel(this)">
+                  <input type="hidden" class="csel-hid cc-debito-hid"
+                         data-bandeira="{{ b.id }}" data-empresa="{{ emp.id }}" data-tipo="debito">
+                  <div class="csel-drop cc-csel-drop"></div>
+                </div>
+              </td>
+              <td class="text-center">
+                <button class="btn btn-sm btn-success cc-btn-salvar"
+                        data-bandeira="{{ b.id }}" data-empresa="{{ emp.id }}"
+                        title="Salvar">
+                  <i class="bi bi-check-lg"></i>
+                </button>
+              </td>
+            </tr>
+            {% endfor %}
+            {% endfor %}
+          </tbody>
+        </table>
+        {% endif %}
+      </div>
+      <div class="modal-footer">
+        <span id="msg-cc" class="small text-success me-auto"></span>
+        <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Fechar</button>
+      </div>
+    </div>
+  </div>
 </div>
 
 <!-- ── Modal de Vinculações ──────────────────────────────────────────────── -->
@@ -692,6 +787,139 @@
   }
 
   document.querySelectorAll('.btn-feriado-del').forEach(attachDelHandler);
+})();
+</script>
+
+<script>
+// ── Config. Contábil de Cartões ──────────────────────────────────────────────
+(function () {
+  const PLANO_CONTAS_CC = {{ plano_contas | tojson }};
+  const CONFIG_CC       = {{ config_contabil_js | tojson }};
+
+  const _PC_MAP = {};
+  PLANO_CONTAS_CC.forEach(pc => { _PC_MAP[String(pc.id)] = pc; });
+
+  function _pcText(id) {
+    if (!id) return '';
+    const pc = _PC_MAP[String(id)];
+    return pc ? `${pc.codigo} – ${pc.nome}` : '';
+  }
+
+  function _buildDropItems(query) {
+    const q = (query || '').trim().toLowerCase();
+    const items = [{ id: '', text: '— Não configurado —' }];
+    PLANO_CONTAS_CC.forEach(pc => {
+      const text = `${pc.codigo} – ${pc.nome} (${pc.grupo_nome})`;
+      if (!q || text.toLowerCase().includes(q)) items.push({ id: String(pc.id), text });
+    });
+    return items;
+  }
+
+  function _renderDrop(drop, query) {
+    const items = _buildDropItems(query);
+    drop.innerHTML = items.length === 0
+      ? '<div class="csel-empty">Nenhuma conta encontrada</div>'
+      : items.map(it => `<div class="csel-item" data-id="${it.id}" onmousedown="ccSelectItem(event,this)">${it.text}</div>`).join('');
+  }
+
+  window.ccOpenCsel = function (inputEl) {
+    const wrap = inputEl.closest('.cc-csel-wrap');
+    const drop = wrap.querySelector('.cc-csel-drop');
+    document.querySelectorAll('.cc-csel-drop').forEach(d => { if (d !== drop) d.style.display = 'none'; });
+    _renderDrop(drop, inputEl.value);
+    drop.style.display = 'block';
+  };
+
+  window.ccFilterCsel = function (inputEl) {
+    const wrap = inputEl.closest('.cc-csel-wrap');
+    const drop = wrap.querySelector('.cc-csel-drop');
+    _renderDrop(drop, inputEl.value);
+    drop.style.display = 'block';
+  };
+
+  window.ccSelectItem = function (evt, itemEl) {
+    evt.preventDefault();
+    const wrap = itemEl.closest('.cc-csel-wrap');
+    const txt  = wrap.querySelector('.cc-csel-txt');
+    const hid  = wrap.querySelector('.csel-hid');
+    const drop = wrap.querySelector('.cc-csel-drop');
+    hid.value  = itemEl.dataset.id;
+    txt.value  = itemEl.dataset.id ? itemEl.textContent : '';
+    drop.style.display = 'none';
+  };
+
+  document.addEventListener('click', function (e) {
+    if (!e.target.closest('.cc-csel-wrap')) {
+      document.querySelectorAll('.cc-csel-drop').forEach(d => { d.style.display = 'none'; });
+    }
+  });
+
+  // Pre-populate fields from existing config when modal opens
+  document.getElementById('modalContasContabeis').addEventListener('show.bs.modal', function () {
+    document.querySelectorAll('.cc-credito-hid').forEach(hid => {
+      const bandId = hid.dataset.bandeira;
+      const cliId  = hid.dataset.empresa;
+      const key    = `${bandId}_${cliId}`;
+      const cfg    = CONFIG_CC[key] || {};
+      hid.value = cfg.conta_credito_id || '';
+      const txt = hid.closest('.cc-csel-wrap').querySelector('.cc-csel-txt');
+      txt.value = cfg.credito_label || (_pcText(cfg.conta_credito_id) || '');
+    });
+    document.querySelectorAll('.cc-debito-hid').forEach(hid => {
+      const bandId = hid.dataset.bandeira;
+      const cliId  = hid.dataset.empresa;
+      const key    = `${bandId}_${cliId}`;
+      const cfg    = CONFIG_CC[key] || {};
+      hid.value = cfg.conta_debito_id || '';
+      const txt = hid.closest('.cc-csel-wrap').querySelector('.cc-csel-txt');
+      txt.value = cfg.debito_label || (_pcText(cfg.conta_debito_id) || '');
+    });
+  });
+
+  // Save button handler
+  document.querySelectorAll('.cc-btn-salvar').forEach(btn => {
+    btn.addEventListener('click', async function () {
+      const bandId = this.dataset.bandeira;
+      const cliId  = this.dataset.empresa;
+      const row    = this.closest('tr');
+      const creditoHid = row.querySelector('.cc-credito-hid');
+      const debitoHid  = row.querySelector('.cc-debito-hid');
+      const payload = {
+        bandeira_cartao_id: parseInt(bandId, 10),
+        cliente_id:         parseInt(cliId, 10),
+        conta_credito_id:   creditoHid.value ? parseInt(creditoHid.value, 10) : null,
+        conta_debito_id:    debitoHid.value  ? parseInt(debitoHid.value,  10) : null,
+      };
+      const msgEl = document.getElementById('msg-cc');
+      try {
+        const resp = await fetch('/relatorios/conf_cartoes/config-contabil/salvar', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        const json = await resp.json();
+        if (json.success) {
+          // Update local config cache
+          const key = `${bandId}_${cliId}`;
+          CONFIG_CC[key] = {
+            conta_credito_id: payload.conta_credito_id,
+            conta_debito_id:  payload.conta_debito_id,
+            credito_label: creditoHid.closest('.cc-csel-wrap').querySelector('.cc-csel-txt').value,
+            debito_label:  debitoHid.closest('.cc-csel-wrap').querySelector('.cc-csel-txt').value,
+          };
+          msgEl.textContent = 'Salvo!';
+          msgEl.style.color = '#198754';
+          setTimeout(() => { msgEl.textContent = ''; }, 2500);
+        } else {
+          msgEl.textContent = 'Erro: ' + (json.message || 'falha ao salvar');
+          msgEl.style.color = '#dc3545';
+        }
+      } catch (e) {
+        msgEl.textContent = 'Erro de comunicação.';
+        msgEl.style.color = '#dc3545';
+      }
+    });
+  });
 })();
 </script>
 {% endblock %}

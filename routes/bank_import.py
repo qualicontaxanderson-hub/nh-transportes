@@ -2913,6 +2913,78 @@ def exportar_contabil():
     except Exception:
         logger.warning("exportar_contabil: falha ao carregar troco_pix_conta_map", exc_info=True)
 
+    # Load card-sales accounting config: {(bandeira_cartao_id, cliente_id): {credito:(cod,nome), debito:(cod,nome)}}
+    cartao_conta_map = {}
+    try:
+        cursor.execute(
+            """SELECT cc.bandeira_cartao_id, cc.cliente_id,
+                      pc_c.codigo AS credito_codigo, pc_c.nome AS credito_nome,
+                      pc_d.codigo AS debito_codigo,  pc_d.nome AS debito_nome
+               FROM conf_cartoes_conta_contabil cc
+               LEFT JOIN plano_contas_contas pc_c ON pc_c.id = cc.conta_credito_id
+               LEFT JOIN plano_contas_contas pc_d ON pc_d.id = cc.conta_debito_id"""
+        )
+        for r in cursor.fetchall():
+            key = (r['bandeira_cartao_id'], r['cliente_id'])
+            cartao_conta_map[key] = {
+                'credito': (r['credito_codigo'] or '', r['credito_nome'] or ''),
+                'debito':  (r['debito_codigo']  or '', r['debito_nome']  or ''),
+            }
+    except Exception:
+        logger.warning("exportar_contabil: falha ao carregar cartao_conta_map", exc_info=True)
+
+    # Fetch card sales grouped by (date, bandeira, empresa) for the selected period/empresa
+    card_sale_rows = []
+    if data_ini and data_fim and cartao_conta_map:
+        try:
+            cs_where = ["lc.data BETWEEN %s AND %s", "lcc.bandeira_cartao_id IS NOT NULL"]
+            cs_params = [data_ini, data_fim]
+            # Determine empresa filter: explicit empresa_id, or derive from account_id
+            _cs_empresa_id = empresa_id
+            if not _cs_empresa_id and account_id:
+                cursor.execute("SELECT cliente_id FROM bank_accounts WHERE id = %s", (account_id,))
+                _row_ba = cursor.fetchone()
+                if _row_ba:
+                    _cs_empresa_id = _row_ba['cliente_id']
+            if _cs_empresa_id:
+                cs_where.append("lc.cliente_id = %s")
+                cs_params.append(_cs_empresa_id)
+            cursor.execute(
+                f"""SELECT lc.data AS data_venda,
+                           lc.cliente_id,
+                           COALESCE(c.nome_fantasia, c.razao_social) AS empresa_nome,
+                           lcc.bandeira_cartao_id AS bandeira_id,
+                           bc.nome AS bandeira_nome,
+                           bc.tipo AS tipo_cartao,
+                           SUM(lcc.valor) AS total_venda
+                      FROM lancamentos_caixa_comprovacao lcc
+                      JOIN lancamentos_caixa lc ON lc.id = lcc.lancamento_caixa_id
+                      JOIN bandeiras_cartao bc ON bc.id = lcc.bandeira_cartao_id
+                      JOIN clientes c ON c.id = lc.cliente_id
+                     WHERE {' AND '.join(cs_where)}
+                     GROUP BY lc.data, lc.cliente_id, lcc.bandeira_cartao_id
+                     ORDER BY lc.data, lc.cliente_id, bc.tipo, bc.nome""",
+                cs_params,
+            )
+            for r in cursor.fetchall():
+                key = (r['bandeira_id'], r['cliente_id'])
+                contas = cartao_conta_map.get(key)
+                if not contas:
+                    continue  # skip rows without configured accounts
+                card_sale_rows.append({
+                    'data_venda':    r['data_venda'],
+                    'empresa_nome':  r['empresa_nome'] or '',
+                    'bandeira_nome': r['bandeira_nome'] or '',
+                    'tipo_cartao':   r['tipo_cartao'] or '',
+                    'total_venda':   float(r['total_venda'] or 0),
+                    'credito_cod':   contas['credito'][0],
+                    'credito_nome':  contas['credito'][1],
+                    'debito_cod':    contas['debito'][0],
+                    'debito_nome':   contas['debito'][1],
+                })
+        except Exception:
+            logger.warning("exportar_contabil: falha ao carregar card_sale_rows", exc_info=True)
+
     cursor.close()
     conn.close()
 
@@ -2923,20 +2995,40 @@ def exportar_contabil():
         w.writerow(['DATA', 'DESCRIÇÃO', 'VALOR',
                     'Nº CONTA CRÉDITO', 'DESCRIÇÃO CONTA CRÉDITO',
                     'Nº CONTA DÉBITO',  'DESCRIÇÃO CONTA DÉBITO'])
-        for r in rows:
-            debito_cod, debito_nome, credito_cod, credito_nome = \
-                _resolver_contas_contabeis(r, despesa_conta_map, coligada_map, fornecedor_conta_map, cnpj_conta_map,
-                                           troco_pix_conta_map=troco_pix_conta_map)
-            valor = r['valor']
-            w.writerow([
-                r['data_transacao'].strftime('%d/%m/%Y') if r['data_transacao'] else '',
-                r['descricao'] or '',
-                str(valor).replace('.', ',') if valor is not None else '',
-                credito_cod,
-                credito_nome,
-                debito_cod,
-                debito_nome,
-            ])
+
+        def _csv_sort_key(r):
+            d = r.get('data_transacao') or r.get('data_venda')
+            return d if d else _dt.date.min
+
+        csv_rows_bank = [dict(r, _kind='bank') for r in rows]
+        csv_rows_card = [dict(r, _kind='card') for r in card_sale_rows]
+        all_csv_rows = sorted(csv_rows_bank + csv_rows_card, key=_csv_sort_key)
+        for r in all_csv_rows:
+            if r['_kind'] == 'card':
+                d = r['data_venda']
+                w.writerow([
+                    d.strftime('%d/%m/%Y') if d else '',
+                    f"VENDA CARTÃO {r['tipo_cartao']} – {r['bandeira_nome']} ({r['empresa_nome']})",
+                    str(r['total_venda']).replace('.', ','),
+                    r['credito_cod'],
+                    r['credito_nome'],
+                    r['debito_cod'],
+                    r['debito_nome'],
+                ])
+            else:
+                debito_cod, debito_nome, credito_cod, credito_nome = \
+                    _resolver_contas_contabeis(r, despesa_conta_map, coligada_map, fornecedor_conta_map, cnpj_conta_map,
+                                               troco_pix_conta_map=troco_pix_conta_map)
+                valor = r['valor']
+                w.writerow([
+                    r['data_transacao'].strftime('%d/%m/%Y') if r['data_transacao'] else '',
+                    r['descricao'] or '',
+                    str(valor).replace('.', ',') if valor is not None else '',
+                    credito_cod,
+                    credito_nome,
+                    debito_cod,
+                    debito_nome,
+                ])
         out.seek(0)
         return Response(
             '\ufeff' + out.getvalue(),
@@ -2971,47 +3063,83 @@ def exportar_contabil():
     ws.auto_filter.ref = f'A1:{ws.cell(row=1, column=len(headers)).column_letter}1'
 
     warn_fill  = PatternFill(start_color='FFFF00', end_color='FFFF00', fill_type='solid')
+    card_fill  = PatternFill(start_color='E8F5E9', end_color='E8F5E9', fill_type='solid')
     money_fmt  = '#,##0.00'
+
+    # Build unified sorted row list: bank transactions + card sale rows
+    # Each entry is either a bank-tx dict (has 'data_transacao') or a card-sale dict (has 'data_venda').
+    def _row_sort_key(r):
+        d = r.get('data_transacao') or r.get('data_venda')
+        return d if d else _dt.date.min
+
+    all_export_rows = []
+    for r in rows:
+        r['_kind'] = 'bank'
+        all_export_rows.append(r)
+    for r in card_sale_rows:
+        r['_kind'] = 'card'
+        all_export_rows.append(r)
+    all_export_rows.sort(key=_row_sort_key)
+
     # collect (conta_apelido, banco_nome, tipo_problema) for warning sheet
     _warn_accounts = []
-    for row_idx, r in enumerate(rows, start=2):
-        debito_cod, debito_nome, credito_cod, credito_nome = \
-            _resolver_contas_contabeis(r, despesa_conta_map, coligada_map, fornecedor_conta_map, cnpj_conta_map,
-                                       troco_pix_conta_map=troco_pix_conta_map)
-        valor = r['valor']
-        data_str = r['data_transacao'].strftime('%d/%m/%Y') if r['data_transacao'] else ''
-
-        ws.cell(row=row_idx, column=1, value=data_str)
-        ws.cell(row=row_idx, column=2, value=r['descricao'] or '')
-        val_cell = ws.cell(row=row_idx, column=3, value=float(valor) if valor is not None else 0)
-        val_cell.number_format = money_fmt
-        ws.cell(row=row_idx, column=4, value=credito_cod)
-        ws.cell(row=row_idx, column=5, value=credito_nome)
-        ws.cell(row=row_idx, column=6, value=debito_cod)
-        ws.cell(row=row_idx, column=7, value=debito_nome)
-
-        # Highlight rows with missing codes in yellow and collect warning info
-        missing_credito = not credito_cod
-        missing_debito  = not debito_cod
-        if missing_credito or missing_debito:
+    for row_idx, r in enumerate(all_export_rows, start=2):
+        if r['_kind'] == 'card':
+            d = r['data_venda']
+            data_str = d.strftime('%d/%m/%Y') if d else ''
+            descr = f"VENDA CARTÃO {r['tipo_cartao']} – {r['bandeira_nome']} ({r['empresa_nome']})"
+            credito_cod  = r['credito_cod']
+            credito_nome = r['credito_nome']
+            debito_cod   = r['debito_cod']
+            debito_nome  = r['debito_nome']
+            ws.cell(row=row_idx, column=1, value=data_str)
+            ws.cell(row=row_idx, column=2, value=descr)
+            val_cell = ws.cell(row=row_idx, column=3, value=r['total_venda'])
+            val_cell.number_format = money_fmt
+            ws.cell(row=row_idx, column=4, value=credito_cod)
+            ws.cell(row=row_idx, column=5, value=credito_nome)
+            ws.cell(row=row_idx, column=6, value=debito_cod)
+            ws.cell(row=row_idx, column=7, value=debito_nome)
             for col in range(1, 8):
-                ws.cell(row=row_idx, column=col).fill = warn_fill
-            tipo_conc = (r.get('tipo_conciliacao') or '').lower()
-            if 'transferen' in tipo_conc:
-                if missing_debito:
-                    dest_banco = r.get('conta_destino_banco_nome') or ''
-                    if dest_banco:
+                ws.cell(row=row_idx, column=col).fill = card_fill
+        else:
+            debito_cod, debito_nome, credito_cod, credito_nome = \
+                _resolver_contas_contabeis(r, despesa_conta_map, coligada_map, fornecedor_conta_map, cnpj_conta_map,
+                                           troco_pix_conta_map=troco_pix_conta_map)
+            valor = r['valor']
+            data_str = r['data_transacao'].strftime('%d/%m/%Y') if r['data_transacao'] else ''
+
+            ws.cell(row=row_idx, column=1, value=data_str)
+            ws.cell(row=row_idx, column=2, value=r['descricao'] or '')
+            val_cell = ws.cell(row=row_idx, column=3, value=float(valor) if valor is not None else 0)
+            val_cell.number_format = money_fmt
+            ws.cell(row=row_idx, column=4, value=credito_cod)
+            ws.cell(row=row_idx, column=5, value=credito_nome)
+            ws.cell(row=row_idx, column=6, value=debito_cod)
+            ws.cell(row=row_idx, column=7, value=debito_nome)
+
+            # Highlight rows with missing codes in yellow and collect warning info
+            missing_credito = not credito_cod
+            missing_debito  = not debito_cod
+            if missing_credito or missing_debito:
+                for col in range(1, 8):
+                    ws.cell(row=row_idx, column=col).fill = warn_fill
+                tipo_conc = (r.get('tipo_conciliacao') or '').lower()
+                if 'transferen' in tipo_conc:
+                    if missing_debito:
+                        dest_banco = r.get('conta_destino_banco_nome') or ''
+                        if dest_banco:
+                            _warn_accounts.append((
+                                r.get('conta_apelido') or r.get('banco_nome') or '',
+                                dest_banco,
+                                'Conta destino sem Conta Contábil configurada'
+                            ))
+                    if missing_credito:
                         _warn_accounts.append((
                             r.get('conta_apelido') or r.get('banco_nome') or '',
-                            dest_banco,
-                            'Conta destino sem Conta Contábil configurada'
+                            '',
+                            'Conta bancária sem Conta Contábil configurada'
                         ))
-                if missing_credito:
-                    _warn_accounts.append((
-                        r.get('conta_apelido') or r.get('banco_nome') or '',
-                        '',
-                        'Conta bancária sem Conta Contábil configurada'
-                    ))
 
     # Warning sheet — lists accounts needing configuration in Gerenciar Contas
     if _warn_accounts:
