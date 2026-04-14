@@ -5,7 +5,7 @@ import os
 import re
 import time
 import datetime as _dt
-from collections import Counter
+from collections import Counter, defaultdict
 
 try:
     import openpyxl
@@ -2913,22 +2913,29 @@ def exportar_contabil():
     except Exception:
         logger.warning("exportar_contabil: falha ao carregar troco_pix_conta_map", exc_info=True)
 
-    # Load card-sales accounting config: {(bandeira_cartao_id, cliente_id): {credito:(cod,nome), debito:(cod,nome)}}
+    # Load card-sales accounting config: {(bandeira_cartao_id, cliente_id): {credito:(cod,nome), debito:(cod,nome), despesa:(cod,nome), ...}}
     cartao_conta_map = {}
     try:
         cursor.execute(
             """SELECT cc.bandeira_cartao_id, cc.cliente_id,
+                      bc.nome AS bandeira_nome, bc.tipo AS tipo_cartao,
                       pc_c.codigo AS credito_codigo, pc_c.nome AS credito_nome,
-                      pc_d.codigo AS debito_codigo,  pc_d.nome AS debito_nome
+                      pc_d.codigo AS debito_codigo,  pc_d.nome AS debito_nome,
+                      pc_e.codigo AS despesa_codigo, pc_e.nome AS despesa_nome
                FROM conf_cartoes_conta_contabil cc
+               JOIN bandeiras_cartao bc ON bc.id = cc.bandeira_cartao_id
                LEFT JOIN plano_contas_contas pc_c ON pc_c.id = cc.conta_credito_id
-               LEFT JOIN plano_contas_contas pc_d ON pc_d.id = cc.conta_debito_id"""
+               LEFT JOIN plano_contas_contas pc_d ON pc_d.id = cc.conta_debito_id
+               LEFT JOIN plano_contas_contas pc_e ON pc_e.id = cc.conta_despesa_id"""
         )
         for r in cursor.fetchall():
             key = (r['bandeira_cartao_id'], r['cliente_id'])
             cartao_conta_map[key] = {
+                'bandeira_nome': r['bandeira_nome'] or '',
+                'tipo_cartao':   r['tipo_cartao'] or '',
                 'credito': (r['credito_codigo'] or '', r['credito_nome'] or ''),
                 'debito':  (r['debito_codigo']  or '', r['debito_nome']  or ''),
+                'despesa': (r['despesa_codigo'] or '', r['despesa_nome'] or ''),
             }
     except Exception:
         logger.warning("exportar_contabil: falha ao carregar cartao_conta_map", exc_info=True)
@@ -2985,12 +2992,159 @@ def exportar_contabil():
         except Exception:
             logger.warning("exportar_contabil: falha ao carregar card_sale_rows", exc_info=True)
 
+    # Compute card fee rows: for each bank receipt on a card form, fee = cycle_sales - receipt.
+    # Entry: D: conta_despesa  /  C: conta_debito
+    card_fee_rows = []
+    _has_despesa_cfg = any(v.get('despesa') and v['despesa'][0] for v in cartao_conta_map.values())
+    if data_ini and data_fim and cartao_conta_map and _has_despesa_cfg:
+        try:
+            # Load feriados for business-day calculation
+            _feriados_set = set()
+            try:
+                cursor.execute("SELECT data FROM conf_cartoes_feriados")
+                for _fr in cursor.fetchall():
+                    _fd = _fr['data']
+                    _feriados_set.add(_fd.isoformat() if hasattr(_fd, 'isoformat') else str(_fd))
+            except Exception:
+                pass
+
+            # Load vinculos: {forma_recebimento_id → [(bandeira_cartao_id, prazo), ...]}
+            cursor.execute(
+                """SELECT v.forma_recebimento_id, v.bandeira_cartao_id,
+                          COALESCE(bc.prazo_compensacao_dias, 1) AS prazo
+                     FROM conf_cartoes_vinculos v
+                     JOIN bandeiras_cartao bc ON bc.id = v.bandeira_cartao_id"""
+            )
+            _forma_to_band = defaultdict(list)
+            for _vr in cursor.fetchall():
+                _forma_to_band[_vr['forma_recebimento_id']].append(
+                    (_vr['bandeira_cartao_id'], int(_vr['prazo']))
+                )
+
+            if _forma_to_band:
+                _forma_ids = list(_forma_to_band.keys())
+                _max_prazo = max(p for vals in _forma_to_band.values() for _, p in vals)
+                _lookback = _max_prazo + 6  # buffer for weekends/holidays
+
+                # empresa filter for receipts
+                _cs_emp2 = empresa_id
+                if not _cs_emp2 and account_id:
+                    cursor.execute(
+                        "SELECT cliente_id FROM bank_accounts WHERE id = %s", (account_id,)
+                    )
+                    _ba_row = cursor.fetchone()
+                    if _ba_row:
+                        _cs_emp2 = _ba_row['cliente_id']
+
+                # Query card receipts (CREDIT on card forms)
+                _rph = ','.join(['%s'] * len(_forma_ids))
+                _rw = [
+                    "bt.tipo = 'CREDIT'",
+                    f"bt.forma_recebimento_id IN ({_rph})",
+                    "bt.data_transacao BETWEEN %s AND %s",
+                ]
+                _rp = list(_forma_ids) + [data_ini, data_fim]
+                if _cs_emp2:
+                    _rw.append("ba.cliente_id = %s")
+                    _rp.append(_cs_emp2)
+                cursor.execute(
+                    f"""SELECT bt.data_transacao, bt.forma_recebimento_id,
+                               ba.cliente_id, SUM(bt.valor) AS total_recebimento,
+                               COALESCE(c.nome_fantasia, c.razao_social) AS empresa_nome
+                          FROM bank_transactions bt
+                          JOIN bank_accounts ba ON ba.id = bt.account_id
+                          JOIN clientes c ON c.id = ba.cliente_id
+                         WHERE {' AND '.join(_rw)}
+                         GROUP BY bt.data_transacao, bt.forma_recebimento_id, ba.cliente_id
+                         ORDER BY bt.data_transacao""",
+                    _rp,
+                )
+                _receipts = cursor.fetchall()
+
+                if _receipts:
+                    # Fetch sales extended backwards for cycle lookback
+                    _di_obj = (
+                        _dt.datetime.strptime(data_ini, '%Y-%m-%d').date()
+                        if isinstance(data_ini, str) else data_ini
+                    )
+                    _ext_ini = (_di_obj - _dt.timedelta(days=_lookback)).isoformat()
+                    _sw = ["lc.data BETWEEN %s AND %s", "lcc.bandeira_cartao_id IS NOT NULL"]
+                    _sp = [_ext_ini, data_fim]
+                    if _cs_emp2:
+                        _sw.append("lc.cliente_id = %s")
+                        _sp.append(_cs_emp2)
+                    cursor.execute(
+                        f"""SELECT lc.data AS data_venda, lcc.bandeira_cartao_id AS bandeira_id,
+                                   lc.cliente_id, SUM(lcc.valor) AS total_venda
+                              FROM lancamentos_caixa_comprovacao lcc
+                              JOIN lancamentos_caixa lc ON lc.id = lcc.lancamento_caixa_id
+                             WHERE {' AND '.join(_sw)}
+                             GROUP BY lc.data, lcc.bandeira_cartao_id, lc.cliente_id""",
+                        _sp,
+                    )
+                    _sales_idx = {}
+                    for _sr in cursor.fetchall():
+                        _sd = _sr['data_venda']
+                        _sd_iso = _sd.isoformat() if hasattr(_sd, 'isoformat') else str(_sd)
+                        _sales_idx[(int(_sr['bandeira_id']), _sd_iso, int(_sr['cliente_id']))] = \
+                            float(_sr['total_venda'] or 0)
+
+                    def _nbd(d, n, fs):
+                        """n business days after d."""
+                        while n > 0:
+                            d += _dt.timedelta(days=1)
+                            if d.weekday() < 5 and d.isoformat() not in fs:
+                                n -= 1
+                        return d
+
+                    for _rec in _receipts:
+                        _rd = _rec['data_transacao']
+                        _rd_obj = (
+                            _dt.datetime.strptime(_rd, '%Y-%m-%d').date()
+                            if isinstance(_rd, str) else _rd
+                        )
+                        _cli_id = int(_rec['cliente_id'])
+                        _receipt_amt = float(_rec['total_recebimento'] or 0)
+
+                        for _band_id, _prazo in _forma_to_band.get(_rec['forma_recebimento_id'], []):
+                            _contas = cartao_conta_map.get((_band_id, _cli_id))
+                            if not _contas or not _contas.get('despesa') or not _contas['despesa'][0]:
+                                continue
+
+                            # Sum sales whose expected receipt date equals _rd_obj
+                            _cycle_venda = 0.0
+                            for _delta in range(_lookback + 1):
+                                _sd_obj = _rd_obj - _dt.timedelta(days=_delta)
+                                _exp_rd = _nbd(_sd_obj, _prazo, _feriados_set)
+                                if _exp_rd == _rd_obj:
+                                    _sd_iso = _sd_obj.isoformat()
+                                    _cycle_venda += _sales_idx.get((_band_id, _sd_iso, _cli_id), 0.0)
+
+                            _cycle_fee = round(_cycle_venda - _receipt_amt, 2)
+                            if _cycle_fee < 0.005:
+                                continue  # skip zero / negligible / negative fees
+
+                            card_fee_rows.append({
+                                'data_recebimento': _rd_obj,
+                                'empresa_nome':  _rec['empresa_nome'] or '',
+                                'bandeira_nome': _contas['bandeira_nome'],
+                                'tipo_cartao':   _contas['tipo_cartao'],
+                                'cycle_fee':     _cycle_fee,
+                                'debito_cod':    _contas['despesa'][0],
+                                'debito_nome':   _contas['despesa'][1],
+                                'credito_cod':   _contas['debito'][0],
+                                'credito_nome':  _contas['debito'][1],
+                            })
+        except Exception:
+            logger.warning("exportar_contabil: falha ao carregar card_fee_rows", exc_info=True)
+
+
     cursor.close()
     conn.close()
 
     def _export_sort_key(r):
         """Sort key for unified bank+card row list – uses whichever date field exists."""
-        d = r.get('data_transacao') or r.get('data_venda')
+        d = r.get('data_transacao') or r.get('data_venda') or r.get('data_recebimento')
         return d if d else _dt.date.min
 
     if not _OPENPYXL_AVAILABLE:
@@ -3003,7 +3157,8 @@ def exportar_contabil():
 
         csv_rows_bank = [dict(r, _kind='bank') for r in rows]
         csv_rows_card = [dict(r, _kind='card') for r in card_sale_rows]
-        all_csv_rows = sorted(csv_rows_bank + csv_rows_card, key=_export_sort_key)
+        csv_rows_fee  = [dict(r, _kind='fee')  for r in card_fee_rows]
+        all_csv_rows = sorted(csv_rows_bank + csv_rows_card + csv_rows_fee, key=_export_sort_key)
         for r in all_csv_rows:
             if r['_kind'] == 'card':
                 d = r['data_venda']
@@ -3011,6 +3166,17 @@ def exportar_contabil():
                     d.strftime('%d/%m/%Y') if d else '',
                     f"VENDA CARTÃO {r['tipo_cartao']} – {r['bandeira_nome']} ({r['empresa_nome']})",
                     str(r['total_venda']).replace('.', ','),
+                    r['credito_cod'],
+                    r['credito_nome'],
+                    r['debito_cod'],
+                    r['debito_nome'],
+                ])
+            elif r['_kind'] == 'fee':
+                d = r['data_recebimento']
+                w.writerow([
+                    d.strftime('%d/%m/%Y') if d else '',
+                    f"TAXA CARTÃO {r['tipo_cartao']} – {r['bandeira_nome']} ({r['empresa_nome']})",
+                    str(r['cycle_fee']).replace('.', ','),
                     r['credito_cod'],
                     r['credito_nome'],
                     r['debito_cod'],
@@ -3065,16 +3231,19 @@ def exportar_contabil():
 
     warn_fill  = PatternFill(start_color='FFFF00', end_color='FFFF00', fill_type='solid')
     card_fill  = PatternFill(start_color='E8F5E9', end_color='E8F5E9', fill_type='solid')
+    fee_fill   = PatternFill(start_color='FFF3E0', end_color='FFF3E0', fill_type='solid')
     money_fmt  = '#,##0.00'
 
-    # Build unified sorted row list: bank transactions + card sale rows
-    # Each entry is either a bank-tx dict (has 'data_transacao') or a card-sale dict (has 'data_venda').
+    # Build unified sorted row list: bank transactions + card sale rows + card fee rows
     all_export_rows = []
     for r in rows:
         r['_kind'] = 'bank'
         all_export_rows.append(r)
     for r in card_sale_rows:
         r['_kind'] = 'card'
+        all_export_rows.append(r)
+    for r in card_fee_rows:
+        r['_kind'] = 'fee'
         all_export_rows.append(r)
     all_export_rows.sort(key=_export_sort_key)
 
@@ -3099,6 +3268,20 @@ def exportar_contabil():
             ws.cell(row=row_idx, column=7, value=debito_nome)
             for col in range(1, 8):
                 ws.cell(row=row_idx, column=col).fill = card_fill
+        elif r['_kind'] == 'fee':
+            d = r['data_recebimento']
+            data_str = d.strftime('%d/%m/%Y') if d else ''
+            descr = f"TAXA CARTÃO {r['tipo_cartao']} – {r['bandeira_nome']} ({r['empresa_nome']})"
+            ws.cell(row=row_idx, column=1, value=data_str)
+            ws.cell(row=row_idx, column=2, value=descr)
+            val_cell = ws.cell(row=row_idx, column=3, value=r['cycle_fee'])
+            val_cell.number_format = money_fmt
+            ws.cell(row=row_idx, column=4, value=r['credito_cod'])
+            ws.cell(row=row_idx, column=5, value=r['credito_nome'])
+            ws.cell(row=row_idx, column=6, value=r['debito_cod'])
+            ws.cell(row=row_idx, column=7, value=r['debito_nome'])
+            for col in range(1, 8):
+                ws.cell(row=row_idx, column=col).fill = fee_fill
         else:
             debito_cod, debito_nome, credito_cod, credito_nome = \
                 _resolver_contas_contabeis(r, despesa_conta_map, coligada_map, fornecedor_conta_map, cnpj_conta_map,

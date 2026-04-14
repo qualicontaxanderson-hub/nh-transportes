@@ -169,6 +169,7 @@ def _ensure_conta_contabil_table(conn):
             cliente_id         INT NOT NULL,
             conta_credito_id   INT NULL,
             conta_debito_id    INT NULL,
+            conta_despesa_id   INT NULL,
             criado_em          DATETIME DEFAULT CURRENT_TIMESTAMP,
             atualizado_em      DATETIME DEFAULT CURRENT_TIMESTAMP
                                ON UPDATE CURRENT_TIMESTAMP,
@@ -180,11 +181,31 @@ def _ensure_conta_contabil_table(conn):
             CONSTRAINT fk_cccc_credito  FOREIGN KEY (conta_credito_id)
                 REFERENCES plano_contas_contas(id) ON DELETE SET NULL,
             CONSTRAINT fk_cccc_debito   FOREIGN KEY (conta_debito_id)
+                REFERENCES plano_contas_contas(id) ON DELETE SET NULL,
+            CONSTRAINT fk_cccc_despesa  FOREIGN KEY (conta_despesa_id)
                 REFERENCES plano_contas_contas(id) ON DELETE SET NULL
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
         """
     )
     conn.commit()
+    # Migration: add conta_despesa_id column if table already existed without it
+    try:
+        cur.execute(
+            "ALTER TABLE conf_cartoes_conta_contabil "
+            "ADD COLUMN conta_despesa_id INT NULL"
+        )
+        conn.commit()
+    except Exception:
+        pass  # column already exists
+    try:
+        cur.execute(
+            "ALTER TABLE conf_cartoes_conta_contabil "
+            "ADD CONSTRAINT fk_cccc_despesa FOREIGN KEY (conta_despesa_id) "
+            "REFERENCES plano_contas_contas(id) ON DELETE SET NULL"
+        )
+        conn.commit()
+    except Exception:
+        pass  # constraint already exists
     cur.close()
 
 
@@ -206,18 +227,20 @@ def _get_plano_contas(conn):
 
 
 def _get_config_contabil(conn):
-    """Retorna dict {(bandeira_cartao_id, cliente_id): {conta_credito_id, conta_debito_id, ...}}."""
+    """Retorna dict {(bandeira_cartao_id, cliente_id): {conta_credito_id, conta_debito_id, conta_despesa_id, ...}}."""
     cur = conn.cursor(dictionary=True)
     try:
         cur.execute(
             """
             SELECT cc.bandeira_cartao_id, cc.cliente_id,
-                   cc.conta_credito_id, cc.conta_debito_id,
+                   cc.conta_credito_id, cc.conta_debito_id, cc.conta_despesa_id,
                    pc_c.codigo AS credito_codigo, pc_c.nome AS credito_nome,
-                   pc_d.codigo AS debito_codigo,  pc_d.nome AS debito_nome
+                   pc_d.codigo AS debito_codigo,  pc_d.nome AS debito_nome,
+                   pc_e.codigo AS despesa_codigo, pc_e.nome AS despesa_nome
               FROM conf_cartoes_conta_contabil cc
               LEFT JOIN plano_contas_contas pc_c ON pc_c.id = cc.conta_credito_id
               LEFT JOIN plano_contas_contas pc_d ON pc_d.id = cc.conta_debito_id
+              LEFT JOIN plano_contas_contas pc_e ON pc_e.id = cc.conta_despesa_id
             """
         )
         rows = cur.fetchall()
@@ -698,10 +721,12 @@ def conf_cartoes():
         # Serialise config_contabil to a JSON-safe dict keyed by "bandId_cliId"
         config_contabil_js = {
             f"{k[0]}_{k[1]}": {
-                'conta_credito_id': v['conta_credito_id'],
-                'conta_debito_id':  v['conta_debito_id'],
-                'credito_label': f"{v['credito_codigo']} – {v['credito_nome']}" if v.get('credito_codigo') else '',
-                'debito_label':  f"{v['debito_codigo']} – {v['debito_nome']}"   if v.get('debito_codigo')  else '',
+                'conta_credito_id':  v['conta_credito_id'],
+                'conta_debito_id':   v['conta_debito_id'],
+                'conta_despesa_id':  v['conta_despesa_id'],
+                'credito_label':  f"{v['credito_codigo']} – {v['credito_nome']}"   if v.get('credito_codigo')  else '',
+                'debito_label':   f"{v['debito_codigo']} – {v['debito_nome']}"     if v.get('debito_codigo')   else '',
+                'despesa_label':  f"{v['despesa_codigo']} – {v['despesa_nome']}"   if v.get('despesa_codigo')  else '',
             }
             for k, v in config_contabil.items()
         }
@@ -774,6 +799,7 @@ def config_contabil_salvar():
     cliente_id   = data.get('cliente_id')
     credito_id   = data.get('conta_credito_id') or None
     debito_id    = data.get('conta_debito_id') or None
+    despesa_id   = data.get('conta_despesa_id') or None
 
     if not bandeira_id or not cliente_id:
         return jsonify({'success': False, 'message': 'Parâmetros inválidos.'}), 400
@@ -782,15 +808,16 @@ def config_contabil_salvar():
     try:
         _ensure_conta_contabil_table(conn)
         cur = conn.cursor()
-        if credito_id or debito_id:
+        if credito_id or debito_id or despesa_id:
             cur.execute(
                 """INSERT INTO conf_cartoes_conta_contabil
-                       (bandeira_cartao_id, cliente_id, conta_credito_id, conta_debito_id)
-                   VALUES (%s, %s, %s, %s)
+                       (bandeira_cartao_id, cliente_id, conta_credito_id, conta_debito_id, conta_despesa_id)
+                   VALUES (%s, %s, %s, %s, %s)
                    ON DUPLICATE KEY UPDATE
-                       conta_credito_id = VALUES(conta_credito_id),
-                       conta_debito_id  = VALUES(conta_debito_id)""",
-                (bandeira_id, cliente_id, credito_id, debito_id),
+                       conta_credito_id  = VALUES(conta_credito_id),
+                       conta_debito_id   = VALUES(conta_debito_id),
+                       conta_despesa_id  = VALUES(conta_despesa_id)""",
+                (bandeira_id, cliente_id, credito_id, debito_id, despesa_id),
             )
         else:
             cur.execute(

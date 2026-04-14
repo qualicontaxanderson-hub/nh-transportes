@@ -348,6 +348,7 @@
               <th style="width:65px;">Tipo</th>
               <th style="min-width:240px;">Conta Crédito (plano de contas)</th>
               <th style="min-width:240px;">Conta Débito (plano de contas)</th>
+              <th style="min-width:240px;">Conta Despesa Taxas (plano de contas)</th>
               <th style="width:60px;" class="text-center">Salvar</th>
             </tr>
           </thead>
@@ -380,6 +381,16 @@
                          onfocus="ccOpenCsel(this)" oninput="ccFilterCsel(this)">
                   <input type="hidden" class="csel-hid cc-debito-hid"
                          data-bandeira="{{ b.id }}" data-empresa="{{ emp.id }}" data-tipo="debito">
+                  <div class="csel-drop cc-csel-drop"></div>
+                </div>
+              </td>
+              <td>
+                <div class="csel-wrap cc-csel-wrap" style="min-width:220px;">
+                  <input type="text" class="form-control form-control-sm csel-txt cc-csel-txt"
+                         placeholder="Buscar conta despesa taxas…" autocomplete="off" style="font-size:.76rem;"
+                         onfocus="ccOpenCsel(this)" oninput="ccFilterCsel(this)">
+                  <input type="hidden" class="csel-hid cc-despesa-hid"
+                         data-bandeira="{{ b.id }}" data-empresa="{{ emp.id }}" data-tipo="despesa">
                   <div class="csel-drop cc-csel-drop"></div>
                 </div>
               </td>
@@ -874,6 +885,15 @@
       const txt = hid.closest('.cc-csel-wrap').querySelector('.cc-csel-txt');
       txt.value = cfg.debito_label || (_pcText(cfg.conta_debito_id) || '');
     });
+    document.querySelectorAll('.cc-despesa-hid').forEach(hid => {
+      const bandId = hid.dataset.bandeira;
+      const cliId  = hid.dataset.empresa;
+      const key    = `${bandId}_${cliId}`;
+      const cfg    = CONFIG_CC[key] || {};
+      hid.value = cfg.conta_despesa_id || '';
+      const txt = hid.closest('.cc-csel-wrap').querySelector('.cc-csel-txt');
+      txt.value = cfg.despesa_label || (_pcText(cfg.conta_despesa_id) || '');
+    });
   });
 
   // Save button handler
@@ -882,13 +902,15 @@
       const bandId = this.dataset.bandeira;
       const cliId  = this.dataset.empresa;
       const row    = this.closest('tr');
-      const creditoHid = row.querySelector('.cc-credito-hid');
-      const debitoHid  = row.querySelector('.cc-debito-hid');
+      const creditoHid  = row.querySelector('.cc-credito-hid');
+      const debitoHid   = row.querySelector('.cc-debito-hid');
+      const despesaHid  = row.querySelector('.cc-despesa-hid');
       const payload = {
         bandeira_cartao_id: parseInt(bandId, 10),
         cliente_id:         parseInt(cliId, 10),
-        conta_credito_id:   creditoHid.value ? parseInt(creditoHid.value, 10) : null,
-        conta_debito_id:    debitoHid.value  ? parseInt(debitoHid.value,  10) : null,
+        conta_credito_id:  creditoHid.value  ? parseInt(creditoHid.value,  10) : null,
+        conta_debito_id:   debitoHid.value   ? parseInt(debitoHid.value,   10) : null,
+        conta_despesa_id:  despesaHid.value  ? parseInt(despesaHid.value,  10) : null,
       };
       const msgEl = document.getElementById('msg-cc');
       try {
@@ -902,10 +924,12 @@
           // Update local config cache
           const key = `${bandId}_${cliId}`;
           CONFIG_CC[key] = {
-            conta_credito_id: payload.conta_credito_id,
-            conta_debito_id:  payload.conta_debito_id,
-            credito_label: creditoHid.closest('.cc-csel-wrap').querySelector('.cc-csel-txt').value,
-            debito_label:  debitoHid.closest('.cc-csel-wrap').querySelector('.cc-csel-txt').value,
+            conta_credito_id:  payload.conta_credito_id,
+            conta_debito_id:   payload.conta_debito_id,
+            conta_despesa_id:  payload.conta_despesa_id,
+            credito_label:  creditoHid.closest('.cc-csel-wrap').querySelector('.cc-csel-txt').value,
+            debito_label:   debitoHid.closest('.cc-csel-wrap').querySelector('.cc-csel-txt').value,
+            despesa_label:  despesaHid.closest('.cc-csel-wrap').querySelector('.cc-csel-txt').value,
           };
           msgEl.textContent = 'Salvo!';
           msgEl.style.color = '#198754';
