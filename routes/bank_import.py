@@ -2899,6 +2899,20 @@ def exportar_contabil():
     except Exception:
         logger.warning("exportar_contabil: falha ao carregar cnpj_conta_map", exc_info=True)
 
+    # Load troco_pix per-company debit account config: cliente_id → (codigo, nome)
+    troco_pix_conta_map = {}
+    try:
+        cursor.execute(
+            """SELECT tpcc.cliente_id, pcc.codigo AS debito_codigo, pcc.nome AS debito_nome
+               FROM troco_pix_conta_contabil tpcc
+               LEFT JOIN plano_contas_contas pcc ON pcc.id = tpcc.conta_debito_id
+               WHERE tpcc.conta_debito_id IS NOT NULL"""
+        )
+        for r in cursor.fetchall():
+            troco_pix_conta_map[r['cliente_id']] = (r['debito_codigo'] or '', r['debito_nome'] or '')
+    except Exception:
+        logger.warning("exportar_contabil: falha ao carregar troco_pix_conta_map", exc_info=True)
+
     cursor.close()
     conn.close()
 
@@ -2911,7 +2925,8 @@ def exportar_contabil():
                     'Nº CONTA DÉBITO',  'DESCRIÇÃO CONTA DÉBITO'])
         for r in rows:
             debito_cod, debito_nome, credito_cod, credito_nome = \
-                _resolver_contas_contabeis(r, despesa_conta_map, coligada_map, fornecedor_conta_map, cnpj_conta_map)
+                _resolver_contas_contabeis(r, despesa_conta_map, coligada_map, fornecedor_conta_map, cnpj_conta_map,
+                                           troco_pix_conta_map=troco_pix_conta_map)
             valor = r['valor']
             w.writerow([
                 r['data_transacao'].strftime('%d/%m/%Y') if r['data_transacao'] else '',
@@ -2957,7 +2972,8 @@ def exportar_contabil():
     _warn_accounts = []
     for row_idx, r in enumerate(rows, start=2):
         debito_cod, debito_nome, credito_cod, credito_nome = \
-            _resolver_contas_contabeis(r, despesa_conta_map, coligada_map, fornecedor_conta_map, cnpj_conta_map)
+            _resolver_contas_contabeis(r, despesa_conta_map, coligada_map, fornecedor_conta_map, cnpj_conta_map,
+                                       troco_pix_conta_map=troco_pix_conta_map)
         valor = r['valor']
         data_str = r['data_transacao'].strftime('%d/%m/%Y') if r['data_transacao'] else ''
 
@@ -3041,7 +3057,8 @@ def exportar_contabil():
 
 
 def _resolver_contas_contabeis(row, despesa_conta_map, coligada_map=None,
-                               fornecedor_conta_map=None, cnpj_conta_map=None):
+                               fornecedor_conta_map=None, cnpj_conta_map=None,
+                               troco_pix_conta_map=None):
     """Retorna (debito_cod, debito_nome, credito_cod, credito_nome) para exportação contábil.
 
     Cada par representa o número e a descrição da conta contábil, separados para que
@@ -3053,6 +3070,8 @@ def _resolver_contas_contabeis(row, despesa_conta_map, coligada_map=None,
     Usado como fallback para débitos sem lançamento de despesa vinculado.
     cnpj_conta_map: {(cnpj, cliente_id): (codigo, nome)}
     Usado como fallback adicional quando fornecedor_id não está disponível mas o CNPJ está.
+    troco_pix_conta_map: {cliente_id: (codigo, nome)}
+    Conta de débito configurada para lançamentos de Troco PIX por empresa.
     """
     if coligada_map is None:
         coligada_map = {}
@@ -3060,6 +3079,8 @@ def _resolver_contas_contabeis(row, despesa_conta_map, coligada_map=None,
         fornecedor_conta_map = {}
     if cnpj_conta_map is None:
         cnpj_conta_map = {}
+    if troco_pix_conta_map is None:
+        troco_pix_conta_map = {}
 
     banco_cod  = row.get('conta_banco_codigo') or ''
     banco_nome = row.get('conta_banco_nome')   or ''
@@ -3113,6 +3134,13 @@ def _resolver_contas_contabeis(row, despesa_conta_map, coligada_map=None,
             dmap = despesa_conta_map.get(row.get('id'))
             if dmap:
                 debito_cod, debito_nome = dmap[0] or '', dmap[1] or ''
+            elif tipo_conc.lower() == 'troco_pix' and banco_cliente_id:
+                # Troco PIX: use per-company debit account configured in troco_pix_conta_contabil
+                tmap = troco_pix_conta_map.get(banco_cliente_id)
+                if tmap:
+                    debito_cod, debito_nome = tmap[0] or '', tmap[1] or ''
+                else:
+                    debito_cod, debito_nome = '', ''
             else:
                 debito_cod, debito_nome = '', ''
                 # Fallback 1: use supplier's conta_contabil by fornecedor_id

@@ -1188,6 +1188,153 @@ def cliente_excluir(cliente_id):
         flash(f'Erro ao desativar cliente: {str(e)}', 'danger')
         return redirect(url_for('troco_pix.clientes'))
 
+# ==================== CONFIG CONTÁBIL (TROCO PIX) ====================
+
+import logging as _logging
+_logger_tp = _logging.getLogger(__name__)
+
+_troco_pix_cc_table_ready = False
+
+def _ensure_troco_pix_conta_contabil_table():
+    """Garante que a tabela troco_pix_conta_contabil existe. Idempotente."""
+    global _troco_pix_cc_table_ready
+    if _troco_pix_cc_table_ready:
+        return
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT COUNT(*) FROM information_schema.TABLES"
+            " WHERE TABLE_SCHEMA = DATABASE()"
+            " AND TABLE_NAME = 'troco_pix_conta_contabil'"
+        )
+        if cursor.fetchone()[0] == 0:
+            cursor.execute(
+                """CREATE TABLE troco_pix_conta_contabil (
+                    id              INT AUTO_INCREMENT PRIMARY KEY,
+                    cliente_id      INT NOT NULL COMMENT 'Empresa (posto)',
+                    conta_debito_id INT NULL COMMENT 'Conta contábil de débito no lançamento contábil',
+                    criado_em       DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    atualizado_em   DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+                                    ON UPDATE CURRENT_TIMESTAMP,
+                    UNIQUE KEY uq_tpcc_cliente (cliente_id),
+                    CONSTRAINT fk_tpcc_cliente FOREIGN KEY (cliente_id)
+                        REFERENCES clientes(id) ON DELETE CASCADE,
+                    CONSTRAINT fk_tpcc_debito  FOREIGN KEY (conta_debito_id)
+                        REFERENCES plano_contas_contas(id) ON DELETE SET NULL
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4"""
+            )
+            conn.commit()
+            _logger_tp.info("_ensure_troco_pix_conta_contabil_table: tabela criada")
+        cursor.close()
+        _troco_pix_cc_table_ready = True
+    except Exception:
+        _logger_tp.warning("_ensure_troco_pix_conta_contabil_table: falha", exc_info=True)
+    finally:
+        if conn:
+            conn.close()
+
+
+@troco_pix_bp.route('/config-contabil', methods=['GET', 'POST'])
+@login_required
+def config_contabil():
+    """Configuração da conta contábil de débito para lançamentos de Troco PIX por empresa."""
+    _ensure_troco_pix_conta_contabil_table()
+
+    if request.method == 'POST':
+        conn = None
+        try:
+            conn = get_db_connection()
+            cursor = conn.cursor()
+            # Receive list of {cliente_id, conta_debito_id} from form
+            # Form fields: conta_debito_id_<cliente_id>
+            for key, val in request.form.items():
+                if not key.startswith('conta_debito_id_'):
+                    continue
+                try:
+                    cid = int(key[len('conta_debito_id_'):])
+                except ValueError:
+                    continue
+                debito_id = int(val) if val and val.isdigit() else None
+                if debito_id:
+                    cursor.execute(
+                        """INSERT INTO troco_pix_conta_contabil (cliente_id, conta_debito_id)
+                           VALUES (%s, %s)
+                           ON DUPLICATE KEY UPDATE conta_debito_id = VALUES(conta_debito_id)""",
+                        (cid, debito_id),
+                    )
+                else:
+                    cursor.execute(
+                        "DELETE FROM troco_pix_conta_contabil WHERE cliente_id = %s",
+                        (cid,),
+                    )
+            conn.commit()
+            cursor.close()
+            flash('Configuração contábil salva com sucesso!', 'success')
+        except Exception as e:
+            if conn:
+                conn.rollback()
+            flash(f'Erro ao salvar configuração: {str(e)}', 'danger')
+            _logger_tp.error("config_contabil POST error: %s", e, exc_info=True)
+        finally:
+            if conn:
+                conn.close()
+        return redirect(url_for('troco_pix.config_contabil'))
+
+    # GET
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+
+        # All client companies that use troco_pix (have products)
+        cursor.execute(
+            """SELECT DISTINCT c.id, c.razao_social
+               FROM clientes c
+               INNER JOIN cliente_produtos cp ON c.id = cp.cliente_id
+               WHERE cp.ativo = 1
+               ORDER BY c.razao_social"""
+        )
+        empresas = cursor.fetchall()
+
+        # Existing configs
+        cursor.execute(
+            """SELECT tpcc.cliente_id, tpcc.conta_debito_id,
+                      pcc.codigo AS debito_codigo, pcc.nome AS debito_nome
+               FROM troco_pix_conta_contabil tpcc
+               LEFT JOIN plano_contas_contas pcc ON pcc.id = tpcc.conta_debito_id"""
+        )
+        config_map = {r['cliente_id']: r for r in cursor.fetchall()}
+
+        # All active plano_contas accounts for the searchable dropdown
+        cursor.execute(
+            """SELECT pcc.id, pcc.codigo, pcc.nome, g.nome AS grupo_nome
+               FROM plano_contas_contas pcc
+               JOIN plano_contas_grupos g ON g.id = pcc.grupo_id
+               WHERE pcc.ativo = 1
+               ORDER BY pcc.codigo"""
+        )
+        plano_contas = cursor.fetchall()
+
+        cursor.close()
+    except Exception as e:
+        flash(f'Erro ao carregar configuração: {str(e)}', 'danger')
+        _logger_tp.error("config_contabil GET error: %s", e, exc_info=True)
+        empresas, config_map, plano_contas = [], {}, []
+    finally:
+        if conn:
+            conn.close()
+
+    return render_template(
+        'troco_pix/config_contabil.html',
+        empresas=empresas,
+        config_map=config_map,
+        plano_contas=plano_contas,
+        titulo='Configuração Contábil – Troco PIX',
+    )
+
+
 # ==================== ROTAS PARA FRENTISTAS (PISTA) ====================
 
 @troco_pix_bp.route('/pista')
