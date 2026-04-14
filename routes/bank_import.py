@@ -3134,7 +3134,7 @@ def _resolver_contas_contabeis(row, despesa_conta_map, coligada_map=None,
             dmap = despesa_conta_map.get(row.get('id'))
             if dmap:
                 debito_cod, debito_nome = dmap[0] or '', dmap[1] or ''
-            elif tipo_conc.lower() == 'troco_pix' and banco_cliente_id:
+            elif 'troco_pix' in tipo_conc.lower() and banco_cliente_id:
                 # Troco PIX: use per-company debit account configured in troco_pix_conta_contabil
                 tmap = troco_pix_conta_map.get(banco_cliente_id)
                 if tmap:
