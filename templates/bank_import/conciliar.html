@@ -97,12 +97,19 @@
   </form>
 
   <!-- Botão Auto-Conciliar -->
-  <div class="d-flex gap-2 mb-2 align-items-center">
+  <div class="d-flex gap-2 mb-2 align-items-center flex-wrap">
     <button type="button" class="btn btn-success btn-sm" onclick="autoConciliarAqui(this)">
       <i class="bi bi-magic"></i> Executar Auto-Conciliação
     </button>
     <a href="{{ url_for('conciliacao_regras.lista') }}" class="btn btn-outline-primary btn-sm">
       <i class="bi bi-funnel-fill"></i> Gerenciar Regras
+    </a>
+    <a href="{{ url_for('bank_import.relatorio', status='ignorado',
+                        empresa_id=(f_clientes[0] if f_clientes|length == 1 else ''),
+                        account_id=(f_contas[0] if f_contas|length == 1 else ''),
+                        tipo=f_tipo) }}"
+       class="btn btn-outline-secondary btn-sm">
+      <i class="bi bi-eye-slash me-1"></i> Ver Ignorados
     </a>
     <span id="msgAutoConciliar" class="small text-muted"></span>
   </div>

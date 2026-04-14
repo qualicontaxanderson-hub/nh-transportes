@@ -131,13 +131,22 @@
                 </small>
                 {% endif %}
             </div>
-            <a href="{{ url_for('bank_import.relatorio_exportar_csv',
-                        account_id=filtros.account_id, empresa_id=filtros.empresa_id,
-                        status=filtros.status, tipo=filtros.tipo,
-                        data_ini=filtros.data_ini, data_fim=filtros.data_fim) }}"
-               class="btn btn-sm btn-success">
-                <i class="bi bi-file-earmark-spreadsheet"></i> Exportar CSV ({{ total_rows }})
-            </a>
+            <div class="d-flex gap-2 align-items-center">
+                {% if filtros.status == 'ignorado' %}
+                <button type="button" class="btn btn-sm btn-warning" id="btnReverterSelecionados" disabled
+                        onclick="reverterSelecionados()">
+                    <i class="bi bi-arrow-counterclockwise me-1"></i> Reverter Selecionados
+                    (<span id="contadorReverter">0</span>)
+                </button>
+                {% endif %}
+                <a href="{{ url_for('bank_import.relatorio_exportar_csv',
+                            account_id=filtros.account_id, empresa_id=filtros.empresa_id,
+                            status=filtros.status, tipo=filtros.tipo,
+                            data_ini=filtros.data_ini, data_fim=filtros.data_fim) }}"
+                   class="btn btn-sm btn-success">
+                    <i class="bi bi-file-earmark-spreadsheet"></i> Exportar CSV ({{ total_rows }})
+                </a>
+            </div>
         </div>
         <div class="card-body p-0">
             {% if transacoes %}
@@ -145,6 +154,9 @@
                 <table class="table table-hover table-sm mb-0" style="font-size:0.83rem;">
                     <thead class="table-light">
                         <tr>
+                            {% if filtros.status == 'ignorado' %}
+                            <th style="width:32px;"><input type="checkbox" id="checkAllIgnorados" title="Selecionar todos"></th>
+                            {% endif %}
                             <th style="white-space:nowrap;">Data</th>
                             <th>Tipo</th>
                             <th>Valor</th>
@@ -155,11 +167,17 @@
                             <th>Status</th>
                             <th style="white-space:nowrap;" title="Tipo de Conciliação">Conc. Tipo</th>
                             <th title="Vínculos: Lançamento Despesa / Troco PIX">Vínculos</th>
+                            {% if filtros.status == 'ignorado' %}
+                            <th class="text-center">Ação</th>
+                            {% endif %}
                         </tr>
                     </thead>
                     <tbody>
                         {% for tx in transacoes %}
                         <tr>
+                            {% if filtros.status == 'ignorado' %}
+                            <td><input type="checkbox" class="ignor-check" value="{{ tx.id }}"></td>
+                            {% endif %}
                             <td style="white-space:nowrap;">{{ tx.data_transacao.strftime('%d/%m/%Y') if tx.data_transacao else '-' }}</td>
                             <td>
                                 {% if tx.tipo == 'DEBIT' %}
@@ -220,6 +238,14 @@
                                 <span class="text-muted" style="font-size:0.78rem;">—</span>
                                 {% endif %}
                             </td>
+                            {% if filtros.status == 'ignorado' %}
+                            <td class="text-center">
+                                <button type="button" class="btn btn-sm btn-outline-warning btn-reverter-unico"
+                                        data-tx-id="{{ tx.id }}" title="Reverter para Pendente">
+                                    <i class="bi bi-arrow-counterclockwise"></i>
+                                </button>
+                            </td>
+                            {% endif %}
                         </tr>
                         {% endfor %}
                     </tbody>
@@ -281,4 +307,71 @@
         </a>
     </div>
 </div>
+
+{% if filtros.status == 'ignorado' %}
+<script>
+(function () {
+  'use strict';
+
+  var REVERTER_URL = '{{ url_for("bank_import.api_reimportar_duplicatas") }}';
+
+  var checkAll  = document.getElementById('checkAllIgnorados');
+  var btnBulk   = document.getElementById('btnReverterSelecionados');
+  var contador  = document.getElementById('contadorReverter');
+
+  function getChecked() {
+    return [...document.querySelectorAll('.ignor-check:checked')].map(c => parseInt(c.value, 10));
+  }
+
+  function atualizarContador() {
+    var n = getChecked().length;
+    if (contador) contador.textContent = n;
+    if (btnBulk) btnBulk.disabled = n === 0;
+  }
+
+  if (checkAll) {
+    checkAll.addEventListener('change', function () {
+      document.querySelectorAll('.ignor-check').forEach(c => c.checked = this.checked);
+      atualizarContador();
+    });
+  }
+
+  document.querySelectorAll('.ignor-check').forEach(c => c.addEventListener('change', atualizarContador));
+
+  function reverterIds(ids, btn) {
+    if (!ids.length) return;
+    if (!confirm('Reverter ' + ids.length + ' transação(ões) para Pendente?')) return;
+    if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>'; }
+    fetch(REVERTER_URL, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json', 'X-CSRFToken': (document.cookie.match(/csrf_token=([^;]+)/) || ['',''])[1]},
+      body: JSON.stringify({ids: ids})
+    })
+    .then(r => r.json())
+    .then(data => {
+      if (data.success) {
+        location.reload();
+      } else {
+        alert('Erro ao reverter: ' + (data.message || 'desconhecido'));
+        if (btn) { btn.disabled = false; btn.innerHTML = '<i class="bi bi-arrow-counterclockwise"></i>'; }
+      }
+    })
+    .catch(() => {
+      alert('Erro de comunicação. Tente novamente.');
+      if (btn) { btn.disabled = false; btn.innerHTML = '<i class="bi bi-arrow-counterclockwise"></i>'; }
+    });
+  }
+
+  window.reverterSelecionados = function () {
+    reverterIds(getChecked(), btnBulk);
+  };
+
+  document.querySelectorAll('.btn-reverter-unico').forEach(btn => {
+    btn.addEventListener('click', function () {
+      reverterIds([parseInt(this.dataset.txId, 10)], this);
+    });
+  });
+})();
+</script>
+{% endif %}
 {% endblock %}
