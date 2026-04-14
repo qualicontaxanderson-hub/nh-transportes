@@ -344,7 +344,7 @@
     if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>'; }
     fetch(REVERTER_URL, {
       method: 'POST',
-      headers: {'Content-Type': 'application/json', 'X-CSRFToken': (document.cookie.match(/csrf_token=([^;]+)/) || ['',''])[1]},
+      headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({ids: ids})
     })
     .then(r => r.json())
