@@ -3063,10 +3063,17 @@ def exportar_contabil():
 
                 if _receipts:
                     # Fetch sales extended backwards for cycle lookback
-                    _di_obj = (
-                        _dt.datetime.strptime(data_ini, '%Y-%m-%d').date()
-                        if isinstance(data_ini, str) else data_ini
-                    )
+                    if isinstance(data_ini, str):
+                        try:
+                            _di_obj = _dt.datetime.strptime(data_ini, '%Y-%m-%d').date()
+                        except ValueError:
+                            _di_obj = None
+                    elif isinstance(data_ini, _dt.date):
+                        _di_obj = data_ini
+                    else:
+                        _di_obj = None
+                    if _di_obj is None:
+                        _di_obj = _dt.date.today()
                     _ext_ini = (_di_obj - _dt.timedelta(days=_lookback)).isoformat()
                     _sw = ["lc.data BETWEEN %s AND %s", "lcc.bandeira_cartao_id IS NOT NULL"]
                     _sp = [_ext_ini, data_fim]
