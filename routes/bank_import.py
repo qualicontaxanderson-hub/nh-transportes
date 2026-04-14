@@ -2966,6 +2966,10 @@ def exportar_contabil():
 
     ws.row_dimensions[1].height = 20
 
+    # Freeze header row and enable auto-filter so the user can sort/filter columns
+    ws.freeze_panes = 'A2'
+    ws.auto_filter.ref = f'A1:{ws.cell(row=1, column=len(headers)).column_letter}1'
+
     warn_fill  = PatternFill(start_color='FFFF00', end_color='FFFF00', fill_type='solid')
     money_fmt  = '#,##0.00'
     # collect (conta_apelido, banco_nome, tipo_problema) for warning sheet
