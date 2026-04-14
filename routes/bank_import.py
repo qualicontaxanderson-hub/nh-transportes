@@ -2784,6 +2784,7 @@ def exportar_contabil():
                pc_ba.nome   AS conta_banco_nome,
                -- Empresa destino (para débitos/transferências)
                ba_dest.cliente_id AS destino_cliente_id,
+               ba_dest.banco_nome AS conta_destino_banco_nome,
                pc_ba_dest.codigo  AS conta_destino_codigo,
                pc_ba_dest.nome    AS conta_destino_nome,
                -- Empresa origem (para créditos/transferências via conta_origem_id)
@@ -2949,7 +2950,10 @@ def exportar_contabil():
 
     ws.row_dimensions[1].height = 20
 
-    money_fmt = '#,##0.00'
+    warn_fill  = PatternFill(start_color='FFFF00', end_color='FFFF00', fill_type='solid')
+    money_fmt  = '#,##0.00'
+    # collect (conta_apelido, banco_nome, tipo_problema) for warning sheet
+    _warn_accounts = []
     for row_idx, r in enumerate(rows, start=2):
         debito_cod, debito_nome, credito_cod, credito_nome = \
             _resolver_contas_contabeis(r, despesa_conta_map, coligada_map, fornecedor_conta_map, cnpj_conta_map)
@@ -2964,6 +2968,56 @@ def exportar_contabil():
         ws.cell(row=row_idx, column=5, value=credito_nome)
         ws.cell(row=row_idx, column=6, value=debito_cod)
         ws.cell(row=row_idx, column=7, value=debito_nome)
+
+        # Highlight rows with missing codes in yellow and collect warning info
+        missing_credito = not credito_cod
+        missing_debito  = not debito_cod
+        if missing_credito or missing_debito:
+            for col in range(1, 8):
+                ws.cell(row=row_idx, column=col).fill = warn_fill
+            tipo_conc = (r.get('tipo_conciliacao') or '').lower()
+            if 'transferen' in tipo_conc:
+                if missing_debito:
+                    dest_banco = r.get('conta_destino_banco_nome') or ''
+                    if dest_banco:
+                        _warn_accounts.append((
+                            r.get('conta_apelido') or r.get('banco_nome') or '',
+                            dest_banco,
+                            'Conta destino sem Conta Contábil configurada'
+                        ))
+                if missing_credito:
+                    _warn_accounts.append((
+                        r.get('conta_apelido') or r.get('banco_nome') or '',
+                        '',
+                        'Conta bancária sem Conta Contábil configurada'
+                    ))
+
+    # Warning sheet — lists accounts needing configuration in Gerenciar Contas
+    if _warn_accounts:
+        ws_warn = wb.create_sheet(title='⚠ Contas sem config')
+        warn_hdr_fill = PatternFill(start_color='FF6600', end_color='FF6600', fill_type='solid')
+        warn_hdr_font = Font(color='FFFFFF', bold=True, size=10)
+        warn_headers  = ['CONTA BANCÁRIA (ORIGEM)', 'CONTA BANCÁRIA (DESTINO)', 'PROBLEMA']
+        warn_widths   = [35, 35, 55]
+        for ci, (h, w) in enumerate(zip(warn_headers, warn_widths), start=1):
+            cell = ws_warn.cell(row=1, column=ci, value=h)
+            cell.fill = warn_hdr_fill
+            cell.font = warn_hdr_font
+            ws_warn.column_dimensions[cell.column_letter].width = w
+        seen_warn = set()
+        for item in _warn_accounts:
+            key = item[:2]
+            if key not in seen_warn:
+                seen_warn.add(key)
+                for ci, val in enumerate(item, start=1):
+                    ws_warn.cell(row=len(seen_warn) + 1, column=ci, value=val)
+        # instruction row
+        instr_row = len(seen_warn) + 3
+        instr_cell = ws_warn.cell(
+            row=instr_row, column=1,
+            value='Para corrigir: acesse Banco → Gerenciar Contas → edite cada conta e selecione a Conta do Plano de Contas correspondente.'
+        )
+        instr_cell.font = Font(italic=True, color='666666')
 
     buf = io.BytesIO()
     wb.save(buf)
