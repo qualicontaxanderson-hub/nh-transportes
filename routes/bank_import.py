@@ -2258,20 +2258,29 @@ def conciliar():
                     if not cnpj:
                         continue
                     desc_key = _desc_chave(tx.get('descricao') or '')
-                    bsm = bsm_index.get((cnpj, desc_key)) or bsm_index.get((cnpj, ''))
+                    bsm_especifico = bsm_index.get((cnpj, desc_key))
+                    bsm_generico   = bsm_index.get((cnpj, ''))
+                    bsm = bsm_especifico or bsm_generico
                     if bsm:
                         tx['sugestao_fornecedor_id']       = bsm.get('fornecedor_id')
                         tx['sugestao_forma_id']            = bsm.get('forma_recebimento_id')
                         tx['sugestao_titulo_id']           = bsm.get('titulo_id')
                         tx['sugestao_categoria_id']        = bsm.get('categoria_id')
                         tx['sugestao_subcategoria_id']     = bsm.get('subcategoria_id')
-                        tx['sugestao_conta_destino_id']    = bsm.get('conta_destino_id')
-                        tx['sugestao_tipo_debito']         = bsm.get('tipo_debito')
                         tx['sugestao_bsm_descricao_chave'] = bsm.get('descricao_chave', '')
                         tx['sugestao_forma_nome']          = bsm.get('sugestao_forma_nome')
                         tx['sugestao_fornecedor_nome']     = bsm.get('sugestao_fornecedor_nome')
                         tx['sugestao_titulo_nome']         = bsm.get('sugestao_titulo_nome')
                         tx['sugestao_categoria_nome']      = bsm.get('sugestao_categoria_nome')
+                        # Sugestões de transferência (conta_destino_id / tipo_debito='transferencia')
+                        # só devem vir de match ESPECÍFICO (descricao_chave). O entry genérico
+                        # (cnpj, '') não deve sugerir transferência, pois o mesmo CNPJ pode ter
+                        # muitas transações sem relação com aquela conta destino. Isso evita que
+                        # uma memorização legada genérica continue sugerindo transferência após o
+                        # usuário excluir a memorização específica correta.
+                        if bsm_especifico or (bsm_generico and bsm_generico.get('tipo_debito') != 'transferencia'):
+                            tx['sugestao_conta_destino_id'] = bsm.get('conta_destino_id')
+                            tx['sugestao_tipo_debito']      = bsm.get('tipo_debito')
 
             # ------------------------------------------------------------------
             # Sugestões para transações SEM CNPJ: match por descricao_chave
