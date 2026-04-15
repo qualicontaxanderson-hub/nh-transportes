@@ -141,6 +141,12 @@
                   disabled onclick="abrirLancamentoUnico()">
             <i class="bi bi-1-circle"></i> Lançamento Único
           </button>
+          {% if total > 0 and f_clientes %}
+          <button type="button" class="btn btn-outline-info btn-sm" id="btnLancamentoFiltros"
+                  onclick="abrirLancamentoFiltros()">
+            <i class="bi bi-funnel-fill"></i> Lançamento a Todos ({{ total }})
+          </button>
+          {% endif %}
           <button type="button" class="btn btn-success btn-sm" id="btnAprovarSugestoes"
                   onclick="aprovarSugestoesPagina()">
             <i class="bi bi-check2-all"></i> Aprovar Sugestões da Página
@@ -949,6 +955,30 @@ document.getElementById('modalConciliar')?.addEventListener('hidden.bs.modal', f
   document.querySelectorAll('#formConciliar .lancunico-extra').forEach(el => el.remove());
 });
 
+// ---- Lançamento a Todos os Filtros ----
+let _modoFiltros = false;
+
+function abrirLancamentoFiltros() {
+  if (!confirm('Isso irá aplicar o lançamento a TODAS as {{ total }} transação(ões) que correspondem aos filtros ativos. Continuar?')) return;
+  _modoFiltros = true;
+  const li = document.getElementById('lote_info');
+  if (li) li.innerHTML = '<strong class="text-warning">&#9888; Aplicando a <span class="badge bg-danger">{{ total }}</span> transações (todos os filtros ativos, todas as páginas)</strong>';
+  // Ajusta a aba inicial conforme o tipo filtrado
+  {% if f_tipo == 'DEBIT' %}
+  const debitBtn = document.querySelector('[data-bs-target="#tabLoteDebito"]');
+  if (debitBtn) bootstrap.Tab.getOrCreateInstance(debitBtn).show();
+  {% else %}
+  const credBtn = document.querySelector('[data-bs-target="#tabLoteCredito"]');
+  if (credBtn) bootstrap.Tab.getOrCreateInstance(credBtn).show();
+  {% endif %}
+  alternarAbaDebitoLote('fornecedor');
+  bootstrap.Modal.getOrCreateInstance(document.getElementById('modalLote')).show();
+}
+
+document.getElementById('modalLote')?.addEventListener('hidden.bs.modal', function() {
+  _modoFiltros = false;
+});
+
 document.querySelectorAll('.btn-ignorar').forEach(btn => {
   btn.addEventListener('click', function() {
     if (!confirm('Ignorar esta transação?')) return;
@@ -1463,17 +1493,26 @@ function abrirModalLote() {
 }
 
 function submeterLote(tipo) {
-  const checks = [...document.querySelectorAll('.tx-check:checked')].filter(c => c.dataset.tipo === tipo);
-  if (!checks.length) { alert('Nenhum ' + (tipo === 'CREDIT' ? 'crédito' : 'débito') + ' selecionado.'); return; }
   const form = document.createElement('form');
   form.method = 'POST';
-  checks.forEach(c => {
-    const inp = document.createElement('input');
-    inp.type = 'hidden'; inp.name = 'transaction_id'; inp.value = c.value;
-    form.appendChild(inp);
-  });
   const add = (n, v) => { const i = document.createElement('input'); i.type='hidden'; i.name=n; i.value=v; form.appendChild(i); };
-  add('acao', 'conciliar');
+  if (_modoFiltros) {
+    // Modo filtros: envia todos os parâmetros do filtro atual (sem IDs individuais)
+    add('acao', 'conciliar_filtros');
+    const urlParams = new URLSearchParams(window.location.search);
+    for (const [key, value] of urlParams.entries()) {
+      if (key !== 'page') add(key, value);
+    }
+  } else {
+    const checks = [...document.querySelectorAll('.tx-check:checked')].filter(c => c.dataset.tipo === tipo);
+    if (!checks.length) { alert('Nenhum ' + (tipo === 'CREDIT' ? 'crédito' : 'débito') + ' selecionado.'); return; }
+    checks.forEach(c => {
+      const inp = document.createElement('input');
+      inp.type = 'hidden'; inp.name = 'transaction_id'; inp.value = c.value;
+      form.appendChild(inp);
+    });
+    add('acao', 'conciliar');
+  }
   add('tipo_tx', tipo);
   if (tipo === 'CREDIT') {
     const sel = document.getElementById('selectFormaLote');

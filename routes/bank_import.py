@@ -2063,6 +2063,50 @@ def conciliar():
             _close_db()
             return redirect(request.url)
 
+        if acao == 'conciliar_filtros':
+            # Re-consulta TODOS os IDs pendentes que correspondem aos filtros enviados no POST
+            _TIPOS_OK2 = {'CREDIT', 'DEBIT'}
+            ff_clientes = [int(c) for c in request.form.getlist('cliente_id') if c and c.isdigit()]
+            ff_tipo     = request.form.get('tipo', '')
+            ff_data_ini = request.form.get('data_ini', '')
+            ff_data_fim = request.form.get('data_fim', '')
+            ff_desc     = request.form.get('descricao', '')
+            ff_cnpj     = request.form.get('cnpj_cpf', '')
+            ff_contas   = [c for c in request.form.getlist('account_id') if c]
+            w2, p2 = ["bt.status = 'pendente'"], []
+            if ff_clientes:
+                ph = ','.join(['%s'] * len(ff_clientes))
+                w2.append(f"ba.cliente_id IN ({ph})")
+                p2.extend(ff_clientes)
+            if ff_tipo and ff_tipo in _TIPOS_OK2:
+                w2.append("bt.tipo = %s")
+                p2.append(ff_tipo)
+            if ff_data_ini:
+                w2.append("bt.data_transacao >= %s")
+                p2.append(ff_data_ini)
+            if ff_data_fim:
+                w2.append("bt.data_transacao <= %s")
+                p2.append(ff_data_fim)
+            if ff_desc:
+                w2.append("bt.descricao LIKE %s")
+                p2.append(f'%{ff_desc}%')
+            if ff_cnpj:
+                w2.append("bt.cnpj_cpf LIKE %s")
+                p2.append(f'%{ff_cnpj}%')
+            if ff_contas:
+                ph = ','.join(['%s'] * len(ff_contas))
+                w2.append(f"bt.account_id IN ({ph})")
+                p2.extend(ff_contas)
+            cursor.execute(
+                "SELECT bt.id FROM bank_transactions bt"
+                " INNER JOIN bank_accounts ba ON bt.account_id = ba.id"
+                f" WHERE {' AND '.join(w2)}"
+                " ORDER BY bt.data_transacao DESC, bt.id DESC",
+                p2,
+            )
+            tx_ids = [str(row['id']) for row in cursor.fetchall()]
+            acao = 'conciliar'
+
         salvar_mapeamento = (acao != 'lancamento_unico')
         # Lançamento Único usa a mesma lógica de conciliação, apenas sem salvar mapeamento
         acao_conciliar = 'conciliar' if acao == 'lancamento_unico' else acao
