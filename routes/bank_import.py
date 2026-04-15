@@ -2258,9 +2258,9 @@ def conciliar():
                     if not cnpj:
                         continue
                     desc_key = _desc_chave(tx.get('descricao') or '')
-                    bsm_especifico = bsm_index.get((cnpj, desc_key))
-                    bsm_generico   = bsm_index.get((cnpj, ''))
-                    bsm = bsm_especifico or bsm_generico
+                    bsm_specific = bsm_index.get((cnpj, desc_key))
+                    bsm_generic  = bsm_index.get((cnpj, ''))
+                    bsm = bsm_specific or bsm_generic
                     if bsm:
                         tx['sugestao_fornecedor_id']       = bsm.get('fornecedor_id')
                         tx['sugestao_forma_id']            = bsm.get('forma_recebimento_id')
@@ -2272,13 +2272,18 @@ def conciliar():
                         tx['sugestao_fornecedor_nome']     = bsm.get('sugestao_fornecedor_nome')
                         tx['sugestao_titulo_nome']         = bsm.get('sugestao_titulo_nome')
                         tx['sugestao_categoria_nome']      = bsm.get('sugestao_categoria_nome')
-                        # Sugestões de transferência (conta_destino_id / tipo_debito='transferencia')
-                        # só devem vir de match ESPECÍFICO (descricao_chave). O entry genérico
-                        # (cnpj, '') não deve sugerir transferência, pois o mesmo CNPJ pode ter
-                        # muitas transações sem relação com aquela conta destino. Isso evita que
-                        # uma memorização legada genérica continue sugerindo transferência após o
-                        # usuário excluir a memorização específica correta.
-                        if bsm_especifico or (bsm_generico and bsm_generico.get('tipo_debito') != 'transferencia'):
+                        # Transfer suggestions (conta_destino_id / tipo_debito='transferencia')
+                        # must only come from a SPECIFIC description-key match. A generic entry
+                        # (cnpj, '') must never suggest a transfer destination because the same
+                        # CNPJ can appear in many unrelated transactions. This prevents a stale
+                        # legacy generic entry from continuing to suggest a transfer after the
+                        # user deletes the specific memorization.
+                        is_generic_transfer = (
+                            bsm_generic
+                            and not bsm_specific
+                            and bsm_generic.get('tipo_debito') == 'transferencia'
+                        )
+                        if not is_generic_transfer:
                             tx['sugestao_conta_destino_id'] = bsm.get('conta_destino_id')
                             tx['sugestao_tipo_debito']      = bsm.get('tipo_debito')
 
