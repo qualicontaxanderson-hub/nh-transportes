@@ -841,7 +841,7 @@ function atualizarBotoes() {
   if (contador) contador.textContent = n;
   if (btnConciliarSel) btnConciliarSel.disabled = n === 0;
   if (btnIgnorarSel)   btnIgnorarSel.disabled   = n === 0;
-  if (btnLancUnico)    btnLancUnico.disabled     = n !== 1;
+  if (btnLancUnico)    btnLancUnico.disabled     = n === 0;
 }
 
 if (checkAll) {
@@ -883,10 +883,14 @@ function ignorarSelecionados() {
   form.submit();
 }
 
+// IDs de todas as transações selecionadas para Lançamento Único em lote
+let _lancUnicoIds = [];
+
 function abrirLancamentoUnico() {
-  const checked = document.querySelectorAll('.tx-check:checked');
-  if (checked.length !== 1) return;
-  // Encontra o botão .btn-conciliar da mesma linha e reutiliza sua lógica
+  const checked = [...document.querySelectorAll('.tx-check:checked')];
+  if (checked.length === 0) return;
+  _lancUnicoIds = checked.map(c => c.value);
+  // Usa o primeiro selecionado para popular o modal
   const tr = checked[0].closest('tr');
   const btn = tr ? tr.querySelector('.btn-conciliar') : null;
   if (!btn) return;
@@ -898,14 +902,51 @@ function abrirLancamentoUnico() {
   // Atualiza o título do modal para indicar modo Lançamento Único
   const titulo = document.querySelector('#modalConciliar .modal-title');
   if (titulo) titulo.innerHTML = '<i class="bi bi-1-circle"></i> Lançamento Único (sem memorizar)';
+  // Para múltiplas seleções: mostra badge de quantidade e limpa valor da despesa
+  // (cada transação usará o seu próprio valor no backend)
+  if (_lancUnicoIds.length > 1) {
+    const info = document.getElementById('modal_tx_info');
+    if (info) {
+      const badge = document.createElement('span');
+      badge.className = 'badge bg-warning text-dark ms-2';
+      badge.textContent = _lancUnicoIds.length + ' transações selecionadas';
+      info.appendChild(badge);
+    }
+    // Limpa o valor da linha de despesa — cada transação usará o seu próprio valor
+    const inp1 = document.getElementById('desp_1_valor');
+    if (inp1) {
+      inp1.value = '';
+      inp1.placeholder = '(valor de cada transação)';
+    }
+    const lbl = document.getElementById('labelValorTotal');
+    if (lbl) lbl.textContent = '(múltiplos valores)';
+  }
 }
 
-// Restaura o título e ação padrão ao fechar o modal
+// Injeta os IDs extras como campos ocultos antes de submeter o formulário
+document.getElementById('formConciliar')?.addEventListener('submit', function() {
+  const acaoInput = this.querySelector('input[name="acao"]');
+  if (acaoInput && acaoInput.value === 'lancamento_unico' && _lancUnicoIds.length > 1) {
+    this.querySelectorAll('.lancunico-extra').forEach(el => el.remove());
+    const mainInput = document.getElementById('modal_tx_id');
+    if (mainInput) mainInput.value = _lancUnicoIds[0];
+    for (let i = 1; i < _lancUnicoIds.length; i++) {
+      const inp = document.createElement('input');
+      inp.type = 'hidden'; inp.name = 'transaction_id'; inp.value = _lancUnicoIds[i];
+      inp.className = 'lancunico-extra';
+      this.appendChild(inp);
+    }
+  }
+});
+
+// Restaura o título e ação padrão ao fechar o modal; limpa estado de lote
 document.getElementById('modalConciliar')?.addEventListener('hidden.bs.modal', function() {
   const acaoInput = document.querySelector('#formConciliar input[name="acao"]');
   if (acaoInput) acaoInput.value = 'conciliar';
   const titulo = document.querySelector('#modalConciliar .modal-title');
   if (titulo) titulo.innerHTML = '<i class="bi bi-link-45deg"></i> Conciliar Transação';
+  _lancUnicoIds = [];
+  document.querySelectorAll('#formConciliar .lancunico-extra').forEach(el => el.remove());
 });
 
 document.querySelectorAll('.btn-ignorar').forEach(btn => {
