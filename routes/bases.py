@@ -30,7 +30,7 @@ def index():
         if nivel == 'SUPERVISOR':
             return redirect(url_for('lancamentos_caixa.lista'))
     
-    import json
+    import calendar
     from datetime import datetime, date
 
     # coletar métricas simples do banco (fallback para 0 em caso de erro)
@@ -161,7 +161,6 @@ def index():
 
     # Construir URLs do relatório de lucro para o mês atual
     primeiro_dia = date(hoje.year, hoje.month, 1)
-    import calendar
     ultimo_dia = date(hoje.year, hoje.month, calendar.monthrange(hoje.year, hoje.month)[1])
     lucro_mes_url = (
         f"https://app.postonovohorizonte.com.br/relatorios/lucro_postos"
@@ -173,9 +172,9 @@ def index():
     importar_pedido_url = "https://app.postonovohorizonte.com.br/pedidos/importar"
 
     grafico = {
-        'labels': json.dumps(meses_labels),
-        'fretes': json.dumps(fretes_por_mes),
-        'pedidos': json.dumps(pedidos_por_mes),
+        'labels': meses_labels,
+        'fretes': fretes_por_mes,
+        'pedidos': pedidos_por_mes,
     }
 
     # URLs seguras para o template (se endpoint inexistente, retorna '#')
@@ -203,7 +202,9 @@ def index():
     context.update(totals)
     context.update(links)
     context['grafico'] = grafico
-    context['mes_atual'] = hoje.strftime('%B/%Y').capitalize()
+    _meses_pt = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho',
+                 'Julho','Agosto','Setembro','Outubro','Novembro','Dezembro']
+    context['mes_atual'] = f"{_meses_pt[hoje.month - 1]}/{hoje.year}"
 
     return render_template('dashboard.html', **context)
 

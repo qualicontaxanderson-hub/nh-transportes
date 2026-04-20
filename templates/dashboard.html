@@ -444,9 +444,9 @@
   Chart.defaults.color = '#94a3b8';
   Chart.defaults.borderColor = '#1e3a5f';
 
-  const labels  = {{ grafico.labels | safe }};
-  const fretes  = {{ grafico.fretes | safe }};
-  const pedidos = {{ grafico.pedidos | safe }};
+  const labels  = {{ grafico.labels | tojson }};
+  const fretes  = {{ grafico.fretes | tojson }};
+  const pedidos = {{ grafico.pedidos | tojson }};
 
   // Bar chart – Fretes por mês
   const ctxF = document.getElementById('chartFretes').getContext('2d');
