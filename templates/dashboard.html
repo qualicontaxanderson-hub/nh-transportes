@@ -2,158 +2,528 @@
 
 {% block title %}Dashboard - NH Transportes{% endblock %}
 
-{% block content %}
+{% block styles %}
+<style>
+  /* Power BI style dashboard */
+  .dash-wrapper {
+    background: #0e1117;
+    min-height: 100vh;
+    padding: 0;
+    margin: -1.5rem -12px 0;
+  }
+  .dash-header {
+    background: linear-gradient(135deg, #1a2236 0%, #0d1b2a 100%);
+    border-bottom: 1px solid #1e3a5f;
+    padding: 16px 28px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+  .dash-header-left h1 {
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: #e2e8f0;
+    margin: 0;
+    letter-spacing: 0.5px;
+  }
+  .dash-header-left p {
+    font-size: 0.78rem;
+    color: #64748b;
+    margin: 2px 0 0;
+  }
+  .dash-body {
+    padding: 20px 24px;
+  }
 
-<div class="row mb-3">
-    <div class="col-12 d-flex flex-wrap justify-content-between align-items-center gap-2">
-        <div>
-            <h2 class="mb-1">Bem-vindo ao NH Transportes</h2>
-            {% if current_user.is_authenticated %}
-                <p class="text-muted mb-0">
-                    <i class="bi bi-person-circle"></i>
-                    Logado como: <strong>{{ current_user.nome_completo }}</strong> ({{ current_user.username }})
-                    {% if current_user.nivel == 'admin' %}
-                        <span class="badge bg-danger ms-2">Administrador</span>
-                    {% endif %}
-                </p>
-            {% endif %}
-        </div>
+  /* KPI Cards */
+  .kpi-card {
+    border-radius: 10px;
+    padding: 20px 22px;
+    border: none;
+    position: relative;
+    overflow: hidden;
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+  }
+  .kpi-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 25px rgba(0,0,0,0.4) !important;
+  }
+  .kpi-card .kpi-label {
+    font-size: 0.7rem;
+    font-weight: 600;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    opacity: 0.8;
+    margin-bottom: 4px;
+  }
+  .kpi-card .kpi-value {
+    font-size: 2.2rem;
+    font-weight: 700;
+    line-height: 1.1;
+    color: #fff;
+  }
+  .kpi-card .kpi-sub {
+    font-size: 0.72rem;
+    opacity: 0.7;
+    margin-top: 6px;
+  }
+  .kpi-card .kpi-icon {
+    position: absolute;
+    right: 16px;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 2.8rem;
+    opacity: 0.15;
+  }
+  .kpi-blue   { background: linear-gradient(135deg, #1565c0, #0d47a1); }
+  .kpi-green  { background: linear-gradient(135deg, #2e7d32, #1b5e20); }
+  .kpi-orange { background: linear-gradient(135deg, #e65100, #bf360c); }
+  .kpi-purple { background: linear-gradient(135deg, #4a148c, #311b92); }
+  .kpi-cyan   { background: linear-gradient(135deg, #00838f, #006064); }
+  .kpi-teal   { background: linear-gradient(135deg, #00695c, #004d40); }
 
-        <!-- Ações rápidas prioritárias -->
-        <div class="d-flex flex-wrap gap-2">
-            <a href="{{ fretes_novo_url }}" class="btn btn-warning">
-                <i class="bi bi-box-seam"></i> Novo Frete
-            </a>
-            <a href="{{ pedidos_novo_url }}" class="btn btn-success">
-                <i class="bi bi-bag-plus"></i> Novo Pedido
-            </a>
-            <a href="{{ clientes_novo_url }}" class="btn btn-primary">
-                <i class="bi bi-person-plus"></i> Novo Cliente
-            </a>
-            <a href="{{ fornecedores_novo_url }}" class="btn btn-outline-secondary">
-                <i class="bi bi-truck"></i> Novo Fornecedor
-            </a>
+  /* Chart cards */
+  .chart-card {
+    background: #1a2236;
+    border-radius: 10px;
+    border: 1px solid #1e3a5f;
+    padding: 20px;
+  }
+  .chart-card .chart-title {
+    font-size: 0.8rem;
+    font-weight: 700;
+    letter-spacing: 0.8px;
+    text-transform: uppercase;
+    color: #94a3b8;
+    margin-bottom: 16px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .chart-card .chart-title i {
+    color: #3b82f6;
+  }
 
-        </div>
-    </div>
-</div>
+  /* Info cards */
+  .info-card {
+    background: #1a2236;
+    border-radius: 10px;
+    border: 1px solid #1e3a5f;
+    padding: 22px;
+    height: 100%;
+    transition: border-color 0.2s;
+  }
+  .info-card:hover {
+    border-color: #3b82f6;
+  }
+  .info-card .info-title {
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    color: #64748b;
+    margin-bottom: 8px;
+  }
+  .info-card .info-value {
+    font-size: 1.6rem;
+    font-weight: 700;
+    color: #e2e8f0;
+  }
+  .info-card .info-desc {
+    font-size: 0.75rem;
+    color: #64748b;
+    margin-top: 4px;
+  }
 
-<!-- Cards principais -->
-<div class="row g-4">
-    <div class="col-md-6 col-lg-3">
-        <div class="card text-bg-primary shadow-sm border-0">
-            <div class="card-body d-flex align-items-center justify-content-between">
-                <div>
-                    <h6 class="text-uppercase mb-1 small">Clientes</h6>
-                    <p class="fs-3 fw-bold mb-1">{{ total_clientes }}</p>
-                    <a href="{{ clientes_lista_url }}" class="btn btn-light btn-sm">
-                        Ver todos
-                    </a>
-                </div>
-                <div class="ms-3 text-white-50">
-                    <i class="bi bi-people fs-1"></i>
-                </div>
-            </div>
-        </div>
-    </div>
+  /* Lucro card special */
+  .lucro-card {
+    background: linear-gradient(135deg, #1a3a2a, #0d2118);
+    border-radius: 10px;
+    border: 1px solid #2e7d32;
+    padding: 22px;
+    height: 100%;
+    text-decoration: none;
+    display: block;
+    transition: border-color 0.2s, transform 0.15s;
+  }
+  .lucro-card:hover {
+    border-color: #4caf50;
+    transform: translateY(-2px);
+    text-decoration: none;
+  }
+  .lucro-card .lucro-label {
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    color: #4caf50;
+    margin-bottom: 6px;
+  }
+  .lucro-card .lucro-desc {
+    font-size: 0.82rem;
+    color: #94a3b8;
+    margin-top: 8px;
+    line-height: 1.5;
+  }
+  .lucro-card .lucro-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 14px;
+    background: #2e7d32;
+    color: #fff;
+    border: none;
+    border-radius: 6px;
+    padding: 7px 16px;
+    font-size: 0.78rem;
+    font-weight: 600;
+    text-decoration: none;
+    transition: background 0.2s;
+  }
+  .lucro-card:hover .lucro-btn {
+    background: #388e3c;
+  }
 
-    <div class="col-md-6 col-lg-3">
-        <div class="card text-bg-success shadow-sm border-0">
-            <div class="card-body d-flex align-items-center justify-content-between">
-                <div>
-                    <h6 class="text-uppercase mb-1 small">Fornecedores</h6>
-                    <p class="fs-3 fw-bold mb-1">{{ total_fornecedores }}</p>
-                    <a href="{{ fornecedores_lista_url }}" class="btn btn-light btn-sm">
-                        Ver todos
-                    </a>
-                </div>
-                <div class="ms-3 text-white-50">
-                    <i class="bi bi-truck fs-1"></i>
-                </div>
-            </div>
-        </div>
-    </div>
+  /* Action buttons */
+  .btn-pbi-primary {
+    background: #2563eb;
+    color: #fff;
+    border: none;
+    border-radius: 7px;
+    padding: 9px 20px;
+    font-size: 0.82rem;
+    font-weight: 600;
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    transition: background 0.2s, transform 0.1s;
+    text-decoration: none;
+  }
+  .btn-pbi-primary:hover {
+    background: #1d4ed8;
+    color: #fff;
+    transform: translateY(-1px);
+  }
+  .btn-pbi-success {
+    background: #16a34a;
+    color: #fff;
+    border: none;
+    border-radius: 7px;
+    padding: 9px 20px;
+    font-size: 0.82rem;
+    font-weight: 600;
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    transition: background 0.2s, transform 0.1s;
+    text-decoration: none;
+  }
+  .btn-pbi-success:hover {
+    background: #15803d;
+    color: #fff;
+    transform: translateY(-1px);
+  }
 
-    <div class="col-md-6 col-lg-3">
-        <div class="card text-bg-warning shadow-sm border-0">
-            <div class="card-body d-flex align-items-center justify-content-between">
-                <div>
-                    <h6 class="text-uppercase mb-1 small">Motoristas</h6>
-                    <p class="fs-3 fw-bold mb-1">{{ total_motoristas }}</p>
-                    <a href="{{ motoristas_lista_url }}" class="btn btn-light btn-sm">
-                        Ver todos
-                    </a>
-                </div>
-                <div class="ms-3 text-dark-50">
-                    <i class="bi bi-person-badge fs-1"></i>
-                </div>
-            </div>
-        </div>
-    </div>
+  /* Section labels */
+  .section-label {
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 1.2px;
+    text-transform: uppercase;
+    color: #475569;
+    margin-bottom: 12px;
+    padding-left: 2px;
+  }
 
-    <div class="col-md-6 col-lg-3">
-        <div class="card text-bg-info shadow-sm border-0">
-            <div class="card-body d-flex align-items-center justify-content-between">
-                <div>
-                    <h6 class="text-uppercase mb-1 small">Fretes</h6>
-                    <p class="fs-3 fw-bold mb-1">{{ total_fretes }}</p>
-                    <a href="{{ fretes_lista_url }}" class="btn btn-light btn-sm">
-                        Ver todos
-                    </a>
-                </div>
-                <div class="ms-3 text-white-50">
-                    <i class="bi bi-box-seam fs-1"></i>
-                </div>
-            </div>
-        </div>
-    </div>
-</div>
+  /* Separator */
+  .dash-sep {
+    border-color: #1e3a5f;
+    margin: 6px 0 20px;
+  }
 
-<!-- Linha extra com pedidos (se quiser destacar) -->
-<div class="row g-4 mt-2">
-    <div class="col-md-6 col-lg-3">
-        <div class="card shadow-sm border-0">
-            <div class="card-body d-flex align-items-center justify-content-between">
-                <div>
-                    <h6 class="text-uppercase mb-1 small">Pedidos</h6>
-                    <p class="fs-3 fw-bold mb-1">{{ total_pedidos }}</p>
-                    <a href="{{ pedidos_index_url }}" class="btn btn-outline-success btn-sm">
-                        Ver pedidos
-                    </a>
-                </div>
-                <div class="ms-3 text-muted">
-                    <i class="bi bi-bag fs-1"></i>
-                </div>
-            </div>
-        </div>
-    </div>
-</div>
+  /* Stats row in bottom */
+  .stat-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 0;
+    border-bottom: 1px solid #1e3a5f;
+  }
+  .stat-row:last-child { border-bottom: none; }
+  .stat-row .stat-icon {
+    width: 36px; height: 36px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1rem;
+    flex-shrink: 0;
+  }
+  .stat-row .stat-text { flex: 1; }
+  .stat-row .stat-text .st-label {
+    font-size: 0.72rem;
+    color: #64748b;
+    font-weight: 500;
+  }
+  .stat-row .stat-text .st-val {
+    font-size: 0.95rem;
+    color: #e2e8f0;
+    font-weight: 700;
+  }
 
-<!-- Seção de Gerenciamento de Conta (Para todos os usuários) -->
-<div class="row mt-4">
-    <div class="col-12">
-        <div class="card border-secondary shadow-sm">
-            <div class="card-header bg-secondary text-white">
-                <h5 class="card-title mb-0">
-                    <i class="bi bi-person-gear"></i> Minha Conta
-                </h5>
-            </div>
-            <div class="card-body">
-                <div class="row g-3">
-                    <div class="col-md-6">
-                        <a href="{{ alterar_senha_url }}" class="btn btn-outline-secondary w-100">
-                            <i class="bi bi-key"></i> Alterar Minha Senha
-                        </a>
-                    </div>
-                    <div class="col-md-6">
-                        <a href="{{ logout_url }}" class="btn btn-outline-danger w-100">
-                            <i class="bi bi-box-arrow-right"></i> Sair do Sistema
-                        </a>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-</div>
-
+  /* Override container background */
+  body { background: #0e1117 !important; }
+  .container-fluid { background: #0e1117; }
+</style>
 {% endblock %}
+
+{% block content %}
+<div class="dash-wrapper">
+
+  <!-- Header -->
+  <div class="dash-header">
+    <div class="dash-header-left">
+      <h1><i class="bi bi-bar-chart-line-fill me-2" style="color:#3b82f6"></i>DASHBOARD  ·  NH TRANSPORTES</h1>
+      <p>
+        {% if current_user.is_authenticated %}
+          {{ current_user.nome_completo }} ({{ current_user.username }})
+          {% if current_user.nivel == 'admin' %}<span class="badge bg-danger ms-2" style="font-size:0.65rem">ADM</span>{% endif %}
+          &nbsp;·&nbsp;
+        {% endif %}
+        {{ mes_atual }}
+      </p>
+    </div>
+    <div class="d-flex gap-2 flex-wrap">
+      <a href="{{ pedidos_novo_url }}" class="btn-pbi-success">
+        <i class="bi bi-bag-plus-fill"></i> Novo Pedido
+      </a>
+      <a href="{{ importar_pedido_url }}" target="_blank" class="btn-pbi-primary">
+        <i class="bi bi-cloud-download-fill"></i> Importar Pedido
+      </a>
+    </div>
+  </div>
+
+  <!-- Body -->
+  <div class="dash-body">
+
+    <!-- KPI Cards -->
+    <div class="section-label">Resumo Geral</div>
+    <div class="row g-3 mb-4">
+      <div class="col-6 col-md-4 col-lg-2">
+        <div class="kpi-card kpi-blue shadow">
+          <div class="kpi-label text-white">Fretes</div>
+          <div class="kpi-value">{{ total_fretes }}</div>
+          <div class="kpi-sub text-white-50"><i class="bi bi-calendar3"></i> {{ fretes_mes }} este mês</div>
+          <i class="bi bi-box-seam kpi-icon text-white"></i>
+        </div>
+      </div>
+      <div class="col-6 col-md-4 col-lg-2">
+        <div class="kpi-card kpi-green shadow">
+          <div class="kpi-label text-white">Pedidos</div>
+          <div class="kpi-value">{{ total_pedidos }}</div>
+          <div class="kpi-sub text-white-50"><i class="bi bi-calendar3"></i> {{ pedidos_mes }} este mês</div>
+          <i class="bi bi-bag-fill kpi-icon text-white"></i>
+        </div>
+      </div>
+      <div class="col-6 col-md-4 col-lg-2">
+        <div class="kpi-card kpi-purple shadow">
+          <div class="kpi-label text-white">Clientes</div>
+          <div class="kpi-value">{{ total_clientes }}</div>
+          <div class="kpi-sub text-white-50"><i class="bi bi-people-fill"></i> cadastrados</div>
+          <i class="bi bi-people kpi-icon text-white"></i>
+        </div>
+      </div>
+      <div class="col-6 col-md-4 col-lg-2">
+        <div class="kpi-card kpi-orange shadow">
+          <div class="kpi-label text-white">Motoristas</div>
+          <div class="kpi-value">{{ total_motoristas }}</div>
+          <div class="kpi-sub text-white-50"><i class="bi bi-person-badge"></i> ativos</div>
+          <i class="bi bi-person-badge kpi-icon text-white"></i>
+        </div>
+      </div>
+      <div class="col-6 col-md-4 col-lg-2">
+        <div class="kpi-card kpi-cyan shadow">
+          <div class="kpi-label text-white">Fornecedores</div>
+          <div class="kpi-value">{{ total_fornecedores }}</div>
+          <div class="kpi-sub text-white-50"><i class="bi bi-truck"></i> cadastrados</div>
+          <i class="bi bi-truck kpi-icon text-white"></i>
+        </div>
+      </div>
+      <div class="col-6 col-md-4 col-lg-2">
+        <a href="{{ lucro_mes_url }}" target="_blank" class="lucro-card text-decoration-none" style="display:flex;flex-direction:column;justify-content:center;">
+          <div class="lucro-label"><i class="bi bi-graph-up-arrow me-1"></i>Lucro do Mês</div>
+          <div style="font-size:1.5rem;font-weight:700;color:#4caf50;">Ver Relatório</div>
+          <div class="lucro-desc">Clique para abrir o relatório de lucro de {{ mes_atual }}.</div>
+          <span class="lucro-btn"><i class="bi bi-box-arrow-up-right"></i> Abrir</span>
+        </a>
+      </div>
+    </div>
+
+    <!-- Charts Row -->
+    <div class="section-label">Evolução — Últimos 6 Meses</div>
+    <div class="row g-3 mb-4">
+      <!-- Fretes por Mês -->
+      <div class="col-12 col-lg-7">
+        <div class="chart-card">
+          <div class="chart-title"><i class="bi bi-bar-chart-fill"></i> Fretes por Mês</div>
+          <canvas id="chartFretes" height="200"></canvas>
+        </div>
+      </div>
+      <!-- Pedidos por Mês -->
+      <div class="col-12 col-lg-5">
+        <div class="chart-card">
+          <div class="chart-title"><i class="bi bi-graph-up"></i> Pedidos por Mês</div>
+          <canvas id="chartPedidos" height="200"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <!-- Bottom row -->
+    <div class="section-label">Atalhos Rápidos</div>
+    <div class="row g-3">
+      <div class="col-md-6 col-lg-3">
+        <div class="info-card">
+          <div class="info-title"><i class="bi bi-box-seam me-1"></i>Fretes</div>
+          <div class="info-value">{{ total_fretes }}</div>
+          <div class="info-desc">Total de fretes cadastrados</div>
+          <a href="{{ fretes_lista_url }}" class="btn btn-outline-secondary btn-sm mt-3 w-100">
+            <i class="bi bi-list-ul me-1"></i>Ver todos os fretes
+          </a>
+        </div>
+      </div>
+      <div class="col-md-6 col-lg-3">
+        <div class="info-card">
+          <div class="info-title"><i class="bi bi-bag me-1"></i>Pedidos</div>
+          <div class="info-value">{{ total_pedidos }}</div>
+          <div class="info-desc">Total de pedidos cadastrados</div>
+          <a href="{{ pedidos_index_url }}" class="btn btn-outline-secondary btn-sm mt-3 w-100">
+            <i class="bi bi-list-ul me-1"></i>Ver todos os pedidos
+          </a>
+        </div>
+      </div>
+      <div class="col-md-6 col-lg-3">
+        <div class="info-card">
+          <div class="info-title"><i class="bi bi-people me-1"></i>Clientes &amp; Motoristas</div>
+          <div class="info-value">{{ total_clientes }}</div>
+          <div class="info-desc">Clientes · <strong class="text-warning">{{ total_motoristas }}</strong> motoristas</div>
+          <a href="{{ clientes_lista_url }}" class="btn btn-outline-secondary btn-sm mt-3 w-100">
+            <i class="bi bi-people me-1"></i>Ver clientes
+          </a>
+        </div>
+      </div>
+      <div class="col-md-6 col-lg-3">
+        <div class="info-card">
+          <div class="info-title"><i class="bi bi-person-gear me-1"></i>Minha Conta</div>
+          <div class="info-value" style="font-size:1rem;color:#94a3b8;">
+            {% if current_user.is_authenticated %}{{ current_user.nome_completo }}{% endif %}
+          </div>
+          <div class="info-desc">Gerencie sua conta</div>
+          <div class="d-flex gap-2 mt-3">
+            <a href="{{ alterar_senha_url }}" class="btn btn-outline-secondary btn-sm flex-fill">
+              <i class="bi bi-key"></i> Senha
+            </a>
+            <a href="{{ logout_url }}" class="btn btn-outline-danger btn-sm flex-fill">
+              <i class="bi bi-box-arrow-right"></i> Sair
+            </a>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /dash-body -->
+</div><!-- /dash-wrapper -->
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script>
+(function() {
+  // Defaults
+  Chart.defaults.color = '#94a3b8';
+  Chart.defaults.borderColor = '#1e3a5f';
+
+  const labels  = {{ grafico.labels | safe }};
+  const fretes  = {{ grafico.fretes | safe }};
+  const pedidos = {{ grafico.pedidos | safe }};
+
+  // Bar chart – Fretes por mês
+  const ctxF = document.getElementById('chartFretes').getContext('2d');
+  new Chart(ctxF, {
+    type: 'bar',
+    data: {
+      labels: labels,
+      datasets: [{
+        label: 'Fretes',
+        data: fretes,
+        backgroundColor: 'rgba(37,99,235,0.75)',
+        borderColor: '#2563eb',
+        borderWidth: 2,
+        borderRadius: 6,
+        borderSkipped: false,
+      }]
+    },
+    options: {
+      responsive: true,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: '#1e2d4a',
+          titleColor: '#94a3b8',
+          bodyColor: '#e2e8f0',
+          borderColor: '#3b82f6',
+          borderWidth: 1,
+        }
+      },
+      scales: {
+        x: { grid: { color: '#1e3a5f' }, ticks: { color: '#64748b' } },
+        y: { grid: { color: '#1e3a5f' }, ticks: { color: '#64748b' }, beginAtZero: true }
+      }
+    }
+  });
+
+  // Line chart – Pedidos por mês
+  const ctxP = document.getElementById('chartPedidos').getContext('2d');
+  const gradient = ctxP.createLinearGradient(0, 0, 0, 200);
+  gradient.addColorStop(0, 'rgba(22,163,74,0.4)');
+  gradient.addColorStop(1, 'rgba(22,163,74,0.02)');
+  new Chart(ctxP, {
+    type: 'line',
+    data: {
+      labels: labels,
+      datasets: [{
+        label: 'Pedidos',
+        data: pedidos,
+        borderColor: '#16a34a',
+        backgroundColor: gradient,
+        borderWidth: 2.5,
+        pointBackgroundColor: '#16a34a',
+        pointRadius: 4,
+        pointHoverRadius: 6,
+        fill: true,
+        tension: 0.4,
+      }]
+    },
+    options: {
+      responsive: true,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: '#1e2d4a',
+          titleColor: '#94a3b8',
+          bodyColor: '#e2e8f0',
+          borderColor: '#16a34a',
+          borderWidth: 1,
+        }
+      },
+      scales: {
+        x: { grid: { color: '#1e3a5f' }, ticks: { color: '#64748b' } },
+        y: { grid: { color: '#1e3a5f' }, ticks: { color: '#64748b' }, beginAtZero: true }
+      }
+    }
+  });
+})();
+</script>
+{% endblock %}
+

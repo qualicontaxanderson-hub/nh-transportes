@@ -30,6 +30,9 @@ def index():
         if nivel == 'SUPERVISOR':
             return redirect(url_for('lancamentos_caixa.lista'))
     
+    import json
+    from datetime import datetime, date
+
     # coletar métricas simples do banco (fallback para 0 em caso de erro)
     totals = {
         'total_clientes': 0,
@@ -37,7 +40,25 @@ def index():
         'total_motoristas': 0,
         'total_fretes': 0,
         'total_pedidos': 0,
+        'fretes_mes': 0,
+        'pedidos_mes': 0,
     }
+
+    # Dados para gráficos (últimos 6 meses)
+    hoje = date.today()
+    meses_labels = []
+    fretes_por_mes = []
+    pedidos_por_mes = []
+    for i in range(5, -1, -1):
+        # calcular mês/ano
+        mes_offset = hoje.month - i
+        ano_offset = hoje.year
+        while mes_offset <= 0:
+            mes_offset += 12
+            ano_offset -= 1
+        meses_labels.append(f"{mes_offset:02d}/{ano_offset}")
+        fretes_por_mes.append(0)
+        pedidos_por_mes.append(0)
 
     try:
         conn = get_db_connection()
@@ -72,6 +93,62 @@ def index():
         except Exception:
             totals['total_pedidos'] = 0
 
+        # Fretes do mês atual
+        try:
+            cursor.execute(
+                "SELECT COUNT(1) FROM fretes WHERE YEAR(data_frete)=%s AND MONTH(data_frete)=%s",
+                (hoje.year, hoje.month)
+            )
+            totals['fretes_mes'] = int(cursor.fetchone()[0] or 0)
+        except Exception:
+            totals['fretes_mes'] = 0
+
+        # Pedidos do mês atual
+        try:
+            cursor.execute(
+                "SELECT COUNT(1) FROM pedidos WHERE YEAR(data_pedido)=%s AND MONTH(data_pedido)=%s",
+                (hoje.year, hoje.month)
+            )
+            totals['pedidos_mes'] = int(cursor.fetchone()[0] or 0)
+        except Exception:
+            totals['pedidos_mes'] = 0
+
+        # Fretes por mês (últimos 6 meses)
+        try:
+            cursor.execute(
+                """SELECT MONTH(data_frete) AS mes, YEAR(data_frete) AS ano, COUNT(1) AS total
+                   FROM fretes
+                   WHERE data_frete >= DATE_SUB(CURDATE(), INTERVAL 6 MONTH)
+                   GROUP BY ano, mes
+                   ORDER BY ano, mes"""
+            )
+            rows = cursor.fetchall()
+            for row in rows:
+                mes_ano = f"{int(row[0]):02d}/{int(row[1])}"
+                if mes_ano in meses_labels:
+                    idx = meses_labels.index(mes_ano)
+                    fretes_por_mes[idx] = int(row[2])
+        except Exception:
+            pass
+
+        # Pedidos por mês (últimos 6 meses)
+        try:
+            cursor.execute(
+                """SELECT MONTH(data_pedido) AS mes, YEAR(data_pedido) AS ano, COUNT(1) AS total
+                   FROM pedidos
+                   WHERE data_pedido >= DATE_SUB(CURDATE(), INTERVAL 6 MONTH)
+                   GROUP BY ano, mes
+                   ORDER BY ano, mes"""
+            )
+            rows = cursor.fetchall()
+            for row in rows:
+                mes_ano = f"{int(row[0]):02d}/{int(row[1])}"
+                if mes_ano in meses_labels:
+                    idx = meses_labels.index(mes_ano)
+                    pedidos_por_mes[idx] = int(row[2])
+        except Exception:
+            pass
+
     except Exception:
         # se não conseguiu conectar, deixamos os totais em zero
         pass
@@ -81,6 +158,25 @@ def index():
             conn.close()
         except Exception:
             pass
+
+    # Construir URLs do relatório de lucro para o mês atual
+    primeiro_dia = date(hoje.year, hoje.month, 1)
+    import calendar
+    ultimo_dia = date(hoje.year, hoje.month, calendar.monthrange(hoje.year, hoje.month)[1])
+    lucro_mes_url = (
+        f"https://app.postonovohorizonte.com.br/relatorios/lucro_postos"
+        f"?data_inicio={primeiro_dia.strftime('%Y-%m-%d')}"
+        f"&data_fim={ultimo_dia.strftime('%Y-%m-%d')}"
+        f"&cliente_ids[]=1&produto_ids[]=1&produto_ids[]=2"
+        f"&produto_ids[]=3&produto_ids[]=5&produto_ids[]=4"
+    )
+    importar_pedido_url = "https://app.postonovohorizonte.com.br/pedidos/importar"
+
+    grafico = {
+        'labels': json.dumps(meses_labels),
+        'fretes': json.dumps(fretes_por_mes),
+        'pedidos': json.dumps(pedidos_por_mes),
+    }
 
     # URLs seguras para o template (se endpoint inexistente, retorna '#')
     links = {
@@ -99,11 +195,15 @@ def index():
         'cadastro_url': safe_url('auth.criar_usuario'),
         'relatorios_index_url': safe_url('relatorios.index'),
         'perfil_url': safe_url('auth.perfil'),
+        'importar_pedido_url': importar_pedido_url,
+        'lucro_mes_url': lucro_mes_url,
     }
 
     context = {}
     context.update(totals)
     context.update(links)
+    context['grafico'] = grafico
+    context['mes_atual'] = hoje.strftime('%B/%Y').capitalize()
 
     return render_template('dashboard.html', **context)
 
