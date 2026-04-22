@@ -42,6 +42,10 @@ def index():
         'total_pedidos': 0,
         'fretes_mes': 0,
         'pedidos_mes': 0,
+        'volume_transportado_mes': 0.0,
+        'volume_vendido_mes': 0.0,
+        'receita_mes': 0.0,
+        'lucro_fretes_mes': 0.0,
     }
 
     # Dados para gráficos (últimos 6 meses)
@@ -49,6 +53,7 @@ def index():
     meses_labels = []
     fretes_por_mes = []
     pedidos_por_mes = []
+    volume_por_mes = []
     for i in range(5, -1, -1):
         # calcular mês/ano
         mes_offset = hoje.month - i
@@ -59,6 +64,7 @@ def index():
         meses_labels.append(f"{mes_offset:02d}/{ano_offset}")
         fretes_por_mes.append(0)
         pedidos_por_mes.append(0)
+        volume_por_mes.append(0)
 
     try:
         conn = get_db_connection()
@@ -149,6 +155,74 @@ def index():
         except Exception:
             pass
 
+        # Volume transportado do mês atual (soma quantidade fretes)
+        try:
+            cursor.execute(
+                """SELECT COALESCE(SUM(COALESCE(f.quantidade_manual, q.valor)), 0)
+                   FROM fretes f
+                   LEFT JOIN quantidades q ON f.quantidade_id = q.id
+                   WHERE YEAR(f.data_frete)=%s AND MONTH(f.data_frete)=%s""",
+                (hoje.year, hoje.month)
+            )
+            totals['volume_transportado_mes'] = float(cursor.fetchone()[0] or 0)
+        except Exception:
+            totals['volume_transportado_mes'] = 0.0
+
+        # Volume vendido do mês atual (soma quantidade pedidos_itens)
+        try:
+            cursor.execute(
+                """SELECT COALESCE(SUM(pi.quantidade), 0)
+                   FROM pedidos_itens pi
+                   JOIN pedidos p ON pi.pedido_id = p.id
+                   WHERE YEAR(p.data_pedido)=%s AND MONTH(p.data_pedido)=%s""",
+                (hoje.year, hoje.month)
+            )
+            totals['volume_vendido_mes'] = float(cursor.fetchone()[0] or 0)
+        except Exception:
+            totals['volume_vendido_mes'] = 0.0
+
+        # Receita do mês atual (valor_total_frete)
+        try:
+            cursor.execute(
+                """SELECT COALESCE(SUM(valor_total_frete), 0) FROM fretes
+                   WHERE YEAR(data_frete)=%s AND MONTH(data_frete)=%s""",
+                (hoje.year, hoje.month)
+            )
+            totals['receita_mes'] = float(cursor.fetchone()[0] or 0)
+        except Exception:
+            totals['receita_mes'] = 0.0
+
+        # Lucro fretes do mês atual
+        try:
+            cursor.execute(
+                """SELECT COALESCE(SUM(lucro), 0) FROM fretes
+                   WHERE YEAR(data_frete)=%s AND MONTH(data_frete)=%s""",
+                (hoje.year, hoje.month)
+            )
+            totals['lucro_fretes_mes'] = float(cursor.fetchone()[0] or 0)
+        except Exception:
+            totals['lucro_fretes_mes'] = 0.0
+
+        # Volume transportado por mês (últimos 6 meses)
+        try:
+            cursor.execute(
+                """SELECT MONTH(f.data_frete) AS mes, YEAR(f.data_frete) AS ano,
+                          COALESCE(SUM(COALESCE(f.quantidade_manual, q.valor)), 0) AS total
+                   FROM fretes f
+                   LEFT JOIN quantidades q ON f.quantidade_id = q.id
+                   WHERE f.data_frete >= DATE_SUB(CURDATE(), INTERVAL 6 MONTH)
+                   GROUP BY ano, mes
+                   ORDER BY ano, mes"""
+            )
+            rows = cursor.fetchall()
+            for row in rows:
+                mes_ano = f"{int(row[0]):02d}/{int(row[1])}"
+                if mes_ano in meses_labels:
+                    idx = meses_labels.index(mes_ano)
+                    volume_por_mes[idx] = float(row[2])
+        except Exception:
+            pass
+
     except Exception:
         # se não conseguiu conectar, deixamos os totais em zero
         pass
@@ -175,6 +249,7 @@ def index():
         'labels': meses_labels,
         'fretes': fretes_por_mes,
         'pedidos': pedidos_por_mes,
+        'volume': volume_por_mes,
     }
 
     # URLs seguras para o template (se endpoint inexistente, retorna '#')

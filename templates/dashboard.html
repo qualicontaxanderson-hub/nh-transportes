@@ -4,433 +4,369 @@
 
 {% block styles %}
 <style>
-  /* Power BI style dashboard */
+  /* ── Power BI Light theme ── */
+  body { background: #f0f2f5 !important; }
+  .container-fluid { background: #f0f2f5; }
+
   .dash-wrapper {
-    background: #0e1117;
-    min-height: 100vh;
-    padding: 0;
     margin: -1.5rem -12px 0;
+    background: #f0f2f5;
+    min-height: 100vh;
   }
+
+  /* Top header bar */
   .dash-header {
-    background: linear-gradient(135deg, #1a2236 0%, #0d1b2a 100%);
-    border-bottom: 1px solid #1e3a5f;
-    padding: 16px 28px;
+    background: #fff;
+    border-bottom: 1px solid #e2e8f0;
+    padding: 14px 28px;
     display: flex;
     align-items: center;
     justify-content: space-between;
     flex-wrap: wrap;
     gap: 12px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.06);
   }
-  .dash-header-left h1 {
-    font-size: 1.25rem;
-    font-weight: 700;
-    color: #e2e8f0;
-    margin: 0;
-    letter-spacing: 0.5px;
-  }
-  .dash-header-left p {
-    font-size: 0.78rem;
-    color: #64748b;
-    margin: 2px 0 0;
-  }
-  .dash-body {
-    padding: 20px 24px;
-  }
-
-  /* KPI Cards */
-  .kpi-card {
-    border-radius: 10px;
-    padding: 20px 22px;
-    border: none;
-    position: relative;
-    overflow: hidden;
-    transition: transform 0.15s ease, box-shadow 0.15s ease;
-  }
-  .kpi-card:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 8px 25px rgba(0,0,0,0.4) !important;
-  }
-  .kpi-card .kpi-label {
-    font-size: 0.7rem;
-    font-weight: 600;
-    letter-spacing: 1px;
-    text-transform: uppercase;
-    opacity: 0.8;
-    margin-bottom: 4px;
-  }
-  .kpi-card .kpi-value {
-    font-size: 2.2rem;
-    font-weight: 700;
-    line-height: 1.1;
-    color: #fff;
-  }
-  .kpi-card .kpi-sub {
-    font-size: 0.72rem;
-    opacity: 0.7;
-    margin-top: 6px;
-  }
-  .kpi-card .kpi-icon {
-    position: absolute;
-    right: 16px;
-    top: 50%;
-    transform: translateY(-50%);
-    font-size: 2.8rem;
-    opacity: 0.15;
-  }
-  .kpi-blue   { background: linear-gradient(135deg, #1565c0, #0d47a1); }
-  .kpi-green  { background: linear-gradient(135deg, #2e7d32, #1b5e20); }
-  .kpi-orange { background: linear-gradient(135deg, #e65100, #bf360c); }
-  .kpi-purple { background: linear-gradient(135deg, #4a148c, #311b92); }
-  .kpi-cyan   { background: linear-gradient(135deg, #00838f, #006064); }
-  .kpi-teal   { background: linear-gradient(135deg, #00695c, #004d40); }
-
-  /* Chart cards */
-  .chart-card {
-    background: #1a2236;
-    border-radius: 10px;
-    border: 1px solid #1e3a5f;
-    padding: 20px;
-  }
-  .chart-card .chart-title {
-    font-size: 0.8rem;
-    font-weight: 700;
-    letter-spacing: 0.8px;
-    text-transform: uppercase;
-    color: #94a3b8;
-    margin-bottom: 16px;
+  .dash-header-left {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 14px;
   }
-  .chart-card .chart-title i {
-    color: #3b82f6;
-  }
-
-  /* Info cards */
-  .info-card {
-    background: #1a2236;
+  .dash-brand-icon {
+    width: 40px; height: 40px;
+    background: linear-gradient(135deg, #2563eb, #1d4ed8);
     border-radius: 10px;
-    border: 1px solid #1e3a5f;
-    padding: 22px;
-    height: 100%;
-    transition: border-color 0.2s;
+    display: flex; align-items: center; justify-content: center;
+    color: #fff;
+    font-size: 1.2rem;
+    flex-shrink: 0;
   }
-  .info-card:hover {
-    border-color: #3b82f6;
-  }
-  .info-card .info-title {
-    font-size: 0.72rem;
+  .dash-header-left h1 {
+    font-size: 1.05rem;
     font-weight: 700;
-    letter-spacing: 1px;
-    text-transform: uppercase;
-    color: #64748b;
-    margin-bottom: 8px;
+    color: #1e293b;
+    margin: 0;
+    letter-spacing: 0.3px;
   }
-  .info-card .info-value {
-    font-size: 1.6rem;
-    font-weight: 700;
-    color: #e2e8f0;
-  }
-  .info-card .info-desc {
+  .dash-header-left p {
     font-size: 0.75rem;
-    color: #64748b;
-    margin-top: 4px;
-  }
-
-  /* Lucro card special */
-  .lucro-card {
-    background: linear-gradient(135deg, #1a3a2a, #0d2118);
-    border-radius: 10px;
-    border: 1px solid #2e7d32;
-    padding: 22px;
-    height: 100%;
-    text-decoration: none;
-    display: block;
-    transition: border-color 0.2s, transform 0.15s;
-  }
-  .lucro-card:hover {
-    border-color: #4caf50;
-    transform: translateY(-2px);
-    text-decoration: none;
-  }
-  .lucro-card .lucro-label {
-    font-size: 0.7rem;
-    font-weight: 700;
-    letter-spacing: 1px;
-    text-transform: uppercase;
-    color: #4caf50;
-    margin-bottom: 6px;
-  }
-  .lucro-card .lucro-desc {
-    font-size: 0.82rem;
     color: #94a3b8;
-    margin-top: 8px;
-    line-height: 1.5;
-  }
-  .lucro-card .lucro-btn {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    margin-top: 14px;
-    background: #2e7d32;
-    color: #fff;
-    border: none;
-    border-radius: 6px;
-    padding: 7px 16px;
-    font-size: 0.78rem;
-    font-weight: 600;
-    text-decoration: none;
-    transition: background 0.2s;
-  }
-  .lucro-card:hover .lucro-btn {
-    background: #388e3c;
+    margin: 1px 0 0;
   }
 
-  /* Action buttons */
-  .btn-pbi-primary {
-    background: #2563eb;
-    color: #fff;
-    border: none;
-    border-radius: 7px;
-    padding: 9px 20px;
-    font-size: 0.82rem;
-    font-weight: 600;
-    display: inline-flex;
-    align-items: center;
-    gap: 7px;
-    transition: background 0.2s, transform 0.1s;
-    text-decoration: none;
-  }
-  .btn-pbi-primary:hover {
-    background: #1d4ed8;
-    color: #fff;
-    transform: translateY(-1px);
-  }
-  .btn-pbi-success {
-    background: #16a34a;
-    color: #fff;
-    border: none;
-    border-radius: 7px;
-    padding: 9px 20px;
-    font-size: 0.82rem;
-    font-weight: 600;
-    display: inline-flex;
-    align-items: center;
-    gap: 7px;
-    transition: background 0.2s, transform 0.1s;
-    text-decoration: none;
-  }
-  .btn-pbi-success:hover {
-    background: #15803d;
-    color: #fff;
-    transform: translateY(-1px);
+  /* Body */
+  .dash-body {
+    padding: 22px 26px;
   }
 
-  /* Section labels */
+  /* Section label */
   .section-label {
-    font-size: 0.7rem;
+    font-size: 0.68rem;
     font-weight: 700;
-    letter-spacing: 1.2px;
+    letter-spacing: 1.3px;
     text-transform: uppercase;
-    color: #475569;
+    color: #94a3b8;
     margin-bottom: 12px;
     padding-left: 2px;
   }
 
-  /* Separator */
-  .dash-sep {
-    border-color: #1e3a5f;
-    margin: 6px 0 20px;
+  /* KPI Cards */
+  .kpi-card {
+    background: #fff;
+    border-radius: 12px;
+    padding: 20px 22px 18px;
+    box-shadow: 0 1px 6px rgba(0,0,0,0.07);
+    border: 1px solid #e8edf3;
+    position: relative;
+    overflow: hidden;
+    transition: box-shadow 0.18s ease, transform 0.15s ease;
   }
+  .kpi-card:hover {
+    box-shadow: 0 6px 20px rgba(0,0,0,0.10);
+    transform: translateY(-2px);
+  }
+  .kpi-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 4px;
+    border-radius: 12px 12px 0 0;
+  }
+  .kpi-blue::before   { background: #2563eb; }
+  .kpi-green::before  { background: #10b981; }
+  .kpi-orange::before { background: #f59e0b; }
+  .kpi-purple::before { background: #8b5cf6; }
+  .kpi-teal::before   { background: #06b6d4; }
 
-  /* Stats row in bottom */
-  .stat-row {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 10px 0;
-    border-bottom: 1px solid #1e3a5f;
+  .kpi-icon-wrap {
+    width: 42px; height: 42px;
+    border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1.15rem;
+    margin-bottom: 14px;
   }
-  .stat-row:last-child { border-bottom: none; }
-  .stat-row .stat-icon {
-    width: 36px; height: 36px;
-    border-radius: 8px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 1rem;
-    flex-shrink: 0;
-  }
-  .stat-row .stat-text { flex: 1; }
-  .stat-row .stat-text .st-label {
-    font-size: 0.72rem;
-    color: #64748b;
-    font-weight: 500;
-  }
-  .stat-row .stat-text .st-val {
-    font-size: 0.95rem;
-    color: #e2e8f0;
+  .kpi-icon-blue   { background: #dbeafe; color: #2563eb; }
+  .kpi-icon-green  { background: #d1fae5; color: #059669; }
+  .kpi-icon-orange { background: #fef3c7; color: #d97706; }
+  .kpi-icon-purple { background: #ede9fe; color: #7c3aed; }
+  .kpi-icon-teal   { background: #cffafe; color: #0891b2; }
+
+  .kpi-label {
+    font-size: 0.68rem;
     font-weight: 700;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    color: #94a3b8;
+    margin-bottom: 4px;
+  }
+  .kpi-value {
+    font-size: 1.85rem;
+    font-weight: 800;
+    color: #1e293b;
+    line-height: 1.15;
+    letter-spacing: -0.5px;
+  }
+  .kpi-sub {
+    font-size: 0.72rem;
+    color: #94a3b8;
+    margin-top: 5px;
+    display: flex; align-items: center; gap: 4px;
+  }
+  .kpi-sub .badge-trend {
+    background: #d1fae5;
+    color: #065f46;
+    border-radius: 20px;
+    padding: 1px 7px;
+    font-weight: 600;
+    font-size: 0.67rem;
+  }
+  .kpi-sub .badge-trend.down {
+    background: #fee2e2;
+    color: #991b1b;
   }
 
-  /* Override container background */
-  body { background: #0e1117 !important; }
-  .container-fluid { background: #0e1117; }
+  /* Lucro card – highlighted */
+  .kpi-card.kpi-lucro {
+    background: linear-gradient(135deg, #f0fdf4, #dcfce7);
+    border-color: #bbf7d0;
+    cursor: pointer;
+    text-decoration: none;
+    display: block;
+  }
+  .kpi-card.kpi-lucro:hover {
+    background: linear-gradient(135deg, #dcfce7, #bbf7d0);
+    text-decoration: none;
+  }
+  .kpi-card.kpi-lucro::before { background: #10b981; }
+  .kpi-card.kpi-lucro .kpi-value { color: #065f46; }
+  .kpi-card.kpi-lucro .kpi-label { color: #6ee7b7; }
+  .kpi-card.kpi-lucro .kpi-sub { color: #6ee7b7; }
+
+  /* Chart cards */
+  .chart-card {
+    background: #fff;
+    border-radius: 12px;
+    border: 1px solid #e8edf3;
+    padding: 20px 22px;
+    box-shadow: 0 1px 6px rgba(0,0,0,0.07);
+  }
+  .chart-card .chart-title {
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.9px;
+    text-transform: uppercase;
+    color: #64748b;
+    margin-bottom: 16px;
+    display: flex;
+    align-items: center;
+    gap: 7px;
+  }
+  .chart-card .chart-title i {
+    color: #2563eb;
+  }
+
+  /* Quick-link buttons */
+  .btn-dash-primary {
+    background: #2563eb;
+    color: #fff !important;
+    border: none;
+    border-radius: 8px;
+    padding: 9px 20px;
+    font-size: 0.82rem;
+    font-weight: 600;
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    transition: background 0.18s, box-shadow 0.15s, transform 0.1s;
+    text-decoration: none;
+    box-shadow: 0 2px 6px rgba(37,99,235,0.25);
+  }
+  .btn-dash-primary:hover {
+    background: #1d4ed8;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(37,99,235,0.35);
+  }
+  .btn-dash-success {
+    background: #10b981;
+    color: #fff !important;
+    border: none;
+    border-radius: 8px;
+    padding: 9px 20px;
+    font-size: 0.82rem;
+    font-weight: 600;
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    transition: background 0.18s, box-shadow 0.15s, transform 0.1s;
+    text-decoration: none;
+    box-shadow: 0 2px 6px rgba(16,185,129,0.25);
+  }
+  .btn-dash-success:hover {
+    background: #059669;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(16,185,129,0.35);
+  }
+
+  /* Separator */
+  .dash-sep { border-color: #e2e8f0; margin: 4px 0 18px; }
+
+  /* Lucro link row */
+  .lucro-link-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 10px;
+    font-size: 0.76rem;
+    color: #059669;
+    font-weight: 600;
+  }
 </style>
 {% endblock %}
 
 {% block content %}
 <div class="dash-wrapper">
 
-  <!-- Header -->
+  <!-- ── Header ── -->
   <div class="dash-header">
     <div class="dash-header-left">
-      <h1><i class="bi bi-bar-chart-line-fill me-2" style="color:#3b82f6"></i>DASHBOARD  ·  NH TRANSPORTES</h1>
-      <p>
-        {% if current_user.is_authenticated %}
-          {{ current_user.nome_completo }} ({{ current_user.username }})
-          {% if current_user.nivel == 'admin' %}<span class="badge bg-danger ms-2" style="font-size:0.65rem">ADM</span>{% endif %}
-          &nbsp;·&nbsp;
-        {% endif %}
-        {{ mes_atual }}
-      </p>
+      <div class="dash-brand-icon">
+        <i class="bi bi-bar-chart-line-fill"></i>
+      </div>
+      <div>
+        <h1>NH TRANSPORTES · Dashboard</h1>
+        <p>
+          {% if current_user.is_authenticated %}
+            {{ current_user.nome_completo }}
+            {% if current_user.nivel == 'admin' %}<span class="badge bg-danger ms-1" style="font-size:0.6rem">ADM</span>{% endif %}
+            &nbsp;·&nbsp;
+          {% endif %}
+          {{ mes_atual }}
+        </p>
+      </div>
     </div>
     <div class="d-flex gap-2 flex-wrap">
-      <a href="{{ pedidos_novo_url }}" class="btn-pbi-success">
+      <a href="{{ pedidos_novo_url }}" class="btn-dash-success">
         <i class="bi bi-bag-plus-fill"></i> Novo Pedido
       </a>
-      <a href="{{ importar_pedido_url }}" target="_blank" class="btn-pbi-primary">
+      <a href="{{ importar_pedido_url }}" target="_blank" class="btn-dash-primary">
         <i class="bi bi-cloud-download-fill"></i> Importar Pedido
       </a>
     </div>
   </div>
 
-  <!-- Body -->
+  <!-- ── Body ── -->
   <div class="dash-body">
 
-    <!-- KPI Cards -->
-    <div class="section-label">Resumo Geral</div>
+    <!-- KPI Row -->
+    <div class="section-label">Mês Corrente — {{ mes_atual }}</div>
     <div class="row g-3 mb-4">
-      <div class="col-6 col-md-4 col-lg-2">
-        <div class="kpi-card kpi-blue shadow">
-          <div class="kpi-label text-white">Fretes</div>
-          <div class="kpi-value">{{ total_fretes }}</div>
-          <div class="kpi-sub text-white-50"><i class="bi bi-calendar3"></i> {{ fretes_mes }} este mês</div>
-          <i class="bi bi-box-seam kpi-icon text-white"></i>
+
+      <!-- Fretes do Mês -->
+      <div class="col-6 col-md-4 col-xl">
+        <div class="kpi-card kpi-blue">
+          <div class="kpi-icon-wrap kpi-icon-blue"><i class="bi bi-truck"></i></div>
+          <div class="kpi-label">Fretes</div>
+          <div class="kpi-value">{{ fretes_mes }}</div>
+          <div class="kpi-sub"><i class="bi bi-calendar3"></i> este mês &nbsp;|&nbsp; {{ total_fretes }} total</div>
         </div>
       </div>
-      <div class="col-6 col-md-4 col-lg-2">
-        <div class="kpi-card kpi-green shadow">
-          <div class="kpi-label text-white">Pedidos</div>
-          <div class="kpi-value">{{ total_pedidos }}</div>
-          <div class="kpi-sub text-white-50"><i class="bi bi-calendar3"></i> {{ pedidos_mes }} este mês</div>
-          <i class="bi bi-bag-fill kpi-icon text-white"></i>
+
+      <!-- Volume Transportado -->
+      <div class="col-6 col-md-4 col-xl">
+        <div class="kpi-card kpi-teal">
+          <div class="kpi-icon-wrap kpi-icon-teal"><i class="bi bi-droplet-half"></i></div>
+          <div class="kpi-label">Vol. Transportado</div>
+          <div class="kpi-value">{{ "{:,.0f}".format(volume_transportado_mes).replace(",", ".") }}</div>
+          <div class="kpi-sub"><i class="bi bi-fuel-pump"></i> litros este mês</div>
         </div>
       </div>
-      <div class="col-6 col-md-4 col-lg-2">
-        <div class="kpi-card kpi-purple shadow">
-          <div class="kpi-label text-white">Clientes</div>
-          <div class="kpi-value">{{ total_clientes }}</div>
-          <div class="kpi-sub text-white-50"><i class="bi bi-people-fill"></i> cadastrados</div>
-          <i class="bi bi-people kpi-icon text-white"></i>
+
+      <!-- Pedidos do Mês -->
+      <div class="col-6 col-md-4 col-xl">
+        <div class="kpi-card kpi-purple">
+          <div class="kpi-icon-wrap kpi-icon-purple"><i class="bi bi-bag-fill"></i></div>
+          <div class="kpi-label">Pedidos</div>
+          <div class="kpi-value">{{ pedidos_mes }}</div>
+          <div class="kpi-sub"><i class="bi bi-calendar3"></i> este mês &nbsp;|&nbsp; {{ total_pedidos }} total</div>
         </div>
       </div>
-      <div class="col-6 col-md-4 col-lg-2">
-        <div class="kpi-card kpi-orange shadow">
-          <div class="kpi-label text-white">Motoristas</div>
-          <div class="kpi-value">{{ total_motoristas }}</div>
-          <div class="kpi-sub text-white-50"><i class="bi bi-person-badge"></i> ativos</div>
-          <i class="bi bi-person-badge kpi-icon text-white"></i>
+
+      <!-- Volume Vendido -->
+      <div class="col-6 col-md-4 col-xl">
+        <div class="kpi-card kpi-orange">
+          <div class="kpi-icon-wrap kpi-icon-orange"><i class="bi bi-box-seam-fill"></i></div>
+          <div class="kpi-label">Vol. Vendido</div>
+          <div class="kpi-value">{{ "{:,.0f}".format(volume_vendido_mes).replace(",", ".") }}</div>
+          <div class="kpi-sub"><i class="bi bi-bar-chart"></i> litros (pedidos)</div>
         </div>
       </div>
-      <div class="col-6 col-md-4 col-lg-2">
-        <div class="kpi-card kpi-cyan shadow">
-          <div class="kpi-label text-white">Fornecedores</div>
-          <div class="kpi-value">{{ total_fornecedores }}</div>
-          <div class="kpi-sub text-white-50"><i class="bi bi-truck"></i> cadastrados</div>
-          <i class="bi bi-truck kpi-icon text-white"></i>
+
+      <!-- Receita Fretes -->
+      <div class="col-6 col-md-4 col-xl">
+        <div class="kpi-card kpi-green">
+          <div class="kpi-icon-wrap kpi-icon-green"><i class="bi bi-currency-dollar"></i></div>
+          <div class="kpi-label">Receita Fretes</div>
+          <div class="kpi-value" style="font-size:1.45rem;">R$ {{ "{:,.2f}".format(receita_mes).replace(",", "X").replace(".", ",").replace("X", ".") }}</div>
+          <div class="kpi-sub"><i class="bi bi-graph-up-arrow"></i> faturamento do mês</div>
         </div>
       </div>
-      <div class="col-6 col-md-4 col-lg-2">
-        <a href="{{ lucro_mes_url }}" target="_blank" class="lucro-card text-decoration-none" style="display:flex;flex-direction:column;justify-content:center;">
-          <div class="lucro-label"><i class="bi bi-graph-up-arrow me-1"></i>Lucro do Mês</div>
-          <div style="font-size:1.5rem;font-weight:700;color:#4caf50;">Ver Relatório</div>
-          <div class="lucro-desc">Clique para abrir o relatório de lucro de {{ mes_atual }}.</div>
-          <span class="lucro-btn"><i class="bi bi-box-arrow-up-right"></i> Abrir</span>
+
+      <!-- Lucro do Mês (link) -->
+      <div class="col-6 col-md-4 col-xl">
+        <a href="{{ lucro_mes_url }}" target="_blank" class="kpi-card kpi-lucro text-decoration-none">
+          <div class="kpi-icon-wrap" style="background:rgba(16,185,129,0.15);color:#059669;width:42px;height:42px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:1.15rem;margin-bottom:14px;">
+            <i class="bi bi-graph-up-arrow"></i>
+          </div>
+          <div class="kpi-label" style="color:#6ee7b7;">Lucro Fretes</div>
+          <div class="kpi-value" style="font-size:1.45rem;">R$ {{ "{:,.2f}".format(lucro_fretes_mes).replace(",", "X").replace(".", ",").replace("X", ".") }}</div>
+          <div class="lucro-link-row">
+            <i class="bi bi-box-arrow-up-right"></i> Ver Relatório de Lucro
+          </div>
         </a>
       </div>
-    </div>
+
+    </div><!-- /KPI row -->
 
     <!-- Charts Row -->
     <div class="section-label">Evolução — Últimos 6 Meses</div>
-    <div class="row g-3 mb-4">
+    <div class="row g-3">
+
       <!-- Fretes por Mês -->
-      <div class="col-12 col-lg-7">
+      <div class="col-12 col-lg-6">
         <div class="chart-card">
           <div class="chart-title"><i class="bi bi-bar-chart-fill"></i> Fretes por Mês</div>
-          <canvas id="chartFretes" height="200"></canvas>
+          <canvas id="chartFretes" height="190"></canvas>
         </div>
       </div>
-      <!-- Pedidos por Mês -->
-      <div class="col-12 col-lg-5">
-        <div class="chart-card">
-          <div class="chart-title"><i class="bi bi-graph-up"></i> Pedidos por Mês</div>
-          <canvas id="chartPedidos" height="200"></canvas>
-        </div>
-      </div>
-    </div>
 
-    <!-- Bottom row -->
-    <div class="section-label">Atalhos Rápidos</div>
-    <div class="row g-3">
-      <div class="col-md-6 col-lg-3">
-        <div class="info-card">
-          <div class="info-title"><i class="bi bi-box-seam me-1"></i>Fretes</div>
-          <div class="info-value">{{ total_fretes }}</div>
-          <div class="info-desc">Total de fretes cadastrados</div>
-          <a href="{{ fretes_lista_url }}" class="btn btn-outline-secondary btn-sm mt-3 w-100">
-            <i class="bi bi-list-ul me-1"></i>Ver todos os fretes
-          </a>
+      <!-- Volume Transportado por Mês -->
+      <div class="col-12 col-lg-6">
+        <div class="chart-card">
+          <div class="chart-title"><i class="bi bi-droplet-fill"></i> Volume Transportado por Mês (litros)</div>
+          <canvas id="chartVolume" height="190"></canvas>
         </div>
       </div>
-      <div class="col-md-6 col-lg-3">
-        <div class="info-card">
-          <div class="info-title"><i class="bi bi-bag me-1"></i>Pedidos</div>
-          <div class="info-value">{{ total_pedidos }}</div>
-          <div class="info-desc">Total de pedidos cadastrados</div>
-          <a href="{{ pedidos_index_url }}" class="btn btn-outline-secondary btn-sm mt-3 w-100">
-            <i class="bi bi-list-ul me-1"></i>Ver todos os pedidos
-          </a>
-        </div>
-      </div>
-      <div class="col-md-6 col-lg-3">
-        <div class="info-card">
-          <div class="info-title"><i class="bi bi-people me-1"></i>Clientes &amp; Motoristas</div>
-          <div class="info-value">{{ total_clientes }}</div>
-          <div class="info-desc">Clientes · <strong class="text-warning">{{ total_motoristas }}</strong> motoristas</div>
-          <a href="{{ clientes_lista_url }}" class="btn btn-outline-secondary btn-sm mt-3 w-100">
-            <i class="bi bi-people me-1"></i>Ver clientes
-          </a>
-        </div>
-      </div>
-      <div class="col-md-6 col-lg-3">
-        <div class="info-card">
-          <div class="info-title"><i class="bi bi-person-gear me-1"></i>Minha Conta</div>
-          <div class="info-value" style="font-size:1rem;color:#94a3b8;">
-            {% if current_user.is_authenticated %}{{ current_user.nome_completo }}{% endif %}
-          </div>
-          <div class="info-desc">Gerencie sua conta</div>
-          <div class="d-flex gap-2 mt-3">
-            <a href="{{ alterar_senha_url }}" class="btn btn-outline-secondary btn-sm flex-fill">
-              <i class="bi bi-key"></i> Senha
-            </a>
-            <a href="{{ logout_url }}" class="btn btn-outline-danger btn-sm flex-fill">
-              <i class="bi bi-box-arrow-right"></i> Sair
-            </a>
-          </div>
-        </div>
-      </div>
-    </div>
+
+    </div><!-- /charts row -->
 
   </div><!-- /dash-body -->
 </div><!-- /dash-wrapper -->
@@ -440,13 +376,21 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script>
 (function() {
-  // Defaults
-  Chart.defaults.color = '#94a3b8';
-  Chart.defaults.borderColor = '#1e3a5f';
+  // Light theme defaults
+  Chart.defaults.color = '#64748b';
+  Chart.defaults.borderColor = '#e2e8f0';
 
   const labels  = {{ grafico.labels | tojson }};
   const fretes  = {{ grafico.fretes | tojson }};
-  const pedidos = {{ grafico.pedidos | tojson }};
+  const volume  = {{ grafico.volume | tojson }};
+
+  const tooltipDefaults = {
+    backgroundColor: '#1e293b',
+    titleColor: '#94a3b8',
+    bodyColor: '#f1f5f9',
+    cornerRadius: 8,
+    padding: 10,
+  };
 
   // Bar chart – Fretes por mês
   const ctxF = document.getElementById('chartFretes').getContext('2d');
@@ -457,50 +401,47 @@
       datasets: [{
         label: 'Fretes',
         data: fretes,
-        backgroundColor: 'rgba(37,99,235,0.75)',
+        backgroundColor: 'rgba(37,99,235,0.15)',
         borderColor: '#2563eb',
         borderWidth: 2,
-        borderRadius: 6,
+        borderRadius: 7,
         borderSkipped: false,
+        hoverBackgroundColor: 'rgba(37,99,235,0.30)',
       }]
     },
     options: {
       responsive: true,
       plugins: {
         legend: { display: false },
-        tooltip: {
-          backgroundColor: '#1e2d4a',
-          titleColor: '#94a3b8',
-          bodyColor: '#e2e8f0',
-          borderColor: '#3b82f6',
-          borderWidth: 1,
-        }
+        tooltip: Object.assign({ borderColor: '#2563eb', borderWidth: 1 }, tooltipDefaults),
       },
       scales: {
-        x: { grid: { color: '#1e3a5f' }, ticks: { color: '#64748b' } },
-        y: { grid: { color: '#1e3a5f' }, ticks: { color: '#64748b' }, beginAtZero: true }
+        x: { grid: { color: '#f1f5f9' }, ticks: { color: '#94a3b8' } },
+        y: { grid: { color: '#f1f5f9' }, ticks: { color: '#94a3b8' }, beginAtZero: true }
       }
     }
   });
 
-  // Line chart – Pedidos por mês
-  const ctxP = document.getElementById('chartPedidos').getContext('2d');
-  const gradient = ctxP.createLinearGradient(0, 0, 0, 200);
-  gradient.addColorStop(0, 'rgba(22,163,74,0.4)');
-  gradient.addColorStop(1, 'rgba(22,163,74,0.02)');
-  new Chart(ctxP, {
+  // Area chart – Volume transportado por mês
+  const ctxV = document.getElementById('chartVolume').getContext('2d');
+  const grad = ctxV.createLinearGradient(0, 0, 0, 220);
+  grad.addColorStop(0, 'rgba(6,182,212,0.25)');
+  grad.addColorStop(1, 'rgba(6,182,212,0.02)');
+  new Chart(ctxV, {
     type: 'line',
     data: {
       labels: labels,
       datasets: [{
-        label: 'Pedidos',
-        data: pedidos,
-        borderColor: '#16a34a',
-        backgroundColor: gradient,
+        label: 'Volume (L)',
+        data: volume,
+        borderColor: '#06b6d4',
+        backgroundColor: grad,
         borderWidth: 2.5,
-        pointBackgroundColor: '#16a34a',
-        pointRadius: 4,
-        pointHoverRadius: 6,
+        pointBackgroundColor: '#fff',
+        pointBorderColor: '#06b6d4',
+        pointBorderWidth: 2,
+        pointRadius: 5,
+        pointHoverRadius: 7,
         fill: true,
         tension: 0.4,
       }]
@@ -509,17 +450,11 @@
       responsive: true,
       plugins: {
         legend: { display: false },
-        tooltip: {
-          backgroundColor: '#1e2d4a',
-          titleColor: '#94a3b8',
-          bodyColor: '#e2e8f0',
-          borderColor: '#16a34a',
-          borderWidth: 1,
-        }
+        tooltip: Object.assign({ borderColor: '#06b6d4', borderWidth: 1 }, tooltipDefaults),
       },
       scales: {
-        x: { grid: { color: '#1e3a5f' }, ticks: { color: '#64748b' } },
-        y: { grid: { color: '#1e3a5f' }, ticks: { color: '#64748b' }, beginAtZero: true }
+        x: { grid: { color: '#f1f5f9' }, ticks: { color: '#94a3b8' } },
+        y: { grid: { color: '#f1f5f9' }, ticks: { color: '#94a3b8' }, beginAtZero: true }
       }
     }
   });
