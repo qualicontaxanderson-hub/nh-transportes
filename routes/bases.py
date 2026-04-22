@@ -5,6 +5,169 @@ from utils.db import get_db_connection
 bp = Blueprint('bases', __name__)
 
 
+def _calcular_lucro_fifo_dashboard(conn, ano, mes):
+    """
+    Calcula lucro FIFO on-the-fly por produto, agregando todos os clientes/postos.
+    Usado no dashboard quando o mês ainda não foi fechado (sem fifo_resumo_mensal).
+    Retorna (lista_por_produto, total_lucro).
+    """
+    import calendar as _cal
+    from datetime import date as _date
+    from collections import defaultdict as _dd
+
+    data_inicio = _date(ano, mes, 1)
+    data_fim = _date(ano, mes, _cal.monthrange(ano, mes)[1])
+    if mes == 1:
+        ano_ant, mes_ant = ano - 1, 12
+    else:
+        ano_ant, mes_ant = ano, mes - 1
+    ano_mes_ant = f'{ano_ant:04d}-{mes_ant:02d}'
+
+    cur = conn.cursor(dictionary=True)
+    try:
+        cur.execute(
+            "SELECT DISTINCT cliente_id FROM vendas_posto "
+            "WHERE YEAR(data_movimento)=%s AND MONTH(data_movimento)=%s",
+            (ano, mes)
+        )
+        cliente_ids = [r['cliente_id'] for r in cur.fetchall()]
+        if not cliente_ids:
+            return [], 0.0
+
+        prod_resultado = {}  # nome -> {'valor': float, 'qtde': float}
+
+        for cliente_id in cliente_ids:
+            cur.execute("""
+                SELECT DISTINCT p.id, p.nome
+                FROM produto p
+                INNER JOIN cliente_produtos cp ON cp.produto_id = p.id
+                WHERE cp.cliente_id = %s AND cp.ativo = 1
+                ORDER BY p.nome
+            """, (cliente_id,))
+            produtos = cur.fetchall()
+
+            for prod in produtos:
+                pid = prod['id']
+                pnome = prod['nome']
+
+                # Camadas base: snapshot do mês anterior fechado ou fifo_abertura
+                cur.execute("""
+                    SELECT fc.id, fc.versao_atual
+                    FROM fifo_competencia fc
+                    WHERE fc.cliente_id = %s AND fc.ano_mes = %s AND fc.status = 'FECHADO'
+                    LIMIT 1
+                """, (cliente_id, ano_mes_ant))
+                comp_ant = cur.fetchone()
+
+                layers = []
+                if comp_ant:
+                    cur.execute("""
+                        SELECT quantidade_restante AS qtde, custo_unitario AS custo
+                        FROM fifo_snapshot_lotes
+                        WHERE competencia_id = %s AND produto_id = %s AND versao = %s
+                          AND substituido = 0 AND quantidade_restante > 0
+                        ORDER BY lote_ordem
+                    """, (comp_ant['id'], pid, comp_ant['versao_atual']))
+                    layers = [
+                        {'qtde': float(l['qtde']), 'custo': float(l['custo'])}
+                        for l in cur.fetchall()
+                    ]
+
+                if not layers:
+                    cur.execute("""
+                        SELECT quantidade AS qtde, custo_unitario AS custo
+                        FROM fifo_abertura WHERE cliente_id = %s AND produto_id = %s
+                    """, (cliente_id, pid))
+                    ab = cur.fetchone()
+                    if ab and float(ab['qtde']) > 0:
+                        layers = [{'qtde': float(ab['qtde']), 'custo': float(ab['custo'])}]
+
+                # Compras = fretes entregues neste client para este produto no mês
+                cur.execute("""
+                    SELECT f.data_frete AS data,
+                           COALESCE(f.quantidade_manual, q.valor, 0) AS qtde,
+                           COALESCE(f.preco_produto_unitario, 0) AS custo
+                    FROM fretes f
+                    LEFT JOIN quantidades q ON f.quantidade_id = q.id
+                    WHERE f.clientes_id = %s AND f.produto_id = %s
+                      AND f.data_frete BETWEEN %s AND %s
+                      AND COALESCE(f.quantidade_manual, q.valor, 0) > 0
+                    ORDER BY f.data_frete
+                """, (cliente_id, pid, data_inicio, data_fim))
+                compras = cur.fetchall()
+
+                # Vendas do posto
+                cur.execute("""
+                    SELECT data_movimento AS data,
+                           SUM(COALESCE(quantidade_litros, 0)) AS qtde,
+                           SUM(COALESCE(valor_total, 0)) AS valor_total
+                    FROM vendas_posto
+                    WHERE cliente_id = %s AND produto_id = %s
+                      AND data_movimento BETWEEN %s AND %s
+                    GROUP BY data_movimento
+                    ORDER BY data_movimento
+                """, (cliente_id, pid, data_inicio, data_fim))
+                vendas = cur.fetchall()
+
+                if not vendas:
+                    continue
+
+                # Calcular FIFO
+                comp_by_date = _dd(list)
+                for c in compras:
+                    comp_by_date[c['data']].append(c)
+                vend_by_date = _dd(list)
+                for v in vendas:
+                    vend_by_date[v['data']].append(v)
+
+                all_dates = sorted(set(list(comp_by_date.keys()) + list(vend_by_date.keys())))
+                qtde_saida = 0.0
+                receita = 0.0
+                cogs = 0.0
+
+                for data in all_dates:
+                    for comp in comp_by_date.get(data, []):
+                        qtde = float(comp['qtde'])
+                        custo = float(comp['custo'])
+                        if qtde > 0:
+                            layers.append({'qtde': qtde, 'custo': custo})
+
+                    for vend in vend_by_date.get(data, []):
+                        qtde_vender = float(vend['qtde'])
+                        valor = float(vend['valor_total'])
+                        if qtde_vender <= 0:
+                            continue
+                        qtde_saida += qtde_vender
+                        receita += valor
+                        restante = qtde_vender
+                        while restante > 0.001 and layers:
+                            layer = layers[0]
+                            if layer['qtde'] <= restante + 0.001:
+                                cogs += layer['qtde'] * layer['custo']
+                                restante -= layer['qtde']
+                                layers.pop(0)
+                            else:
+                                cogs += restante * layer['custo']
+                                layer['qtde'] -= restante
+                                restante = 0.0
+
+                lucro = receita - cogs
+                if pnome not in prod_resultado:
+                    prod_resultado[pnome] = {'valor': 0.0, 'qtde': 0.0}
+                prod_resultado[pnome]['valor'] += lucro
+                prod_resultado[pnome]['qtde'] += qtde_saida
+
+        resultado_list = [
+            {'nome': nome, 'valor': v['valor'], 'qtde': v['qtde']}
+            for nome, v in prod_resultado.items()
+        ]
+        resultado_list.sort(key=lambda x: x['valor'], reverse=True)
+        total_lucro = sum(r['valor'] for r in resultado_list)
+        return resultado_list, total_lucro
+    finally:
+        cur.close()
+
+
 def safe_url(endpoint, **values):
     """
     Retorna url_for(endpoint, **values) se o endpoint existir no app,
@@ -52,6 +215,7 @@ def index():
     lucro_por_produto = []
     lucro_postos_mes = 0.0
     lucro_postos_disponivel = False
+    lucro_postos_fechado = False
 
     # Dados para gráficos (últimos 6 meses)
     hoje = date.today()
@@ -272,6 +436,7 @@ def index():
         lucro_por_produto = []
         lucro_postos_mes = 0.0
         lucro_postos_disponivel = False
+        lucro_postos_fechado = False
         try:
             ano_mes = hoje.strftime('%Y-%m')
             cursor.execute(
@@ -290,11 +455,22 @@ def index():
             rows = cursor.fetchall()
             if rows:
                 lucro_postos_disponivel = True
+                lucro_postos_fechado = True
                 lucro_por_produto = [
                     {'nome': row[0], 'valor': float(row[1] or 0), 'qtde': float(row[2] or 0)}
                     for row in rows
                 ]
                 lucro_postos_mes = sum(p['valor'] for p in lucro_por_produto)
+            else:
+                # Mês não fechado – calcular on-the-fly via FIFO
+                try:
+                    lucro_por_produto, lucro_postos_mes = _calcular_lucro_fifo_dashboard(
+                        conn, hoje.year, hoje.month
+                    )
+                    if lucro_por_produto:
+                        lucro_postos_disponivel = True
+                except Exception:
+                    pass
         except Exception:
             pass
 
@@ -357,6 +533,7 @@ def index():
     context['lucro_por_produto'] = lucro_por_produto
     context['lucro_postos_mes'] = lucro_postos_mes
     context['lucro_postos_disponivel'] = lucro_postos_disponivel
+    context['lucro_postos_fechado'] = lucro_postos_fechado
     _meses_pt = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho',
                  'Julho','Agosto','Setembro','Outubro','Novembro','Dezembro']
     context['mes_atual'] = f"{_meses_pt[hoje.month - 1]}/{hoje.year}"

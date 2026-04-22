@@ -493,7 +493,7 @@
       <!-- Lucro por Produto -->
       <div class="col-12 col-lg-4">
         <div class="breakdown-card">
-          <div class="bk-title"><i class="bi bi-graph-up-arrow" style="color:#10b981"></i> Lucro por Produto (Postos FIFO)</div>
+          <div class="bk-title"><i class="bi bi-graph-up-arrow" style="color:#10b981"></i> Lucro por Produto (Postos FIFO){% if lucro_por_produto and not lucro_postos_fechado %} <span style="font-size:0.65rem;font-weight:400;color:#94a3b8">(estimativa)</span>{% endif %}</div>
           {% if lucro_por_produto %}
             {% set max_luc = namespace(v=0) %}
             {% for p in lucro_por_produto %}{% if p.valor > max_luc.v %}{% set max_luc.v = p.valor %}{% endif %}{% endfor %}
