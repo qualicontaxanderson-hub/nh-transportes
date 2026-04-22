@@ -47,6 +47,9 @@ def index():
         'receita_mes': 0.0,
         'lucro_fretes_mes': 0.0,
     }
+    volume_transportado_por_produto = []
+    volume_vendido_por_produto = []
+    lucro_por_produto = []
 
     # Dados para gráficos (últimos 6 meses)
     hoje = date.today()
@@ -223,6 +226,68 @@ def index():
         except Exception:
             pass
 
+        # Volume transportado por produto do mês atual
+        volume_transportado_por_produto = []
+        try:
+            cursor.execute(
+                """SELECT COALESCE(pr.nome, 'Não especificado'),
+                          COALESCE(SUM(COALESCE(f.quantidade_manual, q.valor)), 0) AS vol
+                   FROM fretes f
+                   LEFT JOIN quantidades q ON f.quantidade_id = q.id
+                   LEFT JOIN produto pr ON f.produto_id = pr.id
+                   WHERE YEAR(f.data_frete)=%s AND MONTH(f.data_frete)=%s
+                   GROUP BY pr.id, pr.nome
+                   ORDER BY vol DESC""",
+                (hoje.year, hoje.month)
+            )
+            volume_transportado_por_produto = [
+                {'nome': row[0], 'valor': float(row[1] or 0)}
+                for row in cursor.fetchall()
+            ]
+        except Exception:
+            pass
+
+        # Volume vendido por produto do mês atual
+        volume_vendido_por_produto = []
+        try:
+            cursor.execute(
+                """SELECT COALESCE(pr.nome, 'Não especificado'),
+                          COALESCE(SUM(pi.quantidade), 0) AS vol
+                   FROM pedidos_itens pi
+                   JOIN pedidos p ON pi.pedido_id = p.id
+                   LEFT JOIN produto pr ON pi.produto_id = pr.id
+                   WHERE YEAR(p.data_pedido)=%s AND MONTH(p.data_pedido)=%s
+                   GROUP BY pr.id, pr.nome
+                   ORDER BY vol DESC""",
+                (hoje.year, hoje.month)
+            )
+            volume_vendido_por_produto = [
+                {'nome': row[0], 'valor': float(row[1] or 0)}
+                for row in cursor.fetchall()
+            ]
+        except Exception:
+            pass
+
+        # Lucro por produto do mês atual
+        lucro_por_produto = []
+        try:
+            cursor.execute(
+                """SELECT COALESCE(pr.nome, 'Não especificado'),
+                          COALESCE(SUM(f.lucro), 0) AS lucro
+                   FROM fretes f
+                   LEFT JOIN produto pr ON f.produto_id = pr.id
+                   WHERE YEAR(f.data_frete)=%s AND MONTH(f.data_frete)=%s
+                   GROUP BY pr.id, pr.nome
+                   ORDER BY lucro DESC""",
+                (hoje.year, hoje.month)
+            )
+            lucro_por_produto = [
+                {'nome': row[0], 'valor': float(row[1] or 0)}
+                for row in cursor.fetchall()
+            ]
+        except Exception:
+            pass
+
     except Exception:
         # se não conseguiu conectar, deixamos os totais em zero
         pass
@@ -277,6 +342,9 @@ def index():
     context.update(totals)
     context.update(links)
     context['grafico'] = grafico
+    context['volume_transportado_por_produto'] = volume_transportado_por_produto
+    context['volume_vendido_por_produto'] = volume_vendido_por_produto
+    context['lucro_por_produto'] = lucro_por_produto
     _meses_pt = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho',
                  'Julho','Agosto','Setembro','Outubro','Novembro','Dezembro']
     context['mes_atual'] = f"{_meses_pt[hoje.month - 1]}/{hoje.year}"

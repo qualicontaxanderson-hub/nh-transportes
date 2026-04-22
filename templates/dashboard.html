@@ -226,6 +226,82 @@
     box-shadow: 0 4px 12px rgba(16,185,129,0.35);
   }
 
+  /* Product breakdown tables */
+  .breakdown-card {
+    background: #fff;
+    border-radius: 12px;
+    border: 1px solid #e8edf3;
+    padding: 20px 22px;
+    box-shadow: 0 1px 6px rgba(0,0,0,0.07);
+    height: 100%;
+  }
+  .breakdown-card .bk-title {
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    color: #64748b;
+    margin-bottom: 14px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .breakdown-card .bk-title i { font-size: 0.85rem; }
+  .bk-table { width: 100%; border-collapse: collapse; }
+  .bk-table th {
+    font-size: 0.63rem;
+    font-weight: 700;
+    letter-spacing: 0.8px;
+    text-transform: uppercase;
+    color: #94a3b8;
+    padding: 0 0 8px;
+    border-bottom: 1px solid #f1f5f9;
+    text-align: left;
+  }
+  .bk-table th:last-child { text-align: right; }
+  .bk-table td {
+    font-size: 0.8rem;
+    color: #374151;
+    padding: 7px 0;
+    border-bottom: 1px solid #f8fafc;
+    vertical-align: middle;
+  }
+  .bk-table td:last-child { text-align: right; font-weight: 600; color: #1e293b; }
+  .bk-table tr:last-child td { border-bottom: none; }
+  .bk-table .bk-total td {
+    font-weight: 700;
+    color: #1e293b;
+    border-top: 2px solid #e2e8f0;
+    padding-top: 10px;
+    font-size: 0.82rem;
+  }
+  .bk-product-dot {
+    display: inline-block;
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    margin-right: 6px;
+    flex-shrink: 0;
+  }
+  .bk-bar-wrap {
+    width: 60px;
+    height: 5px;
+    background: #f1f5f9;
+    border-radius: 3px;
+    display: inline-block;
+    vertical-align: middle;
+    margin-left: 8px;
+  }
+  .bk-bar-fill {
+    height: 100%;
+    border-radius: 3px;
+  }
+  .bk-empty {
+    font-size: 0.75rem;
+    color: #cbd5e1;
+    text-align: center;
+    padding: 12px 0;
+  }
+
   /* Separator */
   .dash-sep { border-color: #e2e8f0; margin: 4px 0 18px; }
 
@@ -345,6 +421,112 @@
       </div>
 
     </div><!-- /KPI row -->
+
+    <!-- Product Breakdown Row -->
+    <div class="section-label mt-2">Detalhamento por Produto — {{ mes_atual }}</div>
+    <div class="row g-3 mb-4">
+
+      <!-- Vol. Transportado por Produto -->
+      <div class="col-12 col-lg-4">
+        <div class="breakdown-card">
+          <div class="bk-title"><i class="bi bi-droplet-half" style="color:#06b6d4"></i> Vol. Transportado por Produto</div>
+          {% if volume_transportado_por_produto %}
+            {% set max_vol = namespace(v=0) %}
+            {% for p in volume_transportado_por_produto %}{% if p.valor > max_vol.v %}{% set max_vol.v = p.valor %}{% endif %}{% endfor %}
+            <table class="bk-table">
+              <thead><tr><th>Produto</th><th>Litros</th></tr></thead>
+              <tbody>
+                {% for p in volume_transportado_por_produto %}
+                <tr>
+                  <td>
+                    <span class="bk-product-dot" style="background:{{ ['#06b6d4','#2563eb','#8b5cf6','#f59e0b','#10b981','#ef4444','#64748b'][loop.index0 % 7] }}"></span>
+                    {{ p.nome }}
+                    <span class="bk-bar-wrap"><span class="bk-bar-fill" style="width:{{ (p.valor / max_vol.v * 100)|int if max_vol.v > 0 else 0 }}%;background:{{ ['#06b6d4','#2563eb','#8b5cf6','#f59e0b','#10b981','#ef4444','#64748b'][loop.index0 % 7] }}"></span></span>
+                  </td>
+                  <td>{{ "{:,.0f}".format(p.valor).replace(",", ".") }}</td>
+                </tr>
+                {% endfor %}
+                <tr class="bk-total">
+                  <td>Total</td>
+                  <td>{{ "{:,.0f}".format(volume_transportado_mes).replace(",", ".") }}</td>
+                </tr>
+              </tbody>
+            </table>
+          {% else %}
+            <div class="bk-empty"><i class="bi bi-inbox"></i> Sem dados no mês</div>
+          {% endif %}
+        </div>
+      </div>
+
+      <!-- Vol. Vendido por Produto -->
+      <div class="col-12 col-lg-4">
+        <div class="breakdown-card">
+          <div class="bk-title"><i class="bi bi-box-seam-fill" style="color:#f59e0b"></i> Vol. Vendido por Produto</div>
+          {% if volume_vendido_por_produto %}
+            {% set max_vnd = namespace(v=0) %}
+            {% for p in volume_vendido_por_produto %}{% if p.valor > max_vnd.v %}{% set max_vnd.v = p.valor %}{% endif %}{% endfor %}
+            <table class="bk-table">
+              <thead><tr><th>Produto</th><th>Litros</th></tr></thead>
+              <tbody>
+                {% for p in volume_vendido_por_produto %}
+                <tr>
+                  <td>
+                    <span class="bk-product-dot" style="background:{{ ['#f59e0b','#ef4444','#10b981','#2563eb','#8b5cf6','#06b6d4','#64748b'][loop.index0 % 7] }}"></span>
+                    {{ p.nome }}
+                    <span class="bk-bar-wrap"><span class="bk-bar-fill" style="width:{{ (p.valor / max_vnd.v * 100)|int if max_vnd.v > 0 else 0 }}%;background:{{ ['#f59e0b','#ef4444','#10b981','#2563eb','#8b5cf6','#06b6d4','#64748b'][loop.index0 % 7] }}"></span></span>
+                  </td>
+                  <td>{{ "{:,.0f}".format(p.valor).replace(",", ".") }}</td>
+                </tr>
+                {% endfor %}
+                <tr class="bk-total">
+                  <td>Total</td>
+                  <td>{{ "{:,.0f}".format(volume_vendido_mes).replace(",", ".") }}</td>
+                </tr>
+              </tbody>
+            </table>
+          {% else %}
+            <div class="bk-empty"><i class="bi bi-inbox"></i> Sem dados no mês</div>
+          {% endif %}
+        </div>
+      </div>
+
+      <!-- Lucro por Produto -->
+      <div class="col-12 col-lg-4">
+        <div class="breakdown-card">
+          <div class="bk-title"><i class="bi bi-graph-up-arrow" style="color:#10b981"></i> Lucro por Produto</div>
+          {% if lucro_por_produto %}
+            {% set max_luc = namespace(v=0) %}
+            {% for p in lucro_por_produto %}{% if p.valor > max_luc.v %}{% set max_luc.v = p.valor %}{% endif %}{% endfor %}
+            <table class="bk-table">
+              <thead><tr><th>Produto</th><th>Lucro (R$)</th></tr></thead>
+              <tbody>
+                {% for p in lucro_por_produto %}
+                <tr>
+                  <td>
+                    <span class="bk-product-dot" style="background:{{ ['#10b981','#2563eb','#f59e0b','#8b5cf6','#06b6d4','#ef4444','#64748b'][loop.index0 % 7] }}"></span>
+                    {{ p.nome }}
+                    <span class="bk-bar-wrap"><span class="bk-bar-fill" style="width:{{ (p.valor / max_luc.v * 100)|int if max_luc.v > 0 else 0 }}%;background:{{ ['#10b981','#2563eb','#f59e0b','#8b5cf6','#06b6d4','#ef4444','#64748b'][loop.index0 % 7] }}"></span></span>
+                  </td>
+                  <td style="color:{% if p.valor >= 0 %}#059669{% else %}#dc2626{% endif %}">
+                    {{ "{:,.2f}".format(p.valor).replace(",", "X").replace(".", ",").replace("X", ".") }}
+                  </td>
+                </tr>
+                {% endfor %}
+                <tr class="bk-total">
+                  <td>Total</td>
+                  <td style="color:{% if lucro_fretes_mes >= 0 %}#059669{% else %}#dc2626{% endif %}">
+                    R$ {{ "{:,.2f}".format(lucro_fretes_mes).replace(",", "X").replace(".", ",").replace("X", ".") }}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          {% else %}
+            <div class="bk-empty"><i class="bi bi-inbox"></i> Sem dados no mês</div>
+          {% endif %}
+        </div>
+      </div>
+
+    </div><!-- /breakdown row -->
 
     <!-- Charts Row -->
     <div class="section-label">Evolução — Últimos 6 Meses</div>
