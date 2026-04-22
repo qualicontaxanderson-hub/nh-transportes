@@ -426,71 +426,7 @@
     <div class="section-label mt-2">Detalhamento por Produto — {{ mes_atual }}</div>
     <div class="row g-3 mb-4">
 
-      <!-- Vol. Transportado por Produto -->
-      <div class="col-12 col-lg-4">
-        <div class="breakdown-card">
-          <div class="bk-title"><i class="bi bi-droplet-half" style="color:#06b6d4"></i> Vol. Transportado por Produto</div>
-          {% if volume_transportado_por_produto %}
-            {% set max_vol = namespace(v=0) %}
-            {% for p in volume_transportado_por_produto %}{% if p.valor > max_vol.v %}{% set max_vol.v = p.valor %}{% endif %}{% endfor %}
-            <table class="bk-table">
-              <thead><tr><th>Produto</th><th>Litros</th></tr></thead>
-              <tbody>
-                {% for p in volume_transportado_por_produto %}
-                <tr>
-                  <td>
-                    <span class="bk-product-dot" style="background:{{ ['#06b6d4','#2563eb','#8b5cf6','#f59e0b','#10b981','#ef4444','#64748b'][loop.index0 % 7] }}"></span>
-                    {{ p.nome }}
-                    <span class="bk-bar-wrap"><span class="bk-bar-fill" style="width:{{ (p.valor / max_vol.v * 100)|int if max_vol.v > 0 else 0 }}%;background:{{ ['#06b6d4','#2563eb','#8b5cf6','#f59e0b','#10b981','#ef4444','#64748b'][loop.index0 % 7] }}"></span></span>
-                  </td>
-                  <td>{{ "{:,.0f}".format(p.valor).replace(",", ".") }}</td>
-                </tr>
-                {% endfor %}
-                <tr class="bk-total">
-                  <td>Total</td>
-                  <td>{{ "{:,.0f}".format(volume_transportado_mes).replace(",", ".") }}</td>
-                </tr>
-              </tbody>
-            </table>
-          {% else %}
-            <div class="bk-empty"><i class="bi bi-inbox"></i> Sem dados no mês</div>
-          {% endif %}
-        </div>
-      </div>
-
-      <!-- Vol. Vendido por Produto -->
-      <div class="col-12 col-lg-4">
-        <div class="breakdown-card">
-          <div class="bk-title"><i class="bi bi-box-seam-fill" style="color:#f59e0b"></i> Vol. Vendido por Produto (Postos)</div>
-          {% if volume_vendido_por_produto %}
-            {% set max_vnd = namespace(v=0) %}
-            {% for p in volume_vendido_por_produto %}{% if p.valor > max_vnd.v %}{% set max_vnd.v = p.valor %}{% endif %}{% endfor %}
-            <table class="bk-table">
-              <thead><tr><th>Produto</th><th>Litros</th></tr></thead>
-              <tbody>
-                {% for p in volume_vendido_por_produto %}
-                <tr>
-                  <td>
-                    <span class="bk-product-dot" style="background:{{ ['#f59e0b','#ef4444','#10b981','#2563eb','#8b5cf6','#06b6d4','#64748b'][loop.index0 % 7] }}"></span>
-                    {{ p.nome }}
-                    <span class="bk-bar-wrap"><span class="bk-bar-fill" style="width:{{ (p.valor / max_vnd.v * 100)|int if max_vnd.v > 0 else 0 }}%;background:{{ ['#f59e0b','#ef4444','#10b981','#2563eb','#8b5cf6','#06b6d4','#64748b'][loop.index0 % 7] }}"></span></span>
-                  </td>
-                  <td>{{ "{:,.0f}".format(p.valor).replace(",", ".") }}</td>
-                </tr>
-                {% endfor %}
-                <tr class="bk-total">
-                  <td>Total</td>
-                  <td>{{ "{:,.0f}".format(volume_vendido_mes).replace(",", ".") }}</td>
-                </tr>
-              </tbody>
-            </table>
-          {% else %}
-            <div class="bk-empty"><i class="bi bi-inbox"></i> Sem dados no mês</div>
-          {% endif %}
-        </div>
-      </div>
-
-      <!-- Lucro por Produto -->
+      <!-- Lucro por Produto (LEFT) -->
       <div class="col-12 col-lg-4">
         <div class="breakdown-card">
           <div class="bk-title"><i class="bi bi-graph-up-arrow" style="color:#10b981"></i> Lucro por Produto (Postos FIFO){% if lucro_por_produto and not lucro_postos_fechado %} <span style="font-size:0.65rem;font-weight:400;color:#94a3b8">(estimativa)</span>{% endif %}</div>
@@ -526,6 +462,73 @@
             <div class="bk-empty" style="color:#94a3b8;font-size:0.75rem;padding:12px 0;">
               <i class="bi bi-clock-history"></i> Lucro FIFO disponível após o fechamento do mês
             </div>
+          {% else %}
+            <div class="bk-empty"><i class="bi bi-inbox"></i> Sem dados no mês</div>
+          {% endif %}
+        </div>
+      </div>
+
+      <!-- Fretes por Empresa (MIDDLE) -->
+      <div class="col-12 col-lg-4">
+        <div class="breakdown-card">
+          <div class="bk-title"><i class="bi bi-truck" style="color:#6366f1"></i> Vol. Transportado por Empresa</div>
+          {% if fretes_por_empresa %}
+            <table class="bk-table">
+              <thead><tr><th>Empresa</th><th style="text-align:right">Qtd (L)</th><th style="text-align:right">Frete (R$)</th></tr></thead>
+              <tbody>
+                {% for e in fretes_por_empresa %}
+                <tr>
+                  <td>
+                    <span class="bk-product-dot" style="background:{{ ['#6366f1','#2563eb','#10b981','#f59e0b','#ef4444','#8b5cf6','#64748b'][loop.index0 % 7] }}"></span>
+                    {{ e.empresa }}
+                  </td>
+                  <td style="text-align:right;font-size:0.78rem;color:#64748b">{{ "{:,.0f}".format(e.qtd_frete).replace(",", ".") }} L</td>
+                  <td style="text-align:right;color:#2563eb">
+                    R$ {{ "{:,.2f}".format(e.valor_frete).replace(",", "X").replace(".", ",").replace("X", ".") }}
+                  </td>
+                </tr>
+                {% endfor %}
+                <tr class="bk-total">
+                  <td>TOTAL</td>
+                  <td style="text-align:right;color:#64748b">{{ "{:,.0f}".format(fretes_por_empresa_total_qtd).replace(",", ".") }} L</td>
+                  <td style="text-align:right;color:#2563eb">
+                    R$ {{ "{:,.2f}".format(fretes_por_empresa_total_valor).replace(",", "X").replace(".", ",").replace("X", ".") }}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          {% else %}
+            <div class="bk-empty"><i class="bi bi-inbox"></i> Sem dados no mês</div>
+          {% endif %}
+        </div>
+      </div>
+
+      <!-- Vol. Transportado por Produto (RIGHT) -->
+      <div class="col-12 col-lg-4">
+        <div class="breakdown-card">
+          <div class="bk-title"><i class="bi bi-droplet-half" style="color:#06b6d4"></i> Vol. Transportado por Produto</div>
+          {% if volume_transportado_por_produto %}
+            {% set max_vol = namespace(v=0) %}
+            {% for p in volume_transportado_por_produto %}{% if p.valor > max_vol.v %}{% set max_vol.v = p.valor %}{% endif %}{% endfor %}
+            <table class="bk-table">
+              <thead><tr><th>Produto</th><th>Litros</th></tr></thead>
+              <tbody>
+                {% for p in volume_transportado_por_produto %}
+                <tr>
+                  <td>
+                    <span class="bk-product-dot" style="background:{{ ['#06b6d4','#2563eb','#8b5cf6','#f59e0b','#10b981','#ef4444','#64748b'][loop.index0 % 7] }}"></span>
+                    {{ p.nome }}
+                    <span class="bk-bar-wrap"><span class="bk-bar-fill" style="width:{{ (p.valor / max_vol.v * 100)|int if max_vol.v > 0 else 0 }}%;background:{{ ['#06b6d4','#2563eb','#8b5cf6','#f59e0b','#10b981','#ef4444','#64748b'][loop.index0 % 7] }}"></span></span>
+                  </td>
+                  <td>{{ "{:,.0f}".format(p.valor).replace(",", ".") }}</td>
+                </tr>
+                {% endfor %}
+                <tr class="bk-total">
+                  <td>Total</td>
+                  <td>{{ "{:,.0f}".format(volume_transportado_mes).replace(",", ".") }}</td>
+                </tr>
+              </tbody>
+            </table>
           {% else %}
             <div class="bk-empty"><i class="bi bi-inbox"></i> Sem dados no mês</div>
           {% endif %}

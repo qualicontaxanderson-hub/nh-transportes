@@ -212,6 +212,9 @@ def index():
     }
     volume_transportado_por_produto = []
     volume_vendido_por_produto = []
+    fretes_por_empresa = []
+    fretes_por_empresa_total_qtd = 0.0
+    fretes_por_empresa_total_valor = 0.0
     lucro_por_produto = []
     lucro_postos_mes = 0.0
     lucro_postos_disponivel = False
@@ -432,6 +435,41 @@ def index():
         except Exception:
             pass
 
+        # Fretes por empresa do mês atual (top 5 + DEMAIS EMPRESAS)
+        fretes_por_empresa = []
+        fretes_por_empresa_total_qtd = 0.0
+        fretes_por_empresa_total_valor = 0.0
+        try:
+            cursor.execute(
+                """SELECT COALESCE(cl.razao_social, 'Não especificado') AS empresa,
+                          COALESCE(SUM(COALESCE(f.quantidade_manual, q.valor, 0)), 0) AS qtd_frete,
+                          COALESCE(SUM(f.valor_total_frete), 0) AS valor_frete
+                   FROM fretes f
+                   LEFT JOIN quantidades q ON f.quantidade_id = q.id
+                   LEFT JOIN clientes cl ON f.clientes_id = cl.id
+                   WHERE YEAR(f.data_frete)=%s AND MONTH(f.data_frete)=%s
+                   GROUP BY f.clientes_id, cl.razao_social
+                   ORDER BY qtd_frete DESC""",
+                (hoje.year, hoje.month)
+            )
+            all_emp = [
+                {'empresa': row[0], 'qtd_frete': float(row[1] or 0), 'valor_frete': float(row[2] or 0)}
+                for row in cursor.fetchall()
+            ]
+            top5 = all_emp[:5]
+            demais = all_emp[5:]
+            if demais:
+                top5.append({
+                    'empresa': 'DEMAIS EMPRESAS',
+                    'qtd_frete': sum(e['qtd_frete'] for e in demais),
+                    'valor_frete': sum(e['valor_frete'] for e in demais),
+                })
+            fretes_por_empresa = top5
+            fretes_por_empresa_total_qtd = sum(e['qtd_frete'] for e in all_emp)
+            fretes_por_empresa_total_valor = sum(e['valor_frete'] for e in all_emp)
+        except Exception:
+            pass
+
         # Lucro por produto do mês atual (fifo_resumo_mensal – postos FIFO)
         lucro_por_produto = []
         lucro_postos_mes = 0.0
@@ -530,6 +568,9 @@ def index():
     context['grafico'] = grafico
     context['volume_transportado_por_produto'] = volume_transportado_por_produto
     context['volume_vendido_por_produto'] = volume_vendido_por_produto
+    context['fretes_por_empresa'] = fretes_por_empresa
+    context['fretes_por_empresa_total_qtd'] = fretes_por_empresa_total_qtd
+    context['fretes_por_empresa_total_valor'] = fretes_por_empresa_total_valor
     context['lucro_por_produto'] = lucro_por_produto
     context['lucro_postos_mes'] = lucro_postos_mes
     context['lucro_postos_disponivel'] = lucro_postos_disponivel
