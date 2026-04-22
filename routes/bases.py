@@ -50,6 +50,8 @@ def index():
     volume_transportado_por_produto = []
     volume_vendido_por_produto = []
     lucro_por_produto = []
+    lucro_postos_mes = 0.0
+    lucro_postos_disponivel = False
 
     # Dados para gráficos (últimos 6 meses)
     hoje = date.today()
@@ -171,13 +173,12 @@ def index():
         except Exception:
             totals['volume_transportado_mes'] = 0.0
 
-        # Volume vendido do mês atual (soma quantidade pedidos_itens)
+        # Volume vendido do mês atual (vendas_posto – litros vendidos nos postos)
         try:
             cursor.execute(
-                """SELECT COALESCE(SUM(pi.quantidade), 0)
-                   FROM pedidos_itens pi
-                   JOIN pedidos p ON pi.pedido_id = p.id
-                   WHERE YEAR(p.data_pedido)=%s AND MONTH(p.data_pedido)=%s""",
+                """SELECT COALESCE(SUM(vp.quantidade_litros), 0)
+                   FROM vendas_posto vp
+                   WHERE YEAR(vp.data_movimento)=%s AND MONTH(vp.data_movimento)=%s""",
                 (hoje.year, hoje.month)
             )
             totals['volume_vendido_mes'] = float(cursor.fetchone()[0] or 0)
@@ -247,17 +248,16 @@ def index():
         except Exception:
             pass
 
-        # Volume vendido por produto do mês atual
+        # Volume vendido por produto do mês atual (vendas_posto)
         volume_vendido_por_produto = []
         try:
             cursor.execute(
                 """SELECT COALESCE(pr.nome, 'Não especificado'),
-                          COALESCE(SUM(pi.quantidade), 0) AS vol
-                   FROM pedidos_itens pi
-                   JOIN pedidos p ON pi.pedido_id = p.id
-                   LEFT JOIN produto pr ON pi.produto_id = pr.id
-                   WHERE YEAR(p.data_pedido)=%s AND MONTH(p.data_pedido)=%s
-                   GROUP BY pr.id, pr.nome
+                          COALESCE(SUM(vp.quantidade_litros), 0) AS vol
+                   FROM vendas_posto vp
+                   LEFT JOIN produto pr ON vp.produto_id = pr.id
+                   WHERE YEAR(vp.data_movimento)=%s AND MONTH(vp.data_movimento)=%s
+                   GROUP BY vp.produto_id, pr.nome
                    ORDER BY vol DESC""",
                 (hoje.year, hoje.month)
             )
@@ -268,23 +268,33 @@ def index():
         except Exception:
             pass
 
-        # Lucro por produto do mês atual
+        # Lucro por produto do mês atual (fifo_resumo_mensal – postos FIFO)
         lucro_por_produto = []
+        lucro_postos_mes = 0.0
+        lucro_postos_disponivel = False
         try:
+            ano_mes = hoje.strftime('%Y-%m')
             cursor.execute(
                 """SELECT COALESCE(pr.nome, 'Não especificado'),
-                          COALESCE(SUM(f.lucro), 0) AS lucro
-                   FROM fretes f
-                   LEFT JOIN produto pr ON f.produto_id = pr.id
-                   WHERE YEAR(f.data_frete)=%s AND MONTH(f.data_frete)=%s
-                   GROUP BY pr.id, pr.nome
+                          COALESCE(SUM(rm.lucro_bruto), 0) AS lucro,
+                          COALESCE(SUM(rm.qtde_saida), 0) AS qtde
+                   FROM fifo_resumo_mensal rm
+                   JOIN fifo_competencia fc ON rm.competencia_id = fc.id
+                   LEFT JOIN produto pr ON rm.produto_id = pr.id
+                   WHERE fc.ano_mes = %s
+                     AND rm.substituido = 0
+                   GROUP BY rm.produto_id, pr.nome
                    ORDER BY lucro DESC""",
-                (hoje.year, hoje.month)
+                (ano_mes,)
             )
-            lucro_por_produto = [
-                {'nome': row[0], 'valor': float(row[1] or 0)}
-                for row in cursor.fetchall()
-            ]
+            rows = cursor.fetchall()
+            if rows:
+                lucro_postos_disponivel = True
+                lucro_por_produto = [
+                    {'nome': row[0], 'valor': float(row[1] or 0), 'qtde': float(row[2] or 0)}
+                    for row in rows
+                ]
+                lucro_postos_mes = sum(p['valor'] for p in lucro_por_produto)
         except Exception:
             pass
 
@@ -345,6 +355,8 @@ def index():
     context['volume_transportado_por_produto'] = volume_transportado_por_produto
     context['volume_vendido_por_produto'] = volume_vendido_por_produto
     context['lucro_por_produto'] = lucro_por_produto
+    context['lucro_postos_mes'] = lucro_postos_mes
+    context['lucro_postos_disponivel'] = lucro_postos_disponivel
     _meses_pt = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho',
                  'Julho','Agosto','Setembro','Outubro','Novembro','Dezembro']
     context['mes_atual'] = f"{_meses_pt[hoje.month - 1]}/{hoje.year}"
