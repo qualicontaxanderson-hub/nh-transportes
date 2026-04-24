@@ -225,6 +225,46 @@
     transform: translateY(-1px);
     box-shadow: 0 4px 12px rgba(16,185,129,0.35);
   }
+  .btn-dash-yellow {
+    background: #fde68a;
+    color: #713f12 !important;
+    border: none;
+    border-radius: 8px;
+    padding: 9px 20px;
+    font-size: 0.82rem;
+    font-weight: 600;
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    transition: background 0.18s, box-shadow 0.15s, transform 0.1s;
+    text-decoration: none;
+    box-shadow: 0 2px 6px rgba(234,179,8,0.25);
+  }
+  .btn-dash-yellow:hover {
+    background: #fcd34d;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(234,179,8,0.35);
+  }
+  .btn-dash-red {
+    background: #fca5a5;
+    color: #7f1d1d !important;
+    border: none;
+    border-radius: 8px;
+    padding: 9px 20px;
+    font-size: 0.82rem;
+    font-weight: 600;
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    transition: background 0.18s, box-shadow 0.15s, transform 0.1s;
+    text-decoration: none;
+    box-shadow: 0 2px 6px rgba(239,68,68,0.25);
+  }
+  .btn-dash-red:hover {
+    background: #f87171;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(239,68,68,0.35);
+  }
 
   /* Product breakdown tables */
   .breakdown-card {
@@ -330,7 +370,7 @@
         <i class="bi bi-bar-chart-line-fill"></i>
       </div>
       <div>
-        <h1>NH TRANSPORTES · Dashboard</h1>
+        <h1>GRUPO NH</h1>
         <p>
           {% if current_user.is_authenticated %}
             {{ current_user.nome_completo }}
@@ -347,6 +387,12 @@
       </a>
       <a href="{{ importar_pedido_url }}" target="_blank" class="btn-dash-primary">
         <i class="bi bi-cloud-download-fill"></i> Importar Pedido
+      </a>
+      <a href="https://app.postonovohorizonte.com.br/fretes/" target="_blank" class="btn-dash-yellow">
+        <i class="bi bi-truck-front-fill"></i> Fretes
+      </a>
+      <a href="https://app.postonovohorizonte.com.br/pedidos/" target="_blank" class="btn-dash-red">
+        <i class="bi bi-cart-check-fill"></i> Pedidos
       </a>
     </div>
   </div>
