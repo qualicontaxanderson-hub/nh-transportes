@@ -713,13 +713,47 @@ def _calcular_resultado_cliente(cur, cliente_id, ano_mes, data_inicio, data_fim,
             }
     else:
         # Calcular on-the-fly
+        _prev_ano_b = ano if mes > 1 else ano - 1
+        _prev_mes_b = mes - 1 if mes > 1 else 12
+        _prev_ano_mes_b = f'{_prev_ano_b:04d}-{_prev_mes_b:02d}'
+        cur.execute("""
+            SELECT id FROM fifo_competencia
+            WHERE cliente_id = %s AND ano_mes = %s AND status = 'FECHADO'
+            LIMIT 1
+        """, (cliente_id, _prev_ano_mes_b))
+        _prev_comp_b = cur.fetchone()
+
         for prod in produtos:
             pid = prod['id']
             camadas_base = _obter_camadas_base_relatorio(cur, cliente_id, pid, ano, mes)
 
-            # EI: peso das camadas FIFO no início do mês
-            ei_qtde = sum(float(l.get('qtde', 0)) for l in camadas_base)
-            ei_valor = sum(float(l.get('qtde', 0)) * float(l.get('custo', 0)) for l in camadas_base)
+            # Converter para lista mutável de floats para eventuais avanços
+            _layers_b = [
+                {'qtde': float(l.get('qtde', 0)), 'custo': float(l.get('custo', 0))}
+                for l in camadas_base if float(l.get('qtde', 0)) > 0
+            ]
+
+            # Quando o mês anterior não está fechado, as camadas vêm de fifo_abertura
+            # (estoque de abertura, ex.: 01/01). É preciso avançar pelas transações
+            # dos meses intermediários até o início do mês corrente.
+            if not _prev_comp_b:
+                cur.execute("""
+                    SELECT data_abertura FROM fifo_abertura
+                    WHERE cliente_id = %s AND produto_id = %s
+                    LIMIT 1
+                """, (cliente_id, pid))
+                _ab_b = cur.fetchone()
+                if _ab_b and _ab_b.get('data_abertura'):
+                    _ab_date_b = _ab_b['data_abertura']
+                    if isinstance(_ab_date_b, str):
+                        _ab_date_b = datetime.strptime(_ab_date_b, '%Y-%m-%d').date()
+                    _mes_ini_b = date(ano, mes, 1)
+                    if _ab_date_b < _mes_ini_b:
+                        _advance_layers_to_date(cur, cliente_id, pid, _layers_b, _ab_date_b, _mes_ini_b)
+
+            # EI: peso das camadas FIFO no início do mês (já avançadas)
+            ei_qtde = sum(l['qtde'] for l in _layers_b)
+            ei_valor = sum(l['qtde'] * l['custo'] for l in _layers_b)
 
             cur.execute("""
                 SELECT f.data_frete AS data,
@@ -748,7 +782,7 @@ def _calcular_resultado_cliente(cur, cliente_id, ano_mes, data_inicio, data_fim,
             """, (cliente_id, pid, data_inicio, data_fim))
             vendas = cur.fetchall()
 
-            resultado, _ = _calcular_fifo_relatorio(camadas_base, compras, vendas)
+            resultado, _ = _calcular_fifo_relatorio(_layers_b, compras, vendas)
             resultado['estoque_inicial_qtde'] = ei_qtde
             resultado['estoque_inicial_valor'] = ei_valor
             resultado['estoque_inicial_custo_unit'] = ei_valor / ei_qtde if ei_qtde else 0.0
@@ -799,6 +833,56 @@ def _consumir_fifo(layers, quantidade):
     return cogs
 
 
+def _advance_layers_to_date(cur, cliente_id, pid, layers, from_date, to_date):
+    """
+    Avança as camadas FIFO de from_date até to_date (exclusive),
+    processando compras e vendas em ordem cronológica dia a dia.
+    Usado quando as camadas vêm de fifo_abertura e é preciso reflectir
+    todas as transações dos meses anteriores ainda não fechados.
+    Modifica `layers` in-place.
+    """
+    from collections import defaultdict as _dd
+    if from_date >= to_date:
+        return
+
+    cur.execute("""
+        SELECT f.data_frete AS data,
+               COALESCE(f.quantidade_manual, q.valor, 0) AS qtde,
+               COALESCE(f.preco_produto_unitario, 0)     AS custo
+        FROM fretes f
+        LEFT JOIN quantidades q ON f.quantidade_id = q.id
+        WHERE f.clientes_id = %s AND f.produto_id = %s
+          AND f.data_frete >= %s AND f.data_frete < %s
+          AND COALESCE(f.quantidade_manual, q.valor, 0) > 0
+        ORDER BY f.data_frete
+    """, (cliente_id, pid, from_date, to_date))
+    compras_by_date = _dd(list)
+    for row in cur.fetchall():
+        compras_by_date[row['data']].append(
+            {'qtde': float(row['qtde']), 'custo': float(row['custo'])}
+        )
+
+    cur.execute("""
+        SELECT data_movimento AS data,
+               SUM(COALESCE(quantidade_litros, 0)) AS qtde
+        FROM vendas_posto
+        WHERE cliente_id = %s AND produto_id = %s
+          AND data_movimento >= %s AND data_movimento < %s
+        GROUP BY data_movimento
+        ORDER BY data_movimento
+    """, (cliente_id, pid, from_date, to_date))
+    vendas_by_date = {row['data']: float(row['qtde'] or 0) for row in cur.fetchall()}
+
+    all_dates = sorted(set(list(compras_by_date.keys()) + list(vendas_by_date.keys())))
+    for d in all_dates:
+        for comp in compras_by_date.get(d, []):
+            if comp['qtde'] > 0 and comp['custo'] > 0:
+                layers.append({'qtde': comp['qtde'], 'custo': comp['custo']})
+        qtde_v = vendas_by_date.get(d, 0.0)
+        if qtde_v > 0:
+            _consumir_fifo(layers, qtde_v)
+
+
 def _calcular_diario_cliente(cur, cliente_id, data_inicio, data_fim, produto_ids_filtro=None):
     """
     Retorna dados dia a dia de estoque para um cliente no intervalo de datas.
@@ -847,8 +931,33 @@ def _calcular_diario_cliente(cur, cliente_id, data_inicio, data_fim, produto_ids
             for l in layers if float(l.get('qtde', 0)) > 0
         ]
 
-        # Se data_inicio não é o 1º do mês, avançar layers até data_inicio
         mes_inicio = date(data_inicio.year, data_inicio.month, 1)
+
+        # Quando o mês anterior não está fechado, as camadas vêm de fifo_abertura.
+        # É preciso avançar pelas compras/vendas dos meses anteriores ainda abertos
+        # para que o estado FIFO reflicta a realidade no início do período.
+        _prev_ano_d = data_inicio.year if data_inicio.month > 1 else data_inicio.year - 1
+        _prev_mes_d = data_inicio.month - 1 if data_inicio.month > 1 else 12
+        cur.execute("""
+            SELECT id FROM fifo_competencia
+            WHERE cliente_id = %s AND ano_mes = %s AND status = 'FECHADO'
+            LIMIT 1
+        """, (cliente_id, f'{_prev_ano_d:04d}-{_prev_mes_d:02d}'))
+        if cur.fetchone() is None:
+            cur.execute("""
+                SELECT data_abertura FROM fifo_abertura
+                WHERE cliente_id = %s AND produto_id = %s
+                LIMIT 1
+            """, (cliente_id, pid))
+            _ab_d = cur.fetchone()
+            if _ab_d and _ab_d.get('data_abertura'):
+                _ab_date_d = _ab_d['data_abertura']
+                if isinstance(_ab_date_d, str):
+                    _ab_date_d = datetime.strptime(_ab_date_d, '%Y-%m-%d').date()
+                if _ab_date_d < mes_inicio:
+                    _advance_layers_to_date(cur, cliente_id, pid, layers, _ab_date_d, mes_inicio)
+
+        # Se data_inicio não é o 1º do mês, avançar layers até data_inicio
         if data_inicio > mes_inicio:
             # Compras entre 1º do mês e data_inicio (exclusive)
             cur.execute("""
