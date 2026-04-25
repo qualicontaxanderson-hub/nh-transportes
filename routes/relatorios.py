@@ -989,6 +989,7 @@ def _calcular_diario_cliente(cur, cliente_id, data_inicio, data_fim, produto_ids
         # EI do período = estado das camadas agora
         ei_mes_custo_unit = layers[0]['custo'] if layers else 0.0
         ei_mes_valor = sum(l['qtde'] * l['custo'] for l in layers)
+        ei_mes_fifo_qtde = sum(l['qtde'] for l in layers)
 
         # ── Vendas diárias ────────────────────────────────────────────────────
         cur.execute("""
@@ -1138,6 +1139,7 @@ def _calcular_diario_cliente(cur, cliente_id, data_inicio, data_fim, produto_ids
             'ei_mes': ei_mes,
             'ei_mes_custo_unit': ei_mes_custo_unit,
             'ei_mes_valor': ei_mes_valor,
+            'ei_mes_fifo_qtde': ei_mes_fifo_qtde,
             'ef_mes': ef_mes,
             'ef_mes_fifo_qtde': ef_mes_fifo_qtde,
             'ef_mes_valor': ef_mes_valor,
@@ -1379,13 +1381,18 @@ def lucro_postos():
                     ei_v = pd.get('ei_mes_valor', 0.0)
                     res['estoque_inicial_qtde'] = ei_q
                     res['estoque_inicial_valor'] = ei_v
-                    res['estoque_inicial_custo_unit'] = ei_v / ei_q if ei_q else 0.0
+                    # Custo Unit EI: usa custo FIFO do 1º lote (não divide valor/qtde física,
+                    # pois qtde física pode divergir das camadas FIFO)
+                    res['estoque_inicial_custo_unit'] = pd.get('ei_mes_custo_unit', 0.0)
+                    res['ei_mes_fifo_qtde'] = pd.get('ei_mes_fifo_qtde', 0.0)
                     # EF: quantidade real medida; valor FIFO
                     ef_v = pd.get('ef_mes_valor', 0.0)
                     ef_q = pd.get('ef_mes') if pd.get('ef_mes') is not None else pd.get('ef_mes_fifo_qtde', 0.0)
                     res['estoque_final_qtde'] = ef_q
                     res['estoque_final_valor'] = ef_v
-                    res['estoque_final_custo_unit'] = ef_v / ef_q if ef_q else 0.0
+                    # Custo Unit EF: usa custo FIFO ponderado das camadas restantes
+                    res['estoque_final_custo_unit'] = pd.get('ef_mes_custo_unit', 0.0)
+                    res['ef_mes_fifo_qtde'] = pd.get('ef_mes_fifo_qtde', 0.0)
     finally:
         cur.close()
         conn.close()
@@ -1402,18 +1409,22 @@ def lucro_postos():
                     'cogs': 0.0, 'lucro': 0.0,
                     'estoque_inicial_qtde': 0.0, 'estoque_inicial_valor': 0.0,
                     'estoque_final_qtde': 0.0, 'estoque_final_valor': 0.0,
+                    'ei_mes_fifo_qtde': 0.0, 'ef_mes_fifo_qtde': 0.0,
                 }
             for campo in ('qtde_entrada', 'custo_entrada_total', 'qtde_saida',
                           'receita_saida', 'cogs', 'lucro',
                           'estoque_inicial_qtde', 'estoque_inicial_valor',
-                          'estoque_final_qtde', 'estoque_final_valor'):
+                          'estoque_final_qtde', 'estoque_final_valor',
+                          'ei_mes_fifo_qtde', 'ef_mes_fifo_qtde'):
                 consolidado[pid][campo] += res.get(campo, 0.0)
 
     for pid, c in consolidado.items():
         c['custo_entrada_unit'] = c['custo_entrada_total'] / c['qtde_entrada'] if c['qtde_entrada'] else 0.0
         c['preco_medio_saida'] = c['receita_saida'] / c['qtde_saida'] if c['qtde_saida'] else 0.0
-        c['estoque_inicial_custo_unit'] = c['estoque_inicial_valor'] / c['estoque_inicial_qtde'] if c['estoque_inicial_qtde'] else 0.0
-        c['estoque_final_custo_unit'] = c['estoque_final_valor'] / c['estoque_final_qtde'] if c['estoque_final_qtde'] else 0.0
+        # Custo Unit EI/EF: usa qtde FIFO das camadas (não qtde física) para evitar
+        # divisão incorreta quando qtde física diverge das camadas FIFO
+        c['estoque_inicial_custo_unit'] = c['estoque_inicial_valor'] / c['ei_mes_fifo_qtde'] if c['ei_mes_fifo_qtde'] else 0.0
+        c['estoque_final_custo_unit'] = c['estoque_final_valor'] / c['ef_mes_fifo_qtde'] if c['ef_mes_fifo_qtde'] else 0.0
 
     exportar = request.args.get('exportar')
     if exportar == 'csv' and filtrou:
