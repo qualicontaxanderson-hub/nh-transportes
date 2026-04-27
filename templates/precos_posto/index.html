@@ -357,8 +357,6 @@
     tbody.innerHTML = '';
     wpDiv.innerHTML = '';
 
-    let textoTodos = '';
-
     raw.formas.forEach(forma => {
       const acr = forma.is_base ? 0 : getAcrescimo(forma.id);
 
@@ -397,30 +395,77 @@
         '<i class="bi bi-whatsapp me-1"></i>Copiar</button></div>' +
         '<div class="whatsapp-block">' + htmlEsc(textForm) + '</div></div>';
       wpDiv.insertAdjacentHTML('beforeend', blockHtml);
-
-      textoTodos += textForm + '\n';
     });
 
     // Guardar texto total no botão "Copiar Todos"
+    const textoCompleto = gerarTextoTodos();
     document.querySelector('.btn-copy-all').onclick = function () {
-      copiarTexto(textoTodos.trim());
+      copiarTexto(textoCompleto);
     };
   };
 
-  function gerarTextoForma(forma, acr) {
-    let linhas = [];
-    if (forma.is_base) {
-      linhas.push('*' + forma.nome + '*');
-    } else {
-      linhas.push('*' + forma.nome + ' (+R$ ' + fmtN(acr, 2) + '/L)*');
-    }
-    raw.produtos.forEach(prod => {
-      const base = getPrecoBase(prod.id);
-      const preco = base + acr;
-      if (preco > 0) {
-        linhas.push(prod.abrev + '    R$ ' + fmtN(preco, 2));
-      }
+  function getEmojiForma(nome) {
+    const n = nome.toLowerCase();
+    if (n.includes('pix') || n.includes('dinheiro') || n.includes('cheque')) return '💵';
+    if (n.includes('débito') || n.includes('debito')) return '💳';
+    if (n.includes('crédito') || n.includes('credito')) return '💳';
+    if (n.includes('x7') || n.includes('bank')) return '🏦';
+    return '💰';
+  }
+
+  function _linhasProdutos(acr) {
+    const linhas = [];
+    const abrevs = raw.produtos
+      .map(p => ({ abrev: p.abrev, preco: getPrecoBase(p.id) + acr }))
+      .filter(p => p.preco > 0);
+    const maxLen = abrevs.reduce((m, p) => Math.max(m, p.abrev.length), 0);
+    abrevs.forEach(p => {
+      const pad = '.'.repeat(Math.max(2, maxLen - p.abrev.length + 4));
+      linhas.push('• ' + p.abrev + pad + 'R$ ' + fmtN(p.preco, 2));
     });
+    return linhas;
+  }
+
+  function _cabecalhoForma(forma, acr) {
+    if (forma.is_base) {
+      return getEmojiForma(forma.nome) + ' *' + forma.nome + '*';
+    }
+    return getEmojiForma(forma.nome) + ' *' + forma.nome + '* (+R$ ' + fmtN(acr, 2) + '/L)';
+  }
+
+  function gerarTextoForma(forma, acr) {
+    const hoje = new Date();
+    const dataStr = hoje.toLocaleDateString('pt-BR');
+    const sep = '─────────────────────────';
+    const linhas = [
+      '🏢 *' + raw.empresaNome.toUpperCase() + '*',
+      '📅 ' + dataStr,
+      sep,
+      _cabecalhoForma(forma, acr),
+      '',
+    ];
+    _linhasProdutos(acr).forEach(l => linhas.push(l));
+    linhas.push(sep);
+    return linhas.join('\n');
+  }
+
+  function gerarTextoTodos() {
+    const hoje = new Date();
+    const dataStr = hoje.toLocaleDateString('pt-BR');
+    const sep = '═══════════════════════════';
+    const linhas = [
+      '🏢 *' + raw.empresaNome.toUpperCase() + '*',
+      '📋 Tabela de Preços – ' + dataStr,
+      sep,
+    ];
+    raw.formas.forEach(forma => {
+      const acr = forma.is_base ? 0 : getAcrescimo(forma.id);
+      linhas.push('');
+      linhas.push(_cabecalhoForma(forma, acr));
+      _linhasProdutos(acr).forEach(l => linhas.push(l));
+    });
+    linhas.push('');
+    linhas.push(sep);
     return linhas.join('\n');
   }
 
