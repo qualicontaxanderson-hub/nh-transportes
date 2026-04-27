@@ -705,7 +705,7 @@ def _calcular_resultado_cliente(cur, cliente_id, ano_mes, data_inicio, data_fim,
                 'lucro': float(row['lucro_bruto'] or 0),
                 'estoque_inicial_qtde': ei_qtde,
                 'estoque_inicial_valor': ei_valor,
-                'estoque_inicial_custo_unit': ei_valor / ei_qtde if ei_qtde else 0.0,
+                'estoque_inicial_custo_unit': float(camadas_ei[0]['custo']) if camadas_ei else 0.0,
                 'estoque_final_qtde': estoque_qtde,
                 'estoque_final_valor': estoque_valor,
                 'estoque_final_custo_unit': estoque_valor / estoque_qtde if estoque_qtde else 0.0,
@@ -785,7 +785,7 @@ def _calcular_resultado_cliente(cur, cliente_id, ano_mes, data_inicio, data_fim,
             resultado, _ = _calcular_fifo_relatorio(_layers_b, compras, vendas)
             resultado['estoque_inicial_qtde'] = ei_qtde
             resultado['estoque_inicial_valor'] = ei_valor
-            resultado['estoque_inicial_custo_unit'] = ei_valor / ei_qtde if ei_qtde else 0.0
+            resultado['estoque_inicial_custo_unit'] = float(_layers_b[0]['custo']) if _layers_b else 0.0
             resultado['status'] = 'ABERTO'
             resultados[pid] = resultado
 
@@ -1410,6 +1410,7 @@ def lucro_postos():
                     'estoque_inicial_qtde': 0.0, 'estoque_inicial_valor': 0.0,
                     'estoque_final_qtde': 0.0, 'estoque_final_valor': 0.0,
                     'ei_mes_fifo_qtde': 0.0, 'ef_mes_fifo_qtde': 0.0,
+                    'ei_custo_unit_numerator': 0.0,
                 }
             for campo in ('qtde_entrada', 'custo_entrada_total', 'qtde_saida',
                           'receita_saida', 'cogs', 'lucro',
@@ -1417,13 +1418,19 @@ def lucro_postos():
                           'estoque_final_qtde', 'estoque_final_valor',
                           'ei_mes_fifo_qtde', 'ef_mes_fifo_qtde'):
                 consolidado[pid][campo] += res.get(campo, 0.0)
+            # Para custo_unit EI: média ponderada do custo do lote frontal FIFO
+            # de cada empresa (weighted by total FIFO qty), para que uma única
+            # empresa mostre exatamente o mesmo valor que a tabela de detalhe.
+            consolidado[pid]['ei_custo_unit_numerator'] += (
+                res.get('estoque_inicial_custo_unit', 0.0) * res.get('ei_mes_fifo_qtde', 0.0)
+            )
 
     for pid, c in consolidado.items():
         c['custo_entrada_unit'] = c['custo_entrada_total'] / c['qtde_entrada'] if c['qtde_entrada'] else 0.0
         c['preco_medio_saida'] = c['receita_saida'] / c['qtde_saida'] if c['qtde_saida'] else 0.0
-        # Custo Unit EI/EF: usa qtde FIFO das camadas (não qtde física) para evitar
-        # divisão incorreta quando qtde física diverge das camadas FIFO
-        c['estoque_inicial_custo_unit'] = c['estoque_inicial_valor'] / c['ei_mes_fifo_qtde'] if c['ei_mes_fifo_qtde'] else 0.0
+        # Custo Unit EI: média ponderada do custo do lote frontal FIFO por empresa.
+        # Com uma única empresa, coincide exatamente com o valor exibido no detalhe diário.
+        c['estoque_inicial_custo_unit'] = c['ei_custo_unit_numerator'] / c['ei_mes_fifo_qtde'] if c['ei_mes_fifo_qtde'] else 0.0
         c['estoque_final_custo_unit'] = c['estoque_final_valor'] / c['ef_mes_fifo_qtde'] if c['ef_mes_fifo_qtde'] else 0.0
 
     exportar = request.args.get('exportar')
