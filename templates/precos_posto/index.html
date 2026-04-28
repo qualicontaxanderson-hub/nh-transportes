@@ -385,8 +385,9 @@
 
       // Botão copiar apenas esta forma
       const textForm = gerarTextoForma(forma, acr);
+      const textFormEsc = htmlEsc(JSON.stringify(textForm));
       tr += '<td class="text-end">';
-      tr += '<button class="btn-copy" onclick="copiarTexto(' + JSON.stringify(textForm) + ')" title="Copiar para WhatsApp">';
+      tr += '<button class="btn-copy" onclick="copiarTexto(' + textFormEsc + ')" title="Copiar para WhatsApp">';
       tr += '<i class="bi bi-whatsapp"></i></button>';
       tr += '</td>';
       tr += '</tr>';
@@ -396,7 +397,7 @@
       const blockHtml = '<div class="mb-2">' +
         '<div class="d-flex align-items-center justify-content-between mb-1">' +
         '<span class="fw-semibold" style="font-size:.82rem;color:#374151;">' + htmlEsc(forma.nome) + '</span>' +
-        '<button class="btn-copy" onclick="copiarTexto(' + JSON.stringify(textForm) + ')">' +
+        '<button class="btn-copy" onclick="copiarTexto(' + textFormEsc + ')">' +
         '<i class="bi bi-whatsapp me-1"></i>Copiar</button></div>' +
         '<div class="whatsapp-block">' + htmlEsc(textForm) + '</div></div>';
       wpDiv.insertAdjacentHTML('beforeend', blockHtml);
@@ -443,15 +444,17 @@
   function gerarTextoForma(forma, acr) {
     const hoje = new Date();
     const dataStr = hoje.toLocaleDateString('pt-BR');
-    const sep = '─────────────────────────';
+    const sep = '═══════════════════════════';
     const linhas = [
       '🏢 *' + raw.empresaNome.toUpperCase() + '*',
-      '📅 ' + dataStr,
+      '📋 Tabela de Preços – ' + dataStr,
       sep,
+      '',
       _cabecalhoForma(forma, acr),
       '',
     ];
     _linhasProdutos(acr, forma.id).forEach(l => linhas.push(l));
+    linhas.push('');
     linhas.push(sep);
     return linhas.join('\n');
   }
