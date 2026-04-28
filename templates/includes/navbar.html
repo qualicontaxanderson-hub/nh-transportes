@@ -46,15 +46,12 @@
             <i class="bi bi-journal-plus"></i> Lançamentos
           </a>
           <ul class="dropdown-menu" aria-labelledby="navLancamentos">
-            <li><a class="dropdown-item" href="/fretes/"><i class="bi bi-truck-front" style="color: #dc3545;"></i> Fretes</a></li>
-            <li><a class="dropdown-item" href="/precos/"><i class="bi bi-tags-fill" style="color: #e65c00;"></i> Preços</a></li>
             <li><a class="dropdown-item" href="/descargas/"><i class="bi bi-fuel-pump-fill" style="color: #1a6b3c;"></i> Descargas</a></li>
             <li><a class="dropdown-item" href="/quilometragem/"><i class="bi bi-speedometer2" style="color: #17a2b8;"></i> Quilometragem</a></li>
             <li><a class="dropdown-item" href="/arla/"><i class="bi bi-droplet-half" style="color: #007bff;"></i> ARLA</a></li>
             <li><a class="dropdown-item" href="/lubrificantes/"><i class="bi bi-droplet" style="color: #ff6b6b;"></i> Lubrificantes</a></li>
             <li><a class="dropdown-item" href="/posto/vendas"><i class="bi bi-fuel-pump" style="color: #28a745;"></i> Vendas Posto</a></li>
             <li><a class="dropdown-item" href="/lancamentos_caixa/"><i class="bi bi-calculator" style="color: #ff9800;"></i> Fechamento de Caixa</a></li>
-            <li><a class="dropdown-item" href="/depositos/"><i class="bi bi-bank2" style="color: #6f42c1;"></i> Depósitos</a></li>
             <li><a class="dropdown-item" href="/troco_pix/"><i class="bi bi-currency-exchange" style="color: #17a2b8;"></i> Troco PIX</a></li>
             <li><a class="dropdown-item" href="/troco_pix/pista"><i class="bi bi-fuel-pump-fill" style="color: #20c997;"></i> Troco PIX Pista</a></li>
           </ul>
@@ -122,8 +119,10 @@
           </a>
           <ul class="dropdown-menu" aria-labelledby="navLancamentos">
             <li><a class="dropdown-item" href="/pedidos/"><i class="bi bi-clipboard-check" style="color: #007bff;"></i> Pedidos</a></li>
+            {% if nivel_usuario == 'ADMIN' %}
             <li><a class="dropdown-item" href="/fretes/"><i class="bi bi-truck-front" style="color: #dc3545;"></i> Fretes</a></li>
             <li><a class="dropdown-item" href="/precos/"><i class="bi bi-tags-fill" style="color: #e65c00;"></i> Preços</a></li>
+            {% endif %}
             <li><a class="dropdown-item" href="/descargas/"><i class="bi bi-fuel-pump-fill" style="color: #1a6b3c;"></i> Descargas</a></li>
             <li><a class="dropdown-item" href="/rotas/"><i class="bi bi-map" style="color: #ffc107;"></i> Rotas</a></li>
             <li><a class="dropdown-item" href="/quilometragem/"><i class="bi bi-speedometer2" style="color: #17a2b8;"></i> Quilometragem</a></li>
@@ -136,7 +135,9 @@
             <li><a class="dropdown-item" href="/lancamentos_despesas/"><i class="bi bi-cash-coin" style="color: #dc3545;"></i> Despesas</a></li>
             {% endif %}
             <li><a class="dropdown-item" href="/lancamentos_caixa/"><i class="bi bi-calculator" style="color: #ff9800;"></i> Fechamento de Caixa</a></li>
+            {% if nivel_usuario == 'ADMIN' %}
             <li><a class="dropdown-item" href="/depositos/"><i class="bi bi-bank2" style="color: #6f42c1;"></i> Depósitos</a></li>
+            {% endif %}
             <li><a class="dropdown-item" href="/troco_pix/"><i class="bi bi-currency-exchange" style="color: #17a2b8;"></i> Troco PIX</a></li>
             <li><a class="dropdown-item" href="/troco_pix/pista"><i class="bi bi-fuel-pump-fill" style="color: #20c997;"></i> Troco PIX Pista</a></li>
             <li><hr class="dropdown-divider"></li>

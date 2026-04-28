@@ -1,5 +1,6 @@
 from flask import Blueprint, render_template, request, redirect, url_for, flash, current_app, session
 from flask_login import login_required
+from routes.auth import admin_required
 import re
 from datetime import datetime, date
 from utils.db import get_db_connection
@@ -76,6 +77,7 @@ def _ensure_fretes_pedido_id(conn=None):
 
 @bp.route('/', methods=['GET'])
 @login_required
+@admin_required
 def lista():
     # Salva a URL da pesquisa atual na sessão para restaurar após uma edição
     session['fretes_lista_url'] = request.url
@@ -210,6 +212,7 @@ def lista():
 
 @bp.route('/novo', methods=['GET', 'POST'])
 @login_required
+@admin_required
 def novo():
     """
     GET: carregar dados auxiliares e tentar pré-selecionar destino a partir do pedido/cliente.
@@ -539,6 +542,7 @@ def novo():
 
 @bp.route('/salvar_importados', methods=['POST'])
 @login_required
+@admin_required
 def salvar_importados():
     """
     Recebe formulário de importação (templates/fretes/importar-pedido.html).
@@ -738,6 +742,7 @@ def salvar_importados():
 
 @bp.route('/editar/<int:id>', methods=['GET', 'POST'])
 @login_required
+@admin_required
 def editar(id):
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
@@ -967,6 +972,7 @@ def editar(id):
 
 @bp.route('/deletar/<int:id>', methods=['POST'])
 @login_required
+@admin_required
 def deletar(id):
     """
     Protegido: antes de excluir um frete, verifica se existe cobranca vinculada.

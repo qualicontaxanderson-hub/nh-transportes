@@ -8,6 +8,7 @@ para envio no WhatsApp.
 
 from flask import Blueprint, render_template, request, flash, redirect, url_for, jsonify
 from flask_login import login_required
+from routes.auth import admin_required
 from utils.db import get_db_connection
 import logging
 
@@ -127,6 +128,7 @@ def _load_formas(cur):
 
 @bp.route('/', methods=['GET'])
 @login_required
+@admin_required
 def index():
     _ensure_tables()
     conn = get_db_connection()
@@ -190,6 +192,7 @@ def index():
 
 @bp.route('/salvar', methods=['POST'])
 @login_required
+@admin_required
 def salvar():
     _ensure_tables()
     cliente_id = request.form.get('cliente_id', type=int)
@@ -247,6 +250,7 @@ def salvar():
 
 @bp.route('/formas', methods=['GET'])
 @login_required
+@admin_required
 def formas():
     _ensure_tables()
     conn = get_db_connection()
@@ -284,6 +288,7 @@ def formas():
 
 @bp.route('/formas/nova', methods=['POST'])
 @login_required
+@admin_required
 def formas_nova():
     _ensure_tables()
     nome     = request.form.get('nome', '').strip()
@@ -319,6 +324,7 @@ def formas_nova():
 
 @bp.route('/formas/<int:forma_id>/editar', methods=['POST'])
 @login_required
+@admin_required
 def formas_editar(forma_id):
     nome      = request.form.get('nome', '').strip()
     acrescimo = request.form.get('acrescimo', '0').replace(',', '.')
@@ -351,6 +357,7 @@ def formas_editar(forma_id):
 
 @bp.route('/formas/<int:forma_id>/excluir', methods=['POST'])
 @login_required
+@admin_required
 def formas_excluir(forma_id):
     conn = get_db_connection()
     cur  = conn.cursor()
@@ -373,6 +380,7 @@ def formas_excluir(forma_id):
 
 @bp.route('/formas/<int:forma_id>/toggle-produto', methods=['POST'])
 @login_required
+@admin_required
 def formas_toggle_produto(forma_id):
     """Alterna visibilidade de um produto no texto do WhatsApp para uma forma."""
     data       = request.get_json(force=True) or {}
