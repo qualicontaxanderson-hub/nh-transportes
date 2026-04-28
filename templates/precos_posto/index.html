@@ -354,6 +354,14 @@
     }
   });
 
+  // Armazena textos individuais por forma.id para evitar problemas de escape inline
+  window._textosFormas = {};
+
+  window.copiarTextoForma = function (formaId) {
+    const txt = window._textosFormas[formaId];
+    if (txt) copiarTexto(txt);
+  };
+
   window.recalcular = function () {
     const tbody = document.getElementById('tbodyPrecos');
     const wpDiv = document.getElementById('wpBlocks');
@@ -361,6 +369,7 @@
 
     tbody.innerHTML = '';
     wpDiv.innerHTML = '';
+    window._textosFormas = {};
 
     raw.formas.forEach(forma => {
       const acr = forma.is_base ? 0 : getAcrescimo(forma.id);
@@ -383,11 +392,11 @@
         tr += '</td>';
       });
 
-      // Botão copiar apenas esta forma
+      // Botão copiar apenas esta forma – referencia pelo ID (sem escape inline de string)
       const textForm = gerarTextoForma(forma, acr);
-      const textFormEsc = htmlEsc(JSON.stringify(textForm));
+      window._textosFormas[forma.id] = textForm;
       tr += '<td class="text-end">';
-      tr += '<button class="btn-copy" onclick="copiarTexto(' + textFormEsc + ')" title="Copiar para WhatsApp">';
+      tr += '<button class="btn-copy" onclick="copiarTextoForma(' + forma.id + ')" title="Copiar para WhatsApp">';
       tr += '<i class="bi bi-whatsapp"></i></button>';
       tr += '</td>';
       tr += '</tr>';
@@ -397,7 +406,7 @@
       const blockHtml = '<div class="mb-2">' +
         '<div class="d-flex align-items-center justify-content-between mb-1">' +
         '<span class="fw-semibold" style="font-size:.82rem;color:#374151;">' + htmlEsc(forma.nome) + '</span>' +
-        '<button class="btn-copy" onclick="copiarTexto(' + textFormEsc + ')">' +
+        '<button class="btn-copy" onclick="copiarTextoForma(' + forma.id + ')">' +
         '<i class="bi bi-whatsapp me-1"></i>Copiar</button></div>' +
         '<div class="whatsapp-block">' + htmlEsc(textForm) + '</div></div>';
       wpDiv.insertAdjacentHTML('beforeend', blockHtml);
@@ -450,7 +459,7 @@
       '📋 Tabela de Preços – ' + dataStr,
       sep,
       '',
-      _cabecalhoForma(forma, acr),
+      getEmojiForma(forma.nome) + ' *' + forma.nome + '*',
       '',
     ];
     _linhasProdutos(acr, forma.id).forEach(l => linhas.push(l));
