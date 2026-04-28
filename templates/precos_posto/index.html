@@ -294,6 +294,11 @@
               "{{ fid }}": {{ acr }}{% if not loop.last %},{% endif %}
               {% endfor %}
             },
+            "ocultosPorForma": {
+              {% for forma in formas %}
+              "{{ forma.id }}": {{ ocultos_por_forma.get(forma.id, []) | tojson }}{% if not loop.last %},{% endif %}
+              {% endfor %}
+            },
             "empresaNome": {{ empresa_sel.nome | tojson }}
           }
           </script>
@@ -413,9 +418,11 @@
     return '💰';
   }
 
-  function _linhasProdutos(acr) {
+  function _linhasProdutos(acr, formaId) {
+    const ocultos = new Set(raw.ocultosPorForma[formaId] || []);
     const linhas = [];
     const abrevs = raw.produtos
+      .filter(p => !ocultos.has(p.id))
       .map(p => ({ abrev: p.abrev, preco: getPrecoBase(p.id) + acr }))
       .filter(p => p.preco > 0);
     const maxLen = abrevs.reduce((m, p) => Math.max(m, p.abrev.length), 0);
@@ -444,7 +451,7 @@
       _cabecalhoForma(forma, acr),
       '',
     ];
-    _linhasProdutos(acr).forEach(l => linhas.push(l));
+    _linhasProdutos(acr, forma.id).forEach(l => linhas.push(l));
     linhas.push(sep);
     return linhas.join('\n');
   }
@@ -462,7 +469,7 @@
       const acr = forma.is_base ? 0 : getAcrescimo(forma.id);
       linhas.push('');
       linhas.push(_cabecalhoForma(forma, acr));
-      _linhasProdutos(acr).forEach(l => linhas.push(l));
+      _linhasProdutos(acr, forma.id).forEach(l => linhas.push(l));
     });
     linhas.push('');
     linhas.push(sep);

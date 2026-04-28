@@ -6,7 +6,7 @@ configurar acréscimos específicos por empresa e gerar texto formatado
 para envio no WhatsApp.
 """
 
-from flask import Blueprint, render_template, request, flash, redirect, url_for
+from flask import Blueprint, render_template, request, flash, redirect, url_for, jsonify
 from flask_login import login_required
 from utils.db import get_db_connection
 import logging
@@ -70,6 +70,13 @@ def _ensure_tables():
                 produto_id  INT          NOT NULL,
                 preco_base  DECIMAL(10,4) NOT NULL DEFAULT 0.0000,
                 UNIQUE KEY uk_clie_prod (cliente_id, produto_id)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+        """)
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS precos_forma_produtos_ocultos (
+                forma_id   INT NOT NULL,
+                produto_id INT NOT NULL,
+                PRIMARY KEY (forma_id, produto_id)
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
         """)
         # Seed formas padrão caso a tabela esteja vazia
@@ -159,6 +166,12 @@ def index():
                 """, (cliente_id,))
                 for row in cur.fetchall():
                     acrescimos_emp[row['forma_id']] = float(row['acrescimo'])
+
+        # Produtos ocultos por forma (global – independente de empresa selecionada)
+        cur.execute("SELECT forma_id, produto_id FROM precos_forma_produtos_ocultos")
+        ocultos_por_forma = {}
+        for row in cur.fetchall():
+            ocultos_por_forma.setdefault(row['forma_id'], []).append(row['produto_id'])
     finally:
         cur.close()
         conn.close()
@@ -171,6 +184,7 @@ def index():
         empresa_sel=empresa_sel,
         produtos_lista=produtos_lista,
         acrescimos_emp=acrescimos_emp,
+        ocultos_por_forma=ocultos_por_forma,
     )
 
 
@@ -244,10 +258,28 @@ def formas():
              ORDER BY ordem, id
         """)
         formas_list = cur.fetchall()
+
+        cur.execute("""
+            SELECT DISTINCT p.id, p.nome
+              FROM produto p
+              JOIN cliente_produtos cp ON cp.produto_id = p.id AND cp.ativo = 1
+             ORDER BY p.nome
+        """)
+        todos_produtos = cur.fetchall()
+        for p in todos_produtos:
+            p['abrev'] = _abrev_produto(p['nome'])
+
+        cur.execute("SELECT forma_id, produto_id FROM precos_forma_produtos_ocultos")
+        ocultos_por_forma = {}
+        for row in cur.fetchall():
+            ocultos_por_forma.setdefault(row['forma_id'], []).append(row['produto_id'])
     finally:
         cur.close()
         conn.close()
-    return render_template('precos_posto/formas.html', formas=formas_list)
+    return render_template('precos_posto/formas.html',
+                           formas=formas_list,
+                           todos_produtos=todos_produtos,
+                           ocultos_por_forma=ocultos_por_forma)
 
 
 @bp.route('/formas/nova', methods=['POST'])
@@ -337,3 +369,38 @@ def formas_excluir(forma_id):
         cur.close()
         conn.close()
     return redirect(url_for('precos_posto.formas'))
+
+
+@bp.route('/formas/<int:forma_id>/toggle-produto', methods=['POST'])
+@login_required
+def formas_toggle_produto(forma_id):
+    """Alterna visibilidade de um produto no texto do WhatsApp para uma forma."""
+    data       = request.get_json(force=True) or {}
+    produto_id = data.get('produto_id')
+    visivel    = data.get('visivel')
+    if produto_id is None or visivel is None:
+        return jsonify({'success': False, 'error': 'Parâmetros inválidos'}), 400
+    conn = get_db_connection()
+    cur  = conn.cursor()
+    try:
+        if visivel:
+            cur.execute(
+                "DELETE FROM precos_forma_produtos_ocultos"
+                " WHERE forma_id = %s AND produto_id = %s",
+                (forma_id, int(produto_id))
+            )
+        else:
+            cur.execute(
+                "INSERT IGNORE INTO precos_forma_produtos_ocultos (forma_id, produto_id)"
+                " VALUES (%s, %s)",
+                (forma_id, int(produto_id))
+            )
+        conn.commit()
+        return jsonify({'success': True})
+    except Exception:
+        conn.rollback()
+        logger.exception("formas_toggle_produto: erro")
+        return jsonify({'success': False, 'error': 'Erro interno'}), 500
+    finally:
+        cur.close()
+        conn.close()
