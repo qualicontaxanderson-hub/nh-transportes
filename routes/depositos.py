@@ -278,7 +278,11 @@ def listar():
 
     cliente_ids = [c for c in args.getlist('cliente_ids[]') if c]
     tipo_grupo  = args.get('tipo_grupo', '').strip() or None
-    status      = args.get('status',    '').strip() or None
+    # Default to 'pendente' on first load (no status param); empty string means 'all'
+    if 'status' not in args:
+        status = 'pendente'
+    else:
+        status = args.get('status', '').strip() or None
 
     conn = get_db_connection()
     try:
