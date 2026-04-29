@@ -569,7 +569,7 @@
     _selectedBankIds = new Set();
     popularFormVincular([id], valor);
     carregarCandidatos(id);
-    const modal = new bootstrap.Modal(document.getElementById('modalVincular'));
+    const modal = bootstrap.Modal.getOrCreateInstance(document.getElementById('modalVincular'));
     modal.show();
   };
 
@@ -608,7 +608,7 @@
     // Load candidates using the first deposit as reference
     carregarCandidatos(ids[0]);
 
-    const modal = new bootstrap.Modal(document.getElementById('modalVincular'));
+    const modal = bootstrap.Modal.getOrCreateInstance(document.getElementById('modalVincular'));
     modal.show();
   };
 
