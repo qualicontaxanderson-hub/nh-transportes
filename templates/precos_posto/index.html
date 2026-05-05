@@ -252,7 +252,7 @@
                 <tr>
                   <th>Forma de Recebimento</th>
                   {% for prod in produtos_lista %}
-                  <th class="text-end">{{ prod.nome }}</th>
+                  <th class="text-end" data-prod-id="{{ prod.id }}">{{ prod.nome }}</th>
                   {% endfor %}
                   <th></th>
                 </tr>
@@ -356,9 +356,15 @@
 
   // Armazena textos individuais por forma.id para evitar problemas de escape inline
   window._textosFormas = {};
+  window._textosProdutos = {};
 
   window.copiarTextoForma = function (formaId) {
     const txt = window._textosFormas[formaId];
+    if (txt) copiarTexto(txt);
+  };
+
+  window.copiarTextoProduto = function (prodId) {
+    const txt = window._textosProdutos[prodId];
     if (txt) copiarTexto(txt);
   };
 
@@ -417,6 +423,20 @@
     document.querySelector('.btn-copy-all').onclick = function () {
       copiarTexto(textoCompleto);
     };
+
+    // Atualizar cabeçalhos das colunas de produto com botão copiar por produto
+    window._textosProdutos = {};
+    raw.produtos.forEach(prod => {
+      const th = document.querySelector('th[data-prod-id="' + prod.id + '"]');
+      if (!th) return;
+      const txt = gerarTextoProduto(prod.id);
+      window._textosProdutos[prod.id] = txt;
+      th.innerHTML = htmlEsc(prod.nome) +
+        '<br><button class="btn-copy" onclick="copiarTextoProduto(' + prod.id + ')" ' +
+        'title="Copiar ' + htmlEsc(prod.nome) + ' para WhatsApp" ' +
+        'style="font-size:.65rem;padding:1px 6px;margin-top:2px;">' +
+        '<i class="bi bi-whatsapp"></i></button>';
+    });
   };
 
   function getEmojiForma(nome) {
@@ -482,6 +502,46 @@
       linhas.push('');
       linhas.push(_cabecalhoForma(forma, acr));
       _linhasProdutos(acr, forma.id).forEach(l => linhas.push(l));
+    });
+    linhas.push('');
+    linhas.push(sep);
+    return linhas.join('\n');
+  }
+
+  function getEmojiProduto(nome) {
+    const n = nome.toLowerCase();
+    if (n.includes('gasolina')) return '⛽';
+    if (n.includes('etanol') || n.includes('álcool') || n.includes('alcool')) return '🌿';
+    if (n.includes('s-10') || n.includes('s10') || n.includes('s-500') || n.includes('s500') || n.includes('diesel')) return '🚛';
+    if (n.includes('arla')) return '💧';
+    return '🛢';
+  }
+
+  function gerarTextoProduto(prodId) {
+    const prod = raw.produtos.find(p => p.id === prodId);
+    if (!prod) return '';
+    const hoje = new Date();
+    const dataStr = hoje.toLocaleDateString('pt-BR');
+    const sep = '═══════════════════════════';
+    const linhas = [
+      '🏢 *' + raw.empresaNome.toUpperCase() + '*',
+      '📋 Tabela de Preços – ' + dataStr,
+      sep,
+      '',
+      getEmojiProduto(prod.nome) + ' *' + prod.nome.toUpperCase() + '*',
+      '',
+    ];
+    raw.formas.forEach(forma => {
+      const acr = forma.is_base ? 0 : getAcrescimo(forma.id);
+      const ocultos = new Set(raw.ocultosPorForma[forma.id] || []);
+      if (ocultos.has(prodId)) return;
+      const preco = getPrecoBase(prodId) + acr;
+      if (preco <= 0) return;
+      const emoji = getEmojiForma(forma.nome);
+      const nomeForma = forma.is_base
+        ? forma.nome
+        : forma.nome + ' (+R$ ' + fmtN(acr, 2) + '/L)';
+      linhas.push(emoji + ' ' + nomeForma + ': R$ ' + fmtN(preco, 2));
     });
     linhas.push('');
     linhas.push(sep);
