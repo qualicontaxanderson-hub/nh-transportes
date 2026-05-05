@@ -414,7 +414,10 @@ def _salvar_compartimentos(cursor, veiculo_id, form):
         parte = partes_comp[i] if i < len(partes_comp) else 'unico'
         if parte not in ('unico', 'cavalo', 'carreta'):
             parte = 'unico'
-        ordem = int(ordens[i]) if i < len(ordens) and ordens[i].isdigit() else (i + 1)
+        try:
+            ordem = int(ordens[i].strip()) if i < len(ordens) else (i + 1)
+        except (ValueError, TypeError):
+            ordem = i + 1
         desc = descricoes[i] if i < len(descricoes) else ''
         cursor.execute("""
             INSERT INTO veiculo_compartimentos (veiculo_id, numero_ordem, capacidade_l, descricao, parte)

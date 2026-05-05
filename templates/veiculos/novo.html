@@ -151,12 +151,12 @@
 <script>
 const TIPOS_DUPLA_PLACA = {{ tipos_dupla_placa | tojson }};
 
-function isDuplaPLaca() {
+function isDuplaPlaca() {
   return TIPOS_DUPLA_PLACA.includes(document.getElementById('tipoVeiculo').value);
 }
 
 function updatePlacaUI() {
-  const dupla = isDuplaPLaca();
+  const dupla = isDuplaPlaca();
   document.getElementById('grpPlacaCarreta').style.display = dupla ? '' : 'none';
   document.getElementById('lblPlaca').innerHTML = dupla
     ? 'Placa do Cavalo Mecânico <span class="text-danger">*</span>'
@@ -178,7 +178,7 @@ document.getElementById('btnAddComp').addEventListener('click', function() {
   tr.innerHTML = `
     <td><input type="number" name="comp_ordem" value="${i+1}" min="1" class="form-control form-control-sm" style="width:60px"></td>
     <td><input type="number" name="comp_capacidade" placeholder="Ex: 5000" min="1" class="form-control form-control-sm" required></td>
-    <td class="col-parte" style="display:${isDuplaPLaca()?'':'none'}">
+    <td class="col-parte" style="display:${isDuplaPlaca()?'':'none'}">
       <select name="comp_parte" class="form-select form-select-sm">
         <option value="unico">Único</option>
         <option value="cavalo">Cavalo</option>
@@ -199,7 +199,7 @@ document.getElementById('btnAddLic').addEventListener('click', function() {
     <td><input type="text" name="lic_tipo" placeholder="Ex: CRLV, ANTT, RNTRC" class="form-control form-control-sm" required></td>
     <td><input type="text" name="lic_numero" placeholder="Nº do documento" class="form-control form-control-sm"></td>
     <td><input type="date" name="lic_validade" class="form-control form-control-sm"></td>
-    <td class="col-parte" style="display:${isDuplaPLaca()?'':'none'}">
+    <td class="col-parte" style="display:${isDuplaPlaca()?'':'none'}">
       <select name="lic_parte" class="form-select form-select-sm">
         <option value="unico">Único</option>
         <option value="cavalo">Cavalo</option>
