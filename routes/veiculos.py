@@ -1,6 +1,14 @@
+import json
 import logging
-from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify
+import os
+import re
+import uuid
+
+from flask import (Blueprint, abort, current_app, render_template, request,
+                   redirect, send_file, url_for, flash, jsonify)
 from flask_login import login_required, current_user
+from werkzeug.utils import secure_filename
+
 from utils.db import get_db_connection
 from utils.decorators import admin_required
 
@@ -20,6 +28,13 @@ TIPOS_VEICULO = [
 
 # Tipos que possuem duas placas (cavalo + carreta)
 TIPOS_DUPLA_PLACA = {'Carreta', 'Semirreboque LS', 'Bitrem'}
+
+
+def _ensure_upload_dir():
+    """Creates and returns the upload directory for license PDFs."""
+    path = os.path.join(current_app.static_folder, 'uploads', 'licencas')
+    os.makedirs(path, exist_ok=True)
+    return path
 
 
 def _ensure_tables():
@@ -71,6 +86,17 @@ def _ensure_tables():
             )
         """)
 
+        # Colunas adicionais na tabela veiculo_licencas
+        for col_sql in [
+            "ALTER TABLE veiculo_licencas ADD COLUMN tipo_doc_id INT NULL AFTER tipo_documento",
+            "ALTER TABLE veiculo_licencas ADD COLUMN arquivo_pdf VARCHAR(255) NULL AFTER observacoes",
+        ]:
+            try:
+                cursor.execute(col_sql)
+                conn.commit()
+            except Exception:
+                conn.rollback()
+
         # Tabela de conjuntos (cavalo + carreta ativos)
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS conjuntos_veiculos (
@@ -87,6 +113,18 @@ def _ensure_tables():
             )
         """)
 
+        # Catálogo de tipos de documento / licença
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS tipos_documento_veiculo (
+                id              INT AUTO_INCREMENT PRIMARY KEY,
+                nome            VARCHAR(80) NOT NULL,
+                obrigatorio     TINYINT(1) NOT NULL DEFAULT 0,
+                tipos_veiculo   TEXT NULL COMMENT 'JSON array dos tipos de veículo aplicáveis',
+                ativo           TINYINT(1) NOT NULL DEFAULT 1,
+                UNIQUE KEY uq_tdv_nome (nome)
+            )
+        """)
+
         conn.commit()
         _tables_ready = True
     except Exception:
@@ -98,6 +136,27 @@ def _ensure_tables():
     finally:
         cursor.close()
         conn.close()
+
+
+def _get_docs_catalog(cursor, tipo_veiculo=None):
+    """Retorna tipos de documento ativos, opcionalmente filtrados pelo tipo do veículo."""
+    cursor.execute("SELECT * FROM tipos_documento_veiculo WHERE ativo=1 ORDER BY nome")
+    docs = cursor.fetchall()
+    if tipo_veiculo is None:
+        return docs
+    result = []
+    for d in docs:
+        tv = d.get('tipos_veiculo')
+        if not tv:
+            result.append(d)
+            continue
+        try:
+            tipos = json.loads(tv)
+        except Exception:
+            tipos = [t.strip() for t in tv.split(',')]
+        if tipo_veiculo in tipos:
+            result.append(d)
+    return result
 
 
 @bp.route('/')
@@ -114,7 +173,20 @@ def lista():
                    cj_as_cavalo.carreta_id  AS conjunto_carreta_id,
                    vc_carreta.placa         AS conjunto_carreta_placa,
                    cj_as_carreta.cavalo_id  AS conjunto_cavalo_id,
-                   vc_cavalo.placa          AS conjunto_cavalo_placa
+                   vc_cavalo.placa          AS conjunto_cavalo_placa,
+                   (SELECT COUNT(*) FROM tipos_documento_veiculo tdv
+                    WHERE tdv.ativo=1 AND tdv.obrigatorio=1
+                      AND (tdv.tipos_veiculo IS NULL
+                           OR JSON_CONTAINS(tdv.tipos_veiculo, JSON_QUOTE(v.tipo_veiculo)))
+                      AND tdv.id NOT IN (
+                          SELECT vl.tipo_doc_id FROM veiculo_licencas vl
+                          WHERE vl.veiculo_id=v.id AND vl.tipo_doc_id IS NOT NULL
+                      )
+                      AND tdv.nome NOT IN (
+                          SELECT vl.tipo_documento FROM veiculo_licencas vl
+                          WHERE vl.veiculo_id=v.id
+                      )
+                   ) AS docs_obrigatorios_pendentes
             FROM veiculos v
             LEFT JOIN motoristas m ON m.veiculo_id = v.id
             LEFT JOIN conjuntos_veiculos cj_as_cavalo
@@ -160,7 +232,7 @@ def novo():
     cursor = None
     try:
         conn = get_db_connection()
-        cursor = conn.cursor()
+        cursor = conn.cursor(dictionary=True)
 
         if request.method == 'POST':
             tipo = request.form.get('tipo_veiculo') or None
@@ -180,15 +252,18 @@ def novo():
             # Salvar compartimentos
             _salvar_compartimentos(cursor, veiculo_id, request.form)
 
-            # Salvar licenças
-            _salvar_licencas(cursor, veiculo_id, request.form)
+            # Salvar licenças (com possíveis uploads de PDF)
+            upload_dir = _ensure_upload_dir()
+            _salvar_licencas(cursor, veiculo_id, request.form, upload_dir=upload_dir)
 
             conn.commit()
             flash('Veículo cadastrado com sucesso!', 'success')
             return redirect(url_for('veiculos.lista'))
 
+        catalog_docs = _get_docs_catalog(cursor)
         return render_template('veiculos/novo.html', tipos=TIPOS_VEICULO,
-                               tipos_dupla_placa=list(TIPOS_DUPLA_PLACA))
+                               tipos_dupla_placa=list(TIPOS_DUPLA_PLACA),
+                               catalog_docs=catalog_docs)
     except Exception as e:
         if conn:
             conn.rollback()
@@ -233,7 +308,8 @@ def editar(id):
             _salvar_compartimentos(cursor, id, request.form)
 
             cursor.execute("DELETE FROM veiculo_licencas WHERE veiculo_id=%s", (id,))
-            _salvar_licencas(cursor, id, request.form)
+            upload_dir = _ensure_upload_dir()
+            _salvar_licencas(cursor, id, request.form, upload_dir=upload_dir)
 
             conn.commit()
             flash('Veículo atualizado com sucesso!', 'success')
@@ -254,6 +330,20 @@ def editar(id):
             SELECT * FROM veiculo_licencas WHERE veiculo_id=%s ORDER BY parte, data_validade
         """, (id,))
         licencas = cursor.fetchall()
+
+        # Catálogo completo para datalist e docs obrigatórios faltantes
+        all_catalog_docs = _get_docs_catalog(cursor)
+        catalog_for_type = _get_docs_catalog(cursor, veiculo.get('tipo_veiculo'))
+
+        filled_doc_ids = {l['tipo_doc_id'] for l in licencas if l.get('tipo_doc_id')}
+        filled_doc_names = {(l['tipo_documento'] or '').lower() for l in licencas}
+        docs_faltantes = [
+            d for d in catalog_for_type
+            if d['obrigatorio'] and (
+                d['id'] not in filled_doc_ids and
+                (d['nome'] or '').lower() not in filled_doc_names
+            )
+        ]
 
         # Conjunto atual
         cursor.execute("""
@@ -286,7 +376,9 @@ def editar(id):
                                conjunto_atual=conjunto_atual,
                                veiculos_disponiveis=veiculos_disponiveis,
                                tipos=TIPOS_VEICULO,
-                               tipos_dupla_placa=list(TIPOS_DUPLA_PLACA))
+                               tipos_dupla_placa=list(TIPOS_DUPLA_PLACA),
+                               catalog_docs=all_catalog_docs,
+                               docs_faltantes=docs_faltantes)
     except Exception as e:
         if conn:
             conn.rollback()
@@ -322,6 +414,102 @@ def excluir(id):
         if conn:
             conn.close()
     return redirect(url_for('veiculos.lista'))
+
+
+# ---------------------------------------------------------------------------
+# Catálogo de tipos de documento / licença
+# ---------------------------------------------------------------------------
+
+@bp.route('/config-documentos', methods=['GET', 'POST'])
+@login_required
+@admin_required
+def config_documentos():
+    _ensure_tables()
+    conn = None
+    cursor = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+
+        if request.method == 'POST':
+            acao = request.form.get('acao', 'salvar')
+
+            if acao == 'excluir':
+                doc_id = request.form.get('doc_id', type=int)
+                if doc_id:
+                    cursor.execute("DELETE FROM tipos_documento_veiculo WHERE id=%s", (doc_id,))
+                    conn.commit()
+                    flash('Tipo de documento excluído.', 'success')
+
+            elif acao == 'salvar':
+                doc_id = request.form.get('doc_id', type=int)
+                nome = (request.form.get('nome') or '').strip()
+                obrigatorio = 1 if request.form.get('obrigatorio') else 0
+                tipos_sel = request.form.getlist('tipos_veiculo')
+                tipos_json = json.dumps(tipos_sel) if tipos_sel else None
+                ativo = 1 if request.form.get('ativo', '1') != '0' else 0
+
+                if not nome:
+                    flash('Nome do documento é obrigatório.', 'danger')
+                elif doc_id:
+                    cursor.execute("""
+                        UPDATE tipos_documento_veiculo
+                        SET nome=%s, obrigatorio=%s, tipos_veiculo=%s, ativo=%s
+                        WHERE id=%s
+                    """, (nome, obrigatorio, tipos_json, ativo, doc_id))
+                    conn.commit()
+                    flash('Tipo de documento atualizado.', 'success')
+                else:
+                    try:
+                        cursor.execute("""
+                            INSERT INTO tipos_documento_veiculo (nome, obrigatorio, tipos_veiculo, ativo)
+                            VALUES (%s, %s, %s, 1)
+                        """, (nome, obrigatorio, tipos_json))
+                        conn.commit()
+                        flash('Tipo de documento cadastrado.', 'success')
+                    except Exception:
+                        conn.rollback()
+                        flash('Já existe um tipo com este nome.', 'danger')
+
+            return redirect(url_for('veiculos.config_documentos'))
+
+        cursor.execute("SELECT * FROM tipos_documento_veiculo ORDER BY nome")
+        tipos_doc = cursor.fetchall()
+        for td in tipos_doc:
+            tv = td.get('tipos_veiculo')
+            if tv:
+                try:
+                    td['tipos_veiculo_list'] = json.loads(tv)
+                except Exception:
+                    td['tipos_veiculo_list'] = []
+            else:
+                td['tipos_veiculo_list'] = []
+
+        return render_template('veiculos/config_documentos.html',
+                               tipos_doc=tipos_doc, tipos_veiculo=TIPOS_VEICULO)
+    except Exception as e:
+        if conn:
+            conn.rollback()
+        flash(f'Erro: {str(e)}', 'danger')
+        return redirect(url_for('veiculos.lista'))
+    finally:
+        if cursor:
+            cursor.close()
+        if conn:
+            conn.close()
+
+
+@bp.route('/licenca/pdf/<path:filename>')
+@login_required
+def licenca_pdf(filename):
+    """Serve o PDF de uma licença de veículo."""
+    if not re.match(r'^\d+_[0-9a-f]{32}\.pdf$', filename):
+        abort(404)
+    upload_dir = os.path.join(current_app.static_folder, 'uploads', 'licencas')
+    file_path = os.path.join(upload_dir, filename)
+    if not os.path.isfile(file_path):
+        abort(404)
+    return send_file(file_path, mimetype='application/pdf')
 
 
 # ---------------------------------------------------------------------------
@@ -425,24 +613,46 @@ def _salvar_compartimentos(cursor, veiculo_id, form):
         """, (veiculo_id, ordem, cap_int, desc or None, parte))
 
 
-def _salvar_licencas(cursor, veiculo_id, form):
-    """Lê as licenças do formulário e insere na tabela."""
+def _salvar_licencas(cursor, veiculo_id, form, upload_dir=None):
+    """Lê as licenças do formulário e insere na tabela (com suporte a upload de PDF)."""
     partes_lic = form.getlist('lic_parte')
     tipos = form.getlist('lic_tipo')
+    tipo_doc_ids = form.getlist('lic_tipo_doc_id')
     numeros = form.getlist('lic_numero')
     validades = form.getlist('lic_validade')
     observacoes = form.getlist('lic_observacoes')
+    arquivos_existentes = form.getlist('lic_arquivo_existente')
+    lic_arquivos = request.files.getlist('lic_arquivo') if upload_dir else []
+
     for i, tipo in enumerate(tipos):
         if not tipo:
             continue
         parte = partes_lic[i] if i < len(partes_lic) else 'unico'
         if parte not in ('unico', 'cavalo', 'carreta'):
             parte = 'unico'
+        tdid_raw = tipo_doc_ids[i] if i < len(tipo_doc_ids) else ''
+        tipo_doc_id = int(tdid_raw) if tdid_raw and str(tdid_raw).strip().isdigit() else None
         numero = numeros[i] if i < len(numeros) else ''
         validade = validades[i] if i < len(validades) else ''
         obs = observacoes[i] if i < len(observacoes) else ''
         validade = validade if validade else None
+
+        # Arquivo PDF: novo upload ou manter existente
+        arquivo_pdf = None
+        if upload_dir and i < len(lic_arquivos):
+            f = lic_arquivos[i]
+            if f and f.filename:
+                orig = secure_filename(f.filename)
+                ext = os.path.splitext(orig)[1].lower()
+                if ext == '.pdf':
+                    fname = f"{veiculo_id}_{uuid.uuid4().hex}.pdf"
+                    f.save(os.path.join(upload_dir, fname))
+                    arquivo_pdf = fname
+        if arquivo_pdf is None and i < len(arquivos_existentes):
+            arquivo_pdf = arquivos_existentes[i] or None
+
         cursor.execute("""
-            INSERT INTO veiculo_licencas (veiculo_id, tipo_documento, numero_doc, data_validade, observacoes, parte)
-            VALUES (%s, %s, %s, %s, %s, %s)
-        """, (veiculo_id, tipo, numero or None, validade, obs or None, parte))
+            INSERT INTO veiculo_licencas
+                (veiculo_id, tipo_documento, tipo_doc_id, numero_doc, data_validade, observacoes, parte, arquivo_pdf)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+        """, (veiculo_id, tipo, tipo_doc_id, numero or None, validade, obs or None, parte, arquivo_pdf))

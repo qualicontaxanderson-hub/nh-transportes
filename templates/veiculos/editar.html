@@ -24,6 +24,8 @@
   .venc-warn { color:#856404; }
   .venc-exp  { color:#dc3545; font-weight:600; }
   .badge-parte { font-size:0.68rem; padding:.2em .5em; }
+  .badge-obrig { font-size:0.68rem; background:#fff3cd; color:#856404; padding:.15em .45em; border-radius:.25rem; }
+  .pdf-link { font-size:0.75rem; }
 </style>
 {% endblock %}
 
@@ -56,7 +58,7 @@
       <i class="bi bi-truck me-2"></i> Dados do Veículo
     </div>
     <div class="card-body">
-      <form method="POST" id="formVeiculo">
+      <form method="POST" id="formVeiculo" enctype="multipart/form-data">
 
         <!-- Dados Principais -->
         <div class="form-section-title"><i class="bi bi-info-circle me-1"></i>Dados Principais</div>
@@ -133,22 +135,48 @@
         <!-- Licenças -->
         <div class="form-section-title mt-4"><i class="bi bi-file-earmark-text me-1"></i>Licenças e Documentos</div>
         <p class="text-muted small mb-2">Cadastre todos os documentos e licenças com data de validade.</p>
+
+        {% if docs_faltantes %}
+        <div class="alert alert-warning py-2 d-flex align-items-start gap-2 mb-3" role="alert">
+          <i class="bi bi-exclamation-triangle-fill flex-shrink-0 mt-1"></i>
+          <div>
+            <strong>Documentos obrigatórios sem cadastro:</strong>
+            {% for df in docs_faltantes %}
+            <span class="badge-obrig ms-1">{{ df.nome }}</span>
+            {% endfor %}
+          </div>
+        </div>
+        {% endif %}
+
+        <!-- datalist para autocomplete do tipo de documento -->
+        <datalist id="docTypesList">
+          {% for cd in catalog_docs %}
+          <option value="{{ cd.nome }}" data-id="{{ cd.id }}" data-obrig="{{ cd.obrigatorio }}">
+          {% endfor %}
+        </datalist>
+
         <div class="table-responsive mb-2">
           <table class="table table-bordered table-sm sub-table mb-1" id="tblLicencas">
             <thead>
               <tr>
-                <th style="width:22%">Tipo de Documento</th>
-                <th style="width:18%">Número</th>
-                <th style="width:18%">Validade</th>
-                <th style="width:18%" id="thLicParte">Parte</th>
+                <th style="width:20%">Tipo de Documento</th>
+                <th style="width:14%">Número</th>
+                <th style="width:13%">Validade</th>
+                <th style="width:14%" id="thLicParte">Parte</th>
                 <th>Observações</th>
-                <th style="width:5%"></th>
+                <th style="width:14%">PDF</th>
+                <th style="width:4%"></th>
               </tr>
             </thead>
             <tbody id="bodyLicencas">
               {% for l in licencas %}
               <tr>
-                <td><input type="text" name="lic_tipo" value="{{ l.tipo_documento }}" class="form-control form-control-sm" required></td>
+                <td>
+                  <input type="hidden" name="lic_tipo_doc_id" value="{{ l.tipo_doc_id or '' }}">
+                  <input type="text" name="lic_tipo" value="{{ l.tipo_documento }}"
+                         class="form-control form-control-sm lic-tipo-input"
+                         list="docTypesList" required>
+                </td>
                 <td><input type="text" name="lic_numero" value="{{ l.numero_doc or '' }}" class="form-control form-control-sm"></td>
                 <td><input type="date" name="lic_validade" value="{{ l.data_validade.strftime('%Y-%m-%d') if l.data_validade else '' }}" class="form-control form-control-sm"></td>
                 <td class="col-parte"><select name="lic_parte" class="form-select form-select-sm">
@@ -157,6 +185,17 @@
                   <option value="carreta" {% if l.parte=='carreta' %}selected{% endif %}>Carreta</option>
                 </select></td>
                 <td><input type="text" name="lic_observacoes" value="{{ l.observacoes or '' }}" class="form-control form-control-sm"></td>
+                <td>
+                  <input type="hidden" name="lic_arquivo_existente" value="{{ l.arquivo_pdf or '' }}">
+                  {% if l.arquivo_pdf %}
+                  <a href="{{ url_for('veiculos.licenca_pdf', filename=l.arquivo_pdf) }}"
+                     target="_blank" class="pdf-link d-block mb-1 text-primary">
+                    <i class="bi bi-file-earmark-pdf-fill text-danger me-1"></i>Ver PDF
+                  </a>
+                  {% endif %}
+                  <input type="file" name="lic_arquivo" accept=".pdf" class="form-control form-control-sm"
+                         style="font-size:0.72rem;" title="{% if l.arquivo_pdf %}Substituir PDF{% else %}Anexar PDF{% endif %}">
+                </td>
                 <td class="text-center"><button type="button" class="btn btn-outline-danger btn-del-row" onclick="this.closest('tr').remove()"><i class="bi bi-trash"></i></button></td>
               </tr>
               {% endfor %}
@@ -273,14 +312,23 @@ document.getElementById('btnAddComp').addEventListener('click', function() {
 
 // ── Licenças ──
 let licIdx = {{ licencas | length }};
+const CATALOG_DOCS = {{ catalog_docs | tojson }};
+const catalogMap = {};
+CATALOG_DOCS.forEach(d => { catalogMap[d.nome] = d; });
+
 document.getElementById('btnAddLic').addEventListener('click', function() {
   const i = licIdx++;
+  const dupla = isDuplaPlaca();
   const tr = document.createElement('tr');
   tr.innerHTML = `
-    <td><input type="text" name="lic_tipo" placeholder="Ex: CRLV, ANTT, RNTRC" class="form-control form-control-sm" required></td>
+    <td>
+      <input type="hidden" name="lic_tipo_doc_id" value="">
+      <input type="text" name="lic_tipo" placeholder="Ex: CRLV, ANTT, RNTRC"
+             class="form-control form-control-sm lic-tipo-input" list="docTypesList" required>
+    </td>
     <td><input type="text" name="lic_numero" placeholder="Nº do documento" class="form-control form-control-sm"></td>
     <td><input type="date" name="lic_validade" class="form-control form-control-sm"></td>
-    <td class="col-parte" style="display:${isDuplaPlaca()?'':'none'}">
+    <td class="col-parte" style="display:${dupla?'':'none'}">
       <select name="lic_parte" class="form-select form-select-sm">
         <option value="unico">Único</option>
         <option value="cavalo">Cavalo</option>
@@ -288,8 +336,23 @@ document.getElementById('btnAddLic').addEventListener('click', function() {
       </select>
     </td>
     <td><input type="text" name="lic_observacoes" placeholder="Observações" class="form-control form-control-sm"></td>
+    <td>
+      <input type="hidden" name="lic_arquivo_existente" value="">
+      <input type="file" name="lic_arquivo" accept=".pdf" class="form-control form-control-sm" style="font-size:0.72rem;" title="Anexar PDF">
+    </td>
     <td class="text-center"><button type="button" class="btn btn-outline-danger btn-del-row" onclick="this.closest('tr').remove()"><i class="bi bi-trash"></i></button></td>`;
   document.getElementById('bodyLicencas').appendChild(tr);
+  bindLicTipoInput(tr.querySelector('.lic-tipo-input'));
 });
+
+function bindLicTipoInput(inp) {
+  inp.addEventListener('change', function() {
+    const doc = catalogMap[this.value];
+    const hidId = this.closest('tr').querySelector('input[name="lic_tipo_doc_id"]');
+    if (doc && hidId) hidId.value = doc.id;
+    else if (hidId) hidId.value = '';
+  });
+}
+document.querySelectorAll('.lic-tipo-input').forEach(bindLicTipoInput);
 </script>
 {% endblock %}
