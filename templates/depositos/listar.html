@@ -560,6 +560,26 @@
     document.getElementById('totalVincular').textContent = fmtMoeda(total);
   }
 
+  /* Reset modal state and clean up any stuck Bootstrap backdrop on close */
+  document.getElementById('modalVincular').addEventListener('hidden.bs.modal', function() {
+    _selectedBankIds = new Set();
+    _allBancoRows = [];
+    document.getElementById('listaBanco').innerHTML =
+      '<div class="text-center text-muted py-3" id="msgSemMatch">Clique em "Vincular" em um depósito para carregar sugestões.</div>';
+    document.getElementById('buscaBanco').value = '';
+    document.getElementById('totalVincular').textContent = 'R$ 0,00';
+    document.getElementById('totalBancoSelecionado').textContent = 'R$ 0,00';
+    document.getElementById('msgDiferenca').textContent = '';
+    document.getElementById('inputsComprovacao').innerHTML = '';
+    document.getElementById('inputsBankTx').innerHTML = '';
+    document.getElementById('btnConfirmarVincular').disabled = true;
+    /* Safety net: remove any lingering backdrop/overflow that Bootstrap sometimes leaves */
+    document.querySelectorAll('.modal-backdrop').forEach(function(el) { el.remove(); });
+    document.body.classList.remove('modal-open');
+    document.body.style.overflow = '';
+    document.body.style.paddingRight = '';
+  });
+
   /* Open modal for a single deposit — callable from row click or button click */
   window.abrirVincularSolo = function(id, valor, grupo) {
     valor = parseFloat(valor || 0);
