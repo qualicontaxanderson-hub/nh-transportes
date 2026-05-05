@@ -505,8 +505,13 @@ def licenca_pdf(filename):
     """Serve o PDF de uma licença de veículo."""
     if not re.match(r'^\d+_[0-9a-f]{32}\.pdf$', filename):
         abort(404)
-    upload_dir = os.path.join(current_app.static_folder, 'uploads', 'licencas')
-    file_path = os.path.join(upload_dir, filename)
+    upload_dir = os.path.realpath(
+        os.path.join(current_app.static_folder, 'uploads', 'licencas')
+    )
+    # Use basename to strip any residual path separators before joining
+    file_path = os.path.realpath(os.path.join(upload_dir, os.path.basename(filename)))
+    if not file_path.startswith(upload_dir + os.sep):
+        abort(404)
     if not os.path.isfile(file_path):
         abort(404)
     return send_file(file_path, mimetype='application/pdf')
@@ -642,12 +647,15 @@ def _salvar_licencas(cursor, veiculo_id, form, upload_dir=None):
         if upload_dir and i < len(lic_arquivos):
             f = lic_arquivos[i]
             if f and f.filename:
-                orig = secure_filename(f.filename)
-                ext = os.path.splitext(orig)[1].lower()
+                ext = os.path.splitext(secure_filename(f.filename))[1].lower()
                 if ext == '.pdf':
-                    fname = f"{veiculo_id}_{uuid.uuid4().hex}.pdf"
-                    f.save(os.path.join(upload_dir, fname))
-                    arquivo_pdf = fname
+                    # Filename is entirely our own — no user data in the path
+                    fname = f"{int(veiculo_id)}_{uuid.uuid4().hex}.pdf"
+                    save_path = os.path.realpath(os.path.join(upload_dir, fname))
+                    real_upload = os.path.realpath(upload_dir)
+                    if save_path.startswith(real_upload + os.sep):
+                        f.save(save_path)
+                        arquivo_pdf = fname
         if arquivo_pdf is None and i < len(arquivos_existentes):
             arquivo_pdf = arquivos_existentes[i] or None
 
