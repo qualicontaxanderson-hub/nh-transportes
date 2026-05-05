@@ -40,6 +40,7 @@
   .btn-excluir { color:#dc3545; border-color:#f5c6cb; background:#fff5f5; }
   .btn-excluir:hover { background:#dc3545; color:#fff; }
   .actions-cell { white-space: nowrap; }
+  .badge-tipo { font-size:0.68rem; padding:.2em .55em; }
 </style>
 {% endblock %}
 
@@ -89,9 +90,11 @@
           <thead>
             <tr>
               <th>ID</th>
-              <th>Caminhão</th>
-              <th>Placa</th>
-              <th>Modelo</th>
+              <th>Tipo</th>
+              <th>Marca / Modelo</th>
+              <th>Placa (Cavalo)</th>
+              <th>Placa Carreta</th>
+              <th>Conjunto Ativo</th>
               <th>Motorista</th>
               <th class="text-center" style="width:8%">Ações</th>
             </tr>
@@ -105,9 +108,40 @@
                   title="Clique para editar"
                   {% endif %}>
                 <td><strong>{{ veiculo.id }}</strong></td>
-                <td>{{ veiculo.caminhao }}</td>
-                <td>{{ veiculo.placa }}</td>
-                <td>{{ veiculo.modelo or '-' }}</td>
+                <td>
+                  {% if veiculo.tipo_veiculo %}
+                  <span class="badge badge-tipo bg-primary bg-opacity-10 text-primary">{{ veiculo.tipo_veiculo }}</span>
+                  {% else %}
+                  <span class="text-muted">—</span>
+                  {% endif %}
+                </td>
+                <td>
+                  {{ veiculo.caminhao }}
+                  {% if veiculo.modelo %}
+                  <span class="text-muted small">({{ veiculo.modelo }})</span>
+                  {% endif %}
+                </td>
+                <td><strong>{{ veiculo.placa }}</strong></td>
+                <td>
+                  {% if veiculo.placa_carreta %}
+                  <span class="badge" style="background:#eaf5ea;color:#198754;font-size:0.72rem;">{{ veiculo.placa_carreta }}</span>
+                  {% else %}
+                  <span class="text-muted">—</span>
+                  {% endif %}
+                </td>
+                <td>
+                  {% if veiculo.conjunto_carreta_placa %}
+                  <span class="badge" style="background:#e8f0fb;color:#1D63A5;font-size:0.72rem;">
+                    <i class="bi bi-link-45deg"></i> Carreta: {{ veiculo.conjunto_carreta_placa }}
+                  </span>
+                  {% elif veiculo.conjunto_cavalo_placa %}
+                  <span class="badge" style="background:#fff3cd;color:#856404;font-size:0.72rem;">
+                    <i class="bi bi-link-45deg"></i> Cavalo: {{ veiculo.conjunto_cavalo_placa }}
+                  </span>
+                  {% else %}
+                  <span class="text-muted" style="font-size:0.74rem;">—</span>
+                  {% endif %}
+                </td>
                 <td>
                   {% if veiculo.motorista_nome %}
                     <span class="badge" style="background:#e6f9ee;color:#198754;font-size:0.72rem;">
@@ -134,7 +168,7 @@
               {% endfor %}
             {% else %}
               <tr>
-                <td colspan="6" class="text-center text-muted py-4">
+                <td colspan="8" class="text-center text-muted py-4">
                   <i class="bi bi-inbox" style="font-size:1.8rem;opacity:0.4;"></i>
                   <div class="mt-2" style="font-size:0.82rem;">Nenhum veículo cadastrado.</div>
                 </td>
