@@ -90,6 +90,7 @@ def _ensure_tables():
         for col_sql in [
             "ALTER TABLE veiculo_licencas ADD COLUMN tipo_doc_id INT NULL AFTER tipo_documento",
             "ALTER TABLE veiculo_licencas ADD COLUMN arquivo_pdf VARCHAR(255) NULL AFTER observacoes",
+            "ALTER TABLE veiculo_licencas ADD COLUMN ordem SMALLINT NULL AFTER parte",
         ]:
             try:
                 cursor.execute(col_sql)
@@ -327,7 +328,7 @@ def editar(id):
         compartimentos = cursor.fetchall()
 
         cursor.execute("""
-            SELECT * FROM veiculo_licencas WHERE veiculo_id=%s ORDER BY parte, data_validade
+            SELECT * FROM veiculo_licencas WHERE veiculo_id=%s ORDER BY COALESCE(ordem, 9999), parte, data_validade
         """, (id,))
         licencas = cursor.fetchall()
 
@@ -627,6 +628,7 @@ def _salvar_licencas(cursor, veiculo_id, form, upload_dir=None):
     validades = form.getlist('lic_validade')
     observacoes = form.getlist('lic_observacoes')
     arquivos_existentes = form.getlist('lic_arquivo_existente')
+    ordens_lic = form.getlist('lic_ordem')
     lic_arquivos = request.files.getlist('lic_arquivo') if upload_dir else []
 
     for i, tipo in enumerate(tipos):
@@ -641,6 +643,8 @@ def _salvar_licencas(cursor, veiculo_id, form, upload_dir=None):
         validade = validades[i] if i < len(validades) else ''
         obs = observacoes[i] if i < len(observacoes) else ''
         validade = validade if validade else None
+        ord_raw = ordens_lic[i] if i < len(ordens_lic) else ''
+        ordem = int(ord_raw) if ord_raw and str(ord_raw).strip().isdigit() else (i + 1)
 
         # Arquivo PDF: novo upload ou manter existente
         arquivo_pdf = None
@@ -661,6 +665,6 @@ def _salvar_licencas(cursor, veiculo_id, form, upload_dir=None):
 
         cursor.execute("""
             INSERT INTO veiculo_licencas
-                (veiculo_id, tipo_documento, tipo_doc_id, numero_doc, data_validade, observacoes, parte, arquivo_pdf)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-        """, (veiculo_id, tipo, tipo_doc_id, numero or None, validade, obs or None, parte, arquivo_pdf))
+                (veiculo_id, tipo_documento, tipo_doc_id, numero_doc, data_validade, observacoes, parte, arquivo_pdf, ordem)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+        """, (veiculo_id, tipo, tipo_doc_id, numero or None, validade, obs or None, parte, arquivo_pdf, ordem))

@@ -29,6 +29,10 @@
   .btn-pdf-pick { width:1.7rem;height:1.7rem;padding:0;border-radius:.35rem;cursor:pointer; }
   .pdf-icon-link { font-size:1.2rem; vertical-align:middle; }
   .pdf-cell { white-space:nowrap; text-align:center; }
+  .drag-handle { cursor:grab; color:#adb5bd; padding:0 .4rem; }
+  .drag-handle:active { cursor:grabbing; }
+  .lic-row.drag-over { border-top:2px solid #1D63A5; }
+  .lic-tipo-label { font-size:0.84rem; font-weight:600; }
 </style>
 {% endblock %}
 
@@ -145,7 +149,8 @@
           <table class="table table-bordered table-sm sub-table mb-1" id="tblLicencas">
             <thead>
               <tr>
-                <th style="width:22%">Tipo de Documento</th>
+                <th style="width:2%"></th>
+                <th style="width:21%">Tipo de Documento</th>
                 <th style="width:6%">PDF</th>
                 <th style="width:13%">Número</th>
                 <th style="width:12%">Validade</th>
@@ -156,16 +161,13 @@
             </thead>
             <tbody id="bodyLicencas">
               {% for l in licencas %}
-              <tr>
+              <tr class="lic-row" draggable="true">
+                <td class="drag-handle text-center"><i class="bi bi-grip-vertical"></i></td>
                 <td>
                   <input type="hidden" name="lic_tipo_doc_id" value="{{ l.tipo_doc_id or '' }}">
-                  <select name="lic_tipo" class="form-select form-select-sm lic-tipo-select" required>
-                    <option value="">— Selecione —</option>
-                    {% for cd in catalog_docs %}
-                    <option value="{{ cd.nome }}" data-id="{{ cd.id }}"
-                      {% if l.tipo_documento == cd.nome %}selected{% endif %}>{{ cd.nome }}</option>
-                    {% endfor %}
-                  </select>
+                  <input type="hidden" name="lic_tipo" value="{{ l.tipo_documento }}">
+                  <input type="hidden" name="lic_ordem" value="{{ loop.index }}">
+                  <span class="lic-tipo-label">{{ l.tipo_documento }}</span>
                 </td>
                 <td class="pdf-cell">
                   <input type="hidden" name="lic_arquivo_existente" value="{{ l.arquivo_pdf or '' }}">
@@ -192,16 +194,13 @@
               </tr>
               {% endfor %}
               {% for df in docs_faltantes %}
-              <tr class="table-warning">
+              <tr class="lic-row table-warning" draggable="true">
+                <td class="drag-handle text-center"><i class="bi bi-grip-vertical"></i></td>
                 <td>
                   <input type="hidden" name="lic_tipo_doc_id" value="{{ df.id }}">
-                  <select name="lic_tipo" class="form-select form-select-sm lic-tipo-select" required>
-                    <option value="">— Selecione —</option>
-                    {% for cd in catalog_docs %}
-                    <option value="{{ cd.nome }}" data-id="{{ cd.id }}"
-                      {% if df.nome == cd.nome %}selected{% endif %}>{{ cd.nome }}</option>
-                    {% endfor %}
-                  </select>
+                  <input type="hidden" name="lic_tipo" value="{{ df.nome }}">
+                  <input type="hidden" name="lic_ordem" value="{{ (licencas | length) + loop.index }}">
+                  <span class="lic-tipo-label">{{ df.nome }}</span>
                 </td>
                 <td class="pdf-cell">
                   <input type="hidden" name="lic_arquivo_existente" value="">
@@ -351,9 +350,13 @@ function _buildSelectOptions() {
 document.getElementById('btnAddLic').addEventListener('click', function() {
   const dupla = isDuplaPlaca();
   const tr = document.createElement('tr');
+  tr.className = 'lic-row';
+  tr.draggable = true;
   tr.innerHTML =
+    '<td class="drag-handle text-center"><i class="bi bi-grip-vertical"></i></td>' +
     '<td>' +
       '<input type="hidden" name="lic_tipo_doc_id" value="">' +
+      '<input type="hidden" name="lic_ordem" value="">' +
       '<select name="lic_tipo" class="form-select form-select-sm lic-tipo-select" required>' +
         _buildSelectOptions() +
       '</select>' +
@@ -378,6 +381,7 @@ document.getElementById('btnAddLic').addEventListener('click', function() {
     '<td class="text-center"><button type="button" class="btn btn-outline-danger btn-del-row" onclick="this.closest(\'tr\').remove()"><i class="bi bi-trash"></i></button></td>';
   document.getElementById('bodyLicencas').appendChild(tr);
   bindLicTipoSelect(tr.querySelector('.lic-tipo-select'));
+  bindDragRow(tr);
 });
 
 function bindLicTipoSelect(sel) {
@@ -387,6 +391,51 @@ function bindLicTipoSelect(sel) {
     if (hidId) hidId.value = (opt && opt.dataset.id) ? opt.dataset.id : '';
   });
 }
-document.querySelectorAll('.lic-tipo-select').forEach(bindLicTipoSelect);
+
+// ── Drag-and-drop reordering ──
+let _dragSrc = null;
+
+function bindDragRow(row) {
+  row.addEventListener('dragstart', function(e) {
+    _dragSrc = this;
+    e.dataTransfer.effectAllowed = 'move';
+    setTimeout(() => this.style.opacity = '0.5', 0);
+  });
+  row.addEventListener('dragend', function() {
+    this.style.opacity = '';
+    document.querySelectorAll('#bodyLicencas .lic-row').forEach(r => r.classList.remove('drag-over'));
+  });
+  row.addEventListener('dragover', function(e) {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    document.querySelectorAll('#bodyLicencas .lic-row').forEach(r => r.classList.remove('drag-over'));
+    if (this !== _dragSrc) this.classList.add('drag-over');
+  });
+  row.addEventListener('drop', function(e) {
+    e.preventDefault();
+    if (_dragSrc && _dragSrc !== this) {
+      const tbody = this.parentNode;
+      const rows = Array.from(tbody.querySelectorAll('.lic-row'));
+      const srcIdx = rows.indexOf(_dragSrc);
+      const tgtIdx = rows.indexOf(this);
+      if (srcIdx < tgtIdx) {
+        tbody.insertBefore(_dragSrc, this.nextSibling);
+      } else {
+        tbody.insertBefore(_dragSrc, this);
+      }
+    }
+    this.classList.remove('drag-over');
+  });
+}
+
+document.querySelectorAll('#bodyLicencas .lic-row').forEach(bindDragRow);
+
+// Renumber lic_ordem hidden inputs before submit to reflect current row order
+document.querySelector('form').addEventListener('submit', function() {
+  document.querySelectorAll('#bodyLicencas .lic-row').forEach(function(row, idx) {
+    const hidOrdem = row.querySelector('input[name="lic_ordem"]');
+    if (hidOrdem) hidOrdem.value = idx + 1;
+  });
+});
 </script>
 {% endblock %}
