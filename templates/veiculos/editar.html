@@ -431,7 +431,7 @@ function bindDragRow(row) {
 document.querySelectorAll('#bodyLicencas .lic-row').forEach(bindDragRow);
 
 // Renumber lic_ordem hidden inputs before submit to reflect current row order
-document.querySelector('form').addEventListener('submit', function() {
+document.getElementById('formVeiculo').addEventListener('submit', function() {
   document.querySelectorAll('#bodyLicencas .lic-row').forEach(function(row, idx) {
     const hidOrdem = row.querySelector('input[name="lic_ordem"]');
     if (hidOrdem) hidOrdem.value = idx + 1;
