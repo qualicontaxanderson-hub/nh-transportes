@@ -136,24 +136,7 @@
         <div class="form-section-title mt-4"><i class="bi bi-file-earmark-text me-1"></i>Licenças e Documentos</div>
         <p class="text-muted small mb-2">Cadastre todos os documentos e licenças com data de validade.</p>
 
-        {% if docs_faltantes %}
-        <div class="alert alert-warning py-2 d-flex align-items-start gap-2 mb-3" role="alert">
-          <i class="bi bi-exclamation-triangle-fill flex-shrink-0 mt-1"></i>
-          <div>
-            <strong>Documentos obrigatórios sem cadastro:</strong>
-            {% for df in docs_faltantes %}
-            <span class="badge-obrig ms-1">{{ df.nome }}</span>
-            {% endfor %}
-          </div>
-        </div>
-        {% endif %}
-
-        <!-- datalist para autocomplete do tipo de documento -->
-        <datalist id="docTypesList">
-          {% for cd in catalog_docs %}
-          <option value="{{ cd.nome }}" data-id="{{ cd.id }}" data-obrig="{{ cd.obrigatorio }}">
-          {% endfor %}
-        </datalist>
+        {% set is_dupla = veiculo.tipo_veiculo in tipos_dupla_placa %}
 
         <div class="table-responsive mb-2">
           <table class="table table-bordered table-sm sub-table mb-1" id="tblLicencas">
@@ -173,13 +156,17 @@
               <tr>
                 <td>
                   <input type="hidden" name="lic_tipo_doc_id" value="{{ l.tipo_doc_id or '' }}">
-                  <input type="text" name="lic_tipo" value="{{ l.tipo_documento }}"
-                         class="form-control form-control-sm lic-tipo-input"
-                         list="docTypesList" required>
+                  <select name="lic_tipo" class="form-select form-select-sm lic-tipo-select" required>
+                    <option value="">— Selecione —</option>
+                    {% for cd in catalog_docs %}
+                    <option value="{{ cd.nome }}" data-id="{{ cd.id }}"
+                      {% if l.tipo_documento == cd.nome %}selected{% endif %}>{{ cd.nome }}</option>
+                    {% endfor %}
+                  </select>
                 </td>
                 <td><input type="text" name="lic_numero" value="{{ l.numero_doc or '' }}" class="form-control form-control-sm"></td>
                 <td><input type="date" name="lic_validade" value="{{ l.data_validade.strftime('%Y-%m-%d') if l.data_validade else '' }}" class="form-control form-control-sm"></td>
-                <td class="col-parte"><select name="lic_parte" class="form-select form-select-sm">
+                <td class="col-parte"{% if not is_dupla %} style="display:none"{% endif %}><select name="lic_parte" class="form-select form-select-sm">
                   <option value="unico"   {% if l.parte=='unico'   %}selected{% endif %}>Único</option>
                   <option value="cavalo"  {% if l.parte=='cavalo'  %}selected{% endif %}>Cavalo</option>
                   <option value="carreta" {% if l.parte=='carreta' %}selected{% endif %}>Carreta</option>
@@ -195,6 +182,34 @@
                   {% endif %}
                   <input type="file" name="lic_arquivo" accept=".pdf" class="form-control form-control-sm"
                          style="font-size:0.72rem;" title="{% if l.arquivo_pdf %}Substituir PDF{% else %}Anexar PDF{% endif %}">
+                </td>
+                <td class="text-center"><button type="button" class="btn btn-outline-danger btn-del-row" onclick="this.closest('tr').remove()"><i class="bi bi-trash"></i></button></td>
+              </tr>
+              {% endfor %}
+              {% for df in docs_faltantes %}
+              <tr class="table-warning">
+                <td>
+                  <input type="hidden" name="lic_tipo_doc_id" value="{{ df.id }}">
+                  <select name="lic_tipo" class="form-select form-select-sm lic-tipo-select" required>
+                    <option value="">— Selecione —</option>
+                    {% for cd in catalog_docs %}
+                    <option value="{{ cd.nome }}" data-id="{{ cd.id }}"
+                      {% if df.nome == cd.nome %}selected{% endif %}>{{ cd.nome }}</option>
+                    {% endfor %}
+                  </select>
+                </td>
+                <td><input type="text" name="lic_numero" placeholder="Nº do documento" class="form-control form-control-sm"></td>
+                <td><input type="date" name="lic_validade" class="form-control form-control-sm"></td>
+                <td class="col-parte"{% if not is_dupla %} style="display:none"{% endif %}><select name="lic_parte" class="form-select form-select-sm">
+                  <option value="unico">Único</option>
+                  <option value="cavalo">Cavalo</option>
+                  <option value="carreta">Carreta</option>
+                </select></td>
+                <td><input type="text" name="lic_observacoes" placeholder="Observações" class="form-control form-control-sm"></td>
+                <td>
+                  <input type="hidden" name="lic_arquivo_existente" value="">
+                  <input type="file" name="lic_arquivo" accept=".pdf" class="form-control form-control-sm"
+                         style="font-size:0.72rem;" title="Anexar PDF">
                 </td>
                 <td class="text-center"><button type="button" class="btn btn-outline-danger btn-del-row" onclick="this.closest('tr').remove()"><i class="bi bi-trash"></i></button></td>
               </tr>
@@ -311,48 +326,57 @@ document.getElementById('btnAddComp').addEventListener('click', function() {
 });
 
 // ── Licenças ──
-let licIdx = {{ licencas | length }};
 const CATALOG_DOCS = {{ catalog_docs | tojson }};
-const catalogMap = {};
-CATALOG_DOCS.forEach(d => { catalogMap[d.nome] = d; });
+
+function _escHtml(str) {
+  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function _buildSelectOptions() {
+  let html = '<option value="">— Selecione —</option>';
+  CATALOG_DOCS.forEach(function(d) {
+    const n = _escHtml(d.nome);
+    html += '<option value="' + n + '" data-id="' + d.id + '">' + n + '</option>';
+  });
+  return html;
+}
 
 document.getElementById('btnAddLic').addEventListener('click', function() {
-  const i = licIdx++;
   const dupla = isDuplaPlaca();
   const tr = document.createElement('tr');
-  tr.innerHTML = `
-    <td>
-      <input type="hidden" name="lic_tipo_doc_id" value="">
-      <input type="text" name="lic_tipo" placeholder="Ex: CRLV, ANTT, RNTRC"
-             class="form-control form-control-sm lic-tipo-input" list="docTypesList" required>
-    </td>
-    <td><input type="text" name="lic_numero" placeholder="Nº do documento" class="form-control form-control-sm"></td>
-    <td><input type="date" name="lic_validade" class="form-control form-control-sm"></td>
-    <td class="col-parte" style="display:${dupla?'':'none'}">
-      <select name="lic_parte" class="form-select form-select-sm">
-        <option value="unico">Único</option>
-        <option value="cavalo">Cavalo</option>
-        <option value="carreta">Carreta</option>
-      </select>
-    </td>
-    <td><input type="text" name="lic_observacoes" placeholder="Observações" class="form-control form-control-sm"></td>
-    <td>
-      <input type="hidden" name="lic_arquivo_existente" value="">
-      <input type="file" name="lic_arquivo" accept=".pdf" class="form-control form-control-sm" style="font-size:0.72rem;" title="Anexar PDF">
-    </td>
-    <td class="text-center"><button type="button" class="btn btn-outline-danger btn-del-row" onclick="this.closest('tr').remove()"><i class="bi bi-trash"></i></button></td>`;
+  tr.innerHTML =
+    '<td>' +
+      '<input type="hidden" name="lic_tipo_doc_id" value="">' +
+      '<select name="lic_tipo" class="form-select form-select-sm lic-tipo-select" required>' +
+        _buildSelectOptions() +
+      '</select>' +
+    '</td>' +
+    '<td><input type="text" name="lic_numero" placeholder="Nº do documento" class="form-control form-control-sm"></td>' +
+    '<td><input type="date" name="lic_validade" class="form-control form-control-sm"></td>' +
+    '<td class="col-parte" style="display:' + (dupla ? '' : 'none') + '">' +
+      '<select name="lic_parte" class="form-select form-select-sm">' +
+        '<option value="unico">Único</option>' +
+        '<option value="cavalo">Cavalo</option>' +
+        '<option value="carreta">Carreta</option>' +
+      '</select>' +
+    '</td>' +
+    '<td><input type="text" name="lic_observacoes" placeholder="Observações" class="form-control form-control-sm"></td>' +
+    '<td>' +
+      '<input type="hidden" name="lic_arquivo_existente" value="">' +
+      '<input type="file" name="lic_arquivo" accept=".pdf" class="form-control form-control-sm" style="font-size:0.72rem;" title="Anexar PDF">' +
+    '</td>' +
+    '<td class="text-center"><button type="button" class="btn btn-outline-danger btn-del-row" onclick="this.closest(\'tr\').remove()"><i class="bi bi-trash"></i></button></td>';
   document.getElementById('bodyLicencas').appendChild(tr);
-  bindLicTipoInput(tr.querySelector('.lic-tipo-input'));
+  bindLicTipoSelect(tr.querySelector('.lic-tipo-select'));
 });
 
-function bindLicTipoInput(inp) {
-  inp.addEventListener('change', function() {
-    const doc = catalogMap[this.value];
+function bindLicTipoSelect(sel) {
+  sel.addEventListener('change', function() {
     const hidId = this.closest('tr').querySelector('input[name="lic_tipo_doc_id"]');
-    if (doc && hidId) hidId.value = doc.id;
-    else if (hidId) hidId.value = '';
+    const opt = this.selectedOptions[0];
+    if (hidId) hidId.value = (opt && opt.dataset.id) ? opt.dataset.id : '';
   });
 }
-document.querySelectorAll('.lic-tipo-input').forEach(bindLicTipoInput);
+document.querySelectorAll('.lic-tipo-select').forEach(bindLicTipoSelect);
 </script>
 {% endblock %}
