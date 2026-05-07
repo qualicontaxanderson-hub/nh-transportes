@@ -8,6 +8,7 @@ from datetime import date
 from flask import (Blueprint, abort, current_app, render_template, request,
                    redirect, send_file, send_from_directory, url_for, flash, jsonify)
 from flask_login import login_required, current_user
+from werkzeug.exceptions import NotFound
 from werkzeug.utils import secure_filename
 
 from utils.db import get_db_connection
@@ -642,12 +643,10 @@ def licenca_pdf(filename):
         os.path.join(current_app.static_folder, 'uploads', 'licencas')
     )
     safe_filename = os.path.basename(filename)
-    file_path = os.path.realpath(os.path.join(upload_dir, safe_filename))
-    if not file_path.startswith(upload_dir + os.sep):
+    try:
+        return send_from_directory(upload_dir, safe_filename, mimetype='application/pdf')
+    except NotFound:
         abort(404)
-    if not os.path.isfile(file_path):
-        abort(404)
-    return send_from_directory(upload_dir, safe_filename, mimetype='application/pdf')
 
 
 # ---------------------------------------------------------------------------
