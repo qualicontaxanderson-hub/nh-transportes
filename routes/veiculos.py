@@ -297,8 +297,11 @@ def mensagem_whatsapp(id):
 
         mensagem = _gerar_mensagem_whatsapp_veiculo(veiculo, licencas)
         return jsonify({'ok': True, 'mensagem': mensagem})
-    except Exception as e:
-        return jsonify({'ok': False, 'error': str(e)}), 500
+    except Exception:
+        logging.getLogger(__name__).exception(
+            'mensagem_whatsapp: erro ao gerar mensagem do veículo id=%s', id
+        )
+        return jsonify({'ok': False, 'error': 'Erro interno ao gerar mensagem.'}), 500
     finally:
         if cursor:
             cursor.close()

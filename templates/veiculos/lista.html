@@ -240,8 +240,10 @@ async function copiarDadosWhatsApp(veiculoId, event, btn){
   try {
     const url = whatsappMsgUrlBase.replace(/0$/, String(veiculoId));
     const resp = await fetch(url, { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
-    const data = await resp.json();
+    const data = await resp.json().catch(function(){ return {}; });
     if (!resp.ok || !data.ok || !data.mensagem) {
+      if (resp.status === 404) throw new Error('Veículo não encontrado.');
+      if (resp.status === 403) throw new Error('Acesso não permitido.');
       throw new Error(data.error || 'Não foi possível gerar a mensagem.');
     }
     await copiarTextoClipboard(data.mensagem);
