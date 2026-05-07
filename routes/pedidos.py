@@ -15,6 +15,51 @@ def get_db():
     """Usa a conexão centralizada com credenciais seguras"""
     return get_db_connection()
 
+
+def _ensure_quantidades_extras():
+    """
+    Garante que as quantidades 9.000 litros e 12.000 litros existam na tabela
+    quantidades. Idempotente: seguro para executar múltiplas vezes.
+    """
+    _extras = [
+        (9000, '9.000 litros'),
+        (12000, '12.000 litros'),
+    ]
+    conn = None
+    cur = None
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        for valor, descricao in _extras:
+            cur.execute("SELECT COUNT(*) FROM quantidades WHERE valor = %s", (valor,))
+            row = cur.fetchone()
+            if not row or row[0] == 0:
+                cur.execute(
+                    "INSERT INTO quantidades (valor, descricao) VALUES (%s, %s)",
+                    (valor, descricao)
+                )
+                logger.info("_ensure_quantidades_extras: inseriu quantidade %s", descricao)
+        conn.commit()
+    except Exception as e:
+        if conn:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+        logger.warning("_ensure_quantidades_extras: falhou: %s", e)
+    finally:
+        if cur:
+            try:
+                cur.close()
+            except Exception:
+                pass
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
 def _proximo_numero_pedido(cursor):
     """
     Retorna o próximo número de pedido como inteiro, consultando o maior número
