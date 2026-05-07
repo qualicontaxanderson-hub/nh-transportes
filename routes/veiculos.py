@@ -3,6 +3,7 @@ import logging
 import os
 import re
 import uuid
+from datetime import date
 
 from flask import (Blueprint, abort, current_app, render_template, request,
                    redirect, send_file, url_for, flash, jsonify)
@@ -160,7 +161,7 @@ def _get_docs_catalog(cursor, tipo_veiculo=None):
     return result
 
 
-def _gerar_mensagem_whatsapp_veiculo(veiculo, licencas):
+def _gerar_mensagem_whatsapp_veiculo(veiculo, licencas, compartimentos=None):
     """Monta texto de veículo + licenças para compartilhamento no WhatsApp."""
     def _fmt_data(dt):
         if not dt:
@@ -169,6 +170,27 @@ def _gerar_mensagem_whatsapp_veiculo(veiculo, licencas):
             return dt.strftime('%d/%m/%Y')
         except Exception:
             return str(dt)
+
+    def _status_validade(dt):
+        if not dt:
+            return None
+        try:
+            dt_base = dt.date() if hasattr(dt, 'date') else dt
+            dias = (dt_base - date.today()).days
+        except Exception:
+            return None
+        if dias < 0:
+            return 'VENCIDA'
+        if dias == 0:
+            return 'Vence hoje'
+        if dias <= 60:
+            return f"Vence em {dias} dia{'s' if dias != 1 else ''}"
+        return None
+
+    def _fmt_parte(parte):
+        if not parte or parte == 'unico':
+            return ''
+        return f" ({str(parte).capitalize()})"
 
     linhas = [
         '🚛 *Dados do Caminhão*',
@@ -191,13 +213,30 @@ def _gerar_mensagem_whatsapp_veiculo(veiculo, licencas):
     else:
         for l in licencas:
             tipo = l.get('tipo_documento') or 'Documento'
-            numero = l.get('numero_doc') or '-'
             validade = _fmt_data(l.get('data_validade'))
-            parte = l.get('parte')
-            parte_txt = ''
-            if parte and parte != 'unico':
-                parte_txt = f" ({parte})"
-            linhas.append(f"• {tipo}{parte_txt} | Nº: {numero} | Validade: {validade}")
+            status = _status_validade(l.get('data_validade'))
+            parte_txt = _fmt_parte(l.get('parte'))
+            if status:
+                linhas.append(f"• {status} | {tipo}{parte_txt} | Validade: {validade}")
+            else:
+                linhas.append(f"• {tipo}{parte_txt} | Validade: {validade}")
+
+    compartimentos = compartimentos or []
+    if compartimentos:
+        linhas.append('')
+        linhas.append('🛢️ *Compartimentos*')
+        for c in compartimentos:
+            boca = c.get('numero_ordem') or '-'
+            capacidade = c.get('capacidade_l') or '-'
+            descricao = (c.get('descricao') or '').strip()
+            parte_txt = _fmt_parte(c.get('parte'))
+            linha = f"• Boca {boca}{parte_txt}: {capacidade} L"
+            if descricao:
+                linha += f" - {descricao}"
+            linhas.append(linha)
+
+        if veiculo.get('tipo_veiculo') in TIPOS_DUPLA_PLACA:
+            linhas.append(f"• Lacres necessários: {len(compartimentos) * 3}")
 
     return '\n'.join(linhas)
 
@@ -295,7 +334,15 @@ def mensagem_whatsapp(id):
         """, (id,))
         licencas = cursor.fetchall()
 
-        mensagem = _gerar_mensagem_whatsapp_veiculo(veiculo, licencas)
+        cursor.execute("""
+            SELECT numero_ordem, capacidade_l, descricao, parte
+            FROM veiculo_compartimentos
+            WHERE veiculo_id=%s
+            ORDER BY parte, numero_ordem
+        """, (id,))
+        compartimentos = cursor.fetchall()
+
+        mensagem = _gerar_mensagem_whatsapp_veiculo(veiculo, licencas, compartimentos)
         return jsonify({'ok': True, 'mensagem': mensagem})
     except Exception:
         logging.getLogger(__name__).exception(
