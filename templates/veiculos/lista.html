@@ -39,6 +39,8 @@
   .btn-editar:hover  { background:#1D63A5; color:#fff; }
   .btn-excluir { color:#dc3545; border-color:#f5c6cb; background:#fff5f5; }
   .btn-excluir:hover { background:#dc3545; color:#fff; }
+  .btn-whatsapp { color:#198754; border-color:#b8e0c7; background:#eefaf2; }
+  .btn-whatsapp:hover { background:#198754; color:#fff; }
   .actions-cell { white-space: nowrap; }
   .badge-tipo { font-size:0.68rem; padding:.2em .55em; }
 </style>
@@ -173,6 +175,12 @@
                     </button>
                   </form>
                   {% endif %}
+                  <button type="button"
+                          class="btn-acao btn-whatsapp"
+                          title="Copiar dados para WhatsApp"
+                          onclick="copiarDadosWhatsApp({{ veiculo.id }}, event, this)">
+                    <i class="bi bi-whatsapp"></i>
+                  </button>
                 </td>
               </tr>
               {% endfor %}
@@ -194,8 +202,57 @@
 
 {% block scripts %}
 <script>
+const whatsappMsgUrlBase = "{{ url_for('veiculos.mensagem_whatsapp', id=0) }}";
+
 document.querySelectorAll('.row-item[data-url]').forEach(function(row) {
   row.addEventListener('click', function() { window.location = this.dataset.url; });
 });
+
+function copiarTextoClipboard(texto){
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    return navigator.clipboard.writeText(texto);
+  }
+  return new Promise(function(resolve, reject){
+    const ta = document.createElement('textarea');
+    ta.value = texto;
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.focus();
+    ta.select();
+    try {
+      const ok = document.execCommand('copy');
+      document.body.removeChild(ta);
+      ok ? resolve() : reject(new Error('Falha ao copiar'));
+    } catch (e) {
+      document.body.removeChild(ta);
+      reject(e);
+    }
+  });
+}
+
+async function copiarDadosWhatsApp(veiculoId, event, btn){
+  if (event) event.stopPropagation();
+  if (!btn) return;
+  const htmlOriginal = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = '<i class="bi bi-hourglass-split"></i>';
+  try {
+    const url = whatsappMsgUrlBase.replace(/0$/, String(veiculoId));
+    const resp = await fetch(url, { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
+    const data = await resp.json();
+    if (!resp.ok || !data.ok || !data.mensagem) {
+      throw new Error(data.error || 'Não foi possível gerar a mensagem.');
+    }
+    await copiarTextoClipboard(data.mensagem);
+    btn.innerHTML = '<i class="bi bi-check-lg"></i>';
+    setTimeout(function(){ btn.innerHTML = htmlOriginal; }, 1500);
+  } catch (err) {
+    alert(err.message || 'Erro ao copiar mensagem para WhatsApp.');
+    btn.innerHTML = htmlOriginal;
+  } finally {
+    btn.disabled = false;
+  }
+}
 </script>
 {% endblock %}

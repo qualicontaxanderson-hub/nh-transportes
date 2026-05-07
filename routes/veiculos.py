@@ -160,6 +160,48 @@ def _get_docs_catalog(cursor, tipo_veiculo=None):
     return result
 
 
+def _gerar_mensagem_whatsapp_veiculo(veiculo, licencas):
+    """Monta texto de veículo + licenças para compartilhamento no WhatsApp."""
+    def _fmt_data(dt):
+        if not dt:
+            return 'Sem validade'
+        try:
+            return dt.strftime('%d/%m/%Y')
+        except Exception:
+            return str(dt)
+
+    linhas = [
+        '🚛 *Dados do Caminhão*',
+        f"• ID: {veiculo.get('id')}",
+        f"• Caminhão: {veiculo.get('caminhao') or '-'}",
+        f"• Tipo: {veiculo.get('tipo_veiculo') or '-'}",
+        f"• Placa: {veiculo.get('placa') or '-'}",
+    ]
+    if veiculo.get('placa_carreta'):
+        linhas.append(f"• Placa Carreta: {veiculo.get('placa_carreta')}")
+    if veiculo.get('modelo'):
+        linhas.append(f"• Modelo: {veiculo.get('modelo')}")
+    if veiculo.get('motorista_nome'):
+        linhas.append(f"• Motorista: {veiculo.get('motorista_nome')}")
+
+    linhas.append('')
+    linhas.append('📄 *Licenças e Vencimentos*')
+    if not licencas:
+        linhas.append('• Nenhuma licença/documento cadastrado.')
+    else:
+        for l in licencas:
+            tipo = l.get('tipo_documento') or 'Documento'
+            numero = l.get('numero_doc') or '-'
+            validade = _fmt_data(l.get('data_validade'))
+            parte = l.get('parte')
+            parte_txt = ''
+            if parte and parte != 'unico':
+                parte_txt = f" ({parte})"
+            linhas.append(f"• {tipo}{parte_txt} | Nº: {numero} | Validade: {validade}")
+
+    return '\n'.join(linhas)
+
+
 @bp.route('/')
 @login_required
 def lista():
@@ -222,6 +264,46 @@ def listar():
         return jsonify(veiculos), 200
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+
+@bp.route('/mensagem-whatsapp/<int:id>', methods=['GET'])
+@login_required
+def mensagem_whatsapp(id):
+    _ensure_tables()
+    conn = None
+    cursor = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+
+        cursor.execute("""
+            SELECT v.*, m.nome AS motorista_nome
+            FROM veiculos v
+            LEFT JOIN motoristas m ON m.veiculo_id = v.id
+            WHERE v.id=%s
+            LIMIT 1
+        """, (id,))
+        veiculo = cursor.fetchone()
+        if not veiculo:
+            return jsonify({'ok': False, 'error': 'Veículo não encontrado.'}), 404
+
+        cursor.execute("""
+            SELECT tipo_documento, numero_doc, data_validade, parte
+            FROM veiculo_licencas
+            WHERE veiculo_id=%s
+            ORDER BY COALESCE(ordem, 9999), parte, data_validade
+        """, (id,))
+        licencas = cursor.fetchall()
+
+        mensagem = _gerar_mensagem_whatsapp_veiculo(veiculo, licencas)
+        return jsonify({'ok': True, 'mensagem': mensagem})
+    except Exception as e:
+        return jsonify({'ok': False, 'error': str(e)}), 500
+    finally:
+        if cursor:
+            cursor.close()
+        if conn:
+            conn.close()
 
 
 @bp.route('/novo', methods=['GET', 'POST'])
