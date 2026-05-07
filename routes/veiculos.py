@@ -6,7 +6,7 @@ import uuid
 from datetime import date
 
 from flask import (Blueprint, abort, current_app, render_template, request,
-                   redirect, send_file, url_for, flash, jsonify)
+                   redirect, send_file, send_from_directory, url_for, flash, jsonify)
 from flask_login import login_required, current_user
 from werkzeug.utils import secure_filename
 
@@ -641,13 +641,13 @@ def licenca_pdf(filename):
     upload_dir = os.path.realpath(
         os.path.join(current_app.static_folder, 'uploads', 'licencas')
     )
-    # Use basename to strip any residual path separators before joining
-    file_path = os.path.realpath(os.path.join(upload_dir, os.path.basename(filename)))
+    safe_filename = os.path.basename(filename)
+    file_path = os.path.realpath(os.path.join(upload_dir, safe_filename))
     if not file_path.startswith(upload_dir + os.sep):
         abort(404)
     if not os.path.isfile(file_path):
         abort(404)
-    return send_file(file_path, mimetype='application/pdf')
+    return send_from_directory(upload_dir, safe_filename, mimetype='application/pdf')
 
 
 # ---------------------------------------------------------------------------
