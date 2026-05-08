@@ -18,12 +18,26 @@ def get_db():
 
 def _ensure_quantidades_extras():
     """
-    Garante que as quantidades 9.000 litros e 12.000 litros existam na tabela
-    quantidades. Idempotente: seguro para executar múltiplas vezes.
+    Garante que as quantidades extras existam na tabela quantidades.
+    Idempotente: seguro para executar múltiplas vezes.
     """
     _extras = [
-        (9000, '9.000 litros'),
+        (6000,  '6.000 litros'),
+        (9000,  '9.000 litros'),
+        (11000, '11.000 litros'),
         (12000, '12.000 litros'),
+        (14000, '14.000 litros'),
+        (16000, '16.000 litros'),
+        (19000, '19.000 litros'),
+        (21000, '21.000 litros'),
+        (24000, '24.000 litros'),
+        (26000, '26.000 litros'),
+        (29000, '29.000 litros'),
+        (31000, '31.000 litros'),
+        (32000, '32.000 litros'),
+        (33000, '33.000 litros'),
+        (34000, '34.000 litros'),
+        (35000, '35.000 litros'),
     ]
     conn = None
     cur = None
