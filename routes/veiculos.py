@@ -17,7 +17,7 @@ from utils.decorators import admin_required
 bp = Blueprint('veiculos', __name__, url_prefix='/veiculos')
 
 _tables_ready = False
-_legacy_docs_reconciled = False
+MIN_DOC_FUZZY_MATCH_LEN = 5
 
 TIPOS_VEICULO = [
     'Caminhão',
@@ -208,7 +208,8 @@ def _reconciliar_licencas_legadas(cursor):
         else:
             candidatos = [
                 (i, n) for i, n, dn in docs_norm
-                if len(ln) >= 5 and len(dn) >= 5 and (dn.endswith(ln) or ln.endswith(dn))
+                if len(ln) >= MIN_DOC_FUZZY_MATCH_LEN and len(dn) >= MIN_DOC_FUZZY_MATCH_LEN
+                and (dn.endswith(ln) or ln.endswith(dn))
             ]
             # garantir que seja único por id (evita vínculo ambíguo)
             uniq = {i: (i, n) for i, n in candidatos}
@@ -624,7 +625,6 @@ def excluir(id):
 @login_required
 @admin_required
 def config_documentos():
-    global _legacy_docs_reconciled
     _ensure_tables()
     conn = None
     cursor = None
@@ -632,11 +632,12 @@ def config_documentos():
         conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)
 
-        if not _legacy_docs_reconciled:
+        cursor.execute("SELECT 1 FROM veiculo_licencas WHERE tipo_doc_id IS NULL LIMIT 1")
+        has_legacy = cursor.fetchone() is not None
+        if has_legacy:
             changed = _reconciliar_licencas_legadas(cursor)
             if changed:
                 conn.commit()
-            _legacy_docs_reconciled = True
 
         if request.method == 'POST':
             acao = request.form.get('acao', 'salvar')
