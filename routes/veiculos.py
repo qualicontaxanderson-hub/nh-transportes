@@ -594,12 +594,19 @@ def config_documentos():
                         SET nome=%s, obrigatorio=%s, tipos_veiculo=%s, ativo=%s
                         WHERE id=%s
                     """, (nome, obrigatorio, tipos_json, ativo, doc_id))
-                    cursor.execute("""
-                        UPDATE veiculo_licencas
-                        SET tipo_documento=%s
-                        WHERE tipo_doc_id=%s
-                           OR (tipo_doc_id IS NULL AND LOWER(TRIM(tipo_documento)) = LOWER(TRIM(%s)))
-                    """, (nome, doc_id, nome_anterior))
+                    if nome_anterior:
+                        cursor.execute("""
+                            UPDATE veiculo_licencas
+                            SET tipo_documento=%s
+                            WHERE tipo_doc_id=%s
+                               OR (tipo_doc_id IS NULL AND LOWER(TRIM(tipo_documento)) = LOWER(TRIM(%s)))
+                        """, (nome, doc_id, nome_anterior))
+                    else:
+                        cursor.execute("""
+                            UPDATE veiculo_licencas
+                            SET tipo_documento=%s
+                            WHERE tipo_doc_id=%s
+                        """, (nome, doc_id))
                     conn.commit()
                     flash('Tipo de documento atualizado.', 'success')
                 else:
