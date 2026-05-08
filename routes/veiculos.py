@@ -17,7 +17,7 @@ from utils.decorators import admin_required
 bp = Blueprint('veiculos', __name__, url_prefix='/veiculos')
 
 _tables_ready = False
-MIN_DOC_FUZZY_MATCH_LEN = 5
+_MIN_DOC_FUZZY_MATCH_LEN = 5
 
 TIPOS_VEICULO = [
     'Caminhão',
@@ -214,7 +214,7 @@ def _reconciliar_licencas_legadas(cursor, veiculo_id=None):
         else:
             candidatos = [
                 (i, n) for i, n, dn in docs_norm
-                if len(ln) >= MIN_DOC_FUZZY_MATCH_LEN and len(dn) >= MIN_DOC_FUZZY_MATCH_LEN
+                if len(ln) >= _MIN_DOC_FUZZY_MATCH_LEN and len(dn) >= _MIN_DOC_FUZZY_MATCH_LEN
                 and (dn.endswith(ln) or ln.endswith(dn))
             ]
             # garantir que seja único por id (evita vínculo ambíguo)
@@ -229,7 +229,11 @@ def _reconciliar_licencas_legadas(cursor, veiculo_id=None):
         sql_update = """
             UPDATE veiculo_licencas
             SET tipo_doc_id=%s, tipo_documento=%s
-            WHERE (tipo_doc_id IS NULL OR tipo_doc_id NOT IN (SELECT id FROM tipos_documento_veiculo))
+            WHERE (
+                tipo_doc_id IS NULL OR NOT EXISTS (
+                    SELECT 1 FROM tipos_documento_veiculo tdx WHERE tdx.id = veiculo_licencas.tipo_doc_id
+                )
+            )
               AND tipo_documento=%s
         """
         if veiculo_id is not None:
