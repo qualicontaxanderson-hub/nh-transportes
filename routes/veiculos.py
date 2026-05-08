@@ -205,7 +205,7 @@ def _reconciliar_licencas_legadas(cursor):
         if len(exact) == 1:
             candidatos = exact
         else:
-            candidatos = [(i, n) for i, n, dn in docs_norm if (ln in dn or dn in ln)]
+            candidatos = [(i, n) for i, n, dn in docs_norm if (dn.endswith(ln) or ln.endswith(dn))]
             # garantir que seja único por id (evita vínculo ambíguo)
             uniq = {i: (i, n) for i, n in candidatos}
             candidatos = list(uniq.values())
@@ -510,10 +510,6 @@ def editar(id):
             conn.commit()
             flash('Veículo atualizado com sucesso!', 'success')
             return redirect(url_for('veiculos.lista'))
-
-        changed = _reconciliar_licencas_legadas(cursor)
-        if changed:
-            conn.commit()
 
         cursor.execute("SELECT * FROM veiculos WHERE id = %s", (id,))
         veiculo = cursor.fetchone()
