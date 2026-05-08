@@ -172,7 +172,7 @@ def _norm_doc_name(value):
     return re.sub(r'[^a-z0-9]+', '', (value or '').strip().lower())
 
 
-def _reconciliar_licencas_legadas(cursor):
+def _reconciliar_licencas_legadas(cursor, veiculo_id=None):
     """
     Vincula licenças antigas sem tipo_doc_id ao catálogo atual.
     Também corrige nome legado quando houver correspondência única.
@@ -187,13 +187,19 @@ def _reconciliar_licencas_legadas(cursor):
     if not docs_norm:
         return 0
 
-    cursor.execute("""
-        SELECT DISTINCT tipo_documento
-        FROM veiculo_licencas
-        WHERE tipo_doc_id IS NULL
-          AND tipo_documento IS NOT NULL
-          AND TRIM(tipo_documento) <> ''
-    """)
+    params = []
+    sql_legacy = """
+        SELECT DISTINCT vl.tipo_documento
+        FROM veiculo_licencas vl
+        LEFT JOIN tipos_documento_veiculo td ON td.id = vl.tipo_doc_id
+        WHERE (vl.tipo_doc_id IS NULL OR td.id IS NULL)
+          AND vl.tipo_documento IS NOT NULL
+          AND TRIM(vl.tipo_documento) <> ''
+    """
+    if veiculo_id is not None:
+        sql_legacy += " AND vl.veiculo_id=%s"
+        params.append(veiculo_id)
+    cursor.execute(sql_legacy, tuple(params))
     legacy_names = [r.get('tipo_documento') for r in (cursor.fetchall() or [])]
 
     atualizados = 0
@@ -219,13 +225,36 @@ def _reconciliar_licencas_legadas(cursor):
             continue
 
         doc_id, doc_nome = candidatos[0]
-        cursor.execute("""
+        params_upd = [doc_id, doc_nome, legacy_name]
+        sql_update = """
             UPDATE veiculo_licencas
             SET tipo_doc_id=%s, tipo_documento=%s
-            WHERE tipo_doc_id IS NULL AND tipo_documento=%s
-        """, (doc_id, doc_nome, legacy_name))
+            WHERE (tipo_doc_id IS NULL OR tipo_doc_id NOT IN (SELECT id FROM tipos_documento_veiculo))
+              AND tipo_documento=%s
+        """
+        if veiculo_id is not None:
+            sql_update += " AND veiculo_id=%s"
+            params_upd.append(veiculo_id)
+        cursor.execute(sql_update, tuple(params_upd))
         atualizados += cursor.rowcount or 0
 
+    return atualizados
+
+
+def _sincronizar_licencas_catalogo(cursor, veiculo_id=None):
+    params = []
+    sql_sync = """
+        UPDATE veiculo_licencas vl
+        JOIN tipos_documento_veiculo td ON td.id = vl.tipo_doc_id
+        SET vl.tipo_documento = td.nome
+        WHERE COALESCE(vl.tipo_documento, '') <> COALESCE(td.nome, '')
+    """
+    if veiculo_id is not None:
+        sql_sync += " AND vl.veiculo_id=%s"
+        params.append(veiculo_id)
+    cursor.execute(sql_sync, tuple(params))
+    atualizados = cursor.rowcount or 0
+    atualizados += _reconciliar_licencas_legadas(cursor, veiculo_id=veiculo_id)
     return atualizados
 
 
@@ -522,6 +551,10 @@ def editar(id):
             flash('Veículo não encontrado.', 'warning')
             return redirect(url_for('veiculos.lista'))
 
+        changed = _sincronizar_licencas_catalogo(cursor, veiculo_id=id)
+        if changed:
+            conn.commit()
+
         cursor.execute("""
             SELECT * FROM veiculo_compartimentos WHERE veiculo_id=%s ORDER BY parte, numero_ordem
         """, (id,))
@@ -632,12 +665,9 @@ def config_documentos():
         conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)
 
-        cursor.execute("SELECT 1 FROM veiculo_licencas WHERE tipo_doc_id IS NULL LIMIT 1")
-        has_legacy = cursor.fetchone() is not None
-        if has_legacy:
-            changed = _reconciliar_licencas_legadas(cursor)
-            if changed:
-                conn.commit()
+        changed = _sincronizar_licencas_catalogo(cursor)
+        if changed:
+            conn.commit()
 
         if request.method == 'POST':
             acao = request.form.get('acao', 'salvar')
