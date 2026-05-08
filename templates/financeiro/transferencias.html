@@ -84,6 +84,16 @@
               <input type="text" name="f_descricao" class="form-control form-control-sm"
                      placeholder="Parte da descrição..." value="{{ f_descricao or '' }}">
             </div>
+            <div class="col-6">
+              <label class="form-label form-label-sm mb-0">Valor mín. (R$)</label>
+              <input type="text" name="valor_min" class="form-control form-control-sm"
+                     placeholder="Ex: 150,00" value="{{ valor_min or '' }}">
+            </div>
+            <div class="col-6">
+              <label class="form-label form-label-sm mb-0">Valor máx. (R$)</label>
+              <input type="text" name="valor_max" class="form-control form-control-sm"
+                     placeholder="Ex: 2000,00" value="{{ valor_max or '' }}">
+            </div>
             <div class="col-12">
               <div class="d-flex gap-1 flex-wrap mb-1">
                 <span class="text-muted" style="font-size:0.78rem; line-height:1.8;">Período:</span>

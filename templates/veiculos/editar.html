@@ -17,6 +17,22 @@
   }
   .form-label { font-size: 0.83rem; font-weight: 600; color: #374151; }
   .form-control-sm, .form-select-sm { font-size: 0.84rem; }
+  .sub-table th { background:#f0f4f8; font-size:0.72rem; font-weight:700; text-transform:uppercase; }
+  .sub-table td { font-size:0.82rem; vertical-align:middle; }
+  .btn-del-row { width:1.7rem;height:1.7rem;padding:0;border-radius:.35rem; }
+  .venc-ok   { color:#198754; }
+  .venc-warn { color:#856404; }
+  .venc-exp  { color:#dc3545; font-weight:600; }
+  .badge-parte { font-size:0.68rem; padding:.2em .5em; }
+  .badge-obrig { font-size:0.68rem; background:#fff3cd; color:#856404; padding:.15em .45em; border-radius:.25rem; }
+  .pdf-link { font-size:0.75rem; }
+  .btn-pdf-pick { width:1.7rem;height:1.7rem;padding:0;border-radius:.35rem;cursor:pointer; }
+  .pdf-icon-link { font-size:1.2rem; vertical-align:middle; }
+  .pdf-cell { white-space:nowrap; text-align:center; }
+  .drag-handle { cursor:grab; color:#adb5bd; padding:0 .4rem; }
+  .drag-handle:active { cursor:grabbing; }
+  .lic-row.drag-over { border-top:2px solid #1D63A5; }
+  .lic-tipo-label { font-size:0.84rem; font-weight:600; }
 </style>
 {% endblock %}
 
@@ -34,7 +50,7 @@
     <div class="hero-icon"><i class="bi bi-pencil-fill"></i></div>
     <div class="flex-grow-1">
       <h4 class="mb-0 fw-bold">Editar Veículo #{{ veiculo.id }}</h4>
-      <p class="mb-0 opacity-75 small">Atualize os dados do veículo.</p>
+      <p class="mb-0 opacity-75 small">{{ veiculo.tipo_veiculo or 'Veículo' }} — {{ veiculo.placa }}</p>
     </div>
     <a href="{{ url_for('veiculos.lista') }}"
        class="btn btn-sm px-3" style="background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.35);">
@@ -42,44 +58,384 @@
     </a>
   </div>
 
-  <div class="card shadow-sm">
+  <!-- ══ Formulário principal ══ -->
+  <div class="card shadow-sm mb-3">
     <div class="card-header d-flex align-items-center py-2"
          style="background:#1D63A5;color:white;font-size:0.82rem;font-weight:600;letter-spacing:0.02em;">
       <i class="bi bi-truck me-2"></i> Dados do Veículo
     </div>
     <div class="card-body">
-      <form method="POST">
+      <form method="POST" id="formVeiculo" enctype="multipart/form-data">
+
+        <!-- Dados Principais -->
         <div class="form-section-title"><i class="bi bi-info-circle me-1"></i>Dados Principais</div>
         <div class="row">
-          <div class="col-md-6 mb-2">
-            <label class="form-label">Caminhão <span class="text-danger">*</span></label>
+          <div class="col-md-4 mb-2">
+            <label class="form-label">Tipo de Veículo <span class="text-danger">*</span></label>
+            <select name="tipo_veiculo" id="tipoVeiculo" class="form-select form-select-sm" required>
+              <option value="">Selecione…</option>
+              {% for t in tipos %}
+              <option value="{{ t }}" {% if veiculo.tipo_veiculo == t %}selected{% endif %}>{{ t }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-md-4 mb-2">
+            <label class="form-label">Marca / Fabricante <span class="text-danger">*</span></label>
             <input type="text" name="caminhao" class="form-control form-control-sm"
                    value="{{ veiculo.caminhao }}" placeholder="Ex: Mercedes, Scania, Volvo" maxlength="20" required>
           </div>
-          <div class="col-md-6 mb-2">
-            <label class="form-label">Placa <span class="text-danger">*</span></label>
-            <input type="text" name="placa" class="form-control form-control-sm"
-                   value="{{ veiculo.placa }}" placeholder="Ex: ABC-1234 ou ABC1D23" maxlength="10" required>
-          </div>
-        </div>
-        <div class="row">
-          <div class="col-md-12 mb-2">
+          <div class="col-md-4 mb-2">
             <label class="form-label">Modelo</label>
             <input type="text" name="modelo" class="form-control form-control-sm"
                    value="{{ veiculo.modelo or '' }}" placeholder="Ex: Actros 2651, R450, FH 540" maxlength="30">
           </div>
         </div>
 
+        <div class="row">
+          <div class="col-md-4 mb-2">
+            <label class="form-label" id="lblPlaca">Placa <span class="text-danger">*</span></label>
+            <input type="text" name="placa" id="inputPlaca" class="form-control form-control-sm"
+                   value="{{ veiculo.placa }}" placeholder="Ex: ABC-1234 ou ABC1D23" maxlength="10" required>
+          </div>
+          <div class="col-md-4 mb-2" id="grpPlacaCarreta">
+            <label class="form-label">Placa da Carreta / Semirreboque</label>
+            <input type="text" name="placa_carreta" id="inputPlacaCarreta" class="form-control form-control-sm"
+                   value="{{ veiculo.placa_carreta or '' }}" placeholder="Ex: DEF-5678" maxlength="10">
+          </div>
+        </div>
+
+        <!-- Compartimentos -->
+        <div class="form-section-title mt-3"><i class="bi bi-grid-3x3-gap me-1"></i>Compartimentos de Carregamento</div>
+        <p class="text-muted small mb-2">Informe as bocas/compartimentos do tanque com a respectiva capacidade em litros.</p>
+        <div class="table-responsive mb-2">
+          <table class="table table-bordered table-sm sub-table mb-1" id="tblCompartimentos">
+            <thead>
+              <tr>
+                <th style="width:12%">Boca</th>
+                <th style="width:25%">Capacidade (L)</th>
+                <th style="width:20%" id="thCompParte">Parte</th>
+                <th>Descrição</th>
+                <th style="width:5%"></th>
+              </tr>
+            </thead>
+            <tbody id="bodyCompartimentos">
+              {% for c in compartimentos %}
+              <tr>
+                <td><input type="number" name="comp_ordem" value="{{ c.numero_ordem }}" min="1" class="form-control form-control-sm" style="width:60px"></td>
+                <td><input type="number" name="comp_capacidade" value="{{ c.capacidade_l }}" min="1" class="form-control form-control-sm"></td>
+                <td class="col-parte"><select name="comp_parte" class="form-select form-select-sm">
+                  <option value="unico"   {% if c.parte=='unico'   %}selected{% endif %}>Único</option>
+                  <option value="cavalo"  {% if c.parte=='cavalo'  %}selected{% endif %}>Cavalo</option>
+                  <option value="carreta" {% if c.parte=='carreta' %}selected{% endif %}>Carreta</option>
+                </select></td>
+                <td><input type="text" name="comp_descricao" value="{{ c.descricao or '' }}" class="form-control form-control-sm"></td>
+                <td class="text-center"><button type="button" class="btn btn-outline-danger btn-del-row" onclick="this.closest('tr').remove()"><i class="bi bi-trash"></i></button></td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        <button type="button" class="btn btn-outline-primary btn-sm" id="btnAddComp">
+          <i class="bi bi-plus me-1"></i> Adicionar Compartimento
+        </button>
+
+        <!-- Licenças -->
+        <div class="form-section-title mt-4"><i class="bi bi-file-earmark-text me-1"></i>Licenças e Documentos</div>
+        <p class="text-muted small mb-2">Cadastre todos os documentos e licenças com data de validade.</p>
+
+        {% set is_dupla = veiculo.tipo_veiculo in tipos_dupla_placa %}
+
+        <div class="table-responsive mb-2">
+          <table class="table table-bordered table-sm sub-table mb-1" id="tblLicencas">
+            <thead>
+              <tr>
+                <th style="width:2%"></th>
+                <th style="width:21%">Tipo de Documento</th>
+                <th style="width:6%">PDF</th>
+                <th style="width:13%">Número</th>
+                <th style="width:12%">Validade</th>
+                <th style="width:13%" id="thLicParte">Parte</th>
+                <th>Observações</th>
+                <th style="width:4%"></th>
+              </tr>
+            </thead>
+            <tbody id="bodyLicencas">
+              {% for l in licencas %}
+              <tr class="lic-row" draggable="true">
+                <td class="drag-handle text-center"><i class="bi bi-grip-vertical"></i></td>
+                <td>
+                  <input type="hidden" name="lic_tipo_doc_id" value="{{ l.tipo_doc_id or '' }}">
+                  <input type="hidden" name="lic_tipo" value="{{ l.tipo_documento }}">
+                  <input type="hidden" name="lic_ordem" value="{{ loop.index }}">
+                  <span class="lic-tipo-label">{{ l.tipo_documento }}</span>
+                </td>
+                <td class="pdf-cell">
+                  <input type="hidden" name="lic_arquivo_existente" value="{{ l.arquivo_pdf or '' }}">
+                  {% if l.arquivo_pdf %}
+                  <a href="{{ url_for('veiculos.licenca_pdf', filename=l.arquivo_pdf) }}"
+                     target="_blank" title="Ver / Baixar PDF" class="pdf-icon-link text-danger me-1">
+                    <i class="bi bi-file-earmark-pdf-fill"></i>
+                  </a>
+                  {% endif %}
+                  <label class="btn btn-outline-secondary btn-pdf-pick" title="{% if l.arquivo_pdf %}Substituir PDF{% else %}Anexar PDF{% endif %}">
+                    <i class="bi bi-paperclip"></i>
+                    <input type="file" name="lic_arquivo" accept=".pdf" class="d-none">
+                  </label>
+                </td>
+                <td><input type="text" name="lic_numero" value="{{ l.numero_doc or '' }}" class="form-control form-control-sm"></td>
+                <td><input type="date" name="lic_validade" value="{{ l.data_validade.strftime('%Y-%m-%d') if l.data_validade else '' }}" class="form-control form-control-sm"></td>
+                <td class="col-parte"{% if not is_dupla %} style="display:none"{% endif %}><select name="lic_parte" class="form-select form-select-sm">
+                  <option value="unico"   {% if l.parte=='unico'   %}selected{% endif %}>Único</option>
+                  <option value="cavalo"  {% if l.parte=='cavalo'  %}selected{% endif %}>Cavalo</option>
+                  <option value="carreta" {% if l.parte=='carreta' %}selected{% endif %}>Carreta</option>
+                </select></td>
+                <td><input type="text" name="lic_observacoes" value="{{ l.observacoes or '' }}" class="form-control form-control-sm"></td>
+                <td class="text-center"><button type="button" class="btn btn-outline-danger btn-del-row" onclick="this.closest('tr').remove()"><i class="bi bi-trash"></i></button></td>
+              </tr>
+              {% endfor %}
+              {% for df in docs_faltantes %}
+              <tr class="lic-row table-warning" draggable="true">
+                <td class="drag-handle text-center"><i class="bi bi-grip-vertical"></i></td>
+                <td>
+                  <input type="hidden" name="lic_tipo_doc_id" value="{{ df.id }}">
+                  <input type="hidden" name="lic_tipo" value="{{ df.nome }}">
+                  <input type="hidden" name="lic_ordem" value="{{ (licencas | length) + loop.index }}">
+                  <span class="lic-tipo-label">{{ df.nome }}</span>
+                </td>
+                <td class="pdf-cell">
+                  <input type="hidden" name="lic_arquivo_existente" value="">
+                  <label class="btn btn-outline-secondary btn-pdf-pick" title="Anexar PDF">
+                    <i class="bi bi-paperclip"></i>
+                    <input type="file" name="lic_arquivo" accept=".pdf" class="d-none">
+                  </label>
+                </td>
+                <td><input type="text" name="lic_numero" placeholder="Nº do documento" class="form-control form-control-sm"></td>
+                <td><input type="date" name="lic_validade" class="form-control form-control-sm"></td>
+                <td class="col-parte"{% if not is_dupla %} style="display:none"{% endif %}><select name="lic_parte" class="form-select form-select-sm">
+                  <option value="unico">Único</option>
+                  <option value="cavalo">Cavalo</option>
+                  <option value="carreta">Carreta</option>
+                </select></td>
+                <td><input type="text" name="lic_observacoes" placeholder="Observações" class="form-control form-control-sm"></td>
+                <td class="text-center"><button type="button" class="btn btn-outline-danger btn-del-row" onclick="this.closest('tr').remove()"><i class="bi bi-trash"></i></button></td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        <button type="button" class="btn btn-outline-primary btn-sm" id="btnAddLic">
+          <i class="bi bi-plus me-1"></i> Adicionar Licença
+        </button>
+
         <div class="d-flex justify-content-between mt-4 pt-2 border-top">
           <a href="{{ url_for('veiculos.lista') }}" class="btn btn-secondary btn-sm">
             <i class="bi bi-arrow-left me-1"></i> Voltar
           </a>
           <button type="submit" class="btn btn-primary btn-sm px-4">
-            <i class="bi bi-check-circle me-1"></i> Salvar
+            <i class="bi bi-check-circle me-1"></i> Salvar Alterações
           </button>
         </div>
       </form>
     </div>
   </div>
+
+  <!-- ══ Conjunto (Cavalo ↔ Carreta) ══ -->
+  <div class="card shadow-sm mb-4">
+    <div class="card-header d-flex align-items-center py-2"
+         style="background:#1D63A5;color:white;font-size:0.82rem;font-weight:600;letter-spacing:0.02em;">
+      <i class="bi bi-link-45deg me-2"></i> Conjunto — Cavalo &amp; Carreta
+    </div>
+    <div class="card-body">
+      {% if conjunto_atual %}
+        <div class="alert alert-info d-flex align-items-center gap-3 py-2 mb-3">
+          <i class="bi bi-link-45deg fs-4"></i>
+          <div>
+            <strong>Conjunto ativo:</strong>
+            Cavalo <span class="badge bg-primary">{{ conjunto_atual.cavalo_placa }}</span>
+            ↔ Carreta <span class="badge bg-secondary">{{ conjunto_atual.carreta_placa }}</span>
+          </div>
+        </div>
+        <form method="POST" action="{{ url_for('veiculos.desvincular_conjunto', id=veiculo.id) }}"
+              onsubmit="return confirm('Deseja desvincular este conjunto?');">
+          <button type="submit" class="btn btn-outline-danger btn-sm">
+            <i class="bi bi-x-circle me-1"></i> Desvincular Conjunto
+          </button>
+        </form>
+      {% else %}
+        <p class="text-muted small mb-3">Nenhum conjunto ativo para este veículo.
+          {% if veiculos_disponiveis %}Vincule uma carreta/cavalo abaixo.{% endif %}
+        </p>
+        {% if veiculos_disponiveis %}
+        <form method="POST" action="{{ url_for('veiculos.vincular_carreta', id=veiculo.id) }}" class="d-flex align-items-end gap-2 flex-wrap">
+          <div>
+            <label class="form-label mb-1">Selecionar veículo para compor conjunto</label>
+            <select name="carreta_id" class="form-select form-select-sm" style="min-width:220px;" required>
+              <option value="">— Selecione —</option>
+              {% for v in veiculos_disponiveis %}
+              <option value="{{ v.id }}">{{ v.placa }} — {{ v.caminhao }} ({{ v.tipo_veiculo or '?' }})</option>
+              {% endfor %}
+            </select>
+          </div>
+          <button type="submit" class="btn btn-primary btn-sm">
+            <i class="bi bi-link me-1"></i> Vincular
+          </button>
+        </form>
+        {% else %}
+        <p class="text-muted small">Não há outros veículos disponíveis para vinculação.</p>
+        {% endif %}
+      {% endif %}
+    </div>
+  </div>
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const TIPOS_DUPLA_PLACA = {{ tipos_dupla_placa | tojson }};
+
+function isDuplaPlaca() {
+  return TIPOS_DUPLA_PLACA.includes(document.getElementById('tipoVeiculo').value);
+}
+
+function updatePlacaUI() {
+  const dupla = isDuplaPlaca();
+  document.getElementById('grpPlacaCarreta').style.display = dupla ? '' : 'none';
+  document.getElementById('lblPlaca').innerHTML = dupla
+    ? 'Placa do Cavalo Mecânico <span class="text-danger">*</span>'
+    : 'Placa <span class="text-danger">*</span>';
+  document.getElementById('thCompParte').style.display  = dupla ? '' : 'none';
+  document.getElementById('thLicParte').style.display   = dupla ? '' : 'none';
+  document.querySelectorAll('.col-parte').forEach(el => el.style.display = dupla ? '' : 'none');
+}
+
+document.getElementById('tipoVeiculo').addEventListener('change', updatePlacaUI);
+updatePlacaUI();
+
+// ── Compartimentos ──
+let compIdx = {{ compartimentos | length }};
+document.getElementById('btnAddComp').addEventListener('click', function() {
+  const i = compIdx++;
+  const tr = document.createElement('tr');
+  tr.innerHTML = `
+    <td><input type="number" name="comp_ordem" value="${i+1}" min="1" class="form-control form-control-sm" style="width:60px"></td>
+    <td><input type="number" name="comp_capacidade" placeholder="Ex: 5000" min="1" class="form-control form-control-sm" required></td>
+    <td class="col-parte" style="display:${isDuplaPlaca()?'':'none'}">
+      <select name="comp_parte" class="form-select form-select-sm">
+        <option value="unico">Único</option>
+        <option value="cavalo">Cavalo</option>
+        <option value="carreta">Carreta</option>
+      </select>
+    </td>
+    <td><input type="text" name="comp_descricao" placeholder="Ex: Boca 1 - Diesel" class="form-control form-control-sm"></td>
+    <td class="text-center"><button type="button" class="btn btn-outline-danger btn-del-row" onclick="this.closest('tr').remove()"><i class="bi bi-trash"></i></button></td>`;
+  document.getElementById('bodyCompartimentos').appendChild(tr);
+});
+
+// ── Licenças ──
+const CATALOG_DOCS = {{ catalog_docs | tojson }};
+
+function _escHtml(str) {
+  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function _buildSelectOptions() {
+  let html = '<option value="">— Selecione —</option>';
+  CATALOG_DOCS.forEach(function(d) {
+    const n = _escHtml(d.nome);
+    html += '<option value="' + n + '" data-id="' + d.id + '">' + n + '</option>';
+  });
+  return html;
+}
+
+document.getElementById('btnAddLic').addEventListener('click', function() {
+  const dupla = isDuplaPlaca();
+  const tr = document.createElement('tr');
+  tr.className = 'lic-row';
+  tr.draggable = true;
+  tr.innerHTML =
+    '<td class="drag-handle text-center"><i class="bi bi-grip-vertical"></i></td>' +
+    '<td>' +
+      '<input type="hidden" name="lic_tipo_doc_id" value="">' +
+      '<input type="hidden" name="lic_ordem" value="">' +
+      '<select name="lic_tipo" class="form-select form-select-sm lic-tipo-select" required>' +
+        _buildSelectOptions() +
+      '</select>' +
+    '</td>' +
+    '<td class="pdf-cell">' +
+      '<input type="hidden" name="lic_arquivo_existente" value="">' +
+      '<label class="btn btn-outline-secondary btn-pdf-pick" title="Anexar PDF">' +
+        '<i class="bi bi-paperclip"></i>' +
+        '<input type="file" name="lic_arquivo" accept=".pdf" class="d-none">' +
+      '</label>' +
+    '</td>' +
+    '<td><input type="text" name="lic_numero" placeholder="Nº do documento" class="form-control form-control-sm"></td>' +
+    '<td><input type="date" name="lic_validade" class="form-control form-control-sm"></td>' +
+    '<td class="col-parte" style="display:' + (dupla ? '' : 'none') + '">' +
+      '<select name="lic_parte" class="form-select form-select-sm">' +
+        '<option value="unico">Único</option>' +
+        '<option value="cavalo">Cavalo</option>' +
+        '<option value="carreta">Carreta</option>' +
+      '</select>' +
+    '</td>' +
+    '<td><input type="text" name="lic_observacoes" placeholder="Observações" class="form-control form-control-sm"></td>' +
+    '<td class="text-center"><button type="button" class="btn btn-outline-danger btn-del-row" onclick="this.closest(\'tr\').remove()"><i class="bi bi-trash"></i></button></td>';
+  document.getElementById('bodyLicencas').appendChild(tr);
+  bindLicTipoSelect(tr.querySelector('.lic-tipo-select'));
+  bindDragRow(tr);
+});
+
+function bindLicTipoSelect(sel) {
+  sel.addEventListener('change', function() {
+    const hidId = this.closest('tr').querySelector('input[name="lic_tipo_doc_id"]');
+    const opt = this.selectedOptions[0];
+    if (hidId) hidId.value = (opt && opt.dataset.id) ? opt.dataset.id : '';
+  });
+}
+
+// ── Drag-and-drop reordering ──
+let _dragSrc = null;
+
+function bindDragRow(row) {
+  row.addEventListener('dragstart', function(e) {
+    _dragSrc = this;
+    e.dataTransfer.effectAllowed = 'move';
+    setTimeout(() => this.style.opacity = '0.5', 0);
+  });
+  row.addEventListener('dragend', function() {
+    this.style.opacity = '';
+    document.querySelectorAll('#bodyLicencas .lic-row').forEach(r => r.classList.remove('drag-over'));
+  });
+  row.addEventListener('dragover', function(e) {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    document.querySelectorAll('#bodyLicencas .lic-row').forEach(r => r.classList.remove('drag-over'));
+    if (this !== _dragSrc) this.classList.add('drag-over');
+  });
+  row.addEventListener('drop', function(e) {
+    e.preventDefault();
+    if (_dragSrc && _dragSrc !== this) {
+      const tbody = this.parentNode;
+      const rows = Array.from(tbody.querySelectorAll('.lic-row'));
+      const srcIdx = rows.indexOf(_dragSrc);
+      const tgtIdx = rows.indexOf(this);
+      if (srcIdx < tgtIdx) {
+        tbody.insertBefore(_dragSrc, this.nextSibling);
+      } else {
+        tbody.insertBefore(_dragSrc, this);
+      }
+    }
+    this.classList.remove('drag-over');
+  });
+}
+
+document.querySelectorAll('#bodyLicencas .lic-row').forEach(bindDragRow);
+
+// Renumber lic_ordem hidden inputs before submit to reflect current row order
+document.getElementById('formVeiculo').addEventListener('submit', function() {
+  document.querySelectorAll('#bodyLicencas .lic-row').forEach(function(row, idx) {
+    const hidOrdem = row.querySelector('input[name="lic_ordem"]');
+    if (hidOrdem) hidOrdem.value = idx + 1;
+  });
+});
+</script>
 {% endblock %}

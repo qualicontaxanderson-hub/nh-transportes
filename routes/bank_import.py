@@ -5,7 +5,14 @@ import os
 import re
 import time
 import datetime as _dt
-from collections import Counter
+from collections import Counter, defaultdict
+
+try:
+    import openpyxl
+    from openpyxl.styles import Font, PatternFill, Alignment
+    _OPENPYXL_AVAILABLE = True
+except ImportError:
+    _OPENPYXL_AVAILABLE = False
 
 import mysql.connector
 from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, Response
@@ -27,6 +34,10 @@ _bsm_descricao_chave_ready = False
 _orphaned_ld_cleanup_done = False
 _auto_regra_subcategoria_fixed = False
 _bank_accounts_ultima_data_ready = False
+_bank_accounts_coligadas_ready = False
+_bank_account_coligadas_table_ready = False
+_bt_conta_origem_id_ready = False
+_bt_conta_destino_id_ready = False
 # Timestamp-based retry cooldown: after a failed attempt, wait _MIGRATION_RETRY_DELAY
 # seconds before retrying.  This avoids hammering the DB on every request but still
 # allows recovery from transient errors (e.g., DB temporarily unavailable at startup).
@@ -34,6 +45,10 @@ _MIGRATION_RETRY_DELAY = 60  # seconds
 _bsm_descricao_chave_retry_after = 0.0   # epoch timestamp; 0 = may run immediately
 _ld_bank_tx_id_retry_after       = 0.0
 _bank_accounts_ultima_data_retry_after = 0.0
+_bank_accounts_coligadas_retry_after   = 0.0
+_bank_account_coligadas_table_retry_after = 0.0
+_bt_conta_origem_id_retry_after = 0.0
+_bt_conta_destino_id_retry_after = 0.0
 
 # Regex to extract DDMMYYYY date patterns from OFX filenames.
 # Uses word-boundary-like anchors (no surrounding digits) to avoid false positives.
@@ -453,9 +468,176 @@ def _ensure_bank_accounts_ultima_data():
             conn.close()
 
 
-# ---------------------------------------------------------------------------
-# Funções auxiliares
-# ---------------------------------------------------------------------------
+def _ensure_bank_accounts_coligadas():
+    """Garante que bank_accounts possui as colunas de conta contábil para coligadas. Idempotente."""
+    global _bank_accounts_coligadas_ready, _bank_accounts_coligadas_retry_after
+    if _bank_accounts_coligadas_ready:
+        return
+    if _bank_accounts_coligadas_retry_after > time.time():
+        return
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        _col_fk = {
+            'conta_coligada_debito_id':  'fk_ba_coligada_deb',
+            'conta_coligada_credito_id': 'fk_ba_coligada_cred',
+        }
+        for col, fk_name in _col_fk.items():
+            cursor.execute(
+                "SELECT COUNT(*) FROM information_schema.COLUMNS"
+                " WHERE TABLE_SCHEMA = DATABASE()"
+                " AND TABLE_NAME = 'bank_accounts'"
+                " AND COLUMN_NAME = %s",
+                (col,),
+            )
+            if cursor.fetchone()[0] == 0:
+                # ADD COLUMN without inline REFERENCES (not supported by MySQL)
+                cursor.execute(
+                    f"ALTER TABLE bank_accounts ADD COLUMN {col} INT NULL"
+                )
+                conn.commit()
+                # Add FK separately; ignore error if it already exists
+                try:
+                    cursor.execute(
+                        f"ALTER TABLE bank_accounts"
+                        f" ADD CONSTRAINT {fk_name}"
+                        f" FOREIGN KEY ({col})"
+                        f" REFERENCES plano_contas_contas(id) ON DELETE SET NULL"
+                    )
+                    conn.commit()
+                except Exception:
+                    conn.rollback()
+                logger.info("_ensure_bank_accounts_coligadas: coluna %s criada", col)
+        cursor.close()
+        _bank_accounts_coligadas_ready = True
+    except Exception:
+        logger.warning("_ensure_bank_accounts_coligadas: falha ao criar colunas", exc_info=True)
+        _bank_accounts_coligadas_retry_after = time.time() + _MIGRATION_RETRY_DELAY
+    finally:
+        if conn:
+            conn.close()
+
+
+def _ensure_bank_account_coligadas_table():
+    """Garante que a tabela bank_account_coligadas existe. Idempotente."""
+    global _bank_account_coligadas_table_ready, _bank_account_coligadas_table_retry_after
+    if _bank_account_coligadas_table_ready:
+        return
+    if _bank_account_coligadas_table_retry_after > time.time():
+        return
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT COUNT(*) FROM information_schema.TABLES"
+            " WHERE TABLE_SCHEMA = DATABASE()"
+            " AND TABLE_NAME = 'bank_account_coligadas'"
+        )
+        if cursor.fetchone()[0] == 0:
+            cursor.execute(
+                """CREATE TABLE bank_account_coligadas (
+                    id                   INT AUTO_INCREMENT PRIMARY KEY,
+                    bank_account_id      INT NOT NULL,
+                    coligada_cliente_id  INT NOT NULL,
+                    conta_debito_id      INT NULL,
+                    conta_credito_id     INT NULL,
+                    criado_em            DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    atualizado_em        DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+                                         ON UPDATE CURRENT_TIMESTAMP,
+                    UNIQUE KEY uq_bac_conta_coligada (bank_account_id, coligada_cliente_id),
+                    CONSTRAINT fk_bac_account  FOREIGN KEY (bank_account_id)
+                        REFERENCES bank_accounts(id) ON DELETE CASCADE,
+                    CONSTRAINT fk_bac_coligada FOREIGN KEY (coligada_cliente_id)
+                        REFERENCES clientes(id) ON DELETE CASCADE,
+                    CONSTRAINT fk_bac_debito   FOREIGN KEY (conta_debito_id)
+                        REFERENCES plano_contas_contas(id) ON DELETE SET NULL,
+                    CONSTRAINT fk_bac_credito  FOREIGN KEY (conta_credito_id)
+                        REFERENCES plano_contas_contas(id) ON DELETE SET NULL
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4"""
+            )
+            conn.commit()
+            logger.info("_ensure_bank_account_coligadas_table: tabela bank_account_coligadas criada")
+        cursor.close()
+        _bank_account_coligadas_table_ready = True
+    except Exception:
+        logger.warning(
+            "_ensure_bank_account_coligadas_table: falha ao criar tabela", exc_info=True
+        )
+        _bank_account_coligadas_table_retry_after = time.time() + _MIGRATION_RETRY_DELAY
+    finally:
+        if conn:
+            conn.close()
+
+
+def _ensure_bt_conta_origem_id():
+    """Garante que bank_transactions.conta_origem_id existe. Idempotente."""
+    global _bt_conta_origem_id_ready, _bt_conta_origem_id_retry_after
+    if _bt_conta_origem_id_ready:
+        return
+    if _bt_conta_origem_id_retry_after > time.time():
+        return
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT COUNT(*) FROM information_schema.COLUMNS"
+            " WHERE TABLE_SCHEMA = DATABASE()"
+            " AND TABLE_NAME = 'bank_transactions'"
+            " AND COLUMN_NAME = 'conta_origem_id'"
+        )
+        if cursor.fetchone()[0] == 0:
+            cursor.execute(
+                "ALTER TABLE bank_transactions"
+                " ADD COLUMN conta_origem_id INT NULL"
+            )
+            conn.commit()
+            logger.info("_ensure_bt_conta_origem_id: coluna conta_origem_id criada")
+        cursor.close()
+        _bt_conta_origem_id_ready = True
+    except Exception:
+        logger.warning("_ensure_bt_conta_origem_id: falha ao criar coluna", exc_info=True)
+        _bt_conta_origem_id_retry_after = time.time() + _MIGRATION_RETRY_DELAY
+    finally:
+        if conn:
+            conn.close()
+
+
+def _ensure_bt_conta_destino_id():
+    """Garante que bank_transactions.conta_destino_id existe. Idempotente."""
+    global _bt_conta_destino_id_ready, _bt_conta_destino_id_retry_after
+    if _bt_conta_destino_id_ready:
+        return
+    if _bt_conta_destino_id_retry_after > time.time():
+        return
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT COUNT(*) FROM information_schema.COLUMNS"
+            " WHERE TABLE_SCHEMA = DATABASE()"
+            " AND TABLE_NAME = 'bank_transactions'"
+            " AND COLUMN_NAME = 'conta_destino_id'"
+        )
+        if cursor.fetchone()[0] == 0:
+            cursor.execute(
+                "ALTER TABLE bank_transactions"
+                " ADD COLUMN conta_destino_id INT NULL"
+                " COMMENT 'Conta bancária de destino para transferências enviadas (DEBIT)'"
+            )
+            conn.commit()
+            logger.info("_ensure_bt_conta_destino_id: coluna conta_destino_id criada")
+        cursor.close()
+        _bt_conta_destino_id_ready = True
+    except Exception:
+        logger.warning("_ensure_bt_conta_destino_id: falha ao criar coluna", exc_info=True)
+        _bt_conta_destino_id_retry_after = time.time() + _MIGRATION_RETRY_DELAY
+    finally:
+        if conn:
+            conn.close()
 
 
 def _desc_chave(descricao: str) -> str:
@@ -486,13 +668,14 @@ def _extrair_data_arquivo(nome: str):
     return None
 
 
-def _validar_data_importacao(nome_arquivo, account_id, cursor):
+def _validar_data_importacao(nome_arquivo, account_id, cursor, verificar_periodo=True):
     """Valida as regras de data de importação para um arquivo OFX.
 
     Regras:
       1. Data extraída do nome do arquivo não pode ser futura.
       2. Data não pode ser menor ou igual à ``ultima_data_importacao`` já registrada
-         para a conta (período já importado).
+         para a conta (período já importado). Aplicada apenas quando
+         ``verificar_periodo=True`` (padrão).
 
     Retorna ``(data_arquivo, error_message)``.
     ``data_arquivo`` é o objeto ``date`` extraído (ou None).
@@ -517,32 +700,33 @@ def _validar_data_importacao(nome_arquivo, account_id, cursor):
             'Só é possível importar extratos com data de hoje ou anterior.'
         )
 
-    # Regra 2: período já importado
-    try:
-        cursor.execute(
-            "SELECT ultima_data_importacao FROM bank_accounts WHERE id = %s",
-            (account_id,),
-        )
-        row = cursor.fetchone()
-    except Exception:
-        row = None
+    # Regra 2: período já importado (apenas na importação automática / Dropbox)
+    if verificar_periodo:
+        try:
+            cursor.execute(
+                "SELECT ultima_data_importacao FROM bank_accounts WHERE id = %s",
+                (account_id,),
+            )
+            row = cursor.fetchone()
+        except Exception:
+            row = None
 
-    if row:
-        ultima = row.get('ultima_data_importacao') if row else None
-        if ultima:
-            if isinstance(ultima, str):
-                try:
-                    ultima = _dt.date.fromisoformat(ultima)
-                except ValueError:
-                    ultima = None
-            if ultima and data_arquivo <= ultima:
-                ultima_str = ultima.strftime('%d/%m/%Y')
-                data_str = data_arquivo.strftime('%d/%m/%Y')
-                return data_arquivo, (
-                    f'Verifique o arquivo — período já importado. '
-                    f'O último extrato importado para esta conta tinha data {ultima_str}. '
-                    f'O arquivo selecionado tem data {data_str}, que é igual ou anterior.'
-                )
+        if row:
+            ultima = row.get('ultima_data_importacao') if row else None
+            if ultima:
+                if isinstance(ultima, str):
+                    try:
+                        ultima = _dt.date.fromisoformat(ultima)
+                    except ValueError:
+                        ultima = None
+                if ultima and data_arquivo <= ultima:
+                    ultima_str = ultima.strftime('%d/%m/%Y')
+                    data_str = data_arquivo.strftime('%d/%m/%Y')
+                    return data_arquivo, (
+                        f'Verifique o arquivo — período já importado. '
+                        f'O último extrato importado para esta conta tinha data {ultima_str}. '
+                        f'O arquivo selecionado tem data {data_str}, que é igual ou anterior.'
+                    )
 
     return data_arquivo, None
 
@@ -1213,17 +1397,28 @@ def upload():
     arquivo = request.files.get('ofx_file')
     account_id = request.form.get('account_id')
 
+    wants_json = request.headers.get('X-Requested-With') == 'XMLHttpRequest'
+
     if not arquivo or not arquivo.filename:
+        if wants_json:
+            return jsonify({'success': False, 'message': 'Nenhum arquivo selecionado.'}), 400
         flash('Nenhum arquivo selecionado.', 'warning')
         return redirect(url_for('bank_import.index'))
 
     if not account_id:
+        if wants_json:
+            return jsonify({'success': False, 'message': 'Selecione uma conta bancária.'}), 400
         flash('Selecione uma conta bancária.', 'warning')
         return redirect(url_for('bank_import.index'))
+
+    nome_arquivo = os.path.basename(arquivo.filename)
 
     try:
         content = arquivo.read().decode('latin-1', errors='replace')
     except Exception as exc:
+        logger.warning("upload: erro ao ler arquivo OFX: %s", exc)
+        if wants_json:
+            return jsonify({'success': False, 'message': 'Erro ao ler o arquivo OFX. Verifique se o arquivo é válido.'}), 500
         flash(f'Erro ao ler arquivo: {exc}', 'danger')
         return redirect(url_for('bank_import.index'))
 
@@ -1232,20 +1427,45 @@ def upload():
     transactions = parser.get_transactions()
 
     if not transactions:
+        if wants_json:
+            return jsonify({'success': False, 'message': 'Nenhuma transação encontrada no arquivo OFX.'}), 422
         flash('Nenhuma transação encontrada no arquivo OFX.', 'warning')
         return redirect(url_for('bank_import.index'))
 
+    _ensure_bank_accounts_ultima_data()
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
+    try:
+        # Valida data do arquivo (evita importação futura; períodos anteriores são permitidos
+        # no upload manual — a verificação de período já importado aplica-se apenas ao
+        # importador automático / Dropbox)
+        data_arquivo, erro_data = _validar_data_importacao(
+            nome_arquivo, account_id, cursor, verificar_periodo=False
+        )
+        if erro_data:
+            if wants_json:
+                return jsonify({'success': False, 'message': erro_data}), 422
+            flash(erro_data, 'danger')
+            return redirect(url_for('bank_import.index'))
 
-    _ensure_descricao_chave()
-    inseridos, duplicados, duplicados_lista = _save_transactions(cursor, conn, account_id, transactions)
+        _ensure_descricao_chave()
+        inseridos, duplicados, duplicados_lista = _save_transactions(cursor, conn, account_id, transactions)
 
-    cursor.close()
-    conn.close()
+        # Atualiza a data do último extrato importado para esta conta
+        _atualizar_ultima_data_importacao(cursor, conn, account_id, data_arquivo)
+    finally:
+        cursor.close()
+        conn.close()
+
+    # Move o arquivo do Dropbox NOVO para IMPORTADOS (não crítico – falha é ignorada)
+    try:
+        from integrations.dropbox_ofx import mover_para_processados, is_configured
+        if is_configured():
+            mover_para_processados(nome_arquivo)
+    except Exception:
+        pass
 
     msg = f'Importação concluída: {inseridos} transação(ões) importada(s), {duplicados} duplicata(s) ignorada(s).'
-    wants_json = request.headers.get('X-Requested-With') == 'XMLHttpRequest'
     if wants_json:
         return jsonify({
             'success': True,
@@ -1356,6 +1576,16 @@ def _conciliar_transferencia(cursor, conn, tx_id, conta_destino_id, usuario,
                WHERE id=%s""",
             (agora, usuario, tx_id),
         )
+    # Armazena conta destino no DEBIT para que exportar_contabil possa resolver
+    # as contas contábeis da empresa destinatária nas transferências.
+    try:
+        cursor.execute(
+            "UPDATE bank_transactions SET conta_destino_id=%s WHERE id=%s",
+            (conta_destino_id, tx_id),
+        )
+    except mysql.connector.errors.ProgrammingError:
+        # Coluna pode não existir ainda (migration pendente) — ignora
+        logger.debug("conta_destino_id column not yet available; skipping")
     # Cria CREDIT na conta destino. Usa TRANSFER_<id> para garantir que cabe
     # em VARCHAR(64) (SHA-256 = 64 chars; '_transfer' causaria overflow).
     # Cria como 'pendente' para que apareça na fila de conciliação da conta destino.
@@ -1380,6 +1610,16 @@ def _conciliar_transferencia(cursor, conn, tx_id, conta_destino_id, usuario,
             (conta_destino_id, tx['data_transacao'], tx['valor'],
              descricao_dest, hash_destino),
         )
+    # Vincula a conta de origem no CREDIT recém-criado para que exportar_contabil
+    # possa resolver as contas contábeis via coligada_map (origem_cliente_id).
+    credit_id = cursor.lastrowid
+    try:
+        cursor.execute(
+            "UPDATE bank_transactions SET conta_origem_id=%s WHERE id=%s",
+            (tx['account_id'], credit_id),
+        )
+    except mysql.connector.errors.ProgrammingError:
+        logger.debug("conta_origem_id column not yet available; skipping")
     # Auto-aprender: salva CNPJ+descrição→conta_destino para sugestão nas próximas importações.
     # Quando não há CNPJ, usa cnpj_cpf='' com descricao_chave como chave de match — isso
     # permite que transações sem CPF/CNPJ (ex: Pix sem identificação) recebam sugestão de
@@ -1823,6 +2063,50 @@ def conciliar():
             _close_db()
             return redirect(request.url)
 
+        if acao == 'conciliar_filtros':
+            # Re-consulta TODOS os IDs pendentes que correspondem aos filtros enviados no POST
+            _TIPOS_OK2 = {'CREDIT', 'DEBIT'}
+            ff_clientes = [int(c) for c in request.form.getlist('cliente_id') if c and c.isdigit()]
+            ff_tipo     = request.form.get('tipo', '')
+            ff_data_ini = request.form.get('data_ini', '')
+            ff_data_fim = request.form.get('data_fim', '')
+            ff_desc     = request.form.get('descricao', '')
+            ff_cnpj     = request.form.get('cnpj_cpf', '')
+            ff_contas   = [c for c in request.form.getlist('account_id') if c]
+            w2, p2 = ["bt.status = 'pendente'"], []
+            if ff_clientes:
+                ph = ','.join(['%s'] * len(ff_clientes))
+                w2.append(f"ba.cliente_id IN ({ph})")
+                p2.extend(ff_clientes)
+            if ff_tipo and ff_tipo in _TIPOS_OK2:
+                w2.append("bt.tipo = %s")
+                p2.append(ff_tipo)
+            if ff_data_ini:
+                w2.append("bt.data_transacao >= %s")
+                p2.append(ff_data_ini)
+            if ff_data_fim:
+                w2.append("bt.data_transacao <= %s")
+                p2.append(ff_data_fim)
+            if ff_desc:
+                w2.append("bt.descricao LIKE %s")
+                p2.append(f'%{ff_desc}%')
+            if ff_cnpj:
+                w2.append("bt.cnpj_cpf LIKE %s")
+                p2.append(f'%{ff_cnpj}%')
+            if ff_contas:
+                ph = ','.join(['%s'] * len(ff_contas))
+                w2.append(f"bt.account_id IN ({ph})")
+                p2.extend(ff_contas)
+            cursor.execute(
+                "SELECT bt.id FROM bank_transactions bt"
+                " INNER JOIN bank_accounts ba ON bt.account_id = ba.id"
+                f" WHERE {' AND '.join(w2)}"
+                " ORDER BY bt.data_transacao DESC, bt.id DESC",
+                p2,
+            )
+            tx_ids = [str(row['id']) for row in cursor.fetchall()]
+            acao = 'conciliar'
+
         salvar_mapeamento = (acao != 'lancamento_unico')
         # Lançamento Único usa a mesma lógica de conciliação, apenas sem salvar mapeamento
         acao_conciliar = 'conciliar' if acao == 'lancamento_unico' else acao
@@ -2018,20 +2302,34 @@ def conciliar():
                     if not cnpj:
                         continue
                     desc_key = _desc_chave(tx.get('descricao') or '')
-                    bsm = bsm_index.get((cnpj, desc_key)) or bsm_index.get((cnpj, ''))
+                    bsm_specific = bsm_index.get((cnpj, desc_key))
+                    bsm_generic  = bsm_index.get((cnpj, ''))
+                    bsm = bsm_specific or bsm_generic
                     if bsm:
                         tx['sugestao_fornecedor_id']       = bsm.get('fornecedor_id')
                         tx['sugestao_forma_id']            = bsm.get('forma_recebimento_id')
                         tx['sugestao_titulo_id']           = bsm.get('titulo_id')
                         tx['sugestao_categoria_id']        = bsm.get('categoria_id')
                         tx['sugestao_subcategoria_id']     = bsm.get('subcategoria_id')
-                        tx['sugestao_conta_destino_id']    = bsm.get('conta_destino_id')
-                        tx['sugestao_tipo_debito']         = bsm.get('tipo_debito')
                         tx['sugestao_bsm_descricao_chave'] = bsm.get('descricao_chave', '')
                         tx['sugestao_forma_nome']          = bsm.get('sugestao_forma_nome')
                         tx['sugestao_fornecedor_nome']     = bsm.get('sugestao_fornecedor_nome')
                         tx['sugestao_titulo_nome']         = bsm.get('sugestao_titulo_nome')
                         tx['sugestao_categoria_nome']      = bsm.get('sugestao_categoria_nome')
+                        # Transfer suggestions (conta_destino_id / tipo_debito='transferencia')
+                        # must only come from a SPECIFIC description-key match. A generic entry
+                        # (cnpj, '') must never suggest a transfer destination because the same
+                        # CNPJ can appear in many unrelated transactions. This prevents a stale
+                        # legacy generic entry from continuing to suggest a transfer after the
+                        # user deletes the specific memorization.
+                        is_generic_transfer = (
+                            bsm_generic
+                            and not bsm_specific
+                            and bsm_generic.get('tipo_debito') == 'transferencia'
+                        )
+                        if not is_generic_transfer:
+                            tx['sugestao_conta_destino_id'] = bsm.get('conta_destino_id')
+                            tx['sugestao_tipo_debito']      = bsm.get('tipo_debito')
 
             # ------------------------------------------------------------------
             # Sugestões para transações SEM CNPJ: match por descricao_chave
@@ -2511,9 +2809,795 @@ def relatorio_exportar_csv():
     )
 
 
-# ---------------------------------------------------------------------------
-# Endpoints da API REST
-# ---------------------------------------------------------------------------
+@bp.route('/exportar-contabil')
+@login_required
+def exportar_contabil():
+    """Exporta lançamentos bancários no formato contábil (Excel).
+
+    Colunas: DATA / DESCRIÇÃO / VALOR / Nº CONTA CRÉDITO / DESCRIÇÃO CONTA CRÉDITO /
+             Nº CONTA DÉBITO / DESCRIÇÃO CONTA DÉBITO
+
+    Regras de CONTA CRÉDITO / CONTA DÉBITO:
+    - DEBIT  (saída):  CONTA CRÉDITO = plano_contas da conta bancária
+                       CONTA DÉBITO  = conta coligada da empresa destino (débito)
+                                       ou conta contábil da categoria de despesa
+    - CREDIT (entrada): CONTA DÉBITO  = plano_contas da conta bancária
+                        CONTA CRÉDITO = conta coligada da empresa origem (crédito)
+                                        ou conta contábil da forma de recebimento
+    Per-company coligada config fetched from bank_account_coligadas table.
+    """
+    _ensure_bank_accounts_coligadas()
+    _ensure_bank_account_coligadas_table()
+    _ensure_bt_conta_origem_id()
+    _ensure_bt_conta_destino_id()
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+
+    account_id = request.args.get('account_id', '')
+    empresa_id = request.args.get('empresa_id', '')
+    data_ini   = request.args.get('data_ini', '')
+    data_fim   = request.args.get('data_fim', '')
+
+    where_parts = ['bt.status = %s',
+                   # Exclui as linhas espelho CREDIT criadas automaticamente em transferências;
+                   # a linha DEBIT já contém toda a informação contábil (débito+crédito).
+                   "NOT (bt.tipo = 'CREDIT' AND COALESCE(bt.tipo_conciliacao,'') = 'transferencia')"]
+    params      = ['conciliado']
+
+    if account_id:
+        where_parts.append('bt.account_id = %s')
+        params.append(account_id)
+    if empresa_id:
+        where_parts.append('ba.cliente_id = %s')
+        params.append(empresa_id)
+    if data_ini:
+        where_parts.append('bt.data_transacao >= %s')
+        params.append(data_ini)
+    if data_fim:
+        where_parts.append('bt.data_transacao <= %s')
+        params.append(data_fim)
+
+    where_sql = 'WHERE ' + ' AND '.join(where_parts)
+
+    cursor.execute(
+        """SELECT
+               bt.id,
+               bt.account_id,
+               bt.data_transacao,
+               bt.tipo,
+               bt.valor,
+               bt.descricao,
+               bt.cnpj_cpf,
+               bt.tipo_conciliacao,
+               bt.forma_recebimento_id,
+               bt.fornecedor_id,
+               COALESCE(bt.conta_destino_id, bt_mirror.account_id) AS conta_destino_id,
+               -- Conta bancária
+               ba.apelido  AS conta_apelido,
+               ba.banco_nome,
+               ba.cliente_id AS banco_cliente_id,
+               pc_ba.codigo AS conta_banco_codigo,
+               pc_ba.nome   AS conta_banco_nome,
+               -- Empresa destino (para débitos/transferências)
+               ba_dest.cliente_id AS destino_cliente_id,
+               ba_dest.banco_nome AS conta_destino_banco_nome,
+               pc_ba_dest.codigo  AS conta_destino_codigo,
+               pc_ba_dest.nome    AS conta_destino_nome,
+               -- Empresa origem (para créditos/transferências via conta_origem_id)
+               ba_orig.cliente_id AS origem_cliente_id,
+               pc_ba_orig.codigo  AS conta_origem_codigo,
+               pc_ba_orig.nome    AS conta_origem_nome,
+               -- Empresa
+               c.razao_social AS empresa_nome,
+               -- Forma de recebimento e seu plano de contas (créditos normais)
+               fr.nome AS forma_recebimento_nome,
+               pc_fr.codigo AS conta_fr_codigo,
+               pc_fr.nome   AS conta_fr_nome
+           FROM bank_transactions bt
+           INNER JOIN bank_accounts ba ON ba.id = bt.account_id
+           LEFT JOIN plano_contas_contas pc_ba ON pc_ba.id = ba.plano_contas_conta_id
+           LEFT JOIN clientes c ON c.id = ba.cliente_id
+           LEFT JOIN formas_recebimento fr ON fr.id = bt.forma_recebimento_id
+           LEFT JOIN formas_recebimento_empresas fre
+               ON fre.forma_recebimento_id = fr.id AND fre.cliente_id = ba.cliente_id
+           LEFT JOIN plano_contas_contas pc_fr ON pc_fr.id = fre.conta_contabil_id
+           LEFT JOIN bank_transactions bt_mirror ON bt_mirror.hash_dedup = CONCAT('TRANSFER_', bt.id)
+           LEFT JOIN bank_accounts ba_dest ON ba_dest.id = COALESCE(bt.conta_destino_id, bt_mirror.account_id)
+           LEFT JOIN plano_contas_contas pc_ba_dest ON pc_ba_dest.id = ba_dest.plano_contas_conta_id
+           LEFT JOIN bank_accounts ba_orig ON ba_orig.id = bt.conta_origem_id
+           LEFT JOIN plano_contas_contas pc_ba_orig ON pc_ba_orig.id = ba_orig.plano_contas_conta_id
+           """
+        + where_sql
+        + ' ORDER BY bt.data_transacao ASC, bt.id ASC',
+        params,
+    )
+    rows = cursor.fetchall()
+
+    # Load ALL per-company coligada configs for these bank accounts into a dict:
+    # {(bank_account_id, coligada_cliente_id): {debito: (cod, nome), credito: (cod, nome)}}
+    try:
+        cursor.execute(
+            """SELECT bac.bank_account_id, bac.coligada_cliente_id,
+                      pd.codigo AS debito_codigo, pd.nome AS debito_nome,
+                      pc.codigo AS credito_codigo, pc.nome AS credito_nome
+               FROM bank_account_coligadas bac
+               LEFT JOIN plano_contas_contas pd ON pd.id = bac.conta_debito_id
+               LEFT JOIN plano_contas_contas pc ON pc.id = bac.conta_credito_id"""
+        )
+        coligada_map = {}
+        for row in cursor.fetchall():
+            key = (row['bank_account_id'], row['coligada_cliente_id'])
+            coligada_map[key] = {
+                'debito':  (row['debito_codigo'] or '', row['debito_nome'] or ''),
+                'credito': (row['credito_codigo'] or '', row['credito_nome'] or ''),
+            }
+    except Exception:
+        logger.warning("exportar_contabil: falha ao carregar bank_account_coligadas", exc_info=True)
+        coligada_map = {}
+
+    # Fetch categoria/subcategoria accounting codes for despesas
+    # Build a mapping: bank_transaction_id → conta_contabil code
+    cursor.execute(
+        """SELECT ld.bank_transaction_id,
+                  pc.codigo AS conta_codigo,
+                  pc.nome   AS conta_nome
+           FROM lancamentos_despesas ld
+           LEFT JOIN categoria_despesa_contas cdc
+               ON cdc.categoria_id = ld.categoria_id AND cdc.cliente_id = ld.cliente_id
+           LEFT JOIN plano_contas_contas pc ON pc.id = cdc.conta_contabil_id
+           WHERE ld.bank_transaction_id IS NOT NULL
+             AND pc.id IS NOT NULL"""
+    )
+    despesa_conta_map = {}
+    for r in cursor.fetchall():
+        if r['bank_transaction_id'] and r['bank_transaction_id'] not in despesa_conta_map:
+            despesa_conta_map[r['bank_transaction_id']] = (
+                r['conta_codigo'] or '', r['conta_nome'] or ''
+            )
+
+    # Fetch supplier accounting codes: (fornecedor_id, cliente_id) → (codigo, nome)
+    fornecedor_conta_map = {}
+    try:
+        cursor.execute(
+            """SELECT fe.fornecedor_id, fe.cliente_id,
+                      pc.codigo AS conta_codigo, pc.nome AS conta_nome
+               FROM fornecedor_empresas fe
+               LEFT JOIN plano_contas_contas pc ON pc.id = fe.conta_contabil_id
+               WHERE fe.conta_contabil_id IS NOT NULL"""
+        )
+        for r in cursor.fetchall():
+            key = (r['fornecedor_id'], r['cliente_id'])
+            if key not in fornecedor_conta_map:
+                fornecedor_conta_map[key] = (r['conta_codigo'] or '', r['conta_nome'] or '')
+    except Exception:
+        logger.warning("exportar_contabil: falha ao carregar fornecedor_conta_map", exc_info=True)
+
+    # Fetch CNPJ-based accounting codes: (cnpj, cliente_id) → (codigo, nome)
+    # Used as a fallback when fornecedor_id is not set on the transaction.
+    cnpj_conta_map = {}
+    try:
+        cursor.execute(
+            """SELECT REPLACE(REPLACE(REPLACE(REPLACE(f.cnpj, '.', ''), '/', ''), '-', ''), ' ', '') AS cnpj_digits,
+                      fe.cliente_id,
+                      pc.codigo AS conta_codigo, pc.nome AS conta_nome
+               FROM fornecedores f
+               JOIN fornecedor_empresas fe ON fe.fornecedor_id = f.id
+               JOIN plano_contas_contas pc ON pc.id = fe.conta_contabil_id
+               WHERE fe.conta_contabil_id IS NOT NULL
+                 AND f.cnpj IS NOT NULL AND f.cnpj <> ''"""
+        )
+        for r in cursor.fetchall():
+            cnpj_d = r['cnpj_digits'] or ''
+            if cnpj_d:
+                key = (cnpj_d, r['cliente_id'])
+                if key not in cnpj_conta_map:
+                    cnpj_conta_map[key] = (r['conta_codigo'] or '', r['conta_nome'] or '')
+    except Exception:
+        logger.warning("exportar_contabil: falha ao carregar cnpj_conta_map", exc_info=True)
+
+    # Load troco_pix per-company debit account config: cliente_id → (codigo, nome)
+    troco_pix_conta_map = {}
+    try:
+        cursor.execute(
+            """SELECT tpcc.cliente_id, pcc.codigo AS debito_codigo, pcc.nome AS debito_nome
+               FROM troco_pix_conta_contabil tpcc
+               LEFT JOIN plano_contas_contas pcc ON pcc.id = tpcc.conta_debito_id
+               WHERE tpcc.conta_debito_id IS NOT NULL"""
+        )
+        for r in cursor.fetchall():
+            troco_pix_conta_map[r['cliente_id']] = (r['debito_codigo'] or '', r['debito_nome'] or '')
+    except Exception:
+        logger.warning("exportar_contabil: falha ao carregar troco_pix_conta_map", exc_info=True)
+
+    # Load card-sales accounting config: {(bandeira_cartao_id, cliente_id): {credito:(cod,nome), debito:(cod,nome), despesa:(cod,nome), ...}}
+    cartao_conta_map = {}
+    try:
+        cursor.execute(
+            """SELECT cc.bandeira_cartao_id, cc.cliente_id,
+                      bc.nome AS bandeira_nome, bc.tipo AS tipo_cartao,
+                      pc_c.codigo AS credito_codigo, pc_c.nome AS credito_nome,
+                      pc_d.codigo AS debito_codigo,  pc_d.nome AS debito_nome,
+                      pc_e.codigo AS despesa_codigo, pc_e.nome AS despesa_nome
+               FROM conf_cartoes_conta_contabil cc
+               JOIN bandeiras_cartao bc ON bc.id = cc.bandeira_cartao_id
+               LEFT JOIN plano_contas_contas pc_c ON pc_c.id = cc.conta_credito_id
+               LEFT JOIN plano_contas_contas pc_d ON pc_d.id = cc.conta_debito_id
+               LEFT JOIN plano_contas_contas pc_e ON pc_e.id = cc.conta_despesa_id"""
+        )
+        for r in cursor.fetchall():
+            key = (r['bandeira_cartao_id'], r['cliente_id'])
+            cartao_conta_map[key] = {
+                'bandeira_nome': r['bandeira_nome'] or '',
+                'tipo_cartao':   r['tipo_cartao'] or '',
+                'credito': (r['credito_codigo'] or '', r['credito_nome'] or ''),
+                'debito':  (r['debito_codigo']  or '', r['debito_nome']  or ''),
+                'despesa': (r['despesa_codigo'] or '', r['despesa_nome'] or ''),
+            }
+    except Exception:
+        logger.warning("exportar_contabil: falha ao carregar cartao_conta_map", exc_info=True)
+
+    # Fetch card sales grouped by (date, bandeira, empresa) for the selected period/empresa
+    card_sale_rows = []
+    if data_ini and data_fim and cartao_conta_map:
+        try:
+            cs_where = ["lc.data BETWEEN %s AND %s", "lcc.bandeira_cartao_id IS NOT NULL"]
+            cs_params = [data_ini, data_fim]
+            # Determine empresa filter: explicit empresa_id, or derive from account_id
+            _cs_empresa_id = empresa_id
+            if not _cs_empresa_id and account_id:
+                cursor.execute("SELECT cliente_id FROM bank_accounts WHERE id = %s", (account_id,))
+                _row_ba = cursor.fetchone()
+                if _row_ba:
+                    _cs_empresa_id = _row_ba['cliente_id']
+            if _cs_empresa_id:
+                cs_where.append("lc.cliente_id = %s")
+                cs_params.append(_cs_empresa_id)
+            cursor.execute(
+                f"""SELECT lc.data AS data_venda,
+                           lc.cliente_id,
+                           COALESCE(c.nome_fantasia, c.razao_social) AS empresa_nome,
+                           lcc.bandeira_cartao_id AS bandeira_id,
+                           bc.nome AS bandeira_nome,
+                           bc.tipo AS tipo_cartao,
+                           SUM(lcc.valor) AS total_venda
+                      FROM lancamentos_caixa_comprovacao lcc
+                      JOIN lancamentos_caixa lc ON lc.id = lcc.lancamento_caixa_id
+                      JOIN bandeiras_cartao bc ON bc.id = lcc.bandeira_cartao_id
+                      JOIN clientes c ON c.id = lc.cliente_id
+                     WHERE {' AND '.join(cs_where)}
+                     GROUP BY lc.data, lc.cliente_id, lcc.bandeira_cartao_id
+                     ORDER BY lc.data, lc.cliente_id, bc.tipo, bc.nome""",
+                cs_params,
+            )
+            for r in cursor.fetchall():
+                key = (r['bandeira_id'], r['cliente_id'])
+                contas = cartao_conta_map.get(key)
+                if not contas:
+                    continue  # skip rows without configured accounts
+                card_sale_rows.append({
+                    'data_venda':    r['data_venda'],
+                    'empresa_nome':  r['empresa_nome'] or '',
+                    'bandeira_nome': r['bandeira_nome'] or '',
+                    'tipo_cartao':   r['tipo_cartao'] or '',
+                    'total_venda':   float(r['total_venda'] or 0),
+                    'credito_cod':   contas['credito'][0],
+                    'credito_nome':  contas['credito'][1],
+                    'debito_cod':    contas['debito'][0],
+                    'debito_nome':   contas['debito'][1],
+                })
+        except Exception:
+            logger.warning("exportar_contabil: falha ao carregar card_sale_rows", exc_info=True)
+
+    # Compute card fee rows: for each bank receipt on a card form, fee = cycle_sales - receipt.
+    # Entry: D: conta_despesa  /  C: conta_debito
+    card_fee_rows = []
+    _has_despesa_cfg = any(v.get('despesa') and v['despesa'][0] for v in cartao_conta_map.values())
+    if data_ini and data_fim and cartao_conta_map and _has_despesa_cfg:
+        try:
+            # Load feriados for business-day calculation
+            _feriados_set = set()
+            try:
+                cursor.execute("SELECT data FROM conf_cartoes_feriados")
+                for _fr in cursor.fetchall():
+                    _fd = _fr['data']
+                    _feriados_set.add(_fd.isoformat() if hasattr(_fd, 'isoformat') else str(_fd))
+            except Exception:
+                pass
+
+            # Load vinculos: {forma_recebimento_id → [(bandeira_cartao_id, prazo), ...]}
+            cursor.execute(
+                """SELECT v.forma_recebimento_id, v.bandeira_cartao_id,
+                          COALESCE(bc.prazo_compensacao_dias, 1) AS prazo
+                     FROM conf_cartoes_vinculos v
+                     JOIN bandeiras_cartao bc ON bc.id = v.bandeira_cartao_id"""
+            )
+            _forma_to_band = defaultdict(list)
+            for _vr in cursor.fetchall():
+                _forma_to_band[_vr['forma_recebimento_id']].append(
+                    (_vr['bandeira_cartao_id'], int(_vr['prazo']))
+                )
+
+            if _forma_to_band:
+                _forma_ids = list(_forma_to_band.keys())
+                _max_prazo = max(p for vals in _forma_to_band.values() for _, p in vals)
+                _lookback = _max_prazo + 6  # buffer for weekends/holidays
+
+                # empresa filter for receipts
+                _cs_emp2 = empresa_id
+                if not _cs_emp2 and account_id:
+                    cursor.execute(
+                        "SELECT cliente_id FROM bank_accounts WHERE id = %s", (account_id,)
+                    )
+                    _ba_row = cursor.fetchone()
+                    if _ba_row:
+                        _cs_emp2 = _ba_row['cliente_id']
+
+                # Query card receipts (CREDIT on card forms)
+                _rph = ','.join(['%s'] * len(_forma_ids))
+                _rw = [
+                    "bt.tipo = 'CREDIT'",
+                    f"bt.forma_recebimento_id IN ({_rph})",
+                    "bt.data_transacao BETWEEN %s AND %s",
+                ]
+                _rp = list(_forma_ids) + [data_ini, data_fim]
+                if _cs_emp2:
+                    _rw.append("ba.cliente_id = %s")
+                    _rp.append(_cs_emp2)
+                cursor.execute(
+                    f"""SELECT bt.data_transacao, bt.forma_recebimento_id,
+                               ba.cliente_id, SUM(bt.valor) AS total_recebimento,
+                               COALESCE(c.nome_fantasia, c.razao_social) AS empresa_nome
+                          FROM bank_transactions bt
+                          JOIN bank_accounts ba ON ba.id = bt.account_id
+                          JOIN clientes c ON c.id = ba.cliente_id
+                         WHERE {' AND '.join(_rw)}
+                         GROUP BY bt.data_transacao, bt.forma_recebimento_id, ba.cliente_id
+                         ORDER BY bt.data_transacao""",
+                    _rp,
+                )
+                _receipts = cursor.fetchall()
+
+                if _receipts:
+                    # Fetch sales extended backwards for cycle lookback
+                    if isinstance(data_ini, str):
+                        try:
+                            _di_obj = _dt.datetime.strptime(data_ini, '%Y-%m-%d').date()
+                        except ValueError:
+                            _di_obj = None
+                    elif isinstance(data_ini, _dt.date):
+                        _di_obj = data_ini
+                    else:
+                        _di_obj = None
+                    if _di_obj is None:
+                        _di_obj = _dt.date.today()
+                    _ext_ini = (_di_obj - _dt.timedelta(days=_lookback)).isoformat()
+                    _sw = ["lc.data BETWEEN %s AND %s", "lcc.bandeira_cartao_id IS NOT NULL"]
+                    _sp = [_ext_ini, data_fim]
+                    if _cs_emp2:
+                        _sw.append("lc.cliente_id = %s")
+                        _sp.append(_cs_emp2)
+                    cursor.execute(
+                        f"""SELECT lc.data AS data_venda, lcc.bandeira_cartao_id AS bandeira_id,
+                                   lc.cliente_id, SUM(lcc.valor) AS total_venda
+                              FROM lancamentos_caixa_comprovacao lcc
+                              JOIN lancamentos_caixa lc ON lc.id = lcc.lancamento_caixa_id
+                             WHERE {' AND '.join(_sw)}
+                             GROUP BY lc.data, lcc.bandeira_cartao_id, lc.cliente_id""",
+                        _sp,
+                    )
+                    _sales_idx = {}
+                    for _sr in cursor.fetchall():
+                        _sd = _sr['data_venda']
+                        _sd_iso = _sd.isoformat() if hasattr(_sd, 'isoformat') else str(_sd)
+                        _sales_idx[(int(_sr['bandeira_id']), _sd_iso, int(_sr['cliente_id']))] = \
+                            float(_sr['total_venda'] or 0)
+
+                    def _nbd(d, n, fs):
+                        """n business days after d."""
+                        while n > 0:
+                            d += _dt.timedelta(days=1)
+                            if d.weekday() < 5 and d.isoformat() not in fs:
+                                n -= 1
+                        return d
+
+                    for _rec in _receipts:
+                        _rd = _rec['data_transacao']
+                        _rd_obj = (
+                            _dt.datetime.strptime(_rd, '%Y-%m-%d').date()
+                            if isinstance(_rd, str) else _rd
+                        )
+                        _cli_id = int(_rec['cliente_id'])
+                        _receipt_amt = float(_rec['total_recebimento'] or 0)
+
+                        for _band_id, _prazo in _forma_to_band.get(_rec['forma_recebimento_id'], []):
+                            _contas = cartao_conta_map.get((_band_id, _cli_id))
+                            if not _contas or not _contas.get('despesa') or not _contas['despesa'][0]:
+                                continue
+
+                            # Sum sales whose expected receipt date equals _rd_obj
+                            _cycle_venda = 0.0
+                            for _delta in range(_lookback + 1):
+                                _sd_obj = _rd_obj - _dt.timedelta(days=_delta)
+                                _exp_rd = _nbd(_sd_obj, _prazo, _feriados_set)
+                                if _exp_rd == _rd_obj:
+                                    _sd_iso = _sd_obj.isoformat()
+                                    _cycle_venda += _sales_idx.get((_band_id, _sd_iso, _cli_id), 0.0)
+
+                            _cycle_fee = round(_cycle_venda - _receipt_amt, 2)
+                            if _cycle_fee < 0.005:
+                                continue  # skip zero / negligible / negative fees
+
+                            card_fee_rows.append({
+                                'data_recebimento': _rd_obj,
+                                'empresa_nome':  _rec['empresa_nome'] or '',
+                                'bandeira_nome': _contas['bandeira_nome'],
+                                'tipo_cartao':   _contas['tipo_cartao'],
+                                'cycle_fee':     _cycle_fee,
+                                'debito_cod':    _contas['despesa'][0],
+                                'debito_nome':   _contas['despesa'][1],
+                                'credito_cod':   _contas['debito'][0],
+                                'credito_nome':  _contas['debito'][1],
+                            })
+        except Exception:
+            logger.warning("exportar_contabil: falha ao carregar card_fee_rows", exc_info=True)
+
+
+    cursor.close()
+    conn.close()
+
+    def _export_sort_key(r):
+        """Sort key for unified bank+card row list – uses whichever date field exists."""
+        d = r.get('data_transacao') or r.get('data_venda') or r.get('data_recebimento')
+        return d if d else _dt.date.min
+
+    if not _OPENPYXL_AVAILABLE:
+        # Fallback: CSV if openpyxl not installed
+        out = io.StringIO()
+        w = csv.writer(out, delimiter=';')
+        w.writerow(['DATA', 'DESCRIÇÃO', 'VALOR',
+                    'Nº CONTA CRÉDITO', 'DESCRIÇÃO CONTA CRÉDITO',
+                    'Nº CONTA DÉBITO',  'DESCRIÇÃO CONTA DÉBITO'])
+
+        csv_rows_bank = [dict(r, _kind='bank') for r in rows]
+        csv_rows_card = [dict(r, _kind='card') for r in card_sale_rows]
+        csv_rows_fee  = [dict(r, _kind='fee')  for r in card_fee_rows]
+        all_csv_rows = sorted(csv_rows_bank + csv_rows_card + csv_rows_fee, key=_export_sort_key)
+        for r in all_csv_rows:
+            if r['_kind'] == 'card':
+                d = r['data_venda']
+                w.writerow([
+                    d.strftime('%d/%m/%Y') if d else '',
+                    f"VENDA CARTÃO {r['tipo_cartao']} – {r['bandeira_nome']} ({r['empresa_nome']})",
+                    str(r['total_venda']).replace('.', ','),
+                    r['credito_cod'],
+                    r['credito_nome'],
+                    r['debito_cod'],
+                    r['debito_nome'],
+                ])
+            elif r['_kind'] == 'fee':
+                d = r['data_recebimento']
+                w.writerow([
+                    d.strftime('%d/%m/%Y') if d else '',
+                    f"TAXA CARTÃO {r['tipo_cartao']} – {r['bandeira_nome']} ({r['empresa_nome']})",
+                    str(r['cycle_fee']).replace('.', ','),
+                    r['credito_cod'],
+                    r['credito_nome'],
+                    r['debito_cod'],
+                    r['debito_nome'],
+                ])
+            else:
+                debito_cod, debito_nome, credito_cod, credito_nome = \
+                    _resolver_contas_contabeis(r, despesa_conta_map, coligada_map, fornecedor_conta_map, cnpj_conta_map,
+                                               troco_pix_conta_map=troco_pix_conta_map)
+                valor = r['valor']
+                w.writerow([
+                    r['data_transacao'].strftime('%d/%m/%Y') if r['data_transacao'] else '',
+                    r['descricao'] or '',
+                    str(valor).replace('.', ',') if valor is not None else '',
+                    credito_cod,
+                    credito_nome,
+                    debito_cod,
+                    debito_nome,
+                ])
+        out.seek(0)
+        return Response(
+            '\ufeff' + out.getvalue(),
+            mimetype='text/csv',
+            headers={'Content-Disposition': 'attachment; filename="exportacao_contabil.csv"'},
+        )
+
+    # --- Excel via openpyxl ---
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = 'Exportação Contábil'
+
+    header_fill = PatternFill(start_color='1D63A5', end_color='1D63A5', fill_type='solid')
+    header_font = Font(color='FFFFFF', bold=True, size=10)
+    header_align = Alignment(horizontal='center', vertical='center', wrap_text=True)
+
+    headers = ['DATA', 'DESCRIÇÃO', 'VALOR',
+               'Nº CONTA CRÉDITO', 'DESCRIÇÃO CONTA CRÉDITO',
+               'Nº CONTA DÉBITO',  'DESCRIÇÃO CONTA DÉBITO']
+    col_widths = [12, 55, 14, 18, 32, 18, 32]
+    for col_idx, (h, w) in enumerate(zip(headers, col_widths), start=1):
+        cell = ws.cell(row=1, column=col_idx, value=h)
+        cell.fill = header_fill
+        cell.font = header_font
+        cell.alignment = header_align
+        ws.column_dimensions[cell.column_letter].width = w
+
+    ws.row_dimensions[1].height = 20
+
+    # Freeze header row and enable auto-filter so the user can sort/filter columns
+    ws.freeze_panes = 'A2'
+    ws.auto_filter.ref = f'A1:{ws.cell(row=1, column=len(headers)).column_letter}1'
+
+    warn_fill  = PatternFill(start_color='FFFF00', end_color='FFFF00', fill_type='solid')
+    card_fill  = PatternFill(start_color='E8F5E9', end_color='E8F5E9', fill_type='solid')
+    fee_fill   = PatternFill(start_color='FFF3E0', end_color='FFF3E0', fill_type='solid')
+    money_fmt  = '#,##0.00'
+
+    # Build unified sorted row list: bank transactions + card sale rows + card fee rows
+    all_export_rows = []
+    for r in rows:
+        r['_kind'] = 'bank'
+        all_export_rows.append(r)
+    for r in card_sale_rows:
+        r['_kind'] = 'card'
+        all_export_rows.append(r)
+    for r in card_fee_rows:
+        r['_kind'] = 'fee'
+        all_export_rows.append(r)
+    all_export_rows.sort(key=_export_sort_key)
+
+    # collect (conta_apelido, banco_nome, tipo_problema) for warning sheet
+    _warn_accounts = []
+    for row_idx, r in enumerate(all_export_rows, start=2):
+        if r['_kind'] == 'card':
+            d = r['data_venda']
+            data_str = d.strftime('%d/%m/%Y') if d else ''
+            descr = f"VENDA CARTÃO {r['tipo_cartao']} – {r['bandeira_nome']} ({r['empresa_nome']})"
+            credito_cod  = r['credito_cod']
+            credito_nome = r['credito_nome']
+            debito_cod   = r['debito_cod']
+            debito_nome  = r['debito_nome']
+            ws.cell(row=row_idx, column=1, value=data_str)
+            ws.cell(row=row_idx, column=2, value=descr)
+            val_cell = ws.cell(row=row_idx, column=3, value=r['total_venda'])
+            val_cell.number_format = money_fmt
+            ws.cell(row=row_idx, column=4, value=credito_cod)
+            ws.cell(row=row_idx, column=5, value=credito_nome)
+            ws.cell(row=row_idx, column=6, value=debito_cod)
+            ws.cell(row=row_idx, column=7, value=debito_nome)
+            for col in range(1, 8):
+                ws.cell(row=row_idx, column=col).fill = card_fill
+        elif r['_kind'] == 'fee':
+            d = r['data_recebimento']
+            data_str = d.strftime('%d/%m/%Y') if d else ''
+            descr = f"TAXA CARTÃO {r['tipo_cartao']} – {r['bandeira_nome']} ({r['empresa_nome']})"
+            ws.cell(row=row_idx, column=1, value=data_str)
+            ws.cell(row=row_idx, column=2, value=descr)
+            val_cell = ws.cell(row=row_idx, column=3, value=r['cycle_fee'])
+            val_cell.number_format = money_fmt
+            ws.cell(row=row_idx, column=4, value=r['credito_cod'])
+            ws.cell(row=row_idx, column=5, value=r['credito_nome'])
+            ws.cell(row=row_idx, column=6, value=r['debito_cod'])
+            ws.cell(row=row_idx, column=7, value=r['debito_nome'])
+            for col in range(1, 8):
+                ws.cell(row=row_idx, column=col).fill = fee_fill
+        else:
+            debito_cod, debito_nome, credito_cod, credito_nome = \
+                _resolver_contas_contabeis(r, despesa_conta_map, coligada_map, fornecedor_conta_map, cnpj_conta_map,
+                                           troco_pix_conta_map=troco_pix_conta_map)
+            valor = r['valor']
+            data_str = r['data_transacao'].strftime('%d/%m/%Y') if r['data_transacao'] else ''
+
+            ws.cell(row=row_idx, column=1, value=data_str)
+            ws.cell(row=row_idx, column=2, value=r['descricao'] or '')
+            val_cell = ws.cell(row=row_idx, column=3, value=float(valor) if valor is not None else 0)
+            val_cell.number_format = money_fmt
+            ws.cell(row=row_idx, column=4, value=credito_cod)
+            ws.cell(row=row_idx, column=5, value=credito_nome)
+            ws.cell(row=row_idx, column=6, value=debito_cod)
+            ws.cell(row=row_idx, column=7, value=debito_nome)
+
+            # Highlight rows with missing codes in yellow and collect warning info
+            missing_credito = not credito_cod
+            missing_debito  = not debito_cod
+            if missing_credito or missing_debito:
+                for col in range(1, 8):
+                    ws.cell(row=row_idx, column=col).fill = warn_fill
+                tipo_conc = (r.get('tipo_conciliacao') or '').lower()
+                if 'transferen' in tipo_conc:
+                    if missing_debito:
+                        dest_banco = r.get('conta_destino_banco_nome') or ''
+                        if dest_banco:
+                            _warn_accounts.append((
+                                r.get('conta_apelido') or r.get('banco_nome') or '',
+                                dest_banco,
+                                'Conta destino sem Conta Contábil configurada'
+                            ))
+                    if missing_credito:
+                        _warn_accounts.append((
+                            r.get('conta_apelido') or r.get('banco_nome') or '',
+                            '',
+                            'Conta bancária sem Conta Contábil configurada'
+                        ))
+
+    # Warning sheet — lists accounts needing configuration in Gerenciar Contas
+    if _warn_accounts:
+        ws_warn = wb.create_sheet(title='⚠ Contas sem config')
+        warn_hdr_fill = PatternFill(start_color='FF6600', end_color='FF6600', fill_type='solid')
+        warn_hdr_font = Font(color='FFFFFF', bold=True, size=10)
+        warn_headers  = ['CONTA BANCÁRIA (ORIGEM)', 'CONTA BANCÁRIA (DESTINO)', 'PROBLEMA']
+        warn_widths   = [35, 35, 55]
+        for ci, (h, w) in enumerate(zip(warn_headers, warn_widths), start=1):
+            cell = ws_warn.cell(row=1, column=ci, value=h)
+            cell.fill = warn_hdr_fill
+            cell.font = warn_hdr_font
+            ws_warn.column_dimensions[cell.column_letter].width = w
+        seen_warn = set()
+        for item in _warn_accounts:
+            key = item[:2]
+            if key not in seen_warn:
+                seen_warn.add(key)
+                for ci, val in enumerate(item, start=1):
+                    ws_warn.cell(row=len(seen_warn) + 1, column=ci, value=val)
+        # instruction row
+        instr_row = len(seen_warn) + 3
+        instr_cell = ws_warn.cell(
+            row=instr_row, column=1,
+            value='Para corrigir: acesse Banco → Gerenciar Contas → edite cada conta e selecione a Conta do Plano de Contas correspondente.'
+        )
+        instr_cell.font = Font(italic=True, color='666666')
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+
+    periodo = ''
+    if data_ini and data_fim:
+        periodo = f'_{data_ini}_{data_fim}'.replace('/', '-')
+    elif data_ini:
+        periodo = f'_a_partir_{data_ini}'.replace('/', '-')
+    elif data_fim:
+        periodo = f'_ate_{data_fim}'.replace('/', '-')
+    filename = f'exportacao_contabil{periodo}.xlsx'
+
+    return Response(
+        buf.getvalue(),
+        mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        headers={'Content-Disposition': f'attachment; filename="{filename}"'},
+    )
+
+
+def _resolver_contas_contabeis(row, despesa_conta_map, coligada_map=None,
+                               fornecedor_conta_map=None, cnpj_conta_map=None,
+                               troco_pix_conta_map=None):
+    """Retorna (debito_cod, debito_nome, credito_cod, credito_nome) para exportação contábil.
+
+    Cada par representa o número e a descrição da conta contábil, separados para que
+    a planilha possa exibir cada campo em sua própria coluna.
+
+    coligada_map: {(bank_account_id, coligada_cliente_id): {'debito': (cod,nome), 'credito': (cod,nome)}}
+    Para transferências, lookup é feito usando o cliente da conta destino/origem.
+    fornecedor_conta_map: {(fornecedor_id, cliente_id): (codigo, nome)}
+    Usado como fallback para débitos sem lançamento de despesa vinculado.
+    cnpj_conta_map: {(cnpj, cliente_id): (codigo, nome)}
+    Usado como fallback adicional quando fornecedor_id não está disponível mas o CNPJ está.
+    troco_pix_conta_map: {cliente_id: (codigo, nome)}
+    Conta de débito configurada para lançamentos de Troco PIX por empresa.
+    """
+    if coligada_map is None:
+        coligada_map = {}
+    if fornecedor_conta_map is None:
+        fornecedor_conta_map = {}
+    if cnpj_conta_map is None:
+        cnpj_conta_map = {}
+    if troco_pix_conta_map is None:
+        troco_pix_conta_map = {}
+
+    banco_cod  = row.get('conta_banco_codigo') or ''
+    banco_nome = row.get('conta_banco_nome')   or ''
+    tipo       = row.get('tipo', '')
+    tipo_conc  = row.get('tipo_conciliacao') or ''
+    banco_cliente_id = row.get('banco_cliente_id')
+    account_id = row.get('account_id')
+
+    def _lookup_coligada(cliente_id):
+        """Encontra cfg da coligada pela combinação exata (ba_id enviador + cliente_id destino).
+        Quando account_id é conhecido, nunca usa entrada de outra conta como fallback, para
+        evitar que a configuração de uma conta diferente (ex: CORA-PREST) seja aplicada
+        erroneamente a uma transferência do Sicredi."""
+        if not cliente_id:
+            return None
+        for (ba_id, col_id), cfg in coligada_map.items():
+            if col_id == cliente_id:
+                if account_id:
+                    # Só retorna se for exatamente esta conta enviadora
+                    if ba_id == account_id:
+                        return cfg
+                else:
+                    # account_id desconhecido: usa qualquer entrada como fallback
+                    return cfg
+        return None
+
+    if tipo == 'DEBIT':
+        # Crédito = a conta bancária (dinheiro sai → crédito no ativo)
+        credito_cod, credito_nome = banco_cod, banco_nome
+        # Débito = conta de despesa/coligada
+        if 'transferen' in tipo_conc.lower():
+            destino_cliente_id = row.get('destino_cliente_id')
+            coligada_cfg = _lookup_coligada(destino_cliente_id)
+            debito_cod, debito_nome = '', ''
+            if coligada_cfg:
+                debito_cod, debito_nome = coligada_cfg['debito']
+            # Cascata 1 (recíproca): procura na config de coligadas da conta destino
+            # para a empresa enviadora.  Ex.: CORA-PREST configurou "ao receber de GOIATUBA →
+            # crédito=22145"; o recíproco é que GOIATUBA debita 22145 ao enviar a CORA-PREST.
+            if not debito_cod:
+                dest_ba_id = row.get('conta_destino_id')
+                if dest_ba_id and banco_cliente_id:
+                    recip_cfg = coligada_map.get((dest_ba_id, banco_cliente_id))
+                    if recip_cfg:
+                        debito_cod, debito_nome = recip_cfg['credito']
+            # Cascata 2: usa o plano de contas da conta destino diretamente (último recurso)
+            if not debito_cod:
+                debito_cod  = row.get('conta_destino_codigo') or ''
+                debito_nome = row.get('conta_destino_nome')   or ''
+        else:
+            dmap = despesa_conta_map.get(row.get('id'))
+            if dmap:
+                debito_cod, debito_nome = dmap[0] or '', dmap[1] or ''
+            elif 'troco_pix' in tipo_conc.lower() and banco_cliente_id:
+                # Troco PIX: use per-company debit account configured in troco_pix_conta_contabil
+                tmap = troco_pix_conta_map.get(banco_cliente_id)
+                if tmap:
+                    debito_cod, debito_nome = tmap[0] or '', tmap[1] or ''
+                else:
+                    debito_cod, debito_nome = '', ''
+            else:
+                debito_cod, debito_nome = '', ''
+                # Fallback 1: use supplier's conta_contabil by fornecedor_id
+                fornecedor_id = row.get('fornecedor_id')
+                if fornecedor_id and banco_cliente_id:
+                    fmap = fornecedor_conta_map.get((fornecedor_id, banco_cliente_id))
+                    if fmap:
+                        debito_cod, debito_nome = fmap[0] or '', fmap[1] or ''
+                # Fallback 2: use supplier's conta_contabil by CNPJ
+                if not debito_cod:
+                    cnpj = row.get('cnpj_cpf') or ''
+                    if cnpj and banco_cliente_id:
+                        cmap = cnpj_conta_map.get((cnpj, banco_cliente_id))
+                        if cmap:
+                            debito_cod, debito_nome = cmap[0] or '', cmap[1] or ''
+    else:
+        # CREDIT: Débito = conta bancária (dinheiro entra → débito no ativo)
+        debito_cod, debito_nome = banco_cod, banco_nome
+        # Crédito = receita/coligada
+        if 'transferen' in tipo_conc.lower():
+            origem_cliente_id = row.get('origem_cliente_id')
+            coligada_cfg = _lookup_coligada(origem_cliente_id)
+            credito_cod, credito_nome = '', ''
+            if coligada_cfg:
+                credito_cod, credito_nome = coligada_cfg['credito']
+            # Sempre em cascata: se coligada não tem conta configurada, usa a conta origem direta
+            if not credito_cod:
+                credito_cod  = row.get('conta_origem_codigo') or ''
+                credito_nome = row.get('conta_origem_nome')   or ''
+        else:
+            credito_cod  = row.get('conta_fr_codigo') or ''
+            credito_nome = row.get('conta_fr_nome')   or ''
+
+    return (
+        debito_cod  if debito_cod  else '',
+        debito_nome if debito_nome else '',
+        credito_cod  if credito_cod  else '',
+        credito_nome if credito_nome else '',
+    )
+
+
+
 
 @bp.route('/api/transacoes-pendentes')
 @login_required
@@ -2806,14 +3890,32 @@ def api_criar_conta():
         except (ValueError, TypeError):
             return jsonify({'success': False, 'message': 'plano_contas_conta_id inválido'}), 400
 
+    conta_coligada_debito_id = data.get('conta_coligada_debito_id') or None
+    if conta_coligada_debito_id is not None:
+        try:
+            conta_coligada_debito_id = int(conta_coligada_debito_id)
+        except (ValueError, TypeError):
+            return jsonify({'success': False, 'message': 'conta_coligada_debito_id inválido'}), 400
+
+    conta_coligada_credito_id = data.get('conta_coligada_credito_id') or None
+    if conta_coligada_credito_id is not None:
+        try:
+            conta_coligada_credito_id = int(conta_coligada_credito_id)
+        except (ValueError, TypeError):
+            return jsonify({'success': False, 'message': 'conta_coligada_credito_id inválido'}), 400
+
+    _ensure_bank_accounts_coligadas()
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
 
     cursor.execute(
-        """INSERT INTO bank_accounts (banco_nome, agencia, conta, apelido, cliente_id, plano_contas_conta_id)
-           VALUES (%s, %s, %s, %s, %s, %s)""",
+        """INSERT INTO bank_accounts
+               (banco_nome, agencia, conta, apelido, cliente_id, plano_contas_conta_id,
+                conta_coligada_debito_id, conta_coligada_credito_id)
+           VALUES (%s, %s, %s, %s, %s, %s, %s, %s)""",
         (banco_nome, data.get('agencia'), data.get('conta'), data.get('apelido'),
-         cliente_id, plano_contas_conta_id),
+         cliente_id, plano_contas_conta_id,
+         conta_coligada_debito_id, conta_coligada_credito_id),
     )
     conn.commit()
     new_id = cursor.lastrowid
@@ -2827,12 +3929,16 @@ def api_criar_conta():
 @login_required
 def gerenciar_contas():
     """Página de gerenciamento de contas bancárias (lista, edita, exclui)."""
+    _ensure_bank_accounts_coligadas()
+    _ensure_bank_account_coligadas_table()
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
     cursor.execute(
         """SELECT ba.id, ba.banco_nome, ba.agencia, ba.conta, ba.apelido,
                   ba.ativo, ba.cliente_id, ba.criado_em,
                   ba.plano_contas_conta_id,
+                  ba.conta_coligada_debito_id,
+                  ba.conta_coligada_credito_id,
                   c.razao_social AS empresa_nome,
                   pc.codigo AS plano_codigo, pc.nome AS plano_nome,
                   (SELECT COUNT(*) FROM bank_transactions bt WHERE bt.account_id = ba.id) AS total_transacoes
@@ -2843,18 +3949,32 @@ def gerenciar_contas():
     )
     contas = cursor.fetchall()
     clientes = _get_clientes_com_produtos(cursor)
+    # Load clients eligible as coligadas: must have products AND a Plano de Contas linked
     cursor.execute(
-        """SELECT pcc.id, pcc.codigo, pcc.nome, g.nome AS grupo_nome
+        """SELECT DISTINCT c.id, c.razao_social
+           FROM clientes c
+           INNER JOIN cliente_produtos cp ON c.id = cp.cliente_id
+           WHERE cp.ativo = 1
+             AND c.grupo_contabil_id IS NOT NULL
+           ORDER BY c.razao_social"""
+    )
+    todos_clientes = cursor.fetchall()
+    cursor.execute(
+        """SELECT pcc.id, pcc.codigo, pcc.nome, pcc.grupo_id, g.nome AS grupo_nome
            FROM plano_contas_contas pcc
            JOIN plano_contas_grupos g ON g.id = pcc.grupo_id
            WHERE pcc.ativo = 1
            ORDER BY pcc.codigo"""
     )
     plano_contas = cursor.fetchall()
+    # Map cliente_id → grupo_contabil_id so JS can filter plano options per empresa
+    cursor.execute("SELECT id, grupo_contabil_id FROM clientes WHERE grupo_contabil_id IS NOT NULL")
+    cliente_grupo_map = {row['id']: row['grupo_contabil_id'] for row in cursor.fetchall()}
     cursor.close()
     conn.close()
     return render_template('bank_import/contas.html', contas=contas, clientes=clientes,
-                           plano_contas=plano_contas)
+                           todos_clientes=todos_clientes, plano_contas=plano_contas,
+                           cliente_grupo_map=cliente_grupo_map)
 
 
 @bp.route('/api/contas/<int:conta_id>', methods=['PUT'])
@@ -2880,15 +4000,32 @@ def api_editar_conta(conta_id):
         except (ValueError, TypeError):
             return jsonify({'success': False, 'message': 'plano_contas_conta_id inválido'}), 400
 
+    conta_coligada_debito_id = data.get('conta_coligada_debito_id') or None
+    if conta_coligada_debito_id is not None:
+        try:
+            conta_coligada_debito_id = int(conta_coligada_debito_id)
+        except (ValueError, TypeError):
+            return jsonify({'success': False, 'message': 'conta_coligada_debito_id inválido'}), 400
+
+    conta_coligada_credito_id = data.get('conta_coligada_credito_id') or None
+    if conta_coligada_credito_id is not None:
+        try:
+            conta_coligada_credito_id = int(conta_coligada_credito_id)
+        except (ValueError, TypeError):
+            return jsonify({'success': False, 'message': 'conta_coligada_credito_id inválido'}), 400
+
+    _ensure_bank_accounts_coligadas()
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
     cursor.execute(
         """UPDATE bank_accounts
            SET banco_nome=%s, agencia=%s, conta=%s, apelido=%s,
-               cliente_id=%s, plano_contas_conta_id=%s
+               cliente_id=%s, plano_contas_conta_id=%s,
+               conta_coligada_debito_id=%s, conta_coligada_credito_id=%s
            WHERE id=%s""",
         (banco_nome, data.get('agencia') or None, data.get('conta') or None,
-         data.get('apelido') or None, cliente_id, plano_contas_conta_id, conta_id),
+         data.get('apelido') or None, cliente_id, plano_contas_conta_id,
+         conta_coligada_debito_id, conta_coligada_credito_id, conta_id),
     )
     conn.commit()
     cursor.close()
@@ -2921,6 +4058,108 @@ def api_excluir_conta(conta_id):
     conn.close()
     return jsonify({'success': True})
 
+
+@bp.route('/api/contas/<int:conta_id>/coligadas', methods=['GET'])
+@login_required
+def api_get_coligadas(conta_id):
+    """API: retorna a configuração contábil por empresa coligada para uma conta bancária."""
+    _ensure_bank_account_coligadas_table()
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        cursor.execute(
+            """SELECT bac.coligada_cliente_id,
+                      bac.conta_debito_id,
+                      bac.conta_credito_id,
+                      c.razao_social AS coligada_nome,
+                      pd.codigo AS debito_codigo, pd.nome AS debito_nome,
+                      pc.codigo AS credito_codigo, pc.nome AS credito_nome
+               FROM bank_account_coligadas bac
+               INNER JOIN clientes c ON c.id = bac.coligada_cliente_id
+               LEFT JOIN plano_contas_contas pd ON pd.id = bac.conta_debito_id
+               LEFT JOIN plano_contas_contas pc ON pc.id = bac.conta_credito_id
+               WHERE bac.bank_account_id = %s
+               ORDER BY c.razao_social""",
+            (conta_id,),
+        )
+        rows = cursor.fetchall()
+    except Exception as e:
+        logger.warning("api_get_coligadas: erro ao buscar dados: %s", e)
+        rows = []
+    finally:
+        cursor.close()
+        conn.close()
+    return jsonify(rows)
+
+
+@bp.route('/api/contas/<int:conta_id>/coligadas', methods=['POST'])
+@login_required
+def api_salvar_coligadas(conta_id):
+    """API: salva (upsert) a configuração contábil por empresa coligada para uma conta bancária.
+
+    Body JSON: lista de objetos com:
+        coligada_cliente_id: int  (obrigatório)
+        conta_debito_id: int|null
+        conta_credito_id: int|null
+
+    Somente as entradas com ao menos uma conta configurada são persistidas.
+    Entradas com ambas as contas nulas para uma coligada são excluídas (limpeza).
+    """
+    _ensure_bank_account_coligadas_table()
+    data = request.get_json() or []
+    if not isinstance(data, list):
+        return jsonify({'success': False, 'message': 'Body deve ser uma lista JSON'}), 400
+
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        for item in data:
+            coligada_id  = item.get('coligada_cliente_id')
+            debito_id    = item.get('conta_debito_id') or None
+            credito_id   = item.get('conta_credito_id') or None
+            if not coligada_id:
+                continue
+            try:
+                coligada_id = int(coligada_id)
+            except (ValueError, TypeError):
+                continue
+
+            if debito_id is None and credito_id is None:
+                # Remove o vínculo se ambas as contas foram limpas
+                cursor.execute(
+                    "DELETE FROM bank_account_coligadas"
+                    " WHERE bank_account_id=%s AND coligada_cliente_id=%s",
+                    (conta_id, coligada_id),
+                )
+            else:
+                if debito_id is not None:
+                    try:
+                        debito_id = int(debito_id)
+                    except (ValueError, TypeError):
+                        debito_id = None
+                if credito_id is not None:
+                    try:
+                        credito_id = int(credito_id)
+                    except (ValueError, TypeError):
+                        credito_id = None
+                cursor.execute(
+                    """INSERT INTO bank_account_coligadas
+                           (bank_account_id, coligada_cliente_id, conta_debito_id, conta_credito_id)
+                       VALUES (%s, %s, %s, %s)
+                       ON DUPLICATE KEY UPDATE
+                           conta_debito_id  = VALUES(conta_debito_id),
+                           conta_credito_id = VALUES(conta_credito_id)""",
+                    (conta_id, coligada_id, debito_id, credito_id),
+                )
+        conn.commit()
+    except Exception as e:
+        conn.rollback()
+        logger.error("api_salvar_coligadas: erro ao salvar: %s", e)
+        return jsonify({'success': False, 'message': 'Erro interno ao salvar configuração de coligadas.'}), 500
+    finally:
+        cursor.close()
+        conn.close()
+    return jsonify({'success': True})
 
 
 def _get_inbox_dirs() -> tuple:

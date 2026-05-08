@@ -56,6 +56,34 @@ _MATCH_WINDOW_DAYS = 5
 # DB migration
 # ──────────────────────────────────────────────────────────────────────────────
 
+def _ensure_deposito_bank_vinculos_table(conn):
+    """
+    Cria a tabela deposito_bank_vinculos que suporta vincular UM depósito a
+    MÚLTIPLAS transações bancárias (ex.: banco divide um depósito em dois lançamentos).
+
+    O campo bank_transaction_id em lancamentos_caixa_comprovacao continua como
+    vínculo primário (compatibilidade). Os vínculos extras ficam aqui.
+    """
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS deposito_bank_vinculos (
+                id                  INT AUTO_INCREMENT PRIMARY KEY,
+                comprovacao_id      INT NOT NULL,
+                bank_transaction_id INT NOT NULL,
+                vinculado_em        DATETIME     NULL DEFAULT NULL,
+                vinculado_por       VARCHAR(255) NULL DEFAULT NULL,
+                UNIQUE KEY uk_comp_bt (comprovacao_id, bank_transaction_id)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+            """
+        )
+        conn.commit()
+        cur.close()
+    except Exception:
+        pass  # Não crítico
+
+
 def _ensure_bank_tx_col(conn):
     """
     Adiciona bank_transaction_id à lancamentos_caixa_comprovacao se ainda não
@@ -207,7 +235,7 @@ def _fetch_depositos(conn, data_inicio, data_fim, cliente_ids=None,
     elif status == 'pendente':
         where.append("lcc.bank_transaction_id IS NULL")
 
-    sql = f"""
+    sql_base = f"""
         SELECT
             lcc.id,
             lcc.lancamento_caixa_id,
@@ -235,10 +263,50 @@ def _fetch_depositos(conn, data_inicio, data_fim, cliente_ids=None,
         WHERE {' AND '.join(where)}
         ORDER BY lc.data DESC, lcc.id DESC
     """
+
+    sql_with_extras = f"""
+        SELECT
+            lcc.id,
+            lcc.lancamento_caixa_id,
+            lcc.forma_pagamento_id,
+            lcc.descricao,
+            lcc.valor,
+            lcc.data_deposito,
+            lcc.bank_transaction_id,
+            lc.data                         AS data_caixa,
+            lc.cliente_id,
+            COALESCE(cl.nome_fantasia, cl.razao_social) AS cliente_nome,
+            fpc.tipo                        AS forma_tipo,
+            fpc.nome                        AS forma_nome,
+            bt.data_transacao               AS banco_data,
+            bt.valor                        AS banco_valor,
+            bt.descricao                    AS banco_descricao,
+            ba.apelido                      AS banco_conta_apelido,
+            ba.banco_nome                   AS banco_nome,
+            COALESCE((SELECT COUNT(*) FROM deposito_bank_vinculos dbv
+                       WHERE dbv.comprovacao_id = lcc.id), 0) AS cnt_extra_vinculos,
+            COALESCE((SELECT SUM(bt_e.valor)
+                        FROM deposito_bank_vinculos dbv_e
+                        JOIN bank_transactions bt_e ON bt_e.id = dbv_e.bank_transaction_id
+                       WHERE dbv_e.comprovacao_id = lcc.id), 0) AS soma_extra_vinculos
+        FROM lancamentos_caixa_comprovacao lcc
+        INNER JOIN lancamentos_caixa       lc  ON lc.id  = lcc.lancamento_caixa_id
+        INNER JOIN clientes                cl  ON cl.id  = lc.cliente_id
+        INNER JOIN formas_pagamento_caixa  fpc ON fpc.id = lcc.forma_pagamento_id
+        LEFT  JOIN bank_transactions       bt  ON bt.id  = lcc.bank_transaction_id
+        LEFT  JOIN bank_accounts           ba  ON ba.id  = bt.account_id
+        WHERE {' AND '.join(where)}
+        ORDER BY lc.data DESC, lcc.id DESC
+    """
+
     cur = conn.cursor(dictionary=True)
     try:
-        cur.execute(sql, params)
-        rows = cur.fetchall()
+        try:
+            cur.execute(sql_with_extras, params)
+            rows = cur.fetchall()
+        except Exception:
+            cur.execute(sql_base, params)
+            rows = cur.fetchall()
     except Exception:
         rows = []
     finally:
@@ -257,6 +325,11 @@ def _fetch_depositos(conn, data_inicio, data_fim, cliente_ids=None,
         r['data_caixa_br']    = _fmt_br(r.get('data_caixa'))
         r['data_deposito_br'] = _fmt_br(r.get('data_deposito'))
         r['banco_data_br']    = _fmt_br(r.get('banco_data'))
+        # Multi-bank-transaction aggregates
+        cnt_extra   = int(r.get('cnt_extra_vinculos') or 0)
+        soma_extra  = float(r.get('soma_extra_vinculos') or 0)
+        r['cnt_vinculos_total']  = (1 if r.get('bank_transaction_id') else 0) + cnt_extra
+        r['total_banco_vinculos'] = float(r.get('banco_valor') or 0) + soma_extra
 
     return rows
 
@@ -278,11 +351,16 @@ def listar():
 
     cliente_ids = [c for c in args.getlist('cliente_ids[]') if c]
     tipo_grupo  = args.get('tipo_grupo', '').strip() or None
-    status      = args.get('status',    '').strip() or None
+    # Default to 'pendente' on first load (no status param); empty string means 'all'
+    if 'status' not in args:
+        status = 'pendente'
+    else:
+        status = args.get('status', '').strip() or None
 
     conn = get_db_connection()
     try:
         _ensure_bank_tx_col(conn)
+        _ensure_deposito_bank_vinculos_table(conn)
         _reset_orphaned_deposit_transactions(conn)
         clientes   = _get_clientes(conn)
         depositos  = _fetch_depositos(
@@ -411,6 +489,7 @@ def api_candidatos(comprovacao_id):
         # Inclui: pendente OU conciliado-para-recebimento (ainda não vinculado como depósito)
         # Também inclui conciliado+deposito sem nenhum comprovacao vinculado
         # (transações "órfãs" que perderam o vínculo por edição do Fechamento de Caixa)
+        # Exclui transações já vinculadas via deposito_bank_vinculos (vínculos extras)
         status_filter = (
             "(bt.status = 'pendente' OR "
             "(bt.status = 'conciliado' AND "
@@ -418,7 +497,9 @@ def api_candidatos(comprovacao_id):
             "  bt.tipo_conciliacao NOT IN ('deposito','transferencia','troco_pix') OR "
             "  (bt.tipo_conciliacao = 'deposito' AND "
             "   NOT EXISTS (SELECT 1 FROM lancamentos_caixa_comprovacao lcc_chk "
-            "               WHERE lcc_chk.bank_transaction_id = bt.id)))))"
+            "               WHERE lcc_chk.bank_transaction_id = bt.id) AND "
+            "   NOT EXISTS (SELECT 1 FROM deposito_bank_vinculos dbv_chk "
+            "               WHERE dbv_chk.bank_transaction_id = bt.id)))))"
         )
 
         cur.execute(
@@ -467,17 +548,27 @@ def _redirect_listar_with_filters(form=None):
 @admin_required
 def vincular():
     """
-    Vincula um ou mais depósitos (lancamentos_caixa_comprovacao) a uma
-    transação bancária CREDIT.
+    Vincula um ou mais depósitos (lancamentos_caixa_comprovacao) a uma ou mais
+    transações bancárias CREDIT.
+
+    Suporta o caso em que o banco divide um único depósito em dois lançamentos
+    (ex.: R$6.216,59 → R$4.535,36 + R$1.681,23).
 
     POST params:
-      bank_transaction_id  – ID da bank_transaction
-      comprovacao_ids[]    – lista de IDs de lancamentos_caixa_comprovacao
+      bank_transaction_ids[]  – lista de IDs de bank_transactions (múltiplos)
+      bank_transaction_id     – compatibilidade com versão anterior (único ID)
+      comprovacao_ids[]       – lista de IDs de lancamentos_caixa_comprovacao
     """
-    bank_tx_id       = request.form.get('bank_transaction_id', '').strip()
+    bank_tx_ids     = [x for x in request.form.getlist('bank_transaction_ids[]') if x]
+    # Backward compat: accept old single-value field
+    if not bank_tx_ids:
+        single = request.form.get('bank_transaction_id', '').strip()
+        if single:
+            bank_tx_ids = [single]
+
     comprovacao_ids  = [x for x in request.form.getlist('comprovacao_ids[]') if x]
 
-    if not bank_tx_id or not comprovacao_ids:
+    if not bank_tx_ids or not comprovacao_ids:
         flash('Selecione a transação bancária e pelo menos um depósito.', 'warning')
         return _redirect_listar_with_filters()
 
@@ -503,33 +594,51 @@ def vincular():
         agora   = datetime.now()
         usuario = current_user.email if hasattr(current_user, 'email') else str(current_user.id)
 
-        # Link all selected comprovacos to the bank transaction
+        primary_btx_id = int(bank_tx_ids[0])
+        extra_btx_ids  = [int(x) for x in bank_tx_ids[1:]]
+
+        # Set primary bank_transaction_id on all selected deposits
         cur.execute(
             f"""
             UPDATE lancamentos_caixa_comprovacao
                SET bank_transaction_id = %s
              WHERE id IN ({placeholders})
             """,
-            [int(bank_tx_id)] + [int(x) for x in comprovacao_ids],
+            [primary_btx_id] + [int(x) for x in comprovacao_ids],
         )
 
-        # Mark bank transaction as conciliado
-        try:
-            cur.execute(
-                """UPDATE bank_transactions
-                      SET status='conciliado', conciliado_em=%s, conciliado_por=%s,
-                          tipo_conciliacao='deposito'
-                    WHERE id=%s""",
-                (agora, usuario, int(bank_tx_id)),
-            )
-        except Exception:
-            conn.rollback()
-            cur.execute(
-                """UPDATE bank_transactions
-                      SET status='conciliado', conciliado_em=%s, conciliado_por=%s
-                    WHERE id=%s""",
-                (agora, usuario, int(bank_tx_id)),
-            )
+        # Insert extra bank_txns into junction table
+        _ensure_deposito_bank_vinculos_table(conn)
+        for comp_id in comprovacao_ids:
+            for btx_id in extra_btx_ids:
+                try:
+                    cur.execute(
+                        """INSERT IGNORE INTO deposito_bank_vinculos
+                               (comprovacao_id, bank_transaction_id, vinculado_em, vinculado_por)
+                           VALUES (%s, %s, %s, %s)""",
+                        (int(comp_id), btx_id, agora, usuario),
+                    )
+                except Exception:
+                    pass
+
+        # Mark all bank transactions as conciliado
+        for btx_id in [primary_btx_id] + extra_btx_ids:
+            try:
+                cur.execute(
+                    """UPDATE bank_transactions
+                          SET status='conciliado', conciliado_em=%s, conciliado_por=%s,
+                              tipo_conciliacao='deposito'
+                        WHERE id=%s""",
+                    (agora, usuario, btx_id),
+                )
+            except Exception:
+                conn.rollback()
+                cur.execute(
+                    """UPDATE bank_transactions
+                          SET status='conciliado', conciliado_em=%s, conciliado_por=%s
+                        WHERE id=%s""",
+                    (agora, usuario, btx_id),
+                )
 
         conn.commit()
         flash('Depósito(s) vinculado(s) com sucesso!', 'success')
@@ -548,9 +657,10 @@ def vincular():
 @admin_required
 def desvincular(comprovacao_id):
     """
-    Remove o vínculo entre um depósito e a transação bancária.
-    Se nenhum outro depósito estiver vinculado à mesma bank_transaction,
-    a transação volta ao status 'pendente'.
+    Remove o vínculo entre um depósito e a(s) transação(ões) bancária(s).
+    Limpa tanto o campo bank_transaction_id quanto a tabela deposito_bank_vinculos.
+    Se nenhum outro depósito estiver vinculado às mesmas bank_transactions,
+    elas voltam ao status 'pendente'.
     """
     conn = get_db_connection()
     cur  = conn.cursor(dictionary=True)
@@ -564,39 +674,72 @@ def desvincular(comprovacao_id):
             flash('Nenhum vínculo bancário encontrado.', 'warning')
             return _redirect_listar_with_filters()
 
-        bank_tx_id = row['bank_transaction_id']
+        primary_bank_tx_id = row['bank_transaction_id']
 
-        # Unlink this deposit
+        # Collect ALL linked bank_txns (primary + extras in junction table)
+        all_bank_tx_ids = {primary_bank_tx_id}
+        try:
+            cur.execute(
+                "SELECT bank_transaction_id FROM deposito_bank_vinculos WHERE comprovacao_id=%s",
+                (comprovacao_id,),
+            )
+            for er in cur.fetchall():
+                if er.get('bank_transaction_id'):
+                    all_bank_tx_ids.add(er['bank_transaction_id'])
+        except Exception:
+            pass
+
+        # Unlink this deposit (primary column)
         cur.execute(
             "UPDATE lancamentos_caixa_comprovacao SET bank_transaction_id=NULL WHERE id=%s",
             (comprovacao_id,),
         )
 
-        # Check if any other deposits still reference this bank_transaction
-        cur.execute(
-            "SELECT COUNT(*) AS cnt FROM lancamentos_caixa_comprovacao WHERE bank_transaction_id=%s",
-            (bank_tx_id,),
-        )
-        remaining = (cur.fetchone() or {}).get('cnt', 0)
+        # Delete extras from junction table
+        try:
+            cur.execute(
+                "DELETE FROM deposito_bank_vinculos WHERE comprovacao_id=%s",
+                (comprovacao_id,),
+            )
+        except Exception:
+            pass
 
-        if not remaining:
-            # No more deposits linked — revert bank_transaction to pendente
+        # For each bank_txn, revert to pendente if no longer referenced
+        for bank_tx_id in all_bank_tx_ids:
+            remaining = 0
+            # Check main column
+            cur.execute(
+                "SELECT COUNT(*) AS cnt FROM lancamentos_caixa_comprovacao WHERE bank_transaction_id=%s",
+                (bank_tx_id,),
+            )
+            remaining += (cur.fetchone() or {}).get('cnt', 0)
+            # Check junction table
             try:
                 cur.execute(
-                    """UPDATE bank_transactions
-                          SET status='pendente', conciliado_em=NULL, conciliado_por=NULL,
-                              tipo_conciliacao=NULL
-                        WHERE id=%s""",
+                    "SELECT COUNT(*) AS cnt FROM deposito_bank_vinculos WHERE bank_transaction_id=%s",
                     (bank_tx_id,),
                 )
+                remaining += (cur.fetchone() or {}).get('cnt', 0)
             except Exception:
-                conn.rollback()
-                cur.execute(
-                    """UPDATE bank_transactions
-                          SET status='pendente', conciliado_em=NULL, conciliado_por=NULL
-                        WHERE id=%s""",
-                    (bank_tx_id,),
-                )
+                pass
+
+            if not remaining:
+                try:
+                    cur.execute(
+                        """UPDATE bank_transactions
+                              SET status='pendente', conciliado_em=NULL, conciliado_por=NULL,
+                                  tipo_conciliacao=NULL
+                            WHERE id=%s""",
+                        (bank_tx_id,),
+                    )
+                except Exception:
+                    conn.rollback()
+                    cur.execute(
+                        """UPDATE bank_transactions
+                              SET status='pendente', conciliado_em=NULL, conciliado_por=NULL
+                            WHERE id=%s""",
+                        (bank_tx_id,),
+                    )
 
         conn.commit()
         flash('Vínculo removido com sucesso!', 'success')

@@ -385,6 +385,18 @@ def create_app():
                 exc_info=True,
             )
 
+    # Garante que as quantidades 9.000 e 12.000 litros existam na tabela quantidades.
+    with app.app_context():
+        try:
+            from routes.pedidos import _ensure_quantidades_extras
+            _ensure_quantidades_extras()
+            app.logger.info("Seed de quantidades 9.000/12.000 litros executado na inicialização.")
+        except Exception:
+            app.logger.warning(
+                "Seed de quantidades 9.000/12.000 litros falhou na inicialização (não crítico).",
+                exc_info=True,
+            )
+
     # Registrar filtro e helpers de template
     app.jinja_env.filters['formatar_moeda'] = formatar_moeda
 

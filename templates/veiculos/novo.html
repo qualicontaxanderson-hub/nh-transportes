@@ -17,6 +17,9 @@
   }
   .form-label { font-size: 0.83rem; font-weight: 600; color: #374151; }
   .form-control-sm, .form-select-sm { font-size: 0.84rem; }
+  .sub-table th { background:#f0f4f8; font-size:0.72rem; font-weight:700; text-transform:uppercase; }
+  .sub-table td { font-size:0.82rem; vertical-align:middle; }
+  .btn-del-row { width:1.7rem;height:1.7rem;padding:0;border-radius:.35rem; }
 </style>
 {% endblock %}
 
@@ -48,27 +51,89 @@
       <i class="bi bi-truck me-2"></i> Dados do Veículo
     </div>
     <div class="card-body">
-      <form method="POST">
+      <form method="POST" id="formVeiculo" enctype="multipart/form-data">
+
+        <!-- ── Dados Principais ── -->
         <div class="form-section-title"><i class="bi bi-info-circle me-1"></i>Dados Principais</div>
         <div class="row">
-          <div class="col-md-6 mb-2">
-            <label class="form-label">Caminhão <span class="text-danger">*</span></label>
+          <div class="col-md-4 mb-2">
+            <label class="form-label">Tipo de Veículo <span class="text-danger">*</span></label>
+            <select name="tipo_veiculo" id="tipoVeiculo" class="form-select form-select-sm" required>
+              <option value="">Selecione…</option>
+              {% for t in tipos %}
+              <option value="{{ t }}">{{ t }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-md-4 mb-2">
+            <label class="form-label">Marca / Fabricante <span class="text-danger">*</span></label>
             <input type="text" name="caminhao" class="form-control form-control-sm"
                    placeholder="Ex: Mercedes, Scania, Volvo" maxlength="20" required>
           </div>
-          <div class="col-md-6 mb-2">
-            <label class="form-label">Placa <span class="text-danger">*</span></label>
-            <input type="text" name="placa" class="form-control form-control-sm"
-                   placeholder="Ex: ABC-1234 ou ABC1D23" maxlength="10" required>
-          </div>
-        </div>
-        <div class="row">
-          <div class="col-md-12 mb-2">
+          <div class="col-md-4 mb-2">
             <label class="form-label">Modelo</label>
             <input type="text" name="modelo" class="form-control form-control-sm"
                    placeholder="Ex: Actros 2651, R450, FH 540" maxlength="30">
           </div>
         </div>
+
+        <div class="row">
+          <div class="col-md-4 mb-2">
+            <label class="form-label" id="lblPlaca">Placa <span class="text-danger">*</span></label>
+            <input type="text" name="placa" id="inputPlaca" class="form-control form-control-sm"
+                   placeholder="Ex: ABC-1234 ou ABC1D23" maxlength="10" required>
+          </div>
+          <div class="col-md-4 mb-2" id="grpPlacaCarreta" style="display:none;">
+            <label class="form-label">Placa da Carreta / Semirreboque</label>
+            <input type="text" name="placa_carreta" id="inputPlacaCarreta" class="form-control form-control-sm"
+                   placeholder="Ex: DEF-5678" maxlength="10">
+          </div>
+        </div>
+
+        <!-- ── Compartimentos de Carregamento ── -->
+        <div class="form-section-title mt-3"><i class="bi bi-grid-3x3-gap me-1"></i>Compartimentos de Carregamento</div>
+        <p class="text-muted small mb-2">Informe as bocas/compartimentos do tanque com a respectiva capacidade em litros.</p>
+        <div class="table-responsive mb-2">
+          <table class="table table-bordered table-sm sub-table mb-1" id="tblCompartimentos">
+            <thead>
+              <tr>
+                <th style="width:12%">Boca</th>
+                <th style="width:25%">Capacidade (L)</th>
+                <th style="width:20%" id="thCompParte">Parte</th>
+                <th>Descrição</th>
+                <th style="width:5%"></th>
+              </tr>
+            </thead>
+            <tbody id="bodyCompartimentos"></tbody>
+          </table>
+        </div>
+        <button type="button" class="btn btn-outline-primary btn-sm" id="btnAddComp">
+          <i class="bi bi-plus me-1"></i> Adicionar Compartimento
+        </button>
+
+        <!-- ── Licenças / Documentos ── -->
+        <div class="form-section-title mt-4"><i class="bi bi-file-earmark-text me-1"></i>Licenças e Documentos</div>
+        <p class="text-muted small mb-2">Cadastre todos os documentos e licenças com data de validade.</p>
+
+        <div class="table-responsive mb-2">
+          <table class="table table-bordered table-sm sub-table mb-1" id="tblLicencas">
+            <thead>
+              <tr>
+                <th style="width:20%">Tipo de Documento</th>
+                <th style="width:14%">Número</th>
+                <th style="width:13%">Validade</th>
+                <th style="width:14%" id="thLicParte">Parte</th>
+                <th>Observações</th>
+                <th style="width:14%">PDF</th>
+                <th style="width:4%"></th>
+              </tr>
+            </thead>
+            <tbody id="bodyLicencas"></tbody>
+          </table>
+        </div>
+        <button type="button" class="btn btn-outline-primary btn-sm" id="btnAddLic">
+          <i class="bi bi-plus me-1"></i> Adicionar Licença
+        </button>
 
         <div class="d-flex justify-content-between mt-4 pt-2 border-top">
           <a href="{{ url_for('veiculos.lista') }}" class="btn btn-secondary btn-sm">
@@ -82,4 +147,99 @@
     </div>
   </div>
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const TIPOS_DUPLA_PLACA = {{ tipos_dupla_placa | tojson }};
+
+function isDuplaPlaca() {
+  return TIPOS_DUPLA_PLACA.includes(document.getElementById('tipoVeiculo').value);
+}
+
+function updatePlacaUI() {
+  const dupla = isDuplaPlaca();
+  document.getElementById('grpPlacaCarreta').style.display = dupla ? '' : 'none';
+  document.getElementById('lblPlaca').innerHTML = dupla
+    ? 'Placa do Cavalo Mecânico <span class="text-danger">*</span>'
+    : 'Placa <span class="text-danger">*</span>';
+  // Atualiza header de Parte nas sub-tabelas
+  document.getElementById('thCompParte').style.display  = dupla ? '' : 'none';
+  document.getElementById('thLicParte').style.display   = dupla ? '' : 'none';
+  document.querySelectorAll('.col-parte').forEach(el => el.style.display = dupla ? '' : 'none');
+}
+
+document.getElementById('tipoVeiculo').addEventListener('change', updatePlacaUI);
+updatePlacaUI();
+
+// ── Compartimentos ──
+let compIdx = 0;
+document.getElementById('btnAddComp').addEventListener('click', function() {
+  const i = compIdx++;
+  const tr = document.createElement('tr');
+  tr.innerHTML = `
+    <td><input type="number" name="comp_ordem" value="${i+1}" min="1" class="form-control form-control-sm" style="width:60px"></td>
+    <td><input type="number" name="comp_capacidade" placeholder="Ex: 5000" min="1" class="form-control form-control-sm" required></td>
+    <td class="col-parte" style="display:${isDuplaPlaca()?'':'none'}">
+      <select name="comp_parte" class="form-select form-select-sm">
+        <option value="unico">Único</option>
+        <option value="cavalo">Cavalo</option>
+        <option value="carreta">Carreta</option>
+      </select>
+    </td>
+    <td><input type="text" name="comp_descricao" placeholder="Ex: Boca 1 - Diesel" class="form-control form-control-sm"></td>
+    <td class="text-center"><button type="button" class="btn btn-outline-danger btn-del-row" onclick="this.closest('tr').remove()"><i class="bi bi-trash"></i></button></td>`;
+  document.getElementById('bodyCompartimentos').appendChild(tr);
+});
+
+// ── Licenças ──
+let licIdx = 0;
+const CATALOG_DOCS = {{ catalog_docs | tojson }};
+
+function _escHtml(str) {
+  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function _buildSelectOptions() {
+  let html = '<option value="">— Selecione —</option>';
+  CATALOG_DOCS.forEach(function(d) {
+    const n = _escHtml(d.nome);
+    html += '<option value="' + n + '" data-id="' + d.id + '">' + n + '</option>';
+  });
+  return html;
+}
+
+document.getElementById('btnAddLic').addEventListener('click', function() {
+  const dupla = isDuplaPlaca();
+  const tr = document.createElement('tr');
+  tr.innerHTML =
+    '<td>' +
+      '<input type="hidden" name="lic_tipo_doc_id" value="">' +
+      '<select name="lic_tipo" class="form-select form-select-sm lic-tipo-select" required>' +
+        _buildSelectOptions() +
+      '</select>' +
+    '</td>' +
+    '<td><input type="text" name="lic_numero" placeholder="Nº do documento" class="form-control form-control-sm"></td>' +
+    '<td><input type="date" name="lic_validade" class="form-control form-control-sm"></td>' +
+    '<td class="col-parte" style="display:' + (dupla ? '' : 'none') + '">' +
+      '<select name="lic_parte" class="form-select form-select-sm">' +
+        '<option value="unico">Único</option>' +
+        '<option value="cavalo">Cavalo</option>' +
+        '<option value="carreta">Carreta</option>' +
+      '</select>' +
+    '</td>' +
+    '<td><input type="text" name="lic_observacoes" placeholder="Observações" class="form-control form-control-sm"></td>' +
+    '<td>' +
+      '<input type="hidden" name="lic_arquivo_existente" value="">' +
+      '<input type="file" name="lic_arquivo" accept=".pdf" class="form-control form-control-sm" style="font-size:0.72rem;" title="Anexar PDF">' +
+    '</td>' +
+    '<td class="text-center"><button type="button" class="btn btn-outline-danger btn-del-row" onclick="this.closest(\'tr\').remove()"><i class="bi bi-trash"></i></button></td>';
+  document.getElementById('bodyLicencas').appendChild(tr);
+  tr.querySelector('.lic-tipo-select').addEventListener('change', function() {
+    const opt = this.selectedOptions[0];
+    const hid = this.closest('tr').querySelector('input[name="lic_tipo_doc_id"]');
+    if (hid) hid.value = (opt && opt.dataset.id) ? opt.dataset.id : '';
+  });
+});
+</script>
 {% endblock %}

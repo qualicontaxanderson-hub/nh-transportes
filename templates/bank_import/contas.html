@@ -32,6 +32,16 @@
   .btn-desativar:hover { background:#dc3545; color:#fff; }
   .actions-cell { white-space: nowrap; }
   .filter-bar { background: #f8fbff; border: 1px solid #d9e8f5; border-radius: .5rem; padding: .6rem 1rem; margin-bottom: 1rem; }
+  /* Searchable dropdown for coligadas table */
+  .csel-wrap { position: relative; min-width: 200px; }
+  .csel-drop { display:none; position:absolute; z-index:1055; background:#fff;
+               border:1px solid #dee2e6; border-radius:4px;
+               max-height:220px; overflow-y:auto; min-width:100%;
+               width:max-content; left:0; top:100%;
+               box-shadow:0 4px 12px rgba(0,0,0,.15); }
+  .csel-item { padding: 4px 10px; cursor:pointer; font-size:0.73rem; white-space:nowrap; }
+  .csel-item:hover, .csel-item.active { background:#e8f0fe; }
+  .csel-empty { padding:6px 10px; color:#6c757d; font-size:0.73rem; font-style:italic; }
 </style>
 {% endblock %}
 
@@ -211,10 +221,7 @@
         <div class="mb-3">
           <label class="form-label fw-semibold form-label-sm">Plano de Contas</label>
           <select id="nc_plano_contas_conta_id" class="form-select form-select-sm">
-            <option value="">— Sem vínculo —</option>
-            {% for pc in plano_contas %}
-            <option value="{{ pc.id }}">{{ pc.codigo }} – {{ pc.nome }} <small>({{ pc.grupo_nome }})</small></option>
-            {% endfor %}
+            <option value="">— Selecione uma empresa primeiro —</option>
           </select>
         </div>
         <div class="mb-3">
@@ -235,6 +242,10 @@
         <div class="mt-3">
           <label class="form-label form-label-sm">Apelido</label>
           <input type="text" id="nc_apelido" class="form-control form-control-sm" placeholder="Ex: Conta Corrente Principal">
+        </div>
+        <div class="alert alert-info mt-3 mb-0 py-2 small">
+          <i class="bi bi-info-circle me-1"></i>
+          Após criar a conta, abra-a para editar e configure as <strong>Contas Contábeis por Coligada</strong>.
         </div>
       </div>
       <div class="modal-footer py-2">
@@ -270,9 +281,6 @@
           <label class="form-label fw-semibold form-label-sm">Plano de Contas</label>
           <select id="ed_plano_contas_conta_id" class="form-select form-select-sm">
             <option value="">— Sem vínculo —</option>
-            {% for pc in plano_contas %}
-            <option value="{{ pc.id }}">{{ pc.codigo }} – {{ pc.nome }} <small>({{ pc.grupo_nome }})</small></option>
-            {% endfor %}
           </select>
         </div>
         <div class="mb-3">
@@ -294,6 +302,15 @@
           <label class="form-label form-label-sm">Apelido</label>
           <input type="text" id="ed_apelido" class="form-control form-control-sm">
         </div>
+        <hr class="my-3">
+        <p class="text-muted small mb-2"><i class="bi bi-building me-1"></i> <strong>Contas Contábeis por Empresa Coligada</strong><br>Para cada empresa do grupo, configure a conta contábil usada ao <strong>enviar</strong> (débito) e ao <strong>receber</strong> (crédito) valores.</p>
+        <div id="ed_coligadas_loading" class="text-center py-3 d-none">
+          <span class="spinner-border spinner-border-sm text-primary me-2"></span>
+          <span class="small text-muted">Carregando configuração...</span>
+        </div>
+        <div id="ed_coligadas_container">
+          <!-- populated by JS -->
+        </div>
       </div>
       <div class="modal-footer py-2">
         <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Cancelar</button>
@@ -310,12 +327,48 @@
 <script>
 const BASE = '{{ url_for("bank_import.api_contas") }}';
 
+// Embed server-side data for JS use
+const TODOS_CLIENTES = {{ todos_clientes | tojson }};
+const PLANO_CONTAS   = {{ plano_contas   | tojson }};
+const CLIENTE_GRUPO_MAP = {{ cliente_grupo_map | tojson }};
+
 function showAlert(msg, type) {
   const box = document.getElementById('alertBox');
   box.innerHTML = `<div class="alert alert-${type} alert-dismissible fade show" role="alert">
       ${msg}<button type="button" class="btn-close" data-bs-dismiss="alert"></button></div>`;
   setTimeout(() => box.innerHTML = '', 5000);
 }
+
+// ---- Populate "Plano de Contas" select filtered by empresa's grupo_contabil_id ----
+function _populatePlanoSelect(selectEl, clienteId, selectedId) {
+  const grupoId = clienteId ? (CLIENTE_GRUPO_MAP[clienteId] || null) : null;
+  const filtered = grupoId
+    ? PLANO_CONTAS.filter(pc => pc.grupo_id === grupoId)
+    : [];
+  let html = '';
+  if (!grupoId) {
+    html = '<option value="">— Empresa sem Plano de Contas —</option>';
+  } else if (filtered.length === 0) {
+    html = '<option value="">— Nenhuma conta neste plano —</option>';
+  } else {
+    html = '<option value="">— Sem vínculo —</option>';
+    filtered.forEach(pc => {
+      const sel = selectedId && String(pc.id) === String(selectedId) ? ' selected' : '';
+      html += `<option value="${pc.id}"${sel}>${pc.codigo} – ${pc.nome} (${pc.grupo_nome})</option>`;
+    });
+  }
+  selectEl.innerHTML = html;
+}
+
+// Wire empresa dropdowns → filter plano de contas options
+document.getElementById('nc_cliente_id').addEventListener('change', function() {
+  const clienteId = this.value ? parseInt(this.value, 10) : null;
+  _populatePlanoSelect(document.getElementById('nc_plano_contas_conta_id'), clienteId, null);
+});
+document.getElementById('ed_cliente_id').addEventListener('change', function() {
+  const clienteId = this.value ? parseInt(this.value, 10) : null;
+  _populatePlanoSelect(document.getElementById('ed_plano_contas_conta_id'), clienteId, null);
+});
 
 // ---- Row click → open edit modal ----
 document.querySelectorAll('#tbl-lista tbody tr.row-item').forEach(function(row) {
@@ -352,6 +405,16 @@ function limparFiltro() {
   document.getElementById('badgeTotal').textContent = '{{ total }}';
 }
 
+// Reset nova conta modal fields on open
+document.getElementById('modalNovaConta').addEventListener('show.bs.modal', function() {
+  document.getElementById('nc_cliente_id').value = '';
+  document.getElementById('nc_banco').value = '';
+  document.getElementById('nc_agencia').value = '';
+  document.getElementById('nc_conta').value = '';
+  document.getElementById('nc_apelido').value = '';
+  _populatePlanoSelect(document.getElementById('nc_plano_contas_conta_id'), null, null);
+});
+
 // ---- Nova Conta ----
 function salvarNovaConta() {
   const banco_nome = document.getElementById('nc_banco').value.trim();
@@ -379,6 +442,142 @@ function salvarNovaConta() {
   });
 }
 
+// ---- Build plano de contas select options HTML ----
+function buildPlanoOptions(selectedId) {
+  let html = '<option value="">— Não configurado —</option>';
+  PLANO_CONTAS.forEach(pc => {
+    const sel = selectedId && String(pc.id) === String(selectedId) ? ' selected' : '';
+    html += `<option value="${pc.id}"${sel}>${pc.codigo} – ${pc.nome} (${pc.grupo_nome})</option>`;
+  });
+  return html;
+}
+
+// ---- Searchable dropdown helpers (for coligadas table) ----
+const _PLANO_BY_ID = {};
+PLANO_CONTAS.forEach(pc => { _PLANO_BY_ID[pc.id] = pc; });
+
+function _planoText(id) {
+  if (!id) return '';
+  const pc = _PLANO_BY_ID[parseInt(id, 10)];
+  return pc ? `${pc.codigo} – ${pc.nome} (${pc.grupo_nome})` : '';
+}
+
+function _buildCselItems(query) {
+  const q = (query || '').trim().toLowerCase();
+  const items = [{ id: '', text: '— Não configurado —' }];
+  PLANO_CONTAS.forEach(pc => {
+    const text = `${pc.codigo} – ${pc.nome} (${pc.grupo_nome})`;
+    if (!q || text.toLowerCase().includes(q)) items.push({ id: String(pc.id), text });
+  });
+  return items;
+}
+
+function _renderCselDrop(drop, query) {
+  const items = _buildCselItems(query);
+  if (items.length === 0) {
+    drop.innerHTML = '<div class="csel-empty">Nenhuma conta encontrada</div>';
+  } else {
+    drop.innerHTML = items.map(it =>
+      `<div class="csel-item" data-id="${it.id}" onmousedown="selectCselItem(event,this)">${it.text}</div>`
+    ).join('');
+  }
+}
+
+function openCsel(inputEl) {
+  const wrap = inputEl.closest('.csel-wrap');
+  const drop = wrap.querySelector('.csel-drop');
+  // Close all others first
+  document.querySelectorAll('.csel-drop').forEach(d => { if (d !== drop) d.style.display = 'none'; });
+  _renderCselDrop(drop, inputEl.value);
+  drop.style.display = 'block';
+}
+
+function filterCsel(inputEl) {
+  const wrap = inputEl.closest('.csel-wrap');
+  const drop = wrap.querySelector('.csel-drop');
+  _renderCselDrop(drop, inputEl.value);
+  drop.style.display = 'block';
+}
+
+function selectCselItem(evt, itemEl) {
+  evt.preventDefault();
+  const wrap = itemEl.closest('.csel-wrap');
+  const txtEl = wrap.querySelector('.csel-txt');
+  const hidEl = wrap.querySelector('input[type=hidden]');
+  const drop  = wrap.querySelector('.csel-drop');
+  hidEl.value = itemEl.dataset.id;
+  txtEl.value = itemEl.dataset.id ? itemEl.textContent : '';
+  drop.style.display = 'none';
+}
+
+// Close dropdowns when clicking outside
+document.addEventListener('click', function(e) {
+  if (!e.target.closest('.csel-wrap')) {
+    document.querySelectorAll('.csel-drop').forEach(d => { d.style.display = 'none'; });
+    // Reset text field to current hidden value (in case user typed but didn't select)
+    document.querySelectorAll('.csel-wrap').forEach(wrap => {
+      const hid = wrap.querySelector('input[type=hidden]');
+      const txt = wrap.querySelector('.csel-txt');
+      if (hid && txt) txt.value = _planoText(hid.value ? hid.value : null);
+    });
+  }
+});
+
+function _renderSearchableSelect(cls, coligadaId, selectedId) {
+  const txt = _planoText(selectedId);
+  return `<div class="csel-wrap">
+    <input type="text" class="form-control form-control-sm csel-txt"
+           placeholder="Buscar conta…" autocomplete="off" value="${txt}"
+           style="font-size:0.73rem;"
+           onfocus="openCsel(this)" oninput="filterCsel(this)">
+    <input type="hidden" class="${cls}" data-coligada-id="${coligadaId}" value="${selectedId || ''}">
+    <div class="csel-drop"></div>
+  </div>`;
+}
+
+// ---- Render per-company coligadas table ----
+function renderColigadasTable(contaClienteId, configMap) {
+  // configMap: {coligada_cliente_id: {conta_debito_id, conta_credito_id}}
+  const outros = TODOS_CLIENTES.filter(c => c.id !== contaClienteId);
+  if (outros.length === 0) {
+    return '<p class="text-muted small">Nenhuma outra empresa cadastrada para configurar como coligada.</p>';
+  }
+
+  let rows = '';
+  outros.forEach(cl => {
+    const cfg = configMap[cl.id] || {};
+    const debId  = cfg.conta_debito_id  || '';
+    const credId = cfg.conta_credito_id || '';
+    rows += `
+      <tr>
+        <td class="align-middle fw-semibold" style="font-size:0.78rem;">${cl.razao_social}</td>
+        <td>${_renderSearchableSelect('col-deb', cl.id, debId)}</td>
+        <td>${_renderSearchableSelect('col-cred', cl.id, credId)}</td>
+      </tr>`;
+  });
+
+  return `
+    <div class="table-responsive">
+      <table class="table table-sm mb-0" style="font-size:0.78rem;">
+        <thead class="table-light sticky-top">
+          <tr>
+            <th style="min-width:140px;">Empresa Coligada</th>
+            <th style="min-width:220px;">
+              <span class="text-danger"><i class="bi bi-arrow-up-right-circle me-1"></i></span>
+              Débito – ao <strong>enviar</strong>
+            </th>
+            <th style="min-width:220px;">
+              <span class="text-success"><i class="bi bi-arrow-down-left-circle me-1"></i></span>
+              Crédito – ao <strong>receber</strong>
+            </th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>
+    <div class="form-text mt-1">Configure a conta contábil usada em cada direção da operação entre empresas do grupo.</div>`;
+}
+
 // ---- Editar ----
 function abrirEditar(id, banco, agencia, conta, apelido, clienteId, planoId) {
   document.getElementById('ed_id').value = id;
@@ -387,8 +586,36 @@ function abrirEditar(id, banco, agencia, conta, apelido, clienteId, planoId) {
   document.getElementById('ed_conta').value = conta;
   document.getElementById('ed_apelido').value = apelido;
   document.getElementById('ed_cliente_id').value = clienteId !== null ? String(clienteId) : '';
-  document.getElementById('ed_plano_contas_conta_id').value = planoId !== null ? String(planoId) : '';
+  // Populate plano de contas filtered by this empresa's grupo_contabil_id
+  _populatePlanoSelect(document.getElementById('ed_plano_contas_conta_id'), clienteId, planoId);
+
+  // Reset coligadas section
+  const container = document.getElementById('ed_coligadas_container');
+  const loading   = document.getElementById('ed_coligadas_loading');
+  container.innerHTML = '';
+  loading.classList.remove('d-none');
+
+  // Open modal
   new bootstrap.Modal(document.getElementById('modalEditarConta')).show();
+
+  // Fetch per-company coligada config
+  fetch(`/banco/api/contas/${id}/coligadas`)
+    .then(r => r.json())
+    .then(data => {
+      loading.classList.add('d-none');
+      const configMap = {};
+      data.forEach(row => {
+        configMap[row.coligada_cliente_id] = {
+          conta_debito_id:  row.conta_debito_id  || '',
+          conta_credito_id: row.conta_credito_id || '',
+        };
+      });
+      container.innerHTML = renderColigadasTable(clienteId, configMap);
+    })
+    .catch(() => {
+      loading.classList.add('d-none');
+      container.innerHTML = '<p class="text-danger small">Erro ao carregar configuração de coligadas.</p>';
+    });
 }
 
 function salvarEdicao() {
@@ -399,6 +626,18 @@ function salvarEdicao() {
 
   const cliente_id_raw = document.getElementById('ed_cliente_id').value;
   const plano_raw = document.getElementById('ed_plano_contas_conta_id').value;
+
+  // Collect per-coligada configs from the rendered table
+  const coligadas = [];
+  document.querySelectorAll('#ed_coligadas_container .col-deb').forEach(sel => {
+    const coligadaId = parseInt(sel.dataset.coligadaId, 10);
+    const debId  = sel.value ? parseInt(sel.value, 10) : null;
+    const credEl = document.querySelector(`#ed_coligadas_container .col-cred[data-coligada-id="${coligadaId}"]`);
+    const credId = credEl && credEl.value ? parseInt(credEl.value, 10) : null;
+    coligadas.push({ coligada_cliente_id: coligadaId, conta_debito_id: debId, conta_credito_id: credId });
+  });
+
+  // 1) Save main account fields
   fetch(`/banco/api/contas/${id}`, {
     method: 'PUT',
     headers: {'Content-Type': 'application/json'},
@@ -413,9 +652,20 @@ function salvarEdicao() {
   })
   .then(r => r.json())
   .then(d => {
-    if (d.success) { location.reload(); }
-    else { showAlert('Erro: ' + d.message, 'danger'); }
-  });
+    if (!d.success) { showAlert('Erro: ' + d.message, 'danger'); return; }
+    // 2) Save coligadas
+    return fetch(`/banco/api/contas/${id}/coligadas`, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(coligadas),
+    });
+  })
+  .then(r => r && r.json())
+  .then(d => {
+    if (d && d.success) { location.reload(); }
+    else if (d) { showAlert('Erro ao salvar coligadas: ' + d.message, 'danger'); }
+  })
+  .catch(err => showAlert('Erro: ' + err, 'danger'));
 }
 
 // ---- Excluir / Desativar ----

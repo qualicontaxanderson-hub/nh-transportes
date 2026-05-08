@@ -2,158 +2,702 @@
 
 {% block title %}Dashboard - NH Transportes{% endblock %}
 
-{% block content %}
+{% block styles %}
+<style>
+  /* ── Power BI Light theme ── */
+  body { background: #f0f2f5 !important; }
+  .container-fluid { background: #f0f2f5; }
 
-<div class="row mb-3">
-    <div class="col-12 d-flex flex-wrap justify-content-between align-items-center gap-2">
-        <div>
-            <h2 class="mb-1">Bem-vindo ao NH Transportes</h2>
-            {% if current_user.is_authenticated %}
-                <p class="text-muted mb-0">
-                    <i class="bi bi-person-circle"></i>
-                    Logado como: <strong>{{ current_user.nome_completo }}</strong> ({{ current_user.username }})
-                    {% if current_user.nivel == 'admin' %}
-                        <span class="badge bg-danger ms-2">Administrador</span>
-                    {% endif %}
-                </p>
-            {% endif %}
-        </div>
+  .dash-wrapper {
+    margin: -1.5rem -12px 0;
+    background: #f0f2f5;
+    min-height: 100vh;
+  }
 
-        <!-- Ações rápidas prioritárias -->
-        <div class="d-flex flex-wrap gap-2">
-            <a href="{{ fretes_novo_url }}" class="btn btn-warning">
-                <i class="bi bi-box-seam"></i> Novo Frete
-            </a>
-            <a href="{{ pedidos_novo_url }}" class="btn btn-success">
-                <i class="bi bi-bag-plus"></i> Novo Pedido
-            </a>
-            <a href="{{ clientes_novo_url }}" class="btn btn-primary">
-                <i class="bi bi-person-plus"></i> Novo Cliente
-            </a>
-            <a href="{{ fornecedores_novo_url }}" class="btn btn-outline-secondary">
-                <i class="bi bi-truck"></i> Novo Fornecedor
-            </a>
+  /* Top header bar */
+  .dash-header {
+    background: #fff;
+    border-bottom: 1px solid #e2e8f0;
+    padding: 14px 28px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 12px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+  }
+  .dash-header-left {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+  }
+  .dash-brand-icon {
+    width: 40px; height: 40px;
+    background: linear-gradient(135deg, #2563eb, #1d4ed8);
+    border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    color: #fff;
+    font-size: 1.2rem;
+    flex-shrink: 0;
+  }
+  .dash-header-left h1 {
+    font-size: 1.05rem;
+    font-weight: 700;
+    color: #1e293b;
+    margin: 0;
+    letter-spacing: 0.3px;
+  }
+  .dash-header-left p {
+    font-size: 0.75rem;
+    color: #94a3b8;
+    margin: 1px 0 0;
+  }
 
-        </div>
-    </div>
-</div>
+  /* Body */
+  .dash-body {
+    padding: 22px 26px;
+  }
 
-<!-- Cards principais -->
-<div class="row g-4">
-    <div class="col-md-6 col-lg-3">
-        <div class="card text-bg-primary shadow-sm border-0">
-            <div class="card-body d-flex align-items-center justify-content-between">
-                <div>
-                    <h6 class="text-uppercase mb-1 small">Clientes</h6>
-                    <p class="fs-3 fw-bold mb-1">{{ total_clientes }}</p>
-                    <a href="{{ clientes_lista_url }}" class="btn btn-light btn-sm">
-                        Ver todos
-                    </a>
-                </div>
-                <div class="ms-3 text-white-50">
-                    <i class="bi bi-people fs-1"></i>
-                </div>
-            </div>
-        </div>
-    </div>
+  /* Section label */
+  .section-label {
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 1.3px;
+    text-transform: uppercase;
+    color: #94a3b8;
+    margin-bottom: 12px;
+    padding-left: 2px;
+  }
 
-    <div class="col-md-6 col-lg-3">
-        <div class="card text-bg-success shadow-sm border-0">
-            <div class="card-body d-flex align-items-center justify-content-between">
-                <div>
-                    <h6 class="text-uppercase mb-1 small">Fornecedores</h6>
-                    <p class="fs-3 fw-bold mb-1">{{ total_fornecedores }}</p>
-                    <a href="{{ fornecedores_lista_url }}" class="btn btn-light btn-sm">
-                        Ver todos
-                    </a>
-                </div>
-                <div class="ms-3 text-white-50">
-                    <i class="bi bi-truck fs-1"></i>
-                </div>
-            </div>
-        </div>
-    </div>
+  /* KPI Cards */
+  .kpi-card {
+    background: #fff;
+    border-radius: 12px;
+    padding: 20px 22px 18px;
+    box-shadow: 0 1px 6px rgba(0,0,0,0.07);
+    border: 1px solid #e8edf3;
+    position: relative;
+    overflow: hidden;
+    transition: box-shadow 0.18s ease, transform 0.15s ease;
+  }
+  .kpi-card:hover {
+    box-shadow: 0 6px 20px rgba(0,0,0,0.10);
+    transform: translateY(-2px);
+  }
+  .kpi-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 4px;
+    border-radius: 12px 12px 0 0;
+  }
+  .kpi-blue::before   { background: #2563eb; }
+  .kpi-green::before  { background: #10b981; }
+  .kpi-orange::before { background: #f59e0b; }
+  .kpi-purple::before { background: #8b5cf6; }
+  .kpi-teal::before   { background: #06b6d4; }
 
-    <div class="col-md-6 col-lg-3">
-        <div class="card text-bg-warning shadow-sm border-0">
-            <div class="card-body d-flex align-items-center justify-content-between">
-                <div>
-                    <h6 class="text-uppercase mb-1 small">Motoristas</h6>
-                    <p class="fs-3 fw-bold mb-1">{{ total_motoristas }}</p>
-                    <a href="{{ motoristas_lista_url }}" class="btn btn-light btn-sm">
-                        Ver todos
-                    </a>
-                </div>
-                <div class="ms-3 text-dark-50">
-                    <i class="bi bi-person-badge fs-1"></i>
-                </div>
-            </div>
-        </div>
-    </div>
+  .kpi-icon-wrap {
+    width: 42px; height: 42px;
+    border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1.15rem;
+    margin-bottom: 14px;
+  }
+  .kpi-icon-blue   { background: #dbeafe; color: #2563eb; }
+  .kpi-icon-green  { background: #d1fae5; color: #059669; }
+  .kpi-icon-orange { background: #fef3c7; color: #d97706; }
+  .kpi-icon-purple { background: #ede9fe; color: #7c3aed; }
+  .kpi-icon-teal   { background: #cffafe; color: #0891b2; }
 
-    <div class="col-md-6 col-lg-3">
-        <div class="card text-bg-info shadow-sm border-0">
-            <div class="card-body d-flex align-items-center justify-content-between">
-                <div>
-                    <h6 class="text-uppercase mb-1 small">Fretes</h6>
-                    <p class="fs-3 fw-bold mb-1">{{ total_fretes }}</p>
-                    <a href="{{ fretes_lista_url }}" class="btn btn-light btn-sm">
-                        Ver todos
-                    </a>
-                </div>
-                <div class="ms-3 text-white-50">
-                    <i class="bi bi-box-seam fs-1"></i>
-                </div>
-            </div>
-        </div>
-    </div>
-</div>
+  .kpi-label {
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    color: #94a3b8;
+    margin-bottom: 4px;
+  }
+  .kpi-value {
+    font-size: 1.85rem;
+    font-weight: 800;
+    color: #1e293b;
+    line-height: 1.15;
+    letter-spacing: -0.5px;
+  }
+  .kpi-sub {
+    font-size: 0.72rem;
+    color: #94a3b8;
+    margin-top: 5px;
+    display: flex; align-items: center; gap: 4px;
+  }
+  .kpi-sub .badge-trend {
+    background: #d1fae5;
+    color: #065f46;
+    border-radius: 20px;
+    padding: 1px 7px;
+    font-weight: 600;
+    font-size: 0.67rem;
+  }
+  .kpi-sub .badge-trend.down {
+    background: #fee2e2;
+    color: #991b1b;
+  }
 
-<!-- Linha extra com pedidos (se quiser destacar) -->
-<div class="row g-4 mt-2">
-    <div class="col-md-6 col-lg-3">
-        <div class="card shadow-sm border-0">
-            <div class="card-body d-flex align-items-center justify-content-between">
-                <div>
-                    <h6 class="text-uppercase mb-1 small">Pedidos</h6>
-                    <p class="fs-3 fw-bold mb-1">{{ total_pedidos }}</p>
-                    <a href="{{ pedidos_index_url }}" class="btn btn-outline-success btn-sm">
-                        Ver pedidos
-                    </a>
-                </div>
-                <div class="ms-3 text-muted">
-                    <i class="bi bi-bag fs-1"></i>
-                </div>
-            </div>
-        </div>
-    </div>
-</div>
+  /* Lucro card – highlighted */
+  .kpi-card.kpi-lucro {
+    background: linear-gradient(135deg, #f0fdf4, #dcfce7);
+    border-color: #bbf7d0;
+    cursor: pointer;
+    text-decoration: none;
+    display: block;
+  }
+  .kpi-card.kpi-lucro:hover {
+    background: linear-gradient(135deg, #dcfce7, #bbf7d0);
+    text-decoration: none;
+  }
+  .kpi-card.kpi-lucro::before { background: #10b981; }
+  .kpi-card.kpi-lucro .kpi-value { color: #065f46; }
+  .kpi-card.kpi-lucro .kpi-label { color: #6ee7b7; }
+  .kpi-card.kpi-lucro .kpi-sub { color: #6ee7b7; }
 
-<!-- Seção de Gerenciamento de Conta (Para todos os usuários) -->
-<div class="row mt-4">
-    <div class="col-12">
-        <div class="card border-secondary shadow-sm">
-            <div class="card-header bg-secondary text-white">
-                <h5 class="card-title mb-0">
-                    <i class="bi bi-person-gear"></i> Minha Conta
-                </h5>
-            </div>
-            <div class="card-body">
-                <div class="row g-3">
-                    <div class="col-md-6">
-                        <a href="{{ alterar_senha_url }}" class="btn btn-outline-secondary w-100">
-                            <i class="bi bi-key"></i> Alterar Minha Senha
-                        </a>
-                    </div>
-                    <div class="col-md-6">
-                        <a href="{{ logout_url }}" class="btn btn-outline-danger w-100">
-                            <i class="bi bi-box-arrow-right"></i> Sair do Sistema
-                        </a>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-</div>
+  /* Chart cards */
+  .chart-card {
+    background: #fff;
+    border-radius: 12px;
+    border: 1px solid #e8edf3;
+    padding: 20px 22px;
+    box-shadow: 0 1px 6px rgba(0,0,0,0.07);
+  }
+  .chart-card .chart-title {
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.9px;
+    text-transform: uppercase;
+    color: #64748b;
+    margin-bottom: 16px;
+    display: flex;
+    align-items: center;
+    gap: 7px;
+  }
+  .chart-card .chart-title i {
+    color: #2563eb;
+  }
 
+  /* Quick-link buttons */
+  .btn-dash-primary {
+    background: #2563eb;
+    color: #fff !important;
+    border: none;
+    border-radius: 8px;
+    padding: 9px 20px;
+    font-size: 0.82rem;
+    font-weight: 600;
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    transition: background 0.18s, box-shadow 0.15s, transform 0.1s;
+    text-decoration: none;
+    box-shadow: 0 2px 6px rgba(37,99,235,0.25);
+  }
+  .btn-dash-primary:hover {
+    background: #1d4ed8;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(37,99,235,0.35);
+  }
+  .btn-dash-success {
+    background: #10b981;
+    color: #fff !important;
+    border: none;
+    border-radius: 8px;
+    padding: 9px 20px;
+    font-size: 0.82rem;
+    font-weight: 600;
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    transition: background 0.18s, box-shadow 0.15s, transform 0.1s;
+    text-decoration: none;
+    box-shadow: 0 2px 6px rgba(16,185,129,0.25);
+  }
+  .btn-dash-success:hover {
+    background: #059669;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(16,185,129,0.35);
+  }
+  .btn-dash-yellow {
+    background: #fde68a;
+    color: #713f12 !important;
+    border: none;
+    border-radius: 8px;
+    padding: 9px 20px;
+    font-size: 0.82rem;
+    font-weight: 600;
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    transition: background 0.18s, box-shadow 0.15s, transform 0.1s;
+    text-decoration: none;
+    box-shadow: 0 2px 6px rgba(234,179,8,0.25);
+  }
+  .btn-dash-yellow:hover {
+    background: #fcd34d;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(234,179,8,0.35);
+  }
+  .btn-dash-red {
+    background: #fca5a5;
+    color: #7f1d1d !important;
+    border: none;
+    border-radius: 8px;
+    padding: 9px 20px;
+    font-size: 0.82rem;
+    font-weight: 600;
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    transition: background 0.18s, box-shadow 0.15s, transform 0.1s;
+    text-decoration: none;
+    box-shadow: 0 2px 6px rgba(239,68,68,0.25);
+  }
+  .btn-dash-red:hover {
+    background: #f87171;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(239,68,68,0.35);
+  }
+
+  /* Product breakdown tables */
+  .breakdown-card {
+    background: #fff;
+    border-radius: 12px;
+    border: 1px solid #e8edf3;
+    padding: 20px 22px;
+    box-shadow: 0 1px 6px rgba(0,0,0,0.07);
+    height: 100%;
+  }
+  .breakdown-card .bk-title {
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    color: #64748b;
+    margin-bottom: 14px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .breakdown-card .bk-title i { font-size: 0.85rem; }
+  .bk-table { width: 100%; border-collapse: collapse; }
+  .bk-table th {
+    font-size: 0.63rem;
+    font-weight: 700;
+    letter-spacing: 0.8px;
+    text-transform: uppercase;
+    color: #94a3b8;
+    padding: 0 0 8px;
+    border-bottom: 1px solid #f1f5f9;
+    text-align: left;
+  }
+  .bk-table th:last-child { text-align: right; }
+  .bk-table td {
+    font-size: 0.8rem;
+    color: #374151;
+    padding: 7px 0;
+    border-bottom: 1px solid #f8fafc;
+    vertical-align: middle;
+  }
+  .bk-table td:last-child { text-align: right; font-weight: 600; color: #1e293b; }
+  .bk-table td:not(:first-child),
+  .bk-table th:not(:first-child) { white-space: nowrap; padding-left: 10px; }
+  .bk-table tr:last-child td { border-bottom: none; }
+  .bk-table .bk-total td {
+    font-weight: 700;
+    color: #1e293b;
+    border-top: 2px solid #e2e8f0;
+    padding-top: 10px;
+    font-size: 0.82rem;
+  }
+  .bk-product-dot {
+    display: inline-block;
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    margin-right: 6px;
+    flex-shrink: 0;
+  }
+  .bk-bar-wrap {
+    width: 60px;
+    height: 5px;
+    background: #f1f5f9;
+    border-radius: 3px;
+    display: inline-block;
+    vertical-align: middle;
+    margin-left: 8px;
+  }
+  .bk-bar-fill {
+    height: 100%;
+    border-radius: 3px;
+  }
+  .bk-empty {
+    font-size: 0.75rem;
+    color: #cbd5e1;
+    text-align: center;
+    padding: 12px 0;
+  }
+
+  /* Separator */
+  .dash-sep { border-color: #e2e8f0; margin: 4px 0 18px; }
+
+  /* Lucro link row */
+  .lucro-link-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 10px;
+    font-size: 0.76rem;
+    color: #059669;
+    font-weight: 600;
+  }
+</style>
 {% endblock %}
+
+{% block content %}
+<div class="dash-wrapper">
+
+  <!-- ── Header ── -->
+  <div class="dash-header">
+    <div class="dash-header-left">
+      <div class="dash-brand-icon">
+        <i class="bi bi-bar-chart-line-fill"></i>
+      </div>
+      <div>
+        <h1>GRUPO NH</h1>
+        <p>
+          {% if current_user.is_authenticated %}
+            {{ current_user.nome_completo }}
+            {% if current_user.nivel == 'admin' %}<span class="badge bg-danger ms-1" style="font-size:0.6rem">ADM</span>{% endif %}
+            &nbsp;·&nbsp;
+          {% endif %}
+          {{ mes_atual }}
+        </p>
+      </div>
+    </div>
+    <div class="d-flex gap-2 flex-wrap">
+      <a href="{{ pedidos_novo_url }}" class="btn-dash-success">
+        <i class="bi bi-bag-plus-fill"></i> Novo Pedido
+      </a>
+      <a href="{{ importar_pedido_url }}" target="_blank" class="btn-dash-primary">
+        <i class="bi bi-cloud-download-fill"></i> Importar Pedido
+      </a>
+      <a href="https://app.postonovohorizonte.com.br/fretes/" target="_blank" class="btn-dash-yellow">
+        <i class="bi bi-truck-front-fill"></i> Fretes
+      </a>
+      <a href="https://app.postonovohorizonte.com.br/pedidos/" target="_blank" class="btn-dash-red">
+        <i class="bi bi-cart-check-fill"></i> Pedidos
+      </a>
+    </div>
+  </div>
+
+  <!-- ── Body ── -->
+  <div class="dash-body">
+
+    <!-- Product Breakdown Row -->
+    <div class="section-label">Detalhamento por Produto — {{ mes_atual }}</div>
+    <div class="row g-3 mb-4">
+
+      <!-- Lucro por Produto (LEFT) -->
+      <div class="col-12 col-lg-4">
+        <div class="breakdown-card">
+          <div class="bk-title"><i class="bi bi-graph-up-arrow" style="color:#10b981"></i> Lucro por Produto (Postos FIFO){% if lucro_por_produto and not lucro_postos_fechado %} <span style="font-size:0.65rem;font-weight:400;color:#94a3b8">(estimativa)</span>{% endif %}</div>
+          {% if lucro_por_produto %}
+            {% set max_luc = namespace(v=0) %}
+            {% for p in lucro_por_produto %}{% if p.valor > max_luc.v %}{% set max_luc.v = p.valor %}{% endif %}{% endfor %}
+            <table class="bk-table">
+              <thead><tr><th>Produto</th><th style="text-align:right">Vol. (L)</th><th style="text-align:right">Lucro (R$)</th></tr></thead>
+              <tbody>
+                {% for p in lucro_por_produto %}
+                <tr>
+                  <td>
+                    <span class="bk-product-dot" style="background:{{ ['#10b981','#2563eb','#f59e0b','#8b5cf6','#06b6d4','#ef4444','#64748b'][loop.index0 % 7] }}"></span>
+                    {{ p.nome }}
+                    <span class="bk-bar-wrap"><span class="bk-bar-fill" style="width:{{ (p.valor / max_luc.v * 100)|int if max_luc.v > 0 else 0 }}%;background:{{ ['#10b981','#2563eb','#f59e0b','#8b5cf6','#06b6d4','#ef4444','#64748b'][loop.index0 % 7] }}"></span></span>
+                  </td>
+                  <td style="text-align:right;font-size:0.78rem;color:#64748b">{{ "{:,.0f}".format(p.qtde).replace(",", ".") }}</td>
+                  <td style="text-align:right;color:{% if p.valor >= 0 %}#059669{% else %}#dc2626{% endif %}">
+                    {{ "{:,.2f}".format(p.valor).replace(",", "X").replace(".", ",").replace("X", ".") }}
+                  </td>
+                </tr>
+                {% endfor %}
+                <tr class="bk-total">
+                  <td>Total</td>
+                  <td style="text-align:right;color:#64748b">{{ "{:,.0f}".format(volume_vendido_mes).replace(",", ".") }}</td>
+                  <td style="text-align:right;color:{% if lucro_postos_mes >= 0 %}#059669{% else %}#dc2626{% endif %}">
+                    R$ {{ "{:,.2f}".format(lucro_postos_mes).replace(",", "X").replace(".", ",").replace("X", ".") }}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          {% elif volume_vendido_por_produto %}
+            <div class="bk-empty" style="color:#94a3b8;font-size:0.75rem;padding:12px 0;">
+              <i class="bi bi-clock-history"></i> Lucro FIFO disponível após o fechamento do mês
+            </div>
+          {% else %}
+            <div class="bk-empty"><i class="bi bi-inbox"></i> Sem dados no mês</div>
+          {% endif %}
+        </div>
+      </div>
+
+      <!-- Fretes por Empresa (MIDDLE) -->
+      <div class="col-12 col-lg-4">
+        <div class="breakdown-card">
+          <div class="bk-title"><i class="bi bi-truck" style="color:#6366f1"></i> Vol. Transportado por Empresa</div>
+          {% if fretes_por_empresa %}
+            <table class="bk-table">
+              <thead><tr><th>Empresa</th><th style="text-align:right">Qtd (L)</th><th style="text-align:right">Frete (R$)</th></tr></thead>
+              <tbody>
+                {% for e in fretes_por_empresa %}
+                <tr>
+                  <td>
+                    <span class="bk-product-dot" style="background:{{ ['#6366f1','#2563eb','#10b981','#f59e0b','#ef4444','#8b5cf6','#64748b'][loop.index0 % 7] }}"></span>
+                    {{ e.empresa }}
+                  </td>
+                  <td style="text-align:right;font-size:0.78rem;color:#64748b">{{ "{:,.0f}".format(e.qtd_frete).replace(",", ".") }} L</td>
+                  <td style="text-align:right;color:#2563eb">
+                    R$ {{ "{:,.2f}".format(e.valor_frete).replace(",", "X").replace(".", ",").replace("X", ".") }}
+                  </td>
+                </tr>
+                {% endfor %}
+                <tr class="bk-total">
+                  <td>TOTAL</td>
+                  <td style="text-align:right;color:#64748b">{{ "{:,.0f}".format(fretes_por_empresa_total_qtd).replace(",", ".") }} L</td>
+                  <td style="text-align:right;color:#2563eb">
+                    R$ {{ "{:,.2f}".format(fretes_por_empresa_total_valor).replace(",", "X").replace(".", ",").replace("X", ".") }}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          {% else %}
+            <div class="bk-empty"><i class="bi bi-inbox"></i> Sem dados no mês</div>
+          {% endif %}
+        </div>
+      </div>
+
+      <!-- Vol. Transportado por Produto (RIGHT) -->
+      <div class="col-12 col-lg-4">
+        <div class="breakdown-card">
+          <div class="bk-title"><i class="bi bi-droplet-half" style="color:#06b6d4"></i> Vol. Transportado por Produto</div>
+          {% if volume_transportado_por_produto %}
+            {% set max_vol = namespace(v=0) %}
+            {% for p in volume_transportado_por_produto %}{% if p.valor > max_vol.v %}{% set max_vol.v = p.valor %}{% endif %}{% endfor %}
+            <table class="bk-table">
+              <thead><tr><th>Produto</th><th>Litros</th></tr></thead>
+              <tbody>
+                {% for p in volume_transportado_por_produto %}
+                <tr>
+                  <td>
+                    <span class="bk-product-dot" style="background:{{ ['#06b6d4','#2563eb','#8b5cf6','#f59e0b','#10b981','#ef4444','#64748b'][loop.index0 % 7] }}"></span>
+                    {{ p.nome }}
+                    <span class="bk-bar-wrap"><span class="bk-bar-fill" style="width:{{ (p.valor / max_vol.v * 100)|int if max_vol.v > 0 else 0 }}%;background:{{ ['#06b6d4','#2563eb','#8b5cf6','#f59e0b','#10b981','#ef4444','#64748b'][loop.index0 % 7] }}"></span></span>
+                  </td>
+                  <td>{{ "{:,.0f}".format(p.valor).replace(",", ".") }}</td>
+                </tr>
+                {% endfor %}
+                <tr class="bk-total">
+                  <td>Total</td>
+                  <td>{{ "{:,.0f}".format(volume_transportado_mes).replace(",", ".") }}</td>
+                </tr>
+              </tbody>
+            </table>
+          {% else %}
+            <div class="bk-empty"><i class="bi bi-inbox"></i> Sem dados no mês</div>
+          {% endif %}
+        </div>
+      </div>
+
+    </div><!-- /breakdown row -->
+
+    <!-- KPI Row -->
+    <div class="section-label mt-2">Mês Corrente — {{ mes_atual }}</div>
+    <div class="row g-3 mb-4">
+
+      <!-- Fretes do Mês -->
+      <div class="col-6 col-md-4 col-xl">
+        <div class="kpi-card kpi-blue">
+          <div class="kpi-icon-wrap kpi-icon-blue"><i class="bi bi-truck"></i></div>
+          <div class="kpi-label">Fretes</div>
+          <div class="kpi-value">{{ fretes_mes }}</div>
+          <div class="kpi-sub"><i class="bi bi-calendar3"></i> este mês &nbsp;|&nbsp; {{ total_fretes }} total</div>
+        </div>
+      </div>
+
+      <!-- Volume Transportado -->
+      <div class="col-6 col-md-4 col-xl">
+        <div class="kpi-card kpi-teal">
+          <div class="kpi-icon-wrap kpi-icon-teal"><i class="bi bi-droplet-half"></i></div>
+          <div class="kpi-label">Vol. Transportado</div>
+          <div class="kpi-value">{{ "{:,.0f}".format(volume_transportado_mes).replace(",", ".") }}</div>
+          <div class="kpi-sub"><i class="bi bi-fuel-pump"></i> litros este mês</div>
+        </div>
+      </div>
+
+      <!-- Pedidos do Mês -->
+      <div class="col-6 col-md-4 col-xl">
+        <div class="kpi-card kpi-purple">
+          <div class="kpi-icon-wrap kpi-icon-purple"><i class="bi bi-bag-fill"></i></div>
+          <div class="kpi-label">Pedidos</div>
+          <div class="kpi-value">{{ pedidos_mes }}</div>
+          <div class="kpi-sub"><i class="bi bi-calendar3"></i> este mês &nbsp;|&nbsp; {{ total_pedidos }} total</div>
+        </div>
+      </div>
+
+      <!-- Volume Vendido -->
+      <div class="col-6 col-md-4 col-xl">
+        <div class="kpi-card kpi-orange">
+          <div class="kpi-icon-wrap kpi-icon-orange"><i class="bi bi-box-seam-fill"></i></div>
+          <div class="kpi-label">Vol. Vendido</div>
+          <div class="kpi-value">{{ "{:,.0f}".format(volume_vendido_mes).replace(",", ".") }}</div>
+          <div class="kpi-sub"><i class="bi bi-bar-chart"></i> litros (postos)</div>
+        </div>
+      </div>
+
+      <!-- Receita Fretes -->
+      <div class="col-6 col-md-4 col-xl">
+        <div class="kpi-card kpi-green">
+          <div class="kpi-icon-wrap kpi-icon-green"><i class="bi bi-currency-dollar"></i></div>
+          <div class="kpi-label">Receita Fretes</div>
+          <div class="kpi-value" style="font-size:1.45rem;">R$ {{ "{:,.2f}".format(receita_mes).replace(",", "X").replace(".", ",").replace("X", ".") }}</div>
+          <div class="kpi-sub"><i class="bi bi-graph-up-arrow"></i> faturamento do mês</div>
+        </div>
+      </div>
+
+      <!-- Lucro do Mês (link) -->
+      <div class="col-6 col-md-4 col-xl">
+        <a href="{{ lucro_mes_url }}" target="_blank" class="kpi-card kpi-lucro text-decoration-none">
+          <div class="kpi-icon-wrap" style="background:rgba(16,185,129,0.15);color:#059669;width:42px;height:42px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:1.15rem;margin-bottom:14px;">
+            <i class="bi bi-graph-up-arrow"></i>
+          </div>
+          <div class="kpi-label" style="color:#6ee7b7;">Lucro Fretes</div>
+          <div class="kpi-value" style="font-size:1.45rem;">R$ {{ "{:,.2f}".format(lucro_fretes_mes).replace(",", "X").replace(".", ",").replace("X", ".") }}</div>
+          <div class="lucro-link-row">
+            <i class="bi bi-box-arrow-up-right"></i> Ver Relatório de Lucro
+          </div>
+        </a>
+      </div>
+
+    </div><!-- /KPI row -->
+
+    <!-- Charts Row -->
+    <div class="section-label">Evolução — Últimos 6 Meses</div>
+    <div class="row g-3">
+
+      <!-- Fretes por Mês -->
+      <div class="col-12 col-lg-6">
+        <div class="chart-card">
+          <div class="chart-title"><i class="bi bi-bar-chart-fill"></i> Fretes por Mês</div>
+          <canvas id="chartFretes" height="190"></canvas>
+        </div>
+      </div>
+
+      <!-- Volume Transportado por Mês -->
+      <div class="col-12 col-lg-6">
+        <div class="chart-card">
+          <div class="chart-title"><i class="bi bi-droplet-fill"></i> Volume Transportado por Mês (litros)</div>
+          <canvas id="chartVolume" height="190"></canvas>
+        </div>
+      </div>
+
+    </div><!-- /charts row -->
+
+  </div><!-- /dash-body -->
+</div><!-- /dash-wrapper -->
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script>
+(function() {
+  // Light theme defaults
+  Chart.defaults.color = '#64748b';
+  Chart.defaults.borderColor = '#e2e8f0';
+
+  const labels  = {{ grafico.labels | tojson }};
+  const fretes  = {{ grafico.fretes | tojson }};
+  const volume  = {{ grafico.volume | tojson }};
+
+  const tooltipDefaults = {
+    backgroundColor: '#1e293b',
+    titleColor: '#94a3b8',
+    bodyColor: '#f1f5f9',
+    cornerRadius: 8,
+    padding: 10,
+  };
+
+  // Bar chart – Fretes por mês
+  const ctxF = document.getElementById('chartFretes').getContext('2d');
+  new Chart(ctxF, {
+    type: 'bar',
+    data: {
+      labels: labels,
+      datasets: [{
+        label: 'Fretes',
+        data: fretes,
+        backgroundColor: 'rgba(37,99,235,0.15)',
+        borderColor: '#2563eb',
+        borderWidth: 2,
+        borderRadius: 7,
+        borderSkipped: false,
+        hoverBackgroundColor: 'rgba(37,99,235,0.30)',
+      }]
+    },
+    options: {
+      responsive: true,
+      plugins: {
+        legend: { display: false },
+        tooltip: Object.assign({ borderColor: '#2563eb', borderWidth: 1 }, tooltipDefaults),
+      },
+      scales: {
+        x: { grid: { color: '#f1f5f9' }, ticks: { color: '#94a3b8' } },
+        y: { grid: { color: '#f1f5f9' }, ticks: { color: '#94a3b8' }, beginAtZero: true }
+      }
+    }
+  });
+
+  // Area chart – Volume transportado por mês
+  const ctxV = document.getElementById('chartVolume').getContext('2d');
+  const grad = ctxV.createLinearGradient(0, 0, 0, 220);
+  grad.addColorStop(0, 'rgba(6,182,212,0.25)');
+  grad.addColorStop(1, 'rgba(6,182,212,0.02)');
+  new Chart(ctxV, {
+    type: 'line',
+    data: {
+      labels: labels,
+      datasets: [{
+        label: 'Volume (L)',
+        data: volume,
+        borderColor: '#06b6d4',
+        backgroundColor: grad,
+        borderWidth: 2.5,
+        pointBackgroundColor: '#fff',
+        pointBorderColor: '#06b6d4',
+        pointBorderWidth: 2,
+        pointRadius: 5,
+        pointHoverRadius: 7,
+        fill: true,
+        tension: 0.4,
+      }]
+    },
+    options: {
+      responsive: true,
+      plugins: {
+        legend: { display: false },
+        tooltip: Object.assign({ borderColor: '#06b6d4', borderWidth: 1 }, tooltipDefaults),
+      },
+      scales: {
+        x: { grid: { color: '#f1f5f9' }, ticks: { color: '#94a3b8' } },
+        y: { grid: { color: '#f1f5f9' }, ticks: { color: '#94a3b8' }, beginAtZero: true }
+      }
+    }
+  });
+})();
+</script>
+{% endblock %}
+

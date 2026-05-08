@@ -39,7 +39,10 @@
   .btn-editar:hover  { background:#1D63A5; color:#fff; }
   .btn-excluir { color:#dc3545; border-color:#f5c6cb; background:#fff5f5; }
   .btn-excluir:hover { background:#dc3545; color:#fff; }
+  .btn-whatsapp { color:#198754; border-color:#b8e0c7; background:#eefaf2; }
+  .btn-whatsapp:hover { background:#198754; color:#fff; }
   .actions-cell { white-space: nowrap; }
+  .badge-tipo { font-size:0.68rem; padding:.2em .55em; }
 </style>
 {% endblock %}
 
@@ -53,6 +56,10 @@
       <p class="mb-0 opacity-75 small">Gerencie a frota de caminhões cadastrados no sistema.</p>
     </div>
     {% if current_user.nivel == 'admin' %}
+    <a href="{{ url_for('veiculos.config_documentos') }}"
+       class="btn btn-sm px-3 me-1" style="background:rgba(255,255,255,.10);color:#fff;border:1px solid rgba(255,255,255,.35);">
+      <i class="bi bi-file-earmark-check me-1"></i> Tipos de Documento
+    </a>
     <a href="{{ url_for('veiculos.novo') }}"
        class="btn btn-sm px-3" style="background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.35);">
       <i class="bi bi-plus-circle me-1"></i> Novo Veículo
@@ -89,9 +96,11 @@
           <thead>
             <tr>
               <th>ID</th>
-              <th>Caminhão</th>
-              <th>Placa</th>
-              <th>Modelo</th>
+              <th>Tipo</th>
+              <th>Marca / Modelo</th>
+              <th>Placa (Cavalo)</th>
+              <th>Placa Carreta</th>
+              <th>Conjunto Ativo</th>
               <th>Motorista</th>
               <th class="text-center" style="width:8%">Ações</th>
             </tr>
@@ -105,9 +114,40 @@
                   title="Clique para editar"
                   {% endif %}>
                 <td><strong>{{ veiculo.id }}</strong></td>
-                <td>{{ veiculo.caminhao }}</td>
-                <td>{{ veiculo.placa }}</td>
-                <td>{{ veiculo.modelo or '-' }}</td>
+                <td>
+                  {% if veiculo.tipo_veiculo %}
+                  <span class="badge badge-tipo bg-primary bg-opacity-10 text-primary">{{ veiculo.tipo_veiculo }}</span>
+                  {% else %}
+                  <span class="text-muted">—</span>
+                  {% endif %}
+                </td>
+                <td>
+                  {{ veiculo.caminhao }}
+                  {% if veiculo.modelo %}
+                  <span class="text-muted small">({{ veiculo.modelo }})</span>
+                  {% endif %}
+                </td>
+                <td><strong>{{ veiculo.placa }}</strong></td>
+                <td>
+                  {% if veiculo.placa_carreta %}
+                  <span class="badge" style="background:#eaf5ea;color:#198754;font-size:0.72rem;">{{ veiculo.placa_carreta }}</span>
+                  {% else %}
+                  <span class="text-muted">—</span>
+                  {% endif %}
+                </td>
+                <td>
+                  {% if veiculo.conjunto_carreta_placa %}
+                  <span class="badge" style="background:#e8f0fb;color:#1D63A5;font-size:0.72rem;">
+                    <i class="bi bi-link-45deg"></i> Carreta: {{ veiculo.conjunto_carreta_placa }}
+                  </span>
+                  {% elif veiculo.conjunto_cavalo_placa %}
+                  <span class="badge" style="background:#fff3cd;color:#856404;font-size:0.72rem;">
+                    <i class="bi bi-link-45deg"></i> Cavalo: {{ veiculo.conjunto_cavalo_placa }}
+                  </span>
+                  {% else %}
+                  <span class="text-muted" style="font-size:0.74rem;">—</span>
+                  {% endif %}
+                </td>
                 <td>
                   {% if veiculo.motorista_nome %}
                     <span class="badge" style="background:#e6f9ee;color:#198754;font-size:0.72rem;">
@@ -118,6 +158,12 @@
                   {% endif %}
                 </td>
                 <td class="text-center actions-cell" onclick="event.stopPropagation()">
+                  {% if veiculo.docs_obrigatorios_pendentes and veiculo.docs_obrigatorios_pendentes > 0 %}
+                  <span class="badge" style="background:#fff3cd;color:#856404;font-size:0.68rem;margin-right:4px;"
+                        title="{{ veiculo.docs_obrigatorios_pendentes }} doc(s) obrigatório(s) pendente(s)">
+                    <i class="bi bi-exclamation-triangle-fill"></i> {{ veiculo.docs_obrigatorios_pendentes }}
+                  </span>
+                  {% endif %}
                   {% if current_user.nivel == 'admin' %}
                   <a href="{{ url_for('veiculos.editar', id=veiculo.id) }}" class="btn-acao btn-editar" title="Editar">
                     <i class="bi bi-pencil"></i>
@@ -129,12 +175,18 @@
                     </button>
                   </form>
                   {% endif %}
+                  <button type="button"
+                          class="btn-acao btn-whatsapp"
+                          title="Copiar dados para WhatsApp"
+                          onclick="copiarDadosWhatsApp({{ veiculo.id }}, event, this)">
+                    <i class="bi bi-whatsapp"></i>
+                  </button>
                 </td>
               </tr>
               {% endfor %}
             {% else %}
               <tr>
-                <td colspan="6" class="text-center text-muted py-4">
+                <td colspan="8" class="text-center text-muted py-4">
                   <i class="bi bi-inbox" style="font-size:1.8rem;opacity:0.4;"></i>
                   <div class="mt-2" style="font-size:0.82rem;">Nenhum veículo cadastrado.</div>
                 </td>
@@ -150,8 +202,59 @@
 
 {% block scripts %}
 <script>
+const whatsappMsgUrlBase = "{{ url_for('veiculos.mensagem_whatsapp', id=0) }}";
+
 document.querySelectorAll('.row-item[data-url]').forEach(function(row) {
   row.addEventListener('click', function() { window.location = this.dataset.url; });
 });
+
+function copiarTextoClipboard(texto){
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    return navigator.clipboard.writeText(texto);
+  }
+  return new Promise(function(resolve, reject){
+    const ta = document.createElement('textarea');
+    ta.value = texto;
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.focus();
+    ta.select();
+    try {
+      const ok = document.execCommand('copy');
+      document.body.removeChild(ta);
+      ok ? resolve() : reject(new Error('Falha ao copiar'));
+    } catch (e) {
+      document.body.removeChild(ta);
+      reject(e);
+    }
+  });
+}
+
+async function copiarDadosWhatsApp(veiculoId, event, btn){
+  if (event) event.stopPropagation();
+  if (!btn) return;
+  const htmlOriginal = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = '<i class="bi bi-hourglass-split"></i>';
+  try {
+    const url = whatsappMsgUrlBase.replace(/0$/, String(veiculoId));
+    const resp = await fetch(url, { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
+    const data = await resp.json().catch(function(){ return {}; });
+    if (!resp.ok || !data.ok || !data.mensagem) {
+      if (resp.status === 404) throw new Error('Veículo não encontrado.');
+      if (resp.status === 403) throw new Error('Acesso não permitido.');
+      throw new Error(data.error || 'Não foi possível gerar a mensagem.');
+    }
+    await copiarTextoClipboard(data.mensagem);
+    btn.innerHTML = '<i class="bi bi-check-lg"></i>';
+    setTimeout(function(){ btn.innerHTML = htmlOriginal; }, 1500);
+  } catch (err) {
+    alert(err.message || 'Erro ao copiar mensagem para WhatsApp.');
+    btn.innerHTML = htmlOriginal;
+  } finally {
+    btn.disabled = false;
+  }
+}
 </script>
 {% endblock %}

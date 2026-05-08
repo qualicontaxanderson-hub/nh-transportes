@@ -27,6 +27,9 @@ from flask_login import login_required
 from routes.auth import admin_required
 from utils.db import get_db_connection
 
+import logging
+_logger = logging.getLogger(__name__)
+
 # Abreviações dos dias da semana em português (weekday() 0=Seg … 6=Dom)
 _DIAS_PT = ['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom']
 # Tolerância monetária para comparações de zero (evita erros de ponto flutuante)
@@ -153,6 +156,98 @@ def _ensure_vinculos_table(conn):
     except Exception:
         pass
     cur.close()
+
+
+def _ensure_conta_contabil_table(conn):
+    """Cria a tabela de configuração contábil de cartões se não existir."""
+    cur = conn.cursor()
+    cur.execute(
+        """
+        CREATE TABLE IF NOT EXISTS conf_cartoes_conta_contabil (
+            id                 INT AUTO_INCREMENT PRIMARY KEY,
+            bandeira_cartao_id INT NOT NULL,
+            cliente_id         INT NOT NULL,
+            conta_credito_id   INT NULL,
+            conta_debito_id    INT NULL,
+            conta_despesa_id   INT NULL,
+            criado_em          DATETIME DEFAULT CURRENT_TIMESTAMP,
+            atualizado_em      DATETIME DEFAULT CURRENT_TIMESTAMP
+                               ON UPDATE CURRENT_TIMESTAMP,
+            UNIQUE KEY uq_cccc_band_cli (bandeira_cartao_id, cliente_id),
+            CONSTRAINT fk_cccc_bandeira FOREIGN KEY (bandeira_cartao_id)
+                REFERENCES bandeiras_cartao(id) ON DELETE CASCADE,
+            CONSTRAINT fk_cccc_cliente  FOREIGN KEY (cliente_id)
+                REFERENCES clientes(id) ON DELETE CASCADE,
+            CONSTRAINT fk_cccc_credito  FOREIGN KEY (conta_credito_id)
+                REFERENCES plano_contas_contas(id) ON DELETE SET NULL,
+            CONSTRAINT fk_cccc_debito   FOREIGN KEY (conta_debito_id)
+                REFERENCES plano_contas_contas(id) ON DELETE SET NULL,
+            CONSTRAINT fk_cccc_despesa  FOREIGN KEY (conta_despesa_id)
+                REFERENCES plano_contas_contas(id) ON DELETE SET NULL
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+        """
+    )
+    conn.commit()
+    # Migration: add conta_despesa_id column if table already existed without it
+    try:
+        cur.execute(
+            "ALTER TABLE conf_cartoes_conta_contabil "
+            "ADD COLUMN conta_despesa_id INT NULL"
+        )
+        conn.commit()
+    except Exception:
+        pass  # column already exists
+    try:
+        cur.execute(
+            "ALTER TABLE conf_cartoes_conta_contabil "
+            "ADD CONSTRAINT fk_cccc_despesa FOREIGN KEY (conta_despesa_id) "
+            "REFERENCES plano_contas_contas(id) ON DELETE SET NULL"
+        )
+        conn.commit()
+    except Exception:
+        pass  # constraint already exists
+    cur.close()
+
+
+def _get_plano_contas(conn):
+    """Retorna todas as contas do plano de contas ativas."""
+    cur = conn.cursor(dictionary=True)
+    cur.execute(
+        """
+        SELECT pcc.id, pcc.codigo, pcc.nome, g.nome AS grupo_nome
+          FROM plano_contas_contas pcc
+          JOIN plano_contas_grupos g ON g.id = pcc.grupo_id
+         WHERE pcc.ativo = 1
+         ORDER BY pcc.codigo
+        """
+    )
+    rows = cur.fetchall()
+    cur.close()
+    return rows
+
+
+def _get_config_contabil(conn):
+    """Retorna dict {(bandeira_cartao_id, cliente_id): {conta_credito_id, conta_debito_id, conta_despesa_id, ...}}."""
+    cur = conn.cursor(dictionary=True)
+    try:
+        cur.execute(
+            """
+            SELECT cc.bandeira_cartao_id, cc.cliente_id,
+                   cc.conta_credito_id, cc.conta_debito_id, cc.conta_despesa_id,
+                   pc_c.codigo AS credito_codigo, pc_c.nome AS credito_nome,
+                   pc_d.codigo AS debito_codigo,  pc_d.nome AS debito_nome,
+                   pc_e.codigo AS despesa_codigo, pc_e.nome AS despesa_nome
+              FROM conf_cartoes_conta_contabil cc
+              LEFT JOIN plano_contas_contas pc_c ON pc_c.id = cc.conta_credito_id
+              LEFT JOIN plano_contas_contas pc_d ON pc_d.id = cc.conta_debito_id
+              LEFT JOIN plano_contas_contas pc_e ON pc_e.id = cc.conta_despesa_id
+            """
+        )
+        rows = cur.fetchall()
+    except Exception:
+        rows = []
+    cur.close()
+    return {(r['bandeira_cartao_id'], r['cliente_id']): r for r in rows}
 
 
 def _ensure_feriados_table(conn):
@@ -615,11 +710,26 @@ def conf_cartoes():
     try:
         _ensure_vinculos_table(conn)
         _ensure_feriados_table(conn)
+        _ensure_conta_contabil_table(conn)
 
         empresas = _get_empresas(conn)
         bandeiras = _get_bandeiras(conn)
         formas_cartao = _get_formas_recebimento_cartao(conn)
         feriados, feriados_set = _get_feriados(conn)
+        plano_contas = _get_plano_contas(conn)
+        config_contabil = _get_config_contabil(conn)
+        # Serialise config_contabil to a JSON-safe dict keyed by "bandId_cliId"
+        config_contabil_js = {
+            f"{k[0]}_{k[1]}": {
+                'conta_credito_id':  v['conta_credito_id'],
+                'conta_debito_id':   v['conta_debito_id'],
+                'conta_despesa_id':  v['conta_despesa_id'],
+                'credito_label':  f"{v['credito_codigo']} – {v['credito_nome']}"   if v.get('credito_codigo')  else '',
+                'debito_label':   f"{v['debito_codigo']} – {v['debito_nome']}"     if v.get('debito_codigo')   else '',
+                'despesa_label':  f"{v['despesa_codigo']} – {v['despesa_nome']}"   if v.get('despesa_codigo')  else '',
+            }
+            for k, v in config_contabil.items()
+        }
 
         # Apply bandeira filter if selected
         bandeiras_filtered = bandeiras
@@ -674,7 +784,56 @@ def conf_cartoes():
         grand_total_recebimento=grand_total_recebimento,
         grand_total_diferenca=grand_total_diferenca,
         grand_saldo=grand_saldo,
+        plano_contas=plano_contas,
+        config_contabil_js=config_contabil_js,
     )
+
+
+@bp.route('/conf_cartoes/config-contabil/salvar', methods=['POST'])
+@login_required
+@admin_required
+def config_contabil_salvar():
+    """Salva ou remove configuração de conta contábil para uma bandeira+empresa."""
+    data = request.get_json(silent=True) or {}
+    bandeira_id  = data.get('bandeira_cartao_id')
+    cliente_id   = data.get('cliente_id')
+    credito_id   = data.get('conta_credito_id') or None
+    debito_id    = data.get('conta_debito_id') or None
+    despesa_id   = data.get('conta_despesa_id') or None
+
+    if not bandeira_id or not cliente_id:
+        return jsonify({'success': False, 'message': 'Parâmetros inválidos.'}), 400
+
+    conn = get_db_connection()
+    try:
+        _ensure_conta_contabil_table(conn)
+        cur = conn.cursor()
+        if credito_id or debito_id or despesa_id:
+            cur.execute(
+                """INSERT INTO conf_cartoes_conta_contabil
+                       (bandeira_cartao_id, cliente_id, conta_credito_id, conta_debito_id, conta_despesa_id)
+                   VALUES (%s, %s, %s, %s, %s)
+                   ON DUPLICATE KEY UPDATE
+                       conta_credito_id  = VALUES(conta_credito_id),
+                       conta_debito_id   = VALUES(conta_debito_id),
+                       conta_despesa_id  = VALUES(conta_despesa_id)""",
+                (bandeira_id, cliente_id, credito_id, debito_id, despesa_id),
+            )
+        else:
+            cur.execute(
+                "DELETE FROM conf_cartoes_conta_contabil"
+                " WHERE bandeira_cartao_id = %s AND cliente_id = %s",
+                (bandeira_id, cliente_id),
+            )
+        conn.commit()
+        cur.close()
+        return jsonify({'success': True})
+    except Exception as e:
+        conn.rollback()
+        _logger.error("config_contabil_salvar: erro ao salvar: %s", e, exc_info=True)
+        return jsonify({'success': False, 'message': 'Erro ao salvar configuração.'}), 500
+    finally:
+        conn.close()
 
 
 @bp.route('/conf_cartoes/vincular', methods=['POST'])

@@ -310,6 +310,9 @@
                     <a href="{{ url_for('conciliacao_regras.lista') }}" class="btn btn-outline-warning">
                         <i class="bi bi-funnel"></i> Regras de Conciliaçao
                     </a>
+                    <button class="btn btn-outline-success fw-semibold" data-bs-toggle="modal" data-bs-target="#modalExportacaoContabil">
+                        <i class="bi bi-file-earmark-spreadsheet me-1"></i> Exportação Contábil
+                    </button>
                 </div>
             </div>
         </div>
@@ -590,6 +593,61 @@
             </div>
         </div>
     </div>
+</div>
+
+<!-- Modal: Exportação Contábil -->
+<div class="modal fade" id="modalExportacaoContabil" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header" style="background:#198754;color:#fff;">
+        <h6 class="modal-title"><i class="bi bi-file-earmark-spreadsheet me-1"></i> Exportação Contábil</h6>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <p class="text-muted small mb-3">Gera uma planilha Excel com os lançamentos bancários conciliados no formato contábil: <strong>DATA / DESCRIÇÃO / VALOR / Nº CONTA CRÉDITO / DESCRIÇÃO CONTA CRÉDITO / Nº CONTA DÉBITO / DESCRIÇÃO CONTA DÉBITO</strong>.</p>
+        <div class="mb-3">
+          <label class="form-label fw-semibold form-label-sm">Empresa</label>
+          <select id="exp_empresa_id" class="form-select form-select-sm">
+            <option value="">— Todas as empresas —</option>
+            {% for c in clientes %}
+            <option value="{{ c.id }}">{{ c.razao_social }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="mb-3">
+          <label class="form-label fw-semibold form-label-sm">Conta Bancária</label>
+          <select id="exp_account_id" class="form-select form-select-sm">
+            <option value="">— Todas as contas —</option>
+            {% if contas %}
+            {% for conta in contas %}
+            <option value="{{ conta.id }}">{{ conta.apelido or conta.banco_nome }}{% if conta.empresa_nome %} — {{ conta.empresa_nome }}{% endif %}</option>
+            {% endfor %}
+            {% endif %}
+          </select>
+        </div>
+        <div class="row g-2">
+          <div class="col-6">
+            <label class="form-label form-label-sm">Data Inicial</label>
+            <input type="date" id="exp_data_ini" class="form-control form-control-sm">
+          </div>
+          <div class="col-6">
+            <label class="form-label form-label-sm">Data Final</label>
+            <input type="date" id="exp_data_fim" class="form-control form-control-sm">
+          </div>
+        </div>
+        <div class="alert alert-info mt-3 mb-0 py-2 small">
+          <i class="bi bi-info-circle me-1"></i>
+          Apenas transações <strong>conciliadas</strong> são exportadas. As contas contábeis de coligadas são configuradas em <a href="{{ url_for('bank_import.gerenciar_contas') }}">Gerenciar Contas</a>.
+        </div>
+      </div>
+      <div class="modal-footer py-2">
+        <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+        <button type="button" class="btn btn-sm btn-success" onclick="exportarContabil()">
+          <i class="bi bi-download me-1"></i> Baixar Excel
+        </button>
+      </div>
+    </div>
+  </div>
 </div>
 {% endblock %}
 
@@ -1300,5 +1358,22 @@
         document.getElementById('ultimoDiaEmpresaId').value = '';
         document.getElementById('ultimoDiaResultado').innerHTML = '';
     });
+
+    // ---- Exportação Contábil ----
+    function exportarContabil() {
+        const empresa_id  = document.getElementById('exp_empresa_id').value;
+        const account_id  = document.getElementById('exp_account_id').value;
+        const data_ini    = document.getElementById('exp_data_ini').value;
+        const data_fim    = document.getElementById('exp_data_fim').value;
+
+        const params = new URLSearchParams();
+        if (empresa_id)  params.append('empresa_id',  empresa_id);
+        if (account_id)  params.append('account_id',  account_id);
+        if (data_ini)    params.append('data_ini',    data_ini);
+        if (data_fim)    params.append('data_fim',    data_fim);
+
+        const url = '{{ url_for("bank_import.exportar_contabil") }}' + (params.toString() ? '?' + params.toString() : '');
+        window.location.href = url;
+    }
 </script>
 {% endblock %}

@@ -174,10 +174,26 @@
 
   <!-- Tabela -->
   <div class="card shadow-sm">
-    <div class="card-header d-flex align-items-center py-2"
+    <div class="card-header d-flex align-items-center gap-2 py-2 flex-wrap"
          style="background:#1D63A5;color:white;font-size:0.82rem;font-weight:600;letter-spacing:0.02em;">
-      <i class="bi bi-list-ul me-2"></i> Lista de Depósitos
-      {% if depositos %}<span class="badge ms-2" style="background:rgba(255,255,255,.2);font-size:0.78rem;">{{ depositos|length }}</span>{% endif %}
+      <i class="bi bi-list-ul me-1"></i> Lista de Depósitos
+      {% if depositos %}<span class="badge ms-1" style="background:rgba(255,255,255,.2);font-size:0.78rem;">{{ depositos|length }}</span>{% endif %}
+      <span class="ms-auto d-flex gap-2">
+        {% set _toggle_base = url_for('depositos.listar', data_inicio=data_inicio, data_fim=data_fim, tipo_grupo=tipo_grupo) %}
+        {% if status != 'conciliado' %}
+          <a href="{{ _toggle_base }}&status=conciliado{% for c in cliente_ids %}&cliente_ids[]={{ c }}{% endfor %}"
+             class="btn btn-sm fw-semibold"
+             style="background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.35);font-size:0.75rem;">
+            <i class="bi bi-check2-all me-1"></i> Ver Verificados
+          </a>
+        {% else %}
+          <a href="{{ _toggle_base }}&status=pendente{% for c in cliente_ids %}&cliente_ids[]={{ c }}{% endfor %}"
+             class="btn btn-sm fw-semibold"
+             style="background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.35);font-size:0.75rem;">
+            <i class="bi bi-hourglass-split me-1"></i> Ver Pendentes
+          </a>
+        {% endif %}
+      </span>
     </div>
     <div class="card-body table-responsive p-0">
       {% if depositos %}
@@ -197,8 +213,10 @@
           </thead>
           <tbody>
             {% for d in depositos %}
-            <tr class="{% if d.bank_transaction_id %}dep-conciliado{% else %}dep-pendente{% endif %}">
-              <td class="ps-3">
+            <tr class="{% if d.bank_transaction_id %}dep-conciliado{% else %}dep-pendente{% endif %}"
+                {% if not d.bank_transaction_id %}style="cursor:pointer;"
+                onclick="abrirVincularSolo('{{ d.id }}', '{{ d.valor }}', '{{ d.tipo_grupo }}')"{% endif %}>
+              <td class="ps-3" onclick="event.stopPropagation()">
                 {% if not d.bank_transaction_id %}
                 <input type="checkbox" class="dep-check"
                        data-id="{{ d.id }}"
@@ -234,9 +252,15 @@
                     <i class="bi bi-check-circle"></i> Conciliado
                   </span>
                   <br>
+                  {% if d.cnt_vinculos_total > 1 %}
+                  <small class="text-muted" style="font-size:0.65rem;">
+                    {{ d.cnt_vinculos_total }} transações · {{ d.total_banco_vinculos | formatar_moeda }}
+                  </small>
+                  {% else %}
                   <small class="text-muted" style="font-size:0.65rem;">
                     {{ d.banco_data_br }} {{ d.banco_valor | formatar_moeda if d.banco_valor }}
                   </small>
+                  {% endif %}
                 {% else %}
                   <div class="concil-auto"
                        data-id="{{ d.id }}"
@@ -305,8 +329,9 @@
           <div class="mt-1">Total: <strong id="totalVincular">R$ 0,00</strong></div>
         </div>
         <!-- Sugestões bancárias -->
-        <div class="mb-2" style="font-size:0.78rem;font-weight:600;color:#1D63A5;">
-          <i class="bi bi-bank me-1"></i> Transações Bancárias (CRÉDITO)
+        <div class="mb-2 d-flex align-items-center justify-content-between" style="font-size:0.78rem;">
+          <span style="font-weight:600;color:#1D63A5;"><i class="bi bi-bank me-1"></i> Transações Bancárias (CRÉDITO)</span>
+          <span class="text-muted" style="font-size:0.72rem;"><i class="bi bi-info-circle me-1"></i>Você pode selecionar múltiplas transações (quando o banco divide um depósito)</span>
         </div>
         <input type="text" id="buscaBanco" class="form-control form-control-sm mb-2"
                placeholder="Buscar por descrição ou valor..." style="font-size:0.75rem;"
@@ -318,13 +343,19 @@
              style="max-height:280px;overflow-y:auto;border:1px solid #dee2e6;border-radius:4px;font-size:0.78rem;">
           <div class="text-center text-muted py-3" id="msgSemMatch">Clique em "Vincular" em um depósito para carregar sugestões.</div>
         </div>
+        <!-- Total das transações bancárias selecionadas -->
+        <div class="mt-2 p-2 rounded d-flex align-items-center justify-content-between"
+             style="background:#f0faf4;font-size:0.8rem;">
+          <span>Total banco selecionado: <strong id="totalBancoSelecionado" class="text-success">R$ 0,00</strong></span>
+          <span id="msgDiferenca" class="text-muted" style="font-size:0.75rem;"></span>
+        </div>
         <div class="mt-2 small text-muted">
           Não encontrou? <a href="{{ url_for('bank_import.conciliar') }}">Abrir conciliação bancária</a>.
         </div>
       </div>
       <!-- Hidden form submitted on confirmation -->
       <form id="formVincular" method="POST" action="{{ url_for('depositos.vincular') }}">
-        <input type="hidden" name="bank_transaction_id" id="inputBankTxId">
+        <div id="inputsBankTx"></div>
         <input type="hidden" name="data_inicio" value="{{ data_inicio }}">
         <input type="hidden" name="data_fim" value="{{ data_fim }}">
         <input type="hidden" name="tipo_grupo" value="{{ tipo_grupo }}">
@@ -403,14 +434,66 @@
     });
   }
 
-  /* ── Modal Vincular ── */
-  let _allBancoRows = [];
+  /* ── Modal Vincular – multi-select bank transactions ── */
+  let _allBancoRows  = [];
+  let _selectedBankIds = new Set();   // IDs of selected bank transactions
+  let _depositTotal  = 0;            // Total value of selected deposits
 
   const URL_API = '{{ url_for("depositos.api_candidatos", comprovacao_id=0) }}'.replace('/0', '/');
 
   function fmtMoeda(v) {
     return 'R$ ' + parseFloat(v || 0).toLocaleString('pt-BR', {minimumFractionDigits:2, maximumFractionDigits:2});
   }
+
+  /* Update hidden inputs, button state, totals, and visual selection */
+  function updateBankSelection() {
+    // Compute total from allBancoRows (works even after filtering)
+    const total = Array.from(_selectedBankIds).reduce((sum, id) => {
+      const row = _allBancoRows.find(r => r.id === id);
+      return sum + (row ? parseFloat(row.valor || 0) : 0);
+    }, 0);
+
+    document.getElementById('totalBancoSelecionado').textContent = fmtMoeda(total);
+    document.getElementById('btnConfirmarVincular').disabled = (_selectedBankIds.size === 0);
+
+    // Show difference hint
+    const diff = total - _depositTotal;
+    const msgEl = document.getElementById('msgDiferenca');
+    if (_selectedBankIds.size > 0 && Math.abs(diff) > 0.01) {
+      const sign = diff > 0 ? '+' : '';
+      msgEl.textContent = `Diferença: ${sign}${fmtMoeda(diff)} em relação ao depósito`;
+      msgEl.style.color = '#dc3545';
+    } else if (_selectedBankIds.size > 0) {
+      msgEl.textContent = '✓ Valor confere';
+      msgEl.style.color = '#198754';
+    } else {
+      msgEl.textContent = '';
+    }
+
+    // Populate hidden inputs
+    const container = document.getElementById('inputsBankTx');
+    container.innerHTML = Array.from(_selectedBankIds).map(id =>
+      `<input type="hidden" name="bank_transaction_ids[]" value="${id}">`
+    ).join('');
+
+    // Update visual (checkbox + highlight)
+    document.querySelectorAll('.banco-item').forEach(el => {
+      const selected = _selectedBankIds.has(parseInt(el.dataset.id));
+      el.style.background = selected ? '#e8f4fd' : '';
+      const cb = el.querySelector('.banco-check');
+      if (cb) cb.checked = selected;
+    });
+  }
+
+  window.toggleBanco = function(txId) {
+    txId = parseInt(txId);
+    if (_selectedBankIds.has(txId)) {
+      _selectedBankIds.delete(txId);
+    } else {
+      _selectedBankIds.add(txId);
+    }
+    updateBankSelection();
+  };
 
   function renderBancoRows(rows) {
     const lista = document.getElementById('listaBanco');
@@ -421,8 +504,10 @@
     lista.innerHTML = rows.map(tx => `
       <div class="banco-item d-flex align-items-center px-2 py-1 border-bottom"
            data-id="${tx.id}" data-valor="${tx.valor}" data-desc="${(tx.descricao||'').toLowerCase()}"
-           style="cursor:pointer; font-size:0.78rem;">
-        <input type="radio" name="banco_radio" class="me-2" value="${tx.id}" onchange="selecionarBanco(${tx.id})">
+           style="cursor:pointer; font-size:0.78rem;"
+           onclick="toggleBanco(${tx.id})">
+        <input type="checkbox" class="banco-check me-2 flex-shrink-0" value="${tx.id}"
+               onclick="event.stopPropagation(); toggleBanco(${tx.id})">
         <div class="flex-grow-1">
           <strong>${tx.data_transacao || '-'}</strong>
           <span class="text-muted mx-1">${tx.conta_apelido || tx.banco_nome || ''}</span>
@@ -432,6 +517,8 @@
         <span class="fw-bold text-success ms-2 text-nowrap">${fmtMoeda(tx.valor)}</span>
       </div>
     `).join('');
+    // Reflect current selection state on freshly rendered rows
+    updateBankSelection();
   }
 
   function carregarCandidatos(comprovacaoId) {
@@ -439,8 +526,8 @@
     const lista   = document.getElementById('listaBanco');
     loading.classList.remove('d-none');
     lista.innerHTML = '';
-    document.getElementById('btnConfirmarVincular').disabled = true;
-    document.getElementById('inputBankTxId').value = '';
+    _selectedBankIds = new Set();
+    updateBankSelection();
 
     fetch(URL_API + comprovacaoId)
       .then(r => r.json())
@@ -457,23 +544,15 @@
 
   window.filtrarBanco = function() {
     const q = document.getElementById('buscaBanco').value.toLowerCase();
-    if (!q) { renderBancoRows(_allBancoRows); return; }
-    renderBancoRows(_allBancoRows.filter(r =>
-      (r.descricao || '').toLowerCase().includes(q) ||
-      String(r.valor).includes(q)
-    ));
-  };
-
-  window.selecionarBanco = function(txId) {
-    document.getElementById('inputBankTxId').value = txId;
-    document.getElementById('btnConfirmarVincular').disabled = false;
-    document.querySelectorAll('.banco-item').forEach(el => {
-      el.style.background = el.dataset.id == txId ? '#e8f4fd' : '';
-    });
+    const filtered = q
+      ? _allBancoRows.filter(r => (r.descricao || '').toLowerCase().includes(q) || String(r.valor).includes(q))
+      : _allBancoRows;
+    renderBancoRows(filtered);
   };
 
   /* Populate form inputs from selected deposits */
   function popularFormVincular(ids, total) {
+    _depositTotal = total;
     const container = document.getElementById('inputsComprovacao');
     container.innerHTML = ids.map(id =>
       `<input type="hidden" name="comprovacao_ids[]" value="${id}">`
@@ -481,22 +560,44 @@
     document.getElementById('totalVincular').textContent = fmtMoeda(total);
   }
 
-  /* Open modal for a single deposit (Vincular button in row) */
-  document.addEventListener('click', function(e) {
-    const btn = e.target.closest('.btn-vincular-solo');
-    if (!btn) return;
-    const id    = btn.dataset.id;
-    const valor = parseFloat(btn.dataset.valor || 0);
-    const grupo = btn.dataset.grupo;
+  /* Reset modal state and clean up any stuck Bootstrap backdrop on close */
+  document.getElementById('modalVincular').addEventListener('hidden.bs.modal', function() {
+    _selectedBankIds = new Set();
+    _allBancoRows = [];
+    document.getElementById('listaBanco').innerHTML =
+      '<div class="text-center text-muted py-3" id="msgSemMatch">Clique em "Vincular" em um depósito para carregar sugestões.</div>';
+    document.getElementById('buscaBanco').value = '';
+    document.getElementById('totalVincular').textContent = 'R$ 0,00';
+    document.getElementById('totalBancoSelecionado').textContent = 'R$ 0,00';
+    document.getElementById('msgDiferenca').textContent = '';
+    document.getElementById('inputsComprovacao').innerHTML = '';
+    document.getElementById('inputsBankTx').innerHTML = '';
+    document.getElementById('btnConfirmarVincular').disabled = true;
+    /* Safety net: remove any lingering backdrop/overflow that Bootstrap sometimes leaves */
+    document.querySelectorAll('.modal-backdrop').forEach(function(el) { el.remove(); });
+    document.body.classList.remove('modal-open');
+    document.body.style.overflow = '';
+    document.body.style.paddingRight = '';
+  });
 
+  /* Open modal for a single deposit — callable from row click or button click */
+  window.abrirVincularSolo = function(id, valor, grupo) {
+    valor = parseFloat(valor || 0);
     document.getElementById('resumoDepositos').textContent =
       `1 depósito — Tipo: ${grupo === 'CHEQUE' ? 'Cheque' : 'Espécie'}`;
     document.getElementById('buscaBanco').value = '';
+    _selectedBankIds = new Set();
     popularFormVincular([id], valor);
     carregarCandidatos(id);
-
-    const modal = new bootstrap.Modal(document.getElementById('modalVincular'));
+    const modal = bootstrap.Modal.getOrCreateInstance(document.getElementById('modalVincular'));
     modal.show();
+  };
+
+  /* Delegate click on .btn-vincular-solo buttons (auto-match area) */
+  document.addEventListener('click', function(e) {
+    const btn = e.target.closest('.btn-vincular-solo');
+    if (!btn) return;
+    abrirVincularSolo(btn.dataset.id, btn.dataset.valor, btn.dataset.grupo);
   });
 
   /* Open modal for multiple selected deposits */
@@ -514,19 +615,20 @@
     const total = Array.from(checked).reduce((s, cb) => s + parseFloat(cb.dataset.valor || 0), 0);
     const grupo = grupos.values().next().value;
 
-    document.getElementById('resumoDepositos').innerHTML = ids.map((id, i) => {
+    document.getElementById('resumoDepositos').innerHTML = ids.map((id) => {
       const cb = document.querySelector(`.dep-check[data-id="${id}"]`);
       const v  = parseFloat(cb ? cb.dataset.valor : 0);
       return `<div>• Depósito #${id} — ${fmtMoeda(v)}</div>`;
     }).join('');
 
     document.getElementById('buscaBanco').value = '';
+    _selectedBankIds = new Set();
     popularFormVincular(ids, total);
 
     // Load candidates using the first deposit as reference
     carregarCandidatos(ids[0]);
 
-    const modal = new bootstrap.Modal(document.getElementById('modalVincular'));
+    const modal = bootstrap.Modal.getOrCreateInstance(document.getElementById('modalVincular'));
     modal.show();
   };
 

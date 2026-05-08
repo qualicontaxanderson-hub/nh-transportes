@@ -1,0 +1,294 @@
+{% extends "base.html" %}
+{% block title %}Formas de Recebimento – Preços{% endblock %}
+
+{% block styles %}
+<style>
+  .check-prod-label {
+    display: inline-flex; align-items: center; gap: .22rem;
+    font-size: .72rem; white-space: nowrap; cursor: pointer;
+    padding: .1rem .3rem; border-radius: 3px;
+    transition: background .1s;
+  }
+  .check-prod-label:hover { background: #e8f0fe; }
+  .check-prod-label input[type=checkbox] {
+    width: .8rem; height: .8rem; flex-shrink: 0; cursor: pointer;
+  }
+  .check-prod-label.oculto { text-decoration: line-through; color: #9ca3af; }
+  .page-hero {
+    background: linear-gradient(135deg, #1D63A5 0%, #1a4f82 60%, #154070 100%);
+    border-radius: .75rem;
+    padding: 1.5rem 2rem;
+    margin-bottom: 1.5rem;
+    color: #fff;
+  }
+  .page-hero .hero-icon {
+    width: 3rem; height: 3rem;
+    background: rgba(255,255,255,.15);
+    border-radius: .6rem;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1.5rem;
+    flex-shrink: 0;
+  }
+  .section-title {
+    font-size: 0.75rem; font-weight: 700; text-transform: uppercase;
+    letter-spacing: .05em; color: #1D63A5;
+    padding-bottom: .4rem; border-bottom: 2px solid #e0eaf5; margin-bottom: 1rem;
+  }
+  .tbl-formas thead th {
+    background: #f0f4f8; font-size: .72rem; text-transform: uppercase;
+    letter-spacing: .04em; font-weight: 700; color: #374151;
+    padding: .5rem .75rem; white-space: nowrap;
+  }
+  .tbl-formas tbody td { padding: .45rem .75rem; vertical-align: middle; font-size: .85rem; }
+  .tbl-formas tbody tr:last-child td { border-bottom: 0; }
+  .tag-base {
+    font-size: .68rem; font-weight: 700;
+    background: #d1ecf1; color: #0c5460;
+    border-radius: 3px; padding: 1px 5px;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+
+  <div class="page-hero d-flex align-items-center gap-3 flex-wrap">
+    <div class="hero-icon"><i class="bi bi-percent"></i></div>
+    <div class="flex-grow-1">
+      <h4 class="mb-0 fw-bold">Formas de Recebimento – Acréscimos Padrão</h4>
+      <p class="mb-0 opacity-75 small">
+        Configure as formas de pagamento e seus acréscimos globais padrão.
+        Os acréscimos podem ser sobrescritos por empresa na tela de Preços.
+      </p>
+    </div>
+    <a href="{{ url_for('precos_posto.index') }}"
+       class="btn btn-sm px-3 fw-semibold"
+       style="background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.35);">
+      <i class="bi bi-arrow-left me-1"></i> Voltar a Preços
+    </a>
+  </div>
+
+  {% with msgs = get_flashed_messages(with_categories=true) %}
+    {% for cat, msg in msgs %}
+    <div class="alert alert-{{ cat }} alert-dismissible fade show mb-3" role="alert">
+      {{ msg }}<button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+    {% endfor %}
+  {% endwith %}
+
+  <div class="row g-3">
+
+    {# ── Lista de formas ─────────────────────────────────────────── #}
+    <div class="col-12 col-lg-8">
+      <div class="card shadow-sm border-0">
+        <div class="card-body">
+          <div class="section-title"><i class="bi bi-list-ul me-1"></i>Formas Cadastradas</div>
+          <div class="table-responsive">
+            <table class="table tbl-formas mb-0">
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>Nome</th>
+                  <th>Combustíveis no WhatsApp</th>
+                  <th class="text-end">Acréscimo Padrão (R$/L)</th>
+                  <th class="text-center">Base</th>
+                  <th class="text-center">Ordem</th>
+                  <th class="text-center">Status</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for f in formas %}
+                <tr>
+                  <td class="text-muted">{{ f.id }}</td>
+                  <td class="fw-semibold">
+                    {{ f.nome }}
+                    {% if f.is_base %}<span class="tag-base ms-1">BASE</span>{% endif %}
+                  </td>
+                  <td>
+                    {% if todos_produtos %}
+                    <div class="d-flex flex-wrap" style="gap:.15rem .4rem;">
+                      {% for prod in todos_produtos %}
+                      {% set oculto = prod.id in ocultos_por_forma.get(f.id, []) %}
+                      <label class="check-prod-label{% if oculto %} oculto{% endif %}"
+                             title="{{ prod.nome }}">
+                        <input type="checkbox"
+                               class="produto-toggle"
+                               data-forma-id="{{ f.id }}"
+                               data-produto-id="{{ prod.id }}"
+                               {% if not oculto %}checked{% endif %}>
+                        {{ prod.abrev }}
+                      </label>
+                      {% endfor %}
+                    </div>
+                    {% else %}
+                    <span class="text-muted small">—</span>
+                    {% endif %}
+                  </td>
+                  <td class="text-end">
+                    {{ '%.4f'|format(f.acrescimo_padrao|float) }}
+                  </td>
+                  <td class="text-center">
+                    {% if f.is_base %}
+                    <i class="bi bi-check-circle-fill text-success"></i>
+                    {% else %}
+                    <span class="text-muted">—</span>
+                    {% endif %}
+                  </td>
+                  <td class="text-center">{{ f.ordem }}</td>
+                  <td class="text-center">
+                    {% if f.ativo %}
+                    <span class="badge" style="background:#d1e7dd;color:#0f5132;">Ativo</span>
+                    {% else %}
+                    <span class="badge" style="background:#f8d7da;color:#842029;">Inativo</span>
+                    {% endif %}
+                  </td>
+                  <td class="text-end">
+                    <button class="btn btn-outline-secondary btn-sm py-0 px-2"
+                            title="Editar"
+                            data-bs-toggle="modal"
+                            data-bs-target="#modalEditar{{ f.id }}">
+                      <i class="bi bi-pencil"></i>
+                    </button>
+                    {% if not f.is_base %}
+                    <form method="POST"
+                          action="{{ url_for('precos_posto.formas_excluir', forma_id=f.id) }}"
+                          class="d-inline"
+                          onsubmit="return confirm('Remover esta forma de recebimento?')">
+                      <button class="btn btn-outline-danger btn-sm py-0 px-2" title="Remover">
+                        <i class="bi bi-trash"></i>
+                      </button>
+                    </form>
+                    {% endif %}
+                  </td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    {# ── Nova forma ──────────────────────────────────────────────── #}
+    <div class="col-12 col-lg-4">
+      <div class="card shadow-sm border-0">
+        <div class="card-body">
+          <div class="section-title"><i class="bi bi-plus-circle me-1"></i>Nova Forma de Recebimento</div>
+          <form method="POST" action="{{ url_for('precos_posto.formas_nova') }}">
+            <div class="mb-2">
+              <label class="form-label form-label-sm fw-semibold">Nome *</label>
+              <input type="text" name="nome" class="form-control form-control-sm"
+                     placeholder="Ex: X7 Bank" required maxlength="150">
+            </div>
+            <div class="mb-2">
+              <label class="form-label form-label-sm fw-semibold">Acréscimo Padrão (R$/L)</label>
+              <input type="number" step="0.0001" min="0" name="acrescimo"
+                     class="form-control form-control-sm" placeholder="0.0500" value="0.0000">
+            </div>
+            <div class="mb-2">
+              <label class="form-label form-label-sm fw-semibold">Ordem</label>
+              <input type="number" name="ordem" class="form-control form-control-sm"
+                     placeholder="99" value="99">
+            </div>
+            <div class="form-check mb-3">
+              <input class="form-check-input" type="checkbox" name="is_base" id="cbBase">
+              <label class="form-check-label small fw-semibold" for="cbBase">
+                É a forma base (PIX/Dinheiro – sem acréscimo)?
+              </label>
+            </div>
+            <button type="submit" class="btn btn-primary btn-sm w-100 fw-semibold">
+              <i class="bi bi-plus-lg me-1"></i> Criar Forma
+            </button>
+          </form>
+        </div>
+      </div>
+    </div>
+
+  </div>{# /row #}
+</div>{# /container #}
+
+{% for f in formas %}
+<div class="modal fade" id="modalEditar{{ f.id }}" tabindex="-1">
+  <div class="modal-dialog modal-sm">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h6 class="modal-title fw-bold">Editar Forma</h6>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <form method="POST" action="{{ url_for('precos_posto.formas_editar', forma_id=f.id) }}">
+        <div class="modal-body">
+          <div class="mb-2">
+            <label class="form-label form-label-sm fw-semibold">Nome *</label>
+            <input type="text" name="nome" class="form-control form-control-sm"
+                   value="{{ f.nome }}" required maxlength="150">
+          </div>
+          <div class="mb-2">
+            <label class="form-label form-label-sm fw-semibold">Acréscimo Padrão (R$/L)</label>
+            <input type="number" step="0.0001" min="0" name="acrescimo"
+                   class="form-control form-control-sm"
+                   value="{{ '%.4f'|format(f.acrescimo_padrao|float) }}">
+          </div>
+          <div class="mb-2">
+            <label class="form-label form-label-sm fw-semibold">Ordem</label>
+            <input type="number" name="ordem" class="form-control form-control-sm"
+                   value="{{ f.ordem }}">
+          </div>
+          <div class="form-check">
+            <input class="form-check-input" type="checkbox" name="is_base"
+                   id="cbBaseEdit{{ f.id }}" {% if f.is_base %}checked{% endif %}>
+            <label class="form-check-label small fw-semibold" for="cbBaseEdit{{ f.id }}">
+              Forma base (sem acréscimo)
+            </label>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
+          <button type="submit" class="btn btn-primary btn-sm fw-semibold">Salvar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endfor %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  document.querySelectorAll('.produto-toggle').forEach(function (cb) {
+    cb.addEventListener('change', function () {
+      const formaId  = parseInt(this.dataset.formaId, 10);
+      const prodId   = parseInt(this.dataset.produtoId, 10);
+      const visivel  = this.checked ? 1 : 0;
+      const label    = this.closest('label');
+      const self     = this;
+      if (!formaId || !prodId) return;
+
+      fetch('/precos/formas/' + formaId + '/toggle-produto', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ produto_id: parseInt(prodId), visivel: visivel })
+      })
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        if (data.success) {
+          if (visivel) {
+            label.classList.remove('oculto');
+          } else {
+            label.classList.add('oculto');
+          }
+        } else {
+          self.checked = !self.checked;
+          alert('Erro ao salvar configuração.');
+        }
+      })
+      .catch(function () {
+        self.checked = !self.checked;
+        alert('Erro de comunicação com o servidor.');
+      });
+    });
+  });
+})();
+</script>
+{% endblock %}

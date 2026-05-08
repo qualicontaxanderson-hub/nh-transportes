@@ -1,0 +1,186 @@
+{% extends "base.html" %}
+
+{% block title %}Configuração Contábil – Troco PIX{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+
+    <!-- Header -->
+    <div class="d-flex justify-content-between align-items-center mt-2 mb-3">
+        <div>
+            <h2 style="color:#1D63A5;font-size:1.25rem;margin:0;">
+                <i class="bi bi-gear"></i> Config. Contábil – Troco PIX
+            </h2>
+            <p class="text-muted mb-0" style="font-size:0.78rem;">
+                Defina a conta contábil de <strong>débito</strong> usada na exportação contábil para os lançamentos de Troco PIX de cada empresa.
+            </p>
+        </div>
+        <div>
+            <a href="{{ url_for('troco_pix.listar') }}" class="btn btn-outline-secondary btn-sm" style="font-size:0.78rem;">
+                <i class="bi bi-arrow-left"></i> Voltar
+            </a>
+        </div>
+    </div>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        {% for category, message in messages %}
+          <div class="alert alert-{{ category }} alert-dismissible fade show py-2" role="alert" style="font-size:0.82rem;">
+            {{ message }}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+          </div>
+        {% endfor %}
+      {% endif %}
+    {% endwith %}
+
+    <div class="card shadow-sm">
+        <div class="card-body p-3">
+            <p class="text-muted small mb-3">
+                <i class="bi bi-info-circle text-primary"></i>
+                Ao exportar o extrato contábil, as transações do tipo <em>Troco PIX</em> usarão a conta abaixo como <strong>débito</strong>.
+                O crédito continuará sendo a conta bancária da empresa.
+            </p>
+
+            {% if not empresas %}
+                <div class="alert alert-warning py-2" style="font-size:0.82rem;">
+                    Nenhuma empresa com produtos ativos encontrada.
+                </div>
+            {% else %}
+                <form method="POST" action="{{ url_for('troco_pix.config_contabil') }}">
+                    <div class="table-responsive">
+                        <table class="table table-sm table-hover align-middle" style="font-size:0.82rem;">
+                            <thead class="table-light">
+                                <tr>
+                                    <th style="width:35%;">Empresa</th>
+                                    <th>Conta Contábil de Débito (Troco PIX)</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for emp in empresas %}
+                                {% set cfg = config_map.get(emp.id, {}) %}
+                                <tr>
+                                    <td class="fw-semibold">{{ emp.razao_social }}</td>
+                                    <td>
+                                        <div class="csel-wrap">
+                                            <input type="text" class="form-control form-control-sm csel-txt"
+                                                   placeholder="Buscar conta…" autocomplete="off"
+                                                   style="font-size:0.78rem;"
+                                                   value="{% if cfg.conta_debito_id %}{{ cfg.debito_codigo }} – {{ cfg.debito_nome }}{% endif %}"
+                                                   onfocus="openCsel(this)" oninput="filterCsel(this)">
+                                            <input type="hidden"
+                                                   name="conta_debito_id_{{ emp.id }}"
+                                                   class="csel-hid"
+                                                   value="{{ cfg.conta_debito_id or '' }}">
+                                            <div class="csel-drop"></div>
+                                        </div>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="d-flex justify-content-end mt-2">
+                        <button type="submit" class="btn btn-primary btn-sm" style="font-size:0.82rem;">
+                            <i class="bi bi-check-lg"></i> Salvar Configuração
+                        </button>
+                    </div>
+                </form>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script>
+// Plano de contas para o dropdown pesquisável
+const PLANO_CONTAS_TP = {{ plano_contas | tojson }};
+const _PC_BY_ID_TP = {};
+PLANO_CONTAS_TP.forEach(pc => { _PC_BY_ID_TP[String(pc.id)] = pc; });
+
+function _pcText(id) {
+    if (!id) return '';
+    const pc = _PC_BY_ID_TP[String(id)];
+    return pc ? `${pc.codigo} – ${pc.nome} (${pc.grupo_nome})` : '';
+}
+
+function _buildDropItems(query) {
+    const q = (query || '').trim().toLowerCase();
+    const items = [{ id: '', text: '— Não configurado —' }];
+    PLANO_CONTAS_TP.forEach(pc => {
+        const text = `${pc.codigo} – ${pc.nome} (${pc.grupo_nome})`;
+        if (!q || text.toLowerCase().includes(q)) items.push({ id: String(pc.id), text });
+    });
+    return items;
+}
+
+function _renderDrop(drop, query) {
+    const items = _buildDropItems(query);
+    drop.innerHTML = items.length === 0
+        ? '<div class="csel-empty">Nenhuma conta encontrada</div>'
+        : items.map(it => `<div class="csel-item" data-id="${it.id}" onmousedown="selectCsel(event,this)">${it.text}</div>`).join('');
+}
+
+function openCsel(inputEl) {
+    const wrap = inputEl.closest('.csel-wrap');
+    const drop = wrap.querySelector('.csel-drop');
+    document.querySelectorAll('.csel-drop').forEach(d => { if (d !== drop) d.style.display = 'none'; });
+    _renderDrop(drop, inputEl.value);
+    drop.style.display = 'block';
+}
+
+function filterCsel(inputEl) {
+    const wrap = inputEl.closest('.csel-wrap');
+    const drop = wrap.querySelector('.csel-drop');
+    _renderDrop(drop, inputEl.value);
+    drop.style.display = 'block';
+}
+
+function selectCsel(evt, itemEl) {
+    evt.preventDefault();
+    const wrap = itemEl.closest('.csel-wrap');
+    const txt = wrap.querySelector('.csel-txt');
+    const hid = wrap.querySelector('.csel-hid');
+    const drop = wrap.querySelector('.csel-drop');
+    hid.value = itemEl.dataset.id;
+    txt.value = itemEl.dataset.id ? itemEl.textContent : '';
+    drop.style.display = 'none';
+}
+
+document.addEventListener('click', function(e) {
+    if (!e.target.closest('.csel-wrap')) {
+        document.querySelectorAll('.csel-drop').forEach(d => { d.style.display = 'none'; });
+        document.querySelectorAll('.csel-wrap').forEach(wrap => {
+            const hid = wrap.querySelector('.csel-hid');
+            const txt = wrap.querySelector('.csel-txt');
+            if (hid && txt && !txt.value && hid.value) {
+                txt.value = _pcText(hid.value);
+            }
+        });
+    }
+});
+</script>
+<style>
+.csel-wrap { position: relative; }
+.csel-drop {
+    display: none;
+    position: absolute;
+    z-index: 1055;
+    background: #fff;
+    border: 1px solid #ced4da;
+    border-radius: 4px;
+    max-height: 220px;
+    overflow-y: auto;
+    width: 100%;
+    box-shadow: 0 4px 12px rgba(0,0,0,.12);
+}
+.csel-item {
+    padding: 5px 10px;
+    font-size: 0.76rem;
+    cursor: pointer;
+}
+.csel-item:hover { background: #e9f0fb; }
+.csel-empty { padding: 6px 10px; color: #6c757d; font-size: 0.76rem; }
+</style>
+{% endblock %}

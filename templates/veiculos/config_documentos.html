@@ -1,0 +1,210 @@
+{% extends 'base.html' %}
+{% block title %}Tipos de Documento — Veículos - {{ app_name }}{% endblock %}
+
+{% block styles %}
+<style>
+  .page-hero {
+    background: linear-gradient(135deg, #1D63A5 0%, #1a4f82 60%, #154070 100%);
+    border-radius: .75rem; padding: 1.5rem 2rem; margin-bottom: 1.5rem; color: #fff;
+  }
+  .page-hero .hero-icon {
+    width: 3rem; height: 3rem; background: rgba(255,255,255,.15); border-radius: .6rem;
+    display: flex; align-items: center; justify-content: center; font-size: 1.5rem; flex-shrink: 0;
+  }
+  .form-section-title {
+    font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em;
+    color: #1D63A5; border-left: 3px solid #1D63A5; padding-left: 0.5rem; margin: 1rem 0 0.6rem;
+  }
+  .form-label { font-size: 0.83rem; font-weight: 600; color: #374151; }
+  .form-control-sm, .form-select-sm { font-size: 0.84rem; }
+  #tbl-tipos th { background:#f0f4f8; font-size:0.72rem; font-weight:700; text-transform:uppercase; letter-spacing:0.03em; }
+  #tbl-tipos td { font-size:0.82rem; vertical-align:middle; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+  <nav aria-label="breadcrumb" class="mb-3">
+    <ol class="breadcrumb small">
+      <li class="breadcrumb-item"><a href="{{ url_for('index') }}" class="text-decoration-none">Dashboard</a></li>
+      <li class="breadcrumb-item"><a href="{{ url_for('veiculos.lista') }}" class="text-decoration-none">Veículos</a></li>
+      <li class="breadcrumb-item active">Tipos de Documento</li>
+    </ol>
+  </nav>
+
+  <div class="page-hero d-flex align-items-center gap-3 flex-wrap">
+    <div class="hero-icon"><i class="bi bi-file-earmark-check-fill"></i></div>
+    <div class="flex-grow-1">
+      <h4 class="mb-0 fw-bold">Tipos de Documento / Licença</h4>
+      <p class="mb-0 opacity-75 small">Configure quais documentos são exigidos por tipo de veículo e marque os obrigatórios.</p>
+    </div>
+    <a href="{{ url_for('veiculos.lista') }}"
+       class="btn btn-sm px-3" style="background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.35);">
+      <i class="bi bi-arrow-left me-1"></i> Voltar
+    </a>
+  </div>
+
+  <div class="row g-3">
+    <!-- Formulário de novo tipo -->
+    <div class="col-lg-4">
+      <div class="card shadow-sm">
+        <div class="card-header py-2" style="background:#1D63A5;color:white;font-size:0.82rem;font-weight:600;">
+          <i class="bi bi-plus-circle me-1"></i> <span id="formTitle">Novo Tipo de Documento</span>
+        </div>
+        <div class="card-body">
+          <form method="POST" id="formTipoDoc">
+            <input type="hidden" name="acao" value="salvar">
+            <input type="hidden" name="doc_id" id="inputDocId" value="">
+
+            <div class="mb-2">
+              <label class="form-label">Nome do Documento <span class="text-danger">*</span></label>
+              <input type="text" name="nome" id="inputNome" class="form-control form-control-sm"
+                     placeholder="Ex: CRLV, RNTRC, ANTT, Seguro..." maxlength="80" required>
+            </div>
+
+            <div class="mb-2">
+              <label class="form-label d-block">Aplica-se a</label>
+              <div class="d-flex flex-wrap gap-2">
+                {% for tv in tipos_veiculo %}
+                <div class="form-check form-check-inline me-0">
+                  <input class="form-check-input tv-check" type="checkbox" name="tipos_veiculo"
+                         value="{{ tv }}" id="tv_{{ loop.index }}">
+                  <label class="form-check-label small" for="tv_{{ loop.index }}">{{ tv }}</label>
+                </div>
+                {% endfor %}
+              </div>
+              <div class="form-text">Deixe todos desmarcados para aplicar a todos os tipos.</div>
+            </div>
+
+            <div class="mb-2">
+              <div class="form-check">
+                <input class="form-check-input" type="checkbox" name="obrigatorio" id="chkObrig" value="1">
+                <label class="form-check-label small fw-bold" for="chkObrig">
+                  <i class="bi bi-exclamation-triangle-fill text-warning me-1"></i> Obrigatório
+                </label>
+              </div>
+            </div>
+
+            <div class="d-flex gap-2 mt-3">
+              <button type="submit" class="btn btn-primary btn-sm flex-grow-1">
+                <i class="bi bi-check-circle me-1"></i> <span id="btnSalvarTxt">Cadastrar</span>
+              </button>
+              <button type="button" class="btn btn-outline-secondary btn-sm" id="btnCancelarEdit" style="display:none;" onclick="cancelarEdicao()">
+                Cancelar
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <!-- Lista de tipos cadastrados -->
+    <div class="col-lg-8">
+      <div class="card shadow-sm">
+        <div class="card-header d-flex justify-content-between align-items-center py-2"
+             style="background:#1D63A5;color:white;font-size:0.82rem;font-weight:600;">
+          <span><i class="bi bi-list-ul me-1"></i> Tipos Cadastrados</span>
+          <span class="badge bg-white text-secondary" style="font-size:0.7rem;">{{ tipos_doc | length }}</span>
+        </div>
+        <div class="card-body p-0">
+          {% if tipos_doc %}
+          <div class="table-responsive">
+            <table class="table table-sm mb-0" id="tbl-tipos">
+              <thead>
+                <tr>
+                  <th class="ps-3">Nome</th>
+                  <th style="width:14%">Obrigatório</th>
+                  <th>Aplica-se a</th>
+                  <th style="width:8%">Ativo</th>
+                  <th style="width:12%" class="text-center">Ações</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for td in tipos_doc %}
+                <tr>
+                  <td class="ps-3 fw-semibold">{{ td.nome }}</td>
+                  <td>
+                    {% if td.obrigatorio %}
+                    <span class="badge" style="background:#fff3cd;color:#856404;font-size:0.7rem;">
+                      <i class="bi bi-exclamation-triangle-fill me-1"></i>Sim
+                    </span>
+                    {% else %}
+                    <span class="text-muted small">Não</span>
+                    {% endif %}
+                  </td>
+                  <td>
+                    {% if td.tipos_veiculo_list %}
+                      {% for tv in td.tipos_veiculo_list %}
+                      <span class="badge bg-primary bg-opacity-10 text-primary me-1" style="font-size:0.68rem;">{{ tv }}</span>
+                      {% endfor %}
+                    {% else %}
+                      <span class="text-muted small">Todos</span>
+                    {% endif %}
+                  </td>
+                  <td>
+                    {% if td.ativo %}
+                    <span class="badge bg-success bg-opacity-15 text-success" style="font-size:0.7rem;">Ativo</span>
+                    {% else %}
+                    <span class="badge bg-secondary bg-opacity-15 text-secondary" style="font-size:0.7rem;">Inativo</span>
+                    {% endif %}
+                  </td>
+                  <td class="text-center">
+                    <button type="button" class="btn btn-outline-primary btn-sm py-0 px-2 me-1"
+                            onclick='editarTipo({{ td.id }}, {{ td.nome | tojson }}, {{ td.obrigatorio | tojson }}, {{ td.tipos_veiculo_list | tojson }}, {{ td.ativo | tojson }})'
+                            title="Editar">
+                      <i class="bi bi-pencil" style="font-size:0.75rem;"></i>
+                    </button>
+                    <form method="POST" class="d-inline"
+                          onsubmit="return confirm('Excluir o tipo &quot;{{ td.nome }}&quot;?');">
+                      <input type="hidden" name="acao" value="excluir">
+                      <input type="hidden" name="doc_id" value="{{ td.id }}">
+                      <button type="submit" class="btn btn-outline-danger btn-sm py-0 px-2" title="Excluir">
+                        <i class="bi bi-trash" style="font-size:0.75rem;"></i>
+                      </button>
+                    </form>
+                  </td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+          {% else %}
+          <div class="p-4 text-center text-muted">
+            <i class="bi bi-file-earmark-x fs-2 d-block mb-2 opacity-40"></i>
+            Nenhum tipo cadastrado ainda. Use o formulário ao lado para adicionar.
+          </div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function editarTipo(id, nome, obrig, tiposVeiculo, ativo) {
+  document.getElementById('formTitle').textContent = 'Editar Tipo de Documento';
+  document.getElementById('btnSalvarTxt').textContent = 'Salvar Alterações';
+  document.getElementById('inputDocId').value = id;
+  document.getElementById('inputNome').value = nome;
+  document.getElementById('chkObrig').checked = obrig == 1;
+  document.querySelectorAll('.tv-check').forEach(cb => {
+    cb.checked = tiposVeiculo.includes(cb.value);
+  });
+  document.getElementById('btnCancelarEdit').style.display = '';
+  document.getElementById('inputNome').focus();
+  window.scrollTo({top: 0, behavior: 'smooth'});
+}
+
+function cancelarEdicao() {
+  document.getElementById('formTitle').textContent = 'Novo Tipo de Documento';
+  document.getElementById('btnSalvarTxt').textContent = 'Cadastrar';
+  document.getElementById('inputDocId').value = '';
+  document.getElementById('inputNome').value = '';
+  document.getElementById('chkObrig').checked = false;
+  document.querySelectorAll('.tv-check').forEach(cb => cb.checked = false);
+  document.getElementById('btnCancelarEdit').style.display = 'none';
+}
+</script>
+{% endblock %}

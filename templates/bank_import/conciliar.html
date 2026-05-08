@@ -97,12 +97,19 @@
   </form>
 
   <!-- Botão Auto-Conciliar -->
-  <div class="d-flex gap-2 mb-2 align-items-center">
+  <div class="d-flex gap-2 mb-2 align-items-center flex-wrap">
     <button type="button" class="btn btn-success btn-sm" onclick="autoConciliarAqui(this)">
       <i class="bi bi-magic"></i> Executar Auto-Conciliação
     </button>
     <a href="{{ url_for('conciliacao_regras.lista') }}" class="btn btn-outline-primary btn-sm">
       <i class="bi bi-funnel-fill"></i> Gerenciar Regras
+    </a>
+    <a href="{{ url_for('bank_import.relatorio', status='ignorado',
+                        empresa_id=(f_clientes[0] if f_clientes|length == 1 else ''),
+                        account_id=(f_contas[0] if f_contas|length == 1 else ''),
+                        tipo=f_tipo) }}"
+       class="btn btn-outline-secondary btn-sm">
+      <i class="bi bi-eye-slash me-1"></i> Ver Ignorados
     </a>
     <span id="msgAutoConciliar" class="small text-muted"></span>
   </div>
@@ -134,6 +141,12 @@
                   disabled onclick="abrirLancamentoUnico()">
             <i class="bi bi-1-circle"></i> Lançamento Único
           </button>
+          {% if total > 0 and f_clientes %}
+          <button type="button" class="btn btn-outline-info btn-sm" id="btnLancamentoFiltros"
+                  onclick="abrirLancamentoFiltros()">
+            <i class="bi bi-funnel-fill"></i> Lançamento a Todos ({{ total }})
+          </button>
+          {% endif %}
           <button type="button" class="btn btn-success btn-sm" id="btnAprovarSugestoes"
                   onclick="aprovarSugestoesPagina()">
             <i class="bi bi-check2-all"></i> Aprovar Sugestões da Página
@@ -834,7 +847,7 @@ function atualizarBotoes() {
   if (contador) contador.textContent = n;
   if (btnConciliarSel) btnConciliarSel.disabled = n === 0;
   if (btnIgnorarSel)   btnIgnorarSel.disabled   = n === 0;
-  if (btnLancUnico)    btnLancUnico.disabled     = n !== 1;
+  if (btnLancUnico)    btnLancUnico.disabled     = n === 0;
 }
 
 if (checkAll) {
@@ -876,10 +889,14 @@ function ignorarSelecionados() {
   form.submit();
 }
 
+// IDs de todas as transações selecionadas para Lançamento Único em lote
+let _lancUnicoIds = [];
+
 function abrirLancamentoUnico() {
-  const checked = document.querySelectorAll('.tx-check:checked');
-  if (checked.length !== 1) return;
-  // Encontra o botão .btn-conciliar da mesma linha e reutiliza sua lógica
+  const checked = [...document.querySelectorAll('.tx-check:checked')];
+  if (checked.length === 0) return;
+  _lancUnicoIds = checked.map(c => c.value);
+  // Usa o primeiro selecionado para popular o modal
   const tr = checked[0].closest('tr');
   const btn = tr ? tr.querySelector('.btn-conciliar') : null;
   if (!btn) return;
@@ -891,14 +908,75 @@ function abrirLancamentoUnico() {
   // Atualiza o título do modal para indicar modo Lançamento Único
   const titulo = document.querySelector('#modalConciliar .modal-title');
   if (titulo) titulo.innerHTML = '<i class="bi bi-1-circle"></i> Lançamento Único (sem memorizar)';
+  // Para múltiplas seleções: mostra badge de quantidade e limpa valor da despesa
+  // (cada transação usará o seu próprio valor no backend)
+  if (_lancUnicoIds.length > 1) {
+    const info = document.getElementById('modal_tx_info');
+    if (info) {
+      const badge = document.createElement('span');
+      badge.className = 'badge bg-warning text-dark ms-2';
+      badge.textContent = _lancUnicoIds.length + ' transações selecionadas';
+      info.appendChild(badge);
+    }
+    // Limpa o valor da linha de despesa — cada transação usará o seu próprio valor
+    const inp1 = document.getElementById('desp_1_valor');
+    if (inp1) {
+      inp1.value = '';
+      inp1.placeholder = '(valor de cada transação)';
+    }
+    const lbl = document.getElementById('labelValorTotal');
+    if (lbl) lbl.textContent = '(múltiplos valores)';
+  }
 }
 
-// Restaura o título e ação padrão ao fechar o modal
+// Injeta os IDs extras como campos ocultos antes de submeter o formulário
+document.getElementById('formConciliar')?.addEventListener('submit', function() {
+  const acaoInput = this.querySelector('input[name="acao"]');
+  if (acaoInput && acaoInput.value === 'lancamento_unico' && _lancUnicoIds.length > 1) {
+    this.querySelectorAll('.lancunico-extra').forEach(el => el.remove());
+    const mainInput = document.getElementById('modal_tx_id');
+    if (mainInput) mainInput.value = _lancUnicoIds[0];
+    for (let i = 1; i < _lancUnicoIds.length; i++) {
+      const inp = document.createElement('input');
+      inp.type = 'hidden'; inp.name = 'transaction_id'; inp.value = _lancUnicoIds[i];
+      inp.className = 'lancunico-extra';
+      this.appendChild(inp);
+    }
+  }
+});
+
+// Restaura o título e ação padrão ao fechar o modal; limpa estado de lote
 document.getElementById('modalConciliar')?.addEventListener('hidden.bs.modal', function() {
   const acaoInput = document.querySelector('#formConciliar input[name="acao"]');
   if (acaoInput) acaoInput.value = 'conciliar';
   const titulo = document.querySelector('#modalConciliar .modal-title');
   if (titulo) titulo.innerHTML = '<i class="bi bi-link-45deg"></i> Conciliar Transação';
+  _lancUnicoIds = [];
+  document.querySelectorAll('#formConciliar .lancunico-extra').forEach(el => el.remove());
+});
+
+// ---- Lançamento a Todos os Filtros ----
+let _modoFiltros = false;
+
+function abrirLancamentoFiltros() {
+  if (!confirm('Isso irá aplicar o lançamento a TODAS as {{ total }} transação(ões) que correspondem aos filtros ativos. Continuar?')) return;
+  _modoFiltros = true;
+  const li = document.getElementById('lote_info');
+  if (li) li.innerHTML = '<strong class="text-warning">&#9888; Aplicando a <span class="badge bg-danger">{{ total }}</span> transações (todos os filtros ativos, todas as páginas)</strong>';
+  // Ajusta a aba inicial conforme o tipo filtrado
+  {% if f_tipo == 'DEBIT' %}
+  const debitBtn = document.querySelector('[data-bs-target="#tabLoteDebito"]');
+  if (debitBtn) bootstrap.Tab.getOrCreateInstance(debitBtn).show();
+  {% else %}
+  const credBtn = document.querySelector('[data-bs-target="#tabLoteCredito"]');
+  if (credBtn) bootstrap.Tab.getOrCreateInstance(credBtn).show();
+  {% endif %}
+  alternarAbaDebitoLote('fornecedor');
+  bootstrap.Modal.getOrCreateInstance(document.getElementById('modalLote')).show();
+}
+
+document.getElementById('modalLote')?.addEventListener('hidden.bs.modal', function() {
+  _modoFiltros = false;
 });
 
 document.querySelectorAll('.btn-ignorar').forEach(btn => {
@@ -1415,17 +1493,26 @@ function abrirModalLote() {
 }
 
 function submeterLote(tipo) {
-  const checks = [...document.querySelectorAll('.tx-check:checked')].filter(c => c.dataset.tipo === tipo);
-  if (!checks.length) { alert('Nenhum ' + (tipo === 'CREDIT' ? 'crédito' : 'débito') + ' selecionado.'); return; }
   const form = document.createElement('form');
   form.method = 'POST';
-  checks.forEach(c => {
-    const inp = document.createElement('input');
-    inp.type = 'hidden'; inp.name = 'transaction_id'; inp.value = c.value;
-    form.appendChild(inp);
-  });
   const add = (n, v) => { const i = document.createElement('input'); i.type='hidden'; i.name=n; i.value=v; form.appendChild(i); };
-  add('acao', 'conciliar');
+  if (_modoFiltros) {
+    // Modo filtros: envia todos os parâmetros do filtro atual (sem IDs individuais)
+    add('acao', 'conciliar_filtros');
+    const urlParams = new URLSearchParams(window.location.search);
+    for (const [key, value] of urlParams.entries()) {
+      if (key !== 'page') add(key, value);
+    }
+  } else {
+    const checks = [...document.querySelectorAll('.tx-check:checked')].filter(c => c.dataset.tipo === tipo);
+    if (!checks.length) { alert('Nenhum ' + (tipo === 'CREDIT' ? 'crédito' : 'débito') + ' selecionado.'); return; }
+    checks.forEach(c => {
+      const inp = document.createElement('input');
+      inp.type = 'hidden'; inp.name = 'transaction_id'; inp.value = c.value;
+      form.appendChild(inp);
+    });
+    add('acao', 'conciliar');
+  }
   add('tipo_tx', tipo);
   if (tipo === 'CREDIT') {
     const sel = document.getElementById('selectFormaLote');

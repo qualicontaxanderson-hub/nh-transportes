@@ -1686,6 +1686,17 @@ def _get_bank_transactions(tipo, request_args, exclude_transfers=False):
     data_fim = request_args.get('data_fim', '').strip()
     f_descricao = request_args.get('f_descricao', '').strip()
     f_categoria_id = request_args.get('f_categoria_id', '').strip()
+    # Faixa de valores: aceita formato brasileiro (vírgula como decimal)
+    _valor_min_raw = request_args.get('valor_min', '').strip().replace('.', '').replace(',', '.')
+    _valor_max_raw = request_args.get('valor_max', '').strip().replace('.', '').replace(',', '.')
+    try:
+        valor_min = float(_valor_min_raw) if _valor_min_raw else None
+    except ValueError:
+        valor_min = None
+    try:
+        valor_max = float(_valor_max_raw) if _valor_max_raw else None
+    except ValueError:
+        valor_max = None
 
     try:
         # Require empresa or conta filter before querying (empty on first load)
@@ -1747,6 +1758,12 @@ def _get_bank_transactions(tipo, request_args, exclude_transfers=False):
                 " AND _ld.categoria_id = %s)"
             )
             params.append(f_categoria_id)
+        if valor_min is not None:
+            where.append("bt.valor >= %s")
+            params.append(valor_min)
+        if valor_max is not None:
+            where.append("bt.valor <= %s")
+            params.append(valor_max)
 
         # Exclui transferências entre contas da página de Pagamentos.
         # Só exclui DEBITs *conciliados* — transações pendentes nunca são excluídas,
@@ -1910,6 +1927,8 @@ def recebimento():
         data_inicio=request.args.get('data_inicio', ''),
         data_fim=request.args.get('data_fim', ''),
         f_descricao=request.args.get('f_descricao', ''),
+        valor_min=request.args.get('valor_min', ''),
+        valor_max=request.args.get('valor_max', ''),
     )
 
 
@@ -1958,6 +1977,8 @@ def pagamentos():
         f_descricao=request.args.get('f_descricao', ''),
         f_categoria_id=f_categoria_id,
         categorias_despesa=categorias_despesa,
+        valor_min=request.args.get('valor_min', ''),
+        valor_max=request.args.get('valor_max', ''),
     )
 
 
@@ -2018,6 +2039,17 @@ def transferencias():
     f_data_ini  = request.args.get('data_ini', '').strip()
     f_data_fim  = request.args.get('data_fim', '').strip()
     f_descricao = request.args.get('f_descricao', '').strip()
+    # Faixa de valores
+    _valor_min_raw = request.args.get('valor_min', '').strip().replace('.', '').replace(',', '.')
+    _valor_max_raw = request.args.get('valor_max', '').strip().replace('.', '').replace(',', '.')
+    try:
+        f_valor_min = float(_valor_min_raw) if _valor_min_raw else None
+    except ValueError:
+        f_valor_min = None
+    try:
+        f_valor_max = float(_valor_max_raw) if _valor_max_raw else None
+    except ValueError:
+        f_valor_max = None
     # Accept both 'conta_id' (new standard) and legacy 'account_id'
     f_contas    = [c for c in request.args.getlist('conta_id') if c and c.strip()]
     if not f_contas:
@@ -2088,6 +2120,8 @@ def transferencias():
                 f_empresas=[str(e) for e in f_empresas],
                 f_conta=f_conta,
                 f_empresa=f_empresa,
+                valor_min=request.args.get('valor_min', ''),
+                valor_max=request.args.get('valor_max', ''),
             )
 
         # Query principal: parte do lado CREDIT (hash_dedup LIKE 'TRANSFER_%')
@@ -2115,6 +2149,12 @@ def transferencias():
             where.append("(COALESCE(bt_orig.descricao, '') LIKE %s OR COALESCE(bt.descricao, '') LIKE %s)")
             params.append(f'%{f_descricao}%')
             params.append(f'%{f_descricao}%')
+        if f_valor_min is not None:
+            where.append("bt.valor >= %s")
+            params.append(f_valor_min)
+        if f_valor_max is not None:
+            where.append("bt.valor <= %s")
+            params.append(f_valor_max)
 
         where_sql = ' AND '.join(where)
 
@@ -2149,9 +2189,15 @@ def transferencias():
         )
         totais = cursor.fetchone() or {}
 
-        # Build extra WHERE for orfaos/candidatos based on current empresa/conta filter
+        # Build extra WHERE for orfaos/candidatos based on current empresa/conta/date filter
         _oc_extra_parts = []
         _oc_extra_params = []
+        if f_data_ini:
+            _oc_extra_parts.append("bt.data_transacao >= %s")
+            _oc_extra_params.append(f_data_ini)
+        if f_data_fim:
+            _oc_extra_parts.append("bt.data_transacao <= %s")
+            _oc_extra_params.append(f_data_fim)
         if f_contas:
             ph = ','.join(['%s'] * len(f_contas))
             _oc_extra_parts.append(f"bt.account_id IN ({ph})")
@@ -2268,4 +2314,6 @@ def transferencias():
         f_empresas=[str(e) for e in f_empresas],
         f_conta=f_conta,
         f_empresa=f_empresa,
+        valor_min=request.args.get('valor_min', ''),
+        valor_max=request.args.get('valor_max', ''),
     )
