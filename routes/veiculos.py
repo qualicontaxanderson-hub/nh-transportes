@@ -591,6 +591,9 @@ def config_documentos():
                 if not nome:
                     flash('Nome do documento é obrigatório.', 'danger')
                 elif doc_id:
+                    cursor.execute("SELECT nome FROM tipos_documento_veiculo WHERE id=%s LIMIT 1", (doc_id,))
+                    row_doc = cursor.fetchone() or {}
+                    nome_anterior = (row_doc.get('nome') or '').strip()
                     cursor.execute("""
                         UPDATE tipos_documento_veiculo
                         SET nome=%s, obrigatorio=%s, tipos_veiculo=%s, ativo=%s
@@ -601,6 +604,12 @@ def config_documentos():
                         SET tipo_documento=%s
                         WHERE tipo_doc_id=%s
                     """, (nome, doc_id))
+                    if nome_anterior and nome_anterior != nome:
+                        cursor.execute("""
+                            UPDATE veiculo_licencas
+                            SET tipo_documento=%s, tipo_doc_id=%s
+                            WHERE tipo_doc_id IS NULL AND tipo_documento=%s
+                        """, (nome, doc_id, nome_anterior))
                     conn.commit()
                     flash('Tipo de documento atualizado.', 'success')
                 else:
