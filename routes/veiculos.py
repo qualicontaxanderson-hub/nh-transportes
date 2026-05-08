@@ -99,6 +99,11 @@ def _ensure_tables():
                 conn.commit()
             except Exception:
                 conn.rollback()
+        try:
+            cursor.execute("ALTER TABLE veiculo_licencas ADD INDEX idx_vl_tipo_doc_id (tipo_doc_id)")
+            conn.commit()
+        except Exception:
+            conn.rollback()
 
         # Tabela de conjuntos (cavalo + carreta ativos)
         cursor.execute("""
