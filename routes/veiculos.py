@@ -599,7 +599,7 @@ def config_documentos():
                             UPDATE veiculo_licencas
                             SET tipo_documento=%s
                             WHERE tipo_doc_id=%s
-                               OR (tipo_doc_id IS NULL AND LOWER(TRIM(tipo_documento)) = LOWER(TRIM(%s)))
+                               OR (tipo_doc_id IS NULL AND tipo_documento=%s)
                         """, (nome, doc_id, nome_anterior))
                     else:
                         cursor.execute("""
