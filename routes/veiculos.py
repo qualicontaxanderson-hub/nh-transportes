@@ -167,6 +167,63 @@ def _get_docs_catalog(cursor, tipo_veiculo=None):
     return result
 
 
+def _norm_doc_name(value):
+    return re.sub(r'[^a-z0-9]+', '', (value or '').strip().lower())
+
+
+def _reconciliar_licencas_legadas(cursor):
+    """
+    Vincula licenças antigas sem tipo_doc_id ao catálogo atual.
+    Também corrige nome legado quando houver correspondência única.
+    """
+    cursor.execute("SELECT id, nome FROM tipos_documento_veiculo WHERE ativo=1")
+    docs = cursor.fetchall() or []
+    docs_norm = []
+    for d in docs:
+        dn = _norm_doc_name(d.get('nome'))
+        if dn:
+            docs_norm.append((d['id'], d['nome'], dn))
+    if not docs_norm:
+        return 0
+
+    cursor.execute("""
+        SELECT DISTINCT tipo_documento
+        FROM veiculo_licencas
+        WHERE tipo_doc_id IS NULL
+          AND tipo_documento IS NOT NULL
+          AND TRIM(tipo_documento) <> ''
+    """)
+    legacy_names = [r.get('tipo_documento') for r in (cursor.fetchall() or [])]
+
+    atualizados = 0
+    for legacy_name in legacy_names:
+        ln = _norm_doc_name(legacy_name)
+        if not ln:
+            continue
+
+        exact = [(i, n) for i, n, dn in docs_norm if dn == ln]
+        if len(exact) == 1:
+            candidatos = exact
+        else:
+            candidatos = [(i, n) for i, n, dn in docs_norm if (ln in dn or dn in ln)]
+            # garantir que seja único por id (evita vínculo ambíguo)
+            uniq = {i: (i, n) for i, n in candidatos}
+            candidatos = list(uniq.values())
+
+        if len(candidatos) != 1:
+            continue
+
+        doc_id, doc_nome = candidatos[0]
+        cursor.execute("""
+            UPDATE veiculo_licencas
+            SET tipo_doc_id=%s, tipo_documento=%s
+            WHERE tipo_doc_id IS NULL AND tipo_documento=%s
+        """, (doc_id, doc_nome, legacy_name))
+        atualizados += cursor.rowcount or 0
+
+    return atualizados
+
+
 def _gerar_mensagem_whatsapp_veiculo(veiculo, licencas, compartimentos=None):
     """Monta texto de veículo + licenças para compartilhamento no WhatsApp."""
     def _fmt_data(dt):
@@ -454,6 +511,10 @@ def editar(id):
             flash('Veículo atualizado com sucesso!', 'success')
             return redirect(url_for('veiculos.lista'))
 
+        changed = _reconciliar_licencas_legadas(cursor)
+        if changed:
+            conn.commit()
+
         cursor.execute("SELECT * FROM veiculos WHERE id = %s", (id,))
         veiculo = cursor.fetchone()
         if not veiculo:
@@ -569,6 +630,10 @@ def config_documentos():
     try:
         conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)
+
+        changed = _reconciliar_licencas_legadas(cursor)
+        if changed:
+            conn.commit()
 
         if request.method == 'POST':
             acao = request.form.get('acao', 'salvar')
