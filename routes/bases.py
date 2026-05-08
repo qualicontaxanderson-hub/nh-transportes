@@ -75,12 +75,72 @@ def _calcular_lucro_fifo_dashboard(conn, ano, mes):
 
                 if not layers:
                     cur.execute("""
-                        SELECT quantidade AS qtde, custo_unitario AS custo
+                        SELECT quantidade AS qtde, custo_unitario AS custo,
+                               data_abertura
                         FROM fifo_abertura WHERE cliente_id = %s AND produto_id = %s
                     """, (cliente_id, pid))
                     ab = cur.fetchone()
                     if ab and float(ab['qtde']) > 0:
                         layers = [{'qtde': float(ab['qtde']), 'custo': float(ab['custo'])}]
+
+                        # Quando o mês anterior não está fechado, é necessário avançar
+                        # as camadas de fifo_abertura até o início do mês corrente,
+                        # processando todas as transações intermediárias (mirrors
+                        # _advance_layers_to_date em relatorios.py).
+                        if not comp_ant:
+                            ab_date = ab.get('data_abertura')
+                            if ab_date:
+                                if isinstance(ab_date, str):
+                                    from datetime import date as _date2
+                                    ab_date = _date2.fromisoformat(ab_date)
+                                if ab_date < data_inicio:
+                                    cur.execute("""
+                                        SELECT f.data_frete AS data,
+                                               COALESCE(f.quantidade_manual, q.valor, 0) AS qtde,
+                                               COALESCE(f.preco_produto_unitario, 0)     AS custo
+                                        FROM fretes f
+                                        LEFT JOIN quantidades q ON f.quantidade_id = q.id
+                                        WHERE f.clientes_id = %s AND f.produto_id = %s
+                                          AND f.data_frete >= %s AND f.data_frete < %s
+                                          AND COALESCE(f.quantidade_manual, q.valor, 0) > 0
+                                        ORDER BY f.data_frete
+                                    """, (cliente_id, pid, ab_date, data_inicio))
+                                    _pre_comp_by_date = _dd(list)
+                                    for row in cur.fetchall():
+                                        _pre_comp_by_date[row['data']].append(
+                                            {'qtde': float(row['qtde']), 'custo': float(row['custo'])}
+                                        )
+                                    cur.execute("""
+                                        SELECT data_movimento AS data,
+                                               SUM(COALESCE(quantidade_litros, 0)) AS qtde
+                                        FROM vendas_posto
+                                        WHERE cliente_id = %s AND produto_id = %s
+                                          AND data_movimento >= %s AND data_movimento < %s
+                                        GROUP BY data_movimento
+                                        ORDER BY data_movimento
+                                    """, (cliente_id, pid, ab_date, data_inicio))
+                                    _pre_vend_by_date = {
+                                        row['data']: float(row['qtde'] or 0)
+                                        for row in cur.fetchall()
+                                    }
+                                    _pre_dates = sorted(
+                                        set(list(_pre_comp_by_date.keys()) + list(_pre_vend_by_date.keys()))
+                                    )
+                                    for _d in _pre_dates:
+                                        for _c in _pre_comp_by_date.get(_d, []):
+                                            if _c['qtde'] > 0 and _c['custo'] > 0:
+                                                layers.append({'qtde': _c['qtde'], 'custo': _c['custo']})
+                                        _qv = _pre_vend_by_date.get(_d, 0.0)
+                                        if _qv > 0:
+                                            _restante = _qv
+                                            while _restante > 0.001 and layers:
+                                                _lay = layers[0]
+                                                if _lay['qtde'] <= _restante + 0.001:
+                                                    _restante -= _lay['qtde']
+                                                    layers.pop(0)
+                                                else:
+                                                    _lay['qtde'] -= _restante
+                                                    _restante = 0.0
 
                 # Compras = fretes entregues neste client para este produto no mês
                 cur.execute("""
