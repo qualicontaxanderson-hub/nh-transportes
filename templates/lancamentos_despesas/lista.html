@@ -171,7 +171,7 @@
                             <th class="text-end" style="width:90px;">Valor</th>
                             <th style="width:140px;">Observação</th>
                             {% if nivel_usuario in ['ADMIN', 'ADMINISTRADOR'] %}
-                            <th class="text-center" style="width:68px;">Ações</th>
+                            <th class="text-center" style="width:98px;">Ações</th>
                             {% endif %}
                         </tr>
                     </thead>
@@ -190,6 +190,17 @@
                                 <td class="td-ellipsis" title="{{ lanc.observacao or '' }}">{{ lanc.observacao or '-' }}</td>
                                 {% if nivel_usuario in ['ADMIN', 'ADMINISTRADOR'] %}
                                 <td class="text-center text-nowrap">
+                                    {% if lanc.bank_transaction_id and lanc.bank_status == 'conciliado' %}
+                                    <form method="POST"
+                                          action="{{ url_for('financeiro.reverter_conciliacao', tx_id=lanc.bank_transaction_id) }}"
+                                          style="display:inline;"
+                                          onsubmit="return confirm('Reverter conciliação bancária deste lançamento?');">
+                                        <input type="hidden" name="return_to" value="{{ request.full_path if request.full_path else request.path }}">
+                                        <button type="submit" class="btn btn-outline-warning btn-xs me-1" title="Reverter conciliação bancária">
+                                            <i class="bi bi-arrow-counterclockwise"></i>
+                                        </button>
+                                    </form>
+                                    {% endif %}
                                     <a href="{{ url_for('lancamentos_despesas.editar', id=lanc.id) }}"
                                        class="btn btn-warning btn-xs me-1" title="Editar">
                                         <i class="bi bi-pencil"></i>

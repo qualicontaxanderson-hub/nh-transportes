@@ -160,7 +160,8 @@ def lista():
                        t.nome as titulo_nome,
                        c.nome as categoria_nome,
                        s.nome as subcategoria_nome,
-                       cl.razao_social as cliente_nome
+                       cl.razao_social as cliente_nome,
+                       _bt.status as bank_status
                 FROM lancamentos_despesas ld
                 INNER JOIN titulos_despesas t ON ld.titulo_id = t.id
                 INNER JOIN categorias_despesas c ON ld.categoria_id = c.id

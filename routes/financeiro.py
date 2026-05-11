@@ -1350,10 +1350,12 @@ def reverter_conciliacao(tx_id):
         except Exception:
             pass
 
-    # Redireciona de volta à página de origem (recebimento ou pagamentos), preservando filtros
-    referrer = request.referrer or ''
-    if 'pagamento' in referrer:
-        return redirect(referrer)
+    # Redireciona de volta à página de origem, preservando filtros.
+    return_to = (request.form.get('return_to') or '').strip()
+    if return_to.startswith('/'):
+        return redirect(return_to)
+    if request.referrer:
+        return redirect(request.referrer)
     return redirect(url_for('financeiro.recebimento'))
 
 
