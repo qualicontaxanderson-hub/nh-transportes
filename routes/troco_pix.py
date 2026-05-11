@@ -1444,13 +1444,13 @@ def _listar_redirect():
     ações (vincular, desvincular, excluir) que incluam esses campos no formulário
     voltem à mesma janela de datas que o usuário estava visualizando.
     """
-    di = (request.form.get('data_inicio') or request.args.get('data_inicio') or '').strip()
-    df = (request.form.get('data_fim')    or request.args.get('data_fim')    or '').strip()
+    data_inicio = (request.form.get('data_inicio') or request.args.get('data_inicio') or '').strip()
+    data_fim    = (request.form.get('data_fim')    or request.args.get('data_fim')    or '').strip()
     kwargs = {}
-    if di:
-        kwargs['data_inicio'] = di
-    if df:
-        kwargs['data_fim'] = df
+    if data_inicio:
+        kwargs['data_inicio'] = data_inicio
+    if data_fim:
+        kwargs['data_fim'] = data_fim
     return redirect(url_for('troco_pix.listar', **kwargs))
 
 
