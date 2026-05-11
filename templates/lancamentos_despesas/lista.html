@@ -195,7 +195,20 @@
                                           action="{{ url_for('financeiro.reverter_conciliacao', tx_id=lanc.bank_transaction_id) }}"
                                           style="display:inline;"
                                           onsubmit="return confirm('Reverter conciliação bancária deste lançamento?');">
-                                        <input type="hidden" name="return_to" value="{{ request.full_path if request.full_path else request.path }}">
+                                        <input type="hidden" name="source" value="lancamentos_despesas">
+                                        <input type="hidden" name="data_inicio" value="{{ filtros.data_inicio or '' }}">
+                                        <input type="hidden" name="data_fim" value="{{ filtros.data_fim or '' }}">
+                                        <input type="hidden" name="titulo_id" value="{{ filtros.titulo_id or '' }}">
+                                        <input type="hidden" name="categoria_id" value="{{ filtros.categoria_id or '' }}">
+                                        <input type="hidden" name="subcategoria_id" value="{{ filtros.subcategoria_id or '' }}">
+                                        <input type="hidden" name="fornecedor" value="{{ filtros.fornecedor or '' }}">
+                                        <input type="hidden" name="observacao" value="{{ filtros.observacao or '' }}">
+                                        {% for cid in (filtros.cliente_ids or []) %}
+                                        <input type="hidden" name="cliente_id" value="{{ cid }}">
+                                        {% endfor %}
+                                        {% for aid in (filtros.account_ids or []) %}
+                                        <input type="hidden" name="account_id" value="{{ aid }}">
+                                        {% endfor %}
                                         <button type="submit" class="btn btn-outline-warning btn-xs me-1" title="Reverter conciliação bancária">
                                             <i class="bi bi-arrow-counterclockwise"></i>
                                         </button>
