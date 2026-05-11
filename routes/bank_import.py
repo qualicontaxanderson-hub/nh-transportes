@@ -1647,7 +1647,7 @@ def _conciliar_transferencia(cursor, conn, tx_id, conta_destino_id, usuario,
                        atualizado_em=NOW()""",
                 (cnpj, desc_chave, tipo_chave, conta_destino_id),
             )
-        except Exception:
+        except mysql.connector.Error:
             logger.warning(
                 "_conciliar_transferencia: erro ao salvar memorização da transferência",
                 exc_info=True,
