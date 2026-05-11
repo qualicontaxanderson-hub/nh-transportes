@@ -36,6 +36,7 @@
 
 {% block content %}
 <div class="container-fluid mt-2">
+  {% set memoria_cols = 8 %}
 
   <!-- Hero header -->
   <div class="page-hero d-flex align-items-center gap-3 flex-wrap">
@@ -319,7 +320,7 @@
             </tr>
             {% else %}
             <tr>
-              <td colspan="8" class="text-center text-muted py-3">
+              <td colspan="{{ memoria_cols }}" class="text-center text-muted py-3">
                 Nenhuma memorização registrada.
               </td>
             </tr>
@@ -380,7 +381,7 @@ function desmarcarTodasMemorias() {
 function confirmarExclusaoLoteMemorias() {
   const selecionadas = _checksMemorias().filter(c => c.checked);
   if (selecionadas.length === 0) {
-    alert('Selecione ao menos uma memorização para excluir.');
+    alert('Selecione pelo menos uma memorização para excluir.');
     return false;
   }
   if (!confirm('Excluir ' + selecionadas.length + ' memorização(ões) selecionada(s)?')) {

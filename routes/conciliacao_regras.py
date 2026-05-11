@@ -557,10 +557,9 @@ def excluir_memorias_lote():
     conn = get_db_connection()
     cursor = conn.cursor()
     try:
-        placeholders = ','.join(['%s'] * len(memoria_ids))
-        cursor.execute(
-            f"DELETE FROM bank_supplier_mapping WHERE id IN ({placeholders})",
-            memoria_ids,
+        cursor.executemany(
+            "DELETE FROM bank_supplier_mapping WHERE id = %s",
+            [(mid,) for mid in memoria_ids],
         )
         conn.commit()
         flash(f'{cursor.rowcount} memorização(ões) excluída(s) com sucesso.', 'success')
