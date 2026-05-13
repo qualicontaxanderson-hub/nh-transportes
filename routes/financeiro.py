@@ -1350,10 +1350,31 @@ def reverter_conciliacao(tx_id):
         except Exception:
             pass
 
-    # Redireciona de volta à página de origem (recebimento ou pagamentos), preservando filtros
-    referrer = request.referrer or ''
-    if 'pagamento' in referrer:
-        return redirect(referrer)
+    # Redireciona de volta ao módulo de origem sem usar URL livre do usuário.
+    source = (request.form.get('source') or '').strip().lower()
+    if source == 'lancamentos_despesas':
+        kwargs = {}
+        for key in ['data_inicio', 'data_fim', 'titulo_id', 'categoria_id', 'subcategoria_id', 'fornecedor', 'observacao']:
+            val = (request.form.get(key) or '').strip()
+            if val:
+                kwargs[key] = val
+        cliente_ids = [(v or '').strip() for v in request.form.getlist('cliente_id') if (v or '').strip()]
+        account_ids = [(v or '').strip() for v in request.form.getlist('account_id') if (v or '').strip()]
+        if cliente_ids:
+            kwargs['cliente_id'] = cliente_ids
+        if account_ids:
+            kwargs['account_id'] = account_ids
+        return redirect(url_for('lancamentos_despesas.lista', **kwargs))
+    if source == 'pagamentos':
+        return redirect(url_for('financeiro.pagamentos'))
+    if source == 'recebimento':
+        return redirect(url_for('financeiro.recebimento'))
+
+    referrer = (request.referrer or '').lower()
+    if '/financeiro/pagamentos/' in referrer:
+        return redirect(url_for('financeiro.pagamentos'))
+    if '/lancamentos_despesas/' in referrer:
+        return redirect(url_for('lancamentos_despesas.lista'))
     return redirect(url_for('financeiro.recebimento'))
 
 

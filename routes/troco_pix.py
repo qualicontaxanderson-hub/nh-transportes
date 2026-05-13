@@ -990,7 +990,7 @@ def excluir(troco_pix_id):
         is_admin = (current_user.nivel.upper() in ['ADMIN', 'GERENTE', 'SUPERVISOR'])
         if not is_admin:
             flash('Apenas administradores, gerentes e supervisores podem excluir transações.', 'danger')
-            return redirect(url_for('troco_pix.listar'))
+            return _listar_redirect()
         
         conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)
@@ -1022,11 +1022,11 @@ def excluir(troco_pix_id):
                 flash('TROCO PIX excluído com sucesso! (Erro ao excluir Lançamento de Caixa automático)', 'warning')
         else:
             flash('TROCO PIX excluído com sucesso!', 'success')
-        return redirect(url_for('troco_pix.listar'))
+        return _listar_redirect()
         
     except Exception as e:
         flash(f'Erro ao excluir TROCO PIX: {str(e)}', 'danger')
-        return redirect(url_for('troco_pix.listar'))
+        return _listar_redirect()
 
 # ==================== ROTAS DE GESTÃO DE CLIENTES PIX ====================
 
@@ -1437,6 +1437,23 @@ def pista():
 
 # ==================== ROTAS DE CONCILIAÇÃO BANCÁRIA ====================
 
+def _listar_redirect():
+    """Redireciona para troco_pix.listar preservando os filtros de data do request atual.
+
+    Lê data_inicio/data_fim primeiro do POST body, depois dos query-params, para que
+    ações (vincular, desvincular, excluir) que incluam esses campos no formulário
+    voltem à mesma janela de datas que o usuário estava visualizando.
+    """
+    data_inicio = (request.form.get('data_inicio') or request.args.get('data_inicio') or '').strip()
+    data_fim    = (request.form.get('data_fim')    or request.args.get('data_fim')    or '').strip()
+    kwargs = {}
+    if data_inicio:
+        kwargs['data_inicio'] = data_inicio
+    if data_fim:
+        kwargs['data_fim'] = data_fim
+    return redirect(url_for('troco_pix.listar', **kwargs))
+
+
 @troco_pix_bp.route('/vincular-banco/<int:troco_pix_id>', methods=['POST'])
 @login_required
 def vincular_banco(troco_pix_id):
@@ -1444,7 +1461,7 @@ def vincular_banco(troco_pix_id):
     bank_transaction_id = request.form.get('bank_transaction_id')
     if not bank_transaction_id:
         flash('Selecione uma transação bancária para vincular.', 'warning')
-        return redirect(url_for('troco_pix.listar'))
+        return _listar_redirect()
 
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
@@ -1485,7 +1502,7 @@ def vincular_banco(troco_pix_id):
         cursor.close()
         conn.close()
 
-    return redirect(url_for('troco_pix.listar'))
+    return _listar_redirect()
 
 
 @troco_pix_bp.route('/desvincular-banco/<int:troco_pix_id>', methods=['POST'])
@@ -1534,7 +1551,7 @@ def desvincular_banco(troco_pix_id):
         cursor.close()
         conn.close()
 
-    return redirect(url_for('troco_pix.listar'))
+    return _listar_redirect()
 
 
 @troco_pix_bp.route('/api/transacoes-banco/<int:troco_pix_id>')

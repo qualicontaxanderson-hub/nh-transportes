@@ -17,6 +17,7 @@ from utils.decorators import admin_required
 bp = Blueprint('veiculos', __name__, url_prefix='/veiculos')
 
 _tables_ready = False
+_MIN_DOC_FUZZY_MATCH_LEN = 5
 
 TIPOS_VEICULO = [
     'Caminhão',
@@ -99,6 +100,11 @@ def _ensure_tables():
                 conn.commit()
             except Exception:
                 conn.rollback()
+        try:
+            cursor.execute("ALTER TABLE veiculo_licencas ADD INDEX idx_vl_tipo_doc_id (tipo_doc_id)")
+            conn.commit()
+        except Exception:
+            conn.rollback()
 
         # Tabela de conjuntos (cavalo + carreta ativos)
         cursor.execute("""
@@ -160,6 +166,100 @@ def _get_docs_catalog(cursor, tipo_veiculo=None):
         if tipo_veiculo in tipos:
             result.append(d)
     return result
+
+
+def _norm_doc_name(value):
+    return re.sub(r'[^a-z0-9]+', '', (value or '').strip().lower())
+
+
+def _reconciliar_licencas_legadas(cursor, veiculo_id=None):
+    """
+    Vincula licenças antigas sem tipo_doc_id ao catálogo atual.
+    Também corrige nome legado quando houver correspondência única.
+    """
+    cursor.execute("SELECT id, nome FROM tipos_documento_veiculo WHERE ativo=1")
+    docs = cursor.fetchall() or []
+    docs_norm = []
+    for d in docs:
+        dn = _norm_doc_name(d.get('nome'))
+        if dn:
+            docs_norm.append((d['id'], d['nome'], dn))
+    if not docs_norm:
+        return 0
+
+    params = []
+    sql_legacy = """
+        SELECT DISTINCT vl.tipo_documento
+        FROM veiculo_licencas vl
+        LEFT JOIN tipos_documento_veiculo td ON td.id = vl.tipo_doc_id
+        WHERE (vl.tipo_doc_id IS NULL OR td.id IS NULL)
+          AND vl.tipo_documento IS NOT NULL
+          AND TRIM(vl.tipo_documento) <> ''
+    """
+    if veiculo_id is not None:
+        sql_legacy += " AND vl.veiculo_id=%s"
+        params.append(veiculo_id)
+    cursor.execute(sql_legacy, tuple(params))
+    legacy_names = [r.get('tipo_documento') for r in (cursor.fetchall() or [])]
+
+    atualizados = 0
+    for legacy_name in legacy_names:
+        ln = _norm_doc_name(legacy_name)
+        if not ln:
+            continue
+
+        exact = [(i, n) for i, n, dn in docs_norm if dn == ln]
+        if len(exact) == 1:
+            candidatos = exact
+        else:
+            candidatos = [
+                (i, n) for i, n, dn in docs_norm
+                if len(ln) >= _MIN_DOC_FUZZY_MATCH_LEN and len(dn) >= _MIN_DOC_FUZZY_MATCH_LEN
+                and (dn.endswith(ln) or ln.endswith(dn))
+            ]
+            # garantir que seja único por id (evita vínculo ambíguo)
+            uniq = {i: (i, n) for i, n in candidatos}
+            candidatos = list(uniq.values())
+
+        if len(candidatos) != 1:
+            continue
+
+        doc_id, doc_nome = candidatos[0]
+        params_upd = [doc_id, doc_nome, legacy_name]
+        sql_update = """
+            UPDATE veiculo_licencas
+            SET tipo_doc_id=%s, tipo_documento=%s
+            WHERE (
+                tipo_doc_id IS NULL OR NOT EXISTS (
+                    SELECT 1 FROM tipos_documento_veiculo tdx WHERE tdx.id = veiculo_licencas.tipo_doc_id
+                )
+            )
+              AND tipo_documento=%s
+        """
+        if veiculo_id is not None:
+            sql_update += " AND veiculo_id=%s"
+            params_upd.append(veiculo_id)
+        cursor.execute(sql_update, tuple(params_upd))
+        atualizados += cursor.rowcount or 0
+
+    return atualizados
+
+
+def _sincronizar_licencas_catalogo(cursor, veiculo_id=None):
+    params = []
+    sql_sync = """
+        UPDATE veiculo_licencas vl
+        JOIN tipos_documento_veiculo td ON td.id = vl.tipo_doc_id
+        SET vl.tipo_documento = td.nome
+        WHERE COALESCE(vl.tipo_documento, '') <> COALESCE(td.nome, '')
+    """
+    if veiculo_id is not None:
+        sql_sync += " AND vl.veiculo_id=%s"
+        params.append(veiculo_id)
+    cursor.execute(sql_sync, tuple(params))
+    atualizados = cursor.rowcount or 0
+    atualizados += _reconciliar_licencas_legadas(cursor, veiculo_id=veiculo_id)
+    return atualizados
 
 
 def _gerar_mensagem_whatsapp_veiculo(veiculo, licencas, compartimentos=None):
@@ -455,6 +555,10 @@ def editar(id):
             flash('Veículo não encontrado.', 'warning')
             return redirect(url_for('veiculos.lista'))
 
+        changed = _sincronizar_licencas_catalogo(cursor, veiculo_id=id)
+        if changed:
+            conn.commit()
+
         cursor.execute("""
             SELECT * FROM veiculo_compartimentos WHERE veiculo_id=%s ORDER BY parte, numero_ordem
         """, (id,))
@@ -565,6 +669,10 @@ def config_documentos():
         conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)
 
+        changed = _sincronizar_licencas_catalogo(cursor)
+        if changed:
+            conn.commit()
+
         if request.method == 'POST':
             acao = request.form.get('acao', 'salvar')
 
@@ -586,11 +694,25 @@ def config_documentos():
                 if not nome:
                     flash('Nome do documento é obrigatório.', 'danger')
                 elif doc_id:
+                    cursor.execute("SELECT nome FROM tipos_documento_veiculo WHERE id=%s LIMIT 1", (doc_id,))
+                    row_doc = cursor.fetchone() or {}
+                    nome_anterior = (row_doc.get('nome') or '').strip()
                     cursor.execute("""
                         UPDATE tipos_documento_veiculo
                         SET nome=%s, obrigatorio=%s, tipos_veiculo=%s, ativo=%s
                         WHERE id=%s
                     """, (nome, obrigatorio, tipos_json, ativo, doc_id))
+                    cursor.execute("""
+                        UPDATE veiculo_licencas
+                        SET tipo_documento=%s
+                        WHERE tipo_doc_id=%s
+                    """, (nome, doc_id))
+                    if nome_anterior and nome_anterior != nome:
+                        cursor.execute("""
+                            UPDATE veiculo_licencas
+                            SET tipo_documento=%s, tipo_doc_id=%s
+                            WHERE tipo_doc_id IS NULL AND tipo_documento=%s
+                        """, (nome, doc_id, nome_anterior))
                     conn.commit()
                     flash('Tipo de documento atualizado.', 'success')
                 else:

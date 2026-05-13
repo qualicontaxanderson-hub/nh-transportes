@@ -171,7 +171,7 @@
                             <th class="text-end" style="width:90px;">Valor</th>
                             <th style="width:140px;">Observação</th>
                             {% if nivel_usuario in ['ADMIN', 'ADMINISTRADOR'] %}
-                            <th class="text-center" style="width:68px;">Ações</th>
+                            <th class="text-center" style="width:98px;">Ações</th>
                             {% endif %}
                         </tr>
                     </thead>
@@ -190,6 +190,30 @@
                                 <td class="td-ellipsis" title="{{ lanc.observacao or '' }}">{{ lanc.observacao or '-' }}</td>
                                 {% if nivel_usuario in ['ADMIN', 'ADMINISTRADOR'] %}
                                 <td class="text-center text-nowrap">
+                                    {% if lanc.bank_transaction_id and lanc.bank_status == 'conciliado' %}
+                                    <form method="POST"
+                                          action="{{ url_for('financeiro.reverter_conciliacao', tx_id=lanc.bank_transaction_id) }}"
+                                          style="display:inline;"
+                                          onsubmit="return confirm('Reverter conciliação bancária deste lançamento?');">
+                                        <input type="hidden" name="source" value="lancamentos_despesas">
+                                        <input type="hidden" name="data_inicio" value="{{ filtros.data_inicio or '' }}">
+                                        <input type="hidden" name="data_fim" value="{{ filtros.data_fim or '' }}">
+                                        <input type="hidden" name="titulo_id" value="{{ filtros.titulo_id or '' }}">
+                                        <input type="hidden" name="categoria_id" value="{{ filtros.categoria_id or '' }}">
+                                        <input type="hidden" name="subcategoria_id" value="{{ filtros.subcategoria_id or '' }}">
+                                        <input type="hidden" name="fornecedor" value="{{ filtros.fornecedor or '' }}">
+                                        <input type="hidden" name="observacao" value="{{ filtros.observacao or '' }}">
+                                        {% for cid in (filtros.cliente_ids or []) %}
+                                        <input type="hidden" name="cliente_id" value="{{ cid }}">
+                                        {% endfor %}
+                                        {% for aid in (filtros.account_ids or []) %}
+                                        <input type="hidden" name="account_id" value="{{ aid }}">
+                                        {% endfor %}
+                                        <button type="submit" class="btn btn-outline-warning btn-xs me-1" title="Reverter conciliação bancária">
+                                            <i class="bi bi-arrow-counterclockwise"></i>
+                                        </button>
+                                    </form>
+                                    {% endif %}
                                     <a href="{{ url_for('lancamentos_despesas.editar', id=lanc.id) }}"
                                        class="btn btn-warning btn-xs me-1" title="Editar">
                                         <i class="bi bi-pencil"></i>

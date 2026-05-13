@@ -159,6 +159,8 @@
                                               action="{{ url_for('troco_pix.desvincular_banco', troco_pix_id=t.id) }}"
                                               style="display:inline;"
                                               onsubmit="return confirm('Remover vínculo bancário?');">
+                                            <input type="hidden" name="data_inicio" value="{{ data_inicio }}">
+                                            <input type="hidden" name="data_fim" value="{{ data_fim }}">
                                             <button type="submit" class="btn-tp btn-tp-ghost" title="Remover vínculo">
                                                 <i class="bi bi-x"></i>
                                             </button>
@@ -190,6 +192,8 @@
                                     <form method="POST" action="{{ url_for('troco_pix.excluir', troco_pix_id=t.id) }}"
                                           style="display:inline;"
                                           onsubmit="return confirm('Excluir esta transação?');">
+                                        <input type="hidden" name="data_inicio" value="{{ data_inicio }}">
+                                        <input type="hidden" name="data_fim" value="{{ data_fim }}">
                                         <button type="submit" class="btn-tp btn-tp-danger" title="Excluir">
                                             <i class="bi bi-trash"></i>
                                         </button>
@@ -309,7 +313,9 @@
 <!-- Modal: Vincular Transação Bancária -->
 <div class="modal fade" id="modalVincularBanco" tabindex="-1"
      data-url-vincular="{{ url_for('troco_pix.vincular_banco', troco_pix_id=0)|replace('/0', '/') }}"
-     data-url-api="{{ url_for('troco_pix.api_transacoes_banco', troco_pix_id=0)|replace('/0', '/') }}">
+     data-url-api="{{ url_for('troco_pix.api_transacoes_banco', troco_pix_id=0)|replace('/0', '/') }}"
+     data-data-inicio="{{ data_inicio }}"
+     data-data-fim="{{ data_fim }}">
   <div class="modal-dialog modal-lg">
     <div class="modal-content">
       <div class="modal-header" style="background:#1D63A5;color:white;">
@@ -342,12 +348,16 @@
   const modalEl = document.getElementById('modalVincularBanco');
   const URL_VINCULAR = (modalEl?.dataset?.urlVincular || '/troco_pix/vincular-banco/');
   const URL_API     = (modalEl?.dataset?.urlApi     || '/troco_pix/api/transacoes-banco/');
+  const DATA_INICIO = (modalEl?.dataset?.dataInicio || '');
+  const DATA_FIM    = (modalEl?.dataset?.dataFim    || '');
 
   // Build inline HTML for a single bank-transaction match
   function buildMatchHtml(tx, trocoPixId, extra) {
     const form =
       '<form method="POST" action="' + URL_VINCULAR + trocoPixId + '" style="display:inline;margin-left:4px;">' +
       '<input type="hidden" name="bank_transaction_id" value="' + tx.id + '">' +
+      '<input type="hidden" name="data_inicio" value="' + DATA_INICIO + '">' +
+      '<input type="hidden" name="data_fim" value="' + DATA_FIM + '">' +
       '<button type="submit" class="btn btn-xs btn-success" style="font-size:0.72rem;padding:1px 6px;">' +
       '<i class="bi bi-check-lg"></i> Confirmar</button></form>';
     return '<div style="font-size:0.78rem;">' +
@@ -427,6 +437,16 @@
           const inp = document.createElement('input');
           inp.type = 'hidden'; inp.name = 'bank_transaction_id'; inp.value = tx.id;
           form.appendChild(inp);
+          if (DATA_INICIO) {
+            const inpDi = document.createElement('input');
+            inpDi.type = 'hidden'; inpDi.name = 'data_inicio'; inpDi.value = DATA_INICIO;
+            form.appendChild(inpDi);
+          }
+          if (DATA_FIM) {
+            const inpDf = document.createElement('input');
+            inpDf.type = 'hidden'; inpDf.name = 'data_fim'; inpDf.value = DATA_FIM;
+            form.appendChild(inpDf);
+          }
           const submitBtn = document.createElement('button');
           submitBtn.type = 'submit';
           submitBtn.className = 'btn btn-sm btn-success';

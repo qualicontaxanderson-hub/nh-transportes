@@ -18,11 +18,25 @@
     padding: 0.45rem 0.5rem; border: none; white-space: nowrap;
   }
   #tbl-memorias tbody td { padding: 0.35rem 0.5rem; vertical-align: middle; border-color: #f0f3f7; font-size: 0.8rem; }
+  #tbl-memorias thead th.col-check,
+  #tbl-memorias tbody td.col-check {
+    width: 2rem;
+    text-align: center;
+    padding-left: .35rem;
+    padding-right: .35rem;
+  }
+  #bulk-actions {
+    display: none;
+  }
+  #bulk-actions.visible {
+    display: flex;
+  }
 </style>
 {% endblock %}
 
 {% block content %}
 <div class="container-fluid mt-2">
+  {% set memoria_cols = 8 %}
 
   <!-- Hero header -->
   <div class="page-hero d-flex align-items-center gap-3 flex-wrap">
@@ -180,14 +194,51 @@
   {% endwith %}
 
   <div class="card shadow-sm">
+    <div class="card-header bg-white py-2">
+      <form method="get" class="row g-2 align-items-center">
+        <div class="col-md-8">
+          <input type="text"
+                 name="q"
+                 class="form-control form-control-sm"
+                 value="{{ filtro_q or '' }}"
+                 placeholder="Filtrar por chave (CNPJ/CPF/descrição) ou vínculo (fornecedor/forma/título/categoria/conta/tipo)">
+        </div>
+        <div class="col-md-4 d-flex gap-1">
+          <button type="submit" class="btn btn-primary btn-sm flex-grow-1">
+            <i class="bi bi-search"></i> Filtrar
+          </button>
+          <a href="{{ url_for('conciliacao_regras.memorias') }}" class="btn btn-outline-secondary btn-sm">
+            <i class="bi bi-x"></i> Limpar
+          </a>
+        </div>
+      </form>
+    </div>
     <div class="card-body p-0">
       <div class="px-3 pt-2 pb-1 text-muted small border-bottom">
         <strong>{{ memorias|length }}</strong> memorização(ões) registrada(s)
+      </div>
+      <div id="bulk-actions" class="align-items-center gap-2 border-bottom px-3 py-2 bg-light">
+        <span class="small text-muted"><strong id="bulk-count">0</strong> selecionada(s)</span>
+        <form id="form-excluir-lote"
+              method="post"
+              action="{{ url_for('conciliacao_regras.excluir_memorias_lote') }}"
+              onsubmit="return confirmarExclusaoLoteMemorias();">
+          <input type="hidden" name="q" value="{{ filtro_q or '' }}">
+          <button type="submit" class="btn btn-danger btn-sm">
+            <i class="bi bi-trash"></i> Excluir selecionadas
+          </button>
+        </form>
+        <button type="button" class="btn btn-outline-secondary btn-sm" onclick="desmarcarTodasMemorias()">
+          <i class="bi bi-x"></i> Desmarcar
+        </button>
       </div>
       <div class="table-responsive">
         <table class="table table-hover table-sm mb-0" id="tbl-memorias">
           <thead>
             <tr>
+              <th class="col-check">
+                <input type="checkbox" id="check-all-memorias" onchange="marcarTodasMemorias(this.checked)">
+              </th>
               <th>CNPJ/CPF</th>
               <th>Descrição-chave</th>
               <th>Vincula a</th>
@@ -200,6 +251,9 @@
           <tbody>
             {% for m in memorias %}
             <tr>
+              <td class="col-check">
+                <input type="checkbox" class="check-memoria" value="{{ m.id }}" onchange="atualizarSelecaoMemorias()">
+              </td>
               <td><code>{{ m.cnpj_cpf }}</code></td>
               <td>
                 {% if m.get('descricao_chave') %}
@@ -257,6 +311,7 @@
                       action="{{ url_for('conciliacao_regras.excluir_memoria', memoria_id=m.id) }}"
                       class="d-inline"
                       onsubmit="return confirm('Excluir esta memorização para {{ m.cnpj_cpf }}?')">
+                  <input type="hidden" name="q" value="{{ filtro_q or '' }}">
                   <button class="btn btn-outline-danger btn-sm" title="Excluir memorização">
                     <i class="bi bi-trash"></i>
                   </button>
@@ -265,7 +320,7 @@
             </tr>
             {% else %}
             <tr>
-              <td colspan="7" class="text-center text-muted py-3">
+              <td colspan="{{ memoria_cols }}" class="text-center text-muted py-3">
                 Nenhuma memorização registrada.
               </td>
             </tr>
@@ -285,4 +340,64 @@
     </a>
   </div>
 </div>
+<script>
+function _checksMemorias() {
+  return Array.from(document.querySelectorAll('.check-memoria'));
+}
+
+function atualizarSelecaoMemorias() {
+  const checks = _checksMemorias();
+  const checksMarcados = checks.filter(c => c.checked);
+  const bulk = document.getElementById('bulk-actions');
+  const count = document.getElementById('bulk-count');
+  const checkAll = document.getElementById('check-all-memorias');
+
+  if (count) count.textContent = checksMarcados.length;
+  if (bulk) bulk.classList.toggle('visible', checksMarcados.length > 0);
+
+  if (checkAll) {
+    if (checks.length === 0 || checksMarcados.length === 0) {
+      checkAll.checked = false;
+      checkAll.indeterminate = false;
+    } else if (checksMarcados.length === checks.length) {
+      checkAll.checked = true;
+      checkAll.indeterminate = false;
+    } else {
+      checkAll.checked = false;
+      checkAll.indeterminate = true;
+    }
+  }
+}
+
+function marcarTodasMemorias(checked) {
+  _checksMemorias().forEach(c => { c.checked = checked; });
+  atualizarSelecaoMemorias();
+}
+
+function desmarcarTodasMemorias() {
+  marcarTodasMemorias(false);
+}
+
+function confirmarExclusaoLoteMemorias() {
+  const selecionadas = _checksMemorias().filter(c => c.checked);
+  if (selecionadas.length === 0) {
+    alert('Selecione pelo menos uma memorização para excluir.');
+    return false;
+  }
+  if (!confirm('Excluir ' + selecionadas.length + ' memorização(ões) selecionada(s)?')) {
+    return false;
+  }
+
+  const form = document.getElementById('form-excluir-lote');
+  form.querySelectorAll('input[name="memoria_ids[]"]').forEach(el => el.remove());
+  selecionadas.forEach(c => {
+    const input = document.createElement('input');
+    input.type = 'hidden';
+    input.name = 'memoria_ids[]';
+    input.value = c.value;
+    form.appendChild(input);
+  });
+  return true;
+}
+</script>
 {% endblock %}

@@ -1620,23 +1620,38 @@ def _conciliar_transferencia(cursor, conn, tx_id, conta_destino_id, usuario,
         )
     except mysql.connector.errors.ProgrammingError:
         logger.debug("conta_origem_id column not yet available; skipping")
-    # Auto-aprender: salva CNPJ+descrição→conta_destino para sugestão nas próximas importações.
-    # Quando não há CNPJ, usa cnpj_cpf='' com descricao_chave como chave de match — isso
-    # permite que transações sem CPF/CNPJ (ex: Pix sem identificação) recebam sugestão de
-    # transferência na próxima vez que o mesmo texto de descrição aparecer.
+    # Auto-aprender: para transferências com CNPJ, memoriza por CNPJ puro
+    # (descricao_chave='') para que os demais lançamentos equivalentes já venham
+    # como sugestão mesmo quando a descrição varia entre transações. Quando não há
+    # CNPJ, mantém o match por descrição para evitar associações amplas demais.
     cnpj = tx.get('cnpj_cpf') or ''
-    desc_chave = _desc_chave(tx.get('descricao') or '')
+    desc_chave = '' if cnpj else _desc_chave(tx.get('descricao') or '')
+    tipo_chave = 'cnpj' if cnpj else 'texto'
     if salvar_mapeamento and (cnpj or desc_chave):
         try:
             cursor.execute(
-                """INSERT INTO bank_supplier_mapping (cnpj_cpf, descricao_chave, conta_destino_id, tipo_debito)
-                   VALUES (%s, %s, %s, 'transferencia')
-                   ON DUPLICATE KEY UPDATE conta_destino_id=%s, tipo_debito='transferencia'""",
-                (cnpj, desc_chave, conta_destino_id, conta_destino_id),
+                """INSERT INTO bank_supplier_mapping
+                       (cnpj_cpf, descricao_chave, tipo_chave, total_conciliacoes,
+                        conta_destino_id, tipo_debito)
+                   VALUES (%s, %s, %s, 1, %s, 'transferencia')
+                   ON DUPLICATE KEY UPDATE
+                       tipo_chave=VALUES(tipo_chave),
+                       fornecedor_id=NULL,
+                       forma_recebimento_id=NULL,
+                       titulo_id=NULL,
+                       categoria_id=NULL,
+                       subcategoria_id=NULL,
+                       conta_destino_id=VALUES(conta_destino_id),
+                       tipo_debito='transferencia',
+                       total_conciliacoes=total_conciliacoes+1,
+                       atualizado_em=NOW()""",
+                (cnpj, desc_chave, tipo_chave, conta_destino_id),
             )
-        except mysql.connector.errors.ProgrammingError:
-            # Coluna pode não existir ainda (migration pendente) — ignora silenciosamente
-            pass
+        except mysql.connector.Error:
+            logger.warning(
+                "_conciliar_transferencia: erro ao salvar memorização da transferência",
+                exc_info=True,
+            )
     conn.commit()
 
 
@@ -2316,20 +2331,8 @@ def conciliar():
                         tx['sugestao_fornecedor_nome']     = bsm.get('sugestao_fornecedor_nome')
                         tx['sugestao_titulo_nome']         = bsm.get('sugestao_titulo_nome')
                         tx['sugestao_categoria_nome']      = bsm.get('sugestao_categoria_nome')
-                        # Transfer suggestions (conta_destino_id / tipo_debito='transferencia')
-                        # must only come from a SPECIFIC description-key match. A generic entry
-                        # (cnpj, '') must never suggest a transfer destination because the same
-                        # CNPJ can appear in many unrelated transactions. This prevents a stale
-                        # legacy generic entry from continuing to suggest a transfer after the
-                        # user deletes the specific memorization.
-                        is_generic_transfer = (
-                            bsm_generic
-                            and not bsm_specific
-                            and bsm_generic.get('tipo_debito') == 'transferencia'
-                        )
-                        if not is_generic_transfer:
-                            tx['sugestao_conta_destino_id'] = bsm.get('conta_destino_id')
-                            tx['sugestao_tipo_debito']      = bsm.get('tipo_debito')
+                        tx['sugestao_conta_destino_id'] = bsm.get('conta_destino_id')
+                        tx['sugestao_tipo_debito']      = bsm.get('tipo_debito')
 
             # ------------------------------------------------------------------
             # Sugestões para transações SEM CNPJ: match por descricao_chave
@@ -4956,4 +4959,3 @@ def api_dropbox_oauth_token():
         })
     except Exception as exc:
         return jsonify({'ok': False, 'erro': f'Erro ao trocar código: {exc}'})
-

@@ -389,6 +389,7 @@ def excluir_lote():
 def memorias():
     """Lista as memorizações de conciliação (bank_supplier_mapping)."""
     _ensure_descricao_chave()
+    filtro_q = (request.args.get('q') or '').strip()
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
 
@@ -481,13 +482,39 @@ def memorias():
                 except Exception:
                     pass  # mantém o valor original em caso de erro inesperado
 
-    return render_template('bank_import/regras/memorias.html', memorias=memorias_list)
+    if filtro_q:
+        filtro = filtro_q.casefold()
+        campos_busca = (
+            'cnpj_cpf',
+            'descricao_chave',
+            'fornecedor_nome',
+            'forma_nome',
+            'titulo_nome',
+            'categoria_nome',
+            'conta_destino_apelido',
+            'conta_destino_banco',
+            'tipo_debito',
+        )
+        memorias_list = [
+            m for m in memorias_list
+            if any(
+                (m.get(c) is not None) and (filtro in str(m.get(c)).casefold())
+                for c in campos_busca
+            )
+        ]
+
+    return render_template(
+        'bank_import/regras/memorias.html',
+        memorias=memorias_list,
+        filtro_q=filtro_q,
+    )
 
 
 @bp.route('/memorias/<int:memoria_id>/excluir', methods=['POST'])
 @login_required
 def excluir_memoria(memoria_id):
     """Exclui uma memorização de conciliação."""
+    filtro_q = (request.form.get('q') or '').strip()
     conn = get_db_connection()
     cursor = conn.cursor()
     try:
@@ -500,6 +527,51 @@ def excluir_memoria(memoria_id):
     finally:
         cursor.close()
         conn.close()
+    if filtro_q:
+        return redirect(url_for('conciliacao_regras.memorias', q=filtro_q))
+    return redirect(url_for('conciliacao_regras.memorias'))
+
+
+@bp.route('/memorias/excluir-lote', methods=['POST'])
+@login_required
+def excluir_memorias_lote():
+    """Exclui memorizações em lote."""
+    filtro_q = (request.form.get('q') or '').strip()
+    memoria_ids = []
+    seen = set()
+    for raw in request.form.getlist('memoria_ids[]'):
+        try:
+            memoria_id = int(raw)
+            if memoria_id > 0 and memoria_id not in seen:
+                memoria_ids.append(memoria_id)
+                seen.add(memoria_id)
+        except (TypeError, ValueError):
+            continue
+
+    if not memoria_ids:
+        flash('Nenhuma memorização selecionada para exclusão.', 'warning')
+        if filtro_q:
+            return redirect(url_for('conciliacao_regras.memorias', q=filtro_q))
+        return redirect(url_for('conciliacao_regras.memorias'))
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.executemany(
+            "DELETE FROM bank_supplier_mapping WHERE id = %s",
+            [(mid,) for mid in memoria_ids],
+        )
+        conn.commit()
+        flash(f'{cursor.rowcount} memorização(ões) excluída(s) com sucesso.', 'success')
+    except Exception as e:
+        conn.rollback()
+        flash(f'Erro ao excluir em lote: {e}', 'danger')
+    finally:
+        cursor.close()
+        conn.close()
+
+    if filtro_q:
+        return redirect(url_for('conciliacao_regras.memorias', q=filtro_q))
     return redirect(url_for('conciliacao_regras.memorias'))
 
 
