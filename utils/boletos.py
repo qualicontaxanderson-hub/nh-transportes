@@ -306,6 +306,8 @@ def _ensure_credentials_from_env(credentials):
         credentials["client_id"] = os.getenv("EFI_CLIENT_ID")
     if not credentials.get("client_secret"):
         credentials["client_secret"] = os.getenv("EFI_CLIENT_SECRET")
+    if not credentials.get("certificate"):
+        credentials["certificate"] = os.getenv("EFI_CERT_PATH")
     if "sandbox" not in credentials or credentials.get("sandbox") is None:
         credentials["sandbox"] = os.getenv("EFI_SANDBOX", "true").lower() == "true"
     return credentials
@@ -762,7 +764,12 @@ def cancel_charge(credentials, charge_id):
 
         # 0) tentativa via SDK (se disponível) — alguns SDKs expõem método de cancelamento
         try:
-            efi = EfiPay({"client_id": credentials.get("client_id"), "client_secret": credentials.get("client_secret"), "sandbox": credentials.get("sandbox", True)})
+            efi = EfiPay({
+                "client_id": credentials.get("client_id"),
+                "client_secret": credentials.get("client_secret"),
+                "sandbox": credentials.get("sandbox", True),
+                "certificate": credentials.get("certificate"),
+            })
             for m in ("cancel_charge", "cancel", "void_charge", "delete_charge"):
                 fn = getattr(efi, m, None)
                 if callable(fn):

@@ -15,6 +15,7 @@ def _get_efi_credentials():
     return {
         "client_id": current_app.config.get("EFI_CLIENT_ID") or os.getenv("EFI_CLIENT_ID"),
         "client_secret": current_app.config.get("EFI_CLIENT_SECRET") or os.getenv("EFI_CLIENT_SECRET"),
+        "certificate": current_app.config.get("EFI_CERT_PATH") or os.getenv("EFI_CERT_PATH"),
         "sandbox": current_app.config.get("EFI_SANDBOX", True),
     }
 
