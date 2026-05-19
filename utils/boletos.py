@@ -810,7 +810,7 @@ def cancel_charge(credentials, charge_id):
             logger.debug("cancel_charge: falha ao logar ambiente/token")
 
         # Função auxiliar que executa o PUT com um token/creds atuais
-        def _do_put_with_token(creds, url=url_cancel):
+        def _do_put_with_token(creds, target_url=url_cancel):
             token = _get_bearer_token(creds) if "client_id" in creds and "client_secret" in creds else None
             headers = {"Accept": "application/json", "Content-Type": "application/json"}
             if token:
@@ -819,22 +819,22 @@ def cancel_charge(credentials, charge_id):
                 # se não houver token, vamos deixar sem Authorization e requests tratará (ou usar basic auth no fallback)
                 pass
             try:
-                resp = requests.put(url, headers=headers, timeout=15)
+                resp = requests.put(target_url, headers=headers, timeout=15)
                 return resp, token
             except Exception as e:
-                logger.exception("cancel_charge: PUT %s falhou: %s", url, e)
+                logger.exception("cancel_charge: PUT %s falhou: %s", target_url, e)
                 return None, token
 
-        def _do_put_with_basic_auth(creds, url=url_cancel):
+        def _do_put_with_basic_auth(creds, target_url=url_cancel):
             client_id = creds.get("client_id")
             client_secret = creds.get("client_secret")
             if not client_id or not client_secret:
                 return None
             headers = {"Accept": "application/json", "Content-Type": "application/json"}
             try:
-                return requests.put(url, headers=headers, auth=(client_id, client_secret), timeout=15)
+                return requests.put(target_url, headers=headers, auth=(client_id, client_secret), timeout=15)
             except Exception as e:
-                logger.exception("cancel_charge: PUT basic auth %s falhou: %s", url, e)
+                logger.exception("cancel_charge: PUT basic auth %s falhou: %s", target_url, e)
                 return None
 
         logger.info("cancel_charge: tentando PUT %s (auth=Bearer? %s)", url_cancel, True)
@@ -896,6 +896,7 @@ def cancel_charge(credentials, charge_id):
                                     return False, resp3.json()
                                 except Exception:
                                     return False, {"http_status": resp3.status_code, "text": resp3.text}
+                            resp = resp3
                     # retry failed fallback handled below...
                 else:
                     return False, {"error": "PUT retry falhou (exceção no request)"}
