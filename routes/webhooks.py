@@ -10,6 +10,14 @@ from datetime import datetime
 webhooks_bp = Blueprint('webhooks', __name__, url_prefix='')
 
 
+def _to_bool(value, default=True):
+    if isinstance(value, bool):
+        return value
+    if value is None:
+        return default
+    return str(value).strip().lower() in {"1", "true", "t", "yes", "y", "on"}
+
+
 def _try_extract_charge_id(payload):
     """
     Tenta extrair charge_id/id em vários formatos que o provedor pode enviar.
@@ -223,7 +231,7 @@ def webhooks_efi():
                     credentials = {
                         "client_id": current_app.config.get("EFI_CLIENT_ID") or os.getenv("EFI_CLIENT_ID"),
                         "client_secret": current_app.config.get("EFI_CLIENT_SECRET") or os.getenv("EFI_CLIENT_SECRET"),
-                        "sandbox": current_app.config.get("EFI_SANDBOX", True),
+                        "sandbox": _to_bool(current_app.config.get("EFI_SANDBOX", os.getenv("EFI_SANDBOX", "true")), True),
                     }
                     resp = fetch_boleto_pdf_stream(credentials, pdf_url)
                     if resp is not None and getattr(resp, "status_code", None) == 200:

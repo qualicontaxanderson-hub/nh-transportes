@@ -10,13 +10,25 @@ import mysql.connector
 financeiro_bp = Blueprint('financeiro', __name__, url_prefix='/financeiro')
 
 
+def _to_bool(value, default=True):
+    """Converte valores variados de config/env para boolean de forma previsível."""
+    if isinstance(value, bool):
+        return value
+    if value is None:
+        return default
+    return str(value).strip().lower() in {"1", "true", "t", "yes", "y", "on"}
+
+
 def _get_efi_credentials():
     """Helper function to get EFI credentials consistently across routes."""
+    sandbox_raw = current_app.config.get("EFI_SANDBOX")
+    if sandbox_raw is None:
+        sandbox_raw = os.getenv("EFI_SANDBOX", "true")
     return {
         "client_id": current_app.config.get("EFI_CLIENT_ID") or os.getenv("EFI_CLIENT_ID"),
         "client_secret": current_app.config.get("EFI_CLIENT_SECRET") or os.getenv("EFI_CLIENT_SECRET"),
         "certificate": current_app.config.get("EFI_CERT_PATH") or os.getenv("EFI_CERT_PATH"),
-        "sandbox": current_app.config.get("EFI_SANDBOX", True),
+        "sandbox": _to_bool(sandbox_raw, True),
     }
 
 
@@ -866,7 +878,7 @@ def consultar_status_efi(charge_id):
             
             # Mensagem de erro mais específica para 401
             if error_code == 401:
-                sandbox_status = "SANDBOX (homologação)" if current_app.config.get("EFI_SANDBOX", True) else "PRODUÇÃO"
+                sandbox_status = "SANDBOX (homologação)" if credentials.get("sandbox", True) else "PRODUÇÃO"
                 error_msg = (
                     f"❌ Acesso Negado (401 Unauthorized)\n\n"
                     f"As credenciais não têm permissão para consultar esta cobrança.\n\n"

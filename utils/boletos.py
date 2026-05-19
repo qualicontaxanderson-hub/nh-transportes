@@ -298,6 +298,15 @@ def _sanitize_payment_payload(payload):
 _TOKEN_CACHE = {}  # keys: (client_id, bool(sandbox)) -> {"access_token": str, "expire_at": float}
 
 
+def _coerce_bool(value, default=True):
+    """Coerce robusto para flags vindas de env/config (inclui strings)."""
+    if isinstance(value, bool):
+        return value
+    if value is None:
+        return default
+    return str(value).strip().lower() in ("1", "true", "t", "yes", "y", "on")
+
+
 def _ensure_credentials_from_env(credentials):
     """Preenche credenciais faltantes a partir das ENV para maior robustez."""
     if credentials is None:
@@ -308,8 +317,10 @@ def _ensure_credentials_from_env(credentials):
         credentials["client_secret"] = os.getenv("EFI_CLIENT_SECRET")
     if not credentials.get("certificate"):
         credentials["certificate"] = os.getenv("EFI_CERT_PATH")
-    if "sandbox" not in credentials or credentials.get("sandbox") is None:
-        credentials["sandbox"] = os.getenv("EFI_SANDBOX", "true").lower() == "true"
+    sandbox_value = credentials.get("sandbox")
+    if "sandbox" not in credentials or sandbox_value is None:
+        sandbox_value = os.getenv("EFI_SANDBOX", "true")
+    credentials["sandbox"] = _coerce_bool(sandbox_value, True)
     return credentials
 
 
