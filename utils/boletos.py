@@ -825,6 +825,18 @@ def cancel_charge(credentials, charge_id):
                 logger.exception("cancel_charge: PUT %s falhou: %s", url, e)
                 return None, token
 
+        def _do_put_with_basic_auth(creds, url=url_cancel):
+            client_id = creds.get("client_id")
+            client_secret = creds.get("client_secret")
+            if not client_id or not client_secret:
+                return None
+            headers = {"Accept": "application/json", "Content-Type": "application/json"}
+            try:
+                return requests.put(url, headers=headers, auth=(client_id, client_secret), timeout=15)
+            except Exception as e:
+                logger.exception("cancel_charge: PUT basic auth %s falhou: %s", url, e)
+                return None
+
         logger.info("cancel_charge: tentando PUT %s (auth=Bearer? %s)", url_cancel, True)
         # primeira tentativa
         resp, used_token = _do_put_with_token(credentials)
@@ -864,6 +876,26 @@ def cancel_charge(credentials, charge_id):
                         except Exception:
                             logger.debug("persist cancel response failed")
                         return True, j2
+                    if resp2.status_code == 401:
+                        logger.info("cancel_charge: retry Bearer também retornou 401, tentando PUT com Basic Auth")
+                        resp3 = _do_put_with_basic_auth(credentials)
+                        if resp3 is not None:
+                            logger.info("cancel_charge: basic PUT %s -> status=%s text=%s", url_cancel, getattr(resp3, "status_code", None), (getattr(resp3, "text", "") or "")[:2000])
+                            if resp3.status_code in (200, 204):
+                                try:
+                                    j3 = resp3.json()
+                                except Exception:
+                                    j3 = {"http_status": resp3.status_code, "text": resp3.text}
+                                try:
+                                    _persist_cancel_to_db(cid_int, j3)
+                                except Exception:
+                                    logger.debug("persist cancel response failed")
+                                return True, j3
+                            if resp3.status_code not in (404, 405):
+                                try:
+                                    return False, resp3.json()
+                                except Exception:
+                                    return False, {"http_status": resp3.status_code, "text": resp3.text}
                     # retry failed fallback handled below...
                 else:
                     return False, {"error": "PUT retry falhou (exceção no request)"}
