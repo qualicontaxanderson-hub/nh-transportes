@@ -304,7 +304,7 @@ def _coerce_bool(value, default=True):
         return value
     if value is None:
         return default
-    return str(value).strip().lower() in ("1", "true", "t", "yes", "y", "on")
+    return str(value).strip().lower() in {"1", "true", "t", "yes", "y", "on"}
 
 
 def _ensure_credentials_from_env(credentials):
