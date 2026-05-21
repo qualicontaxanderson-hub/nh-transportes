@@ -150,7 +150,7 @@
           <div>
             <div class="stat-label text-muted">Valor de Frete</div>
             <div class="stat-value" style="color:#17963c;">R$ {{ "{:,.2f}".format(total_fretes).replace(',','X').replace('.',',').replace('X','.') }}</div>
-            <small class="text-muted">Total do período</small>
+            <small class="text-muted">Total da pesquisa</small>
           </div>
         </div>
       </div>
@@ -164,7 +164,7 @@
           <div>
             <div class="stat-label text-muted">Boletos Emitidos</div>
             <div class="stat-value" style="color:#0066cc;">R$ {{ "{:,.2f}".format(total_boletos).replace(',','X').replace('.',',').replace('X','.') }}</div>
-            <small class="text-muted">Total emitido</small>
+            <small class="text-muted">Total da pesquisa</small>
           </div>
         </div>
       </div>
@@ -178,7 +178,7 @@
           <div>
             <div class="stat-label text-muted">Diferença (Fretes − Boletos)</div>
             <div class="stat-value" style="color:{% if diferenca >= 0 %}#374151{% else %}#dc3545{% endif %};">R$ {{ "{:,.2f}".format(diferenca).replace(',','X').replace('.',',').replace('X','.') }}</div>
-            <small class="text-muted">Saldo do período</small>
+            <small class="text-muted">Saldo da pesquisa</small>
           </div>
         </div>
       </div>

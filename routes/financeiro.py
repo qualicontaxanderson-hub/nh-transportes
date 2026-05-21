@@ -63,7 +63,8 @@ def recebimentos():
                     cl.nome_fantasia AS cliente_fantasia,
                     f.id AS frete_id,
                     f.id AS frete_numero,
-                    f.data_frete AS frete_data
+                    f.data_frete AS frete_data,
+                    f.valor_total_frete AS frete_valor
                 FROM cobrancas c
                 LEFT JOIN clientes cl ON c.id_cliente = cl.id
                 LEFT JOIN fretes f ON c.frete_id = f.id
@@ -91,26 +92,10 @@ def recebimentos():
             flash(f"Erro ao carregar recebimentos: {str(e)}", "danger")
             recebimentos_lista = []
 
-        # Calcular resumos do período
+        # Calcular resumos da pesquisa atual
         try:
-            # Total de fretes no período
-            cursor.execute("""
-                SELECT COALESCE(SUM(f.valor_total_frete), 0) AS total_fretes
-                FROM fretes f
-                WHERE f.data_frete BETWEEN %s AND %s
-            """, (data_inicio, data_fim))
-            total_fretes = float(cursor.fetchone().get('total_fretes', 0) or 0)
-
-            # Total de boletos emitidos no período (soma dos valores das cobranças)
-            cursor.execute("""
-                SELECT COALESCE(SUM(c.valor), 0) AS total_boletos
-                FROM cobrancas c
-                WHERE c.data_emissao BETWEEN %s AND %s
-                AND (c.status IS NULL OR c.status != 'cancelado')
-            """, (data_inicio, data_fim))
-            total_boletos = float(cursor.fetchone().get('total_boletos', 0) or 0)
-
-            # Diferença
+            total_fretes = sum(float(r.get('frete_valor') or 0) for r in recebimentos_lista)
+            total_boletos = sum(float(r.get('valor') or 0) for r in recebimentos_lista)
             diferenca = total_fretes - total_boletos
         except Exception as e:
             current_app.logger.error(f"[recebimentos] Erro ao calcular resumos: {str(e)}")
