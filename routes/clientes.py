@@ -78,7 +78,7 @@ def _montar_endereco_waze(cliente):
 def _montar_link_waze(cliente):
     consulta = _montar_endereco_waze(cliente)
     if consulta == '—':
-        return '—'
+        return 'Endereço não disponível para Waze.'
     return f"https://www.waze.com/ul?q={quote(consulta)}&navigate=yes"
 
 
