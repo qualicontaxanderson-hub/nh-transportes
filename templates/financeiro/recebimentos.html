@@ -40,6 +40,43 @@
   #tbl-recebimentos tbody tr.row-receb { cursor: pointer; transition: background .1s; }
   #tbl-recebimentos tbody tr.row-receb:hover { background: #eef4ff; }
   #tbl-recebimentos tbody tr.no-boleto { cursor: default; }
+  #tbl-recebimentos tbody tr.row-selected { background: #dbeafe !important; }
+
+  /* ── Checkbox column ─────────────────────────────────────── */
+  .col-chk { width: 2rem; text-align: center; padding: 0.35rem 0.25rem !important; }
+  #tbl-recebimentos thead .col-chk { padding: 0.45rem 0.25rem !important; }
+  input.row-chk, #chk-all { cursor: pointer; width: 1rem; height: 1rem; accent-color: #1D63A5; }
+
+  /* ── Bulk toolbar ─────────────────────────────────────────── */
+  #bulk-toolbar {
+    display: none;
+    position: sticky; bottom: 0; z-index: 900;
+    background: #1D63A5; color: #fff;
+    padding: 0.55rem 1rem; border-radius: .5rem .5rem 0 0;
+    box-shadow: 0 -2px 12px rgba(0,0,0,.18);
+    align-items: center; gap: .75rem; flex-wrap: wrap;
+  }
+  #bulk-toolbar.show { display: flex; }
+  #bulk-toolbar .bulk-count {
+    font-size: 0.78rem; font-weight: 700;
+    background: rgba(255,255,255,.2); border-radius: .3rem;
+    padding: .15rem .55rem; white-space: nowrap;
+  }
+  .btn-bulk {
+    display: inline-flex; align-items: center; gap: .3rem;
+    border: 1px solid rgba(255,255,255,.4); border-radius: .35rem;
+    background: rgba(255,255,255,.12); color: #fff;
+    font-size: 0.72rem; font-weight: 600; padding: .25rem .65rem;
+    cursor: pointer; transition: background .12s;
+  }
+  .btn-bulk:hover { background: rgba(255,255,255,.25); }
+  .btn-bulk.bulk-pagar  { background: rgba(25,160,74,.45); border-color: rgba(25,160,74,.6); }
+  .btn-bulk.bulk-pagar:hover { background: rgba(25,160,74,.65); }
+  .btn-bulk.bulk-cancelar { background: rgba(200,40,40,.45); border-color: rgba(200,40,40,.6); }
+  .btn-bulk.bulk-cancelar:hover { background: rgba(200,40,40,.65); }
+  .btn-bulk.bulk-registrar { background: rgba(180,130,0,.45); border-color: rgba(180,130,0,.6); }
+  .btn-bulk.bulk-registrar:hover { background: rgba(180,130,0,.65); }
+  #btn-bulk-deselect { margin-left: auto; background: transparent; border: 1px solid rgba(255,255,255,.3); }
 
   /* ── Status badges ─────────────────────────────────────────── */
   .badge-status {
@@ -153,11 +190,11 @@
     <div class="flt-header"><i class="bi bi-funnel me-1"></i>Filtrar Recebimentos</div>
     <div class="card-body py-2">
       <form method="GET" action="{{ url_for('financeiro.recebimentos') }}" class="row g-2 align-items-end">
-        <div class="col-md-3">
+        <div class="col-md-2">
           <label for="data_inicio" class="form-label mb-1" style="font-size:0.82rem;">Data Inicial</label>
           <input type="date" class="form-control form-control-sm" id="data_inicio" name="data_inicio" value="{{ data_inicio }}">
         </div>
-        <div class="col-md-3">
+        <div class="col-md-2">
           <label for="data_fim" class="form-label mb-1" style="font-size:0.82rem;">Data Final</label>
           <input type="date" class="form-control form-control-sm" id="data_fim" name="data_fim" value="{{ data_fim }}">
         </div>
@@ -167,9 +204,19 @@
             <span class="input-group-text"><i class="bi bi-building"></i></span>
             <input type="text" class="form-control form-control-sm" id="busca_cliente" name="busca_cliente"
                    value="{{ busca_cliente or '' }}"
-                   placeholder="Buscar por razão social ou nome fantasia…"
+                   placeholder="Razão social ou nome fantasia…"
                    autocomplete="off">
           </div>
+        </div>
+        <div class="col-md-2">
+          <label for="busca_status" class="form-label mb-1" style="font-size:0.82rem;">Status</label>
+          <select class="form-select form-select-sm" id="busca_status" name="busca_status">
+            <option value="todos" {% if not busca_status or busca_status == 'todos' %}selected{% endif %}>Todos</option>
+            <option value="pendente"  {% if busca_status == 'pendente' %}selected{% endif %}>Pendente</option>
+            <option value="pago"      {% if busca_status == 'pago' %}selected{% endif %}>Pago</option>
+            <option value="vencido"   {% if busca_status == 'vencido' %}selected{% endif %}>Vencido</option>
+            <option value="cancelado" {% if busca_status == 'cancelado' %}selected{% endif %}>Cancelado</option>
+          </select>
         </div>
         <div class="col-auto">
           <button type="submit" class="btn btn-primary btn-sm"><i class="bi bi-search me-1"></i>Filtrar</button>
@@ -193,6 +240,7 @@
         <table class="table mb-0" id="tbl-recebimentos">
           <thead>
             <tr>
+              <th class="col-chk"><input type="checkbox" id="chk-all" title="Selecionar todos"></th>
               <th style="width:3%">#</th>
               <th style="width:7%">Frete</th>
               <th>Cliente</th>
@@ -209,7 +257,18 @@
             {% set boleto_url = url_for('financeiro.visualizar_boleto', charge_id=r.charge_id) if r.charge_id else '' %}
             <tr id="cobranca-row-{{ r.charge_id or r.id }}"
                 class="row-receb{% if not r.charge_id %} no-boleto{% endif %}"
+                data-cobranca-id="{{ r.id }}"
+                data-charge-id="{{ r.charge_id or '' }}"
+                data-display-status="{{ ds }}"
+                data-cliente="{{ r.cliente_fantasia or r.cliente_nome or '' }}"
                 {% if boleto_url %}data-boleto-url="{{ boleto_url }}" title="Clique para abrir o boleto"{% endif %}>
+              <td class="col-chk" onclick="event.stopPropagation()">
+                <input type="checkbox" class="row-chk"
+                       data-cobranca-id="{{ r.id }}"
+                       data-charge-id="{{ r.charge_id or '' }}"
+                       data-display-status="{{ ds }}"
+                       data-cliente="{{ r.cliente_fantasia or r.cliente_nome or '' }}">
+              </td>
               <td class="text-muted mono">{{ r.id }}</td>
               <td class="mono">
                 {% if r.frete_numero %}#{{ r.frete_numero }}
@@ -302,15 +361,36 @@
 
 </div>
 
-<!-- Modal: Registrar Pagamento Manual -->
+<!-- ── Bulk actions toolbar (sticky bottom) ───────────────────────────── -->
+<div id="bulk-toolbar">
+  <span class="bulk-count" id="bulk-count-label">0 selecionado(s)</span>
+  <button class="btn-bulk bulk-pagar" id="btn-bulk-pagar" title="Marcar selecionados como Pago (local/admin)">
+    <i class="bi bi-check2-circle"></i> Marcar como Pago
+  </button>
+  <button class="btn-bulk bulk-registrar" id="btn-bulk-registrar" title="Registrar pagamento manual para selecionados">
+    <i class="bi bi-cash-stack"></i> Registrar Pagamento
+  </button>
+  <button class="btn-bulk bulk-efi" id="btn-bulk-efi" title="Consultar Status EFI para selecionados (sequencial)">
+    <i class="bi bi-info-circle"></i> Consultar EFI
+  </button>
+  <button class="btn-bulk bulk-cancelar" id="btn-bulk-cancelar" title="Cancelar boletos selecionados no provedor">
+    <i class="bi bi-x-circle"></i> Cancelar Boletos
+  </button>
+  <button class="btn-bulk" id="btn-bulk-deselect" title="Desmarcar seleção">
+    <i class="bi bi-x"></i> Desmarcar
+  </button>
+</div>
+
+<!-- Modal: Registrar Pagamento Manual (individual + lote) -->
 <div id="modal-registrar-pag" style="display:none;position:fixed;inset:0;z-index:2000;background:rgba(0,0,0,.45);">
   <div style="background:#fff;border-radius:.75rem;padding:1.5rem;max-width:420px;margin:6rem auto;box-shadow:0 8px 32px rgba(0,0,0,.18);">
     <div class="d-flex align-items-center mb-3 gap-2">
       <span style="background:#fff3cd;color:#856404;width:2rem;height:2rem;border-radius:.4rem;display:inline-flex;align-items:center;justify-content:center;font-size:1rem;"><i class="bi bi-cash-stack"></i></span>
-      <h6 class="mb-0 fw-bold">Registrar Pagamento Manual</h6>
+      <h6 class="mb-0 fw-bold" id="modal-reg-titulo">Registrar Pagamento Manual</h6>
     </div>
     <p id="modal-reg-cliente" class="mb-3" style="font-size:0.82rem;color:#555;"></p>
-    <form method="post" action="{{ url_for('financeiro.registrar_pagamento_manual') }}">
+    <!-- Modo individual (formulário normal) -->
+    <form method="post" action="{{ url_for('financeiro.registrar_pagamento_manual') }}" id="modal-reg-form-single">
       <input type="hidden" name="cobranca_id" id="modal-reg-id">
       <div class="mb-3">
         <label class="form-label fw-semibold" style="font-size:0.78rem;">Data do Pagamento</label>
@@ -318,13 +398,28 @@
       </div>
       <div class="mb-3">
         <label class="form-label fw-semibold" style="font-size:0.78rem;">Observação (opcional)</label>
-        <input type="text" name="observacao" class="form-control form-control-sm" placeholder="Ex.: pago com desconto, boleto substituído…" maxlength="255">
+        <input type="text" name="observacao" id="modal-reg-obs" class="form-control form-control-sm" placeholder="Ex.: pago com desconto, boleto substituído…" maxlength="255">
       </div>
       <div class="d-flex gap-2 justify-content-end mt-3">
         <button type="button" class="btn btn-secondary btn-sm" id="modal-reg-cancel">Cancelar</button>
         <button type="submit" class="btn btn-warning btn-sm fw-semibold"><i class="bi bi-check2-circle me-1"></i>Confirmar Pagamento</button>
       </div>
     </form>
+    <!-- Modo lote (botão AJAX) -->
+    <div id="modal-reg-form-bulk" style="display:none;">
+      <div class="mb-3">
+        <label class="form-label fw-semibold" style="font-size:0.78rem;">Data do Pagamento</label>
+        <input type="date" id="modal-reg-data-bulk" class="form-control form-control-sm" required>
+      </div>
+      <div class="mb-3">
+        <label class="form-label fw-semibold" style="font-size:0.78rem;">Observação (opcional)</label>
+        <input type="text" id="modal-reg-obs-bulk" class="form-control form-control-sm" placeholder="Ex.: pago com desconto, boleto substituído…" maxlength="255">
+      </div>
+      <div class="d-flex gap-2 justify-content-end mt-3">
+        <button type="button" class="btn btn-secondary btn-sm" id="modal-reg-cancel-bulk">Cancelar</button>
+        <button type="button" class="btn btn-warning btn-sm fw-semibold" id="modal-reg-confirm-bulk"><i class="bi bi-check2-circle me-1"></i>Confirmar</button>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -336,8 +431,8 @@ document.addEventListener('DOMContentLoaded', function () {
   // ── Click on row to open boleto ──────────────────────────────
   qsa('tr.row-receb[data-boleto-url]').forEach(function(row) {
     row.addEventListener('click', function(e) {
-      // Don't open if clicking inside the actions cell or a form/button/link
-      if (e.target.closest('.actions-cell') || e.target.closest('a') || e.target.closest('button') || e.target.closest('form')) return;
+      // Don't open if clicking inside the actions cell, checkbox cell, or a form/button/link
+      if (e.target.closest('.actions-cell') || e.target.closest('.col-chk') || e.target.closest('a') || e.target.closest('button') || e.target.closest('form')) return;
       var url = row.getAttribute('data-boleto-url');
       if (url) window.open(url, '_blank');
     });
@@ -474,6 +569,10 @@ document.addEventListener('DOMContentLoaded', function () {
       modalId.value = btn.dataset.cobrancaId;
       modalCliente.textContent = btn.dataset.cliente ? 'Cliente: ' + btn.dataset.cliente : '';
       modalData.value = today;
+      // single mode
+      document.getElementById('modal-reg-titulo').textContent = 'Registrar Pagamento Manual';
+      document.getElementById('modal-reg-form-single').style.display = '';
+      document.getElementById('modal-reg-form-bulk').style.display = 'none';
       modal.style.display = '';
     });
   });
@@ -482,6 +581,201 @@ document.addEventListener('DOMContentLoaded', function () {
   });
   modal.addEventListener('click', function(e) {
     if (e.target === modal) modal.style.display = 'none';
+  });
+  document.getElementById('modal-reg-cancel-bulk').addEventListener('click', function() {
+    modal.style.display = 'none';
+  });
+
+  // ── Checkboxes & Bulk toolbar ────────────────────────────────
+  var toolbar = document.getElementById('bulk-toolbar');
+  var countLabel = document.getElementById('bulk-count-label');
+  var chkAll = document.getElementById('chk-all');
+
+  function getChecked() {
+    return qsa('.row-chk:checked');
+  }
+  function updateToolbar() {
+    var checked = getChecked();
+    if (checked.length > 0) {
+      countLabel.textContent = checked.length + ' selecionado(s)';
+      toolbar.classList.add('show');
+    } else {
+      toolbar.classList.remove('show');
+    }
+    // sync select-all indeterminate
+    var all = qsa('.row-chk');
+    if (chkAll) {
+      chkAll.checked = all.length > 0 && checked.length === all.length;
+      chkAll.indeterminate = checked.length > 0 && checked.length < all.length;
+    }
+    // highlight rows
+    all.forEach(function(c) {
+      var row = c.closest('tr');
+      if (row) row.classList.toggle('row-selected', c.checked);
+    });
+  }
+
+  if (chkAll) {
+    chkAll.addEventListener('change', function() {
+      qsa('.row-chk').forEach(c => { c.checked = chkAll.checked; });
+      updateToolbar();
+    });
+  }
+  qsa('.row-chk').forEach(function(chk) {
+    chk.addEventListener('change', updateToolbar);
+  });
+
+  // Deselect all
+  var btnDeselect = document.getElementById('btn-bulk-deselect');
+  if (btnDeselect) btnDeselect.addEventListener('click', function() {
+    qsa('.row-chk').forEach(c => { c.checked = false; });
+    if (chkAll) { chkAll.checked = false; chkAll.indeterminate = false; }
+    updateToolbar();
+  });
+
+  // ── Bulk: Marcar como Pago ───────────────────────────────────
+  document.getElementById('btn-bulk-pagar').addEventListener('click', async function() {
+    var checked = getChecked();
+    if (!checked.length) return;
+    var chargeIds = checked.map(c => c.dataset.chargeId).filter(Boolean);
+    var semCharge = checked.length - chargeIds.length;
+    if (!chargeIds.length) { alert('Nenhum dos selecionados possui Charge ID para marcar como pago.'); return; }
+    var msg = 'Marcar ' + chargeIds.length + ' cobrança(s) como PAGO (admin)?';
+    if (semCharge) msg += '\n⚠️ ' + semCharge + ' selecionado(s) sem Charge ID serão ignorados.';
+    if (!confirm(msg)) return;
+    var btn = this;
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Processando…';
+    try {
+      var resp = await fetch('/financeiro/bulk-marcar-pago/', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest'},
+        body: JSON.stringify({charge_ids: chargeIds})
+      });
+      var j = await resp.json();
+      if (j.success) {
+        var msg2 = '✅ ' + (j.saved || []).length + ' cobrança(s) marcadas como pagas.';
+        if ((j.failed || []).length) msg2 += '\n⚠️ ' + j.failed.length + ' falha(s).';
+        alert(msg2);
+        location.reload();
+      } else {
+        alert('❌ Erro: ' + (j.error || JSON.stringify(j)));
+        btn.disabled = false;
+        btn.innerHTML = '<i class="bi bi-check2-circle"></i> Marcar como Pago';
+      }
+    } catch(e) {
+      alert('❌ Erro: ' + e);
+      btn.disabled = false;
+      btn.innerHTML = '<i class="bi bi-check2-circle"></i> Marcar como Pago';
+    }
+  });
+
+  // ── Bulk: Registrar Pagamento Manual ─────────────────────────
+  document.getElementById('btn-bulk-registrar').addEventListener('click', function() {
+    var checked = getChecked();
+    if (!checked.length) return;
+    var ids = checked.map(c => c.dataset.cobrancaId).filter(Boolean);
+    document.getElementById('modal-reg-titulo').textContent = 'Registrar Pagamento — ' + ids.length + ' cobrança(s)';
+    var nomes = [...new Set(checked.map(c => c.dataset.cliente).filter(Boolean))];
+    var nomesLabel = nomes.slice(0,5).join(', ');
+    document.getElementById('modal-reg-cliente').textContent = nomesLabel ? 'Clientes: ' + nomesLabel + (nomes.length > 5 ? '…' : '') : '';
+    document.getElementById('modal-reg-data-bulk').value = new Date().toISOString().split('T')[0];
+    document.getElementById('modal-reg-obs-bulk').value = '';
+    document.getElementById('modal-reg-form-single').style.display = 'none';
+    document.getElementById('modal-reg-form-bulk').style.display = '';
+    document.getElementById('modal-registrar-pag').style.display = '';
+
+    document.getElementById('modal-reg-confirm-bulk').onclick = async function() {
+      var dataPag = document.getElementById('modal-reg-data-bulk').value;
+      var obs = document.getElementById('modal-reg-obs-bulk').value;
+      if (!dataPag) { alert('Informe a data do pagamento.'); return; }
+      this.disabled = true;
+      this.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Salvando…';
+      try {
+        var resp = await fetch('/financeiro/bulk-registrar-pagamento/', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest'},
+          body: JSON.stringify({cobranca_ids: ids, data_pagamento: dataPag, observacao: obs})
+        });
+        var j = await resp.json();
+        document.getElementById('modal-registrar-pag').style.display = 'none';
+        if (j.success) {
+          var msg2 = '✅ ' + (j.saved || []).length + ' pagamento(s) registrado(s).';
+          if ((j.failed || []).length) msg2 += '\n⚠️ ' + j.failed.length + ' falha(s).';
+          alert(msg2);
+          location.reload();
+        } else {
+          alert('❌ Erro: ' + (j.error || JSON.stringify(j)));
+        }
+      } catch(e) {
+        alert('❌ Erro: ' + e);
+        document.getElementById('modal-registrar-pag').style.display = 'none';
+      }
+    };
+  });
+
+  // ── Bulk: Consultar Status EFI (sequencial) ──────────────────
+  document.getElementById('btn-bulk-efi').addEventListener('click', async function() {
+    var checked = getChecked();
+    if (!checked.length) return;
+    var chargeIds = checked.map(c => c.dataset.chargeId).filter(Boolean);
+    if (!chargeIds.length) { alert('Nenhum dos selecionados possui Charge ID.'); return; }
+    if (!confirm('Consultar status EFI de ' + chargeIds.length + ' cobrança(s)? Pode demorar alguns segundos.')) return;
+    var btn = this;
+    btn.disabled = true;
+    var original = btn.innerHTML;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Consultando…';
+    var resultados = [];
+    for (var i = 0; i < chargeIds.length; i++) {
+      var cid = chargeIds[i];
+      btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Consultando ' + (i+1) + '/' + chargeIds.length + '…';
+      try {
+        var resp = await fetch('/financeiro/consultar-status-efi/' + cid + '/', {
+          headers: {'X-Requested-With': 'XMLHttpRequest'}
+        });
+        var j = await resp.json();
+        resultados.push({ cid, status: j.status_label || j.status || '?', ok: j.success });
+      } catch(e) {
+        resultados.push({ cid, status: 'Erro: ' + e, ok: false });
+      }
+    }
+    btn.disabled = false;
+    btn.innerHTML = original;
+    var msg = '📊 Resultado EFI (' + resultados.length + ' cobranças):\n\n';
+    resultados.forEach(function(r) {
+      msg += (r.ok ? '✅' : '❌') + ' #' + r.cid + ' → ' + r.status + '\n';
+    });
+    alert(msg);
+  });
+
+  // ── Bulk: Cancelar Boletos ───────────────────────────────────
+  document.getElementById('btn-bulk-cancelar').addEventListener('click', async function() {
+    var checked = getChecked();
+    if (!checked.length) return;
+    var chargeIds = checked.map(c => c.dataset.chargeId).filter(Boolean);
+    if (!chargeIds.length) { alert('Nenhum dos selecionados possui Charge ID.'); return; }
+    if (!confirm('⚠️ Cancelar ' + chargeIds.length + ' boleto(s) no provedor EFI? Esta ação não pode ser desfeita.')) return;
+    var btn = this;
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Cancelando…';
+    var salvos = 0, falhas = 0;
+    for (var i = 0; i < chargeIds.length; i++) {
+      var cid = chargeIds[i];
+      btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Cancelando ' + (i+1) + '/' + chargeIds.length + '…';
+      try {
+        var resp = await fetch('/financeiro/cancelar-boleto/' + cid + '/', {
+          method: 'POST', headers: {'X-Requested-With': 'XMLHttpRequest',
+            'X-CSRFToken': (document.querySelector('meta[name=csrf-token]') || {content:''}).content}
+        });
+        if (resp.ok) salvos++; else falhas++;
+      } catch(e) {
+        falhas++;
+      }
+    }
+    btn.disabled = false;
+    btn.innerHTML = '<i class="bi bi-x-circle"></i> Cancelar Boletos';
+    alert((salvos ? '✅ ' + salvos + ' boleto(s) cancelado(s).' : '') + (falhas ? '\n⚠️ ' + falhas + ' falha(s).' : ''));
+    if (salvos) location.reload();
   });
 
 });

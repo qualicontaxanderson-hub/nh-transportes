@@ -52,6 +52,7 @@ def recebimentos():
         data_inicio = request.args.get('data_inicio', primeiro_dia_mes.strftime('%Y-%m-%d'))
         data_fim = request.args.get('data_fim', ultimo_dia_mes.strftime('%Y-%m-%d'))
         busca_cliente = (request.args.get('busca_cliente') or '').strip()
+        busca_status = (request.args.get('busca_status') or '').strip().lower()
 
         try:
             # Buscar recebimentos/boletos emitidos no período
@@ -73,6 +74,14 @@ def recebimentos():
                 sql += " AND (cl.razao_social LIKE %s OR cl.nome_fantasia LIKE %s)"
                 like = f"%{busca_cliente}%"
                 params.extend([like, like])
+            if busca_status and busca_status != 'todos':
+                if busca_status == 'vencido':
+                    sql += " AND (c.status NOT IN ('pago','cancelado') OR c.status IS NULL) AND c.data_vencimento < CURDATE()"
+                elif busca_status == 'pendente':
+                    sql += " AND (c.status NOT IN ('pago','cancelado') OR c.status IS NULL) AND (c.data_vencimento IS NULL OR c.data_vencimento >= CURDATE())"
+                else:
+                    sql += " AND c.status = %s"
+                    params.append(busca_status)
             sql += " ORDER BY c.data_vencimento DESC, c.data_emissao DESC"
             cursor.execute(sql, params)
             recebimentos_lista = cursor.fetchall()
@@ -174,6 +183,7 @@ def recebimentos():
                              data_inicio=data_inicio,
                              data_fim=data_fim,
                              busca_cliente=busca_cliente,
+                             busca_status=busca_status,
                              total_fretes=total_fretes,
                              total_boletos=total_boletos,
                              diferenca=diferenca)
@@ -182,6 +192,7 @@ def recebimentos():
         flash(f"Erro ao acessar recebimentos: {str(e)}", "danger")
         return render_template('financeiro/recebimentos.html', recebimentos=[],
                              data_inicio='', data_fim='',
+                             busca_cliente='', busca_status='',
                              total_fretes=0, total_boletos=0, diferenca=0)
     finally:
         if cursor:
@@ -850,6 +861,124 @@ def cancelar_boleto(charge_id):
         if conn:
             conn.close()
     return redirect(url_for('financeiro.recebimentos'))
+
+
+@financeiro_bp.route('/bulk-marcar-pago/', methods=['POST'])
+@login_required
+def bulk_marcar_pago():
+    """
+    Marca múltiplas cobranças como pagas (admin) em lote.
+    Espera JSON: { "charge_ids": [...] }
+    Retorna JSON com resultados.
+    """
+    try:
+        payload = request.get_json(silent=True) or {}
+        charge_ids = payload.get("charge_ids") or []
+        if not charge_ids:
+            return jsonify({"success": False, "error": "charge_ids ausentes"}), 400
+
+        conn = get_db_connection()
+        cur = conn.cursor(dictionary=True)
+        saved = []
+        failed = []
+        today = datetime.today().date()
+        for cid in charge_ids:
+            try:
+                cur.execute(
+                    "SELECT pago_via_provedor, status FROM cobrancas WHERE charge_id = %s LIMIT 1",
+                    (str(cid),)
+                )
+                row = cur.fetchone()
+                if row and int(row.get('pago_via_provedor') or 0):
+                    failed.append({"charge_id": cid, "error": "já pago via provedor"})
+                    continue
+                cur.execute(
+                    "UPDATE cobrancas SET status = %s, data_pagamento = %s WHERE charge_id = %s",
+                    ("pago", today, str(cid))
+                )
+                conn.commit()
+                saved.append(cid)
+            except Exception as e:
+                try:
+                    conn.rollback()
+                except Exception:
+                    pass
+                current_app.logger.exception("bulk_marcar_pago: erro charge %s: %s", cid, e)
+                failed.append({"charge_id": cid, "error": "Falha ao processar cobrança."})
+        cur.close()
+        conn.close()
+        return jsonify({"success": True, "saved": saved, "failed": failed}), 200
+    except Exception as e:
+        current_app.logger.exception("Erro em bulk_marcar_pago: %s", e)
+        return jsonify({"success": False, "error": "Erro interno ao processar ação em lote."}), 500
+
+
+@financeiro_bp.route('/bulk-registrar-pagamento/', methods=['POST'])
+@login_required
+def bulk_registrar_pagamento():
+    """
+    Registra pagamento manual para múltiplas cobranças em lote.
+    Espera JSON: { "cobranca_ids": [...], "data_pagamento": "YYYY-MM-DD", "observacao": "..." }
+    """
+    try:
+        payload = request.get_json(silent=True) or {}
+        cobranca_ids = payload.get("cobranca_ids") or []
+        data_pagamento = payload.get("data_pagamento") or datetime.today().date().isoformat()
+        observacao = (payload.get("observacao") or '').strip()
+
+        if not cobranca_ids:
+            return jsonify({"success": False, "error": "cobranca_ids ausentes"}), 400
+
+        conn = get_db_connection()
+        cur = conn.cursor(dictionary=True)
+        saved = []
+        failed = []
+        for cid in cobranca_ids:
+            try:
+                cid = int(cid)
+                cur.execute(
+                    "SELECT id, status, pago_via_provedor FROM cobrancas WHERE id = %s LIMIT 1",
+                    (cid,)
+                )
+                row = cur.fetchone()
+                if not row:
+                    failed.append({"cobranca_id": cid, "error": "não encontrada"})
+                    continue
+                if (row.get('status') or '').lower() == 'cancelado':
+                    failed.append({"cobranca_id": cid, "error": "cancelada"})
+                    continue
+                if int(row.get('pago_via_provedor') or 0):
+                    failed.append({"cobranca_id": cid, "error": "já pago via provedor"})
+                    continue
+                try:
+                    cur.execute(
+                        """UPDATE cobrancas
+                           SET status = 'pago', data_pagamento = %s,
+                               observacao = COALESCE(NULLIF(%s, ''), observacao)
+                           WHERE id = %s""",
+                        (data_pagamento, observacao, cid)
+                    )
+                except Exception:
+                    cur.execute(
+                        "UPDATE cobrancas SET status = 'pago', data_pagamento = %s WHERE id = %s",
+                        (data_pagamento, cid)
+                    )
+                conn.commit()
+                saved.append(cid)
+            except Exception as e:
+                try:
+                    conn.rollback()
+                except Exception:
+                    pass
+                current_app.logger.exception("bulk_registrar_pagamento: erro id %s: %s", cid, e)
+                failed.append({"cobranca_id": cid, "error": "Falha ao registrar pagamento."})
+        cur.close()
+        conn.close()
+        return jsonify({"success": True, "saved": saved, "failed": failed}), 200
+    except Exception as e:
+        current_app.logger.exception("Erro em bulk_registrar_pagamento: %s", e)
+        return jsonify({"success": False, "error": "Erro interno ao processar ação em lote."}), 500
+
 
 
 @financeiro_bp.route('/consultar-status-efi/<int:charge_id>/', methods=['GET'])
