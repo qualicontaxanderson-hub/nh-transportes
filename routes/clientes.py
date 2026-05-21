@@ -1,4 +1,4 @@
-from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify
+from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, current_app
 from flask_login import login_required
 
 from utils.db import get_db_connection
@@ -38,9 +38,7 @@ def _montar_endereco_completo(cliente):
     if cliente.get('bairro'):
         partes.append(str(cliente['bairro']).strip())
 
-    cidade = (cliente.get('municipio') or cliente.get('destino_cidade') or '').strip()
-    uf = (cliente.get('uf') or cliente.get('destino_estado') or '').strip()
-    cidade_uf = ' / '.join([p for p in [cidade, uf] if p]).strip()
+    cidade_uf = _cidade_uf(cliente)
     if cidade_uf:
         partes.append(cidade_uf)
     if cliente.get('cep'):
@@ -49,9 +47,7 @@ def _montar_endereco_completo(cliente):
 
 
 def _montar_mensagem_whatsapp(cliente):
-    cidade = (cliente.get('municipio') or cliente.get('destino_cidade') or '').strip()
-    uf = (cliente.get('uf') or cliente.get('destino_estado') or '').strip()
-    cidade_uf = ' / '.join([p for p in [cidade, uf] if p]).strip() or '—'
+    cidade_uf = _cidade_uf(cliente) or '—'
     return '\n'.join([
         f"*CIDADE/UF:* *{cidade_uf}*",
         f"Razão Social: {_str_or_dash(cliente.get('razao_social'))}",
@@ -59,6 +55,12 @@ def _montar_mensagem_whatsapp(cliente):
         f"CNPJ: {_str_or_dash(cliente.get('cnpj'))}",
         f"Endereço completo: {_montar_endereco_completo(cliente)}",
     ])
+
+
+def _cidade_uf(cliente):
+    cidade = (cliente.get('municipio') or cliente.get('destino_cidade') or '').strip()
+    uf = (cliente.get('uf') or cliente.get('destino_estado') or '').strip()
+    return ' / '.join([p for p in [cidade, uf] if p]).strip()
 
 
 @bp.route('/')
@@ -294,7 +296,8 @@ def mensagem_whatsapp(id):
             return jsonify({'ok': False, 'error': 'Cliente não encontrado.'}), 404
         return jsonify({'ok': True, 'mensagem': _montar_mensagem_whatsapp(cliente)})
     except Exception as e:
-        return jsonify({'ok': False, 'error': str(e)}), 500
+        current_app.logger.exception('Erro ao montar mensagem de WhatsApp do cliente id=%s', id)
+        return jsonify({'ok': False, 'error': 'Erro interno ao gerar mensagem.'}), 500
     finally:
         if cursor:
             cursor.close()
