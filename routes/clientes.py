@@ -89,7 +89,7 @@ def _montar_mensagem_whatsapp(cliente):
     return '\n'.join([
         "🚛 *DADOS DO CLIENTE*",
         "",
-        f"📍 *CIDADE/UF:* *{cidade_uf}*",
+        f"📍 *CIDADE/UF: {cidade_uf}*",
         "",
         f"*Razão Social:* {_str_or_dash(cliente.get('razao_social'))}",
         f"*Nome Fantasia:* {_str_or_dash(cliente.get('nome_fantasia'))}",

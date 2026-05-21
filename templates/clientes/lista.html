@@ -296,7 +296,8 @@ async function copiarDadosWhatsAppCliente(clienteId, event, btn){
     if (!resp.ok || !data.ok || !data.mensagem) {
       if (resp.status === 404) throw new Error('Cliente não encontrado.');
       if (resp.status === 403) throw new Error('Acesso não permitido.');
-      throw new Error(data.error || 'Não foi possível gerar a mensagem.');
+      const detalhe = data.error || ('Falha HTTP ' + resp.status);
+      throw new Error('Não foi possível gerar a mensagem. ' + detalhe);
     }
     await copiarTextoClipboard(data.mensagem);
     btn.innerHTML = '<i class="bi bi-check-lg"></i>';
