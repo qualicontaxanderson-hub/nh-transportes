@@ -150,16 +150,26 @@
 
   <!-- ── Filter ─────────────────────────────────────────────── -->
   <div class="card shadow-sm mb-3">
-    <div class="flt-header"><i class="bi bi-funnel me-1"></i>Filtrar por Período</div>
+    <div class="flt-header"><i class="bi bi-funnel me-1"></i>Filtrar Recebimentos</div>
     <div class="card-body py-2">
       <form method="GET" action="{{ url_for('financeiro.recebimentos') }}" class="row g-2 align-items-end">
-        <div class="col-md-4">
+        <div class="col-md-3">
           <label for="data_inicio" class="form-label mb-1" style="font-size:0.82rem;">Data Inicial</label>
           <input type="date" class="form-control form-control-sm" id="data_inicio" name="data_inicio" value="{{ data_inicio }}">
         </div>
-        <div class="col-md-4">
+        <div class="col-md-3">
           <label for="data_fim" class="form-label mb-1" style="font-size:0.82rem;">Data Final</label>
           <input type="date" class="form-control form-control-sm" id="data_fim" name="data_fim" value="{{ data_fim }}">
+        </div>
+        <div class="col-md-4">
+          <label for="busca_cliente" class="form-label mb-1" style="font-size:0.82rem;">Empresa / Cliente</label>
+          <div class="input-group input-group-sm">
+            <span class="input-group-text"><i class="bi bi-building"></i></span>
+            <input type="text" class="form-control form-control-sm" id="busca_cliente" name="busca_cliente"
+                   value="{{ busca_cliente or '' }}"
+                   placeholder="Buscar por razão social ou nome fantasia…"
+                   autocomplete="off">
+          </div>
         </div>
         <div class="col-auto">
           <button type="submit" class="btn btn-primary btn-sm"><i class="bi bi-search me-1"></i>Filtrar</button>

@@ -51,10 +51,11 @@ def recebimentos():
         
         data_inicio = request.args.get('data_inicio', primeiro_dia_mes.strftime('%Y-%m-%d'))
         data_fim = request.args.get('data_fim', ultimo_dia_mes.strftime('%Y-%m-%d'))
+        busca_cliente = (request.args.get('busca_cliente') or '').strip()
 
         try:
             # Buscar recebimentos/boletos emitidos no período
-            cursor.execute("""
+            sql = """
                 SELECT 
                     c.*,
                     cl.razao_social AS cliente_nome,
@@ -66,8 +67,14 @@ def recebimentos():
                 LEFT JOIN clientes cl ON c.id_cliente = cl.id
                 LEFT JOIN fretes f ON c.frete_id = f.id
                 WHERE c.data_emissao BETWEEN %s AND %s
-                ORDER BY c.data_vencimento DESC, c.data_emissao DESC
-            """, (data_inicio, data_fim))
+            """
+            params = [data_inicio, data_fim]
+            if busca_cliente:
+                sql += " AND (cl.razao_social LIKE %s OR cl.nome_fantasia LIKE %s)"
+                like = f"%{busca_cliente}%"
+                params.extend([like, like])
+            sql += " ORDER BY c.data_vencimento DESC, c.data_emissao DESC"
+            cursor.execute(sql, params)
             recebimentos_lista = cursor.fetchall()
             current_app.logger.info(f"[recebimentos] Encontrados {len(recebimentos_lista)} recebimentos")
         except Exception as e:
@@ -166,6 +173,7 @@ def recebimentos():
                              recebimentos=recebimentos_lista,
                              data_inicio=data_inicio,
                              data_fim=data_fim,
+                             busca_cliente=busca_cliente,
                              total_fretes=total_fretes,
                              total_boletos=total_boletos,
                              diferenca=diferenca)
