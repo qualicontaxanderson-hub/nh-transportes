@@ -63,8 +63,7 @@ def recebimentos():
                     cl.nome_fantasia AS cliente_fantasia,
                     f.id AS frete_id,
                     f.id AS frete_numero,
-                    f.data_frete AS frete_data,
-                    f.valor_total_frete AS frete_valor
+                    f.data_frete AS frete_data
                 FROM cobrancas c
                 LEFT JOIN clientes cl ON c.id_cliente = cl.id
                 LEFT JOIN fretes f ON c.frete_id = f.id
@@ -94,7 +93,22 @@ def recebimentos():
 
         # Calcular resumos da pesquisa atual
         try:
-            total_fretes = sum(float(r.get('frete_valor') or 0) for r in recebimentos_lista)
+            # Total de fretes no período filtrado pelo mesmo cliente (query separada)
+            sql_fretes = """
+                SELECT COALESCE(SUM(f.valor_total_frete), 0) AS total_fretes
+                FROM fretes f
+                LEFT JOIN clientes cl ON f.clientes_id = cl.id
+                WHERE f.data_frete BETWEEN %s AND %s
+            """
+            params_fretes = [data_inicio, data_fim]
+            if busca_cliente:
+                sql_fretes += " AND (cl.razao_social LIKE %s OR cl.nome_fantasia LIKE %s)"
+                like_f = f"%{busca_cliente}%"
+                params_fretes.extend([like_f, like_f])
+            cursor.execute(sql_fretes, params_fretes)
+            total_fretes = float(cursor.fetchone().get('total_fretes', 0) or 0)
+
+            # Total de boletos da pesquisa atual (das linhas filtradas)
             total_boletos = sum(float(r.get('valor') or 0) for r in recebimentos_lista)
             diferenca = total_fretes - total_boletos
         except Exception as e:
