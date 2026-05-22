@@ -97,33 +97,111 @@ def _titulos_list(conn):
 
 def _fetch_veiculos_motoristas(conn):
     """
-    Retorna uma tupla (by_caminhao, nome_to_vid):
-      by_caminhao  – {caminhao_upper: {nome, veiculo_id}}
-      nome_to_vid  – {motorista_nome_upper: veiculo_id}  (reservado para uso futuro)
+    Retorna uma tupla (veiculos, nome_to_vid):
+      veiculos  – [{veiculo_id, nome, aliases}]
+      nome_to_vid – {motorista_nome_upper: veiculo_id}  (reservado para uso futuro)
 
     Usado para anotar as linhas da seção CAMINHÕES no relatório conf_despesas
     com o badge do nome do motorista.
     """
     cur = conn.cursor(dictionary=True)
     cur.execute("""
-        SELECT v.id              AS veiculo_id,
-               UPPER(v.caminhao) AS caminhao_upper,
-               m.nome            AS motorista_nome
+        SELECT
+               v.id AS veiculo_id,
+               v.caminhao,
+               v.modelo,
+               v.tipo_veiculo,
+               v.placa,
+               v.placa_carreta,
+               GROUP_CONCAT(DISTINCT m.nome ORDER BY m.nome SEPARATOR ' / ') AS motorista_nome
         FROM   veiculos  v
-        INNER  JOIN motoristas m ON m.veiculo_id = v.id
+        LEFT   JOIN motoristas m ON m.veiculo_id = v.id
         WHERE  v.caminhao IS NOT NULL
+        GROUP BY v.id, v.caminhao, v.modelo, v.tipo_veiculo, v.placa, v.placa_carreta
     """)
     rows = cur.fetchall()
     cur.close()
-    by_caminhao = {
-        r['caminhao_upper']: {'nome': r['motorista_nome'], 'veiculo_id': r['veiculo_id']}
-        for r in rows
-    }
-    nome_to_vid = {
-        _ascii_upper(r['motorista_nome']): r['veiculo_id']
-        for r in rows
-    }
-    return by_caminhao, nome_to_vid
+
+    veiculos = []
+    nome_to_vid = {}
+    for r in rows:
+        motorista_nome = (r.get('motorista_nome') or '').strip() or None
+        veiculos.append({
+            'veiculo_id': r['veiculo_id'],
+            'nome': motorista_nome,
+            'aliases': _build_veiculo_aliases(
+                r.get('tipo_veiculo'),
+                r.get('caminhao'),
+                r.get('modelo'),
+                r.get('placa'),
+                r.get('placa_carreta'),
+            ),
+        })
+        if motorista_nome:
+            nome_to_vid[_ascii_upper(motorista_nome)] = r['veiculo_id']
+
+    return veiculos, nome_to_vid
+
+
+def _build_veiculo_aliases(tipo_veiculo, caminhao, modelo, placa=None, placa_carreta=None):
+    """
+    Gera aliases textuais para localizar a linha correta do caminhão no bloco.
+
+    Ex.: caminhao='Scania', modelo='R540' → ['SCANIA R540', 'R540', 'ABC1D23']
+    """
+    aliases = []
+
+    def _push(*parts):
+        text = _ascii_upper(' '.join(str(p).strip() for p in parts if p and str(p).strip()))
+        if text and text not in aliases:
+            aliases.append(text)
+
+    caminhao_up = _ascii_upper(caminhao)
+    modelo_up = _ascii_upper(modelo)
+    tipo_up = _ascii_upper(tipo_veiculo)
+    placa_up = _ascii_upper(placa)
+    placa_carreta_up = _ascii_upper(placa_carreta)
+
+    if caminhao_up and modelo_up:
+        _push(caminhao_up, modelo_up)
+    if modelo_up:
+        _push(modelo_up)
+    elif caminhao_up:
+        _push(caminhao_up)
+
+    if tipo_up and caminhao_up and modelo_up:
+        _push(tipo_up, caminhao_up, modelo_up)
+    if tipo_up and modelo_up:
+        _push(tipo_up, modelo_up)
+
+    _push(placa_up)
+    _push(placa_carreta_up)
+
+    aliases.sort(key=lambda s: (-len(s), s))
+    return aliases
+
+
+def _compile_veiculo_matchers(veiculos):
+    """Compila regexes ordenadas do alias mais específico para o menos específico."""
+    matchers = []
+    for veiculo in veiculos:
+        for alias in veiculo.get('aliases', []):
+            matchers.append({
+                'veiculo': veiculo,
+                'alias': alias,
+                'pattern': re.compile(r'(?<![A-Z0-9])' + re.escape(alias) + r'(?![A-Z0-9])'),
+            })
+    matchers.sort(key=lambda item: (-len(item['alias']), item['alias']))
+    return matchers
+
+
+def _match_veiculo_row(categoria_nome, matchers):
+    """Retorna o veículo cujo alias melhor casa com a categoria do bloco CAMINHÕES."""
+    nome_up = _ascii_upper(categoria_nome or '')
+    for matcher in matchers:
+        if matcher['pattern'].search(nome_up):
+            return matcher['veiculo']
+    return None
 
 
 def _fetch_frete_data_by_vehicle(conn, data_inicio, data_fim):
@@ -1109,11 +1187,7 @@ def conf_despesas():
             mot_salary_rows = _build_motorista_salary_rows(func_rows, months)
             frete_by_vid    = _fetch_frete_data_by_vehicle(conn, data_inicio, data_fim)
             if veiculo_mot:
-                # Pré-compila os padrões regex uma única vez
-                veiculo_patterns = {
-                    caminhao_up: re.compile(r'\b' + re.escape(caminhao_up) + r'\b')
-                    for caminhao_up in veiculo_mot
-                }
+                veiculo_matchers = _compile_veiculo_matchers(veiculo_mot)
                 for block in blocks:
                     titulo_norm = _ascii_upper(block['titulo_nome'])
                     if 'CAMINHAO' not in titulo_norm and 'CAMINHOES' not in titulo_norm:
@@ -1122,74 +1196,77 @@ def conf_despesas():
                     new_rows = []
                     for row in block.get('rows', []):
                         new_rows.append(row)
-                        nome_up = row.get('categoria_nome', '').upper()
-                        for caminhao_up, vdata in veiculo_mot.items():
-                            if veiculo_patterns[caminhao_up].search(nome_up):
-                                row['motorista_nome'] = vdata['nome']
-                                vid = vdata['veiculo_id']
+                        vdata = _match_veiculo_row(row.get('categoria_nome', ''), veiculo_matchers)
+                        if not vdata:
+                            continue
 
-                                # ── Injeta RECEITA e LITROS como primeiras subcats ──
-                                if vid in frete_by_vid:
-                                    vfrete = frete_by_vid[vid]
-                                    receita_by_month = {}
-                                    litros_by_month  = {}
-                                    receita_total    = 0.0
-                                    litros_total     = 0.0
-                                    for m_ in months:
-                                        mk_ = m_['key']
-                                        # receita é negativa: subtrai do custo líquido
-                                        r_val = -vfrete['receita'].get(mk_, 0.0)
-                                        l_val =  vfrete['litros'].get(mk_,  0.0)
-                                        receita_by_month[mk_] = r_val
-                                        litros_by_month[mk_]  = l_val
-                                        receita_total += r_val
-                                        litros_total  += l_val
+                        if vdata.get('nome'):
+                            row['motorista_nome'] = vdata['nome']
+                        vid = vdata['veiculo_id']
 
-                                    # Primeiro: RECEITA (monetária, subtrai do total)
-                                    row['subcats'].insert(0, {
-                                        'subcat_id':   f'receita_{vid}',
-                                        'subcat_nome': 'RECEITA',
-                                        'by_month':    receita_by_month,
-                                        'total':       receita_total,
-                                        'is_receita':  True,
-                                    })
-                                    # Segundo: LITROS (informativa, não afeta totais monetários)
-                                    row['subcats'].insert(1, {
-                                        'subcat_id':   f'litros_{vid}',
-                                        'subcat_nome': 'LITROS TRANSPORTADOS',
-                                        'by_month':    litros_by_month,
-                                        'total':       litros_total,
-                                        'is_litros':   True,
-                                    })
-                                    # Atualiza totais monetários com a receita (negativa)
-                                    for m_ in months:
-                                        mk_ = m_['key']
-                                        r_val = receita_by_month[mk_]
-                                        row['by_month'][mk_]             = row['by_month'].get(mk_, 0.0) + r_val
-                                        block['total_by_month'][mk_]     = block['total_by_month'].get(mk_, 0.0) + r_val
-                                        grand_by_month[mk_]              = grand_by_month.get(mk_, 0.0) + r_val
-                                    row['total']    += receita_total
-                                    block['total']  += receita_total
-                                    grand_total     += receita_total
+                        # ── Injeta RECEITA e LITROS como primeiras subcats ──
+                        if vid in frete_by_vid:
+                            vfrete = frete_by_vid[vid]
+                            receita_by_month = {}
+                            litros_by_month  = {}
+                            receita_total    = 0.0
+                            litros_total     = 0.0
+                            for m_ in months:
+                                mk_ = m_['key']
+                                # receita é negativa: subtrai do custo líquido
+                                r_val = -vfrete['receita'].get(mk_, 0.0)
+                                l_val =  vfrete['litros'].get(mk_,  0.0)
+                                receita_by_month[mk_] = r_val
+                                litros_by_month[mk_]  = l_val
+                                receita_total += r_val
+                                litros_total  += l_val
 
-                                # ── Injeta linha de salário do motorista logo após o caminhão ──
-                                mot_key = _ascii_upper(vdata['nome'])
-                                if mot_key in mot_salary_rows:
-                                    sal_row = mot_salary_rows[mot_key]
-                                    new_rows.append(sal_row)
-                                    # Incorpora salário no total da linha do caminhão (custo líquido
-                                    # do veículo = despesas + salário motorista − receita de frete)
-                                    for mk_, v in sal_row['by_month'].items():
-                                        row['by_month'][mk_] = row['by_month'].get(mk_, 0.0) + v
-                                    row['total'] += sal_row['total']
-                                    # Mantém block/grand corretos (são variáveis independentes
-                                    # de row['total'] — não há dupla contagem)
-                                    block['total'] += sal_row['total']
-                                    for mk_, v in sal_row['by_month'].items():
-                                        block['total_by_month'][mk_] = block['total_by_month'].get(mk_, 0.0) + v
-                                        grand_by_month[mk_]          = grand_by_month.get(mk_, 0.0) + v
-                                    grand_total += sal_row['total']
-                                break
+                            # Primeiro: RECEITA (monetária, subtrai do total)
+                            row['subcats'].insert(0, {
+                                'subcat_id':   f'receita_{vid}',
+                                'subcat_nome': 'RECEITA',
+                                'by_month':    receita_by_month,
+                                'total':       receita_total,
+                                'is_receita':  True,
+                            })
+                            # Segundo: LITROS (informativa, não afeta totais monetários)
+                            row['subcats'].insert(1, {
+                                'subcat_id':   f'litros_{vid}',
+                                'subcat_nome': 'LITROS TRANSPORTADOS',
+                                'by_month':    litros_by_month,
+                                'total':       litros_total,
+                                'is_litros':   True,
+                            })
+                            # Atualiza totais monetários com a receita (negativa)
+                            for m_ in months:
+                                mk_ = m_['key']
+                                r_val = receita_by_month[mk_]
+                                row['by_month'][mk_]             = row['by_month'].get(mk_, 0.0) + r_val
+                                block['total_by_month'][mk_]     = block['total_by_month'].get(mk_, 0.0) + r_val
+                                grand_by_month[mk_]              = grand_by_month.get(mk_, 0.0) + r_val
+                            row['total']    += receita_total
+                            block['total']  += receita_total
+                            grand_total     += receita_total
+
+                        # ── Injeta linha de salário do motorista logo após o caminhão ──
+                        mot_nome = vdata.get('nome')
+                        if mot_nome:
+                            mot_key = _ascii_upper(mot_nome)
+                            if mot_key in mot_salary_rows:
+                                sal_row = mot_salary_rows[mot_key]
+                                new_rows.append(sal_row)
+                                # Incorpora salário no total da linha do caminhão (custo líquido
+                                # do veículo = despesas + salário motorista − receita de frete)
+                                for mk_, v in sal_row['by_month'].items():
+                                    row['by_month'][mk_] = row['by_month'].get(mk_, 0.0) + v
+                                row['total'] += sal_row['total']
+                                # Mantém block/grand corretos (são variáveis independentes
+                                # de row['total'] — não há dupla contagem)
+                                block['total'] += sal_row['total']
+                                for mk_, v in sal_row['by_month'].items():
+                                    block['total_by_month'][mk_] = block['total_by_month'].get(mk_, 0.0) + v
+                                    grand_by_month[mk_]          = grand_by_month.get(mk_, 0.0) + v
+                                grand_total += sal_row['total']
                     block['rows'] = new_rows
 
             # ── Litros comprados pela empresa selecionada e custo por litro ──
