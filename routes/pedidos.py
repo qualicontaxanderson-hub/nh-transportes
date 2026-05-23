@@ -176,7 +176,51 @@ def index():
     
     cursor.execute(sql, params)
     pedidos = cursor.fetchall()
-    
+
+    # ── Resumo 1: por Veículo ────────────────────────────────────────────────
+    sql_rv = """
+        SELECT
+            COALESCE(v.caminhao, '(sem veículo)') AS veiculo_nome,
+            COALESCE(v.placa, '')                  AS veiculo_placa,
+            COUNT(DISTINCT p.id)                   AS total_pedidos,
+            COALESCE(SUM(pi.quantidade), 0)        AS total_quantidade,
+            COALESCE(SUM(pi.total_nf), 0)          AS total_valor
+        FROM pedidos p
+        LEFT JOIN veiculos  v  ON p.veiculo_id  = v.id
+        LEFT JOIN pedidos_itens pi ON p.id = pi.pedido_id
+        WHERE 1=1
+    """
+    if data_inicio and data_fim:
+        sql_rv += " AND DATE(p.data_pedido) BETWEEN %s AND %s"
+    if status:
+        sql_rv += " AND p.status = %s"
+    sql_rv += " GROUP BY p.veiculo_id, v.caminhao, v.placa ORDER BY total_quantidade DESC"
+    cursor.execute(sql_rv, params)
+    resumo_veiculos = cursor.fetchall()
+
+    # ── Resumo 2: por Veículo + Motorista ────────────────────────────────────
+    sql_rvm = """
+        SELECT
+            COALESCE(v.caminhao, '(sem veículo)') AS veiculo_nome,
+            COALESCE(v.placa, '')                  AS veiculo_placa,
+            COALESCE(m.nome, '(sem motorista)')    AS motorista_nome,
+            COUNT(DISTINCT p.id)                   AS total_pedidos,
+            COALESCE(SUM(pi.quantidade), 0)        AS total_quantidade,
+            COALESCE(SUM(pi.total_nf), 0)          AS total_valor
+        FROM pedidos p
+        LEFT JOIN veiculos   v  ON p.veiculo_id  = v.id
+        LEFT JOIN motoristas m  ON p.motorista_id = m.id
+        LEFT JOIN pedidos_itens pi ON p.id = pi.pedido_id
+        WHERE 1=1
+    """
+    if data_inicio and data_fim:
+        sql_rvm += " AND DATE(p.data_pedido) BETWEEN %s AND %s"
+    if status:
+        sql_rvm += " AND p.status = %s"
+    sql_rvm += " GROUP BY p.veiculo_id, v.caminhao, v.placa, p.motorista_id, m.nome ORDER BY total_quantidade DESC"
+    cursor.execute(sql_rvm, params)
+    resumo_veiculo_motorista = cursor.fetchall()
+
     cursor.close()
     conn.close()
 
@@ -200,6 +244,8 @@ def index():
         pedidos=pedidos,
         filtros={'data_inicio': data_inicio, 'data_fim': data_fim, 'status': status},
         return_url=return_url,
+        resumo_veiculos=resumo_veiculos,
+        resumo_veiculo_motorista=resumo_veiculo_motorista,
     )
 
 

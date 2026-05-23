@@ -216,6 +216,100 @@
     </div>
   </div>
 
+  <!-- ═══════════════════════════════════════════════════════════════════════ -->
+  <!-- RESUMO 1 – Por Veículo                                                 -->
+  <!-- ═══════════════════════════════════════════════════════════════════════ -->
+  {% if resumo_veiculos %}
+  <div class="card shadow-sm mb-4">
+    <div class="card-header py-2 px-3" style="background:#1D63A5;">
+      <span class="fw-bold text-white" style="font-size:.85rem;">
+        <i class="bi bi-truck me-1"></i> Quantidade Transportada por Veículo
+      </span>
+    </div>
+    <div class="table-responsive">
+      <table class="table table-sm table-hover mb-0">
+        <thead class="table-light">
+          <tr>
+            <th class="ps-3">Veículo</th>
+            <th>Placa</th>
+            <th class="text-center">Pedidos</th>
+            <th class="text-end">Qtd Total (m³)</th>
+            <th class="text-end pe-3">Valor Total</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% set ns = namespace(qtd_total=0, val_total=0) %}
+          {% for rv in resumo_veiculos %}
+            {% set ns.qtd_total = ns.qtd_total + (rv.total_quantidade or 0) %}
+            {% set ns.val_total = ns.val_total + (rv.total_valor or 0) %}
+            <tr>
+              <td class="ps-3 fw-semibold">{{ rv.veiculo_nome }}</td>
+              <td>{% if rv.veiculo_placa %}<span class="badge bg-secondary">{{ rv.veiculo_placa }}</span>{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              <td class="text-center">{{ rv.total_pedidos }}</td>
+              <td class="text-end">{{ "{:,.0f}".format(rv.total_quantidade or 0).replace(',', '.') }}</td>
+              <td class="text-end pe-3">R$ {{ "{:,.2f}".format(rv.total_valor or 0).replace(',', 'X').replace('.', ',').replace('X', '.') }}</td>
+            </tr>
+          {% endfor %}
+          <tr class="table-primary fw-bold">
+            <td class="ps-3" colspan="2">TOTAL</td>
+            <td class="text-center">{{ resumo_veiculos | sum(attribute='total_pedidos') }}</td>
+            <td class="text-end">{{ "{:,.0f}".format(ns.qtd_total).replace(',', '.') }}</td>
+            <td class="text-end pe-3">R$ {{ "{:,.2f}".format(ns.val_total).replace(',', 'X').replace('.', ',').replace('X', '.') }}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- ═══════════════════════════════════════════════════════════════════════ -->
+  <!-- RESUMO 2 – Por Veículo + Motorista                                     -->
+  <!-- ═══════════════════════════════════════════════════════════════════════ -->
+  {% if resumo_veiculo_motorista %}
+  <div class="card shadow-sm mb-4">
+    <div class="card-header py-2 px-3" style="background:#1a4f82;">
+      <span class="fw-bold text-white" style="font-size:.85rem;">
+        <i class="bi bi-person-gear me-1"></i> Quantidade Transportada por Veículo e Motorista
+      </span>
+    </div>
+    <div class="table-responsive">
+      <table class="table table-sm table-hover mb-0">
+        <thead class="table-light">
+          <tr>
+            <th class="ps-3">Veículo</th>
+            <th>Placa</th>
+            <th>Motorista</th>
+            <th class="text-center">Pedidos</th>
+            <th class="text-end">Qtd Total (m³)</th>
+            <th class="text-end pe-3">Valor Total</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% set ns2 = namespace(qtd_total=0, val_total=0) %}
+          {% for rvm in resumo_veiculo_motorista %}
+            {% set ns2.qtd_total = ns2.qtd_total + (rvm.total_quantidade or 0) %}
+            {% set ns2.val_total = ns2.val_total + (rvm.total_valor or 0) %}
+            <tr>
+              <td class="ps-3 fw-semibold">{{ rvm.veiculo_nome }}</td>
+              <td>{% if rvm.veiculo_placa %}<span class="badge bg-secondary">{{ rvm.veiculo_placa }}</span>{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              <td>{{ rvm.motorista_nome }}</td>
+              <td class="text-center">{{ rvm.total_pedidos }}</td>
+              <td class="text-end">{{ "{:,.0f}".format(rvm.total_quantidade or 0).replace(',', '.') }}</td>
+              <td class="text-end pe-3">R$ {{ "{:,.2f}".format(rvm.total_valor or 0).replace(',', 'X').replace('.', ',').replace('X', '.') }}</td>
+            </tr>
+          {% endfor %}
+          <tr class="table-primary fw-bold">
+            <td class="ps-3" colspan="3">TOTAL</td>
+            <td class="text-center">{{ resumo_veiculo_motorista | sum(attribute='total_pedidos') }}</td>
+            <td class="text-end">{{ "{:,.0f}".format(ns2.qtd_total).replace(',', '.') }}</td>
+            <td class="text-end pe-3">R$ {{ "{:,.2f}".format(ns2.val_total).replace(',', 'X').replace('.', ',').replace('X', '.') }}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {% endif %}
+
 </div>
 {% endblock %}
 
