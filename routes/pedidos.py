@@ -123,18 +123,11 @@ def index():
 
     query_keys = ('data_inicio', 'data_fim', 'status', 'mostrar_todos')
     has_explicit_filters = any(k in request.args for k in query_keys)
-    saved_filters = session.get('pedidos_filtros') or {}
-
     if has_explicit_filters:
         data_inicio = request.args.get('data_inicio', '')
         data_fim = request.args.get('data_fim', '')
         status = request.args.get('status', '')
         mostrar_todos = request.args.get('mostrar_todos', '') == '1'
-    elif saved_filters:
-        data_inicio = saved_filters.get('data_inicio', '')
-        data_fim = saved_filters.get('data_fim', '')
-        status = saved_filters.get('status', '')
-        mostrar_todos = saved_filters.get('mostrar_todos', False)
     else:
         data_inicio = ''
         data_fim = ''
