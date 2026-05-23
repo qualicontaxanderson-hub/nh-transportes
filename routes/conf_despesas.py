@@ -195,12 +195,20 @@ def _compile_veiculo_matchers(veiculos):
     return matchers
 
 
-def _match_veiculo_row(categoria_nome, matchers):
+def _match_veiculo_row(categoria_nome, matchers, used_vehicle_ids=None):
     """Retorna o veículo cujo alias melhor casa com a categoria do bloco CAMINHÕES."""
+    used_vehicle_ids = used_vehicle_ids or set()
     nome_up = _ascii_upper(categoria_nome or '')
+    first_any = None
     for matcher in matchers:
         if matcher['pattern'].search(nome_up):
-            return matcher['veiculo']
+            veiculo = matcher['veiculo']
+            if first_any is None:
+                first_any = veiculo
+            if veiculo.get('veiculo_id') not in used_vehicle_ids:
+                return veiculo
+    if first_any is not None:
+        return first_any
     return None
 
 
@@ -1193,16 +1201,22 @@ def conf_despesas():
                     if 'CAMINHAO' not in titulo_norm and 'CAMINHOES' not in titulo_norm:
                         continue
                     block['is_caminhoes'] = True
+                    used_vehicle_ids = set()
                     new_rows = []
                     for row in block.get('rows', []):
                         new_rows.append(row)
-                        vdata = _match_veiculo_row(row.get('categoria_nome', ''), veiculo_matchers)
+                        vdata = _match_veiculo_row(
+                            row.get('categoria_nome', ''),
+                            veiculo_matchers,
+                            used_vehicle_ids=used_vehicle_ids,
+                        )
                         if not vdata:
                             continue
 
                         if vdata.get('nome'):
                             row['motorista_nome'] = vdata['nome']
                         vid = vdata['veiculo_id']
+                        used_vehicle_ids.add(vid)
 
                         # ── Injeta RECEITA e LITROS como primeiras subcats ──
                         if vid in frete_by_vid:

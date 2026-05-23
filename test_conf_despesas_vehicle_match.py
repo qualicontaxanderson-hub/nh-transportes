@@ -49,3 +49,18 @@ def test_match_veiculo_row_supports_model_only_categories():
     matched = _match_veiculo_row('VEICULO TRUCK MODELO ACTROS 1620', matchers)
 
     assert matched['veiculo_id'] == 3
+
+
+def test_match_veiculo_row_avoids_reusing_same_vehicle_when_alias_is_ambiguous():
+    veiculos = [
+        {'veiculo_id': 10, 'nome': 'A', 'aliases': ['SCANIA']},
+        {'veiculo_id': 11, 'nome': 'B', 'aliases': ['SCANIA']},
+    ]
+    matchers = _compile_veiculo_matchers(veiculos)
+
+    used = set()
+    first = _match_veiculo_row('VEICULO CARRETA MODELO SCANIA R540', matchers, used_vehicle_ids=used)
+    used.add(first['veiculo_id'])
+    second = _match_veiculo_row('VEICULO CARRETA MODELO SCANIA R500', matchers, used_vehicle_ids=used)
+
+    assert first['veiculo_id'] != second['veiculo_id']
