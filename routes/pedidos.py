@@ -575,10 +575,8 @@ def excluir(id):
     conn.commit()
     cursor.close()
     conn.close()
-    return_url = _safe_return_url(request.args.get('return_url')) or url_for('pedidos.index')
-
     flash('Pedido excluído com sucesso!', 'success')
-    return redirect(return_url)
+    return redirect(url_for('pedidos.index'))
 
 
 @bp.route('/api/buscar/<int:id>')
