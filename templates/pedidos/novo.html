@@ -234,7 +234,7 @@
         </div>
         <div class="col-md-2">
           <label class="form-label">Preço Unit. R$</label>
-          <input type="text" class="form-control form-control-sm input-preco" name="preco_unitario" placeholder="0,000">
+          <input type="text" class="form-control form-control-sm input-preco" name="preco_unitario" placeholder="0,0000">
         </div>
         <div class="col-md-2">
           <label class="form-label">Total NF R$</label>
@@ -340,7 +340,7 @@ function calcularTotal(item) {
 }
 
 function formatarMoeda3(valor) {
-  return valor.toLocaleString('pt-BR', { minimumFractionDigits: 3, maximumFractionDigits: 3 });
+  return valor.toLocaleString('pt-BR', { minimumFractionDigits: 4, maximumFractionDigits: 4 });
 }
 
 function formatarMoeda2(valor) {
@@ -411,7 +411,7 @@ document.addEventListener('input', function(e) {
   if (e.target.classList.contains('input-preco')) {
     var value = e.target.value.replace(/\D/g, '');
     if (value) {
-      value = (parseInt(value) / 1000).toFixed(3);
+      value = (parseInt(value) / 10000).toFixed(4);
       e.target.value = formatarMoeda3(parseFloat(value));
     }
     var item = e.target.closest('.item-pedido');
