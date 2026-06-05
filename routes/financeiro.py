@@ -1013,31 +1013,41 @@ def reconciliar_efi():
         headers = {"Authorization": f"Bearer {token}", "Accept": "application/json"}
 
         # Buscar todas as cobranças pagas no período com paginação
+        # EFI Pay: parâmetro "status" (não "situation"), paginação por "page" (1-based)
         all_charges = []
         limit = 100
-        offset = 0
-        while True:
-            params = {"situation": "paid", "begin_date": begin_date, "end_date": end_date,
-                      "limit": limit, "offset": offset}
-            resp = requests.get(f"{base}/v1/charges", headers=headers, params=params, timeout=30)
-            if resp.status_code != 200:
-                # Fallback: tentar com parâmetro "status" (API mais nova)
-                params2 = {**params, "status": params.pop("situation")}
-                resp = requests.get(f"{base}/v1/charges", headers=headers, params=params2, timeout=30)
-            if resp.status_code != 200:
-                current_app.logger.error("[reconciliar_efi] EFI retornou %s: %s", resp.status_code, resp.text[:500])
-                return jsonify({"success": False, "error": f"EFI Pay retornou status {resp.status_code}."}), 502
 
-            data = resp.json()
-            charges = data.get("data") or []
-            all_charges.extend(charges)
+        for status_val in ("paid", "settled"):
+            page = 1
+            while True:
+                params = {
+                    "status": status_val,
+                    "begin_date": begin_date,
+                    "end_date": end_date,
+                    "limit": limit,
+                    "page": page,
+                }
+                resp = requests.get(f"{base}/v1/charges", headers=headers, params=params, timeout=30)
+                if resp.status_code != 200:
+                    current_app.logger.error(
+                        "[reconciliar_efi] EFI status=%s status_val=%s body=%s",
+                        resp.status_code, status_val, resp.text[:1000]
+                    )
+                    return jsonify({
+                        "success": False,
+                        "error": f"EFI Pay retornou {resp.status_code} ao buscar status={status_val}.",
+                        "detail": resp.text[:300],
+                    }), 502
 
-            paginate = data.get("paginate") or {}
-            total_pages = int(paginate.get("totalPages") or 1)
-            current_page = int(paginate.get("currentPage") or 1)
-            if current_page >= total_pages or not charges:
-                break
-            offset += limit
+                data = resp.json()
+                charges = data.get("data") or []
+                all_charges.extend(charges)
+
+                paginate = data.get("paginate") or {}
+                total_pages = int(paginate.get("totalPages") or 1)
+                if page >= total_pages or not charges:
+                    break
+                page += 1
 
         current_app.logger.info("[reconciliar_efi] %d cobranças pagas obtidas da EFI (%s → %s)", len(all_charges), begin_date, end_date)
 
