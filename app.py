@@ -6,7 +6,10 @@ import importlib
 
 from flask import Flask, render_template, redirect, url_for, current_app
 from flask_login import LoginManager
+from flask_wtf.csrf import CSRFProtect
 from utils.formatadores import formatar_moeda
+
+csrf = CSRFProtect()
 
 
 def register_blueprints_from_routes(app):
@@ -269,6 +272,9 @@ def create_app():
     from config import Config
     app.config.from_object(Config)
     
+    # CSRF protection
+    csrf.init_app(app)
+
     # Initialize SQLAlchemy
     from models import db
     db.init_app(app)

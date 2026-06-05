@@ -1,4 +1,5 @@
 from flask import Blueprint, request, current_app, jsonify
+from flask_wtf.csrf import csrf_exempt
 from utils.db import get_db_connection
 from utils.boletos import fetch_boleto_pdf_stream, BOLETOS_DIR, _ensure_credentials_from_env, _get_bearer_token
 import os
@@ -177,6 +178,7 @@ def _validate_signature(raw_body):
 
 
 @webhooks_bp.route('/webhooks/efi', methods=['POST'])
+@csrf_exempt
 def webhooks_efi():
     """
     Recebe notificações (webhook) do provedor Efipay (EFI).

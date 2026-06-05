@@ -34,6 +34,10 @@ class Config:
     DEBUG = os.environ.get('FLASK_DEBUG', '0') == '1'
     ITEMS_PER_PAGE = 20
 
+    # CSRF (Flask-WTF)
+    WTF_CSRF_ENABLED = True
+    WTF_CSRF_TIME_LIMIT = 28800  # 8 horas — evita expiração em sessões longas
+
     # Pasta de entrada para arquivos OFX (watch-folder)
     # Configure OFX_INBOX_DIR no ambiente para apontar para qualquer pasta acessível ao servidor.
     # Padrão: /tmp/ofx_inbox  (sempre gravável no Render/Railway/Docker)
