@@ -849,9 +849,18 @@ def cancelar_boleto(charge_id):
         conn = get_db_connection()
         cursor = conn.cursor()
         try:
-            cursor.execute("UPDATE cobrancas SET status = %s WHERE charge_id = %s", ("cancelado", charge_id))
+            # charge_id vem como int da URL mas é armazenado como string — usar str() garante match
+            cursor.execute(
+                "UPDATE cobrancas SET status = %s, data_cancelamento = NOW() WHERE charge_id = %s",
+                ("cancelado", str(charge_id))
+            )
+            rows = cursor.rowcount
             conn.commit()
-            flash("Boleto cancelado com sucesso (provedor + local).", "success")
+            if rows == 0:
+                current_app.logger.warning("cancelar_boleto: UPDATE não afetou linhas para charge_id=%s", charge_id)
+                flash("Boleto cancelado no provedor, mas cobrança não encontrada no banco local.", "warning")
+            else:
+                flash("Boleto cancelado com sucesso (provedor + local).", "success")
         except Exception as e:
             conn.rollback()
             current_app.logger.exception("Falha ao atualizar status local após cancelamento: %s", e)
@@ -1012,12 +1021,9 @@ def reconciliar_efi():
 
         headers = {"Authorization": f"Bearer {token}", "Accept": "application/json"}
 
-        # Buscar todas as cobranças pagas no período com paginação
-        # EFI Pay: parâmetro "status" (não "situation"), paginação por "page" (1-based)
-        all_charges = []
-        limit = 100
-
-        for status_val in ("paid", "settled"):
+        def _fetch_efi_status(status_val):
+            """Busca todas as páginas de cobranças para um dado status na EFI Pay."""
+            result = []
             page = 1
             while True:
                 params = {
@@ -1025,53 +1031,64 @@ def reconciliar_efi():
                     "status": status_val,
                     "begin_date": begin_date,
                     "end_date": end_date,
-                    "limit": limit,
+                    "limit": 100,
                     "page": page,
                 }
-                resp = requests.get(f"{base}/v1/charges", headers=headers, params=params, timeout=30)
-                if resp.status_code != 200:
+                r = requests.get(f"{base}/v1/charges", headers=headers, params=params, timeout=30)
+                if r.status_code != 200:
                     current_app.logger.error(
                         "[reconciliar_efi] EFI status=%s status_val=%s body=%s",
-                        resp.status_code, status_val, resp.text[:1000]
+                        r.status_code, status_val, r.text[:1000]
                     )
-                    return jsonify({
-                        "success": False,
-                        "error": f"EFI Pay retornou {resp.status_code} ao buscar status={status_val}.",
-                        "detail": resp.text[:300],
-                    }), 502
-
-                data = resp.json()
+                    return None, r.status_code, r.text[:300]
+                data = r.json()
                 charges = data.get("data") or []
-                all_charges.extend(charges)
-
+                result.extend(charges)
                 paginate = data.get("paginate") or {}
-                total_pages = int(paginate.get("totalPages") or 1)
-                if page >= total_pages or not charges:
+                if page >= int(paginate.get("totalPages") or 1) or not charges:
                     break
                 page += 1
+            return result, None, None
 
-        current_app.logger.info("[reconciliar_efi] %d cobranças pagas obtidas da EFI (%s → %s)", len(all_charges), begin_date, end_date)
+        # Pagos e liquidados
+        paid_charges, err_code, err_body = _fetch_efi_status("paid")
+        if paid_charges is None:
+            return jsonify({"success": False, "error": f"EFI Pay retornou {err_code} ao buscar status=paid.", "detail": err_body}), 502
+        settled_charges, err_code, err_body = _fetch_efi_status("settled")
+        if settled_charges is None:
+            return jsonify({"success": False, "error": f"EFI Pay retornou {err_code} ao buscar status=settled.", "detail": err_body}), 502
 
-        updated = []
-        already_paid = []
+        # Cancelados
+        cancelled_charges, err_code, err_body = _fetch_efi_status("canceled")
+        if cancelled_charges is None:
+            return jsonify({"success": False, "error": f"EFI Pay retornou {err_code} ao buscar status=canceled.", "detail": err_body}), 502
+
+        current_app.logger.info(
+            "[reconciliar_efi] EFI: paid=%d settled=%d canceled=%d (%s → %s)",
+            len(paid_charges), len(settled_charges), len(cancelled_charges), begin_date, end_date
+        )
+
+        updated_pagos = []
+        updated_cancelados = []
+        ja_corretos = []
         not_found = []
 
         conn = get_db_connection()
         cur = conn.cursor(dictionary=True)
 
-        for charge in all_charges:
+        # --- Processar pagos/liquidados ---
+        for charge in (paid_charges + settled_charges):
             charge_id = str(charge.get("id") or charge.get("charge_id") or "").strip()
             if not charge_id:
                 continue
 
-            # Tentar extrair data de pagamento
             paid_date = None
             raw_paid = charge.get("paid_at") or charge.get("paidAt")
             if raw_paid:
                 paid_date = str(raw_paid)[:10]
             else:
                 for h in (charge.get("history") or []):
-                    if isinstance(h, dict) and (h.get("situation") == "paid" or h.get("status") == "paid"):
+                    if isinstance(h, dict) and (h.get("situation") in ("paid", "settled") or h.get("status") in ("paid", "settled")):
                         dt = h.get("created_at") or h.get("date")
                         if dt:
                             paid_date = str(dt)[:10]
@@ -1083,7 +1100,7 @@ def reconciliar_efi():
                 not_found.append(charge_id)
                 continue
             if (row.get("status") or "").lower() == "pago":
-                already_paid.append(charge_id)
+                ja_corretos.append(charge_id)
                 continue
 
             cur.execute(
@@ -1091,8 +1108,31 @@ def reconciliar_efi():
                 (paid_date, charge_id)
             )
             conn.commit()
-            updated.append(charge_id)
-            current_app.logger.info("[reconciliar_efi] atualizado charge_id=%s paid_date=%s", charge_id, paid_date)
+            updated_pagos.append(charge_id)
+            current_app.logger.info("[reconciliar_efi] pago charge_id=%s paid_date=%s", charge_id, paid_date)
+
+        # --- Processar cancelados ---
+        for charge in cancelled_charges:
+            charge_id = str(charge.get("id") or charge.get("charge_id") or "").strip()
+            if not charge_id:
+                continue
+
+            cur.execute("SELECT id, status FROM cobrancas WHERE charge_id = %s LIMIT 1", (charge_id,))
+            row = cur.fetchone()
+            if not row:
+                not_found.append(charge_id)
+                continue
+            if (row.get("status") or "").lower() == "cancelado":
+                ja_corretos.append(charge_id)
+                continue
+
+            cur.execute(
+                "UPDATE cobrancas SET status = 'cancelado', data_cancelamento = NOW() WHERE charge_id = %s",
+                (charge_id,)
+            )
+            conn.commit()
+            updated_cancelados.append(charge_id)
+            current_app.logger.info("[reconciliar_efi] cancelado charge_id=%s", charge_id)
 
         cur.close()
         conn.close()
@@ -1100,9 +1140,10 @@ def reconciliar_efi():
         return jsonify({
             "success": True,
             "periodo": {"begin_date": begin_date, "end_date": end_date},
-            "total_efi": len(all_charges),
-            "atualizados": len(updated),
-            "ja_pagos": len(already_paid),
+            "total_efi": len(paid_charges) + len(settled_charges) + len(cancelled_charges),
+            "atualizados_pagos": len(updated_pagos),
+            "atualizados_cancelados": len(updated_cancelados),
+            "ja_corretos": len(ja_corretos),
             "nao_encontrados": len(not_found),
         }), 200
 

@@ -937,15 +937,17 @@ function _efiRodada(btn) {
       var j = await resp.json();
       result.style.display = 'block';
       if (j.success) {
-        result.style.background = j.atualizados > 0 ? '#d4edda' : '#d1ecf1';
-        result.innerHTML = (j.atualizados > 0 ? '✅' : 'ℹ️')
-          + ' <strong>' + j.total_efi + '</strong> cobrança(s) pagas encontradas na EFI.<br>'
-          + '• <strong>' + j.atualizados + '</strong> atualizada(s) para <em>Pago</em><br>'
-          + '• ' + j.ja_pagos + ' já estavam pagas no banco<br>'
-          + '• ' + j.nao_encontrados + ' não encontrada(s) no banco local';
+        var totalAtualiz = (j.atualizados_pagos || 0) + (j.atualizados_cancelados || 0);
+        result.style.background = totalAtualiz > 0 ? '#d4edda' : '#d1ecf1';
+        result.innerHTML = (totalAtualiz > 0 ? '✅' : 'ℹ️')
+          + ' <strong>' + j.total_efi + '</strong> cobrança(s) encontradas na EFI no período.<br>'
+          + '• <strong>' + (j.atualizados_pagos || 0) + '</strong> marcada(s) como <em>Pago</em><br>'
+          + '• <strong>' + (j.atualizados_cancelados || 0) + '</strong> marcada(s) como <em>Cancelado</em><br>'
+          + '• ' + (j.ja_corretos || 0) + ' já estavam corretas no banco<br>'
+          + '• ' + (j.nao_encontrados || 0) + ' não encontrada(s) no banco local';
         btnExec.disabled = false;
         btnExec.innerHTML = '<i class="bi bi-arrow-repeat me-1"></i>Reconciliar novamente';
-        if (j.atualizados > 0) setTimeout(function () { location.reload(); }, 2500);
+        if (totalAtualiz > 0) setTimeout(function () { location.reload(); }, 2500);
       } else {
         result.style.background = '#f8d7da';
         result.innerHTML = '❌ ' + (j.error || 'Erro desconhecido.');
