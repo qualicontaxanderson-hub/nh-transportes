@@ -1021,6 +1021,7 @@ def reconciliar_efi():
             page = 1
             while True:
                 params = {
+                    "charge_type": "billet",
                     "status": status_val,
                     "begin_date": begin_date,
                     "end_date": end_date,
