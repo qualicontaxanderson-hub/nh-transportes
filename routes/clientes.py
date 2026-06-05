@@ -1,5 +1,6 @@
-from flask import Blueprint, render_template, request, redirect, url_for, flash
+from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, current_app
 from flask_login import login_required
+from urllib.parse import quote
 
 from utils.db import get_db_connection
 from utils.decorators import admin_required
@@ -16,6 +17,94 @@ def _get_grupos_contabeis(cursor):
         return cursor.fetchall()
     except Exception:
         return []
+
+
+def _str_or_dash(value):
+    texto = (str(value).strip() if value is not None else '')
+    return texto if texto else '—'
+
+
+def _montar_endereco_completo(cliente):
+    partes = []
+    linha_principal = ' '.join([
+        p for p in [
+            (cliente.get('endereco') or '').strip(),
+            (cliente.get('numero') or '').strip()
+        ] if p
+    ]).strip()
+    if linha_principal:
+        partes.append(linha_principal)
+    if cliente.get('complemento'):
+        partes.append(str(cliente['complemento']).strip())
+    if cliente.get('bairro'):
+        partes.append(str(cliente['bairro']).strip())
+
+    cidade_uf = _cidade_uf(cliente)
+    if cidade_uf:
+        partes.append(cidade_uf)
+    if cliente.get('cep'):
+        partes.append(f"CEP {str(cliente['cep']).strip()}")
+    return ', '.join([p for p in partes if p]).strip() or '—'
+
+
+def _montar_endereco_waze(cliente):
+    partes = []
+    if cliente.get('razao_social'):
+        partes.append(str(cliente['razao_social']).strip())
+    if cliente.get('endereco'):
+        linha_principal = ' '.join([
+            p for p in [
+                str(cliente['endereco']).strip(),
+                str(cliente.get('numero') or '').strip()
+            ] if p
+        ]).strip()
+        if linha_principal:
+            partes.append(linha_principal)
+    if cliente.get('bairro'):
+        partes.append(str(cliente['bairro']).strip())
+
+    cidade = (cliente.get('municipio') or cliente.get('destino_cidade') or '').strip()
+    uf = (cliente.get('uf') or cliente.get('destino_estado') or '').strip()
+    cidade_estado = ' '.join([p for p in [cidade, uf] if p]).strip()
+    if cidade_estado:
+        partes.append(cidade_estado)
+    if cliente.get('cep'):
+        partes.append(str(cliente['cep']).strip())
+
+    consulta = ', '.join([p for p in partes if p]).strip()
+    return consulta or _str_or_dash(cliente.get('razao_social'))
+
+
+def _montar_link_waze(cliente):
+    consulta = _montar_endereco_waze(cliente)
+    if consulta == '—':
+        return 'Endereço não disponível para Waze.'
+    return f"https://www.waze.com/ul?q={quote(consulta)}&navigate=yes"
+
+
+def _montar_mensagem_whatsapp(cliente):
+    cidade_uf = _cidade_uf(cliente) or '—'
+    endereco = _montar_endereco_completo(cliente)
+    link_waze = _montar_link_waze(cliente)
+    return '\n'.join([
+        "🚛 *DADOS DO CLIENTE*",
+        "",
+        f"📍 *CIDADE/UF: {cidade_uf}*",
+        "",
+        f"*Razão Social:* {_str_or_dash(cliente.get('razao_social'))}",
+        f"*Nome Fantasia:* {_str_or_dash(cliente.get('nome_fantasia'))}",
+        f"*CNPJ:* {_str_or_dash(cliente.get('cnpj'))}",
+        f"*Endereço:* {endereco}",
+        "",
+        "🧭 *Localização no Waze:*",
+        link_waze,
+    ])
+
+
+def _cidade_uf(cliente):
+    cidade = (cliente.get('municipio') or cliente.get('destino_cidade') or '').strip()
+    uf = (cliente.get('uf') or cliente.get('destino_estado') or '').strip()
+    return ' / '.join([p for p in [cidade, uf] if p]).strip()
 
 
 @bp.route('/')
@@ -227,3 +316,35 @@ def excluir(id):
             conn.close()
 
     return redirect(url_for('clientes.lista'))
+
+
+@bp.route('/mensagem-whatsapp/<int:id>')
+@login_required
+@admin_required
+def mensagem_whatsapp(id):
+    conn = None
+    cursor = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute("""
+            SELECT c.*,
+                   d.cidade AS destino_cidade,
+                   d.estado AS destino_estado
+            FROM clientes c
+            LEFT JOIN destinos d ON d.id = c.destino_id
+            WHERE c.id = %s
+            LIMIT 1
+        """, (id,))
+        cliente = cursor.fetchone()
+        if not cliente:
+            return jsonify({'ok': False, 'error': 'Cliente não encontrado.'}), 404
+        return jsonify({'ok': True, 'mensagem': _montar_mensagem_whatsapp(cliente)})
+    except Exception as e:
+        current_app.logger.exception('Erro ao montar mensagem de WhatsApp do cliente id=%s', id)
+        return jsonify({'ok': False, 'error': 'Erro interno ao gerar mensagem.'}), 500
+    finally:
+        if cursor:
+            cursor.close()
+        if conn:
+            conn.close()

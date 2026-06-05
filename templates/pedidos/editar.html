@@ -32,7 +32,7 @@
   <nav aria-label="breadcrumb" class="mb-3">
     <ol class="breadcrumb small">
       <li class="breadcrumb-item"><a href="/" class="text-decoration-none">Dashboard</a></li>
-      <li class="breadcrumb-item"><a href="{{ url_for('pedidos.index') }}" class="text-decoration-none">Pedidos</a></li>
+      <li class="breadcrumb-item"><a href="{{ return_url }}" class="text-decoration-none">Pedidos</a></li>
       <li class="breadcrumb-item active">Editar {{ pedido.numero }}</li>
     </ol>
   </nav>
@@ -44,13 +44,14 @@
       <h4 class="mb-0 fw-bold">Editar Pedido</h4>
       <p class="mb-0 opacity-75 small">Editando: <strong>{{ pedido.numero }}</strong></p>
     </div>
-    <a href="{{ url_for('pedidos.visualizar', id=pedido.id) }}"
+    <a href="{{ url_for('pedidos.visualizar', id=pedido.id, return_url=return_url) }}"
        class="btn btn-sm px-3" style="background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.35);">
       <i class="bi bi-arrow-left me-1"></i> Voltar
     </a>
   </div>
 
   <form method="POST" id="formPedido">
+    <input type="hidden" name="return_url" value="{{ return_url }}">
 
     <!-- Informações do Pedido -->
     <div class="card shadow-sm mb-4">
@@ -119,7 +120,7 @@
 
     <!-- Botões -->
     <div class="d-flex justify-content-end gap-2 mb-4">
-      <a href="{{ url_for('pedidos.visualizar', id=pedido.id) }}" class="btn btn-secondary btn-sm">
+      <a href="{{ url_for('pedidos.visualizar', id=pedido.id, return_url=return_url) }}" class="btn btn-secondary btn-sm">
         <i class="bi bi-x-circle me-1"></i> Cancelar
       </a>
       <button type="submit" class="btn btn-primary btn-sm px-4">
@@ -214,7 +215,7 @@
         </div>
         <div class="col-md-2">
           <label class="form-label">Preço Unit. R$</label>
-          <input type="text" class="form-control form-control-sm input-preco" name="preco_unitario" placeholder="0,000">
+          <input type="text" class="form-control form-control-sm input-preco" name="preco_unitario" placeholder="0,0000">
         </div>
         <div class="col-md-2">
           <label class="form-label">Total NF R$</label>
@@ -367,7 +368,7 @@ function calcularTotal(item) {
 }
 
 function formatarMoeda3(valor) {
-  return valor.toLocaleString('pt-BR', { minimumFractionDigits: 3, maximumFractionDigits: 3 });
+  return valor.toLocaleString('pt-BR', { minimumFractionDigits: 4, maximumFractionDigits: 4 });
 }
 
 function formatarMoeda2(valor) {
@@ -392,7 +393,7 @@ document.addEventListener('input', function(e) {
   if (e.target.classList.contains('input-preco')) {
     var value = e.target.value.replace(/\D/g, '');
     if (value) {
-      value = (parseInt(value) / 1000).toFixed(3);
+      value = (parseInt(value) / 10000).toFixed(4);
       e.target.value = formatarMoeda3(parseFloat(value));
     }
     var item = e.target.closest('.item-pedido');
@@ -444,4 +445,3 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 </script>
 {% endblock %}
-

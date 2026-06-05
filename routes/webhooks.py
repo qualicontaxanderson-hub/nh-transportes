@@ -1,13 +1,55 @@
 from flask import Blueprint, request, current_app, jsonify
 from utils.db import get_db_connection
-from utils.boletos import fetch_boleto_pdf_stream, BOLETOS_DIR
+from utils.boletos import fetch_boleto_pdf_stream, BOLETOS_DIR, _ensure_credentials_from_env, _get_bearer_token
 import os
 import json
 import hmac
 import hashlib
+import requests
 from datetime import datetime
 
 webhooks_bp = Blueprint('webhooks', __name__, url_prefix='')
+
+
+def _to_bool(value, default=True):
+    if isinstance(value, bool):
+        return value
+    if value is None:
+        return default
+    return str(value).strip().lower() in {"1", "true", "t", "yes", "y", "on"}
+
+
+def _fetch_notification_data(notification_token):
+    """
+    Busca os dados reais da notificação via GET /v1/notification/{token}.
+    A EFI Pay v1 envia apenas o token no POST; os dados estão neste endpoint.
+    Retorna o dict de dados da notificação ou None em caso de falha.
+    """
+    try:
+        credentials = {
+            "client_id": current_app.config.get("EFI_CLIENT_ID") or os.getenv("EFI_CLIENT_ID"),
+            "client_secret": current_app.config.get("EFI_CLIENT_SECRET") or os.getenv("EFI_CLIENT_SECRET"),
+            "sandbox": _to_bool(current_app.config.get("EFI_SANDBOX", os.getenv("EFI_SANDBOX", "true")), True),
+            "certificate": current_app.config.get("EFI_CERT_PATH") or os.getenv("EFI_CERT_PATH"),
+        }
+        credentials = _ensure_credentials_from_env(credentials)
+        sandbox = credentials.get("sandbox", True)
+        base = "https://cobrancas-h.api.efipay.com.br" if sandbox else "https://cobrancas.api.efipay.com.br"
+        url = f"{base}/v1/notification/{notification_token}"
+
+        token = _get_bearer_token(credentials)
+        headers = {"Accept": "application/json"}
+        if token:
+            headers["Authorization"] = f"Bearer {token}"
+
+        resp = requests.get(url, headers=headers, timeout=15)
+        current_app.logger.info("[webhook/efi] GET notification/%s -> status=%s", notification_token[:8], resp.status_code)
+        if resp.status_code == 200:
+            return resp.json()
+        current_app.logger.warning("[webhook/efi] notification lookup falhou: status=%s body=%s", resp.status_code, resp.text[:500])
+    except Exception:
+        current_app.logger.exception("[webhook/efi] erro buscando notification token")
+    return None
 
 
 def _try_extract_charge_id(payload):
@@ -173,6 +215,35 @@ def webhooks_efi():
 
         current_app.logger.info("[webhook/efi] recebido payload type=%s keys=%s", type(payload).__name__, list(payload.keys()) if isinstance(payload, dict) else [])
 
+        # EFI Pay v1: o POST só traz notification_token; buscar dados reais via GET /v1/notification/{token}
+        if isinstance(payload, dict):
+            notif_token = payload.get("notification_token") or payload.get("token")
+            if notif_token and isinstance(notif_token, str) and len(notif_token) > 8:
+                current_app.logger.info("[webhook/efi] notification_token detectado, buscando dados reais")
+                notif_data = _fetch_notification_data(notif_token)
+                if notif_data:
+                    current_app.logger.info("[webhook/efi] notification data obtida: type=%s", type(notif_data).__name__)
+                    # Normalizar: EFI retorna {"code":200,"data":[{...charge...}]} ou {"data":{...charge...}}
+                    merged = notif_data if isinstance(notif_data, dict) else {}
+                    inner = merged.get("data")
+                    if isinstance(inner, list) and inner:
+                        # lista de eventos — extrair o primeiro que tenha charge ou id
+                        for event in inner:
+                            if isinstance(event, dict):
+                                charge = event.get("charge") or event
+                                if isinstance(charge, dict) and (charge.get("id") or charge.get("charge_id")):
+                                    merged = {**payload, **charge}
+                                    break
+                        else:
+                            merged = {**payload, **merged}
+                    elif isinstance(inner, dict):
+                        charge = inner.get("charge") or inner
+                        merged = {**payload, **charge}
+                    else:
+                        merged = {**payload, **merged}
+                    payload = merged
+                    current_app.logger.info("[webhook/efi] payload normalizado keys=%s", list(payload.keys()) if isinstance(payload, dict) else [])
+
         # extrair charge_id
         charge_id = _try_extract_charge_id(payload)
 
@@ -223,7 +294,7 @@ def webhooks_efi():
                     credentials = {
                         "client_id": current_app.config.get("EFI_CLIENT_ID") or os.getenv("EFI_CLIENT_ID"),
                         "client_secret": current_app.config.get("EFI_CLIENT_SECRET") or os.getenv("EFI_CLIENT_SECRET"),
-                        "sandbox": current_app.config.get("EFI_SANDBOX", True),
+                        "sandbox": _to_bool(current_app.config.get("EFI_SANDBOX", os.getenv("EFI_SANDBOX", "true")), True),
                     }
                     resp = fetch_boleto_pdf_stream(credentials, pdf_url)
                     if resp is not None and getattr(resp, "status_code", None) == 200:

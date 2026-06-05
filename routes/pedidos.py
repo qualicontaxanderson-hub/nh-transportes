@@ -1,5 +1,6 @@
-from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify
+from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, session
 from flask_login import login_required
+from urllib.parse import urlparse
 from utils.db import get_db_connection
 from datetime import datetime, date, timedelta
 import logging
@@ -14,6 +15,19 @@ bp = Blueprint('pedidos', __name__, url_prefix='/pedidos')
 def get_db():
     """Usa a conexão centralizada com credenciais seguras"""
     return get_db_connection()
+
+
+def _safe_return_url(value):
+    """Aceita apenas retornos internos da área de pedidos."""
+    if not value:
+        return None
+    value = str(value).strip()
+    parsed = urlparse(value)
+    if parsed.scheme or parsed.netloc:
+        return None
+    if parsed.path.startswith('/pedidos'):
+        return value
+    return None
 
 
 def _ensure_quantidades_extras():
@@ -110,13 +124,21 @@ def gerar_numero_pedido():
 def index():
     conn = get_db()
     cursor = conn.cursor(dictionary=True)
-    
-    data_inicio = request.args.get('data_inicio', '')
-    data_fim = request.args.get('data_fim', '')
-    status = request.args.get('status', '')
-    mostrar_todos = request.args.get('mostrar_todos', '') == '1'
-    
-    # Se não houver filtros de data e não for solicitado mostrar todos, carregar últimos 30 dias por padrão
+
+    query_keys = ('data_inicio', 'data_fim', 'status', 'mostrar_todos')
+    has_explicit_filters = any(k in request.args for k in query_keys)
+    if has_explicit_filters:
+        data_inicio = request.args.get('data_inicio', '')
+        data_fim = request.args.get('data_fim', '')
+        status = request.args.get('status', '')
+        mostrar_todos = request.args.get('mostrar_todos', '') == '1'
+    else:
+        data_inicio = ''
+        data_fim = ''
+        status = ''
+        mostrar_todos = False
+
+    # Primeira entrada na tela: últimos 30 dias por padrão
     if not data_inicio and not data_fim and not mostrar_todos:
         data_fim_obj = date.today()
         data_inicio_obj = data_fim_obj - timedelta(days=30)
@@ -127,6 +149,7 @@ def index():
         SELECT p.*,
                m.nome as motorista_nome,
                v.caminhao as veiculo_nome,
+               v.placa as veiculo_placa,
                COUNT(pi.id) as total_itens,
                SUM(pi.quantidade) as total_quantidade,
                SUM(pi.total_nf) as total_valor
@@ -150,14 +173,76 @@ def index():
     
     cursor.execute(sql, params)
     pedidos = cursor.fetchall()
-    
+
+    # ── Resumo 1: por Veículo ────────────────────────────────────────────────
+    sql_rv = """
+        SELECT
+            COALESCE(v.caminhao, '(sem veículo)') AS veiculo_nome,
+            COALESCE(v.placa, '')                  AS veiculo_placa,
+            COUNT(DISTINCT p.id)                   AS total_pedidos,
+            COALESCE(SUM(pi.quantidade), 0)        AS total_quantidade,
+            COALESCE(SUM(pi.total_nf), 0)          AS total_valor
+        FROM pedidos p
+        LEFT JOIN veiculos  v  ON p.veiculo_id  = v.id
+        LEFT JOIN pedidos_itens pi ON p.id = pi.pedido_id
+        WHERE 1=1
+    """
+    if data_inicio and data_fim:
+        sql_rv += " AND DATE(p.data_pedido) BETWEEN %s AND %s"
+    if status:
+        sql_rv += " AND p.status = %s"
+    sql_rv += " GROUP BY p.veiculo_id, v.caminhao, v.placa ORDER BY total_quantidade DESC"
+    cursor.execute(sql_rv, params)
+    resumo_veiculos = cursor.fetchall()
+
+    # ── Resumo 2: por Veículo + Motorista ────────────────────────────────────
+    sql_rvm = """
+        SELECT
+            COALESCE(v.caminhao, '(sem veículo)') AS veiculo_nome,
+            COALESCE(v.placa, '')                  AS veiculo_placa,
+            COALESCE(m.nome, '(sem motorista)')    AS motorista_nome,
+            COUNT(DISTINCT p.id)                   AS total_pedidos,
+            COALESCE(SUM(pi.quantidade), 0)        AS total_quantidade,
+            COALESCE(SUM(pi.total_nf), 0)          AS total_valor
+        FROM pedidos p
+        LEFT JOIN veiculos   v  ON p.veiculo_id  = v.id
+        LEFT JOIN motoristas m  ON p.motorista_id = m.id
+        LEFT JOIN pedidos_itens pi ON p.id = pi.pedido_id
+        WHERE 1=1
+    """
+    if data_inicio and data_fim:
+        sql_rvm += " AND DATE(p.data_pedido) BETWEEN %s AND %s"
+    if status:
+        sql_rvm += " AND p.status = %s"
+    sql_rvm += " GROUP BY p.veiculo_id, v.caminhao, v.placa, p.motorista_id, m.nome ORDER BY total_quantidade DESC"
+    cursor.execute(sql_rvm, params)
+    resumo_veiculo_motorista = cursor.fetchall()
+
     cursor.close()
     conn.close()
-    
+
+    session['pedidos_filtros'] = {
+        'data_inicio': data_inicio,
+        'data_fim': data_fim,
+        'status': status,
+        'mostrar_todos': bool(mostrar_todos),
+    }
+
+    return_url = url_for(
+        'pedidos.index',
+        data_inicio=(data_inicio or None),
+        data_fim=(data_fim or None),
+        status=(status or None),
+        mostrar_todos=('1' if mostrar_todos else None),
+    )
+
     return render_template(
         'pedidos/index.html',
         pedidos=pedidos,
-        filtros={'data_inicio': data_inicio, 'data_fim': data_fim, 'status': status}
+        filtros={'data_inicio': data_inicio, 'data_fim': data_fim, 'status': status},
+        return_url=return_url,
+        resumo_veiculos=resumo_veiculos,
+        resumo_veiculo_motorista=resumo_veiculo_motorista,
     )
 
 
@@ -305,6 +390,7 @@ def novo():
 def visualizar(id):
     conn = get_db()
     cursor = conn.cursor(dictionary=True)
+    return_url = _safe_return_url(request.args.get('return_url')) or url_for('pedidos.index')
     
     cursor.execute("""
         SELECT p.*,
@@ -364,7 +450,8 @@ def visualizar(id):
         itens=itens,
         itens_por_fornecedor=itens_por_fornecedor,
         total_quantidade=total_quantidade,
-        total_valor=total_valor
+        total_valor=total_valor,
+        return_url=return_url,
     )
 
 
@@ -373,6 +460,7 @@ def visualizar(id):
 def editar(id):
     conn = get_db()
     cursor = conn.cursor(dictionary=True)
+    return_url = _safe_return_url(request.args.get('return_url') or request.form.get('return_url')) or url_for('pedidos.index')
     
     if request.method == 'POST':
         data_pedido = request.form['data_pedido']
@@ -432,7 +520,7 @@ def editar(id):
             conn.close()
             
             flash('Pedido atualizado com sucesso!', 'success')
-            return redirect(url_for('pedidos.visualizar', id=id))
+            return redirect(url_for('pedidos.visualizar', id=id, return_url=return_url))
 
         except Exception as exc:
             logger.exception("Erro ao atualizar pedido id=%s: %s", id, exc)
@@ -446,7 +534,7 @@ def editar(id):
             except Exception:
                 pass
             flash('Erro ao atualizar pedido. Por favor, tente novamente.', 'danger')
-            return redirect(url_for('pedidos.editar', id=id))
+            return redirect(url_for('pedidos.editar', id=id, return_url=return_url))
     
     # GET
     cursor.execute("SELECT * FROM pedidos WHERE id = %s", (id,))
@@ -496,7 +584,8 @@ def editar(id):
         quantidades=quantidades,
         motoristas=motoristas,
         veiculos=veiculos,
-        bases=bases
+        bases=bases,
+        return_url=return_url,
     )
 
 
@@ -511,9 +600,10 @@ def alterar_status(id, status):
     conn.commit()
     cursor.close()
     conn.close()
-    
+    return_url = _safe_return_url(request.args.get('return_url')) or url_for('pedidos.index')
+
     flash(f'Status alterado para {status}!', 'success')
-    return redirect(url_for('pedidos.visualizar', id=id))
+    return redirect(url_for('pedidos.visualizar', id=id, return_url=return_url))
 
 
 @bp.route('/excluir/<int:id>')
@@ -528,7 +618,6 @@ def excluir(id):
     conn.commit()
     cursor.close()
     conn.close()
-    
     flash('Pedido excluído com sucesso!', 'success')
     return redirect(url_for('pedidos.index'))
 

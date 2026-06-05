@@ -70,6 +70,7 @@
   .btn-acao:hover { opacity: 0.8; }
   .btn-editar  { background: #fff3cd; color: #856404; }
   .btn-excluir { background: #f8d7da; color: #842029; }
+  .btn-whatsapp { background:#e6f9ee; color:#198754; }
   @media (max-width: 768px) {
     #tbl-lista { font-size: 0.70rem; }
   }
@@ -185,7 +186,7 @@
                             <th>Telefone</th>
                             <th>Município</th>
                             <th>Grupo Contábil</th>
-                            <th class="text-center" style="width:8%">Ações</th>
+                            <th class="text-center" style="width:10%">Ações</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -216,6 +217,12 @@
                                     <a href="{{ url_for('clientes.editar', id=cliente.id) }}" class="btn-acao btn-editar" title="Editar">
                                         <i class="bi bi-pencil"></i>
                                     </a>
+                                    <button type="button"
+                                            class="btn-acao btn-whatsapp"
+                                            title="Copiar dados para WhatsApp"
+                                            onclick="copiarDadosWhatsAppCliente({{ cliente.id }}, event, this)">
+                                        <i class="bi bi-whatsapp"></i>
+                                    </button>
                                     {% if current_user.nivel == 'admin' %}
                                     <form method="POST" action="{{ url_for('clientes.excluir', id=cliente.id) }}" style="display:inline;" onsubmit="return confirm('Deseja realmente excluir este cliente?');">
                                         <button type="submit" class="btn-acao btn-excluir" title="Excluir">
@@ -242,6 +249,8 @@
 </div>
 
 <script>
+const whatsappClienteUrlBase = "{{ url_for('clientes.mensagem_whatsapp', id=0) }}";
+
 document.addEventListener('DOMContentLoaded', function () {
   document.querySelectorAll('tr.row-cli[data-url]').forEach(function (row) {
     row.addEventListener('click', function (e) {
@@ -250,6 +259,56 @@ document.addEventListener('DOMContentLoaded', function () {
     });
   });
 });
+
+function copiarTextoClipboard(texto){
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    return navigator.clipboard.writeText(texto);
+  }
+  return new Promise(function(resolve, reject){
+    const ta = document.createElement('textarea');
+    ta.value = texto;
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.focus();
+    ta.select();
+    try {
+      const ok = document.execCommand('copy');
+      document.body.removeChild(ta);
+      ok ? resolve() : reject(new Error('Falha ao copiar'));
+    } catch (e) {
+      document.body.removeChild(ta);
+      reject(e);
+    }
+  });
+}
+
+async function copiarDadosWhatsAppCliente(clienteId, event, btn){
+  if (event) event.stopPropagation();
+  if (!btn) return;
+  const htmlOriginal = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = '<i class="bi bi-hourglass-split"></i>';
+  try {
+    const url = whatsappClienteUrlBase.replace(/0$/, String(clienteId));
+    const resp = await fetch(url, { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
+    const data = await resp.json().catch(function(){ return {}; });
+    if (!resp.ok || !data.ok || !data.mensagem) {
+      if (resp.status === 404) throw new Error('Cliente não encontrado.');
+      if (resp.status === 403) throw new Error('Acesso não permitido.');
+      const detalhe = data.error || `Falha HTTP ${resp.status}`;
+      throw new Error(`Não foi possível gerar a mensagem. ${detalhe}`);
+    }
+    await copiarTextoClipboard(data.mensagem);
+    btn.innerHTML = '<i class="bi bi-check-lg"></i>';
+    setTimeout(function(){ btn.innerHTML = htmlOriginal; }, 1500);
+  } catch (err) {
+    alert(err.message || 'Erro ao copiar mensagem para WhatsApp.');
+    btn.innerHTML = htmlOriginal;
+  } finally {
+    btn.disabled = false;
+  }
+}
 </script>
 
 {% endblock %}

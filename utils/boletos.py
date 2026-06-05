@@ -298,6 +298,15 @@ def _sanitize_payment_payload(payload):
 _TOKEN_CACHE = {}  # keys: (client_id, bool(sandbox)) -> {"access_token": str, "expire_at": float}
 
 
+def _coerce_bool(value, default=True):
+    """Coerce robusto para flags vindas de env/config (inclui strings)."""
+    if isinstance(value, bool):
+        return value
+    if value is None:
+        return default
+    return str(value).strip().lower() in {"1", "true", "t", "yes", "y", "on"}
+
+
 def _ensure_credentials_from_env(credentials):
     """Preenche credenciais faltantes a partir das ENV para maior robustez."""
     if credentials is None:
@@ -306,8 +315,12 @@ def _ensure_credentials_from_env(credentials):
         credentials["client_id"] = os.getenv("EFI_CLIENT_ID")
     if not credentials.get("client_secret"):
         credentials["client_secret"] = os.getenv("EFI_CLIENT_SECRET")
-    if "sandbox" not in credentials or credentials.get("sandbox") is None:
-        credentials["sandbox"] = os.getenv("EFI_SANDBOX", "true").lower() == "true"
+    if not credentials.get("certificate"):
+        credentials["certificate"] = os.getenv("EFI_CERT_PATH")
+    sandbox_value = credentials.get("sandbox")
+    if "sandbox" not in credentials or sandbox_value is None:
+        sandbox_value = os.getenv("EFI_SANDBOX", "true")
+    credentials["sandbox"] = _coerce_bool(sandbox_value, True)
     return credentials
 
 
@@ -762,7 +775,12 @@ def cancel_charge(credentials, charge_id):
 
         # 0) tentativa via SDK (se disponível) — alguns SDKs expõem método de cancelamento
         try:
-            efi = EfiPay({"client_id": credentials.get("client_id"), "client_secret": credentials.get("client_secret"), "sandbox": credentials.get("sandbox", True)})
+            efi = EfiPay({
+                "client_id": credentials.get("client_id"),
+                "client_secret": credentials.get("client_secret"),
+                "sandbox": credentials.get("sandbox", True),
+                "certificate": credentials.get("certificate"),
+            })
             for m in ("cancel_charge", "cancel", "void_charge", "delete_charge"):
                 fn = getattr(efi, m, None)
                 if callable(fn):
@@ -810,7 +828,7 @@ def cancel_charge(credentials, charge_id):
             logger.debug("cancel_charge: falha ao logar ambiente/token")
 
         # Função auxiliar que executa o PUT com um token/creds atuais
-        def _do_put_with_token(creds, url=url_cancel):
+        def _do_put_with_token(creds, target_url=url_cancel):
             token = _get_bearer_token(creds) if "client_id" in creds and "client_secret" in creds else None
             headers = {"Accept": "application/json", "Content-Type": "application/json"}
             if token:
@@ -819,11 +837,23 @@ def cancel_charge(credentials, charge_id):
                 # se não houver token, vamos deixar sem Authorization e requests tratará (ou usar basic auth no fallback)
                 pass
             try:
-                resp = requests.put(url, headers=headers, timeout=15)
+                resp = requests.put(target_url, headers=headers, timeout=15)
                 return resp, token
             except Exception as e:
-                logger.exception("cancel_charge: PUT %s falhou: %s", url, e)
+                logger.exception("cancel_charge: PUT %s falhou: %s", target_url, e)
                 return None, token
+
+        def _do_put_with_basic_auth(creds, target_url=url_cancel):
+            client_id = creds.get("client_id")
+            client_secret = creds.get("client_secret")
+            if not client_id or not client_secret:
+                return None
+            headers = {"Accept": "application/json", "Content-Type": "application/json"}
+            try:
+                return requests.put(target_url, headers=headers, auth=(client_id, client_secret), timeout=15)
+            except Exception as e:
+                logger.exception("cancel_charge: PUT basic auth %s falhou: %s", target_url, e)
+                return None
 
         logger.info("cancel_charge: tentando PUT %s (auth=Bearer? %s)", url_cancel, True)
         # primeira tentativa
@@ -864,6 +894,27 @@ def cancel_charge(credentials, charge_id):
                         except Exception:
                             logger.debug("persist cancel response failed")
                         return True, j2
+                    if resp2.status_code == 401:
+                        logger.info("cancel_charge: retry Bearer também retornou 401, tentando PUT com Basic Auth")
+                        resp3 = _do_put_with_basic_auth(credentials)
+                        if resp3 is not None:
+                            logger.info("cancel_charge: basic PUT %s -> status=%s text=%s", url_cancel, getattr(resp3, "status_code", None), (getattr(resp3, "text", "") or "")[:2000])
+                            if resp3.status_code in (200, 204):
+                                try:
+                                    j3 = resp3.json()
+                                except Exception:
+                                    j3 = {"http_status": resp3.status_code, "text": resp3.text}
+                                try:
+                                    _persist_cancel_to_db(cid_int, j3)
+                                except Exception:
+                                    logger.debug("persist cancel response failed")
+                                return True, j3
+                            if resp3.status_code not in (404, 405):
+                                try:
+                                    return False, resp3.json()
+                                except Exception:
+                                    return False, {"http_status": resp3.status_code, "text": resp3.text}
+                            resp = resp3
                     # retry failed fallback handled below...
                 else:
                     return False, {"error": "PUT retry falhou (exceção no request)"}
