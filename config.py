@@ -20,8 +20,14 @@ class Config:
     # URI do Banco de Dados
     SQLALCHEMY_DATABASE_URI = os.environ.get('DATABASE_URL') or f'mysql+mysqlconnector://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}'
     
-    # Chave Secreta - usa variável de ambiente ou valor padrão
-    SECRET_KEY = os.environ.get('SECRET_KEY', 'nh-transportes-2025-secret')
+    # Chave Secreta — obrigatória via variável de ambiente, sem fallback
+    SECRET_KEY = os.environ.get('SECRET_KEY')
+    if not SECRET_KEY:
+        raise RuntimeError(
+            "A variável de ambiente SECRET_KEY não está definida. "
+            "Gere um valor seguro com: python -c \"import secrets; print(secrets.token_hex(32))\" "
+            "e configure-o no ambiente antes de iniciar o app."
+        )
     
     # Configurações da Aplicação
     APP_NAME = "NH Transportes"

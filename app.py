@@ -269,10 +269,6 @@ def create_app():
     from config import Config
     app.config.from_object(Config)
     
-    # Override with environment variable if set
-    if os.environ.get('SECRET_KEY'):
-        app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY')
-
     # Initialize SQLAlchemy
     from models import db
     db.init_app(app)
