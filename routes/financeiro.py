@@ -1,10 +1,12 @@
 from flask import Blueprint, render_template, request, jsonify, flash, redirect, url_for, current_app, Response, stream_with_context, send_file, abort
 from flask_login import login_required
+from utils.decorators import admin_required
 from utils.db import get_db_connection
-from utils.boletos import emitir_boleto_frete, emitir_boleto_multiplo, fetch_charge, fetch_boleto_pdf_stream, update_billet_expire, cancel_charge
-from datetime import datetime, date
+from utils.boletos import emitir_boleto_frete, emitir_boleto_multiplo, fetch_charge, fetch_boleto_pdf_stream, update_billet_expire, cancel_charge, _get_bearer_token, _ensure_credentials_from_env
+from datetime import datetime, date, timedelta
 from calendar import monthrange
 import os
+import requests
 import mysql.connector
 
 financeiro_bp = Blueprint('financeiro', __name__, url_prefix='/financeiro')
@@ -108,8 +110,11 @@ def recebimentos():
             cursor.execute(sql_fretes, params_fretes)
             total_fretes = float(cursor.fetchone().get('total_fretes', 0) or 0)
 
-            # Total de boletos da pesquisa atual (das linhas filtradas)
-            total_boletos = sum(float(r.get('valor') or 0) for r in recebimentos_lista)
+            # Total de boletos da pesquisa atual (das linhas filtradas, excluindo cancelados)
+            total_boletos = sum(
+                float(r.get('valor') or 0) for r in recebimentos_lista
+                if (r.get('status') or '').lower() != 'cancelado'
+            )
             diferenca = total_fretes - total_boletos
         except Exception as e:
             current_app.logger.error(f"[recebimentos] Erro ao calcular resumos: {str(e)}")
@@ -864,6 +869,7 @@ def cancelar_boleto(charge_id):
 
 @financeiro_bp.route('/bulk-marcar-pago/', methods=['POST'])
 @login_required
+@admin_required
 def bulk_marcar_pago():
     """
     Marca múltiplas cobranças como pagas (admin) em lote.
@@ -914,6 +920,7 @@ def bulk_marcar_pago():
 
 @financeiro_bp.route('/bulk-registrar-pagamento/', methods=['POST'])
 @login_required
+@admin_required
 def bulk_registrar_pagamento():
     """
     Registra pagamento manual para múltiplas cobranças em lote.
@@ -978,6 +985,119 @@ def bulk_registrar_pagamento():
         current_app.logger.exception("Erro em bulk_registrar_pagamento: %s", e)
         return jsonify({"success": False, "error": "Erro interno ao processar ação em lote."}), 500
 
+
+@financeiro_bp.route('/reconciliar-efi/', methods=['POST'])
+@login_required
+@admin_required
+def reconciliar_efi():
+    """
+    Busca cobranças com situation=paid na EFI Pay e atualiza o banco local
+    para as que ainda não estão marcadas como pagas.
+    Aceita JSON opcional: { "begin_date": "YYYY-MM-DD", "end_date": "YYYY-MM-DD" }
+    """
+    try:
+        payload = request.get_json(silent=True) or {}
+        begin_date = payload.get('begin_date') or (date.today() - timedelta(days=90)).isoformat()
+        end_date   = payload.get('end_date')   or date.today().isoformat()
+
+        credentials = _get_efi_credentials()
+        credentials = _ensure_credentials_from_env(credentials)
+
+        sandbox = credentials.get('sandbox', True)
+        base = "https://cobrancas-h.api.efipay.com.br" if sandbox else "https://cobrancas.api.efipay.com.br"
+
+        token = _get_bearer_token(credentials)
+        if not token:
+            return jsonify({"success": False, "error": "Não foi possível obter token EFI Pay. Verifique as credenciais."}), 500
+
+        headers = {"Authorization": f"Bearer {token}", "Accept": "application/json"}
+
+        # Buscar todas as cobranças pagas no período com paginação
+        all_charges = []
+        limit = 100
+        offset = 0
+        while True:
+            params = {"situation": "paid", "begin_date": begin_date, "end_date": end_date,
+                      "limit": limit, "offset": offset}
+            resp = requests.get(f"{base}/v1/charges", headers=headers, params=params, timeout=30)
+            if resp.status_code != 200:
+                # Fallback: tentar com parâmetro "status" (API mais nova)
+                params2 = {**params, "status": params.pop("situation")}
+                resp = requests.get(f"{base}/v1/charges", headers=headers, params=params2, timeout=30)
+            if resp.status_code != 200:
+                current_app.logger.error("[reconciliar_efi] EFI retornou %s: %s", resp.status_code, resp.text[:500])
+                return jsonify({"success": False, "error": f"EFI Pay retornou status {resp.status_code}."}), 502
+
+            data = resp.json()
+            charges = data.get("data") or []
+            all_charges.extend(charges)
+
+            paginate = data.get("paginate") or {}
+            total_pages = int(paginate.get("totalPages") or 1)
+            current_page = int(paginate.get("currentPage") or 1)
+            if current_page >= total_pages or not charges:
+                break
+            offset += limit
+
+        current_app.logger.info("[reconciliar_efi] %d cobranças pagas obtidas da EFI (%s → %s)", len(all_charges), begin_date, end_date)
+
+        updated = []
+        already_paid = []
+        not_found = []
+
+        conn = get_db_connection()
+        cur = conn.cursor(dictionary=True)
+
+        for charge in all_charges:
+            charge_id = str(charge.get("id") or charge.get("charge_id") or "").strip()
+            if not charge_id:
+                continue
+
+            # Tentar extrair data de pagamento
+            paid_date = None
+            raw_paid = charge.get("paid_at") or charge.get("paidAt")
+            if raw_paid:
+                paid_date = str(raw_paid)[:10]
+            else:
+                for h in (charge.get("history") or []):
+                    if isinstance(h, dict) and (h.get("situation") == "paid" or h.get("status") == "paid"):
+                        dt = h.get("created_at") or h.get("date")
+                        if dt:
+                            paid_date = str(dt)[:10]
+                            break
+
+            cur.execute("SELECT id, status FROM cobrancas WHERE charge_id = %s LIMIT 1", (charge_id,))
+            row = cur.fetchone()
+            if not row:
+                not_found.append(charge_id)
+                continue
+            if (row.get("status") or "").lower() == "pago":
+                already_paid.append(charge_id)
+                continue
+
+            cur.execute(
+                "UPDATE cobrancas SET status = 'pago', pago_via_provedor = 1, data_pagamento = %s WHERE charge_id = %s",
+                (paid_date, charge_id)
+            )
+            conn.commit()
+            updated.append(charge_id)
+            current_app.logger.info("[reconciliar_efi] atualizado charge_id=%s paid_date=%s", charge_id, paid_date)
+
+        cur.close()
+        conn.close()
+
+        return jsonify({
+            "success": True,
+            "periodo": {"begin_date": begin_date, "end_date": end_date},
+            "total_efi": len(all_charges),
+            "atualizados": len(updated),
+            "ja_pagos": len(already_paid),
+            "nao_encontrados": len(not_found),
+        }), 200
+
+    except Exception as e:
+        current_app.logger.exception("Erro em reconciliar_efi: %s", e)
+        return jsonify({"success": False, "error": "Erro interno na reconciliação."}), 500
 
 
 @financeiro_bp.route('/consultar-status-efi/<int:charge_id>/', methods=['GET'])

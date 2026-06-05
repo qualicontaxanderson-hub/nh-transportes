@@ -1,5 +1,6 @@
 from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, session
 from flask_login import login_required
+from urllib.parse import urlparse
 from utils.db import get_db_connection
 from datetime import datetime, date, timedelta
 import logging
@@ -21,7 +22,10 @@ def _safe_return_url(value):
     if not value:
         return None
     value = str(value).strip()
-    if value.startswith('/pedidos'):
+    parsed = urlparse(value)
+    if parsed.scheme or parsed.netloc:
+        return None
+    if parsed.path.startswith('/pedidos'):
         return value
     return None
 

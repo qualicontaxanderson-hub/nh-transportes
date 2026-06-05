@@ -320,6 +320,7 @@ def excluir(id):
 
 @bp.route('/mensagem-whatsapp/<int:id>')
 @login_required
+@admin_required
 def mensagem_whatsapp(id):
     conn = None
     cursor = None

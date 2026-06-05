@@ -230,9 +230,16 @@
   <div class="card shadow-sm">
     <div class="card-header d-flex justify-content-between align-items-center py-2" style="background:#1D63A5;color:#fff;font-size:0.78rem;font-weight:600;">
       <span><i class="bi bi-list me-1"></i>Recebimentos</span>
-      {% if recebimentos %}
-      <span class="badge bg-white text-secondary" style="font-size:0.68rem;">{{ recebimentos|length }}</span>
-      {% endif %}
+      <div class="d-flex align-items-center gap-2">
+        {% if recebimentos %}
+        <span class="badge bg-white text-secondary" style="font-size:0.68rem;">{{ recebimentos|length }}</span>
+        {% endif %}
+        <button id="btn-reconciliar-efi" type="button"
+                style="font-size:0.7rem;padding:.2rem .6rem;border-radius:.3rem;border:1px solid rgba(255,255,255,.45);background:rgba(255,255,255,.15);color:#fff;cursor:pointer;display:inline-flex;align-items:center;gap:.3rem;"
+                title="Buscar pagamentos confirmados na EFI Pay e baixar automaticamente">
+          <i class="bi bi-arrow-repeat"></i> Reconciliar EFI
+        </button>
+      </div>
     </div>
     <div class="card-body p-0">
       {% if recebimentos %}
@@ -857,6 +864,103 @@ function _efiRodada(btn) {
     msg.textContent = '❌ ' + e.message;
   });
 }
+</script>
+
+<!-- Modal: Reconciliação EFI (GET /v1/charges?situation=paid) -->
+<div id="modal-reconciliar" style="display:none;position:fixed;inset:0;z-index:2100;background:rgba(0,0,0,.48);">
+  <div style="background:#fff;border-radius:.75rem;padding:1.5rem;max-width:440px;margin:6rem auto;box-shadow:0 8px 32px rgba(0,0,0,.2);">
+    <div class="d-flex align-items-center mb-3 gap-2">
+      <span style="background:#d1ecf1;color:#0c5460;width:2.2rem;height:2.2rem;border-radius:.4rem;display:inline-flex;align-items:center;justify-content:center;font-size:1rem;"><i class="bi bi-arrow-repeat"></i></span>
+      <h6 class="mb-0 fw-bold">Reconciliar Pagamentos — EFI Pay</h6>
+    </div>
+    <p class="mb-3" style="font-size:0.82rem;color:#555;">
+      Busca todos os boletos marcados como <strong>pagos</strong> na EFI Pay no período e atualiza o banco local para os que ainda aparecem como vencidos.
+    </p>
+    <div class="row g-2 mb-3">
+      <div class="col-6">
+        <label class="form-label mb-1 fw-semibold" style="font-size:0.78rem;">Data inicial</label>
+        <input type="date" id="rec-begin-date" class="form-control form-control-sm">
+      </div>
+      <div class="col-6">
+        <label class="form-label mb-1 fw-semibold" style="font-size:0.78rem;">Data final</label>
+        <input type="date" id="rec-end-date" class="form-control form-control-sm">
+      </div>
+    </div>
+    <div id="rec-result" style="display:none;font-size:0.82rem;border-radius:.4rem;padding:.6rem .8rem;margin-bottom:.75rem;"></div>
+    <div class="d-flex gap-2 justify-content-end">
+      <button type="button" class="btn btn-secondary btn-sm" id="rec-cancel">Fechar</button>
+      <button type="button" class="btn btn-info btn-sm fw-semibold text-white" id="rec-confirm">
+        <i class="bi bi-arrow-repeat me-1"></i>Reconciliar
+      </button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  var modal    = document.getElementById('modal-reconciliar');
+  var btnOpen  = document.getElementById('btn-reconciliar-efi');
+  var btnClose = document.getElementById('rec-cancel');
+  var btnExec  = document.getElementById('rec-confirm');
+  var result   = document.getElementById('rec-result');
+  var inpBegin = document.getElementById('rec-begin-date');
+  var inpEnd   = document.getElementById('rec-end-date');
+
+  function isoDate(d) { return d.toISOString().split('T')[0]; }
+  var hoje = new Date();
+  var d90  = new Date(hoje); d90.setDate(hoje.getDate() - 90);
+  inpBegin.value = isoDate(d90);
+  inpEnd.value   = isoDate(hoje);
+
+  btnOpen && btnOpen.addEventListener('click', function () {
+    result.style.display = 'none';
+    btnExec.disabled = false;
+    btnExec.innerHTML = '<i class="bi bi-arrow-repeat me-1"></i>Reconciliar';
+    modal.style.display = 'block';
+  });
+
+  btnClose && btnClose.addEventListener('click', function () { modal.style.display = 'none'; });
+  modal && modal.addEventListener('click', function (e) { if (e.target === modal) modal.style.display = 'none'; });
+
+  btnExec && btnExec.addEventListener('click', async function () {
+    if (!inpBegin.value || !inpEnd.value) { alert('Informe o período.'); return; }
+    btnExec.disabled = true;
+    btnExec.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Buscando…';
+    result.style.display = 'none';
+
+    try {
+      var resp = await fetch('/financeiro/reconciliar-efi/', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest'},
+        body: JSON.stringify({begin_date: inpBegin.value, end_date: inpEnd.value})
+      });
+      var j = await resp.json();
+      result.style.display = 'block';
+      if (j.success) {
+        result.style.background = j.atualizados > 0 ? '#d4edda' : '#d1ecf1';
+        result.innerHTML = (j.atualizados > 0 ? '✅' : 'ℹ️')
+          + ' <strong>' + j.total_efi + '</strong> cobrança(s) pagas encontradas na EFI.<br>'
+          + '• <strong>' + j.atualizados + '</strong> atualizada(s) para <em>Pago</em><br>'
+          + '• ' + j.ja_pagos + ' já estavam pagas no banco<br>'
+          + '• ' + j.nao_encontrados + ' não encontrada(s) no banco local';
+        btnExec.disabled = false;
+        btnExec.innerHTML = '<i class="bi bi-arrow-repeat me-1"></i>Reconciliar novamente';
+        if (j.atualizados > 0) setTimeout(function () { location.reload(); }, 2500);
+      } else {
+        result.style.background = '#f8d7da';
+        result.innerHTML = '❌ ' + (j.error || 'Erro desconhecido.');
+        btnExec.disabled = false;
+        btnExec.innerHTML = '<i class="bi bi-arrow-repeat me-1"></i>Tentar novamente';
+      }
+    } catch (e) {
+      result.style.display = 'block';
+      result.style.background = '#f8d7da';
+      result.innerHTML = '❌ ' + e.message;
+      btnExec.disabled = false;
+      btnExec.innerHTML = '<i class="bi bi-arrow-repeat me-1"></i>Tentar novamente';
+    }
+  });
+})();
 </script>
 
 {% endblock %}
