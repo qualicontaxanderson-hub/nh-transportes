@@ -66,6 +66,27 @@
     .frete-mob-hdr-title { font-size: .88rem; font-weight: 700; color: #fff !important; }
     .frete-mob-hdr-period { font-size: .8rem; font-weight: 600; color: rgba(255,255,255,.88) !important; }
 
+    /* ── Resumo mobile (4 mini-cards) ── */
+    .mob-summary { display: grid; grid-template-columns: 1fr 1fr; gap: .5rem; margin-bottom: .75rem; }
+    .mob-sum-card { background: #fff; border: 1px solid #e8e8e8; border-radius: .6rem; padding: .5rem .75rem; }
+    .mob-sum-lbl { font-size: .57rem; color: #9ca3af; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; }
+    .mob-sum-val { font-size: .9rem; font-weight: 700; margin-top: .05rem; }
+
+    /* ── Botão Filtros mobile ── */
+    .mob-filter-btn {
+      background: #fff !important;
+      border: 1px solid #e8e8e8 !important;
+      border-radius: .55rem;
+      padding: .45rem .85rem;
+      font-size: .8rem;
+      font-weight: 600;
+      color: #374151 !important;
+      cursor: pointer;
+      width: 100%;
+      text-align: left;
+      margin-bottom: .5rem;
+    }
+
     /* ── Card individual ── */
     .frete-card {
       background: #fff !important;
@@ -83,16 +104,16 @@
       background: #fafafa !important;
       border-bottom: 1px solid #f0f0f0;
       font-size: .67rem;
-      color: #9ca3af;
+      color: #6b7280;
     }
     .frete-card-body { padding: .6rem .85rem .75rem; }
 
-    /* ── Nome do cliente — sem caixa alta ── */
+    /* ── Nome do cliente ── */
     .frete-card-cliente {
-      font-size: .92rem !important;
+      font-size: .82rem !important;
       font-weight: 600 !important;
       color: #1a1a1a !important;
-      text-transform: capitalize !important;
+      text-transform: uppercase !important;
       letter-spacing: 0 !important;
       margin-bottom: .1rem;
     }
@@ -100,7 +121,7 @@
     /* ── Fornecedor · Motorista ── */
     .frete-card-meta {
       font-size: .72rem;
-      color: #9ca3af;
+      color: #4b5563;
       margin-bottom: .55rem;
       text-transform: capitalize !important;
     }
@@ -124,15 +145,13 @@
     /* ── Grid 2×2 de botões ── */
     .frete-card-acts { display: grid; grid-template-columns: 1fr 1fr; gap: .4rem; }
 
-    /* ── Botão outline base ── */
+    /* ── Botão base ── */
     .fcb {
       display: flex !important;
       align-items: center;
       justify-content: center;
       gap: .3rem;
       padding: .44rem .4rem;
-      background: #fff !important;
-      background-color: #fff !important;
       border-radius: .55rem;
       font-size: .78rem !important;
       font-weight: 600;
@@ -144,18 +163,44 @@
       border-style: solid;
       border-width: 1.5px;
     }
-
-    /* ── Variantes de cor — borda + texto, fundo branco ── */
-    .fcb.fcb-blue  { border-color: #1D63A5 !important; color: #1D63A5 !important; }
-    .fcb.fcb-green { border-color: #16a34a !important; color: #16a34a !important; }
-    .fcb.fcb-gray  { border-color: #9ca3af !important; color: #6b7280 !important; }
-    .fcb.fcb-red   { border-color: #e05050 !important; color: #e05050 !important; }
-    .fcb.fcb-dis   { border-color: #d1d5db !important; color: #9ca3af !important; }
     .fcb:hover { opacity: .78; text-decoration: none !important; }
-    .fcb:disabled, .fcb[disabled] {
-      opacity: .35;
-      cursor: not-allowed;
-      background: #fff !important;
+    .fcb:disabled, .fcb[disabled] { opacity: .35; cursor: not-allowed; }
+
+    /* ── Badge de faturamento ── */
+    .badge-fat {
+      font-size: .57rem;
+      padding: .12rem .38rem;
+      border-radius: 3px;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+
+    /* ── Checkbox mobile ── */
+    .mob-card-check {
+      width: 1rem;
+      height: 1rem;
+      cursor: pointer;
+      accent-color: #1D63A5;
+      flex-shrink: 0;
+    }
+
+    /* ── Barra fixa de seleção múltipla ── */
+    .mob-emit-bar {
+      position: fixed;
+      bottom: 0; left: 0; right: 0;
+      background: #1D63A5;
+      color: #fff;
+      padding: .9rem 1.25rem;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      gap: .6rem;
+      font-size: .9rem;
+      font-weight: 700;
+      z-index: 1050;
+      cursor: pointer;
+      border-top: 3px solid #154070;
+      box-shadow: 0 -3px 12px rgba(0,0,0,.15);
     }
   }
 </style>
@@ -166,10 +211,11 @@
 
   {# ─── Stat helpers ─────────────────────────────────────────────────────── #}
   {% set total_fretes = fretes | length %}
-  {% set ns = namespace(valor=0.0, lucro=0.0) %}
+  {% set ns = namespace(valor=0.0, lucro=0.0, qtd=0.0) %}
   {% for f in fretes %}
     {% if f.valor_total_frete %}{% set ns.valor = ns.valor + f.valor_total_frete|float %}{% endif %}
     {% if f.lucro %}{% set ns.lucro = ns.lucro + f.lucro|float %}{% endif %}
+    {% if f.quantidade %}{% set ns.qtd = ns.qtd + f.quantidade|float %}{% endif %}
   {% endfor %}
 
   <!-- Hero header — desktop only -->
@@ -214,11 +260,12 @@
     </div>
   </div>
 
-  <!-- Card de Filtros — desktop only -->
-  <div class="card mb-3 shadow-sm d-none d-md-block">
+  <!-- Card de Filtros — colapsável no mobile, sempre aberto no desktop -->
+  <div class="card mb-3 shadow-sm">
     <div class="frt-filter-header d-flex align-items-center gap-2">
       <i class="bi bi-funnel"></i> Filtros
     </div>
+    <div class="collapse d-md-block" id="filtros-collapse">
     <div class="card-body py-2 px-3">
       <form method="get" action="{{ url_for('fretes.lista') }}" id="frm-filtros-fretes">
         <div class="row g-2 align-items-start">
@@ -292,6 +339,7 @@
         </div>
       </form>
     </div>
+    </div><!-- /collapse -->
   </div>
 
   <!-- Botões de Ações — desktop only -->
@@ -437,24 +485,68 @@
     {% else %}
       {% set _periodo = '' %}
     {% endif %}
+
+    <!-- Botão Filtros mobile — abre/fecha o card de filtros acima -->
+    <button type="button" class="mob-filter-btn d-flex align-items-center gap-2"
+            data-bs-toggle="collapse" data-bs-target="#filtros-collapse"
+            aria-expanded="false" aria-controls="filtros-collapse">
+      <i class="bi bi-funnel"></i> Filtros
+      <i class="bi bi-chevron-down ms-auto" style="font-size:.75rem;transition:transform .2s;" id="mob-filter-chevron"></i>
+    </button>
+
+    <!-- Resumo mobile: 4 mini-cards -->
+    <div class="mob-summary">
+      <div class="mob-sum-card">
+        <div class="mob-sum-lbl">Fretes</div>
+        <div class="mob-sum-val" style="color:#1D63A5;">{{ total_fretes }}</div>
+      </div>
+      <div class="mob-sum-card">
+        <div class="mob-sum-lbl">Valor total</div>
+        <div class="mob-sum-val" style="color:#1D63A5;font-size:.82rem;">R$&nbsp;{{ "%.2f"|format(ns.valor)|replace('.', ',') if ns.valor else '—' }}</div>
+      </div>
+      <div class="mob-sum-card">
+        <div class="mob-sum-lbl">Lucro est.</div>
+        <div class="mob-sum-val" style="color:#198754;font-size:.82rem;">R$&nbsp;{{ "%.2f"|format(ns.lucro)|replace('.', ',') if ns.lucro else '—' }}</div>
+      </div>
+      <div class="mob-sum-card">
+        <div class="mob-sum-lbl">Vol. transp.</div>
+        <div class="mob-sum-val" style="color:#6b7280;font-size:.82rem;">
+          {% if ns.qtd %}{{ "{:,.0f}".format(ns.qtd).replace(',', '.') }}&nbsp;L{% else %}—{% endif %}
+        </div>
+      </div>
+    </div>
+
     <!-- Header laranja -->
     <div class="frete-mob-hdr">
       <span class="frete-mob-hdr-title">Lista de fretes</span>
       {% if _periodo %}<span class="frete-mob-hdr-period">{{ _periodo }}</span>{% endif %}
     </div>
+
     {% for frete in fretes %}
     {% set emitted = frete.emitted if frete.emitted is defined else 0 %}
     <div class="frete-card">
-      <!-- Header: ID · data · badge -->
+      <!-- Header: checkbox · ID · data · badges -->
       <div class="frete-card-hdr">
-        <span><span style="font-family:monospace;">#{{ frete.id }}</span>&nbsp;·&nbsp;{{ frete.datafrete_formatada or '—' }}</span>
-        {% if frete.status == 'Concluído' %}
-          <span class="badge-status" style="background:#d4edda;color:#155724;">Concluído</span>
-        {% elif frete.status == 'Pendente' %}
-          <span class="badge-status" style="background:#fff3cd;color:#856404;">Pendente</span>
-        {% elif frete.status %}
-          <span class="badge-status" style="background:#e2e3e5;color:#383d41;">{{ frete.status }}</span>
-        {% endif %}
+        <div class="d-flex align-items-center gap-2">
+          <input type="checkbox" class="mob-card-check frete-select-mob" value="{{ frete.id }}" aria-label="Selecionar frete #{{ frete.id }}">
+          <span><span style="font-family:monospace;">#{{ frete.id }}</span>&nbsp;·&nbsp;{{ frete.datafrete_formatada or '—' }}</span>
+        </div>
+        <div class="d-flex align-items-center gap-1 flex-wrap justify-content-end">
+          {% if frete.status == 'Concluído' %}
+            <span class="badge-status" style="background:#d4edda;color:#155724;">Concluído</span>
+          {% elif frete.status == 'Pendente' %}
+            <span class="badge-status" style="background:#fff3cd;color:#856404;">Pendente</span>
+          {% elif frete.status %}
+            <span class="badge-status" style="background:#e2e3e5;color:#383d41;">{{ frete.status }}</span>
+          {% endif %}
+          {% if emitted %}
+            <span class="badge-fat" style="background:#dbeafe;color:#1D63A5;">Faturado</span>
+          {% elif not frete.valor_total_frete or frete.valor_total_frete|float == 0 %}
+            <span class="badge-fat" style="background:#ede9fe;color:#7c3aed;">Próprio</span>
+          {% else %}
+            <span class="badge-fat" style="background:#ffedd5;color:#ea580c;">Não faturado</span>
+          {% endif %}
+        </div>
       </div>
       <div class="frete-card-body">
         <!-- Nome do cliente -->
@@ -463,7 +555,7 @@
         <div class="frete-card-meta">
           {{ frete.fornecedor or '' }}{% if frete.fornecedor and frete.motorista %} · {% endif %}{{ frete.motorista or '' }}
         </div>
-        <!-- Valores sem box -->
+        <!-- Valores -->
         <div class="frete-card-vals">
           <div>
             <div class="frete-val-lbl">Valor frete</div>
@@ -478,34 +570,38 @@
             </div>
           </div>
         </div>
-        <!-- Ações 2×2 outline -->
+        <!-- Ações 2×2 -->
         <div class="frete-card-acts">
-          {% if frete.valor_total_frete and frete.valor_total_frete > 0 %}
-          <button type="button" class="fcb fcb-blue btn-emit-boleto"
+          {% if frete.valor_total_frete and frete.valor_total_frete|float > 0 %}
+          <button type="button" class="fcb btn-emit-boleto"
                   data-frete-id="{{ frete.id }}"
                   data-emitted="{{ '1' if emitted else '0' }}"
+                  style="background:#fff!important;border:1.5px solid #1D63A5!important;color:#1D63A5!important;"
                   {% if emitted %}disabled title="Boleto já emitido"{% endif %}>
             <i class="bi bi-receipt"></i> Emitir boleto
           </button>
           {% else %}
-          <button type="button" class="fcb fcb-dis" disabled>
+          <button type="button" class="fcb" disabled
+                  style="background:#fff!important;border:1.5px solid #d1d5db!important;color:#9ca3af!important;">
             <i class="bi bi-receipt"></i> Emitir boleto
           </button>
           {% endif %}
-          <button type="button" class="fcb fcb-green btn-wa-frete"
+          <button type="button" class="fcb btn-wa-frete"
                   data-cliente="{{ frete.cliente or '' }}"
                   data-id="{{ frete.id }}"
                   data-data="{{ frete.datafrete_formatada or '' }}"
-                  data-valor="{{ '%.2f'|format(frete.valor_total_frete|float) if frete.valor_total_frete else '0,00' }}">
+                  data-valor="{{ '%.2f'|format(frete.valor_total_frete|float) if frete.valor_total_frete else '0,00' }}"
+                  style="background:#fff!important;border:1.5px solid #16a34a!important;color:#16a34a!important;">
             <i class="bi bi-whatsapp"></i> WhatsApp
           </button>
-          <a href="{{ url_for('fretes.editar', id=frete.id) }}" class="fcb fcb-gray">
+          <a href="{{ url_for('fretes.editar', id=frete.id) }}" class="fcb"
+             style="background:#e8f0fe!important;border:1.5px solid #1D63A5!important;color:#1D63A5!important;">
             <i class="bi bi-pencil"></i> Editar
           </a>
           <form method="post" action="{{ url_for('fretes.deletar', id=frete.id) }}"
                 style="display:flex;"
                 onsubmit="return confirm('Confirma exclusão do frete #{{ frete.id }}?');">
-            <button type="submit" class="fcb fcb-red" style="flex:1;">
+            <button type="submit" class="fcb" style="flex:1;background:#fee2e2!important;border:1.5px solid #e05050!important;color:#e05050!important;">
               <i class="bi bi-trash"></i> Excluir
             </button>
           </form>
@@ -518,6 +614,12 @@
       <div class="mt-2" style="font-size:.82rem;">Nenhum frete encontrado.</div>
     </div>
     {% endfor %}
+  </div>
+
+  <!-- Barra fixa de seleção múltipla (mobile) -->
+  <div class="mob-emit-bar d-md-none" id="mob-emit-bar" role="button" tabindex="0">
+    <i class="bi bi-receipt"></i>
+    <span>Emitir boleto selecionados (<span id="mob-emit-count">0</span>)</span>
   </div>
 
 </div>
@@ -983,6 +1085,68 @@ document.querySelectorAll('.btn-wa-frete').forEach(function(btn) {
     window.open('https://wa.me/?text=' + encodeURIComponent(msg), '_blank');
   });
 });
+</script>
+
+<script>
+// ── Seleção múltipla mobile ────────────────────────────────────────────────
+(function() {
+  var bar = document.getElementById('mob-emit-bar');
+  var countEl = document.getElementById('mob-emit-count');
+
+  function getCheckedMob() {
+    return Array.from(document.querySelectorAll('input.frete-select-mob:checked'));
+  }
+
+  function updateBar() {
+    var checked = getCheckedMob();
+    if (!bar) return;
+    if (checked.length > 0) {
+      bar.style.display = 'flex';
+      if (countEl) countEl.textContent = checked.length;
+    } else {
+      bar.style.display = 'none';
+    }
+  }
+
+  document.querySelectorAll('input.frete-select-mob').forEach(function(cb) {
+    cb.addEventListener('change', updateBar);
+  });
+
+  if (bar) {
+    bar.addEventListener('click', function() {
+      var ids = getCheckedMob().map(function(cb) { return parseInt(cb.value); });
+      if (ids.length === 0) return;
+      // reutiliza o modal de emissão de boleto existente
+      var modal = document.getElementById('emit-boleto-modal');
+      var inputFrete = document.getElementById('emit-frete-id');
+      var inputVenc = document.getElementById('emit-vencimento');
+      var feedback = document.getElementById('emit-feedback');
+      if (!modal) return;
+      modal.dataset.multiple = '1';
+      modal.dataset.selectedIds = JSON.stringify(ids);
+      if (inputFrete) inputFrete.value = '';
+      if (inputVenc) {
+        var d = new Date(); d.setDate(d.getDate() + 3);
+        inputVenc.value = d.toISOString().slice(0, 10);
+      }
+      if (feedback) feedback.style.display = 'none';
+      modal.style.display = 'flex';
+      modal.removeAttribute('aria-hidden');
+    });
+  }
+
+  // ── Chevron do filtro mobile ─────────────────────────────────────────────
+  var filtrosCollapse = document.getElementById('filtros-collapse');
+  var mobChevron = document.getElementById('mob-filter-chevron');
+  if (filtrosCollapse) {
+    filtrosCollapse.addEventListener('show.bs.collapse', function() {
+      if (mobChevron) mobChevron.style.transform = 'rotate(180deg)';
+    });
+    filtrosCollapse.addEventListener('hide.bs.collapse', function() {
+      if (mobChevron) mobChevron.style.transform = 'rotate(0deg)';
+    });
+  }
+})();
 </script>
 
 {% endblock %}

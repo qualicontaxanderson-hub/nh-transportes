@@ -155,6 +155,7 @@ def lista():
                 f.valor_total_frete,
                 COALESCE(f.lucro, 0) AS lucro,
                 COALESCE(f.status, '') AS status,
+                COALESCE(f.quantidade_manual, 0) AS quantidade,
                 CASE 
                     WHEN EXISTS(
                         SELECT 1 FROM cobrancas cb 
