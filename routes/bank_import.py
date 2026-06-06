@@ -17,7 +17,7 @@ except ImportError:
 import mysql.connector
 from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, Response
 from flask_login import login_required, current_user
-from flask_wtf.csrf import csrf_exempt
+from extensions import csrf
 from utils.db import get_db_connection
 
 logger = logging.getLogger(__name__)
@@ -3635,7 +3635,7 @@ def api_transacoes_pendentes():
 
 
 @bp.route('/api/auto-reconcile', methods=['POST'])
-@csrf_exempt
+@csrf.exempt
 def api_auto_reconcile():
     """API: força a auto-conciliação de transações pendentes (por CNPJ e por regras)."""
     if not current_user.is_authenticated:

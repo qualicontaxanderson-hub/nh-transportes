@@ -6,10 +6,8 @@ import importlib
 
 from flask import Flask, render_template, redirect, url_for, current_app
 from flask_login import LoginManager
-from flask_wtf.csrf import CSRFProtect
+from extensions import csrf
 from utils.formatadores import formatar_moeda
-
-csrf = CSRFProtect()
 
 
 def register_blueprints_from_routes(app):
