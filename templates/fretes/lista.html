@@ -102,7 +102,7 @@
       font-size: .72rem;
       color: #9ca3af;
       margin-bottom: .55rem;
-      text-transform: none !important;
+      text-transform: capitalize !important;
     }
 
     /* ── Valores lado a lado (sem box, só texto) ── */
@@ -172,8 +172,8 @@
     {% if f.lucro %}{% set ns.lucro = ns.lucro + f.lucro|float %}{% endif %}
   {% endfor %}
 
-  <!-- Hero header -->
-  <div class="page-hero d-flex align-items-center gap-3 flex-wrap">
+  <!-- Hero header — desktop only -->
+  <div class="page-hero d-none d-md-flex align-items-center gap-3 flex-wrap">
     <div class="hero-icon"><i class="bi bi-truck"></i></div>
     <div class="flex-grow-1">
       <h4 class="mb-0 fw-bold">Lista de Fretes</h4>
@@ -185,8 +185,8 @@
     </a>
   </div>
 
-  <!-- Stat cards -->
-  <div class="row g-3 mb-3">
+  <!-- Stat cards — desktop only -->
+  <div class="row g-3 mb-3 d-none d-md-flex">
     <div class="col-6 col-md-3">
       <div class="card stat-card p-3">
         <div class="stat-label text-primary">Fretes</div>
@@ -214,8 +214,8 @@
     </div>
   </div>
 
-  <!-- Card de Filtros -->
-  <div class="card mb-3 shadow-sm">
+  <!-- Card de Filtros — desktop only -->
+  <div class="card mb-3 shadow-sm d-none d-md-block">
     <div class="frt-filter-header d-flex align-items-center gap-2">
       <i class="bi bi-funnel"></i> Filtros
     </div>
@@ -294,8 +294,8 @@
     </div>
   </div>
 
-  <!-- Botões de Ações -->
-  <div class="d-flex justify-content-end mb-2 gap-2 flex-wrap">
+  <!-- Botões de Ações — desktop only -->
+  <div class="d-none d-md-flex justify-content-end mb-2 gap-2 flex-wrap">
     <a class="btn btn-warning btn-sm" style="font-size:0.75rem;" href="{{ url_for('fretes.novo') }}">
       <i class="bi bi-plus-circle"></i> Novo Frete
     </a>
@@ -468,7 +468,7 @@
           <div>
             <div class="frete-val-lbl">Valor frete</div>
             <div class="frete-val-num" style="color:#1D63A5;">
-              {% if frete.valor_total_frete and frete.valor_total_frete > 0 %}R$ {{ "%.2f"|format(frete.valor_total_frete)|replace('.', ',') }}{% else %}—{% endif %}
+              {% if frete.valor_total_frete is not none %}R$ {{ "%.2f"|format(frete.valor_total_frete|float)|replace('.', ',') }}{% else %}—{% endif %}
             </div>
           </div>
           <div>
