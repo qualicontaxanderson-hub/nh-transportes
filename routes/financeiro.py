@@ -205,6 +205,35 @@ def recebimentos():
             conn.close()
 
 
+def _get_cobranca_share_info(charge_id):
+    """Return cliente_nome, valor, data_vencimento for a cobranca by charge_id."""
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor(dictionary=True)
+        cur.execute("""
+            SELECT cl.nome_fantasia, cl.razao_social, c.valor, c.data_vencimento
+            FROM cobrancas c
+            LEFT JOIN clientes cl ON c.id_cliente = cl.id
+            WHERE c.charge_id = %s LIMIT 1
+        """, (str(charge_id),))
+        row = cur.fetchone()
+        cur.close()
+        conn.close()
+        if not row:
+            return {}
+        nome = (row.get("nome_fantasia") or row.get("razao_social") or "").strip()
+        valor = float(row.get("valor") or 0)
+        dv = row.get("data_vencimento")
+        if dv:
+            venc_fmt = dv.strftime('%d/%m/%Y') if hasattr(dv, 'strftime') else str(dv)[:10]
+        else:
+            venc_fmt = ""
+        return {"cliente_nome": nome, "valor": valor, "data_vencimento": venc_fmt}
+    except Exception:
+        current_app.logger.exception("[share_info] erro ao buscar info cobranca %s", charge_id)
+        return {}
+
+
 def _wants_json():
     """Helper: detect if request expects JSON (AJAX or Accept header)."""
     return request.headers.get('X-Requested-With') == 'XMLHttpRequest' or request.accept_mimetypes.accept_json
@@ -248,6 +277,8 @@ def emitir_boleto_route(frete_id):
                     payload["pdf_boleto"] = pdf_boleto
                 if barcode:
                     payload["barcode"] = barcode
+                payload["visualizar_url"] = url_for('financeiro.visualizar_boleto', charge_id=charge_id)
+                payload.update(_get_cobranca_share_info(charge_id))
                 return jsonify(payload), 200
 
             flash(f"Boleto emitido com sucesso! Charge ID: {charge_id}", "success")
@@ -291,13 +322,16 @@ def emitir_boleto_multiple_route():
             return jsonify({"success": False, "error": "Resposta inválida do utilitário"}), 500
 
         if resultado.get("success"):
-            resp = {"success": True, "charge_id": resultado.get("charge_id")}
+            cid = resultado.get("charge_id")
+            resp = {"success": True, "charge_id": cid}
             if resultado.get("boleto_url"):
                 resp["boleto_url"] = resultado.get("boleto_url")
             if resultado.get("pdf_boleto"):
                 resp["pdf_boleto"] = resultado.get("pdf_boleto")
             if resultado.get("barcode"):
                 resp["barcode"] = resultado.get("barcode")
+            resp["visualizar_url"] = url_for('financeiro.visualizar_boleto', charge_id=cid)
+            resp.update(_get_cobranca_share_info(cid))
             return jsonify(resp), 200
         else:
             return jsonify({"success": False, "error": resultado.get("error", "Erro desconhecido")}), 400
@@ -601,6 +635,64 @@ def visualizar_boleto(charge_id):
         current_app.logger.exception("Erro em visualizar_boleto: %s", e)
         flash(f"Erro ao visualizar boleto: {str(e)}", "danger")
         return redirect(url_for('financeiro.recebimentos'))
+
+
+@financeiro_bp.route('/download-boleto/<int:charge_id>/')
+@login_required
+def download_boleto(charge_id):
+    """Serve boleto PDF como attachment com nome CLIENTE_DD-MM-YYYY.pdf."""
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor(dictionary=True)
+        cur.execute("""
+            SELECT c.pdf_boleto, c.link_boleto, c.data_vencimento,
+                   cl.nome_fantasia, cl.razao_social
+            FROM cobrancas c
+            LEFT JOIN clientes cl ON c.id_cliente = cl.id
+            WHERE c.charge_id = %s LIMIT 1
+        """, (charge_id,))
+        row = cur.fetchone()
+        cur.close()
+        conn.close()
+
+        if not row:
+            abort(404)
+
+        nome_raw = (row.get("nome_fantasia") or row.get("razao_social") or "cliente").strip()
+        nome_safe = ''.join(c if c.isalnum() or c in (' ', '-') else '' for c in nome_raw).strip().replace(' ', '_') or 'cliente'
+        dv = row.get("data_vencimento")
+        if dv and hasattr(dv, 'strftime'):
+            dv_str = dv.strftime('%d-%m-%Y')
+        elif dv:
+            try:
+                dv_str = datetime.strptime(str(dv)[:10], '%Y-%m-%d').strftime('%d-%m-%Y')
+            except Exception:
+                dv_str = str(dv)[:10]
+        else:
+            dv_str = 'sem-data'
+        filename = f"{nome_safe}_{dv_str}.pdf"
+
+        pdf_boleto = row.get("pdf_boleto")
+        if pdf_boleto and isinstance(pdf_boleto, str) and not pdf_boleto.startswith('http'):
+            if os.path.exists(pdf_boleto):
+                return send_file(pdf_boleto, mimetype='application/pdf', as_attachment=True, download_name=filename)
+
+        link = (pdf_boleto if (pdf_boleto and isinstance(pdf_boleto, str) and pdf_boleto.startswith('http'))
+                else row.get("link_boleto"))
+        if link:
+            credentials = _get_efi_credentials()
+            stream_resp = fetch_boleto_pdf_stream(credentials, link)
+            if stream_resp and getattr(stream_resp, "status_code", None) == 200:
+                headers = {
+                    'Content-Type': 'application/pdf',
+                    'Content-Disposition': f'attachment; filename="{filename}"',
+                }
+                return Response(stream_with_context(stream_resp.iter_content(chunk_size=8192)), headers=headers)
+
+        abort(404)
+    except Exception as e:
+        current_app.logger.exception("Erro em download_boleto: %s", e)
+        abort(500)
 
 
 @financeiro_bp.route('/alterar-vencimento/<int:charge_id>/', methods=['GET', 'POST'])
