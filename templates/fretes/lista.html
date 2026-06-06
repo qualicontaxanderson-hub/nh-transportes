@@ -67,10 +67,13 @@
     .frete-mob-hdr-period { font-size: .8rem; font-weight: 600; color: rgba(255,255,255,.88) !important; }
 
     /* ── Resumo mobile (4 mini-cards) ── */
-    .mob-summary { display: grid; grid-template-columns: 1fr 1fr; gap: .5rem; margin-bottom: .75rem; }
-    .mob-sum-card { background: #fff; border: 1px solid #e8e8e8; border-radius: .6rem; padding: .5rem .75rem; }
-    .mob-sum-lbl { font-size: .57rem; color: #9ca3af; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; }
-    .mob-sum-val { font-size: .9rem; font-weight: 700; margin-top: .05rem; }
+    .mob-summary { display: grid; grid-template-columns: 1fr 1fr; gap: .45rem; margin-bottom: .75rem; }
+    .mob-sum-card { background: #fff; border: 1px solid #e8e8e8; border-radius: .55rem; padding: .45rem .7rem; }
+    .mob-sum-lbl { font-size: .7rem; color: #6b7280; font-weight: 400; }
+    .mob-sum-val { font-size: 1.1rem; font-weight: 700; margin-top: .05rem; line-height: 1.2; }
+
+    /* ── Separador de seção ── */
+    .mob-section-sep { font-size: .62rem; font-weight: 700; color: #9ca3af; letter-spacing: .08em; text-transform: uppercase; margin: .6rem 0 .5rem; }
 
     /* ── Botão Filtros mobile ── */
     .mob-filter-btn {
@@ -260,12 +263,11 @@
     </div>
   </div>
 
-  <!-- Card de Filtros — colapsável no mobile, sempre aberto no desktop -->
-  <div class="card mb-3 shadow-sm">
+  <!-- Card de Filtros — desktop only -->
+  <div class="card mb-3 shadow-sm d-none d-md-block">
     <div class="frt-filter-header d-flex align-items-center gap-2">
       <i class="bi bi-funnel"></i> Filtros
     </div>
-    <div class="collapse d-md-block" id="filtros-collapse">
     <div class="card-body py-2 px-3">
       <form method="get" action="{{ url_for('fretes.lista') }}" id="frm-filtros-fretes">
         <div class="row g-2 align-items-start">
@@ -339,7 +341,6 @@
         </div>
       </form>
     </div>
-    </div><!-- /collapse -->
   </div>
 
   <!-- Botões de Ações — desktop only -->
@@ -486,13 +487,61 @@
       {% set _periodo = '' %}
     {% endif %}
 
-    <!-- Botão Filtros mobile — abre/fecha o card de filtros acima -->
+    <!-- Botão Filtros mobile -->
     <button type="button" class="mob-filter-btn d-flex align-items-center gap-2"
-            data-bs-toggle="collapse" data-bs-target="#filtros-collapse"
-            aria-expanded="false" aria-controls="filtros-collapse">
+            data-bs-toggle="collapse" data-bs-target="#filtros-mob-collapse"
+            aria-expanded="false" aria-controls="filtros-mob-collapse">
       <i class="bi bi-funnel"></i> Filtros
       <i class="bi bi-chevron-down ms-auto" style="font-size:.75rem;transition:transform .2s;" id="mob-filter-chevron"></i>
     </button>
+    <!-- Formulário de filtros mobile (accordion) -->
+    <div class="collapse mb-2" id="filtros-mob-collapse">
+      <div class="card" style="border:1px solid #e8e8e8;border-radius:.55rem;">
+        <div class="card-body py-2 px-3">
+          <form method="get" action="{{ url_for('fretes.lista') }}" class="js-sem-trava">
+            <div class="row g-2">
+              <div class="col-12">
+                <label class="form-label mb-1" style="font-size:.72rem;color:#6b7280;">Empresa</label>
+                <select name="cliente_ids[]" class="form-select form-select-sm" style="font-size:.8rem;">
+                  <option value="">Todas</option>
+                  {% for c in clientes %}
+                  <option value="{{ c.id }}" {% if c.id|string in (cliente_ids or []) %}selected{% endif %}>{{ c.razao_social }}</option>
+                  {% endfor %}
+                </select>
+              </div>
+              <div class="col-6">
+                <label class="form-label mb-1" style="font-size:.72rem;color:#6b7280;">De</label>
+                <input type="date" name="data_inicio" id="frtMobDtInicio"
+                       class="form-control form-control-sm" style="font-size:.8rem;"
+                       value="{{ data_inicio or '' }}">
+              </div>
+              <div class="col-6">
+                <label class="form-label mb-1" style="font-size:.72rem;color:#6b7280;">Até</label>
+                <input type="date" name="data_fim" id="frtMobDtFim"
+                       class="form-control form-control-sm" style="font-size:.8rem;"
+                       value="{{ data_fim or '' }}">
+              </div>
+              <div class="col-12 d-flex gap-1">
+                <button type="button" class="btn btn-outline-secondary btn-sm py-0 px-2" style="font-size:.72rem;"
+                        onclick="setFretePeriodoMob('mes_atual')">Este mês</button>
+                <button type="button" class="btn btn-outline-secondary btn-sm py-0 px-2" style="font-size:.72rem;"
+                        onclick="setFretePeriodoMob('mes_anterior')">Mês anterior</button>
+              </div>
+              <div class="col-6">
+                <button type="submit" class="btn btn-primary btn-sm w-100" style="font-size:.8rem;">
+                  <i class="bi bi-search"></i> Filtrar
+                </button>
+              </div>
+              <div class="col-6">
+                <a href="{{ url_for('fretes.lista') }}" class="btn btn-outline-secondary btn-sm w-100" style="font-size:.8rem;">
+                  <i class="bi bi-x"></i> Limpar
+                </a>
+              </div>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
 
     <!-- Resumo mobile: 4 mini-cards -->
     <div class="mob-summary">
@@ -502,25 +551,22 @@
       </div>
       <div class="mob-sum-card">
         <div class="mob-sum-lbl">Valor total</div>
-        <div class="mob-sum-val" style="color:#1D63A5;font-size:.82rem;">R$&nbsp;{{ "%.2f"|format(ns.valor)|replace('.', ',') if ns.valor else '—' }}</div>
+        <div class="mob-sum-val" style="color:#1D63A5;">R$&nbsp;{{ "%.2f"|format(ns.valor)|replace('.', ',') if ns.valor else '—' }}</div>
       </div>
       <div class="mob-sum-card">
-        <div class="mob-sum-lbl">Lucro est.</div>
-        <div class="mob-sum-val" style="color:#198754;font-size:.82rem;">R$&nbsp;{{ "%.2f"|format(ns.lucro)|replace('.', ',') if ns.lucro else '—' }}</div>
+        <div class="mob-sum-lbl">Lucro estimado</div>
+        <div class="mob-sum-val" style="color:#198754;">R$&nbsp;{{ "%.2f"|format(ns.lucro)|replace('.', ',') if ns.lucro else '—' }}</div>
       </div>
       <div class="mob-sum-card">
-        <div class="mob-sum-lbl">Vol. transp.</div>
-        <div class="mob-sum-val" style="color:#6b7280;font-size:.82rem;">
+        <div class="mob-sum-lbl">Vol. transportado</div>
+        <div class="mob-sum-val" style="color:#6b7280;">
           {% if ns.qtd %}{{ "{:,.0f}".format(ns.qtd).replace(',', '.') }}&nbsp;L{% else %}—{% endif %}
         </div>
       </div>
     </div>
 
-    <!-- Header laranja -->
-    <div class="frete-mob-hdr">
-      <span class="frete-mob-hdr-title">Lista de fretes</span>
-      {% if _periodo %}<span class="frete-mob-hdr-period">{{ _periodo }}</span>{% endif %}
-    </div>
+    <!-- Separador -->
+    <div class="mob-section-sep">Fretes recentes</div>
 
     {% for frete in fretes %}
     {% set emitted = frete.emitted if frete.emitted is defined else 0 %}
@@ -1136,17 +1182,36 @@ document.querySelectorAll('.btn-wa-frete').forEach(function(btn) {
   }
 
   // ── Chevron do filtro mobile ─────────────────────────────────────────────
-  var filtrosCollapse = document.getElementById('filtros-collapse');
+  var filtrosMobCollapse = document.getElementById('filtros-mob-collapse');
   var mobChevron = document.getElementById('mob-filter-chevron');
-  if (filtrosCollapse) {
-    filtrosCollapse.addEventListener('show.bs.collapse', function() {
+  if (filtrosMobCollapse) {
+    filtrosMobCollapse.addEventListener('show.bs.collapse', function() {
       if (mobChevron) mobChevron.style.transform = 'rotate(180deg)';
     });
-    filtrosCollapse.addEventListener('hide.bs.collapse', function() {
+    filtrosMobCollapse.addEventListener('hide.bs.collapse', function() {
       if (mobChevron) mobChevron.style.transform = 'rotate(0deg)';
     });
   }
 })();
+</script>
+
+<script>
+function setFretePeriodoMob(tipo) {
+  var hoje = new Date();
+  var ini, fim;
+  if (tipo === 'mes_atual') {
+    ini = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
+    fim = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0);
+  } else {
+    ini = new Date(hoje.getFullYear(), hoje.getMonth() - 1, 1);
+    fim = new Date(hoje.getFullYear(), hoje.getMonth(), 0);
+  }
+  var fmt = function(d) { return d.toISOString().slice(0, 10); };
+  var elIni = document.getElementById('frtMobDtInicio');
+  var elFim = document.getElementById('frtMobDtFim');
+  if (elIni) elIni.value = fmt(ini);
+  if (elFim) elFim.value = fmt(fim);
+}
 </script>
 
 {% endblock %}
