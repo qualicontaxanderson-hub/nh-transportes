@@ -114,6 +114,33 @@
   .actions-cell { white-space: nowrap; }
 
   .mono { font-family: 'SFMono-Regular', Consolas, monospace; font-size: 0.7rem; }
+
+  /* ── Mobile cards (recebimentos) ─────────────────────── */
+  .receb-card {
+    background: #fff; border-radius: .75rem;
+    box-shadow: 0 2px 8px rgba(0,0,0,.08);
+    margin-bottom: .75rem; overflow: hidden;
+  }
+  .receb-card-hdr {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: .55rem .85rem; background: #f8fafc;
+    border-bottom: 1px solid #e9ecef;
+  }
+  .receb-card-nome { font-size: .92rem; font-weight: 700; color: #1a1a1a; }
+  .receb-card-body { padding: .7rem .85rem .85rem; }
+  .receb-card-row { display: grid; grid-template-columns: 1fr 1fr; gap: .5rem; margin-bottom: .8rem; }
+  .receb-val-box { background: #f8fafc; border-radius: .4rem; padding: .4rem .6rem; }
+  .receb-val-lbl { font-size: .62rem; text-transform: uppercase; letter-spacing: .04em; color: #6b7280; font-weight: 700; }
+  .receb-val-num { font-size: .9rem; font-weight: 700; margin-top: .1rem; }
+  .receb-card-acts { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: .4rem; }
+  .rcb {
+    display: flex; align-items: center; justify-content: center; gap: .3rem;
+    padding: .6rem .35rem; border: none; border-radius: .5rem;
+    font-size: .78rem; font-weight: 600; cursor: pointer;
+    text-decoration: none; transition: opacity .15s; width: 100%; box-sizing: border-box;
+  }
+  .rcb:hover { opacity: .85; text-decoration: none; }
+  .rcb:disabled { opacity: .4; cursor: not-allowed; }
 </style>
 {% endblock %}
 
@@ -222,7 +249,7 @@
   </div>
 
   <!-- ── Table ──────────────────────────────────────────────── -->
-  <div class="card shadow-sm">
+  <div class="card shadow-sm d-none d-md-block">
     <div class="card-header d-flex justify-content-between align-items-center py-2" style="background:#1D63A5;color:#fff;font-size:0.78rem;font-weight:600;">
       <span><i class="bi bi-list me-1"></i>Recebimentos</span>
       <div class="d-flex align-items-center gap-2">
@@ -375,6 +402,94 @@
       </div>
       {% endif %}
     </div>
+  </div>
+
+  <!-- ── Mobile cards: Recebimentos ───────────────────────── -->
+  <div class="d-md-none mt-1" id="mob-recebimentos">
+    {% for r in recebimentos %}
+    {% set ds = r.display_status if r.display_status is defined else (r.status or 'pendente') %}
+    {% set boleto_url = url_for('financeiro.visualizar_boleto', charge_id=r.charge_id) if r.charge_id else '' %}
+    <div class="receb-card">
+      <!-- Cabeçalho: nome + badge status -->
+      <div class="receb-card-hdr">
+        <span class="receb-card-nome">{{ r.cliente_fantasia or r.cliente_nome or '—' }}</span>
+        {% if ds == 'pago' %}
+          <span class="badge-status badge-pago">Pago</span>
+        {% elif ds == 'quitado' %}
+          <span class="badge-status badge-quitado">Quitado</span>
+        {% elif ds == 'vencido' %}
+          <span class="badge-status badge-vencido">Vencido</span>
+        {% elif ds == 'cancelado' %}
+          <span class="badge-status badge-cancelado">Cancelado</span>
+        {% else %}
+          <span class="badge-status badge-pendente">Pendente</span>
+        {% endif %}
+      </div>
+      <div class="receb-card-body">
+        <!-- Vencimento e Valor lado a lado -->
+        <div class="receb-card-row">
+          <div class="receb-val-box">
+            <div class="receb-val-lbl">Vencimento</div>
+            <div class="receb-val-num" style="color:#374151;">
+              {{ r.data_vencimento_fmt or '—' }}
+            </div>
+          </div>
+          <div class="receb-val-box">
+            <div class="receb-val-lbl">Valor</div>
+            <div class="receb-val-num" style="color:#1D63A5;">
+              {% if r.valor is not none %}R$ {{ ("%.2f"|format(r.valor|float)).replace('.', ',') }}
+              {% else %}—{% endif %}
+            </div>
+          </div>
+        </div>
+        <!-- Botões -->
+        <div class="receb-card-acts">
+          {% if r.charge_id %}
+          <!-- WhatsApp -->
+          <button type="button" class="rcb btn-whatsapp-boleto"
+                  data-charge-id="{{ r.charge_id }}"
+                  data-cliente="{{ (r.cliente_fantasia or r.cliente_nome or '') | e }}"
+                  data-valor="{{ '%.2f'|format(r.valor|float) if r.valor is not none else '0.00' }}"
+                  data-vencimento="{{ r.data_vencimento_fmt or '' }}"
+                  data-boleto-url="{{ boleto_url }}"
+                  style="background:#16a34a;color:#fff;" title="Enviar WhatsApp">
+            <i class="bi bi-whatsapp"></i> WhatsApp
+          </button>
+          <!-- PDF -->
+          <a href="{{ boleto_url }}" target="_blank"
+             class="rcb" style="background:#1D63A5;color:#fff;" title="Ver Boleto PDF">
+            <i class="bi bi-file-earmark-pdf"></i> PDF
+          </a>
+          <!-- Cancelar -->
+          {% if ds not in ('pago', 'quitado', 'cancelado') %}
+          <form method="post" action="{{ url_for('financeiro.cancelar_boleto', charge_id=r.charge_id) }}"
+                style="display:flex;"
+                onsubmit="return confirm('Confirma cancelar este boleto?');">
+            <button type="submit" class="rcb" style="background:#dc3545;color:#fff;flex:1;">
+              <i class="bi bi-x-circle"></i> Cancelar
+            </button>
+          </form>
+          {% else %}
+          <button type="button" class="rcb" disabled style="background:#e9ecef;color:#adb5bd;">
+            <i class="bi bi-x-circle"></i> Cancelar
+          </button>
+          {% endif %}
+          {% else %}
+          <!-- Sem boleto -->
+          <button type="button" class="rcb" disabled
+                  style="background:#e9ecef;color:#adb5bd;grid-column:span 3;">
+            Sem boleto emitido
+          </button>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+    {% else %}
+    <div class="text-center text-muted py-5">
+      <i class="bi bi-inbox" style="font-size:2rem;opacity:0.35;"></i>
+      <div class="mt-2" style="font-size:0.82rem;">Nenhum recebimento encontrado.</div>
+    </div>
+    {% endfor %}
   </div>
 
 </div>
