@@ -206,16 +206,26 @@ def recebimentos():
 
 
 def _get_cobranca_share_info(charge_id):
-    """Return cliente_nome, valor, data_vencimento for a cobranca by charge_id."""
+    """Return cliente_nome, valor, data_vencimento, barcode, pix_qrcode for a cobranca by charge_id."""
     try:
         conn = get_db_connection()
         cur = conn.cursor(dictionary=True)
-        cur.execute("""
-            SELECT cl.nome_fantasia, cl.razao_social, c.valor, c.data_vencimento
-            FROM cobrancas c
-            LEFT JOIN clientes cl ON c.id_cliente = cl.id
-            WHERE c.charge_id = %s LIMIT 1
-        """, (str(charge_id),))
+        try:
+            cur.execute("""
+                SELECT cl.nome_fantasia, cl.razao_social, c.valor, c.data_vencimento,
+                       c.barcode, c.pix_qrcode
+                FROM cobrancas c
+                LEFT JOIN clientes cl ON c.id_cliente = cl.id
+                WHERE c.charge_id = %s LIMIT 1
+            """, (str(charge_id),))
+        except Exception:
+            # columns barcode/pix_qrcode may not exist yet (migration pending)
+            cur.execute("""
+                SELECT cl.nome_fantasia, cl.razao_social, c.valor, c.data_vencimento
+                FROM cobrancas c
+                LEFT JOIN clientes cl ON c.id_cliente = cl.id
+                WHERE c.charge_id = %s LIMIT 1
+            """, (str(charge_id),))
         row = cur.fetchone()
         cur.close()
         conn.close()
@@ -228,7 +238,12 @@ def _get_cobranca_share_info(charge_id):
             venc_fmt = dv.strftime('%d/%m/%Y') if hasattr(dv, 'strftime') else str(dv)[:10]
         else:
             venc_fmt = ""
-        return {"cliente_nome": nome, "valor": valor, "data_vencimento": venc_fmt}
+        info = {"cliente_nome": nome, "valor": valor, "data_vencimento": venc_fmt}
+        if row.get("barcode"):
+            info["barcode"] = row.get("barcode")
+        if row.get("pix_qrcode"):
+            info["pix_qrcode"] = row.get("pix_qrcode")
+        return info
     except Exception:
         current_app.logger.exception("[share_info] erro ao buscar info cobranca %s", charge_id)
         return {}
@@ -267,6 +282,7 @@ def emitir_boleto_route(frete_id):
             charge_id = resultado.get('charge_id')
             boleto_url = resultado.get('boleto_url') or resultado.get('link_boleto')
             barcode = resultado.get('barcode')
+            pix_qrcode = resultado.get('pix_qrcode')
             pdf_boleto = resultado.get('pdf_boleto')
 
             if _wants_json():
@@ -277,6 +293,8 @@ def emitir_boleto_route(frete_id):
                     payload["pdf_boleto"] = pdf_boleto
                 if barcode:
                     payload["barcode"] = barcode
+                if pix_qrcode:
+                    payload["pix_qrcode"] = pix_qrcode
                 payload["visualizar_url"] = url_for('financeiro.visualizar_boleto', charge_id=charge_id)
                 payload.update(_get_cobranca_share_info(charge_id))
                 return jsonify(payload), 200
@@ -330,6 +348,8 @@ def emitir_boleto_multiple_route():
                 resp["pdf_boleto"] = resultado.get("pdf_boleto")
             if resultado.get("barcode"):
                 resp["barcode"] = resultado.get("barcode")
+            if resultado.get("pix_qrcode"):
+                resp["pix_qrcode"] = resultado.get("pix_qrcode")
             resp["visualizar_url"] = url_for('financeiro.visualizar_boleto', charge_id=cid)
             resp.update(_get_cobranca_share_info(cid))
             return jsonify(resp), 200

@@ -105,11 +105,12 @@ def _log_provider_response(method_name, resp_raw):
 
 def _safe_get_charge_fields(response):
     if not response or not isinstance(response, dict):
-        return None, None, None
+        return None, None, None, None
     data = response.get("data") or response.get("charge") or response
     charge_id = data.get("id") or data.get("charge_id") or response.get("data", {}).get("id")
     boleto_url = None
     barcode = None
+    pix_qrcode = None
     try:
         if isinstance(data.get("payment"), dict):
             p = data.get("payment")
@@ -123,9 +124,12 @@ def _safe_get_charge_fields(response):
             boleto_url = (data.get("banking_billet") or {}).get("link") or response.get("link")
         if not barcode:
             barcode = (data.get("banking_billet") or {}).get("barcode")
+        pix = data.get("pix") or {}
+        if isinstance(pix, dict):
+            pix_qrcode = pix.get("qrcode") or pix.get("chave") or pix.get("qr_code")
     except Exception:
         logger.debug("Falha extraindo fields do response: %r", response)
-    return charge_id, boleto_url, barcode
+    return charge_id, boleto_url, barcode, pix_qrcode
 
 
 def _extract_charge_id(resp):
@@ -1207,7 +1211,7 @@ def emitir_boleto_multiplo(frete_ids, vencimento_str=None):
         final_resp = pay_resp or create_resp
 
         # extrair campos
-        charge_id_final, boleto_url, barcode = _safe_get_charge_fields(final_resp if isinstance(final_resp, dict) else create_resp)
+        charge_id_final, boleto_url, barcode, pix_qrcode = _safe_get_charge_fields(final_resp if isinstance(final_resp, dict) else create_resp)
         if not charge_id_final:
             charge_id_final = charge_id
 
@@ -1282,6 +1286,20 @@ def emitir_boleto_multiplo(frete_ids, vencimento_str=None):
             conn.rollback()
             return {"success": False, "error": "Erro ao persistir cobrança agregada no banco"}
 
+        if cobranca_id and (barcode or pix_qrcode):
+            try:
+                cursor.execute(
+                    "UPDATE cobrancas SET barcode = %s, pix_qrcode = %s WHERE id = %s",
+                    (barcode, pix_qrcode, cobranca_id)
+                )
+                conn.commit()
+            except Exception:
+                logger.debug("barcode/pix_qrcode não salvos (migração pendente?)")
+                try:
+                    conn.rollback()
+                except Exception:
+                    pass
+
         # criar relações na tabela cobrancas_fretes (necessita migration)
         try:
             for r in rows:
@@ -1307,7 +1325,7 @@ def emitir_boleto_multiplo(frete_ids, vencimento_str=None):
                 pass
             logger.exception("Falha ao marcar fretes boleto_emitido")
 
-        return {"success": True, "cobranca_id": cobranca_id, "charge_id": charge_id_final, "boleto_url": boleto_url, "barcode": barcode, "pdf_boleto": pdf_boleto_path}
+        return {"success": True, "cobranca_id": cobranca_id, "charge_id": charge_id_final, "boleto_url": boleto_url, "barcode": barcode, "pix_qrcode": pix_qrcode, "pdf_boleto": pdf_boleto_path}
 
     except Exception as e:
         logger.exception("Erro emitir_boleto_multiplo: %s", e)
@@ -1552,7 +1570,7 @@ def emitir_boleto_frete(frete_id, vencimento_str=None):
         final_response = pay_response if pay_response is not None else create_response
 
         if paid_success and isinstance(final_response, dict):
-            charge_id_final, boleto_url, barcode = _safe_get_charge_fields(final_response)
+            charge_id_final, boleto_url, barcode, pix_qrcode = _safe_get_charge_fields(final_response)
             if not charge_id_final:
                 charge_id_final = charge_id
 
@@ -1636,6 +1654,20 @@ def emitir_boleto_frete(frete_id, vencimento_str=None):
                 conn.rollback()
                 return {"success": False, "error": "Erro ao persistir cobrança no banco"}
 
+            if cobranca_id and (barcode or pix_qrcode):
+                try:
+                    cursor.execute(
+                        "UPDATE cobrancas SET barcode = %s, pix_qrcode = %s WHERE id = %s",
+                        (barcode, pix_qrcode, cobranca_id)
+                    )
+                    conn.commit()
+                except Exception:
+                    logger.debug("barcode/pix_qrcode não salvos (migração pendente?)")
+                    try:
+                        conn.rollback()
+                    except Exception:
+                        pass
+
             # marcar frete como já tendo boleto emitido (impede re-emissão)
             try:
                 try:
@@ -1652,7 +1684,7 @@ def emitir_boleto_frete(frete_id, vencimento_str=None):
             except Exception:
                 logger.exception("Erro marcando frete boleto_emitido (silenciado)")
 
-            return {"success": True, "cobranca_id": cobranca_id, "charge_id": charge_id_final, "boleto_url": boleto_url, "barcode": barcode, "pdf_boleto": pdf_boleto_path}
+            return {"success": True, "cobranca_id": cobranca_id, "charge_id": charge_id_final, "boleto_url": boleto_url, "barcode": barcode, "pix_qrcode": pix_qrcode, "pdf_boleto": pdf_boleto_path}
 
         if isinstance(final_response, dict) and final_response.get("error") == "validation_error":
             err_desc = final_response.get("error_description") or final_response.get("message") or final_response

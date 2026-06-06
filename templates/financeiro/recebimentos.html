@@ -339,6 +339,8 @@
                         data-valor="{{ '%.2f'|format(r.valor|float) if r.valor is not none else '0.00' }}"
                         data-vencimento="{{ r.data_vencimento_fmt or '' }}"
                         data-boleto-url="{{ boleto_url }}"
+                        data-barcode="{{ r.barcode or '' }}"
+                        data-pix="{{ r.pix_qrcode or '' }}"
                         title="Enviar via WhatsApp">
                   <i class="bi bi-whatsapp" style="color:#25d366;"></i>
                 </button>
@@ -452,6 +454,8 @@
                   data-valor="{{ '%.2f'|format(r.valor|float) if r.valor is not none else '0.00' }}"
                   data-vencimento="{{ r.data_vencimento_fmt or '' }}"
                   data-boleto-url="{{ boleto_url }}"
+                  data-barcode="{{ r.barcode or '' }}"
+                  data-pix="{{ r.pix_qrcode or '' }}"
                   style="background:#16a34a;color:#fff;" title="Enviar WhatsApp">
             <i class="bi bi-whatsapp"></i> WhatsApp
           </button>
@@ -1052,12 +1056,16 @@ document.addEventListener('DOMContentLoaded', function () {
       var valor     = 'R$ ' + valorRaw.toLocaleString('pt-BR', {minimumFractionDigits:2, maximumFractionDigits:2});
       var venc      = btn.dataset.vencimento || '';
       var viewUrl   = btn.dataset.boletoUrl || '';
+      var barcode   = btn.dataset.barcode || '';
+      var pixCode   = btn.dataset.pix || '';
       var origin    = window.location.origin;
 
-      var msg = 'Olá' + (nome ? ', ' + nome : '') + '!\n\nSegue o boleto:\n';
+      var msg = 'Olá' + (nome ? ', ' + nome : '') + '!\n\nSegue o boleto para pagamento:\n';
       msg += 'Valor: ' + valor + '\n';
       if (venc) msg += 'Vencimento: ' + venc + '\n';
-      if (viewUrl) msg += 'Link: ' + origin + viewUrl;
+      if (barcode) msg += '\nLinha digitável:\n' + barcode + '\n';
+      if (pixCode) msg += '\nPix (copia e cola):\n' + pixCode + '\n';
+      if (viewUrl) msg += '\nLink do boleto:\n' + origin + viewUrl;
 
       window.open('https://wa.me/?text=' + encodeURIComponent(msg), '_blank');
     });

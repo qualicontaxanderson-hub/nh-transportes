@@ -739,6 +739,8 @@ document.addEventListener('DOMContentLoaded', function () {
       ? 'R$ ' + parseFloat(data.valor).toLocaleString('pt-BR', {minimumFractionDigits:2, maximumFractionDigits:2})
       : '';
     const venc      = data.data_vencimento || '';
+    const barcode   = data.barcode || '';
+    const pixCode   = data.pix_qrcode || '';
     const viewUrl   = data.visualizar_url || ('/financeiro/visualizar-boleto/' + chargeId + '/');
 
     // descrição no modal
@@ -750,10 +752,12 @@ document.addEventListener('DOMContentLoaded', function () {
 
     // WhatsApp
     const origin = window.location.origin;
-    let msg = 'Olá' + (nome ? ', ' + nome : '') + '!\n\nSegue o boleto:\n';
+    let msg = 'Olá' + (nome ? ', ' + nome : '') + '!\n\nSegue o boleto para pagamento:\n';
     if (valor) msg += 'Valor: ' + valor + '\n';
     if (venc)  msg += 'Vencimento: ' + venc + '\n';
-    msg += 'Link: ' + origin + viewUrl;
+    if (barcode) msg += '\nLinha digitável:\n' + barcode + '\n';
+    if (pixCode) msg += '\nPix (copia e cola):\n' + pixCode + '\n';
+    msg += '\nLink do boleto:\n' + origin + viewUrl;
     qs('#share-whatsapp-btn').href = 'https://wa.me/?text=' + encodeURIComponent(msg);
 
     // PDF download
