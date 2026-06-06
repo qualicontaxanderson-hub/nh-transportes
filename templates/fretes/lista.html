@@ -75,20 +75,19 @@
     /* ── Separador de seção ── */
     .mob-section-sep { font-size: .62rem; font-weight: 700; color: #9ca3af; letter-spacing: .08em; text-transform: uppercase; margin: .6rem 0 .5rem; }
 
-    /* ── Botão Filtros mobile ── */
-    .mob-filter-btn {
-      background: #fff !important;
-      border: 1px solid #e8e8e8 !important;
-      border-radius: .55rem;
-      padding: .45rem .85rem;
-      font-size: .8rem;
-      font-weight: 600;
-      color: #374151 !important;
+    /* ── Botão funil no header laranja ── */
+    .mob-hdr-filter-btn {
+      background: rgba(255,255,255,.18) !important;
+      border: 1.5px solid rgba(255,255,255,.45) !important;
+      border-radius: .4rem;
+      color: #fff !important;
+      padding: .22rem .55rem;
+      font-size: .88rem;
       cursor: pointer;
-      width: 100%;
-      text-align: left;
-      margin-bottom: .5rem;
+      line-height: 1;
+      transition: background .15s;
     }
+    .mob-hdr-filter-btn:hover { background: rgba(255,255,255,.3) !important; }
 
     /* ── Card individual ── */
     .frete-card {
@@ -487,13 +486,16 @@
       {% set _periodo = '' %}
     {% endif %}
 
-    <!-- Botão Filtros mobile -->
-    <button type="button" class="mob-filter-btn d-flex align-items-center gap-2"
-            data-bs-toggle="collapse" data-bs-target="#filtros-mob-collapse"
-            aria-expanded="false" aria-controls="filtros-mob-collapse">
-      <i class="bi bi-funnel"></i> Filtros
-      <i class="bi bi-chevron-down ms-auto" style="font-size:.75rem;transition:transform .2s;" id="mob-filter-chevron"></i>
-    </button>
+    <!-- Header laranja com ícone funil para filtros -->
+    <div class="frete-mob-hdr">
+      <span class="frete-mob-hdr-title">Lista de fretes{% if _periodo %} · {{ _periodo }}{% endif %}</span>
+      <button type="button" class="mob-hdr-filter-btn"
+              data-bs-toggle="collapse" data-bs-target="#filtros-mob-collapse"
+              aria-expanded="false" aria-controls="filtros-mob-collapse"
+              title="Filtros">
+        <i class="bi bi-funnel"></i>
+      </button>
+    </div>
     <!-- Formulário de filtros mobile (accordion) -->
     <div class="collapse mb-2" id="filtros-mob-collapse">
       <div class="card" style="border:1px solid #e8e8e8;border-radius:.55rem;">
@@ -622,13 +624,13 @@
           <button type="button" class="fcb btn-emit-boleto"
                   data-frete-id="{{ frete.id }}"
                   data-emitted="{{ '1' if emitted else '0' }}"
-                  style="background:#fff!important;border:1.5px solid #1D63A5!important;color:#1D63A5!important;"
+                  style="background:#1D63A5!important;border:1.5px solid #1D63A5!important;color:#fff!important;"
                   {% if emitted %}disabled title="Boleto já emitido"{% endif %}>
             <i class="bi bi-receipt"></i> Emitir boleto
           </button>
           {% else %}
           <button type="button" class="fcb" disabled
-                  style="background:#fff!important;border:1.5px solid #d1d5db!important;color:#9ca3af!important;">
+                  style="background:#e5e7eb!important;border:1.5px solid #d1d5db!important;color:#9ca3af!important;">
             <i class="bi bi-receipt"></i> Emitir boleto
           </button>
           {% endif %}
@@ -637,11 +639,11 @@
                   data-id="{{ frete.id }}"
                   data-data="{{ frete.datafrete_formatada or '' }}"
                   data-valor="{{ '%.2f'|format(frete.valor_total_frete|float) if frete.valor_total_frete else '0,00' }}"
-                  style="background:#fff!important;border:1.5px solid #16a34a!important;color:#16a34a!important;">
+                  style="background:#16a34a!important;border:1.5px solid #16a34a!important;color:#fff!important;">
             <i class="bi bi-whatsapp"></i> WhatsApp
           </button>
           <a href="{{ url_for('fretes.editar', id=frete.id) }}" class="fcb"
-             style="background:#e8f0fe!important;border:1.5px solid #1D63A5!important;color:#1D63A5!important;">
+             style="background:#fef9c3!important;border:1.5px solid #ca8a04!important;color:#854d0e!important;">
             <i class="bi bi-pencil"></i> Editar
           </a>
           <form method="post" action="{{ url_for('fretes.deletar', id=frete.id) }}"
@@ -1183,13 +1185,13 @@ document.querySelectorAll('.btn-wa-frete').forEach(function(btn) {
 
   // ── Chevron do filtro mobile ─────────────────────────────────────────────
   var filtrosMobCollapse = document.getElementById('filtros-mob-collapse');
-  var mobChevron = document.getElementById('mob-filter-chevron');
+  var mobFunnelBtn = document.querySelector('.mob-hdr-filter-btn');
   if (filtrosMobCollapse) {
     filtrosMobCollapse.addEventListener('show.bs.collapse', function() {
-      if (mobChevron) mobChevron.style.transform = 'rotate(180deg)';
+      if (mobFunnelBtn) mobFunnelBtn.style.background = 'rgba(255,255,255,.38)';
     });
     filtrosMobCollapse.addEventListener('hide.bs.collapse', function() {
-      if (mobChevron) mobChevron.style.transform = 'rotate(0deg)';
+      if (mobFunnelBtn) mobFunnelBtn.style.background = 'rgba(255,255,255,.18)';
     });
   }
 })();
