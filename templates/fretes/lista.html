@@ -344,6 +344,34 @@
   </div>
 </div>
 
+<!-- Modal de compartilhamento após emissão -->
+<div id="share-boleto-modal" class="modal" tabindex="-1" role="dialog" aria-hidden="true" style="display:none;z-index:1065;">
+  <div class="modal-dialog modal-dialog-centered" role="document" style="max-width:420px;">
+    <div class="modal-content">
+      <div class="modal-header border-0 pb-0">
+        <h5 class="modal-title fw-bold text-success">
+          <i class="bi bi-check-circle-fill me-2"></i>Boleto emitido com sucesso!
+        </h5>
+      </div>
+      <div class="modal-body text-center pt-2">
+        <p id="share-boleto-desc" class="text-muted mb-4" style="font-size:.9rem;"></p>
+        <div class="d-grid gap-2">
+          <a id="share-whatsapp-btn" href="#" target="_blank" rel="noopener noreferrer"
+             class="btn btn-success btn-lg">
+            📱 Enviar WhatsApp
+          </a>
+          <button id="share-download-btn" type="button" class="btn btn-outline-primary btn-lg">
+            📄 Baixar PDF
+          </button>
+          <button id="share-close-btn" type="button" class="btn btn-secondary">
+            Fechar
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- Modal Quitar -->
 <div id="quitar-frete-modal" class="modal" tabindex="-1" role="dialog" aria-hidden="true" style="display:none;">
   <div class="modal-dialog" role="document">
@@ -488,10 +516,7 @@ document.addEventListener('DOMContentLoaded', function () {
         });
         const j = await resp.json();
         if (resp.ok && j.success){
-          feedback.className = 'alert alert-success';
-          feedback.textContent = 'Boleto(s) emitido(s) com sucesso.';
-          feedback.style.display = 'block';
-          setTimeout(()=> { closeModal(modal); location.reload(); }, 700);
+          showShareModal(j);
         } else {
           feedback.className = 'alert alert-danger';
           feedback.textContent = j.error || 'Falha ao emitir boletos';
@@ -514,28 +539,9 @@ document.addEventListener('DOMContentLoaded', function () {
         });
         const j = await resp.json();
         if (resp.ok && j.success){
-          feedback.className = 'alert alert-success';
-          feedback.textContent = 'Boleto emitido com sucesso.';
-          feedback.style.display = 'block';
-
-          if (j.boleto_url) {
-            window.open(j.boleto_url, '_blank');
-          } else if (j.pdf_boleto) {
-            if (typeof j.pdf_boleto === 'string' && (j.pdf_boleto.startsWith('http://') || j.pdf_boleto.startsWith('https://'))) {
-              window.open(j.pdf_boleto, '_blank');
-            } else {
-              window.open('/financeiro/visualizar-boleto/' + j.charge_id + '/', '_blank');
-            }
-          } else if (j.charge_id) {
-            window.open('/financeiro/visualizar-boleto/' + j.charge_id + '/', '_blank');
-          }
-
-          const btn = document.querySelector(`.btn-emit-boleto[data-frete-id="${freteId}"]`);
-          if (btn){
-            btn.disabled = true;
-            btn.title = 'Boleto já emitido (cancele no financeiro para reemitir)';
-          }
-          setTimeout(()=> { closeModal(modal); location.reload(); }, 700);
+          const rowBtn = document.querySelector(`.btn-emit-boleto[data-frete-id="${freteId}"]`);
+          if (rowBtn){ rowBtn.disabled = true; rowBtn.title = 'Boleto já emitido (cancele no financeiro para reemitir)'; }
+          showShareModal(j);
         } else {
           feedback.className = 'alert alert-danger';
           feedback.textContent = j.error || 'Falha ao emitir boleto';
@@ -550,6 +556,69 @@ document.addEventListener('DOMContentLoaded', function () {
       emitBtn.disabled = false;
     }
   });
+
+  // ── Share modal (exibido após emissão bem-sucedida) ──────────
+  const shareModal = qs('#share-boleto-modal');
+
+  function showShareModal(data) {
+    const chargeId  = data.charge_id || '';
+    const nome      = data.cliente_nome || '';
+    const valor     = data.valor != null
+      ? 'R$ ' + parseFloat(data.valor).toLocaleString('pt-BR', {minimumFractionDigits:2, maximumFractionDigits:2})
+      : '';
+    const venc      = data.data_vencimento || '';
+    const viewUrl   = data.visualizar_url || ('/financeiro/visualizar-boleto/' + chargeId + '/');
+
+    // descrição no modal
+    let parts = [];
+    if (nome) parts.push(nome);
+    if (valor) parts.push(valor);
+    if (venc)  parts.push('Vence ' + venc);
+    qs('#share-boleto-desc').textContent = parts.join(' — ');
+
+    // WhatsApp
+    const origin = window.location.origin;
+    let msg = 'Olá' + (nome ? ', ' + nome : '') + '!\n\nSegue o boleto:\n';
+    if (valor) msg += 'Valor: ' + valor + '\n';
+    if (venc)  msg += 'Vencimento: ' + venc + '\n';
+    msg += 'Link: ' + origin + viewUrl;
+    qs('#share-whatsapp-btn').href = 'https://wa.me/?text=' + encodeURIComponent(msg);
+
+    // PDF download
+    const nomeSafe = nome.replace(/[^a-zA-Z0-9 À-ÿ]/g, '').trim().replace(/\s+/g, '_') || 'boleto';
+    const vencSafe = venc.replace(/\//g, '-');
+    qs('#share-download-btn').onclick = () => downloadBoletoPDF(chargeId, nomeSafe + '_' + vencSafe);
+
+    // Fechar → recebimentos
+    qs('#share-close-btn').onclick = () => { window.location.href = '/financeiro/recebimentos/'; };
+
+    closeModal(modal);
+    showModal(shareModal);
+  }
+
+  async function downloadBoletoPDF(chargeId, filename) {
+    try {
+      const r = await fetch('/financeiro/download-boleto/' + chargeId + '/');
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      const blob = await r.blob();
+      const url  = URL.createObjectURL(blob);
+      const a    = document.createElement('a');
+      a.href = url;
+      a.download = filename + '.pdf';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      alert('Erro ao baixar PDF: ' + e);
+    }
+  }
+
+  if (shareModal) {
+    shareModal.addEventListener('click', function(e) {
+      if (e.target === shareModal) window.location.href = '/financeiro/recebimentos/';
+    });
+  }
 
   // Quitar: abrir modal para 1 frete (btn-quitar) ou selecionados
   qsa('.btn-quitar').forEach(btn => {
