@@ -321,6 +321,19 @@ def create_app():
     app.logger.info("Registro de blueprints concluído!")
     app.logger.info("="*60)
 
+    # Executa todas as migrations SQL pendentes em /migrations/ na inicialização.
+    # Cria a tabela schema_migrations se não existir e aplica cada arquivo .sql
+    # exatamente uma vez, em ordem alfabética (prefixo YYYYMMDD garante cronologia).
+    with app.app_context():
+        try:
+            from utils.migrations_runner import run_pending_migrations
+            run_pending_migrations(app)
+        except Exception:
+            app.logger.warning(
+                "Migration runner falhou na inicialização (não crítico).",
+                exc_info=True,
+            )
+
     # Executa migrations opcionais de schema na inicialização do servidor.
     # Garante que as colunas adicionadas em versões recentes (descricao_chave,
     # bank_transaction_id, etc.) existam antes da primeira request, evitando
