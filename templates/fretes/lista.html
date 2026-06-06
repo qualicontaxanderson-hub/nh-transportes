@@ -345,32 +345,59 @@
 </div>
 
 <!-- Modal de compartilhamento após emissão -->
-<div id="share-boleto-modal" class="modal" tabindex="-1" role="dialog" aria-hidden="true" style="display:none;z-index:1065;">
-  <div class="modal-dialog modal-dialog-centered" role="document" style="max-width:420px;">
-    <div class="modal-content">
-      <div class="modal-header border-0 pb-0">
-        <h5 class="modal-title fw-bold text-success">
-          <i class="bi bi-check-circle-fill me-2"></i>Boleto emitido com sucesso!
-        </h5>
-      </div>
-      <div class="modal-body text-center pt-2">
-        <p id="share-boleto-desc" class="text-muted mb-4" style="font-size:.9rem;"></p>
-        <div class="d-grid gap-2">
-          <a id="share-whatsapp-btn" href="#" target="_blank" rel="noopener noreferrer"
-             class="btn btn-success btn-lg">
-            📱 Enviar WhatsApp
-          </a>
-          <button id="share-download-btn" type="button" class="btn btn-outline-primary btn-lg">
-            📄 Baixar PDF
-          </button>
-          <button id="share-close-btn" type="button" class="btn btn-secondary">
-            Fechar
-          </button>
-        </div>
-      </div>
+<div id="share-boleto-modal" tabindex="-1" aria-modal="true" role="dialog"
+     style="display:none;position:fixed;inset:0;z-index:1065;background:rgba(0,0,0,.55);
+            align-items:center;justify-content:center;">
+  <div style="background:#fff;border-radius:1.1rem;padding:2.25rem 2rem 1.75rem;
+              max-width:400px;width:90%;box-shadow:0 12px 48px rgba(0,0,0,.22);
+              text-align:center;position:relative;animation:shareModalIn .22s ease;">
+    <!-- Ícone check -->
+    <div style="width:4.5rem;height:4.5rem;border-radius:50%;
+                background:linear-gradient(135deg,#22c55e,#16a34a);
+                display:flex;align-items:center;justify-content:center;
+                margin:0 auto 1.2rem;box-shadow:0 4px 18px rgba(34,197,94,.35);">
+      <i class="bi bi-check-lg" style="font-size:2.2rem;color:#fff;"></i>
+    </div>
+    <!-- Título -->
+    <h5 style="font-weight:700;font-size:1.15rem;color:#1a1a1a;margin-bottom:.45rem;">
+      Boleto emitido com sucesso!
+    </h5>
+    <!-- Descrição -->
+    <p id="share-boleto-desc"
+       style="font-size:.82rem;color:#6b7280;margin-bottom:1.75rem;line-height:1.5;"></p>
+    <!-- Botões -->
+    <div style="display:flex;flex-direction:column;gap:.7rem;">
+      <a id="share-whatsapp-btn" href="#" target="_blank" rel="noopener noreferrer"
+         style="display:flex;align-items:center;justify-content:center;gap:.55rem;
+                background:#16a34a;color:#fff;border:none;border-radius:.65rem;
+                padding:.8rem 1rem;font-size:.95rem;font-weight:600;
+                text-decoration:none;cursor:pointer;transition:background .15s;">
+        <i class="bi bi-whatsapp" style="font-size:1.1rem;"></i>
+        Enviar pelo WhatsApp
+      </a>
+      <button id="share-download-btn" type="button"
+         style="display:flex;align-items:center;justify-content:center;gap:.55rem;
+                background:#1D63A5;color:#fff;border:none;border-radius:.65rem;
+                padding:.8rem 1rem;font-size:.95rem;font-weight:600;
+                cursor:pointer;transition:background .15s;">
+        <i class="bi bi-file-earmark-arrow-down" style="font-size:1.1rem;"></i>
+        Baixar PDF
+      </button>
+      <button id="share-close-btn" type="button"
+         style="background:transparent;border:1.5px solid #d1d5db;border-radius:.65rem;
+                padding:.5rem 1rem;font-size:.82rem;color:#6b7280;font-weight:500;
+                cursor:pointer;transition:border-color .15s,color .15s;">
+        Fechar
+      </button>
     </div>
   </div>
 </div>
+<style>
+@keyframes shareModalIn {
+  from { opacity:0; transform:translateY(-14px) scale(.97); }
+  to   { opacity:1; transform:translateY(0)     scale(1);   }
+}
+</style>
 
 <!-- Modal Quitar -->
 <div id="quitar-frete-modal" class="modal" tabindex="-1" role="dialog" aria-hidden="true" style="display:none;">
@@ -593,7 +620,7 @@ document.addEventListener('DOMContentLoaded', function () {
     qs('#share-close-btn').onclick = () => { window.location.href = '/financeiro/recebimentos/'; };
 
     closeModal(modal);
-    showModal(shareModal);
+    shareModal.style.display = 'flex';
   }
 
   async function downloadBoletoPDF(chargeId, filename) {
@@ -618,6 +645,12 @@ document.addEventListener('DOMContentLoaded', function () {
     shareModal.addEventListener('click', function(e) {
       if (e.target === shareModal) window.location.href = '/financeiro/recebimentos/';
     });
+    const waBtn = qs('#share-whatsapp-btn');
+    const dlBtn = qs('#share-download-btn');
+    const clBtn = qs('#share-close-btn');
+    if (waBtn) { waBtn.onmouseover = () => waBtn.style.background = '#15803d'; waBtn.onmouseout = () => waBtn.style.background = '#16a34a'; }
+    if (dlBtn) { dlBtn.onmouseover = () => dlBtn.style.background = '#174f86'; dlBtn.onmouseout = () => dlBtn.style.background = '#1D63A5'; }
+    if (clBtn) { clBtn.onmouseover = () => { clBtn.style.borderColor='#9ca3af'; clBtn.style.color='#374151'; }; clBtn.onmouseout = () => { clBtn.style.borderColor='#d1d5db'; clBtn.style.color='#6b7280'; }; }
   }
 
   // Quitar: abrir modal para 1 frete (btn-quitar) ou selecionados
