@@ -49,56 +49,115 @@
   /* filter card */
   .frt-filter-header { background: #1D63A5; color: #fff; font-size: 0.78rem; font-weight: 600; padding: .45rem .75rem; border-radius: .35rem .35rem 0 0; }
 
-  /* ── Mobile cards (fretes) ───────────────────────────── */
+  /* ── Mobile cards — fretes (tudo dentro de @media para isolar do CSS global) ── */
   @media (max-width: 767.98px) {
-    body { background: #f5f5f0; }
+    body { background: #f5f5f0 !important; }
+
+    /* ── Section header laranja ── */
+    .frete-mob-hdr {
+      background: linear-gradient(90deg, #e07020, #f0a040) !important;
+      border-radius: .65rem;
+      padding: .7rem 1rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: .75rem;
+    }
+    .frete-mob-hdr-title { font-size: .88rem; font-weight: 700; color: #fff !important; }
+    .frete-mob-hdr-period { font-size: .8rem; font-weight: 600; color: rgba(255,255,255,.88) !important; }
+
+    /* ── Card individual ── */
+    .frete-card {
+      background: #fff !important;
+      border: 1px solid #e8e8e8 !important;
+      border-radius: .75rem;
+      margin-bottom: .65rem;
+      overflow: hidden;
+      box-shadow: none !important;
+    }
+    .frete-card-hdr {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: .38rem .85rem;
+      background: #fafafa !important;
+      border-bottom: 1px solid #f0f0f0;
+      font-size: .67rem;
+      color: #9ca3af;
+    }
+    .frete-card-body { padding: .6rem .85rem .75rem; }
+
+    /* ── Nome do cliente — sem caixa alta ── */
+    .frete-card-cliente {
+      font-size: .92rem !important;
+      font-weight: 600 !important;
+      color: #1a1a1a !important;
+      text-transform: none !important;
+      letter-spacing: 0 !important;
+      margin-bottom: .1rem;
+    }
+
+    /* ── Fornecedor · Motorista ── */
+    .frete-card-meta {
+      font-size: .72rem;
+      color: #9ca3af;
+      margin-bottom: .55rem;
+      text-transform: none !important;
+    }
+
+    /* ── Valores lado a lado (sem box, só texto) ── */
+    .frete-card-vals {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: .6rem;
+      margin-bottom: .65rem;
+    }
+    .frete-val-lbl {
+      font-size: .6rem;
+      color: #9ca3af;
+      font-weight: 600;
+      letter-spacing: .01em;
+      text-transform: none !important;
+    }
+    .frete-val-num { font-size: .88rem; font-weight: 700; margin-top: .05rem; }
+
+    /* ── Grid 2×2 de botões ── */
+    .frete-card-acts { display: grid; grid-template-columns: 1fr 1fr; gap: .4rem; }
+
+    /* ── Botão outline base ── */
+    .fcb {
+      display: flex !important;
+      align-items: center;
+      justify-content: center;
+      gap: .3rem;
+      padding: .44rem .4rem;
+      background: #fff !important;
+      background-color: #fff !important;
+      border-radius: .55rem;
+      font-size: .78rem !important;
+      font-weight: 600;
+      cursor: pointer;
+      text-decoration: none !important;
+      transition: opacity .15s;
+      width: 100%;
+      box-sizing: border-box;
+      border-style: solid;
+      border-width: 1.5px;
+    }
+
+    /* ── Variantes de cor — borda + texto, fundo branco ── */
+    .fcb.fcb-blue  { border-color: #1D63A5 !important; color: #1D63A5 !important; }
+    .fcb.fcb-green { border-color: #16a34a !important; color: #16a34a !important; }
+    .fcb.fcb-gray  { border-color: #9ca3af !important; color: #6b7280 !important; }
+    .fcb.fcb-red   { border-color: #e05050 !important; color: #e05050 !important; }
+    .fcb.fcb-dis   { border-color: #d1d5db !important; color: #9ca3af !important; }
+    .fcb:hover { opacity: .78; text-decoration: none !important; }
+    .fcb:disabled, .fcb[disabled] {
+      opacity: .35;
+      cursor: not-allowed;
+      background: #fff !important;
+    }
   }
-  .frete-mob-hdr {
-    background: linear-gradient(90deg, #e07020, #f0a040);
-    border-radius: .65rem;
-    padding: .7rem 1rem;
-    display: flex; align-items: center; justify-content: space-between;
-    margin-bottom: .7rem;
-  }
-  .frete-mob-hdr-title { font-size: .88rem; font-weight: 700; color: #fff; }
-  .frete-mob-hdr-period { font-size: .8rem; font-weight: 600; color: rgba(255,255,255,.88); }
-  .frete-card {
-    background: #fff;
-    border: 1px solid #e8e8e8;
-    border-radius: .75rem;
-    margin-bottom: .6rem; overflow: hidden;
-  }
-  .frete-card-hdr {
-    display: flex; align-items: center; justify-content: space-between;
-    padding: .4rem .85rem; background: #fafafa;
-    border-bottom: 1px solid #f0f0f0; font-size: .67rem; color: #9ca3af;
-  }
-  .frete-card-body { padding: .6rem .85rem .75rem; }
-  .frete-card-cliente {
-    font-size: .92rem; font-weight: 600; color: #1a1a1a;
-    text-transform: none !important; margin-bottom: .1rem;
-  }
-  .frete-card-meta { font-size: .72rem; color: #9ca3af; margin-bottom: .55rem; }
-  .frete-card-vals {
-    display: grid; grid-template-columns: 1fr 1fr;
-    gap: .6rem; margin-bottom: .65rem;
-  }
-  .frete-val-lbl { font-size: .6rem; color: #9ca3af; font-weight: 600; letter-spacing: .01em; }
-  .frete-val-num { font-size: .88rem; font-weight: 700; margin-top: .06rem; }
-  .frete-card-acts { display: grid; grid-template-columns: 1fr 1fr; gap: .4rem; }
-  .fcb {
-    display: flex; align-items: center; justify-content: center; gap: .3rem;
-    padding: .44rem .4rem; background: #fff; border-radius: .55rem;
-    font-size: .78rem; font-weight: 600; cursor: pointer;
-    text-decoration: none; transition: opacity .15s; width: 100%; box-sizing: border-box;
-  }
-  .fcb-blue  { border: 1.5px solid #1D63A5; color: #1D63A5; }
-  .fcb-green { border: 1.5px solid #16a34a; color: #16a34a; }
-  .fcb-gray  { border: 1.5px solid #9ca3af; color: #6b7280; }
-  .fcb-red   { border: 1.5px solid #e05050; color: #e05050; }
-  .fcb-dis   { border: 1.5px solid #d1d5db; color: #9ca3af; }
-  .fcb:hover { opacity: .78; text-decoration: none; }
-  .fcb:disabled { opacity: .35; cursor: not-allowed; }
 </style>
 {% endblock %}
 
