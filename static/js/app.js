@@ -48,7 +48,7 @@ document.addEventListener('DOMContentLoaded', function() {
   var textInputs = document.querySelectorAll('input[type="text"], input:not([type])');
   textInputs.forEach(function(input) {
     // Ignora campos que não devem ser convertidos
-    var excludeNames = ['email', 'password', 'senha', 'observacao', 'observacoes'];
+    var excludeNames = ['email', 'password', 'senha', 'observacao', 'observacoes', 'nome_fantasia', 'razao_social'];
     var excludeTypes = ['email', 'password', 'url'];
     
     var inputName = (input.name || '').toLowerCase();
