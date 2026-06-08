@@ -493,14 +493,17 @@ def get_funcionarios_por_cliente(cliente_id):
         columns = [col['Field'] for col in cursor.fetchall()]
         print(f"[DEBUG] Colunas da tabela funcionarios: {columns}")
         
-        # Determinar qual nome de coluna usar
+        # Determinar qual nome de coluna usar.
+        # ATENÇÃO: checar id_cliente antes de clienteid — a tabela funcionarios
+        # pode ter ambas as colunas (clienteid foi adicionada por migration mas
+        # fica NULL; id_cliente é onde os dados reais são gravados pelo CRUD).
         cliente_column = None
-        if 'clienteid' in columns:
-            cliente_column = 'clienteid'
+        if 'id_cliente' in columns:
+            cliente_column = 'id_cliente'
         elif 'cliente_id' in columns:
             cliente_column = 'cliente_id'
-        elif 'id_cliente' in columns:
-            cliente_column = 'id_cliente'
+        elif 'clienteid' in columns:
+            cliente_column = 'clienteid'
         
         if not cliente_column:
             print(f"[AVISO] Coluna de cliente não encontrada. Retornando todos os funcionários ativos.")
