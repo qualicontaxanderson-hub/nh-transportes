@@ -743,7 +743,11 @@ def novo():
         # Get receipt types from database
         cursor.execute("SELECT * FROM tipos_receita_caixa WHERE ativo = 1 ORDER BY nome")
         tipos_receita = cursor.fetchall()
-        
+        # Deduplicate by nome in case the table has duplicate rows
+        _seen_nomes: set = set()
+        tipos_receita = [t for t in tipos_receita
+                         if t['nome'] not in _seen_nomes and not _seen_nomes.add(t['nome'])]
+
         # Convert cursor results to plain Python types to avoid serialization issues
         def convert_to_plain_python(obj):
             """Convert MySQL cursor results to plain Python types"""
@@ -827,7 +831,10 @@ def novo():
             cartoes = cursor.fetchall()
             cursor.execute("SELECT * FROM tipos_receita_caixa WHERE ativo = 1 ORDER BY nome")
             tipos_receita = cursor.fetchall()
-            
+            _seen_nomes2: set = set()
+            tipos_receita = [t for t in tipos_receita
+                             if t['nome'] not in _seen_nomes2 and not _seen_nomes2.add(t['nome'])]
+
             # Convert to plain Python types before JSON serialization
             def convert_to_plain_python(obj):
                 """Convert MySQL cursor results to plain Python types"""
@@ -1390,7 +1397,10 @@ def editar(id):
             ORDER BY nome
         """)
         tipos_receita = cursor.fetchall()
-        
+        _seen_nomes3: set = set()
+        tipos_receita = [t for t in tipos_receita
+                         if t['nome'] not in _seen_nomes3 and not _seen_nomes3.add(t['nome'])]
+
         # Convert cursor results to plain Python dicts/lists immediately
         # This avoids any special MySQL connector types that can't be serialized
         def convert_to_plain_python(obj):
