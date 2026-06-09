@@ -116,6 +116,11 @@ def index():
             ORDER BY t.ordem, t.nome
         """)
         titulos = cursor.fetchall()
+        # Deduplicate by nome in case the table has duplicate rows
+        # (migration applied multiple times cria títulos repetidos com ids distintos)
+        _seen_titulos: set = set()
+        titulos = [t for t in titulos
+                   if t['nome'] not in _seen_titulos and not _seen_titulos.add(t['nome'])]
 
         # Companies with active products for the filter dropdown
         cursor.execute(

@@ -83,6 +83,28 @@
         return _fetch.apply(this, arguments);
       };
 
+      // 2b) Intercepta envio programático de formulários (form.submit()).
+      //     Forms criados dinamicamente via JS e submetidos com .submit() NÃO
+      //     disparam o evento 'submit' nem passam pelo passo (1) do DOMContentLoaded,
+      //     ficando sem o csrf_token. Aqui injetamos o token antes de qualquer envio.
+      (function () {
+        var _submit = HTMLFormElement.prototype.submit;
+        HTMLFormElement.prototype.submit = function () {
+          var method = (this.getAttribute('method') || 'GET').toUpperCase();
+          if (method === 'POST') {
+            var token = getCsrfToken();
+            if (token && !this.querySelector('input[name="csrf_token"]')) {
+              var inp = document.createElement('input');
+              inp.type  = 'hidden';
+              inp.name  = 'csrf_token';
+              inp.value = token;
+              this.appendChild(inp);
+            }
+          }
+          return _submit.apply(this, arguments);
+        };
+      })();
+
       // 3) jQuery AJAX (configurado após jQuery carregar)
       document.addEventListener('DOMContentLoaded', function () {
         if (typeof $ === 'undefined') return;
