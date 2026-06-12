@@ -105,6 +105,25 @@
         };
       })();
 
+      // 2c) Intercepta envio nativo de formulários (clique em <button type="submit">).
+      //     Forms criados dinamicamente APÓS o DOMContentLoaded (passo 1) e enviados
+      //     por clique no botão de submit NÃO passam pelo passo (1) nem pelo override
+      //     de .submit() (passo 2b, que só pega .submit() programático). O evento
+      //     'submit' em fase de captura cobre justamente esse caso, injetando o token
+      //     antes do envio. Complementa (não conflita com) o passo 2b.
+      document.addEventListener('submit', function (e) {
+        var form = e.target;
+        if (!form || (form.getAttribute('method') || 'GET').toUpperCase() !== 'POST') return;
+        if (form.querySelector('input[name="csrf_token"]')) return;
+        var token = getCsrfToken();
+        if (!token) return;
+        var inp = document.createElement('input');
+        inp.type  = 'hidden';
+        inp.name  = 'csrf_token';
+        inp.value = token;
+        form.appendChild(inp);
+      }, true);
+
       // 3) jQuery AJAX (configurado após jQuery carregar)
       document.addEventListener('DOMContentLoaded', function () {
         if (typeof $ === 'undefined') return;
