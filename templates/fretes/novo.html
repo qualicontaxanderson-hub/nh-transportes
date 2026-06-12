@@ -262,7 +262,7 @@
             <label for="preco_por_litro" class="form-label">Preço por Litro (R$)</label>
             <input type="text" id="preco_por_litro" name="preco_por_litro"
                    class="form-control form-control-sm"
-                   value="{{ 'R$ {:.2f}'.format(frete.preco_por_litro).replace('.', ',') if frete and frete.preco_por_litro else 'R$ 0,00' }}"
+                   value="{{ 'R$ {:.3f}'.format(frete.preco_por_litro).replace('.', ',') if frete and frete.preco_por_litro else 'R$ 0,000' }}"
                    required>
           </div>
         </div>

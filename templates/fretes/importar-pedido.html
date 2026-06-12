@@ -168,6 +168,16 @@ function formatarMoeda(valor) {
   return inteiro + ',' + decimal;
 }
 
+function formatarMoedaTres(valor) {
+  if (valor === null || valor === undefined) return '0,000';
+  let numero = parseFloat(valor).toFixed(3);
+  let partes = numero.split('.');
+  let inteiro = partes[0];
+  let decimal = partes[1];
+  inteiro = inteiro.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+  return inteiro + ',' + decimal;
+}
+
 // calcularItem do modal (usa nomes itens[index][...])
 function calcularItem(itemDiv) {
   try {
@@ -183,7 +193,7 @@ function calcularItem(itemDiv) {
       const onlyDigits = raw.replace(/\D/g, '');
       const hasSeparator = raw.indexOf(',') >= 0 || raw.indexOf('.') >= 0;
       if (onlyDigits && !hasSeparator) {
-        precoPorLitro = parseInt(onlyDigits, 10) / 100.0;
+        precoPorLitro = parseInt(onlyDigits, 10) / 1000.0;
       } else {
         precoPorLitro = desformatarMoeda(raw);
       }
@@ -235,7 +245,7 @@ function calcularItem(itemDiv) {
 
     const precoLitroContainer = itemDiv.querySelector('.campo-preco-litro-container');
     if (!clientePagaComissao) {
-      if (precoLitroInput) precoLitroInput.value = '0,00';
+      if (precoLitroInput) precoLitroInput.value = '0,000';
       if (precoLitroInput) precoLitroInput.readOnly = true;
       if (precoLitroContainer) precoLitroContainer.style.display = 'none';
     } else {
@@ -300,11 +310,11 @@ function calcularItem(itemDiv) {
             return;
           }
           
-          // converter centavos para reais (divide por 100)
-          const valueToUse = parseInt(onlyDigits, 10) / 100.0;
-          
-          // formatar para exibição BR
-          const newValue = formatarMoeda(valueToUse);
+          // converter milésimos para reais (divide por 1000)
+          const valueToUse = parseInt(onlyDigits, 10) / 1000.0;
+
+          // formatar para exibição BR com 3 casas decimais
+          const newValue = formatarMoedaTres(valueToUse);
           inputPrecoLitro.value = newValue;
           
           // posicionar cursor no final (melhor UX para entrada sequencial de números)

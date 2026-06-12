@@ -20,7 +20,7 @@ class Frete(db.Model):
 
     preco_produto_unitario = db.Column(db.Numeric(10, 2), nullable=False)
     total_nf_compra = db.Column(db.Numeric(10, 2), nullable=False)
-    preco_por_litro = db.Column(db.Numeric(10, 2), nullable=False)
+    preco_por_litro = db.Column(db.Numeric(10, 3), nullable=False)
     valor_total_frete = db.Column(db.Numeric(10, 2), nullable=False)
 
     comissao_motorista = db.Column(db.Numeric(10, 2), nullable=True, default=0)

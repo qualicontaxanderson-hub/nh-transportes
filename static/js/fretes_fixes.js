@@ -73,6 +73,8 @@ function aplicarFormatacaoMonetaria(el, casas) {
         // para campos com 2 casas, arredondar a 2 casas no raw se preferir:
         if (casas === 2) {
           rawEl.value = (Math.round((Number(valorNum || 0) + Number.EPSILON) * 100) / 100);
+        } else if (casas === 3) {
+          rawEl.value = (Math.round((Number(valorNum || 0) + Number.EPSILON) * 1000) / 1000);
         }
       }
     } catch (e) {
@@ -115,15 +117,15 @@ function initFretesFixes() {
   }
 
   if (elPrecoPorLitro) {
-    aplicarFormatacaoMonetaria(elPrecoPorLitro, 2);
-    
+    aplicarFormatacaoMonetaria(elPrecoPorLitro, 3);
+
     // Auto-select all on focus to allow easy overwrite
     elPrecoPorLitro.addEventListener('focus', function(){
       this.select();
     });
-    
+
     elPrecoPorLitro.addEventListener('blur', function(){
-      aplicarFormatacaoMonetaria(this, 2);
+      aplicarFormatacaoMonetaria(this, 3);
       try{ if (typeof calcularTudo==='function') calcularTudo(); }catch(e){}
     });
     
