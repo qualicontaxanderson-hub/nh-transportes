@@ -156,6 +156,7 @@ def lista():
                 COALESCE(f.lucro, 0) AS lucro,
                 COALESCE(f.status, '') AS status,
                 COALESCE(f.quantidade_manual, 0) AS quantidade,
+                COALESCE(f.preco_por_litro, 0) AS preco_por_litro,
                 CASE 
                     WHEN EXISTS(
                         SELECT 1 FROM cobrancas cb 
