@@ -4,6 +4,18 @@ from utils.db import get_db_connection
 
 bp = Blueprint('rotas', __name__, url_prefix='/rotas')
 
+# Mensagem amigável quando a rota (origem+destino) já existe.
+# Garantida pelo índice único uq_rotas_origem_destino (erro MySQL 1062).
+ROTA_DUPLICADA_MSG = 'Já existe uma rota para essa origem e destino.'
+
+
+def _is_duplicada(exc):
+    """True se a exceção for violação do índice único origem+destino (MySQL 1062)."""
+    code = getattr(exc, 'errno', None)
+    if code is None and getattr(exc, 'args', None):
+        code = exc.args[0]
+    return code == 1062
+
 def get_db():
     """Usa a conexão centralizada com credenciais seguras"""
     return get_db_connection()
@@ -59,7 +71,10 @@ def novo():
         except Exception as e:
             if conn:
                 conn.rollback()
-            flash(f'Erro ao cadastrar rota: {str(e)}', 'danger')
+            if _is_duplicada(e):
+                flash(ROTA_DUPLICADA_MSG, 'warning')
+            else:
+                flash(f'Erro ao cadastrar rota: {str(e)}', 'danger')
         finally:
             if cursor:
                 cursor.close()
@@ -108,7 +123,10 @@ def editar(id):
         except Exception as e:
             if conn:
                 conn.rollback()
-            flash(f'Erro ao atualizar rota: {str(e)}', 'danger')
+            if _is_duplicada(e):
+                flash(ROTA_DUPLICADA_MSG, 'warning')
+            else:
+                flash(f'Erro ao atualizar rota: {str(e)}', 'danger')
     
     cursor.execute("SELECT * FROM rotas WHERE id = %s", (id,))
     rota = cursor.fetchone()
