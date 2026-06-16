@@ -1,6 +1,16 @@
 // Utilitários e bindings usados pelo formulário de frete.
 // Deve ser carregado antes de fretes_calculos.js
 
+// Frete EXISTENTE = template (editar) renderizou <input name="id"> com valor.
+// Local (independente da ordem de carga) — usado para NÃO recalcular no load e
+// preservar o CTe/valores gravados. Recálculo por mudança do usuário segue normal.
+function freteExistenteFix() {
+  try {
+    var el = document.querySelector('input[name="id"]');
+    return !!(el && String(el.value).trim() !== '');
+  } catch (e) { return false; }
+}
+
 // Converte string formatada para número (aceita formatos BR: "R$ 1.234,56" ou "1.234,56" ou "1234.56")
 function desformatarMoeda(input) {
   if (input === null || input === undefined) return 0;
@@ -87,6 +97,10 @@ function aplicarFormatacaoMonetaria(el, casas) {
 }
 
 function initFretesFixes() {
+  // Durante a inicialização, as chamadas iniciais aplicarTipo()/aplicarCliente()
+  // disparam calcularTudo(). Em frete EXISTENTE não queremos recalcular no load
+  // (preservar CTe/valores gravados). O flag marca essa janela de "load".
+  window.__FIX_INITIAL_LOAD = true;
   var elPrecoProduto = document.getElementById('preco_produto_unitario');
   var elPrecoPorLitro = document.getElementById('preco_por_litro');
   var elComissaoMotorista = document.getElementById('comissao_motorista');
@@ -162,7 +176,8 @@ function initFretesFixes() {
         divPadrao.style.display = '';
         divManual.style.display = 'none';
       }
-      try{ if (typeof calcularTudo==='function') calcularTudo(); }catch(e){}
+      // no load de frete existente, só ajusta a visibilidade — não recalcula (mantém o gravado)
+      try{ if (typeof calcularTudo==='function' && !(window.__FIX_INITIAL_LOAD && freteExistenteFix())) calcularTudo(); }catch(e){}
     }
     qTipo.addEventListener('change', aplicarTipo);
     aplicarTipo();
@@ -217,15 +232,20 @@ function initFretesFixes() {
       }
       if (destHidden) destHidden.value = destinoId || '';
 
-      // recalcular tudo
-      try { if (typeof calcularTudo === 'function') calcularTudo(); } catch(e){}
+      // recalcular tudo — no load de frete EXISTENTE não recalcula (mantém o gravado);
+      // as flags do cliente acima já foram definidas, o recálculo segue normal em mudanças.
+      try {
+        if (typeof calcularTudo === 'function' && !(window.__FIX_INITIAL_LOAD && freteExistenteFix())) calcularTudo();
+      } catch(e){}
     }
 
     clienteSel.addEventListener('change', aplicarCliente);
 
-    // disparar uma vez para o valor já selecionado ao carregar
+    // disparar uma vez para o valor já selecionado ao carregar (define as flags do cliente).
     try { aplicarCliente(); } catch(e){}
   }
+  // fim da janela de load: a partir daqui, mudanças do usuário recalculam normalmente.
+  window.__FIX_INITIAL_LOAD = false;
 }
 
 // expor no escopo global
@@ -244,12 +264,16 @@ document.addEventListener('DOMContentLoaded', function(){
   setTimeout(function() {
     try {
       if (typeof calcularTudo === 'function') {
-        calcularTudo();
-        console.log('[INIT] calcularTudo chamado no carregamento da página');
+        if (freteExistenteFix()) {
+          console.log('[INIT] Frete existente -> mantendo valores gravados (sem recálculo no load).');
+        } else {
+          calcularTudo();
+          console.log('[INIT] calcularTudo chamado no carregamento da página');
+        }
       } else {
         console.warn('[INIT] calcularTudo ainda não definido');
       }
-    } catch (e) { 
+    } catch (e) {
       console.error('[INIT] Erro ao chamar calcularTudo:', e);
     }
   }, 100);

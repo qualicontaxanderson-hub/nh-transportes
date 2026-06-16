@@ -315,6 +315,27 @@ function calcularTudo() {
 window.calcularTudo = calcularTudo;
 window.parseBoolean = parseBoolean;
 
+// Frete EXISTENTE = o template (editar) renderizou <input name="id"> com valor.
+// Nesse caso NÃO recalculamos no load: mantemos o CTe e demais valores GRAVADOS
+// que o template já exibe. O recálculo só ocorre quando o usuário muda
+// origem/destino/quantidade/cliente/preço (os listeners de change/blur seguem ativos).
+function freteExistente() {
+  try {
+    var el = document.querySelector('input[name="id"]');
+    return !!(el && String(el.value).trim() !== '');
+  } catch (e) { return false; }
+}
+window.freteExistente = freteExistente;
+
+function calcularInicialSeNovo(origem) {
+  if (freteExistente()) {
+    console.log('[INIT] Frete existente -> mantendo valores gravados (sem recálculo no load).', origem || '');
+    return;
+  }
+  try { calcularTudo(); } catch (e) { console.error('[INIT] Erro no calcularTudo inicial:', e); }
+}
+window.calcularInicialSeNovo = calcularInicialSeNovo;
+
 // Registrar conteúdo de ROTAS no carregamento do script
 console.log('[INIT] Dicionário ROTAS carregado:', typeof ROTAS !== 'undefined' ? ROTAS : 'ROTAS não definido');
 console.log('[INIT] Chaves ROTAS:', typeof ROTAS !== 'undefined' ? Object.keys(ROTAS) : 'N/A');
@@ -324,19 +345,11 @@ console.log('[INIT] Total ROTAS:', typeof ROTAS !== 'undefined' ? Object.keys(RO
 // Isso garante que todos os elementos DOM e outros scripts estão prontos
 if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', function() {
-    console.log('[INIT] fretes_calculos.js: DOMContentLoaded, chamando calcularTudo');
-    try {
-      calcularTudo();
-    } catch (e) {
-      console.error('[INIT] Erro no calcularTudo inicial:', e);
-    }
+    console.log('[INIT] fretes_calculos.js: DOMContentLoaded');
+    calcularInicialSeNovo('calculos.DOMContentLoaded');
   });
 } else {
   // DOM já carregado, chamar imediatamente
-  console.log('[INIT] fretes_calculos.js: DOM já pronto, chamando calcularTudo');
-  try {
-    calcularTudo();
-  } catch (e) {
-    console.error('[INIT] Erro no calcularTudo inicial:', e);
-  }
+  console.log('[INIT] fretes_calculos.js: DOM já pronto');
+  calcularInicialSeNovo('calculos.imediato');
 }
