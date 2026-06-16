@@ -155,7 +155,7 @@ def lista():
                 f.valor_total_frete,
                 COALESCE(f.lucro, 0) AS lucro,
                 COALESCE(f.status, '') AS status,
-                COALESCE(f.quantidade_manual, 0) AS quantidade,
+                COALESCE(f.quantidade_manual, q.valor, 0) AS quantidade,
                 COALESCE(f.preco_por_litro, 0) AS preco_por_litro,
                 CASE 
                     WHEN EXISTS(
@@ -177,6 +177,7 @@ def lista():
             LEFT JOIN produto p ON f.produto_id = p.id
             LEFT JOIN motoristas m ON f.motoristas_id = m.id
             LEFT JOIN veiculos v ON f.veiculos_id = v.id
+            LEFT JOIN quantidades q ON f.quantidade_id = q.id
             {where_clause}
             ORDER BY f.data_frete DESC, f.id DESC
         """
