@@ -316,7 +316,7 @@
      data-url-api="{{ url_for('troco_pix.api_transacoes_banco', troco_pix_id=0)|replace('/0', '/') }}"
      data-data-inicio="{{ data_inicio }}"
      data-data-fim="{{ data_fim }}">
-  <div class="modal-dialog modal-lg">
+  <div class="modal-dialog modal-xl">
     <div class="modal-content">
       <div class="modal-header" style="background:#1D63A5;color:white;">
         <h5 class="modal-title"><i class="bi bi-link-45deg"></i> Vincular Transação Bancária</h5>
@@ -363,7 +363,7 @@
     return '<div style="font-size:0.78rem;">' +
       '<span class="badge bg-warning text-dark"><i class="bi bi-search"></i> Match</span>' +
       '<br><strong>' + (tx.data_transacao || '-') + '</strong>' +
-      '<br><span class="text-muted" style="max-width:180px;display:inline-block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + (tx.descricao || '-') + '</span>' +
+      '<br><span class="text-muted" style="max-width:none;display:inline-block;white-space:normal;word-break:break-word;">' + (tx.descricao || '-') + '</span>' +
       '<br><strong class="text-danger">R$ ' + parseFloat(tx.valor || 0).toLocaleString('pt-BR', {minimumFractionDigits: 2}) + '</strong>' +
       form + extra + '</div>';
   }

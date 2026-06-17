@@ -315,7 +315,7 @@
 
 <!-- ── Modal: Vincular Banco ── -->
 <div class="modal fade" id="modalVincular" tabindex="-1">
-  <div class="modal-dialog modal-lg">
+  <div class="modal-dialog modal-xl">
     <div class="modal-content">
       <div class="modal-header" style="background:#1D63A5;color:white;">
         <h5 class="modal-title"><i class="bi bi-link-45deg"></i> Vincular ao Banco</h5>
@@ -512,7 +512,7 @@
           <strong>${tx.data_transacao || '-'}</strong>
           <span class="text-muted mx-1">${tx.conta_apelido || tx.banco_nome || ''}</span>
           ${tx.forma_recebimento_nome ? `<span class="badge bg-secondary me-1" style="font-size:0.65rem;">${tx.forma_recebimento_nome}</span>` : ''}
-          <span style="max-width:200px;display:inline-block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:bottom;">${tx.descricao || '-'}</span>
+          <span style="max-width:none;display:inline-block;white-space:normal;word-break:break-word;vertical-align:bottom;">${tx.descricao || '-'}</span>
         </div>
         <span class="fw-bold text-success ms-2 text-nowrap">${fmtMoeda(tx.valor)}</span>
       </div>
