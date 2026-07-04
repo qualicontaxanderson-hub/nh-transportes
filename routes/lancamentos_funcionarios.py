@@ -155,13 +155,14 @@ def _ensure_tipo_funcionario(conn):
                 AND lf1.mes              = lf2.mes
                 AND lf1.rubricaid        = lf2.rubricaid
                 AND lf1.tipo_funcionario = lf2.tipo_funcionario
+                AND lf1.caminhaoid       = lf2.caminhaoid
                 AND lf1.id < lf2.id
         """)
         conn.commit()
         cur.execute("""
             ALTER TABLE lancamentosfuncionarios_v2
             ADD UNIQUE KEY uq_lancamento_tipo
-                (clienteid, funcionarioid, mes, rubricaid, tipo_funcionario)
+                (clienteid, funcionarioid, mes, rubricaid, tipo_funcionario, caminhaoid)
         """)
         conn.commit()
 
@@ -278,8 +279,8 @@ def novo():
                             cursor.execute("""
                                 INSERT INTO lancamentosfuncionarios_v2 (
                                     clienteid, funcionarioid, mes, rubricaid, valor,
-                                    statuslancamento, tipo_funcionario
-                                ) VALUES (%s, %s, %s, %s, %s, %s, %s)
+                                    statuslancamento, tipo_funcionario, caminhaoid
+                                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
                                 ON DUPLICATE KEY UPDATE
                                     valor = VALUES(valor),
                                     tipo_funcionario = VALUES(tipo_funcionario),
@@ -292,6 +293,8 @@ def novo():
                                 valor,
                                 'PENDENTE',
                                 tipo,
+                                0,  # caminhaoid: sentinela "sem veículo" (Etapa 1);
+                                    # valor real por veículo virá nas próximas etapas
                             ))
 
             conn.commit()
@@ -665,8 +668,8 @@ def editar(mes, cliente_id):
                             cursor.execute("""
                                 INSERT INTO lancamentosfuncionarios_v2 (
                                     clienteid, funcionarioid, mes, rubricaid, valor,
-                                    statuslancamento, tipo_funcionario
-                                ) VALUES (%s, %s, %s, %s, %s, %s, %s)
+                                    statuslancamento, tipo_funcionario, caminhaoid
+                                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
                                 ON DUPLICATE KEY UPDATE
                                     valor = VALUES(valor),
                                     tipo_funcionario = VALUES(tipo_funcionario),
@@ -679,6 +682,8 @@ def editar(mes, cliente_id):
                                 valor,
                                 'PENDENTE',
                                 tipo,
+                                0,  # caminhaoid: sentinela "sem veículo" (Etapa 1);
+                                    # valor real por veículo virá nas próximas etapas
                             ))
                         else:
                             # If valor is 0 or empty, DELETE the record.
