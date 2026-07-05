@@ -1295,8 +1295,6 @@ def conf_despesas():
                         if not vdata:
                             continue
 
-                        if vdata.get('nome'):
-                            row['motorista_nome'] = vdata['nome']
                         vid = vdata['veiculo_id']
                         used_vehicle_ids.add(vid)
 
@@ -1350,10 +1348,6 @@ def conf_despesas():
                         # não mais pelo vínculo fixo motoristas.veiculo_id.
                         vcost = motorista_cost_by_vid.get(vid)
                         if vcost:
-                            # Badge: motoristas que rodaram este veículo no período
-                            if vcost['motoristas']:
-                                row['motorista_nome'] = ' / '.join(sorted(vcost['motoristas']))
-
                             # (1) Incorpora comissão + resto no custo líquido do caminhão
                             #     (row/block/grand). MESMA aritmética de sempre — os totais
                             #     NÃO mudam; a Fase 1 só reorganiza a EXIBIÇÃO abaixo.
