@@ -348,11 +348,23 @@ def _build_motorista_cost_by_vehicle(conn, func_rows, months, frete_counts):
     def _slot(vid):
         if vid not in cost:
             cost[vid] = {
-                'comissao':   {m['key']: 0.0 for m in months},
-                'resto':      {m['key']: 0.0 for m in months},
-                'motoristas': set(),
+                'comissao':      {m['key']: 0.0 for m in months},
+                'resto':         {m['key']: 0.0 for m in months},
+                'motoristas':    set(),
+                'por_motorista': {},   # mid → {nome, comissao{mk}, resto{mk}} (só exibição)
             }
         return cost[vid]
+
+    def _mslot(vid, mid, nome):
+        """Slot por motorista dentro do veículo (detalhe níveis 2/3, só exibição)."""
+        pm = _slot(vid)['por_motorista']
+        if mid not in pm:
+            pm[mid] = {
+                'nome':     nome or f'Motorista {mid}',
+                'comissao': {m['key']: 0.0 for m in months},
+                'resto':    {m['key']: 0.0 for m in months},
+            }
+        return pm[mid]
 
     # ── Comissão por caminhão (rubrica 19) e resto por motorista/mês ──
     resto_by_mot_mk = {}  # (mid, mk) → float
@@ -366,6 +378,8 @@ def _build_motorista_cost_by_vehicle(conn, func_rows, months, frete_counts):
         if row.get('rubricaid') in _RUBRICA_COMISSAO_IDS:
             # veiculo_id aqui = lf.caminhaoid gravado (veículo real da comissão)
             _slot(row['veiculo_id'])['comissao'][mk] += val
+            _mslot(row['veiculo_id'], row['funcionarioid'],
+                   row['funcionario_nome'])['comissao'][mk] += val
         else:
             key = (row['funcionarioid'], mk)
             resto_by_mot_mk[key] = resto_by_mot_mk.get(key, 0.0) + val
@@ -386,12 +400,15 @@ def _build_motorista_cost_by_vehicle(conn, func_rows, months, frete_counts):
             if resto_cents != 0:
                 vid_max = max(itens, key=lambda x: x[1])[0]  # maior fatia (nº fretes)
                 base[vid_max] += resto_cents
+            _nome = mot_info.get(mid, {}).get('nome')
             for vid, c in base.items():
                 _slot(vid)['resto'][mk] += c / 100.0
+                _mslot(vid, mid, _nome)['resto'][mk] += c / 100.0
         else:
             # Fallback: sem frete no mês → vínculo fixo
             vfix = mot_info.get(mid, {}).get('veiculo_id') or 0
             _slot(vfix)['resto'][mk] += resto_total
+            _mslot(vfix, mid, mot_info.get(mid, {}).get('nome'))['resto'][mk] += resto_total
 
     # ── Badge: motoristas que rodaram cada veículo no período ──
     for (mid, _mk), counts in frete_counts.items():
@@ -1337,31 +1354,59 @@ def conf_despesas():
                             if vcost['motoristas']:
                                 row['motorista_nome'] = ' / '.join(sorted(vcost['motoristas']))
 
-                            for _kind, _label in (
-                                ('comissao', 'COMISSÃO MOTORISTA'),
-                                ('resto',    'SALÁRIO/ENCARGOS (rateado)'),
-                            ):
-                                sc_by_month = {m_['key']: vcost[_kind].get(m_['key'], 0.0)
-                                               for m_ in months}
-                                sc_total = sum(sc_by_month.values())
-                                if abs(sc_total) < 0.005:
-                                    continue
-                                row['subcats'].append({
-                                    'subcat_id':   f'{_kind}_{vid}',
-                                    'subcat_nome': _label,
-                                    'by_month':    sc_by_month,
-                                    'total':       sc_total,
-                                })
-                                # Incorpora no custo líquido do caminhão (row/block/grand)
+                            # (1) Incorpora comissão + resto no custo líquido do caminhão
+                            #     (row/block/grand). MESMA aritmética de sempre — os totais
+                            #     NÃO mudam; a Fase 1 só reorganiza a EXIBIÇÃO abaixo.
+                            grupo_by_month = {m_['key']: 0.0 for m_ in months}
+                            for _kind in ('comissao', 'resto'):
                                 for m_ in months:
                                     mk_ = m_['key']
-                                    v = sc_by_month[mk_]
+                                    v = vcost[_kind].get(mk_, 0.0)
+                                    grupo_by_month[mk_]          += v
                                     row['by_month'][mk_]         = row['by_month'].get(mk_, 0.0) + v
                                     block['total_by_month'][mk_] = block['total_by_month'].get(mk_, 0.0) + v
                                     grand_by_month[mk_]          = grand_by_month.get(mk_, 0.0) + v
-                                row['total']   += sc_total
-                                block['total'] += sc_total
-                                grand_total    += sc_total
+                            grupo_total = sum(grupo_by_month.values())
+                            row['total']   += grupo_total
+                            block['total'] += grupo_total
+                            grand_total    += grupo_total
+
+                            # (2) Estrutura visual em 3 níveis (SÓ exibição — não toca totais):
+                            #     MOTORISTAS (grupo) → motorista → Comissão / Salário.
+                            #     Cada motorista só exibe as rubricas que tiver (sem zeradas);
+                            #     só aparece se tiver algum valor no período.
+                            if abs(grupo_total) >= 0.005:
+                                mot_children = []
+                                for _mid, _md in sorted(vcost['por_motorista'].items(),
+                                                        key=lambda x: x[1]['nome']):
+                                    leaves = []
+                                    for _k, _lbl in (('comissao', 'Comissão'),
+                                                     ('resto', 'Salário/encargos (rateado)')):
+                                        _bym = {m_['key']: _md[_k].get(m_['key'], 0.0) for m_ in months}
+                                        _tot = sum(_bym.values())
+                                        if abs(_tot) < 0.005:
+                                            continue   # rubrica zerada → não renderiza
+                                        leaves.append({
+                                            'subcat_id':   f'{_k}_{vid}_{_mid}',
+                                            'subcat_nome': _lbl,
+                                            'by_month':    _bym, 'total': _tot, 'nivel': 3,
+                                        })
+                                    if not leaves:
+                                        continue   # motorista sem valor → não aparece
+                                    _mbym = {m_['key']: _md['comissao'].get(m_['key'], 0.0)
+                                             + _md['resto'].get(m_['key'], 0.0) for m_ in months}
+                                    mot_children.append({
+                                        'subcat_id':   f'mot::{vid}::{_mid}',
+                                        'subcat_nome': _md['nome'],
+                                        'by_month':    _mbym, 'total': sum(_mbym.values()),
+                                        'nivel': 2, 'is_expandable': True, 'children': leaves,
+                                    })
+                                row['subcats'].append({
+                                    'subcat_id':   f'motoristas_{vid}',
+                                    'subcat_nome': 'MOTORISTAS',
+                                    'by_month':    grupo_by_month, 'total': grupo_total,
+                                    'nivel': 1, 'is_group': True, 'children': mot_children,
+                                })
                     block['rows'] = new_rows
 
             # ── Litros comprados pela empresa selecionada e custo por litro ──
