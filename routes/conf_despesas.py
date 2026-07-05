@@ -313,12 +313,47 @@ def _fetch_frete_counts_by_mot_vehicle(conn, data_inicio, data_fim):
     return result
 
 
-def _build_motorista_cost_by_vehicle(conn, func_rows, months, frete_counts):
+def _fetch_comissao_fretes_by_vehicle(conn, data_inicio, data_fim):
+    """
+    Comissão de motorista LIDA DIRETO DOS FRETES (fonte de verdade), por
+    (motorista, veículo, mês). Substitui a leitura da rubrica 19 gravada em
+    lancamentosfuncionarios_v2 no relatório conf_despesas.
+
+    Mesmo critério da gravação da folha (lancamentos_funcionarios.get_comissoes):
+    apenas motoristas paga_comissao=1. Não filtra empresa — a atribuição por
+    empresa é feita no consumo (gate por motoristas presentes na folha).
+
+    Retorna {(motoristas_id, veiculos_id, mk): comissao_float}  (mk='YYYYMM').
+    """
+    cur = conn.cursor(dictionary=True)
+    cur.execute("""
+        SELECT f.motoristas_id                          AS mid,
+               f.veiculos_id                            AS vid,
+               DATE_FORMAT(f.data_frete, '%Y%m')        AS mk,
+               COALESCE(SUM(f.comissao_motorista), 0)   AS comissao
+        FROM   fretes f
+        JOIN   motoristas m ON m.id = f.motoristas_id
+        WHERE  f.data_frete BETWEEN %s AND %s
+          AND  m.paga_comissao = 1
+        GROUP BY f.motoristas_id, f.veiculos_id, DATE_FORMAT(f.data_frete, '%Y%m')
+    """, (data_inicio, data_fim))
+    rows = cur.fetchall()
+    cur.close()
+    return {(r['mid'], r['vid'], r['mk']): float(r['comissao']) for r in rows}
+
+
+def _build_motorista_cost_by_vehicle(conn, func_rows, months, frete_counts,
+                                     comissao_fretes):
     """
     Constrói o custo de motorista atribuído ao CAMINHÃO REAL, por mês.
 
-    - COMISSÃO: rubrica 19 já gravada em lancamentosfuncionarios_v2 com o
-      caminhaoid do veículo real → agrupada por veículo diretamente.
+    - COMISSÃO: lida DIRETO DOS FRETES (SUM(fretes.comissao_motorista) por
+      motorista/veículo/mês, via ``comissao_fretes``). A rubrica 19 gravada em
+      lancamentosfuncionarios_v2 é IGNORADA pelo relatório (mesma informação).
+      A comissão só é injetada quando a folha do filtro de empresa vigente
+      contém motoristas (``has_motorista_folha``), preservando a atribuição por
+      empresa que a rubrica 19 (filtrada por clienteid) dava — postos, sem folha
+      de motorista, seguem com comissão zerada.
     - RESTO (salário/vale/FGTS/encargos, todas as rubricas != comissão): total
       do motorista no mês (caminhaoid=0), RATEADO entre os veículos que ele
       rodou na proporção de nº de fretes. Diferença de centavos vai na maior
@@ -366,23 +401,38 @@ def _build_motorista_cost_by_vehicle(conn, func_rows, months, frete_counts):
             }
         return pm[mid]
 
-    # ── Comissão por caminhão (rubrica 19) e resto por motorista/mês ──
+    # ── Resto por motorista/mês (comissão vem dos fretes, ver abaixo) ──
+    # A COMISSÃO gravada na rubrica 19 é IGNORADA — a fonte agora é fretes.
+    # has_motorista_folha = a folha do filtro de empresa vigente contém algum
+    # motorista? A comissão (custo da folha) é injetada quando a EMPRESA da folha
+    # está no filtro (ex.: empresa 1). Filtros de posto, que não têm folha de
+    # motorista, continuam com comissão zerada — preserva o comportamento por
+    # empresa que a rubrica 19 (filtrada por clienteid) dava, SEM exigir que cada
+    # motorista tenha lançamento (motoristas novos, ex.: julho, também aparecem).
     resto_by_mot_mk = {}  # (mid, mk) → float
+    has_motorista_folha = False
     for row in func_rows:
         if row['categoria_func'] != 'MOTORISTA':
             continue
         mk = _mes_to_mk(row['mes'])
         if not mk or mk not in month_keys_set:
             continue
+        has_motorista_folha = True
         val = float(row['valor'])
         if row.get('rubricaid') in _RUBRICA_COMISSAO_IDS:
-            # veiculo_id aqui = lf.caminhaoid gravado (veículo real da comissão)
-            _slot(row['veiculo_id'])['comissao'][mk] += val
-            _mslot(row['veiculo_id'], row['funcionarioid'],
-                   row['funcionario_nome'])['comissao'][mk] += val
-        else:
-            key = (row['funcionarioid'], mk)
-            resto_by_mot_mk[key] = resto_by_mot_mk.get(key, 0.0) + val
+            continue  # comissão gravada IGNORADA — fonte agora é fretes
+        key = (row['funcionarioid'], mk)
+        resto_by_mot_mk[key] = resto_by_mot_mk.get(key, 0.0) + val
+
+    # ── Comissão DIRETO DOS FRETES, por (motorista, veículo, mês) ──
+    # Em jan-jun bate ao centavo com a rubrica 19 (0 divergência); meses ainda
+    # não gravados na folha (ex.: julho) passam a aparecer.
+    if has_motorista_folha:
+        for (mid, vid, mk), com in comissao_fretes.items():
+            if mk not in month_keys_set or abs(com) < 0.005:
+                continue
+            _slot(vid)['comissao'][mk] += com
+            _mslot(vid, mid, mot_info.get(mid, {}).get('nome'))['comissao'][mk] += com
 
     # ── Rateio do resto por proporção de nº de fretes ──
     for (mid, mk), resto_total in resto_by_mot_mk.items():
@@ -1273,8 +1323,9 @@ def conf_despesas():
             veiculo_mot, _ = _fetch_veiculos_motoristas(conn)
             frete_by_vid    = _fetch_frete_data_by_vehicle(conn, data_inicio, data_fim)
             frete_counts    = _fetch_frete_counts_by_mot_vehicle(conn, data_inicio, data_fim)
+            comissao_fretes = _fetch_comissao_fretes_by_vehicle(conn, data_inicio, data_fim)
             motorista_cost_by_vid = _build_motorista_cost_by_vehicle(
-                conn, func_rows, months, frete_counts
+                conn, func_rows, months, frete_counts, comissao_fretes
             )
             if veiculo_mot:
                 veiculo_matchers = _compile_veiculo_matchers(veiculo_mot)
