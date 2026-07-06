@@ -55,13 +55,14 @@ def montar_caminho(cnpj: str, ano, mes, chave: str) -> str:
     return _normalizar_caminho(raw)
 
 
-def upload_xml(caminho_dropbox: str, conteudo_bytes: bytes) -> dict:
+def upload_arquivo(caminho_dropbox: str, conteudo_bytes: bytes) -> dict:
     """
-    Envia o conteúdo de um XML para o Dropbox, sobrescrevendo se já existir.
+    Envia bytes para um caminho no Dropbox, sobrescrevendo se já existir.
+    Genérico — serve para XML, PFX ou qualquer arquivo.
 
     Args:
         caminho_dropbox: path Dropbox (ex.: saída de montar_caminho()).
-        conteudo_bytes:  bytes do XML.
+        conteudo_bytes:  bytes do arquivo (str é aceito e vira utf-8).
 
     Retorna dict com {path, tamanho} em caso de sucesso.
     Levanta RuntimeError com mensagem clara em qualquer falha.
@@ -69,9 +70,9 @@ def upload_xml(caminho_dropbox: str, conteudo_bytes: bytes) -> dict:
     if not _DROPBOX_AVAILABLE:
         raise RuntimeError('Pacote "dropbox" não instalado. Execute: pip install dropbox==12.0.2')
     if not caminho_dropbox:
-        raise RuntimeError("upload_xml: caminho_dropbox vazio")
+        raise RuntimeError("upload_arquivo: caminho_dropbox vazio")
     if conteudo_bytes is None:
-        raise RuntimeError("upload_xml: conteudo_bytes é None")
+        raise RuntimeError("upload_arquivo: conteudo_bytes é None")
     if isinstance(conteudo_bytes, str):
         conteudo_bytes = conteudo_bytes.encode('utf-8')
 
@@ -81,11 +82,19 @@ def upload_xml(caminho_dropbox: str, conteudo_bytes: bytes) -> dict:
         dbx = _criar_dbx()
         meta = dbx.files_upload(conteudo_bytes, caminho, mode=WriteMode('overwrite'))
     except ApiError as exc:
-        raise RuntimeError(f'Falha ao enviar XML para o Dropbox em "{caminho}": {exc}') from exc
+        raise RuntimeError(f'Falha ao enviar arquivo para o Dropbox em "{caminho}": {exc}') from exc
     except Exception as exc:
-        raise RuntimeError(f'Erro inesperado ao enviar XML para o Dropbox em "{caminho}": {exc}') from exc
+        raise RuntimeError(f'Erro inesperado ao enviar arquivo para o Dropbox em "{caminho}": {exc}') from exc
 
     return {"path": getattr(meta, "path_lower", caminho), "tamanho": len(conteudo_bytes)}
+
+
+def upload_xml(caminho_dropbox: str, conteudo_bytes: bytes) -> dict:
+    """
+    Envia o conteúdo de um XML para o Dropbox, sobrescrevendo se já existir.
+    Fina camada semântica sobre upload_arquivo() (comportamento idêntico).
+    """
+    return upload_arquivo(caminho_dropbox, conteudo_bytes)
 
 
 def apagar_xml(caminho_dropbox: str) -> bool:

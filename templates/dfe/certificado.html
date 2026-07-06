@@ -1,0 +1,170 @@
+{% extends 'base.html' %}
+{% block title %}Certificado Digital A1 - {{ app_name }}{% endblock %}
+
+{% block styles %}
+<style>
+  .page-hero {
+    background: linear-gradient(135deg, #1D63A5 0%, #1a4f82 60%, #154070 100%);
+    border-radius: .75rem;
+    padding: 1.5rem 2rem;
+    margin-bottom: 1.5rem;
+    color: #fff;
+  }
+  .page-hero .hero-icon {
+    width: 3rem; height: 3rem;
+    background: rgba(255,255,255,.15);
+    border-radius: .6rem;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1.5rem; flex-shrink: 0;
+  }
+  .form-label { font-size: 0.83rem; font-weight: 600; color: #374151; }
+  .form-control-sm, .form-select-sm { font-size: 0.84rem; }
+  .tbl-cert th { font-size: 0.72rem; text-transform: uppercase; letter-spacing: .04em; color: #6b7280; }
+  .tbl-cert td { font-size: 0.85rem; vertical-align: middle; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+
+  <nav aria-label="breadcrumb" class="mb-3">
+    <ol class="breadcrumb small">
+      <li class="breadcrumb-item"><a href="{{ url_for('index') }}" class="text-decoration-none">Dashboard</a></li>
+      <li class="breadcrumb-item active">Certificado Digital A1</li>
+    </ol>
+  </nav>
+
+  <div class="page-hero d-flex align-items-center gap-3 flex-wrap">
+    <div class="hero-icon"><i class="bi bi-shield-lock-fill"></i></div>
+    <div class="flex-grow-1">
+      <h4 class="mb-0 fw-bold">Certificado Digital A1</h4>
+      <p class="mb-0 opacity-75 small">Cadastre o certificado A1 (.pfx) por empresa para a captura automática de DFe (NF-e / CT-e).</p>
+    </div>
+  </div>
+
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+      {% for category, message in messages %}
+        <div class="alert alert-{{ 'danger' if category == 'danger' else category }} alert-dismissible fade show py-2 small" role="alert">
+          {{ message }}
+          <button type="button" class="btn-close btn-close-sm" data-bs-dismiss="alert" aria-label="Fechar"></button>
+        </div>
+      {% endfor %}
+    {% endif %}
+  {% endwith %}
+
+  <div class="row g-3">
+    <!-- Formulário -->
+    <div class="col-lg-5">
+      <div class="card shadow-sm">
+        <div class="card-header d-flex align-items-center py-2"
+             style="background:#1D63A5;color:white;font-size:0.82rem;font-weight:600;">
+          <i class="bi bi-upload me-2"></i> Novo / Renovar certificado
+        </div>
+        <div class="card-body">
+          <form method="POST" enctype="multipart/form-data">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+            <div class="mb-3">
+              <label class="form-label">Empresa <span class="text-danger">*</span></label>
+              <select name="cliente_id" class="form-select form-select-sm" required>
+                <option value="">— Selecione a empresa —</option>
+                {% for c in clientes %}
+                  <option value="{{ c.id }}">{{ c.nome }}{% if c.cnpj %} ({{ c.cnpj }}){% endif %}</option>
+                {% endfor %}
+              </select>
+            </div>
+
+            <div class="mb-3">
+              <label class="form-label">Arquivo do certificado (.pfx) <span class="text-danger">*</span></label>
+              <input type="file" name="pfx_arquivo" accept=".pfx,.p12"
+                     class="form-control form-control-sm" required>
+              <div class="form-text">O CNPJ e a validade são lidos automaticamente do certificado.</div>
+            </div>
+
+            <div class="mb-3">
+              <label class="form-label">Senha do certificado <span class="text-danger">*</span></label>
+              <input type="password" name="senha" class="form-control form-control-sm"
+                     autocomplete="new-password" required>
+              <div class="form-text">A senha é validada contra o .pfx e gravada cifrada.</div>
+            </div>
+
+            <div class="form-check mb-3">
+              <input class="form-check-input" type="checkbox" name="modo_automatico"
+                     id="modo_automatico" value="1" checked>
+              <label class="form-check-label small" for="modo_automatico">
+                Buscar DFe automaticamente para esta empresa
+              </label>
+            </div>
+
+            <div class="d-grid">
+              <button type="submit" class="btn btn-primary btn-sm">
+                <i class="bi bi-check-circle me-1"></i> Validar e salvar
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <!-- Lista -->
+    <div class="col-lg-7">
+      <div class="card shadow-sm">
+        <div class="card-header d-flex align-items-center py-2"
+             style="background:#f8f9fa;font-size:0.82rem;font-weight:600;color:#374151;">
+          <i class="bi bi-collection me-2"></i> Certificados cadastrados
+        </div>
+        <div class="card-body p-0">
+          {% if certificados %}
+          <div class="table-responsive">
+            <table class="table table-hover mb-0 tbl-cert">
+              <thead>
+                <tr>
+                  <th class="ps-3">Empresa</th>
+                  <th>CNPJ</th>
+                  <th>Validade</th>
+                  <th>Auto</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for cert in certificados %}
+                <tr>
+                  <td class="ps-3">{{ cert.empresa_nome or '—' }}</td>
+                  <td>{{ cert.cnpj }}</td>
+                  <td>
+                    {% if cert.validade_ate %}
+                      {{ cert.validade_ate.strftime('%d/%m/%Y') }}
+                    {% else %}—{% endif %}
+                  </td>
+                  <td>
+                    {% if cert.modo_automatico %}
+                      <span class="badge bg-info-subtle text-info-emphasis">Sim</span>
+                    {% else %}
+                      <span class="badge bg-secondary-subtle text-secondary-emphasis">Não</span>
+                    {% endif %}
+                  </td>
+                  <td>
+                    {% if cert.ativo %}
+                      <span class="badge bg-success-subtle text-success-emphasis">Ativo</span>
+                    {% else %}
+                      <span class="badge bg-secondary-subtle text-secondary-emphasis">Inativo</span>
+                    {% endif %}
+                  </td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+          {% else %}
+          <div class="text-center text-muted py-4 small">
+            <i class="bi bi-inbox fs-4 d-block mb-2"></i>
+            Nenhum certificado cadastrado ainda.
+          </div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
