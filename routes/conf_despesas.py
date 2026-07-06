@@ -376,6 +376,9 @@ def _build_motorista_cost_by_vehicle(conn, func_rows, months, frete_counts,
     cur = conn.cursor(dictionary=True)
     cur.execute("SELECT id, nome, paga_comissao, veiculo_id FROM motoristas")
     mot_info = {r['id']: r for r in cur.fetchall()}
+    # Metadados das rubricas (nome + ordem do sistema) p/ detalhar o RESTO por rubrica.
+    cur.execute("SELECT id, nome, COALESCE(ordem, 9999) AS ordem FROM rubricas")
+    rub_meta = {r['id']: (r['nome'], int(r['ordem'])) for r in cur.fetchall()}
     cur.close()
 
     cost = {}
@@ -398,8 +401,20 @@ def _build_motorista_cost_by_vehicle(conn, func_rows, months, frete_counts,
                 'nome':     nome or f'Motorista {mid}',
                 'comissao': {m['key']: 0.0 for m in months},
                 'resto':    {m['key']: 0.0 for m in months},
+                'rubricas': {},   # rid → {'nome','ordem','by_month'{mk}} (detalhe do resto)
             }
         return pm[mid]
+
+    def _rslot(vid, mid, nome, rid, rub_nome, rub_ordem):
+        """Slot por rubrica do RESTO dentro do motorista (nível 3, só exibição)."""
+        rubs = _mslot(vid, mid, nome)['rubricas']
+        if rid not in rubs:
+            rubs[rid] = {
+                'nome':     rub_nome,
+                'ordem':    rub_ordem,
+                'by_month': {m['key']: 0.0 for m in months},
+            }
+        return rubs[rid]
 
     # ── Resto por motorista/mês (comissão vem dos fretes, ver abaixo) ──
     # A COMISSÃO gravada na rubrica 19 é IGNORADA — a fonte agora é fretes.
@@ -409,7 +424,8 @@ def _build_motorista_cost_by_vehicle(conn, func_rows, months, frete_counts,
     # motorista, continuam com comissão zerada — preserva o comportamento por
     # empresa que a rubrica 19 (filtrada por clienteid) dava, SEM exigir que cada
     # motorista tenha lançamento (motoristas novos, ex.: julho, também aparecem).
-    resto_by_mot_mk = {}  # (mid, mk) → float
+    resto_by_mot_mk = {}      # (mid, mk) → float           (lump; autoridade dos totais)
+    resto_rub_by_mot_mk = {}  # (mid, mk) → {rid: float}     (detalhe por rubrica)
     has_motorista_folha = False
     for row in func_rows:
         if row['categoria_func'] != 'MOTORISTA':
@@ -421,8 +437,11 @@ def _build_motorista_cost_by_vehicle(conn, func_rows, months, frete_counts,
         val = float(row['valor'])
         if row.get('rubricaid') in _RUBRICA_COMISSAO_IDS:
             continue  # comissão gravada IGNORADA — fonte agora é fretes
+        rid = row.get('rubricaid')
         key = (row['funcionarioid'], mk)
         resto_by_mot_mk[key] = resto_by_mot_mk.get(key, 0.0) + val
+        rr = resto_rub_by_mot_mk.setdefault(key, {})
+        rr[rid] = rr.get(rid, 0.0) + val
 
     # ── Comissão DIRETO DOS FRETES, por (motorista, veículo, mês) ──
     # Em jan-jun bate ao centavo com a rubrica 19 (0 divergência); meses ainda
@@ -435,30 +454,66 @@ def _build_motorista_cost_by_vehicle(conn, func_rows, months, frete_counts,
             _mslot(vid, mid, mot_info.get(mid, {}).get('nome'))['comissao'][mk] += com
 
     # ── Rateio do resto por proporção de nº de fretes ──
+    # O LUMP (soma de todas as rubricas != comissão) é rateado como sempre e
+    # define o resto por caminhão → os TOTAIS (motorista, caminhão, TOTAL) NÃO
+    # mudam. Adicionalmente, CADA rubrica é rateada por nº de fretes (mesma
+    # regra: diferença de centavos na MAIOR fatia) para o DETALHE nível 3, e o
+    # detalhe é RECONCILIADO ao lump por caminhão (diferença de centavos absorvida
+    # pela rubrica de maior valor) → a soma das rubricas por caminhão == o resto
+    # daquele caminhão, e a soma de cada rubrica entre caminhões é preservada.
+    def _rateio_cents(total_cents, itens, N, vid_max):
+        base = {vid: total_cents * n // N for vid, n in itens}
+        rem = total_cents - sum(base.values())
+        if rem != 0:
+            base[vid_max] += rem
+        return base
+
     for (mid, mk), resto_total in resto_by_mot_mk.items():
         if mot_info.get(mid, {}).get('paga_comissao') != 1:
             continue
         if abs(resto_total) < 0.005:
             continue
+        _nome = mot_info.get(mid, {}).get('nome')
+        rubs = resto_rub_by_mot_mk.get((mid, mk), {})   # {rid: valor}
         counts = frete_counts.get((mid, mk), {})
         if counts:
-            total_cents = int(round(resto_total * 100))
             itens = sorted(counts.items())          # [(vid, n)] ordenado por vid
             N = sum(n for _, n in itens)
-            base = {vid: total_cents * n // N for vid, n in itens}
-            resto_cents = total_cents - sum(base.values())
-            if resto_cents != 0:
-                vid_max = max(itens, key=lambda x: x[1])[0]  # maior fatia (nº fretes)
-                base[vid_max] += resto_cents
-            _nome = mot_info.get(mid, {}).get('nome')
-            for vid, c in base.items():
+            vid_max = max(itens, key=lambda x: x[1])[0]  # maior fatia (nº fretes)
+
+            # (a) LUMP — autoridade dos totais (aritmética idêntica à de antes)
+            base_lump = _rateio_cents(int(round(resto_total * 100)), itens, N, vid_max)
+            for vid, c in base_lump.items():
                 _slot(vid)['resto'][mk] += c / 100.0
                 _mslot(vid, mid, _nome)['resto'][mk] += c / 100.0
+
+            # (b) DETALHE por rubrica — mesmo rateio; reconciliado ao lump
+            rub_base = {rid: _rateio_cents(int(round(rval * 100)), itens, N, vid_max)
+                        for rid, rval in rubs.items()}
+            # rubrica de maior valor absorve a diferença de centavos por caminhão
+            rid_max = None
+            if rubs:
+                rid_max = min(rubs, key=lambda rid: (-abs(rubs[rid]),
+                                                     rub_meta.get(rid, ('', 9999))[1], rid))
+            for vid, _n in itens:
+                d = base_lump[vid] - sum(rb[vid] for rb in rub_base.values())
+                if d != 0 and rid_max is not None:
+                    rub_base[rid_max][vid] += d
+            for rid, rb in rub_base.items():
+                _nm, _ord = rub_meta.get(rid, ('OUTROS', 9999))
+                for vid, c in rb.items():
+                    if c:
+                        _rslot(vid, mid, _nome, rid, _nm, _ord)['by_month'][mk] += c / 100.0
         else:
-            # Fallback: sem frete no mês → vínculo fixo
+            # Fallback: sem frete no mês → vínculo fixo (1 caminhão, sem rateio)
             vfix = mot_info.get(mid, {}).get('veiculo_id') or 0
             _slot(vfix)['resto'][mk] += resto_total
-            _mslot(vfix, mid, mot_info.get(mid, {}).get('nome'))['resto'][mk] += resto_total
+            _mslot(vfix, mid, _nome)['resto'][mk] += resto_total
+            for rid, rval in rubs.items():
+                if abs(rval) < 0.005:
+                    continue
+                _nm, _ord = rub_meta.get(rid, ('OUTROS', 9999))
+                _rslot(vfix, mid, _nome, rid, _nm, _ord)['by_month'][mk] += rval
 
     # ── Badge: motoristas que rodaram cada veículo no período ──
     for (mid, _mk), counts in frete_counts.items():
@@ -1417,23 +1472,35 @@ def conf_despesas():
                             grand_total    += grupo_total
 
                             # (2) Estrutura visual em 3 níveis (SÓ exibição — não toca totais):
-                            #     MOTORISTAS (grupo) → motorista → Comissão / Salário.
-                            #     Cada motorista só exibe as rubricas que tiver (sem zeradas);
-                            #     só aparece se tiver algum valor no período.
+                            #     MOTORISTAS (grupo) → motorista → Comissão + cada rubrica.
+                            #     Comissão primeiro (exata, dos fretes); depois CADA rubrica do
+                            #     resto SEPARADA, na ORDEM DO SISTEMA (rubricas.ordem), só as
+                            #     não-zeradas. A soma das folhas == total do motorista (nível 2).
                             if abs(grupo_total) >= 0.005:
                                 mot_children = []
                                 for _mid, _md in sorted(vcost['por_motorista'].items(),
                                                         key=lambda x: x[1]['nome']):
                                     leaves = []
-                                    for _k, _lbl in (('comissao', 'Comissão'),
-                                                     ('resto', 'Salário/encargos (rateado)')):
-                                        _bym = {m_['key']: _md[_k].get(m_['key'], 0.0) for m_ in months}
+                                    # Comissão (exata, dos fretes) — primeiro
+                                    _cbym = {m_['key']: _md['comissao'].get(m_['key'], 0.0) for m_ in months}
+                                    _ctot = sum(_cbym.values())
+                                    if abs(_ctot) >= 0.005:
+                                        leaves.append({
+                                            'subcat_id':   f'comissao_{vid}_{_mid}',
+                                            'subcat_nome': 'Comissão',
+                                            'by_month':    _cbym, 'total': _ctot, 'nivel': 3,
+                                        })
+                                    # Demais rubricas (resto) na ordem do sistema, só não-zeradas
+                                    for _rid, _rd in sorted(
+                                            _md.get('rubricas', {}).items(),
+                                            key=lambda x: (x[1]['ordem'], x[1]['nome'], x[0])):
+                                        _bym = {m_['key']: _rd['by_month'].get(m_['key'], 0.0) for m_ in months}
                                         _tot = sum(_bym.values())
                                         if abs(_tot) < 0.005:
                                             continue   # rubrica zerada → não renderiza
                                         leaves.append({
-                                            'subcat_id':   f'{_k}_{vid}_{_mid}',
-                                            'subcat_nome': _lbl,
+                                            'subcat_id':   f'rub_{vid}_{_mid}_{_rid}',
+                                            'subcat_nome': _rd['nome'],
                                             'by_month':    _bym, 'total': _tot, 'nivel': 3,
                                         })
                                     if not leaves:
