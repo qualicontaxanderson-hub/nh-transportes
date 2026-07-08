@@ -475,6 +475,15 @@ def create_app():
         except Exception:
             return "500 - Erro interno do servidor", 500
 
+    # Agendador da captura automatica de DFe (de hora em hora; lock global no
+    # MySQL garante execucao unica mesmo com varios workers). Falha aqui NAO
+    # deve derrubar o app.
+    try:
+        from integrations.dfe_scheduler import iniciar_scheduler
+        iniciar_scheduler(app)
+    except Exception:
+        app.logger.warning("[dfe_sched] nao foi possivel iniciar o scheduler.", exc_info=True)
+
     return app
 
 
