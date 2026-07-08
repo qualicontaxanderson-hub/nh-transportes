@@ -1,0 +1,350 @@
+{% extends 'base.html' %}
+{% block title %}Classificação de Compras (DFe){% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h3 class="mb-0"><i class="bi bi-tags"></i> Classificação de Compras — DFe</h3>
+  <span class="badge bg-secondary">Serviço isolado</span>
+</div>
+
+<ul class="nav nav-tabs mb-3" id="abas" role="tablist">
+  <li class="nav-item" role="presentation">
+    <button class="nav-link {% if aba != 'consultar' %}active{% endif %}"
+            id="tab-classificar" data-bs-toggle="tab" data-bs-target="#pane-classificar"
+            type="button" role="tab">
+      Classificar
+      <span class="badge bg-warning text-dark">{{ total_pendentes_itens }}</span>
+    </button>
+  </li>
+  <li class="nav-item" role="presentation">
+    <button class="nav-link {% if aba == 'consultar' %}active{% endif %}"
+            id="tab-consultar" data-bs-toggle="tab" data-bs-target="#pane-consultar"
+            type="button" role="tab">Consultar</button>
+  </li>
+</ul>
+
+<div class="tab-content">
+
+  {# =================== ÁREA 1: CLASSIFICAR =================== #}
+  <div class="tab-pane fade {% if aba != 'consultar' %}show active{% endif %}"
+       id="pane-classificar" role="tabpanel">
+
+    {% if not notas %}
+      <div class="alert alert-success"><i class="bi bi-check2-circle"></i>
+        Nenhum item pendente de classificação. 🎉</div>
+    {% else %}
+      <p class="text-muted small">
+        {{ total_pendentes_notas }} nota(s) com {{ total_pendentes_itens }} item(ns)
+        pendente(s). Clique numa nota para expandir os itens.
+      </p>
+      <table class="table table-sm align-middle">
+        <thead class="table-light">
+          <tr>
+            <th style="width:34px"></th>
+            <th>Data</th>
+            <th>Fornecedor</th>
+            <th class="text-center">Itens</th>
+            <th class="text-end">Valor da nota</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for n in notas %}
+          <tr class="nota-row" data-doc="{{ n.doc_id }}" style="cursor:pointer">
+            <td class="text-center"><i class="bi bi-chevron-right caret" id="caret-{{ n.doc_id }}"></i></td>
+            <td>{{ n.dh_emissao.strftime('%d/%m/%Y') if n.dh_emissao else '—' }}</td>
+            <td>
+              <strong>{{ n.emit_nome or '(sem nome)' }}</strong><br>
+              <small class="text-muted">CNPJ {{ n.emit_cnpj or '—' }}
+                {% if n.numero %}· NF {{ n.numero }}/{{ n.serie }}{% endif %}
+                {% if n.situacao and n.situacao != 'autorizado' %}
+                  · <span class="text-danger">{{ n.situacao }}</span>{% endif %}
+              </small>
+            </td>
+            <td class="text-center">{{ n.itens|length }}</td>
+            <td class="text-end">{{ (n.nota_valor or 0) | formatar_moeda }}</td>
+          </tr>
+          <tr class="nota-itens" id="itens-{{ n.doc_id }}" style="display:none">
+            <td colspan="5" class="bg-light">
+              <table class="table table-sm mb-0 bg-white">
+                <thead>
+                  <tr class="small text-muted">
+                    <th>Item (cProd / EAN / NCM)</th>
+                    <th class="text-end">Qtd</th>
+                    <th class="text-end">Valor</th>
+                    <th style="width:210px">Categoria</th>
+                    <th style="width:210px">Produto (combustível)</th>
+                    <th style="width:190px" class="text-end">Ação</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for it in n.itens %}
+                  <tr id="item-{{ it.item_id }}" data-item="{{ it.item_id }}">
+                    <td>
+                      {{ it.produto_xml or '(sem descrição)' }}<br>
+                      <small class="text-muted">
+                        cProd: <code>{{ it.cprod_fornecedor or '—' }}</code>
+                        · EAN: {{ it.cean or '—' }}
+                        · NCM: {{ it.ncm or '—' }}
+                        {% if it.cod_anp %}· ANP: {{ it.cod_anp }}{% endif %}
+                      </small>
+                    </td>
+                    <td class="text-end">{{ it.quantidade }} {{ it.unidade or '' }}</td>
+                    <td class="text-end">{{ (it.item_valor or 0) | formatar_moeda }}</td>
+                    <td>
+                      <select class="form-select form-select-sm sel-cat"
+                              onchange="toggleProduto(this, {{ it.item_id }})">
+                        <option value="">— escolha —</option>
+                        {% for val, rot in categorias %}
+                        <option value="{{ val }}">{{ rot }}</option>
+                        {% endfor %}
+                      </select>
+                    </td>
+                    <td>
+                      <select class="form-select form-select-sm sel-prod"
+                              id="prod-{{ it.item_id }}" style="display:none">
+                        <option value="">— produto —</option>
+                        {% for p in produtos %}
+                        <option value="{{ p.id }}">{{ p.nome }}</option>
+                        {% endfor %}
+                      </select>
+                    </td>
+                    <td class="text-end">
+                      <button class="btn btn-sm btn-primary"
+                              onclick="classificar({{ it.item_id }}, 'memorizar')"
+                              title="Grava a regra CNPJ+cProd e classifica">Memorizar</button>
+                      <button class="btn btn-sm btn-outline-secondary"
+                              onclick="classificar({{ it.item_id }}, 'so_desta_vez')"
+                              title="Classifica só este item, sem criar regra">Só desta vez</button>
+                    </td>
+                  </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    {% endif %}
+  </div>
+
+  {# =================== ÁREA 2: CONSULTAR =================== #}
+  <div class="tab-pane fade {% if aba == 'consultar' %}show active{% endif %}"
+       id="pane-consultar" role="tabpanel">
+
+    <form method="GET" action="{{ url_for('dfe_compras.compras') }}" class="card card-body mb-3">
+      <input type="hidden" name="filtrar" value="1">
+      <input type="hidden" name="aba" value="consultar">
+      <div class="row g-2">
+        <div class="col-md-3">
+          <label class="form-label small mb-0">Fornecedor / CNPJ</label>
+          <input type="text" name="fornecedor" class="form-control form-control-sm"
+                 value="{{ filtros.fornecedor }}" placeholder="nome ou CNPJ">
+        </div>
+        <div class="col-md-2">
+          <label class="form-label small mb-0">Categoria</label>
+          <select name="categoria" class="form-select form-select-sm">
+            <option value="">todas</option>
+            {% for val, rot in categorias %}
+            <option value="{{ val }}" {% if filtros.categoria == val %}selected{% endif %}>{{ rot }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-md-2">
+          <label class="form-label small mb-0">Produto</label>
+          <select name="produto_id" class="form-select form-select-sm">
+            <option value="">todos</option>
+            {% for p in produtos %}
+            <option value="{{ p.id }}" {% if filtros.produto_id == p.id|string %}selected{% endif %}>{{ p.nome }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-md-2">
+          <label class="form-label small mb-0">Data de</label>
+          <input type="date" name="data_ini" class="form-control form-control-sm"
+                 value="{{ filtros.data_ini or data_ini_default }}">
+        </div>
+        <div class="col-md-2">
+          <label class="form-label small mb-0">Data até</label>
+          <input type="date" name="data_fim" class="form-control form-control-sm"
+                 value="{{ filtros.data_fim or data_fim_default }}">
+        </div>
+        <div class="col-md-1">
+          <label class="form-label small mb-0">NCM</label>
+          <input type="text" name="ncm" class="form-control form-control-sm" value="{{ filtros.ncm }}">
+        </div>
+        <div class="col-md-2">
+          <label class="form-label small mb-0">Valor mín (item)</label>
+          <input type="text" name="valor_min" class="form-control form-control-sm"
+                 value="{{ filtros.valor_min }}" placeholder="0,00">
+        </div>
+        <div class="col-md-2">
+          <label class="form-label small mb-0">Valor máx (item)</label>
+          <input type="text" name="valor_max" class="form-control form-control-sm"
+                 value="{{ filtros.valor_max }}" placeholder="0,00">
+        </div>
+        <div class="col-md-2">
+          <label class="form-label small mb-0">Situação</label>
+          <select name="situacao" class="form-select form-select-sm">
+            <option value="">todas</option>
+            <option value="autorizado" {% if filtros.situacao == 'autorizado' %}selected{% endif %}>autorizado</option>
+            <option value="cancelada"  {% if filtros.situacao == 'cancelada'  %}selected{% endif %}>cancelada</option>
+            <option value="denegada"   {% if filtros.situacao == 'denegada'   %}selected{% endif %}>denegada</option>
+          </select>
+        </div>
+        <div class="col-md-2">
+          <label class="form-label small mb-0">Classificado?</label>
+          <select name="classificado" class="form-select form-select-sm">
+            <option value="">todos</option>
+            <option value="sim" {% if filtros.classificado == 'sim' %}selected{% endif %}>só classificados</option>
+            <option value="nao" {% if filtros.classificado == 'nao' %}selected{% endif %}>só pendentes</option>
+          </select>
+        </div>
+        <div class="col-md-2 d-flex align-items-end">
+          <button type="submit" class="btn btn-sm btn-primary w-100"><i class="bi bi-search"></i> Filtrar</button>
+        </div>
+      </div>
+    </form>
+
+    {% if filtrou %}
+      <div class="d-flex gap-3 mb-2">
+        <div class="border rounded p-2 flex-fill text-center">
+          <div class="small text-muted">Total em R$</div>
+          <div class="fs-5 fw-bold text-success">{{ (totais.valor or 0) | formatar_moeda }}</div>
+        </div>
+        <div class="border rounded p-2 flex-fill text-center">
+          <div class="small text-muted">Total em litros (combustível)</div>
+          <div class="fs-5 fw-bold">{{ '%.3f'|format((totais.litros or 0)|float) }}</div>
+        </div>
+        <div class="border rounded p-2 flex-fill text-center">
+          <div class="small text-muted">Itens</div>
+          <div class="fs-5 fw-bold">{{ totais.itens }}</div>
+        </div>
+      </div>
+
+      {% if truncado %}
+        <div class="alert alert-warning py-2 small">
+          Exibindo os primeiros {{ limite }} itens (o total nos cartões acima considera
+          TODO o filtro). Refine os filtros para ver menos linhas.
+        </div>
+      {% endif %}
+
+      <table class="table table-sm table-striped align-middle">
+        <thead class="table-light">
+          <tr>
+            <th>Data</th>
+            <th>Fornecedor</th>
+            <th>Item</th>
+            <th>Categoria</th>
+            <th>Produto</th>
+            <th class="text-end">Qtd</th>
+            <th class="text-end">Valor</th>
+            <th>Situação</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in resultados %}
+          <tr>
+            <td>{{ r.dh_emissao.strftime('%d/%m/%Y') if r.dh_emissao else '—' }}</td>
+            <td>{{ r.emit_nome or '—' }}<br><small class="text-muted">{{ r.emit_cnpj or '' }}</small></td>
+            <td>{{ r.produto_xml or '—' }}<br>
+                <small class="text-muted">cProd {{ r.cprod_fornecedor or '—' }} · NCM {{ r.ncm or '—' }}</small></td>
+            <td>
+              {% if r.categoria %}
+                <span class="badge bg-info text-dark">{{ rot_categoria.get(r.categoria, r.categoria) }}</span>
+                {% if r.classificado_modo == 'so_desta_vez' %}<br><small class="text-muted">só desta vez</small>{% endif %}
+              {% else %}
+                <span class="badge bg-warning text-dark">pendente</span>
+              {% endif %}
+            </td>
+            <td>{{ r.produto_nome or '—' }}</td>
+            <td class="text-end">{{ r.quantidade }} {{ r.unidade or '' }}</td>
+            <td class="text-end">{{ (r.item_valor or 0) | formatar_moeda }}</td>
+            <td>{{ r.situacao }}</td>
+          </tr>
+          {% else %}
+          <tr><td colspan="8" class="text-center text-muted">Nenhum item para o filtro.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    {% else %}
+      <div class="alert alert-light border">Defina os filtros e clique em <strong>Filtrar</strong>.</div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Expandir/recolher os itens de uma nota.
+document.querySelectorAll('.nota-row').forEach(function (row) {
+  row.addEventListener('click', function () {
+    var doc = row.getAttribute('data-doc');
+    var bloco = document.getElementById('itens-' + doc);
+    var caret = document.getElementById('caret-' + doc);
+    if (!bloco) return;
+    var aberto = bloco.style.display !== 'none';
+    bloco.style.display = aberto ? 'none' : 'table-row';
+    if (caret) caret.className = 'bi ' + (aberto ? 'bi-chevron-right' : 'bi-chevron-down') + ' caret';
+  });
+});
+
+// Mostra/oculta o dropdown de produto conforme a categoria (só combustível).
+function toggleProduto(sel, itemId) {
+  var prod = document.getElementById('prod-' + itemId);
+  if (!prod) return;
+  prod.style.display = (sel.value === 'combustivel') ? '' : 'none';
+}
+
+// Classifica um item via fetch (o base.html injeta o X-CSRFToken automaticamente).
+function classificar(itemId, modo) {
+  var linha = document.getElementById('item-' + itemId);
+  if (!linha) return;
+  var categoria = linha.querySelector('.sel-cat').value;
+  var prodSel = document.getElementById('prod-' + itemId);
+  var produtoId = prodSel ? prodSel.value : '';
+
+  if (!categoria) { alert('Escolha a categoria do item.'); return; }
+  if (categoria === 'combustivel' && !produtoId) { alert('Combustível: escolha o produto.'); return; }
+
+  linha.querySelectorAll('button').forEach(function (b) { b.disabled = true; });
+
+  fetch('{{ url_for("dfe_compras.classificar") }}', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ item_id: itemId, categoria: categoria, produto_id: produtoId, modo: modo })
+  })
+  .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+  .then(function (res) {
+    if (!res.ok || !res.j.ok) {
+      alert('Erro: ' + (res.j && res.j.erro ? res.j.erro : 'falha ao classificar'));
+      linha.querySelectorAll('button').forEach(function (b) { b.disabled = false; });
+      return;
+    }
+    if (res.j.aviso) alert(res.j.aviso);
+    // Se a regra classificou tambem outros pendentes iguais, recarrega a lista
+    // para refletir todos (podem estar em outras notas).
+    if (res.j.tambem && res.j.tambem > 0) {
+      alert('Regra memorizada e aplicada também a ' + res.j.tambem +
+            ' item(ns) pendente(s) igual(is). Recarregando a lista...');
+      window.location.reload();
+      return;
+    }
+    // Remove a linha do item; se a nota ficou sem itens, remove a nota.
+    var tbody = linha.parentNode;
+    var docRowBlock = linha.closest('.nota-itens');
+    linha.remove();
+    if (tbody && tbody.querySelectorAll('tr').length === 0 && docRowBlock) {
+      var id = docRowBlock.id.replace('itens-', '');
+      var notaRow = document.querySelector('.nota-row[data-doc="' + id + '"]');
+      if (notaRow) notaRow.remove();
+      docRowBlock.remove();
+    }
+  })
+  .catch(function (e) {
+    alert('Erro de rede: ' + e);
+    linha.querySelectorAll('button').forEach(function (b) { b.disabled = false; });
+  });
+}
+</script>
+{% endblock %}
