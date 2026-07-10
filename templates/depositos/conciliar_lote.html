@@ -21,6 +21,9 @@
   .diff-badge { font-size:.72rem; font-weight:700; padding:.15rem .45rem; border-radius:3px; }
   .diff-pos { background:#d1e7dd; color:#0f5132; }  /* banco MAIOR: verde */
   .diff-neg { background:#f8d7da; color:#842029; }  /* banco MENOR: vermelho */
+  /* botões da coluna Ação: mesmo tamanho, quadrados, alinhados */
+  .btn-acao { width:2rem; height:1.9rem; padding:0; display:inline-flex;
+              align-items:center; justify-content:center; line-height:1; }
   .barra-lote { position:sticky; bottom:0; z-index:5; }
 </style>
 {% endblock %}
@@ -103,11 +106,11 @@
             <td class="text-end val text-success">{{ r.bt_valor | formatar_moeda }}</td>
             <td>{{ r.bt_data_br }}</td>
             <td class="text-center pe-3">
-              <a class="btn btn-outline-secondary btn-sm"
+              <a class="btn btn-outline-secondary btn-sm btn-acao"
                  href="{{ url_for('lancamentos_caixa.editar', id=r.lancamento_caixa_id) }}"
                  target="_blank" rel="noopener"
-                 title="Abrir o caixa deste depósito para corrigir">
-                <i class="bi bi-cash-register"></i></a>
+                 title="Abrir o caixa para corrigir">
+                <i class="bi bi-cash-stack"></i></a>
             </td>
           </tr>
           {% endfor %}
@@ -158,34 +161,34 @@
                 <span class="diff-badge {{ 'diff-pos' if r.diff > 0 else 'diff-neg' }}">{{ '+' if r.diff > 0 else '' }}{{ r.diff | formatar_moeda }}</span></td>
               <td class="text-center pe-3">
                 <div class="d-flex justify-content-center gap-1">
-                  <button class="btn btn-outline-warning btn-sm btn-vinc-div"
+                  <button type="button" class="btn btn-outline-warning btn-sm btn-acao btn-vinc-div"
                           data-dep="{{ r.dep_id }}" data-bt="{{ r.bt_id }}"
                           data-depvalor="{{ r.valor }}" data-btvalor="{{ r.bt_valor }}" data-diff="{{ r.diff }}"
-                          title="Vincular assim mesmo (1-a-1)">
-                    <i class="bi bi-link-45deg"></i> Vincular</button>
-                  <button class="btn btn-outline-info btn-sm btn-juntar"
+                          title="Vincular só esta transação (com diferença)">
+                    <i class="bi bi-link-45deg"></i></button>
+                  <button type="button" class="btn btn-outline-info btn-sm btn-acao btn-juntar"
                           data-dep="{{ r.dep_id }}" data-depvalor="{{ r.valor }}"
-                          title="Juntar 2+ transações que somam este depósito">
+                          title="Juntar 2+ transações do banco">
                     <i class="bi bi-collection"></i></button>
-                  <a class="btn btn-outline-secondary btn-sm"
+                  <a class="btn btn-outline-secondary btn-sm btn-acao"
                      href="{{ url_for('lancamentos_caixa.editar', id=r.lancamento_caixa_id) }}"
                      target="_blank" rel="noopener"
-                     title="Abrir o caixa deste depósito para corrigir">
-                    <i class="bi bi-cash-register"></i></a>
+                     title="Abrir o caixa para corrigir">
+                    <i class="bi bi-cash-stack"></i></a>
                 </div>
               </td>
             {% else %}
               <td colspan="3" class="text-center text-muted small">— sem crédito candidato na janela —</td>
               <td class="text-center pe-3">
                 <div class="d-flex justify-content-center gap-1">
-                  <a class="btn btn-outline-secondary btn-sm"
+                  <a class="btn btn-outline-secondary btn-sm btn-acao"
                      href="{{ url_for('depositos.listar', data_inicio=data_inicio, data_fim=data_fim) }}"
                      title="Resolver na tela de depósitos"><i class="bi bi-box-arrow-up-right"></i></a>
-                  <a class="btn btn-outline-secondary btn-sm"
+                  <a class="btn btn-outline-secondary btn-sm btn-acao"
                      href="{{ url_for('lancamentos_caixa.editar', id=r.lancamento_caixa_id) }}"
                      target="_blank" rel="noopener"
-                     title="Abrir o caixa deste depósito para corrigir">
-                    <i class="bi bi-cash-register"></i></a>
+                     title="Abrir o caixa para corrigir">
+                    <i class="bi bi-cash-stack"></i></a>
                 </div>
               </td>
             {% endif %}
