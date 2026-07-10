@@ -1,0 +1,264 @@
+{% extends "base.html" %}
+{% block title %}Conciliação em Lote — Depósitos{% endblock %}
+
+{% block styles %}
+<style>
+  .lote-hero { background:linear-gradient(135deg,#1D63A5,#154070); border-radius:.75rem;
+               padding:1.25rem 1.75rem; margin-bottom:1.25rem; color:#fff; }
+  .sec-title { font-weight:700; font-size:.95rem; padding:.5rem .9rem; border-radius:.5rem .5rem 0 0; }
+  .sec-exato { background:#d1e7dd; color:#0f5132; }
+  .sec-div   { background:#fff3cd; color:#664d03; }
+  .table td, .table th { font-size:.85rem; vertical-align:middle; }
+  .val { font-variant-numeric:tabular-nums; }
+  .arrow { color:#0f5132; font-weight:700; }
+  .diff-badge { font-size:.72rem; font-weight:700; padding:.15rem .45rem; border-radius:3px;
+                background:#f8d7da; color:#842029; }
+  .barra-lote { position:sticky; bottom:0; z-index:5; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+
+  <div class="lote-hero d-flex align-items-center gap-3 flex-wrap">
+    <div class="flex-grow-1">
+      <h4 class="mb-0 fw-bold"><i class="bi bi-lightning-charge me-1"></i>Conciliação em Lote</h4>
+      <p class="mb-0 opacity-75 small">
+        Só pares com <strong>valor idêntico</strong> (±{{ window_days }} dias) entram no lote.
+        Divergências ficam para conferência 1-a-1.</p>
+    </div>
+    <a href="{{ url_for('depositos.listar') }}" class="btn btn-sm px-3 fw-semibold"
+       style="background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.35);">
+      <i class="bi bi-arrow-left me-1"></i> Depósitos (1-a-1)
+    </a>
+  </div>
+
+  <!-- Filtro -->
+  <div class="card shadow-sm mb-3"><div class="card-body">
+    <form method="GET" action="{{ url_for('depositos_lote.conciliar_lote') }}" class="row g-2 align-items-end">
+      <div class="col-md-2">
+        <label class="form-label small fw-semibold">Data Inicial</label>
+        <input type="date" class="form-control form-control-sm" name="data_inicio" value="{{ data_inicio }}">
+      </div>
+      <div class="col-md-2">
+        <label class="form-label small fw-semibold">Data Final</label>
+        <input type="date" class="form-control form-control-sm" name="data_fim" value="{{ data_fim }}">
+      </div>
+      <div class="col-md-4">
+        <label class="form-label small fw-semibold">Conta / Banco</label>
+        <select class="form-select form-select-sm" name="conta_ids[]" multiple size="1">
+          {% for c in contas %}
+          <option value="{{ c.id }}" {% if c.id|string in conta_ids %}selected{% endif %}>{{ c.nome }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-2 d-flex gap-2">
+        <button class="btn btn-primary btn-sm"><i class="bi bi-search me-1"></i>Filtrar</button>
+        <a href="{{ url_for('depositos_lote.conciliar_lote') }}" class="btn btn-secondary btn-sm">Limpar</a>
+      </div>
+    </form>
+  </div></div>
+
+  <!-- SEÇÃO 1: EXATOS -->
+  <div class="card shadow-sm mb-4">
+    <div class="sec-title sec-exato d-flex align-items-center">
+      <i class="bi bi-check2-circle me-2"></i> Batem exato
+      <span class="badge bg-success ms-2" id="cntExato">{{ qtd_exato }}</span>
+    </div>
+    <div class="card-body p-0 table-responsive">
+      {% if exatos %}
+      <table class="table table-hover table-sm mb-0" id="tblExato">
+        <thead style="background:#f0faf4;"><tr>
+          <th class="ps-3" style="width:2rem;"><input type="checkbox" id="checkAllExato"></th>
+          <th>Data Caixa</th><th>Posto</th><th>Tipo</th>
+          <th class="text-end">Depósito</th><th class="text-center">⟷</th>
+          <th>Transação banco</th><th class="text-end">Valor banco</th><th>Data banco</th>
+        </tr></thead>
+        <tbody>
+          {% for r in exatos %}
+          <tr data-dep="{{ r.dep_id }}" data-bt="{{ r.bt_id }}" data-valor="{{ r.valor }}">
+            <td class="ps-3"><input type="checkbox" class="chk-exato"></td>
+            <td>{{ r.data_caixa_br }}</td>
+            <td class="text-truncate" style="max-width:150px;">{{ r.cliente }}</td>
+            <td><span class="badge bg-secondary">{{ r.tipo_label }}</span></td>
+            <td class="text-end fw-semibold val">{{ r.valor | formatar_moeda }}</td>
+            <td class="text-center arrow">=</td>
+            <td class="text-truncate" style="max-width:230px;" title="{{ r.bt_desc }}">
+              <span class="text-muted small">{{ r.conta }}</span> {{ r.bt_desc }}</td>
+            <td class="text-end val text-success">{{ r.bt_valor | formatar_moeda }}</td>
+            <td>{{ r.bt_data_br }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <div class="text-center text-muted py-4"><i class="bi bi-inbox"></i>
+        Nenhum par exato no período/conta selecionados.</div>
+      {% endif %}
+    </div>
+    {% if exatos %}
+    <div class="card-footer barra-lote bg-white d-flex align-items-center justify-content-between flex-wrap gap-2">
+      <span class="small"><strong id="qtdSel">0</strong> par(es) selecionado(s) —
+        Total: <strong id="totalSel" class="text-success">R$ 0,00</strong></span>
+      <button class="btn btn-success btn-sm" id="btnConciliar" disabled onclick="abrirConfirmacao()">
+        <i class="bi bi-link-45deg"></i> Conciliar selecionados</button>
+    </div>
+    {% endif %}
+  </div>
+
+  <!-- SEÇÃO 2: DIVERGENTES -->
+  <div class="card shadow-sm">
+    <div class="sec-title sec-div d-flex align-items-center">
+      <i class="bi bi-exclamation-triangle me-2"></i> Divergentes — conferir 1 a 1
+      <span class="badge bg-warning text-dark ms-2">{{ qtd_divergente }}</span>
+    </div>
+    <div class="card-body p-0 table-responsive">
+      {% if divergentes %}
+      <table class="table table-sm mb-0">
+        <thead style="background:#fffdf3;"><tr>
+          <th class="ps-3">Data Caixa</th><th>Posto</th><th>Tipo</th>
+          <th class="text-end">Depósito</th><th>Candidato banco</th>
+          <th class="text-end">Valor banco</th><th class="text-center">Diferença</th>
+          <th class="text-center pe-3">Ação</th>
+        </tr></thead>
+        <tbody>
+          {% for r in divergentes %}
+          <tr>
+            <td class="ps-3">{{ r.data_caixa_br }}</td>
+            <td class="text-truncate" style="max-width:150px;">{{ r.cliente }}</td>
+            <td><span class="badge bg-secondary">{{ r.tipo_label }}</span></td>
+            <td class="text-end fw-semibold val">{{ r.valor | formatar_moeda }}</td>
+            {% if r.tem_candidato %}
+              <td class="text-truncate" style="max-width:220px;" title="{{ r.bt_desc }}">
+                <span class="text-muted small">{{ r.conta }}</span> {{ r.bt_desc }}
+                <span class="text-muted small">· {{ r.bt_data_br }}</span></td>
+              <td class="text-end val">{{ r.bt_valor | formatar_moeda }}</td>
+              <td class="text-center">
+                <span class="diff-badge">{{ '+' if r.diff > 0 else '' }}{{ r.diff | formatar_moeda }}</span></td>
+              <td class="text-center pe-3">
+                <form method="POST" action="{{ url_for('depositos.vincular') }}" style="display:inline;"
+                      onsubmit="return confirm('Vincular depósito de {{ r.valor | formatar_moeda }} à transação de {{ r.bt_valor | formatar_moeda }}?\n\nDiferença: {{ r.diff | formatar_moeda }}.');">
+                  <input type="hidden" name="comprovacao_ids[]" value="{{ r.dep_id }}">
+                  <input type="hidden" name="bank_transaction_ids[]" value="{{ r.bt_id }}">
+                  <input type="hidden" name="data_inicio" value="{{ data_inicio }}">
+                  <input type="hidden" name="data_fim" value="{{ data_fim }}">
+                  <button class="btn btn-outline-warning btn-sm" title="Vincular assim mesmo (1-a-1)">
+                    <i class="bi bi-link-45deg"></i> Vincular</button>
+                </form>
+              </td>
+            {% else %}
+              <td colspan="3" class="text-center text-muted small">— sem crédito candidato na janela —</td>
+              <td class="text-center pe-3">
+                <a class="btn btn-outline-secondary btn-sm"
+                   href="{{ url_for('depositos.listar', data_inicio=data_inicio, data_fim=data_fim) }}"
+                   title="Resolver na tela de depósitos"><i class="bi bi-box-arrow-up-right"></i></a>
+              </td>
+            {% endif %}
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <div class="text-center text-muted py-4">Nenhum depósito divergente pendente. 🎉</div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+<!-- Modal de confirmação do lote -->
+<div class="modal fade" id="modalConfirma" tabindex="-1"><div class="modal-dialog">
+  <div class="modal-content">
+    <div class="modal-header bg-success text-white">
+      <h5 class="modal-title"><i class="bi bi-check2-all me-1"></i>Confirmar conciliação em lote</h5>
+      <button class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+    </div>
+    <div class="modal-body">
+      <p class="mb-1">Você vai conciliar <strong id="cfQtd">0</strong> depósito(s), todos com
+        valor idêntico ao crédito bancário.</p>
+      <p class="mb-0">Total: <strong id="cfTotal" class="text-success">R$ 0,00</strong></p>
+      <p class="text-muted small mt-2 mb-0">Ação manual e revalidada no servidor. Nada é gravado sem este OK.</p>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
+      <button class="btn btn-success btn-sm" id="btnConfirmaGravar"><i class="bi bi-check-lg"></i> Confirmar e gravar</button>
+    </div>
+  </div>
+</div></div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  const URL_EXEC = '{{ url_for("depositos_lote.conciliar_lote_executar") }}';
+  const fmt = v => 'R$ ' + parseFloat(v||0).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
+  const checkAll = document.getElementById('checkAllExato');
+  const btnConc  = document.getElementById('btnConciliar');
+
+  function selecionadas() { return Array.from(document.querySelectorAll('.chk-exato:checked')).map(cb => cb.closest('tr')); }
+
+  function atualizarBarra() {
+    const trs = selecionadas();
+    const total = trs.reduce((s, tr) => s + parseFloat(tr.dataset.valor||0), 0);
+    const qtdSel = document.getElementById('qtdSel');
+    if (qtdSel) qtdSel.textContent = trs.length;
+    const totalSel = document.getElementById('totalSel');
+    if (totalSel) totalSel.textContent = fmt(total);
+    if (btnConc) btnConc.disabled = trs.length === 0;
+  }
+
+  document.querySelectorAll('.chk-exato').forEach(cb => cb.addEventListener('change', atualizarBarra));
+  if (checkAll) checkAll.addEventListener('change', () => {
+    document.querySelectorAll('.chk-exato').forEach(cb => cb.checked = checkAll.checked);
+    atualizarBarra();
+  });
+
+  window.abrirConfirmacao = function () {
+    const trs = selecionadas();
+    if (!trs.length) return;
+    const total = trs.reduce((s, tr) => s + parseFloat(tr.dataset.valor||0), 0);
+    document.getElementById('cfQtd').textContent = trs.length;
+    document.getElementById('cfTotal').textContent = fmt(total);
+    bootstrap.Modal.getOrCreateInstance(document.getElementById('modalConfirma')).show();
+  };
+
+  document.getElementById('btnConfirmaGravar').addEventListener('click', function () {
+    const trs = selecionadas();
+    const pares = trs.map(tr => ({ c: parseInt(tr.dataset.dep), b: parseInt(tr.dataset.bt) }));
+    if (!pares.length) return;
+    this.disabled = true;
+    fetch(URL_EXEC, {                         // CSRF (X-CSRFToken) injetado pelo base.html
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ pares })
+    })
+    .then(r => r.json().then(j => ({ ok: r.ok, j })))
+    .then(({ ok, j }) => {
+      const modal = bootstrap.Modal.getInstance(document.getElementById('modalConfirma'));
+      if (modal) modal.hide();
+      if (j && j.success) {
+        // Remove as linhas conciliadas; as puladas continuam na tela (marcadas)
+        (j.conciliados || []).forEach(depId => {
+          const tr = document.querySelector(`#tblExato tr[data-dep="${depId}"]`);
+          if (tr) tr.remove();
+        });
+        const rest = document.querySelectorAll('#tblExato tbody tr').length;
+        document.getElementById('cntExato').textContent = rest;
+        atualizarBarra();
+
+        let msg = `✓ ${j.qtd} depósito(s) conciliado(s).`;
+        if (j.pulados && j.pulados.length) {
+          msg += `\n\n${j.pulados.length} pulado(s) — NÃO gravado(s):\n` +
+                 j.pulados.map(x => `• depósito #${x.c}: ${x.motivo}`).join('\n') +
+                 `\n\n(os certos foram gravados; corrija os pulados e tente de novo)`;
+        }
+        alert(msg);
+      } else {
+        alert((j && j.message) || 'Falha ao conciliar.');
+      }
+    })
+    .catch(() => alert('Erro de rede ao conciliar.'))
+    .finally(() => { this.disabled = false; });
+  });
+})();
+</script>
+{% endblock %}
