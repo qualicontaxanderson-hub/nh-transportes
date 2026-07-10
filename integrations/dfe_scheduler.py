@@ -1,8 +1,10 @@
 """
 Agendador in-process (APScheduler) da captura automatica de DFe.
 
-Roda de HORA EM HORA a captura em massa (scripts/captura_massa_dfe.py),
-respeitando a cota da SEFAZ:
+Roda de 3 EM 3 HORAS (horario de Brasilia) a captura em massa
+(scripts/captura_massa_dfe.py), respeitando a cota da SEFAZ. O espacamento de 3h
+(em vez de 1h) reduz o 656 "Consumo Indevido", ja que o mesmo CNPJ tambem e
+consultado por outro consumidor (NFStock) e a cota da SEFAZ e rigida.
   - o proprio script pula se dfe_nsu.proximo_permitido ainda estiver no futuro
     (656 recente) e, se tomar 656 no meio, para e reagenda +1h;
   - aqui ainda fazemos um pre-check barato de proximo_permitido para nem
@@ -16,7 +18,8 @@ Concorrencia (gunicorn --workers 2):
 
 Liga/desliga por env (no servico web do Railway):
   DFE_SCHED_ENABLED = '1' (default) | '0' para desligar
-  DFE_SCHED_MINUTE  = minuto do disparo em cada hora (default '5')
+  DFE_SCHED_HOURS   = horas do disparo em cron (default '*/3' = 00,03,...,21 BR)
+  DFE_SCHED_MINUTE  = minuto do disparo (default '5')
 """
 import os
 import sys
@@ -130,11 +133,26 @@ def iniciar_scheduler(app):
         except ValueError:
             minuto = 5
 
-        sched = BackgroundScheduler(daemon=True)
+        # Horas do disparo em cron; default de 3 em 3 horas (00,03,...,21).
+        horas = os.environ.get('DFE_SCHED_HOURS', '*/3')
+
+        # Fuso de Brasilia: o container roda em UTC, entao fixamos o timezone
+        # para os horarios acima serem em horario de Brasilia (UTC-3).
+        # APScheduler 3.x so aceita timezones do pytz.
+        try:
+            import pytz
+            tz = pytz.timezone('America/Sao_Paulo')
+        except Exception:
+            tz = None
+            app.logger.warning(
+                "[dfe_sched] pytz indisponivel; usando fuso padrao do container (UTC)."
+            )
+
+        sched = BackgroundScheduler(daemon=True, timezone=tz)
         sched.add_job(
             lambda: _job(app),
-            trigger=CronTrigger(minute=minuto),   # de hora em hora, no minuto X
-            id='dfe_captura_horaria',
+            trigger=CronTrigger(hour=horas, minute=minuto, timezone=tz),  # 3 em 3h, BR
+            id='dfe_captura_3h',
             max_instances=1,
             coalesce=True,
             misfire_grace_time=300,
@@ -142,6 +160,6 @@ def iniciar_scheduler(app):
         sched.start()
         _started = True
         app.logger.info(
-            "[dfe_sched] scheduler ligado: captura de hora em hora no minuto %s "
-            "(lock global '%s').", minuto, _LOCK_NAME,
+            "[dfe_sched] scheduler ligado: captura nas horas '%s' (America/Sao_Paulo), "
+            "minuto %s (lock global '%s').", horas, minuto, _LOCK_NAME,
         )
