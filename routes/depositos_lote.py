@@ -18,6 +18,7 @@ inválidos e devolve a lista dos pulados. Idempotente: revalida no momento de
 gravar (não religa um depósito já conciliado nem um crédito já usado).
 """
 from datetime import date, datetime, timedelta
+from decimal import Decimal
 
 from flask import Blueprint, render_template, request, jsonify, url_for
 from flask_login import login_required, current_user
@@ -551,6 +552,214 @@ def conciliar_lote_vincular_divergente():
             )
         conn.commit()
         return jsonify(success=True, conciliado=c)
+    except Exception as exc:
+        conn.rollback()
+        return jsonify(success=False, message=f'Erro ao vincular: {exc}'), 500
+    finally:
+        cur.close()
+        conn.close()
+
+
+@bp.route('/conciliar-lote/candidatos/<int:comprovacao_id>')
+@login_required
+@admin_required
+def conciliar_lote_candidatos(comprovacao_id):
+    """
+    Lista transações CRÉDITO LIVRES (não usadas por depósito) na janela de
+    ±WINDOW_DAYS da DATA DO DEPÓSITO FEITO (COALESCE(data_deposito, data_caixa)),
+    do mesmo tipo (cheque/espécie) do depósito. Só SUGERE — nada é gravado.
+    Usado pelo modal "Juntar transações" (banco dividiu o depósito).
+    """
+    conn = get_db_connection()
+    cur = conn.cursor(dictionary=True)
+    try:
+        cur.execute(
+            """
+            SELECT lcc.id, lcc.valor, lcc.bank_transaction_id,
+                   COALESCE(lcc.data_deposito, lc.data) AS data_ref,
+                   fpc.tipo AS forma_tipo
+              FROM lancamentos_caixa_comprovacao lcc
+              JOIN lancamentos_caixa lc ON lc.id = lcc.lancamento_caixa_id
+              JOIN formas_pagamento_caixa fpc ON fpc.id = lcc.forma_pagamento_id
+             WHERE lcc.id = %s
+            """,
+            (comprovacao_id,),
+        )
+        dep = cur.fetchone()
+        if not dep:
+            return jsonify(success=False, message='Depósito inexistente.'), 404
+        if dep['bank_transaction_id'] is not None:
+            return jsonify(success=False, message='Depósito já conciliado.'), 409
+
+        cheque_set, dinheiro_set = _deposit_forma_sets(conn)
+        grupo = _TIPO_GRUPO.get(dep['forma_tipo'], 'ESPECIE')
+        forma_ids = list(cheque_set if grupo == 'CHEQUE' else dinheiro_set)
+
+        dep_out = {
+            'id': dep['id'], 'valor': float(dep['valor']),
+            'tipo': _TIPO_LABEL.get(dep['forma_tipo'], dep['forma_tipo']),
+            'data_ref_br': _fmt_br(dep['data_ref']),
+        }
+        if not forma_ids:
+            return jsonify(success=True, dep=dep_out, candidatos=[])
+
+        data_ref = dep['data_ref']
+        di = (data_ref - timedelta(days=WINDOW_DAYS)).isoformat()
+        df = (data_ref + timedelta(days=WINDOW_DAYS)).isoformat()
+        ph = ','.join(['%s'] * len(forma_ids))
+        dbv_clause = ("AND NOT EXISTS (SELECT 1 FROM deposito_bank_vinculos dbv "
+                      "WHERE dbv.bank_transaction_id = bt.id)")
+        sql = f"""
+            SELECT bt.id, bt.valor, bt.data_transacao, bt.descricao,
+                   COALESCE(ba.apelido, ba.banco_nome) AS conta_nome
+              FROM bank_transactions bt
+              JOIN bank_accounts ba ON ba.id = bt.account_id
+             WHERE bt.tipo = 'CREDIT'
+               AND bt.status <> 'ignorado'
+               AND bt.data_transacao BETWEEN %s AND %s
+               AND bt.forma_recebimento_id IN ({ph})
+               AND NOT EXISTS (SELECT 1 FROM lancamentos_caixa_comprovacao l2
+                                WHERE l2.bank_transaction_id = bt.id)
+               {dbv_clause}
+             ORDER BY bt.data_transacao, bt.id
+        """
+        params = [di, df] + forma_ids
+        try:
+            cur.execute(sql, params)
+            rows = cur.fetchall()
+        except Exception:
+            cur.execute(sql.replace(dbv_clause, ''), params)
+            rows = cur.fetchall()
+
+        candidatos = [{
+            'id': r['id'], 'valor': float(r['valor']),
+            'data_br': _fmt_br(r['data_transacao']),
+            'desc': r.get('descricao') or '', 'conta': r.get('conta_nome') or '',
+        } for r in rows]
+        return jsonify(success=True, dep=dep_out, candidatos=candidatos)
+    finally:
+        cur.close()
+        conn.close()
+
+
+@bp.route('/conciliar-lote/vincular-multiplo', methods=['POST'])
+@login_required
+@admin_required
+def conciliar_lote_vincular_multiplo():
+    """
+    Vincula 1 depósito a N transações (banco dividiu o depósito). Exige soma EXATA.
+    Gravação IDÊNTICA à tela antiga depositos.vincular:
+      - primária em lancamentos_caixa_comprovacao.bank_transaction_id
+      - extras em deposito_bank_vinculos
+      - cada bt marcada status='conciliado', tipo_conciliacao='deposito'
+    Revalida na hora (idempotente): depósito livre + todas as bts livres + soma exata.
+    """
+    payload = request.get_json(silent=True) or {}
+    try:
+        c = int(payload.get('c'))
+    except (TypeError, ValueError):
+        return jsonify(success=False, message='Depósito inválido.'), 400
+    bts, seen = [], set()
+    for x in (payload.get('bts') or []):
+        try:
+            v = int(x)
+        except (TypeError, ValueError):
+            continue
+        if v not in seen:
+            seen.add(v); bts.append(v)
+    if len(bts) < 2:
+        return jsonify(success=False, message='Selecione ao menos 2 transações.'), 400
+
+    conn = get_db_connection()
+    cur = conn.cursor(dictionary=True)
+    try:
+        agora = datetime.now()
+        usuario = current_user.email if hasattr(current_user, 'email') else str(current_user.id)
+        has_tipo_concil = _col_exists(cur, 'bank_transactions', 'tipo_conciliacao')
+
+        cur.execute(
+            "SELECT valor, bank_transaction_id FROM lancamentos_caixa_comprovacao WHERE id=%s",
+            (c,),
+        )
+        dep = cur.fetchone()
+        if not dep:
+            conn.rollback()
+            return jsonify(success=False, message='Depósito inexistente.'), 404
+        if dep['bank_transaction_id'] is not None:
+            conn.rollback()
+            return jsonify(success=False, message='Depósito já conciliado.'), 409
+
+        ph = ','.join(['%s'] * len(bts))
+        cur.execute(
+            f"""
+            SELECT bt.id, bt.valor, bt.tipo, bt.status,
+                   (SELECT COUNT(*) FROM lancamentos_caixa_comprovacao l2
+                     WHERE l2.bank_transaction_id = bt.id) AS up,
+                   (SELECT COUNT(*) FROM deposito_bank_vinculos dbv
+                     WHERE dbv.bank_transaction_id = bt.id) AS ue
+              FROM bank_transactions bt
+             WHERE bt.id IN ({ph})
+            """,
+            bts,
+        )
+        found = {r['id']: r for r in cur.fetchall()}
+        if len(found) != len(bts):
+            conn.rollback()
+            return jsonify(success=False, message='Alguma transação não existe mais.'), 409
+
+        soma = Decimal('0')
+        for bid in bts:
+            r = found[bid]
+            if r['tipo'] != 'CREDIT':
+                conn.rollback()
+                return jsonify(success=False, message=f'Transação #{bid} não é crédito.'), 409
+            if r['status'] == 'ignorado':
+                conn.rollback()
+                return jsonify(success=False, message=f'Transação #{bid} está ignorada.'), 409
+            if (r['up'] or 0) + (r['ue'] or 0) > 0:
+                conn.rollback()
+                return jsonify(success=False, message=f'Transação #{bid} já foi usada em outro depósito.'), 409
+            soma += r['valor']
+        if soma != dep['valor']:   # igualdade Decimal, sem tolerância
+            conn.rollback()
+            return jsonify(success=False, message=f'Soma não confere ({soma} ≠ {dep["valor"]}).'), 409
+
+        # ── gravação idêntica à tela antiga (primária + extras + marcação) ──
+        primary, extras = bts[0], bts[1:]
+        cur.execute(
+            """UPDATE lancamentos_caixa_comprovacao
+                  SET bank_transaction_id = %s
+                WHERE id = %s AND bank_transaction_id IS NULL""",
+            (primary, c),
+        )
+        if cur.rowcount != 1:
+            conn.rollback()
+            return jsonify(success=False, message='conflito de concorrência'), 409
+        for btx in extras:
+            cur.execute(
+                """INSERT IGNORE INTO deposito_bank_vinculos
+                       (comprovacao_id, bank_transaction_id, vinculado_em, vinculado_por)
+                   VALUES (%s, %s, %s, %s)""",
+                (c, btx, agora, usuario),
+            )
+        for btx in [primary] + extras:
+            if has_tipo_concil:
+                cur.execute(
+                    """UPDATE bank_transactions
+                          SET status='conciliado', conciliado_em=%s, conciliado_por=%s,
+                              tipo_conciliacao='deposito'
+                        WHERE id=%s""",
+                    (agora, usuario, btx),
+                )
+            else:
+                cur.execute(
+                    """UPDATE bank_transactions
+                          SET status='conciliado', conciliado_em=%s, conciliado_por=%s
+                        WHERE id=%s""",
+                    (agora, usuario, btx),
+                )
+        conn.commit()
+        return jsonify(success=True, conciliado=c, qtd_transacoes=len(bts))
     except Exception as exc:
         conn.rollback()
         return jsonify(success=False, message=f'Erro ao vincular: {exc}'), 500

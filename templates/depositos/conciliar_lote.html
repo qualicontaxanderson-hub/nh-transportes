@@ -145,7 +145,7 @@
         </tr></thead>
         <tbody>
           {% for r in divergentes %}
-          <tr>
+          <tr data-dep="{{ r.dep_id }}">
             <td class="ps-3">{{ r.data_caixa_br }}</td>
             <td><span class="tipo-tag {{ r.tipo_css }}">{{ r.tipo_label }}</span></td>
             <td class="text-end fw-semibold val">{{ r.valor | formatar_moeda }}</td>
@@ -163,6 +163,10 @@
                           data-depvalor="{{ r.valor }}" data-btvalor="{{ r.bt_valor }}" data-diff="{{ r.diff }}"
                           title="Vincular assim mesmo (1-a-1)">
                     <i class="bi bi-link-45deg"></i> Vincular</button>
+                  <button class="btn btn-outline-info btn-sm btn-juntar"
+                          data-dep="{{ r.dep_id }}" data-depvalor="{{ r.valor }}"
+                          title="Juntar 2+ transações que somam este depósito">
+                    <i class="bi bi-collection"></i></button>
                   <a class="btn btn-outline-secondary btn-sm"
                      href="{{ url_for('lancamentos_caixa.editar', id=r.lancamento_caixa_id) }}"
                      target="_blank" rel="noopener"
@@ -212,6 +216,32 @@
     <div class="modal-footer">
       <button class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
       <button class="btn btn-success btn-sm" id="btnConfirmaGravar"><i class="bi bi-check-lg"></i> Confirmar e gravar</button>
+    </div>
+  </div>
+</div></div>
+
+<!-- Modal: Juntar múltiplas transações (banco dividiu o depósito) -->
+<div class="modal fade" id="modalMultiplo" tabindex="-1"><div class="modal-dialog modal-lg">
+  <div class="modal-content">
+    <div class="modal-header" style="background:#1D63A5;color:#fff;">
+      <h5 class="modal-title"><i class="bi bi-collection me-1"></i>Juntar transações do banco</h5>
+      <button class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+    </div>
+    <div class="modal-body">
+      <div class="mb-1 small">Depósito <strong id="mmDepInfo">—</strong> · Data ref.: <strong id="mmDataRef">—</strong></div>
+      <p class="text-muted small mb-2">Marque 2+ créditos que, somados, batem EXATO o valor do depósito. Só créditos livres na janela de ±3 dias.</p>
+      <div id="mmLoading" class="text-center py-3 d-none"><span class="spinner-border spinner-border-sm"></span> Buscando…</div>
+      <div id="mmLista" style="max-height:320px;overflow-y:auto;border:1px solid #dee2e6;border-radius:4px;font-size:.82rem;"></div>
+    </div>
+    <div class="modal-footer flex-column align-items-stretch">
+      <div class="d-flex justify-content-between align-items-center w-100 mb-2 px-1" style="font-size:.85rem;">
+        <span>Selecionado: <strong id="mmSoma" class="text-primary">R$ 0,00</strong> · Depósito: <strong id="mmDepValor">R$ 0,00</strong></span>
+        <span id="mmStatus" class="fw-bold"></span>
+      </div>
+      <div class="d-flex justify-content-end gap-2">
+        <button class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
+        <button class="btn btn-success btn-sm" id="mmConfirmar" disabled><i class="bi bi-check-lg"></i> Confirmar vínculo</button>
+      </div>
     </div>
   </div>
 </div></div>
@@ -320,6 +350,86 @@
       })
       .catch(() => { alert('Erro de rede ao vincular.'); this.disabled = false; });
     });
+  });
+
+  /* ── Juntar múltiplas transações (banco dividiu o depósito) ── */
+  const URL_CAND = '{{ url_for("depositos_lote.conciliar_lote_candidatos", comprovacao_id=0) }}'.replace(/\/0$/, '/');
+  const URL_MULTI = '{{ url_for("depositos_lote.conciliar_lote_vincular_multiplo") }}';
+  const modalMulti = document.getElementById('modalMultiplo');
+  let mmDep = null, mmCands = [], mmSelected = new Set();
+  const mmCent = v => Math.round(parseFloat(v || 0) * 100);
+
+  function mmAtualiza() {
+    let soma = 0;
+    mmSelected.forEach(id => { const c = mmCands.find(x => x.id === id); if (c) soma += c.valor; });
+    document.getElementById('mmSoma').textContent = fmt(soma);
+    const st = document.getElementById('mmStatus'), btn = document.getElementById('mmConfirmar');
+    const diffC = mmCent(soma) - mmCent(mmDep.valor);
+    if (mmSelected.size < 2) { st.textContent = ''; btn.disabled = true; }
+    else if (diffC === 0) { st.textContent = 'BATE ✓'; st.style.color = '#198754'; btn.disabled = false; }
+    else if (diffC < 0) { st.textContent = 'FALTA ' + fmt(Math.abs(diffC) / 100); st.style.color = '#b45309'; btn.disabled = true; }
+    else { st.textContent = 'EXCEDE ' + fmt(diffC / 100); st.style.color = '#dc3545'; btn.disabled = true; }
+    document.querySelectorAll('.mm-item').forEach(el => {
+      el.style.background = mmSelected.has(parseInt(el.dataset.id)) ? '#e8f4fd' : '';
+    });
+  }
+  window.mmToggle = function (id) {
+    id = parseInt(id);
+    if (mmSelected.has(id)) mmSelected.delete(id); else mmSelected.add(id);
+    mmAtualiza();
+  };
+  function mmRender() {
+    const lista = document.getElementById('mmLista');
+    if (!mmCands.length) { lista.innerHTML = '<div class="text-center text-muted py-3 small">Nenhum crédito livre na janela.</div>'; return; }
+    lista.innerHTML = mmCands.map(c => `
+      <label class="mm-item d-flex align-items-center px-2 py-1 border-bottom" data-id="${c.id}" style="cursor:pointer;">
+        <input type="checkbox" class="me-2" onclick="mmToggle(${c.id})">
+        <div class="flex-grow-1"><strong>${c.data_br}</strong>
+          <span class="text-muted mx-1">${c.conta}</span> ${c.desc}</div>
+        <span class="fw-bold text-success ms-2 text-nowrap">${fmt(c.valor)}</span>
+      </label>`).join('');
+  }
+  document.querySelectorAll('.btn-juntar').forEach(btn => {
+    btn.addEventListener('click', function () {
+      const dep = parseInt(this.dataset.dep), depValor = parseFloat(this.dataset.depvalor);
+      mmDep = { id: dep, valor: depValor }; mmSelected = new Set(); mmCands = [];
+      document.getElementById('mmDepValor').textContent = fmt(depValor);
+      document.getElementById('mmDepInfo').textContent = '#' + dep + ' · ' + fmt(depValor);
+      document.getElementById('mmDataRef').textContent = '—';
+      document.getElementById('mmSoma').textContent = fmt(0);
+      document.getElementById('mmStatus').textContent = '';
+      document.getElementById('mmConfirmar').disabled = true;
+      const lista = document.getElementById('mmLista'); lista.innerHTML = '';
+      const loading = document.getElementById('mmLoading'); loading.classList.remove('d-none');
+      bootstrap.Modal.getOrCreateInstance(modalMulti).show();
+      fetch(URL_CAND + dep).then(r => r.json()).then(j => {
+        loading.classList.add('d-none');
+        if (!j.success) { lista.innerHTML = `<div class="text-danger small p-2">${j.message || 'Erro'}</div>`; return; }
+        mmCands = j.candidatos || [];
+        if (j.dep && j.dep.data_ref_br) document.getElementById('mmDataRef').textContent = j.dep.data_ref_br;
+        mmRender(); mmAtualiza();
+      }).catch(() => { loading.classList.add('d-none'); lista.innerHTML = '<div class="text-danger small p-2">Erro de rede.</div>'; });
+    });
+  });
+  document.getElementById('mmConfirmar').addEventListener('click', function () {
+    if (!mmDep || mmSelected.size < 2) return;
+    this.disabled = true;
+    fetch(URL_MULTI, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ c: mmDep.id, bts: Array.from(mmSelected) })
+    })
+    .then(r => r.json().then(j => ({ ok: r.ok, j })))
+    .then(({ ok, j }) => {
+      if (ok && j && j.success) {
+        const m = bootstrap.Modal.getInstance(modalMulti); if (m) m.hide();
+        const tr = document.querySelector(`#tblDiv tr[data-dep="${j.conciliado}"]`);
+        if (tr) tr.remove();
+        const cnt = document.getElementById('cntDiv');
+        if (cnt) cnt.textContent = document.querySelectorAll('#tblDiv tbody tr').length;
+        alert(`✓ Depósito conciliado com ${j.qtd_transacoes} transações.`);
+      } else { alert((j && j.message) || 'Falha ao vincular.'); this.disabled = false; }
+    })
+    .catch(() => { alert('Erro de rede ao vincular.'); this.disabled = false; });
   });
 })();
 </script>
