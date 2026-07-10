@@ -45,6 +45,10 @@ _TIPO_CSS = {
     'DEPOSITO_CHEQUE_PRAZO': 'tipo-cheque-prazo',  # roxo claro
 }
 WINDOW_DAYS = 3  # janela de data para considerar o mesmo depósito
+# Marco de corte fixo: a tela de conciliação em lote esconde depósitos com data do
+# depósito feito (COALESCE(data_deposito, data_caixa)) anterior a esta data.
+# NÃO apaga nem altera nada no banco — apenas filtra a exibição desta tela.
+DATA_CORTE_CONCILIACAO = '2026-06-01'
 
 
 # ─────────────────────────────── helpers ────────────────────────────────────
@@ -142,11 +146,12 @@ def _fetch_pending_deposits(conn, di, df):
            AND lcc.bank_transaction_id IS NULL
            AND lcc.valor > 0
            AND lc.data BETWEEN %s AND %s
+           AND COALESCE(lcc.data_deposito, lc.data) >= %s
            AND NOT EXISTS (SELECT 1 FROM troco_pix tp
                             WHERE tp.lancamento_caixa_id = lc.id)
          ORDER BY lc.data, lcc.id
         """,
-        (di, df),
+        (di, df, DATA_CORTE_CONCILIACAO),
     )
     rows = cur.fetchall()
     cur.close()
@@ -345,6 +350,7 @@ def conciliar_lote():
         data_inicio=data_inicio,
         data_fim=data_fim,
         window_days=WINDOW_DAYS,
+        data_corte_br=_fmt_br(DATA_CORTE_CONCILIACAO),
         empresas=empresas,
         exatos=exatos_rows,
         divergentes=divergentes_rows,
