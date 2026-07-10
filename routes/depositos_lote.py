@@ -38,6 +38,11 @@ _TIPO_GRUPO = {
     'DEPOSITO_CHEQUE_VISTA': 'CHEQUE',
     'DEPOSITO_CHEQUE_PRAZO': 'CHEQUE',
 }
+_TIPO_CSS = {
+    'DEPOSITO_ESPECIE':      'tipo-especie',       # verde
+    'DEPOSITO_CHEQUE_VISTA': 'tipo-cheque-vista',  # amarelo
+    'DEPOSITO_CHEQUE_PRAZO': 'tipo-cheque-prazo',  # roxo claro
+}
 WINDOW_DAYS = 3  # janela de data para considerar o mesmo depósito
 
 
@@ -268,6 +273,7 @@ def _row_dep(d):
         'lancamento_caixa_id': d['lancamento_caixa_id'],
         'cliente': d['cliente_nome'],
         'tipo_label': _TIPO_LABEL.get(d['forma_tipo'], d['forma_tipo']),
+        'tipo_css': _TIPO_CSS.get(d['forma_tipo'], 'tipo-especie'),
         'tipo_grupo': d['tipo_grupo'],
         'data_caixa_br': _fmt_br(d['data_caixa']),
         'valor': float(d['valor']),
@@ -327,6 +333,10 @@ def conciliar_lote():
             row['diff'] = None
         divergentes_rows.append(row)
 
+    empresas = sorted(
+        {r['cliente'] for r in exatos_rows} | {r['cliente'] for r in divergentes_rows}
+    )
+
     return render_template(
         'depositos/conciliar_lote.html',
         contas=contas,
@@ -334,6 +344,7 @@ def conciliar_lote():
         data_inicio=data_inicio,
         data_fim=data_fim,
         window_days=WINDOW_DAYS,
+        empresas=empresas,
         exatos=exatos_rows,
         divergentes=divergentes_rows,
         total_exato=total_exato,
@@ -456,6 +467,93 @@ def conciliar_lote_executar():
     except Exception as exc:
         conn.rollback()
         return jsonify(success=False, message=f'Erro ao conciliar: {exc}'), 500
+    finally:
+        cur.close()
+        conn.close()
+
+
+@bp.route('/conciliar-lote/vincular-divergente', methods=['POST'])
+@login_required
+@admin_required
+def conciliar_lote_vincular_divergente():
+    """
+    Vincula UM par divergente (valor NÃO precisa bater) via AJAX, para o vínculo
+    acontecer na própria tela /conciliar-lote sem redirecionar.
+    Gravação idêntica a depositos.vincular; só o retorno é JSON.
+    """
+    payload = request.get_json(silent=True) or {}
+    try:
+        c, b = int(payload.get('c')), int(payload.get('b'))
+    except (TypeError, ValueError):
+        return jsonify(success=False, message='Par inválido.'), 400
+
+    conn = get_db_connection()
+    cur = conn.cursor(dictionary=True)
+    try:
+        agora = datetime.now()
+        usuario = current_user.email if hasattr(current_user, 'email') else str(current_user.id)
+        has_tipo_concil = _col_exists(cur, 'bank_transactions', 'tipo_conciliacao')
+
+        cur.execute(
+            """
+            SELECT lcc.bank_transaction_id AS cur_link,
+                   bt.tipo AS bt_tipo, bt.status AS bt_status,
+                   (SELECT COUNT(*) FROM lancamentos_caixa_comprovacao l2
+                     WHERE l2.bank_transaction_id = bt.id) AS used_primary,
+                   (SELECT COUNT(*) FROM deposito_bank_vinculos dbv
+                     WHERE dbv.bank_transaction_id = bt.id) AS used_extra
+              FROM lancamentos_caixa_comprovacao lcc
+              JOIN bank_transactions bt ON bt.id = %s
+             WHERE lcc.id = %s
+            """,
+            (b, c),
+        )
+        row = cur.fetchone()
+
+        motivo = None
+        if not row:
+            motivo = 'registro inexistente'
+        elif row['cur_link'] is not None:
+            motivo = 'depósito já conciliado'
+        elif row['bt_tipo'] != 'CREDIT':
+            motivo = 'transação não é crédito'
+        elif row['bt_status'] == 'ignorado':
+            motivo = 'transação ignorada'
+        elif (row['used_primary'] or 0) + (row['used_extra'] or 0) > 0:
+            motivo = 'transação já usada em outro depósito'
+        if motivo:
+            conn.rollback()
+            return jsonify(success=False, message=motivo), 409
+
+        cur.execute(
+            """UPDATE lancamentos_caixa_comprovacao
+                  SET bank_transaction_id = %s
+                WHERE id = %s AND bank_transaction_id IS NULL""",
+            (b, c),
+        )
+        if cur.rowcount != 1:
+            conn.rollback()
+            return jsonify(success=False, message='conflito de concorrência'), 409
+        if has_tipo_concil:
+            cur.execute(
+                """UPDATE bank_transactions
+                      SET status='conciliado', conciliado_em=%s, conciliado_por=%s,
+                          tipo_conciliacao='deposito'
+                    WHERE id=%s""",
+                (agora, usuario, b),
+            )
+        else:
+            cur.execute(
+                """UPDATE bank_transactions
+                      SET status='conciliado', conciliado_em=%s, conciliado_por=%s
+                    WHERE id=%s""",
+                (agora, usuario, b),
+            )
+        conn.commit()
+        return jsonify(success=True, conciliado=c)
+    except Exception as exc:
+        conn.rollback()
+        return jsonify(success=False, message=f'Erro ao vincular: {exc}'), 500
     finally:
         cur.close()
         conn.close()
