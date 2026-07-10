@@ -88,6 +88,7 @@
           <th>Data Caixa</th><th>Tipo</th>
           <th class="text-end">Depósito</th><th class="text-center">⟷</th>
           <th>Transação banco</th><th class="text-end">Valor banco</th><th>Data banco</th>
+          <th class="text-center pe-3">Ação</th>
         </tr></thead>
         <tbody>
           {% for r in exatos %}
@@ -101,6 +102,13 @@
               <span class="text-muted small">{{ r.conta }}</span> {{ r.bt_desc }}</td>
             <td class="text-end val text-success">{{ r.bt_valor | formatar_moeda }}</td>
             <td>{{ r.bt_data_br }}</td>
+            <td class="text-center pe-3">
+              <a class="btn btn-outline-secondary btn-sm"
+                 href="{{ url_for('lancamentos_caixa.editar', id=r.lancamento_caixa_id) }}"
+                 target="_blank" rel="noopener"
+                 title="Abrir o caixa deste depósito para corrigir">
+                <i class="bi bi-cash-register"></i></a>
+            </td>
           </tr>
           {% endfor %}
         </tbody>
@@ -149,18 +157,32 @@
               <td class="text-center">
                 <span class="diff-badge {{ 'diff-pos' if r.diff > 0 else 'diff-neg' }}">{{ '+' if r.diff > 0 else '' }}{{ r.diff | formatar_moeda }}</span></td>
               <td class="text-center pe-3">
-                <button class="btn btn-outline-warning btn-sm btn-vinc-div"
-                        data-dep="{{ r.dep_id }}" data-bt="{{ r.bt_id }}"
-                        data-depvalor="{{ r.valor }}" data-btvalor="{{ r.bt_valor }}" data-diff="{{ r.diff }}"
-                        title="Vincular assim mesmo (1-a-1)">
-                  <i class="bi bi-link-45deg"></i> Vincular</button>
+                <div class="d-flex justify-content-center gap-1">
+                  <button class="btn btn-outline-warning btn-sm btn-vinc-div"
+                          data-dep="{{ r.dep_id }}" data-bt="{{ r.bt_id }}"
+                          data-depvalor="{{ r.valor }}" data-btvalor="{{ r.bt_valor }}" data-diff="{{ r.diff }}"
+                          title="Vincular assim mesmo (1-a-1)">
+                    <i class="bi bi-link-45deg"></i> Vincular</button>
+                  <a class="btn btn-outline-secondary btn-sm"
+                     href="{{ url_for('lancamentos_caixa.editar', id=r.lancamento_caixa_id) }}"
+                     target="_blank" rel="noopener"
+                     title="Abrir o caixa deste depósito para corrigir">
+                    <i class="bi bi-cash-register"></i></a>
+                </div>
               </td>
             {% else %}
               <td colspan="3" class="text-center text-muted small">— sem crédito candidato na janela —</td>
               <td class="text-center pe-3">
-                <a class="btn btn-outline-secondary btn-sm"
-                   href="{{ url_for('depositos.listar', data_inicio=data_inicio, data_fim=data_fim) }}"
-                   title="Resolver na tela de depósitos"><i class="bi bi-box-arrow-up-right"></i></a>
+                <div class="d-flex justify-content-center gap-1">
+                  <a class="btn btn-outline-secondary btn-sm"
+                     href="{{ url_for('depositos.listar', data_inicio=data_inicio, data_fim=data_fim) }}"
+                     title="Resolver na tela de depósitos"><i class="bi bi-box-arrow-up-right"></i></a>
+                  <a class="btn btn-outline-secondary btn-sm"
+                     href="{{ url_for('lancamentos_caixa.editar', id=r.lancamento_caixa_id) }}"
+                     target="_blank" rel="noopener"
+                     title="Abrir o caixa deste depósito para corrigir">
+                    <i class="bi bi-cash-register"></i></a>
+                </div>
               </td>
             {% endif %}
           </tr>
