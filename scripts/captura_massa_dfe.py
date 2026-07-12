@@ -46,6 +46,7 @@ import pymysql
 # Reaproveita TUDO: consulta_sefaz (cert/mTLS/SOAP) e processa_dfe (extrai/grava).
 import consulta_sefaz as cs
 import processa_dfe as pd
+from integrations.dfe_classificacao import aplicar_regras
 
 # --------------------------------------------------------------------------
 # Parametros de seguranca desta captura em massa.
@@ -230,6 +231,18 @@ def main():
                 cliente_id, cnpj_cert, novo_ult, ret_max or 0, status_txt,
             ))
             conn.commit()
+
+            # Classificacao automatica dos itens novos que ja tem regra memorizada
+            # (emit_cnpj + cprod). Best-effort e ISOLADO: se falhar, so faz rollback
+            # dela -- a nota ja esta salva e o ult_nsu ja avancou.
+            try:
+                n_cls = aplicar_regras(cur)
+                if n_cls:
+                    conn.commit()
+                    print(f"    (auto-classificacao: {n_cls} item(ns) por regra)")
+            except Exception as exc:
+                conn.rollback()
+                print(f"    (aviso: auto-classificacao falhou: {exc})")
 
             lotes += 1
             max_nsu = ret_max or max_nsu

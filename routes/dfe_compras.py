@@ -203,6 +203,22 @@ def compras():
             resultados = cur.fetchall()
             truncado = len(resultados) >= LIMITE and (totais['itens'] or 0) > LIMITE
 
+        # ---------- AREA 3: REGRAS memorizadas (para ver/apagar) ----------
+        cur.execute(
+            """
+            SELECT r.id, r.emit_cnpj, r.cprod_fornecedor,
+                   r.categoria, r.produto_id, r.criado_em,
+                   p.nome AS produto_nome,
+                   (SELECT d.emit_nome FROM dfe_documentos d
+                     WHERE d.emit_cnpj = r.emit_cnpj AND d.emit_nome IS NOT NULL
+                     ORDER BY d.id DESC LIMIT 1) AS fornecedor_nome
+              FROM dfe_classificacao_regra r
+              LEFT JOIN produto p ON p.id = r.produto_id
+             ORDER BY fornecedor_nome, r.cprod_fornecedor
+            """
+        )
+        regras = cur.fetchall()
+
         # Rotulos de categoria para exibicao.
         rot_categoria = dict(CATEGORIAS)
 
@@ -229,8 +245,38 @@ def compras():
             limite=LIMITE,
             data_ini_default=data_ini_default,
             data_fim_default=data_fim_default,
+            regras=regras,
             aba=aba,
         )
+    finally:
+        cur.close()
+        conn.close()
+
+
+# ==========================================================================
+# ACAO: apagar UMA regra memorizada (AJAX/JSON). So remove a regra; os itens
+# ja classificados por ela permanecem como estao.
+# ==========================================================================
+@dfe_compras_bp.route('/compras/regras/apagar', methods=['POST'])
+@login_required
+def apagar_regra():
+    dados = request.get_json(silent=True) or {}
+    try:
+        regra_id = int(dados.get('regra_id') or 0)
+    except (TypeError, ValueError):
+        regra_id = 0
+    if not regra_id:
+        return jsonify({'ok': False, 'erro': 'regra_id ausente'}), 400
+
+    conn = get_db_connection()
+    cur = conn.cursor(dictionary=True)
+    try:
+        cur.execute("DELETE FROM dfe_classificacao_regra WHERE id = %s", (regra_id,))
+        conn.commit()
+        return jsonify({'ok': True, 'apagou': cur.rowcount or 0})
+    except Exception as e:
+        conn.rollback()
+        return jsonify({'ok': False, 'erro': str(e)}), 500
     finally:
         cur.close()
         conn.close()

@@ -9,7 +9,7 @@
 
 <ul class="nav nav-tabs mb-3" id="abas" role="tablist">
   <li class="nav-item" role="presentation">
-    <button class="nav-link {% if aba != 'consultar' %}active{% endif %}"
+    <button class="nav-link {% if aba != 'consultar' and aba != 'regras' %}active{% endif %}"
             id="tab-classificar" data-bs-toggle="tab" data-bs-target="#pane-classificar"
             type="button" role="tab">
       Classificar
@@ -21,12 +21,20 @@
             id="tab-consultar" data-bs-toggle="tab" data-bs-target="#pane-consultar"
             type="button" role="tab">Consultar</button>
   </li>
+  <li class="nav-item" role="presentation">
+    <button class="nav-link {% if aba == 'regras' %}active{% endif %}"
+            id="tab-regras" data-bs-toggle="tab" data-bs-target="#pane-regras"
+            type="button" role="tab">
+      Regras
+      <span class="badge bg-secondary">{{ regras|length }}</span>
+    </button>
+  </li>
 </ul>
 
 <div class="tab-content">
 
   {# =================== ÁREA 1: CLASSIFICAR =================== #}
-  <div class="tab-pane fade {% if aba != 'consultar' %}show active{% endif %}"
+  <div class="tab-pane fade {% if aba != 'consultar' and aba != 'regras' %}show active{% endif %}"
        id="pane-classificar" role="tabpanel">
 
     {% if not notas %}
@@ -271,6 +279,45 @@
       <div class="alert alert-light border">Defina os filtros e clique em <strong>Filtrar</strong>.</div>
     {% endif %}
   </div>
+
+  {# =================== ÁREA 3: REGRAS =================== #}
+  <div class="tab-pane fade {% if aba == 'regras' %}show active{% endif %}"
+       id="pane-regras" role="tabpanel">
+    <p class="text-muted small">
+      Regras memorizadas (fornecedor + código do produto no XML → categoria/produto).
+      Toda nota nova que casar é classificada automaticamente. Apagar remove <strong>só a
+      regra</strong>; os itens já classificados por ela permanecem.
+    </p>
+    {% if not regras %}
+      <div class="alert alert-light border">Nenhuma regra memorizada ainda.</div>
+    {% else %}
+      <table class="table table-sm align-middle">
+        <thead class="table-light">
+          <tr>
+            <th>Fornecedor</th><th>cProd</th><th>Categoria</th><th>Produto</th>
+            <th>Criada em</th><th class="text-end">Ação</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in regras %}
+          <tr id="regra-{{ r.id }}">
+            <td>{{ r.fornecedor_nome or '—' }}<br>
+                <small class="text-muted">{{ r.emit_cnpj }}</small></td>
+            <td><code>{{ r.cprod_fornecedor }}</code></td>
+            <td>{{ rot_categoria.get(r.categoria, r.categoria) }}</td>
+            <td>{{ r.produto_nome or '—' }}</td>
+            <td><small>{{ r.criado_em.strftime('%d/%m/%Y %H:%M') if r.criado_em else '—' }}</small></td>
+            <td class="text-end">
+              <button class="btn btn-sm btn-outline-danger" onclick="apagarRegra({{ r.id }})">
+                <i class="bi bi-trash"></i> Apagar
+              </button>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    {% endif %}
+  </div>
 </div>
 {% endblock %}
 
@@ -294,6 +341,26 @@ function toggleProduto(sel, itemId) {
   var prod = document.getElementById('prod-' + itemId);
   if (!prod) return;
   prod.style.display = (sel.value === 'combustivel') ? '' : 'none';
+}
+
+// Apaga uma regra memorizada (só a regra; itens já classificados permanecem).
+function apagarRegra(regraId) {
+  if (!confirm('Apagar esta regra memorizada?\nOs itens já classificados por ela permanecem.')) return;
+  fetch('{{ url_for("dfe_compras.apagar_regra") }}', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ regra_id: regraId })
+  })
+  .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+  .then(function (res) {
+    if (!res.ok || !res.j.ok) {
+      alert('Erro: ' + (res.j && res.j.erro ? res.j.erro : 'falha ao apagar'));
+      return;
+    }
+    var tr = document.getElementById('regra-' + regraId);
+    if (tr) tr.remove();
+  })
+  .catch(function () { alert('Falha de rede ao apagar a regra.'); });
 }
 
 // Classifica um item via fetch (o base.html injeta o X-CSRFToken automaticamente).

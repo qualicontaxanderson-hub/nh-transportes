@@ -50,6 +50,7 @@ import pymysql
 # Reaproveita TUDO do script de consulta que ja funcionou (cStat 138).
 import consulta_sefaz as cs
 from integrations.dropbox_dfe import montar_caminho, upload_xml
+from integrations.dfe_classificacao import aplicar_regras
 
 # Retencao placeholder do XML (definitiva sera decidida depois).
 DIAS_RETENCAO = 90
@@ -682,6 +683,18 @@ def main():
             cliente_id, cnpj_cert, nsu_ok, _to_int(ret_max) or 0, status_txt,
         ))
         conn.commit()
+
+        # Classificacao automatica dos itens novos que ja tem regra memorizada.
+        # Best-effort e isolado: nao interfere na integridade da captura.
+        try:
+            n_cls = aplicar_regras(cur)
+            if n_cls:
+                conn.commit()
+                print(f"    (auto-classificacao: {n_cls} item(ns) por regra)")
+        except Exception as exc:
+            conn.rollback()
+            print(f"    (aviso: auto-classificacao falhou: {exc})")
+
         cur.close()
     finally:
         conn.close()
