@@ -83,51 +83,49 @@ def _consultar(sess, cnpj_cert, ult_nsu):
 # chamando as funcoes IMPORTADAS de processa_dfe (extrai/grava/Dropbox).
 # Grava por documento (commit/rollback dentro de gravar_*). Retorna contagens.
 # ==========================================================================
-def _processar_docs(conn, cur, ret, cliente_id, cnpj_cert, agora, expira):
+def _processar_docs(conn, cur, ret, cliente_id, cnpj_cert, agora, expira, ult_nsu):
+    """Processa os docZip de UMA resposta 138, EM ORDEM DE NSU, avancando a
+    marca-d'agua (nsu_ok) so APOS cada gravacao bem-sucedida. Se um doc falha,
+    PARA na hora e devolve houve_falha=True: o chamador NAO deve avancar o
+    ult_nsu alem de nsu_ok. Retorna (contagens, nsu_ok, houve_falha)."""
     lote = cs._find(ret, "loteDistDFeInt")
     docs = [e for e in (lote.iter() if lote is not None else [])
             if cs._local(e.tag) == "docZip"]
+    docs.sort(key=lambda e: pd._to_int(e.get("NSU")) or 0)
     c = dict(docs=len(docs), n_nota=0, n_evento=0, n_resumo=0, n_outro=0,
-             n_itens=0, n_cancel=0, n_erro=0)
+             n_itens=0, n_cancel=0)
 
+    nsu_ok = ult_nsu
+    houve_falha = False
     for d in docs:
-        schema = d.get("schema") or None
         nsu = pd._to_int(d.get("NSU"))
-        b64 = d.text or ""
         try:
-            xml_bytes = gzip.decompress(base64.b64decode(b64))
-            root = ET.fromstring(xml_bytes)
-            raiz = cs._local(root.tag)
-        except Exception as exc:
-            c["n_erro"] += 1
-            print(f"      [NSU {nsu}] ERRO descompactar/parsear: {exc}")
-            continue
-
-        try:
-            if raiz == "nfeProc":
-                nota = pd.extrair_nota(root)
-                ni = pd.gravar_nota(conn, cur, cliente_id, cnpj_cert, nota,
-                                    xml_bytes, nsu, schema, agora, expira)
-                c["n_nota"] += 1
-                c["n_itens"] += ni
-            elif raiz == "procEventoNFe":
-                ev = pd.extrair_evento(root)
-                canc = pd.gravar_evento(conn, cur, cliente_id, cnpj_cert, ev,
-                                        xml_bytes, nsu, schema, agora, expira)
-                c["n_evento"] += 1
-                if canc:
-                    c["n_cancel"] += 1
-            elif raiz in ("resNFe", "resEvento"):
-                c["n_resumo"] += 1       # resumo redundante: so conta
-            else:
-                c["n_outro"] += 1
-                print(f"      [NSU {nsu}] IGNORADO (raiz desconhecida: {raiz})")
+            kind, ni, canc = pd.processar_um_doc(
+                conn, cur, cliente_id, cnpj_cert, d, agora, expira)
         except Exception as exc:
             conn.rollback()
-            c["n_erro"] += 1
-            print(f"      [NSU {nsu}] ERRO gravar ({raiz}): {exc}")
+            houve_falha = True
+            print(f"      [NSU {nsu}] FALHA ao salvar: {exc}")
+            print(f"      >>> PARANDO o lote; ult_nsu nao avanca alem de {nsu_ok} "
+                  "(retenta no proximo ciclo).")
+            break
 
-    return c
+        if kind == "nota":
+            c["n_nota"] += 1
+            c["n_itens"] += ni
+        elif kind == "evento":
+            c["n_evento"] += 1
+            if canc:
+                c["n_cancel"] += 1
+        elif kind == "resumo":
+            c["n_resumo"] += 1
+        else:
+            c["n_outro"] += 1
+            print(f"      [NSU {nsu}] tipo nao modelado (CTe/resEvento) -- seguindo.")
+
+        nsu_ok = nsu   # so avanca a marca APOS salvar com sucesso
+
+    return c, nsu_ok, houve_falha
 
 
 # ==========================================================================
@@ -168,7 +166,7 @@ def main():
     print("    OK.")
 
     # 4) Loop de lotes.
-    tot_nota = tot_evento = tot_itens = tot_cancel = tot_resumo = tot_outro = tot_erro = 0
+    tot_nota = tot_evento = tot_itens = tot_cancel = tot_resumo = tot_outro = 0
     lotes = 0
     max_nsu = 0
     motivo_fim = "limite"   # default se sair pelo teto
@@ -225,9 +223,9 @@ def main():
                 print(f"    cStat inesperado {cStat} ({xMotivo}). Parando.")
                 break
 
-            # ----- 138: processa o lote e avanca -----
-            c = _processar_docs(conn, cur, ret, cliente_id, cnpj_cert, agora, expira)
-            novo_ult = ret_ult or ult_nsu
+            # ----- 138: processa o lote e avanca SO ate o ultimo NSU salvo -----
+            c, novo_ult, houve_falha = _processar_docs(
+                conn, cur, ret, cliente_id, cnpj_cert, agora, expira, ult_nsu)
             cur.execute(pd.SQL_NSU_OK, (
                 cliente_id, cnpj_cert, novo_ult, ret_max or 0, status_txt,
             ))
@@ -241,13 +239,19 @@ def main():
             tot_cancel += c["n_cancel"]
             tot_resumo += c["n_resumo"]
             tot_outro += c["n_outro"]
-            tot_erro += c["n_erro"]
             ult_nsu = novo_ult
             falta = max(0, (max_nsu or 0) - novo_ult)
 
-            print(f"Lote {lotes}: +{c['n_nota']} notas, +{c['n_evento']} eventos, "
-                  f"+{c['n_itens']} itens ({c['n_resumo']} resumos, {c['n_erro']} erros) "
-                  f"| NSU agora={novo_ult} (falta {falta})")
+            print(f"Lote {lotes}: +{c['n_nota']} notas, +{c['n_resumo']} resumos, "
+                  f"+{c['n_evento']} eventos, +{c['n_itens']} itens "
+                  f"(outros {c['n_outro']}) | NSU agora={novo_ult} (falta {falta})")
+
+            # ----- um doc falhou ao salvar: nao insiste agora; ult_nsu preservado -----
+            if houve_falha:
+                motivo_fim = "falha_doc"
+                print("    >>> Parou por FALHA ao salvar um doc. ult_nsu preservado "
+                      "no ultimo salvo; o proximo ciclo retenta a partir dele.")
+                break
 
             # ----- chegou ao fim da janela? -----
             if max_nsu and novo_ult >= max_nsu:
@@ -266,17 +270,20 @@ def main():
     print("\n" + "-" * 74)
     print("RESUMO DA CAPTURA EM MASSA:")
     print(f"    lotes processados   : {lotes}")
-    print(f"    notas gravadas      : {tot_nota}   (itens: {tot_itens})")
+    print(f"    notas completas     : {tot_nota}   (itens: {tot_itens})")
+    print(f"    resumos de nota     : {tot_resumo}   (resNFe -> aparecem em /dfe/compras)")
     print(f"    eventos gravados    : {tot_evento}   (cancelamentos: {tot_cancel})")
-    print(f"    resumos ignorados   : {tot_resumo}")
-    print(f"    outros ignorados    : {tot_outro}")
-    print(f"    erros (doc a doc)   : {tot_erro}")
+    print(f"    outros (nao modelados): {tot_outro}")
     print(f"    NSU final           : {ult_nsu}  (maxNSU visto: {max_nsu})")
 
     if motivo_fim == "completo":
         print("\n    >>> TERMINOU: pegou tudo (ult_nsu >= maxNSU).")
     elif motivo_fim == "fim137":
         print("\n    >>> TERMINOU: SEFAZ sem documentos novos (137, em dia).")
+    elif motivo_fim == "falha_doc":
+        print(f"\n    >>> PAROU por FALHA ao salvar um doc. ult_nsu preservado no "
+              f"ultimo salvo ({ult_nsu}); faltam ~{falta_final} NSU. O proximo "
+              "ciclo retenta a partir dali (nada foi pulado).")
     elif motivo_fim == "656":
         print(f"\n    >>> PAROU por 656 (consumo indevido). Faltam ~{falta_final} NSU. "
               "Espere ~1h e rode de novo -- continua de onde parou.")

@@ -229,6 +229,40 @@ def extrair_evento(root):
 
 
 # ==========================================================================
+# Extracao de um RESUMO de nota (resNFe) -> dict de cabecalho (sem itens).
+# O resNFe so traz: chNFe, CNPJ/CPF+xNome do emitente, dhEmi, tpNF, vNF e
+# cSitNFe. numero/serie/modelo saem da propria chave (posicoes fixas).
+# ==========================================================================
+def extrair_resumo_nota(root):
+    chave = _digitos(cs._text(root, "chNFe"))
+    if len(chave) != 44:
+        raise ValueError("resNFe sem chNFe de 44 digitos")
+
+    # chave = cUF(2) AAMM(4) CNPJ(14) mod(2) serie(3) nNF(9) tpEmis(1) cNF(8) cDV(1)
+    modelo = chave[20:22]
+    serie = chave[22:25].lstrip("0") or "0"
+    numero = chave[25:34].lstrip("0") or "0"
+
+    dh_txt, ano, mes = _parse_dh(cs._text(root, "dhEmi"))
+    emit_cnpj = _digitos(cs._text(root, "CNPJ") or cs._text(root, "CPF")) or None
+    emit_nome = cs._text(root, "xNome")
+    if emit_nome:
+        emit_nome = emit_nome[:160]
+    valor_total = cs._text(root, "vNF")
+
+    # cSitNFe: 1=autorizada, 2=denegada, 3=cancelada.
+    csit = cs._text(root, "cSitNFe")
+    situacao = {"1": "autorizado", "2": "denegada", "3": "cancelada"}.get(csit, "autorizado")
+
+    return {
+        "chave": chave, "tipo": "NFe", "numero": numero, "serie": serie,
+        "modelo": modelo, "dh_txt": dh_txt, "ano": ano, "mes": mes,
+        "emit_cnpj": emit_cnpj, "emit_nome": emit_nome,
+        "valor_total": valor_total, "situacao": situacao,
+    }
+
+
+# ==========================================================================
 # De-para ANP -> produto_id: NAO ha tabela-fonte dedicada (produto so tem
 # id/nome/descricao). Reaproveita mapeamentos JA resolvidos em vendas_xml_itens
 # e dfe_itens. Retorna None se nao houver de-para conhecido (deixa NULL).
@@ -269,8 +303,22 @@ SQL_DOC_UPSERT = (
     "  serie=VALUES(serie), modelo=VALUES(modelo), dh_emissao=VALUES(dh_emissao), "
     "  emit_cnpj=VALUES(emit_cnpj), emit_nome=VALUES(emit_nome), "
     "  dest_cnpj=VALUES(dest_cnpj), valor_total=VALUES(valor_total), "
-    "  xml_caminho=VALUES(xml_caminho), xml_expira_em=VALUES(xml_expira_em)"
+    "  xml_caminho=VALUES(xml_caminho), xml_expira_em=VALUES(xml_expira_em), "
+    "  resumo=VALUES(resumo)"   # nota COMPLETA chegou: se a linha era resumo(1), vira 0
     # NAO mexe em situacao no UPDATE: preserva 'cancelada' setada por evento.
+)
+
+# Upsert de RESUMO de nota (resNFe). Grava resumo=1 com os poucos campos que o
+# resNFe traz (chave, emitente, valor, data). Se a chave JA existe (nota completa
+# ou outro resumo), NAO sobrescreve nada -- uma nota completa vale mais que um
+# resumo. Assim a nota de compra aparece em /dfe/compras mesmo sem o XML cheio.
+SQL_RESUMO_UPSERT = (
+    "INSERT INTO dfe_documentos "
+    "(cliente_id, chave, tipo, nsu, schema_dfe, resumo, numero, serie, modelo, "
+    " dh_emissao, emit_cnpj, emit_nome, dest_cnpj, valor_total, situacao, "
+    " xml_caminho, xml_expira_em) "
+    "VALUES (%s,%s,%s,%s,%s,1,%s,%s,%s,%s,%s,%s,%s,%s,%s,NULL,NULL) "
+    "ON DUPLICATE KEY UPDATE chave=chave"   # no-op: nunca rebaixa nota completa
 )
 
 SQL_DOC_ID = "SELECT id FROM dfe_documentos WHERE chave = %s"
@@ -416,6 +464,69 @@ def gravar_evento(conn, cur, cliente_id, cnpj_cert, ev, xml_bytes, nsu, schema,
 
 
 # ==========================================================================
+# Gravacao de UM resumo de nota (resNFe). So banco (sem Dropbox: o resNFe nao e
+# o XML da nota). resumo=1. Idempotente e nao rebaixa nota completa (SQL_RESUMO_UPSERT).
+# ==========================================================================
+def gravar_resumo_nota(conn, cur, cliente_id, cnpj_cert, res, nsu, schema):
+    cur.execute(SQL_RESUMO_UPSERT, (
+        cliente_id, res["chave"], res["tipo"], nsu, schema,
+        res["numero"], res["serie"], res["modelo"], res["dh_txt"],
+        res["emit_cnpj"], res["emit_nome"], cnpj_cert,   # dest = o proprio interessado
+        res["valor_total"], res["situacao"],
+    ))
+    conn.commit()
+
+
+# ==========================================================================
+# Processa e SALVA um UNICO docZip. Este e o ponto onde o "salvar" acontece;
+# quem chama usa o retorno para so avancar o ult_nsu ATE o ultimo NSU salvo.
+#
+#   nfeProc       -> nota completa (resumo=0)
+#   procEventoNFe -> evento (dfe_eventos); cancelamento marca a nota
+#   resNFe        -> RESUMO de nota (resumo=1) -> aparece em /dfe/compras
+#   resEvento / cteProc / outros -> tipos que NAO modelamos: conta e SEGUE
+#                    (nao levanta -- nao pode travar a fila de NSU eternamente)
+#
+# LEVANTA excecao se falhar ao descompactar/parsear OU ao gravar o que DEVE ser
+# gravado (nota/evento/resumo). Nesse caso quem chama NAO deve avancar o ult_nsu
+# alem deste NSU: na proxima consulta a SEFAZ o servico volta e tenta de novo.
+#
+# Retorna (kind, n_itens, cancelou) com kind in
+# {"nota","evento","resumo","outro"}.
+# ==========================================================================
+def processar_um_doc(conn, cur, cliente_id, cnpj_cert, d, agora, expira):
+    schema = d.get("schema") or None
+    nsu = _to_int(d.get("NSU"))
+    b64 = d.text or ""
+
+    # Falha aqui (base64/gzip/XML corrompido) PROPAGA: nao avanca o ponteiro.
+    xml_bytes = gzip.decompress(base64.b64decode(b64))
+    root = ET.fromstring(xml_bytes)
+    raiz = cs._local(root.tag)
+
+    if raiz == "nfeProc":
+        nota = extrair_nota(root)
+        ni = gravar_nota(conn, cur, cliente_id, cnpj_cert, nota,
+                         xml_bytes, nsu, schema, agora, expira)
+        return "nota", ni, False
+
+    if raiz == "procEventoNFe":
+        ev = extrair_evento(root)
+        canc = gravar_evento(conn, cur, cliente_id, cnpj_cert, ev,
+                             xml_bytes, nsu, schema, agora, expira)
+        return "evento", 0, bool(canc)
+
+    if raiz == "resNFe":
+        res = extrair_resumo_nota(root)
+        gravar_resumo_nota(conn, cur, cliente_id, cnpj_cert, res, nsu, schema)
+        return "resumo", 0, False
+
+    # resEvento, cteProc, resCTe etc.: nao modelamos. Nao levanta (nao trava a
+    # fila); quem chama loga e segue. Nenhuma NOTA se perde por isto.
+    return "outro", 0, False
+
+
+# ==========================================================================
 # MAIN
 # ==========================================================================
 def main():
@@ -522,62 +633,53 @@ def main():
             if cs._local(e.tag) == "docZip"]
     print(f"\n[5] Documentos no lote: {len(docs)} -- processando...")
 
-    n_nota = n_evento = n_resumo = n_outro = n_itens = n_cancel = n_erro = 0
+    n_nota = n_evento = n_resumo = n_outro = n_itens = n_cancel = 0
 
-    # Uma conexao para todo o lote; commit/rollback POR documento.
+    # ATOMICIDADE do ponteiro: processa os docs EM ORDEM DE NSU e so avanca a
+    # "marca-d'agua" (nsu_ok) APOS cada gravacao bem-sucedida. Se um doc falha,
+    # PARA o lote ali -> o ult_nsu nao passa dele -> na proxima consulta a SEFAZ
+    # o servico volta e tenta de novo. Nunca mais pula nota.
+    docs.sort(key=lambda e: _to_int(e.get("NSU")) or 0)
+    nsu_ok = ult_nsu
+    houve_falha = False
+
     conn = pymysql.connect(**cs.CONN)
     try:
         cur = conn.cursor()
         for d in docs:
-            schema = d.get("schema") or None
             nsu = _to_int(d.get("NSU"))
-            b64 = d.text or ""
             try:
-                xml_bytes = gzip.decompress(base64.b64decode(b64))
-                root = ET.fromstring(xml_bytes)
-                raiz = cs._local(root.tag)
-            except Exception as exc:
-                n_erro += 1
-                print(f"    [NSU {nsu}] ERRO ao descompactar/parsear: {exc}")
-                continue
-
-            try:
-                if raiz == "nfeProc":
-                    nota = extrair_nota(root)
-                    ni = gravar_nota(conn, cur, cliente_id, cnpj_cert, nota,
-                                     xml_bytes, nsu, schema, agora, expira)
-                    n_nota += 1
-                    n_itens += ni
-                    print(f"    [NSU {nsu}] NOTA {nota['chave']} "
-                          f"({ni} item(ns), situacao={nota['situacao']})")
-
-                elif raiz == "procEventoNFe":
-                    ev = extrair_evento(root)
-                    canc = gravar_evento(conn, cur, cliente_id, cnpj_cert, ev,
-                                         xml_bytes, nsu, schema, agora, expira)
-                    n_evento += 1
-                    if canc:
-                        n_cancel += 1
-                    marca = " -> nota CANCELADA" if canc else ""
-                    print(f"    [NSU {nsu}] EVENTO tp={ev['tp_evento']} "
-                          f"chNFe={ev['ch_nfe']}{marca}")
-
-                elif raiz in ("resNFe", "resEvento"):
-                    n_resumo += 1  # redundante: so conta
-
-                else:
-                    n_outro += 1
-                    print(f"    [NSU {nsu}] IGNORADO (raiz desconhecida: {raiz})")
-
+                kind, ni, canc = processar_um_doc(
+                    conn, cur, cliente_id, cnpj_cert, d, agora, expira)
             except Exception as exc:
                 conn.rollback()
-                n_erro += 1
-                print(f"    [NSU {nsu}] ERRO ao gravar ({raiz}): {exc}")
+                houve_falha = True
+                print(f"    [NSU {nsu}] FALHA ao salvar: {exc}")
+                print(f"    >>> PARANDO o lote. ult_nsu NAO avanca alem de {nsu_ok} "
+                      "(retenta na proxima consulta).")
+                break
 
-        # 6) Atualiza dfe_nsu (avanca ult_nsu; sucesso -> limpa proximo_permitido).
+            if kind == "nota":
+                n_nota += 1
+                n_itens += ni
+                print(f"    [NSU {nsu}] NOTA completa ({ni} item(ns))")
+            elif kind == "evento":
+                n_evento += 1
+                if canc:
+                    n_cancel += 1
+                print(f"    [NSU {nsu}] EVENTO{' -> nota CANCELADA' if canc else ''}")
+            elif kind == "resumo":
+                n_resumo += 1
+                print(f"    [NSU {nsu}] RESUMO de nota (resNFe) gravado (resumo=1)")
+            else:
+                n_outro += 1
+                print(f"    [NSU {nsu}] tipo nao modelado (CTe/resEvento) -- seguindo.")
+
+            nsu_ok = nsu   # so avanca a marca APOS salvar com sucesso
+
+        # 6) Avanca ult_nsu SO ate o ultimo NSU salvo com sucesso (nsu_ok).
         cur.execute(SQL_NSU_OK, (
-            cliente_id, cnpj_cert, _to_int(ret_ult) or ult_nsu,
-            _to_int(ret_max) or 0, status_txt,
+            cliente_id, cnpj_cert, nsu_ok, _to_int(ret_max) or 0, status_txt,
         ))
         conn.commit()
         cur.close()
@@ -588,11 +690,11 @@ def main():
     print("\n" + "-" * 74)
     print("RESUMO DO LOTE:")
     print(f"    docs recebidos      : {len(docs)}")
-    print(f"    notas gravadas      : {n_nota}   (itens: {n_itens})")
+    print(f"    notas completas     : {n_nota}   (itens: {n_itens})")
+    print(f"    resumos de nota     : {n_resumo}   (resNFe -> aparecem em /dfe/compras)")
     print(f"    eventos gravados    : {n_evento}   (cancelamentos aplicados: {n_cancel})")
-    print(f"    resumos ignorados   : {n_resumo}   (resNFe/resEvento redundantes)")
-    print(f"    outros ignorados    : {n_outro}")
-    print(f"    erros (doc a doc)   : {n_erro}")
+    print(f"    outros (nao modelados): {n_outro}")
+    print(f"    ult_nsu final       : {nsu_ok}" + ("  (PAROU por falha)" if houve_falha else ""))
     if ret_ult and ret_max and ret_ult != ret_max:
         print(f"\n    ultNSU ({ret_ult}) < maxNSU ({ret_max}) -> HA MAIS documentos.")
         print("    (este script NAO faz loop; rodar de novo pega o proximo lote)")
