@@ -597,33 +597,27 @@ def main():
 
     status_txt = f"{cStat} {xMotivo}"[:60]
 
-    # 656 = Consumo Indevido: nao e erro; aguardar ~1h.
-    # A SEFAZ devolve, MESMO no 656, o ultNSU ate onde ela ja entregou
-    # ("use o ultNSU nas solicitacoes subsequentes"). Se vier ultNSU > 0,
-    # AVANCA o ponteiro para ele -> a proxima consulta parte dali, nao do 0
-    # (recomecar do 0 e justamente o que dispara o 656). A espera (+1h) e o
-    # ult_consulta sao gravados no relogio do BANCO (SQL_NSU_656).
+    # 656 = Consumo Indevido: nao e erro; aguardar ~1h. O 656 NAO traz documento,
+    # entao o ponteiro NAO pode avancar: avancar para o ultNSU ecoado pela SEFAZ
+    # PULA notas ainda nao baixadas (foi o que sumiu com as de 11/07). Mantem
+    # ult_nsu EXATAMENTE onde esta -- nao regride (nao volta pra 0, que e o que
+    # dispara o 656) e nao avanca. So agenda a espera de 1h (relogio do BANCO,
+    # SQL_NSU_656); a proxima consulta retoma deste mesmo ponto.
     if cStat == "656":
-        ret_ult_int = _to_int(ret_ult) or 0
-        nsu_gravar = max(ult_nsu, ret_ult_int)   # nunca regride o ponteiro
-        if nsu_gravar > ult_nsu:
-            print(f"    >>> 656 CONSUMO INDEVIDO: avancando ult_nsu {ult_nsu} -> "
-                  f"{nsu_gravar} (ultNSU indicado pela SEFAZ). Aguardar ~1h.")
-        else:
-            print("    >>> 656 CONSUMO INDEVIDO: aguardar ~1h "
-                  "(sem ultNSU novo para avancar).")
+        print(f"    >>> 656 CONSUMO INDEVIDO: aguardar ~1h. Cursor MANTIDO em "
+              f"ult_nsu={ult_nsu} (nao avanca -- avancar pularia notas).")
         con1 = pymysql.connect(**cs.CONN)
         try:
             with con1.cursor() as c1:
                 c1.execute(SQL_NSU_656, (
-                    cliente_id, cnpj_cert, nsu_gravar, _to_int(ret_max) or 0,
+                    cliente_id, cnpj_cert, ult_nsu, _to_int(ret_max) or 0,
                     status_txt,
                 ))
             con1.commit()
         finally:
             con1.close()
         print("\n" + "=" * 74)
-        print(f"FIM - 656, nada gravado. ult_nsu agora = {nsu_gravar}, "
+        print(f"FIM - 656, nada gravado. ult_nsu mantido em {ult_nsu}, "
               "proximo_permitido = agora + 1h (relogio do banco).")
         print("=" * 74)
         return

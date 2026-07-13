@@ -187,19 +187,23 @@ def main():
             ret_max = pd._to_int(cs._text(ret, "maxNSU")) or 0
             status_txt = f"{cStat} {xMotivo}"[:60]
 
-            # ----- 656: consumo indevido -> para na hora -----
+            # ----- 656: consumo indevido -> para na hora, SEM mexer no cursor -----
+            # O 656 NAO traz documento. Avancar o cursor aqui PULA notas ainda
+            # nao baixadas (foi o que sumiu com as de 11/07). Mantem ult_nsu
+            # exatamente onde esta: NAO regride (nao volta pra 0, que e o que
+            # dispara o 656) e NAO avanca. So agenda a espera de 1h e para; o
+            # proximo ciclo retoma exatamente deste ponto.
             if cStat == "656":
-                nsu_grav = max(ult_nsu, ret_ult)   # nunca regride
                 cur.execute(pd.SQL_NSU_656, (
-                    cliente_id, cnpj_cert, nsu_grav, ret_max or max_nsu or 0,
+                    cliente_id, cnpj_cert, ult_nsu, ret_max or max_nsu or 0,
                     status_txt,
                 ))
                 conn.commit()
-                ult_nsu = nsu_grav
                 motivo_fim = "656"
-                print(f"    >>> 656 CONSUMO INDEVIDO. Parando. ult_nsu={ult_nsu}, "
-                      "proximo_permitido = agora + 1h (relogio do banco); "
-                      "espere ~1h e rode de novo.")
+                print(f"    >>> 656 CONSUMO INDEVIDO. Parando SEM avancar o cursor "
+                      f"(ult_nsu={ult_nsu}); proximo_permitido = agora + 1h "
+                      "(relogio do banco). Espere ~1h e rode de novo -- "
+                      "continua exatamente daqui.")
                 break
 
             # ----- 137: nada localizado (em dia) -> fim com sucesso -----
