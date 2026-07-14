@@ -4,7 +4,13 @@
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-3">
   <h3 class="mb-0"><i class="bi bi-tags"></i> Classificação de Compras — DFe</h3>
-  <span class="badge bg-secondary">Serviço isolado</span>
+  <div class="d-flex align-items-center gap-2">
+    <span id="capturaMsg" class="small text-muted"></span>
+    <button id="btnCapturar" class="btn btn-sm btn-success" onclick="capturarAgora()">
+      <i class="bi bi-cloud-download"></i> Capturar agora
+    </button>
+    <span class="badge bg-secondary">Serviço isolado</span>
+  </div>
 </div>
 
 <ul class="nav nav-tabs mb-3" id="abas" role="tablist">
@@ -411,6 +417,45 @@ function classificar(itemId, modo) {
   .catch(function (e) {
     alert('Erro de rede: ' + e);
     linha.querySelectorAll('button').forEach(function (b) { b.disabled = false; });
+  });
+}
+
+// Dispara a captura de DFe no servidor (thread; respeita a cota).
+// O base.html injeta o X-CSRFToken automaticamente no fetch.
+function capturarAgora() {
+  var btn = document.getElementById('btnCapturar');
+  var msg = document.getElementById('capturaMsg');
+  var htmlOrig = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Disparando...';
+  if (msg) { msg.className = 'small text-muted'; msg.textContent = ''; }
+
+  fetch('{{ url_for("dfe_compras.capturar_agora") }}', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: '{}'
+  })
+  .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+  .then(function (res) {
+    if (!res.ok || !res.j.ok) {
+      if (msg) { msg.className = 'small text-danger'; msg.textContent = (res.j && res.j.erro) ? res.j.erro : 'falha ao disparar'; }
+      btn.disabled = false; btn.innerHTML = htmlOrig;
+      return;
+    }
+    if (msg) {
+      msg.className = res.j.bloqueado ? 'small text-warning' : 'small text-success';
+      msg.textContent = res.j.mensagem;
+    }
+    if (res.j.bloqueado) {
+      btn.disabled = false; btn.innerHTML = htmlOrig;   // cota fechada: deixa retentar
+    } else {
+      btn.innerHTML = '<i class="bi bi-hourglass-split"></i> Capturando...';
+      setTimeout(function () { window.location.reload(); }, 90000);  // ~90s e recarrega
+    }
+  })
+  .catch(function (e) {
+    if (msg) { msg.className = 'small text-danger'; msg.textContent = 'Erro de rede: ' + e; }
+    btn.disabled = false; btn.innerHTML = htmlOrig;
   });
 }
 </script>

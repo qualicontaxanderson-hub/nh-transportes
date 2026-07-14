@@ -17,7 +17,7 @@ SQL 100% parametrizado (%s). NAO altera nada existente.
 """
 from datetime import date, timedelta
 
-from flask import Blueprint, render_template, request, jsonify
+from flask import Blueprint, render_template, request, jsonify, current_app
 from flask_login import login_required
 
 from utils.db import get_db_connection
@@ -406,3 +406,58 @@ def classificar():
     finally:
         cur.close()
         conn.close()
+
+
+# ==========================================================================
+# ACAO: disparar UMA captura de DFe AGORA (botao "Capturar agora"). Roda em
+# background (thread), retorna na hora. Respeita a cota: o proprio job usa
+# GET_LOCK global (nao roda 2x) e pre-checa proximo_permitido (nao consulta a
+# SEFAZ se a cota ainda esta fechada por 656). Reaproveita disparar_captura_async
+# do agendador -> nenhuma logica de captura nova.
+# ==========================================================================
+@dfe_compras_bp.route('/capturar-agora', methods=['POST'])
+@login_required
+def capturar_agora():
+    # 1) Le o estado atual da cota (best-effort) so para dar feedback na tela.
+    estado = {}
+    conn = get_db_connection()
+    cur = conn.cursor(dictionary=True)
+    try:
+        cur.execute(
+            "SELECT ult_consulta, proximo_permitido, ult_status, "
+            "(proximo_permitido IS NOT NULL AND proximo_permitido > NOW()) AS bloqueado "
+            "FROM dfe_nsu LIMIT 1"
+        )
+        estado = cur.fetchone() or {}
+    except Exception:
+        pass
+    finally:
+        cur.close()
+        conn.close()
+
+    # 2) Dispara em background. O job se autoprotege (lock + proximo_permitido),
+    #    entao disparar mesmo "bloqueado" e inofensivo (ele so pula).
+    try:
+        from integrations.dfe_scheduler import disparar_captura_async
+        disparar_captura_async(current_app._get_current_object())
+    except Exception as e:
+        current_app.logger.exception("[dfe] falha ao disparar captura manual")
+        return jsonify({'ok': False, 'erro': 'não foi possível iniciar a captura: %s' % e}), 500
+
+    bloqueado = bool(estado.get('bloqueado'))
+    if bloqueado:
+        mensagem = ('A SEFAZ pediu para aguardar até %s (cota/656). A captura não vai '
+                    'consultar agora; o agendador tenta de novo automaticamente.'
+                    % estado.get('proximo_permitido'))
+    else:
+        mensagem = ('Captura iniciada em segundo plano. Aguarde ~1–2 min — a página '
+                    'recarrega sozinha para mostrar as notas novas.')
+
+    return jsonify({
+        'ok': True,
+        'bloqueado': bloqueado,
+        'mensagem': mensagem,
+        'proximo_permitido': str(estado.get('proximo_permitido') or ''),
+        'ult_status': estado.get('ult_status'),
+        'ult_consulta': str(estado.get('ult_consulta') or ''),
+    })

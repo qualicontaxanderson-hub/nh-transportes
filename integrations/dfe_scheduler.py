@@ -163,3 +163,18 @@ def iniciar_scheduler(app):
             "[dfe_sched] scheduler ligado: captura nas horas '%s' (America/Sao_Paulo), "
             "minuto %s (lock global '%s').", horas, minuto, _LOCK_NAME,
         )
+
+
+def disparar_captura_async(app):
+    """Dispara UMA captura AGORA, em background (mesma rotina do agendador).
+
+    Reutiliza _job(): GET_LOCK global (nao roda em paralelo com o agendador nem
+    com outro disparo), pre-check de proximo_permitido (nao consulta se a cota
+    ainda esta fechada) e subprocess com timeout. Retorna na hora; o trabalho
+    segue na thread daemon. Usado pela rota POST /dfe/capturar-agora, para forcar
+    uma coleta sem depender de terminal/CLI."""
+    t = threading.Thread(
+        target=_job, args=(app,), name='dfe-captura-manual', daemon=True,
+    )
+    t.start()
+    return t
