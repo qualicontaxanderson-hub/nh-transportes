@@ -1,0 +1,167 @@
+{% extends 'base.html' %}
+{% block title %}Vendas Migradas{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h3 class="mb-0"><i class="bi bi-receipt"></i> Vendas Migradas</h3>
+  <span class="badge bg-secondary">{{ totais.notas }} nota(s)</span>
+</div>
+
+{# =================== FILTROS =================== #}
+<form method="GET" action="/vendas" class="card card-body mb-3">
+  <div class="row g-2">
+    <div class="col-md-2">
+      <label class="form-label small mb-0">Data de</label>
+      <input type="date" name="data_ini" class="form-control form-control-sm"
+             value="{{ filtros.data_ini or data_ini_default }}">
+    </div>
+    <div class="col-md-2">
+      <label class="form-label small mb-0">Data até</label>
+      <input type="date" name="data_fim" class="form-control form-control-sm"
+             value="{{ filtros.data_fim or data_fim_default }}">
+    </div>
+    <div class="col-md-3">
+      <label class="form-label small mb-0">Vendedor</label>
+      <input type="text" name="vendedor" class="form-control form-control-sm"
+             value="{{ filtros.vendedor }}" placeholder="nome no XML">
+    </div>
+    <div class="col-md-2">
+      <label class="form-label small mb-0">Produto</label>
+      <input type="text" name="produto" class="form-control form-control-sm"
+             value="{{ filtros.produto }}" placeholder="descrição do item">
+    </div>
+    <div class="col-md-2">
+      <label class="form-label small mb-0">Forma pgto</label>
+      <input type="text" name="forma_pgto" class="form-control form-control-sm"
+             value="{{ filtros.forma_pgto }}" placeholder="ex.: Dinheiro">
+    </div>
+    <div class="col-md-1 d-flex align-items-end">
+      <button type="submit" class="btn btn-sm btn-primary w-100"><i class="bi bi-search"></i></button>
+    </div>
+    <div class="col-12">
+      <a href="/vendas" class="btn btn-sm btn-outline-secondary"><i class="bi bi-x-circle"></i> Limpar filtros</a>
+    </div>
+  </div>
+</form>
+
+{# =================== TOTAIS =================== #}
+<div class="d-flex gap-3 mb-3">
+  <div class="border rounded p-2 flex-fill text-center">
+    <div class="small text-muted">Notas</div>
+    <div class="fs-5 fw-bold">{{ totais.notas }}</div>
+  </div>
+  <div class="border rounded p-2 flex-fill text-center">
+    <div class="small text-muted">Valor total (autorizadas)</div>
+    <div class="fs-5 fw-bold text-success">{{ (totais.valor or 0) | formatar_moeda }}</div>
+  </div>
+  <div class="border rounded p-2 flex-fill text-center">
+    <div class="small text-muted">Canceladas</div>
+    <div class="fs-5 fw-bold {% if totais.canceladas %}text-danger{% endif %}">{{ totais.canceladas }}</div>
+  </div>
+</div>
+
+{% if truncado %}
+  <div class="alert alert-warning py-2 small">
+    Exibindo as primeiras {{ limite }} notas (os totais acima consideram TODO o filtro).
+    Refine os filtros para ver menos linhas.
+  </div>
+{% endif %}
+
+{# =================== TABELA =================== #}
+<table class="table table-sm table-striped align-middle">
+  <thead class="table-light">
+    <tr>
+      <th style="width:34px"></th>
+      <th>Data</th>
+      <th class="text-center">Modelo</th>
+      <th class="text-end">Número</th>
+      <th>Vendedor</th>
+      <th>Cliente</th>
+      <th class="text-end">Valor</th>
+      <th>Forma pgto</th>
+      <th>Situação</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for n in notas %}
+    {% set cancelada = (n.situacao == 'cancelada') %}
+    <tr class="venda-row {% if cancelada %}text-danger{% endif %}" data-venda="{{ n.id }}" style="cursor:pointer">
+      <td class="text-center"><i class="bi bi-chevron-right caret" id="caret-{{ n.id }}"></i></td>
+      <td>{{ n.dh_emissao.strftime('%d/%m/%Y %H:%M') if n.dh_emissao else '—' }}</td>
+      <td class="text-center">{{ n.modelo }}</td>
+      <td class="text-end">{{ n.numero }}/{{ n.serie }}</td>
+      <td>{{ n.vendedor_raw or '—' }}</td>
+      <td>{{ n.cliente_nome or '—' }}</td>
+      <td class="text-end">{{ (n.valor_total or 0) | formatar_moeda }}</td>
+      <td>{{ n.forma_pagamento or '—' }}</td>
+      <td>
+        {% if cancelada %}
+          <span class="badge bg-danger">CANCELADA</span>
+        {% else %}
+          <span class="badge bg-success">{{ n.situacao }}</span>
+        {% endif %}
+      </td>
+    </tr>
+    <tr class="venda-itens" id="itens-{{ n.id }}" style="display:none">
+      <td colspan="9" class="bg-light">
+        {% set itens = itens_por_venda.get(n.id, []) %}
+        {% if not itens %}
+          <div class="text-muted small px-2 py-1">Sem itens para esta nota.</div>
+        {% else %}
+        <table class="table table-sm mb-0 bg-white">
+          <thead>
+            <tr class="small text-muted">
+              <th>#</th>
+              <th>Produto</th>
+              <th>Un</th>
+              <th class="text-end">Qtd</th>
+              <th class="text-end">Vlr Unit</th>
+              <th class="text-end">Vlr Total</th>
+              <th class="text-end">Bico</th>
+              <th class="text-end">Bomba</th>
+              <th class="text-end">Tanque</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for it in itens %}
+            <tr>
+              <td>{{ it.n_item }}</td>
+              <td>{{ it.produto_xml or '—' }}
+                  {% if it.cod_anp %}<small class="text-muted">· ANP {{ it.cod_anp }}</small>{% endif %}</td>
+              <td>{{ it.unidade or '' }}</td>
+              <td class="text-end">{{ it.quantidade }}</td>
+              <td class="text-end">{{ (it.valor_unitario or 0) | formatar_moeda }}</td>
+              <td class="text-end">{{ (it.valor_total or 0) | formatar_moeda }}</td>
+              <td class="text-end">{{ it.bico if it.bico is not none else '—' }}</td>
+              <td class="text-end">{{ it.bomba if it.bomba is not none else '—' }}</td>
+              <td class="text-end">{{ it.tanque if it.tanque is not none else '—' }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        {% endif %}
+      </td>
+    </tr>
+    {% else %}
+    <tr><td colspan="9" class="text-center text-muted">Nenhuma venda encontrada.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Expandir/recolher os itens de uma venda (mesmo padrao do dfe_compras).
+document.querySelectorAll('.venda-row').forEach(function (row) {
+  row.addEventListener('click', function () {
+    var id = row.getAttribute('data-venda');
+    var bloco = document.getElementById('itens-' + id);
+    var caret = document.getElementById('caret-' + id);
+    if (!bloco) return;
+    var aberto = bloco.style.display !== 'none';
+    bloco.style.display = aberto ? 'none' : 'table-row';
+    if (caret) caret.className = 'bi ' + (aberto ? 'bi-chevron-right' : 'bi-chevron-down') + ' caret';
+  });
+});
+</script>
+{% endblock %}
