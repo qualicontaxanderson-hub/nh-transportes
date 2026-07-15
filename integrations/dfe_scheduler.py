@@ -29,6 +29,7 @@ import threading
 import mysql.connector
 
 from utils.db import CONNECTION_PARAMS
+from integrations import dfe_log
 
 _LOCK_NAME = 'dfe_captura'
 _SUBPROC_TIMEOUT = 20 * 60  # 20 min (o script tem teto de 40 lotes + pausas de 20s)
@@ -49,52 +50,85 @@ def _conn_direta():
     return mysql.connector.connect(**params)
 
 
-def _proximo_no_futuro(cur):
-    """True se a SEFAZ pediu para aguardar (proximo_permitido > agora)."""
+def _estado_cota(cur):
+    """Devolve (cliente_id, cnpj, ult_nsu, proximo_permitido) se a SEFAZ ainda
+    pediu para aguardar, ou None se a janela esta aberta. Comparacao sempre no
+    relogio do BANCO (NOW())."""
     cur.execute(
-        "SELECT 1 FROM dfe_nsu "
+        "SELECT cliente_id, cnpj, ult_nsu, proximo_permitido FROM dfe_nsu "
         "WHERE proximo_permitido IS NOT NULL AND proximo_permitido > NOW() "
         "LIMIT 1"
     )
-    return cur.fetchone() is not None
+    return cur.fetchone()
 
 
-def _job(app):
-    """Executado pelo scheduler. Garantidamente unico por deploy via GET_LOCK."""
+def _job(app, origem='agendador'):
+    """Executado pelo scheduler. Garantidamente unico por deploy via GET_LOCK.
+
+    origem ('agendador'|'manual') so rotula o log e e repassada ao subprocess
+    via DFE_ORIGEM, para dfe_consulta_log saber QUEM disparou cada rodada."""
     logger = app.logger
     conn = cur = None
     got = 0
     try:
         conn = _conn_direta()
         cur = conn.cursor()
+        dfe_log.garantir_tabela(cur)
 
         cur.execute("SELECT GET_LOCK(%s, 0)", (_LOCK_NAME,))
         row = cur.fetchone()
         got = row[0] if row else 0
         if got != 1:
             logger.info("[dfe_sched] outro worker/deploy ja esta capturando; pulando.")
+            dfe_log.registrar(
+                cur, origem, 'pulado_lock',
+                detalhe='outro worker/deploy ja estava capturando (GET_LOCK negado)')
             return
 
         # Pre-check de cota: nao dispara se a janela ainda esta fechada.
-        if _proximo_no_futuro(cur):
+        # Este ramo era INVISIVEL no banco -- a rodada sumia sem rastro. Agora
+        # deixa linha, que e justamente o que faltava para auditar os ciclos.
+        estado = _estado_cota(cur)
+        if estado:
+            cli, cnpj, ult_nsu, prox = estado
             logger.info("[dfe_sched] proximo_permitido no futuro (656 recente); pulando ciclo.")
+            dfe_log.registrar(
+                cur, origem, 'pulado_cota', cliente_id=cli, cnpj=cnpj,
+                ult_nsu_env=ult_nsu,
+                detalhe='proximo_permitido=%s ainda no futuro; nem disparou a captura'
+                        % prox)
             return
 
         logger.info("[dfe_sched] iniciando captura em massa (%s)...", _SCRIPT)
+        env = dict(os.environ, DFE_ORIGEM=origem)
         res = subprocess.run(
             [sys.executable, _SCRIPT],
             cwd=_RAIZ, capture_output=True, text=True, timeout=_SUBPROC_TIMEOUT,
+            env=env,
         )
         cauda = (res.stdout or "")[-1500:]
         logger.info("[dfe_sched] captura terminou (rc=%s). Fim do log:\n%s",
                     res.returncode, cauda)
         if res.returncode != 0:
             logger.warning("[dfe_sched] stderr (fim):\n%s", (res.stderr or "")[-1500:])
+            # O subprocess loga as consultas que chegou a fazer; este 'erro'
+            # cobre o caso de ele morrer ANTES disso (import, certificado, OOM).
+            dfe_log.registrar(
+                cur, origem, 'erro',
+                detalhe='captura saiu com rc=%s; stderr: %s'
+                        % (res.returncode, (res.stderr or '').strip()[-200:]))
     except subprocess.TimeoutExpired:
         logger.warning("[dfe_sched] captura excedeu %ss; sera retomada no proximo ciclo.",
                        _SUBPROC_TIMEOUT)
-    except Exception:
+        if cur is not None:
+            dfe_log.registrar(cur, origem, 'erro',
+                              detalhe='captura excedeu o timeout de %ss e foi morta'
+                                      % _SUBPROC_TIMEOUT)
+    except Exception as exc:
         logger.exception("[dfe_sched] falha no job de captura.")
+        if cur is not None:
+            dfe_log.registrar(cur, origem, 'erro',
+                              detalhe='%s: %s' % (type(exc).__name__, exc))
     finally:
         try:
             if got == 1 and cur is not None:
@@ -174,7 +208,7 @@ def disparar_captura_async(app):
     segue na thread daemon. Usado pela rota POST /dfe/capturar-agora, para forcar
     uma coleta sem depender de terminal/CLI."""
     t = threading.Thread(
-        target=_job, args=(app,), name='dfe-captura-manual', daemon=True,
+        target=_job, args=(app, 'manual'), name='dfe-captura-manual', daemon=True,
     )
     t.start()
     return t

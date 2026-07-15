@@ -595,7 +595,9 @@ def main():
     print(f"    ultNSU        : {ret_ult}")
     print(f"    maxNSU        : {ret_max}")
 
-    status_txt = f"{cStat} {xMotivo}"[:60]
+    # 255 = largura de dfe_nsu.ult_status. Era 60 e cortava a mensagem da SEFAZ
+    # justo onde ela diz qual ultNSU usar.
+    status_txt = f"{cStat} {xMotivo}"[:255]
 
     # 656 = Consumo Indevido: nao e erro; aguardar ~1h. O 656 NAO traz documento,
     # entao o ponteiro NAO pode avancar: avancar para o ultNSU ecoado pela SEFAZ

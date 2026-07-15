@@ -47,12 +47,38 @@ import pymysql
 import consulta_sefaz as cs
 import processa_dfe as pd
 from integrations.dfe_classificacao import aplicar_regras
+from integrations import dfe_log
 
 # --------------------------------------------------------------------------
 # Parametros de seguranca desta captura em massa.
 # --------------------------------------------------------------------------
 PAUSA_SEGUNDOS = 20   # pausa entre lotes (comeca conservador; pode subir depois)
 MAX_LOTES = 40        # teto de lotes por execucao (nao roda infinito nem abusa)
+
+# Quem disparou esta rodada. O agendador injeta DFE_ORIGEM no subprocess
+# ('agendador' ou 'manual'); rodando na mao pelo terminal fica 'cli'. So rotula
+# o log -- nao muda nenhum comportamento da captura.
+ORIGEM = os.environ.get('DFE_ORIGEM', 'cli')
+if ORIGEM not in dfe_log.ORIGENS:
+    ORIGEM = 'cli'
+
+
+def _log_avulso(cliente_id, cnpj, evento, **kw):
+    """Grava UMA linha do log com conexao propria. Para os pontos FORA do loop
+    principal (ex.: rodada pulada pela cota), onde ainda nao ha conexao aberta.
+    Best-effort: log nunca derruba a captura."""
+    try:
+        con = pymysql.connect(**cs.CONN)
+        try:
+            with con.cursor() as c:
+                dfe_log.garantir_tabela(c)
+                dfe_log.registrar(c, ORIGEM, evento, cliente_id=cliente_id,
+                                  cnpj=cnpj, **kw)
+            con.commit()
+        finally:
+            con.close()
+    except Exception:
+        pass
 
 
 # ==========================================================================
@@ -152,14 +178,19 @@ def main():
     if bloqueio:
         print(f"    ATENCAO: proximo_permitido = {bloqueio} (relogio do banco) ainda no "
               "futuro. A SEFAZ pediu para aguardar (656 recente). Encerrando sem consultar.")
+        _log_avulso(cliente_id, cnpj_cert, 'pulado_cota', ult_nsu_env=ult_nsu,
+                    detalhe=f"proximo_permitido={bloqueio} ainda no futuro; "
+                            "encerrou sem consultar a SEFAZ")
         return
 
-    # 3) Garante a tabela de eventos (idempotente) e monta a sessao mTLS uma vez.
-    print("\n[3] Garantindo dfe_eventos + mTLS em memoria...")
+    # 3) Garante dfe_eventos + dfe_consulta_log (idempotente) e monta a sessao
+    #    mTLS uma vez.
+    print("\n[3] Garantindo dfe_eventos + dfe_consulta_log + mTLS em memoria...")
     con0 = pymysql.connect(**cs.CONN)
     try:
         with con0.cursor() as c0:
             c0.execute(pd.DDL_EVENTOS)
+            dfe_log.garantir_tabela(c0)
         con0.commit()
     finally:
         con0.close()
@@ -180,12 +211,37 @@ def main():
             agora = datetime.now()
             expira = (agora + timedelta(days=pd.DIAS_RETENCAO)).date()
 
-            ret, _nbytes = _consultar(sess, cnpj_cert, ult_nsu)
+            # A requisicao em si pode morrer (rede/cert/timeout) ou chamar
+            # cs.falhar() -> SystemExit. Nos dois casos o log fica: sem isso a
+            # rodada some sem deixar rastro, que e o problema que este log existe
+            # para resolver.
+            try:
+                ret, _nbytes = _consultar(sess, cnpj_cert, ult_nsu)
+            except BaseException as exc:
+                dfe_log.registrar(
+                    cur, ORIGEM, 'erro', cliente_id=cliente_id, cnpj=cnpj_cert,
+                    ult_nsu_env=ult_nsu, lote=lotes + 1,
+                    detalhe=f"falha na requisicao a SEFAZ -- {type(exc).__name__}: {exc}",
+                )
+                conn.commit()
+                raise
+
             cStat = cs._text(ret, "cStat")
             xMotivo = cs._text(ret, "xMotivo")
             ret_ult = pd._to_int(cs._text(ret, "ultNSU")) or 0
             ret_max = pd._to_int(cs._text(ret, "maxNSU")) or 0
-            status_txt = f"{cStat} {xMotivo}"[:60]
+            status_txt = f"{cStat} {xMotivo}"[:255]
+
+            # Log da consulta CRUA, antes de qualquer decisao: e a unica coisa
+            # que sobrevive para responder "o que a SEFAZ respondeu as 03:05?".
+            # docs/notas/eventos sao completados adiante no ramo 138.
+            def _log_consulta(**extra):
+                dfe_log.registrar(
+                    cur, ORIGEM, 'consulta', cliente_id=cliente_id, cnpj=cnpj_cert,
+                    ult_nsu_env=ult_nsu, c_stat=cStat, x_motivo=xMotivo,
+                    ret_ult_nsu=ret_ult, ret_max_nsu=ret_max, lote=lotes + 1,
+                    **extra
+                )
 
             # ----- 656: consumo indevido -> para na hora, SEM mexer no cursor -----
             # O 656 NAO traz documento. Avancar o cursor aqui PULA notas ainda
@@ -198,6 +254,8 @@ def main():
                     cliente_id, cnpj_cert, ult_nsu, ret_max or max_nsu or 0,
                     status_txt,
                 ))
+                _log_consulta(detalhe="656: parou sem avancar o cursor; "
+                                      "proximo_permitido = agora + 1h")
                 conn.commit()
                 motivo_fim = "656"
                 print(f"    >>> 656 CONSUMO INDEVIDO. Parando SEM avancar o cursor "
@@ -212,6 +270,7 @@ def main():
                     cliente_id, cnpj_cert, ult_nsu, ret_max or max_nsu or ult_nsu,
                     status_txt,
                 ))
+                _log_consulta(detalhe="137: nenhum documento novo (em dia)")
                 conn.commit()
                 motivo_fim = "fim137"
                 print("    cStat 137: nenhum documento novo. Em dia.")
@@ -223,6 +282,7 @@ def main():
                     cliente_id, cnpj_cert, ult_nsu, ret_max or max_nsu or 0,
                     status_txt,
                 ))
+                _log_consulta(detalhe=f"cStat inesperado {cStat}: parou")
                 conn.commit()
                 motivo_fim = f"cstat_{cStat}"
                 print(f"    cStat inesperado {cStat} ({xMotivo}). Parando.")
@@ -234,6 +294,14 @@ def main():
             cur.execute(pd.SQL_NSU_OK, (
                 cliente_id, cnpj_cert, novo_ult, ret_max or 0, status_txt,
             ))
+            _log_consulta(
+                docs=c["docs"], notas=c["n_nota"], eventos=c["n_evento"],
+                detalhe=("138: %d docs (%d notas, %d resumos, %d eventos, %d outros); "
+                         "cursor %d -> %d%s"
+                         % (c["docs"], c["n_nota"], c["n_resumo"], c["n_evento"],
+                            c["n_outro"], ult_nsu, novo_ult,
+                            "; PAROU por falha ao salvar" if houve_falha else "")),
+            )
             conn.commit()
 
             # Classificacao automatica dos itens novos que ja tem regra memorizada
