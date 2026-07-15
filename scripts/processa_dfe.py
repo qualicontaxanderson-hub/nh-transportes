@@ -360,12 +360,18 @@ SQL_CANCELA_NOTA = (
 # SQL_NSU_656  : consumo indevido -> agenda espera de 1h a partir de NOW()
 # Ambos com a MESMA assinatura de 5 parametros:
 #   (cliente_id, cnpj, ult_nsu, max_nsu, ult_status)
+# max_nsu=0 quer dizer "a SEFAZ nao informou", NUNCA "existem zero documentos":
+# o 656 nao traz maxNSU. Gravar esse 0 por cima apagava o max_nsu ja conhecido e
+# destruia o indicador de quantas notas faltam (deixava "faltam" negativo). Entao
+# o 0 preserva o valor atual; so um maxNSU real (>0) atualiza.
+_MAX_NSU = "max_nsu=IF(VALUES(max_nsu) > 0, VALUES(max_nsu), max_nsu)"
+
 SQL_NSU_OK = (
     "INSERT INTO dfe_nsu "
     "(cliente_id, cnpj, ult_nsu, max_nsu, ult_consulta, proximo_permitido, ult_status) "
     "VALUES (%s,%s,%s,%s,NOW(),NULL,%s) "
     "ON DUPLICATE KEY UPDATE "
-    "  ult_nsu=VALUES(ult_nsu), max_nsu=VALUES(max_nsu), "
+    "  ult_nsu=VALUES(ult_nsu), " + _MAX_NSU + ", "
     "  ult_consulta=NOW(), proximo_permitido=NULL, ult_status=VALUES(ult_status)"
 )
 
@@ -374,7 +380,7 @@ SQL_NSU_656 = (
     "(cliente_id, cnpj, ult_nsu, max_nsu, ult_consulta, proximo_permitido, ult_status) "
     "VALUES (%s,%s,%s,%s,NOW(),NOW() + INTERVAL 1 HOUR,%s) "
     "ON DUPLICATE KEY UPDATE "
-    "  ult_nsu=VALUES(ult_nsu), max_nsu=VALUES(max_nsu), "
+    "  ult_nsu=VALUES(ult_nsu), " + _MAX_NSU + ", "
     "  ult_consulta=NOW(), proximo_permitido=NOW() + INTERVAL 1 HOUR, "
     "  ult_status=VALUES(ult_status)"
 )
