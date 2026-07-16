@@ -219,6 +219,23 @@ def compras():
         )
         regras = cur.fetchall()
 
+        # ---------- AREA 4: AGUARDANDO XML (resumos, resumo=1, sem itens) ----------
+        # Notas que entraram so como resumo (resNFe): existem no banco mas ainda
+        # SEM o XML completo (logo, sem itens para classificar). Aparecem aqui so
+        # para VISIBILIDADE/conferencia. Quando o XML completo chega numa proxima
+        # captura, resumo vira 0, os itens sao inseridos e a nota migra sozinha
+        # para a aba Classificar. O app NAO manifesta (isso e papel do SGA).
+        cur.execute(
+            """
+            SELECT d.id, d.chave, d.numero, d.serie, d.dh_emissao,
+                   d.emit_nome, d.emit_cnpj, d.valor_total, d.situacao
+            FROM dfe_documentos d
+            WHERE d.tipo = 'NFe' AND d.resumo = 1
+            ORDER BY d.dh_emissao DESC, d.id DESC
+            """
+        )
+        resumos = cur.fetchall()
+
         # Rotulos de categoria para exibicao.
         rot_categoria = dict(CATEGORIAS)
 
@@ -246,6 +263,7 @@ def compras():
             data_ini_default=data_ini_default,
             data_fim_default=data_fim_default,
             regras=regras,
+            resumos=resumos,
             aba=aba,
         )
     finally:
