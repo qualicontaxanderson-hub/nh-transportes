@@ -482,123 +482,135 @@ def capturar_agora():
 
 
 # ==========================================================================
-# >>> TEMP-DIAGNOSTICO (REMOVER APOS O TESTE) <<<
-# Faz UMA requisicao consChNFe (busca por chave) ao NFeDistribuicaoDFe usando
-# o certificado do servidor. READ-ONLY: nao grava no banco, nao manifesta.
-# Responde as 2 perguntas: (1) volta procNFe COMPLETO com itens? (2) toma 656?
-# Uso: abrir /dfe/_teste-conschnfe  (opcional ?chave=44digitos)
+# ACAO: buscar o XML COMPLETO de UMA nota (resumo) pela chave, via consChNFe.
+# Usa distDFeInt versao "1.01" (consulta por chave) -- comprovado que traz o
+# procNFe completo com itens e NAO cai na cota/656 do polling (a versao 1.35,
+# usada no polling distNSU, retorna 215 no consChNFe). Reusa processar_um_doc
+# (upsert nota resumo->0 + itens + Dropbox, com commit interno) e aplica as
+# regras memorizadas. NAO manifesta (isso e papel do SGA).
 # ==========================================================================
-@dfe_compras_bp.route('/_teste-conschnfe', methods=['GET'])
+@dfe_compras_bp.route('/compras/buscar-xml', methods=['POST'])
 @login_required
-def _teste_conschnfe():
-    import gzip as _gzip, base64 as _b64
+def buscar_xml():
     import xml.etree.ElementTree as _ET
-    from flask import Response
+    from datetime import datetime as _dt, timedelta as _td
+    import sys as _sys, os as _os
 
-    chave = (request.args.get('chave')
-             or '52260709250921001230550020000138021718955044')  # ON PETRO 13802
-    chave = ''.join(ch for ch in chave if ch.isdigit())
-    # versoes a testar (?versao=1.01 forca so uma). Default: tenta 1.35 e 1.01.
-    if request.args.get('versao'):
-        versoes = [request.args.get('versao')]
-    else:
-        versoes = ['1.35', '1.01']
-
-    out = []
-    def p(s=''): out.append(str(s))
-
-    p('=== TESTE consChNFe (READ-ONLY, nao grava, nao manifesta) ===')
-    p('chave: %s  (len=%s)' % (chave, len(chave)))
-    p('versoes a testar: %s' % versoes)
-
-    def mostra_itens(r_content):
-        """Parseia a resposta 138 e lista itens. Retorna (cStat, veio_completo)."""
-        env = _ET.fromstring(r_content)
-        ret = cs._find(env, 'retDistDFeInt')
-        cStat = cs._text(ret, 'cStat'); xMotivo = cs._text(ret, 'xMotivo')
-        p('    cStat/xMotivo : %s  %s' % (cStat, xMotivo))
-        p('    ultNSU/maxNSU : %s / %s' % (cs._text(ret, 'ultNSU'), cs._text(ret, 'maxNSU')))
-        lote = cs._find(ret, 'loteDistDFeInt')
-        docs = [e for e in (lote.iter() if lote is not None else [])
-                if cs._local(e.tag) == 'docZip']
-        veio_completo = False
-        for i, d in enumerate(docs, 1):
-            schema = d.get('schema') or '(sem)'
-            try:
-                root = _ET.fromstring(_gzip.decompress(_b64.b64decode(d.text or '')))
-                raiz = cs._local(root.tag)
-            except Exception as exc:
-                p('      [%s] schema=%s (falha unzip: %s)' % (i, schema, exc)); continue
-            dets = [e for e in root.iter() if cs._local(e.tag) == 'det']
-            p('      [%s] NSU=%s schema=%s raiz=<%s> ITENS=%s'
-              % (i, d.get('NSU'), schema, raiz, len(dets)))
-            if schema.lower().startswith(('proc', 'nfeproc')) or len(dets) > 0:
-                veio_completo = True
-            for de in dets:
-                def g(node, nome):
-                    for e in node.iter():
-                        if cs._local(e.tag) == nome and e.text:
-                            return e.text.strip()
-                    return '?'
-                p('        - %-40s qCom=%s un=%s vProd=%s'
-                  % (g(de, 'xProd')[:40], g(de, 'qCom'), g(de, 'uCom'), g(de, 'vProd')))
-        return cStat, veio_completo
-
+    dados = request.get_json(silent=True) or {}
     try:
-        import sys, os
-        _raiz = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        for _p in (_raiz, os.path.join(_raiz, 'scripts')):
-            if _p not in sys.path:
-                sys.path.insert(0, _p)
-        import consulta_sefaz as cs
+        doc_id = int(dados.get('doc_id') or 0)
+    except (TypeError, ValueError):
+        doc_id = 0
+    if not doc_id:
+        return jsonify({'ok': False, 'erro': 'doc_id ausente'}), 400
 
-        cliente_id, cnpj, cert, chave_priv, cadeia = cs.abrir_certificado()
-        p('cert OK: cnpj=%s cadeia=%s' % (cnpj, len(cadeia)))
+    # scripts/ no sys.path p/ importar consulta_sefaz e processa_dfe.
+    _raiz = _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__)))
+    for _p in (_raiz, _os.path.join(_raiz, 'scripts')):
+        if _p not in _sys.path:
+            _sys.path.insert(0, _p)
+    import consulta_sefaz as cs
+    import processa_dfe as pd
+    from integrations.dfe_classificacao import aplicar_regras
+    import pymysql
+
+    # 1) Chave da nota (server-side; nao confia no cliente).
+    conn = pymysql.connect(**cs.CONN)
+    try:
+        with conn.cursor() as cur0:
+            cur0.execute("SELECT chave, numero, resumo FROM dfe_documentos WHERE id=%s",
+                         (doc_id,))
+            doc = cur0.fetchone()
+    finally:
+        conn.close()
+    if not doc:
+        return jsonify({'ok': False, 'erro': 'documento nao encontrado'}), 404
+    chave = ''.join(ch for ch in str(doc['chave']) if ch.isdigit())
+    if len(chave) != 44:
+        return jsonify({'ok': False, 'erro': 'chave invalida'}), 400
+
+    # 2) Certificado + consulta consChNFe (versao 1.01).
+    try:
+        cliente_id, cnpj_cert, cert, chave_priv, cadeia = cs.abrir_certificado()
+        corpo = (
+            '<distDFeInt xmlns="%s" versao="1.01">'
+            '<tpAmb>%s</tpAmb><cUFAutor>%s</cUFAutor><CNPJ>%s</CNPJ>'
+            '<consChNFe><chNFe>%s</chNFe></consChNFe>'
+            '</distDFeInt>'
+        ) % (cs.NS_NFE, cs.TP_AMB, cs.C_UF_AUTOR, cnpj_cert, chave)
+        soap = (
+            '<?xml version="1.0" encoding="utf-8"?>'
+            '<soap12:Envelope xmlns:soap12="http://www.w3.org/2003/05/soap-envelope">'
+            '<soap12:Body><nfeDistDFeInteresse xmlns="%s"><nfeDadosMsg>%s'
+            '</nfeDadosMsg></nfeDistDFeInteresse></soap12:Body></soap12:Envelope>'
+        ) % (cs.NS_WSDL, corpo)
         sess = cs.montar_sessao_mtls(cert, chave_priv, cadeia)
         headers = {
             'Content-Type': ('application/soap+xml; charset=utf-8; '
                              'action="%s/nfeDistDFeInteresse"' % cs.NS_WSDL),
-            'User-Agent': 'nh-transportes/teste-conschnfe (read-only)',
+            'User-Agent': 'nh-transportes/buscar-xml-conschnfe',
         }
+        r = sess.post(cs.ENDPOINT, data=soap.encode('utf-8'),
+                      headers=headers, timeout=cs.TIMEOUT)
+        if r.status_code != 200:
+            return jsonify({'ok': False, 'erro': 'SEFAZ HTTP %s' % r.status_code}), 502
+        env = _ET.fromstring(r.content)
+        ret = cs._find(env, 'retDistDFeInt')
+        cStat = cs._text(ret, 'cStat'); xMotivo = cs._text(ret, 'xMotivo')
+    except Exception as e:
+        current_app.logger.exception('[dfe] buscar-xml: falha na consulta SEFAZ')
+        return jsonify({'ok': False, 'erro': 'falha ao consultar a SEFAZ: %s' % e}), 500
 
-        for ver in versoes:
-            corpo = (
-                '<distDFeInt xmlns="%s" versao="%s">'
-                '<tpAmb>%s</tpAmb><cUFAutor>%s</cUFAutor><CNPJ>%s</CNPJ>'
-                '<consChNFe><chNFe>%s</chNFe></consChNFe>'
-                '</distDFeInt>'
-            ) % (cs.NS_NFE, ver, cs.TP_AMB, cs.C_UF_AUTOR, cnpj, chave)
-            soap = (
-                '<?xml version="1.0" encoding="utf-8"?>'
-                '<soap12:Envelope xmlns:soap12="http://www.w3.org/2003/05/soap-envelope">'
-                '<soap12:Body>'
-                '<nfeDistDFeInteresse xmlns="%s"><nfeDadosMsg>%s</nfeDadosMsg>'
-                '</nfeDistDFeInteresse></soap12:Body></soap12:Envelope>'
-            ) % (cs.NS_WSDL, corpo)
+    if cStat != '138':
+        return jsonify({'ok': False, 'cStat': cStat,
+                        'erro': 'SEFAZ nao retornou o documento (cStat %s: %s)'
+                                % (cStat, xMotivo)}), 200
 
-            p('')
-            p('#' * 70)
-            p('### TENTATIVA versao=%s' % ver)
-            p('#' * 70)
-            p('--- REQUISICAO (corpo distDFeInt) ---')
-            p(corpo)
-            r = sess.post(cs.ENDPOINT, data=soap.encode('utf-8'), headers=headers,
-                          timeout=cs.TIMEOUT)
-            p('--- HTTP %s (%s bytes) ---' % (r.status_code, len(r.content)))
-            p('--- RESPOSTA CRUA (ate 2500 chars) ---')
-            p(r.text[:2500])
-            if r.status_code == 200:
-                p('--- PARSE ---')
-                try:
-                    cStat, completo = mostra_itens(r.content)
-                    if cStat == '656':
-                        p('    >>> 656: mesma cota do polling. Botao INVIAVEL.')
-                    elif cStat == '138':
-                        p('    >>> 138 PASSOU. XML completo com itens? %s'
-                          % ('SIM -> botao VIAVEL' if completo else 'NAO (so resumo)'))
-                except Exception as exc:
-                    p('    (falha ao parsear: %s)' % exc)
-    except Exception as exc:
-        import traceback
-        p(''); p('ERRO: %s' % exc); p(traceback.format_exc()[:1500])
-    return Response('\n'.join(out), mimetype='text/plain')
+    # 3) Processa os docZip (reusa processar_um_doc: grava nota completa + itens,
+    #    eventos etc.; gravar_nota faz commit interno e sobe o XML no Dropbox).
+    lote = cs._find(ret, 'loteDistDFeInt')
+    docs = [e for e in (lote.iter() if lote is not None else [])
+            if cs._local(e.tag) == 'docZip']
+    if not docs:
+        return jsonify({'ok': False, 'erro': 'SEFAZ 138 mas lote vazio'}), 200
+
+    agora = _dt.now()
+    expira = (agora + _td(days=pd.DIAS_RETENCAO)).date()
+    n_nota = n_itens = n_evento = n_resumo = 0
+    conn = pymysql.connect(**cs.CONN)
+    try:
+        cur = conn.cursor()
+        for d in docs:
+            try:
+                kind, ni, _c = pd.processar_um_doc(
+                    conn, cur, cliente_id, cnpj_cert, d, agora, expira)
+            except Exception as e:
+                conn.rollback()
+                current_app.logger.warning('[dfe] buscar-xml: doc falhou: %s', e)
+                continue
+            if kind == 'nota':
+                n_nota += 1; n_itens += ni
+            elif kind == 'evento':
+                n_evento += 1
+            elif kind == 'resumo':
+                n_resumo += 1
+        # auto-classificacao (best-effort, isolada -- a nota ja esta salva).
+        n_cls = 0
+        try:
+            n_cls = aplicar_regras(cur)
+            if n_cls:
+                conn.commit()
+        except Exception:
+            conn.rollback(); n_cls = 0
+        cur.close()
+    finally:
+        conn.close()
+
+    if n_nota == 0:
+        return jsonify({'ok': False, 'cStat': cStat, 'so_resumo': n_resumo > 0,
+                        'erro': 'A SEFAZ ainda nao liberou o XML completo desta nota '
+                                '(veio so o resumo). Tente novamente mais tarde.'}), 200
+
+    return jsonify({'ok': True, 'itens': n_itens, 'eventos': n_evento,
+                    'auto_classificados': n_cls,
+                    'mensagem': 'Nota completa capturada (%s item(ns)).' % n_itens})

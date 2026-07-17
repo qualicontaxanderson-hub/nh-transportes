@@ -355,11 +355,12 @@
             <th class="text-end">Valor</th>
             <th>Situação</th>
             <th>Chave</th>
+            <th class="text-end">Ação</th>
           </tr>
         </thead>
         <tbody>
           {% for r in resumos %}
-          <tr>
+          <tr id="resumo-{{ r.id }}">
             <td>{{ r.dh_emissao.strftime('%d/%m/%Y %H:%M') if r.dh_emissao else '—' }}</td>
             <td><strong>{{ r.emit_nome or '(sem nome)' }}</strong><br>
                 <small class="text-muted">CNPJ {{ r.emit_cnpj or '—' }}</small></td>
@@ -371,6 +372,12 @@
               {% else %}{{ r.situacao or '—' }}{% endif %}
             </td>
             <td><small class="text-muted"><code>{{ r.chave }}</code></small></td>
+            <td class="text-end">
+              <button class="btn btn-sm btn-primary" onclick="buscarXml(this, {{ r.id }})"
+                      title="Consulta a nota pela chave (consChNFe) e traz o XML completo">
+                <i class="bi bi-cloud-download"></i> Buscar XML
+              </button>
+            </td>
           </tr>
           {% endfor %}
         </tbody>
@@ -475,6 +482,46 @@ function classificar(itemId, modo) {
   .catch(function (e) {
     alert('Erro de rede: ' + e);
     linha.querySelectorAll('button').forEach(function (b) { b.disabled = false; });
+  });
+}
+
+// Busca o XML COMPLETO de uma nota (resumo) pela chave, via consChNFe.
+// "buscando..." -> "nota completa!" (recarrega, a nota migra p/ Classificar)
+// ou mostra o erro / "só resumo ainda". CSRF injetado pelo base.html.
+function buscarXml(btn, docId) {
+  var htmlOrig = btn.innerHTML;
+  btn.disabled = true;
+  btn.className = 'btn btn-sm btn-primary';
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> buscando...';
+
+  fetch('{{ url_for("dfe_compras.buscar_xml") }}', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ doc_id: docId })
+  })
+  .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+  .then(function (res) {
+    if (!res.ok || !res.j.ok) {
+      var msg = (res.j && res.j.erro) ? res.j.erro : 'falha ao buscar o XML';
+      var soResumo = res.j && res.j.so_resumo;
+      btn.className = 'btn btn-sm ' + (soResumo ? 'btn-outline-secondary' : 'btn-warning');
+      btn.innerHTML = '<i class="bi bi-exclamation-triangle"></i> ' +
+                      (soResumo ? 'só resumo ainda' : 'erro');
+      btn.disabled = false;
+      alert(msg);
+      setTimeout(function () {
+        btn.className = 'btn btn-sm btn-primary'; btn.innerHTML = htmlOrig;
+      }, 5000);
+      return;
+    }
+    btn.className = 'btn btn-sm btn-success';
+    btn.innerHTML = '<i class="bi bi-check2"></i> nota completa!';
+    // Recarrega: a nota sai de "Aguardando XML" e vai para "Classificar".
+    setTimeout(function () { window.location.reload(); }, 1200);
+  })
+  .catch(function (e) {
+    btn.disabled = false; btn.className = 'btn btn-sm btn-primary'; btn.innerHTML = htmlOrig;
+    alert('Erro de rede: ' + e);
   });
 }
 
