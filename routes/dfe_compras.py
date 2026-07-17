@@ -498,12 +498,52 @@ def _teste_conschnfe():
     chave = (request.args.get('chave')
              or '52260709250921001230550020000138021718955044')  # ON PETRO 13802
     chave = ''.join(ch for ch in chave if ch.isdigit())
+    # versoes a testar (?versao=1.01 forca so uma). Default: tenta 1.35 e 1.01.
+    if request.args.get('versao'):
+        versoes = [request.args.get('versao')]
+    else:
+        versoes = ['1.35', '1.01']
 
     out = []
     def p(s=''): out.append(str(s))
 
     p('=== TESTE consChNFe (READ-ONLY, nao grava, nao manifesta) ===')
-    p('chave: %s' % chave)
+    p('chave: %s  (len=%s)' % (chave, len(chave)))
+    p('versoes a testar: %s' % versoes)
+
+    def mostra_itens(r_content):
+        """Parseia a resposta 138 e lista itens. Retorna (cStat, veio_completo)."""
+        env = _ET.fromstring(r_content)
+        ret = cs._find(env, 'retDistDFeInt')
+        cStat = cs._text(ret, 'cStat'); xMotivo = cs._text(ret, 'xMotivo')
+        p('    cStat/xMotivo : %s  %s' % (cStat, xMotivo))
+        p('    ultNSU/maxNSU : %s / %s' % (cs._text(ret, 'ultNSU'), cs._text(ret, 'maxNSU')))
+        lote = cs._find(ret, 'loteDistDFeInt')
+        docs = [e for e in (lote.iter() if lote is not None else [])
+                if cs._local(e.tag) == 'docZip']
+        veio_completo = False
+        for i, d in enumerate(docs, 1):
+            schema = d.get('schema') or '(sem)'
+            try:
+                root = _ET.fromstring(_gzip.decompress(_b64.b64decode(d.text or '')))
+                raiz = cs._local(root.tag)
+            except Exception as exc:
+                p('      [%s] schema=%s (falha unzip: %s)' % (i, schema, exc)); continue
+            dets = [e for e in root.iter() if cs._local(e.tag) == 'det']
+            p('      [%s] NSU=%s schema=%s raiz=<%s> ITENS=%s'
+              % (i, d.get('NSU'), schema, raiz, len(dets)))
+            if schema.lower().startswith(('proc', 'nfeproc')) or len(dets) > 0:
+                veio_completo = True
+            for de in dets:
+                def g(node, nome):
+                    for e in node.iter():
+                        if cs._local(e.tag) == nome and e.text:
+                            return e.text.strip()
+                    return '?'
+                p('        - %-40s qCom=%s un=%s vProd=%s'
+                  % (g(de, 'xProd')[:40], g(de, 'qCom'), g(de, 'uCom'), g(de, 'vProd')))
+        return cStat, veio_completo
+
     try:
         import sys, os
         _raiz = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -514,75 +554,50 @@ def _teste_conschnfe():
 
         cliente_id, cnpj, cert, chave_priv, cadeia = cs.abrir_certificado()
         p('cert OK: cnpj=%s cadeia=%s' % (cnpj, len(cadeia)))
-
-        soap = (
-            '<?xml version="1.0" encoding="utf-8"?>'
-            '<soap12:Envelope xmlns:soap12="http://www.w3.org/2003/05/soap-envelope">'
-            '<soap12:Body>'
-            '<nfeDistDFeInteresse xmlns="%s"><nfeDadosMsg>'
-            '<distDFeInt xmlns="%s" versao="%s">'
-            '<tpAmb>%s</tpAmb><cUFAutor>%s</cUFAutor><CNPJ>%s</CNPJ>'
-            '<consChNFe><chNFe>%s</chNFe></consChNFe>'
-            '</distDFeInt></nfeDadosMsg></nfeDistDFeInteresse>'
-            '</soap12:Body></soap12:Envelope>'
-        ) % (cs.NS_WSDL, cs.NS_NFE, cs.VERSAO, cs.TP_AMB, cs.C_UF_AUTOR, cnpj, chave)
-
         sess = cs.montar_sessao_mtls(cert, chave_priv, cadeia)
         headers = {
             'Content-Type': ('application/soap+xml; charset=utf-8; '
                              'action="%s/nfeDistDFeInteresse"' % cs.NS_WSDL),
             'User-Agent': 'nh-transportes/teste-conschnfe (read-only)',
         }
-        r = sess.post(cs.ENDPOINT, data=soap.encode('utf-8'), headers=headers,
-                      timeout=cs.TIMEOUT)
-        p('HTTP %s (%s bytes)' % (r.status_code, len(r.content)))
-        if r.status_code != 200:
-            p(r.text[:1500]); return Response('\n'.join(out), mimetype='text/plain')
 
-        env = _ET.fromstring(r.content)
-        ret = cs._find(env, 'retDistDFeInt')
-        cStat = cs._text(ret, 'cStat'); xMotivo = cs._text(ret, 'xMotivo')
-        p('')
-        p('cStat / xMotivo : %s  %s' % (cStat, xMotivo))
-        p('ultNSU / maxNSU : %s / %s' % (cs._text(ret, 'ultNSU'), cs._text(ret, 'maxNSU')))
+        for ver in versoes:
+            corpo = (
+                '<distDFeInt xmlns="%s" versao="%s">'
+                '<tpAmb>%s</tpAmb><cUFAutor>%s</cUFAutor><CNPJ>%s</CNPJ>'
+                '<consChNFe><chNFe>%s</chNFe></consChNFe>'
+                '</distDFeInt>'
+            ) % (cs.NS_NFE, ver, cs.TP_AMB, cs.C_UF_AUTOR, cnpj, chave)
+            soap = (
+                '<?xml version="1.0" encoding="utf-8"?>'
+                '<soap12:Envelope xmlns:soap12="http://www.w3.org/2003/05/soap-envelope">'
+                '<soap12:Body>'
+                '<nfeDistDFeInteresse xmlns="%s"><nfeDadosMsg>%s</nfeDadosMsg>'
+                '</nfeDistDFeInteresse></soap12:Body></soap12:Envelope>'
+            ) % (cs.NS_WSDL, corpo)
 
-        if cStat == '656':
             p('')
-            p('>>> PERGUNTA DE OURO: consChNFe TOMOU 656 (mesma cota do polling).')
-            p('>>> Botao "Buscar XML" INVIAVEL.')
-            return Response('\n'.join(out), mimetype='text/plain')
-
-        lote = cs._find(ret, 'loteDistDFeInt')
-        docs = [e for e in (lote.iter() if lote is not None else [])
-                if cs._local(e.tag) == 'docZip']
-        p('docZip no lote: %s' % len(docs))
-        veio_completo = False
-        for i, d in enumerate(docs, 1):
-            schema = d.get('schema') or '(sem)'
-            try:
-                root = _ET.fromstring(_gzip.decompress(_b64.b64decode(d.text or '')))
-                raiz = cs._local(root.tag)
-            except Exception as exc:
-                p('  [%s] schema=%s (falha unzip: %s)' % (i, schema, exc)); continue
-            dets = [e for e in root.iter() if cs._local(e.tag) == 'det']
-            p('  [%s] NSU=%s schema=%s raiz=<%s> ITENS=%s'
-              % (i, d.get('NSU'), schema, raiz, len(dets)))
-            if schema.lower().startswith(('proc', 'nfeproc')) or len(dets) > 0:
-                veio_completo = True
-            for de in dets:
-                def g(node, nome):
-                    for e in node.iter():
-                        if cs._local(e.tag) == nome and e.text:
-                            return e.text.strip()
-                    return '?'
-                p('      - %-42s qCom=%s un=%s vProd=%s'
-                  % (g(de, 'xProd')[:42], g(de, 'qCom'), g(de, 'uCom'), g(de, 'vProd')))
-            for e in root.iter():
-                if cs._local(e.tag) == 'vNF' and e.text:
-                    p('      vNF (total): %s' % e.text.strip()); break
-        p('')
-        p('>>> PASSOU sem 656. XML completo com itens? %s'
-          % ('SIM -> botao VIAVEL' if veio_completo else 'NAO (veio so resumo)'))
+            p('#' * 70)
+            p('### TENTATIVA versao=%s' % ver)
+            p('#' * 70)
+            p('--- REQUISICAO (corpo distDFeInt) ---')
+            p(corpo)
+            r = sess.post(cs.ENDPOINT, data=soap.encode('utf-8'), headers=headers,
+                          timeout=cs.TIMEOUT)
+            p('--- HTTP %s (%s bytes) ---' % (r.status_code, len(r.content)))
+            p('--- RESPOSTA CRUA (ate 2500 chars) ---')
+            p(r.text[:2500])
+            if r.status_code == 200:
+                p('--- PARSE ---')
+                try:
+                    cStat, completo = mostra_itens(r.content)
+                    if cStat == '656':
+                        p('    >>> 656: mesma cota do polling. Botao INVIAVEL.')
+                    elif cStat == '138':
+                        p('    >>> 138 PASSOU. XML completo com itens? %s'
+                          % ('SIM -> botao VIAVEL' if completo else 'NAO (so resumo)'))
+                except Exception as exc:
+                    p('    (falha ao parsear: %s)' % exc)
     except Exception as exc:
         import traceback
         p(''); p('ERRO: %s' % exc); p(traceback.format_exc()[:1500])
