@@ -1,14 +1,17 @@
 """
 Agendador in-process (APScheduler) da captura automatica de DFe.
 
-Roda de 3 EM 3 HORAS (horario de Brasilia) a captura em massa
-(scripts/captura_massa_dfe.py), respeitando a cota da SEFAZ. O espacamento de 3h
-(em vez de 1h) reduz o 656 "Consumo Indevido", ja que o mesmo CNPJ tambem e
-consultado por outro consumidor (NFStock) e a cota da SEFAZ e rigida.
+Roda A CADA 20 MINUTOS (horario de Brasilia) a captura em massa
+(scripts/captura_massa_dfe.py), respeitando a cota da SEFAZ. A cota da SEFAZ e
+rigida (~1 consulta produtiva por hora por CNPJ) e o mesmo CNPJ tambem e
+consultado por outro consumidor (NFStock/SGA), que mantem o relogio de 1h
+quente. Tentar de 20 em 20 min NAO abusa -- so serve para PEGAR a janela assim
+que ela abre (ate ~20 min depois), em vez de perde-la esperando 3h:
   - o proprio script pula se dfe_nsu.proximo_permitido ainda estiver no futuro
     (656 recente) e, se tomar 656 no meio, para e reagenda +1h;
   - aqui ainda fazemos um pre-check barato de proximo_permitido para nem
-    disparar o processo a toa.
+    disparar o processo a toa (a esmagadora maioria dos ciclos de 20 min so
+    registra 'pulado_cota' e sai -- barato).
 
 Concorrencia (gunicorn --workers 2):
   cada worker cria o seu proprio scheduler, entao o job usa um LOCK global no
@@ -18,8 +21,8 @@ Concorrencia (gunicorn --workers 2):
 
 Liga/desliga por env (no servico web do Railway):
   DFE_SCHED_ENABLED = '1' (default) | '0' para desligar
-  DFE_SCHED_HOURS   = horas do disparo em cron (default '*/3' = 00,03,...,21 BR)
-  DFE_SCHED_MINUTE  = minuto do disparo (default '5')
+  DFE_SCHED_HOURS   = horas do disparo em cron (default '*' = toda hora)
+  DFE_SCHED_MINUTE  = minuto do disparo em cron (default '*/20' = a cada 20 min)
 """
 import os
 import sys
@@ -162,13 +165,18 @@ def iniciar_scheduler(app):
             app.logger.warning("[dfe_sched] APScheduler nao instalado; scheduler NAO iniciado.")
             return
 
-        try:
-            minuto = int(os.environ.get('DFE_SCHED_MINUTE', '5'))
-        except ValueError:
-            minuto = 5
+        # Minuto do disparo em cron. Aceita expressao ('*/20', '5,25,45'...),
+        # nao so um inteiro fixo -- por isso repassamos a string crua ao
+        # CronTrigger. Default '*/20' = a cada 20 min.
+        minuto = os.environ.get('DFE_SCHED_MINUTE', '*/20')
 
-        # Horas do disparo em cron; default de 3 em 3 horas (00,03,...,21).
-        horas = os.environ.get('DFE_SCHED_HOURS', '*/3')
+        # Horas do disparo em cron; default '*' (toda hora). Combinado com
+        # minuto '*/20', dispara a cada 20 min. Nao abusa da SEFAZ: o proprio
+        # ciclo se auto-regula -- apos um 656 grava proximo_permitido=+1h e a
+        # pre-checagem de cota nem dispara a captura enquanto o bloqueio vale.
+        # Assim tentamos de 20 em 20 min so para PEGAR a janela assim que ela
+        # abre (ate ~20 min depois), em vez de perde-la esperando 3h.
+        horas = os.environ.get('DFE_SCHED_HOURS', '*')
 
         # Fuso de Brasilia: o container roda em UTC, entao fixamos o timezone
         # para os horarios acima serem em horario de Brasilia (UTC-3).
@@ -185,8 +193,8 @@ def iniciar_scheduler(app):
         sched = BackgroundScheduler(daemon=True, timezone=tz)
         sched.add_job(
             lambda: _job(app),
-            trigger=CronTrigger(hour=horas, minute=minuto, timezone=tz),  # 3 em 3h, BR
-            id='dfe_captura_3h',
+            trigger=CronTrigger(hour=horas, minute=minuto, timezone=tz),  # cada 20 min, BR
+            id='dfe_captura',
             max_instances=1,
             coalesce=True,
             misfire_grace_time=300,
