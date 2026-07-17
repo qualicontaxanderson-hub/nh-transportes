@@ -342,6 +342,29 @@
       aqui só para <strong>conferência/visibilidade</strong>. Quando o XML completo chegar
       numa próxima captura, a nota sai desta lista e vai para <em>Classificar</em> sozinha.
     </p>
+
+    <div class="card border-primary mb-3">
+      <div class="card-body">
+        <h6 class="card-title mb-2">
+          <i class="bi bi-key"></i> Buscar por chave avulsa
+        </h6>
+        <p class="text-muted small mb-2">
+          Cole a chave de <strong>44 dígitos</strong> (você pega no SGA) e clique em
+          <strong>Buscar</strong>. Traz o XML completo na hora pela chave (consChNFe),
+          mesmo que a nota nunca tenha passado pela captura.
+        </p>
+        <div class="input-group">
+          <input type="text" id="chaveAvulsa" class="form-control font-monospace"
+                 maxlength="54" inputmode="numeric" autocomplete="off"
+                 placeholder="Chave de 44 dígitos">
+          <button class="btn btn-primary" id="btnChaveAvulsa"
+                  onclick="buscarXmlChave(this)">
+            <i class="bi bi-cloud-download"></i> Buscar
+          </button>
+        </div>
+      </div>
+    </div>
+
     {% if not resumos %}
       <div class="alert alert-success"><i class="bi bi-check2-circle"></i>
         Nenhuma nota aguardando XML completo.</div>
@@ -521,6 +544,47 @@ function buscarXml(btn, docId) {
   })
   .catch(function (e) {
     btn.disabled = false; btn.className = 'btn btn-sm btn-primary'; btn.innerHTML = htmlOrig;
+    alert('Erro de rede: ' + e);
+  });
+}
+
+// Busca o XML pela CHAVE avulsa digitada (mesma rota; manda { chave }).
+// Valida 44 digitos NUMERICOS no cliente antes de bater na SEFAZ.
+function buscarXmlChave(btn) {
+  var input = document.getElementById('chaveAvulsa');
+  var chave = (input.value || '').replace(/\D/g, '');   // so digitos
+  if (chave.length !== 44) {
+    alert('A chave deve ter 44 dígitos (você digitou ' + chave.length + ').');
+    input.focus();
+    return;
+  }
+  var htmlOrig = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> buscando...';
+
+  fetch('{{ url_for("dfe_compras.buscar_xml") }}', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ chave: chave })
+  })
+  .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+  .then(function (res) {
+    if (!res.ok || !res.j.ok) {
+      // Cobre: nota nao e nossa / cStat != 138 / veio so o resumo.
+      // O backend manda a mensagem pronta em res.j.erro (com o cStat/xMotivo).
+      var msg = (res.j && res.j.erro) ? res.j.erro : 'falha ao buscar o XML';
+      btn.disabled = false;
+      btn.innerHTML = htmlOrig;
+      alert(msg);
+      return;
+    }
+    btn.className = 'btn btn-success';
+    btn.innerHTML = '<i class="bi bi-check2"></i> nota completa!';
+    // Recarrega: a nota entra e migra para "Classificar".
+    setTimeout(function () { window.location.reload(); }, 1200);
+  })
+  .catch(function (e) {
+    btn.disabled = false; btn.innerHTML = htmlOrig;
     alert('Erro de rede: ' + e);
   });
 }

@@ -497,12 +497,23 @@ def buscar_xml():
     import sys as _sys, os as _os
 
     dados = request.get_json(silent=True) or {}
+
+    # Aceita OU doc_id (botao da linha "Aguardando XML") OU chave avulsa
+    # (campo novo: cola a chave de 44 digitos pega no SGA). A chave digitada
+    # tem prioridade e permite buscar QUALQUER nota, mesmo que nunca tenha
+    # passado pelo polling (nao existe no banco).
     try:
         doc_id = int(dados.get('doc_id') or 0)
     except (TypeError, ValueError):
         doc_id = 0
-    if not doc_id:
-        return jsonify({'ok': False, 'erro': 'doc_id ausente'}), 400
+    # Filtra so digitos: descarta pontos/espacos que possam vir colados do SGA.
+    chave_in = ''.join(ch for ch in str(dados.get('chave') or '') if ch.isdigit())
+
+    if not chave_in and not doc_id:
+        return jsonify({'ok': False, 'erro': 'informe a chave ou o doc_id'}), 400
+    if chave_in and len(chave_in) != 44:
+        return jsonify({'ok': False,
+                        'erro': 'a chave deve ter 44 digitos (recebi %d)' % len(chave_in)}), 400
 
     # scripts/ no sys.path p/ importar consulta_sefaz e processa_dfe.
     _raiz = _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__)))
@@ -514,20 +525,24 @@ def buscar_xml():
     from integrations.dfe_classificacao import aplicar_regras
     import pymysql
 
-    # 1) Chave da nota (server-side; nao confia no cliente).
-    conn = pymysql.connect(**cs.CONN)
-    try:
-        with conn.cursor() as cur0:
-            cur0.execute("SELECT chave, numero, resumo FROM dfe_documentos WHERE id=%s",
-                         (doc_id,))
-            doc = cur0.fetchone()
-    finally:
-        conn.close()
-    if not doc:
-        return jsonify({'ok': False, 'erro': 'documento nao encontrado'}), 404
-    chave = ''.join(ch for ch in str(doc['chave']) if ch.isdigit())
-    if len(chave) != 44:
-        return jsonify({'ok': False, 'erro': 'chave invalida'}), 400
+    # 1) Chave da nota. Se veio digitada (chave avulsa), usa direto -- nao
+    #    precisa existir no banco. Senao, resolve pelo doc_id (server-side).
+    if chave_in:
+        chave = chave_in
+    else:
+        conn = pymysql.connect(**cs.CONN)
+        try:
+            with conn.cursor() as cur0:
+                cur0.execute("SELECT chave, numero, resumo FROM dfe_documentos WHERE id=%s",
+                             (doc_id,))
+                doc = cur0.fetchone()
+        finally:
+            conn.close()
+        if not doc:
+            return jsonify({'ok': False, 'erro': 'documento nao encontrado'}), 404
+        chave = ''.join(ch for ch in str(doc['chave']) if ch.isdigit())
+        if len(chave) != 44:
+            return jsonify({'ok': False, 'erro': 'chave invalida'}), 400
 
     # 2) Certificado + consulta consChNFe (versao 1.01).
     try:
