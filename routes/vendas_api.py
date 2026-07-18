@@ -39,20 +39,48 @@ _CAMPOS_ITEM = (
     'bico', 'bomba', 'tanque', 'enc_ini', 'enc_fin',
 )
 
+# Campos NOVOS (JSON key -> default se ausente OU None no JSON).
+# NOT NULL no banco -> default 0 (nunca NULL). Nullable -> None.
+# A ORDEM aqui casa com a ordem das colunas no INSERT (apos as antigas).
+_CABECALHO_NOVOS = (
+    ('vlr_desconto', 0), ('vlr_acrescimo', 0), ('vlr_trib_aprox', 0),
+    ('troco', 0), ('nat_op', None), ('protocolo', None),
+    ('card_bandeira_cod', None), ('card_bandeira', None),
+    ('card_credenciadora', None), ('card_autorizacao', None),
+    ('card_integrado', None), ('placa', None), ('km', None),
+)
+_ITEM_NOVOS = (
+    ('vlr_desconto', 0), ('vlr_acrescimo', 0), ('pbio', None),
+)
+
+
+def _com_defaults(d, campos):
+    """Valores de `campos` (lista de (chave, default)) tirados do dict `d`.
+    Chave ausente OU None -> usa default. Assim robo antigo (sem os campos)
+    nao quebra os INSERTs em colunas NOT NULL."""
+    return tuple(default if d.get(k) is None else d.get(k) for k, default in campos)
+
 _SQL_EXISTE = "SELECT id FROM vendas_xml WHERE chave = %s"
 
 _SQL_INSERT_CABECALHO = (
     "INSERT INTO vendas_xml (chave, modelo, serie, numero, dh_emissao, "
     "cnpj_emitente, cliente_doc, cliente_nome, valor_total, forma_pagamento, "
-    "vendedor_raw, arquivo) "
-    "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
+    "vendedor_raw, arquivo, "
+    "vlr_desconto, vlr_acrescimo, vlr_trib_aprox, troco, nat_op, protocolo, "
+    "card_bandeira_cod, card_bandeira, card_credenciadora, card_autorizacao, "
+    "card_integrado, placa, km) "
+    "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, "
+    "%s, %s, %s, %s, %s, %s, "
+    "%s, %s, %s, %s, %s, %s, %s)"
 )
 
 _SQL_INSERT_ITEM = (
     "INSERT INTO vendas_xml_itens (venda_id, n_item, produto_xml, cod_anp, "
     "produto_id, eh_combustivel, unidade, quantidade, valor_unitario, "
-    "valor_total, bico, bomba, tanque, enc_ini, enc_fin) "
-    "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
+    "valor_total, bico, bomba, tanque, enc_ini, enc_fin, "
+    "vlr_desconto, vlr_acrescimo, pbio) "
+    "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, "
+    "%s, %s, %s)"
 )
 
 _SQL_CANCELA = "UPDATE vendas_xml SET situacao = 'cancelada' WHERE chave = %s"
@@ -146,7 +174,8 @@ def receber_vendas():
                     continue
 
                 # Insere cabeçalho + itens numa transação própria desta nota.
-                params_cab = tuple(nota.get(c) for c in _CAMPOS_CABECALHO)
+                params_cab = (tuple(nota.get(c) for c in _CAMPOS_CABECALHO)
+                              + _com_defaults(nota, _CABECALHO_NOVOS))
                 cur.execute(_SQL_INSERT_CABECALHO, params_cab)
                 venda_id = cur.lastrowid
 
@@ -156,7 +185,9 @@ def receber_vendas():
                 for item in itens:
                     if not isinstance(item, dict):
                         raise ValueError("item não é objeto JSON")
-                    params_item = (venda_id,) + tuple(item.get(c) for c in _CAMPOS_ITEM)
+                    params_item = ((venda_id,)
+                                   + tuple(item.get(c) for c in _CAMPOS_ITEM)
+                                   + _com_defaults(item, _ITEM_NOVOS))
                     cur.execute(_SQL_INSERT_ITEM, params_item)
 
                 conn.commit()
