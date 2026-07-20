@@ -120,7 +120,7 @@ def _processar_docs(conn, cur, ret, cliente_id, cnpj_cert, agora, expira, ult_ns
             if cs._local(e.tag) == "docZip"]
     docs.sort(key=lambda e: pd._to_int(e.get("NSU")) or 0)
     c = dict(docs=len(docs), n_nota=0, n_evento=0, n_resumo=0, n_outro=0,
-             n_itens=0, n_cancel=0)
+             n_itens=0, n_cancel=0, n_cte=0, n_resumo_cte=0)
 
     nsu_ok = ult_nsu
     houve_falha = False
@@ -146,9 +146,14 @@ def _processar_docs(conn, cur, ret, cliente_id, cnpj_cert, agora, expira, ult_ns
                 c["n_cancel"] += 1
         elif kind == "resumo":
             c["n_resumo"] += 1
+        elif kind == "cte":
+            c["n_cte"] += 1
+            c["n_itens"] += ni   # ni = qtd de NF-e vinculadas
+        elif kind == "resumo_cte":
+            c["n_resumo_cte"] += 1
         else:
             c["n_outro"] += 1
-            print(f"      [NSU {nsu}] tipo nao modelado (CTe/resEvento) -- seguindo.")
+            print(f"      [NSU {nsu}] tipo nao modelado (resEvento) -- seguindo.")
 
         nsu_ok = nsu   # so avanca a marca APOS salvar com sucesso
 
@@ -190,6 +195,8 @@ def main():
     try:
         with con0.cursor() as c0:
             c0.execute(pd.DDL_EVENTOS)
+            c0.execute(pd.DDL_CTE)
+            c0.execute(pd.DDL_CTE_NFE)
             dfe_log.garantir_tabela(c0)
         con0.commit()
     finally:
@@ -199,6 +206,7 @@ def main():
 
     # 4) Loop de lotes.
     tot_nota = tot_evento = tot_itens = tot_cancel = tot_resumo = tot_outro = 0
+    tot_cte = tot_resumo_cte = 0
     lotes = 0
     max_nsu = 0
     motivo_fim = "limite"   # default se sair pelo teto
@@ -296,10 +304,11 @@ def main():
             ))
             _log_consulta(
                 docs=c["docs"], notas=c["n_nota"], eventos=c["n_evento"],
-                detalhe=("138: %d docs (%d notas, %d resumos, %d eventos, %d outros); "
-                         "cursor %d -> %d%s"
-                         % (c["docs"], c["n_nota"], c["n_resumo"], c["n_evento"],
-                            c["n_outro"], ult_nsu, novo_ult,
+                detalhe=("138: %d docs (%d notas, %d resumos, %d CTe, %d resCTe, "
+                         "%d eventos, %d outros); cursor %d -> %d%s"
+                         % (c["docs"], c["n_nota"], c["n_resumo"], c["n_cte"],
+                            c["n_resumo_cte"], c["n_evento"], c["n_outro"],
+                            ult_nsu, novo_ult,
                             "; PAROU por falha ao salvar" if houve_falha else "")),
             )
             conn.commit()
@@ -324,11 +333,13 @@ def main():
             tot_cancel += c["n_cancel"]
             tot_resumo += c["n_resumo"]
             tot_outro += c["n_outro"]
+            tot_cte += c["n_cte"]
+            tot_resumo_cte += c["n_resumo_cte"]
             ult_nsu = novo_ult
             falta = max(0, (max_nsu or 0) - novo_ult)
 
             print(f"Lote {lotes}: +{c['n_nota']} notas, +{c['n_resumo']} resumos, "
-                  f"+{c['n_evento']} eventos, +{c['n_itens']} itens "
+                  f"+{c['n_cte']} CT-e, +{c['n_evento']} eventos, +{c['n_itens']} itens "
                   f"(outros {c['n_outro']}) | NSU agora={novo_ult} (falta {falta})")
 
             # ----- um doc falhou ao salvar: nao insiste agora; ult_nsu preservado -----
@@ -357,6 +368,8 @@ def main():
     print(f"    lotes processados   : {lotes}")
     print(f"    notas completas     : {tot_nota}   (itens: {tot_itens})")
     print(f"    resumos de nota     : {tot_resumo}   (resNFe -> aparecem em /dfe/compras)")
+    print(f"    CT-e completos      : {tot_cte}")
+    print(f"    resumos de CT-e     : {tot_resumo_cte}   (resCTe)")
     print(f"    eventos gravados    : {tot_evento}   (cancelamentos: {tot_cancel})")
     print(f"    outros (nao modelados): {tot_outro}")
     print(f"    NSU final           : {ult_nsu}  (maxNSU visto: {max_nsu})")

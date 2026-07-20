@@ -89,6 +89,55 @@ CREATE TABLE IF NOT EXISTS dfe_eventos (
 
 
 # ==========================================================================
+# DDL das tabelas NOVAS de CT-e (isoladas, idempotentes). dfe_cte guarda os
+# campos especificos do CT-e (1:1 com dfe_documentos, tipo='CTe'); dfe_cte_nfe
+# guarda as N chaves de NF-e transportadas.
+# ==========================================================================
+DDL_CTE = """
+CREATE TABLE IF NOT EXISTS dfe_cte (
+    id            INT AUTO_INCREMENT PRIMARY KEY,
+    documento_id  INT NOT NULL,
+    cfop          VARCHAR(6)   NULL,
+    nat_op        VARCHAR(120) NULL,
+    tp_cte        VARCHAR(2)   NULL,
+    rem_cnpj      VARCHAR(14)  NULL, rem_nome  VARCHAR(160) NULL,
+    dest_cnpj     VARCHAR(14)  NULL, dest_nome VARCHAR(160) NULL,
+    toma_codigo   VARCHAR(2)   NULL,
+    toma_cnpj     VARCHAR(14)  NULL, toma_nome VARCHAR(160) NULL,
+    mun_ini       VARCHAR(60)  NULL, uf_ini    VARCHAR(2)  NULL,
+    mun_fim       VARCHAR(60)  NULL, uf_fim    VARCHAR(2)  NULL,
+    vprest        DECIMAL(14,2) NULL,
+    vcarga        DECIMAL(14,2) NULL,
+    prod_predom   VARCHAR(120) NULL,
+    peso          DECIMAL(14,3) NULL,
+    qtd_unid      DECIMAL(14,3) NULL,
+    rntrc         VARCHAR(20)  NULL,
+    motorista_nome VARCHAR(120) NULL,
+    motorista_cpf  VARCHAR(14)  NULL,
+    placa          VARCHAR(10)  NULL,
+    criado_em     TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    atualizado_em TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_doc (documento_id),
+    KEY ix_toma (toma_cnpj),
+    CONSTRAINT fk_cte_doc FOREIGN KEY (documento_id)
+        REFERENCES dfe_documentos(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+"""
+
+DDL_CTE_NFE = """
+CREATE TABLE IF NOT EXISTS dfe_cte_nfe (
+    id            INT AUTO_INCREMENT PRIMARY KEY,
+    documento_id  INT NOT NULL,
+    chave_nfe     CHAR(44) NOT NULL,
+    UNIQUE KEY uq_doc_nfe (documento_id, chave_nfe),
+    KEY ix_chave (chave_nfe),
+    CONSTRAINT fk_ctenfe_doc FOREIGN KEY (documento_id)
+        REFERENCES dfe_documentos(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+"""
+
+
+# ==========================================================================
 # Helpers de parsing (namespaces ignorados; busca por nome local).
 # Reaproveita cs._find / cs._text / cs._local.
 # ==========================================================================
@@ -264,6 +313,162 @@ def extrair_resumo_nota(root):
 
 
 # ==========================================================================
+# Extracao de um CT-e (cteProc) -> dict de cabecalho + specifics + chaves NF-e.
+# Estrutura do modelo 57 (layout 4.00), confirmada em XML real.
+# ==========================================================================
+# Tomador: toma3/toma aponta p/ rem(0)/exped(1)/receb(2)/dest(3); toma4 = outro.
+_TOMA_MAP = {"0": "rem", "1": "exped", "2": "receb", "3": "dest"}
+
+
+def _parte_cnpj_nome(el):
+    if el is None:
+        return None, None
+    cnpj = _digitos(cs._text(el, "CNPJ") or cs._text(el, "CPF")) or None
+    nome = cs._text(el, "xNome")
+    return cnpj, (nome[:160] if nome else None)
+
+
+def _resolve_tomador(root, ide):
+    """(codigo, cnpj, nome) do tomador do frete. toma4 tem parte propria; toma3
+    aponta p/ uma das partes ja presentes no CT-e."""
+    toma4 = cs._find(ide, "toma4") if ide is not None else None
+    if toma4 is not None:
+        cnpj, nome = _parte_cnpj_nome(toma4)
+        return "4", cnpj, nome
+    toma3 = cs._find(ide, "toma3") if ide is not None else None
+    cod = cs._text(toma3, "toma") if toma3 is not None else None
+    if cod is None:
+        return None, None, None
+    alvo = _TOMA_MAP.get(cod)
+    cnpj, nome = _parte_cnpj_nome(cs._find(root, alvo) if alvo else None)
+    return cod, cnpj, nome
+
+
+def _extrai_carga(root):
+    """proPred, vCarga e as 2 medidas do infCarga (PESO DECLARADO + UNIDADE)."""
+    prod = cs._text(root, "proPred")
+    vcarga = cs._text(root, "vCarga")
+    peso = qtd = None
+    for infq in root.iter():
+        if cs._local(infq.tag) != "infQ":
+            continue
+        tp = (cs._text(infq, "tpMed") or "").upper()
+        q = cs._text(infq, "qCarga")
+        if "PESO" in tp and peso is None:
+            peso = q
+        elif "UNIDADE" in tp and qtd is None:
+            qtd = q
+    return (prod[:120] if prod else None), vcarga, peso, qtd
+
+
+def _extrai_obscont(root):
+    """Motorista/placa do compl/ObsCont (xCampo -> xTexto)."""
+    d = {}
+    for obs in root.iter():
+        if cs._local(obs.tag) != "ObsCont":
+            continue
+        campo = (obs.get("xCampo") or "").strip().upper()
+        texto = cs._text(obs, "xTexto")
+        if campo and texto:
+            d[campo] = texto.strip()
+    nome = d.get("NOMEMOTORISTA") or d.get("MOTORISTA")
+    cpf = _digitos(d.get("CPFMOTORISTA") or "") or None
+    placa = d.get("PLACA")
+    return (nome[:120] if nome else None), cpf, (placa[:10] if placa else None)
+
+
+def _extrai_chaves_nfe(root):
+    """Chaves das NF-e transportadas (infCTeNorm/infDoc/infNFe/chave)."""
+    chaves = []
+    for el in root.iter():
+        if cs._local(el.tag) != "infNFe":
+            continue
+        ch = _digitos(cs._text(el, "chave"))
+        if len(ch) == 44 and ch not in chaves:
+            chaves.append(ch)
+    return chaves
+
+
+def extrair_cte(root):
+    infcte = cs._find(root, "infCte")
+    idv = (infcte.get("Id") or infcte.get("id") or "") if infcte is not None else ""
+    chave = _digitos(idv)
+    chave = chave if len(chave) == 44 else (chave[-44:] if len(chave) > 44 else None)
+    if not chave:
+        chave = _digitos(cs._text(root, "chCTe"))
+        chave = chave if len(chave) == 44 else None
+    if not chave:
+        raise ValueError("CTe sem chave de 44 digitos (infCte/protCTe)")
+
+    ide = cs._find(root, "ide")
+    numero = cs._text(ide, "nCT") if ide is not None else None
+    serie = cs._text(ide, "serie") if ide is not None else None
+    modelo = cs._text(ide, "mod") if ide is not None else None
+    cfop = cs._text(ide, "CFOP") if ide is not None else None
+    nat_op = cs._text(ide, "natOp") if ide is not None else None
+    tp_cte = cs._text(ide, "tpCTe") if ide is not None else None
+    dh_txt, ano, mes = _parse_dh(cs._text(ide, "dhEmi") if ide is not None else None)
+    mun_ini = cs._text(ide, "xMunIni") if ide is not None else None
+    uf_ini = cs._text(ide, "UFIni") if ide is not None else None
+    mun_fim = cs._text(ide, "xMunFim") if ide is not None else None
+    uf_fim = cs._text(ide, "UFFim") if ide is not None else None
+
+    emit_cnpj, emit_nome = _parte_cnpj_nome(cs._find(root, "emit"))
+    rem_cnpj, rem_nome = _parte_cnpj_nome(cs._find(root, "rem"))
+    dest_cnpj, dest_nome = _parte_cnpj_nome(cs._find(root, "dest"))
+    toma_cod, toma_cnpj, toma_nome = _resolve_tomador(root, ide)
+
+    valor_total = cs._text(root, "vTPrest")
+    prod_predom, vcarga, peso, qtd_unid = _extrai_carga(root)
+    rntrc = cs._text(root, "RNTRC")
+    mot_nome, mot_cpf, placa = _extrai_obscont(root)
+    chaves_nfe = _extrai_chaves_nfe(root)
+
+    prot = cs._find(root, "protCTe")
+    cstat = cs._text(prot, "cStat") if prot is not None else None
+    situacao = "denegada" if cstat in ("110", "301", "302") else "autorizado"
+
+    return {
+        "chave": chave, "tipo": "CTe", "numero": numero, "serie": serie,
+        "modelo": modelo, "dh_txt": dh_txt, "ano": ano, "mes": mes,
+        "cfop": cfop, "nat_op": (nat_op[:120] if nat_op else None), "tp_cte": tp_cte,
+        "emit_cnpj": emit_cnpj, "emit_nome": emit_nome,
+        "rem_cnpj": rem_cnpj, "rem_nome": rem_nome,
+        "dest_cnpj": dest_cnpj, "dest_nome": dest_nome,
+        "toma_codigo": toma_cod, "toma_cnpj": toma_cnpj, "toma_nome": toma_nome,
+        "mun_ini": (mun_ini[:60] if mun_ini else None), "uf_ini": uf_ini,
+        "mun_fim": (mun_fim[:60] if mun_fim else None), "uf_fim": uf_fim,
+        "valor_total": valor_total, "vprest": valor_total, "vcarga": vcarga,
+        "prod_predom": prod_predom, "peso": peso, "qtd_unid": qtd_unid,
+        "rntrc": (rntrc[:20] if rntrc else None),
+        "motorista_nome": mot_nome, "motorista_cpf": mot_cpf, "placa": placa,
+        "situacao": situacao, "chaves_nfe": chaves_nfe,
+    }
+
+
+def extrair_resumo_cte(root):
+    """resCTe -> resumo (resumo=1). Sem specifics; campos da propria chave."""
+    chave = _digitos(cs._text(root, "chCTe"))
+    if len(chave) != 44:
+        raise ValueError("resCTe sem chCTe de 44 digitos")
+    modelo = chave[20:22]
+    serie = chave[22:25].lstrip("0") or "0"
+    numero = chave[25:34].lstrip("0") or "0"
+    dh_txt, ano, mes = _parse_dh(cs._text(root, "dhEmi"))
+    emit_cnpj = _digitos(cs._text(root, "CNPJ") or cs._text(root, "CPF")) or None
+    emit_nome = cs._text(root, "xNome")
+    emit_nome = emit_nome[:160] if emit_nome else None
+    csit = cs._text(root, "cSitCTe")
+    situacao = {"1": "autorizado", "2": "denegada", "3": "cancelada"}.get(csit, "autorizado")
+    return {
+        "chave": chave, "tipo": "CTe", "numero": numero, "serie": serie,
+        "modelo": modelo, "dh_txt": dh_txt, "ano": ano, "mes": mes,
+        "emit_cnpj": emit_cnpj, "emit_nome": emit_nome,
+        "valor_total": cs._text(root, "vTPrest"), "situacao": situacao,
+    }
+
+
+# ==========================================================================
 # De-para ANP -> produto_id: NAO ha tabela-fonte dedicada (produto so tem
 # id/nome/descricao). Reaproveita mapeamentos JA resolvidos em vendas_xml_itens
 # e dfe_itens. Retorna None se nao houver de-para conhecido (deixa NULL).
@@ -349,6 +554,31 @@ SQL_EVENTO_UPSERT = (
 
 SQL_CANCELA_NOTA = (
     "UPDATE dfe_documentos SET situacao='cancelada' WHERE chave = %s"
+)
+
+# CT-e: specifics (1:1 com dfe_documentos) e NF-e vinculadas (N). Idempotentes.
+SQL_CTE_UPSERT = (
+    "INSERT INTO dfe_cte (documento_id, cfop, nat_op, tp_cte, rem_cnpj, rem_nome, "
+    "dest_cnpj, dest_nome, toma_codigo, toma_cnpj, toma_nome, mun_ini, uf_ini, "
+    "mun_fim, uf_fim, vprest, vcarga, prod_predom, peso, qtd_unid, rntrc, "
+    "motorista_nome, motorista_cpf, placa) "
+    "VALUES (" + ",".join(["%s"] * 24) + ") "
+    "ON DUPLICATE KEY UPDATE "
+    "  cfop=VALUES(cfop), nat_op=VALUES(nat_op), tp_cte=VALUES(tp_cte), "
+    "  rem_cnpj=VALUES(rem_cnpj), rem_nome=VALUES(rem_nome), "
+    "  dest_cnpj=VALUES(dest_cnpj), dest_nome=VALUES(dest_nome), "
+    "  toma_codigo=VALUES(toma_codigo), toma_cnpj=VALUES(toma_cnpj), "
+    "  toma_nome=VALUES(toma_nome), mun_ini=VALUES(mun_ini), uf_ini=VALUES(uf_ini), "
+    "  mun_fim=VALUES(mun_fim), uf_fim=VALUES(uf_fim), vprest=VALUES(vprest), "
+    "  vcarga=VALUES(vcarga), prod_predom=VALUES(prod_predom), peso=VALUES(peso), "
+    "  qtd_unid=VALUES(qtd_unid), rntrc=VALUES(rntrc), "
+    "  motorista_nome=VALUES(motorista_nome), motorista_cpf=VALUES(motorista_cpf), "
+    "  placa=VALUES(placa)"
+)
+
+SQL_CTE_NFE_UPSERT = (
+    "INSERT INTO dfe_cte_nfe (documento_id, chave_nfe) VALUES (%s, %s) "
+    "ON DUPLICATE KEY UPDATE chave_nfe=chave_nfe"   # idempotente (no-op)
 )
 
 # IMPORTANTE (timezone): ult_consulta e proximo_permitido usam SEMPRE o relogio
@@ -485,6 +715,63 @@ def gravar_resumo_nota(conn, cur, cliente_id, cnpj_cert, res, nsu, schema):
 
 
 # ==========================================================================
+# Gravacao de UM CT-e (Dropbox + dfe_documentos tipo='CTe' + dfe_cte +
+# dfe_cte_nfe). Espelha gravar_nota. Transacao propria. Retorna qtd de NF-e
+# vinculadas gravadas.
+# ==========================================================================
+def gravar_cte(conn, cur, cliente_id, cnpj_cert, cte, xml_bytes, nsu, schema,
+               agora, expira):
+    ano = cte["ano"] or agora.year
+    mes = cte["mes"] or agora.month
+    caminho = montar_caminho(cnpj_cert, ano, mes, cte["chave"])
+    upload_xml(caminho, xml_bytes)  # sobe ANTES; falha aqui aborta o doc
+
+    cur.execute(SQL_DOC_UPSERT, (
+        cliente_id, cte["chave"], "CTe", nsu, schema,
+        cte["numero"], cte["serie"], cte["modelo"], cte["dh_txt"],
+        cte["emit_cnpj"], cte["emit_nome"], cte["dest_cnpj"],
+        cte["valor_total"], cte["situacao"], caminho, expira,
+    ))
+    cur.execute(SQL_DOC_ID, (cte["chave"],))
+    row = cur.fetchone()
+    documento_id = row["id"] if row else None
+    if not documento_id:
+        raise RuntimeError("nao recuperou documento_id do CTe apos upsert")
+
+    cur.execute(SQL_CTE_UPSERT, (
+        documento_id, cte["cfop"], cte["nat_op"], cte["tp_cte"],
+        cte["rem_cnpj"], cte["rem_nome"], cte["dest_cnpj"], cte["dest_nome"],
+        cte["toma_codigo"], cte["toma_cnpj"], cte["toma_nome"],
+        cte["mun_ini"], cte["uf_ini"], cte["mun_fim"], cte["uf_fim"],
+        cte["vprest"], cte["vcarga"], cte["prod_predom"], cte["peso"],
+        cte["qtd_unid"], cte["rntrc"], cte["motorista_nome"],
+        cte["motorista_cpf"], cte["placa"],
+    ))
+
+    n_nfe = 0
+    for ch in cte["chaves_nfe"]:
+        cur.execute(SQL_CTE_NFE_UPSERT, (documento_id, ch))
+        n_nfe += 1
+
+    conn.commit()
+    return n_nfe
+
+
+# ==========================================================================
+# Gravacao de UM resumo de CT-e (resCTe). So banco. resumo=1. Idempotente e
+# nao rebaixa CT-e completo (reaproveita SQL_RESUMO_UPSERT).
+# ==========================================================================
+def gravar_resumo_cte(conn, cur, cliente_id, cnpj_cert, res, nsu, schema):
+    cur.execute(SQL_RESUMO_UPSERT, (
+        cliente_id, res["chave"], res["tipo"], nsu, schema,
+        res["numero"], res["serie"], res["modelo"], res["dh_txt"],
+        res["emit_cnpj"], res["emit_nome"], cnpj_cert,
+        res["valor_total"], res["situacao"],
+    ))
+    conn.commit()
+
+
+# ==========================================================================
 # Processa e SALVA um UNICO docZip. Este e o ponto onde o "salvar" acontece;
 # quem chama usa o retorno para so avancar o ult_nsu ATE o ultimo NSU salvo.
 #
@@ -528,8 +815,19 @@ def processar_um_doc(conn, cur, cliente_id, cnpj_cert, d, agora, expira):
         gravar_resumo_nota(conn, cur, cliente_id, cnpj_cert, res, nsu, schema)
         return "resumo", 0, False
 
-    # resEvento, cteProc, resCTe etc.: nao modelamos. Nao levanta (nao trava a
-    # fila); quem chama loga e segue. Nenhuma NOTA se perde por isto.
+    if raiz == "cteProc":
+        cte = extrair_cte(root)
+        n_nfe = gravar_cte(conn, cur, cliente_id, cnpj_cert, cte,
+                           xml_bytes, nsu, schema, agora, expira)
+        return "cte", n_nfe, False
+
+    if raiz == "resCTe":
+        rescte = extrair_resumo_cte(root)
+        gravar_resumo_cte(conn, cur, cliente_id, cnpj_cert, rescte, nsu, schema)
+        return "resumo_cte", 0, False
+
+    # resEvento etc.: nao modelamos. Nao levanta (nao trava a fila); quem chama
+    # loga e segue. Nenhuma NOTA/CTe se perde por isto.
     return "outro", 0, False
 
 
@@ -561,11 +859,13 @@ def main():
         return
 
     # 3) Garante a tabela NOVA de eventos (idempotente, isolada).
-    print("\n[3] Garantindo tabela dfe_eventos (CREATE TABLE IF NOT EXISTS)...")
+    print("\n[3] Garantindo tabelas dfe_eventos + dfe_cte (CREATE TABLE IF NOT EXISTS)...")
     con0 = pymysql.connect(**cs.CONN)
     try:
         with con0.cursor() as c0:
             c0.execute(DDL_EVENTOS)
+            c0.execute(DDL_CTE)
+            c0.execute(DDL_CTE_NFE)
         con0.commit()
     finally:
         con0.close()
@@ -637,6 +937,7 @@ def main():
     print(f"\n[5] Documentos no lote: {len(docs)} -- processando...")
 
     n_nota = n_evento = n_resumo = n_outro = n_itens = n_cancel = 0
+    n_cte = n_resumo_cte = 0
 
     # ATOMICIDADE do ponteiro: processa os docs EM ORDEM DE NSU e so avanca a
     # "marca-d'agua" (nsu_ok) APOS cada gravacao bem-sucedida. Se um doc falha,
@@ -674,9 +975,16 @@ def main():
             elif kind == "resumo":
                 n_resumo += 1
                 print(f"    [NSU {nsu}] RESUMO de nota (resNFe) gravado (resumo=1)")
+            elif kind == "cte":
+                n_cte += 1
+                n_itens += ni   # ni = qtd de NF-e vinculadas
+                print(f"    [NSU {nsu}] CT-e ({ni} NF-e vinculada(s))")
+            elif kind == "resumo_cte":
+                n_resumo_cte += 1
+                print(f"    [NSU {nsu}] RESUMO de CT-e (resCTe) gravado (resumo=1)")
             else:
                 n_outro += 1
-                print(f"    [NSU {nsu}] tipo nao modelado (CTe/resEvento) -- seguindo.")
+                print(f"    [NSU {nsu}] tipo nao modelado (resEvento) -- seguindo.")
 
             nsu_ok = nsu   # so avanca a marca APOS salvar com sucesso
 
@@ -707,6 +1015,8 @@ def main():
     print(f"    docs recebidos      : {len(docs)}")
     print(f"    notas completas     : {n_nota}   (itens: {n_itens})")
     print(f"    resumos de nota     : {n_resumo}   (resNFe -> aparecem em /dfe/compras)")
+    print(f"    CT-e completos      : {n_cte}")
+    print(f"    resumos de CT-e     : {n_resumo_cte}   (resCTe)")
     print(f"    eventos gravados    : {n_evento}   (cancelamentos aplicados: {n_cancel})")
     print(f"    outros (nao modelados): {n_outro}")
     print(f"    ult_nsu final       : {nsu_ok}" + ("  (PAROU por falha)" if houve_falha else ""))
