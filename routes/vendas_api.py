@@ -48,9 +48,16 @@ _CABECALHO_NOVOS = (
     ('card_bandeira_cod', None), ('card_bandeira', None),
     ('card_credenciadora', None), ('card_autorizacao', None),
     ('card_integrado', None), ('placa', None), ('km', None),
+    # --- Fase 2: tributos separados, TEF e endereco do cliente ---
+    ('trib_fed', None), ('trib_est', None), ('trib_mun', None),
+    ('tef_terminal', None), ('tef_sequencia', None),
+    ('cli_logradouro', None), ('cli_bairro', None), ('cli_municipio', None),
+    ('cli_uf', None), ('cli_cep', None),
 )
 _ITEM_NOVOS = (
     ('vlr_desconto', 0), ('vlr_acrescimo', 0), ('pbio', None),
+    # --- Fase 2: fiscais do item ---
+    ('cprod', None), ('ncm', None), ('cfop', None), ('cst', None), ('icms_mono', None),
 )
 
 
@@ -68,19 +75,24 @@ _SQL_INSERT_CABECALHO = (
     "vendedor_raw, arquivo, "
     "vlr_desconto, vlr_acrescimo, vlr_trib_aprox, troco, nat_op, protocolo, "
     "card_bandeira_cod, card_bandeira, card_credenciadora, card_autorizacao, "
-    "card_integrado, placa, km) "
+    "card_integrado, placa, km, "
+    "trib_fed, trib_est, trib_mun, tef_terminal, tef_sequencia, "
+    "cli_logradouro, cli_bairro, cli_municipio, cli_uf, cli_cep) "
     "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, "
     "%s, %s, %s, %s, %s, %s, "
-    "%s, %s, %s, %s, %s, %s, %s)"
+    "%s, %s, %s, %s, %s, %s, %s, "
+    "%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
 )
 
 _SQL_INSERT_ITEM = (
     "INSERT INTO vendas_xml_itens (venda_id, n_item, produto_xml, cod_anp, "
     "produto_id, eh_combustivel, unidade, quantidade, valor_unitario, "
     "valor_total, bico, bomba, tanque, enc_ini, enc_fin, "
-    "vlr_desconto, vlr_acrescimo, pbio) "
+    "vlr_desconto, vlr_acrescimo, pbio, "
+    "cprod, ncm, cfop, cst, icms_mono) "
     "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, "
-    "%s, %s, %s)"
+    "%s, %s, %s, "
+    "%s, %s, %s, %s, %s)"
 )
 
 _SQL_CANCELA = "UPDATE vendas_xml SET situacao = 'cancelada' WHERE chave = %s"
