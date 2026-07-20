@@ -1,0 +1,237 @@
+{% extends 'base.html' %}
+{% block title %}Venda {{ nota.numero }}/{{ nota.serie }}{% endblock %}
+
+{% block styles %}
+<style>
+  .voltar-bar { max-width: 820px; margin: 0 auto 1rem; }
+  .doc-wrap   { max-width: 820px; margin: 0 auto; }
+
+  /* ---- CUPOM (modelo 65) ---- */
+  .cupom { max-width: 400px; margin: 0 auto; background:#fff; border:1px solid #dee2e6;
+           border-radius:.5rem; padding:1.2rem 1rem; font-family:'Courier New',monospace;
+           font-size:.8rem; color:#212529; }
+  .cupom .c-center { text-align:center; }
+  .cupom hr { border:0; border-top:1px dashed #adb5bd; margin:.5rem 0; }
+  .cupom .linha { display:flex; justify-content:space-between; gap:.5rem; }
+  .cupom .item-nome { font-weight:700; }
+
+  /* ---- DANFE (modelo 55) ---- */
+  .danfe { background:#fff; border:1px solid #000; border-radius:.25rem; font-size:.8rem; }
+  .danfe .box { border-bottom:1px solid #000; padding:.5rem .75rem; }
+  .danfe .box:last-child { border-bottom:0; }
+  .danfe .rot { font-size:.62rem; text-transform:uppercase; color:#555; letter-spacing:.03em; }
+  .danfe table { width:100%; border-collapse:collapse; }
+  .danfe th, .danfe td { border:1px solid #999; padding:.25rem .4rem; vertical-align:top; }
+  .danfe thead th { background:#f1f3f5; font-size:.66rem; text-transform:uppercase; }
+</style>
+{% endblock %}
+
+{% block content %}
+{% set is_danfe = (nota.modelo == 55) %}
+{% set cancelada = (nota.situacao == 'cancelada') %}
+
+<div class="voltar-bar d-flex justify-content-between align-items-center">
+  <a href="/vendas" onclick="if(document.referrer){history.back();return false;}"
+     class="btn btn-sm btn-outline-secondary"><i class="bi bi-arrow-left"></i> Voltar</a>
+  <span class="badge {{ 'bg-danger' if cancelada else 'bg-success' }}">
+    {{ 'CANCELADA' if cancelada else nota.situacao }}
+  </span>
+</div>
+
+<div class="doc-wrap">
+{% if is_danfe %}
+  {# ==================== DANFE (modelo 55) ==================== #}
+  {% set tem_cprod = itens|selectattr('cprod')|list|length > 0 %}
+  {% set tem_ncm   = itens|selectattr('ncm')|list|length > 0 %}
+  {% set tem_cfop  = itens|selectattr('cfop')|list|length > 0 %}
+  {% set tem_cst   = itens|selectattr('cst')|list|length > 0 %}
+  <div class="danfe">
+    <div class="box d-flex justify-content-between">
+      <div>
+        <div class="fw-bold">DANFE — Documento Auxiliar da NF-e</div>
+        <div class="rot">Modelo {{ nota.modelo }} · Série {{ nota.serie }} · Nº {{ nota.numero }}</div>
+        {% if nota.nat_op %}<div class="rot">Nat. operação: {{ nota.nat_op }}</div>{% endif %}
+      </div>
+      {% if nota.dh_emissao %}
+      <div class="text-end"><div class="rot">Emissão</div><div>{{ nota.dh_emissao.strftime('%d/%m/%Y %H:%M') }}</div></div>
+      {% endif %}
+    </div>
+
+    {% if nota.cnpj_emitente %}<div class="box"><span class="rot">CNPJ emitente</span><div>{{ nota.cnpj_emitente }}</div></div>{% endif %}
+
+    {% if nota.cliente_nome or nota.cliente_doc or nota.cli_logradouro %}
+    <div class="box">
+      <span class="rot">Destinatário</span>
+      <div>{{ nota.cliente_nome or '' }}{% if nota.cliente_doc %} · {{ nota.cliente_doc }}{% endif %}</div>
+      {% if nota.cli_logradouro %}<div>{{ nota.cli_logradouro }}{% if nota.cli_bairro %}, {{ nota.cli_bairro }}{% endif %}
+        {% if nota.cli_municipio %} — {{ nota.cli_municipio }}{% if nota.cli_uf %}/{{ nota.cli_uf }}{% endif %}{% endif %}
+        {% if nota.cli_cep %} — CEP {{ nota.cli_cep }}{% endif %}</div>{% endif %}
+    </div>
+    {% endif %}
+
+    <div class="box">
+      <span class="rot">Produtos / Serviços</span>
+      <table class="mt-1">
+        <thead>
+          <tr>
+            <th>#</th><th>Descrição</th>
+            {% if tem_cprod %}<th>Cód</th>{% endif %}
+            {% if tem_ncm %}<th>NCM</th>{% endif %}
+            {% if tem_cfop %}<th>CFOP</th>{% endif %}
+            {% if tem_cst %}<th>CST</th>{% endif %}
+            <th>Un</th><th class="text-end">Qtd</th>
+            <th class="text-end">Vlr Unit</th><th class="text-end">Vlr Total</th>
+          </tr>
+        </thead>
+        <tbody>
+        {% for it in itens %}
+          <tr>
+            <td>{{ it.n_item }}</td>
+            <td>{{ it.produto_xml or '—' }}{% if it.cod_anp %}<div class="rot">ANP {{ it.cod_anp }}</div>{% endif %}</td>
+            {% if tem_cprod %}<td>{{ it.cprod or '' }}</td>{% endif %}
+            {% if tem_ncm %}<td>{{ it.ncm or '' }}</td>{% endif %}
+            {% if tem_cfop %}<td>{{ it.cfop or '' }}</td>{% endif %}
+            {% if tem_cst %}<td>{{ it.cst or '' }}</td>{% endif %}
+            <td>{{ it.unidade or '' }}</td>
+            <td class="text-end">{{ it.quantidade }}</td>
+            <td class="text-end">{{ (it.valor_unitario or 0) | formatar_moeda }}</td>
+            <td class="text-end">{{ (it.valor_total or 0) | formatar_moeda }}</td>
+          </tr>
+          {% if it.bico is not none or it.bomba is not none or it.tanque is not none or it.enc_ini is not none or it.icms_mono %}
+          <tr><td></td><td colspan="99" class="rot">
+            {% if it.bico is not none %}Bico {{ it.bico }} · {% endif %}
+            {% if it.bomba is not none %}Bomba {{ it.bomba }} · {% endif %}
+            {% if it.tanque is not none %}Tanque {{ it.tanque }} · {% endif %}
+            {% if it.enc_ini is not none %}Encerrante {{ it.enc_ini }} → {{ it.enc_fin }} · {% endif %}
+            {% if it.icms_mono %}ICMS mono {{ it.icms_mono | formatar_moeda }}{% endif %}
+          </td></tr>
+          {% endif %}
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <div class="box">
+      <div class="d-flex justify-content-between"><span class="rot">Valor total</span><span class="fw-bold">{{ (nota.valor_total or 0) | formatar_moeda }}</span></div>
+      {% if nota.vlr_desconto %}<div class="d-flex justify-content-between"><span class="rot">Desconto</span><span>{{ nota.vlr_desconto | formatar_moeda }}</span></div>{% endif %}
+      {% if nota.vlr_acrescimo %}<div class="d-flex justify-content-between"><span class="rot">Acréscimo</span><span>{{ nota.vlr_acrescimo | formatar_moeda }}</span></div>{% endif %}
+      {% if nota.troco %}<div class="d-flex justify-content-between"><span class="rot">Troco</span><span>{{ nota.troco | formatar_moeda }}</span></div>{% endif %}
+      {% if nota.forma_pagamento %}<div class="d-flex justify-content-between"><span class="rot">Forma pgto</span><span>{{ nota.forma_pagamento }}</span></div>{% endif %}
+      {% if nota.vlr_trib_aprox %}<div class="d-flex justify-content-between"><span class="rot">Trib. aprox (Lei 12.741)</span><span>{{ nota.vlr_trib_aprox | formatar_moeda }}</span></div>{% endif %}
+      {% if nota.trib_fed %}<div class="d-flex justify-content-between"><span class="rot">Trib. federal</span><span>{{ nota.trib_fed | formatar_moeda }}</span></div>{% endif %}
+      {% if nota.trib_est %}<div class="d-flex justify-content-between"><span class="rot">Trib. estadual</span><span>{{ nota.trib_est | formatar_moeda }}</span></div>{% endif %}
+      {% if nota.trib_mun %}<div class="d-flex justify-content-between"><span class="rot">Trib. municipal</span><span>{{ nota.trib_mun | formatar_moeda }}</span></div>{% endif %}
+    </div>
+
+    {% if nota.card_bandeira or nota.card_autorizacao or nota.card_credenciadora or nota.tef_terminal or nota.tef_sequencia %}
+    <div class="box">
+      <span class="rot">Pagamento eletrônico</span>
+      {% if nota.card_bandeira %}<div>Bandeira: {{ nota.card_bandeira }}</div>{% endif %}
+      {% if nota.card_credenciadora %}<div>Credenciadora: {{ nota.card_credenciadora }}</div>{% endif %}
+      {% if nota.card_autorizacao %}<div>Autorização: {{ nota.card_autorizacao }}</div>{% endif %}
+      {% if nota.card_integrado is not none %}<div>Integrado: {{ 'Sim' if nota.card_integrado else 'Não' }}</div>{% endif %}
+      {% if nota.tef_terminal %}<div>Terminal TEF: {{ nota.tef_terminal }}</div>{% endif %}
+      {% if nota.tef_sequencia %}<div>Sequência TEF: {{ nota.tef_sequencia }}</div>{% endif %}
+    </div>
+    {% endif %}
+
+    {% if nota.vendedor_raw or nota.placa or nota.km is not none or nota.protocolo %}
+    <div class="box">
+      {% if nota.vendedor_raw %}<div><span class="rot">Vendedor:</span> {{ nota.vendedor_raw }}</div>{% endif %}
+      {% if nota.placa %}<div><span class="rot">Placa:</span> {{ nota.placa }}</div>{% endif %}
+      {% if nota.km is not none %}<div><span class="rot">KM:</span> {{ nota.km }}</div>{% endif %}
+      {% if nota.protocolo %}<div><span class="rot">Protocolo:</span> {{ nota.protocolo }}</div>{% endif %}
+    </div>
+    {% endif %}
+
+    {% if nota.chave %}<div class="box"><span class="rot">Chave de acesso</span><div style="word-break:break-all">{{ nota.chave }}</div></div>{% endif %}
+  </div>
+
+{% else %}
+  {# ==================== CUPOM (modelo 65 e demais) ==================== #}
+  <div class="cupom">
+    <div class="c-center">
+      <div class="fw-bold">DOCUMENTO AUXILIAR NFC-e</div>
+      <div>Modelo {{ nota.modelo }} · Série {{ nota.serie }} · Nº {{ nota.numero }}</div>
+      {% if nota.dh_emissao %}<div>{{ nota.dh_emissao.strftime('%d/%m/%Y %H:%M:%S') }}</div>{% endif %}
+      {% if nota.cnpj_emitente %}<div>CNPJ {{ nota.cnpj_emitente }}</div>{% endif %}
+      {% if nota.nat_op %}<div>{{ nota.nat_op }}</div>{% endif %}
+    </div>
+    <hr>
+
+    {% for it in itens %}
+      <div class="item-nome">{{ it.n_item }}. {{ it.produto_xml or '—' }}</div>
+      <div class="linha">
+        <span>Qtd {{ it.quantidade }} {{ it.unidade or '' }} × {{ (it.valor_unitario or 0) | formatar_moeda }}</span>
+        <span>{{ (it.valor_total or 0) | formatar_moeda }}</span>
+      </div>
+      {% if it.cod_anp %}<div class="small text-muted">ANP {{ it.cod_anp }}</div>{% endif %}
+      {% if it.bico is not none or it.bomba is not none or it.tanque is not none %}
+      <div class="small text-muted">
+        {% if it.bico is not none %}Bico {{ it.bico }} {% endif %}
+        {% if it.bomba is not none %}Bomba {{ it.bomba }} {% endif %}
+        {% if it.tanque is not none %}Tanque {{ it.tanque }}{% endif %}
+      </div>
+      {% endif %}
+      {% if it.enc_ini is not none or it.enc_fin is not none %}
+      <div class="small text-muted">Encerrante {{ it.enc_ini }} → {{ it.enc_fin }}</div>
+      {% endif %}
+      {% if it.cprod or it.ncm or it.cfop or it.cst or it.icms_mono %}
+      <div class="small text-muted">
+        {% if it.cprod %}Cód {{ it.cprod }} {% endif %}
+        {% if it.ncm %}NCM {{ it.ncm }} {% endif %}
+        {% if it.cfop %}CFOP {{ it.cfop }} {% endif %}
+        {% if it.cst %}CST {{ it.cst }} {% endif %}
+        {% if it.icms_mono %}ICMS mono {{ it.icms_mono | formatar_moeda }}{% endif %}
+      </div>
+      {% endif %}
+      {% if it.vlr_desconto %}<div class="small text-muted">Desconto {{ it.vlr_desconto | formatar_moeda }}</div>{% endif %}
+      {% if it.vlr_acrescimo %}<div class="small text-muted">Acréscimo {{ it.vlr_acrescimo | formatar_moeda }}</div>{% endif %}
+      <hr>
+    {% endfor %}
+
+    <div class="linha fw-bold"><span>TOTAL</span><span>{{ (nota.valor_total or 0) | formatar_moeda }}</span></div>
+    {% if nota.vlr_desconto %}<div class="linha"><span>Desconto</span><span>{{ nota.vlr_desconto | formatar_moeda }}</span></div>{% endif %}
+    {% if nota.vlr_acrescimo %}<div class="linha"><span>Acréscimo</span><span>{{ nota.vlr_acrescimo | formatar_moeda }}</span></div>{% endif %}
+    {% if nota.forma_pagamento %}<div class="linha"><span>{{ nota.forma_pagamento }}</span><span></span></div>{% endif %}
+    {% if nota.troco %}<div class="linha"><span>Troco</span><span>{{ nota.troco | formatar_moeda }}</span></div>{% endif %}
+    {% if nota.vlr_trib_aprox %}<div class="linha"><span>Trib. aprox (Lei 12.741)</span><span>{{ nota.vlr_trib_aprox | formatar_moeda }}</span></div>{% endif %}
+    {% if nota.trib_fed %}<div class="linha"><span>Trib. federal</span><span>{{ nota.trib_fed | formatar_moeda }}</span></div>{% endif %}
+    {% if nota.trib_est %}<div class="linha"><span>Trib. estadual</span><span>{{ nota.trib_est | formatar_moeda }}</span></div>{% endif %}
+    {% if nota.trib_mun %}<div class="linha"><span>Trib. municipal</span><span>{{ nota.trib_mun | formatar_moeda }}</span></div>{% endif %}
+    <hr>
+
+    {% if nota.card_bandeira or nota.card_autorizacao or nota.card_credenciadora or nota.tef_terminal or nota.tef_sequencia %}
+    <div class="c-center small text-muted">— PAGAMENTO ELETRÔNICO —</div>
+    {% if nota.card_bandeira %}<div class="linha"><span>Bandeira</span><span>{{ nota.card_bandeira }}</span></div>{% endif %}
+    {% if nota.card_credenciadora %}<div class="linha"><span>Credenciadora</span><span>{{ nota.card_credenciadora }}</span></div>{% endif %}
+    {% if nota.card_autorizacao %}<div class="linha"><span>Autorização</span><span>{{ nota.card_autorizacao }}</span></div>{% endif %}
+    {% if nota.card_integrado is not none %}<div class="linha"><span>Integrado</span><span>{{ 'Sim' if nota.card_integrado else 'Não' }}</span></div>{% endif %}
+    {% if nota.tef_terminal %}<div class="linha"><span>Terminal TEF</span><span>{{ nota.tef_terminal }}</span></div>{% endif %}
+    {% if nota.tef_sequencia %}<div class="linha"><span>Sequência TEF</span><span>{{ nota.tef_sequencia }}</span></div>{% endif %}
+    <hr>
+    {% endif %}
+
+    {% if nota.cliente_nome or nota.cliente_doc or nota.cli_logradouro %}
+    <div class="c-center small text-muted">— CLIENTE —</div>
+    {% if nota.cliente_nome %}<div>{{ nota.cliente_nome }}</div>{% endif %}
+    {% if nota.cliente_doc %}<div>Doc {{ nota.cliente_doc }}</div>{% endif %}
+    {% if nota.cli_logradouro %}<div>{{ nota.cli_logradouro }}{% if nota.cli_bairro %}, {{ nota.cli_bairro }}{% endif %}</div>{% endif %}
+    {% if nota.cli_municipio or nota.cli_uf %}<div>{{ nota.cli_municipio or '' }}{% if nota.cli_uf %}/{{ nota.cli_uf }}{% endif %}</div>{% endif %}
+    {% if nota.cli_cep %}<div>CEP {{ nota.cli_cep }}</div>{% endif %}
+    <hr>
+    {% endif %}
+
+    {% if nota.placa or nota.km is not none %}
+    <div class="linha">
+      {% if nota.placa %}<span>Placa {{ nota.placa }}</span>{% else %}<span></span>{% endif %}
+      {% if nota.km is not none %}<span>KM {{ nota.km }}</span>{% endif %}
+    </div>
+    {% endif %}
+    {% if nota.vendedor_raw %}<div class="c-center small">Vendedor: {{ nota.vendedor_raw }}</div>{% endif %}
+    {% if nota.protocolo %}<div class="c-center small text-muted mt-2">Protocolo {{ nota.protocolo }}</div>{% endif %}
+    {% if nota.chave %}<div class="c-center small text-muted" style="word-break:break-all">Chave {{ nota.chave }}</div>{% endif %}
+  </div>
+{% endif %}
+</div>
+{% endblock %}

@@ -1,13 +1,23 @@
 {% extends 'base.html' %}
 {% block title %}Vendas Migradas{% endblock %}
 
+{% block styles %}
+<style>
+  .venda-row { cursor: pointer; }
+  .venda-row:hover td { background: #eef4ff; }
+  .venda-card { cursor: pointer; }
+  .venda-card:active { background: #f4f8ff; }
+  .pag-nums .page-link { min-width: 2.1rem; text-align: center; }
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-3">
   <h3 class="mb-0"><i class="bi bi-receipt"></i> Vendas Migradas</h3>
   <span class="badge bg-secondary">{{ totais.notas }} nota(s)</span>
 </div>
 
-{# =================== FILTROS =================== #}
+{# =================== FILTROS (INALTERADO) =================== #}
 <form method="GET" action="/vendas" class="card card-body mb-3">
   <div class="row g-2">
     <div class="col-md-2">
@@ -44,7 +54,7 @@
   </div>
 </form>
 
-{# =================== TOTAIS =================== #}
+{# =================== TOTAIS (INALTERADO) =================== #}
 <div class="d-flex gap-3 mb-3">
   <div class="border rounded p-2 flex-fill text-center">
     <div class="small text-muted">Notas</div>
@@ -60,108 +70,114 @@
   </div>
 </div>
 
-{% if truncado %}
-  <div class="alert alert-warning py-2 small">
-    Exibindo as primeiras {{ limite }} notas (os totais acima consideram TODO o filtro).
-    Refine os filtros para ver menos linhas.
+{# =================== TABELA (desktop) =================== #}
+<div class="table-responsive d-none d-md-block">
+  <table class="table table-sm table-striped align-middle">
+    <thead class="table-light">
+      <tr>
+        <th>Data</th>
+        <th class="text-center">Modelo</th>
+        <th class="text-end">Número</th>
+        <th>Vendedor</th>
+        <th>Cliente</th>
+        <th class="text-end">Valor</th>
+        <th>Forma pgto</th>
+        <th>Situação</th>
+        <th style="width:34px"></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for n in notas %}
+      {% set cancelada = (n.situacao == 'cancelada') %}
+      <tr class="venda-row {% if cancelada %}text-danger{% endif %}"
+          onclick="location.href='{{ url_for('vendas.detalhe', venda_id=n.id) }}'">
+        <td>{{ n.dh_emissao.strftime('%d/%m/%Y %H:%M') if n.dh_emissao else '—' }}</td>
+        <td class="text-center">{{ n.modelo }}</td>
+        <td class="text-end">{{ n.numero }}/{{ n.serie }}</td>
+        <td>{{ n.vendedor_raw or '—' }}</td>
+        <td>{{ n.cliente_nome or '—' }}</td>
+        <td class="text-end">{{ (n.valor_total or 0) | formatar_moeda }}</td>
+        <td>{{ n.forma_pagamento or '—' }}</td>
+        <td>
+          {% if cancelada %}<span class="badge bg-danger">CANCELADA</span>
+          {% else %}<span class="badge bg-success">{{ n.situacao }}</span>{% endif %}
+        </td>
+        <td class="text-center"><i class="bi bi-chevron-right text-muted"></i></td>
+      </tr>
+      {% else %}
+      <tr><td colspan="9" class="text-center text-muted">Nenhuma venda encontrada.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+{# =================== CARDS (mobile) =================== #}
+<div class="d-md-none">
+  {% for n in notas %}
+  {% set cancelada = (n.situacao == 'cancelada') %}
+  <div class="card mb-2 venda-card {% if cancelada %}border-danger{% endif %}"
+       onclick="location.href='{{ url_for('vendas.detalhe', venda_id=n.id) }}'">
+    <div class="card-body py-2">
+      <div class="d-flex justify-content-between">
+        <span class="small text-muted">{{ n.dh_emissao.strftime('%d/%m/%Y %H:%M') if n.dh_emissao else '—' }}</span>
+        {% if cancelada %}<span class="badge bg-danger">CANCELADA</span>
+        {% else %}<span class="badge bg-success">{{ n.situacao }}</span>{% endif %}
+      </div>
+      <div class="d-flex justify-content-between align-items-center">
+        <div class="me-2" style="min-width:0">
+          <div class="fw-semibold text-truncate">{{ n.vendedor_raw or 'Sem vendedor' }}</div>
+          {% if n.cliente_nome %}<div class="small text-muted text-truncate">{{ n.cliente_nome }}</div>{% endif %}
+        </div>
+        <div class="fw-bold text-success text-nowrap">{{ (n.valor_total or 0) | formatar_moeda }}</div>
+      </div>
+      {% set itens = itens_por_venda.get(n.id, []) %}
+      {% if itens %}
+      <ul class="list-unstyled small mb-0 mt-1 border-top pt-1">
+        {% for it in itens %}
+        <li class="d-flex justify-content-between">
+          <span class="text-truncate me-2">{{ it.produto_xml or '—' }}
+            <span class="text-muted">{{ it.quantidade }} {{ it.unidade or '' }} × {{ (it.valor_unitario or 0) | formatar_moeda }}</span>
+          </span>
+          <span class="text-nowrap">{{ (it.valor_total or 0) | formatar_moeda }}</span>
+        </li>
+        {% endfor %}
+      </ul>
+      {% endif %}
+    </div>
   </div>
-{% endif %}
+  {% else %}
+  <div class="text-center text-muted py-4">Nenhuma venda encontrada.</div>
+  {% endfor %}
+</div>
 
-{# =================== TABELA =================== #}
-<table class="table table-sm table-striped align-middle">
-  <thead class="table-light">
-    <tr>
-      <th style="width:34px"></th>
-      <th>Data</th>
-      <th class="text-center">Modelo</th>
-      <th class="text-end">Número</th>
-      <th>Vendedor</th>
-      <th>Cliente</th>
-      <th class="text-end">Valor</th>
-      <th>Forma pgto</th>
-      <th>Situação</th>
-    </tr>
-  </thead>
-  <tbody>
-    {% for n in notas %}
-    {% set cancelada = (n.situacao == 'cancelada') %}
-    <tr class="venda-row {% if cancelada %}text-danger{% endif %}" data-venda="{{ n.id }}" style="cursor:pointer">
-      <td class="text-center"><i class="bi bi-chevron-right caret" id="caret-{{ n.id }}"></i></td>
-      <td>{{ n.dh_emissao.strftime('%d/%m/%Y %H:%M') if n.dh_emissao else '—' }}</td>
-      <td class="text-center">{{ n.modelo }}</td>
-      <td class="text-end">{{ n.numero }}/{{ n.serie }}</td>
-      <td>{{ n.vendedor_raw or '—' }}</td>
-      <td>{{ n.cliente_nome or '—' }}</td>
-      <td class="text-end">{{ (n.valor_total or 0) | formatar_moeda }}</td>
-      <td>{{ n.forma_pagamento or '—' }}</td>
-      <td>
-        {% if cancelada %}
-          <span class="badge bg-danger">CANCELADA</span>
-        {% else %}
-          <span class="badge bg-success">{{ n.situacao }}</span>
-        {% endif %}
-      </td>
-    </tr>
-    <tr class="venda-itens" id="itens-{{ n.id }}" style="display:none">
-      <td colspan="9" class="bg-light">
-        {% set itens = itens_por_venda.get(n.id, []) %}
-        {% if not itens %}
-          <div class="text-muted small px-2 py-1">Sem itens para esta nota.</div>
-        {% else %}
-        <table class="table table-sm mb-0 bg-white">
-          <thead>
-            <tr class="small text-muted">
-              <th>#</th>
-              <th>Produto</th>
-              <th>Un</th>
-              <th class="text-end">Qtd</th>
-              <th class="text-end">Vlr Unit</th>
-              <th class="text-end">Vlr Total</th>
-              <th class="text-end">Bico</th>
-              <th class="text-end">Bomba</th>
-              <th class="text-end">Tanque</th>
-            </tr>
-          </thead>
-          <tbody>
-            {% for it in itens %}
-            <tr>
-              <td>{{ it.n_item }}</td>
-              <td>{{ it.produto_xml or '—' }}
-                  {% if it.cod_anp %}<small class="text-muted">· ANP {{ it.cod_anp }}</small>{% endif %}</td>
-              <td>{{ it.unidade or '' }}</td>
-              <td class="text-end">{{ it.quantidade }}</td>
-              <td class="text-end">{{ (it.valor_unitario or 0) | formatar_moeda }}</td>
-              <td class="text-end">{{ (it.valor_total or 0) | formatar_moeda }}</td>
-              <td class="text-end">{{ it.bico if it.bico is not none else '—' }}</td>
-              <td class="text-end">{{ it.bomba if it.bomba is not none else '—' }}</td>
-              <td class="text-end">{{ it.tanque if it.tanque is not none else '—' }}</td>
-            </tr>
-            {% endfor %}
-          </tbody>
-        </table>
-        {% endif %}
-      </td>
-    </tr>
-    {% else %}
-    <tr><td colspan="9" class="text-center text-muted">Nenhuma venda encontrada.</td></tr>
+{# =================== PAGINACAO =================== #}
+{% if total_paginas > 1 %}
+{% set sep = '&' if qs_filtros else '' %}
+<nav class="mt-3">
+  <ul class="pagination pagination-sm justify-content-center flex-wrap pag-nums">
+    <li class="page-item {% if pagina <= 1 %}disabled{% endif %}">
+      <a class="page-link" href="?{{ qs_filtros }}{{ sep }}page={{ pagina - 1 }}">‹ Anterior</a>
+    </li>
+    {% for p in paginas %}
+      {% if p is none %}
+        <li class="page-item disabled"><span class="page-link">…</span></li>
+      {% else %}
+        <li class="page-item {% if p == pagina %}active{% endif %}">
+          <a class="page-link" href="?{{ qs_filtros }}{{ sep }}page={{ p }}">{{ p }}</a>
+        </li>
+      {% endif %}
     {% endfor %}
-  </tbody>
-</table>
-{% endblock %}
-
-{% block scripts %}
-<script>
-// Expandir/recolher os itens de uma venda (mesmo padrao do dfe_compras).
-document.querySelectorAll('.venda-row').forEach(function (row) {
-  row.addEventListener('click', function () {
-    var id = row.getAttribute('data-venda');
-    var bloco = document.getElementById('itens-' + id);
-    var caret = document.getElementById('caret-' + id);
-    if (!bloco) return;
-    var aberto = bloco.style.display !== 'none';
-    bloco.style.display = aberto ? 'none' : 'table-row';
-    if (caret) caret.className = 'bi ' + (aberto ? 'bi-chevron-right' : 'bi-chevron-down') + ' caret';
-  });
-});
-</script>
+    <li class="page-item {% if pagina >= total_paginas %}disabled{% endif %}">
+      <a class="page-link" href="?{{ qs_filtros }}{{ sep }}page={{ pagina + 1 }}">Próxima ›</a>
+    </li>
+  </ul>
+  <form method="GET" action="/vendas" class="d-flex justify-content-center align-items-center gap-2 small">
+    {% for k, v in filtros.items() %}{% if v %}<input type="hidden" name="{{ k }}" value="{{ v }}">{% endif %}{% endfor %}
+    <span class="text-muted">Página {{ pagina }} de {{ total_paginas }} · pular para</span>
+    <input type="number" name="page" min="1" max="{{ total_paginas }}" value="{{ pagina }}"
+           class="form-control form-control-sm" style="width:5rem">
+    <button class="btn btn-sm btn-outline-secondary" type="submit">Ir</button>
+  </form>
+</nav>
+{% endif %}
 {% endblock %}
