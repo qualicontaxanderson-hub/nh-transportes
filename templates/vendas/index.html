@@ -4,17 +4,38 @@
 {% block styles %}
 <style>
   .venda-row { cursor: pointer; }
-  .venda-row:hover td { background: #eef4ff; }
   .venda-card { cursor: pointer; }
   .venda-card:active { background: #f4f8ff; }
   .pag-nums .page-link { min-width: 2.1rem; text-align: center; }
+
+  /* Tabela desktop — visual leve e espaçado */
+  .tbl-vendas { font-size: 14px; color: #212529; background: #fff; --bs-table-bg: #fff; }
+  .tbl-vendas thead th {
+    padding: 12px; background: #fff; color: #6c757d; font-weight: 400;
+    border-top: 0; border-bottom: 1px solid #e9ecef;
+  }
+  .tbl-vendas tbody td {
+    padding: 14px 12px; border-top: 0; border-bottom: 1px solid #f1f3f5;
+    vertical-align: middle;
+  }
+  .tbl-vendas tbody tr:last-child td { border-bottom: 0; }
+  .tbl-vendas tbody tr.venda-row:hover td { background: #f8fafc; }
+
+  /* Badges pill suaves */
+  .badge-suave-ok, .badge-suave-cancel, .pill-contagem {
+    display: inline-block; border-radius: 20px; padding: 3px 12px;
+    font-size: 12px; font-weight: 500; border: 0; line-height: 1.4;
+  }
+  .badge-suave-ok     { background: #e6f4ea; color: #1e7e34; }
+  .badge-suave-cancel { background: #fdecea; color: #c0392b; }
+  .pill-contagem      { background: #f1f3f5; color: #6c757d; }
 </style>
 {% endblock %}
 
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-3">
   <h3 class="mb-0"><i class="bi bi-receipt"></i> Vendas Migradas</h3>
-  <span class="badge bg-secondary">{{ totais.notas }} nota(s)</span>
+  <span class="pill-contagem">{{ totais.notas }} nota(s)</span>
 </div>
 
 {# =================== FILTROS (INALTERADO) =================== #}
@@ -72,8 +93,8 @@
 
 {# =================== TABELA (desktop) =================== #}
 <div class="table-responsive d-none d-md-block">
-  <table class="table table-sm table-striped align-middle">
-    <thead class="table-light">
+  <table class="table tbl-vendas align-middle">
+    <thead>
       <tr>
         <th>Data</th>
         <th class="text-center">Modelo</th>
@@ -101,8 +122,8 @@
         <td class="text-end">{{ (n.valor_total or 0) | formatar_moeda }}</td>
         <td>{{ n.forma_pagamento or '—' }}</td>
         <td>
-          {% if cancelada %}<span class="badge bg-danger">CANCELADA</span>
-          {% else %}<span class="badge bg-success">{{ n.situacao }}</span>{% endif %}
+          {% if cancelada %}<span class="badge-suave-cancel">cancelada</span>
+          {% else %}<span class="badge-suave-ok">{{ n.situacao }}</span>{% endif %}
         </td>
         <td class="text-center"><i class="bi bi-chevron-right text-muted"></i></td>
       </tr>
@@ -124,8 +145,8 @@
     <div class="card-body py-2">
       <div class="d-flex justify-content-between">
         <span class="small text-muted">{{ n.dh_emissao.strftime('%d/%m/%Y %H:%M') if n.dh_emissao else '—' }}</span>
-        {% if cancelada %}<span class="badge bg-danger">CANCELADA</span>
-        {% else %}<span class="badge bg-success">{{ n.situacao }}</span>{% endif %}
+        {% if cancelada %}<span class="badge-suave-cancel">cancelada</span>
+        {% else %}<span class="badge-suave-ok">{{ n.situacao }}</span>{% endif %}
       </div>
       <div class="d-flex justify-content-between align-items-center">
         <div class="me-2" style="min-width:0">
