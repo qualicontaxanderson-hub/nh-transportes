@@ -15,7 +15,7 @@
     border-top: 0; border-bottom: 1px solid #e9ecef;
   }
   .tbl-vendas tbody td {
-    padding: 14px 12px; border-top: 0; border-bottom: 1px solid #f1f3f5;
+    padding: 7px 12px; border-top: 0; border-bottom: 1px solid #f1f3f5;
     vertical-align: middle;
   }
   .tbl-vendas tbody tr:last-child td { border-bottom: 0; }
@@ -98,6 +98,7 @@
       <tr>
         <th>Data</th>
         <th class="text-center">Modelo</th>
+        <th class="text-center">Tipo</th>
         <th class="text-end">Número</th>
         <th>Vendedor</th>
         <th>Cliente</th>
@@ -116,6 +117,7 @@
           data-venda-cancelada="{{ '1' if cancelada else '0' }}">
         <td>{{ n.dh_emissao.strftime('%d/%m/%Y %H:%M') if n.dh_emissao else '—' }}</td>
         <td class="text-center">{{ n.modelo }}</td>
+        <td class="text-center">{% if n.modelo == 55 %}NF-e{% else %}NFC-e{% endif %}</td>
         <td class="text-end">{{ n.numero }}/{{ n.serie }}</td>
         <td>{{ n.vendedor_raw or '—' }}</td>
         <td>{{ n.cliente_nome or '—' }}</td>
@@ -128,7 +130,7 @@
         <td class="text-center"><i class="bi bi-chevron-right text-muted"></i></td>
       </tr>
       {% else %}
-      <tr><td colspan="9" class="text-center text-muted">Nenhuma venda encontrada.</td></tr>
+      <tr><td colspan="10" class="text-center text-muted">Nenhuma venda encontrada.</td></tr>
       {% endfor %}
     </tbody>
   </table>
