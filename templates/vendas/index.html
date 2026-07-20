@@ -285,18 +285,39 @@
     btnPdf.disabled  = true;
     btnPdf.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Gerando...';
 
-    function restaura() { btnPdf.disabled = false; btnPdf.innerHTML = original; }
+    // Dentro do modal o overflow/scroll faz o html2canvas capturar só a parte
+    // visível (cortava no item 1). Clonamos o conteúdo para um palco fora do
+    // modal, com largura fixa e sem overflow, e geramos o PDF a partir do clone.
+    var LARGURA = 800;
+    var palco = document.createElement('div');
+    palco.style.position   = 'absolute';
+    palco.style.left       = '-9999px';
+    palco.style.top        = '0';
+    palco.style.width      = LARGURA + 'px';
+    palco.style.background = '#ffffff';
+    palco.style.overflow   = 'visible';
+    var clone = alvo.cloneNode(true);
+    clone.style.maxWidth = 'none';
+    clone.style.width    = '100%';
+    palco.appendChild(clone);
+    document.body.appendChild(palco);
+
+    function restaura() {
+      if (palco.parentNode) palco.parentNode.removeChild(palco);   // sempre remove o clone
+      btnPdf.disabled  = false;
+      btnPdf.innerHTML = original;
+    }
 
     var opt = {
       margin:      [8, 8, 8, 8],
       filename:    nome,
       image:       { type: 'jpeg', quality: 0.98 },
-      html2canvas: { scale: 2, useCORS: true, backgroundColor: '#ffffff' },
+      html2canvas: { scale: 2, useCORS: true, backgroundColor: '#ffffff', scrollY: 0, windowWidth: LARGURA },
       jsPDF:       { unit: 'mm', format: 'a4', orientation: 'portrait' },
-      pagebreak:   { mode: ['avoid-all', 'css', 'legacy'] }
+      pagebreak:   { mode: ['css', 'legacy'] }
     };
 
-    html2pdf().set(opt).from(alvo).save()
+    html2pdf().set(opt).from(clone).save()
       .then(restaura)
       .catch(restaura);
   });
