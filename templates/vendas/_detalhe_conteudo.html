@@ -219,3 +219,60 @@
   </div>
 {% endif %}
 </div>
+
+{# ---- Dados p/ exportar (PDF/WhatsApp). Inerte: lido só pelo JS no navegador. Nada é salvo. ---- #}
+{% set tipo = 'NF-e' if (nota.modelo == 55) else 'NFC-e' %}
+{% set ns = namespace(lines=[], p=[]) %}
+{% set ns.lines = ns.lines + ['🧾 ' ~ tipo ~ ' nº ' ~ nota.numero|string ~ '/' ~ nota.serie|string] %}
+{% set ns.lines = ns.lines + ['Modelo ' ~ nota.modelo|string] %}
+{% if nota.dh_emissao %}{% set ns.lines = ns.lines + ['Emissão: ' ~ nota.dh_emissao.strftime('%d/%m/%Y %H:%M:%S')] %}{% endif %}
+{% if nota.cnpj_emitente %}{% set ns.lines = ns.lines + ['CNPJ: ' ~ nota.cnpj_emitente] %}{% endif %}
+{% if nota.nat_op %}{% set ns.lines = ns.lines + ['Nat. operação: ' ~ nota.nat_op] %}{% endif %}
+{% set ns.lines = ns.lines + [''] %}
+{% set ns.lines = ns.lines + ['── ITENS ──'] %}
+{% for it in itens %}
+  {% set bomba = (it.bico is not none or it.bomba is not none or it.tanque is not none) %}
+  {% set ns.lines = ns.lines + [('⛽ ' if bomba else '• ') ~ it.n_item|string ~ '. ' ~ (it.produto_xml or '—')] %}
+  {% if it.cod_anp %}{% set ns.lines = ns.lines + ['   ANP ' ~ it.cod_anp] %}{% endif %}
+  {% set ns.lines = ns.lines + ['   ' ~ it.quantidade|string ~ ' ' ~ (it.unidade or '') ~ ' × ' ~ ((it.valor_unitario or 0)|formatar_moeda) ~ ' = ' ~ ((it.valor_total or 0)|formatar_moeda)] %}
+  {% set ns.p = [] %}
+  {% if it.bico is not none %}{% set ns.p = ns.p + ['Bico ' ~ it.bico|string] %}{% endif %}
+  {% if it.bomba is not none %}{% set ns.p = ns.p + ['Bomba ' ~ it.bomba|string] %}{% endif %}
+  {% if it.tanque is not none %}{% set ns.p = ns.p + ['Tanque ' ~ it.tanque|string] %}{% endif %}
+  {% if ns.p %}{% set ns.lines = ns.lines + ['   ' ~ ns.p|join(' · ')] %}{% endif %}
+{% endfor %}
+{% set ns.lines = ns.lines + [''] %}
+{% set ns.lines = ns.lines + ['── TOTAIS ──'] %}
+{% set ns.lines = ns.lines + ['💰 Total: ' ~ ((nota.valor_total or 0)|formatar_moeda)] %}
+{% if nota.vlr_desconto %}{% set ns.lines = ns.lines + ['Desconto: ' ~ (nota.vlr_desconto|formatar_moeda)] %}{% endif %}
+{% if nota.vlr_acrescimo %}{% set ns.lines = ns.lines + ['Acréscimo: ' ~ (nota.vlr_acrescimo|formatar_moeda)] %}{% endif %}
+{% if nota.troco %}{% set ns.lines = ns.lines + ['Troco: ' ~ (nota.troco|formatar_moeda)] %}{% endif %}
+{% if nota.forma_pagamento %}{% set ns.lines = ns.lines + ['Forma pgto: ' ~ nota.forma_pagamento] %}{% endif %}
+{% if nota.vlr_trib_aprox %}{% set ns.lines = ns.lines + ['Trib. aprox (Lei 12.741): ' ~ (nota.vlr_trib_aprox|formatar_moeda)] %}{% endif %}
+{% if nota.trib_fed %}{% set ns.lines = ns.lines + ['Trib. federal: ' ~ (nota.trib_fed|formatar_moeda)] %}{% endif %}
+{% if nota.trib_est %}{% set ns.lines = ns.lines + ['Trib. estadual: ' ~ (nota.trib_est|formatar_moeda)] %}{% endif %}
+{% if nota.trib_mun %}{% set ns.lines = ns.lines + ['Trib. municipal: ' ~ (nota.trib_mun|formatar_moeda)] %}{% endif %}
+{% if nota.card_bandeira or nota.card_credenciadora or nota.card_autorizacao or nota.tef_terminal or nota.tef_sequencia %}
+  {% set ns.lines = ns.lines + [''] %}
+  {% set ns.lines = ns.lines + ['── PAGAMENTO ELETRÔNICO ──'] %}
+  {% if nota.card_bandeira %}{% set ns.lines = ns.lines + ['Bandeira: ' ~ nota.card_bandeira] %}{% endif %}
+  {% if nota.card_credenciadora %}{% set ns.lines = ns.lines + ['Credenciadora: ' ~ nota.card_credenciadora] %}{% endif %}
+  {% if nota.card_autorizacao %}{% set ns.lines = ns.lines + ['Autorização: ' ~ nota.card_autorizacao] %}{% endif %}
+  {% if nota.card_integrado is not none %}{% set ns.lines = ns.lines + ['Integrado: ' ~ ('Sim' if nota.card_integrado else 'Não')] %}{% endif %}
+  {% if nota.tef_terminal %}{% set ns.lines = ns.lines + ['Terminal TEF: ' ~ nota.tef_terminal] %}{% endif %}
+  {% if nota.tef_sequencia %}{% set ns.lines = ns.lines + ['Sequência TEF: ' ~ nota.tef_sequencia] %}{% endif %}
+{% endif %}
+{% if nota.cliente_nome or nota.cliente_doc or nota.cli_logradouro %}
+  {% set ns.lines = ns.lines + [''] %}
+  {% set ns.lines = ns.lines + ['── CLIENTE ──'] %}
+  {% if nota.cliente_nome %}{% set ns.lines = ns.lines + [nota.cliente_nome] %}{% endif %}
+  {% if nota.cliente_doc %}{% set ns.lines = ns.lines + ['Doc: ' ~ nota.cliente_doc] %}{% endif %}
+  {% if nota.cli_logradouro %}{% set ns.lines = ns.lines + [nota.cli_logradouro ~ (', ' ~ nota.cli_bairro if nota.cli_bairro else '')] %}{% endif %}
+  {% if nota.cli_municipio or nota.cli_uf %}{% set ns.lines = ns.lines + [(nota.cli_municipio or '') ~ ('/' ~ nota.cli_uf if nota.cli_uf else '')] %}{% endif %}
+  {% if nota.cli_cep %}{% set ns.lines = ns.lines + ['CEP ' ~ nota.cli_cep] %}{% endif %}
+{% endif %}
+{% set ns.lines = ns.lines + [''] %}
+{% if nota.vendedor_raw %}{% set ns.lines = ns.lines + ['Vendedor: ' ~ nota.vendedor_raw] %}{% endif %}
+{% if nota.protocolo %}{% set ns.lines = ns.lines + ['Protocolo: ' ~ nota.protocolo] %}{% endif %}
+{% if nota.chave %}{% set ns.lines = ns.lines + ['Chave: ' ~ nota.chave] %}{% endif %}
+<script type="application/json" id="venda-wpp-data">{{ {'pdf': 'Venda ' ~ nota.numero|string ~ '-' ~ nota.serie|string, 'linhas': ns.lines}|tojson }}</script>

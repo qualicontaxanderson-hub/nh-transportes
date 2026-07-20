@@ -218,7 +218,11 @@
           <span id="vendaModalTitulo">Detalhe da venda</span>
           <span id="vendaModalBadge" class="badge ms-2"></span>
         </h5>
-        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Fechar"></button>
+        <div class="d-flex align-items-center gap-2">
+          <button type="button" class="btn btn-sm btn-light" id="btnPdfVenda"><i class="bi bi-file-earmark-pdf"></i> PDF</button>
+          <button type="button" class="btn btn-sm btn-light" id="btnWppVenda"><i class="bi bi-whatsapp"></i> WhatsApp</button>
+          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Fechar"></button>
+        </div>
       </div>
       <div class="modal-body bg-light py-3" id="vendaModalBody"></div>
     </div>
@@ -234,6 +238,8 @@
   var body    = document.getElementById('vendaModalBody');
   var titulo  = document.getElementById('vendaModalTitulo');
   var badge   = document.getElementById('vendaModalBadge');
+  var btnPdf  = document.getElementById('btnPdfVenda');
+  var btnWpp  = document.getElementById('btnWppVenda');
 
   document.querySelectorAll('[data-venda-id]').forEach(function (el) {
     el.addEventListener('click', function () {
@@ -256,6 +262,68 @@
         });
     });
   });
+
+  // ---- Dados embutidos (JSON inerte) carregados no corpo do modal ----
+  function lerDados() {
+    var el = body.querySelector('#venda-wpp-data');
+    if (!el) return null;
+    try { return JSON.parse(el.textContent); } catch (e) { return null; }
+  }
+
+  // ---- PDF: impressão do navegador (nada vai ao servidor) ----
+  btnPdf.addEventListener('click', function () {
+    if (!body.querySelector('.venda-doc-wrap')) return;        // ainda no spinner: não faz nada
+    var dados = lerDados();
+    var tituloPdf = (dados && dados.pdf) ? dados.pdf : 'Venda';
+    var w = window.open('', '_blank');
+    if (!w) return;                                            // popup bloqueado
+    w.document.write(
+      '<!doctype html><html><head><meta charset="utf-8"><title>' + tituloPdf + '</title>' +
+      '<style>@page{margin:12mm}' +
+      'body{background:#fff;color:#000;font-family:Arial,Helvetica,sans-serif;margin:0;padding:10px}' +
+      '.d-flex{display:flex}.justify-content-between{justify-content:space-between}' +
+      '.text-end{text-align:right}.text-center{text-align:center}' +
+      '.fw-bold{font-weight:700}.fw-semibold{font-weight:600}' +
+      '.small{font-size:.85em}.text-muted{color:#555}.mt-1{margin-top:.25rem}.mt-2{margin-top:.5rem}</style>' +
+      '</head><body>' + body.innerHTML + '</body></html>'
+    );
+    w.document.close();
+    w.focus();
+    w.print();
+  });
+
+  // ---- WhatsApp: copia o texto pronto para a área de transferência ----
+  btnWpp.addEventListener('click', function () {
+    var dados = lerDados();
+    if (!dados || !dados.linhas) return;                       // ainda no spinner: não faz nada
+    copiar(dados.linhas.join('\n'), btnWpp);
+  });
+
+  function copiar(texto, btn) {
+    var original = btn.innerHTML;
+    function feedback(ok) {
+      btn.innerHTML = ok ? '<i class="bi bi-check2"></i> Copiado!'
+                         : '<i class="bi bi-x-lg"></i> Erro';
+      setTimeout(function () { btn.innerHTML = original; }, 2000);
+    }
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(texto).then(function () { feedback(true); },
+                                                function () { fallbackCopy(texto, feedback); });
+    } else {
+      fallbackCopy(texto, feedback);
+    }
+  }
+
+  function fallbackCopy(texto, feedback) {
+    try {
+      var ta = document.createElement('textarea');
+      ta.value = texto; ta.style.position = 'fixed'; ta.style.opacity = '0';
+      document.body.appendChild(ta); ta.focus(); ta.select();
+      var ok = document.execCommand('copy');
+      document.body.removeChild(ta);
+      feedback(ok);
+    } catch (e) { feedback(false); }
+  }
 })();
 </script>
 {% endblock %}
