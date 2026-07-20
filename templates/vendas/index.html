@@ -90,7 +90,9 @@
       {% for n in notas %}
       {% set cancelada = (n.situacao == 'cancelada') %}
       <tr class="venda-row {% if cancelada %}text-danger{% endif %}"
-          onclick="location.href='{{ url_for('vendas.detalhe', venda_id=n.id) }}'">
+          data-venda-id="{{ n.id }}"
+          data-venda-titulo="{{ 'NF-e' if n.modelo == 55 else 'NFC-e' }} nº {{ n.numero }}/{{ n.serie }}"
+          data-venda-cancelada="{{ '1' if cancelada else '0' }}">
         <td>{{ n.dh_emissao.strftime('%d/%m/%Y %H:%M') if n.dh_emissao else '—' }}</td>
         <td class="text-center">{{ n.modelo }}</td>
         <td class="text-end">{{ n.numero }}/{{ n.serie }}</td>
@@ -116,7 +118,9 @@
   {% for n in notas %}
   {% set cancelada = (n.situacao == 'cancelada') %}
   <div class="card mb-2 venda-card {% if cancelada %}border-danger{% endif %}"
-       onclick="location.href='{{ url_for('vendas.detalhe', venda_id=n.id) }}'">
+       data-venda-id="{{ n.id }}"
+       data-venda-titulo="{{ 'NF-e' if n.modelo == 55 else 'NFC-e' }} nº {{ n.numero }}/{{ n.serie }}"
+       data-venda-cancelada="{{ '1' if cancelada else '0' }}">
     <div class="card-body py-2">
       <div class="d-flex justify-content-between">
         <span class="small text-muted">{{ n.dh_emissao.strftime('%d/%m/%Y %H:%M') if n.dh_emissao else '—' }}</span>
@@ -180,4 +184,55 @@
   </form>
 </nav>
 {% endif %}
+
+{# =================== MODAL DE DETALHE =================== #}
+<div class="modal fade" id="vendaModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable modal-fullscreen-sm-down">
+    <div class="modal-content">
+      <div class="modal-header" style="background:#1D63A5;color:#fff;">
+        <h5 class="modal-title mb-0">
+          <i class="bi bi-receipt"></i>
+          <span id="vendaModalTitulo">Detalhe da venda</span>
+          <span id="vendaModalBadge" class="badge ms-2"></span>
+        </h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Fechar"></button>
+      </div>
+      <div class="modal-body bg-light py-3" id="vendaModalBody"></div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  var modalEl = document.getElementById('vendaModal');
+  var modal   = new bootstrap.Modal(modalEl);
+  var body    = document.getElementById('vendaModalBody');
+  var titulo  = document.getElementById('vendaModalTitulo');
+  var badge   = document.getElementById('vendaModalBadge');
+
+  document.querySelectorAll('[data-venda-id]').forEach(function (el) {
+    el.addEventListener('click', function () {
+      var id = el.dataset.vendaId;
+      titulo.textContent = el.dataset.vendaTitulo || 'Detalhe da venda';
+      var cancelada = el.dataset.vendaCancelada === '1';
+      badge.textContent = cancelada ? 'CANCELADA' : 'Autorizada';
+      badge.className = 'badge ms-2 ' + (cancelada ? 'bg-danger' : 'bg-light text-dark');
+
+      body.innerHTML = '<div class="text-center py-5">' +
+        '<div class="spinner-border text-primary" role="status"></div>' +
+        '<div class="small text-muted mt-2">Carregando nota…</div></div>';
+      modal.show();
+
+      fetch('/vendas/' + id + '?partial=1')
+        .then(function (r) { if (!r.ok) throw new Error(r.status); return r.text(); })
+        .then(function (html) { body.innerHTML = html; })
+        .catch(function () {
+          body.innerHTML = '<div class="alert alert-danger m-3">Não foi possível carregar o detalhe. Tente novamente.</div>';
+        });
+    });
+  });
+})();
+</script>
 {% endblock %}

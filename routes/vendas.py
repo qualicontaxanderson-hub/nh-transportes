@@ -175,7 +175,11 @@ def index():
 @vendas_bp.route('/<int:venda_id>', methods=['GET'])
 @login_required
 def detalhe(venda_id):
-    """Detalhe SOMENTE-LEITURA de uma venda, no layout de nota."""
+    """Detalhe SOMENTE-LEITURA de uma venda, no layout de nota.
+
+    ?partial=1 -> retorna apenas o fragmento (para carregar no modal via fetch).
+    Sem o parametro -> pagina completa (link direto / fallback).
+    """
     conn = get_db_connection()
     cur = conn.cursor(dictionary=True)
     try:
@@ -188,7 +192,9 @@ def detalhe(venda_id):
             (venda_id,),
         )
         itens = cur.fetchall()
-        return render_template('vendas/detalhe.html', nota=nota, itens=itens)
+        template = ('vendas/_detalhe_conteudo.html'
+                    if request.args.get('partial') else 'vendas/detalhe.html')
+        return render_template(template, nota=nota, itens=itens)
     finally:
         cur.close()
         conn.close()
