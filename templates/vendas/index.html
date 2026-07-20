@@ -231,6 +231,8 @@
 {% endblock %}
 
 {% block scripts %}
+<!-- html2pdf: gera e baixa o PDF no cliente (nada vai ao servidor) -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 <script>
 (function () {
   var modalEl = document.getElementById('vendaModal');
@@ -270,26 +272,33 @@
     try { return JSON.parse(el.textContent); } catch (e) { return null; }
   }
 
-  // ---- PDF: impressão do navegador (nada vai ao servidor) ----
+  // ---- PDF: gera e BAIXA o arquivo no cliente com html2pdf (nada vai ao servidor) ----
   btnPdf.addEventListener('click', function () {
-    if (!body.querySelector('.venda-doc-wrap')) return;        // ainda no spinner: não faz nada
+    var alvo = body.querySelector('.venda-doc-wrap');
+    if (!alvo) return;                              // ainda no spinner: não faz nada
+    if (typeof html2pdf === 'undefined') return;    // lib do CDN não carregou
+
     var dados = lerDados();
-    var tituloPdf = (dados && dados.pdf) ? dados.pdf : 'Venda';
-    var w = window.open('', '_blank');
-    if (!w) return;                                            // popup bloqueado
-    w.document.write(
-      '<!doctype html><html><head><meta charset="utf-8"><title>' + tituloPdf + '</title>' +
-      '<style>@page{margin:12mm}' +
-      'body{background:#fff;color:#000;font-family:Arial,Helvetica,sans-serif;margin:0;padding:10px}' +
-      '.d-flex{display:flex}.justify-content-between{justify-content:space-between}' +
-      '.text-end{text-align:right}.text-center{text-align:center}' +
-      '.fw-bold{font-weight:700}.fw-semibold{font-weight:600}' +
-      '.small{font-size:.85em}.text-muted{color:#555}.mt-1{margin-top:.25rem}.mt-2{margin-top:.5rem}</style>' +
-      '</head><body>' + body.innerHTML + '</body></html>'
-    );
-    w.document.close();
-    w.focus();
-    w.print();
+    var nome  = ((dados && dados.pdf) ? dados.pdf : 'Venda') + '.pdf';
+
+    var original = btnPdf.innerHTML;
+    btnPdf.disabled  = true;
+    btnPdf.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Gerando...';
+
+    function restaura() { btnPdf.disabled = false; btnPdf.innerHTML = original; }
+
+    var opt = {
+      margin:      [8, 8, 8, 8],
+      filename:    nome,
+      image:       { type: 'jpeg', quality: 0.98 },
+      html2canvas: { scale: 2, useCORS: true, backgroundColor: '#ffffff' },
+      jsPDF:       { unit: 'mm', format: 'a4', orientation: 'portrait' },
+      pagebreak:   { mode: ['avoid-all', 'css', 'legacy'] }
+    };
+
+    html2pdf().set(opt).from(alvo).save()
+      .then(restaura)
+      .catch(restaura);
   });
 
   // ---- WhatsApp: copia o texto pronto para a área de transferência ----
