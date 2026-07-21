@@ -65,6 +65,15 @@ def _so_digitos(v):
     return "".join(ch for ch in str(v or "") if ch.isdigit())
 
 
+def tag_interessado(documento):
+    """Tag do 'interessado' no distDFeInt: <CPF> para 11 digitos (e-CPF),
+    <CNPJ> para 14 (e-CNPJ). O distDFeInt aceita os dois (choice do schema).
+    Detecta pelo COMPRIMENTO -- nao precisa do tipo_doc aqui. Usada tambem pelo
+    CTeDistribuicaoDFe e pelo buscar-xml (consChNFe)."""
+    d = _so_digitos(documento)
+    return f"<CPF>{d}</CPF>" if len(d) == 11 else f"<CNPJ>{d}</CNPJ>"
+
+
 def falhar(etapa, erro):
     print()
     print("!" * 74)
@@ -76,39 +85,49 @@ def falhar(etapa, erro):
 
 # ==========================================================================
 # ETAPA 1 - Abrir o certificado A1 (mesma cadeia do teste que passou)
+#
+# Multi-empresa: _selecionar_ativos() lista os certs (opcional: 1 empresa e/ou
+# so os automaticos), _abrir_registro() abre UM PFX (Dropbox->decifra->pkcs12).
+# abrir_certificado() = pega UM (uso single: diagnostico, buscar-xml); ABORTA no
+# erro. abrir_todos_certificados() = LISTA p/ o loop; PULA a empresa que falhar.
 # ==========================================================================
-def abrir_certificado():
-    """
-    Retorna (cliente_id, cnpj, cert, chave_priv, cadeia).
-    Repete a cadeia validada: banco -> Dropbox -> decifra -> abre PFX.
-    """
-    # -- 1a) registro ativo no banco -------------------------------------
+def _selecionar_ativos(cliente_id=None, so_automatico=False):
+    """Registros de dfe_certificados ativos, ja ORDENADOS por ult_consulta ASC
+    (empresa mais atrasada -- ou nunca consultada -- primeiro; LEFT JOIN dfe_nsu).
+    Filtra por empresa (cliente_id) e/ou so os modo_automatico=1 quando pedido."""
+    sql = (
+        "SELECT dc.id, dc.cliente_id, dc.cnpj, dc.pfx_caminho, dc.senha_cifrada "
+        "FROM dfe_certificados dc "
+        "LEFT JOIN dfe_nsu n ON n.cliente_id = dc.cliente_id "
+        "WHERE dc.ativo = 1"
+    )
+    params = []
+    if cliente_id is not None:
+        sql += " AND dc.cliente_id = %s"
+        params.append(cliente_id)
+    if so_automatico:
+        sql += " AND dc.modo_automatico = 1"
+    sql += " ORDER BY COALESCE(n.ult_consulta, '1970-01-01') ASC, dc.cliente_id ASC"
     con = pymysql.connect(**CONN)
     try:
         with con.cursor() as cur:
-            cur.execute(
-                "SELECT id, cliente_id, cnpj, pfx_caminho, senha_cifrada "
-                "FROM dfe_certificados WHERE ativo = 1"
-            )
-            regs = cur.fetchall()
+            cur.execute(sql, params)
+            return cur.fetchall()
     finally:
         con.close()
 
-    if not regs:
-        falhar("1 (banco)", "nenhum certificado ATIVO em dfe_certificados.")
-    if len(regs) == 1:
-        reg = regs[0]
-    else:
-        pref = [r for r in regs if _so_digitos(r["cnpj"]) == CNPJ_PREFERIDO]
-        reg = pref[0] if pref else regs[0]
 
+def _abrir_registro(reg):
+    """Abre UM registro -> (cliente_id, documento, cert, chave_priv, cadeia).
+    Cadeia validada: Dropbox -> decifra -> abre PFX (em memoria). Levanta
+    RuntimeError com etapa clara (NUNCA sys.exit: o loop multi-empresa precisa
+    poder pular so a empresa que falhou). 'documento' = CNPJ(14) ou CPF(11)."""
     if not reg["pfx_caminho"]:
-        falhar("1 (banco)", "registro sem pfx_caminho (PFX deveria estar no Dropbox).")
+        raise RuntimeError("registro sem pfx_caminho (PFX deveria estar no Dropbox).")
     if not reg["senha_cifrada"]:
-        falhar("1 (banco)", "registro sem senha_cifrada.")
+        raise RuntimeError("registro sem senha_cifrada.")
 
-    # -- 1b) baixa o .pfx do Dropbox -------------------------------------
-    #    Mesma autenticacao/normalizacao usadas no teste que passou.
+    # baixa o .pfx do Dropbox
     try:
         from integrations.dropbox_ofx import _criar_dbx, _normalizar_caminho
         caminho = _normalizar_caminho(reg["pfx_caminho"])
@@ -116,29 +135,60 @@ def abrir_certificado():
         _meta, resp = dbx.files_download(caminho)
         pfx_bytes = resp.content
     except Exception as exc:
-        falhar("1 (download do PFX no Dropbox)", exc)
+        raise RuntimeError(f"download do PFX no Dropbox falhou -> {exc}") from exc
     if not pfx_bytes:
-        falhar("1 (download do PFX)", "arquivo vazio (0 bytes).")
+        raise RuntimeError("download do PFX: arquivo vazio (0 bytes).")
 
-    # -- 1c) decifra a senha ---------------------------------------------
+    # decifra a senha
     try:
         from integrations.cripto_dfe import decifrar_senha
         senha = decifrar_senha(reg["senha_cifrada"])
     except Exception as exc:
-        falhar("1 (decifrar senha)", exc)
+        raise RuntimeError(f"decifrar senha falhou -> {exc}") from exc
 
-    # -- 1d) abre o PFX (A1) ---------------------------------------------
+    # abre o PFX (A1) em memoria
     try:
         from cryptography.hazmat.primitives.serialization import pkcs12
         chave_priv, cert, cadeia = pkcs12.load_key_and_certificates(
             pfx_bytes, senha.encode("utf-8")
         )
     except Exception as exc:
-        falhar("1 (abrir o PFX)", f"senha incorreta ou PFX invalido -> {exc}")
+        raise RuntimeError(f"abrir o PFX falhou (senha/arquivo) -> {exc}") from exc
     if cert is None or chave_priv is None:
-        falhar("1 (abrir o PFX)", "PFX sem certificado ou sem chave privada.")
+        raise RuntimeError("PFX sem certificado ou sem chave privada.")
 
     return reg["cliente_id"], _so_digitos(reg["cnpj"]), cert, chave_priv, (cadeia or [])
+
+
+def abrir_certificado(cliente_id=None):
+    """Retorna (cliente_id, documento, cert, chave_priv, cadeia) de UM cert
+    ativo. Com cliente_id, e o daquela empresa; sem, pega o mais atrasado (sem
+    preferencia por CNPJ). Assinatura de 5 valores mantida (chamadores single
+    -- diagnostico, buscar-xml -- nao mudam). No erro ABORTA (falhar/SystemExit),
+    porque os usos single querem o erro na cara."""
+    regs = _selecionar_ativos(cliente_id=cliente_id)
+    if not regs:
+        falhar("1 (banco)", "nenhum certificado ATIVO em dfe_certificados"
+               + (f" para cliente_id={cliente_id}." if cliente_id is not None else "."))
+    try:
+        return _abrir_registro(regs[0])
+    except Exception as exc:
+        falhar("1 (abrir certificado)", exc)
+
+
+def abrir_todos_certificados():
+    """LISTA de (cliente_id, documento, cert, chave_priv, cadeia) para TODOS os
+    certificados ativos com modo_automatico=1, 'mais atrasado primeiro'. Se UM
+    cert falhar ao abrir (Dropbox/senha), LOGA e PULA -- uma empresa quebrada
+    nao pode travar as outras."""
+    saida = []
+    for reg in _selecionar_ativos(so_automatico=True):
+        try:
+            saida.append(_abrir_registro(reg))
+        except Exception as exc:
+            print(f"    [cert cliente_id={reg.get('cliente_id')} "
+                  f"cnpj={_so_digitos(reg.get('cnpj'))}] IGNORADO: {exc}")
+    return saida
 
 
 # ==========================================================================
@@ -222,7 +272,7 @@ def montar_soap(cnpj, ult_nsu):
         f'<distDFeInt xmlns="{NS_NFE}" versao="{VERSAO}">'
         f'<tpAmb>{TP_AMB}</tpAmb>'
         f'<cUFAutor>{C_UF_AUTOR}</cUFAutor>'
-        f'<CNPJ>{cnpj}</CNPJ>'
+        f'{tag_interessado(cnpj)}'
         f'<distNSU><ultNSU>{ult_nsu_fmt}</ultNSU></distNSU>'
         '</distDFeInt>'
         '</nfeDadosMsg>'

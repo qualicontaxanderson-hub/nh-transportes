@@ -45,7 +45,7 @@ def montar_soap_cte(cnpj, ult_nsu):
         f'<distDFeInt xmlns="{NS_CTE}" versao="{VERSAO_CTE}">'
         f'<tpAmb>{cs.TP_AMB}</tpAmb>'
         f'<cUFAutor>{cs.C_UF_AUTOR}</cUFAutor>'
-        f'<CNPJ>{cnpj}</CNPJ>'
+        f'{cs.tag_interessado(cnpj)}'
         f'<distNSU><ultNSU>{ult_nsu_fmt}</ultNSU></distNSU>'
         '</distDFeInt>'
         '</cteDadosMsg>'

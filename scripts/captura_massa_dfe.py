@@ -186,7 +186,7 @@ def _consultar_cte(sess, cnpj_cert, ult_nsu):
     return ret, len(r.content)
 
 
-def capturar_cte(sess, cliente_id, cnpj_cert):
+def capturar_cte(sess, cliente_id, cnpj_cert, prazo=None):
     """FASE B: mesmo run, mesmo lock, mesma sessao mTLS -- MAS endpoint, cursor
     (dfe_nsu_cte) e cota do CT-e, 100% independentes da NF-e. Se a NF-e estiver
     de castigo por 656, ISTO RODA MESMO ASSIM (cota separada). Reusa _consultar_cte
@@ -212,6 +212,10 @@ def capturar_cte(sess, cliente_id, cnpj_cert):
     try:
         cur = conn.cursor()
         while lotes < MAX_LOTES_CTE:
+            if prazo is not None and time.monotonic() > prazo:
+                motivo_fim = "prazo"
+                print("    >>> [CTe] prazo suave atingido; parando (retoma no proximo ciclo).")
+                break
             agora = datetime.now()
             expira = (agora + timedelta(days=pd.DIAS_RETENCAO)).date()
             try:
@@ -304,7 +308,7 @@ def capturar_cte(sess, cliente_id, cnpj_cert):
 # agora moram no main orquestrador). No ramo de cota bloqueada faz return DA
 # FUNCAO (nao do processo), pra a Fase B rodar mesmo se a NF-e estiver de 656.
 # ==========================================================================
-def capturar_nfe(sess, cliente_id, cnpj_cert):
+def capturar_nfe(sess, cliente_id, cnpj_cert, prazo=None):
     # 2) ult_nsu atual + respeita proximo_permitido (comparado no relogio do BANCO).
     print("\n[2] Lendo ult_nsu (dfe_nsu)...")
     ult_nsu, _proximo = cs.ler_ult_nsu(cliente_id)
@@ -330,6 +334,10 @@ def capturar_nfe(sess, cliente_id, cnpj_cert):
     try:
         cur = conn.cursor()
         while lotes < MAX_LOTES:
+            if prazo is not None and time.monotonic() > prazo:
+                motivo_fim = "prazo"
+                print("    >>> prazo suave atingido; parando (retoma no proximo ciclo).")
+                break
             agora = datetime.now()
             expira = (agora + timedelta(days=pd.DIAS_RETENCAO)).date()
 
@@ -502,6 +510,9 @@ def capturar_nfe(sess, cliente_id, cnpj_cert):
     elif motivo_fim == "limite":
         print(f"\n    >>> PAROU no limite de {MAX_LOTES} lotes. Faltam ~{falta_final} NSU. "
               "Rode de novo pra continuar.")
+    elif motivo_fim == "prazo":
+        print(f"\n    >>> PAROU pelo prazo suave (DFE_CAPTURA_PRAZO_SEG). Faltam ~{falta_final} "
+              "NSU; retoma no proximo ciclo.")
     else:
         print(f"\n    >>> PAROU por cStat inesperado ({motivo_fim}). "
               f"Faltam ~{falta_final} NSU.")
@@ -512,34 +523,67 @@ def capturar_nfe(sess, cliente_id, cnpj_cert):
 
 
 # ==========================================================================
-# MAIN - orquestrador das 2 fases (A: NF-e / B: CT-e), mesmo run e mesmo lock.
+# MAIN - orquestrador MULTI-EMPRESA. Para CADA certificado ativo/automatico:
+# abre o cert (Dropbox), monta a sessao mTLS PROPRIA e roda Fase A (NF-e) + Fase
+# B (CT-e), cada uma com seu cursor/cota (isolados por cliente_id). Erro de uma
+# empresa NAO derruba as outras. Prazo suave (DFE_CAPTURA_PRAZO_SEG, default
+# 960s=16min) evita estourar o timeout do subprocess: o que nao coube volta no
+# proximo ciclo (cada cursor retoma de onde parou).
 # ==========================================================================
 def main():
     print("=" * 74)
-    print("CAPTURA EM MASSA DFe - FASE A (NF-e) + FASE B (CT-e), mesmo run/lock")
+    print("CAPTURA EM MASSA DFe MULTI-EMPRESA - FASE A (NF-e) + FASE B (CT-e)")
     print("SO CONSULTA E SALVA. NAO manifesta.")
     print("=" * 74)
-    # 1) Certificado (uma vez; serve os dois endpoints).
-    cliente_id, cnpj_cert, cert, chave_priv, cadeia = cs.abrir_certificado()
-    print(f"[1] cert OK: cliente_id={cliente_id} cnpj={cnpj_cert}")
-    # 2) DDLs idempotentes (+ dfe_nsu_cte) e sessao mTLS unica.
+
+    # DDLs idempotentes (+ dfe_nsu_cte) UMA vez, antes do loop.
     con0 = pymysql.connect(**cs.CONN)
     try:
         with con0.cursor() as c0:
             c0.execute(pd.DDL_EVENTOS)
             c0.execute(pd.DDL_CTE)
             c0.execute(pd.DDL_CTE_NFE)
-            c0.execute(cte.DDL_NSU_CTE)     # <-- cursor CT-e
+            c0.execute(cte.DDL_NSU_CTE)
             dfe_log.garantir_tabela(c0)
         con0.commit()
     finally:
         con0.close()
-    sess = cs.montar_sessao_mtls(cert, chave_priv, cadeia)
-    # FASE A: NF-e (cota/cursor dfe_nsu) -- corpo atual, so vira funcao.
-    capturar_nfe(sess, cliente_id, cnpj_cert)
-    # FASE B: CT-e (cota/cursor dfe_nsu_cte) -- roda mesmo se A estiver bloqueada.
-    capturar_cte(sess, cliente_id, cnpj_cert)
-    print("\nFIM - captura A+B concluida. Nada foi manifestado.")
+
+    # Prazo suave de wall-clock (segundos). Checado antes de cada empresa e, la
+    # dentro, antes de cada lote. Overridavel por env SEM deploy.
+    prazo = time.monotonic() + int(os.environ.get("DFE_CAPTURA_PRAZO_SEG", "960"))
+
+    certs = cs.abrir_todos_certificados()
+    print(f"\n[1] {len(certs)} certificado(s) ativo(s)/automatico(s) a processar.\n")
+
+    for (cliente_id, documento, cert, chave_priv, cadeia) in certs:
+        if time.monotonic() > prazo:
+            print(">>> prazo suave atingido; empresas restantes vem no proximo ciclo.")
+            break
+
+        # Pre-check BARATO: se AMBAS as fases desta empresa estao de castigo por
+        # 656, pula sem montar sessao/consultar (cada fase re-checa por dentro).
+        nfe_bloq = pd.bloqueado_por_cota(cliente_id)
+        cte_bloq = cte.bloqueado_por_cota_cte(cliente_id)
+        if nfe_bloq and cte_bloq:
+            print(f"[empresa {documento}] NF-e e CT-e de castigo (656); pulando.")
+            _log_avulso(cliente_id, documento, 'pulado_cota',
+                        detalhe="loop multi: ambas as fases bloqueadas; nao consultou")
+            continue
+
+        print(f"[empresa {documento}] cliente_id={cliente_id} -> Fase A + Fase B")
+        try:
+            sess = cs.montar_sessao_mtls(cert, chave_priv, cadeia)
+            capturar_nfe(sess, cliente_id, documento, prazo=prazo)
+            capturar_cte(sess, cliente_id, documento, prazo=prazo)
+        except Exception as exc:
+            # Isola a falha nesta empresa; as demais continuam.
+            print(f"[empresa {documento}] FALHOU: {type(exc).__name__}: {exc}; seguindo.")
+            _log_avulso(cliente_id, documento, 'erro',
+                        detalhe=f"loop multi: {type(exc).__name__}: {exc}")
+            continue
+
+    print("\nFIM - captura A+B multi-empresa concluida. Nada foi manifestado.")
 
 
 if __name__ == "__main__":
