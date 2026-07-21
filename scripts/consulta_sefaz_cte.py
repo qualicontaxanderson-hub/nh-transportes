@@ -62,7 +62,7 @@ DDL_NSU_CTE = """
 CREATE TABLE IF NOT EXISTS dfe_nsu_cte (
     id                INT AUTO_INCREMENT PRIMARY KEY,
     cliente_id        INT           NOT NULL,
-    cnpj              CHAR(14)      NOT NULL,
+    cnpj              VARCHAR(14)   NOT NULL,
     ult_nsu           BIGINT        NOT NULL DEFAULT 0,
     max_nsu           BIGINT        NOT NULL DEFAULT 0,
     ult_consulta      DATETIME      NULL,

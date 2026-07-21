@@ -18,7 +18,8 @@ DDL = [
 CREATE TABLE IF NOT EXISTS dfe_certificados (
     id                INT AUTO_INCREMENT PRIMARY KEY,
     cliente_id        INT           NOT NULL,
-    cnpj              CHAR(14)      NOT NULL,
+    cnpj              VARCHAR(14)   NOT NULL,
+    tipo_doc          VARCHAR(4)    NOT NULL DEFAULT 'CNPJ',
     nome_arquivo      VARCHAR(160)  NULL,
     pfx_conteudo      LONGBLOB      NULL,
     senha_cifrada     VARBINARY(512) NULL,
@@ -36,7 +37,7 @@ CREATE TABLE IF NOT EXISTS dfe_certificados (
 CREATE TABLE IF NOT EXISTS dfe_nsu (
     id                INT AUTO_INCREMENT PRIMARY KEY,
     cliente_id        INT           NOT NULL,
-    cnpj              CHAR(14)      NOT NULL,
+    cnpj              VARCHAR(14)   NOT NULL,
     ult_nsu           BIGINT        NOT NULL DEFAULT 0,
     max_nsu           BIGINT        NOT NULL DEFAULT 0,
     ult_consulta      DATETIME      NULL,
