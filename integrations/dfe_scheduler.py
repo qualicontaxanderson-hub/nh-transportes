@@ -10,8 +10,12 @@ que ela abre (ate ~20 min depois), em vez de perde-la esperando 3h:
   - o proprio script pula se dfe_nsu.proximo_permitido ainda estiver no futuro
     (656 recente) e, se tomar 656 no meio, para e reagenda +1h;
   - aqui ainda fazemos um pre-check barato de proximo_permitido para nem
-    disparar o processo a toa (a esmagadora maioria dos ciclos de 20 min so
-    registra 'pulado_cota' e sai -- barato).
+    disparar o processo a toa, MAS afrouxado (opcao ii): a captura tem 2 fases
+    independentes -- NF-e (cursor dfe_nsu) e CT-e (cursor dfe_nsu_cte) -- com
+    cotas SEPARADAS na SEFAZ. So pulamos o ciclo quando as DUAS estao de castigo
+    por 656 ao mesmo tempo; se qualquer janela esta aberta, disparamos e cada
+    fase se auto-regula la dentro. Assim a NF-e travada (656 do SGA) nao arrasta
+    o CT-e junto.
 
 Concorrencia (gunicorn --workers 2):
   cada worker cria o seu proprio scheduler, entao o job usa um LOCK global no
@@ -54,15 +58,38 @@ def _conn_direta():
 
 
 def _estado_cota(cur):
-    """Devolve (cliente_id, cnpj, ult_nsu, proximo_permitido) se a SEFAZ ainda
-    pediu para aguardar, ou None se a janela esta aberta. Comparacao sempre no
-    relogio do BANCO (NOW())."""
+    """Pre-check AFROUXADO (opcao ii): so vale a pena pular o ciclo inteiro
+    quando as DUAS fases estao de castigo por 656 AO MESMO TEMPO. Se QUALQUER
+    janela estiver aberta -- NF-e (dfe_nsu) OU CT-e (dfe_nsu_cte) -- devolve None
+    para DISPARAR o subprocess; cada fase se auto-regula la dentro. Assim a NF-e
+    travada (656 do SGA) nao arrasta o CT-e junto. Comparacao sempre no relogio
+    do BANCO (NOW()).
+
+    Devolve (cliente_id, cnpj, ult_nsu, prox_nfe, prox_cte) SO quando ambas
+    bloqueadas (para o log do 'pulado_cota'); None se ao menos uma janela esta
+    aberta -- inclusive se dfe_nsu_cte ainda nem existe (1a vez), caso em que o
+    CT-e esta 'aberto' e o subprocess a cria."""
     cur.execute(
         "SELECT cliente_id, cnpj, ult_nsu, proximo_permitido FROM dfe_nsu "
         "WHERE proximo_permitido IS NOT NULL AND proximo_permitido > NOW() "
         "LIMIT 1"
     )
-    return cur.fetchone()
+    row_nfe = cur.fetchone()
+    if not row_nfe:
+        return None                       # janela NF-e aberta -> dispara
+    try:
+        cur.execute(
+            "SELECT proximo_permitido FROM dfe_nsu_cte "
+            "WHERE proximo_permitido IS NOT NULL AND proximo_permitido > NOW() "
+            "LIMIT 1"
+        )
+        row_cte = cur.fetchone()
+    except Exception:
+        return None                       # tabela ainda nao existe -> CT-e aberto
+    if not row_cte:
+        return None                       # janela CT-e aberta -> dispara
+    cli, cnpj, ult_nsu, prox_nfe = row_nfe
+    return cli, cnpj, ult_nsu, prox_nfe, row_cte[0]   # AMBAS bloqueadas
 
 
 def _job(app, origem='agendador'):
@@ -88,18 +115,21 @@ def _job(app, origem='agendador'):
                 detalhe='outro worker/deploy ja estava capturando (GET_LOCK negado)')
             return
 
-        # Pre-check de cota: nao dispara se a janela ainda esta fechada.
+        # Pre-check de cota AFROUXADO (opcao ii): so pula o ciclo se AMBAS as
+        # fases (NF-e e CT-e) estiverem bloqueadas por 656 ao mesmo tempo. Se uma
+        # janela esta aberta, dispara -- cada fase se auto-regula no subprocess.
         # Este ramo era INVISIVEL no banco -- a rodada sumia sem rastro. Agora
         # deixa linha, que e justamente o que faltava para auditar os ciclos.
         estado = _estado_cota(cur)
         if estado:
-            cli, cnpj, ult_nsu, prox = estado
-            logger.info("[dfe_sched] proximo_permitido no futuro (656 recente); pulando ciclo.")
+            cli, cnpj, ult_nsu, prox_nfe, prox_cte = estado
+            logger.info("[dfe_sched] NF-e e CT-e ambas com proximo_permitido no futuro "
+                        "(656 nas duas); pulando ciclo.")
             dfe_log.registrar(
                 cur, origem, 'pulado_cota', cliente_id=cli, cnpj=cnpj,
                 ult_nsu_env=ult_nsu,
-                detalhe='proximo_permitido=%s ainda no futuro; nem disparou a captura'
-                        % prox)
+                detalhe='ambas as fases bloqueadas (NF-e ate %s; CT-e ate %s); '
+                        'nem disparou a captura' % (prox_nfe, prox_cte))
             return
 
         logger.info("[dfe_sched] iniciando captura em massa (%s)...", _SCRIPT)

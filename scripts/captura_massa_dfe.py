@@ -45,6 +45,7 @@ import pymysql
 
 # Reaproveita TUDO: consulta_sefaz (cert/mTLS/SOAP) e processa_dfe (extrai/grava).
 import consulta_sefaz as cs
+import consulta_sefaz_cte as cte
 import processa_dfe as pd
 from integrations.dfe_classificacao import aplicar_regras
 from integrations import dfe_log
@@ -54,6 +55,9 @@ from integrations import dfe_log
 # --------------------------------------------------------------------------
 PAUSA_SEGUNDOS = 20   # pausa entre lotes (comeca conservador; pode subir depois)
 MAX_LOTES = 40        # teto de lotes por execucao (nao roda infinito nem abusa)
+MAX_LOTES_CTE = 15    # teto MENOR da Fase B (CT-e): a 1a consulta vem cheia (ate 3
+                      # meses de historico) e nao pode estourar o timeout de 20 min
+                      # do subprocess; o resto vem nas proximas rodadas.
 
 # Quem disparou esta rodada. O agendador injeta DFE_ORIGEM no subprocess
 # ('agendador' ou 'manual'); rodando na mao pelo terminal fica 'cli'. So rotula
@@ -160,21 +164,147 @@ def _processar_docs(conn, cur, ret, cliente_id, cnpj_cert, agora, expira, ult_ns
     return c, nsu_ok, houve_falha
 
 
-# ==========================================================================
-# MAIN - loop de lotes.
-# ==========================================================================
-def main():
-    print("=" * 74)
-    print("CAPTURA EM MASSA distDFeInt - SEFAZ (PRODUCAO, tpAmb=1)")
-    print(f"Loop ate pegar tudo (ate {MAX_LOTES} lotes), pausa {PAUSA_SEGUNDOS}s "
-          "entre lotes. SO CONSULTA E SALVA. NAO manifesta.")
-    print("=" * 74)
+def _consultar_cte(sess, cnpj_cert, ult_nsu):
+    """Espelho de _consultar(), no endpoint do CTeDistribuicaoDFe. MESMA sessao
+    mTLS (o cert serve os dois hosts). Retorna (ret_element, bytes)."""
+    soap, _ult_fmt = cte.montar_soap_cte(cnpj_cert, ult_nsu)
+    headers = {
+        "Content-Type": (
+            'application/soap+xml; charset=utf-8; '
+            f'action="{cte.ACTION_CTE}"'
+        ),
+        "User-Agent": "nh-transportes/captura-massa-cte (loop)",
+    }
+    r = sess.post(cte.ENDPOINT_CTE, data=soap.encode("utf-8"), headers=headers,
+                  timeout=cs.TIMEOUT)
+    if r.status_code != 200:
+        cs.falhar("HTTP != 200 (CTe)", f"status {r.status_code}")
+    env = ET.fromstring(r.content)
+    ret = cs._find(env, "retDistDFeInt")   # resposta tem a MESMA estrutura da NF-e
+    if ret is None:
+        cs.falhar("sem retDistDFeInt (CTe)", "resposta inesperada da SEFAZ.")
+    return ret, len(r.content)
 
-    # 1) Certificado (mesma cadeia validada).
-    print("\n[1] Abrindo o certificado A1 (banco -> dropbox -> senha -> PFX)...")
-    cliente_id, cnpj_cert, cert, chave_priv, cadeia = cs.abrir_certificado()
-    print(f"    OK: cliente_id={cliente_id} cnpj={cnpj_cert} cadeia_extra={len(cadeia)}")
 
+def capturar_cte(sess, cliente_id, cnpj_cert):
+    """FASE B: mesmo run, mesmo lock, mesma sessao mTLS -- MAS endpoint, cursor
+    (dfe_nsu_cte) e cota do CT-e, 100% independentes da NF-e. Se a NF-e estiver
+    de castigo por 656, ISTO RODA MESMO ASSIM (cota separada). Reusa _consultar_cte
+    e o MESMO _processar_docs (pd.processar_um_doc ja roteia cteProc/resCTe)."""
+    print("\n" + "=" * 74)
+    print("[FASE B] CAPTURA CT-e -- CTeDistribuicaoDFe (endpoint/cursor proprios)")
+    print(f"         versao distDFeInt(CTe) = {cte.VERSAO_CTE}")
+    print("=" * 74)
+    ult_nsu, _prox = cte.ler_ult_nsu_cte(cliente_id)
+    print(f"    ult_nsu (CTe) = {ult_nsu}")
+    bloqueio = cte.bloqueado_por_cota_cte(cliente_id)   # cota SEPARADA da NF-e
+    if bloqueio:
+        print(f"    ATENCAO: proximo_permitido(CTe) = {bloqueio} ainda no futuro. "
+              "Pulando Fase B sem consultar.")
+        _log_avulso(cliente_id, cnpj_cert, 'pulado_cota', ult_nsu_env=ult_nsu,
+                    detalhe=f"CTe: proximo_permitido={bloqueio} no futuro; nao consultou")
+        return
+    tot_cte = tot_resumo_cte = tot_outro = 0
+    lotes = 0
+    max_nsu = 0
+    motivo_fim = "limite"
+    conn = pymysql.connect(**cs.CONN)
+    try:
+        cur = conn.cursor()
+        while lotes < MAX_LOTES_CTE:
+            agora = datetime.now()
+            expira = (agora + timedelta(days=pd.DIAS_RETENCAO)).date()
+            try:
+                ret, _nbytes = _consultar_cte(sess, cnpj_cert, ult_nsu)
+            except BaseException as exc:
+                dfe_log.registrar(
+                    cur, ORIGEM, 'erro', cliente_id=cliente_id, cnpj=cnpj_cert,
+                    ult_nsu_env=ult_nsu, lote=lotes + 1,
+                    detalhe=f"CTe: falha na requisicao -- {type(exc).__name__}: {exc}")
+                conn.commit()
+                raise
+            cStat   = cs._text(ret, "cStat")
+            xMotivo = cs._text(ret, "xMotivo")
+            ret_ult = pd._to_int(cs._text(ret, "ultNSU")) or 0
+            ret_max = pd._to_int(cs._text(ret, "maxNSU")) or 0
+            status_txt = f"CTe {cStat} {xMotivo}"[:255]   # prefixo CTe p/ auditar o log
+            def _log_consulta(**extra):
+                dfe_log.registrar(
+                    cur, ORIGEM, 'consulta', cliente_id=cliente_id, cnpj=cnpj_cert,
+                    ult_nsu_env=ult_nsu, c_stat=cStat, x_motivo=xMotivo,
+                    ret_ult_nsu=ret_ult, ret_max_nsu=ret_max, lote=lotes + 1, **extra)
+            # ----- 656: para sem mexer no cursor; +1h na dfe_nsu_cte -----
+            if cStat == "656":
+                cur.execute(cte.SQL_NSU_CTE_656, (
+                    cliente_id, cnpj_cert, ult_nsu, ret_max or max_nsu or 0, status_txt))
+                _log_consulta(detalhe="CTe 656: parou sem avancar; proximo_permitido=+1h")
+                conn.commit()
+                motivo_fim = "656"
+                print(f"    >>> [CTe] 656 CONSUMO INDEVIDO. Para SEM avancar "
+                      f"(ult_nsu={ult_nsu}); +1h. Continua no proximo ciclo.")
+                break
+            # ----- 137: em dia -----
+            if cStat == "137":
+                cur.execute(cte.SQL_NSU_CTE_OK, (
+                    cliente_id, cnpj_cert, ult_nsu, ret_max or max_nsu or ult_nsu, status_txt))
+                _log_consulta(detalhe="CTe 137: nenhum CT-e novo (em dia)")
+                conn.commit()
+                motivo_fim = "fim137"
+                print("    [CTe] cStat 137: nenhum CT-e novo. Em dia.")
+                break
+            # ----- qualquer outro != 138 (inclui versao invalida) -----
+            if cStat != "138":
+                cur.execute(cte.SQL_NSU_CTE_OK, (
+                    cliente_id, cnpj_cert, ult_nsu, ret_max or max_nsu or 0, status_txt))
+                _log_consulta(detalhe=f"CTe cStat inesperado {cStat}: parou")
+                conn.commit()
+                motivo_fim = f"cstat_{cStat}"
+                print(f"    [CTe] cStat inesperado {cStat} ({xMotivo}). Parando. "
+                      "(se for versao invalida, ajuste a env DFE_CTE_VERSAO)")
+                break
+            # ----- 138: mesmo _processar_docs da NF-e (roteia cteProc/resCTe) -----
+            c, novo_ult, houve_falha = _processar_docs(
+                conn, cur, ret, cliente_id, cnpj_cert, agora, expira, ult_nsu)
+            cur.execute(cte.SQL_NSU_CTE_OK, (
+                cliente_id, cnpj_cert, novo_ult, ret_max or 0, status_txt))
+            _log_consulta(
+                docs=c["docs"],
+                detalhe=("CTe 138: %d docs (%d CTe, %d resCTe, %d outros); cursor %d->%d%s"
+                         % (c["docs"], c["n_cte"], c["n_resumo_cte"], c["n_outro"],
+                            ult_nsu, novo_ult,
+                            "; PAROU por falha ao salvar" if houve_falha else "")))
+            conn.commit()
+            lotes += 1
+            max_nsu = ret_max or max_nsu
+            tot_cte += c["n_cte"]
+            tot_resumo_cte += c["n_resumo_cte"]
+            tot_outro += c["n_outro"]
+            ult_nsu = novo_ult
+            falta = max(0, (max_nsu or 0) - novo_ult)
+            print(f"[CTe] Lote {lotes}: +{c['n_cte']} CT-e, +{c['n_resumo_cte']} resCTe "
+                  f"(outros {c['n_outro']}) | NSU={novo_ult} (falta {falta})")
+            if houve_falha:
+                motivo_fim = "falha_doc"
+                break
+            if max_nsu and novo_ult >= max_nsu:
+                motivo_fim = "completo"
+                break
+            time.sleep(PAUSA_SEGUNDOS)
+        cur.close()
+    finally:
+        conn.close()
+    print("\n[FASE B] RESUMO CT-e: %d lote(s), %d CT-e completos, %d resCTe, "
+          "%d outros | NSU final=%d (max=%d) | fim=%s"
+          % (lotes, tot_cte, tot_resumo_cte, tot_outro, ult_nsu, max_nsu, motivo_fim))
+
+
+# ==========================================================================
+# FASE A - NF-e (NFeDistribuicaoDFe). Cursor/cota em dfe_nsu. Corpo extraido do
+# antigo main(): recebe sess/cliente_id/cnpj_cert por PARAMETRO (cert/sessao/DDLs
+# agora moram no main orquestrador). No ramo de cota bloqueada faz return DA
+# FUNCAO (nao do processo), pra a Fase B rodar mesmo se a NF-e estiver de 656.
+# ==========================================================================
+def capturar_nfe(sess, cliente_id, cnpj_cert):
     # 2) ult_nsu atual + respeita proximo_permitido (comparado no relogio do BANCO).
     print("\n[2] Lendo ult_nsu (dfe_nsu)...")
     ult_nsu, _proximo = cs.ler_ult_nsu(cliente_id)
@@ -187,22 +317,6 @@ def main():
                     detalhe=f"proximo_permitido={bloqueio} ainda no futuro; "
                             "encerrou sem consultar a SEFAZ")
         return
-
-    # 3) Garante dfe_eventos + dfe_consulta_log (idempotente) e monta a sessao
-    #    mTLS uma vez.
-    print("\n[3] Garantindo dfe_eventos + dfe_consulta_log + mTLS em memoria...")
-    con0 = pymysql.connect(**cs.CONN)
-    try:
-        with con0.cursor() as c0:
-            c0.execute(pd.DDL_EVENTOS)
-            c0.execute(pd.DDL_CTE)
-            c0.execute(pd.DDL_CTE_NFE)
-            dfe_log.garantir_tabela(c0)
-        con0.commit()
-    finally:
-        con0.close()
-    sess = cs.montar_sessao_mtls(cert, chave_priv, cadeia)
-    print("    OK.")
 
     # 4) Loop de lotes.
     tot_nota = tot_evento = tot_itens = tot_cancel = tot_resumo = tot_outro = 0
@@ -395,6 +509,37 @@ def main():
     print("=" * 74)
     print("FIM - captura em massa concluida. Nada foi manifestado.")
     print("=" * 74)
+
+
+# ==========================================================================
+# MAIN - orquestrador das 2 fases (A: NF-e / B: CT-e), mesmo run e mesmo lock.
+# ==========================================================================
+def main():
+    print("=" * 74)
+    print("CAPTURA EM MASSA DFe - FASE A (NF-e) + FASE B (CT-e), mesmo run/lock")
+    print("SO CONSULTA E SALVA. NAO manifesta.")
+    print("=" * 74)
+    # 1) Certificado (uma vez; serve os dois endpoints).
+    cliente_id, cnpj_cert, cert, chave_priv, cadeia = cs.abrir_certificado()
+    print(f"[1] cert OK: cliente_id={cliente_id} cnpj={cnpj_cert}")
+    # 2) DDLs idempotentes (+ dfe_nsu_cte) e sessao mTLS unica.
+    con0 = pymysql.connect(**cs.CONN)
+    try:
+        with con0.cursor() as c0:
+            c0.execute(pd.DDL_EVENTOS)
+            c0.execute(pd.DDL_CTE)
+            c0.execute(pd.DDL_CTE_NFE)
+            c0.execute(cte.DDL_NSU_CTE)     # <-- cursor CT-e
+            dfe_log.garantir_tabela(c0)
+        con0.commit()
+    finally:
+        con0.close()
+    sess = cs.montar_sessao_mtls(cert, chave_priv, cadeia)
+    # FASE A: NF-e (cota/cursor dfe_nsu) -- corpo atual, so vira funcao.
+    capturar_nfe(sess, cliente_id, cnpj_cert)
+    # FASE B: CT-e (cota/cursor dfe_nsu_cte) -- roda mesmo se A estiver bloqueada.
+    capturar_cte(sess, cliente_id, cnpj_cert)
+    print("\nFIM - captura A+B concluida. Nada foi manifestado.")
 
 
 if __name__ == "__main__":
