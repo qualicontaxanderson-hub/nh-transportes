@@ -544,32 +544,34 @@ def buscar_xml():
 
     # 1) Chave da nota. Se veio digitada (chave avulsa), usa direto -- nao
     #    precisa existir no banco. Senao, resolve pelo doc_id (server-side).
+    cli_id = None   # empresa do documento -> usa o cert certo (multi-empresa)
     if chave_in:
         chave = chave_in
     else:
         conn = pymysql.connect(**cs.CONN)
         try:
             with conn.cursor() as cur0:
-                cur0.execute("SELECT chave, numero, resumo FROM dfe_documentos WHERE id=%s",
+                cur0.execute("SELECT chave, numero, resumo, cliente_id FROM dfe_documentos WHERE id=%s",
                              (doc_id,))
                 doc = cur0.fetchone()
         finally:
             conn.close()
         if not doc:
             return jsonify({'ok': False, 'erro': 'documento nao encontrado'}), 404
+        cli_id = doc.get('cliente_id')
         chave = ''.join(ch for ch in str(doc['chave']) if ch.isdigit())
         if len(chave) != 44:
             return jsonify({'ok': False, 'erro': 'chave invalida'}), 400
 
     # 2) Certificado + consulta consChNFe (versao 1.01).
     try:
-        cliente_id, cnpj_cert, cert, chave_priv, cadeia = cs.abrir_certificado()
+        cliente_id, cnpj_cert, cert, chave_priv, cadeia = cs.abrir_certificado(cliente_id=cli_id)
         corpo = (
             '<distDFeInt xmlns="%s" versao="1.01">'
-            '<tpAmb>%s</tpAmb><cUFAutor>%s</cUFAutor><CNPJ>%s</CNPJ>'
+            '<tpAmb>%s</tpAmb><cUFAutor>%s</cUFAutor>%s'
             '<consChNFe><chNFe>%s</chNFe></consChNFe>'
             '</distDFeInt>'
-        ) % (cs.NS_NFE, cs.TP_AMB, cs.C_UF_AUTOR, cnpj_cert, chave)
+        ) % (cs.NS_NFE, cs.TP_AMB, cs.C_UF_AUTOR, cs.tag_interessado(cnpj_cert), chave)
         soap = (
             '<?xml version="1.0" encoding="utf-8"?>'
             '<soap12:Envelope xmlns:soap12="http://www.w3.org/2003/05/soap-envelope">'

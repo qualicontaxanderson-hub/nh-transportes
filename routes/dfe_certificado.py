@@ -33,8 +33,11 @@ from cryptography.x509.oid import NameOID
 
 dfe_certificado_bp = Blueprint('dfe_certificado', __name__, url_prefix='/dfe/certificado')
 
-# OID ICP-Brasil que carrega o CNPJ (14 dígitos) da pessoa jurídica no SAN.
+# OIDs ICP-Brasil no SAN otherName:
+#   2.16.76.1.3.3 = e-CNPJ (14 digitos da pessoa juridica)
+#   2.16.76.1.3.1 = e-CPF  (nascimento[8] + CPF[11] + NIS[11] + RG[...])
 _OID_CNPJ_ICP = '2.16.76.1.3.3'
+_OID_CPF_ICP  = '2.16.76.1.3.1'
 
 # Pasta base no Dropbox onde os certificados são gravados.
 # ATENÇÃO: é uma App Folder do Qualicontax; a integração do NH é Full Dropbox.
@@ -42,35 +45,50 @@ _OID_CNPJ_ICP = '2.16.76.1.3.3'
 _BASE_DROPBOX_CERT = 'Aplicativos/QUALICONTAX/Certificados'
 
 
-def _extrair_cnpj(cert) -> str | None:
-    """
-    Extrai o CNPJ (14 dígitos) do certificado. Prioriza o SAN otherName
-    OID 2.16.76.1.3.3 (padrão ICP-Brasil e-CNPJ); cai para o CN (formato
-    'RAZAO SOCIAL:CNPJ') como fallback. Retorna só dígitos, ou None.
-    """
-    # 1) SAN otherName OID 2.16.76.1.3.3
+def _san_otherName_digitos(cert, oid) -> str | None:
+    """Dígitos do SAN otherName do OID dado (ICP-Brasil), PULANDO o tag+length
+    DER do valor. Isso importa no e-CPF: se a length (2º byte) calhar de ser um
+    ASCII '0'-'9', ela injetaria um dígito e deslocaria as posições do CPF."""
     try:
         san = cert.extensions.get_extension_for_class(x509.SubjectAlternativeName).value
-        for gn in san:
-            if isinstance(gn, x509.OtherName) and gn.type_id.dotted_string == _OID_CNPJ_ICP:
-                texto = gn.value.decode('latin-1', errors='ignore')
-                m = re.search(r'\d{14}', texto)
-                if m:
-                    return m.group(0)
     except Exception:
-        pass
+        return None
+    for gn in san:
+        if isinstance(gn, x509.OtherName) and gn.type_id.dotted_string == oid:
+            raw = gn.value  # DER do valor (bytes): [tag][length][conteudo]
+            if isinstance(raw, (bytes, bytearray)) and len(raw) >= 2 and raw[1] < 0x80:
+                conteudo = raw[2:]          # pula tag+length (forma curta)
+            else:
+                conteudo = raw
+            texto = conteudo.decode('latin-1', errors='ignore')
+            return re.sub(r'\D', '', texto)
+    return None
 
-    # 2) Fallback: Common Name no formato "NOME:CNPJ"
+
+def _extrair_documento(cert):
+    """Extrai (documento, tipo_doc) do certificado ICP-Brasil:
+      - e-CNPJ (OID 2.16.76.1.3.3): 14 dígitos           -> ('<14>', 'CNPJ')
+      - e-CPF  (OID 2.16.76.1.3.1): nascimento[8]+CPF[11] -> ('<11>', 'CPF')
+        (o CPF são os 11 dígitos APÓS os 8 da data de nascimento -> posições 8:19)
+    Fallback: CN 'RAZÃO:CNPJ'. Retorna (None, None) se não achar."""
+    # 1) e-CNPJ
+    d = _san_otherName_digitos(cert, _OID_CNPJ_ICP)
+    if d and len(d) >= 14:
+        return d[:14], 'CNPJ'
+    # 2) e-CPF (CPF = 11 dígitos após os 8 da data de nascimento)
+    d = _san_otherName_digitos(cert, _OID_CPF_ICP)
+    if d and len(d) >= 19:
+        return d[8:19], 'CPF'
+    # 3) Fallback: Common Name "NOME:CNPJ"
     try:
         cn = cert.subject.get_attributes_for_oid(NameOID.COMMON_NAME)[0].value
         if ':' in cn:
             digitos = re.sub(r'\D', '', cn.split(':')[-1])
             if len(digitos) >= 14:
-                return digitos[:14]
+                return digitos[:14], 'CNPJ'
     except Exception:
         pass
-
-    return None
+    return None, None
 
 
 def _extrair_validade(cert) -> date | None:
@@ -139,7 +157,6 @@ def index():
             flash('Informe a senha do certificado.', 'danger')
             return redirect(url_for('dfe_certificado.index'))
 
-        nome_arquivo = os.path.basename(pfx_file.filename)
         pfx_bytes = pfx_file.read()
         if not pfx_bytes:
             flash('O arquivo .pfx está vazio.', 'danger')
@@ -155,15 +172,18 @@ def index():
             flash('O arquivo .pfx não contém um certificado válido. Nada foi salvo.', 'danger')
             return redirect(url_for('dfe_certificado.index'))
 
-        # --- 3) extrai CNPJ e validade do certificado ---
-        cnpj = _extrair_cnpj(cert)
-        if not cnpj:
-            flash('Não consegui extrair o CNPJ do certificado. Confirme que é um e-CNPJ (A1). Nada foi salvo.', 'danger')
+        # --- 3) extrai documento (CNPJ/CPF), tipo e validade do certificado ---
+        documento, tipo_doc = _extrair_documento(cert)
+        if not documento:
+            flash('Não consegui extrair o CNPJ/CPF do certificado. Confirme que é um e-CNPJ ou e-CPF (A1). Nada foi salvo.', 'danger')
             return redirect(url_for('dfe_certificado.index'))
         validade_ate = _extrair_validade(cert)
 
-        # --- 4) sobe o PFX pro Dropbox ---
-        caminho_dropbox = f'{_BASE_DROPBOX_CERT}/{cnpj}/certificado.pfx'
+        # nome do arquivo PADRONIZADO: {documento}.pfx (sem empresa nem senha no nome)
+        nome_arquivo = f'{documento}.pfx'
+
+        # --- 4) sobe o PFX pro Dropbox: /{documento}/{documento}.pfx ---
+        caminho_dropbox = f'{_BASE_DROPBOX_CERT}/{documento}/{documento}.pfx'
         try:
             res = upload_arquivo(caminho_dropbox, pfx_bytes)
             pfx_caminho = res['path']
@@ -187,18 +207,19 @@ def index():
             cur = conn.cursor()
             cur.execute(
                 """INSERT INTO dfe_certificados
-                       (cliente_id, cnpj, nome_arquivo, pfx_caminho, senha_cifrada,
+                       (cliente_id, cnpj, tipo_doc, nome_arquivo, pfx_caminho, senha_cifrada,
                         validade_ate, modo_automatico, ativo)
-                   VALUES (%s, %s, %s, %s, %s, %s, %s, 1)
+                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s, 1)
                    ON DUPLICATE KEY UPDATE
                        cnpj            = VALUES(cnpj),
+                       tipo_doc        = VALUES(tipo_doc),
                        nome_arquivo    = VALUES(nome_arquivo),
                        pfx_caminho     = VALUES(pfx_caminho),
                        senha_cifrada   = VALUES(senha_cifrada),
                        validade_ate    = VALUES(validade_ate),
                        modo_automatico = VALUES(modo_automatico),
                        ativo           = 1""",
-                (int(cliente_id), cnpj, nome_arquivo, pfx_caminho, senha_cifrada,
+                (int(cliente_id), documento, tipo_doc, nome_arquivo, pfx_caminho, senha_cifrada,
                  validade_ate, modo_automatico)
             )
             conn.commit()
@@ -214,7 +235,7 @@ def index():
                 conn.close()
 
         val_str = validade_ate.strftime('%d/%m/%Y') if validade_ate else 'sem data'
-        flash(f'Certificado do CNPJ {cnpj} salvo com sucesso (validade {val_str}).', 'success')
+        flash(f'Certificado do {tipo_doc} {documento} salvo com sucesso (validade {val_str}).', 'success')
         return redirect(url_for('dfe_certificado.index'))
 
     # GET
