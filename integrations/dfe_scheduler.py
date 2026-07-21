@@ -10,12 +10,13 @@ que ela abre (ate ~20 min depois), em vez de perde-la esperando 3h:
   - o proprio script pula se dfe_nsu.proximo_permitido ainda estiver no futuro
     (656 recente) e, se tomar 656 no meio, para e reagenda +1h;
   - aqui ainda fazemos um pre-check barato de proximo_permitido para nem
-    disparar o processo a toa, MAS afrouxado (opcao ii): a captura tem 2 fases
-    independentes -- NF-e (cursor dfe_nsu) e CT-e (cursor dfe_nsu_cte) -- com
-    cotas SEPARADAS na SEFAZ. So pulamos o ciclo quando as DUAS estao de castigo
-    por 656 ao mesmo tempo; se qualquer janela esta aberta, disparamos e cada
-    fase se auto-regula la dentro. Assim a NF-e travada (656 do SGA) nao arrasta
-    o CT-e junto.
+    disparar o processo a toa, MAS afrouxado (opcao ii) e MULTI-EMPRESA: a
+    captura tem 2 fases independentes -- NF-e (cursor dfe_nsu) e CT-e (cursor
+    dfe_nsu_cte) -- com cotas SEPARADAS na SEFAZ, e roda para TODAS as empresas
+    ativas/automaticas. So pulamos o ciclo quando TODAS as empresas estao de
+    castigo por 656 nas DUAS fases; se qualquer empresa tem qualquer janela
+    aberta, disparamos e cada empresa/fase se auto-regula la dentro. Assim a
+    NF-e travada (656 do SGA) de uma empresa nao arrasta o CT-e nem as outras.
 
 Concorrencia (gunicorn --workers 2):
   cada worker cria o seu proprio scheduler, entao o job usa um LOCK global no
@@ -58,38 +59,39 @@ def _conn_direta():
 
 
 def _estado_cota(cur):
-    """Pre-check AFROUXADO (opcao ii): so vale a pena pular o ciclo inteiro
-    quando as DUAS fases estao de castigo por 656 AO MESMO TEMPO. Se QUALQUER
-    janela estiver aberta -- NF-e (dfe_nsu) OU CT-e (dfe_nsu_cte) -- devolve None
-    para DISPARAR o subprocess; cada fase se auto-regula la dentro. Assim a NF-e
-    travada (656 do SGA) nao arrasta o CT-e junto. Comparacao sempre no relogio
+    """Pre-check MULTI-EMPRESA (opcao ii estendida): so vale a pena pular o ciclo
+    inteiro quando TODAS as empresas ativas/automaticas estao de castigo por 656
+    nas DUAS fases (NF-e em dfe_nsu E CT-e em dfe_nsu_cte) AO MESMO TEMPO. Se
+    QUALQUER empresa tiver PELO MENOS UMA janela aberta, devolve None para
+    DISPARAR o subprocess; cada empresa/fase se auto-regula la dentro. Empresa
+    sem linha de cursor (nova) conta como 'aberta'. Comparacao sempre no relogio
     do BANCO (NOW()).
 
-    Devolve (cliente_id, cnpj, ult_nsu, prox_nfe, prox_cte) SO quando ambas
-    bloqueadas (para o log do 'pulado_cota'); None se ao menos uma janela esta
-    aberta -- inclusive se dfe_nsu_cte ainda nem existe (1a vez), caso em que o
-    CT-e esta 'aberto' e o subprocess a cria."""
-    cur.execute(
-        "SELECT cliente_id, cnpj, ult_nsu, proximo_permitido FROM dfe_nsu "
-        "WHERE proximo_permitido IS NOT NULL AND proximo_permitido > NOW() "
-        "LIMIT 1"
-    )
-    row_nfe = cur.fetchone()
-    if not row_nfe:
-        return None                       # janela NF-e aberta -> dispara
+    Devolve (abertas, total) SO quando abertas==0 (todas bloqueadas), para o log
+    do 'pulado_cota'; None se ha alguma janela aberta, se nao ha empresa ativa,
+    ou se alguma tabela de cursor ainda nem existe (1a vez -> deixa o subprocess
+    criar)."""
     try:
         cur.execute(
-            "SELECT proximo_permitido FROM dfe_nsu_cte "
-            "WHERE proximo_permitido IS NOT NULL AND proximo_permitido > NOW() "
-            "LIMIT 1"
+            "SELECT "
+            "  SUM(CASE WHEN ("
+            "     NOT EXISTS (SELECT 1 FROM dfe_nsu n "
+            "                  WHERE n.cliente_id=dc.cliente_id AND n.proximo_permitido > NOW()) "
+            "  OR NOT EXISTS (SELECT 1 FROM dfe_nsu_cte nc "
+            "                  WHERE nc.cliente_id=dc.cliente_id AND nc.proximo_permitido > NOW()) "
+            "  ) THEN 1 ELSE 0 END) AS abertas, "
+            "  COUNT(*) AS total "
+            "FROM dfe_certificados dc "
+            "WHERE dc.ativo=1 AND dc.modo_automatico=1"
         )
-        row_cte = cur.fetchone()
+        row = cur.fetchone()
     except Exception:
-        return None                       # tabela ainda nao existe -> CT-e aberto
-    if not row_cte:
-        return None                       # janela CT-e aberta -> dispara
-    cli, cnpj, ult_nsu, prox_nfe = row_nfe
-    return cli, cnpj, ult_nsu, prox_nfe, row_cte[0]   # AMBAS bloqueadas
+        return None                       # tabela de cursor ausente (1a vez) -> dispara
+    abertas = int(row[0] or 0)
+    total = int(row[1] or 0)
+    if total == 0 or abertas > 0:
+        return None                       # sem empresa OU alguma janela aberta -> dispara
+    return abertas, total                 # 0 de 'total' abertas -> TODAS bloqueadas
 
 
 def _job(app, origem='agendador'):
@@ -115,21 +117,20 @@ def _job(app, origem='agendador'):
                 detalhe='outro worker/deploy ja estava capturando (GET_LOCK negado)')
             return
 
-        # Pre-check de cota AFROUXADO (opcao ii): so pula o ciclo se AMBAS as
-        # fases (NF-e e CT-e) estiverem bloqueadas por 656 ao mesmo tempo. Se uma
-        # janela esta aberta, dispara -- cada fase se auto-regula no subprocess.
-        # Este ramo era INVISIVEL no banco -- a rodada sumia sem rastro. Agora
-        # deixa linha, que e justamente o que faltava para auditar os ciclos.
+        # Pre-check de cota MULTI-EMPRESA (opcao ii estendida): so pula o ciclo
+        # se TODAS as empresas ativas/automaticas estao de castigo por 656 nas
+        # DUAS fases. Se qualquer uma tem janela aberta, dispara -- cada empresa
+        # se auto-regula no subprocess. Este ramo era INVISIVEL no banco -- a
+        # rodada sumia sem rastro. Agora deixa linha, que e o que faltava p/ auditar.
         estado = _estado_cota(cur)
         if estado:
-            cli, cnpj, ult_nsu, prox_nfe, prox_cte = estado
-            logger.info("[dfe_sched] NF-e e CT-e ambas com proximo_permitido no futuro "
-                        "(656 nas duas); pulando ciclo.")
+            abertas, total = estado
+            logger.info("[dfe_sched] todas as %s empresa(s) de castigo (656) nas duas "
+                        "fases; pulando ciclo.", total)
             dfe_log.registrar(
-                cur, origem, 'pulado_cota', cliente_id=cli, cnpj=cnpj,
-                ult_nsu_env=ult_nsu,
-                detalhe='ambas as fases bloqueadas (NF-e ate %s; CT-e ate %s); '
-                        'nem disparou a captura' % (prox_nfe, prox_cte))
+                cur, origem, 'pulado_cota',
+                detalhe='todas as %s empresa(s) ativas/automaticas bloqueadas nas duas '
+                        'fases; nem disparou a captura' % total)
             return
 
         logger.info("[dfe_sched] iniciando captura em massa (%s)...", _SCRIPT)
