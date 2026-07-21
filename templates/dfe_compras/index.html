@@ -159,6 +159,15 @@
       <input type="hidden" name="aba" value="consultar">
       <div class="row g-2">
         <div class="col-md-3">
+          <label class="form-label small mb-0">Empresa</label>
+          <select name="empresa" class="form-select form-select-sm">
+            <option value="">todas</option>
+            {% for e in empresas %}
+            <option value="{{ e.id }}" {% if filtros.empresa == e.id|string %}selected{% endif %}>{{ e.nome }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-md-3">
           <label class="form-label small mb-0">Fornecedor / CNPJ</label>
           <input type="text" name="fornecedor" class="form-control form-control-sm"
                  value="{{ filtros.fornecedor }}" placeholder="nome ou CNPJ">
@@ -255,6 +264,7 @@
         <thead class="table-light">
           <tr>
             <th>Data</th>
+            <th>Empresa</th>
             <th>Fornecedor</th>
             <th>Item</th>
             <th>Categoria</th>
@@ -268,6 +278,7 @@
           {% for r in resultados %}
           <tr>
             <td>{{ r.dh_emissao.strftime('%d/%m/%Y') if r.dh_emissao else '—' }}</td>
+            <td class="text-truncate" style="max-width:150px">{{ r.empresa_nome or '—' }}</td>
             <td>{{ r.emit_nome or '—' }}<br><small class="text-muted">{{ r.emit_cnpj or '' }}</small></td>
             <td>{{ r.produto_xml or '—' }}<br>
                 <small class="text-muted">cProd {{ r.cprod_fornecedor or '—' }} · NCM {{ r.ncm or '—' }}</small></td>
@@ -285,7 +296,7 @@
             <td>{{ r.situacao }}</td>
           </tr>
           {% else %}
-          <tr><td colspan="8" class="text-center text-muted">Nenhum item para o filtro.</td></tr>
+          <tr><td colspan="9" class="text-center text-muted">Nenhum item para o filtro.</td></tr>
           {% endfor %}
         </tbody>
       </table>

@@ -41,6 +41,15 @@
 {# =================== FILTROS =================== #}
 <form method="GET" action="/dfe/ctes" class="card card-body mb-3">
   <div class="row g-2">
+    <div class="col-12 col-md-3">
+      <label class="form-label small mb-0">Empresa</label>
+      <select name="empresa" class="form-select form-select-sm">
+        <option value="">Todas</option>
+        {% for e in empresas %}
+        <option value="{{ e.id }}" {% if filtros.empresa == e.id|string %}selected{% endif %}>{{ e.nome }}</option>
+        {% endfor %}
+      </select>
+    </div>
     <div class="col-6 col-md-2">
       <label class="form-label small mb-0">Data de</label>
       <input type="date" name="data_ini" class="form-control form-control-sm"
@@ -51,12 +60,12 @@
       <input type="date" name="data_fim" class="form-control form-control-sm"
              value="{{ filtros.data_fim or data_fim_default }}">
     </div>
-    <div class="col-12 col-md-4">
+    <div class="col-12 col-md-2">
       <label class="form-label small mb-0">Transportadora</label>
       <input type="text" name="transportadora" class="form-control form-control-sm"
              value="{{ filtros.transportadora }}" placeholder="nome do emitente">
     </div>
-    <div class="col-12 col-md-3">
+    <div class="col-12 col-md-2">
       <label class="form-label small mb-0">Tomador</label>
       <input type="text" name="tomador" class="form-control form-control-sm"
              value="{{ filtros.tomador }}" placeholder="quem paga o frete">
@@ -88,6 +97,7 @@
     <thead>
       <tr>
         <th>Data</th>
+        <th>Empresa</th>
         <th class="text-end">Nº/Série</th>
         <th>Transportadora</th>
         <th>Origem → Destino</th>
@@ -106,6 +116,7 @@
           data-cte-titulo="CT-e nº {{ c.numero }}/{{ c.serie }}"
           data-cte-cancel="{{ '1' if cancel else '0' }}">
         <td>{{ c.dh_emissao.strftime('%d/%m/%Y %H:%M') if c.dh_emissao else '—' }}</td>
+        <td class="text-truncate" style="max-width:150px">{{ c.empresa_nome or '—' }}</td>
         <td class="text-end">{{ c.numero }}/{{ c.serie }}</td>
         <td class="text-truncate" style="max-width:200px">{{ c.emit_nome or '—' }}</td>
         <td>{% if c.mun_ini %}{{ c.mun_ini }}/{{ c.uf_ini }} <span class="rota-seta">→</span> {{ c.mun_fim }}/{{ c.uf_fim }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
@@ -116,7 +127,7 @@
         <td class="text-center"><i class="bi bi-chevron-right text-muted"></i></td>
       </tr>
       {% else %}
-      <tr><td colspan="9" class="text-center text-muted py-4">
+      <tr><td colspan="10" class="text-center text-muted py-4">
         Nenhum CT-e ainda. Assim que a captura da SEFAZ trouxer um CT-e, ele aparece aqui.
       </td></tr>
       {% endfor %}

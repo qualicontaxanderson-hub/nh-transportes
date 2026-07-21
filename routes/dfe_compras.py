@@ -105,6 +105,7 @@ def compras():
 
         # ---------- AREA 2: CONSULTAR (mega-filtros) ----------
         f = {
+            'empresa':      (request.args.get('empresa') or '').strip(),
             'fornecedor':   (request.args.get('fornecedor') or '').strip(),
             'categoria':    (request.args.get('categoria') or '').strip(),
             'produto_id':   (request.args.get('produto_id') or '').strip(),
@@ -126,6 +127,8 @@ def compras():
         if filtrou:
             where = ["d.tipo = 'NFe'"]
             params = []
+            if f['empresa']:
+                where.append("d.cliente_id = %s"); params.append(f['empresa'])
             if f['fornecedor']:
                 where.append("(d.emit_nome LIKE %s OR d.emit_cnpj LIKE %s)")
                 termo = f"%{f['fornecedor']}%"
@@ -190,10 +193,12 @@ def compras():
                        i.ncm, i.cod_anp, i.unidade, i.quantidade,
                        i.valor_total AS item_valor, i.categoria,
                        i.classificado_produto_id, i.classificado_modo,
-                       p.nome AS produto_nome
+                       p.nome AS produto_nome,
+                       COALESCE(emp.nome_fantasia, emp.razao_social) AS empresa_nome
                 FROM dfe_documentos d
                 JOIN dfe_itens i ON i.documento_id = d.id
                 LEFT JOIN produto p ON p.id = i.classificado_produto_id
+                LEFT JOIN clientes emp ON emp.id = d.cliente_id
                 WHERE {where_sql}
                 ORDER BY d.dh_emissao DESC, i.n_item ASC
                 LIMIT %s
@@ -236,6 +241,17 @@ def compras():
         )
         resumos = cur.fetchall()
 
+        # Empresas que TEM NF-e (para o dropdown de filtro por empresa).
+        cur.execute(
+            """SELECT DISTINCT d.cliente_id AS id,
+                      COALESCE(emp.nome_fantasia, emp.razao_social) AS nome
+                 FROM dfe_documentos d
+                 JOIN clientes emp ON emp.id = d.cliente_id
+                WHERE d.tipo = 'NFe'
+                ORDER BY nome"""
+        )
+        empresas = cur.fetchall()
+
         # Rotulos de categoria para exibicao.
         rot_categoria = dict(CATEGORIAS)
 
@@ -255,6 +271,7 @@ def compras():
             categorias=CATEGORIAS,
             rot_categoria=rot_categoria,
             filtros=f,
+            empresas=empresas,
             filtrou=filtrou,
             resultados=resultados,
             totais=totais,

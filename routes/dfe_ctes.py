@@ -45,6 +45,7 @@ def _janela_paginas(pagina, total_paginas, raio=2):
 @login_required
 def index():
     f = {
+        'empresa':        (request.args.get('empresa') or '').strip(),
         'data_ini':       (request.args.get('data_ini') or '').strip(),
         'data_fim':       (request.args.get('data_fim') or '').strip(),
         'transportadora': (request.args.get('transportadora') or '').strip(),
@@ -60,6 +61,8 @@ def index():
     try:
         where = ["d.tipo = 'CTe'"]
         params = []
+        if f['empresa']:
+            where.append("d.cliente_id = %s"); params.append(f['empresa'])
         if f['data_ini']:
             where.append("d.dh_emissao >= %s"); params.append(f['data_ini'] + " 00:00:00")
         if f['data_fim']:
@@ -97,10 +100,12 @@ def index():
                    d.emit_nome, d.valor_total, d.situacao, d.resumo,
                    c.mun_ini, c.uf_ini, c.mun_fim, c.uf_fim, c.vprest,
                    c.toma_nome, c.toma_cnpj,
+                   COALESCE(emp.nome_fantasia, emp.razao_social) AS empresa_nome,
                    COALESCE(c.vprest, d.valor_total) AS frete,
                    (SELECT COUNT(*) FROM dfe_cte_nfe n WHERE n.documento_id = d.id) AS qt_nfe
             FROM dfe_documentos d
             LEFT JOIN dfe_cte c ON c.documento_id = d.id
+            LEFT JOIN clientes emp ON emp.id = d.cliente_id
             {where_sql}
             ORDER BY d.dh_emissao DESC, d.id DESC
             LIMIT %s OFFSET %s
@@ -109,6 +114,17 @@ def index():
         )
         ctes = cur.fetchall()
 
+        # Empresas que TEM CT-e (para o dropdown de filtro por empresa).
+        cur.execute(
+            """SELECT DISTINCT d.cliente_id AS id,
+                      COALESCE(emp.nome_fantasia, emp.razao_social) AS nome
+                 FROM dfe_documentos d
+                 JOIN clientes emp ON emp.id = d.cliente_id
+                WHERE d.tipo = 'CTe'
+                ORDER BY nome"""
+        )
+        empresas = cur.fetchall()
+
         hoje = date.today()
         data_ini_default = f['data_ini'] or (hoje - timedelta(days=90)).strftime('%Y-%m-%d')
         data_fim_default = f['data_fim'] or hoje.strftime('%Y-%m-%d')
@@ -116,7 +132,7 @@ def index():
 
         return render_template(
             'dfe_ctes/index.html',
-            ctes=ctes, totais=totais, filtros=f,
+            ctes=ctes, totais=totais, filtros=f, empresas=empresas,
             data_ini_default=data_ini_default, data_fim_default=data_fim_default,
             pagina=pagina, total_paginas=total_paginas, por_pagina=POR_PAGINA,
             paginas=_janela_paginas(pagina, total_paginas), qs_filtros=qs_filtros,
