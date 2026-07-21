@@ -1,0 +1,8 @@
+{% extends 'base.html' %}
+{% block title %}CT-e {{ doc.numero }}/{{ doc.serie }}{% endblock %}
+{% block content %}
+<div class="my-3">
+  <a href="/dfe/ctes" class="btn btn-sm btn-outline-secondary mb-3"><i class="bi bi-arrow-left"></i> Voltar aos CT-e</a>
+  {% include 'dfe_ctes/_detalhe_conteudo.html' %}
+</div>
+{% endblock %}

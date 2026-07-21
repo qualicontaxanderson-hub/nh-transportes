@@ -1,0 +1,236 @@
+{% extends 'base.html' %}
+{% block title %}CT-e Migrados{% endblock %}
+
+{% block styles %}
+<style>
+  .cte-row { cursor: pointer; }
+  .cte-card { cursor: pointer; }
+  .cte-card:active { background: #f4f8ff; }
+  .pag-nums .page-link { min-width: 2.1rem; text-align: center; }
+
+  .tbl-ctes { font-size: 14px; color: #212529; background: #fff; --bs-table-bg: #fff; }
+  .tbl-ctes thead th {
+    padding: 12px; background: #fff; color: #6c757d; font-weight: 400;
+    border-top: 0; border-bottom: 1px solid #e9ecef;
+  }
+  .tbl-ctes tbody td {
+    padding: 7px 12px; border-top: 0; border-bottom: 1px solid #f1f3f5;
+    vertical-align: middle;
+  }
+  .tbl-ctes tbody tr:last-child td { border-bottom: 0; }
+  .tbl-ctes tbody tr.cte-row:hover td { background: #f8fafc; }
+
+  .badge-suave-ok, .badge-suave-cancel, .pill-contagem, .pill-nfe {
+    display: inline-block; border-radius: 20px; padding: 3px 12px;
+    font-size: 12px; font-weight: 500; border: 0; line-height: 1.4;
+  }
+  .badge-suave-ok     { background: #e6f4ea; color: #1e7e34; }
+  .badge-suave-cancel { background: #fdecea; color: #c0392b; }
+  .pill-contagem      { background: #f1f3f5; color: #6c757d; }
+  .pill-nfe           { background: #e7f1ff; color: #0d63c4; }
+  .rota-seta          { color: #6c757d; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h3 class="mb-0"><i class="bi bi-truck"></i> CT-e Migrados</h3>
+  <span class="pill-contagem">{{ totais.ctes }} CT-e</span>
+</div>
+
+{# =================== FILTROS =================== #}
+<form method="GET" action="/dfe/ctes" class="card card-body mb-3">
+  <div class="row g-2">
+    <div class="col-6 col-md-2">
+      <label class="form-label small mb-0">Data de</label>
+      <input type="date" name="data_ini" class="form-control form-control-sm"
+             value="{{ filtros.data_ini or data_ini_default }}">
+    </div>
+    <div class="col-6 col-md-2">
+      <label class="form-label small mb-0">Data até</label>
+      <input type="date" name="data_fim" class="form-control form-control-sm"
+             value="{{ filtros.data_fim or data_fim_default }}">
+    </div>
+    <div class="col-12 col-md-4">
+      <label class="form-label small mb-0">Transportadora</label>
+      <input type="text" name="transportadora" class="form-control form-control-sm"
+             value="{{ filtros.transportadora }}" placeholder="nome do emitente">
+    </div>
+    <div class="col-12 col-md-3">
+      <label class="form-label small mb-0">Tomador</label>
+      <input type="text" name="tomador" class="form-control form-control-sm"
+             value="{{ filtros.tomador }}" placeholder="quem paga o frete">
+    </div>
+    <div class="col-12 col-md-1 d-flex align-items-end">
+      <button type="submit" class="btn btn-sm btn-primary w-100"><i class="bi bi-search"></i></button>
+    </div>
+    <div class="col-12">
+      <a href="/dfe/ctes" class="btn btn-sm btn-outline-secondary"><i class="bi bi-x-circle"></i> Limpar filtros</a>
+    </div>
+  </div>
+</form>
+
+{# =================== TOTAIS =================== #}
+<div class="d-flex gap-3 mb-3">
+  <div class="border rounded p-2 flex-fill text-center">
+    <div class="small text-muted">CT-e</div>
+    <div class="fs-5 fw-bold">{{ totais.ctes }}</div>
+  </div>
+  <div class="border rounded p-2 flex-fill text-center">
+    <div class="small text-muted">Soma do frete</div>
+    <div class="fs-5 fw-bold text-success">{{ (totais.frete or 0) | formatar_moeda }}</div>
+  </div>
+</div>
+
+{# =================== TABELA (desktop) =================== #}
+<div class="table-responsive d-none d-md-block">
+  <table class="table tbl-ctes align-middle">
+    <thead>
+      <tr>
+        <th>Data</th>
+        <th class="text-end">Nº/Série</th>
+        <th>Transportadora</th>
+        <th>Origem → Destino</th>
+        <th>Tomador</th>
+        <th class="text-end">Frete</th>
+        <th>Situação</th>
+        <th class="text-center">NF-e</th>
+        <th style="width:34px"></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for c in ctes %}
+      {% set cancel = (c.situacao in ['cancelada', 'denegada']) %}
+      <tr class="cte-row {% if cancel %}text-danger{% endif %}"
+          data-cte-id="{{ c.id }}"
+          data-cte-titulo="CT-e nº {{ c.numero }}/{{ c.serie }}"
+          data-cte-cancel="{{ '1' if cancel else '0' }}">
+        <td>{{ c.dh_emissao.strftime('%d/%m/%Y %H:%M') if c.dh_emissao else '—' }}</td>
+        <td class="text-end">{{ c.numero }}/{{ c.serie }}</td>
+        <td class="text-truncate" style="max-width:200px">{{ c.emit_nome or '—' }}</td>
+        <td>{% if c.mun_ini %}{{ c.mun_ini }}/{{ c.uf_ini }} <span class="rota-seta">→</span> {{ c.mun_fim }}/{{ c.uf_fim }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+        <td class="text-truncate" style="max-width:160px">{{ c.toma_nome or '—' }}</td>
+        <td class="text-end">{{ (c.frete or 0) | formatar_moeda }}</td>
+        <td>{% if cancel %}<span class="badge-suave-cancel">{{ c.situacao }}</span>{% else %}<span class="badge-suave-ok">{{ c.situacao }}</span>{% endif %}</td>
+        <td class="text-center">{% if c.qt_nfe %}<span class="pill-nfe">{{ c.qt_nfe }}</span>{% else %}<span class="text-muted">—</span>{% endif %}</td>
+        <td class="text-center"><i class="bi bi-chevron-right text-muted"></i></td>
+      </tr>
+      {% else %}
+      <tr><td colspan="9" class="text-center text-muted py-4">
+        Nenhum CT-e ainda. Assim que a captura da SEFAZ trouxer um CT-e, ele aparece aqui.
+      </td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+{# =================== CARDS (mobile) =================== #}
+<div class="d-md-none">
+  {% for c in ctes %}
+  {% set cancel = (c.situacao in ['cancelada', 'denegada']) %}
+  <div class="card mb-2 cte-card {% if cancel %}border-danger{% endif %}"
+       data-cte-id="{{ c.id }}"
+       data-cte-titulo="CT-e nº {{ c.numero }}/{{ c.serie }}"
+       data-cte-cancel="{{ '1' if cancel else '0' }}">
+    <div class="card-body py-2">
+      <div class="d-flex justify-content-between">
+        <span class="small text-muted">{{ c.dh_emissao.strftime('%d/%m/%Y %H:%M') if c.dh_emissao else '—' }} · Nº {{ c.numero }}/{{ c.serie }}</span>
+        {% if cancel %}<span class="badge-suave-cancel">{{ c.situacao }}</span>
+        {% else %}<span class="badge-suave-ok">{{ c.situacao }}</span>{% endif %}
+      </div>
+      <div class="d-flex justify-content-between align-items-center mt-1">
+        <div class="me-2" style="min-width:0">
+          <div class="fw-semibold text-truncate">{{ c.emit_nome or 'Sem transportadora' }}</div>
+          {% if c.toma_nome %}<div class="small text-muted text-truncate">Tomador: {{ c.toma_nome }}</div>{% endif %}
+        </div>
+        <div class="fw-bold text-success text-nowrap">{{ (c.frete or 0) | formatar_moeda }}</div>
+      </div>
+      {% if c.mun_ini %}
+      <div class="small mt-1"><i class="bi bi-geo-alt text-muted"></i>
+        {{ c.mun_ini }}/{{ c.uf_ini }} <span class="rota-seta">→</span> {{ c.mun_fim }}/{{ c.uf_fim }}</div>
+      {% endif %}
+      {% if c.qt_nfe %}<div class="mt-1"><span class="pill-nfe">{{ c.qt_nfe }} NF-e vinculada(s)</span></div>{% endif %}
+    </div>
+  </div>
+  {% else %}
+  <div class="text-center text-muted py-4">
+    Nenhum CT-e ainda. Assim que a captura trouxer um CT-e, ele aparece aqui.
+  </div>
+  {% endfor %}
+</div>
+
+{# =================== PAGINACAO =================== #}
+{% if total_paginas > 1 %}
+{% set sep = '&' if qs_filtros else '' %}
+<nav class="mt-3">
+  <ul class="pagination pagination-sm justify-content-center flex-wrap pag-nums">
+    <li class="page-item {% if pagina <= 1 %}disabled{% endif %}">
+      <a class="page-link" href="?{{ qs_filtros }}{{ sep }}page={{ pagina - 1 }}">‹ Anterior</a>
+    </li>
+    {% for p in paginas %}
+      {% if p is none %}
+        <li class="page-item disabled"><span class="page-link">…</span></li>
+      {% else %}
+        <li class="page-item {% if p == pagina %}active{% endif %}">
+          <a class="page-link" href="?{{ qs_filtros }}{{ sep }}page={{ p }}">{{ p }}</a>
+        </li>
+      {% endif %}
+    {% endfor %}
+    <li class="page-item {% if pagina >= total_paginas %}disabled{% endif %}">
+      <a class="page-link" href="?{{ qs_filtros }}{{ sep }}page={{ pagina + 1 }}">Próxima ›</a>
+    </li>
+  </ul>
+</nav>
+{% endif %}
+
+{# =================== MODAL DE DETALHE =================== #}
+<div class="modal fade" id="cteModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable modal-fullscreen-sm-down">
+    <div class="modal-content">
+      <div class="modal-header" style="background:#1D63A5;color:#fff;">
+        <h5 class="modal-title mb-0">
+          <i class="bi bi-truck"></i>
+          <span id="cteModalTitulo">Detalhe do CT-e</span>
+          <span id="cteModalBadge" class="badge ms-2"></span>
+        </h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Fechar"></button>
+      </div>
+      <div class="modal-body bg-light py-3" id="cteModalBody"></div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  var modalEl = document.getElementById('cteModal');
+  var modal   = new bootstrap.Modal(modalEl);
+  var body    = document.getElementById('cteModalBody');
+  var titulo  = document.getElementById('cteModalTitulo');
+  var badge   = document.getElementById('cteModalBadge');
+
+  document.querySelectorAll('[data-cte-id]').forEach(function (el) {
+    el.addEventListener('click', function () {
+      var id = el.dataset.cteId;
+      titulo.textContent = el.dataset.cteTitulo || 'Detalhe do CT-e';
+      var cancel = el.dataset.cteCancel === '1';
+      badge.textContent = cancel ? 'CANCELADO' : 'Autorizado';
+      badge.className = 'badge ms-2 ' + (cancel ? 'bg-danger' : 'bg-light text-dark');
+
+      body.innerHTML = '<div class="text-center py-5">' +
+        '<div class="spinner-border text-primary" role="status"></div>' +
+        '<div class="small text-muted mt-2">Carregando CT-e…</div></div>';
+      modal.show();
+
+      fetch('/dfe/ctes/' + id + '?partial=1')
+        .then(function (r) { if (!r.ok) throw new Error(r.status); return r.text(); })
+        .then(function (html) { body.innerHTML = html; })
+        .catch(function () {
+          body.innerHTML = '<div class="alert alert-danger m-3">Não foi possível carregar o detalhe. Tente novamente.</div>';
+        });
+    });
+  });
+})();
+</script>
+{% endblock %}
