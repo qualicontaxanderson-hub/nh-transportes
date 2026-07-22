@@ -1,6 +1,7 @@
 from flask import Blueprint, render_template, current_app, url_for, jsonify, request, redirect, flash
 from flask_login import login_required, current_user
 from utils.db import get_db_connection
+from utils.pagamentos import classificar_recebimento
 
 bp = Blueprint('bases', __name__)
 
@@ -42,7 +43,8 @@ def _dados_onda1_dashboard(hoje):
         return {'notas': 0, 'total': 0.0, 'ticket': 0.0, 'litros_comb': 0.0, 'linhas': [],
                 'sub_comb': 0.0, 'sub_outros': 0.0, 'qt_outros': 0,
                 'sub_produtos': 0.0, 'acrescimo': 0.0, 'desconto': 0.0}
-    vazio = {'dia': _p_vazio(), 'mes': _p_vazio(), 'ranking': []}
+    vazio = {'dia': _p_vazio(), 'mes': _p_vazio(), 'ranking': [],
+             'recebimento': [], 'recebimento_total': 0.0}
 
     conn = cur = None
     try:
@@ -123,7 +125,36 @@ def _dados_onda1_dashboard(hoje):
                                 'pct': (tot / max_tot * 100) if max_tot else 0,
                                 'fuels': fmap.get(t['vendedor'], {})})
 
-        return {'dia': dia, 'mes': mes, 'ranking': ranking}
+        # ── Recebimento do dia: total por CLASSE (nível nota; esconde zeradas) ──
+        recebimento = []
+        total_receb = 0.0
+        try:
+            cur.execute(
+                "SELECT forma_pagamento, card_bandeira, card_credenciadora, "
+                "card_autorizacao, tef_terminal, COALESCE(valor_total,0) AS vt "
+                "FROM vendas_xml WHERE situacao <> 'cancelada' "
+                "AND dh_emissao >= %s AND dh_emissao < %s", (ini_dia, fim_dia))
+            por_classe = {}
+            for r in cur.fetchall():
+                cls = classificar_recebimento(
+                    r['forma_pagamento'], r['card_bandeira'], r['card_credenciadora'],
+                    r['card_autorizacao'], r['tef_terminal'])
+                vt = float(r['vt'] or 0)
+                d = por_classe.setdefault(cls, [0, 0.0])
+                d[0] += 1
+                d[1] += vt
+                total_receb += vt
+            recebimento = [
+                {'classe': k, 'n': v[0], 'valor': v[1],
+                 'pct': (v[1] / total_receb * 100) if total_receb else 0}
+                for k, v in por_classe.items()          # só classes com movimento aparecem
+            ]
+            recebimento.sort(key=lambda x: -x['valor'])   # maior valor primeiro
+        except Exception:
+            recebimento = []
+
+        return {'dia': dia, 'mes': mes, 'ranking': ranking,
+                'recebimento': recebimento, 'recebimento_total': total_receb}
     except Exception:
         current_app.logger.exception('[dashboard onda1] falha ao coletar dados')
         return vazio

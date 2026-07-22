@@ -21,6 +21,7 @@ from flask import Blueprint, render_template, request, abort
 from flask_login import login_required
 
 from utils.db import get_db_connection
+from utils.pagamentos import classificar_recebimento
 
 vendas_bp = Blueprint('vendas', __name__, url_prefix='/vendas')
 
@@ -117,7 +118,8 @@ def index():
             f"""
             SELECT v.id, v.chave, v.modelo, v.serie, v.numero, v.dh_emissao,
                    v.cnpj_emitente, v.vendedor_raw, v.cliente_doc, v.cliente_nome,
-                   v.valor_total, v.forma_pagamento, v.situacao, v.origem
+                   v.valor_total, v.forma_pagamento, v.situacao, v.origem,
+                   v.card_bandeira, v.card_credenciadora, v.card_autorizacao, v.tef_terminal
             FROM vendas_xml v
             {where_sql}
             ORDER BY v.dh_emissao DESC, v.id DESC
@@ -126,6 +128,13 @@ def index():
             params + [POR_PAGINA, offset],
         )
         notas = cur.fetchall()
+
+        # Classe de RECEBIMENTO (coluna nova; NAO altera forma_pagamento cru nem o filtro).
+        for n in notas:
+            n['recebimento'] = classificar_recebimento(
+                n.get('forma_pagamento'), n.get('card_bandeira'),
+                n.get('card_credenciadora'), n.get('card_autorizacao'),
+                n.get('tef_terminal'))
 
         # ---------- Itens das notas exibidas (1 query, sem N+1) — p/ cards mobile ----------
         itens_por_venda = {}

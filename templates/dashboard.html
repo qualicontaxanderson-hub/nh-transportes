@@ -371,6 +371,7 @@
   .onda1-head--mes  { background: linear-gradient(135deg,#7c3aed,#6d28d9); }
   .onda1-head--live { background: linear-gradient(135deg,#0f172a,#1e293b); }
   .onda1-head--rank { background: linear-gradient(135deg,#0891b2,#0e7490); }
+  .onda1-head--receb { background: linear-gradient(135deg,#059669,#047857); }
   .onda1-head-top { display: flex; align-items: center; justify-content: space-between; }
   .onda1-tag { font-size: .68rem; font-weight: 700; letter-spacing: 1px; text-transform: uppercase;
     display: inline-flex; align-items: center; gap: 6px; opacity: .95; }
@@ -518,6 +519,10 @@
     </section>
     {% endmacro %}
 
+    {% set cor_receb = {
+      'PIX APP':'#0d9488','PIX Manual':'#b45309','Débito APP':'#1d4ed8','Débito Manual':'#2563eb',
+      'Crédito APP':'#7c3aed','Crédito Manual':'#8b5cf6','Dinheiro':'#059669','Cheque':'#475569',
+      'Prazo':'#d97706','Transferência':'#0891b2','Combo':'#64748b','Outros':'#64748b'} %}
     <div class="carousel-onda1" data-onda1>
       <button type="button" class="onda1-arrow onda1-prev" aria-label="Anterior"><i class="bi bi-chevron-left"></i></button>
       <div class="onda1-track" data-onda1-track>
@@ -567,6 +572,33 @@
                 </div>
               </div>
               {% endfor %}
+            {% else %}
+              <div class="onda1-empty"><i class="bi bi-inbox"></i> Sem vendas hoje</div>
+            {% endif %}
+          </div>
+        </section>
+
+        {# CARD 5 — RECEBIMENTO DO DIA (por classe; conciliação PIX APP x Manual) #}
+        <section class="onda1-card">
+          <div class="onda1-head onda1-head--receb">
+            <div class="onda1-head-top">
+              <span class="onda1-tag"><i class="bi bi-wallet2"></i> Recebimento do Dia</span>
+              <span class="onda1-notas">{{ onda1.recebimento|length }} classe{{ 's' if onda1.recebimento|length != 1 else '' }}</span>
+            </div>
+            <div class="onda1-big">{{ fmt_moeda(onda1.recebimento_total) }}</div>
+            <div class="onda1-ticket">todas as vendas do dia · por forma de recebimento</div>
+          </div>
+          <div class="onda1-body">
+            {% if onda1.recebimento %}
+              <table class="onda1-tbl"><tbody>
+                {% for r in onda1.recebimento %}
+                <tr>
+                  <td><span class="onda1-dot" style="background:{{ cor_receb.get(r.classe,'#64748b') }}"></span>{{ r.classe }}</td>
+                  <td class="num muted">{{ r.pct|round(0)|int }}%</td>
+                  <td class="num strong">{{ fmt_moeda(r.valor) }}</td>
+                </tr>
+                {% endfor %}
+              </tbody></table>
             {% else %}
               <div class="onda1-empty"><i class="bi bi-inbox"></i> Sem vendas hoje</div>
             {% endif %}
