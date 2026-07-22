@@ -490,7 +490,7 @@
           <span class="onda1-notas">{{ d.notas }} nota{{ 's' if d.notas != 1 else '' }}</span>
         </div>
         <div class="onda1-big">{{ fmt_moeda(d.total) }}</div>
-        <div class="onda1-ticket">Ticket médio {{ fmt_moeda(d.ticket) }}</div>
+        <div class="onda1-ticket"><b>{{ fmt_litros(d.litros_comb) }} L</b> em combustíveis &middot; Ticket médio {{ fmt_moeda(d.ticket) }}</div>
       </div>
       <div class="onda1-body">
         <table class="onda1-tbl"><tbody>

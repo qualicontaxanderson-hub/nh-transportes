@@ -39,7 +39,7 @@ def _dados_onda1_dashboard(hoje):
     fim_mes = prox.strftime('%Y-%m-%d 00:00:00')
 
     def _p_vazio():
-        return {'notas': 0, 'total': 0.0, 'ticket': 0.0, 'linhas': [],
+        return {'notas': 0, 'total': 0.0, 'ticket': 0.0, 'litros_comb': 0.0, 'linhas': [],
                 'sub_comb': 0.0, 'sub_outros': 0.0, 'qt_outros': 0,
                 'sub_produtos': 0.0, 'acrescimo': 0.0, 'desconto': 0.0}
     vazio = {'dia': _p_vazio(), 'mes': _p_vazio(), 'ranking': []}
@@ -69,18 +69,20 @@ def _dados_onda1_dashboard(hoje):
                 "WHERE v.situacao <> 'cancelada' AND v.dh_emissao >= %s AND v.dh_emissao < %s "
                 "GROUP BY cat", (ini, fim))
             por = {r['cat']: r for r in cur.fetchall()}
-            linhas, sub_comb = [], 0.0
+            linhas, sub_comb, litros_comb = [], 0.0, 0.0
             for lbl in _ONDA1_ORDEM:
                 r = por.get(lbl)
                 tot = float(r['total']) if r else 0.0
+                lit = float(r['litros']) if r else 0.0
                 sub_comb += tot
-                linhas.append({'label': lbl,
-                               'litros': float(r['litros']) if r else 0.0,
-                               'total': tot})
+                if lbl != 'ARLA':          # ARLA não soma no total de litros do topo
+                    litros_comb += lit
+                linhas.append({'label': lbl, 'litros': lit, 'total': tot})
             o = por.get('Outros')
             sub_outros = float(o['total']) if o else 0.0
             return {'notas': notas, 'total': total,
                     'ticket': (total / notas) if notas else 0.0,
+                    'litros_comb': litros_comb,
                     'linhas': linhas, 'sub_comb': sub_comb, 'sub_outros': sub_outros,
                     'qt_outros': int(o['itens']) if o else 0,
                     'sub_produtos': sub_comb + sub_outros,
