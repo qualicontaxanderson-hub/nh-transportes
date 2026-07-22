@@ -4,6 +4,139 @@ from utils.db import get_db_connection
 
 bp = Blueprint('bases', __name__)
 
+# ── Onda 1 do carrossel do dashboard: regra dura de identificação de produto ──
+# 4 combustíveis por cod_anp + ARLA por cprod. NUNCA usa eh_combustivel.
+_ONDA1_CASE = (
+    "CASE "
+    "WHEN i.cod_anp='820101012' THEN 'Diesel S-500' "
+    "WHEN i.cod_anp='820101034' THEN 'Diesel S-10' "
+    "WHEN i.cod_anp='810101001' THEN 'Etanol' "
+    "WHEN i.cod_anp='320102001' THEN 'Gasolina C' "
+    "WHEN i.cprod='64' THEN 'ARLA' "
+    "ELSE 'Outros' END"
+)
+# Ordem fixa das linhas nos cards (casa com as cores .onda1-dot--0..--4).
+_ONDA1_ORDEM = ['Diesel S-500', 'Diesel S-10', 'Etanol', 'Gasolina C', 'ARLA']
+
+
+def _dados_onda1_dashboard(hoje):
+    """Onda 1 do carrossel: Vendas do Dia, Vendas do Mês e Ranking do Dia.
+
+    ISOLADO (conexão própria) e SOMENTE LEITURA. Nunca altera nada nem derruba
+    o dashboard: qualquer erro -> retorna estrutura vazia segura.
+
+    Reconciliação (confirmada no banco, resíduo 0,00):
+        Total da nota = Σ itens + acréscimo − desconto   (troco não entra)
+    Por isso cada período expõe `acrescimo` e `desconto`, e o rodapé fecha
+    exatamente no `total` (nível nota).
+    """
+    from datetime import date, timedelta
+
+    ini_dia = hoje.strftime('%Y-%m-%d 00:00:00')
+    fim_dia = (hoje + timedelta(days=1)).strftime('%Y-%m-%d 00:00:00')
+    ini_mes = hoje.replace(day=1).strftime('%Y-%m-%d 00:00:00')
+    prox = date(hoje.year + 1, 1, 1) if hoje.month == 12 else date(hoje.year, hoje.month + 1, 1)
+    fim_mes = prox.strftime('%Y-%m-%d 00:00:00')
+
+    def _p_vazio():
+        return {'notas': 0, 'total': 0.0, 'ticket': 0.0, 'linhas': [],
+                'sub_comb': 0.0, 'sub_outros': 0.0, 'qt_outros': 0,
+                'sub_produtos': 0.0, 'acrescimo': 0.0, 'desconto': 0.0}
+    vazio = {'dia': _p_vazio(), 'mes': _p_vazio(), 'ranking': []}
+
+    conn = cur = None
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor(dictionary=True)
+
+        def _periodo(ini, fim):
+            # Cabeçalho + rodapé: nível NOTA (faturamento fiscal, acréscimo, desconto).
+            cur.execute(
+                "SELECT COUNT(*) AS notas, "
+                "COALESCE(SUM(v.valor_total),0) AS total, "
+                "COALESCE(SUM(v.vlr_acrescimo),0) AS acrescimo, "
+                "COALESCE(SUM(v.vlr_desconto),0) AS desconto "
+                "FROM vendas_xml v WHERE v.situacao <> 'cancelada' "
+                "AND v.dh_emissao >= %s AND v.dh_emissao < %s", (ini, fim))
+            cab = cur.fetchone() or {}
+            notas = int(cab.get('notas') or 0)
+            total = float(cab.get('total') or 0)
+            # Corpo: por categoria (nível ITEM).
+            cur.execute(
+                "SELECT " + _ONDA1_CASE + " AS cat, COUNT(*) AS itens, "
+                "COALESCE(SUM(i.quantidade),0) AS litros, COALESCE(SUM(i.valor_total),0) AS total "
+                "FROM vendas_xml_itens i JOIN vendas_xml v ON v.id = i.venda_id "
+                "WHERE v.situacao <> 'cancelada' AND v.dh_emissao >= %s AND v.dh_emissao < %s "
+                "GROUP BY cat", (ini, fim))
+            por = {r['cat']: r for r in cur.fetchall()}
+            linhas, sub_comb = [], 0.0
+            for lbl in _ONDA1_ORDEM:
+                r = por.get(lbl)
+                tot = float(r['total']) if r else 0.0
+                sub_comb += tot
+                linhas.append({'label': lbl,
+                               'litros': float(r['litros']) if r else 0.0,
+                               'total': tot})
+            o = por.get('Outros')
+            sub_outros = float(o['total']) if o else 0.0
+            return {'notas': notas, 'total': total,
+                    'ticket': (total / notas) if notas else 0.0,
+                    'linhas': linhas, 'sub_comb': sub_comb, 'sub_outros': sub_outros,
+                    'qt_outros': int(o['itens']) if o else 0,
+                    'sub_produtos': sub_comb + sub_outros,
+                    'acrescimo': float(cab.get('acrescimo') or 0),
+                    'desconto': float(cab.get('desconto') or 0)}
+
+        dia, mes = _periodo(ini_dia, fim_dia), _periodo(ini_mes, fim_mes)
+
+        # ── Ranking do dia: top 4 vendedores por R$ nota + litros por combustível ──
+        cur.execute(
+            "SELECT COALESCE(NULLIF(TRIM(v.vendedor_raw),''),'Não identificado') AS vendedor, "
+            "COUNT(*) AS notas, COALESCE(SUM(v.valor_total),0) AS total FROM vendas_xml v "
+            "WHERE v.situacao <> 'cancelada' AND v.dh_emissao >= %s AND v.dh_emissao < %s "
+            "GROUP BY vendedor ORDER BY total DESC LIMIT 4", (ini_dia, fim_dia))
+        top = cur.fetchall()
+        ranking = []
+        if top:
+            max_tot = float(top[0]['total']) or 1.0
+            nomes = [t['vendedor'] for t in top]
+            fmap = {n: {'Diesel S-500': 0.0, 'Diesel S-10': 0.0,
+                        'Etanol': 0.0, 'Gasolina C': 0.0} for n in nomes}
+            place = ",".join(["%s"] * len(nomes))
+            cur.execute(
+                "SELECT COALESCE(NULLIF(TRIM(v.vendedor_raw),''),'Não identificado') AS vendedor, "
+                + _ONDA1_CASE + " AS cat, COALESCE(SUM(i.quantidade),0) AS litros "
+                "FROM vendas_xml_itens i JOIN vendas_xml v ON v.id = i.venda_id "
+                "WHERE v.situacao <> 'cancelada' AND v.dh_emissao >= %s AND v.dh_emissao < %s "
+                "AND i.cod_anp IN ('820101012','820101034','810101001','320102001') "
+                "AND COALESCE(NULLIF(TRIM(v.vendedor_raw),''),'Não identificado') IN (" + place + ") "
+                "GROUP BY vendedor, cat", [ini_dia, fim_dia] + nomes)
+            for r in cur.fetchall():
+                if r['vendedor'] in fmap and r['cat'] in fmap[r['vendedor']]:
+                    fmap[r['vendedor']][r['cat']] = float(r['litros'] or 0)
+            for t in top:
+                tot = float(t['total'] or 0)
+                ranking.append({'vendedor': t['vendedor'], 'total': tot,
+                                'notas': int(t['notas'] or 0),
+                                'pct': (tot / max_tot * 100) if max_tot else 0,
+                                'fuels': fmap.get(t['vendedor'], {})})
+
+        return {'dia': dia, 'mes': mes, 'ranking': ranking}
+    except Exception:
+        current_app.logger.exception('[dashboard onda1] falha ao coletar dados')
+        return vazio
+    finally:
+        try:
+            if cur:
+                cur.close()
+        except Exception:
+            pass
+        try:
+            if conn:
+                conn.close()
+        except Exception:
+            pass
+
 
 def _calcular_lucro_fifo_dashboard(conn, ano, mes):
     """
@@ -582,6 +715,9 @@ def index():
         except Exception:
             pass
 
+    # Onda 1 do carrossel (isolado; conexão própria; nunca derruba o dashboard)
+    onda1 = _dados_onda1_dashboard(hoje)
+
     # Construir URLs do relatório de lucro para o mês atual
     primeiro_dia = date(hoje.year, hoje.month, 1)
     ultimo_dia = date(hoje.year, hoje.month, calendar.monthrange(hoje.year, hoje.month)[1])
@@ -638,6 +774,7 @@ def index():
     _meses_pt = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho',
                  'Julho','Agosto','Setembro','Outubro','Novembro','Dezembro']
     context['mes_atual'] = f"{_meses_pt[hoje.month - 1]}/{hoje.year}"
+    context['onda1'] = onda1
 
     return render_template('dashboard.html', **context)
 

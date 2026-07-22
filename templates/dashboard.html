@@ -357,6 +357,84 @@
     color: #059669;
     font-weight: 600;
   }
+
+  /* ===== Onda 1 – carrossel (isolado, prefixo onda1-; não toca nos cards existentes) ===== */
+  .carousel-onda1 { position: relative; margin-bottom: 26px; }
+  .onda1-track { display: flex; gap: 16px; overflow-x: auto; scroll-snap-type: x mandatory;
+    scroll-behavior: smooth; padding: 4px 2px 10px; -ms-overflow-style: none; scrollbar-width: none; }
+  .onda1-track::-webkit-scrollbar { display: none; }
+  .onda1-card { flex: 0 0 335px; scroll-snap-align: start; background: #fff; border: 1px solid #e8edf3;
+    border-radius: 12px; box-shadow: 0 1px 6px rgba(0,0,0,0.07); display: flex; flex-direction: column;
+    overflow: hidden; min-height: 300px; }
+  .onda1-head { padding: 14px 16px 12px; color: #fff; }
+  .onda1-head--dia  { background: linear-gradient(135deg,#2563eb,#1d4ed8); }
+  .onda1-head--mes  { background: linear-gradient(135deg,#7c3aed,#6d28d9); }
+  .onda1-head--live { background: linear-gradient(135deg,#0f172a,#1e293b); }
+  .onda1-head--rank { background: linear-gradient(135deg,#0891b2,#0e7490); }
+  .onda1-head-top { display: flex; align-items: center; justify-content: space-between; }
+  .onda1-tag { font-size: .68rem; font-weight: 700; letter-spacing: 1px; text-transform: uppercase;
+    display: inline-flex; align-items: center; gap: 6px; opacity: .95; }
+  .onda1-notas { font-size: .68rem; font-weight: 600; opacity: .85; }
+  .onda1-big { font-size: 1.6rem; font-weight: 800; letter-spacing: -.5px; margin-top: 8px; }
+  .onda1-ticket, .onda1-live-sub { font-size: .7rem; opacity: .82; margin-top: 3px; }
+  .onda1-body { padding: 12px 16px 14px; flex: 1; display: flex; flex-direction: column; }
+  .onda1-tbl { width: 100%; border-collapse: collapse; }
+  .onda1-tbl td { font-size: .78rem; color: #374151; padding: 5px 0; border-bottom: 1px solid #f4f7fb; }
+  .onda1-tbl td.num { text-align: right; white-space: nowrap; padding-left: 8px; }
+  .onda1-tbl td.strong { font-weight: 700; color: #1e293b; }
+  .onda1-tbl td.muted { color: #94a3b8; }
+  .onda1-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 7px; vertical-align: middle; }
+  /* cores de bico de bomba (ordem: S-500, S-10, Etanol, Gasolina C, ARLA) */
+  .onda1-dot--0 { background: #5A6675; }  /* Diesel S-500 – grafite */
+  .onda1-dot--1 { background: #2B7FC4; }  /* Diesel S-10  – azul    */
+  .onda1-dot--2 { background: #2E9E5B; }  /* Etanol       – verde   */
+  .onda1-dot--3 { background: #E0A02E; }  /* Gasolina C   – âmbar   */
+  .onda1-dot--4 { background: #12A0A0; }  /* ARLA         – turquesa*/
+  .onda1-dot--outros { background: #C3CCD6; }
+  .onda1-outros td { border-top: 1px dashed #e5e9f0; }
+  .onda1-foot { margin-top: auto; padding-top: 10px; border-top: 2px solid #eef2f7; }
+  .onda1-foot > div { display: flex; justify-content: space-between; font-size: .75rem; color: #64748b; padding: 2px 0; }
+  .onda1-foot .tot { font-size: .82rem; font-weight: 700; color: #1e293b; margin-top: 2px; }
+  .onda1-live-dot { width: 9px; height: 9px; border-radius: 50%; background: #22c55e; animation: onda1pulse 1.6s infinite; }
+  @keyframes onda1pulse { 0%{box-shadow:0 0 0 0 rgba(34,197,94,.55);} 70%{box-shadow:0 0 0 7px rgba(34,197,94,0);} 100%{box-shadow:0 0 0 0 rgba(34,197,94,0);} }
+  .onda1-live { list-style: none; margin: 0; padding: 0; }
+  .onda1-live-item { display: flex; justify-content: space-between; gap: 8px; padding: 8px 0; border-bottom: 1px solid #f4f7fb; animation: onda1fade .4s ease; }
+  .onda1-live-item:last-child { border-bottom: none; }
+  @keyframes onda1fade { from{opacity:0; transform:translateY(-3px);} to{opacity:1; transform:none;} }
+  .lv-l { display: flex; flex-direction: column; min-width: 0; }
+  .lv-prod { font-size: .8rem; font-weight: 600; color: #1e293b; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .lv-extra { font-size: .6rem; font-weight: 600; color: #64748b; background: #eef2f7; border-radius: 8px; padding: 0 5px; margin-left: 5px; }
+  .lv-vend { font-size: .68rem; color: #94a3b8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .lv-r { text-align: right; display: flex; flex-direction: column; white-space: nowrap; }
+  .lv-val { font-size: .82rem; font-weight: 700; color: #059669; }
+  .lv-meta { font-size: .67rem; color: #94a3b8; }
+  .onda1-live-empty, .onda1-empty { color: #cbd5e1; font-size: .78rem; text-align: center; padding: 14px 0; }
+  .onda1-rank-row { padding: 8px 0; border-bottom: 1px solid #f4f7fb; }
+  .onda1-rank-row:last-child { border-bottom: none; }
+  .onda1-rank-top { display: flex; align-items: center; gap: 8px; }
+  .onda1-rank-pos { width: 18px; height: 18px; border-radius: 50%; background: #e0f2fe; color: #0369a1;
+    font-size: .68rem; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .onda1-rank-name { font-size: .8rem; font-weight: 600; color: #1e293b; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .onda1-rank-val { font-size: .78rem; font-weight: 700; color: #0891b2; }
+  .onda1-rank-bar { height: 5px; background: #f1f5f9; border-radius: 3px; margin: 5px 0; overflow: hidden; }
+  .onda1-rank-bar span { display: block; height: 100%; border-radius: 3px; background: linear-gradient(90deg,#06b6d4,#0891b2); }
+  .onda1-rank-fuels { display: flex; gap: 10px; flex-wrap: wrap; font-size: .66rem; color: #94a3b8; }
+  .onda1-rank-fuels b { color: #475569; font-weight: 700; }
+  .onda1-arrow { position: absolute; top: 46%; transform: translateY(-50%); width: 34px; height: 34px;
+    border-radius: 50%; border: 1px solid #e2e8f0; background: #fff; color: #334155; font-size: 1rem;
+    box-shadow: 0 2px 8px rgba(0,0,0,.12); cursor: pointer; z-index: 3; display: flex; align-items: center; justify-content: center; }
+  .onda1-arrow:hover { background: #f8fafc; }
+  .onda1-prev { left: -4px; } .onda1-next { right: -4px; }
+  .onda1-dots { display: none; justify-content: center; gap: 7px; margin-top: 6px; }
+  .onda1-dot-btn { width: 8px; height: 8px; padding: 0; border: none; border-radius: 50%; background: #cbd5e1; cursor: pointer; transition: width .2s, background .2s; }
+  .onda1-dot-btn.is-active { background: #2563eb; width: 20px; border-radius: 5px; }
+  /* mobile: 1 card por vez + bolinhas, sem setas */
+  @media (max-width: 768px) {
+    .onda1-card { flex: 0 0 100%; }
+    .onda1-arrow { display: none; }
+    .onda1-dots { display: flex; }
+    .onda1-track { gap: 0; }
+  }
 </style>
 {% endblock %}
 
@@ -399,6 +477,107 @@
 
   <!-- ── Body ── -->
   <div class="dash-body">
+
+    {# ===== Onda 1 — carrossel (ADITIVO; não altera os cards existentes) ===== #}
+    {% macro fmt_moeda(v) %}R$ {{ "{:,.2f}".format(v|float).replace(",","X").replace(".",",").replace("X",".") }}{% endmacro %}
+    {% macro fmt_litros(v) %}{{ "{:,.0f}".format(v|float).replace(",",".") }}{% endmacro %}
+
+    {% macro card_vendas(titulo, icone, accent, d) %}
+    <section class="onda1-card">
+      <div class="onda1-head onda1-head--{{ accent }}">
+        <div class="onda1-head-top">
+          <span class="onda1-tag"><i class="bi {{ icone }}"></i> {{ titulo }}</span>
+          <span class="onda1-notas">{{ d.notas }} nota{{ 's' if d.notas != 1 else '' }}</span>
+        </div>
+        <div class="onda1-big">{{ fmt_moeda(d.total) }}</div>
+        <div class="onda1-ticket">Ticket médio {{ fmt_moeda(d.ticket) }}</div>
+      </div>
+      <div class="onda1-body">
+        <table class="onda1-tbl"><tbody>
+          {% for l in d.linhas %}
+          <tr>
+            <td><span class="onda1-dot onda1-dot--{{ loop.index0 }}"></span>{{ l.label }}</td>
+            <td class="num">{{ fmt_litros(l.litros) }} L</td>
+            <td class="num strong">{{ fmt_moeda(l.total) }}</td>
+          </tr>
+          {% endfor %}
+          <tr class="onda1-outros">
+            <td><span class="onda1-dot onda1-dot--outros"></span>Outros produtos</td>
+            <td class="num muted">{{ d.qt_outros }} it.</td>
+            <td class="num strong">{{ fmt_moeda(d.sub_outros) }}</td>
+          </tr>
+        </tbody></table>
+        <div class="onda1-foot">
+          <div><span>Combustíveis + ARLA</span><b>{{ fmt_moeda(d.sub_comb) }}</b></div>
+          <div><span>Outros</span><b>{{ fmt_moeda(d.sub_outros) }}</b></div>
+          {% if d.acrescimo %}<div><span>+ Acréscimo</span><b>{{ fmt_moeda(d.acrescimo) }}</b></div>{% endif %}
+          {% if d.desconto %}<div><span>− Desconto</span><b>-{{ fmt_moeda(d.desconto) }}</b></div>{% endif %}
+          <div class="tot"><span>Total {{ titulo.split(' ')[-1] }}</span><b>{{ fmt_moeda(d.total) }}</b></div>
+        </div>
+      </div>
+    </section>
+    {% endmacro %}
+
+    <div class="carousel-onda1" data-onda1>
+      <button type="button" class="onda1-arrow onda1-prev" aria-label="Anterior"><i class="bi bi-chevron-left"></i></button>
+      <div class="onda1-track" data-onda1-track>
+
+        {{ card_vendas('Vendas do Dia', 'bi-calendar-day', 'dia', onda1.dia) }}
+        {{ card_vendas('Vendas do Mês', 'bi-calendar-month', 'mes', onda1.mes) }}
+
+        {# CARD 3 — AO VIVO #}
+        <section class="onda1-card">
+          <div class="onda1-head onda1-head--live">
+            <div class="onda1-head-top">
+              <span class="onda1-tag"><i class="bi bi-broadcast"></i> Ao Vivo</span>
+              <span class="onda1-live-dot" title="atualiza a cada 30s"></span>
+            </div>
+            <div class="onda1-live-sub">Últimas 5 vendas</div>
+          </div>
+          <div class="onda1-body">
+            <ul class="onda1-live" id="onda1LiveList" data-endpoint="{{ url_for('api.vendas_ultimas') }}">
+              <li class="onda1-live-empty">Carregando…</li>
+            </ul>
+          </div>
+        </section>
+
+        {# CARD 4 — RANKING DO DIA #}
+        <section class="onda1-card">
+          <div class="onda1-head onda1-head--rank">
+            <div class="onda1-head-top">
+              <span class="onda1-tag"><i class="bi bi-trophy"></i> Ranking do Dia</span>
+            </div>
+            <div class="onda1-live-sub">Top vendedores por faturamento</div>
+          </div>
+          <div class="onda1-body">
+            {% if onda1.ranking %}
+              {% for r in onda1.ranking %}
+              <div class="onda1-rank-row">
+                <div class="onda1-rank-top">
+                  <span class="onda1-rank-pos">{{ loop.index }}</span>
+                  <span class="onda1-rank-name">{{ r.vendedor }}</span>
+                  <span class="onda1-rank-val">{{ fmt_moeda(r.total) }}</span>
+                </div>
+                <div class="onda1-rank-bar"><span style="width: {{ r.pct|round(1) }}%"></span></div>
+                <div class="onda1-rank-fuels">
+                  <span>S500 <b>{{ fmt_litros(r.fuels['Diesel S-500']) }}</b></span>
+                  <span>S10 <b>{{ fmt_litros(r.fuels['Diesel S-10']) }}</b></span>
+                  <span>ET <b>{{ fmt_litros(r.fuels['Etanol']) }}</b></span>
+                  <span>GC <b>{{ fmt_litros(r.fuels['Gasolina C']) }}</b></span>
+                </div>
+              </div>
+              {% endfor %}
+            {% else %}
+              <div class="onda1-empty"><i class="bi bi-inbox"></i> Sem vendas hoje</div>
+            {% endif %}
+          </div>
+        </section>
+
+      </div>
+      <button type="button" class="onda1-arrow onda1-next" aria-label="Próximo"><i class="bi bi-chevron-right"></i></button>
+      <div class="onda1-dots" data-onda1-dots></div>
+    </div>
+    {# ===== fim Onda 1 ===== #}
 
     <!-- Product Breakdown Row -->
     <div class="section-label">Detalhamento por Produto — {{ mes_atual }}</div>
@@ -697,6 +876,65 @@
       }
     }
   });
+})();
+</script>
+
+<!-- Onda 1 – navegação do carrossel + card Ao Vivo (fetch 30s) -->
+<script>
+(function () {
+  var root = document.querySelector('[data-onda1]');
+  if (!root) return;
+  var track = root.querySelector('[data-onda1-track]');
+  var cards = track.querySelectorAll('.onda1-card');
+  var dotsWrap = root.querySelector('[data-onda1-dots]');
+
+  function step() { return cards.length > 1 ? (cards[1].offsetLeft - cards[0].offsetLeft) : track.clientWidth; }
+  function active() { return Math.round(track.scrollLeft / (step() || 1)); }
+
+  for (var i = 0; i < cards.length; i++) {
+    var b = document.createElement('button');
+    b.className = 'onda1-dot-btn'; b.type = 'button'; b.setAttribute('aria-label', 'Card ' + (i + 1));
+    (function (idx) { b.addEventListener('click', function () { track.scrollTo({ left: step() * idx, behavior: 'smooth' }); }); })(i);
+    dotsWrap.appendChild(b);
+  }
+  function syncDots() {
+    var a = active();
+    dotsWrap.querySelectorAll('.onda1-dot-btn').forEach(function (d, i) { d.classList.toggle('is-active', i === a); });
+  }
+  var pv = root.querySelector('.onda1-prev'), nx = root.querySelector('.onda1-next');
+  if (pv) pv.addEventListener('click', function () { track.scrollBy({ left: -step(), behavior: 'smooth' }); });
+  if (nx) nx.addEventListener('click', function () { track.scrollBy({ left: step(), behavior: 'smooth' }); });
+  var t; track.addEventListener('scroll', function () { clearTimeout(t); t = setTimeout(syncDots, 60); });
+  syncDots();
+
+  // ---- Card AO VIVO ----
+  var list = document.getElementById('onda1LiveList');
+  if (list) {
+    var url = list.getAttribute('data-endpoint');
+    function esc(s) { var d = document.createElement('div'); d.textContent = (s == null ? '' : s); return d.innerHTML; }
+    function moeda(v) { return 'R$ ' + Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+    function qtd(v, un) { return v ? (Number(v).toLocaleString('pt-BR', { maximumFractionDigits: 0 }) + (un ? ' ' + un : '')) : ''; }
+    function carregar() {
+      fetch(url, { headers: { 'Accept': 'application/json' } })
+        .then(function (r) { return r.ok ? r.json() : null; })
+        .then(function (d) {
+          if (!d || !d.ok) return;
+          if (!d.vendas.length) { list.innerHTML = '<li class="onda1-live-empty">Sem vendas ainda</li>'; return; }
+          list.innerHTML = d.vendas.map(function (x) {
+            var extra = x.extra > 0 ? '<span class="lv-extra">+' + x.extra + ' ' + (x.extra > 1 ? 'itens' : 'item') + '</span>' : '';
+            return '<li class="onda1-live-item">'
+              + '<div class="lv-l"><span class="lv-prod">' + esc(x.produto) + extra + '</span>'
+              + '<span class="lv-vend">' + esc(x.vendedor) + '</span></div>'
+              + '<div class="lv-r"><span class="lv-val">' + moeda(x.valor) + '</span>'
+              + '<span class="lv-meta">' + esc(qtd(x.litros, x.unidade)) + ' · ' + esc(x.hora) + '</span></div>'
+              + '</li>';
+          }).join('');
+        })
+        .catch(function () { /* silencioso: mantém o último estado renderizado */ });
+    }
+    carregar();
+    setInterval(carregar, 30000);
+  }
 })();
 </script>
 {% endblock %}
