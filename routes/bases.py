@@ -2,6 +2,7 @@ from flask import Blueprint, render_template, current_app, url_for, jsonify, req
 from flask_login import login_required, current_user
 from utils.db import get_db_connection
 from utils.pagamentos import classificar_recebimento
+from utils.fuso import hoje_brasilia, janelas_dia_mes
 
 bp = Blueprint('bases', __name__)
 
@@ -20,24 +21,25 @@ _ONDA1_CASE = (
 _ONDA1_ORDEM = ['Diesel S-500', 'Diesel S-10', 'Etanol', 'Gasolina C', 'ARLA']
 
 
-def _dados_onda1_dashboard(hoje):
+def _dados_onda1_dashboard(hoje=None):
     """Onda 1 do carrossel: Vendas do Dia, Vendas do Mês e Ranking do Dia.
 
     ISOLADO (conexão própria) e SOMENTE LEITURA. Nunca altera nada nem derruba
     o dashboard: qualquer erro -> retorna estrutura vazia segura.
+
+    `hoje` é SEMPRE a data de Brasília (ver utils.fuso): dh_emissao está em
+    horário de Brasília, então as janelas do dia e do mês são montadas nesse
+    fuso — nunca no fuso do servidor (UTC).
 
     Reconciliação (confirmada no banco, resíduo 0,00):
         Total da nota = Σ itens + acréscimo − desconto   (troco não entra)
     Por isso cada período expõe `acrescimo` e `desconto`, e o rodapé fecha
     exatamente no `total` (nível nota).
     """
-    from datetime import date, timedelta
+    if hoje is None:
+        hoje = hoje_brasilia()
 
-    ini_dia = hoje.strftime('%Y-%m-%d 00:00:00')
-    fim_dia = (hoje + timedelta(days=1)).strftime('%Y-%m-%d 00:00:00')
-    ini_mes = hoje.replace(day=1).strftime('%Y-%m-%d 00:00:00')
-    prox = date(hoje.year + 1, 1, 1) if hoje.month == 12 else date(hoje.year, hoje.month + 1, 1)
-    fim_mes = prox.strftime('%Y-%m-%d 00:00:00')
+    ini_dia, fim_dia, ini_mes, fim_mes = janelas_dia_mes(hoje)
 
     def _p_vazio():
         return {'notas': 0, 'total': 0.0, 'ticket': 0.0, 'litros_comb': 0.0, 'linhas': [],
@@ -748,8 +750,10 @@ def index():
         except Exception:
             pass
 
-    # Onda 1 do carrossel (isolado; conexão própria; nunca derruba o dashboard)
-    onda1 = _dados_onda1_dashboard(hoje)
+    # Onda 1 do carrossel (isolado; conexão própria; nunca derruba o dashboard).
+    # Usa a data de BRASÍLIA, não `hoje` (= date.today() = data UTC no servidor):
+    # senão, depois das 21h BRT os cards do dia zeram. Cards antigos intocados.
+    onda1 = _dados_onda1_dashboard(hoje_brasilia())
 
     # Construir URLs do relatório de lucro para o mês atual
     primeiro_dia = date(hoje.year, hoje.month, 1)
