@@ -3,10 +3,16 @@
 Classificação de FORMA DE RECEBIMENTO das vendas (vendas_xml).
 
 Devolve UMA das classes:
-  PIX APP · PIX Manual · Débito APP · Débito Manual · Crédito APP ·
+  Operadora · PIX APP · PIX Manual · Débito APP · Débito Manual · Crédito APP ·
   Crédito Manual · Dinheiro · Cheque · Prazo · Transferência · Combo
 
 REGRA (validada em 60 dias, 0 ambíguas):
+  EIXO 0 — OPERADORA (prioridade máxima):
+    - card_credenciadora == cliente_doc (CNPJ 14 dígitos)          -> Operadora
+      A nota é vendida PARA a operadora de cartão (ex.: Baratão, X7 Bank) e ela
+      é a própria credenciadora. O acréscimo destacado é REPASSE pra ela, não é
+      receita nossa. Tem de vir ANTES do teste de bandeira 'Outros' — senão cai
+      em PIX, porque a Baratão usa bandeira 'Outros' sendo crédito de operadora.
   EIXO 1 — TIPO:
     - card_bandeira == 'Outros'                          -> PIX
     - card_bandeira em {Visa, Mastercard, Elo, Cabal, Amex, Hipercard}
@@ -25,7 +31,8 @@ não da origem. Para "acréscimo não cobrado" compare preço praticado x tabela
 dia, NÃO use esta classe.
 
 Campos aceitos (todos de vendas_xml, nível cabeçalho):
-  forma_pagamento, card_bandeira, card_credenciadora, card_autorizacao, tef_terminal
+  forma_pagamento, card_bandeira, card_credenciadora, card_autorizacao,
+  tef_terminal, cliente_doc
 """
 import re
 import unicodedata
@@ -56,10 +63,13 @@ def _origem_app(card_autorizacao):
 
 def classificar_recebimento(forma_pagamento, card_bandeira=None,
                             card_credenciadora=None, card_autorizacao=None,
-                            tef_terminal=None):
+                            tef_terminal=None, cliente_doc=None):
     """Classe de recebimento (str). Ver docstring do módulo para a regra completa.
 
     Ex.:
+      classificar_recebimento('Cartao Credito', 'Outros', '41524064000179',
+                              '78C87', 'PDV1', '41524064000179')
+        -> 'Operadora'
       classificar_recebimento('Cartao Debito', 'Outros', '011..', '004324', 'PDV1')
         -> 'PIX APP'
       classificar_recebimento('Cartao Debito', 'Visa', '011..', '307840', 'V9B..')
@@ -67,6 +77,16 @@ def classificar_recebimento(forma_pagamento, card_bandeira=None,
       classificar_recebimento('Cartao Debito', 'Outros', '', 'PIX MENESES', 'PDV1')
         -> 'PIX Manual'
     """
+    # EIXO 0 — OPERADORA de cartão (Baratão, X7 Bank...): o consumidor da nota é a
+    # própria operadora e ela é a credenciadora do cartão (card_credenciadora ==
+    # cliente_doc, CNPJ 14 dígitos). O acréscimo destacado é REPASSE pra ela, não é
+    # receita nossa. Vem ANTES de tudo — senão cai em PIX (band 'Outros' → PIX),
+    # já que a Baratão usa bandeira 'Outros' sendo crédito de operadora.
+    doc = (cliente_doc or '').strip()
+    cred = (card_credenciadora or '').strip()
+    if len(doc) == 14 and doc == cred:
+        return 'Operadora'
+
     fp = (forma_pagamento or '').strip()
     fpn = _sem_acento(fp).lower()          # normaliza acento/mojibake
 
@@ -100,6 +120,7 @@ def classificar_recebimento(forma_pagamento, card_bandeira=None,
 
 # Cor sugerida por classe (hex do texto; fundo = cor + transparência).
 CORES_RECEBIMENTO = {
+    'Operadora':      '#dc2626',   # vermelho (repasse: dinheiro parado com terceiro)
     'PIX APP':        '#0d9488',   # turquesa
     'PIX Manual':     '#b45309',   # âmbar (manual = ponto de conciliação)
     'Débito APP':     '#1d4ed8',   # azul

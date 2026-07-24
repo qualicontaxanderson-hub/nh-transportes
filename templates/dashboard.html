@@ -372,6 +372,20 @@
   .onda1-head--live { background: linear-gradient(135deg,#0f172a,#1e293b); }
   .onda1-head--rank { background: linear-gradient(135deg,#0891b2,#0e7490); }
   .onda1-head--receb { background: linear-gradient(135deg,#059669,#047857); }
+  .onda1-head--repasse { background: linear-gradient(135deg,#0f766e,#065f46); }
+  .onda1-sub2 { font-size: .72rem; color: #64748b; margin-top: -2px; padding-bottom: 2px; }
+  .onda1-meu td { font-weight: 800; color: #047857; border-top: 2px solid #d1fae5; }
+  .onda1-repbox { margin-top: 10px; padding: 10px 12px; border-radius: 10px;
+                  background: #fef2f2; border: 1px solid #fecaca; }
+  .onda1-repbox-top { display: flex; align-items: center; justify-content: space-between; }
+  .onda1-repbox-top .lbl { font-size: .78rem; font-weight: 800; color: #dc2626; }
+  .onda1-repbox-top .val { font-size: .95rem; font-weight: 800; color: #dc2626; }
+  .onda1-repbox-cap { font-size: .66rem; color: #b91c1c; margin-top: 1px; }
+  .onda1-repbox-op { display: flex; justify-content: space-between; font-size: .72rem;
+                     color: #7f1d1d; padding: 4px 0 0; }
+  .onda1-repbox-op b { font-weight: 700; }
+  .onda1-repbox-empty { font-size: .72rem; color: #059669; margin-top: 2px; }
+  .onda1-tbl-cap { font-size: .66rem; color: #94a3b8; }
   .onda1-head-top { display: flex; align-items: center; justify-content: space-between; }
   .onda1-tag { font-size: .68rem; font-weight: 700; letter-spacing: 1px; text-transform: uppercase;
     display: inline-flex; align-items: center; gap: 6px; opacity: .95; }
@@ -519,7 +533,57 @@
     </section>
     {% endmacro %}
 
+    {# Minha Venda × Repasse: o que é meu (mercadoria + acréscimo que fica comigo)
+       vs. o repasse que fica parado na mão da operadora de cartão. #}
+    {% macro card_repasse(titulo, icone, d) %}
+    <section class="onda1-card">
+      <div class="onda1-head onda1-head--repasse">
+        <div class="onda1-head-top">
+          <span class="onda1-tag"><i class="bi {{ icone }}"></i> {{ titulo }}</span>
+          <span class="onda1-notas">Minha venda × repasse</span>
+        </div>
+        <div class="onda1-big">{{ fmt_moeda(d.meu) }}</div>
+        <div class="onda1-ticket">meu de verdade &middot; total faturado {{ fmt_moeda(d.total) }}</div>
+      </div>
+      <div class="onda1-body">
+        <table class="onda1-tbl"><tbody>
+          <tr>
+            <td>Minha venda <span class="onda1-tbl-cap">(mercadoria)</span></td>
+            <td class="num strong">{{ fmt_moeda(d.venda) }}</td>
+          </tr>
+          <tr>
+            <td>+ Acréscimo que fica comigo</td>
+            <td class="num strong">{{ fmt_moeda(d.comigo) }}</td>
+          </tr>
+          <tr class="onda1-meu">
+            <td>= Meu de verdade</td>
+            <td class="num">{{ fmt_moeda(d.meu) }}</td>
+          </tr>
+        </tbody></table>
+        <div class="onda1-sub2">prazo + degrau de cartão comum ficam comigo</div>
+        <div class="onda1-repbox">
+          <div class="onda1-repbox-top">
+            <span class="lbl"><i class="bi bi-exclamation-triangle-fill"></i> Repasse à operadora</span>
+            <span class="val">{{ fmt_moeda(d.repasse) }}</span>
+          </div>
+          <div class="onda1-repbox-cap">parado na mão de terceiros</div>
+          {% if d.operadoras %}
+            {% for op in d.operadoras %}
+            <div class="onda1-repbox-op"><span>{{ op.nome }}</span><b>{{ fmt_moeda(op.valor) }}</b></div>
+            {% endfor %}
+          {% else %}
+            <div class="onda1-repbox-empty">Nenhum repasse no período.</div>
+          {% endif %}
+        </div>
+        <div class="onda1-foot">
+          <div class="tot"><span>Total faturado</span><b>{{ fmt_moeda(d.total) }}</b></div>
+        </div>
+      </div>
+    </section>
+    {% endmacro %}
+
     {% set cor_receb = {
+      'Operadora':'#dc2626',
       'PIX APP':'#0d9488','PIX Manual':'#b45309','Débito APP':'#1d4ed8','Débito Manual':'#2563eb',
       'Crédito APP':'#7c3aed','Crédito Manual':'#8b5cf6','Dinheiro':'#059669','Cheque':'#475569',
       'Prazo':'#d97706','Transferência':'#0891b2','Combo':'#64748b','Outros':'#64748b'} %}
@@ -529,6 +593,9 @@
 
         {{ card_vendas('Vendas do Dia', 'bi-calendar-day', 'dia', onda1.dia) }}
         {{ card_vendas('Vendas do Mês', 'bi-calendar-month', 'mes', onda1.mes) }}
+
+        {{ card_repasse('Minha Venda × Repasse · Dia', 'bi-cash-coin', onda1.repasse.dia) }}
+        {{ card_repasse('Minha Venda × Repasse · Mês', 'bi-cash-coin', onda1.repasse.mes) }}
 
         {# CARD 3 — AO VIVO #}
         <section class="onda1-card">

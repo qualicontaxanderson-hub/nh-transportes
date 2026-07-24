@@ -134,7 +134,7 @@ def index():
             n['recebimento'] = classificar_recebimento(
                 n.get('forma_pagamento'), n.get('card_bandeira'),
                 n.get('card_credenciadora'), n.get('card_autorizacao'),
-                n.get('tef_terminal'))
+                n.get('tef_terminal'), n.get('cliente_doc'))
 
         # ---------- Itens das notas exibidas (1 query, sem N+1) — p/ cards mobile ----------
         itens_por_venda = {}

@@ -45,8 +45,11 @@ def _dados_onda1_dashboard(hoje=None):
         return {'notas': 0, 'total': 0.0, 'ticket': 0.0, 'litros_comb': 0.0, 'linhas': [],
                 'sub_comb': 0.0, 'sub_outros': 0.0, 'qt_outros': 0,
                 'sub_produtos': 0.0, 'acrescimo': 0.0, 'desconto': 0.0}
+    _r_vazio = {'venda': 0.0, 'comigo': 0.0, 'meu': 0.0, 'repasse': 0.0,
+                'total': 0.0, 'operadoras': []}
     vazio = {'dia': _p_vazio(), 'mes': _p_vazio(), 'ranking': [],
-             'recebimento': [], 'recebimento_total': 0.0}
+             'recebimento': [], 'recebimento_total': 0.0,
+             'repasse': {'dia': dict(_r_vazio), 'mes': dict(_r_vazio)}}
 
     conn = cur = None
     try:
@@ -133,14 +136,14 @@ def _dados_onda1_dashboard(hoje=None):
         try:
             cur.execute(
                 "SELECT forma_pagamento, card_bandeira, card_credenciadora, "
-                "card_autorizacao, tef_terminal, COALESCE(valor_total,0) AS vt "
+                "card_autorizacao, tef_terminal, cliente_doc, COALESCE(valor_total,0) AS vt "
                 "FROM vendas_xml WHERE situacao <> 'cancelada' "
                 "AND dh_emissao >= %s AND dh_emissao < %s", (ini_dia, fim_dia))
             por_classe = {}
             for r in cur.fetchall():
                 cls = classificar_recebimento(
                     r['forma_pagamento'], r['card_bandeira'], r['card_credenciadora'],
-                    r['card_autorizacao'], r['tef_terminal'])
+                    r['card_autorizacao'], r['tef_terminal'], r['cliente_doc'])
                 vt = float(r['vt'] or 0)
                 d = por_classe.setdefault(cls, [0, 0.0])
                 d[0] += 1
@@ -155,8 +158,45 @@ def _dados_onda1_dashboard(hoje=None):
         except Exception:
             recebimento = []
 
+        # ── Minha Venda × Repasse (dia e mês) ──────────────────────────────
+        # MINHA VENDA = mercadoria (Σ itens.valor_total = litros × preço à vista;
+        #   o degrau está separado em vlr_acrescimo) = sub_produtos do período.
+        # REPASSE = Σ vlr_acrescimo das vendas classe 'Operadora' (card_credenciadora
+        #   = cliente_doc), detalhado por operadora. FICA COMIGO = acréscimo restante
+        #   (prazo + degrau de cartão comum). Identidade: total = venda + comigo + repasse.
+        def _repasse(ini, fim, merc):
+            comigo, repasse, por_op = 0.0, 0.0, {}
+            try:
+                cur.execute(
+                    "SELECT cliente_doc, card_credenciadora, cliente_nome, "
+                    "COALESCE(vlr_acrescimo,0) AS acr FROM vendas_xml "
+                    "WHERE situacao <> 'cancelada' AND vlr_acrescimo > 0 "
+                    "AND dh_emissao >= %s AND dh_emissao < %s", (ini, fim))
+                for r in cur.fetchall():
+                    doc = (r['cliente_doc'] or '').strip()
+                    cred = (r['card_credenciadora'] or '').strip()
+                    acr = float(r['acr'] or 0)
+                    if len(doc) == 14 and doc == cred:        # classe Operadora
+                        repasse += acr
+                        nome = (r['cliente_nome'] or doc)
+                        d = por_op.setdefault(nome, 0.0)
+                        por_op[nome] = d + acr
+                    else:
+                        comigo += acr
+            except Exception:
+                comigo, repasse, por_op = 0.0, 0.0, {}
+            operadoras = sorted(({'nome': k, 'valor': v} for k, v in por_op.items()),
+                                key=lambda x: -x['valor'])
+            return {'venda': merc, 'comigo': comigo, 'meu': merc + comigo,
+                    'repasse': repasse, 'total': merc + comigo + repasse,
+                    'operadoras': operadoras}
+
+        repasse_card = {'dia': _repasse(ini_dia, fim_dia, dia['sub_produtos']),
+                        'mes': _repasse(ini_mes, fim_mes, mes['sub_produtos'])}
+
         return {'dia': dia, 'mes': mes, 'ranking': ranking,
-                'recebimento': recebimento, 'recebimento_total': total_receb}
+                'recebimento': recebimento, 'recebimento_total': total_receb,
+                'repasse': repasse_card}
     except Exception:
         current_app.logger.exception('[dashboard onda1] falha ao coletar dados')
         return vazio
