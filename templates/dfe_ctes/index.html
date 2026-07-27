@@ -38,6 +38,9 @@
   <span class="pill-contagem">{{ totais.ctes }} CT-e</span>
 </div>
 
+{% set aba_ativa = 'ctes' %}
+{% include 'includes/nav_migracoes.html' %}
+
 {# =================== FILTROS =================== #}
 <form method="GET" action="/dfe/ctes" class="card card-body mb-3">
   <div class="row g-2">

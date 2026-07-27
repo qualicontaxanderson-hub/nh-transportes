@@ -1,0 +1,46 @@
+{# ===========================================================================
+   Navegação entre as telas de Migração (nav-pills Bootstrap).
+
+   Uso no template:
+     {% set aba_ativa = 'vendas' %}
+     {% include 'includes/nav_migracoes.html' %}
+
+   Valores de aba_ativa: 'vendas' | 'compras' | 'ctes'
+   A aba da tela atual fica destacada (azul #1D63A5) e NÃO é clicável.
+
+   SOMENTE navegação — não altera dados, filtros nem queries.
+   =========================================================================== #}
+<style>
+  .nav-migracoes { gap: .4rem; }
+  .nav-migracoes::-webkit-scrollbar { height: 4px; }
+  .nav-migracoes .nav-link {
+    padding: .35rem .85rem; font-size: .9rem; white-space: nowrap;
+    border: 1px solid #dee2e6; color: #6c757d;
+  }
+  .nav-migracoes .nav-link:hover { color: #1D63A5; border-color: #1D63A5; }
+  .nav-migracoes .nav-link.active {
+    background-color: #1D63A5; border-color: #1D63A5; color: #fff;
+    cursor: default;
+  }
+</style>
+
+{% set _abas = [
+    ('vendas',  'Vendas',  'bi-receipt',                 url_for('vendas.index')),
+    ('compras', 'Compras', 'bi-file-earmark-arrow-down', url_for('dfe_compras.compras')),
+    ('ctes',    'CT-e',    'bi-truck',                   url_for('dfe_ctes.index'))
+] %}
+<ul class="nav nav-pills flex-nowrap overflow-auto mb-3 nav-migracoes">
+  {% for _chave, _rotulo, _icone, _destino in _abas %}
+  <li class="nav-item">
+    {% if _chave == aba_ativa %}
+    <span class="nav-link active" aria-current="page">
+      <i class="bi {{ _icone }}"></i> {{ _rotulo }}
+    </span>
+    {% else %}
+    <a class="nav-link" href="{{ _destino }}">
+      <i class="bi {{ _icone }}"></i> {{ _rotulo }}
+    </a>
+    {% endif %}
+  </li>
+  {% endfor %}
+</ul>

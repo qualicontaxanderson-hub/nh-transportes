@@ -13,6 +13,9 @@
   </div>
 </div>
 
+{% set aba_ativa = 'compras' %}
+{% include 'includes/nav_migracoes.html' %}
+
 <ul class="nav nav-tabs mb-3" id="abas" role="tablist">
   <li class="nav-item" role="presentation">
     <button class="nav-link {% if aba != 'consultar' and aba != 'regras' and aba != 'aguardando' %}active{% endif %}"

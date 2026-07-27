@@ -48,6 +48,9 @@
   <span class="pill-contagem">{{ totais.notas }} nota(s)</span>
 </div>
 
+{% set aba_ativa = 'vendas' %}
+{% include 'includes/nav_migracoes.html' %}
+
 {# =================== FILTROS (INALTERADO) =================== #}
 <form method="GET" action="/vendas" class="card card-body mb-3">
   <div class="row g-2">
