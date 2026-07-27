@@ -136,6 +136,61 @@
     {% endif %}
   </div>
 
+  <!-- SEÇÃO N→1: AGRUPADOS (vários depósitos = 1 crédito) -->
+  {% if agrupados %}
+  <div class="card shadow-sm mb-4">
+    <div class="sec-title d-flex align-items-center" style="background:#cfe2f3;color:#0b3d66;">
+      <i class="bi bi-diagram-3 me-2"></i> Agrupados — vários depósitos → 1 crédito
+      <span class="badge ms-2" style="background:#0b3d66;" id="cntAgrup">{{ qtd_agrupado }}</span>
+    </div>
+    <div class="card-body p-0">
+      {% for g in agrupados %}
+      <div class="border-bottom p-3 agrup-item" data-bt="{{ g.bt_id }}" data-deps="{{ g.dep_ids | join(',') }}">
+        <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
+          <div>
+            <span class="text-muted small">{{ g.conta }}</span>
+            <strong>{{ g.bt_desc }}</strong>
+            <span class="text-muted small">· {{ g.bt_data_br }}</span>
+            {% if g.ambiguo %}
+            <span class="diff-badge diff-neg ms-1"
+                  title="Existe outra combinação de depósitos que também fecha este crédito. Confira antes de confirmar.">
+              ⚠ há outra combinação possível — confira</span>
+            {% endif %}
+          </div>
+          <div class="text-end">
+            <div class="fw-bold text-success val">{{ g.bt_valor | formatar_moeda }}</div>
+            <div class="small text-muted">{{ g.n_parcelas }} depósitos · {{ g.span_br }}</div>
+          </div>
+        </div>
+        <table class="table table-sm mt-2 mb-2" style="background:#f6faff;">
+          <tbody>
+            {% for d in g.deps %}
+            <tr>
+              <td style="width:6rem;">{{ d.data_caixa_br }}</td>
+              <td><span class="tipo-tag {{ d.tipo_css }}">{{ d.tipo_label }}</span></td>
+              <td class="text-truncate" style="max-width:220px;">{{ d.cliente }}</td>
+              <td class="text-end val">{{ d.valor | formatar_moeda }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+          <tfoot><tr class="fw-bold">
+            <td colspan="3" class="text-end">Soma dos depósitos</td>
+            <td class="text-end val text-success">{{ g.soma | formatar_moeda }} ✓</td>
+          </tr></tfoot>
+        </table>
+        <div class="text-end">
+          <a class="btn btn-outline-secondary btn-sm"
+             href="{{ url_for('depositos.listar', data_inicio=data_inicio, data_fim=data_fim) }}"
+             title="Conferir na tela de depósitos"><i class="bi bi-box-arrow-up-right me-1"></i>Conferir</a>
+          <button type="button" class="btn btn-sm {{ 'btn-warning' if g.ambiguo else 'btn-primary' }} btn-confirmar-agrup">
+            <i class="bi bi-check-lg me-1"></i>Confirmar agrupamento</button>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
   <!-- SEÇÃO 2: DIVERGENTES -->
   <div class="card shadow-sm">
     <div class="sec-title sec-div d-flex align-items-center">
@@ -438,6 +493,34 @@
       } else { alert((j && j.message) || 'Falha ao vincular.'); this.disabled = false; }
     })
     .catch(() => { alert('Erro de rede ao vincular.'); this.disabled = false; });
+  });
+
+  /* ── Fase 2: confirmar agrupamento N→1 (vários depósitos = 1 crédito) ── */
+  const URL_AGRUP = '{{ url_for("depositos_lote.conciliar_lote_vincular_agrupado") }}';
+  document.querySelectorAll('.btn-confirmar-agrup').forEach(btn => {
+    btn.addEventListener('click', function () {
+      const item = this.closest('.agrup-item');
+      const b = parseInt(item.dataset.bt);
+      const cs = (item.dataset.deps || '').split(',').map(x => parseInt(x)).filter(Boolean);
+      if (cs.length < 2) return;
+      if (!confirm(`Vincular ${cs.length} depósitos a este crédito?\n\n` +
+                   `A soma dos depósitos bate exatamente o valor do crédito.`)) return;
+      this.disabled = true;
+      fetch(URL_AGRUP, {                       // CSRF injetado pelo base.html
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ b: b, cs: cs })
+      })
+      .then(r => r.json().then(j => ({ ok: r.ok, j })))
+      .then(({ ok, j }) => {
+        if (ok && j && j.success) {
+          item.remove();
+          const cnt = document.getElementById('cntAgrup');
+          if (cnt) cnt.textContent = document.querySelectorAll('.agrup-item').length;
+          alert(`✓ Crédito conciliado com ${j.qtd_depositos} depósitos.`);
+        } else { alert((j && j.message) || 'Falha ao vincular.'); this.disabled = false; }
+      })
+      .catch(() => { alert('Erro de rede ao vincular.'); this.disabled = false; });
+    });
   });
 })();
 </script>

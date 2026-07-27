@@ -50,6 +50,12 @@ WINDOW_DAYS = 3  # janela de data para considerar o mesmo depósito
 # NÃO apaga nem altera nada no banco — apenas filtra a exibição desta tela.
 DATA_CORTE_CONCILIACAO = '2026-06-01'
 
+# ─── Fase 2 (N depósitos do caixa → 1 crédito no banco) ──────────────────────
+WINDOW_N1_DAYS = 7       # depósitos até 7 dias ANTES do crédito entram na busca
+MAX_PARCELAS_N1 = 6      # no máximo 6 depósitos somados por crédito
+_N1_CAND_MAX = 25        # candidatos por crédito (mais próximos por data) — anti-explosão
+_N1_DP_BUDGET = 200000   # teto de estados do subset-sum; estourou → desiste deste crédito
+
 
 # ─────────────────────────────── helpers ────────────────────────────────────
 
@@ -273,6 +279,90 @@ def _parear(depositos, bank_txs, cheque_set, dinheiro_set):
     return exatos, divergentes
 
 
+# ─────────────────── Fase 2: N depósitos → 1 crédito ─────────────────────────
+
+def _cent(v):
+    return int(round(float(v) * 100))
+
+
+def _subset_exato(cand, alvo_dec, maxp):
+    """Subset-sum EXATO em centavos, no máximo `maxp` parcelas. Devolve UMA
+    solução (lista de depósitos) ou None. Os itens são ordenados por data DESC
+    (mais perto do crédito primeiro), enviesando a solução para dias recentes/
+    consecutivos — o padrão real de quem junta depósitos de dias seguidos.
+    Orçamento rígido (_N1_DP_BUDGET): estourou → devolve None (nunca trava)."""
+    target = _cent(alvo_dec)
+    if target <= 0:
+        return None
+    items = sorted(cand, key=lambda d: d['data_caixa'], reverse=True)[:_N1_CAND_MAX]
+    dp = {0: (0, None, None)}   # soma_cent -> (n_parcelas, soma_anterior, item_idx)
+    for idx, d in enumerate(items):
+        v = _cent(d['valor'])
+        if v <= 0 or v > target:
+            continue
+        novos = {}
+        for s, (pc, ps, pi) in dp.items():
+            ns = s + v
+            if ns > target or pc + 1 > maxp:
+                continue
+            if ns not in dp and ns not in novos:
+                novos[ns] = (pc + 1, s, idx)
+        dp.update(novos)
+        if target in dp:
+            break
+        if len(dp) > _N1_DP_BUDGET:      # anti-explosão: desiste deste crédito
+            return None
+    if target not in dp:
+        return None
+    sol, s = [], target
+    while s != 0:
+        pc, ps, pi = dp[s]
+        sol.append(items[pi])
+        s = ps
+    sol.reverse()
+    return sol
+
+
+def _existe_outra_combinacao(cand, alvo_dec, maxp, sol):
+    """Ambiguidade barata: se, tirando QUALQUER um dos depósitos da solução, os
+    demais candidatos ainda fecham o alvo, então há outra combinação possível →
+    o grupo ganha o selo 'confira'. Valores redondos (R$3.000) tendem a disparar
+    isto; combinação única passa limpo."""
+    for drop in sol:
+        resto = [d for d in cand if d['id'] != drop['id']]
+        if _subset_exato(resto, alvo_dec, maxp):
+            return True
+    return False
+
+
+def _agrupar_n1(deps_sobra, free_credits, cheque_set, dinheiro_set):
+    """FASE 2. Para cada crédito LIVRE (não casado 1:1), tenta fechá-lo com a
+    soma de 2..MAX_PARCELAS_N1 depósitos do MESMO grupo (cheque/dinheiro), com
+    data_caixa em [crédito-WINDOW_N1_DAYS .. crédito]. Dinheiro e cheque NUNCA se
+    misturam. Greedy: cada depósito entra em no máximo um grupo. Não toca a
+    Fase 1 — só consome o que sobrou. Devolve (grupos, ids_dos_depósitos_usados)."""
+    grupos, dep_usado = [], set()
+    for bt in sorted(free_credits, key=lambda b: b['valor'], reverse=True):
+        grupo_bt = _grupo_da_transacao(bt, cheque_set, dinheiro_set)
+        if grupo_bt is None:
+            continue
+        cdate = bt['data_transacao']
+        cand = [d for d in deps_sobra
+                if d['id'] not in dep_usado
+                and d['tipo_grupo'] == grupo_bt
+                and 0 <= (cdate - d['data_caixa']).days <= WINDOW_N1_DAYS]
+        if len(cand) < 2:
+            continue
+        sol = _subset_exato(cand, bt['valor'], MAX_PARCELAS_N1)
+        if not sol or len(sol) < 2:   # 1 só depósito já seria caso da Fase 1
+            continue
+        ambiguo = _existe_outra_combinacao(cand, bt['valor'], MAX_PARCELAS_N1, sol)
+        for d in sol:
+            dep_usado.add(d['id'])
+        grupos.append({'credito': bt, 'deps': sol, 'ambiguo': ambiguo})
+    return grupos, dep_usado
+
+
 def _row_dep(d):
     return {
         'dep_id': d['id'],
@@ -317,6 +407,13 @@ def conciliar_lote():
         depositos = _fetch_pending_deposits(conn, data_inicio, data_fim)
         bank_txs = _fetch_free_credits(conn, data_inicio, data_fim, forma_ids, conta_ids)
         exatos, divergentes = _parear(depositos, bank_txs, cheque_set, dinheiro_set)
+        # Fase 2 (N→1): sobre as sobras da Fase 1. Créditos livres = os não usados
+        # num par exato; depósitos-sobra = os que não casaram 1:1.
+        usados_exato = {bt['id'] for _, bt in exatos}
+        free_credits = [bt for bt in bank_txs if bt['id'] not in usados_exato]
+        deps_sobra = [d for d, _ in divergentes]
+        agrupamentos, deps_agrupados = _agrupar_n1(
+            deps_sobra, free_credits, cheque_set, dinheiro_set)
     finally:
         conn.close()
 
@@ -327,8 +424,27 @@ def conciliar_lote():
         exatos_rows.append(row)
         total_exato += row['valor']
 
+    # Grupos N→1 (Fase 2) para o template
+    agrupados_rows = []
+    for g in agrupamentos:
+        bt = g['credito']
+        datas = sorted(d['data_caixa'] for d in g['deps'])
+        span = (_fmt_br(datas[0]) if datas[0] == datas[-1]
+                else f"{_fmt_br(datas[0])}–{_fmt_br(datas[-1])}")
+        agrupados_rows.append({
+            **_row_bt(bt),
+            'ambiguo': g['ambiguo'],
+            'deps': [_row_dep(d) for d in g['deps']],
+            'dep_ids': [d['id'] for d in g['deps']],
+            'soma': float(sum(d['valor'] for d in g['deps'])),
+            'span_br': span,
+            'n_parcelas': len(g['deps']),
+        })
+
     divergentes_rows = []
     for d, bt in divergentes:
+        if d['id'] in deps_agrupados:   # já entrou num grupo N→1: não duplica
+            continue
         row = _row_dep(d)
         if bt is not None:
             row.update(_row_bt(bt))
@@ -353,9 +469,11 @@ def conciliar_lote():
         data_corte_br=_fmt_br(DATA_CORTE_CONCILIACAO),
         empresas=empresas,
         exatos=exatos_rows,
+        agrupados=agrupados_rows,
         divergentes=divergentes_rows,
         total_exato=total_exato,
         qtd_exato=len(exatos_rows),
+        qtd_agrupado=len(agrupados_rows),
         qtd_divergente=len(divergentes_rows),
     )
 
@@ -766,6 +884,128 @@ def conciliar_lote_vincular_multiplo():
                 )
         conn.commit()
         return jsonify(success=True, conciliado=c, qtd_transacoes=len(bts))
+    except Exception as exc:
+        conn.rollback()
+        return jsonify(success=False, message=f'Erro ao vincular: {exc}'), 500
+    finally:
+        cur.close()
+        conn.close()
+
+
+@bp.route('/conciliar-lote/vincular-agrupado', methods=['POST'])
+@login_required
+@admin_required
+def conciliar_lote_vincular_agrupado():
+    """
+    FASE 2 (N→1): vincula N depósitos do caixa a UM crédito do banco (o banco
+    agregou vários depósitos num crédito só). JSON: {"b": <bt_id>, "cs": [ids...]}.
+
+    Soma EXATA obrigatória. Grava com a MESMA semântica de depositos.vincular:
+    seta lancamentos_caixa_comprovacao.bank_transaction_id = b em TODOS os N e
+    marca o crédito status='conciliado'. Reversão pelo desvincular existente.
+    Revalida na hora (idempotente): crédito livre + todos os depósitos livres +
+    mesmo grupo (não mistura cheque com espécie) + soma exata.
+    """
+    payload = request.get_json(silent=True) or {}
+    try:
+        b = int(payload.get('b'))
+    except (TypeError, ValueError):
+        return jsonify(success=False, message='Crédito inválido.'), 400
+    cs, seen = [], set()
+    for x in (payload.get('cs') or []):
+        try:
+            v = int(x)
+        except (TypeError, ValueError):
+            continue
+        if v not in seen:
+            seen.add(v); cs.append(v)
+    if len(cs) < 2:
+        return jsonify(success=False, message='Selecione ao menos 2 depósitos.'), 400
+
+    conn = get_db_connection()
+    cur = conn.cursor(dictionary=True)
+    try:
+        agora = datetime.now()
+        usuario = current_user.email if hasattr(current_user, 'email') else str(current_user.id)
+        has_tipo_concil = _col_exists(cur, 'bank_transactions', 'tipo_conciliacao')
+
+        # ── crédito: existe, é CREDIT, não ignorado, e ainda LIVRE ──
+        cur.execute("SELECT id, tipo, status, valor FROM bank_transactions WHERE id=%s", (b,))
+        bt = cur.fetchone()
+        if not bt:
+            conn.rollback()
+            return jsonify(success=False, message='Crédito inexistente.'), 404
+        if bt['tipo'] != 'CREDIT':
+            conn.rollback()
+            return jsonify(success=False, message='Transação não é crédito.'), 409
+        if bt['status'] == 'ignorado':
+            conn.rollback()
+            return jsonify(success=False, message='Crédito ignorado.'), 409
+        cur.execute(
+            "SELECT (SELECT COUNT(*) FROM lancamentos_caixa_comprovacao l2 WHERE l2.bank_transaction_id=%s) up, "
+            "(SELECT COUNT(*) FROM deposito_bank_vinculos dbv WHERE dbv.bank_transaction_id=%s) ue",
+            (b, b),
+        )
+        u = cur.fetchone()
+        if (u['up'] or 0) + (u['ue'] or 0) > 0:
+            conn.rollback()
+            return jsonify(success=False, message='Crédito já usado em outro depósito.'), 409
+
+        # ── depósitos: existem, livres, mesmo grupo, soma exata ──
+        ph = ','.join(['%s'] * len(cs))
+        cur.execute(
+            f"""SELECT lcc.id, lcc.valor, lcc.bank_transaction_id, fpc.tipo
+                  FROM lancamentos_caixa_comprovacao lcc
+                  JOIN formas_pagamento_caixa fpc ON fpc.id = lcc.forma_pagamento_id
+                 WHERE lcc.id IN ({ph})""",
+            cs,
+        )
+        found = {r['id']: r for r in cur.fetchall()}
+        if len(found) != len(cs):
+            conn.rollback()
+            return jsonify(success=False, message='Algum depósito não existe mais.'), 409
+        grupos, soma = set(), Decimal('0')
+        for cid in cs:
+            r = found[cid]
+            if r['bank_transaction_id'] is not None:
+                conn.rollback()
+                return jsonify(success=False, message=f'Depósito #{cid} já conciliado.'), 409
+            grupos.add(_TIPO_GRUPO.get(r['tipo'], 'ESPECIE'))
+            soma += r['valor']
+        if len(grupos) > 1:
+            conn.rollback()
+            return jsonify(success=False, message='Não é possível juntar espécie com cheque.'), 409
+        if soma != bt['valor']:   # igualdade Decimal, sem tolerância
+            conn.rollback()
+            return jsonify(success=False, message=f'Soma não confere ({soma} ≠ {bt["valor"]}).'), 409
+
+        # ── gravação (semântica idêntica a depositos.vincular) ──
+        cur.execute(
+            f"""UPDATE lancamentos_caixa_comprovacao
+                   SET bank_transaction_id = %s
+                 WHERE id IN ({ph}) AND bank_transaction_id IS NULL""",
+            [b] + cs,
+        )
+        if cur.rowcount != len(cs):   # corrida: algum foi conciliado no meio-tempo
+            conn.rollback()
+            return jsonify(success=False, message='conflito de concorrência'), 409
+        if has_tipo_concil:
+            cur.execute(
+                """UPDATE bank_transactions
+                      SET status='conciliado', conciliado_em=%s, conciliado_por=%s,
+                          tipo_conciliacao='deposito'
+                    WHERE id=%s""",
+                (agora, usuario, b),
+            )
+        else:
+            cur.execute(
+                """UPDATE bank_transactions
+                      SET status='conciliado', conciliado_em=%s, conciliado_por=%s
+                    WHERE id=%s""",
+                (agora, usuario, b),
+            )
+        conn.commit()
+        return jsonify(success=True, credito=b, qtd_depositos=len(cs))
     except Exception as exc:
         conn.rollback()
         return jsonify(success=False, message=f'Erro ao vincular: {exc}'), 500
