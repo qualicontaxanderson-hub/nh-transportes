@@ -39,15 +39,19 @@ from cryptography.hazmat.primitives.serialization import (
     Encoding, PrivateFormat, NoEncryption,
 )
 
+# Importado DEPOIS do load_dotenv() acima: db_credentials le os.environ no
+# momento do import, entao o .env precisa ja estar carregado.
+from utils.db_credentials import pymysql_params
+
 # --------------------------------------------------------------------------
 # Parametros fixos deste ambiente
 # --------------------------------------------------------------------------
-CONN = dict(
-    host="centerbeam.proxy.rlwy.net", port=56026, user="root",
-    password="CYTzzRYLVmEJGDexxXpgepWgpvebdSrV", database="railway",
-    charset="utf8mb4", cursorclass=pymysql.cursors.DictCursor,
-    read_timeout=30, connect_timeout=30,
-)
+# Credenciais do banco vem do AMBIENTE (utils/db_credentials), a mesma fonte do
+# app web. Este dict e o unico ponto de conexao de TODA a cadeia de captura --
+# captura_massa_dfe.py, processa_dfe.py e consulta_sefaz_cte.py fazem
+# `pymysql.connect(**cs.CONN)`. Ter a senha literal aqui foi o que quebrou a
+# captura na rotacao de 2026-07-27 (1045 a cada ciclo, antes de tocar na SEFAZ).
+CONN = pymysql_params(read_timeout=30, connect_timeout=30)
 CNPJ_PREFERIDO = "33503987000116"   # POSTO NOVO HORIZONTE GOIATUBA
 C_UF_AUTOR     = "52"               # GO
 TP_AMB         = "1"                # 1 = PRODUCAO

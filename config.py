@@ -4,14 +4,20 @@ from dotenv import load_dotenv
 # Carrega variáveis de ambiente do arquivo .env (se existir)
 load_dotenv()
 
+# Importado DEPOIS do load_dotenv(): db_credentials lê os.environ no import.
+from utils import db_credentials
+
 class Config:
     # Configurações do Banco de Dados
     # Usa variáveis de ambiente se disponíveis, caso contrário usa valores padrão
-    DB_HOST = os.environ.get('DB_HOST', 'centerbeam.proxy.rlwy.net')
-    DB_PORT = int(os.environ.get('DB_PORT', 56026))
-    DB_USER = os.environ.get('DB_USER', 'root')
-    DB_PASSWORD = os.environ.get('DB_PASSWORD', 'CYTzzRYLVmEJGDexxXpgepWgpvebdSrV')
-    DB_NAME = os.environ.get('DB_NAME', 'railway')
+    # Valores vindos de utils/db_credentials: fonte UNICA, compartilhada com os
+    # scripts de captura de DFe. DB_PASSWORD nao tem valor padrao de proposito --
+    # um fallback com senha antiga esconde rotacoes de senha (incidente 27/07).
+    DB_HOST = db_credentials.DB_HOST
+    DB_PORT = db_credentials.DB_PORT
+    DB_USER = db_credentials.DB_USER
+    DB_PASSWORD = db_credentials.DB_PASSWORD
+    DB_NAME = db_credentials.DB_NAME
     
     # Configurações de Pool de Conexões
     DB_POOL_SIZE = int(os.environ.get('DB_POOL_SIZE', 10))  # Número máximo de conexões no pool

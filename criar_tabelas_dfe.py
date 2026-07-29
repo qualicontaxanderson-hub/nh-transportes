@@ -3,11 +3,12 @@
 #  MIGRATION IDEMPOTENTE - tabelas do servico de captura de DFe (SEFAZ)
 #  Cria 4 tabelas NOVAS e ISOLADAS. Empresa = clientes.id. XML fica no Dropbox.
 # ============================================================================
+import os
 import pymysql
 
 CONN = dict(
     host="centerbeam.proxy.rlwy.net", port=56026, user="root",
-    password="CYTzzRYLVmEJGDexxXpgepWgpvebdSrV",
+    password=os.environ["DB_PASSWORD"],
     database="railway", charset="utf8mb4",
     cursorclass=pymysql.cursors.DictCursor,
     read_timeout=30, connect_timeout=15,

@@ -4,10 +4,11 @@
 # dfe_cte (1:1 com dfe_documentos) + dfe_cte_nfe (N NF-e vinculadas).
 # Idempotente (CREATE TABLE IF NOT EXISTS). NAO toca em nada existente.
 # ============================================================
+import os
 import pymysql
 
 CONN = dict(host="centerbeam.proxy.rlwy.net", port=56026, user="root",
-            password="CYTzzRYLVmEJGDexxXpgepWgpvebdSrV", database="railway",
+            password=os.environ["DB_PASSWORD"], database="railway",
             charset="utf8mb4", cursorclass=pymysql.cursors.DictCursor,
             read_timeout=30, connect_timeout=15)
 

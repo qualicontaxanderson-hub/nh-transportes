@@ -15,7 +15,7 @@ import pymysql
 
 CONN = dict(
     host="centerbeam.proxy.rlwy.net", port=56026, user="root",
-    password="CYTzzRYLVmEJGDexxXpgepWgpvebdSrV", database="railway",
+    password=os.environ["DB_PASSWORD"], database="railway",
     charset="utf8mb4", cursorclass=pymysql.cursors.DictCursor,
     read_timeout=30, connect_timeout=15,
 )
