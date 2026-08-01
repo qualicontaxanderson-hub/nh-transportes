@@ -488,12 +488,17 @@ def index():
     lucro_postos_disponivel = False
     lucro_postos_fechado = False
 
-    # Dados para gráficos (últimos 6 meses)
-    hoje = date.today()
+    # Data de referência de TODOS os blocos abaixo (KPIs do mês, detalhamento
+    # por produto, gráfico de 6 meses, mes_atual). Tem que ser a data de
+    # BRASÍLIA, não date.today() (= data UTC no servidor): dia 31 às 21h BRT já
+    # é dia 1 em UTC, e o dashboard inteiro pulava para o mês seguinte.
+    # Mesma função da Onda 1 (utils.fuso) — nada de segunda lógica de fuso.
+    hoje = hoje_brasilia()
     meses_labels = []
     fretes_por_mes = []
     pedidos_por_mes = []
     volume_por_mes = []
+    ini_6m = None   # 1º dia do mês mais antigo do gráfico (substitui CURDATE())
     for i in range(5, -1, -1):
         # calcular mês/ano
         mes_offset = hoje.month - i
@@ -502,6 +507,8 @@ def index():
             mes_offset += 12
             ano_offset -= 1
         meses_labels.append(f"{mes_offset:02d}/{ano_offset}")
+        if ini_6m is None:
+            ini_6m = date(ano_offset, mes_offset, 1).strftime('%Y-%m-%d')
         fretes_por_mes.append(0)
         pedidos_por_mes.append(0)
         volume_por_mes.append(0)
@@ -564,9 +571,10 @@ def index():
             cursor.execute(
                 """SELECT MONTH(data_frete) AS mes, YEAR(data_frete) AS ano, COUNT(1) AS total
                    FROM fretes
-                   WHERE data_frete >= DATE_SUB(CURDATE(), INTERVAL 6 MONTH)
+                   WHERE data_frete >= %s
                    GROUP BY ano, mes
-                   ORDER BY ano, mes"""
+                   ORDER BY ano, mes""",
+                (ini_6m,)
             )
             rows = cursor.fetchall()
             for row in rows:
@@ -582,9 +590,10 @@ def index():
             cursor.execute(
                 """SELECT MONTH(data_pedido) AS mes, YEAR(data_pedido) AS ano, COUNT(1) AS total
                    FROM pedidos
-                   WHERE data_pedido >= DATE_SUB(CURDATE(), INTERVAL 6 MONTH)
+                   WHERE data_pedido >= %s
                    GROUP BY ano, mes
-                   ORDER BY ano, mes"""
+                   ORDER BY ano, mes""",
+                (ini_6m,)
             )
             rows = cursor.fetchall()
             for row in rows:
@@ -649,9 +658,10 @@ def index():
                           COALESCE(SUM(COALESCE(f.quantidade_manual, q.valor)), 0) AS total
                    FROM fretes f
                    LEFT JOIN quantidades q ON f.quantidade_id = q.id
-                   WHERE f.data_frete >= DATE_SUB(CURDATE(), INTERVAL 6 MONTH)
+                   WHERE f.data_frete >= %s
                    GROUP BY ano, mes
-                   ORDER BY ano, mes"""
+                   ORDER BY ano, mes""",
+                (ini_6m,)
             )
             rows = cursor.fetchall()
             for row in rows:
@@ -791,8 +801,9 @@ def index():
             pass
 
     # Onda 1 do carrossel (isolado; conexão própria; nunca derruba o dashboard).
-    # Usa a data de BRASÍLIA, não `hoje` (= date.today() = data UTC no servidor):
-    # senão, depois das 21h BRT os cards do dia zeram. Cards antigos intocados.
+    # Data de Brasília explícita: `hoje` acima já é a mesma coisa, mas a Onda 1
+    # não pode depender disso — se alguém mexer no `hoje` dos blocos antigos,
+    # os cards do dia não podem voltar a zerar depois das 21h BRT.
     onda1 = _dados_onda1_dashboard(hoje_brasilia())
 
     # Construir URLs do relatório de lucro para o mês atual
