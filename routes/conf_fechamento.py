@@ -102,12 +102,19 @@ def _fetch_receitas(conn, data_inicio, data_fim, empresa_ids):
         f"""SELECT data, tipo_nome, SUM(valor) AS valor
              FROM (
                -- Receitas normais
+               -- SEM join em tipos_receita_caixa: lcr.tipo JÁ É o nome do tipo.
+               -- O join por nome (tr.nome = lcr.tipo) multiplicava cada lançamento
+               -- pelo número de linhas homônimas no catálogo — há 3 cópias de 6
+               -- tipos desde 06/06/2026 (ARLA, VENDAS POSTO, LUBRIFICANTES,
+               -- EMPRESTIMOS, OUTROS, TROCO PIX (MANUAL)), então essas linhas
+               -- apareciam com 3× o valor lançado.  O join nunca agregou
+               -- informação: pela própria condição de junção, tr.nome era sempre
+               -- igual a lcr.tipo em todas as linhas que casavam.
                SELECT lc.data,
-                      COALESCE(tr.nome, lcr.tipo) AS tipo_nome,
+                      lcr.tipo AS tipo_nome,
                       lcr.valor
                  FROM lancamentos_caixa_receitas lcr
                  INNER JOIN lancamentos_caixa lc ON lc.id = lcr.lancamento_caixa_id
-                 LEFT  JOIN tipos_receita_caixa tr ON tr.nome = lcr.tipo
                  WHERE lc.data BETWEEN %s AND %s
                    AND {_LC_STATUS_COND}
                    {emp_cond}
