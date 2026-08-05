@@ -39,10 +39,14 @@ dfe_certificado_bp = Blueprint('dfe_certificado', __name__, url_prefix='/dfe/cer
 _OID_CNPJ_ICP = '2.16.76.1.3.3'
 _OID_CPF_ICP  = '2.16.76.1.3.1'
 
-# Pasta base no Dropbox onde os certificados são gravados.
-# ATENÇÃO: é uma App Folder do Qualicontax; a integração do NH é Full Dropbox.
-# O upload pode falhar por permissão — o erro é tratado com mensagem clara.
-_BASE_DROPBOX_CERT = 'Aplicativos/QUALICONTAX/Certificados'
+# Pasta ÚNICA no Dropbox onde TODOS os certificados A1 são gravados, no padrão
+# {documento}.pfx (documento = CNPJ de 14 ou CPF de 11 digitos, extraido do
+# proprio certificado). Pasta plana: 1 arquivo por empresa, facil de conferir.
+# Fica no espaco Full Dropbox do NH — NAO e a App Folder do Qualicontax. Isso e
+# proposital: em 03/08/2026 o mover_certificados.py do Qualicontax reorganizou
+# 'Aplicativos/QUALICONTAX/Certificados' e levou o PFX do Posto embora, deixando
+# a captura de DFe 43h fora do ar. Manter os certificados fora daquela arvore.
+_BASE_DROPBOX_CERT = '/FISCAL/CERTIFICADOS'
 
 
 def _san_otherName_digitos(cert, oid) -> str | None:
@@ -182,13 +186,16 @@ def index():
         # nome do arquivo PADRONIZADO: {documento}.pfx (sem empresa nem senha no nome)
         nome_arquivo = f'{documento}.pfx'
 
-        # --- 4) sobe o PFX pro Dropbox: /{documento}/{documento}.pfx ---
-        caminho_dropbox = f'{_BASE_DROPBOX_CERT}/{documento}/{documento}.pfx'
+        # --- 4) sobe o PFX pro Dropbox: /FISCAL/CERTIFICADOS/{documento}.pfx ---
+        caminho_dropbox = f'{_BASE_DROPBOX_CERT}/{documento}.pfx'
         try:
-            res = upload_arquivo(caminho_dropbox, pfx_bytes)
-            pfx_caminho = res['path']
+            upload_arquivo(caminho_dropbox, pfx_bytes)
+            # Grava o caminho CANONICO que montamos, nao o path_lower devolvido
+            # pela API: o Dropbox e case-insensitive na leitura, mas guardar o
+            # path_lower deixava o banco com '/aplicativos/qualicontax/...' em
+            # minusculo, dificil de ler e de comparar entre empresas.
+            pfx_caminho = caminho_dropbox
         except Exception as e:
-            # Teste de permissão da App Folder do Qualicontax: mensagem clara.
             flash(f'Não consegui gravar na pasta "{caminho_dropbox}" do Dropbox: {e}. Nada foi salvo.', 'danger')
             return redirect(url_for('dfe_certificado.index'))
 
