@@ -19,8 +19,17 @@
   {% include 'includes/nav_migracoes.html' %}
 
   {# =================== FILTROS =================== #}
-  <details class="mig-filtros" open>
-    <summary><i class="bi bi-funnel"></i> Filtros <i class="bi bi-chevron-down"></i></summary>
+  {# Recolhido por padrao; o selo abaixo denuncia filtro ativo sem precisar abrir. #}
+  <details class="mig-filtros">
+    <summary>
+      <i class="bi bi-funnel"></i> Filtros
+      {% if n_filtros %}
+      <span class="mig-pill mig-pill-strong mig-filtros__n">
+        {{ n_filtros }} ativo{{ '' if n_filtros == 1 else 's' }}
+      </span>
+      {% endif %}
+      <i class="bi bi-chevron-down"></i>
+    </summary>
     <form method="GET" action="/estoque" class="form-row">
       <input type="hidden" name="tab" value="{{ tab }}">
       <div class="row g-3">
@@ -81,13 +90,9 @@
   <div class="tab-content">
     {# ---------------- ABA LEITURAS ---------------- #}
     <div class="tab-pane fade {% if tab == 'leituras' %}show active{% endif %}" id="pane-leituras" role="tabpanel">
-      <div class="d-flex justify-content-between align-items-end gap-3 flex-wrap">
-        <div class="mig-stats flex-fill">
-          <div class="mig-stat"><div class="rot">Leituras no período</div><div class="val">{{ totais.leituras }}</div></div>
-        </div>
-        {# toolbar reservada p/ "Inserir/editar estoque manual" (proxima camada) #}
-        <div class="mig-toolbar mb-3"></div>
-      </div>
+      {# Sem bloco de total aqui: a contagem ja vive no titulo da aba, acima. #}
+      {# toolbar reservada p/ "Inserir/editar estoque manual" (proxima camada) #}
+      <div class="mig-toolbar mb-3"></div>
 
       {# Icone por combustivel (Bootstrap Icons, ja carregado no base.html).
          O slug vem de _slug_produto() em routes/estoque.py. #}
@@ -133,7 +138,10 @@
         {% endif %}
 
       {% else %}
-        {# ---- SEM FILTRO DE PRODUTO: um card por DIA, data uma vez no cabecalho ---- #}
+        {# ---- SEM FILTRO DE PRODUTO: um card por DIA, data uma vez no cabecalho ----
+           .mig-dias vira grade no desktop; no mobile os cards seguem empilhados. #}
+        {% if dias %}
+        <div class="mig-dias">
         {% for g in dias %}
         <div class="mig-dia">
           <div class="mig-dia__head">
@@ -158,12 +166,10 @@
             <div class="mig-dia__prod">
               <div class="mig-dia__nome">{{ l.produto_nome or '—' }}</div>
               <div class="mig-dia__meta">
+                {#- Vol. 20C e capacidade nao cabem no card estreito da grade;
+                    aparecem na lista por produto, logo acima. -#}
                 {%- if g.n_eventos > 1 %}{{ l.hora }} · {% endif -%}
                 tanque {{ l.tanque if l.tanque is not none else '—' }}
-                <span class="d-none d-md-inline mig-dia__extra">
-                  {%- if l.volume_20c is not none %} · 20 °C: {{ l.volume_20c | fmtnum(0) }} L{% endif %}
-                  {%- if l.capacidade is not none %} · cap. {{ l.capacidade | fmtnum(0) }} L{% endif %}
-                </span>
               </div>
             </div>
             <div class="mig-dia__vals">
@@ -172,11 +178,13 @@
             </div>
           </div>
           {% endfor %}
-        </div>
+        </div>{# /.mig-dia #}
+        {% endfor %}
+        </div>{# /.mig-dias #}
         {% else %}
         <div class="mig-empty"><i class="bi bi-rulers"></i>
           Nenhuma leitura no período. As leituras (ABERTURA/medições) chegam pelo e-mail do ELS.</div>
-        {% endfor %}
+        {% endif %}
       {% endif %}
 
       {# paginacao leituras #}

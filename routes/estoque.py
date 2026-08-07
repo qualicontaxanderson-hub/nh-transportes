@@ -249,6 +249,10 @@ def index():
         )
         produtos = [r['produto_nome'] for r in cur.fetchall()]
 
+        # Com o card de filtros recolhido por padrao, um filtro ativo ficaria
+        # invisivel — o selo no titulo mostra quantos estao valendo.
+        n_filtros = sum(1 for v in f.values() if v)
+
         hoje = date.today()
         data_ini_default = f['data_ini'] or (hoje - timedelta(days=90)).strftime('%Y-%m-%d')
         data_fim_default = f['data_fim'] or hoje.strftime('%Y-%m-%d')
@@ -258,7 +262,7 @@ def index():
             'estoque/index.html',
             leituras=leituras, descargas=descargas, totais=totais,
             dias=dias, serie=serie, produtos=produtos,
-            filtros=f, empresas=empresas, tab=tab,
+            filtros=f, n_filtros=n_filtros, empresas=empresas, tab=tab,
             data_ini_default=data_ini_default, data_fim_default=data_fim_default,
             page_l=page_l, tp_l=tp_l, paginas_l=_janela_paginas(page_l, tp_l),
             page_d=page_d, tp_d=tp_d, paginas_d=_janela_paginas(page_d, tp_d),

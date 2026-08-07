@@ -59,6 +59,9 @@
 .mig-filtros>summary .bi-chevron-down{ transition:transform .2s; margin-left:auto; }
 .mig-filtros[open]>summary .bi-chevron-down{ transform:rotate(180deg); }
 .mig-filtros .form-row{ margin-top:.9rem; }
+/* Selo de filtros ativos: so faz sentido com o card recolhido — aberto, os
+   proprios campos ja mostram o que esta valendo. */
+.mig-filtros[open] .mig-filtros__n{ display:none; }
 .mig-filtros label{ font-size:11px; text-transform:uppercase; letter-spacing:.03em;
   color:var(--muted); font-weight:600; margin-bottom:2px; }
 
@@ -175,6 +178,22 @@
   .mig-dia__ico{ width:38px; height:38px; font-size:1.1rem; }
   .mig-dia__nome{ font-size:.95rem; }
   .mig-dia__vol{ font-size:1.02rem; }
+}
+
+/* Grade de dias — SO no desktop. No mobile .mig-dias e um bloco comum e os
+   cards seguem empilhados, sem nenhuma mudanca. auto-fill deixa a largura da
+   tela decidir o numero de colunas; align-items:start impede que um dia de 2
+   tanques estique ate a altura de um dia de 4. Vem depois do bloco acima de
+   proposito: mesma media query, seletor mais especifico, aperta o card. */
+@media (min-width:768px){
+  .mig-dias{ display:grid; grid-template-columns:repeat(auto-fill, minmax(290px, 1fr));
+    gap:.75rem; align-items:start; }
+  .mig-dias .mig-dia{ margin-bottom:0; }
+  .mig-dias .mig-dia__head{ padding:.55rem .8rem; }
+  .mig-dias .mig-dia__lin{ padding:.5rem .8rem; gap:.6rem; }
+  .mig-dias .mig-dia__ico{ width:31px; height:31px; font-size:.92rem; }
+  .mig-dias .mig-dia__nome{ font-size:.87rem; }
+  .mig-dias .mig-dia__vol{ font-size:.92rem; }
 }
 
 /* ---------- Filtrado por produto: lista corrida (data em cada linha) ---------- */
