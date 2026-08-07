@@ -373,7 +373,11 @@ def _buscar(cfg_dias=1, apenas_nao_lidos=True):
         if typ != "OK" or not dados or not dados[0]:
             return out
         for uid in dados[0].split():
-            typ, raw = M.uid("FETCH", uid, "(RFC822)")
+            # BODY.PEEK[] traz a mensagem inteira SEM setar \Seen. Um FETCH
+            # RFC822/BODY[] marcaria o e-mail como lido como efeito colateral,
+            # sabotando a idempotencia (a marcacao e feita so por marcar_lidos,
+            # apos gravar com sucesso).
+            typ, raw = M.uid("FETCH", uid, "(BODY.PEEK[])")
             if typ != "OK" or not raw or raw[0] is None:
                 continue
             msg = email.message_from_bytes(raw[0][1])
