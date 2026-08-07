@@ -24,7 +24,7 @@
     <form method="GET" action="/estoque" class="form-row">
       <input type="hidden" name="tab" value="{{ tab }}">
       <div class="row g-3">
-        <div class="col-12 col-md-4">
+        <div class="col-12 col-md-3">
           <label class="form-label">Empresa</label>
           <select name="empresa" class="form-select form-select-sm">
             <option value="">Todas</option>
@@ -33,12 +33,21 @@
             {% endfor %}
           </select>
         </div>
-        <div class="col-6 col-md-3">
+        <div class="col-12 col-md-3">
+          <label class="form-label">Produto</label>
+          <select name="produto" class="form-select form-select-sm">
+            <option value="">Todos</option>
+            {% for p in produtos %}
+            <option value="{{ p }}" {% if filtros.produto == p %}selected{% endif %}>{{ p }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-6 col-md-2">
           <label class="form-label">Data de</label>
           <input type="date" name="data_ini" class="form-control form-control-sm"
                  value="{{ filtros.data_ini or data_ini_default }}">
         </div>
-        <div class="col-6 col-md-3">
+        <div class="col-6 col-md-2">
           <label class="form-label">Data até</label>
           <input type="date" name="data_fim" class="form-control form-control-sm"
                  value="{{ filtros.data_fim or data_fim_default }}">
@@ -80,53 +89,95 @@
         <div class="mig-toolbar mb-3"></div>
       </div>
 
-      {# desktop #}
-      <div class="mig-card d-none d-md-block">
-        <div class="table-responsive">
-          <table class="mig-table">
-            <thead><tr>
-              <th>Data/Hora</th><th>Título</th><th class="num">Tanque</th><th>Produto</th>
-              <th class="num">Vol. atual</th><th class="num">Vol. 20°C</th>
-              <th class="num">Capacidade</th><th class="num">Temp.</th>
-            </tr></thead>
-            <tbody>
-              {% for l in leituras %}
-              <tr>
-                <td>{{ l.data_leitura.strftime('%d/%m/%Y %H:%M') if l.data_leitura else '—' }}</td>
-                <td>{% if l.titulo %}<span class="mig-badge--info mig-badge">{{ l.titulo }}</span>{% else %}<span class="muted">—</span>{% endif %}</td>
-                <td class="num">{{ l.tanque }}</td>
-                <td class="text-truncate" style="max-width:200px">{{ l.produto_nome or '—' }}</td>
-                <td class="num">{{ l.volume_atual | fmtnum(0) }} L</td>
-                <td class="num">{% if l.volume_20c is not none %}{{ l.volume_20c | fmtnum(0) }} L{% else %}<span class="muted">—</span>{% endif %}</td>
-                <td class="num">{% if l.capacidade is not none %}{{ l.capacidade | fmtnum(0) }} L{% else %}<span class="muted">—</span>{% endif %}</td>
-                <td class="num">{% if l.temperatura is not none %}{{ l.temperatura | fmtnum(1) }}°C{% else %}<span class="muted">—</span>{% endif %}</td>
-              </tr>
-              {% else %}
-              <tr><td colspan="8"><div class="mig-empty"><i class="bi bi-rulers"></i>
-                Nenhuma leitura no período. As leituras (ABERTURA/medições) chegam pelo e-mail do ELS.</div></td></tr>
-              {% endfor %}
-            </tbody>
-          </table>
-        </div>
-      </div>
-      {# mobile #}
-      <div class="d-md-none">
-        {% for l in leituras %}
-        <div class="mig-item">
-          <div class="top">
-            <span class="muted small">{{ l.data_leitura.strftime('%d/%m/%Y %H:%M') if l.data_leitura else '—' }} · Tanque {{ l.tanque }}</span>
-            {% if l.titulo %}<span class="mig-badge mig-badge--info">{{ l.titulo }}</span>{% endif %}
+      {# Icone por combustivel (Bootstrap Icons, ja carregado no base.html).
+         O slug vem de _slug_produto() em routes/estoque.py. #}
+      {% set ICO_PROD = {'gas':'bi-fuel-pump', 'eta':'bi-flower1', 's500':'bi-truck',
+                         's10':'bi-truck', 'diesel':'bi-truck', 'outro':'bi-droplet'} %}
+
+      {% if serie %}
+        {# ---- PRODUTO FILTRADO: lista corrida, data em cada linha, sem agrupar por dia ---- #}
+        {% if leituras %}
+        <div class="mig-serie">
+          <div class="mig-serie__head">
+            <span class="mig-dia__ico mig-dia__ico--{{ serie.slug }}">
+              <i class="bi {{ ICO_PROD.get(serie.slug, 'bi-droplet') }}"></i>
+            </span>
+            <span class="nome">{{ serie.nome }}</span>
+            <span class="cnt">
+              {% if serie.tanques %}tanque {{ serie.tanques | join(', ') }} · {% endif %}
+              {{ serie.n }} leitura{{ '' if serie.n == 1 else 's' }}
+            </span>
           </div>
-          <div class="titulo text-truncate mt-1">{{ l.produto_nome or '—' }}</div>
-          <div class="d-flex justify-content-between mt-1 small">
-            <span>Vol. atual: <b>{{ l.volume_atual | fmtnum(0) }} L</b></span>
-            <span class="muted">{% if l.temperatura is not none %}{{ l.temperatura | fmtnum(1) }}°C{% endif %}</span>
+          {% for l in leituras %}
+          <div class="mig-serie__lin">
+            <div class="mig-serie__quando">
+              <div class="mig-serie__data">{{ l.data_leitura.strftime('%d/%m/%Y') if l.data_leitura else '—' }}</div>
+              <div class="mig-dia__meta">
+                {{ l.hora }}{% if l.titulo_fmt %} · {{ l.titulo_fmt }}{% endif %}
+                <span class="d-none d-md-inline mig-dia__extra">
+                  {%- if l.volume_20c is not none %} · 20 °C: {{ l.volume_20c | fmtnum(0) }} L{% endif %}
+                  {%- if l.capacidade is not none %} · cap. {{ l.capacidade | fmtnum(0) }} L{% endif %}
+                </span>
+              </div>
+            </div>
+            <div class="mig-dia__vals">
+              <div class="mig-dia__vol">{{ l.volume_atual | fmtnum(0) }} L</div>
+              <div class="mig-dia__temp">{% if l.temperatura is not none %}{{ l.temperatura | fmtnum(1) }} °C{% endif %}</div>
+            </div>
           </div>
+          {% endfor %}
         </div>
         {% else %}
-        <div class="mig-empty"><i class="bi bi-rulers"></i> Nenhuma leitura no período.</div>
+        <div class="mig-empty"><i class="bi bi-rulers"></i>
+          Nenhuma leitura de {{ serie.nome }} no período.</div>
+        {% endif %}
+
+      {% else %}
+        {# ---- SEM FILTRO DE PRODUTO: um card por DIA, data uma vez no cabecalho ---- #}
+        {% for g in dias %}
+        <div class="mig-dia">
+          <div class="mig-dia__head">
+            <div class="mig-dia__data">
+              <i class="bi bi-calendar3"></i>
+              <span>{{ g.rotulo }}</span>
+            </div>
+            <div class="mig-dia__quando">
+              {% if g.n_eventos == 1 %}
+                <span>{{ g.hora }}</span>
+                {% if g.titulo_fmt %}<span class="sep">·</span><span class="tit">{{ g.titulo_fmt }}</span>{% endif %}
+              {% else %}
+                <span>{{ g.n_eventos }} medições</span>
+              {% endif %}
+            </div>
+          </div>
+          {% for l in g.itens %}
+          <div class="mig-dia__lin">
+            <span class="mig-dia__ico mig-dia__ico--{{ l.slug }}">
+              <i class="bi {{ ICO_PROD.get(l.slug, 'bi-droplet') }}"></i>
+            </span>
+            <div class="mig-dia__prod">
+              <div class="mig-dia__nome">{{ l.produto_nome or '—' }}</div>
+              <div class="mig-dia__meta">
+                {%- if g.n_eventos > 1 %}{{ l.hora }} · {% endif -%}
+                tanque {{ l.tanque if l.tanque is not none else '—' }}
+                <span class="d-none d-md-inline mig-dia__extra">
+                  {%- if l.volume_20c is not none %} · 20 °C: {{ l.volume_20c | fmtnum(0) }} L{% endif %}
+                  {%- if l.capacidade is not none %} · cap. {{ l.capacidade | fmtnum(0) }} L{% endif %}
+                </span>
+              </div>
+            </div>
+            <div class="mig-dia__vals">
+              <div class="mig-dia__vol">{{ l.volume_atual | fmtnum(0) }} L</div>
+              <div class="mig-dia__temp">{% if l.temperatura is not none %}{{ l.temperatura | fmtnum(1) }} °C{% endif %}</div>
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+        {% else %}
+        <div class="mig-empty"><i class="bi bi-rulers"></i>
+          Nenhuma leitura no período. As leituras (ABERTURA/medições) chegam pelo e-mail do ELS.</div>
         {% endfor %}
-      </div>
+      {% endif %}
 
       {# paginacao leituras #}
       {% if tp_l > 1 %}{% set sep = '&' if qs_filtros else '' %}

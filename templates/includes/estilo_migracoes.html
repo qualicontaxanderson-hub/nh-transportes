@@ -112,4 +112,87 @@
 
 /* ---------- Toolbar de acoes (reservada p/ proximas camadas) ---------- */
 .mig-toolbar{ display:flex; gap:.5rem; flex-wrap:wrap; align-items:center; }
+
+/* ===========================================================================
+   LEITURAS DE TANQUE: cards agrupados por DIA (.mig-dia) e, quando um produto
+   esta filtrado, a lista corrida por produto (.mig-serie).
+   Mesmo componente no mobile e no desktop — sem tabela paralela.
+   =========================================================================== */
+
+/* Cores por combustivel. Fundo = a mesma cor a 12% sobre branco. */
+.mig{
+  --f-gas:#BA7517;   --f-gas-bg:#F7EEE3;
+  --f-eta:#639922;   --f-eta-bg:#ECF3E5;
+  --f-s500:#185FA5;  --f-s500-bg:#E3ECF4;
+  --f-s10:#534AB7;   --f-s10-bg:#EAE9F6;
+  --f-out:#6b7280;   --f-out-bg:#f1f3f6;
+}
+
+.mig-dia{ background:var(--surface); border:1px solid var(--line-2); border-radius:var(--radius);
+  box-shadow:var(--shadow); overflow:hidden; margin-bottom:.7rem; }
+
+/* Cabecalho do dia: a DATA aparece uma vez so. */
+.mig-dia__head{ display:flex; align-items:center; justify-content:space-between; gap:.6rem;
+  padding:.6rem .85rem; background:var(--soft); border-bottom:1px solid var(--line-2); }
+.mig-dia__data{ display:flex; align-items:center; gap:.5rem; min-width:0;
+  font-weight:700; font-size:.9rem; color:var(--blue-deep); }
+.mig-dia__data .bi{ color:var(--blue); font-size:.95rem; flex:0 0 auto; }
+.mig-dia__quando{ display:flex; align-items:center; gap:.35rem; flex:0 0 auto;
+  font-size:12px; color:var(--muted); font-weight:600; font-variant-numeric:tabular-nums; }
+.mig-dia__quando .sep{ opacity:.5; }
+.mig-dia__quando .tit{ text-transform:lowercase; }
+
+/* Uma linha por produto (tanque). */
+.mig-dia__lin{ display:flex; align-items:center; gap:.7rem; padding:.6rem .85rem;
+  border-top:1px solid var(--line); }
+.mig-dia__lin:first-of-type{ border-top:0; }
+.mig-dia__ico{ flex:0 0 auto; width:34px; height:34px; border-radius:10px;
+  display:inline-grid; place-items:center; font-size:1rem;
+  background:var(--f-out-bg); color:var(--f-out); }
+/* Modificador vai NO PROPRIO icone, entao serve tanto na linha do dia
+   quanto no cabecalho da lista por produto. */
+.mig-dia__ico--gas { background:var(--f-gas-bg);  color:var(--f-gas); }
+.mig-dia__ico--eta { background:var(--f-eta-bg);  color:var(--f-eta); }
+.mig-dia__ico--s500{ background:var(--f-s500-bg); color:var(--f-s500); }
+.mig-dia__ico--s10 { background:var(--f-s10-bg);  color:var(--f-s10); }
+
+.mig-dia__prod{ min-width:0; flex:1 1 auto; }
+.mig-dia__nome{ font-weight:600; font-size:.9rem; line-height:1.25;
+  overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.mig-dia__meta{ font-size:11.5px; color:var(--muted); line-height:1.35; }
+.mig-dia__vals{ flex:0 0 auto; text-align:right; }
+.mig-dia__vol{ font-weight:700; font-size:.95rem; font-variant-numeric:tabular-nums;
+  line-height:1.25; white-space:nowrap; }
+.mig-dia__temp{ font-size:11.5px; color:var(--muted); font-variant-numeric:tabular-nums;
+  line-height:1.35; white-space:nowrap; }
+/* Vol. 20C + capacidade: so no desktop (no mobile o template esconde com d-none d-md-inline). */
+.mig-dia__extra{ font-variant-numeric:tabular-nums; }
+
+@media (min-width:768px){
+  .mig-dia__head{ padding:.7rem 1.1rem; }
+  .mig-dia__data{ font-size:.98rem; }
+  .mig-dia__lin{ padding:.7rem 1.1rem; gap:.9rem; }
+  .mig-dia__ico{ width:38px; height:38px; font-size:1.1rem; }
+  .mig-dia__nome{ font-size:.95rem; }
+  .mig-dia__vol{ font-size:1.02rem; }
+}
+
+/* ---------- Filtrado por produto: lista corrida (data em cada linha) ---------- */
+.mig-serie{ background:var(--surface); border:1px solid var(--line-2); border-radius:var(--radius);
+  box-shadow:var(--shadow); overflow:hidden; }
+.mig-serie__head{ display:flex; align-items:center; gap:.6rem; padding:.6rem .85rem;
+  background:var(--soft); border-bottom:1px solid var(--line-2); }
+.mig-serie__head .mig-dia__ico{ width:30px; height:30px; font-size:.9rem; }
+.mig-serie__head .nome{ font-weight:700; font-size:.9rem; min-width:0;
+  overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.mig-serie__head .cnt{ margin-left:auto; flex:0 0 auto; font-size:12px; color:var(--muted); font-weight:600; }
+.mig-serie__lin{ display:flex; align-items:center; gap:.7rem; padding:.55rem .85rem;
+  border-top:1px solid var(--line); }
+.mig-serie__lin:first-of-type{ border-top:0; }
+.mig-serie__quando{ flex:1 1 auto; min-width:0; }
+.mig-serie__data{ font-weight:600; font-size:.88rem; font-variant-numeric:tabular-nums; }
+@media (min-width:768px){
+  .mig-serie__head{ padding:.7rem 1.1rem; }
+  .mig-serie__lin{ padding:.65rem 1.1rem; gap:.9rem; }
+}
 </style>

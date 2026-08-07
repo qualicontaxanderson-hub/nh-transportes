@@ -16,6 +16,8 @@ Terreno para as PROXIMAS camadas (ainda NAO implementadas aqui):
     acabe vinculada a uma nota de compra (por e-mail ou manual).
 """
 import math
+import re
+import unicodedata
 from datetime import date, timedelta
 from urllib.parse import urlencode
 
@@ -27,6 +29,70 @@ from utils.db import get_db_connection
 estoque_bp = Blueprint('estoque', __name__)
 
 POR_PAGINA = 100
+
+# Rotulo de dia em PT-BR (strftime %A/%b depende de locale, que nao da p/ confiar).
+_DIAS_SEMANA = ['segunda', 'terça', 'quarta', 'quinta', 'sexta', 'sábado', 'domingo']
+_MESES_ABREV = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun',
+                'jul', 'ago', 'set', 'out', 'nov', 'dez']
+
+
+def _rotulo_dia(d):
+    """date -> 'quinta, 7 ago' (com o ano junto quando nao e o ano corrente)."""
+    if not d:
+        return '—'
+    txt = f"{_DIAS_SEMANA[d.weekday()]}, {d.day} {_MESES_ABREV[d.month - 1]}"
+    if d.year != date.today().year:
+        txt += f" {d.year}"
+    return txt
+
+
+def _slug_produto(nome):
+    """Nome do produto do ELS -> slug de cor/icone.
+
+    Os nomes chegam do e-mail como 'GASOLINA COMUM', 'ETANOL COMUM',
+    'DIESEL S500 COMUM', 'DIESEL S10 COMUM'. Normaliza (sem acento, sem
+    separador) para que 'DIESEL S-500' e 'DIESEL S500' caiam no mesmo lugar.
+    Um diesel sem S10/S500 fica em 'diesel' (cinza) em vez de chutar qual e.
+    """
+    if not nome:
+        return 'outro'
+    txt = unicodedata.normalize('NFKD', str(nome)).encode('ascii', 'ignore').decode('ascii')
+    txt = re.sub(r'[^A-Z0-9]+', '', txt.upper())
+    if 'GASOLINA' in txt:
+        return 'gas'
+    if 'ETANOL' in txt or 'ALCOOL' in txt:
+        return 'eta'
+    if 'S10' in txt:
+        return 's10'
+    if 'S500' in txt:
+        return 's500'
+    if 'DIESEL' in txt:
+        return 'diesel'
+    return 'outro'
+
+
+def _agrupar_por_dia(leituras):
+    """Lista ordenada por data_leitura DESC -> lista de cards de dia.
+
+    Cada grupo carrega o rotulo do dia e, quando o dia tem UMA unica medicao
+    (mesmo horario + mesmo titulo), tambem a hora e o titulo p/ o cabecalho.
+    Com mais de uma, o cabecalho vira 'N medicoes' e cada linha mostra a sua
+    hora — nada some. Depende da ordenacao do SQL para agrupar consecutivo.
+    """
+    grupos = []
+    for l in leituras:
+        chave = l['data_leitura'].date() if l.get('data_leitura') else None
+        if not grupos or grupos[-1]['chave'] != chave:
+            grupos.append({'chave': chave, 'rotulo': _rotulo_dia(chave), 'itens': []})
+        grupos[-1]['itens'].append(l)
+    for g in grupos:
+        eventos = {(i['hora'], i['titulo_fmt']) for i in g['itens']}
+        g['n_eventos'] = len(eventos)
+        if g['n_eventos'] == 1:
+            g['hora'], g['titulo_fmt'] = next(iter(eventos))
+        else:
+            g['hora'], g['titulo_fmt'] = None, None
+    return grupos
 
 
 def _janela_paginas(pagina, total_paginas, raio=2):
@@ -50,6 +116,7 @@ def index():
         'empresa':  (request.args.get('empresa') or '').strip(),
         'data_ini': (request.args.get('data_ini') or '').strip(),
         'data_fim': (request.args.get('data_fim') or '').strip(),
+        'produto':  (request.args.get('produto') or '').strip(),
     }
     tab = (request.args.get('tab') or 'leituras').strip()
     if tab not in ('leituras', 'descargas'):
@@ -79,6 +146,9 @@ def index():
             w_l.append("l.data_leitura <= %s"); p_l.append(f['data_fim'] + " 23:59:59")
             w_d.append("COALESCE(d.data_final, d.data_inicial, d.data_descarga) <= %s")
             p_d.append(f['data_fim'] + " 23:59:59")
+        # Produto filtra SO as leituras (a aba Descargas segue como estava).
+        if f['produto']:
+            w_l.append("l.produto_nome = %s"); p_l.append(f['produto'])
         where_l = (" WHERE " + " AND ".join(w_l)) if w_l else ""
         where_d = (" WHERE " + " AND ".join(w_d)) if w_d else ""
 
@@ -115,6 +185,25 @@ def index():
         )
         leituras = cur.fetchall()
 
+        # -------- Leituras: enfeites p/ os cards (cor/icone, hora, titulo) --------
+        for l in leituras:
+            l['slug'] = _slug_produto(l.get('produto_nome'))
+            l['hora'] = l['data_leitura'].strftime('%H:%M') if l.get('data_leitura') else '—'
+            l['titulo_fmt'] = (l.get('titulo') or '').strip().lower()
+
+        # Sem filtro de produto -> cards por dia. Com filtro -> lista corrida.
+        if f['produto']:
+            dias = []
+            serie = {
+                'nome':    f['produto'],
+                'slug':    _slug_produto(f['produto']),
+                'tanques': sorted({l['tanque'] for l in leituras if l.get('tanque') is not None}),
+                'n':       total_leituras,
+            }
+        else:
+            dias = _agrupar_por_dia(leituras)
+            serie = None
+
         # -------- Descargas (paginada) --------
         tp_d = max(1, math.ceil(totais['descargas'] / POR_PAGINA))
         page_d = min(page_d, tp_d)
@@ -149,6 +238,17 @@ def index():
         )
         empresas = cur.fetchall()
 
+        # -------- Produtos p/ dropdown (so os que aparecem nas leituras) --------
+        cur.execute(
+            """
+            SELECT DISTINCT produto_nome
+            FROM leitura_tanque_diaria
+            WHERE produto_nome IS NOT NULL AND produto_nome <> ''
+            ORDER BY produto_nome
+            """
+        )
+        produtos = [r['produto_nome'] for r in cur.fetchall()]
+
         hoje = date.today()
         data_ini_default = f['data_ini'] or (hoje - timedelta(days=90)).strftime('%Y-%m-%d')
         data_fim_default = f['data_fim'] or hoje.strftime('%Y-%m-%d')
@@ -157,6 +257,7 @@ def index():
         return render_template(
             'estoque/index.html',
             leituras=leituras, descargas=descargas, totais=totais,
+            dias=dias, serie=serie, produtos=produtos,
             filtros=f, empresas=empresas, tab=tab,
             data_ini_default=data_ini_default, data_fim_default=data_fim_default,
             page_l=page_l, tp_l=tp_l, paginas_l=_janela_paginas(page_l, tp_l),
