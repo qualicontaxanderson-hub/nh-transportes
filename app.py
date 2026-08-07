@@ -484,6 +484,15 @@ def create_app():
     except Exception:
         app.logger.warning("[dfe_sched] nao foi possivel iniciar o scheduler.", exc_info=True)
 
+    # Agendador da importacao automatica do ELS por e-mail (a cada 10 min; lock
+    # global no MySQL garante execucao unica mesmo com varios workers). Falha
+    # aqui NAO deve derrubar o app.
+    try:
+        from integrations.els_scheduler import iniciar_scheduler as iniciar_els
+        iniciar_els(app)
+    except Exception:
+        app.logger.warning("[els_sched] nao foi possivel iniciar o scheduler.", exc_info=True)
+
     return app
 
 
