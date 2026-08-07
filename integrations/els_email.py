@@ -340,8 +340,14 @@ def _texto_msg(msg):
     return _html_txt(html) if html else ""
 
 
-def _buscar(cfg_dias=1, apenas_nao_lidos=True, marcar_lido=True):
-    """Retorna [(assunto, texto)] das mensagens do ELS. Marca como lidas ao processar."""
+def _buscar(cfg_dias=1, apenas_nao_lidos=True):
+    """Retorna [(uid, assunto, texto)] das mensagens do ELS.
+
+    NAO marca como lida: a marcacao e feita por marcar_lidos(), somente apos a
+    gravacao ter dado commit com sucesso. Assim um erro de gravacao NUNCA
+    consome o e-mail em silencio (ele fica nao-lido e e reprocessado).
+    Usa UID (identificador estavel) para casar com marcar_lidos().
+    """
     host = _cfg("ELS_MAIL_IMAP_HOST", "imap.titan.email")
     port = int(_cfg("ELS_MAIL_IMAP_PORT", "993"))
     user = _cfg("ELS_MAIL_USER")
@@ -363,18 +369,42 @@ def _buscar(cfg_dias=1, apenas_nao_lidos=True, marcar_lido=True):
     try:
         M.login(user, pwd)
         M.select(mailbox)
-        typ, dados = M.search(None, criterio)
+        typ, dados = M.uid("SEARCH", None, criterio)
         if typ != "OK" or not dados or not dados[0]:
             return out
-        for mid in dados[0].split():
-            typ, raw = M.fetch(mid, "(RFC822)")
+        for uid in dados[0].split():
+            typ, raw = M.uid("FETCH", uid, "(RFC822)")
             if typ != "OK" or not raw or raw[0] is None:
                 continue
             msg = email.message_from_bytes(raw[0][1])
-            out.append((_decode(msg.get("Subject", "")), _texto_msg(msg)))
-            if marcar_lido:
-                M.store(mid, '+FLAGS', '\\Seen')
+            uid_str = uid.decode() if isinstance(uid, bytes) else str(uid)
+            out.append((uid_str, _decode(msg.get("Subject", "")), _texto_msg(msg)))
         return out
+    finally:
+        try:
+            M.close()
+        except Exception:
+            pass
+        M.logout()
+
+
+def marcar_lidos(uids):
+    """Marca \\Seen SOMENTE os e-mails cujos UIDs gravaram com sucesso."""
+    if not uids:
+        return
+    host = _cfg("ELS_MAIL_IMAP_HOST", "imap.titan.email")
+    port = int(_cfg("ELS_MAIL_IMAP_PORT", "993"))
+    user = _cfg("ELS_MAIL_USER")
+    pwd = _cfg("ELS_MAIL_PASSWORD")
+    mailbox = _cfg("ELS_MAIL_MAILBOX", "INBOX")
+    if not user or not pwd:
+        return
+    M = imaplib.IMAP4_SSL(host, port)
+    try:
+        M.login(user, pwd)
+        M.select(mailbox)
+        for uid in uids:
+            M.uid("STORE", uid, "+FLAGS", "\\Seen")
     finally:
         try:
             M.close()
@@ -552,14 +582,15 @@ def processar(dias=1):
 
     resumo = {"aberturas": 0, "leituras": 0, "descargas_vinculadas": 0,
               "descargas_pendentes": 0, "ignorados": 0}
-    mensagens = _buscar(cfg_dias=dias, apenas_nao_lidos=True, marcar_lido=True)
+    mensagens = _buscar(cfg_dias=dias, apenas_nao_lidos=True)
     if not mensagens:
         return resumo
 
+    ok_uids = []  # so os e-mails gravados com sucesso -> marcados lidos no fim
     conn = get_db_connection()
     cur = conn.cursor(dictionary=True)
     try:
-        for assunto, texto in mensagens:
+        for uid, assunto, texto in mensagens:
             tipo = detectar_tipo(assunto, texto)
             try:
                 if tipo == "ABERTURA":
@@ -580,11 +611,15 @@ def processar(dias=1):
                         resumo["ignorados"] += 1
                 else:
                     resumo["ignorados"] += 1
+                # Chegou aqui sem excecao (gravou ou foi ignorado deliberadamente):
+                # pode marcar como lido. Falhas caem no except e NAO marcam.
+                ok_uids.append(uid)
             except Exception:
                 conn.rollback()
                 _log.warning("[els] falha ao processar '%s'.", assunto, exc_info=True)
     finally:
         cur.close()
         conn.close()
+    marcar_lidos(ok_uids)  # so os UIDs que gravaram; falhas ficam nao-lidas
     _log.info("[els] resumo: %s", resumo)
     return resumo
