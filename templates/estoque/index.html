@@ -1,260 +1,236 @@
 {% extends 'base.html' %}
 {% block title %}Estoque Migrados{% endblock %}
 
-{% block styles %}
-<style>
-  .pag-nums .page-link { min-width: 2.1rem; text-align: center; }
-  .tbl-estq { font-size: 14px; color: #212529; background: #fff; --bs-table-bg: #fff; }
-  .tbl-estq thead th { padding: 12px; background:#fff; color:#6c757d; font-weight:400;
-                       border-top:0; border-bottom:1px solid #e9ecef; }
-  .tbl-estq tbody td { padding:7px 12px; border-top:0; border-bottom:1px solid #f1f3f5;
-                       vertical-align:middle; }
-  .tbl-estq tbody tr:last-child td { border-bottom:0; }
-  .pill-contagem, .pill-titulo, .st-pend, .st-vinc, .st-ign {
-    display:inline-block; border-radius:20px; padding:3px 12px; font-size:12px;
-    font-weight:500; border:0; line-height:1.4; }
-  .pill-contagem { background:#f1f3f5; color:#6c757d; }
-  .pill-titulo   { background:#eef2ff; color:#4338ca; }
-  .st-pend { background:#fff4e5; color:#b26a00; }   /* pendente  */
-  .st-vinc { background:#e6f4ea; color:#1e7e34; }   /* vinculada */
-  .st-ign  { background:#f1f3f5; color:#6c757d; }   /* ignorada  */
-  #estqTabs .nav-link.active { color:#1D63A5; border-color:#dee2e6 #dee2e6 #fff; font-weight:600; }
-</style>
-{% endblock %}
+{% block styles %}{% include 'includes/estilo_migracoes.html' %}{% endblock %}
 
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-3">
-  <h3 class="mb-0"><i class="bi bi-box-seam"></i> Estoque Migrados</h3>
-  <span class="pill-contagem">{{ totais.leituras }} leituras · {{ totais.descargas }} descargas</span>
-</div>
+<div class="mig">
 
-{% set aba_ativa = 'estoque' %}
-{% include 'includes/nav_migracoes.html' %}
-
-{# =================== FILTROS =================== #}
-<form method="GET" action="/estoque" class="card card-body mb-3">
-  <input type="hidden" name="tab" value="{{ tab }}">
-  <div class="row g-2">
-    <div class="col-12 col-md-4">
-      <label class="form-label small mb-0">Empresa</label>
-      <select name="empresa" class="form-select form-select-sm">
-        <option value="">Todas</option>
-        {% for e in empresas %}
-        <option value="{{ e.id }}" {% if filtros.empresa == e.id|string %}selected{% endif %}>{{ e.nome }}</option>
-        {% endfor %}
-      </select>
-    </div>
-    <div class="col-6 col-md-3">
-      <label class="form-label small mb-0">Data de</label>
-      <input type="date" name="data_ini" class="form-control form-control-sm"
-             value="{{ filtros.data_ini or data_ini_default }}">
-    </div>
-    <div class="col-6 col-md-3">
-      <label class="form-label small mb-0">Data até</label>
-      <input type="date" name="data_fim" class="form-control form-control-sm"
-             value="{{ filtros.data_fim or data_fim_default }}">
-    </div>
-    <div class="col-12 col-md-2 d-flex align-items-end">
-      <button type="submit" class="btn btn-sm btn-primary w-100"><i class="bi bi-search"></i></button>
-    </div>
-    <div class="col-12">
-      <a href="/estoque" class="btn btn-sm btn-outline-secondary"><i class="bi bi-x-circle"></i> Limpar filtros</a>
+  {# =================== CABECALHO =================== #}
+  <div class="mig-head">
+    <h3 class="mig-title"><span class="mig-ico"><i class="bi bi-box-seam"></i></span> Estoque Migrados</h3>
+    <div class="mig-counters">
+      <span class="mig-pill"><i class="bi bi-rulers"></i> {{ totais.leituras }} leituras</span>
+      <span class="mig-pill"><i class="bi bi-truck"></i> {{ totais.descargas }} descargas</span>
     </div>
   </div>
-</form>
 
-{# =================== ABAS INTERNAS =================== #}
-<ul class="nav nav-tabs mb-3" id="estqTabs" role="tablist">
-  <li class="nav-item">
-    <button class="nav-link {% if tab == 'leituras' %}active{% endif %}" data-bs-toggle="tab"
-            data-bs-target="#pane-leituras" type="button" role="tab">
-      <i class="bi bi-rulers"></i> Leituras <span class="pill-contagem">{{ totais.leituras }}</span>
-    </button>
-  </li>
-  <li class="nav-item">
-    <button class="nav-link {% if tab == 'descargas' %}active{% endif %}" data-bs-toggle="tab"
-            data-bs-target="#pane-descargas" type="button" role="tab">
-      <i class="bi bi-truck"></i> Descargas <span class="pill-contagem">{{ totais.descargas }}</span>
-    </button>
-  </li>
-</ul>
+  {% set aba_ativa = 'estoque' %}
+  {% include 'includes/nav_migracoes.html' %}
 
-<div class="tab-content">
-  {# ---------------- ABA LEITURAS ---------------- #}
-  <div class="tab-pane fade {% if tab == 'leituras' %}show active{% endif %}" id="pane-leituras" role="tabpanel">
-    {# toolbar: totais + area reservada para acoes (ex.: "Inserir/editar estoque manual") #}
-    <div class="d-flex justify-content-between align-items-end gap-3 mb-3 flex-wrap">
-      <div class="d-flex gap-3 flex-fill">
-        <div class="border rounded p-2 flex-fill text-center">
-          <div class="small text-muted">Leituras</div>
-          <div class="fs-5 fw-bold">{{ totais.leituras }}</div>
+  {# =================== FILTROS =================== #}
+  <details class="mig-filtros" open>
+    <summary><i class="bi bi-funnel"></i> Filtros <i class="bi bi-chevron-down"></i></summary>
+    <form method="GET" action="/estoque" class="form-row">
+      <input type="hidden" name="tab" value="{{ tab }}">
+      <div class="row g-3">
+        <div class="col-12 col-md-4">
+          <label class="form-label">Empresa</label>
+          <select name="empresa" class="form-select form-select-sm">
+            <option value="">Todas</option>
+            {% for e in empresas %}
+            <option value="{{ e.id }}" {% if filtros.empresa == e.id|string %}selected{% endif %}>{{ e.nome }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-6 col-md-3">
+          <label class="form-label">Data de</label>
+          <input type="date" name="data_ini" class="form-control form-control-sm"
+                 value="{{ filtros.data_ini or data_ini_default }}">
+        </div>
+        <div class="col-6 col-md-3">
+          <label class="form-label">Data até</label>
+          <input type="date" name="data_fim" class="form-control form-control-sm"
+                 value="{{ filtros.data_fim or data_fim_default }}">
+        </div>
+        <div class="col-12 col-md-2 d-flex align-items-end gap-2">
+          <button type="submit" class="btn btn-sm btn-primary flex-fill"><i class="bi bi-search"></i> Buscar</button>
         </div>
       </div>
-      <div class="toolbar-acoes-leituras d-flex gap-2">
-        {# FUTURO: <button> "Inserir/editar estoque manual" (quando a sonda parar). #}
+      <div class="mt-2">
+        <a href="/estoque" class="btn btn-sm btn-outline-secondary"><i class="bi bi-x-circle"></i> Limpar filtros</a>
       </div>
-    </div>
+    </form>
+  </details>
 
-    {# desktop #}
-    <div class="table-responsive d-none d-md-block">
-      <table class="table tbl-estq align-middle">
-        <thead><tr>
-          <th>Data/Hora</th><th>Título</th><th class="text-end">Tanque</th><th>Produto</th>
-          <th class="text-end">Vol. atual</th><th class="text-end">Vol. 20°C</th>
-          <th class="text-end">Capacidade</th><th class="text-end">Temp.</th>
-        </tr></thead>
-        <tbody>
-          {% for l in leituras %}
-          <tr>
-            <td>{{ l.data_leitura.strftime('%d/%m/%Y %H:%M') if l.data_leitura else '—' }}</td>
-            <td>{% if l.titulo %}<span class="pill-titulo">{{ l.titulo }}</span>{% else %}—{% endif %}</td>
-            <td class="text-end">{{ l.tanque }}</td>
-            <td class="text-truncate" style="max-width:180px">{{ l.produto_nome or '—' }}</td>
-            <td class="text-end">{{ l.volume_atual | fmtnum(0) }} L</td>
-            <td class="text-end">{% if l.volume_20c is not none %}{{ l.volume_20c | fmtnum(0) }} L{% else %}—{% endif %}</td>
-            <td class="text-end">{% if l.capacidade is not none %}{{ l.capacidade | fmtnum(0) }} L{% else %}—{% endif %}</td>
-            <td class="text-end">{% if l.temperatura is not none %}{{ l.temperatura | fmtnum(1) }}°C{% else %}—{% endif %}</td>
-          </tr>
-          {% else %}
-          <tr><td colspan="8" class="text-center text-muted py-4">
-            Nenhuma leitura no período. As leituras (ABERTURA/medições) chegam pelo e-mail do ELS.
-          </td></tr>
-          {% endfor %}
-        </tbody>
-      </table>
-    </div>
-    {# mobile #}
-    <div class="d-md-none">
-      {% for l in leituras %}
-      <div class="card mb-2"><div class="card-body py-2">
-        <div class="d-flex justify-content-between">
-          <span class="small text-muted">{{ l.data_leitura.strftime('%d/%m/%Y %H:%M') if l.data_leitura else '—' }} · Tanque {{ l.tanque }}</span>
-          {% if l.titulo %}<span class="pill-titulo">{{ l.titulo }}</span>{% endif %}
-        </div>
-        <div class="fw-semibold text-truncate mt-1">{{ l.produto_nome or '—' }}</div>
-        <div class="d-flex justify-content-between mt-1 small">
-          <span>Vol. atual: <b>{{ l.volume_atual | fmtnum(0) }} L</b></span>
-          <span class="text-muted">{% if l.temperatura is not none %}{{ l.temperatura | fmtnum(1) }}°C{% endif %}</span>
-        </div>
-      </div></div>
-      {% else %}
-      <div class="text-center text-muted py-4">Nenhuma leitura no período.</div>
-      {% endfor %}
-    </div>
+  {# =================== ABAS INTERNAS =================== #}
+  <ul class="nav mig-subtabs" id="estqTabs" role="tablist">
+    <li class="nav-item">
+      <button class="nav-link {% if tab == 'leituras' %}active{% endif %}" data-bs-toggle="tab"
+              data-bs-target="#pane-leituras" type="button" role="tab">
+        <i class="bi bi-rulers"></i> Leituras <span class="mig-pill">{{ totais.leituras }}</span>
+      </button>
+    </li>
+    <li class="nav-item">
+      <button class="nav-link {% if tab == 'descargas' %}active{% endif %}" data-bs-toggle="tab"
+              data-bs-target="#pane-descargas" type="button" role="tab">
+        <i class="bi bi-truck"></i> Descargas <span class="mig-pill">{{ totais.descargas }}</span>
+      </button>
+    </li>
+  </ul>
 
-    {# paginacao leituras #}
-    {% if tp_l > 1 %}{% set sep = '&' if qs_filtros else '' %}
-    <nav class="mt-3"><ul class="pagination pagination-sm justify-content-center flex-wrap pag-nums">
-      <li class="page-item {% if page_l <= 1 %}disabled{% endif %}">
-        <a class="page-link" href="?{{ qs_filtros }}{{ sep }}tab=leituras&page_l={{ page_l - 1 }}">‹</a></li>
-      {% for p in paginas_l %}{% if p is none %}
-        <li class="page-item disabled"><span class="page-link">…</span></li>
-      {% else %}
-        <li class="page-item {% if p == page_l %}active{% endif %}">
-          <a class="page-link" href="?{{ qs_filtros }}{{ sep }}tab=leituras&page_l={{ p }}">{{ p }}</a></li>
-      {% endif %}{% endfor %}
-      <li class="page-item {% if page_l >= tp_l %}disabled{% endif %}">
-        <a class="page-link" href="?{{ qs_filtros }}{{ sep }}tab=leituras&page_l={{ page_l + 1 }}">›</a></li>
-    </ul></nav>{% endif %}
-  </div>
-
-  {# ---------------- ABA DESCARGAS ---------------- #}
-  <div class="tab-pane fade {% if tab == 'descargas' %}show active{% endif %}" id="pane-descargas" role="tabpanel">
-    {# toolbar: totais + area reservada para acoes (ex.: "Lancar descarga manual") #}
-    <div class="d-flex justify-content-between align-items-end gap-3 mb-3 flex-wrap">
-      <div class="d-flex gap-3 flex-fill">
-        <div class="border rounded p-2 flex-fill text-center">
-          <div class="small text-muted">Descargas</div>
-          <div class="fs-5 fw-bold">{{ totais.descargas }}</div>
+  <div class="tab-content">
+    {# ---------------- ABA LEITURAS ---------------- #}
+    <div class="tab-pane fade {% if tab == 'leituras' %}show active{% endif %}" id="pane-leituras" role="tabpanel">
+      <div class="d-flex justify-content-between align-items-end gap-3 flex-wrap">
+        <div class="mig-stats flex-fill">
+          <div class="mig-stat"><div class="rot">Leituras no período</div><div class="val">{{ totais.leituras }}</div></div>
         </div>
-        <div class="border rounded p-2 flex-fill text-center">
-          <div class="small text-muted">Total (litros)</div>
-          <div class="fs-5 fw-bold text-success">{{ totais.litros | fmtnum(0) }} L</div>
+        {# toolbar reservada p/ "Inserir/editar estoque manual" (proxima camada) #}
+        <div class="mig-toolbar mb-3"></div>
+      </div>
+
+      {# desktop #}
+      <div class="mig-card d-none d-md-block">
+        <div class="table-responsive">
+          <table class="mig-table">
+            <thead><tr>
+              <th>Data/Hora</th><th>Título</th><th class="num">Tanque</th><th>Produto</th>
+              <th class="num">Vol. atual</th><th class="num">Vol. 20°C</th>
+              <th class="num">Capacidade</th><th class="num">Temp.</th>
+            </tr></thead>
+            <tbody>
+              {% for l in leituras %}
+              <tr>
+                <td>{{ l.data_leitura.strftime('%d/%m/%Y %H:%M') if l.data_leitura else '—' }}</td>
+                <td>{% if l.titulo %}<span class="mig-badge--info mig-badge">{{ l.titulo }}</span>{% else %}<span class="muted">—</span>{% endif %}</td>
+                <td class="num">{{ l.tanque }}</td>
+                <td class="text-truncate" style="max-width:200px">{{ l.produto_nome or '—' }}</td>
+                <td class="num">{{ l.volume_atual | fmtnum(0) }} L</td>
+                <td class="num">{% if l.volume_20c is not none %}{{ l.volume_20c | fmtnum(0) }} L{% else %}<span class="muted">—</span>{% endif %}</td>
+                <td class="num">{% if l.capacidade is not none %}{{ l.capacidade | fmtnum(0) }} L{% else %}<span class="muted">—</span>{% endif %}</td>
+                <td class="num">{% if l.temperatura is not none %}{{ l.temperatura | fmtnum(1) }}°C{% else %}<span class="muted">—</span>{% endif %}</td>
+              </tr>
+              {% else %}
+              <tr><td colspan="8"><div class="mig-empty"><i class="bi bi-rulers"></i>
+                Nenhuma leitura no período. As leituras (ABERTURA/medições) chegam pelo e-mail do ELS.</div></td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
         </div>
       </div>
-      <div class="toolbar-acoes-descargas d-flex gap-2">
-        {# FUTURO: <button> "Lancar descarga manual" (quando o e-mail nao vem). #}
-      </div>
-    </div>
-
-    {# desktop #}
-    <div class="table-responsive d-none d-md-block">
-      <table class="table tbl-estq align-middle">
-        <thead><tr>
-          <th>Data/Hora</th><th class="text-end">Tanque</th><th>Produto</th>
-          <th class="text-end">Total descarga</th><th>Status</th><th class="text-end">Frete</th>
-          <th class="text-center" style="width:120px">Ações</th>
-        </tr></thead>
-        <tbody>
-          {% for d in descargas %}
-          {% set dt = d.data_final or d.data_inicial or d.data_descarga %}
-          <tr data-descarga-id="{{ d.id }}" data-status="{{ d.status }}">
-            <td>{{ dt.strftime('%d/%m/%Y %H:%M') if dt else '—' }}</td>
-            <td class="text-end">{{ d.tanque if d.tanque is not none else '—' }}</td>
-            <td class="text-truncate" style="max-width:180px">{{ d.produto_nome or '—' }}</td>
-            <td class="text-end">{{ d.total_descarga | fmtnum(0) }} L</td>
-            <td>
-              {% if d.status == 'vinculada' %}<span class="st-vinc">vinculada</span>
-              {% elif d.status == 'ignorada' %}<span class="st-ign">ignorada</span>
-              {% else %}<span class="st-pend">pendente</span>{% endif %}
-            </td>
-            <td class="text-end">
-              {% if d.frete_id %}<a href="{{ url_for('fretes.editar', id=d.frete_id) }}">#{{ d.frete_id }}</a>
-              {% else %}<span class="text-muted">—</span>{% endif %}
-            </td>
-            {# Coluna Acoes: reservada para "Vincular nota" (por linha pendente).
-               Por ora vazia; a vinculacao a nota de compra vem na proxima camada. #}
-            <td class="text-center col-acoes-descarga">
-              <span class="text-muted">—</span>
-            </td>
-          </tr>
-          {% else %}
-          <tr><td colspan="7" class="text-center text-muted py-4">
-            Nenhuma descarga no período. Os alarmes de descarga chegam pelo e-mail do ELS.
-          </td></tr>
-          {% endfor %}
-        </tbody>
-      </table>
-    </div>
-    {# mobile #}
-    <div class="d-md-none">
-      {% for d in descargas %}
-      {% set dt = d.data_final or d.data_inicial or d.data_descarga %}
-      <div class="card mb-2" data-descarga-id="{{ d.id }}" data-status="{{ d.status }}">
-        <div class="card-body py-2">
-          <div class="d-flex justify-content-between">
-            <span class="small text-muted">{{ dt.strftime('%d/%m/%Y %H:%M') if dt else '—' }} · Tanque {{ d.tanque if d.tanque is not none else '—' }}</span>
-            {% if d.status == 'vinculada' %}<span class="st-vinc">vinculada</span>
-            {% elif d.status == 'ignorada' %}<span class="st-ign">ignorada</span>
-            {% else %}<span class="st-pend">pendente</span>{% endif %}
+      {# mobile #}
+      <div class="d-md-none">
+        {% for l in leituras %}
+        <div class="mig-item">
+          <div class="top">
+            <span class="muted small">{{ l.data_leitura.strftime('%d/%m/%Y %H:%M') if l.data_leitura else '—' }} · Tanque {{ l.tanque }}</span>
+            {% if l.titulo %}<span class="mig-badge mig-badge--info">{{ l.titulo }}</span>{% endif %}
           </div>
-          <div class="fw-semibold text-truncate mt-1">{{ d.produto_nome or '—' }}</div>
+          <div class="titulo text-truncate mt-1">{{ l.produto_nome or '—' }}</div>
+          <div class="d-flex justify-content-between mt-1 small">
+            <span>Vol. atual: <b>{{ l.volume_atual | fmtnum(0) }} L</b></span>
+            <span class="muted">{% if l.temperatura is not none %}{{ l.temperatura | fmtnum(1) }}°C{% endif %}</span>
+          </div>
+        </div>
+        {% else %}
+        <div class="mig-empty"><i class="bi bi-rulers"></i> Nenhuma leitura no período.</div>
+        {% endfor %}
+      </div>
+
+      {# paginacao leituras #}
+      {% if tp_l > 1 %}{% set sep = '&' if qs_filtros else '' %}
+      <nav class="mig-pag"><ul class="pagination pagination-sm justify-content-center flex-wrap">
+        <li class="page-item {% if page_l <= 1 %}disabled{% endif %}">
+          <a class="page-link" href="?{{ qs_filtros }}{{ sep }}tab=leituras&page_l={{ page_l - 1 }}">‹</a></li>
+        {% for p in paginas_l %}{% if p is none %}
+          <li class="page-item disabled"><span class="page-link">…</span></li>
+        {% else %}
+          <li class="page-item {% if p == page_l %}active{% endif %}">
+            <a class="page-link" href="?{{ qs_filtros }}{{ sep }}tab=leituras&page_l={{ p }}">{{ p }}</a></li>
+        {% endif %}{% endfor %}
+        <li class="page-item {% if page_l >= tp_l %}disabled{% endif %}">
+          <a class="page-link" href="?{{ qs_filtros }}{{ sep }}tab=leituras&page_l={{ page_l + 1 }}">›</a></li>
+      </ul></nav>{% endif %}
+    </div>
+
+    {# ---------------- ABA DESCARGAS ---------------- #}
+    <div class="tab-pane fade {% if tab == 'descargas' %}show active{% endif %}" id="pane-descargas" role="tabpanel">
+      <div class="d-flex justify-content-between align-items-end gap-3 flex-wrap">
+        <div class="mig-stats flex-fill">
+          <div class="mig-stat"><div class="rot">Descargas</div><div class="val">{{ totais.descargas }}</div></div>
+          <div class="mig-stat"><div class="rot">Total (litros)</div><div class="val ok">{{ totais.litros | fmtnum(0) }} L</div></div>
+        </div>
+        {# toolbar reservada p/ "Lancar descarga manual" (proxima camada) #}
+        <div class="mig-toolbar mb-3"></div>
+      </div>
+
+      {# desktop #}
+      <div class="mig-card d-none d-md-block">
+        <div class="table-responsive">
+          <table class="mig-table">
+            <thead><tr>
+              <th>Data/Hora</th><th class="num">Tanque</th><th>Produto</th>
+              <th class="num">Total descarga</th><th>Status</th><th class="num">Frete</th>
+              <th class="text-center" style="width:120px">Ações</th>
+            </tr></thead>
+            <tbody>
+              {% for d in descargas %}
+              {% set dt = d.data_final or d.data_inicial or d.data_descarga %}
+              <tr data-descarga-id="{{ d.id }}" data-status="{{ d.status }}">
+                <td>{{ dt.strftime('%d/%m/%Y %H:%M') if dt else '—' }}</td>
+                <td class="num">{{ d.tanque if d.tanque is not none else '—' }}</td>
+                <td class="text-truncate" style="max-width:200px">{{ d.produto_nome or '—' }}</td>
+                <td class="num">{{ d.total_descarga | fmtnum(0) }} L</td>
+                <td>
+                  {% if d.status == 'vinculada' %}<span class="mig-badge mig-badge--ok">vinculada</span>
+                  {% elif d.status == 'ignorada' %}<span class="mig-badge mig-badge--ign">ignorada</span>
+                  {% else %}<span class="mig-badge mig-badge--pend">pendente</span>{% endif %}
+                </td>
+                <td class="num">
+                  {% if d.frete_id %}<a href="{{ url_for('fretes.editar', id=d.frete_id) }}">#{{ d.frete_id }}</a>
+                  {% else %}<span class="muted">—</span>{% endif %}
+                </td>
+                {# Coluna Acoes: reservada para "Vincular nota" (linhas pendentes) na proxima camada. #}
+                <td class="text-center col-acoes-descarga"><span class="muted">—</span></td>
+              </tr>
+              {% else %}
+              <tr><td colspan="7"><div class="mig-empty"><i class="bi bi-truck"></i>
+                Nenhuma descarga no período. Os alarmes de descarga chegam pelo e-mail do ELS.</div></td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+      {# mobile #}
+      <div class="d-md-none">
+        {% for d in descargas %}
+        {% set dt = d.data_final or d.data_inicial or d.data_descarga %}
+        <div class="mig-item" data-descarga-id="{{ d.id }}" data-status="{{ d.status }}">
+          <div class="top">
+            <span class="muted small">{{ dt.strftime('%d/%m/%Y %H:%M') if dt else '—' }} · Tanque {{ d.tanque if d.tanque is not none else '—' }}</span>
+            {% if d.status == 'vinculada' %}<span class="mig-badge mig-badge--ok">vinculada</span>
+            {% elif d.status == 'ignorada' %}<span class="mig-badge mig-badge--ign">ignorada</span>
+            {% else %}<span class="mig-badge mig-badge--pend">pendente</span>{% endif %}
+          </div>
+          <div class="titulo text-truncate mt-1">{{ d.produto_nome or '—' }}</div>
           <div class="d-flex justify-content-between mt-1 small">
             <span>Total: <b>{{ d.total_descarga | fmtnum(0) }} L</b></span>
             {% if d.frete_id %}<a href="{{ url_for('fretes.editar', id=d.frete_id) }}">Frete #{{ d.frete_id }}</a>{% endif %}
           </div>
           {# FUTURO (mobile): botao "Vincular nota" para linhas pendentes. #}
         </div>
+        {% else %}
+        <div class="mig-empty"><i class="bi bi-truck"></i> Nenhuma descarga no período.</div>
+        {% endfor %}
       </div>
-      {% else %}
-      <div class="text-center text-muted py-4">Nenhuma descarga no período.</div>
-      {% endfor %}
-    </div>
 
-    {# paginacao descargas #}
-    {% if tp_d > 1 %}{% set sep = '&' if qs_filtros else '' %}
-    <nav class="mt-3"><ul class="pagination pagination-sm justify-content-center flex-wrap pag-nums">
-      <li class="page-item {% if page_d <= 1 %}disabled{% endif %}">
-        <a class="page-link" href="?{{ qs_filtros }}{{ sep }}tab=descargas&page_d={{ page_d - 1 }}">‹</a></li>
-      {% for p in paginas_d %}{% if p is none %}
-        <li class="page-item disabled"><span class="page-link">…</span></li>
-      {% else %}
-        <li class="page-item {% if p == page_d %}active{% endif %}">
-          <a class="page-link" href="?{{ qs_filtros }}{{ sep }}tab=descargas&page_d={{ p }}">{{ p }}</a></li>
-      {% endif %}{% endfor %}
-      <li class="page-item {% if page_d >= tp_d %}disabled{% endif %}">
-        <a class="page-link" href="?{{ qs_filtros }}{{ sep }}tab=descargas&page_d={{ page_d + 1 }}">›</a></li>
-    </ul></nav>{% endif %}
+      {# paginacao descargas #}
+      {% if tp_d > 1 %}{% set sep = '&' if qs_filtros else '' %}
+      <nav class="mig-pag"><ul class="pagination pagination-sm justify-content-center flex-wrap">
+        <li class="page-item {% if page_d <= 1 %}disabled{% endif %}">
+          <a class="page-link" href="?{{ qs_filtros }}{{ sep }}tab=descargas&page_d={{ page_d - 1 }}">‹</a></li>
+        {% for p in paginas_d %}{% if p is none %}
+          <li class="page-item disabled"><span class="page-link">…</span></li>
+        {% else %}
+          <li class="page-item {% if p == page_d %}active{% endif %}">
+            <a class="page-link" href="?{{ qs_filtros }}{{ sep }}tab=descargas&page_d={{ p }}">{{ p }}</a></li>
+        {% endif %}{% endfor %}
+        <li class="page-item {% if page_d >= tp_d %}disabled{% endif %}">
+          <a class="page-link" href="?{{ qs_filtros }}{{ sep }}tab=descargas&page_d={{ page_d + 1 }}">›</a></li>
+      </ul></nav>{% endif %}
+    </div>
   </div>
-</div>
+
+</div>{# /.mig #}
 {% endblock %}

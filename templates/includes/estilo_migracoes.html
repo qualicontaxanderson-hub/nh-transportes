@@ -1,0 +1,115 @@
+{# ===========================================================================
+   DESIGN SYSTEM das telas de Migracao (Vendas / Compras / CT-e / Estoque).
+
+   Fonte unica de estilo. Tudo escopado sob `.mig` -> NAO vaza para o resto do
+   app. Uso na tela:
+     {% block styles %}{% include 'includes/estilo_migracoes.html' %}{% endblock %}
+     ... e envolver o conteudo do bloco content em <div class="mig"> ... </div>
+
+   Segue o DNA do app (azuis NH #1D63A5/#07569C/#1f6fb6, fonte system, cards
+   arredondados com sombra suave). Mobile-first.
+   =========================================================================== #}
+<style>
+.mig{
+  --blue:#1D63A5; --blue-deep:#07569C; --accent:#1f6fb6;
+  --ink:#1f2937; --muted:#6b7280; --line:#eef1f5; --line-2:#e5e9f0;
+  --surface:#fff; --soft:#f8fafc; --zebra:#fbfcfe; --hover:#f2f7fd;
+  --ok-bg:#e6f4ea; --ok:#1e7e34; --pend-bg:#fff4e5; --pend:#b26a00;
+  --ign-bg:#eef1f5; --ign:#6b7280; --info-bg:#e7f1ff; --info:#0d63c4;
+  --danger-bg:#fdecea; --danger:#c0392b;
+  --radius:12px; --shadow:0 1px 3px rgba(16,24,40,.06),0 1px 2px rgba(16,24,40,.04);
+  color:var(--ink);
+}
+
+/* ---------- Cabecalho ---------- */
+.mig-head{ display:flex; align-items:center; justify-content:space-between; gap:.75rem;
+  margin-bottom:1rem; flex-wrap:wrap; }
+.mig-title{ display:flex; align-items:center; gap:.6rem; margin:0; font-size:1.3rem;
+  font-weight:700; color:var(--blue-deep); }
+.mig-title .mig-ico{ display:inline-grid; place-items:center; width:2.1rem; height:2.1rem;
+  border-radius:10px; background:linear-gradient(135deg,#e8f1fb,#dbe9f8); color:var(--blue); font-size:1.05rem; }
+.mig-counters{ display:flex; gap:.4rem; flex-wrap:wrap; }
+
+/* ---------- Pills / badges ---------- */
+.mig-pill,.mig-badge{ display:inline-flex; align-items:center; gap:.3rem; border-radius:999px;
+  padding:.2rem .7rem; font-size:12px; font-weight:600; line-height:1.5; white-space:nowrap; }
+.mig-pill{ background:var(--soft); color:var(--muted); border:1px solid var(--line-2); }
+.mig-pill-strong{ background:var(--blue); color:#fff; border:0; }
+.mig-badge--ok{ background:var(--ok-bg); color:var(--ok); }
+.mig-badge--pend{ background:var(--pend-bg); color:var(--pend); }
+.mig-badge--ign{ background:var(--ign-bg); color:var(--ign); }
+.mig-badge--info{ background:var(--info-bg); color:var(--info); }
+.mig-badge--danger{ background:var(--danger-bg); color:var(--danger); }
+
+/* ---------- Sub-nav entre migracoes: vira SEGMENTED CONTROL dentro de .mig ----------
+   Sobrescreve o estilo de includes/nav_migracoes.html apenas quando dentro de .mig,
+   entao as telas ainda nao migradas mantem as pills antigas. */
+.mig .nav-migracoes{ background:#eef2f7; border:1px solid var(--line-2); border-radius:12px; padding:4px; gap:2px; }
+.mig .nav-migracoes .nav-link{ border:0; border-radius:9px; color:var(--muted); font-weight:600;
+  padding:.42rem .9rem; transition:background .15s, color .15s; }
+.mig .nav-migracoes .nav-link:hover{ color:var(--blue); background:#fff; border-color:transparent; }
+.mig .nav-migracoes .nav-link.active{ background:var(--blue); color:#fff; box-shadow:0 1px 2px rgba(16,24,40,.18); }
+
+/* ---------- Filtros (recolhivel via <details>; aberto por padrao) ---------- */
+.mig-filtros{ background:var(--surface); border:1px solid var(--line-2); border-radius:var(--radius);
+  box-shadow:var(--shadow); padding:1rem 1.1rem; margin-bottom:1rem; }
+.mig-filtros>summary{ list-style:none; font-weight:700; color:var(--blue-deep); cursor:pointer;
+  display:flex; align-items:center; gap:.5rem; }
+.mig-filtros>summary::-webkit-details-marker{ display:none; }
+.mig-filtros>summary .bi-chevron-down{ transition:transform .2s; margin-left:auto; }
+.mig-filtros[open]>summary .bi-chevron-down{ transform:rotate(180deg); }
+.mig-filtros .form-row{ margin-top:.9rem; }
+.mig-filtros label{ font-size:11px; text-transform:uppercase; letter-spacing:.03em;
+  color:var(--muted); font-weight:600; margin-bottom:2px; }
+
+/* ---------- Totais ---------- */
+.mig-stats{ display:flex; gap:.75rem; margin-bottom:1rem; flex-wrap:wrap; }
+.mig-stat{ flex:1 1 140px; background:var(--surface); border:1px solid var(--line-2);
+  border-radius:var(--radius); box-shadow:var(--shadow); padding:.7rem 1rem; text-align:center; }
+.mig-stat .rot{ font-size:11px; text-transform:uppercase; letter-spacing:.03em; color:var(--muted); font-weight:600; }
+.mig-stat .val{ font-size:1.35rem; font-weight:700; color:var(--ink); }
+.mig-stat .val.ok{ color:var(--ok); }
+
+/* ---------- Sub-abas internas (underline) ---------- */
+.mig-subtabs{ border:0; gap:.25rem; margin-bottom:1rem; border-bottom:2px solid var(--line);
+  flex-wrap:nowrap; overflow-x:auto; }
+.mig-subtabs .nav-link{ border:0; border-bottom:2px solid transparent; margin-bottom:-2px;
+  color:var(--muted); font-weight:600; white-space:nowrap; }
+.mig-subtabs .nav-link:hover{ color:var(--blue); }
+.mig-subtabs .nav-link.active{ color:var(--blue); background:transparent; border-bottom-color:var(--blue); }
+
+/* ---------- Tabela desktop ---------- */
+.mig-card{ background:var(--surface); border:1px solid var(--line-2); border-radius:var(--radius);
+  box-shadow:var(--shadow); overflow:hidden; }
+.mig-table{ width:100%; margin:0; font-size:14px; color:var(--ink); border-collapse:collapse; }
+.mig-table thead th{ background:var(--soft); color:var(--muted); font-weight:600; font-size:11px;
+  text-transform:uppercase; letter-spacing:.04em; padding:11px 14px; border-bottom:1px solid var(--line-2);
+  white-space:nowrap; }
+.mig-table tbody td{ padding:11px 14px; border-top:1px solid var(--line); vertical-align:middle; }
+.mig-table tbody tr:nth-child(even){ background:var(--zebra); }
+.mig-table tbody tr:hover{ background:var(--hover); }
+.mig-table .num{ text-align:right; font-variant-numeric:tabular-nums; white-space:nowrap; }
+.mig-table .muted{ color:var(--muted); }
+
+/* ---------- Cards mobile ---------- */
+.mig-item{ background:var(--surface); border:1px solid var(--line-2); border-radius:var(--radius);
+  box-shadow:var(--shadow); padding:.7rem .8rem; margin-bottom:.6rem; }
+.mig-item:active{ background:var(--hover); }
+.mig-item .top{ display:flex; justify-content:space-between; align-items:center; gap:.5rem; }
+.mig-item .titulo{ font-weight:600; }
+.mig-item .val{ font-weight:700; }
+
+/* ---------- Empty state ---------- */
+.mig-empty{ text-align:center; color:var(--muted); padding:2.5rem 1rem; }
+.mig-empty .bi{ font-size:1.6rem; display:block; margin-bottom:.4rem; opacity:.5; }
+
+/* ---------- Paginacao ---------- */
+.mig-pag{ margin-top:1rem; }
+.mig-pag .page-link{ min-width:2.1rem; text-align:center; border-radius:8px !important; margin:0 2px;
+  border-color:var(--line-2); color:var(--blue); }
+.mig-pag .page-item.active .page-link{ background:var(--blue); border-color:var(--blue); color:#fff; }
+.mig-pag .page-item.disabled .page-link{ color:var(--muted); }
+
+/* ---------- Toolbar de acoes (reservada p/ proximas camadas) ---------- */
+.mig-toolbar{ display:flex; gap:.5rem; flex-wrap:wrap; align-items:center; }
+</style>
