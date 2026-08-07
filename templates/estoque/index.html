@@ -6,6 +6,11 @@
 {% block content %}
 <div class="mig">
 
+  {# Icone por combustivel (Bootstrap Icons, ja carregado no base.html).
+     O slug vem de _slug_produto() em routes/estoque.py. Usado nas duas abas. #}
+  {% set ICO_PROD = {'gas':'bi-fuel-pump', 'eta':'bi-flower1', 's500':'bi-truck',
+                     's10':'bi-truck', 'diesel':'bi-truck', 'outro':'bi-droplet'} %}
+
   {# =================== CABECALHO =================== #}
   <div class="mig-head">
     <h3 class="mig-title"><span class="mig-ico"><i class="bi bi-box-seam"></i></span> Estoque Migrados</h3>
@@ -93,11 +98,6 @@
       {# Sem bloco de total aqui: a contagem ja vive no titulo da aba, acima. #}
       {# toolbar reservada p/ "Inserir/editar estoque manual" (proxima camada) #}
       <div class="mig-toolbar mb-3"></div>
-
-      {# Icone por combustivel (Bootstrap Icons, ja carregado no base.html).
-         O slug vem de _slug_produto() em routes/estoque.py. #}
-      {% set ICO_PROD = {'gas':'bi-fuel-pump', 'eta':'bi-flower1', 's500':'bi-truck',
-                         's10':'bi-truck', 'diesel':'bi-truck', 'outro':'bi-droplet'} %}
 
       {% if serie %}
         {# ---- PRODUTO FILTRADO: lista corrida, data em cada linha, sem agrupar por dia ---- #}
@@ -214,65 +214,53 @@
         <div class="mig-toolbar mb-3"></div>
       </div>
 
-      {# desktop #}
-      <div class="mig-card d-none d-md-block">
-        <div class="table-responsive">
-          <table class="mig-table">
-            <thead><tr>
-              <th>Data/Hora</th><th class="num">Tanque</th><th>Produto</th>
-              <th class="num">Total descarga</th><th>Status</th><th class="num">Frete</th>
-              <th class="text-center" style="width:120px">Ações</th>
-            </tr></thead>
-            <tbody>
-              {% for d in descargas %}
-              {% set dt = d.data_final or d.data_inicial or d.data_descarga %}
-              <tr data-descarga-id="{{ d.id }}" data-status="{{ d.status }}">
-                <td>{{ dt.strftime('%d/%m/%Y %H:%M') if dt else '—' }}</td>
-                <td class="num">{{ d.tanque if d.tanque is not none else '—' }}</td>
-                <td class="text-truncate" style="max-width:200px">{{ d.produto_nome or '—' }}</td>
-                <td class="num">{{ d.total_descarga | fmtnum(0) }} L</td>
-                <td>
-                  {% if d.status == 'vinculada' %}<span class="mig-badge mig-badge--ok">vinculada</span>
-                  {% elif d.status == 'ignorada' %}<span class="mig-badge mig-badge--ign">ignorada</span>
-                  {% else %}<span class="mig-badge mig-badge--pend">pendente</span>{% endif %}
-                </td>
-                <td class="num">
-                  {% if d.frete_id %}<a href="{{ url_for('fretes.editar', id=d.frete_id) }}">#{{ d.frete_id }}</a>
-                  {% else %}<span class="muted">—</span>{% endif %}
-                </td>
-                {# Coluna Acoes: reservada para "Vincular nota" (linhas pendentes) na proxima camada. #}
-                <td class="text-center col-acoes-descarga"><span class="muted">—</span></td>
-              </tr>
-              {% else %}
-              <tr><td colspan="7"><div class="mig-empty"><i class="bi bi-truck"></i>
-                Nenhuma descarga no período. Os alarmes de descarga chegam pelo e-mail do ELS.</div></td></tr>
-              {% endfor %}
-            </tbody>
-          </table>
+      {# Um card por DIA, mesmo componente da aba Leituras: grade no desktop,
+         empilhado no mobile. #}
+      {% if dias_d %}
+      <div class="mig-dias">
+      {% for g in dias_d %}
+      <div class="mig-dia">
+        <div class="mig-dia__head">
+          <div class="mig-dia__data">
+            <i class="bi bi-calendar3"></i>
+            <span>{{ g.rotulo }}</span>
+          </div>
+          <div class="mig-dia__quando">
+            <span>{{ g.n }} descarga{{ '' if g.n == 1 else 's' }}</span>
+            <span class="sep">·</span>
+            <span>{{ g.litros | fmtnum(0) }} L</span>
+          </div>
         </div>
-      </div>
-      {# mobile #}
-      <div class="d-md-none">
-        {% for d in descargas %}
-        {% set dt = d.data_final or d.data_inicial or d.data_descarga %}
-        <div class="mig-item" data-descarga-id="{{ d.id }}" data-status="{{ d.status }}">
-          <div class="top">
-            <span class="muted small">{{ dt.strftime('%d/%m/%Y %H:%M') if dt else '—' }} · Tanque {{ d.tanque if d.tanque is not none else '—' }}</span>
+        {% for d in g.itens %}
+        <div class="mig-dia__lin" data-descarga-id="{{ d.id }}" data-status="{{ d.status }}">
+          <span class="mig-dia__ico mig-dia__ico--{{ d.slug }}">
+            <i class="bi {{ ICO_PROD.get(d.slug, 'bi-droplet') }}"></i>
+          </span>
+          <div class="mig-dia__prod">
+            <div class="mig-dia__nome">{{ d.produto_nome or '—' }}</div>
+            <div class="mig-dia__meta">
+              {{ d.hora }} · tanque {{ d.tanque if d.tanque is not none else '—' }}
+              {%- if d.frete_id %} · <a href="{{ url_for('fretes.editar', id=d.frete_id) }}">frete #{{ d.frete_id }}</a>{% endif %}
+            </div>
+          </div>
+          <div class="mig-dia__vals">
+            <div class="mig-dia__vol">{{ d.total_descarga | fmtnum(0) }} L</div>
             {% if d.status == 'vinculada' %}<span class="mig-badge mig-badge--ok">vinculada</span>
             {% elif d.status == 'ignorada' %}<span class="mig-badge mig-badge--ign">ignorada</span>
             {% else %}<span class="mig-badge mig-badge--pend">pendente</span>{% endif %}
           </div>
-          <div class="titulo text-truncate mt-1">{{ d.produto_nome or '—' }}</div>
-          <div class="d-flex justify-content-between mt-1 small">
-            <span>Total: <b>{{ d.total_descarga | fmtnum(0) }} L</b></span>
-            {% if d.frete_id %}<a href="{{ url_for('fretes.editar', id=d.frete_id) }}">Frete #{{ d.frete_id }}</a>{% endif %}
-          </div>
-          {# FUTURO (mobile): botao "Vincular nota" para linhas pendentes. #}
+          {# FUTURO (Bloco 3): o botao "Vincular nota" das linhas pendentes entra
+             aqui, numa <div class="mig-dia__acao">. A regra CSS ja existe; nao
+             ha botao vazio/desabilitado no HTML de proposito. #}
         </div>
-        {% else %}
-        <div class="mig-empty"><i class="bi bi-truck"></i> Nenhuma descarga no período.</div>
         {% endfor %}
-      </div>
+      </div>{# /.mig-dia #}
+      {% endfor %}
+      </div>{# /.mig-dias #}
+      {% else %}
+      <div class="mig-empty"><i class="bi bi-truck"></i>
+        Nenhuma descarga no período. Os alarmes de descarga chegam pelo e-mail do ELS.</div>
+      {% endif %}
 
       {# paginacao descargas #}
       {% if tp_d > 1 %}{% set sep = '&' if qs_filtros else '' %}

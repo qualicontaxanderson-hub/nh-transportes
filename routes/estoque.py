@@ -71,20 +71,39 @@ def _slug_produto(nome):
     return 'outro'
 
 
-def _agrupar_por_dia(leituras):
-    """Lista ordenada por data_leitura DESC -> lista de cards de dia.
+def _dia_de(valor):
+    """DATETIME ou DATE -> date. descargas_pendentes.data_descarga e DATE puro,
+    enquanto data_inicial/data_final sao DATETIME — o COALESCE devolve os dois."""
+    if not valor:
+        return None
+    return valor.date() if hasattr(valor, 'date') else valor
 
-    Cada grupo carrega o rotulo do dia e, quando o dia tem UMA unica medicao
-    (mesmo horario + mesmo titulo), tambem a hora e o titulo p/ o cabecalho.
-    Com mais de uma, o cabecalho vira 'N medicoes' e cada linha mostra a sua
-    hora — nada some. Depende da ordenacao do SQL para agrupar consecutivo.
+
+def _hora_de(valor):
+    """DATETIME -> 'HH:MM'. Um DATE puro nao tem hora, entao vira travessao."""
+    return valor.strftime('%H:%M') if hasattr(valor, 'hour') else '—'
+
+
+def _agrupar_por_dia(linhas, campo):
+    """Lista ordenada por `campo` DESC -> lista de cards de dia.
+
+    Serve as duas abas: leituras (campo data_leitura) e descargas (campo dt,
+    o COALESCE ja resolvido). Depende da ordenacao do SQL — agrupa vizinhos
+    iguais, nao reordena.
     """
     grupos = []
-    for l in leituras:
-        chave = l['data_leitura'].date() if l.get('data_leitura') else None
+    for x in linhas:
+        chave = _dia_de(x.get(campo))
         if not grupos or grupos[-1]['chave'] != chave:
             grupos.append({'chave': chave, 'rotulo': _rotulo_dia(chave), 'itens': []})
-        grupos[-1]['itens'].append(l)
+        grupos[-1]['itens'].append(x)
+    return grupos
+
+
+def _marcar_eventos(grupos):
+    """LEITURAS: quando o dia tem UMA unica medicao (mesmo horario + mesmo
+    titulo), o cabecalho leva a hora e o titulo. Com mais de uma vira
+    'N medicoes' e cada linha mostra a sua hora — nada some."""
     for g in grupos:
         eventos = {(i['hora'], i['titulo_fmt']) for i in g['itens']}
         g['n_eventos'] = len(eventos)
@@ -92,6 +111,14 @@ def _agrupar_por_dia(leituras):
             g['hora'], g['titulo_fmt'] = next(iter(eventos))
         else:
             g['hora'], g['titulo_fmt'] = None, None
+    return grupos
+
+
+def _totalizar(grupos, campo):
+    """DESCARGAS: o cabecalho do dia mostra quantas foram e quantos litros."""
+    for g in grupos:
+        g['n'] = len(g['itens'])
+        g['litros'] = sum(float(i[campo] or 0) for i in g['itens'])
     return grupos
 
 
@@ -188,7 +215,7 @@ def index():
         # -------- Leituras: enfeites p/ os cards (cor/icone, hora, titulo) --------
         for l in leituras:
             l['slug'] = _slug_produto(l.get('produto_nome'))
-            l['hora'] = l['data_leitura'].strftime('%H:%M') if l.get('data_leitura') else '—'
+            l['hora'] = _hora_de(l.get('data_leitura'))
             l['titulo_fmt'] = (l.get('titulo') or '').strip().lower()
 
         # Sem filtro de produto -> cards por dia. Com filtro -> lista corrida.
@@ -201,7 +228,7 @@ def index():
                 'n':       total_leituras,
             }
         else:
-            dias = _agrupar_por_dia(leituras)
+            dias = _marcar_eventos(_agrupar_por_dia(leituras, 'data_leitura'))
             serie = None
 
         # -------- Descargas (paginada) --------
@@ -222,6 +249,13 @@ def index():
             p_d + [POR_PAGINA, (page_d - 1) * POR_PAGINA],
         )
         descargas = cur.fetchall()
+
+        # -------- Descargas: mesmos cards por dia da aba Leituras --------
+        for d in descargas:
+            d['slug'] = _slug_produto(d.get('produto_nome'))
+            d['dt'] = d.get('data_final') or d.get('data_inicial') or d.get('data_descarga')
+            d['hora'] = _hora_de(d['dt'])
+        dias_d = _totalizar(_agrupar_por_dia(descargas, 'dt'), 'total_descarga')
 
         # -------- Empresas p/ dropdown (uniao dos dois) --------
         cur.execute(
@@ -261,7 +295,7 @@ def index():
         return render_template(
             'estoque/index.html',
             leituras=leituras, descargas=descargas, totais=totais,
-            dias=dias, serie=serie, produtos=produtos,
+            dias=dias, dias_d=dias_d, serie=serie, produtos=produtos,
             filtros=f, n_filtros=n_filtros, empresas=empresas, tab=tab,
             data_ini_default=data_ini_default, data_fim_default=data_fim_default,
             page_l=page_l, tp_l=tp_l, paginas_l=_janela_paginas(page_l, tp_l),
