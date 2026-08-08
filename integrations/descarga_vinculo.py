@@ -193,7 +193,12 @@ def sugerir_notas(cur, descarga_id, janela_dias=JANELA_DIAS,
         candidatas.append({
             "documento_id": r["documento_id"], "chave": r["chave"],
             "numero": r["numero"], "serie": r["serie"],
-            "emissao": dia_nfe, "fornecedor": r["emit_nome"],
+            # emissao_br ja formatada: o jsonify do Flask serializa `date` em
+            # HTTP-date ("Tue, 28 Jul 2026 00:00:00 GMT"), que a tela mostrava
+            # cru. Formatar aqui evita o navegador ter que parsear aquilo.
+            "emissao": dia_nfe,
+            "emissao_br": dia_nfe.strftime("%d/%m/%Y") if dia_nfe else "",
+            "fornecedor": r["emit_nome"],
             "emit_cnpj": r["emit_cnpj"], "nota_valor": _f(r["nota_valor"]),
             "item_id": r["item_id"], "n_item": r["n_item"],
             "produto_xml": r["produto_xml"], "cod_anp": r["cod_anp"],

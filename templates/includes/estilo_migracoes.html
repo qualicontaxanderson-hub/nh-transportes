@@ -251,7 +251,13 @@
 .mig-cand__t{ display:flex; align-items:center; gap:.45rem; flex-wrap:wrap; }
 .mig-cand__nf{ font-weight:700; font-size:.9rem; }
 .mig-cand__forn{ font-size:12px; color:var(--ink); }
-.mig-cand__l{ font-size:11.5px; color:var(--muted); margin-top:.15rem; }
+/* Descricao do produto como o FORNECEDOR escreveu na nota (dfe_itens.produto_xml).
+   Costuma ser longa ("ONU 1202 OLEO DIESEL S10 COMUM B15 MISTURA...") — presa em
+   2 linhas, com o texto inteiro no title. */
+.mig-cand__prod{ font-size:11.5px; color:var(--ink); margin-top:.25rem;
+  display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+.mig-cand__prod b{ color:var(--muted); font-weight:600; }
+.mig-cand__l{ font-size:11.5px; color:var(--muted); margin-top:.2rem; }
 .mig-cand__badges{ display:flex; gap:.3rem; flex-wrap:wrap; margin-top:.35rem; }
 .mig-cand__cte{ margin-top:.4rem; padding-top:.4rem; border-top:1px dashed var(--line-2);
   font-size:11.5px; color:var(--ink); display:flex; align-items:center; gap:.35rem; flex-wrap:wrap; }
@@ -260,6 +266,24 @@
 .mig-cand__v{ flex:0 0 auto; text-align:right; }
 .mig-cand__v .q{ font-weight:700; font-variant-numeric:tabular-nums; white-space:nowrap; }
 .mig-cand__v .s{ font-size:11px; color:var(--muted); white-space:nowrap; }
+
+/* ---------- Como vincular: Total (padrao) ou Parcial ---------- */
+.mig-modo{ background:var(--surface); border:1px solid var(--line-2); border-radius:10px;
+  padding:.7rem .75rem; margin-top:.75rem; }
+.mig-modo__ops{ display:flex; gap:.5rem; flex-wrap:wrap; }
+.mig-modo__op{ flex:1 1 190px; min-width:0; display:flex; gap:.5rem; align-items:flex-start;
+  border:1px solid var(--line-2); border-radius:9px; padding:.5rem .6rem;
+  cursor:pointer; background:var(--surface); }
+.mig-modo__op--on{ border-color:var(--blue); background:var(--hover);
+  box-shadow:0 0 0 2px rgba(29,99,165,.10); }
+.mig-modo__op input{ margin-top:.15rem; accent-color:var(--blue); flex:0 0 auto; }
+.mig-modo__tit{ font-weight:700; font-size:.87rem; }
+.mig-modo__tit .q{ font-variant-numeric:tabular-nums; }
+.mig-modo__sub{ font-size:11px; color:var(--muted); line-height:1.35; }
+.mig-modo__campo{ margin-top:.6rem; padding-top:.6rem; border-top:1px solid var(--line); }
+.mig-modo__campo[hidden]{ display:none; }
+/* Abaixo de 420px as duas opcoes viram pilha: alvo de toque largo no celular. */
+@media (max-width:420px){ .mig-modo__ops{ flex-direction:column; } }
 
 .mig-grava{ background:var(--surface); border:1px solid var(--line-2); border-radius:10px;
   padding:.7rem .75rem; margin-top:.75rem; }

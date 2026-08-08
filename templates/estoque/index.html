@@ -440,30 +440,74 @@
           '<span class="mig-cand__nf">NF-e ' + esc(c.numero) + '</span>' +
           (i === 0 && !c.esgotada ? '<span class="mig-badge mig-badge--info"><i class="bi bi-star-fill"></i> mais provável</span>' : '') +
           '</div><div class="mig-cand__forn">' + esc(c.fornecedor || '') + '</div>' +
-          '<div class="mig-cand__l">emitida ' + esc(c.emissao) + ' · série ' + esc(c.serie) +
+          // Descricao do produto como o FORNECEDOR escreveu na nota — e o que da
+          // pra conferir contra o canhoto; o codigo ANP sozinho nao diz nada.
+          (c.produto_xml
+            ? '<div class="mig-cand__prod" title="' + esc(c.produto_xml) + '">' +
+              '<b>Produto:</b> ' + esc(c.produto_xml) + '</div>'
+            : '') +
+          '<div class="mig-cand__l">emitida <b>' + esc(c.emissao_br || '—') + '</b> · série ' + esc(c.serie) +
           ' · item ' + esc(c.n_item) + (c.cod_anp ? ' · ANP ' + esc(c.cod_anp) : '') + '</div>' +
           '<div class="mig-cand__badges">' + selosDe(c) + '</div>' + cteDe(c) +
           '</div><div class="mig-cand__v"><div class="q">' + fmt(c.item_litros) + ' L</div>' +
           '<div class="s">saldo ' + fmt(c.saldo) + ' L</div></div></label>';
       });
-      h += '<div class="mig-grava"><div class="mig-grava__row">' +
-        '<div class="fld" style="flex:0 0 170px"><div class="mig-vlbl">Litros desta nota</div>' +
-        '<input type="number" step="0.001" min="0" class="form-control form-control-sm" id="vincLitros" disabled>' +
-        '<div class="mig-hint" id="vincHint">Escolha uma nota acima.</div></div>' +
-        '<div class="fld"><div class="mig-vlbl">Observação <span style="text-transform:none;font-weight:400">(opcional)</span></div>' +
+      // Como vincular: Total (padrao, 1 clique) ou Parcial (abre o campo).
+      h += '<div class="mig-modo" id="vincModo" hidden>' +
+        '<div class="mig-vlbl">Como vincular</div>' +
+        '<div class="mig-modo__ops">' +
+        '<label class="mig-modo__op mig-modo__op--on" id="vincOpTotal">' +
+        '<input type="radio" name="vmodo" value="total" checked>' +
+        '<div><div class="mig-modo__tit">Total — <span class="q" id="vincTotalQtd">—</span></div>' +
+        '<div class="mig-modo__sub">a descarga inteira nesta nota</div></div></label>' +
+        '<label class="mig-modo__op" id="vincOpParcial">' +
+        '<input type="radio" name="vmodo" value="parcial">' +
+        '<div><div class="mig-modo__tit">Parcial</div>' +
+        '<div class="mig-modo__sub">escolher quantos litros</div></div></label>' +
+        '</div>' +
+        '<div class="mig-modo__campo" id="vincCampo" hidden>' +
+        '<div class="mig-vlbl">Litros desta nota</div>' +
+        '<input type="number" step="0.001" min="0" class="form-control form-control-sm" ' +
+        'id="vincLitros" style="max-width:180px">' +
+        '<div class="mig-hint" id="vincHint"></div>' +
+        '<div class="mig-vlbl" style="margin-top:.6rem">Observação ' +
+        '<span style="text-transform:none;font-weight:400">(opcional)</span></div>' +
         '<input type="text" maxlength="255" class="form-control form-control-sm" id="vincObs" ' +
-        'placeholder="ex.: conferido com o canhoto"></div></div></div>';
+        'placeholder="ex.: conferido com o canhoto"></div></div>';
     }
     body.innerHTML = h;
     atualizaBotao();
   }
 
-  function atualizaBotao() {
+  function modoAtual() {
+    var r = body.querySelector('input[name="vmodo"]:checked');
+    return r ? r.value : 'total';
+  }
+
+  // Litros que serao gravados: no Total e o proprio teto; no Parcial, o campo.
+  function litrosAtuais() {
+    if (!sel) return NaN;
+    if (modoAtual() === 'total') return tetoDe(sel);
     var inp = document.getElementById('vincLitros');
-    var v = inp ? parseFloat(inp.value) : NaN;
+    return inp ? parseFloat(String(inp.value).replace(',', '.')) : NaN;
+  }
+
+  function atualizaBotao() {
+    var v = litrosAtuais();
     var ok = !!sel && !isNaN(v) && v > 0 && v <= tetoDe(sel) + 1e-6;
     btnOk.disabled = !ok;
     btnOk.textContent = ok ? 'Vincular ' + fmt(v) + ' L' : 'Vincular';
+
+    var qtd = document.getElementById('vincTotalQtd');
+    if (qtd && sel) qtd.textContent = fmt(tetoDe(sel)) + ' L';
+
+    var campo = document.getElementById('vincCampo');
+    if (campo) campo.hidden = modoAtual() !== 'parcial';
+    body.querySelectorAll('.mig-modo__op').forEach(function (op) {
+      var r = op.querySelector('input');
+      op.classList.toggle('mig-modo__op--on', !!r && r.checked);
+    });
+
     var hint = document.getElementById('vincHint');
     if (hint && sel) {
       var teto = tetoDe(sel);
@@ -516,14 +560,31 @@
   });
 
   body.addEventListener('change', function (ev) {
-    if (ev.target.name !== 'vcand') return;
-    sel = cands[parseInt(ev.target.value, 10)];
-    body.querySelectorAll('.mig-cand').forEach(function (el) { el.classList.remove('mig-cand--sel'); });
-    var lab = ev.target.closest('.mig-cand');
-    if (lab) lab.classList.add('mig-cand--sel');
-    var inp = document.getElementById('vincLitros');
-    if (inp) { inp.disabled = false; inp.value = tetoDe(sel); }   // default = menor dos dois saldos
-    atualizaBotao();
+    if (ev.target.name === 'vcand') {
+      sel = cands[parseInt(ev.target.value, 10)];
+      body.querySelectorAll('.mig-cand').forEach(function (el) { el.classList.remove('mig-cand--sel'); });
+      var lab = ev.target.closest('.mig-cand');
+      if (lab) lab.classList.add('mig-cand--sel');
+      var modo = document.getElementById('vincModo');
+      if (modo) modo.hidden = false;
+      // Trocar de nota volta para Total e recalcula: um "parcial" digitado
+      // para a nota anterior nao pode ficar pendurado numa nota com outro saldo.
+      var rt = body.querySelector('input[name="vmodo"][value="total"]');
+      if (rt) rt.checked = true;
+      var inp = document.getElementById('vincLitros');
+      if (inp) inp.value = tetoDe(sel);
+      atualizaBotao();
+      return;
+    }
+    if (ev.target.name === 'vmodo') {
+      var i2 = document.getElementById('vincLitros');
+      // Ao entrar no Parcial, comeca no mesmo valor do Total: so reduzir.
+      if (i2 && ev.target.value === 'parcial' && sel && !parseFloat(i2.value)) {
+        i2.value = tetoDe(sel);
+      }
+      atualizaBotao();
+      if (ev.target.value === 'parcial' && i2) i2.focus();
+    }
   });
   body.addEventListener('input', function (ev) {
     if (ev.target.id === 'vincLitros') atualizaBotao();
@@ -538,7 +599,7 @@
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({
         item_id: sel.item_id,
-        litros: document.getElementById('vincLitros').value,
+        litros: litrosAtuais(),           // Total = o teto; Parcial = o campo
         observacao: obs ? obs.value : ''
       })
     })
