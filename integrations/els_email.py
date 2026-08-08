@@ -41,6 +41,7 @@ import imaplib
 import logging
 import os
 import re
+import unicodedata
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
 from email.header import decode_header, make_header
@@ -422,28 +423,76 @@ def marcar_lidos(uids):
 # Resolução de produto e casamento de frete
 # ===========================================================================
 
+def slug_produto(nome):
+    """Nome de combustivel -> slug canonico, ou None se nao reconhecer.
+
+    Tira acento e TODO separador, entao 'S-500', 'S 500' e 'DIESEL S500 COMUM'
+    caem no mesmo lugar. Era exatamente isso que faltava no matcher anterior:
+    ele comparava substring crua, e o hifen do cadastro ('S-500') nunca batia
+    com o nome que o ELS manda ('DIESEL S500 COMUM') — por isso TODA descarga
+    e leitura de diesel ficava com produto_id NULL, enquanto gasolina e etanol
+    funcionavam (ali o nome cadastrado e substring literal do nome do e-mail).
+
+    A ordem importa: S10/S500 ANTES do diesel generico, senao 'DIESEL S10
+    COMUM' cairia em 'DIESEL'; e aditivada antes da comum, para uma nao
+    engolir a outra.
+
+    Mesma normalizacao de routes/estoque.py:_slug_produto (que ja acerta cor e
+    icone do diesel). Se mudar aqui, olhe la tambem.
+    """
+    if not nome:
+        return None
+    t = unicodedata.normalize("NFKD", str(nome)).encode("ascii", "ignore").decode("ascii")
+    t = re.sub(r"[^A-Z0-9]+", "", t.upper())
+    if not t:
+        return None
+    if "GASOLINA" in t:
+        return "GASOLINA_ADITIVADA" if "ADITIV" in t else "GASOLINA"
+    if "ETANOL" in t or "ALCOOL" in t:
+        return "ETANOL"
+    if "S10" in t:
+        return "S10"
+    if "S500" in t:
+        return "S500"
+    if "ARLA" in t:
+        return "ARLA"
+    if "DIESEL" in t:
+        return "DIESEL"          # diesel sem S10/S500: generico, nao chuta qual e
+    return None
+
+
 def resolver_produto_id(cur, nome):
-    """Mapeia o nome do produto do e-mail para produto.id (match tolerante)."""
+    """Mapeia o nome do produto do e-mail para produto.id.
+
+    1) match exato pelo nome (desempata cadastro duplicado)
+    2) match por SLUG normalizado dos dois lados
+
+    Com DOIS produtos no mesmo slug devolve None e registra aviso, em vez de
+    retornar o primeiro que encontrar. O matcher antigo tinha esse furo: a
+    chave generica 'DIESEL' casava com qualquer produto que contivesse a
+    palavra, entao uma descarga de S500 podia ser gravada no produto S10 sem
+    ninguem perceber. Melhor deixar NULL e aparecer no diagnostico.
+    """
     if not nome:
         return None, None
     cur.execute("SELECT id, nome FROM produto")
     rows = cur.fetchall()
-    alvo = nome.strip().upper()
-    # 1) match exato
+
+    alvo_txt = str(nome).strip().upper()
     for r in rows:
-        if (r["nome"] or "").strip().upper() == alvo:
+        if (r["nome"] or "").strip().upper() == alvo_txt:
             return r["id"], r["nome"]
-    # 2) contém (ex.: 'GASOLINA COMUM' casa 'GASOLINA')
-    for r in rows:
-        pn = (r["nome"] or "").strip().upper()
-        if pn and (pn in alvo or alvo in pn):
-            return r["id"], r["nome"]
-    # 3) por palavra-chave principal
-    for chave in ("GASOLINA", "ETANOL", "DIESEL S10", "DIESEL S500", "DIESEL", "ARLA"):
-        if chave in alvo:
-            for r in rows:
-                if chave in (r["nome"] or "").strip().upper():
-                    return r["id"], r["nome"]
+
+    alvo = slug_produto(nome)
+    if not alvo:
+        return None, None
+    casados = [r for r in rows if slug_produto(r["nome"]) == alvo]
+    if len(casados) == 1:
+        return casados[0]["id"], casados[0]["nome"]
+    if len(casados) > 1:
+        _log.warning(
+            "[els] produto ambiguo para %r (slug %s): %s — deixando NULL",
+            nome, alvo, ", ".join("%s(id %s)" % (c["nome"], c["id"]) for c in casados))
     return None, None
 
 

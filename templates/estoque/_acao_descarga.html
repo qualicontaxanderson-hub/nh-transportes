@@ -7,12 +7,12 @@
    versoes divergiriam na primeira mudanca. #}
 {% if d.vinc_n %}
 {# Ja tem vinculo: o resumo E o botao (abre o mesmo modal, que e onde se
-   desfaz ou se vincula mais uma nota). #}
+   desfaz ou se vincula mais uma nota). Coberta mostra so a nota — os litros
+   ja aparecem no volume da linha. #}
 <button type="button" class="mig-vinc-resumo js-vinc" data-descarga="{{ d.id }}"
         title="Ver, desfazer ou vincular outra nota">
-  <span class="nf">{% if d.vinc_n == 1 %}NF-e {{ d.vinc_numero }}{% else %}{{ d.vinc_n }} notas{% endif %}</span>
-  <b>{{ d.vinc_litros | fmtnum(0) }} L</b>
-  {% if d.vinc_falta > 0 %}<span class="falta">faltam {{ d.vinc_falta | fmtnum(0) }} L · vincular mais</span>{% endif %}
+  {% if d.vinc_n == 1 %}NF-e {{ d.vinc_numero }}{% else %}{{ d.vinc_n }} notas{% endif %}
+  {%- if d.vinc_falta > 0 %} · <span class="falta">faltam {{ d.vinc_falta | fmtnum(0) }} L</span>{% endif %}
 </button>
 {% else %}
 <button type="button" class="mig-btn-vinc js-vinc" data-descarga="{{ d.id }}">

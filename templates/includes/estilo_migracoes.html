@@ -177,6 +177,29 @@
 /* Vol. 20C + capacidade: so no desktop (no mobile o template esconde com d-none d-md-inline). */
 .mig-dia__extra{ font-variant-numeric:tabular-nums; }
 
+/* ---------- Linha da DESCARGA: grade 3x2 ----------
+   A linha da descarga carrega dois elementos a mais que a da leitura (status e
+   acao). Em flex os cinco disputavam a largura e o nome do produto cortava.
+   Aqui viram grade: linha 1 = nome + volume, linha 2 = meta + acao, com o
+   icone ocupando as duas. Modificador proprio de proposito — a linha da
+   LEITURA continua flex, que la funciona. */
+.mig-dia__lin--desc{ display:grid; grid-template-columns:auto 1fr auto;
+  gap:.15rem .6rem; align-items:center; }
+.mig-dia__lin--desc .mig-dia__ico{ grid-row:1 / span 2; }
+.mig-dia__lin--desc .mig-dia__nome{ grid-column:2; grid-row:1; }
+.mig-dia__lin--desc .mig-dia__vol{ grid-column:3; grid-row:1; text-align:right; }
+.mig-dia__lin--desc .mig-dia__meta{ grid-column:2; grid-row:2;
+  display:flex; align-items:center; gap:.3rem; flex-wrap:wrap; }
+.mig-dia__lin--desc .mig-dia__acao{ grid-column:3; grid-row:2; justify-content:flex-end; }
+
+/* Status como ponto colorido na meta, em vez de badge no canto direito:
+   libera a coluna da direita para volume e acao. */
+.mig-st{ display:inline-flex; align-items:center; gap:.25rem; font-weight:600; white-space:nowrap; }
+.mig-st__dot{ width:7px; height:7px; border-radius:50%; flex:0 0 auto; background:currentColor; }
+.mig-st--ok{ color:var(--ok); }
+.mig-st--pend{ color:var(--pend); }
+.mig-st--ign{ color:var(--ign); }
+
 /* Acao no fim da linha da descarga: botao "Vincular" ou o resumo do que ja
    foi vinculado (os dois abrem o mesmo modal). */
 .mig-dia__acao{ flex:0 0 auto; display:flex; align-items:center; gap:.35rem; }
@@ -184,12 +207,13 @@
   border-radius:8px; padding:.25rem .55rem; font-size:11.5px; font-weight:600;
   cursor:pointer; white-space:nowrap; display:inline-flex; align-items:center; gap:.3rem; }
 .mig-btn-vinc:hover{ background:var(--info-bg); border-color:var(--blue); }
+/* Resumo enxuto: coberta mostra so a nota (os litros ja estao no volume, era
+   repeticao); parcial acrescenta o que falta. */
 .mig-vinc-resumo{ border:0; background:none; padding:.1rem .2rem; cursor:pointer;
-  font-size:11px; color:var(--muted); text-align:right; line-height:1.3; max-width:150px; }
-.mig-vinc-resumo:hover{ color:var(--blue); }
-.mig-vinc-resumo .nf{ display:block; color:var(--blue); font-weight:600; }
-.mig-vinc-resumo b{ color:var(--ok); }
-.mig-vinc-resumo .falta{ display:block; color:var(--pend); font-weight:600; }
+  font-size:11px; color:var(--blue); font-weight:600; text-align:right;
+  line-height:1.3; max-width:160px; }
+.mig-vinc-resumo:hover{ text-decoration:underline; }
+.mig-vinc-resumo .falta{ color:var(--pend); }
 
 /* ---------- Modal de vinculo (conteudo montado por JS) ---------- */
 .mig-mdl-body{ background:var(--soft); }
@@ -259,7 +283,10 @@
    tanques estique ate a altura de um dia de 4. Vem depois do bloco acima de
    proposito: mesma media query, seletor mais especifico, aperta o card. */
 @media (min-width:768px){
-  .mig-dias{ display:grid; grid-template-columns:repeat(auto-fill, minmax(290px, 1fr));
+  /* 340px e nao 290: com 290 o nome do produto cortava ("GASOLIN…"), porque
+     icone+nome+volume+status+acao nao cabem na mesma linha. Num monitor de
+     1400px ainda dao 3-4 colunas. */
+  .mig-dias{ display:grid; grid-template-columns:repeat(auto-fill, minmax(340px, 1fr));
     gap:.75rem; align-items:start; }
   .mig-dias .mig-dia{ margin-bottom:0; }
   .mig-dias .mig-dia__head{ padding:.55rem .8rem; }

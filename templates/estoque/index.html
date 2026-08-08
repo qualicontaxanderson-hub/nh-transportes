@@ -107,7 +107,7 @@
             <span class="mig-dia__ico mig-dia__ico--{{ serie.slug }}">
               <i class="bi {{ ICO_PROD.get(serie.slug, 'bi-droplet') }}"></i>
             </span>
-            <span class="nome">{{ serie.nome }}</span>
+            <span class="nome" title="{{ serie.nome }}">{{ serie.nome | title }}</span>
             <span class="cnt">
               {% if serie.tanques %}TQ&nbsp;{{ serie.tanques | join(', ') }} · {% endif %}
               {{ serie.n }} leitura{{ '' if serie.n == 1 else 's' }}
@@ -164,7 +164,7 @@
               <i class="bi {{ ICO_PROD.get(l.slug, 'bi-droplet') }}"></i>
             </span>
             <div class="mig-dia__prod">
-              <div class="mig-dia__nome">{{ l.produto_nome or '—' }}</div>
+              <div class="mig-dia__nome" title="{{ l.produto_nome or '—' }}">{{ (l.produto_nome or '—') | title }}</div>
               <div class="mig-dia__meta">
                 {#- Vol. 20C e capacidade nao cabem no card estreito da grade;
                     aparecem na lista por produto, logo acima. -#}
@@ -232,23 +232,24 @@
           </div>
         </div>
         {% for d in g.itens %}
-        <div class="mig-dia__lin" data-descarga-id="{{ d.id }}" data-status="{{ d.status }}">
+        {# Grade 3x2 (--desc): nome e volume em cima, meta e acao embaixo. O
+           status saiu do canto direito e virou ponto colorido na meta — era
+           ele que espremia o nome do produto. #}
+        <div class="mig-dia__lin mig-dia__lin--desc"
+             data-descarga-id="{{ d.id }}" data-status="{{ d.status }}">
           <span class="mig-dia__ico mig-dia__ico--{{ d.slug }}">
             <i class="bi {{ ICO_PROD.get(d.slug, 'bi-droplet') }}"></i>
           </span>
-          <div class="mig-dia__prod">
-            <div class="mig-dia__nome">{{ d.produto_nome or '—' }}</div>
-            {# O frete_id (controle interno de cobranca) NAO aparece mais: o
-               vinculo certo da descarga e com a NF-e de compra. #}
-            <div class="mig-dia__meta">
-              {{ d.hora }} · TQ&nbsp;{{ d.tanque if d.tanque is not none else '—' }}
-            </div>
-          </div>
-          <div class="mig-dia__vals">
-            <div class="mig-dia__vol">{{ d.total_descarga | fmtnum(0) }} L</div>
-            {% if d.status == 'vinculada' %}<span class="mig-badge mig-badge--ok">vinculada</span>
-            {% elif d.status == 'ignorada' %}<span class="mig-badge mig-badge--ign">ignorada</span>
-            {% else %}<span class="mig-badge mig-badge--pend">pendente</span>{% endif %}
+          {# title com o nome CRU do ELS: o |title e so apresentacao. #}
+          <div class="mig-dia__nome" title="{{ d.produto_nome or '—' }}">{{ (d.produto_nome or '—') | title }}</div>
+          <div class="mig-dia__vol">{{ d.total_descarga | fmtnum(0) }} L</div>
+          {# O frete_id (controle interno de cobranca) NAO aparece mais: o
+             vinculo certo da descarga e com a NF-e de compra. #}
+          <div class="mig-dia__meta">
+            <span>{{ d.hora }} · TQ&nbsp;{{ d.tanque if d.tanque is not none else '—' }}</span>
+            <span class="mig-st mig-st--{{ 'ok' if d.status == 'vinculada' else ('ign' if d.status == 'ignorada' else 'pend') }}">
+              <i class="mig-st__dot"></i>{{ 'parcial' if (d.vinc_n and d.status != 'vinculada') else d.status }}
+            </span>
           </div>
           {% if d.status != 'ignorada' %}
           {# O conteudo vem do parcial porque as rotas de vincular/desfazer
@@ -339,11 +340,13 @@
     lin.setAttribute('data-status', st);
     var acao = lin.querySelector('.mig-dia__acao');
     if (acao && typeof d.acao_html === 'string') acao.innerHTML = d.acao_html;
-    var badge = lin.querySelector('.mig-dia__vals .mig-badge');
-    if (badge) {
-      badge.className = 'mig-badge mig-badge--' +
+    // Status virou ponto colorido na meta (.mig-st), nao mais badge no canto.
+    var stEl = lin.querySelector('.mig-st');
+    if (stEl) {
+      stEl.className = 'mig-st mig-st--' +
         (st === 'vinculada' ? 'ok' : st === 'ignorada' ? 'ign' : 'pend');
-      badge.textContent = st;
+      var rotulo = (d.estado && d.estado.parcial) ? 'parcial' : st;
+      stEl.innerHTML = '<i class="mig-st__dot"></i>' + rotulo;
     }
   }
 
