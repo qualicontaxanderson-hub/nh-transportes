@@ -251,22 +251,9 @@
             {% else %}<span class="mig-badge mig-badge--pend">pendente</span>{% endif %}
           </div>
           {% if d.status != 'ignorada' %}
-          <div class="mig-dia__acao">
-            {% if d.vinc_n %}
-            {# Ja tem vinculo: o resumo E o botao (abre o mesmo modal, que e
-               onde se desfaz ou se vincula mais uma nota). #}
-            <button type="button" class="mig-vinc-resumo js-vinc" data-descarga="{{ d.id }}"
-                    title="Ver, desfazer ou vincular outra nota">
-              <span class="nf">{% if d.vinc_n == 1 %}NF-e {{ d.vinc_numero }}{% else %}{{ d.vinc_n }} notas{% endif %}</span>
-              <b>{{ d.vinc_litros | fmtnum(0) }} L</b>
-              {% if d.vinc_falta > 0 %}<span class="falta">faltam {{ d.vinc_falta | fmtnum(0) }} L · vincular mais</span>{% endif %}
-            </button>
-            {% else %}
-            <button type="button" class="mig-btn-vinc js-vinc" data-descarga="{{ d.id }}">
-              <i class="bi bi-link-45deg"></i> Vincular
-            </button>
-            {% endif %}
-          </div>
+          {# O conteudo vem do parcial porque as rotas de vincular/desfazer
+             devolvem exatamente este HTML para o JS trocar sem recarregar. #}
+          <div class="mig-dia__acao">{% include 'estoque/_acao_descarga.html' %}</div>
           {% endif %}
         </div>
         {% endfor %}
@@ -333,7 +320,32 @@
   var cands   = [];     // candidatas
   var sel     = null;   // candidata escolhida
   var descId  = null;
-  var mudou   = false;  // houve gravacao? -> recarrega ao fechar
+
+  // Fallback: so usado quando a linha nao esta na pagina (filtro/paginacao
+  // mudaram). Recarrega JA na aba Descargas, senao o servidor cai no default
+  // 'leituras' e o usuario perde o contexto.
+  function recarregaNaAba() {
+    var u = new URL(location.href);
+    u.searchParams.set('tab', 'descargas');
+    location.href = u.toString();
+  }
+
+  // Atualiza a linha da descarga sem recarregar. O HTML da acao vem PRONTO do
+  // servidor (mesmo parcial do index), entao nao ha marcacao duplicada aqui.
+  function atualizaLinha(id, d) {
+    var lin = document.querySelector('.mig-dia__lin[data-descarga-id="' + id + '"]');
+    if (!lin) { recarregaNaAba(); return; }
+    var st = (d.estado && d.estado.status) || 'pendente';
+    lin.setAttribute('data-status', st);
+    var acao = lin.querySelector('.mig-dia__acao');
+    if (acao && typeof d.acao_html === 'string') acao.innerHTML = d.acao_html;
+    var badge = lin.querySelector('.mig-dia__vals .mig-badge');
+    if (badge) {
+      badge.className = 'mig-badge mig-badge--' +
+        (st === 'vinculada' ? 'ok' : st === 'ignorada' ? 'ign' : 'pend');
+      badge.textContent = st;
+    }
+  }
 
   function fmt(n, dec) {
     dec = dec || 0;
@@ -493,7 +505,7 @@
         .then(function (r) { return r.json(); })
         .then(function (d) {
           if (!d.ok) throw new Error(d.erro || 'falha');
-          mudou = true;
+          atualizaLinha(d.descarga_id || descId, d);
           abrir(descId);   // remonta o modal com o estado novo
         })
         .catch(function (e) { u.disabled = false; alert('Não deu para desfazer: ' + (e.message || e)); });
@@ -530,8 +542,8 @@
       .then(function (r) { return r.json(); })
       .then(function (d) {
         if (!d.ok) throw new Error(d.erro || 'falha');
-        mudou = true;
-        modal.hide();   // o handler de 'hidden' recarrega a pagina
+        atualizaLinha(descId, d);   // a linha ja mostra o resumo
+        modal.hide();               // sem reload: mesma aba, mesma rolagem
       })
       .catch(function (e) {
         alert('Não deu para vincular: ' + (e.message || e));
@@ -539,9 +551,17 @@
       });
   });
 
-  // Recarrega so quando algo foi de fato gravado (mantem a aba/filtros da URL).
-  modalEl.addEventListener('hidden.bs.modal', function () {
-    if (mudou) location.reload();
+  // A URL acompanha a sub-aba ativa. Sem isso, um F5 (ou o fallback acima)
+  // cairia no default 'leituras' do servidor, porque o clique na aba e
+  // client-side e nunca tocava na URL.
+  document.querySelectorAll('#estqTabs [data-bs-target]').forEach(function (b) {
+    b.addEventListener('shown.bs.tab', function (ev) {
+      var alvo = ev.target.getAttribute('data-bs-target') === '#pane-descargas'
+               ? 'descargas' : 'leituras';
+      var u = new URL(location.href);
+      u.searchParams.set('tab', alvo);
+      history.replaceState(null, '', u.toString());
+    });
   });
 })();
 </script>

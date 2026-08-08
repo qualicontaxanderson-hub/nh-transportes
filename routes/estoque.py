@@ -318,6 +318,24 @@ def index():
         conn.close()
 
 
+def _acao_html(cur, descarga_id, estado):
+    """HTML do .mig-dia__acao desta descarga, ja renderizado.
+
+    O JS troca esse pedaco na linha depois de vincular/desfazer, entao a pagina
+    nao recarrega. Renderiza o MESMO parcial que o index usa — sem isso a
+    marcacao viveria em dois lugares (Jinja e JS) e divergiria.
+    """
+    res = vinculos_resumo(cur, [descarga_id]).get(descarga_id)
+    d = {
+        'id': descarga_id,
+        'vinc_n': res['n'] if res else 0,
+        'vinc_litros': res['litros'] if res else 0.0,
+        'vinc_numero': res['numero'] if res else None,
+        'vinc_falta': estado['saldo'],
+    }
+    return render_template('estoque/_acao_descarga.html', d=d)
+
+
 # ==========================================================================
 # CAMADA 2 — vinculo descarga <-> NF-e de compra.
 # Tres rotas JSON consumidas pelo modal da aba Descargas. O base.html ja
@@ -370,7 +388,8 @@ def vincular(descarga_id):
             observacao=dados.get('observacao'),
         )
         conn.commit()
-        return jsonify({'ok': True, 'estado': estado})
+        return jsonify({'ok': True, 'estado': estado,
+                        'acao_html': _acao_html(cur, descarga_id, estado)})
     except ValueError as e:
         conn.rollback()
         return jsonify({'ok': False, 'erro': str(e)}), 400
@@ -393,7 +412,9 @@ def desfazer_vinculo(vinculo_id):
         if estado is None:
             return jsonify({'ok': False, 'erro': 'Vínculo não encontrado.'}), 404
         conn.commit()
-        return jsonify({'ok': True, 'estado': estado})
+        return jsonify({'ok': True, 'estado': estado,
+                        'descarga_id': estado['descarga_id'],
+                        'acao_html': _acao_html(cur, estado['descarga_id'], estado)})
     except Exception as e:
         conn.rollback()
         return jsonify({'ok': False, 'erro': 'Falha ao desfazer: %s' % e}), 500
