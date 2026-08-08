@@ -221,6 +221,161 @@ def sugerir_notas(cur, descarga_id, janela_dias=JANELA_DIAS,
     return {"descarga": descarga, "candidatas": candidatas[:limite]}
 
 
+def listar_vinculos(cur, descarga_id):
+    """Vinculos ja gravados de UMA descarga, com os dados da nota, pro modal."""
+    cur.execute(
+        """
+        SELECT dn.id, dn.litros, dn.observacao, dn.criado_em, dn.criado_por,
+               dn.documento_id, dn.item_id,
+               doc.numero, doc.serie, doc.emit_nome AS fornecedor, doc.chave,
+               doc.dh_emissao, i.n_item, i.produto_xml,
+               u.username AS criado_por_nome
+        FROM descarga_nota dn
+        JOIN dfe_documentos doc ON doc.id = dn.documento_id
+        JOIN dfe_itens i        ON i.id  = dn.item_id
+        LEFT JOIN usuarios u    ON u.id  = dn.criado_por
+        WHERE dn.descarga_id = %s
+        ORDER BY dn.id
+        """,
+        (descarga_id,),
+    )
+    saida = []
+    for r in cur.fetchall():
+        r = dict(r)
+        r["litros"] = _f(r["litros"])
+        saida.append(r)
+    return saida
+
+
+def vinculos_resumo(cur, descarga_ids):
+    """Resumo por descarga para a LISTA (uma consulta so, sem N+1).
+
+    {descarga_id: {'n': qtd de notas, 'litros': total, 'numero': n da 1a nota}}
+    """
+    ids = [i for i in (descarga_ids or []) if i]
+    if not ids:
+        return {}
+    marc = ", ".join(["%s"] * len(ids))
+    cur.execute(
+        f"""
+        SELECT dn.descarga_id, COUNT(*) AS n, SUM(dn.litros) AS litros,
+               MIN(doc.numero) AS numero
+        FROM descarga_nota dn
+        JOIN dfe_documentos doc ON doc.id = dn.documento_id
+        WHERE dn.descarga_id IN ({marc})
+        GROUP BY dn.descarga_id
+        """,
+        ids,
+    )
+    return {r["descarga_id"]: {"n": r["n"], "litros": _f(r["litros"]) or 0.0,
+                               "numero": r["numero"]}
+            for r in cur.fetchall()}
+
+
+def registrar_vinculo(cur, descarga_id, item_id, litros, usuario_id=None,
+                      observacao=None, tolerancia_l=TOLERANCIA_L):
+    """Grava UM vinculo depois de revalidar TUDO no servidor.
+
+    Nao confia em nada que venha da tela: o `documento_id` e resolvido a partir
+    do `item_id` (nunca recebido de fora, senao as duas colunas poderiam
+    divergir), e a legitimidade do item e conferida de novo — mesma empresa,
+    mesmo produto, NF-e autorizada.
+
+    Vincular o MESMO item na MESMA descarga duas vezes SOMA no vinculo que ja
+    existe (ON DUPLICATE KEY), respeitando a UNIQUE(descarga_id, item_id): e o
+    que o usuario quer dizer, e evita estourar a constraint na cara dele.
+
+    Levanta ValueError com mensagem pronta pra exibir quando algo nao passa.
+    NAO da commit — quem chama controla a transacao.
+    Retorna o estado da descarga depois do vinculo.
+    """
+    try:
+        litros = float(str(litros).replace(",", "."))
+    except (TypeError, ValueError):
+        raise ValueError("Informe os litros em número.")
+    if litros <= 0:
+        raise ValueError("Os litros precisam ser maiores que zero.")
+
+    cur.execute(
+        """
+        SELECT id, cliente_id, produto_id, status, total_descarga,
+               COALESCE((SELECT SUM(dn.litros) FROM descarga_nota dn
+                          WHERE dn.descarga_id = descargas_pendentes.id), 0) AS vinculado
+        FROM descargas_pendentes WHERE id = %s
+        """,
+        (descarga_id,),
+    )
+    d = cur.fetchone()
+    if not d:
+        raise ValueError("Descarga não encontrada.")
+    if d["status"] == 'ignorada':
+        raise ValueError("Esta descarga está marcada como ignorada. "
+                         "Tire a marcação antes de vincular uma nota.")
+
+    # O item precisa ser um candidato legitimo AGORA — nao basta ter sido
+    # quando a tela montou a lista.
+    cur.execute(
+        """
+        SELECT i.id, i.documento_id, i.quantidade,
+               COALESCE(i.classificado_produto_id, i.produto_id) AS produto_id,
+               doc.cliente_id, doc.tipo, doc.situacao, doc.numero,
+               COALESCE((SELECT SUM(dn.litros) FROM descarga_nota dn
+                          WHERE dn.item_id = i.id), 0) AS vinculado_item
+        FROM dfe_itens i
+        JOIN dfe_documentos doc ON doc.id = i.documento_id
+        WHERE i.id = %s
+        """,
+        (item_id,),
+    )
+    it = cur.fetchone()
+    if not it:
+        raise ValueError("Item da nota não encontrado.")
+    if it["tipo"] != 'NFe' or it["situacao"] != 'autorizado':
+        raise ValueError("A nota precisa ser uma NF-e autorizada.")
+    if it["cliente_id"] != d["cliente_id"]:
+        raise ValueError("Esta nota é de outra empresa.")
+    if not d["produto_id"] or it["produto_id"] != d["produto_id"]:
+        raise ValueError("O produto da nota não é o mesmo da descarga.")
+
+    saldo_item = round((_f(it["quantidade"]) or 0.0) - (_f(it["vinculado_item"]) or 0.0), 3)
+    if litros > saldo_item + 1e-6:
+        raise ValueError("A nota %s só tem %.3f L de saldo (você pediu %.3f L)."
+                         % (it["numero"] or "?", saldo_item, litros))
+
+    falta = round((_f(d["total_descarga"]) or 0.0) - (_f(d["vinculado"]) or 0.0), 3)
+    if litros > falta + 1e-6:
+        raise ValueError("Faltam só %.3f L nesta descarga (você pediu %.3f L)."
+                         % (falta, litros))
+
+    cur.execute(
+        """
+        INSERT INTO descarga_nota
+            (descarga_id, documento_id, item_id, litros, observacao, criado_por)
+        VALUES (%s, %s, %s, %s, %s, %s)
+        ON DUPLICATE KEY UPDATE
+            litros     = litros + VALUES(litros),
+            observacao = COALESCE(NULLIF(VALUES(observacao), ''), observacao)
+        """,
+        (descarga_id, it["documento_id"], item_id, litros,
+         (observacao or '').strip()[:255] or None, usuario_id),
+    )
+    return calcular_estado(cur, descarga_id, tolerancia_l=tolerancia_l)
+
+
+def remover_vinculo(cur, vinculo_id, tolerancia_l=TOLERANCIA_L):
+    """Desfaz UM vinculo e recalcula o estado da descarga.
+
+    NAO da commit. Retorna o estado novo, ou None se o vinculo nao existir.
+    """
+    cur.execute("SELECT descarga_id FROM descarga_nota WHERE id = %s", (vinculo_id,))
+    v = cur.fetchone()
+    if not v:
+        return None
+    descarga_id = v["descarga_id"]
+    cur.execute("DELETE FROM descarga_nota WHERE id = %s", (vinculo_id,))
+    return calcular_estado(cur, descarga_id, tolerancia_l=tolerancia_l)
+
+
 def calcular_estado(cur, descarga_id, tolerancia_l=TOLERANCIA_L,
                     atualizar_status=True):
     """Quanto da descarga ja foi coberto por notas, e sincroniza o status.

@@ -177,10 +177,72 @@
 /* Vol. 20C + capacidade: so no desktop (no mobile o template esconde com d-none d-md-inline). */
 .mig-dia__extra{ font-variant-numeric:tabular-nums; }
 
-/* RESERVADO p/ o Bloco 3: o botao "Vincular nota" das descargas pendentes
-   entra aqui, no fim da linha, sem remexer no resto. Vazio ate la — de
-   proposito nao ha botao desabilitado no HTML. */
+/* Acao no fim da linha da descarga: botao "Vincular" ou o resumo do que ja
+   foi vinculado (os dois abrem o mesmo modal). */
 .mig-dia__acao{ flex:0 0 auto; display:flex; align-items:center; gap:.35rem; }
+.mig-btn-vinc{ border:1px solid var(--line-2); background:var(--surface); color:var(--blue);
+  border-radius:8px; padding:.25rem .55rem; font-size:11.5px; font-weight:600;
+  cursor:pointer; white-space:nowrap; display:inline-flex; align-items:center; gap:.3rem; }
+.mig-btn-vinc:hover{ background:var(--info-bg); border-color:var(--blue); }
+.mig-vinc-resumo{ border:0; background:none; padding:.1rem .2rem; cursor:pointer;
+  font-size:11px; color:var(--muted); text-align:right; line-height:1.3; max-width:150px; }
+.mig-vinc-resumo:hover{ color:var(--blue); }
+.mig-vinc-resumo .nf{ display:block; color:var(--blue); font-weight:600; }
+.mig-vinc-resumo b{ color:var(--ok); }
+.mig-vinc-resumo .falta{ display:block; color:var(--pend); font-weight:600; }
+
+/* ---------- Modal de vinculo (conteudo montado por JS) ---------- */
+.mig-mdl-body{ background:var(--soft); }
+.mig-vdsc{ background:var(--surface); border:1px solid var(--line-2); border-radius:10px;
+  padding:.6rem .75rem; margin-bottom:.75rem; }
+.mig-vdsc__top{ display:flex; align-items:center; gap:.55rem; }
+.mig-vdsc__nome{ font-weight:700; font-size:.92rem; }
+.mig-vdsc__meta{ font-size:11.5px; color:var(--muted); }
+.mig-vdsc__tot{ margin-left:auto; text-align:right; }
+.mig-vdsc__tot b{ font-size:1.02rem; font-variant-numeric:tabular-nums; }
+.mig-bar{ height:6px; border-radius:99px; background:var(--line); margin-top:.5rem; overflow:hidden; }
+.mig-bar i{ display:block; height:100%; background:var(--ok); border-radius:99px; }
+.mig-vdsc__prog{ font-size:11.5px; color:var(--muted); margin-top:.3rem;
+  display:flex; justify-content:space-between; gap:.5rem; }
+
+.mig-vja{ background:var(--surface); border:1px solid var(--line-2); border-radius:10px;
+  padding:.5rem .75rem; margin-bottom:.75rem; }
+.mig-vja__lin{ display:flex; align-items:center; gap:.5rem; padding:.35rem 0;
+  border-top:1px solid var(--line); font-size:.85rem; }
+.mig-vja__lin:first-of-type{ border-top:0; }
+.mig-vja__lin .l{ margin-left:auto; font-weight:700; font-variant-numeric:tabular-nums; }
+.mig-btn-undo{ border:1px solid #f0d5d1; background:var(--surface); color:var(--danger);
+  border-radius:7px; padding:.15rem .45rem; font-size:11px; font-weight:600; cursor:pointer; }
+.mig-btn-undo:hover{ background:var(--danger-bg); }
+
+.mig-vlbl{ font-size:11px; text-transform:uppercase; letter-spacing:.04em;
+  color:var(--muted); font-weight:700; margin-bottom:.35rem; }
+.mig-cand{ background:var(--surface); border:1px solid var(--line-2); border-radius:10px;
+  padding:.6rem .7rem; margin-bottom:.5rem; display:flex; gap:.6rem; cursor:pointer; }
+.mig-cand--top{ border-color:var(--blue); box-shadow:0 0 0 2px rgba(29,99,165,.12); }
+.mig-cand--sel{ background:var(--hover); }
+.mig-cand--off{ opacity:.55; cursor:not-allowed; }
+.mig-cand input{ margin-top:.2rem; accent-color:var(--blue); flex:0 0 auto; }
+.mig-cand__c{ min-width:0; flex:1 1 auto; }
+.mig-cand__t{ display:flex; align-items:center; gap:.45rem; flex-wrap:wrap; }
+.mig-cand__nf{ font-weight:700; font-size:.9rem; }
+.mig-cand__forn{ font-size:12px; color:var(--ink); }
+.mig-cand__l{ font-size:11.5px; color:var(--muted); margin-top:.15rem; }
+.mig-cand__badges{ display:flex; gap:.3rem; flex-wrap:wrap; margin-top:.35rem; }
+.mig-cand__cte{ margin-top:.4rem; padding-top:.4rem; border-top:1px dashed var(--line-2);
+  font-size:11.5px; color:var(--ink); display:flex; align-items:center; gap:.35rem; flex-wrap:wrap; }
+.mig-cand__cte .bi{ color:var(--f-s500); }
+.mig-cand__cte--sem{ color:var(--muted); }
+.mig-cand__v{ flex:0 0 auto; text-align:right; }
+.mig-cand__v .q{ font-weight:700; font-variant-numeric:tabular-nums; white-space:nowrap; }
+.mig-cand__v .s{ font-size:11px; color:var(--muted); white-space:nowrap; }
+
+.mig-grava{ background:var(--surface); border:1px solid var(--line-2); border-radius:10px;
+  padding:.7rem .75rem; margin-top:.75rem; }
+.mig-grava__row{ display:flex; gap:.6rem; align-items:flex-end; flex-wrap:wrap; }
+.mig-grava .fld{ flex:1 1 150px; min-width:0; }
+.mig-hint{ font-size:11px; color:var(--muted); margin-top:.3rem; }
+.mig-hint--err{ color:var(--danger); font-weight:600; }
 
 @media (min-width:768px){
   .mig-dia__head{ padding:.7rem 1.1rem; }

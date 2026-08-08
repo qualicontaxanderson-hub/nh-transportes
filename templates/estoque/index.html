@@ -238,9 +238,10 @@
           </span>
           <div class="mig-dia__prod">
             <div class="mig-dia__nome">{{ d.produto_nome or '—' }}</div>
+            {# O frete_id (controle interno de cobranca) NAO aparece mais: o
+               vinculo certo da descarga e com a NF-e de compra. #}
             <div class="mig-dia__meta">
               {{ d.hora }} · tanque {{ d.tanque if d.tanque is not none else '—' }}
-              {%- if d.frete_id %} · <a href="{{ url_for('fretes.editar', id=d.frete_id) }}">frete #{{ d.frete_id }}</a>{% endif %}
             </div>
           </div>
           <div class="mig-dia__vals">
@@ -249,9 +250,24 @@
             {% elif d.status == 'ignorada' %}<span class="mig-badge mig-badge--ign">ignorada</span>
             {% else %}<span class="mig-badge mig-badge--pend">pendente</span>{% endif %}
           </div>
-          {# FUTURO (Bloco 3): o botao "Vincular nota" das linhas pendentes entra
-             aqui, numa <div class="mig-dia__acao">. A regra CSS ja existe; nao
-             ha botao vazio/desabilitado no HTML de proposito. #}
+          {% if d.status != 'ignorada' %}
+          <div class="mig-dia__acao">
+            {% if d.vinc_n %}
+            {# Ja tem vinculo: o resumo E o botao (abre o mesmo modal, que e
+               onde se desfaz ou se vincula mais uma nota). #}
+            <button type="button" class="mig-vinc-resumo js-vinc" data-descarga="{{ d.id }}"
+                    title="Ver, desfazer ou vincular outra nota">
+              <span class="nf">{% if d.vinc_n == 1 %}NF-e {{ d.vinc_numero }}{% else %}{{ d.vinc_n }} notas{% endif %}</span>
+              <b>{{ d.vinc_litros | fmtnum(0) }} L</b>
+              {% if d.vinc_falta > 0 %}<span class="falta">faltam {{ d.vinc_falta | fmtnum(0) }} L · vincular mais</span>{% endif %}
+            </button>
+            {% else %}
+            <button type="button" class="mig-btn-vinc js-vinc" data-descarga="{{ d.id }}">
+              <i class="bi bi-link-45deg"></i> Vincular
+            </button>
+            {% endif %}
+          </div>
+          {% endif %}
         </div>
         {% endfor %}
       </div>{# /.mig-dia #}
@@ -279,5 +295,248 @@
     </div>
   </div>
 
+  {# =================== MODAL: vincular descarga -> NF-e de compra ===================
+     Fica DENTRO de .mig para herdar os tokens do design system. O corpo e
+     montado por JS a partir de /estoque/descarga/<id>/vinculo. #}
+  <div class="modal fade" id="vincModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable modal-fullscreen-sm-down">
+      <div class="modal-content">
+        <div class="modal-header" style="background:#1D63A5;color:#fff;">
+          <h5 class="modal-title mb-0"><i class="bi bi-link-45deg"></i> Vincular nota de compra</h5>
+          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Fechar"></button>
+        </div>
+        <div class="modal-body mig-mdl-body py-3" id="vincBody"></div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+          <button type="button" class="btn btn-sm btn-primary" id="vincOk" disabled>Vincular</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
 </div>{# /.mig #}
+
+<script>
+(function () {
+  var modalEl = document.getElementById('vincModal');
+  if (!modalEl) return;
+  var modal   = new bootstrap.Modal(modalEl);
+  var body    = document.getElementById('vincBody');
+  var btnOk   = document.getElementById('vincOk');
+  var estado  = null;   // estado da descarga (do servidor)
+  var cands   = [];     // candidatas
+  var sel     = null;   // candidata escolhida
+  var descId  = null;
+  var mudou   = false;  // houve gravacao? -> recarrega ao fechar
+
+  function fmt(n, dec) {
+    dec = dec || 0;
+    return (Number(n) || 0).toLocaleString('pt-BR',
+      {minimumFractionDigits: dec, maximumFractionDigits: dec});
+  }
+  function esc(s) {
+    return String(s === null || s === undefined ? '' : s).replace(/[&<>"']/g,
+      function (c) { return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; });
+  }
+  // Teto do campo: o que falta na descarga, limitado pelo saldo da nota.
+  function tetoDe(c) {
+    return Math.max(0, Math.min(Number(estado.saldo) || 0, Number(c.saldo) || 0));
+  }
+
+  function selosDe(c) {
+    var s = '';
+    if (c.dif_litros === 0)            s += '<span class="mig-badge mig-badge--ok">volume exato</span>';
+    else if (c.dentro_tolerancia)      s += '<span class="mig-badge mig-badge--info">' +
+                                            (c.dif_litros > 0 ? '+' : '−') + fmt(Math.abs(c.dif_litros)) + ' L na nota</span>';
+    else                               s += '<span class="mig-badge mig-badge--pend">' +
+                                            (c.dif_litros > 0 ? '+' : '−') + fmt(Math.abs(c.dif_litros)) +
+                                            ' L · fora da tolerância</span>';
+    if (c.dif_dias === 0)              s += '<span class="mig-badge mig-badge--ok">mesmo dia</span>';
+    else {
+      var n = Math.abs(c.dif_dias);
+      s += '<span class="mig-badge mig-badge--info">' + n + (n === 1 ? ' dia ' : ' dias ') +
+           (c.dif_dias < 0 ? 'antes' : 'depois') + '</span>';
+    }
+    if (c.ja_vinculada_nesta) s += '<span class="mig-badge mig-badge--info">já usada nesta descarga</span>';
+    if (c.esgotada)           s += '<span class="mig-badge mig-badge--ign">sem saldo</span>';
+    return s;
+  }
+
+  function cteDe(c) {
+    if (!c.ctes || !c.ctes.length) {
+      return '<div class="mig-cand__cte mig-cand__cte--sem"><i class="bi bi-truck"></i> sem CT-e capturado</div>';
+    }
+    return c.ctes.map(function (t) {
+      var p = ['<b>CT-e ' + esc(t.cte_numero) + '</b>'];
+      if (t.cte_transportadora) p.push(esc(t.cte_transportadora));
+      if (t.cte_valor_frete !== null && t.cte_valor_frete !== undefined)
+        p.push('frete R$ ' + fmt(t.cte_valor_frete, 2));
+      if (t.cte_placa) p.push(esc(t.cte_placa));
+      if (t.mun_ini && t.mun_fim) p.push(esc(t.mun_ini) + '→' + esc(t.mun_fim));
+      return '<div class="mig-cand__cte"><i class="bi bi-truck"></i> ' + p.join(' · ') + '</div>';
+    }).join('');
+  }
+
+  function render(d) {
+    estado = d.estado; cands = d.candidatas || []; sel = null;
+    var dsc = d.descarga || {};
+    var pct = estado.total_descarga > 0
+      ? Math.min(100, Math.round(estado.vinculado / estado.total_descarga * 100)) : 0;
+
+    var h = '<div class="mig-vdsc"><div class="mig-vdsc__top">' +
+      '<div><div class="mig-vdsc__nome">' + esc(dsc.produto_nome || '—') + '</div>' +
+      '<div class="mig-vdsc__meta">tanque ' + esc(dsc.tanque === null ? '—' : dsc.tanque) + '</div></div>' +
+      '<div class="mig-vdsc__tot"><b>' + fmt(estado.total_descarga) + ' L</b>' +
+      '<div class="mig-vdsc__meta">descarregados</div></div></div>' +
+      '<div class="mig-bar"><i style="width:' + pct + '%"></i></div>' +
+      '<div class="mig-vdsc__prog"><span><b>' + fmt(estado.vinculado) + ' L</b> vinculados (' + pct + '%)</span>' +
+      '<span>faltam <b>' + fmt(estado.saldo) + ' L</b></span></div></div>';
+
+    if (d.vinculos && d.vinculos.length) {
+      h += '<div class="mig-vja"><div class="mig-vlbl">Já vinculado</div>';
+      d.vinculos.forEach(function (v) {
+        h += '<div class="mig-vja__lin"><i class="bi bi-link-45deg" style="color:#1e7e34"></i><div>' +
+             '<div><b>NF-e ' + esc(v.numero) + '</b> · ' + esc(v.fornecedor || '') + '</div>' +
+             '<div class="mig-vdsc__meta">item ' + esc(v.n_item) +
+             (v.criado_por_nome ? ' · por ' + esc(v.criado_por_nome) : '') + '</div></div>' +
+             '<span class="l">' + fmt(v.litros) + ' L</span>' +
+             '<button type="button" class="mig-btn-undo js-undo" data-id="' + v.id + '">desfazer</button></div>';
+      });
+      h += '</div>';
+    }
+
+    if (!cands.length) {
+      h += '<div class="mig-empty"><i class="bi bi-search"></i> Nenhuma nota candidata. ' +
+           esc(d.motivo_vazio || '') + '</div>';
+    } else {
+      h += '<div class="mig-vlbl">Notas candidatas · ' + cands.length + '</div>';
+      cands.forEach(function (c, i) {
+        var cls = 'mig-cand' + (i === 0 && !c.esgotada ? ' mig-cand--top' : '') +
+                  (c.esgotada ? ' mig-cand--off' : '');
+        h += '<label class="' + cls + '" data-i="' + i + '">' +
+          '<input type="radio" name="vcand" value="' + i + '"' + (c.esgotada ? ' disabled' : '') + '>' +
+          '<div class="mig-cand__c"><div class="mig-cand__t">' +
+          '<span class="mig-cand__nf">NF-e ' + esc(c.numero) + '</span>' +
+          (i === 0 && !c.esgotada ? '<span class="mig-badge mig-badge--info"><i class="bi bi-star-fill"></i> mais provável</span>' : '') +
+          '</div><div class="mig-cand__forn">' + esc(c.fornecedor || '') + '</div>' +
+          '<div class="mig-cand__l">emitida ' + esc(c.emissao) + ' · série ' + esc(c.serie) +
+          ' · item ' + esc(c.n_item) + (c.cod_anp ? ' · ANP ' + esc(c.cod_anp) : '') + '</div>' +
+          '<div class="mig-cand__badges">' + selosDe(c) + '</div>' + cteDe(c) +
+          '</div><div class="mig-cand__v"><div class="q">' + fmt(c.item_litros) + ' L</div>' +
+          '<div class="s">saldo ' + fmt(c.saldo) + ' L</div></div></label>';
+      });
+      h += '<div class="mig-grava"><div class="mig-grava__row">' +
+        '<div class="fld" style="flex:0 0 170px"><div class="mig-vlbl">Litros desta nota</div>' +
+        '<input type="number" step="0.001" min="0" class="form-control form-control-sm" id="vincLitros" disabled>' +
+        '<div class="mig-hint" id="vincHint">Escolha uma nota acima.</div></div>' +
+        '<div class="fld"><div class="mig-vlbl">Observação <span style="text-transform:none;font-weight:400">(opcional)</span></div>' +
+        '<input type="text" maxlength="255" class="form-control form-control-sm" id="vincObs" ' +
+        'placeholder="ex.: conferido com o canhoto"></div></div></div>';
+    }
+    body.innerHTML = h;
+    atualizaBotao();
+  }
+
+  function atualizaBotao() {
+    var inp = document.getElementById('vincLitros');
+    var v = inp ? parseFloat(inp.value) : NaN;
+    var ok = !!sel && !isNaN(v) && v > 0 && v <= tetoDe(sel) + 1e-6;
+    btnOk.disabled = !ok;
+    btnOk.textContent = ok ? 'Vincular ' + fmt(v) + ' L' : 'Vincular';
+    var hint = document.getElementById('vincHint');
+    if (hint && sel) {
+      var teto = tetoDe(sel);
+      if (!isNaN(v) && v > teto + 1e-6) {
+        hint.className = 'mig-hint mig-hint--err';
+        hint.textContent = 'Máximo ' + fmt(teto, 3) + ' L (saldo da nota e o que falta na descarga).';
+      } else {
+        hint.className = 'mig-hint';
+        hint.textContent = 'máx. ' + fmt(teto, 3) + ' L (saldo da nota e o que falta na descarga)';
+      }
+    }
+  }
+
+  function abrir(id) {
+    descId = id;
+    body.innerHTML = '<div class="mig-empty"><i class="bi bi-hourglass-split"></i> Buscando notas…</div>';
+    btnOk.disabled = true; btnOk.textContent = 'Vincular';
+    modal.show();
+    fetch('/estoque/descarga/' + id + '/vinculo', {headers: {'Accept': 'application/json'}})
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        if (!d.ok) throw new Error(d.erro || 'falha');
+        render(d);
+      })
+      .catch(function (e) {
+        body.innerHTML = '<div class="mig-empty"><i class="bi bi-exclamation-triangle"></i> ' +
+                         esc(e.message || e) + '</div>';
+      });
+  }
+
+  // ---- eventos ----
+  document.addEventListener('click', function (ev) {
+    var b = ev.target.closest('.js-vinc');
+    if (b) { ev.preventDefault(); abrir(b.getAttribute('data-descarga')); return; }
+
+    var u = ev.target.closest('.js-undo');
+    if (u) {
+      ev.preventDefault(); ev.stopPropagation();
+      if (!confirm('Desfazer este vínculo?')) return;
+      u.disabled = true;
+      fetch('/estoque/vinculo/' + u.getAttribute('data-id') + '/desfazer', {method: 'POST'})
+        .then(function (r) { return r.json(); })
+        .then(function (d) {
+          if (!d.ok) throw new Error(d.erro || 'falha');
+          mudou = true;
+          abrir(descId);   // remonta o modal com o estado novo
+        })
+        .catch(function (e) { u.disabled = false; alert('Não deu para desfazer: ' + (e.message || e)); });
+    }
+  });
+
+  body.addEventListener('change', function (ev) {
+    if (ev.target.name !== 'vcand') return;
+    sel = cands[parseInt(ev.target.value, 10)];
+    body.querySelectorAll('.mig-cand').forEach(function (el) { el.classList.remove('mig-cand--sel'); });
+    var lab = ev.target.closest('.mig-cand');
+    if (lab) lab.classList.add('mig-cand--sel');
+    var inp = document.getElementById('vincLitros');
+    if (inp) { inp.disabled = false; inp.value = tetoDe(sel); }   // default = menor dos dois saldos
+    atualizaBotao();
+  });
+  body.addEventListener('input', function (ev) {
+    if (ev.target.id === 'vincLitros') atualizaBotao();
+  });
+
+  btnOk.addEventListener('click', function () {
+    if (!sel || btnOk.disabled) return;
+    var obs = document.getElementById('vincObs');
+    btnOk.disabled = true; btnOk.textContent = 'Vinculando…';
+    fetch('/estoque/descarga/' + descId + '/vincular', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        item_id: sel.item_id,
+        litros: document.getElementById('vincLitros').value,
+        observacao: obs ? obs.value : ''
+      })
+    })
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        if (!d.ok) throw new Error(d.erro || 'falha');
+        mudou = true;
+        modal.hide();   // o handler de 'hidden' recarrega a pagina
+      })
+      .catch(function (e) {
+        alert('Não deu para vincular: ' + (e.message || e));
+        atualizaBotao();
+      });
+  });
+
+  // Recarrega so quando algo foi de fato gravado (mantem a aba/filtros da URL).
+  modalEl.addEventListener('hidden.bs.modal', function () {
+    if (mudou) location.reload();
+  });
+})();
+</script>
 {% endblock %}

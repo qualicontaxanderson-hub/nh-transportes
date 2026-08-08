@@ -13,9 +13,10 @@ banco do app:
         campo-chave: "Volume atual"
 
   2) "Alarme descarga"                 -> ENTRADA DE MERCADORIA (DESCARGA)
-        grava em `descargas_pendentes` e, quando casa com UM frete, cria a
-        linha em `descargas` (mesma estrutura da tela /descargas/nova)
+        grava em `descargas_pendentes` SEMPRE como 'pendente'
         campo-chave: "Total da descarga"
+        O vinculo correto e com a NF-e DE COMPRA e e feito pelo usuario na
+        tela /estoque (Camada 2). Este modulo nao vincula nada sozinho.
 
 Segue os padrões do app: usa utils.db.get_db_connection(), cria as tabelas de
 forma idempotente (como routes/descargas.py) e é chamado pelo agendador
@@ -446,44 +447,22 @@ def resolver_produto_id(cur, nome):
     return None, None
 
 
-def casar_frete(cur, cliente_id, produto_id, data_ref, total_litros):
-    """
-    Procura UM frete compatível para a descarga.
-    Critério: mesmo cliente + produto, data_frete dentro da janela, volume NF
-    (quantidade_manual) próximo do total da descarga, e SEM descarga finalizada.
-    Retorna frete_id se houver EXATAMENTE um candidato; senão None.
-    """
-    if not (cliente_id and produto_id and data_ref):
-        return None
-    janela = int(_cfg("ELS_MATCH_JANELA_DIAS", "5"))
-    tol = float(_cfg("ELS_MATCH_TOLERANCIA", "500"))
-    d0 = (data_ref - timedelta(days=janela)).strftime("%Y-%m-%d")
-    d1 = (data_ref + timedelta(days=1)).strftime("%Y-%m-%d")
-    cur.execute(
-        """
-        SELECT f.id, COALESCE(f.quantidade_manual,0) AS volume_nf
-        FROM fretes f
-        WHERE f.clientes_id = %s
-          AND f.produto_id  = %s
-          AND f.data_frete BETWEEN %s AND %s
-          AND NOT EXISTS (
-              SELECT 1 FROM descargas d
-              WHERE d.frete_id = f.id AND d.status = 'finalizado'
-          )
-        ORDER BY f.data_frete DESC, f.id DESC
-        """,
-        (cliente_id, produto_id, d0, d1),
-    )
-    cands = cur.fetchall()
-    if not cands:
-        return None
-    if total_litros is not None and tol >= 0:
-        prox = [c for c in cands if abs(float(c["volume_nf"] or 0) - total_litros) <= tol]
-        if len(prox) == 1:
-            return prox[0]["id"]
-        if len(prox) > 1:
-            return None  # ambíguo -> pendente
-    return cands[0]["id"] if len(cands) == 1 else None
+# ---------------------------------------------------------------------------
+# REMOVIDO: casar_frete()
+#
+# Ate 07/08/2026 este modulo tentava casar cada descarga automaticamente com a
+# tabela `fretes`. Estava ERRADO: `fretes` e o controle interno de COBRANCA e
+# nao tem relacao com a entrada de estoque. Pior, quando casava o codigo ainda
+# INSERIA uma linha em `descargas` com status='finalizado', poluindo o controle
+# interno com descargas que ninguem lancou.
+#
+# Agora a descarga nasce sempre 'pendente' e quem vincula e o usuario, contra a
+# NF-e DE COMPRA, na tela /estoque (integrations/descarga_vinculo.py). O git
+# guarda a versao antiga da funcao se algum dia ela fizer falta.
+#
+# Ficaram sem uso as configs ELS_MATCH_JANELA_DIAS e ELS_MATCH_TOLERANCIA — os
+# mesmos nomes/valores viraram os defaults de descarga_vinculo.py.
+# ---------------------------------------------------------------------------
 
 
 # ===========================================================================
@@ -522,7 +501,12 @@ def gravar_abertura(cur, ab: Abertura, cliente_id):
 
 
 def gravar_descarga(cur, dc: Descarga, cliente_id):
-    """Grava em descargas_pendentes e tenta vincular a um frete (cria descarga)."""
+    """Grava em descargas_pendentes SEMPRE como 'pendente'.
+
+    NAO casa mais com `fretes` e NAO cria linha em `descargas` (ver o bloco
+    "REMOVIDO: casar_frete()" acima). O vinculo certo e com a NF-e de compra e
+    quem faz e o usuario, na tela /estoque.
+    """
     chave = f"{dc.tanque}-{(dc.data_final or dc.data_inicial or datetime.now()).strftime('%Y%m%d%H%M%S')}"
     produto_id, _ = resolver_produto_id(cur, dc.produto)
     data_ref = (dc.data_final or dc.data_inicial or datetime.now()).date()
@@ -532,29 +516,11 @@ def gravar_descarga(cur, dc: Descarga, cliente_id):
     if cur.fetchone():
         return "duplicada"
 
-    frete_id = casar_frete(cur, cliente_id, produto_id, data_ref, dc.total_descarga_l)
+    # frete_id/descarga_id continuam NULL: as colunas seguem no banco (dados
+    # antigos preservados), mas o fluxo novo nao as preenche nem as exibe.
+    frete_id = None
     descarga_id = None
     status = "pendente"
-
-    if frete_id:
-        # cria a descarga com os MESMOS campos da tela /descargas/nova
-        cur.execute(
-            """
-            INSERT INTO descargas (
-                frete_id, numero_descarga, total_descargas, data_descarga,
-                volume_descarga, medidor_antes, medidor_depois,
-                regua_antes_litros, regua_depois_litros,
-                temperatura, status, observacoes
-            ) VALUES (%s,1,1,%s,%s,%s,%s,%s,%s,%s,'finalizado',%s)
-            """,
-            (frete_id, data_ref.strftime("%Y-%m-%d"),
-             dc.total_descarga_l, dc.volume_inicial_l, dc.volume_final_l,
-             dc.volume_inicial_l, dc.volume_final_l, None,
-             f"Importado automaticamente do ELS (tanque {dc.tanque}, "
-             f"{dc.produto}). Total 20°C: {dc.total_descarga_20c_l} L."),
-        )
-        descarga_id = cur.lastrowid
-        status = "vinculada"
 
     cur.execute(
         """
