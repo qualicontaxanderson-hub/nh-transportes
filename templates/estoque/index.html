@@ -109,7 +109,7 @@
             </span>
             <span class="nome">{{ serie.nome }}</span>
             <span class="cnt">
-              {% if serie.tanques %}tanque {{ serie.tanques | join(', ') }} · {% endif %}
+              {% if serie.tanques %}TQ&nbsp;{{ serie.tanques | join(', ') }} · {% endif %}
               {{ serie.n }} leitura{{ '' if serie.n == 1 else 's' }}
             </span>
           </div>
@@ -169,7 +169,7 @@
                 {#- Vol. 20C e capacidade nao cabem no card estreito da grade;
                     aparecem na lista por produto, logo acima. -#}
                 {%- if g.n_eventos > 1 %}{{ l.hora }} · {% endif -%}
-                tanque {{ l.tanque if l.tanque is not none else '—' }}
+                TQ&nbsp;{{ l.tanque if l.tanque is not none else '—' }}
               </div>
             </div>
             <div class="mig-dia__vals">
@@ -241,7 +241,7 @@
             {# O frete_id (controle interno de cobranca) NAO aparece mais: o
                vinculo certo da descarga e com a NF-e de compra. #}
             <div class="mig-dia__meta">
-              {{ d.hora }} · tanque {{ d.tanque if d.tanque is not none else '—' }}
+              {{ d.hora }} · TQ&nbsp;{{ d.tanque if d.tanque is not none else '—' }}
             </div>
           </div>
           <div class="mig-dia__vals">
@@ -315,7 +315,13 @@
   </div>
 
 </div>{# /.mig #}
+{% endblock %}
 
+{# O script PRECISA ficar em `scripts`, nao em `content`: o base.html carrega o
+   bootstrap.bundle DEPOIS do bloco content, entao aqui dentro `bootstrap` ainda
+   nao existe e o `new bootstrap.Modal(...)` derrubaria o arquivo inteiro — sem
+   registrar nem o listener do clique. #}
+{% block scripts %}
 <script>
 (function () {
   var modalEl = document.getElementById('vincModal');
@@ -385,7 +391,7 @@
 
     var h = '<div class="mig-vdsc"><div class="mig-vdsc__top">' +
       '<div><div class="mig-vdsc__nome">' + esc(dsc.produto_nome || '—') + '</div>' +
-      '<div class="mig-vdsc__meta">tanque ' + esc(dsc.tanque === null ? '—' : dsc.tanque) + '</div></div>' +
+      '<div class="mig-vdsc__meta">TQ&nbsp;' + esc(dsc.tanque === null ? '—' : dsc.tanque) + '</div></div>' +
       '<div class="mig-vdsc__tot"><b>' + fmt(estado.total_descarga) + ' L</b>' +
       '<div class="mig-vdsc__meta">descarregados</div></div></div>' +
       '<div class="mig-bar"><i style="width:' + pct + '%"></i></div>' +
