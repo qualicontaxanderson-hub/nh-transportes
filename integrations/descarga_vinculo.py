@@ -346,10 +346,16 @@ def vinculos_resumo(cur, descarga_ids):
         SELECT dn.descarga_id, COUNT(*) AS n, SUM(dn.litros) AS litros,
                MIN(doc.numero) AS numero,
                SUM(dn.modo = 'integral') AS fechadas,
-               SUM(i.quantidade) AS nota_litros,
                SUM(NOT EXISTS (SELECT 1 FROM descarga_nota f
                                 WHERE f.item_id = dn.item_id
-                                  AND f.modo = 'integral')) AS abertas
+                                  AND f.modo = 'integral')) AS abertas,
+               -- perda/sobra por nota: TUDO que o item recebeu (todas as
+               -- descargas) menos a quantidade da nota. Nao e o recebido
+               -- desta descarga: uma nota baixada em duas viagens tem que
+               -- somar as duas.
+               SUM(COALESCE((SELECT SUM(a.litros) FROM descarga_nota a
+                              WHERE a.item_id = dn.item_id), 0)
+                   - i.quantidade) AS dif
         FROM descarga_nota dn
         JOIN dfe_documentos doc ON doc.id = dn.documento_id
         JOIN dfe_itens i        ON i.id  = dn.item_id
@@ -361,7 +367,7 @@ def vinculos_resumo(cur, descarga_ids):
     return {r["descarga_id"]: {"n": r["n"], "litros": _f(r["litros"]) or 0.0,
                                "numero": r["numero"], "fechadas": r["fechadas"] or 0,
                                "abertas": r["abertas"] or 0,
-                               "nota_litros": _f(r["nota_litros"]) or 0.0}
+                               "dif": _f(r["dif"]) or 0.0}
             for r in cur.fetchall()}
 
 
@@ -439,12 +445,14 @@ def registrar_vinculo(cur, descarga_id, item_id, litros, usuario_id=None,
         raise ValueError("A nota %s só tem %.3f L de saldo (você pediu %.3f L)."
                          % (it["numero"] or "?", saldo_item, litros))
 
-    # Perda/sobra do FECHAMENTO: o que o tanque recebeu contra o que a nota diz.
-    # Mesma formula da tela — recebido menos a nota, NAO menos o vinculado.
+    # Perda/sobra do FECHAMENTO: TUDO que a nota recebeu, somando todas as
+    # descargas ligadas a ela, contra a quantidade da nota.
+    # perda_sobra_item soma as linhas ja gravadas e acrescenta o lancamento
+    # atual (litros_extra), que ainda nao foi inserido.
     perda_sobra = None
     if modo == 'integral':
-        perda_sobra = round((_f(d["total_descarga"]) or 0.0)
-                            - (_f(it["quantidade"]) or 0.0), 3)
+        ps = perda_sobra_item(cur, item_id, litros_extra=litros)
+        perda_sobra = ps["perda_sobra"] if ps else None
 
     cur.execute(
         """
@@ -512,10 +520,7 @@ def calcular_estado(cur, descarga_id, tolerancia_l=TOLERANCIA_L,
                           WHERE dn.descarga_id = dp.id
                             AND NOT EXISTS (SELECT 1 FROM descarga_nota f
                                              WHERE f.item_id = dn.item_id
-                                               AND f.modo = 'integral')), 0) AS notas_abertas,
-               COALESCE((SELECT SUM(i.quantidade) FROM descarga_nota dn
-                          JOIN dfe_itens i ON i.id = dn.item_id
-                         WHERE dn.descarga_id = dp.id), 0) AS nota_litros
+                                               AND f.modo = 'integral')), 0) AS notas_abertas
         FROM descargas_pendentes dp
         WHERE dp.id = %s
         """,
@@ -549,20 +554,36 @@ def calcular_estado(cur, descarga_id, tolerancia_l=TOLERANCIA_L,
                 (novo_status, descarga_id),
             )
 
-    # PERDA/SOBRA = recebido - o que as notas dizem. Negativo e perda (veio
-    # menos do que foi comprado), positivo e sobra. Repare que NAO e
-    # `recebido - vinculado`: se a nota tem 3.000 e o tanque recebeu 3.156, os
-    # 156 L a mais sao sobra, mesmo com a nota inteira vinculada.
-    # So faz sentido com as notas FECHADAS: enquanto alguma esta aberta, ainda
-    # pode entrar litro e o numero mudaria.
-    nota_litros = _f(r["nota_litros"]) or 0.0
-    perda_sobra = round(recebido - nota_litros, 3) if todas_fechadas else None
+    # PERDA/SOBRA, por NOTA: tudo que aquela nota recebeu — somando TODAS as
+    # descargas ligadas a ela — contra a quantidade da nota. Negativo e perda,
+    # positivo e sobra.
+    #
+    # Tem que somar todas: uma nota de 10.000 baixada em 4.948 + 4.820 recebeu
+    # 9.768, logo perda de 232. Olhar so a descarga do fechamento daria
+    # 4.820 - 10.000 = -5.180, que foi exatamente o bug.
+    #
+    # So aparece com as notas FECHADAS: com alguma aberta ainda pode entrar
+    # litro e o numero mudaria.
+    perda_sobra = None
+    if todas_fechadas:
+        cur.execute(
+            """
+            SELECT i.quantidade,
+                   COALESCE((SELECT SUM(a.litros) FROM descarga_nota a
+                              WHERE a.item_id = dn.item_id), 0) AS recebido_item
+            FROM descarga_nota dn
+            JOIN dfe_itens i ON i.id = dn.item_id
+            WHERE dn.descarga_id = %s
+            """,
+            (descarga_id,),
+        )
+        perda_sobra = round(sum((_f(x["recebido_item"]) or 0.0) - (_f(x["quantidade"]) or 0.0)
+                                for x in cur.fetchall()), 3)
 
     return {
         "descarga_id": r["id"],
         "recebido": recebido,
         "vinculado": vinculado,
-        "nota_litros": nota_litros,
         "perda_sobra": perda_sobra,     # None enquanto houver nota aberta
         "falta": falta,                 # negativo = vinculou mais que o recebido
         "total_descarga": recebido,     # nome antigo, mantido para a tela

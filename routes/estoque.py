@@ -269,8 +269,7 @@ def index():
             # Notas todas fechadas -> o numero deixa de ser "falta" e vira
             # perda/sobra: recebido menos o que as notas dizem.
             d['vinc_fechada'] = bool(v and v['n'] and not v['abertas'])
-            d['vinc_dif'] = (round(float(d.get('total_descarga') or 0)
-                                   - v['nota_litros'], 3)) if d['vinc_fechada'] else None
+            d['vinc_dif'] = v['dif'] if d['vinc_fechada'] else None
         dias_d = _totalizar(_agrupar_por_dia(descargas, 'dt'), 'total_descarga')
 
         # -------- Empresas p/ dropdown (uniao dos dois) --------

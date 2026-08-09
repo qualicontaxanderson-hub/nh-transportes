@@ -602,16 +602,21 @@
         }
         if (integral) {
           var it = itemSel(sel);
-          // recebido no tanque − o que a nota diz. E o mesmo numero que a
-          // linha da descarga vai passar a mostrar.
-          var ps = Math.round(((Number(estado.recebido) || 0) - (it ? it.item_litros : 0)) * 1000) / 1000;
+          // TUDO que a nota ja recebeu (todas as descargas) mais este
+          // lancamento, contra a nota. Nao e so o recebido desta descarga:
+          // uma nota baixada em duas viagens tem que somar as duas.
+          var recNota = (it ? (it.vinculado_total || 0) : 0) + v;
+          var ps = Math.round((recNota - (it ? it.item_litros : 0)) * 1000) / 1000;
           if (Math.abs(ps) <= 0.001) {
             txt += '<div class="mig-aviso mig-aviso--ok"><i class="bi bi-check2-circle"></i> ' +
-                   'Ao fechar: o recebido bate com a nota, sem diferença.</div>';
+                   'Ao fechar: a nota terá recebido exatamente os ' +
+                   fmt(it.item_litros) + ' L. Sem diferença.</div>';
           } else {
             txt += '<div class="mig-aviso"><i class="bi bi-calculator"></i> <b>Ao fechar:</b> ' +
-                   'recebido <b>' + fmt(estado.recebido) + ' L</b> contra <b>' +
-                   fmt(it.item_litros) + ' L</b> na nota → ' + difHtml(ps) + '</div>';
+                   'esta nota terá recebido <b>' + fmt(recNota) + ' L</b>' +
+                   ((it.vinculado_total || 0) > 0
+                     ? ' (' + fmt(it.vinculado_total) + ' já lançados + ' + fmt(v) + ')' : '') +
+                   ' contra <b>' + fmt(it.item_litros) + ' L</b> na nota → ' + difHtml(ps) + '</div>';
           }
         }
       }
