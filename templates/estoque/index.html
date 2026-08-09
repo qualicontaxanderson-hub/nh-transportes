@@ -377,6 +377,15 @@
     return c.itens[0];
   }
 
+  // Perda/sobra: so o sinal e a cor. '' quando nao ha diferenca ou quando
+  // ainda nao da pra saber (nota aberta).
+  function difHtml(ps) {
+    if (ps === null || ps === undefined) return '';
+    if (Math.abs(ps) <= 0.001) return '<span class="mig-st mig-st--ok">sem diferença</span>';
+    return '<span class="mig-dif mig-dif--' + (ps > 0 ? 'sobra' : 'perda') + '">' +
+           (ps > 0 ? '+' : '−') + fmt(Math.abs(ps)) + ' L</span>';
+  }
+
   function selosDe(c) {
     var s = '';
     if (c.parcial) s += '<span class="mig-badge mig-badge--ok"><i class="bi bi-arrow-repeat"></i> já iniciada · próxima a descarregar</span>';
@@ -427,10 +436,12 @@
       '<div class="mig-vdsc__meta">recebido no tanque</div></div></div>' +
       '<div class="mig-bar"><i style="width:' + pct + '%"></i></div>' +
       '<div class="mig-vdsc__prog"><span>vinculado <b>' + fmt(estado.vinculado) + ' L</b> (' + pct + '%)</span>' +
-      (falta > 0.001
-        ? '<span>faltam <b>' + fmt(falta) + ' L</b> pra fechar</span>'
-        : (falta < -0.001
-            ? '<span class="mig-st mig-st--pend">vinculado ' + fmt(-falta) + ' L a mais</span>'
+      // Com as notas fechadas o numero vira PERDA/SOBRA (sinal + cor). Só
+      // enquanto ha nota aberta e que "faltam X" quer dizer falta mesmo.
+      (estado.todas_fechadas
+        ? difHtml(estado.perda_sobra)
+        : (falta > 0.001
+            ? '<span>faltam <b>' + fmt(falta) + ' L</b> pra fechar</span>'
             : '<span class="mig-st mig-st--ok">recebido coberto</span>')) +
       '</div></div>';
 
@@ -438,14 +449,9 @@
       h += '<div class="mig-vja"><div class="mig-vlbl">Já vinculado</div>';
       d.vinculos.forEach(function (v) {
         var fechou = v.modo === 'integral';
-        var ps = fechou ? v.perda_sobra_l : v.perda_sobra_prov;
-        var res = '';
-        if (ps !== null && ps !== undefined && Math.abs(ps) > 0.001) {
-          var sobra = ps > 0;
-          res = '<span class="mig-st mig-st--' + (sobra ? 'ok' : 'pend') + '">' +
-                (sobra ? 'sobra ' : 'perda ') + fmt(Math.abs(ps)) + ' L' +
-                (fechou ? '' : ' (provisória)') + '</span>';
-        }
+        // So mostra o numero quando a nota FOI FECHADA: com ela aberta ainda
+        // pode entrar litro e o resultado mudaria.
+        var res = fechou ? difHtml(v.perda_sobra_l) : '';
         h += '<div class="mig-vja__lin"><i class="bi bi-link-45deg" style="color:' +
              (fechou ? '#1e7e34' : '#b26a00') + '"></i><div>' +
              '<div><b>NF-e ' + esc(v.numero) + '</b> · ' + esc(v.fornecedor || '') +
@@ -595,17 +601,17 @@
                  ' L. Pode ser proposital (perda), mas confira.</div>';
         }
         if (integral) {
-          var ps = perdaSobraDe(sel, v);
-          if (ps === null) { /* sem item */ }
-          else if (Math.abs(ps) <= 0.001) {
+          var it = itemSel(sel);
+          // recebido no tanque − o que a nota diz. E o mesmo numero que a
+          // linha da descarga vai passar a mostrar.
+          var ps = Math.round(((Number(estado.recebido) || 0) - (it ? it.item_litros : 0)) * 1000) / 1000;
+          if (Math.abs(ps) <= 0.001) {
             txt += '<div class="mig-aviso mig-aviso--ok"><i class="bi bi-check2-circle"></i> ' +
-                   'Ao fechar: recebido bate com a nota. Sem perda nem sobra.</div>';
+                   'Ao fechar: o recebido bate com a nota, sem diferença.</div>';
           } else {
-            var it = itemSel(sel);
             txt += '<div class="mig-aviso"><i class="bi bi-calculator"></i> <b>Ao fechar:</b> ' +
-                   'esta nota terá recebido <b>' + fmt((it.vinculado_total || 0) + v) +
-                   ' L</b> contra <b>' + fmt(it.item_litros) + ' L</b> na nota → <b>' +
-                   (ps > 0 ? 'sobra' : 'perda') + ' de ' + fmt(Math.abs(ps)) + ' L</b>.</div>';
+                   'recebido <b>' + fmt(estado.recebido) + ' L</b> contra <b>' +
+                   fmt(it.item_litros) + ' L</b> na nota → ' + difHtml(ps) + '</div>';
           }
         }
       }

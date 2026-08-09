@@ -215,6 +215,12 @@
 .mig-vinc-resumo:hover{ text-decoration:underline; }
 .mig-vinc-resumo .falta{ color:var(--pend); }
 
+/* PERDA/SOBRA: so o sinal e a cor. Nada de "faltam"/"sobra"/"perda" — o −/+
+   ja diz, e a palavra "falta" confundia sobra com pendencia. */
+.mig-dif{ font-weight:700; font-variant-numeric:tabular-nums; white-space:nowrap; }
+.mig-dif--perda{ color:var(--danger); }
+.mig-dif--sobra{ color:var(--ok); }
+
 /* ---------- Modal de vinculo (conteudo montado por JS) ---------- */
 .mig-mdl-body{ background:var(--soft); }
 .mig-vdsc{ background:var(--surface); border:1px solid var(--line-2); border-radius:10px;

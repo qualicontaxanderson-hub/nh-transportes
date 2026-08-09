@@ -345,16 +345,23 @@ def vinculos_resumo(cur, descarga_ids):
         f"""
         SELECT dn.descarga_id, COUNT(*) AS n, SUM(dn.litros) AS litros,
                MIN(doc.numero) AS numero,
-               SUM(dn.modo = 'integral') AS fechadas
+               SUM(dn.modo = 'integral') AS fechadas,
+               SUM(i.quantidade) AS nota_litros,
+               SUM(NOT EXISTS (SELECT 1 FROM descarga_nota f
+                                WHERE f.item_id = dn.item_id
+                                  AND f.modo = 'integral')) AS abertas
         FROM descarga_nota dn
         JOIN dfe_documentos doc ON doc.id = dn.documento_id
+        JOIN dfe_itens i        ON i.id  = dn.item_id
         WHERE dn.descarga_id IN ({marc})
         GROUP BY dn.descarga_id
         """,
         ids,
     )
     return {r["descarga_id"]: {"n": r["n"], "litros": _f(r["litros"]) or 0.0,
-                               "numero": r["numero"], "fechadas": r["fechadas"] or 0}
+                               "numero": r["numero"], "fechadas": r["fechadas"] or 0,
+                               "abertas": r["abertas"] or 0,
+                               "nota_litros": _f(r["nota_litros"]) or 0.0}
             for r in cur.fetchall()}
 
 
@@ -388,7 +395,8 @@ def registrar_vinculo(cur, descarga_id, item_id, litros, usuario_id=None,
         raise ValueError("Modo inválido: use parcial ou integral.")
 
     cur.execute(
-        "SELECT id, cliente_id, produto_id, status FROM descargas_pendentes WHERE id = %s",
+        "SELECT id, cliente_id, produto_id, status, total_descarga "
+        "FROM descargas_pendentes WHERE id = %s",
         (descarga_id,),
     )
     d = cur.fetchone()
@@ -431,10 +439,12 @@ def registrar_vinculo(cur, descarga_id, item_id, litros, usuario_id=None,
         raise ValueError("A nota %s só tem %.3f L de saldo (você pediu %.3f L)."
                          % (it["numero"] or "?", saldo_item, litros))
 
+    # Perda/sobra do FECHAMENTO: o que o tanque recebeu contra o que a nota diz.
+    # Mesma formula da tela — recebido menos a nota, NAO menos o vinculado.
     perda_sobra = None
     if modo == 'integral':
-        ps = perda_sobra_item(cur, item_id, litros_extra=litros)
-        perda_sobra = ps["perda_sobra"] if ps else None
+        perda_sobra = round((_f(d["total_descarga"]) or 0.0)
+                            - (_f(it["quantidade"]) or 0.0), 3)
 
     cur.execute(
         """
@@ -453,7 +463,10 @@ def registrar_vinculo(cur, descarga_id, item_id, litros, usuario_id=None,
     )
     estado = calcular_estado(cur, descarga_id, tolerancia_l=tolerancia_l)
     if estado is not None:
-        estado["perda_sobra"] = perda_sobra
+        # NAO sobrescreve estado["perda_sobra"]: o de calcular_estado ja e o
+        # numero da descarga inteira (recebido - soma das notas), que e o que
+        # a tela mostra. Este aqui e o que ficou gravado nesta linha.
+        estado["perda_sobra_linha"] = perda_sobra
         estado["fechou_nota"] = (modo == 'integral')
         estado["nota_numero"] = it["numero"]
     return estado
@@ -499,7 +512,10 @@ def calcular_estado(cur, descarga_id, tolerancia_l=TOLERANCIA_L,
                           WHERE dn.descarga_id = dp.id
                             AND NOT EXISTS (SELECT 1 FROM descarga_nota f
                                              WHERE f.item_id = dn.item_id
-                                               AND f.modo = 'integral')), 0) AS notas_abertas
+                                               AND f.modo = 'integral')), 0) AS notas_abertas,
+               COALESCE((SELECT SUM(i.quantidade) FROM descarga_nota dn
+                          JOIN dfe_itens i ON i.id = dn.item_id
+                         WHERE dn.descarga_id = dp.id), 0) AS nota_litros
         FROM descargas_pendentes dp
         WHERE dp.id = %s
         """,
@@ -533,10 +549,21 @@ def calcular_estado(cur, descarga_id, tolerancia_l=TOLERANCIA_L,
                 (novo_status, descarga_id),
             )
 
+    # PERDA/SOBRA = recebido - o que as notas dizem. Negativo e perda (veio
+    # menos do que foi comprado), positivo e sobra. Repare que NAO e
+    # `recebido - vinculado`: se a nota tem 3.000 e o tanque recebeu 3.156, os
+    # 156 L a mais sao sobra, mesmo com a nota inteira vinculada.
+    # So faz sentido com as notas FECHADAS: enquanto alguma esta aberta, ainda
+    # pode entrar litro e o numero mudaria.
+    nota_litros = _f(r["nota_litros"]) or 0.0
+    perda_sobra = round(recebido - nota_litros, 3) if todas_fechadas else None
+
     return {
         "descarga_id": r["id"],
         "recebido": recebido,
         "vinculado": vinculado,
+        "nota_litros": nota_litros,
+        "perda_sobra": perda_sobra,     # None enquanto houver nota aberta
         "falta": falta,                 # negativo = vinculou mais que o recebido
         "total_descarga": recebido,     # nome antigo, mantido para a tela
         "saldo": falta,
