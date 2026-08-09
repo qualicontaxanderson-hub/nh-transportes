@@ -503,10 +503,14 @@
         '<input type="number" step="0.001" min="0" class="form-control form-control-sm" ' +
         'id="vincLitros" style="max-width:180px">' +
         '<div class="mig-hint" id="vincHint"></div>' +
-        '<div class="mig-vlbl" style="margin-top:.85rem">Esta nota está encerrada?</div>' +
+        '<div class="mig-vlbl mig-vlbl--forte" style="margin-top:.85rem">' +
+        '<i class="bi bi-question-circle"></i> Esta nota está encerrada?</div>' +
         '<div class="mig-modo__ops" style="flex-direction:column">' +
-        '<label class="mig-modo__op mig-modo__op--on">' +
-        '<input type="radio" name="vmodo" value="parcial" checked>' +
+        // NENHUM marcado de proposito: sem escolha explicita o botao nao
+        // habilita. Era o `checked` daqui que gravava 'parcial' sem o usuario
+        // nunca ter visto a pergunta.
+        '<label class="mig-modo__op">' +
+        '<input type="radio" name="vmodo" value="parcial">' +
         '<div><div class="mig-modo__tit">PARCIAL — ainda falta descarregar</div>' +
         '<div class="mig-modo__sub">A nota guarda saldo e volta nos próximos dias, em destaque.</div>' +
         '</div></label>' +
@@ -526,9 +530,11 @@
     atualizaBotao();
   }
 
+  // Sem default: devolve '' enquanto o usuario nao escolher. O botao de
+  // confirmar depende disso, entao nada e gravado por omissao.
   function modoAtual() {
     var r = body.querySelector('input[name="vmodo"]:checked');
-    return r ? r.value : 'parcial';
+    return r ? r.value : '';
   }
 
   function litrosAtuais() {
@@ -547,11 +553,17 @@
 
   function atualizaBotao() {
     var v = litrosAtuais();
-    var integral = modoAtual() === 'integral';
-    var ok = !!sel && !isNaN(v) && v > 0 && v <= tetoDe(sel) + 1e-6;
+    var modo = modoAtual();
+    var integral = modo === 'integral';
+    var litrosOk = !!sel && !isNaN(v) && v > 0 && v <= tetoDe(sel) + 1e-6;
+    // Exige a escolha parcial/integral: e a trava que impede gravar sem o
+    // usuario ter visto a pergunta.
+    var ok = litrosOk && !!modo;
     btnOk.disabled = !ok;
-    btnOk.textContent = !ok ? 'Vincular'
-      : (integral ? 'Fechar nota com ' + fmt(v) + ' L' : 'Vincular ' + fmt(v) + ' L');
+    btnOk.textContent = !litrosOk ? 'Vincular'
+      : (!modo ? 'Escolha parcial ou integral'
+               : (integral ? 'Fechar nota com ' + fmt(v) + ' L'
+                           : 'Vincular ' + fmt(v) + ' L'));
 
     body.querySelectorAll('.mig-modo__op').forEach(function (op) {
       var r = op.querySelector('input');
@@ -645,12 +657,18 @@
       body.querySelectorAll('.mig-cand').forEach(function (el) { el.classList.remove('mig-cand--sel'); });
       var lab = ev.target.closest('.mig-cand');
       if (lab) lab.classList.add('mig-cand--sel');
+      // O bloco vai para LOGO ABAIXO da nota clicada. Antes ele ficava no fim
+      // da lista: com 4-5 candidatas nascia fora da area visivel do modal, e
+      // como o botao do rodape e fixo, dava pra confirmar sem nunca ver a
+      // pergunta. Era esse o bug — o bloco aparecia, so que longe.
       var modo = document.getElementById('vincModo');
-      if (modo) modo.hidden = false;
-      // Trocar de nota volta para PARCIAL (o caso comum e o mais seguro: nao
-      // fecha nada sem o usuario pedir) e sugere os litros de novo.
-      var rp = body.querySelector('input[name="vmodo"][value="parcial"]');
-      if (rp) rp.checked = true;
+      if (modo) {
+        if (lab) lab.insertAdjacentElement('afterend', modo);
+        modo.hidden = false;
+        if (modo.scrollIntoView) modo.scrollIntoView({block: 'nearest', behavior: 'smooth'});
+      }
+      // Trocar de nota LIMPA a escolha: o usuario decide de novo, por nota.
+      body.querySelectorAll('input[name="vmodo"]').forEach(function (r) { r.checked = false; });
       var inp = document.getElementById('vincLitros');
       if (inp) inp.value = sel.sugestao_litros;
       atualizaBotao();

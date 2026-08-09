@@ -267,9 +267,12 @@
 .mig-cand__v .q{ font-weight:700; font-variant-numeric:tabular-nums; white-space:nowrap; }
 .mig-cand__v .s{ font-size:11px; color:var(--muted); white-space:nowrap; }
 
-/* ---------- Como vincular: Total (padrao) ou Parcial ---------- */
-.mig-modo{ background:var(--surface); border:1px solid var(--line-2); border-radius:10px;
-  padding:.7rem .75rem; margin-top:.75rem; }
+/* ---------- Como vincular: parcial ou integral ----------
+   Nasce logo abaixo da nota escolhida (o JS o move para la). Borda em destaque
+   porque e uma decisao obrigatoria: sem ela o botao de confirmar nao habilita. */
+.mig-modo{ background:var(--surface); border:2px solid var(--blue); border-radius:10px;
+  padding:.7rem .75rem; margin:.15rem 0 .75rem; box-shadow:0 2px 10px rgba(29,99,165,.12); }
+.mig-vlbl--forte{ color:var(--blue-deep); font-size:12px; }
 .mig-modo__ops{ display:flex; gap:.5rem; flex-wrap:wrap; }
 .mig-modo__op{ flex:1 1 190px; min-width:0; display:flex; gap:.5rem; align-items:flex-start;
   border:1px solid var(--line-2); border-radius:9px; padding:.5rem .6rem;
