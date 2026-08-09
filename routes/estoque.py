@@ -264,6 +264,7 @@ def index():
             d['vinc_n'] = v['n'] if v else 0
             d['vinc_litros'] = v['litros'] if v else 0.0
             d['vinc_numero'] = v['numero'] if v else None
+            d['vinc_fechadas'] = v['fechadas'] if v else 0
             d['vinc_falta'] = round(float(d.get('total_descarga') or 0)
                                     - (v['litros'] if v else 0.0), 3)
         dias_d = _totalizar(_agrupar_por_dia(descargas, 'dt'), 'total_descarga')
@@ -331,7 +332,8 @@ def _acao_html(cur, descarga_id, estado):
         'vinc_n': res['n'] if res else 0,
         'vinc_litros': res['litros'] if res else 0.0,
         'vinc_numero': res['numero'] if res else None,
-        'vinc_falta': estado['saldo'],
+        'vinc_falta': estado['falta'],
+        'vinc_fechadas': res['fechadas'] if res else 0,
     }
     return render_template('estoque/_acao_descarga.html', d=d)
 
@@ -386,6 +388,7 @@ def vincular(descarga_id):
             cur, descarga_id, item_id, dados.get('litros'),
             usuario_id=getattr(current_user, 'id', None),   # nunca do formulario
             observacao=dados.get('observacao'),
+            modo=(dados.get('modo') or 'parcial'),
         )
         conn.commit()
         return jsonify({'ok': True, 'estado': estado,

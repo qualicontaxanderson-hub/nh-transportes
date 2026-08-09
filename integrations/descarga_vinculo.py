@@ -3,56 +3,62 @@ Camada 2: vinculo entre a DESCARGA FISICA (ELS, descargas_pendentes) e a
 NF-E DE COMPRA (dfe_documentos + dfe_itens). O CT-e vem de brinde: a ligacao
 CT-e -> NF-e ja existe em dfe_cte_nfe, entao basta segui-la ao contrario.
 
-Duas funcoes, ambas puras em relacao a transacao (recebem o cursor, NAO dao
-commit — quem chama decide):
+MODELO
+------
+A DESCARGA e o que fisicamente entrou no tanque (o "recebido"). Uma NOTA pode
+ser baixada em VARIAS descargas: 10.000 L viram 4.900 num dia e 5.200 noutro.
 
-    sugerir_notas(cur, descarga_id)   -> candidatas ordenadas pela mais provavel
-    calcular_estado(cur, descarga_id) -> quanto ja foi vinculado e se cobriu
+A cada lancamento o USUARIO decide se aquela nota esta encerrada:
 
-O fluxo e SUGERIR -> o usuario ESCOLHE. Nada aqui grava vinculo sozinho.
-Depende da tabela descarga_nota (scripts/criar_tabela_descarga_nota.py).
+  PARCIAL  -> a nota guarda saldo e volta a aparecer nos proximos dias,
+              em destaque (e a proxima a descarregar). Nada e apurado.
+  INTEGRAL -> este lancamento FECHA a nota. Ela sai das candidatas e a
+              perda/sobra e apurada: soma de tudo que foi recebido contra
+              essa nota, menos a quantidade da nota.
+
+PERDA e SOBRA
+-------------
+    perda_sobra = SUM(descarga_nota.litros do item) - dfe_itens.quantidade
+    negativo -> PERDA (recebemos menos do que a nota diz)
+    positivo -> SOBRA (recebemos mais)
+
+So faz sentido no fechamento: com a nota aberta ainda falta descarregar, e
+qualquer numero antes disso seria um falso alarme. Enquanto aberta o valor e
+calculado na hora e tratado como provisorio; no fechamento fica gravado na
+propria linha que fechou (descarga_nota.perda_sobra_l).
+
+Funcoes puras em relacao a transacao: recebem o cursor e NAO dao commit.
 """
 from datetime import date
 
-# Mesmos defaults que o els_email.py ja usa pro frete interno, pra tela nao
-# ter dois criterios diferentes de "perto".
+# Janela folgada de proposito: o produto carrega sexta e desce segunda, ou
+# carrega terca e desce quarta. 5 dias cobre o padrao real de viagem.
 JANELA_DIAS = 5
 TOLERANCIA_L = 500.0
+# Abaixo disso o saldo e ruido de arredondamento, nao litro descarregavel.
+EPS_L = 0.001
 
 # ---------------------------------------------------------------------------
-# ATENCAO — volume a 20 graus
+# Volume a 20 graus
 # ---------------------------------------------------------------------------
-# O lado da DESCARGA tem os dois volumes (total_descarga e total_descarga_20c).
-# O lado da NOTA hoje so tem `dfe_itens.quantidade` (o qCom do XML): NAO existe
-# coluna de volume a 20C em dfe_itens, e o parser (scripts/processa_dfe.py) nao
-# le o qTemp do grupo <comb>. Ou seja: a comparacao 20C x 20C esta implementada
-# aqui, mas NUNCA dispara hoje — sempre cai em ambiente x ambiente. Isso e
-# aceitavel porque os dois lados sofrem dilatacao parecida; o que seria ruim e
-# comparar ambiente com 20C, e e exatamente o que _par_volumes() evita.
-# Para ligar de verdade seria preciso (deliberadamente FORA do escopo de agora):
+# O lado da DESCARGA tem total_descarga e total_descarga_20c; o lado da NOTA so
+# tem dfe_itens.quantidade (o qCom do XML). Nao existe coluna de 20C em
+# dfe_itens e o parser nao le o qTemp de <comb>, entao toda comparacao aqui e
+# ambiente x ambiente — o que e aceitavel, ja que os dois lados dilatam
+# parecido; ruim seria comparar ambiente com 20C.
+#
+# O caminho para corrigir de verdade, no dia em que interessar:
 #   1. ALTER TABLE dfe_itens ADD COLUMN quantidade_20c DECIMAL(15,4) NULL;
 #   2. o parser gravar qTemp/vlrQTemp de <comb>;
-#   3. trocar SQL_ITEM_20C abaixo por "i.quantidade_20c".
-# Enquanto isso, NULL faz o codigo escolher ambiente x ambiente sozinho.
-SQL_ITEM_20C = "NULL"
+#   3. calcular o SALDO em 20C (nao apenas parear volumes totais) e comparar
+#      contra total_descarga_20c.
+# A funcao _par_volumes() que existia aqui foi removida: alem de nunca
+# disparar, ela pareava volumes TOTAIS, e o score agora trabalha com SALDO.
 
 
 def _f(v):
     """Decimal/None -> float. O MySQL devolve DECIMAL, que nao mistura com float."""
     return float(v) if v is not None else None
-
-
-def _par_volumes(desc_amb, desc_20c, nfe_amb, nfe_20c):
-    """Escolhe o par de volumes a comparar.
-
-    20C x 20C quando os DOIS lados tiverem (mais preciso: elimina a dilatacao
-    termica, que em 12.000 L a 25C ja da ~100 L). Senao, ambiente x ambiente —
-    comparar ambiente com 20C seria pior do que nao corrigir nada.
-    Retorna (litros_descarga, litros_nota, base) com base em '20c' ou 'ambiente'.
-    """
-    if desc_20c is not None and nfe_20c is not None:
-        return desc_20c, nfe_20c, '20c'
-    return (desc_amb or 0.0), (nfe_amb or 0.0), 'ambiente'
 
 
 def _ctes_por_chave(cur, chaves):
@@ -85,29 +91,61 @@ def _ctes_por_chave(cur, chaves):
     return saida
 
 
+def perda_sobra_item(cur, item_id, litros_extra=0.0):
+    """Perda/sobra de UM item de nota.
+
+    recebido_total - quantidade da nota. Negativo e PERDA, positivo e SOBRA.
+    `litros_extra` permite simular o lancamento que ainda nao foi gravado —
+    e o que alimenta o aviso do modal antes de confirmar o fechamento.
+    """
+    cur.execute(
+        """
+        SELECT i.quantidade,
+               COALESCE((SELECT SUM(dn.litros) FROM descarga_nota dn
+                          WHERE dn.item_id = i.id), 0) AS recebido
+        FROM dfe_itens i WHERE i.id = %s
+        """,
+        (item_id,),
+    )
+    r = cur.fetchone()
+    if not r:
+        return None
+    nota = _f(r["quantidade"]) or 0.0
+    recebido = (_f(r["recebido"]) or 0.0) + (float(litros_extra) or 0.0)
+    return {"nota": nota, "recebido": round(recebido, 3),
+            "perda_sobra": round(recebido - nota, 3)}
+
+
 def sugerir_notas(cur, descarga_id, janela_dias=JANELA_DIAS,
                   tolerancia_l=TOLERANCIA_L, limite=20):
-    """Candidatas a NF-e de compra para UMA descarga, da mais provavel pra menos.
+    """Notas candidatas para UMA descarga, agrupadas por nota, da mais provavel
+    para a menos.
 
-    Casa por PRODUTO (descargas_pendentes.produto_id x o produto do item da
-    nota) e por DATA (janela de +/- janela_dias). O volume NAO filtra — ele
-    ordena: a tela mostra todas as notas do produto na janela e deixa o usuario
-    escolher, porque numa descarga fracionada o volume da nota e legitimamente
-    MUITO maior que o da descarga, e filtrar por tolerancia esconderia
-    justamente a nota certa.
+    Casa por PRODUTO e por DATA (janela folgada). O volume NAO filtra: numa
+    descarga fracionada a nota e legitimamente muito maior, e filtrar
+    esconderia justamente a nota certa.
 
-    Retorna None se a descarga nao existir, senao:
-        {'descarga': {...}, 'candidatas': [ {...}, ... ]}
+    Fora da lista: nota FECHADA (algum lancamento integral) e nota sem saldo.
 
-    Cada candidata traz o item da NF-e, o saldo ainda nao vinculado daquele
-    item, os CT-e ligados e um `score` (menor = mais provavel).
+    Ordem, em tres niveis:
+      1. parcial que ainda cobre  -> ja comecou a descarregar, e a proxima
+      2. as que cobrem o que falta
+      3. as que nao cobrem, da que mais cobre para a que menos cobre
+
+    Uma NOTA aparece UMA vez. Se ela tiver mais de uma linha do mesmo
+    combustivel, as linhas vem dentro dela em `itens` — o vinculo continua
+    sendo por item, que e a unica unidade sem ambiguidade (a mesma NF-e pode
+    trazer S10 e S500, que vao para tanques diferentes).
+
     NAO grava nada.
     """
     cur.execute(
         """
         SELECT id, cliente_id, produto_id, produto_nome, tanque, status,
                total_descarga, total_descarga_20c,
-               COALESCE(data_final, data_inicial, data_descarga) AS dt
+               COALESCE(data_final, data_inicial, data_descarga) AS dt,
+               COALESCE((SELECT SUM(dn.litros) FROM descarga_nota dn
+                          WHERE dn.descarga_id = descargas_pendentes.id), 0) AS vinculado
         FROM descargas_pendentes
         WHERE id = %s
         """,
@@ -117,33 +155,37 @@ def sugerir_notas(cur, descarga_id, janela_dias=JANELA_DIAS,
     if not d:
         return None
 
-    desc_amb = _f(d["total_descarga"])
-    desc_20c = _f(d["total_descarga_20c"])
+    recebido = _f(d["total_descarga"]) or 0.0
+    vinculado = _f(d["vinculado"]) or 0.0
+    # O que ainda falta juntar — NAO o total da descarga. Numa descarga que ja
+    # tem 3.000 de 6.000, quem manda na comparacao sao os 3.000 que faltam.
+    precisa = round(recebido - vinculado, 3)
     dt = d["dt"]
     dia = dt.date() if hasattr(dt, "date") else dt
 
     descarga = {
         "id": d["id"], "produto_id": d["produto_id"], "produto_nome": d["produto_nome"],
         "tanque": d["tanque"], "status": d["status"], "data": dia,
-        "total_descarga": desc_amb, "total_descarga_20c": desc_20c,
+        "recebido": recebido, "vinculado": vinculado, "precisa": precisa,
+        "total_descarga": recebido, "total_descarga_20c": _f(d["total_descarga_20c"]),
     }
 
-    # Sem produto resolvido ou sem data nao da pra sugerir nada com honestidade.
     if not d["produto_id"] or not dia:
         return {"descarga": descarga, "candidatas": [],
                 "motivo_vazio": ("descarga sem produto_id" if not d["produto_id"]
                                  else "descarga sem data")}
 
     cur.execute(
-        f"""
+        """
         SELECT doc.id  AS documento_id, doc.chave, doc.numero, doc.serie,
                doc.dh_emissao, doc.emit_cnpj, doc.emit_nome,
                doc.valor_total AS nota_valor,
                i.id AS item_id, i.n_item, i.produto_xml, i.cod_anp, i.unidade,
-               i.quantidade AS item_litros, {SQL_ITEM_20C} AS item_litros_20c,
-               i.valor_total AS item_valor, i.categoria,
+               i.quantidade AS item_litros, i.valor_total AS item_valor, i.categoria,
                COALESCE(v.litros, 0)  AS vinculado_total,
-               COALESCE(vd.litros, 0) AS vinculado_nesta
+               COALESCE(vd.litros, 0) AS vinculado_nesta,
+               EXISTS (SELECT 1 FROM descarga_nota f
+                        WHERE f.item_id = i.id AND f.modo = 'integral') AS fechada
         FROM dfe_itens i
         JOIN dfe_documentos doc ON doc.id = i.documento_id
         LEFT JOIN (SELECT item_id, SUM(litros) AS litros
@@ -157,6 +199,7 @@ def sugerir_notas(cur, descarga_id, janela_dias=JANELA_DIAS,
           AND doc.cliente_id = %s
           AND COALESCE(i.classificado_produto_id, i.produto_id) = %s
           AND ABS(DATEDIFF(DATE(doc.dh_emissao), %s)) <= %s
+        ORDER BY doc.dh_emissao DESC, doc.id, i.n_item
         """,
         (descarga_id, d["cliente_id"], d["produto_id"], dia, janela_dias),
     )
@@ -165,75 +208,106 @@ def sugerir_notas(cur, descarga_id, janela_dias=JANELA_DIAS,
         return {"descarga": descarga, "candidatas": [],
                 "motivo_vazio": "nenhuma NF-e autorizada deste produto na janela"}
 
-    ctes = _ctes_por_chave(cur, {r["chave"] for r in brutas})
-
     tol = tolerancia_l if tolerancia_l and tolerancia_l > 0 else 1.0
     jan = janela_dias if janela_dias and janela_dias > 0 else 1
 
-    candidatas = []
+    # ---- 1) por item: descarta fechada e sem saldo ----
+    vivos = []
+    n_fechadas = n_sem_saldo = 0
     for r in brutas:
-        nfe_amb = _f(r["item_litros"]) or 0.0
-        nfe_20c = _f(r["item_litros_20c"])
-        v_desc, v_nota, base = _par_volumes(desc_amb, desc_20c, nfe_amb, nfe_20c)
+        total_item = _f(r["item_litros"]) or 0.0
+        vinc = _f(r["vinculado_total"]) or 0.0
+        saldo = round(total_item - vinc, 3)
+        if r["fechada"]:
+            n_fechadas += 1
+            continue
+        if saldo <= EPS_L:
+            n_sem_saldo += 1
+            continue
+        r = dict(r)
+        r["_total_item"] = total_item
+        r["_vinc"] = vinc
+        r["_saldo"] = saldo
+        vivos.append(r)
 
+    if not vivos:
+        motivo = "todas as notas do periodo ja foram fechadas" if n_fechadas \
+            else "as notas do periodo nao tem saldo"
+        return {"descarga": descarga, "candidatas": [], "motivo_vazio": motivo}
+
+    ctes = _ctes_por_chave(cur, {r["chave"] for r in vivos})
+
+    # ---- 2) agrupa por NOTA (cada nota aparece uma vez) ----
+    notas = {}
+    for r in vivos:
+        doc_id = r["documento_id"]
         emissao = r["dh_emissao"]
         dia_nfe = emissao.date() if hasattr(emissao, "date") else emissao
-        dif_dias = (dia_nfe - dia).days if isinstance(dia_nfe, date) else 0
-        dif_litros = round(v_nota - v_desc, 3)
-
-        vinc_total = _f(r["vinculado_total"]) or 0.0
-        vinc_nesta = _f(r["vinculado_nesta"]) or 0.0
-        saldo = round(nfe_amb - vinc_total, 3)
-
-        # Score: as duas distancias normalizadas pela propria unidade de
-        # tolerancia, entao "300 L de diferenca" e "3 dias de diferenca" pesam
-        # de forma comparavel. Menor = mais provavel.
-        score = round(abs(dif_litros) / tol + abs(dif_dias) / jan, 4)
-
-        candidatas.append({
-            "documento_id": r["documento_id"], "chave": r["chave"],
-            "numero": r["numero"], "serie": r["serie"],
-            # emissao_br ja formatada: o jsonify do Flask serializa `date` em
-            # HTTP-date ("Tue, 28 Jul 2026 00:00:00 GMT"), que a tela mostrava
-            # cru. Formatar aqui evita o navegador ter que parsear aquilo.
-            "emissao": dia_nfe,
-            "emissao_br": dia_nfe.strftime("%d/%m/%Y") if dia_nfe else "",
-            "fornecedor": r["emit_nome"],
-            "emit_cnpj": r["emit_cnpj"], "nota_valor": _f(r["nota_valor"]),
+        if doc_id not in notas:
+            notas[doc_id] = {
+                "documento_id": doc_id, "chave": r["chave"], "numero": r["numero"],
+                "serie": r["serie"], "emissao": dia_nfe,
+                "emissao_br": dia_nfe.strftime("%d/%m/%Y") if dia_nfe else "",
+                "fornecedor": r["emit_nome"], "emit_cnpj": r["emit_cnpj"],
+                "nota_valor": _f(r["nota_valor"]),
+                "ctes": ctes.get(r["chave"], []),
+                "itens": [],
+            }
+        notas[doc_id]["itens"].append({
             "item_id": r["item_id"], "n_item": r["n_item"],
             "produto_xml": r["produto_xml"], "cod_anp": r["cod_anp"],
             "unidade": r["unidade"], "categoria": r["categoria"],
-            "item_litros": nfe_amb, "item_valor": _f(r["item_valor"]),
-            # comparacao
-            "base_volume": base,          # '20c' ou 'ambiente'
-            "dif_litros": dif_litros,     # >0 = nota maior que a descarga
-            "dif_dias": dif_dias,         # >0 = nota emitida DEPOIS da descarga
-            "dentro_tolerancia": abs(dif_litros) <= tol,
-            "score": score,
-            # saldo (base do vinculo parcial)
-            "vinculado_total": vinc_total,
-            "vinculado_nesta": vinc_nesta,
-            "saldo": saldo,
-            "esgotada": saldo <= 0,
-            "ja_vinculada_nesta": vinc_nesta > 0,
-            # CT-e de brinde
-            "ctes": ctes.get(r["chave"], []),
+            "item_litros": r["_total_item"], "item_valor": _f(r["item_valor"]),
+            "vinculado_total": r["_vinc"], "saldo": r["_saldo"],
+            "vinculado_nesta": _f(r["vinculado_nesta"]) or 0.0,
         })
 
-    # Nota sem saldo vai pro fim mesmo que o volume bata perfeito — nao adianta
-    # sugerir em primeiro lugar uma nota ja toda consumida por outras descargas.
-    candidatas.sort(key=lambda c: (c["esgotada"], c["score"]))
-    return {"descarga": descarga, "candidatas": candidatas[:limite]}
+    # ---- 3) score da nota, pelo SALDO (nao pelo volume total) ----
+    candidatas = []
+    for c in notas.values():
+        # A linha com mais saldo representa a nota na comparacao; e tambem a
+        # que vem pre-selecionada quando a nota tem mais de uma linha.
+        melhor = max(c["itens"], key=lambda it: it["saldo"])
+        saldo = melhor["saldo"]
+        dif_dias = (c["emissao"] - dia).days if isinstance(c["emissao"], date) else 0
+        dif_litros = round(saldo - precisa, 3)
+        cobre = saldo >= precisa - tol
+        # Ja comecou a descarregar e ainda tem saldo: e a proxima da fila.
+        parcial = any(it["vinculado_total"] > 0 for it in c["itens"])
+
+        c.update({
+            "item_id": melhor["item_id"], "n_item": melhor["n_item"],
+            "produto_xml": melhor["produto_xml"], "cod_anp": melhor["cod_anp"],
+            "unidade": melhor["unidade"], "item_litros": melhor["item_litros"],
+            "item_valor": melhor["item_valor"],
+            "saldo": saldo, "saldo_nota": round(sum(it["saldo"] for it in c["itens"]), 3),
+            "vinculado_total": melhor["vinculado_total"],
+            "vinculado_nesta": melhor["vinculado_nesta"],
+            "varias_linhas": len(c["itens"]) > 1,
+            "base_volume": "ambiente",
+            "dif_litros": dif_litros, "dif_dias": dif_dias,
+            "dentro_tolerancia": abs(dif_litros) <= tol,
+            "cobre": cobre, "parcial": parcial,
+            "score": round(abs(dif_litros) / tol + abs(dif_dias) / jan, 4),
+            # sugestao para o campo de litros: nunca mais que o saldo
+            "sugestao_litros": round(min(saldo, precisa), 3) if precisa > 0 else saldo,
+        })
+        candidatas.append(c)
+
+    candidatas.sort(key=lambda c: (not (c["parcial"] and c["cobre"]),
+                                   not c["cobre"], c["score"]))
+    return {"descarga": descarga, "candidatas": candidatas[:limite],
+            "ocultas_fechadas": n_fechadas, "ocultas_sem_saldo": n_sem_saldo}
 
 
 def listar_vinculos(cur, descarga_id):
     """Vinculos ja gravados de UMA descarga, com os dados da nota, pro modal."""
     cur.execute(
         """
-        SELECT dn.id, dn.litros, dn.observacao, dn.criado_em, dn.criado_por,
-               dn.documento_id, dn.item_id,
+        SELECT dn.id, dn.litros, dn.modo, dn.perda_sobra_l, dn.observacao,
+               dn.criado_em, dn.criado_por, dn.documento_id, dn.item_id,
                doc.numero, doc.serie, doc.emit_nome AS fornecedor, doc.chave,
-               doc.dh_emissao, i.n_item, i.produto_xml,
+               i.n_item, i.produto_xml, i.quantidade AS item_litros,
                u.username AS criado_por_nome
         FROM descarga_nota dn
         JOIN dfe_documentos doc ON doc.id = dn.documento_id
@@ -248,15 +322,21 @@ def listar_vinculos(cur, descarga_id):
     for r in cur.fetchall():
         r = dict(r)
         r["litros"] = _f(r["litros"])
+        r["item_litros"] = _f(r["item_litros"])
+        r["perda_sobra_l"] = _f(r["perda_sobra_l"])
+        # Nota aberta: mostra o numero provisorio, deixando claro que ainda
+        # pode mudar se entrar outro lancamento.
+        if r["modo"] != "integral":
+            prov = perda_sobra_item(cur, r["item_id"])
+            r["perda_sobra_prov"] = prov["perda_sobra"] if prov else None
+        else:
+            r["perda_sobra_prov"] = None
         saida.append(r)
     return saida
 
 
 def vinculos_resumo(cur, descarga_ids):
-    """Resumo por descarga para a LISTA (uma consulta so, sem N+1).
-
-    {descarga_id: {'n': qtd de notas, 'litros': total, 'numero': n da 1a nota}}
-    """
+    """Resumo por descarga para a LISTA (uma consulta so, sem N+1)."""
     ids = [i for i in (descarga_ids or []) if i]
     if not ids:
         return {}
@@ -264,7 +344,8 @@ def vinculos_resumo(cur, descarga_ids):
     cur.execute(
         f"""
         SELECT dn.descarga_id, COUNT(*) AS n, SUM(dn.litros) AS litros,
-               MIN(doc.numero) AS numero
+               MIN(doc.numero) AS numero,
+               SUM(dn.modo = 'integral') AS fechadas
         FROM descarga_nota dn
         JOIN dfe_documentos doc ON doc.id = dn.documento_id
         WHERE dn.descarga_id IN ({marc})
@@ -273,26 +354,29 @@ def vinculos_resumo(cur, descarga_ids):
         ids,
     )
     return {r["descarga_id"]: {"n": r["n"], "litros": _f(r["litros"]) or 0.0,
-                               "numero": r["numero"]}
+                               "numero": r["numero"], "fechadas": r["fechadas"] or 0}
             for r in cur.fetchall()}
 
 
 def registrar_vinculo(cur, descarga_id, item_id, litros, usuario_id=None,
-                      observacao=None, tolerancia_l=TOLERANCIA_L):
-    """Grava UM vinculo depois de revalidar TUDO no servidor.
+                      observacao=None, modo='parcial', tolerancia_l=TOLERANCIA_L):
+    """Grava UM lancamento depois de revalidar TUDO no servidor.
 
-    Nao confia em nada que venha da tela: o `documento_id` e resolvido a partir
-    do `item_id` (nunca recebido de fora, senao as duas colunas poderiam
-    divergir), e a legitimidade do item e conferida de novo — mesma empresa,
-    mesmo produto, NF-e autorizada.
+    Nao confia em nada da tela: o `documento_id` sai do `item_id` (nunca vem de
+    fora, senao as duas colunas poderiam divergir) e a legitimidade do item e
+    conferida de novo — mesma empresa, mesmo produto, NF-e autorizada.
 
-    Vincular o MESMO item na MESMA descarga duas vezes SOMA no vinculo que ja
-    existe (ON DUPLICATE KEY), respeitando a UNIQUE(descarga_id, item_id): e o
-    que o usuario quer dizer, e evita estourar a constraint na cara dele.
+    NAO ha mais trava de "litros <= o que falta na descarga": era ela que
+    impedia registrar perda e sobra. Uma nota de 5.000 pode ser lancada inteira
+    numa descarga que recebeu 4.950 — a diferenca e justamente a perda. Sobra
+    apenas o limite fisico: litros <= saldo da nota. Os avisos de "passou do
+    recebido" e de perda/sobra sao dados pela TELA antes de confirmar; aqui
+    nao se bloqueia.
 
-    Levanta ValueError com mensagem pronta pra exibir quando algo nao passa.
-    NAO da commit — quem chama controla a transacao.
-    Retorna o estado da descarga depois do vinculo.
+    modo='integral' FECHA a nota: grava perda_sobra_l nesta linha e tira a nota
+    das candidatas dali pra frente.
+
+    Levanta ValueError com mensagem pronta pra exibir. NAO da commit.
     """
     try:
         litros = float(str(litros).replace(",", "."))
@@ -300,14 +384,11 @@ def registrar_vinculo(cur, descarga_id, item_id, litros, usuario_id=None,
         raise ValueError("Informe os litros em número.")
     if litros <= 0:
         raise ValueError("Os litros precisam ser maiores que zero.")
+    if modo not in ('parcial', 'integral'):
+        raise ValueError("Modo inválido: use parcial ou integral.")
 
     cur.execute(
-        """
-        SELECT id, cliente_id, produto_id, status, total_descarga,
-               COALESCE((SELECT SUM(dn.litros) FROM descarga_nota dn
-                          WHERE dn.descarga_id = descargas_pendentes.id), 0) AS vinculado
-        FROM descargas_pendentes WHERE id = %s
-        """,
+        "SELECT id, cliente_id, produto_id, status FROM descargas_pendentes WHERE id = %s",
         (descarga_id,),
     )
     d = cur.fetchone()
@@ -317,15 +398,15 @@ def registrar_vinculo(cur, descarga_id, item_id, litros, usuario_id=None,
         raise ValueError("Esta descarga está marcada como ignorada. "
                          "Tire a marcação antes de vincular uma nota.")
 
-    # O item precisa ser um candidato legitimo AGORA — nao basta ter sido
-    # quando a tela montou a lista.
     cur.execute(
         """
         SELECT i.id, i.documento_id, i.quantidade,
                COALESCE(i.classificado_produto_id, i.produto_id) AS produto_id,
                doc.cliente_id, doc.tipo, doc.situacao, doc.numero,
                COALESCE((SELECT SUM(dn.litros) FROM descarga_nota dn
-                          WHERE dn.item_id = i.id), 0) AS vinculado_item
+                          WHERE dn.item_id = i.id), 0) AS vinculado_item,
+               EXISTS (SELECT 1 FROM descarga_nota f
+                        WHERE f.item_id = i.id AND f.modo = 'integral') AS fechada
         FROM dfe_itens i
         JOIN dfe_documentos doc ON doc.id = i.documento_id
         WHERE i.id = %s
@@ -335,6 +416,9 @@ def registrar_vinculo(cur, descarga_id, item_id, litros, usuario_id=None,
     it = cur.fetchone()
     if not it:
         raise ValueError("Item da nota não encontrado.")
+    if it["fechada"]:
+        raise ValueError("A nota %s já foi fechada. Desfaça o fechamento antes "
+                         "de lançar de novo." % (it["numero"] or "?"))
     if it["tipo"] != 'NFe' or it["situacao"] != 'autorizado':
         raise ValueError("A nota precisa ser uma NF-e autorizada.")
     if it["cliente_id"] != d["cliente_id"]:
@@ -347,28 +431,40 @@ def registrar_vinculo(cur, descarga_id, item_id, litros, usuario_id=None,
         raise ValueError("A nota %s só tem %.3f L de saldo (você pediu %.3f L)."
                          % (it["numero"] or "?", saldo_item, litros))
 
-    falta = round((_f(d["total_descarga"]) or 0.0) - (_f(d["vinculado"]) or 0.0), 3)
-    if litros > falta + 1e-6:
-        raise ValueError("Faltam só %.3f L nesta descarga (você pediu %.3f L)."
-                         % (falta, litros))
+    perda_sobra = None
+    if modo == 'integral':
+        ps = perda_sobra_item(cur, item_id, litros_extra=litros)
+        perda_sobra = ps["perda_sobra"] if ps else None
 
     cur.execute(
         """
         INSERT INTO descarga_nota
-            (descarga_id, documento_id, item_id, litros, observacao, criado_por)
-        VALUES (%s, %s, %s, %s, %s, %s)
+            (descarga_id, documento_id, item_id, litros, modo, perda_sobra_l,
+             observacao, criado_por)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
         ON DUPLICATE KEY UPDATE
-            litros     = litros + VALUES(litros),
-            observacao = COALESCE(NULLIF(VALUES(observacao), ''), observacao)
+            litros        = litros + VALUES(litros),
+            modo          = VALUES(modo),
+            perda_sobra_l = VALUES(perda_sobra_l),
+            observacao    = COALESCE(NULLIF(VALUES(observacao), ''), observacao)
         """,
-        (descarga_id, it["documento_id"], item_id, litros,
+        (descarga_id, it["documento_id"], item_id, litros, modo, perda_sobra,
          (observacao or '').strip()[:255] or None, usuario_id),
     )
-    return calcular_estado(cur, descarga_id, tolerancia_l=tolerancia_l)
+    estado = calcular_estado(cur, descarga_id, tolerancia_l=tolerancia_l)
+    if estado is not None:
+        estado["perda_sobra"] = perda_sobra
+        estado["fechou_nota"] = (modo == 'integral')
+        estado["nota_numero"] = it["numero"]
+    return estado
 
 
 def remover_vinculo(cur, vinculo_id, tolerancia_l=TOLERANCIA_L):
-    """Desfaz UM vinculo e recalcula o estado da descarga.
+    """Desfaz UM lancamento e recalcula o estado da descarga.
+
+    Se a linha removida era o fechamento da nota, a nota REABRE sozinha: a
+    marca de integral morre junto com o lancamento, e a perda/sobra gravada
+    nela vai junto — nao fica resultado orfao.
 
     NAO da commit. Retorna o estado novo, ou None se o vinculo nao existir.
     """
@@ -383,17 +479,14 @@ def remover_vinculo(cur, vinculo_id, tolerancia_l=TOLERANCIA_L):
 
 def calcular_estado(cur, descarga_id, tolerancia_l=TOLERANCIA_L,
                     atualizar_status=True):
-    """Quanto da descarga ja foi coberto por notas, e sincroniza o status.
+    """Progresso da descarga: quanto do RECEBIDO ja foi coberto por notas.
 
-    'Coberta' = a soma dos litros vinculados alcancou o total da descarga,
-    dentro da tolerancia. Total x parcial nao e um campo gravado: e o resultado
-    desta soma, entao nunca fica dessincronizado do que foi de fato vinculado.
+    A descarga fecha quando o vinculado alcanca o recebido OU quando todas as
+    notas dela foram fechadas (integral). O segundo caso importa: com perda,
+    o vinculado nunca chega ao recebido, e sem essa regra a descarga ficaria
+    eternamente pendente.
 
-    Nao mexe em descarga marcada como 'ignorada' — foi uma decisao do usuario,
-    e nao cabe ao calculo desfazer. NAO da commit: quem chama controla a
-    transacao (a tela vai gravar o vinculo e recalcular no mesmo commit).
-
-    Retorna None se a descarga nao existir, senao um dict com o estado.
+    Nao mexe em descarga 'ignorada'. NAO da commit.
     """
     cur.execute(
         """
@@ -401,7 +494,12 @@ def calcular_estado(cur, descarga_id, tolerancia_l=TOLERANCIA_L,
                COALESCE((SELECT SUM(dn.litros) FROM descarga_nota dn
                           WHERE dn.descarga_id = dp.id), 0) AS vinculado,
                COALESCE((SELECT COUNT(*) FROM descarga_nota dn
-                          WHERE dn.descarga_id = dp.id), 0) AS n_vinculos
+                          WHERE dn.descarga_id = dp.id), 0) AS n_vinculos,
+               COALESCE((SELECT COUNT(*) FROM descarga_nota dn
+                          WHERE dn.descarga_id = dp.id
+                            AND NOT EXISTS (SELECT 1 FROM descarga_nota f
+                                             WHERE f.item_id = dn.item_id
+                                               AND f.modo = 'integral')), 0) AS notas_abertas
         FROM descargas_pendentes dp
         WHERE dp.id = %s
         """,
@@ -411,14 +509,19 @@ def calcular_estado(cur, descarga_id, tolerancia_l=TOLERANCIA_L,
     if not r:
         return None
 
-    total = _f(r["total_descarga"]) or 0.0
+    recebido = _f(r["total_descarga"]) or 0.0
     vinculado = _f(r["vinculado"]) or 0.0
-    tol = tolerancia_l if tolerancia_l and tolerancia_l > 0 else 0.0
+    n_vinculos = r["n_vinculos"]
+    notas_abertas = r["notas_abertas"]
 
-    # Exige vinculo de verdade: sem nenhum litro vinculado a descarga nao esta
-    # "coberta", nem quando o total dela e 0 ou nulo (dado ruim do ELS).
-    coberta = bool(vinculado > 0 and total > 0 and vinculado >= (total - tol))
-    saldo = round(total - vinculado, 3)
+    # Estrito de proposito: a tolerancia serve para SUGERIR nota plausivel, nao
+    # para declarar descarga fechada. Faltando 150 L com nota ainda aberta, a
+    # descarga NAO esta resolvida — dar como fechada esconderia a diferenca,
+    # que e justamente o que perda/sobra existe para mostrar.
+    alcancou = vinculado > 0 and recebido > 0 and vinculado >= (recebido - EPS_L)
+    todas_fechadas = n_vinculos > 0 and notas_abertas == 0
+    coberta = bool(alcancou or todas_fechadas)
+    falta = round(recebido - vinculado, 3)
 
     status_atual = r["status"]
     novo_status = status_atual
@@ -432,12 +535,16 @@ def calcular_estado(cur, descarga_id, tolerancia_l=TOLERANCIA_L,
 
     return {
         "descarga_id": r["id"],
-        "total_descarga": total,
+        "recebido": recebido,
         "vinculado": vinculado,
-        "saldo": saldo,
+        "falta": falta,                 # negativo = vinculou mais que o recebido
+        "total_descarga": recebido,     # nome antigo, mantido para a tela
+        "saldo": falta,
         "coberta": coberta,
         "parcial": bool(vinculado > 0 and not coberta),
-        "n_vinculos": r["n_vinculos"],
+        "n_vinculos": n_vinculos,
+        "notas_abertas": notas_abertas,
+        "todas_fechadas": todas_fechadas,
         "status_anterior": status_atual,
         "status": novo_status,
         "status_alterado": novo_status != status_atual,

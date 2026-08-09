@@ -292,6 +292,17 @@
 .mig-hint{ font-size:11px; color:var(--muted); margin-top:.3rem; }
 .mig-hint--err{ color:var(--danger); font-weight:600; }
 
+/* Avisos do lancamento (perda/sobra, passou do recebido). INFORMAM, nao
+   bloqueiam: o botao continua habilitado. */
+.mig-aviso{ border:1px solid #f0d9b5; background:#fff8ec; border-radius:9px;
+  padding:.5rem .65rem; font-size:.82rem; color:#8a5a00; margin-top:.55rem; }
+.mig-aviso b{ color:#8a5a00; }
+.mig-aviso--ok{ border-color:#cfe8d6; background:var(--ok-bg); color:var(--ok); }
+.mig-aviso--ok b{ color:var(--ok); }
+
+/* Candidata que nao cobre o que falta: visivel, clicavel, mas discreta. */
+.mig-cand--fraca{ opacity:.72; }
+
 @media (min-width:768px){
   .mig-dia__head{ padding:.7rem 1.1rem; }
   .mig-dia__data{ font-size:.98rem; }

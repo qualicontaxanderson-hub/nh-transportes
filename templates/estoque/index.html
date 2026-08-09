@@ -359,27 +359,40 @@
     return String(s === null || s === undefined ? '' : s).replace(/[&<>"']/g,
       function (c) { return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; });
   }
-  // Teto do campo: o que falta na descarga, limitado pelo saldo da nota.
+  // O unico teto e o SALDO DA NOTA. A trava de "nao passar do recebido" saiu
+  // de proposito: era ela que impedia registrar perda e sobra.
   function tetoDe(c) {
-    return Math.max(0, Math.min(Number(estado.saldo) || 0, Number(c.saldo) || 0));
+    var it = itemSel(c);
+    return Math.max(0, Number(it ? it.saldo : c.saldo) || 0);
+  }
+
+  // Linha da nota em uso (quase sempre uma so; a nota com duas linhas do mesmo
+  // combustivel deixa o usuario escolher).
+  function itemSel(c) {
+    if (!c) return null;
+    if (!c.varias_linhas) return c.itens && c.itens[0];
+    var s = body.querySelector('.js-linha[data-doc="' + c.documento_id + '"]');
+    var id = s ? parseInt(s.value, 10) : c.item_id;
+    for (var i = 0; i < c.itens.length; i++) if (c.itens[i].item_id === id) return c.itens[i];
+    return c.itens[0];
   }
 
   function selosDe(c) {
     var s = '';
-    if (c.dif_litros === 0)            s += '<span class="mig-badge mig-badge--ok">volume exato</span>';
-    else if (c.dentro_tolerancia)      s += '<span class="mig-badge mig-badge--info">' +
-                                            (c.dif_litros > 0 ? '+' : '−') + fmt(Math.abs(c.dif_litros)) + ' L na nota</span>';
-    else                               s += '<span class="mig-badge mig-badge--pend">' +
-                                            (c.dif_litros > 0 ? '+' : '−') + fmt(Math.abs(c.dif_litros)) +
-                                            ' L · fora da tolerância</span>';
+    if (c.parcial) s += '<span class="mig-badge mig-badge--ok"><i class="bi bi-arrow-repeat"></i> já iniciada · próxima a descarregar</span>';
+    if (!c.cobre)  s += '<span class="mig-badge mig-badge--pend">saldo ' + fmt(c.saldo) +
+                        ' L · não cobre o que falta</span>';
+    else if (c.dif_litros === 0) s += '<span class="mig-badge mig-badge--ok">saldo exato</span>';
+    else if (c.dentro_tolerancia) s += '<span class="mig-badge mig-badge--info">sobram ' +
+                                       fmt(Math.abs(c.dif_litros)) + ' L na nota</span>';
     if (c.dif_dias === 0)              s += '<span class="mig-badge mig-badge--ok">mesmo dia</span>';
     else {
       var n = Math.abs(c.dif_dias);
       s += '<span class="mig-badge mig-badge--info">' + n + (n === 1 ? ' dia ' : ' dias ') +
            (c.dif_dias < 0 ? 'antes' : 'depois') + '</span>';
     }
-    if (c.ja_vinculada_nesta) s += '<span class="mig-badge mig-badge--info">já usada nesta descarga</span>';
-    if (c.esgotada)           s += '<span class="mig-badge mig-badge--ign">sem saldo</span>';
+    if (c.varias_linhas) s += '<span class="mig-badge mig-badge--info">' + c.itens.length +
+                              ' linhas deste produto</span>';
     return s;
   }
 
@@ -404,22 +417,44 @@
     var pct = estado.total_descarga > 0
       ? Math.min(100, Math.round(estado.vinculado / estado.total_descarga * 100)) : 0;
 
+    // A meta e o RECEBIDO: o que entrou no tanque. As notas e que se juntam
+    // ate alcanca-lo.
+    var falta = Number(estado.falta) || 0;
     var h = '<div class="mig-vdsc"><div class="mig-vdsc__top">' +
       '<div><div class="mig-vdsc__nome">' + esc(dsc.produto_nome || '—') + '</div>' +
       '<div class="mig-vdsc__meta">TQ&nbsp;' + esc(dsc.tanque === null ? '—' : dsc.tanque) + '</div></div>' +
-      '<div class="mig-vdsc__tot"><b>' + fmt(estado.total_descarga) + ' L</b>' +
-      '<div class="mig-vdsc__meta">descarregados</div></div></div>' +
+      '<div class="mig-vdsc__tot"><b>' + fmt(estado.recebido) + ' L</b>' +
+      '<div class="mig-vdsc__meta">recebido no tanque</div></div></div>' +
       '<div class="mig-bar"><i style="width:' + pct + '%"></i></div>' +
-      '<div class="mig-vdsc__prog"><span><b>' + fmt(estado.vinculado) + ' L</b> vinculados (' + pct + '%)</span>' +
-      '<span>faltam <b>' + fmt(estado.saldo) + ' L</b></span></div></div>';
+      '<div class="mig-vdsc__prog"><span>vinculado <b>' + fmt(estado.vinculado) + ' L</b> (' + pct + '%)</span>' +
+      (falta > 0.001
+        ? '<span>faltam <b>' + fmt(falta) + ' L</b> pra fechar</span>'
+        : (falta < -0.001
+            ? '<span class="mig-st mig-st--pend">vinculado ' + fmt(-falta) + ' L a mais</span>'
+            : '<span class="mig-st mig-st--ok">recebido coberto</span>')) +
+      '</div></div>';
 
     if (d.vinculos && d.vinculos.length) {
       h += '<div class="mig-vja"><div class="mig-vlbl">Já vinculado</div>';
       d.vinculos.forEach(function (v) {
-        h += '<div class="mig-vja__lin"><i class="bi bi-link-45deg" style="color:#1e7e34"></i><div>' +
-             '<div><b>NF-e ' + esc(v.numero) + '</b> · ' + esc(v.fornecedor || '') + '</div>' +
-             '<div class="mig-vdsc__meta">item ' + esc(v.n_item) +
-             (v.criado_por_nome ? ' · por ' + esc(v.criado_por_nome) : '') + '</div></div>' +
+        var fechou = v.modo === 'integral';
+        var ps = fechou ? v.perda_sobra_l : v.perda_sobra_prov;
+        var res = '';
+        if (ps !== null && ps !== undefined && Math.abs(ps) > 0.001) {
+          var sobra = ps > 0;
+          res = '<span class="mig-st mig-st--' + (sobra ? 'ok' : 'pend') + '">' +
+                (sobra ? 'sobra ' : 'perda ') + fmt(Math.abs(ps)) + ' L' +
+                (fechou ? '' : ' (provisória)') + '</span>';
+        }
+        h += '<div class="mig-vja__lin"><i class="bi bi-link-45deg" style="color:' +
+             (fechou ? '#1e7e34' : '#b26a00') + '"></i><div>' +
+             '<div><b>NF-e ' + esc(v.numero) + '</b> · ' + esc(v.fornecedor || '') +
+             ' <span class="mig-badge mig-badge--' + (fechou ? 'ok' : 'pend') + '">' +
+             (fechou ? 'fechada' : 'aberta') + '</span></div>' +
+             '<div class="mig-vdsc__meta">linha ' + esc(v.n_item) + ' · nota ' +
+             fmt(v.item_litros) + ' L' +
+             (v.criado_por_nome ? ' · por ' + esc(v.criado_por_nome) : '') +
+             (res ? ' · ' + res : '') + '</div></div>' +
              '<span class="l">' + fmt(v.litros) + ' L</span>' +
              '<button type="button" class="mig-btn-undo js-undo" data-id="' + v.id + '">desfazer</button></div>';
       });
@@ -432,48 +467,60 @@
     } else {
       h += '<div class="mig-vlbl">Notas candidatas · ' + cands.length + '</div>';
       cands.forEach(function (c, i) {
-        var cls = 'mig-cand' + (i === 0 && !c.esgotada ? ' mig-cand--top' : '') +
-                  (c.esgotada ? ' mig-cand--off' : '');
+        // A estrela so vai para a primeira se ela REALMENTE cobrir o que falta.
+        var top = i === 0 && c.cobre;
+        var cls = 'mig-cand' + (top ? ' mig-cand--top' : '') + (c.cobre ? '' : ' mig-cand--fraca');
         h += '<label class="' + cls + '" data-i="' + i + '">' +
-          '<input type="radio" name="vcand" value="' + i + '"' + (c.esgotada ? ' disabled' : '') + '>' +
+          '<input type="radio" name="vcand" value="' + i + '">' +
           '<div class="mig-cand__c"><div class="mig-cand__t">' +
           '<span class="mig-cand__nf">NF-e ' + esc(c.numero) + '</span>' +
-          (i === 0 && !c.esgotada ? '<span class="mig-badge mig-badge--info"><i class="bi bi-star-fill"></i> mais provável</span>' : '') +
+          (top ? '<span class="mig-badge mig-badge--info"><i class="bi bi-star-fill"></i> mais provável</span>' : '') +
           '</div><div class="mig-cand__forn">' + esc(c.fornecedor || '') + '</div>' +
-          // Descricao do produto como o FORNECEDOR escreveu na nota — e o que da
-          // pra conferir contra o canhoto; o codigo ANP sozinho nao diz nada.
           (c.produto_xml
             ? '<div class="mig-cand__prod" title="' + esc(c.produto_xml) + '">' +
               '<b>Produto:</b> ' + esc(c.produto_xml) + '</div>'
             : '') +
           '<div class="mig-cand__l">emitida <b>' + esc(c.emissao_br || '—') + '</b> · série ' + esc(c.serie) +
-          ' · item ' + esc(c.n_item) + (c.cod_anp ? ' · ANP ' + esc(c.cod_anp) : '') + '</div>' +
+          (c.cod_anp ? ' · ANP ' + esc(c.cod_anp) : '') + '</div>' +
+          // Nota com mais de uma linha do mesmo combustivel: escolhe qual.
+          (c.varias_linhas
+            ? '<div class="mig-cand__l">linha: <select class="js-linha form-select form-select-sm" ' +
+              'style="width:auto;display:inline-block" data-doc="' + c.documento_id + '">' +
+              c.itens.map(function (it) {
+                return '<option value="' + it.item_id + '"' +
+                       (it.item_id === c.item_id ? ' selected' : '') + '>item ' + esc(it.n_item) +
+                       ' · saldo ' + fmt(it.saldo) + ' L</option>';
+              }).join('') + '</select></div>'
+            : '<div class="mig-cand__l">linha ' + esc(c.n_item) + '</div>') +
           '<div class="mig-cand__badges">' + selosDe(c) + '</div>' + cteDe(c) +
           '</div><div class="mig-cand__v"><div class="q">' + fmt(c.item_litros) + ' L</div>' +
-          '<div class="s">saldo ' + fmt(c.saldo) + ' L</div></div></label>';
+          '<div class="s">saldo <b>' + fmt(c.saldo) + '</b> L</div></div></label>';
       });
-      // Como vincular: Total (padrao, 1 clique) ou Parcial (abre o campo).
+      // Duas perguntas separadas: QUANTOS litros desta nota vieram nesta
+      // descarga, e se a nota esta ENCERRADA. A segunda e que fecha a nota.
       h += '<div class="mig-modo" id="vincModo" hidden>' +
-        '<div class="mig-vlbl">Como vincular</div>' +
-        '<div class="mig-modo__ops">' +
-        '<label class="mig-modo__op mig-modo__op--on" id="vincOpTotal">' +
-        '<input type="radio" name="vmodo" value="total" checked>' +
-        '<div><div class="mig-modo__tit">Total — <span class="q" id="vincTotalQtd">—</span></div>' +
-        '<div class="mig-modo__sub">a descarga inteira nesta nota</div></div></label>' +
-        '<label class="mig-modo__op" id="vincOpParcial">' +
-        '<input type="radio" name="vmodo" value="parcial">' +
-        '<div><div class="mig-modo__tit">Parcial</div>' +
-        '<div class="mig-modo__sub">escolher quantos litros</div></div></label>' +
-        '</div>' +
-        '<div class="mig-modo__campo" id="vincCampo" hidden>' +
-        '<div class="mig-vlbl">Litros desta nota</div>' +
+        '<div class="mig-vlbl">Litros desta nota que entraram nesta descarga</div>' +
         '<input type="number" step="0.001" min="0" class="form-control form-control-sm" ' +
         'id="vincLitros" style="max-width:180px">' +
         '<div class="mig-hint" id="vincHint"></div>' +
-        '<div class="mig-vlbl" style="margin-top:.6rem">Observação ' +
+        '<div class="mig-vlbl" style="margin-top:.85rem">Esta nota está encerrada?</div>' +
+        '<div class="mig-modo__ops" style="flex-direction:column">' +
+        '<label class="mig-modo__op mig-modo__op--on">' +
+        '<input type="radio" name="vmodo" value="parcial" checked>' +
+        '<div><div class="mig-modo__tit">PARCIAL — ainda falta descarregar</div>' +
+        '<div class="mig-modo__sub">A nota guarda saldo e volta nos próximos dias, em destaque.</div>' +
+        '</div></label>' +
+        '<label class="mig-modo__op">' +
+        '<input type="radio" name="vmodo" value="integral">' +
+        '<div><div class="mig-modo__tit">INTEGRAL — fecha a nota agora</div>' +
+        '<div class="mig-modo__sub">Último lançamento. A nota sai das candidatas e a perda/sobra é apurada.</div>' +
+        '</div></label>' +
+        '</div>' +
+        '<div id="vincAvisos"></div>' +
+        '<div class="mig-vlbl" style="margin-top:.7rem">Observação ' +
         '<span style="text-transform:none;font-weight:400">(opcional)</span></div>' +
         '<input type="text" maxlength="255" class="form-control form-control-sm" id="vincObs" ' +
-        'placeholder="ex.: conferido com o canhoto"></div></div>';
+        'placeholder="ex.: conferido com o canhoto"></div>';
     }
     body.innerHTML = h;
     atualizaBotao();
@@ -481,28 +528,31 @@
 
   function modoAtual() {
     var r = body.querySelector('input[name="vmodo"]:checked');
-    return r ? r.value : 'total';
+    return r ? r.value : 'parcial';
   }
 
-  // Litros que serao gravados: no Total e o proprio teto; no Parcial, o campo.
   function litrosAtuais() {
     if (!sel) return NaN;
-    if (modoAtual() === 'total') return tetoDe(sel);
     var inp = document.getElementById('vincLitros');
     return inp ? parseFloat(String(inp.value).replace(',', '.')) : NaN;
   }
 
+  // Perda/sobra que este lancamento produziria se fechasse a nota AGORA:
+  // tudo que a nota ja recebeu, mais o que esta sendo lancado, menos a nota.
+  function perdaSobraDe(c, litros) {
+    var it = itemSel(c);
+    if (!it || isNaN(litros)) return null;
+    return Math.round(((it.vinculado_total || 0) + litros - (it.item_litros || 0)) * 1000) / 1000;
+  }
+
   function atualizaBotao() {
     var v = litrosAtuais();
+    var integral = modoAtual() === 'integral';
     var ok = !!sel && !isNaN(v) && v > 0 && v <= tetoDe(sel) + 1e-6;
     btnOk.disabled = !ok;
-    btnOk.textContent = ok ? 'Vincular ' + fmt(v) + ' L' : 'Vincular';
+    btnOk.textContent = !ok ? 'Vincular'
+      : (integral ? 'Fechar nota com ' + fmt(v) + ' L' : 'Vincular ' + fmt(v) + ' L');
 
-    var qtd = document.getElementById('vincTotalQtd');
-    if (qtd && sel) qtd.textContent = fmt(tetoDe(sel)) + ' L';
-
-    var campo = document.getElementById('vincCampo');
-    if (campo) campo.hidden = modoAtual() !== 'parcial';
     body.querySelectorAll('.mig-modo__op').forEach(function (op) {
       var r = op.querySelector('input');
       op.classList.toggle('mig-modo__op--on', !!r && r.checked);
@@ -513,11 +563,41 @@
       var teto = tetoDe(sel);
       if (!isNaN(v) && v > teto + 1e-6) {
         hint.className = 'mig-hint mig-hint--err';
-        hint.textContent = 'Máximo ' + fmt(teto, 3) + ' L (saldo da nota e o que falta na descarga).';
+        hint.textContent = 'Máximo ' + fmt(teto, 3) + ' L — é o saldo desta nota.';
       } else {
         hint.className = 'mig-hint';
-        hint.textContent = 'máx. ' + fmt(teto, 3) + ' L (saldo da nota e o que falta na descarga)';
+        hint.textContent = 'saldo desta nota: ' + fmt(teto, 3) + ' L';
       }
+    }
+
+    // Avisos: informam, nao bloqueiam.
+    var av = document.getElementById('vincAvisos');
+    if (av) {
+      var txt = '';
+      if (sel && !isNaN(v) && v > 0) {
+        var falta = Number(estado.falta) || 0;
+        if (v > falta + 0.001) {
+          txt += '<div class="mig-aviso"><i class="bi bi-exclamation-triangle"></i> ' +
+                 'Isso é <b>mais do que entrou no tanque</b>: a descarga recebeu ' +
+                 fmt(estado.recebido) + ' L e ainda faltavam ' + fmt(Math.max(0, falta)) +
+                 ' L. Pode ser proposital (perda), mas confira.</div>';
+        }
+        if (integral) {
+          var ps = perdaSobraDe(sel, v);
+          if (ps === null) { /* sem item */ }
+          else if (Math.abs(ps) <= 0.001) {
+            txt += '<div class="mig-aviso mig-aviso--ok"><i class="bi bi-check2-circle"></i> ' +
+                   'Ao fechar: recebido bate com a nota. Sem perda nem sobra.</div>';
+          } else {
+            var it = itemSel(sel);
+            txt += '<div class="mig-aviso"><i class="bi bi-calculator"></i> <b>Ao fechar:</b> ' +
+                   'esta nota terá recebido <b>' + fmt((it.vinculado_total || 0) + v) +
+                   ' L</b> contra <b>' + fmt(it.item_litros) + ' L</b> na nota → <b>' +
+                   (ps > 0 ? 'sobra' : 'perda') + ' de ' + fmt(Math.abs(ps)) + ' L</b>.</div>';
+          }
+        }
+      }
+      av.innerHTML = txt;
     }
   }
 
@@ -567,23 +647,22 @@
       if (lab) lab.classList.add('mig-cand--sel');
       var modo = document.getElementById('vincModo');
       if (modo) modo.hidden = false;
-      // Trocar de nota volta para Total e recalcula: um "parcial" digitado
-      // para a nota anterior nao pode ficar pendurado numa nota com outro saldo.
-      var rt = body.querySelector('input[name="vmodo"][value="total"]');
-      if (rt) rt.checked = true;
+      // Trocar de nota volta para PARCIAL (o caso comum e o mais seguro: nao
+      // fecha nada sem o usuario pedir) e sugere os litros de novo.
+      var rp = body.querySelector('input[name="vmodo"][value="parcial"]');
+      if (rp) rp.checked = true;
       var inp = document.getElementById('vincLitros');
-      if (inp) inp.value = tetoDe(sel);
+      if (inp) inp.value = sel.sugestao_litros;
       atualizaBotao();
       return;
     }
-    if (ev.target.name === 'vmodo') {
-      var i2 = document.getElementById('vincLitros');
-      // Ao entrar no Parcial, comeca no mesmo valor do Total: so reduzir.
-      if (i2 && ev.target.value === 'parcial' && sel && !parseFloat(i2.value)) {
-        i2.value = tetoDe(sel);
-      }
+    if (ev.target.name === 'vmodo') { atualizaBotao(); return; }
+    if (ev.target.classList.contains('js-linha')) {
+      // Trocou a linha da nota: o saldo mudou, resugere os litros.
+      var it = itemSel(sel);
+      var i3 = document.getElementById('vincLitros');
+      if (it && i3) i3.value = Math.min(it.saldo, Math.max(0, Number(estado.falta) || it.saldo));
       atualizaBotao();
-      if (ev.target.value === 'parcial' && i2) i2.focus();
     }
   });
   body.addEventListener('input', function (ev) {
@@ -598,8 +677,9 @@
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({
-        item_id: sel.item_id,
-        litros: litrosAtuais(),           // Total = o teto; Parcial = o campo
+        item_id: (itemSel(sel) || sel).item_id,   // a linha escolhida da nota
+        litros: litrosAtuais(),
+        modo: modoAtual(),                        // parcial | integral (fecha)
         observacao: obs ? obs.value : ''
       })
     })
