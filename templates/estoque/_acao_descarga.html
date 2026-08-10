@@ -12,9 +12,9 @@
 <button type="button" class="mig-vinc-resumo js-vinc" data-descarga="{{ d.id }}"
         title="Ver, desfazer ou vincular outra nota">
   {% if d.vinc_n == 1 %}NF-e {{ d.vinc_numero }}{% else %}{{ d.vinc_n }} notas{% endif %}
-  {%- if d.vinc_fechada %}
-    {#- Notas fechadas: o numero e PERDA/SOBRA (recebido - o que as notas
-        dizem). O sinal e a cor contam a historia, sem precisar de palavra. -#}
+  {%- if d.vinc_integral %}
+    {#- SO a descarga que FECHOU a nota mostra a perda/sobra. Numa nota baixada
+        em duas viagens, mostrar nas duas duplicaria o numero. -#}
     {%- if d.vinc_dif and (d.vinc_dif > 0.001 or d.vinc_dif < -0.001) %}
       · <span class="mig-dif mig-dif--{{ 'sobra' if d.vinc_dif > 0 else 'perda' }}"
         >{{ '+' if d.vinc_dif > 0 else '−' }}{{ (d.vinc_dif if d.vinc_dif > 0 else -d.vinc_dif) | fmtnum(0) }} L</span>

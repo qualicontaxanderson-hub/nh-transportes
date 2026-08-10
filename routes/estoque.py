@@ -266,10 +266,12 @@ def index():
             d['vinc_numero'] = v['numero'] if v else None
             d['vinc_falta'] = round(float(d.get('total_descarga') or 0)
                                     - (v['litros'] if v else 0.0), 3)
-            # Notas todas fechadas -> o numero deixa de ser "falta" e vira
-            # perda/sobra: recebido menos o que as notas dizem.
-            d['vinc_fechada'] = bool(v and v['n'] and not v['abertas'])
-            d['vinc_dif'] = v['dif'] if d['vinc_fechada'] else None
+            # A perda/sobra pertence a descarga que FECHOU a nota (o lancamento
+            # integral) — nao a toda descarga da nota. Com a nota baixada em
+            # duas viagens, mostrar nas duas duplicaria o numero: as duas
+            # exibiriam -232 e a auditoria somaria -464.
+            d['vinc_integral'] = bool(v and v['fechadas'])
+            d['vinc_dif'] = v['dif'] if d['vinc_integral'] else None
         dias_d = _totalizar(_agrupar_por_dia(descargas, 'dt'), 'total_descarga')
 
         # -------- Empresas p/ dropdown (uniao dos dois) --------
@@ -322,24 +324,44 @@ def index():
         conn.close()
 
 
-def _acao_html(cur, descarga_id, estado):
-    """HTML do .mig-dia__acao desta descarga, ja renderizado.
+def _rotulo_status(status, vinc_n, integral):
+    """Rotulo e cor do status NA TELA.
 
-    O JS troca esse pedaco na linha depois de vincular/desfazer, entao a pagina
-    nao recarrega. Renderiza o MESMO parcial que o index usa — sem isso a
-    marcacao viveria em dois lugares (Jinja e JS) e divergiria.
+    O status no banco fica 'vinculada' assim que as notas da descarga fecham,
+    mesmo para a descarga que so trouxe um pedaco. Na tela isso confunde: a
+    descarga que nao fechou nota nenhuma e 'parcial' (roxo), e so quem fechou
+    aparece como 'vinculada'.
+    """
+    if status == 'ignorada':
+        return 'ignorada', 'ign'
+    if integral:
+        return 'vinculada', 'ok'
+    if vinc_n:
+        return 'parcial', 'parcial'
+    return 'pendente', 'pend'
+
+
+def _linha_descarga(cur, descarga_id, estado):
+    """O que o JS precisa para atualizar a linha sem recarregar: o HTML da acao
+    e o rotulo/cor do status.
+
+    O HTML sai do MESMO parcial que o index usa — sem isso a marcacao viveria
+    em dois lugares (Jinja e JS) e divergiria.
     """
     res = vinculos_resumo(cur, [descarga_id]).get(descarga_id)
+    integral = bool(res and res['fechadas'])
     d = {
         'id': descarga_id,
         'vinc_n': res['n'] if res else 0,
         'vinc_litros': res['litros'] if res else 0.0,
         'vinc_numero': res['numero'] if res else None,
         'vinc_falta': estado['falta'],
-        'vinc_fechada': bool(estado.get('todas_fechadas')),
-        'vinc_dif': estado.get('perda_sobra'),
+        'vinc_integral': integral,
+        'vinc_dif': res['dif'] if integral else None,
     }
-    return render_template('estoque/_acao_descarga.html', d=d)
+    rotulo, classe = _rotulo_status(estado.get('status'), d['vinc_n'], integral)
+    return {'acao_html': render_template('estoque/_acao_descarga.html', d=d),
+            'rotulo': rotulo, 'classe': classe}
 
 
 # ==========================================================================
@@ -395,8 +417,8 @@ def vincular(descarga_id):
             modo=(dados.get('modo') or 'parcial'),
         )
         conn.commit()
-        return jsonify({'ok': True, 'estado': estado,
-                        'acao_html': _acao_html(cur, descarga_id, estado)})
+        linha = _linha_descarga(cur, descarga_id, estado)
+        return jsonify(dict({'ok': True, 'estado': estado}, **linha))
     except ValueError as e:
         conn.rollback()
         return jsonify({'ok': False, 'erro': str(e)}), 400
@@ -419,9 +441,9 @@ def desfazer_vinculo(vinculo_id):
         if estado is None:
             return jsonify({'ok': False, 'erro': 'Vínculo não encontrado.'}), 404
         conn.commit()
-        return jsonify({'ok': True, 'estado': estado,
-                        'descarga_id': estado['descarga_id'],
-                        'acao_html': _acao_html(cur, estado['descarga_id'], estado)})
+        linha = _linha_descarga(cur, estado['descarga_id'], estado)
+        return jsonify(dict({'ok': True, 'estado': estado,
+                             'descarga_id': estado['descarga_id']}, **linha))
     except Exception as e:
         conn.rollback()
         return jsonify({'ok': False, 'erro': 'Falha ao desfazer: %s' % e}), 500

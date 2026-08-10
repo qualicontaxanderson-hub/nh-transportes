@@ -247,8 +247,17 @@
              vinculo certo da descarga e com a NF-e de compra. #}
           <div class="mig-dia__meta">
             <span>{{ d.hora }} · TQ&nbsp;{{ d.tanque if d.tanque is not none else '—' }}</span>
-            <span class="mig-st mig-st--{{ 'ok' if d.status == 'vinculada' else ('ign' if d.status == 'ignorada' else 'pend') }}">
-              <i class="mig-st__dot"></i>{{ 'parcial' if (d.vinc_n and d.status != 'vinculada') else d.status }}
+            {#- 'parcial' (roxo) e a descarga que so trouxe um pedaco: tem
+                vinculo mas nao fechou nota nenhuma. O status no banco vira
+                'vinculada' assim que a NOTA fecha, mesmo para essa descarga —
+                na tela isso confundiria. -#}
+            {% set _rot = 'ignorada' if d.status == 'ignorada'
+                          else ('vinculada' if d.vinc_integral
+                                else ('parcial' if d.vinc_n else 'pendente')) %}
+            <span class="mig-st mig-st--{{ 'ign' if _rot == 'ignorada'
+                                           else ('ok' if _rot == 'vinculada'
+                                                 else ('parcial' if _rot == 'parcial' else 'pend')) }}">
+              <i class="mig-st__dot"></i>{{ _rot }}
             </span>
           </div>
           {% if d.status != 'ignorada' %}
@@ -340,13 +349,12 @@
     lin.setAttribute('data-status', st);
     var acao = lin.querySelector('.mig-dia__acao');
     if (acao && typeof d.acao_html === 'string') acao.innerHTML = d.acao_html;
-    // Status virou ponto colorido na meta (.mig-st), nao mais badge no canto.
+    // Status: rotulo e cor vem PRONTOS do servidor (mesma regra do Jinja),
+    // senao a tela teria que reproduzir aqui quando 'vinculada' vira 'parcial'.
     var stEl = lin.querySelector('.mig-st');
-    if (stEl) {
-      stEl.className = 'mig-st mig-st--' +
-        (st === 'vinculada' ? 'ok' : st === 'ignorada' ? 'ign' : 'pend');
-      var rotulo = (d.estado && d.estado.parcial) ? 'parcial' : st;
-      stEl.innerHTML = '<i class="mig-st__dot"></i>' + rotulo;
+    if (stEl && d.rotulo) {
+      stEl.className = 'mig-st mig-st--' + (d.classe || 'pend');
+      stEl.innerHTML = '<i class="mig-st__dot"></i>' + d.rotulo;
     }
   }
 
