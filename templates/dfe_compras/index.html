@@ -49,16 +49,36 @@
 </ul>
 
 <style>
-  /* Accordion de regras no visual .mig (azul #1D63A5 quando aberto). */
-  .accordion-mig .accordion-button:not(.collapsed){
-    background:#1D63A5; color:#fff; box-shadow:none;
+  /* Aba Regras: accordion no visual .mig com PROFUNDIDADE (só CSS, escopado em
+     #pane-regras -> não vaza para as outras abas). Espelha a paleta do .mig. */
+  #pane-regras .accordion-mig{ display:flex; flex-direction:column; gap:.55rem; }
+  #pane-regras .accordion-item{ border:1px solid #dde3ec; border-radius:12px; overflow:hidden;
+    box-shadow:0 1px 3px rgba(16,45,80,.08),0 4px 12px rgba(16,45,80,.06); }
+  #pane-regras .accordion-button{ border-radius:12px; font-weight:500; }
+  #pane-regras .accordion-button:not(.collapsed){
+    background:#1D63A5; color:#fff; box-shadow:none; border-radius:12px 12px 0 0;
   }
-  .accordion-mig .accordion-button:not(.collapsed) .text-muted{ color:#dbe7f3 !important; }
-  .accordion-mig .accordion-button:not(.collapsed)::after{ filter:brightness(0) invert(1); }
-  .accordion-mig .accordion-button:focus{ box-shadow:none; border-color:rgba(29,99,165,.35); }
-  .accordion-mig .accordion-button .badge.bg-secondary{
-    background:#e7eef6 !important; color:#1D63A5 !important;
+  #pane-regras .accordion-button:not(.collapsed) .text-muted{ color:#dbe7f3 !important; }
+  #pane-regras .accordion-button:not(.collapsed)::after{ filter:brightness(0) invert(1); }
+  #pane-regras .accordion-button:focus{ box-shadow:none; border-color:rgba(29,99,165,.35); }
+  /* Contador: pílula azul suave fechada; translúcida sobre o azul quando aberta. */
+  #pane-regras .accordion-button .badge.bg-secondary{
+    background:#e6f1fb !important; color:#0c447c !important; font-weight:700;
   }
+  #pane-regras .accordion-button:not(.collapsed) .badge.bg-secondary{
+    background:rgba(255,255,255,.18) !important; color:#fff !important;
+  }
+  /* Zebra + hover sutis nas linhas de regra. */
+  #pane-regras tbody tr:nth-child(even){ background:#f8fbfe; }
+  #pane-regras tbody tr:hover{ background:#eef5fd; }
+  /* cProd vira pílula mono. */
+  #pane-regras code{ background:#f1f4f8; border:1px solid #e5e9f0; border-radius:6px;
+    padding:.06rem .4rem; color:#334155; }
+  /* Botões de ação: quadradinhos com fundo suave da cor + ícone escuro. */
+  #pane-regras .btn-outline-primary{ background:#e6f1fb; border-color:#e6f1fb; color:#0c447c; }
+  #pane-regras .btn-outline-primary:hover{ background:#cfe3f7; border-color:#cfe3f7; color:#0c447c; }
+  #pane-regras .btn-outline-danger{ background:#fcebeb; border-color:#fcebeb; color:#a32d2d; }
+  #pane-regras .btn-outline-danger:hover{ background:#f6d7d7; border-color:#f6d7d7; color:#a32d2d; }
 </style>
 
 <div class="tab-content">
