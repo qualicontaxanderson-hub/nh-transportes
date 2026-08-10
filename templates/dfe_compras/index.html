@@ -49,6 +49,7 @@
               {% if it.preco_unit is not none %}<b>{{ _unit(it.preco_unit) }}</b>{% else %}—{% endif %}
               <span class="eq">= {{ (it.valor_show or 0) | formatar_moeda }}</span>
               {% if it.eta %}<span class="tag tag-rest">o que sobrou</span>
+                {% if it.valor_unitario is not none %}<span class="decl-orig">declarado {{ _unit(it.valor_unitario) }}</span>{% endif %}
               {% else %}<span class="tag tag-decl">declarado</span>{% endif %}
             {% else %}
               {{ (it.valor_show or 0) | formatar_moeda }}
@@ -314,6 +315,8 @@
   #pane-consultar .cmp-prod .tag{ font-size:.7rem; font-weight:700; border-radius:5px; padding:.02rem .32rem; margin-left:.3rem; }
   #pane-consultar .cmp-prod .tag-decl{ background:#eef2f7; color:#6b7280; }
   #pane-consultar .cmp-prod .tag-rest{ background:#ecf3e5; color:#27500a; }
+  /* Só no etanol: o unitário que a nota trazia (vUnCom), bem discreto. */
+  #pane-consultar .cmp-prod .decl-orig{ font-size:.72rem; color:#9aa4b2; margin-left:.35rem; }
   /* Caixinha de apuração do etanol (o "resto" do total). */
   #pane-consultar .cmp-apur{ background:#f6faf1; border:1px solid #dcebc9; border-radius:8px;
     margin:.5rem .7rem .1rem; padding:.45rem .6rem; font-size:.78rem; color:#3d5321; font-variant-numeric:tabular-nums; }
