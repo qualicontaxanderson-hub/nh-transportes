@@ -229,6 +229,12 @@
             <span>{{ g.n }} descarga{{ '' if g.n == 1 else 's' }}</span>
             <span class="sep">·</span>
             <span>{{ g.litros | fmtnum(0) }} L</span>
+            {# Lancamento manual: quando o e-mail do ELS nao capturou uma boca.
+               Ja leva o dia deste card para o formulario. #}
+            <button type="button" class="mig-btn-manual js-manual"
+                    data-dia="{{ g.chave }}" title="Lançar descarga manual neste dia">
+              <i class="bi bi-plus-lg"></i> manual
+            </button>
           </div>
         </div>
         {% for d in g.itens %}
@@ -241,7 +247,10 @@
             <i class="bi {{ ICO_PROD.get(d.slug, 'bi-droplet') }}"></i>
           </span>
           {# title com o nome CRU do ELS: o |title e so apresentacao. #}
-          <div class="mig-dia__nome" title="{{ d.produto_nome or '—' }}">{{ (d.produto_nome or '—') | title }}</div>
+          <div class="mig-dia__nome" title="{{ d.produto_nome or '—' }}">{{ (d.produto_nome or '—') | title }}{%
+            if d.origem == 'manual' %}<span class="mig-selo-man"
+              title="Lançada manualmente{% if d.descricao %}: {{ d.descricao }}{% endif %}"
+              ><i class="bi bi-hand-index-thumb"></i> manual</span>{% endif %}</div>
           <div class="mig-dia__vol">{{ d.total_descarga | fmtnum(0) }} L</div>
           {# O frete_id (controle interno de cobranca) NAO aparece mais: o
              vinculo certo da descarga e com a NF-e de compra. #}
@@ -289,6 +298,61 @@
         <li class="page-item {% if page_d >= tp_d %}disabled{% endif %}">
           <a class="page-link" href="?{{ qs_filtros }}{{ sep }}tab=descargas&page_d={{ page_d + 1 }}">›</a></li>
       </ul></nav>{% endif %}
+    </div>
+  </div>
+
+  {# =================== MODAL: lancar descarga manual =================== #}
+  <div class="modal fade" id="manualModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-fullscreen-sm-down">
+      <div class="modal-content">
+        <div class="modal-header" style="background:#1D63A5;color:#fff;">
+          <h5 class="modal-title mb-0"><i class="bi bi-hand-index-thumb"></i> Lançar descarga manual</h5>
+          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Fechar"></button>
+        </div>
+        <div class="modal-body mig-mdl-body py-3">
+          <div class="row g-2">
+            <div class="col-12">
+              <div class="mig-vlbl">Empresa *</div>
+              <select class="form-select form-select-sm" id="manEmpresa">
+                {% for e in empresas %}
+                <option value="{{ e.id }}" {% if filtros.empresa == e.id|string %}selected{% endif %}>{{ e.nome }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="col-7">
+              <div class="mig-vlbl">Produto *</div>
+              <select class="form-select form-select-sm" id="manProduto">
+                <option value="">Escolha…</option>
+                {% for p in produtos_cad %}<option value="{{ p.id }}">{{ p.nome }}</option>{% endfor %}
+              </select>
+            </div>
+            <div class="col-5">
+              <div class="mig-vlbl">Tanque *</div>
+              <input type="number" min="1" step="1" class="form-control form-control-sm" id="manTanque">
+            </div>
+            <div class="col-6">
+              <div class="mig-vlbl">Litros recebidos *</div>
+              <input type="number" min="0" step="0.001" class="form-control form-control-sm" id="manLitros">
+              <div class="mig-hint">o que entrou no tanque nesta boca</div>
+            </div>
+            <div class="col-6">
+              <div class="mig-vlbl">Data e hora *</div>
+              <input type="datetime-local" class="form-control form-control-sm" id="manData">
+            </div>
+            <div class="col-12">
+              <div class="mig-vlbl">Motivo do lançamento manual *</div>
+              <textarea class="form-control form-control-sm" id="manMotivo" rows="2" maxlength="255"
+                        placeholder="ex.: e-mail do ELS falhou, 3ª boca não capturada"></textarea>
+              <div class="mig-hint">fica gravado junto — é o que explica esta descarga daqui a seis meses</div>
+            </div>
+          </div>
+          <div id="manErro"></div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+          <button type="button" class="btn btn-sm btn-primary" id="manOk">Lançar descarga</button>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -731,6 +795,56 @@
       .catch(function (e) {
         alert('Não deu para vincular: ' + (e.message || e));
         atualizaBotao();
+      });
+  });
+
+  // ---- lancamento manual de descarga ----
+  var manEl = document.getElementById('manualModal');
+  var manModal = manEl ? new bootstrap.Modal(manEl) : null;
+
+  document.addEventListener('click', function (ev) {
+    var b = ev.target.closest('.js-manual');
+    if (!b || !manModal) return;
+    ev.preventDefault();
+    // Ja abre no dia do card, com a hora de agora (a data nao pode ser futura,
+    // entao num card de hoje a hora atual e o limite natural).
+    var dia = b.getAttribute('data-dia');
+    var agora = new Date();
+    var hh = String(agora.getHours()).padStart(2, '0');
+    var mm = String(agora.getMinutes()).padStart(2, '0');
+    document.getElementById('manData').value = dia + 'T' + hh + ':' + mm;
+    document.getElementById('manErro').innerHTML = '';
+    manModal.show();
+  });
+
+  var btnMan = document.getElementById('manOk');
+  if (btnMan) btnMan.addEventListener('click', function () {
+    var erro = document.getElementById('manErro');
+    erro.innerHTML = '';
+    btnMan.disabled = true; btnMan.textContent = 'Lançando…';
+    fetch('/estoque/descarga/manual', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        cliente_id: document.getElementById('manEmpresa').value,
+        produto_id: document.getElementById('manProduto').value,
+        tanque:     document.getElementById('manTanque').value,
+        litros:     document.getElementById('manLitros').value,
+        data:       document.getElementById('manData').value,
+        descricao:  document.getElementById('manMotivo').value
+      })
+    })
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        if (!d.ok) throw new Error(d.erro || 'falha');
+        // Recarrega: a descarga nova muda a contagem e o total do dia, entao
+        // atualizar so uma linha deixaria o cabecalho mentindo.
+        recarregaNaAba();
+      })
+      .catch(function (e) {
+        erro.innerHTML = '<div class="mig-aviso" style="border-color:#f0d5d1;' +
+          'background:#fdecea;color:#8a2a1e"><i class="bi bi-exclamation-triangle"></i> ' +
+          esc(e.message || e) + '</div>';
+        btnMan.disabled = false; btnMan.textContent = 'Lançar descarga';
       });
   });
 

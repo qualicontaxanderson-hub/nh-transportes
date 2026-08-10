@@ -315,6 +315,17 @@
 /* Candidata que nao cobre o que falta: visivel, clicavel, mas discreta. */
 .mig-cand--fraca{ opacity:.72; }
 
+/* ---------- Lancamento manual de descarga ---------- */
+.mig-btn-manual{ border:1px solid var(--line-2); background:var(--surface); color:var(--blue);
+  border-radius:7px; padding:.1rem .4rem; font-size:11px; font-weight:700; cursor:pointer;
+  white-space:nowrap; display:inline-flex; align-items:center; gap:.2rem; }
+.mig-btn-manual:hover{ background:var(--info-bg); border-color:var(--blue); }
+/* Selo na linha: roxo, o mesmo do 'parcial' — sinaliza "olhe com atencao". O
+   motivo do lancamento vai no title, sem ocupar espaco na linha. */
+.mig-selo-man{ display:inline-flex; align-items:center; gap:.2rem; border-radius:999px;
+  padding:.05rem .4rem; margin-left:.35rem; font-size:10px; font-weight:700;
+  background:#ede9fb; color:#534AB7; vertical-align:middle; }
+
 @media (min-width:768px){
   .mig-dia__head{ padding:.7rem 1.1rem; }
   .mig-dia__data{ font-size:.98rem; }

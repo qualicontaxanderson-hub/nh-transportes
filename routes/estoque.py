@@ -18,7 +18,7 @@ Terreno para as PROXIMAS camadas (ainda NAO implementadas aqui):
 import math
 import re
 import unicodedata
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from urllib.parse import urlencode
 
 from flask import Blueprint, jsonify, render_template, request
@@ -123,6 +123,26 @@ def _totalizar(grupos, campo):
         g['n'] = len(g['itens'])
         g['litros'] = sum(float(i[campo] or 0) for i in g['itens'])
     return grupos
+
+
+_COLS_MANUAL = None   # cache: descargas_pendentes ja tem as colunas do manual?
+
+
+def _tem_colunas_manual(cur):
+    """descargas_pendentes ja tem origem/descricao/criado_por?
+
+    O Railway sobe o codigo assim que a branch e pushada, mas a migration roda
+    a mao depois. Sem esta checagem o SELECT com `origem` derrubaria a tela
+    inteira nessa janela. Consulta uma vez por processo.
+    """
+    global _COLS_MANUAL
+    if _COLS_MANUAL is None:
+        cur.execute(
+            "SELECT COUNT(*) AS n FROM information_schema.columns "
+            "WHERE table_schema = DATABASE() AND table_name = 'descargas_pendentes' "
+            "AND column_name IN ('origem','descricao','criado_por')")
+        _COLS_MANUAL = ((cur.fetchone() or {}).get('n') or 0) >= 3
+    return _COLS_MANUAL
 
 
 def _janela_paginas(pagina, total_paginas, raio=2):
@@ -237,11 +257,15 @@ def index():
         # -------- Descargas (paginada) --------
         tp_d = max(1, math.ceil(totais['descargas'] / POR_PAGINA))
         page_d = min(page_d, tp_d)
+        # Antes da migration as colunas nao existem: finge 'els_email' em vez
+        # de derrubar a tela.
+        sel_manual = ("d.origem, d.descricao," if _tem_colunas_manual(cur)
+                      else "'els_email' AS origem, NULL AS descricao,")
         cur.execute(
             f"""
             SELECT d.id, d.data_final, d.data_inicial, d.data_descarga, d.tanque,
                    d.produto_nome, d.total_descarga, d.total_descarga_20c,
-                   d.status, d.frete_id,
+                   d.status, d.frete_id, {sel_manual}
                    COALESCE(emp.nome_fantasia, emp.razao_social) AS empresa_nome
             FROM descargas_pendentes d
             LEFT JOIN clientes emp ON emp.id = d.cliente_id
@@ -300,6 +324,11 @@ def index():
         )
         produtos = [r['produto_nome'] for r in cur.fetchall()]
 
+        # Cadastro de produtos para o dropdown do lancamento manual. O filtro
+        # acima usa o produto_nome que vem do ELS; aqui precisamos do id real.
+        cur.execute("SELECT id, nome FROM produto ORDER BY nome")
+        produtos_cad = cur.fetchall()
+
         # Com o card de filtros recolhido por padrao, um filtro ativo ficaria
         # invisivel — o selo no titulo mostra quantos estao valendo.
         n_filtros = sum(1 for v in f.values() if v)
@@ -313,6 +342,7 @@ def index():
             'estoque/index.html',
             leituras=leituras, descargas=descargas, totais=totais,
             dias=dias, dias_d=dias_d, serie=serie, produtos=produtos,
+            produtos_cad=produtos_cad, hoje_iso=hoje.strftime('%Y-%m-%d'),
             filtros=f, n_filtros=n_filtros, empresas=empresas, tab=tab,
             data_ini_default=data_ini_default, data_fim_default=data_fim_default,
             page_l=page_l, tp_l=tp_l, paginas_l=_janela_paginas(page_l, tp_l),
@@ -425,6 +455,111 @@ def vincular(descarga_id):
     except Exception as e:
         conn.rollback()
         return jsonify({'ok': False, 'erro': 'Falha ao vincular: %s' % e}), 500
+    finally:
+        cur.close()
+        conn.close()
+
+
+@estoque_bp.route('/estoque/descarga/manual', methods=['POST'])
+@login_required
+def descarga_manual():
+    """Lanca a mao uma descarga que o e-mail do ELS nao capturou.
+
+    Entra igual as do ELS (status 'pendente', pronta para vincular), mas com
+    origem='manual' e o motivo gravado — sem o motivo, daqui a seis meses
+    ninguem sabe por que aquela descarga existe.
+
+    volume_inicial/final e total_descarga_20c ficam NULL de proposito: num
+    lancamento manual esses numeros nao sao conhecidos, e inventa-los seria
+    pior do que assumir a ausencia.
+    """
+    dados = request.get_json(silent=True) or {}
+
+    def _int(v):
+        try:
+            return int(v)
+        except (TypeError, ValueError):
+            return 0
+
+    cliente_id = _int(dados.get('cliente_id'))
+    produto_id = _int(dados.get('produto_id'))
+    tanque = _int(dados.get('tanque'))
+    motivo = (dados.get('descricao') or '').strip()
+    try:
+        litros = float(str(dados.get('litros') or '').replace(',', '.'))
+    except (TypeError, ValueError):
+        litros = 0.0
+
+    if not cliente_id:
+        return jsonify({'ok': False, 'erro': 'Escolha a empresa.'}), 400
+    if not produto_id:
+        return jsonify({'ok': False, 'erro': 'Escolha o produto.'}), 400
+    if tanque <= 0:
+        return jsonify({'ok': False, 'erro': 'Informe o tanque.'}), 400
+    if litros <= 0:
+        return jsonify({'ok': False, 'erro': 'Os litros precisam ser maiores que zero.'}), 400
+    if not motivo:
+        return jsonify({'ok': False,
+                        'erro': 'Escreva o motivo do lançamento manual.'}), 400
+
+    # datetime-local: 'AAAA-MM-DDTHH:MM'
+    bruto = (dados.get('data') or '').strip().replace('T', ' ')
+    try:
+        quando = datetime.strptime(bruto[:16], '%Y-%m-%d %H:%M')
+    except ValueError:
+        return jsonify({'ok': False, 'erro': 'Data e hora inválidas.'}), 400
+    if quando > datetime.now():
+        return jsonify({'ok': False,
+                        'erro': 'A data não pode ser no futuro — descarga é fato passado.'}), 400
+
+    conn = get_db_connection()
+    cur = conn.cursor(dictionary=True)
+    try:
+        if not _tem_colunas_manual(cur):
+            return jsonify({'ok': False, 'erro': 'O banco ainda não tem as colunas do '
+                                                 'lançamento manual. Rode a migration '
+                                                 'alter_descargas_pendentes_manual.py.'}), 400
+
+        cur.execute("SELECT id FROM clientes WHERE id = %s", (cliente_id,))
+        if not cur.fetchone():
+            return jsonify({'ok': False, 'erro': 'Empresa não encontrada.'}), 400
+        cur.execute("SELECT id, nome FROM produto WHERE id = %s", (produto_id,))
+        prod = cur.fetchone()
+        if not prod:
+            return jsonify({'ok': False, 'erro': 'Produto não encontrado.'}), 400
+
+        # A chave e UNIQUE: montada com tanque+minuto+litros, um duplo clique
+        # bate na constraint em vez de criar duas descargas iguais.
+        chave = 'MAN-%d-%s-%.3f' % (tanque, quando.strftime('%Y%m%d%H%M'), litros)
+        cur.execute("SELECT id FROM descargas_pendentes WHERE chave = %s", (chave,))
+        if cur.fetchone():
+            return jsonify({'ok': False,
+                            'erro': 'Essa descarga já foi lançada (mesmo tanque, '
+                                    'minuto e litros).'}), 409
+
+        cur.execute(
+            """
+            INSERT INTO descargas_pendentes
+              (cliente_id, tanque, produto_nome, produto_id, data_descarga,
+               data_inicial, data_final, volume_inicial, volume_final,
+               total_descarga, total_descarga_20c, status, chave,
+               origem, descricao, criado_por)
+            VALUES (%s,%s,%s,%s,%s, NULL,%s, NULL, NULL, %s, NULL,
+                    'pendente', %s, 'manual', %s, %s)
+            """,
+            (cliente_id, tanque, prod['nome'], produto_id,
+             quando.strftime('%Y-%m-%d'), quando.strftime('%Y-%m-%d %H:%M:%S'),
+             litros, chave, motivo[:255], getattr(current_user, 'id', None)),
+        )
+        conn.commit()
+        return jsonify({'ok': True, 'id': cur.lastrowid,
+                        'mensagem': 'Descarga manual de %s L lançada.' % litros})
+    except Exception as e:
+        conn.rollback()
+        if 'Duplicate' in str(e) or '1062' in str(e):
+            return jsonify({'ok': False,
+                            'erro': 'Essa descarga já foi lançada.'}), 409
+        return jsonify({'ok': False, 'erro': 'Falha ao lançar: %s' % e}), 500
     finally:
         cur.close()
         conn.close()
