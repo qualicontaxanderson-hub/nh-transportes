@@ -1,6 +1,58 @@
 {% extends 'base.html' %}
 {% block title %}Classificação de Compras (DFe){% endblock %}
 
+{# Detalhe de UMA nota de compra: produtos (fornecedor chama -> classificamos)
+   + bloco Transporte (CT-e). Reusado pelo desktop (expandir) e pelo mobile (card). #}
+{% macro cmp_detalhe(c) %}
+  {% set CATLBL = {'combustivel':'Combustível','despesa':'Despesa','ativo':'Ativo Imobilizado','produto':'Produto/Lubrificante'} %}
+  <div class="cmp-blk">
+    <div class="cmp-blk__h"><i class="bi bi-box-seam"></i> Produtos da nota ({{ c.itens|length }})</div>
+    {% for it in c.itens %}
+      {%- set pn = (it.produto_nome or '')|lower -%}
+      {%- set tp = 'out' -%}
+      {%- if it.categoria == 'combustivel' -%}
+        {%- if 'gasolina' in pn -%}{% set tp = 'gas' %}
+        {%- elif 'etanol' in pn or 'alcool' in pn or 'álcool' in pn -%}{% set tp = 'eta' %}
+        {%- elif 's10' in pn or 's-10' in pn -%}{% set tp = 's10' %}
+        {%- else -%}{% set tp = 's500' %}{%- endif -%}
+      {%- endif -%}
+      <div class="cmp-prod cmp-prod--{{ tp }}">
+        <div class="strip"></div>
+        <div class="body">
+          <div><code>{{ it.cprod_fornecedor or '—' }}</code>
+            <span class="lbl">Fornecedor chama</span>
+            <span class="fc">{{ it.produto_xml or '—' }}</span></div>
+          <div class="cls"><span class="lbl">Classificamos</span>
+            <b>{% if it.categoria %}{{ CATLBL.get(it.categoria, it.categoria) }}{% if it.produto_nome %} · {{ it.produto_nome }}{% endif %}{% else %}pendente{% endif %}</b>
+            {% if it.categoria == 'combustivel' and it.quantidade %}· {{ '{:,.0f}'.format(it.quantidade|float).replace(',', '.') }} {{ it.unidade or 'L' }}{% endif %}
+            · {{ (it.item_valor or 0) | formatar_moeda }}</div>
+        </div>
+      </div>
+    {% endfor %}
+  </div>
+  <div class="cmp-blk">
+    <div class="cmp-blk__h"><i class="bi bi-truck"></i> Transporte (CT-e)</div>
+    {% if c.ctes %}
+      {% for t in c.ctes %}
+      <div class="cmp-cte">
+        <div><span class="k">Transportadora:</span> {{ t.transportadora or '—' }}
+             {% if t.transp_cnpj %}· <span class="k">CNPJ</span> {{ t.transp_cnpj }}{% endif %}</div>
+        <div><span class="k">CT-e nº</span> {{ t.cte_numero or '—' }}
+             &nbsp; <span class="k">Motorista</span> {{ t.motorista_nome or '—' }}
+             &nbsp; <span class="k">Placa</span> {{ t.placa or '—' }}</div>
+        <div>
+          {% if t.mun_ini or t.mun_fim %}<span class="k">Rota:</span>
+            {{ t.mun_ini or '?' }}/{{ t.uf_ini or '' }} → {{ t.mun_fim or '?' }}/{{ t.uf_fim or '' }} &nbsp;·&nbsp;{% endif %}
+          <span class="frete">Frete {{ (t.frete or 0) | formatar_moeda }}</span>
+        </div>
+      </div>
+      {% endfor %}
+    {% else %}
+      <div class="cmp-cte-sem"><i class="bi bi-dash-circle"></i> Sem CT-e vinculado a esta nota.</div>
+    {% endif %}
+  </div>
+{% endmacro %}
+
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-3">
   <h3 class="mb-0"><i class="bi bi-tags"></i> Classificação de Compras — DFe</h3>
@@ -28,7 +80,7 @@
   <li class="nav-item" role="presentation">
     <button class="nav-link {% if aba == 'consultar' %}active{% endif %}"
             id="tab-consultar" data-bs-toggle="tab" data-bs-target="#pane-consultar"
-            type="button" role="tab">Consultar</button>
+            type="button" role="tab">Compras</button>
   </li>
   <li class="nav-item" role="presentation">
     <button class="nav-link {% if aba == 'regras' %}active{% endif %}"
@@ -149,6 +201,108 @@
   }
 </style>
 
+<style>
+  /* ===== Aba COMPRAS (por nota) — visual .mig, escopado em #pane-consultar ===== */
+  #pane-consultar{
+    --line-2:#dde3ec; --surface-1:#f1f4f8; --muted:#6b7280; --blue-deep:#07569C;
+    --shadow:0 1px 3px rgba(16,45,80,.08),0 4px 12px rgba(16,45,80,.06);
+    --f-gas:#BA7517; --f-eta:#639922; --f-s500:#185FA5; --f-s10:#534AB7; --f-out:#9aa4b2;
+  }
+  /* Totalizador */
+  #pane-consultar .cmp-stats{ display:flex; gap:.75rem; margin-bottom:1rem; flex-wrap:wrap; }
+  #pane-consultar .cmp-stat{ flex:1 1 150px; background:#fff; border:1px solid var(--line-2);
+    border-radius:12px; box-shadow:var(--shadow); padding:.7rem 1rem; }
+  #pane-consultar .cmp-stat .rot{ font-size:10.5px; text-transform:uppercase; letter-spacing:.04em;
+    color:var(--muted); font-weight:700; }
+  #pane-consultar .cmp-stat .val{ font-size:1.35rem; font-weight:800; font-variant-numeric:tabular-nums; }
+  #pane-consultar .cmp-stat .val-sm{ font-size:1rem; }
+  #pane-consultar .cmp-stat .val-blue{ color:var(--blue-deep); }
+  #pane-consultar .cmp-stat .val-green{ color:#27500a; }
+  /* Filtro recolhido */
+  #pane-consultar .cmp-filtros{ background:#fff; border:1px solid var(--line-2); border-radius:12px;
+    box-shadow:var(--shadow); padding:.7rem 1rem; margin-bottom:1rem; }
+  #pane-consultar .cmp-filtros>summary{ list-style:none; cursor:pointer; display:flex; align-items:center;
+    gap:.5rem; font-weight:700; color:var(--blue-deep); }
+  #pane-consultar .cmp-filtros>summary::-webkit-details-marker{ display:none; }
+  #pane-consultar .cmp-filtros .selo{ font-size:.72rem; font-weight:700; background:#e6f1fb; color:#0c447c;
+    border-radius:999px; padding:.12rem .55rem; }
+  #pane-consultar .cmp-filtros .chev{ transition:transform .2s; color:var(--muted); }
+  #pane-consultar .cmp-filtros[open] .chev{ transform:rotate(180deg); }
+  #pane-consultar .cmp-filtros__body{ margin-top:.8rem; display:grid; gap:.6rem;
+    grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); align-items:end; }
+  #pane-consultar .cmp-filtros__body label{ font-size:10.5px; text-transform:uppercase; color:var(--muted);
+    font-weight:700; display:block; margin-bottom:2px; }
+  #pane-consultar .cmp-filtros__body input,
+  #pane-consultar .cmp-filtros__body select{ width:100%; border:1px solid var(--line-2); border-radius:8px;
+    padding:.35rem .5rem; font-size:.85rem; }
+  #pane-consultar .cmp-filtros__btns{ display:flex; gap:.4rem; }
+  /* Tabela por nota */
+  #pane-consultar .cmp-card{ background:#fff; border:1px solid var(--line-2); border-radius:12px;
+    box-shadow:var(--shadow); overflow:hidden; }
+  #pane-consultar .cmp-tbl{ width:100%; border-collapse:collapse; font-size:.86rem; }
+  #pane-consultar .cmp-tbl thead th{ background:#f5f8fc; color:var(--muted); font-size:10.5px;
+    text-transform:uppercase; letter-spacing:.04em; text-align:left; padding:10px 12px;
+    border-bottom:1px solid var(--line-2); white-space:nowrap; }
+  #pane-consultar .cmp-tbl thead th.num{ text-align:right; }
+  #pane-consultar .cmp-tbl tbody td{ padding:10px 12px; border-top:1px solid #e8edf3; vertical-align:middle; }
+  #pane-consultar .cmp-tbl tbody td.num{ text-align:right; font-variant-numeric:tabular-nums; white-space:nowrap; }
+  #pane-consultar .cmp-tbl td.nowrap{ white-space:nowrap; }
+  #pane-consultar .cmp-tbl .muted{ color:var(--muted); }
+  #pane-consultar .cmp-tbl .forn{ font-weight:600; }
+  #pane-consultar .cmp-tbl .prod-1{ font-weight:600; }
+  #pane-consultar .cmp-tbl .prod-n{ font-weight:600; color:var(--blue-deep); }
+  #pane-consultar .compra-row{ cursor:pointer; }
+  #pane-consultar .compra-row:hover{ background:#eef5fd; }
+  #pane-consultar .compra-row .caret{ color:var(--muted); transition:transform .2s; }
+  #pane-consultar .compra-row.open .caret{ transform:rotate(90deg); }
+  #pane-consultar .compra-det>td{ background:#f6f9fc; padding:0; }
+  /* Situação */
+  #pane-consultar .sit{ display:inline-block; font-size:.76rem; font-weight:700; border-radius:999px;
+    padding:.12rem .55rem; white-space:nowrap; }
+  #pane-consultar .sit-ok{ background:#e6f1fb; color:#0c447c; }
+  #pane-consultar .sit-no{ background:#fcebeb; color:#a32d2d; }
+  /* Detalhe (produtos + CT-e) */
+  #pane-consultar .cmp-det{ padding:.8rem 1rem 1rem; display:grid; gap:.7rem; grid-template-columns:1.4fr 1fr; }
+  @media (max-width:1100px){ #pane-consultar .cmp-det{ grid-template-columns:1fr; } }
+  #pane-consultar .cmp-blk{ background:#fff; border:1px solid var(--line-2); border-radius:10px;
+    box-shadow:var(--shadow); overflow:hidden; }
+  #pane-consultar .cmp-blk__h{ font-size:10.5px; text-transform:uppercase; letter-spacing:.04em;
+    color:var(--muted); font-weight:700; padding:.5rem .7rem; background:#f5f8fc;
+    border-bottom:1px solid var(--line-2); display:flex; align-items:center; gap:.4rem; }
+  #pane-consultar .cmp-prod{ display:flex; align-items:stretch; gap:.6rem; padding:.5rem .7rem;
+    border-top:1px solid #e8edf3; }
+  #pane-consultar .cmp-prod:first-of-type{ border-top:0; }
+  #pane-consultar .cmp-prod .strip{ width:4px; border-radius:3px; background:var(--f-out); flex:0 0 auto; }
+  #pane-consultar .cmp-prod--gas .strip{ background:var(--f-gas); }
+  #pane-consultar .cmp-prod--eta .strip{ background:var(--f-eta); }
+  #pane-consultar .cmp-prod--s10 .strip{ background:var(--f-s10); }
+  #pane-consultar .cmp-prod--s500 .strip{ background:var(--f-s500); }
+  #pane-consultar .cmp-prod .body{ min-width:0; flex:1; font-size:.83rem; line-height:1.5; }
+  #pane-consultar .cmp-prod code{ background:var(--surface-1); border:1px solid var(--line-2); border-radius:6px;
+    padding:.03rem .35rem; font-size:.78rem; color:#334155; }
+  #pane-consultar .cmp-prod .lbl{ color:#8a95a5; font-weight:700; font-size:9px; text-transform:uppercase;
+    letter-spacing:.03em; margin:0 .25rem 0 .45rem; }
+  #pane-consultar .cmp-prod .cls b{ color:var(--blue-deep); }
+  #pane-consultar .cmp-cte{ padding:.6rem .7rem; font-size:.85rem; line-height:1.7; }
+  #pane-consultar .cmp-cte .k{ color:var(--muted); font-weight:600; }
+  #pane-consultar .cmp-cte .frete{ font-weight:800; color:#27500a; white-space:nowrap; }
+  #pane-consultar .cmp-cte-sem{ padding:.7rem; color:var(--muted); font-size:.85rem; font-style:italic; }
+  /* Empty */
+  #pane-consultar .cmp-empty{ text-align:center; color:var(--muted); padding:2.5rem 1rem;
+    background:#fff; border:1px solid var(--line-2); border-radius:12px; box-shadow:var(--shadow); }
+  #pane-consultar .cmp-empty .bi{ font-size:1.6rem; display:block; margin-bottom:.4rem; opacity:.5; }
+  /* Mobile cards */
+  #pane-consultar .cmp-mcard{ background:#fff; border:1px solid var(--line-2); border-radius:12px;
+    box-shadow:var(--shadow); padding:.7rem .8rem; margin-bottom:.6rem; }
+  #pane-consultar .cmp-mcard__top{ display:flex; justify-content:space-between; align-items:center; gap:.5rem; }
+  #pane-consultar .cmp-mcard__data{ font-weight:700; font-size:.9rem; }
+  #pane-consultar .cmp-mcard__emp{ font-size:.8rem; color:var(--muted); margin-top:1px; }
+  #pane-consultar .cmp-mcard__vals{ display:flex; gap:.6rem 1rem; flex-wrap:wrap; margin:.5rem 0; font-size:.83rem; }
+  #pane-consultar .cmp-mcard__vals .k{ color:var(--muted); }
+  #pane-consultar .cmp-mcard .cmp-det{ display:block; padding:0; margin-top:.4rem; }
+  #pane-consultar .cmp-mcard .cmp-blk{ margin-top:.5rem; box-shadow:none; }
+</style>
+
 <div class="tab-content">
 
   {# =================== ÁREA 1: CLASSIFICAR =================== #}
@@ -254,158 +408,152 @@
     {% endif %}
   </div>
 
-  {# =================== ÁREA 2: CONSULTAR =================== #}
+  {# =================== ÁREA 2: COMPRAS (por nota) =================== #}
   <div class="tab-pane fade {% if aba == 'consultar' %}show active{% endif %}"
        id="pane-consultar" role="tabpanel">
 
-    <form method="GET" action="{{ url_for('dfe_compras.compras') }}" class="card card-body mb-3">
-      <input type="hidden" name="filtrar" value="1">
-      <input type="hidden" name="aba" value="consultar">
-      <div class="row g-2">
-        <div class="col-md-3">
-          <label class="form-label small mb-0">Empresa</label>
-          <select name="empresa" class="form-select form-select-sm">
-            <option value="">todas</option>
+    {# ---- Totalizador do período ---- #}
+    <div class="cmp-stats">
+      <div class="cmp-stat">
+        <div class="rot">Período</div>
+        <div class="val val-sm">{{ data_ini_default[8:10] }}/{{ data_ini_default[5:7] }} — {{ data_fim_default[8:10] }}/{{ data_fim_default[5:7] }}/{{ data_fim_default[0:4] }}</div>
+      </div>
+      <div class="cmp-stat">
+        <div class="rot">Litros de combustível</div>
+        <div class="val val-green">{{ '{:,.0f}'.format((compras_totais.litros or 0)|float).replace(',', '.') }} L</div>
+      </div>
+      <div class="cmp-stat">
+        <div class="rot">Total R$ (compras)</div>
+        <div class="val val-blue">{{ (compras_totais.valor or 0) | formatar_moeda }}</div>
+      </div>
+      <div class="cmp-stat">
+        <div class="rot">Notas</div>
+        <div class="val">{{ compras_totais.notas }}</div>
+      </div>
+    </div>
+
+    {# ---- Filtro recolhido (details sem open) + selo N ativos ---- #}
+    <details class="cmp-filtros"{% if filtros_ativos %} data-tem="1"{% endif %}>
+      <summary>
+        <i class="bi bi-funnel"></i> Filtros
+        {% if filtros_ativos %}<span class="selo">{{ filtros_ativos }} ativo{{ 's' if filtros_ativos > 1 else '' }}</span>{% endif %}
+        <i class="bi bi-chevron-down chev ms-auto"></i>
+      </summary>
+      <form method="GET" action="{{ url_for('dfe_compras.compras') }}" class="cmp-filtros__body">
+        <input type="hidden" name="aba" value="consultar">
+        <div>
+          <label>Data de</label>
+          <input type="date" name="data_ini" value="{{ filtros.data_ini or data_ini_default }}">
+        </div>
+        <div>
+          <label>Data até</label>
+          <input type="date" name="data_fim" value="{{ filtros.data_fim or data_fim_default }}">
+        </div>
+        <div>
+          <label>Empresa</label>
+          <select name="empresa">
+            <option value="">Todas</option>
             {% for e in empresas %}
             <option value="{{ e.id }}" {% if filtros.empresa == e.id|string %}selected{% endif %}>{{ e.nome }}</option>
             {% endfor %}
           </select>
         </div>
-        <div class="col-md-3">
-          <label class="form-label small mb-0">Fornecedor / CNPJ</label>
-          <input type="text" name="fornecedor" class="form-control form-control-sm"
-                 value="{{ filtros.fornecedor }}" placeholder="nome ou CNPJ">
+        <div>
+          <label>Fornecedor / CNPJ</label>
+          <input type="text" name="fornecedor" value="{{ filtros.fornecedor }}" placeholder="nome ou CNPJ">
         </div>
-        <div class="col-md-2">
-          <label class="form-label small mb-0">Categoria</label>
-          <select name="categoria" class="form-select form-select-sm">
-            <option value="">todas</option>
+        <div>
+          <label>Categoria</label>
+          <select name="categoria">
+            <option value="">Todas</option>
             {% for val, rot in categorias %}
             <option value="{{ val }}" {% if filtros.categoria == val %}selected{% endif %}>{{ rot }}</option>
             {% endfor %}
           </select>
         </div>
-        <div class="col-md-2">
-          <label class="form-label small mb-0">Produto</label>
-          <select name="produto_id" class="form-select form-select-sm">
-            <option value="">todos</option>
-            {% for p in produtos %}
-            <option value="{{ p.id }}" {% if filtros.produto_id == p.id|string %}selected{% endif %}>{{ p.nome }}</option>
-            {% endfor %}
-          </select>
-        </div>
-        <div class="col-md-2">
-          <label class="form-label small mb-0">Data de</label>
-          <input type="date" name="data_ini" class="form-control form-control-sm"
-                 value="{{ filtros.data_ini or data_ini_default }}">
-        </div>
-        <div class="col-md-2">
-          <label class="form-label small mb-0">Data até</label>
-          <input type="date" name="data_fim" class="form-control form-control-sm"
-                 value="{{ filtros.data_fim or data_fim_default }}">
-        </div>
-        <div class="col-md-1">
-          <label class="form-label small mb-0">NCM</label>
-          <input type="text" name="ncm" class="form-control form-control-sm" value="{{ filtros.ncm }}">
-        </div>
-        <div class="col-md-2">
-          <label class="form-label small mb-0">Valor mín (item)</label>
-          <input type="text" name="valor_min" class="form-control form-control-sm"
-                 value="{{ filtros.valor_min }}" placeholder="0,00">
-        </div>
-        <div class="col-md-2">
-          <label class="form-label small mb-0">Valor máx (item)</label>
-          <input type="text" name="valor_max" class="form-control form-control-sm"
-                 value="{{ filtros.valor_max }}" placeholder="0,00">
-        </div>
-        <div class="col-md-2">
-          <label class="form-label small mb-0">Situação</label>
-          <select name="situacao" class="form-select form-select-sm">
-            <option value="">todas</option>
-            <option value="autorizado" {% if filtros.situacao == 'autorizado' %}selected{% endif %}>autorizado</option>
+        <div>
+          <label>Situação</label>
+          <select name="situacao">
+            <option value="">Todas</option>
+            <option value="autorizado" {% if filtros.situacao == 'autorizado' %}selected{% endif %}>autorizada</option>
             <option value="cancelada"  {% if filtros.situacao == 'cancelada'  %}selected{% endif %}>cancelada</option>
             <option value="denegada"   {% if filtros.situacao == 'denegada'   %}selected{% endif %}>denegada</option>
           </select>
         </div>
-        <div class="col-md-2">
-          <label class="form-label small mb-0">Classificado?</label>
-          <select name="classificado" class="form-select form-select-sm">
-            <option value="">todos</option>
-            <option value="sim" {% if filtros.classificado == 'sim' %}selected{% endif %}>só classificados</option>
-            <option value="nao" {% if filtros.classificado == 'nao' %}selected{% endif %}>só pendentes</option>
-          </select>
+        <div class="cmp-filtros__btns">
+          <button type="submit" class="btn btn-sm btn-primary"><i class="bi bi-search"></i> Filtrar</button>
+          <a href="{{ url_for('dfe_compras.compras', aba='consultar') }}" class="btn btn-sm btn-outline-secondary">Limpar</a>
         </div>
-        <div class="col-md-2 d-flex align-items-end">
-          <button type="submit" class="btn btn-sm btn-primary w-100"><i class="bi bi-search"></i> Filtrar</button>
-        </div>
+      </form>
+    </details>
+
+    {% if truncado %}
+      <div class="alert alert-warning py-2 small">
+        Exibindo as primeiras {{ limite }} notas (o totalizador acima considera TODO o período).
+        Refine os filtros para ver menos.
       </div>
-    </form>
+    {% endif %}
 
-    {% if filtrou %}
-      <div class="d-flex gap-3 mb-2">
-        <div class="border rounded p-2 flex-fill text-center">
-          <div class="small text-muted">Total em R$</div>
-          <div class="fs-5 fw-bold text-success">{{ (totais.valor or 0) | formatar_moeda }}</div>
-        </div>
-        <div class="border rounded p-2 flex-fill text-center">
-          <div class="small text-muted">Total em litros (combustível)</div>
-          <div class="fs-5 fw-bold">{{ '%.3f'|format((totais.litros or 0)|float) }}</div>
-        </div>
-        <div class="border rounded p-2 flex-fill text-center">
-          <div class="small text-muted">Itens</div>
-          <div class="fs-5 fw-bold">{{ totais.itens }}</div>
-        </div>
-      </div>
+    {% if not compras %}
+      <div class="cmp-empty"><i class="bi bi-inbox"></i> Nenhuma compra no período/filtro.</div>
+    {% else %}
 
-      {% if truncado %}
-        <div class="alert alert-warning py-2 small">
-          Exibindo os primeiros {{ limite }} itens (o total nos cartões acima considera
-          TODO o filtro). Refine os filtros para ver menos linhas.
-        </div>
-      {% endif %}
-
-      <table class="table table-sm table-striped align-middle">
-        <thead class="table-light">
+    {# ===== DESKTOP: tabela com linha por nota + expandir ===== #}
+    <div class="cmp-card d-none d-md-block">
+      <table class="cmp-tbl">
+        <thead>
           <tr>
-            <th>Data</th>
-            <th>Empresa</th>
-            <th>Fornecedor</th>
-            <th>Item</th>
-            <th>Categoria</th>
-            <th>Produto</th>
-            <th class="text-end">Qtd</th>
-            <th class="text-end">Valor</th>
-            <th>Situação</th>
+            <th style="width:28px"></th><th>Data</th><th>Empresa</th><th>Fornecedor</th>
+            <th>Nosso produto</th><th class="num">Litros</th><th class="num">V.unit</th>
+            <th class="num">V.total</th><th>Situação</th>
           </tr>
         </thead>
         <tbody>
-          {% for r in resultados %}
-          <tr>
-            <td>{{ r.dh_emissao.strftime('%d/%m/%Y') if r.dh_emissao else '—' }}</td>
-            <td class="text-truncate" style="max-width:150px">{{ r.empresa_nome or '—' }}</td>
-            <td>{{ r.emit_nome or '—' }}<br><small class="text-muted">{{ r.emit_cnpj or '' }}</small></td>
-            <td>{{ r.produto_xml or '—' }}<br>
-                <small class="text-muted">cProd {{ r.cprod_fornecedor or '—' }} · NCM {{ r.ncm or '—' }}</small></td>
-            <td>
-              {% if r.categoria %}
-                <span class="badge bg-info text-dark">{{ rot_categoria.get(r.categoria, r.categoria) }}</span>
-                {% if r.classificado_modo == 'so_desta_vez' %}<br><small class="text-muted">só desta vez</small>{% endif %}
-              {% else %}
-                <span class="badge bg-warning text-dark">pendente</span>
-              {% endif %}
-            </td>
-            <td>{{ r.produto_nome or '—' }}</td>
-            <td class="text-end">{{ r.quantidade }} {{ r.unidade or '' }}</td>
-            <td class="text-end">{{ (r.item_valor or 0) | formatar_moeda }}</td>
-            <td>{{ r.situacao }}</td>
+          {% for c in compras %}
+          <tr class="compra-row" data-doc="{{ c.doc_id }}" onclick="toggleCompra(this)">
+            <td><i class="bi bi-chevron-right caret"></i></td>
+            <td class="nowrap">{{ c.dh_emissao.strftime('%d/%m/%Y') if c.dh_emissao else '—' }}</td>
+            <td class="muted text-truncate" style="max-width:130px">{{ c.empresa_nome or '—' }}</td>
+            <td class="forn">{{ c.emit_nome or '(sem nome)' }}</td>
+            <td class="{{ 'prod-n' if c.n_produtos > 1 else 'prod-1' }}">{{ c.produto_label }}</td>
+            <td class="num">{% if c.litros and c.litros|float > 0 %}{{ '{:,.0f}'.format(c.litros|float).replace(',', '.') }} L{% else %}—{% endif %}</td>
+            <td class="num">{% if c.v_unit %}{{ '%.2f'|format(c.v_unit)|replace('.', ',') }}{% else %}—{% endif %}</td>
+            <td class="num">{{ (c.nota_valor or 0) | formatar_moeda }}</td>
+            <td><span class="sit {{ 'sit-ok' if c.situacao_ok else 'sit-no' }}">{{ 'autorizada' if c.situacao_ok else c.situacao }}</span></td>
           </tr>
-          {% else %}
-          <tr><td colspan="9" class="text-center text-muted">Nenhum item para o filtro.</td></tr>
+          <tr class="compra-det" id="compra-det-{{ c.doc_id }}" style="display:none">
+            <td colspan="9">
+              <div class="cmp-det">
+                {{ cmp_detalhe(c) }}
+              </div>
+            </td>
+          </tr>
           {% endfor %}
         </tbody>
       </table>
-    {% else %}
-      <div class="alert alert-light border">Defina os filtros e clique em <strong>Filtrar</strong>.</div>
+    </div>
+
+    {# ===== MOBILE: cards já abertos ===== #}
+    <div class="d-md-none">
+      {% for c in compras %}
+      <div class="cmp-mcard">
+        <div class="cmp-mcard__top">
+          <div>
+            <div class="cmp-mcard__data">{{ c.dh_emissao.strftime('%d/%m/%Y') if c.dh_emissao else '—' }}</div>
+            <div class="cmp-mcard__emp">{{ c.empresa_nome or '—' }} · {{ c.emit_nome or '(sem nome)' }}</div>
+          </div>
+          <span class="sit {{ 'sit-ok' if c.situacao_ok else 'sit-no' }}">{{ 'autorizada' if c.situacao_ok else c.situacao }}</span>
+        </div>
+        <div class="cmp-mcard__vals">
+          <span><span class="k">Produtos:</span> <b>{{ c.produto_label }}</b></span>
+          <span><span class="k">Litros:</span> <b>{% if c.litros and c.litros|float > 0 %}{{ '{:,.0f}'.format(c.litros|float).replace(',', '.') }} L{% else %}—{% endif %}</b></span>
+          <span><span class="k">Total:</span> <b>{{ (c.nota_valor or 0) | formatar_moeda }}</b></span>
+        </div>
+        {{ cmp_detalhe(c) }}
+      </div>
+      {% endfor %}
+    </div>
+
     {% endif %}
   </div>
 
@@ -677,7 +825,7 @@
 
 {% block scripts %}
 <script>
-// Expandir/recolher os itens de uma nota.
+// Expandir/recolher os itens de uma nota (aba Classificar).
 document.querySelectorAll('.nota-row').forEach(function (row) {
   row.addEventListener('click', function () {
     var doc = row.getAttribute('data-doc');
@@ -689,6 +837,16 @@ document.querySelectorAll('.nota-row').forEach(function (row) {
     if (caret) caret.className = 'bi ' + (aberto ? 'bi-chevron-right' : 'bi-chevron-down') + ' caret';
   });
 });
+
+// Expandir/recolher o detalhe de UMA nota na aba Compras (desktop).
+function toggleCompra(row) {
+  var doc = row.getAttribute('data-doc');
+  var det = document.getElementById('compra-det-' + doc);
+  if (!det) return;
+  var aberto = det.style.display !== 'none';
+  det.style.display = aberto ? 'none' : 'table-row';
+  row.classList.toggle('open', !aberto);
+}
 
 // Mostra/oculta o dropdown de produto conforme a categoria (só combustível).
 function toggleProduto(sel, itemId) {

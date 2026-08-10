@@ -9,7 +9,9 @@ Duas areas na mesma pagina:
                           categoria (e produto, se combustivel) e:
                             - "Memorizar"    -> grava regra + classifica (modo memorizado)
                             - "So desta vez" -> classifica so o item (modo so_desta_vez)
-  AREA 2 "Consultar"  -> mega-filtros sobre os itens ja gravados, com totais (R$ e litros).
+  AREA 2 "Compras"    -> listagem POR NOTA (agrupada), pre-filtrada (30 dias), com
+                          totalizador (litros + R$) e, ao expandir, os produtos da
+                          nota + o CT-e vinculado (motorista/placa/transportadora/frete).
 
 Padroes do app: blueprint *_bp (auto-registro), @login_required, CSRF normal
 (o base.html injeta o token em forms/fetch), get_db_connection() + cursor(dictionary=True),
@@ -103,110 +105,163 @@ def compras():
                 'item_valor': r['item_valor'],
             })
 
-        # ---------- AREA 2: CONSULTAR (mega-filtros) ----------
+        # ---------- AREA 2: COMPRAS (listagem POR NOTA) ----------
+        # Substitui a antiga "Consultar" (por item). Agora agrupa por NOTA, ja
+        # vem pre-filtrada (ultimos 30 dias), traz o totalizador (litros + R$) e,
+        # ao expandir, os produtos da nota + o CT-e vinculado (dfe_cte_nfe).
+        hoje = date.today()
         f = {
-            'empresa':      (request.args.get('empresa') or '').strip(),
-            'fornecedor':   (request.args.get('fornecedor') or '').strip(),
-            'categoria':    (request.args.get('categoria') or '').strip(),
-            'produto_id':   (request.args.get('produto_id') or '').strip(),
-            'data_ini':     (request.args.get('data_ini') or '').strip(),
-            'data_fim':     (request.args.get('data_fim') or '').strip(),
-            'valor_min':    (request.args.get('valor_min') or '').strip(),
-            'valor_max':    (request.args.get('valor_max') or '').strip(),
-            'situacao':     (request.args.get('situacao') or '').strip(),
-            'classificado': (request.args.get('classificado') or '').strip(),  # ''|sim|nao
-            'ncm':          (request.args.get('ncm') or '').strip(),
+            'empresa':    (request.args.get('empresa') or '').strip(),
+            'fornecedor': (request.args.get('fornecedor') or '').strip(),
+            'categoria':  (request.args.get('categoria') or '').strip(),
+            'situacao':   (request.args.get('situacao') or '').strip(),
+            'data_ini':   (request.args.get('data_ini') or '').strip(),
+            'data_fim':   (request.args.get('data_fim') or '').strip(),
         }
-        filtrou = request.args.get('filtrar') == '1'
+        # Pre-filtrado: ultimos 30 dias por padrao (o usuario pode trocar).
+        c_data_ini = f['data_ini'] or (hoje - timedelta(days=30)).strftime('%Y-%m-%d')
+        c_data_fim = f['data_fim'] or hoje.strftime('%Y-%m-%d')
+        # Selo "N ativos": conta filtros ALEM do periodo default.
+        filtros_ativos = sum(1 for k in ('empresa', 'fornecedor', 'categoria', 'situacao') if f[k]) \
+            + (1 if f['data_ini'] else 0) + (1 if f['data_fim'] else 0)
 
-        resultados = []
-        totais = {'valor': 0, 'litros': 0, 'itens': 0}
-        LIMITE = 1000
-        truncado = False
+        where = ["d.tipo = 'NFe'"]
+        params = []
+        where.append("d.dh_emissao >= %s"); params.append(c_data_ini + " 00:00:00")
+        where.append("d.dh_emissao <= %s"); params.append(c_data_fim + " 23:59:59")
+        if f['empresa']:
+            where.append("d.cliente_id = %s"); params.append(f['empresa'])
+        if f['fornecedor']:
+            where.append("(d.emit_nome LIKE %s OR d.emit_cnpj LIKE %s)")
+            termo = f"%{f['fornecedor']}%"; params += [termo, termo]
+        if f['situacao']:
+            where.append("d.situacao = %s"); params.append(f['situacao'])
+        if f['categoria'] in _CATEGORIAS_VALIDAS:
+            # Nota que TENHA ao menos um item da categoria escolhida.
+            where.append("EXISTS (SELECT 1 FROM dfe_itens ix "
+                         "WHERE ix.documento_id = d.id AND ix.categoria = %s)")
+            params.append(f['categoria'])
+        where_sql = " AND ".join(where)
 
-        if filtrou:
-            where = ["d.tipo = 'NFe'"]
-            params = []
-            if f['empresa']:
-                where.append("d.cliente_id = %s"); params.append(f['empresa'])
-            if f['fornecedor']:
-                where.append("(d.emit_nome LIKE %s OR d.emit_cnpj LIKE %s)")
-                termo = f"%{f['fornecedor']}%"
-                params += [termo, termo]
-            if f['categoria'] in _CATEGORIAS_VALIDAS:
-                where.append("i.categoria = %s")
-                params.append(f['categoria'])
-            if f['produto_id']:
-                where.append("i.classificado_produto_id = %s")
-                params.append(f['produto_id'])
-            if f['data_ini']:
-                where.append("d.dh_emissao >= %s")
-                params.append(f['data_ini'] + " 00:00:00")
-            if f['data_fim']:
-                where.append("d.dh_emissao <= %s")
-                params.append(f['data_fim'] + " 23:59:59")
-            if f['valor_min']:
-                where.append("i.valor_total >= %s")
-                params.append(f['valor_min'].replace(',', '.'))
-            if f['valor_max']:
-                where.append("i.valor_total <= %s")
-                params.append(f['valor_max'].replace(',', '.'))
-            if f['situacao']:
-                where.append("d.situacao = %s")
-                params.append(f['situacao'])
-            if f['classificado'] == 'sim':
-                where.append("i.categoria IS NOT NULL")
-            elif f['classificado'] == 'nao':
-                where.append("i.categoria IS NULL")
-            if f['ncm']:
-                where.append("i.ncm LIKE %s")
-                params.append(f"%{f['ncm']}%")
+        LIMITE = 500
 
-            where_sql = " AND ".join(where)
-
-            # Totais (independentes do LIMITE, sobre TODO o filtro).
-            cur.execute(
-                f"""
-                SELECT COALESCE(SUM(i.valor_total), 0) AS total_valor,
-                       COALESCE(SUM(CASE WHEN i.categoria = 'combustivel'
-                                         THEN i.quantidade ELSE 0 END), 0) AS total_litros,
-                       COUNT(*) AS total_itens
+        # 1) TOTALIZADOR (todo o periodo, sem LIMITE): litros de combustivel + R$
+        #    (inclui despesas no R$) + nº de notas.
+        cur.execute(
+            f"""
+            SELECT COALESCE(SUM(sub.litros), 0)     AS litros,
+                   COALESCE(SUM(sub.nota_valor), 0) AS valor,
+                   COUNT(*)                         AS notas
+            FROM (
+                SELECT d.id, d.valor_total AS nota_valor,
+                       SUM(CASE WHEN i.categoria = 'combustivel'
+                                THEN i.quantidade ELSE 0 END) AS litros
                 FROM dfe_documentos d
                 JOIN dfe_itens i ON i.documento_id = d.id
                 WHERE {where_sql}
-                """,
-                params,
-            )
-            agg = cur.fetchone() or {}
-            totais = {
-                'valor': agg.get('total_valor') or 0,
-                'litros': agg.get('total_litros') or 0,
-                'itens': agg.get('total_itens') or 0,
-            }
+                GROUP BY d.id, d.valor_total
+            ) sub
+            """,
+            params,
+        )
+        agg = cur.fetchone() or {}
+        compras_totais = {
+            'litros': agg.get('litros') or 0,
+            'valor':  agg.get('valor') or 0,
+            'notas':  agg.get('notas') or 0,
+        }
 
-            # Linhas (limitadas para nao estourar a tela).
+        # 2) LISTA por nota (limitada). Agrupa por documento (PK) -> os demais
+        #    campos de d/emp sao funcionalmente dependentes.
+        cur.execute(
+            f"""
+            SELECT d.id AS doc_id, d.chave, d.numero, d.serie, d.dh_emissao,
+                   d.situacao, d.emit_nome, d.emit_cnpj,
+                   d.valor_total AS nota_valor,
+                   COALESCE(emp.nome_fantasia, emp.razao_social) AS empresa_nome,
+                   SUM(CASE WHEN i.categoria = 'combustivel'
+                            THEN i.quantidade ELSE 0 END) AS litros,
+                   SUM(CASE WHEN i.categoria = 'combustivel'
+                            THEN i.valor_total ELSE 0 END) AS valor_comb
+            FROM dfe_documentos d
+            JOIN dfe_itens i ON i.documento_id = d.id
+            LEFT JOIN clientes emp ON emp.id = d.cliente_id
+            WHERE {where_sql}
+            GROUP BY d.id
+            ORDER BY d.dh_emissao DESC, d.id DESC
+            LIMIT %s
+            """,
+            params + [LIMITE],
+        )
+        compras = cur.fetchall()
+        truncado = len(compras) >= LIMITE
+
+        # 3) Itens das notas da pagina (para o expandir + resumo "N produtos").
+        # 4) CT-e vinculado por chave da NF-e (reusa o vinculo dfe_cte_nfe).
+        itens_por_doc = {}
+        ctes_por_chave = {}
+        if compras:
+            ids = [c['doc_id'] for c in compras]
+            marc = ",".join(["%s"] * len(ids))
             cur.execute(
                 f"""
-                SELECT d.chave, d.numero, d.serie, d.dh_emissao,
-                       d.emit_nome, d.emit_cnpj, d.situacao,
-                       i.id AS item_id, i.produto_xml, i.cprod_fornecedor,
-                       i.ncm, i.cod_anp, i.unidade, i.quantidade,
-                       i.valor_total AS item_valor, i.categoria,
-                       i.classificado_produto_id, i.classificado_modo,
-                       p.nome AS produto_nome,
-                       COALESCE(emp.nome_fantasia, emp.razao_social) AS empresa_nome
-                FROM dfe_documentos d
-                JOIN dfe_itens i ON i.documento_id = d.id
+                SELECT i.documento_id, i.n_item, i.produto_xml, i.cprod_fornecedor,
+                       i.categoria, i.quantidade, i.unidade,
+                       i.valor_total AS item_valor, p.nome AS produto_nome
+                FROM dfe_itens i
                 LEFT JOIN produto p ON p.id = i.classificado_produto_id
-                LEFT JOIN clientes emp ON emp.id = d.cliente_id
-                WHERE {where_sql}
-                ORDER BY d.dh_emissao DESC, i.n_item ASC
-                LIMIT %s
+                WHERE i.documento_id IN ({marc})
+                ORDER BY i.documento_id, i.n_item
                 """,
-                params + [LIMITE],
+                ids,
             )
-            resultados = cur.fetchall()
-            truncado = len(resultados) >= LIMITE and (totais['itens'] or 0) > LIMITE
+            for it in cur.fetchall():
+                itens_por_doc.setdefault(it['documento_id'], []).append(it)
+
+            chaves = [c['chave'] for c in compras if c['chave']]
+            if chaves:
+                marc2 = ",".join(["%s"] * len(chaves))
+                cur.execute(
+                    f"""
+                    SELECT n.chave_nfe, c.numero AS cte_numero,
+                           c.emit_nome AS transportadora, c.emit_cnpj AS transp_cnpj,
+                           ct.vprest AS frete, ct.placa,
+                           ct.motorista_nome, ct.motorista_cpf,
+                           ct.mun_ini, ct.uf_ini, ct.mun_fim, ct.uf_fim
+                    FROM dfe_cte_nfe n
+                    JOIN dfe_documentos c ON c.id = n.documento_id AND c.tipo = 'CTe'
+                    LEFT JOIN dfe_cte ct ON ct.documento_id = c.id
+                    WHERE n.chave_nfe IN ({marc2})
+                    ORDER BY c.dh_emissao
+                    """,
+                    chaves,
+                )
+                for r in cur.fetchall():
+                    ctes_por_chave.setdefault(r['chave_nfe'], []).append(r)
+
+        # Monta cada nota: itens, CT-e, rotulo "nosso produto" e V.unit.
+        _rot = dict(CATEGORIAS)
+        for c in compras:
+            itens = itens_por_doc.get(c['doc_id'], [])
+            c['itens'] = itens
+            c['ctes'] = ctes_por_chave.get(c['chave'], [])
+            c['situacao_ok'] = (c['situacao'] == 'autorizado')
+
+            # Token por item: combustivel -> nosso produto; senao -> categoria.
+            def _tok(it):
+                if it['categoria'] == 'combustivel':
+                    return it['produto_nome'] or 'Combustível'
+                if it['categoria']:
+                    return _rot.get(it['categoria'], it['categoria'])
+                return 'pendente'
+            tokens = list(dict.fromkeys(_tok(it) for it in itens))
+            c['n_produtos'] = len(tokens)
+            c['produto_label'] = tokens[0] if len(tokens) == 1 else ('%d produtos' % len(tokens))
+
+            # V.unit (R$/litro) so p/ combustivel com UM unico produto.
+            litros = float(c['litros'] or 0)
+            so_comb = bool(itens) and all(it['categoria'] == 'combustivel' for it in itens)
+            c['v_unit'] = (float(c['valor_comb'] or 0) / litros) if (len(tokens) == 1 and so_comb and litros) else None
 
         # ---------- AREA 3: REGRAS memorizadas (para ver/apagar) ----------
         cur.execute(
@@ -279,12 +334,11 @@ def compras():
         # Rotulos de categoria para exibicao.
         rot_categoria = dict(CATEGORIAS)
 
-        # Padroes uteis para o form (periodo dos ultimos 90 dias, sem forcar).
-        hoje = date.today()
-        data_ini_default = f['data_ini'] or (hoje - timedelta(days=90)).strftime('%Y-%m-%d')
-        data_fim_default = f['data_fim'] or hoje.strftime('%Y-%m-%d')
+        # Datas para preencher o form (o periodo default de 30 dias ja calculado).
+        data_ini_default = c_data_ini
+        data_fim_default = c_data_fim
 
-        aba = request.args.get('aba') or ('consultar' if filtrou else 'classificar')
+        aba = request.args.get('aba') or ('consultar' if filtros_ativos else 'classificar')
 
         return render_template(
             'dfe_compras/index.html',
@@ -296,9 +350,9 @@ def compras():
             rot_categoria=rot_categoria,
             filtros=f,
             empresas=empresas,
-            filtrou=filtrou,
-            resultados=resultados,
-            totais=totais,
+            compras=compras,
+            compras_totais=compras_totais,
+            filtros_ativos=filtros_ativos,
             truncado=truncado,
             limite=LIMITE,
             data_ini_default=data_ini_default,
