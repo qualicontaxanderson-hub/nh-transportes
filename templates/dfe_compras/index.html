@@ -63,15 +63,13 @@
     {% if c.ctes %}
       {% for t in c.ctes %}
       <div class="cmp-cte">
-        <div class="row"><span class="k">Transportadora</span> <span>{{ t.transportadora or '—' }}</span></div>
-        <div class="row two">
-          <span class="seg"><span class="k">CNPJ</span> {{ t.transp_cnpj or '—' }}</span>
-          <span class="seg"><span class="k">CT-e nº</span> {{ t.cte_numero or '—' }}</span>
-        </div>
-        <div class="row"><span class="k">Motorista</span> <span>{{ t.motorista_nome or '—' }}</span></div>
-        <div class="row"><span class="k">Placa</span> <span>{{ t.placa or '—' }}</span></div>
-        <div class="row"><span class="k">Rota</span> <span>{% if t.mun_ini or t.mun_fim %}{{ t.mun_ini or '?' }}/{{ t.uf_ini or '' }} → {{ t.mun_fim or '?' }}/{{ t.uf_fim or '' }}{% else %}—{% endif %}</span></div>
-        <div class="row frete"><span class="k">Frete</span> <b>{{ (t.frete or 0) | formatar_moeda }}</b></div>
+        <div class="lin"><span class="k">Transportadora:</span> {{ t.transportadora or '—' }}</div>
+        <div class="lin"><span class="k">CNPJ:</span> {{ t.transp_cnpj or '—' }}
+          <span class="sep">·</span> <span class="k">CT-e nº</span> {{ t.cte_numero or '—' }}</div>
+        <div class="lin"><span class="k">Motorista:</span> {{ t.motorista_nome or '—' }}</div>
+        <div class="lin"><span class="k">Placa:</span> {{ t.placa or '—' }}</div>
+        <div class="lin"><span class="k">Rota:</span> {% if t.mun_ini or t.mun_fim %}{{ t.mun_ini or '?' }}/{{ t.uf_ini or '' }} → {{ t.mun_fim or '?' }}/{{ t.uf_fim or '' }}{% else %}—{% endif %}</div>
+        <div class="lin"><span class="k">Frete:</span> <b class="fr">{{ (t.frete or 0) | formatar_moeda }}</b></div>
       </div>
       {% endfor %}
     {% else %}
@@ -322,15 +320,12 @@
   #pane-consultar .cmp-apur b{ color:#27500a; }
   #pane-consultar .cmp-apur--erro{ background:#fdf1f1; border-color:#f0cccc; color:#8a2d2d; }
   #pane-consultar .cmp-apur--erro b{ color:#a32d2d; }
-  /* CT-e: cada campo numa linha (CNPJ + CT-e nº juntos). */
+  /* CT-e: cada campo numa linha (compacto), CNPJ + CT-e nº juntos. */
   #pane-consultar .cmp-cte{ padding:.55rem .75rem; font-size:.85rem; }
-  #pane-consultar .cmp-cte .row{ display:flex; gap:.5rem; padding:.26rem 0; border-top:1px dashed #eef2f7; }
-  #pane-consultar .cmp-cte .row:first-child{ border-top:0; }
-  #pane-consultar .cmp-cte .k{ color:var(--muted); font-weight:600; width:118px; flex:0 0 auto; }
-  #pane-consultar .cmp-cte .row.two{ gap:1.4rem; }
-  #pane-consultar .cmp-cte .row.two .seg{ display:flex; gap:.4rem; }
-  #pane-consultar .cmp-cte .row.two .k{ width:auto; }
-  #pane-consultar .cmp-cte .frete b{ font-weight:800; color:#27500a; }
+  #pane-consultar .cmp-cte .lin{ display:block; padding:0; margin:0; line-height:1.5; }
+  #pane-consultar .cmp-cte .k{ color:var(--muted); font-weight:600; }
+  #pane-consultar .cmp-cte .sep{ color:#c4ccd6; margin:0 .2rem; }
+  #pane-consultar .cmp-cte .fr{ font-weight:800; color:#27500a; }
   #pane-consultar .cmp-cte-sem{ padding:.7rem; color:var(--muted); font-size:.85rem; font-style:italic; }
   /* Empty */
   #pane-consultar .cmp-empty{ text-align:center; color:var(--muted); padding:2.5rem 1rem;
