@@ -49,18 +49,30 @@
 </ul>
 
 <style>
-  /* Aba Regras: accordion no visual .mig com PROFUNDIDADE (só CSS, escopado em
-     #pane-regras -> não vaza para as outras abas). Espelha a paleta do .mig. */
+  /* ===== Aba Regras: accordion por fornecedor + de-para explícito (só CSS,
+     escopado em #pane-regras -> não vaza). Paleta .mig hardcoded pois esta
+     tela não importa os tokens --f-* do design system. ===== */
+  #pane-regras{
+    --rdp-surface:#f1f4f8; --rdp-line:#dde3ec;
+    --f-gas:#BA7517; --f-eta:#639922; --f-s500:#185FA5; --f-s10:#534AB7; --f-out:#9aa4b2;
+  }
   #pane-regras .accordion-mig{ display:flex; flex-direction:column; gap:.55rem; }
-  #pane-regras .accordion-item{ border:1px solid #dde3ec; border-radius:12px; overflow:hidden;
+  #pane-regras .accordion-item{ border:1px solid var(--rdp-line); border-radius:12px; overflow:hidden;
     box-shadow:0 1px 3px rgba(16,45,80,.08),0 4px 12px rgba(16,45,80,.06); }
-  #pane-regras .accordion-button{ border-radius:12px; font-weight:500; }
+  #pane-regras .accordion-button{ border-radius:12px; font-weight:500; gap:.6rem; }
   #pane-regras .accordion-button:not(.collapsed){
     background:#1D63A5; color:#fff; box-shadow:none; border-radius:12px 12px 0 0;
   }
-  #pane-regras .accordion-button:not(.collapsed) .text-muted{ color:#dbe7f3 !important; }
+  #pane-regras .accordion-button:not(.collapsed) .rdp-hdr-cnpj{ color:#dbe7f3 !important; }
   #pane-regras .accordion-button:not(.collapsed)::after{ filter:brightness(0) invert(1); }
   #pane-regras .accordion-button:focus{ box-shadow:none; border-color:rgba(29,99,165,.35); }
+  #pane-regras .min-w-0{ min-width:0; }
+  /* Ícone do fornecedor num quadradinho translúcido (profundidade). */
+  #pane-regras .rdp-hdr-ico{ flex:0 0 auto; display:inline-grid; place-items:center;
+    width:2rem; height:2rem; border-radius:9px; background:#e6f1fb; color:#185fa5; font-size:1rem; }
+  #pane-regras .accordion-button:not(.collapsed) .rdp-hdr-ico{
+    background:rgba(255,255,255,.18); color:#fff; }
+  #pane-regras .rdp-hdr-cnpj{ color:#6b7280; }
   /* Contador: pílula azul suave fechada; translúcida sobre o azul quando aberta. */
   #pane-regras .accordion-button .badge.bg-secondary{
     background:#e6f1fb !important; color:#0c447c !important; font-weight:700;
@@ -68,17 +80,73 @@
   #pane-regras .accordion-button:not(.collapsed) .badge.bg-secondary{
     background:rgba(255,255,255,.18) !important; color:#fff !important;
   }
-  /* Zebra + hover sutis nas linhas de regra. */
-  #pane-regras tbody tr:nth-child(even){ background:#f8fbfe; }
-  #pane-regras tbody tr:hover{ background:#eef5fd; }
-  /* cProd vira pílula mono. */
-  #pane-regras code{ background:#f1f4f8; border:1px solid #e5e9f0; border-radius:6px;
-    padding:.06rem .4rem; color:#334155; }
+  #pane-regras .regra-tbl{ border-collapse:separate; border-spacing:0; }
+  #pane-regras .regra-tbl td{ padding:0; }
+
+  /* ---------- Linha de-para (DESKTOP) ---------- */
+  #pane-regras .regra-dp{
+    display:grid; align-items:center; gap:.85rem;
+    grid-template-columns:minmax(64px,auto) minmax(0,1.25fr) auto minmax(0,1fr) auto;
+    padding:.6rem .5rem .6rem .85rem; background:var(--rdp-surface);
+    border-top:1px solid #e6ebf2; border-left:4px solid var(--strip,#9aa4b2);
+  }
+  #pane-regras tbody tr:first-child .regra-dp{ border-top:0; }
+  #pane-regras tbody tr:hover .regra-dp{ background:#eaf1f9; }
+  /* faixa lateral por tipo */
+  #pane-regras .regra-dp--gas { --strip:var(--f-gas); }
+  #pane-regras .regra-dp--eta { --strip:var(--f-eta); }
+  #pane-regras .regra-dp--s500{ --strip:var(--f-s500); }
+  #pane-regras .regra-dp--s10 { --strip:var(--f-s10); }
+  #pane-regras .regra-dp--out { --strip:var(--f-out); }
+  #pane-regras .rdp-lbl{ font-size:9.5px; text-transform:uppercase; letter-spacing:.05em;
+    color:#8a95a5; font-weight:700; margin-bottom:1px; }
+  #pane-regras .rdp-cprod code{ background:#fff; border:1px solid var(--rdp-line); border-radius:6px;
+    padding:.1rem .45rem; color:#334155; font-size:.82rem; }
+  #pane-regras .rdp-xprod{ font-size:.86rem; color:#1f2937; line-height:1.25;
+    display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+  #pane-regras .rdp-seta{ color:#b3bccb; font-size:1.05rem; text-align:center; }
+  #pane-regras .rdp-clsval{ display:flex; align-items:center; gap:.4rem; flex-wrap:wrap; }
+  #pane-regras .prod-display{ font-weight:600; font-size:.86rem; color:#1f2937; }
+  #pane-regras .badge-cat{ display:inline-block; font-size:.76rem; font-weight:700; border-radius:999px;
+    padding:.12rem .55rem; white-space:nowrap; }
+  #pane-regras .cat-combustivel{ background:#e6f1fb; color:#0c447c; }
+  #pane-regras .cat-despesa{ background:#f1efe8; color:#444441; }
+  #pane-regras .cat-ativo{ background:#eae9f6; color:#534ab7; }
+  #pane-regras .cat-produto{ background:#eaf3de; color:#27500a; }
+  #pane-regras .rdp-acoes{ display:flex; gap:.4rem; justify-content:flex-end; white-space:nowrap; }
+  #pane-regras .rdp-emp, #pane-regras .rdp-cnpj, #pane-regras .rdp-cprod .rdp-lbl{ display:none; }
+
   /* Botões de ação: quadradinhos com fundo suave da cor + ícone escuro. */
-  #pane-regras .btn-outline-primary{ background:#e6f1fb; border-color:#e6f1fb; color:#0c447c; }
-  #pane-regras .btn-outline-primary:hover{ background:#cfe3f7; border-color:#cfe3f7; color:#0c447c; }
+  #pane-regras .btn-outline-primary{ background:#e6f1fb; border-color:#e6f1fb; color:#185fa5; }
+  #pane-regras .btn-outline-primary:hover{ background:#cfe3f7; border-color:#cfe3f7; color:#185fa5; }
   #pane-regras .btn-outline-danger{ background:#fcebeb; border-color:#fcebeb; color:#a32d2d; }
   #pane-regras .btn-outline-danger:hover{ background:#f6d7d7; border-color:#f6d7d7; color:#a32d2d; }
+
+  /* ---------- MOBILE: cada regra vira CARD (o mesmo <tr id>) ---------- */
+  @media (max-width:767px){
+    #pane-regras .regra-tbl,
+    #pane-regras .regra-tbl tbody,
+    #pane-regras .regra-tbl tr,
+    #pane-regras .regra-tbl td{ display:block; width:100%; }
+    #pane-regras .regra-dp{
+      display:block; gap:0; border-top:0; border:1px solid var(--rdp-line);
+      border-left:4px solid var(--strip,#9aa4b2); border-radius:10px;
+      margin:.55rem .55rem 0; padding:.7rem .8rem; background:#fff;
+      box-shadow:0 1px 3px rgba(16,45,80,.06);
+    }
+    #pane-regras tbody tr:first-child .regra-dp{ border-top:1px solid var(--rdp-line); }
+    #pane-regras tbody tr:last-child .regra-dp{ margin-bottom:.55rem; }
+    #pane-regras tbody tr:hover .regra-dp{ background:#fff; }
+    #pane-regras .rdp-emp{ display:block; font-weight:700; font-size:.92rem; line-height:1.2; }
+    #pane-regras .rdp-cnpj{ display:block; font-size:.75rem; color:#6b7280; margin:1px 0 .5rem; }
+    #pane-regras .rdp-cprod{ padding-top:.5rem; border-top:1px solid #eef2f7; }
+    #pane-regras .rdp-cprod .rdp-lbl{ display:inline; margin-right:.35rem; }
+    #pane-regras .rdp-forn{ margin-top:.45rem; }
+    #pane-regras .rdp-seta{ display:none; }
+    #pane-regras .rdp-cls{ margin-top:.45rem; padding-top:.5rem; border-top:1px solid #eef2f7; }
+    #pane-regras .rdp-acoes{ margin-top:.6rem; }
+    #pane-regras .rdp-xprod{ -webkit-line-clamp:3; }
+  }
 </style>
 
 <div class="tab-content">
@@ -360,10 +428,11 @@
             <button class="accordion-button collapsed" type="button"
                     data-bs-toggle="collapse" data-bs-target="#forn-{{ loop.index }}"
                     aria-expanded="false" aria-controls="forn-{{ loop.index }}">
-              <span class="d-flex w-100 align-items-center gap-2 pe-2">
+              <span class="rdp-hdr-ico"><i class="bi bi-building"></i></span>
+              <span class="d-flex flex-column flex-sm-row w-100 align-items-sm-center gap-sm-2 pe-2 min-w-0">
                 <span class="fw-semibold text-truncate">{{ g.nome or '(sem nome)' }}</span>
-                <small class="text-muted d-none d-sm-inline">CNPJ {{ g.emit_cnpj or '—' }}</small>
-                <span class="badge bg-secondary ms-auto">
+                <small class="rdp-hdr-cnpj d-none d-sm-inline">CNPJ {{ g.emit_cnpj or '—' }}</small>
+                <span class="badge bg-secondary ms-sm-auto align-self-start align-self-sm-center">
                   <span class="regra-count">{{ g.regras|length }}</span> regra(s)</span>
               </span>
             </button>
@@ -371,33 +440,60 @@
           <div id="forn-{{ loop.index }}" class="accordion-collapse collapse"
                data-bs-parent="#accFornecedores">
             <div class="accordion-body p-0">
-              <table class="table table-sm align-middle mb-0">
-                <thead class="table-light">
-                  <tr>
-                    <th>cProd</th><th>Categoria</th><th>Produto</th>
-                    <th>Criada em</th><th class="text-end" style="width:120px">Ação</th>
-                  </tr>
-                </thead>
+              <table class="table mb-0 regra-tbl">
                 <tbody>
                   {% for r in g.regras %}
+                  {# tipo -> cor da faixa lateral (combustivel pelo produto; despesa/resto cinza) #}
+                  {%- set pn = (r.produto_nome or '')|lower -%}
+                  {%- if r.categoria == 'combustivel' -%}
+                    {%- if 'gasolina' in pn -%}{% set tipo = 'gas' %}
+                    {%- elif 'etanol' in pn or 'alcool' in pn or 'álcool' in pn -%}{% set tipo = 'eta' %}
+                    {%- elif 's10' in pn or 's-10' in pn -%}{% set tipo = 's10' %}
+                    {%- else -%}{% set tipo = 's500' %}{%- endif -%}
+                  {%- else -%}{% set tipo = 'out' %}{%- endif -%}
                   <tr id="regra-{{ r.id }}">
-                    <td><code>{{ r.cprod_fornecedor }}</code></td>
-                    <td class="cat-display">{{ rot_categoria.get(r.categoria, r.categoria) }}</td>
-                    <td class="prod-display">{{ r.produto_nome or '—' }}</td>
-                    <td><small>{{ r.criado_em.strftime('%d/%m/%Y %H:%M') if r.criado_em else '—' }}</small></td>
-                    <td class="text-end text-nowrap">
-                      <button class="btn btn-sm btn-outline-primary" title="Editar"
-                              onclick="abrirEditar(this)"
-                              data-regra="{{ r.id }}"
-                              data-forn="{{ g.nome or '(sem nome)' }}"
-                              data-cnpj="{{ g.emit_cnpj or '' }}"
-                              data-cprod="{{ r.cprod_fornecedor }}"
-                              data-cat="{{ r.categoria }}"
-                              data-prod="{{ r.produto_id or '' }}">
-                        <i class="bi bi-pencil"></i></button>
-                      <button class="btn btn-sm btn-outline-danger" title="Apagar"
-                              onclick="apagarRegra({{ r.id }})">
-                        <i class="bi bi-trash"></i></button>
+                    <td class="p-0 border-0">
+                      <div class="regra-dp regra-dp--{{ tipo }}">
+                        {# --- mobile-only: empresa + CNPJ no topo do card --- #}
+                        <div class="rdp-emp d-md-none">{{ g.nome or '(sem nome)' }}</div>
+                        <div class="rdp-cnpj d-md-none">CNPJ {{ g.emit_cnpj or '—' }}</div>
+                        {# --- cProd --- #}
+                        <div class="rdp-cprod">
+                          <span class="rdp-lbl d-md-none">Cód. fornecedor</span>
+                          <code>{{ r.cprod_fornecedor }}</code>
+                        </div>
+                        {# --- FORNECEDOR CHAMA (xProd) --- #}
+                        <div class="rdp-forn">
+                          <div class="rdp-lbl">Fornecedor chama</div>
+                          <div class="rdp-xprod" title="{{ r.xprod_fornecedor or '' }}">
+                            {{ r.xprod_fornecedor or '—' }}</div>
+                        </div>
+                        {# --- seta (só desktop) --- #}
+                        <div class="rdp-seta"><i class="bi bi-arrow-right"></i></div>
+                        {# --- CLASSIFICAMOS (nossa categoria + produto) --- #}
+                        <div class="rdp-cls">
+                          <div class="rdp-lbl">Classificamos</div>
+                          <div class="rdp-clsval">
+                            <span class="badge-cat cat-{{ r.categoria }} cat-display">{{ rot_categoria.get(r.categoria, r.categoria) }}</span>
+                            <span class="prod-display">{{ r.produto_nome or '—' }}</span>
+                          </div>
+                        </div>
+                        {# --- ações --- #}
+                        <div class="rdp-acoes">
+                          <button class="btn btn-sm btn-outline-primary" title="Editar"
+                                  onclick="abrirEditar(this)"
+                                  data-regra="{{ r.id }}"
+                                  data-forn="{{ g.nome or '(sem nome)' }}"
+                                  data-cnpj="{{ g.emit_cnpj or '' }}"
+                                  data-cprod="{{ r.cprod_fornecedor }}"
+                                  data-cat="{{ r.categoria }}"
+                                  data-prod="{{ r.produto_id or '' }}">
+                            <i class="bi bi-pencil"></i></button>
+                          <button class="btn btn-sm btn-outline-danger" title="Apagar"
+                                  onclick="apagarRegra({{ r.id }})">
+                            <i class="bi bi-trash"></i></button>
+                        </div>
+                      </div>
                     </td>
                   </tr>
                   {% endfor %}

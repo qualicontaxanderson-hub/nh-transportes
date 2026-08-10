@@ -216,7 +216,15 @@ def compras():
                    p.nome AS produto_nome,
                    (SELECT d.emit_nome FROM dfe_documentos d
                      WHERE d.emit_cnpj = r.emit_cnpj AND d.emit_nome IS NOT NULL
-                     ORDER BY d.id DESC LIMIT 1) AS fornecedor_nome
+                     ORDER BY d.id DESC LIMIT 1) AS fornecedor_nome,
+                   -- Como o FORNECEDOR chama o produto (xProd = dfe_itens.produto_xml),
+                   -- pego da nota mais recente daquele emit_cnpj + cProd.
+                   (SELECT i.produto_xml FROM dfe_itens i
+                     JOIN dfe_documentos d2 ON d2.id = i.documento_id
+                     WHERE d2.emit_cnpj = r.emit_cnpj
+                       AND i.cprod_fornecedor = r.cprod_fornecedor
+                       AND i.produto_xml IS NOT NULL
+                     ORDER BY d2.id DESC LIMIT 1) AS xprod_fornecedor
               FROM dfe_classificacao_regra r
               LEFT JOIN produto p ON p.id = r.produto_id
              ORDER BY fornecedor_nome, r.cprod_fornecedor
