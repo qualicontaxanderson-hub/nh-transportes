@@ -602,10 +602,11 @@
         }
         if (integral) {
           var it = itemSel(sel);
-          // TUDO que a nota ja recebeu (todas as descargas) mais este
-          // lancamento, contra a nota. Nao e so o recebido desta descarga:
-          // uma nota baixada em duas viagens tem que somar as duas.
-          var recNota = (it ? (it.vinculado_total || 0) : 0) + v;
+          // O que ENTROU NO TANQUE nas descargas ligadas a esta nota, mais o
+          // recebido desta descarga. Nao e o litros vinculado: se o tanque
+          // recebeu mais do que a nota cobre, o vinculo para no saldo e a
+          // sobra sumiria.
+          var recNota = (it ? (it.recebido_fisico || 0) : 0) + (Number(estado.recebido) || 0);
           var ps = Math.round((recNota - (it ? it.item_litros : 0)) * 1000) / 1000;
           if (Math.abs(ps) <= 0.001) {
             txt += '<div class="mig-aviso mig-aviso--ok"><i class="bi bi-check2-circle"></i> ' +
@@ -613,10 +614,11 @@
                    fmt(it.item_litros) + ' L. Sem diferença.</div>';
           } else {
             txt += '<div class="mig-aviso"><i class="bi bi-calculator"></i> <b>Ao fechar:</b> ' +
-                   'esta nota terá recebido <b>' + fmt(recNota) + ' L</b>' +
-                   ((it.vinculado_total || 0) > 0
-                     ? ' (' + fmt(it.vinculado_total) + ' já lançados + ' + fmt(v) + ')' : '') +
-                   ' contra <b>' + fmt(it.item_litros) + ' L</b> na nota → ' + difHtml(ps) + '</div>';
+                   'o tanque terá recebido <b>' + fmt(recNota) + ' L</b> por conta desta nota' +
+                   ((it.recebido_fisico || 0) > 0
+                     ? ' (' + fmt(it.recebido_fisico) + ' em descargas anteriores + ' +
+                       fmt(estado.recebido) + ' nesta)' : '') +
+                   ', contra <b>' + fmt(it.item_litros) + ' L</b> na nota → ' + difHtml(ps) + '</div>';
           }
         }
       }

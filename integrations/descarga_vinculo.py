@@ -91,27 +91,55 @@ def _ctes_por_chave(cur, chaves):
     return saida
 
 
-def perda_sobra_item(cur, item_id, litros_extra=0.0):
+def perda_sobra_item(cur, item_id, descarga_extra=None):
     """Perda/sobra de UM item de nota.
 
-    recebido_total - quantidade da nota. Negativo e PERDA, positivo e SOBRA.
-    `litros_extra` permite simular o lancamento que ainda nao foi gravado —
-    e o que alimenta o aviso do modal antes de confirmar o fechamento.
+        perda_sobra = quanto ENTROU NO TANQUE - quantidade da nota
+
+    Negativo e PERDA, positivo e SOBRA.
+
+    "Quanto entrou no tanque" e a soma do total_descarga das descargas ligadas
+    a esta nota — o volume FISICO —, NAO a soma de descarga_nota.litros. Os
+    dois divergem quando o tanque recebeu mais do que a nota cobre: o Diesel
+    S10 recebeu 3.156 com nota de 3.000, e como o vinculo nao pode passar do
+    saldo da nota, o litros vinculado para em 3.000 e a sobra de 156 sumiria.
+    O que interessa e o que desceu no tanque.
+
+    `descarga_extra` soma a descarga do lancamento que ainda nao foi gravado
+    (e o que alimenta o aviso do modal antes de confirmar), sem contar duas
+    vezes se aquela descarga ja estiver ligada a este item.
     """
-    cur.execute(
-        """
-        SELECT i.quantidade,
-               COALESCE((SELECT SUM(dn.litros) FROM descarga_nota dn
-                          WHERE dn.item_id = i.id), 0) AS recebido
-        FROM dfe_itens i WHERE i.id = %s
-        """,
-        (item_id,),
-    )
+    cur.execute("SELECT quantidade FROM dfe_itens WHERE id = %s", (item_id,))
     r = cur.fetchone()
     if not r:
         return None
     nota = _f(r["quantidade"]) or 0.0
-    recebido = (_f(r["recebido"]) or 0.0) + (float(litros_extra) or 0.0)
+
+    cur.execute(
+        """
+        SELECT COALESCE(SUM(dp.total_descarga), 0) AS recebido
+        FROM descarga_nota dn
+        JOIN descargas_pendentes dp ON dp.id = dn.descarga_id
+        WHERE dn.item_id = %s
+        """,
+        (item_id,),
+    )
+    recebido = _f((cur.fetchone() or {}).get("recebido")) or 0.0
+
+    if descarga_extra:
+        cur.execute(
+            """
+            SELECT dp.total_descarga,
+                   EXISTS (SELECT 1 FROM descarga_nota d2
+                            WHERE d2.item_id = %s AND d2.descarga_id = %s) AS ja_ligada
+            FROM descargas_pendentes dp WHERE dp.id = %s
+            """,
+            (item_id, descarga_extra, descarga_extra),
+        )
+        x = cur.fetchone()
+        if x and not x["ja_ligada"]:
+            recebido += _f(x["total_descarga"]) or 0.0
+
     return {"nota": nota, "recebido": round(recebido, 3),
             "perda_sobra": round(recebido - nota, 3)}
 
@@ -184,6 +212,12 @@ def sugerir_notas(cur, descarga_id, janela_dias=JANELA_DIAS,
                i.quantidade AS item_litros, i.valor_total AS item_valor, i.categoria,
                COALESCE(v.litros, 0)  AS vinculado_total,
                COALESCE(vd.litros, 0) AS vinculado_nesta,
+               -- volume FISICO que ja desceu no tanque por conta desta nota,
+               -- em OUTRAS descargas (a atual entra depois, na tela)
+               COALESCE((SELECT SUM(dp2.total_descarga)
+                           FROM descarga_nota a
+                           JOIN descargas_pendentes dp2 ON dp2.id = a.descarga_id
+                          WHERE a.item_id = i.id AND a.descarga_id <> %s), 0) AS recebido_fisico,
                EXISTS (SELECT 1 FROM descarga_nota f
                         WHERE f.item_id = i.id AND f.modo = 'integral') AS fechada
         FROM dfe_itens i
@@ -201,7 +235,7 @@ def sugerir_notas(cur, descarga_id, janela_dias=JANELA_DIAS,
           AND ABS(DATEDIFF(DATE(doc.dh_emissao), %s)) <= %s
         ORDER BY doc.dh_emissao DESC, doc.id, i.n_item
         """,
-        (descarga_id, d["cliente_id"], d["produto_id"], dia, janela_dias),
+        (descarga_id, descarga_id, d["cliente_id"], d["produto_id"], dia, janela_dias),
     )
     brutas = cur.fetchall()
     if not brutas:
@@ -260,6 +294,7 @@ def sugerir_notas(cur, descarga_id, janela_dias=JANELA_DIAS,
             "item_litros": r["_total_item"], "item_valor": _f(r["item_valor"]),
             "vinculado_total": r["_vinc"], "saldo": r["_saldo"],
             "vinculado_nesta": _f(r["vinculado_nesta"]) or 0.0,
+            "recebido_fisico": _f(r["recebido_fisico"]) or 0.0,
         })
 
     # ---- 3) score da nota, pelo SALDO (nao pelo volume total) ----
@@ -280,6 +315,7 @@ def sugerir_notas(cur, descarga_id, janela_dias=JANELA_DIAS,
             "produto_xml": melhor["produto_xml"], "cod_anp": melhor["cod_anp"],
             "unidade": melhor["unidade"], "item_litros": melhor["item_litros"],
             "item_valor": melhor["item_valor"],
+            "recebido_fisico": melhor["recebido_fisico"],
             "saldo": saldo, "saldo_nota": round(sum(it["saldo"] for it in c["itens"]), 3),
             "vinculado_total": melhor["vinculado_total"],
             "vinculado_nesta": melhor["vinculado_nesta"],
@@ -349,11 +385,12 @@ def vinculos_resumo(cur, descarga_ids):
                SUM(NOT EXISTS (SELECT 1 FROM descarga_nota f
                                 WHERE f.item_id = dn.item_id
                                   AND f.modo = 'integral')) AS abertas,
-               -- perda/sobra por nota: TUDO que o item recebeu (todas as
-               -- descargas) menos a quantidade da nota. Nao e o recebido
-               -- desta descarga: uma nota baixada em duas viagens tem que
-               -- somar as duas.
-               SUM(COALESCE((SELECT SUM(a.litros) FROM descarga_nota a
+               -- perda/sobra: o que ENTROU NO TANQUE em todas as descargas
+               -- ligadas a esta nota (volume fisico, nao o litros vinculado,
+               -- que para no saldo da nota) menos a quantidade da nota.
+               SUM(COALESCE((SELECT SUM(dp2.total_descarga)
+                               FROM descarga_nota a
+                               JOIN descargas_pendentes dp2 ON dp2.id = a.descarga_id
                               WHERE a.item_id = dn.item_id), 0)
                    - i.quantidade) AS dif
         FROM descarga_nota dn
@@ -451,7 +488,7 @@ def registrar_vinculo(cur, descarga_id, item_id, litros, usuario_id=None,
     # atual (litros_extra), que ainda nao foi inserido.
     perda_sobra = None
     if modo == 'integral':
-        ps = perda_sobra_item(cur, item_id, litros_extra=litros)
+        ps = perda_sobra_item(cur, item_id, descarga_extra=descarga_id)
         perda_sobra = ps["perda_sobra"] if ps else None
 
     cur.execute(
@@ -569,7 +606,9 @@ def calcular_estado(cur, descarga_id, tolerancia_l=TOLERANCIA_L,
         cur.execute(
             """
             SELECT i.quantidade,
-                   COALESCE((SELECT SUM(a.litros) FROM descarga_nota a
+                   COALESCE((SELECT SUM(dp2.total_descarga)
+                               FROM descarga_nota a
+                               JOIN descargas_pendentes dp2 ON dp2.id = a.descarga_id
                               WHERE a.item_id = dn.item_id), 0) AS recebido_item
             FROM descarga_nota dn
             JOIN dfe_itens i ON i.id = dn.item_id
