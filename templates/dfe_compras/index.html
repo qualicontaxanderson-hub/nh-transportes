@@ -348,6 +348,64 @@
   #pane-consultar .cmp-mcard .cmp-blk{ margin-top:.5rem; box-shadow:none; }
 </style>
 
+<style>
+  /* ===== Aba CLASSIFICAR (cards por nota pendente) — visual .mig, tema âmbar,
+     escopado em #pane-classificar. Não colide com Compras/Regras. ===== */
+  #pane-classificar{
+    --line-2:#dde3ec; --surface-1:#f1f4f8; --muted:#6b7280;
+    --amber:#c07f16; --amber-bg:#fdf3e2; --amber-ink:#8a5a00; --amber-strip:#e0a54a;
+  }
+  #pane-classificar .cls-ok{ background:#eaf6ec; border:1px solid #cfe8d6; color:#1e7e34;
+    border-radius:12px; padding:1rem; font-weight:600; }
+  #pane-classificar .cls-card{ background:#fff; border:1px solid var(--line-2); border-radius:12px;
+    box-shadow:0 1px 3px rgba(16,45,80,.08),0 4px 12px rgba(16,45,80,.06); overflow:hidden; margin-bottom:.7rem; }
+  #pane-classificar .cls-head{ width:100%; border:0; text-align:left; cursor:pointer; display:flex;
+    align-items:center; gap:.65rem; padding:.7rem .85rem; background:var(--amber-bg); border-bottom:1px solid #f0dfc0; }
+  #pane-classificar .cls-head__ico{ flex:0 0 auto; display:inline-grid; place-items:center; width:2.1rem;
+    height:2.1rem; border-radius:10px; background:#f6e3c2; color:var(--amber); font-size:1.05rem; }
+  #pane-classificar .cls-head__main{ min-width:0; flex:1; }
+  #pane-classificar .cls-head__forn{ font-weight:700; color:#5a4212; line-height:1.2; display:block; }
+  #pane-classificar .cls-head__meta{ font-size:.76rem; color:var(--amber-ink); opacity:.9; }
+  #pane-classificar .cls-canc{ color:#a32d2d; font-weight:700; }
+  #pane-classificar .cls-head__badge{ flex:0 0 auto; font-size:.72rem; font-weight:700; background:#f6e3c2;
+    color:var(--amber-ink); border-radius:999px; padding:.18rem .6rem; white-space:nowrap; }
+  #pane-classificar .cls-head__chev{ color:var(--amber); transition:transform .2s; flex:0 0 auto; }
+  #pane-classificar .cls-card.open .cls-head__chev{ transform:rotate(90deg); }
+  #pane-classificar .cls-body{ display:none; padding:.6rem; }
+  #pane-classificar .cls-card.open .cls-body{ display:block; }
+  #pane-classificar .cls-item{ background:#fff; border:1px solid var(--line-2);
+    border-left:4px solid var(--amber-strip); border-radius:10px; box-shadow:0 1px 3px rgba(16,45,80,.06);
+    padding:.7rem .8rem; margin-bottom:.6rem; }
+  #pane-classificar .cls-item:last-child{ margin-bottom:0; }
+  #pane-classificar .cls-item__body{ min-width:0; }
+  #pane-classificar .lbl{ font-size:9.5px; text-transform:uppercase; letter-spacing:.05em; color:#8a95a5; font-weight:700; }
+  #pane-classificar .xprod{ font-size:1rem; font-weight:700; color:#1f2937; line-height:1.25; margin:1px 0 .4rem; }
+  #pane-classificar .pills{ display:flex; flex-wrap:wrap; gap:.3rem; margin-bottom:.35rem; }
+  #pane-classificar .pill{ background:var(--surface-1); border:1px solid var(--line-2); border-radius:6px;
+    padding:.05rem .4rem; font-family:ui-monospace,Menlo,monospace; font-size:.74rem; color:#334155; }
+  #pane-classificar .pill b{ color:#8a95a5; font-weight:700; }
+  #pane-classificar .meta{ font-size:.83rem; color:#42506a; font-variant-numeric:tabular-nums; }
+  #pane-classificar .meta b{ color:#1f2937; }
+  #pane-classificar .cls-sep{ border-top:1px dashed #e2e7ee; margin:.6rem 0; }
+  #pane-classificar .cls-class .lbl{ margin-bottom:.3rem; }
+  #pane-classificar .cls-controls{ display:flex; gap:.5rem; align-items:center; flex-wrap:wrap; }
+  #pane-classificar .cls-controls .form-select{ width:auto; min-width:160px; }
+  #pane-classificar .cls-btns{ display:flex; gap:.4rem; margin-left:auto; }
+  #pane-classificar .btn-mem,#pane-classificar .btn-once{ border:0; border-radius:8px; padding:.4rem .8rem;
+    font-size:.85rem; font-weight:600; cursor:pointer; display:inline-flex; align-items:center; gap:.35rem; }
+  #pane-classificar .btn-mem{ background:#e6f1fb; color:#0c447c; }
+  #pane-classificar .btn-mem:hover:not(:disabled){ background:#cfe3f7; }
+  #pane-classificar .btn-once{ background:#eef2f7; color:#42506a; }
+  #pane-classificar .btn-once:hover:not(:disabled){ background:#e2e8f0; }
+  #pane-classificar .btn-mem:disabled,#pane-classificar .btn-once:disabled{ opacity:.45; cursor:not-allowed; }
+  @media (max-width:767px){
+    #pane-classificar .cls-controls{ flex-direction:column; align-items:stretch; }
+    #pane-classificar .cls-controls .form-select{ width:100%; min-width:0; }
+    #pane-classificar .cls-btns{ margin-left:0; }
+    #pane-classificar .btn-mem,#pane-classificar .btn-once{ flex:1; justify-content:center; }
+  }
+</style>
+
 <div class="tab-content">
 
   {# =================== ÁREA 1: CLASSIFICAR =================== #}
@@ -355,101 +413,74 @@
        id="pane-classificar" role="tabpanel">
 
     {% if not notas %}
-      <div class="alert alert-success"><i class="bi bi-check2-circle"></i>
+      <div class="cls-ok"><i class="bi bi-check2-circle"></i>
         Nenhum item pendente de classificação. 🎉</div>
     {% else %}
-      <p class="text-muted small">
-        {{ total_pendentes_notas }} nota(s) com {{ total_pendentes_itens }} item(ns)
-        pendente(s). Clique numa nota para expandir os itens.
+      <p class="text-muted small mb-2">
+        {{ total_pendentes_notas }} nota(s) com {{ total_pendentes_itens }} item(ns) pendente(s).
       </p>
-      <table class="table table-sm align-middle">
-        <thead class="table-light">
-          <tr>
-            <th style="width:34px"></th>
-            <th>Data</th>
-            <th>Fornecedor</th>
-            <th class="text-center">Itens</th>
-            <th class="text-end">Valor da nota</th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for n in notas %}
-          <tr class="nota-row" data-doc="{{ n.doc_id }}" style="cursor:pointer">
-            <td class="text-center"><i class="bi bi-chevron-right caret" id="caret-{{ n.doc_id }}"></i></td>
-            <td>{{ n.dh_emissao.strftime('%d/%m/%Y') if n.dh_emissao else '—' }}</td>
-            <td>
-              <strong>{{ n.emit_nome or '(sem nome)' }}</strong><br>
-              <small class="text-muted">CNPJ {{ n.emit_cnpj or '—' }}
-                {% if n.numero %}· NF {{ n.numero }}/{{ n.serie }}{% endif %}
-                {% if n.situacao and n.situacao != 'autorizado' %}
-                  · <span class="text-danger">{{ n.situacao }}</span>{% endif %}
-              </small>
-            </td>
-            <td class="text-center">{{ n.itens|length }}</td>
-            <td class="text-end">{{ (n.nota_valor or 0) | formatar_moeda }}</td>
-          </tr>
-          <tr class="nota-itens" id="itens-{{ n.doc_id }}" style="display:none">
-            <td colspan="5" class="bg-light">
-              <table class="table table-sm mb-0 bg-white">
-                <thead>
-                  <tr class="small text-muted">
-                    <th>Item (cProd / EAN / NCM)</th>
-                    <th class="text-end">Qtd</th>
-                    <th class="text-end">Valor</th>
-                    <th style="width:210px">Categoria</th>
-                    <th style="width:210px">Produto (combustível)</th>
-                    <th style="width:190px" class="text-end">Ação</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {% for it in n.itens %}
-                  <tr id="item-{{ it.item_id }}" data-item="{{ it.item_id }}">
-                    <td>
-                      {{ it.produto_xml or '(sem descrição)' }}<br>
-                      <small class="text-muted">
-                        cProd: <code>{{ it.cprod_fornecedor or '—' }}</code>
-                        · EAN: {{ it.cean or '—' }}
-                        · NCM: {{ it.ncm or '—' }}
-                        {% if it.cod_anp %}· ANP: {{ it.cod_anp }}{% endif %}
-                      </small>
-                    </td>
-                    <td class="text-end">{{ it.quantidade }} {{ it.unidade or '' }}</td>
-                    <td class="text-end">{{ (it.item_valor or 0) | formatar_moeda }}</td>
-                    <td>
-                      <select class="form-select form-select-sm sel-cat"
-                              onchange="toggleProduto(this, {{ it.item_id }})">
-                        <option value="">— escolha —</option>
-                        {% for val, rot in categorias %}
-                        <option value="{{ val }}">{{ rot }}</option>
-                        {% endfor %}
-                      </select>
-                    </td>
-                    <td>
-                      <select class="form-select form-select-sm sel-prod"
-                              id="prod-{{ it.item_id }}" style="display:none">
-                        <option value="">— produto —</option>
-                        {% for p in produtos %}
-                        <option value="{{ p.id }}">{{ p.nome }}</option>
-                        {% endfor %}
-                      </select>
-                    </td>
-                    <td class="text-end">
-                      <button class="btn btn-sm btn-primary"
-                              onclick="classificar({{ it.item_id }}, 'memorizar')"
-                              title="Grava a regra CNPJ+cProd e classifica">Memorizar</button>
-                      <button class="btn btn-sm btn-outline-secondary"
-                              onclick="classificar({{ it.item_id }}, 'so_desta_vez')"
-                              title="Classifica só este item, sem criar regra">Só desta vez</button>
-                    </td>
-                  </tr>
-                  {% endfor %}
-                </tbody>
-              </table>
-            </td>
-          </tr>
+      {% for n in notas %}
+      <div class="cls-card open" data-doc="{{ n.doc_id }}">
+        <button type="button" class="cls-head" onclick="this.closest('.cls-card').classList.toggle('open')">
+          <span class="cls-head__ico"><i class="bi bi-hourglass-split"></i></span>
+          <span class="cls-head__main">
+            <span class="cls-head__forn">{{ n.emit_nome or '(sem nome)' }}</span>
+            <span class="cls-head__meta">
+              {% if n.numero %}NF nº {{ n.numero }}/{{ n.serie }} · {% endif %}CNPJ {{ n.emit_cnpj or '—' }}
+              · {{ n.dh_emissao.strftime('%d/%m/%Y') if n.dh_emissao else '—' }}
+              {% if n.situacao and n.situacao != 'autorizado' %} · <span class="cls-canc">{{ n.situacao }}</span>{% endif %}
+            </span>
+          </span>
+          <span class="cls-head__badge">{{ n.itens|length }} {{ 'itens' if n.itens|length > 1 else 'item' }} a classificar</span>
+          <i class="bi bi-chevron-right cls-head__chev"></i>
+        </button>
+        <div class="cls-body">
+          {% for it in n.itens %}
+          <div class="cls-item" id="item-{{ it.item_id }}" data-item="{{ it.item_id }}">
+            <div class="cls-item__body">
+              <div class="lbl">Fornecedor chama</div>
+              <div class="xprod">{{ it.produto_xml or '(sem descrição)' }}</div>
+              <div class="pills">
+                <span class="pill"><b>cProd</b> {{ it.cprod_fornecedor or '—' }}</span>
+                {% if it.ncm %}<span class="pill"><b>NCM</b> {{ it.ncm }}</span>{% endif %}
+                {% if it.cod_anp %}<span class="pill"><b>ANP</b> {{ it.cod_anp }}</span>{% endif %}
+                {% if it.cean %}<span class="pill"><b>EAN</b> {{ it.cean }}</span>{% endif %}
+              </div>
+              <div class="meta"><b>{{ it.quantidade }}</b> {{ it.unidade or '' }} · <b>{{ (it.item_valor or 0) | formatar_moeda }}</b></div>
+              <div class="cls-sep"></div>
+              <div class="cls-class">
+                <div class="lbl">Classificar como</div>
+                <div class="cls-controls">
+                  <select class="form-select form-select-sm sel-cat"
+                          onchange="toggleProduto(this, {{ it.item_id }})">
+                    <option value="">— categoria —</option>
+                    {% for val, rot in categorias %}
+                    <option value="{{ val }}">{{ rot }}</option>
+                    {% endfor %}
+                  </select>
+                  <select class="form-select form-select-sm sel-prod" id="prod-{{ it.item_id }}"
+                          style="display:none" onchange="clsRefreshBtns({{ it.item_id }})">
+                    <option value="">— produto —</option>
+                    {% for p in produtos %}
+                    <option value="{{ p.id }}">{{ p.nome }}</option>
+                    {% endfor %}
+                  </select>
+                  <div class="cls-btns">
+                    <button class="btn-mem" disabled
+                            onclick="classificar({{ it.item_id }}, 'memorizar')"
+                            title="Grava a regra CNPJ+cProd e classifica"><i class="bi bi-bookmark-star"></i> Memorizar</button>
+                    <button class="btn-once" disabled
+                            onclick="classificar({{ it.item_id }}, 'so_desta_vez')"
+                            title="Classifica só este item, sem criar regra">Só desta vez</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
           {% endfor %}
-        </tbody>
-      </table>
+        </div>
+      </div>
+      {% endfor %}
     {% endif %}
   </div>
 
@@ -873,18 +904,7 @@
 
 {% block scripts %}
 <script>
-// Expandir/recolher os itens de uma nota (aba Classificar).
-document.querySelectorAll('.nota-row').forEach(function (row) {
-  row.addEventListener('click', function () {
-    var doc = row.getAttribute('data-doc');
-    var bloco = document.getElementById('itens-' + doc);
-    var caret = document.getElementById('caret-' + doc);
-    if (!bloco) return;
-    var aberto = bloco.style.display !== 'none';
-    bloco.style.display = aberto ? 'none' : 'table-row';
-    if (caret) caret.className = 'bi ' + (aberto ? 'bi-chevron-right' : 'bi-chevron-down') + ' caret';
-  });
-});
+// (Aba Classificar: o card da nota abre/fecha via onclick inline no cabeçalho.)
 
 // Expandir/recolher o detalhe de UMA nota na aba Compras (desktop).
 function toggleCompra(row) {
@@ -896,11 +916,24 @@ function toggleCompra(row) {
   row.classList.toggle('open', !aberto);
 }
 
-// Mostra/oculta o dropdown de produto conforme a categoria (só combustível).
+// Mostra/oculta o dropdown de produto conforme a categoria (só combustível)
+// e recalcula o estado (aceso/travado) dos botões daquele item.
 function toggleProduto(sel, itemId) {
   var prod = document.getElementById('prod-' + itemId);
-  if (!prod) return;
-  prod.style.display = (sel.value === 'combustivel') ? '' : 'none';
+  if (prod) prod.style.display = (sel.value === 'combustivel') ? '' : 'none';
+  clsRefreshBtns(itemId);
+}
+
+// Trava/destrava Memorizar e Só desta vez: só habilita com categoria escolhida
+// (e produto, se combustível). Espelha a validação do classificar().
+function clsRefreshBtns(itemId) {
+  var linha = document.getElementById('item-' + itemId);
+  if (!linha) return;
+  var cat = linha.querySelector('.sel-cat').value;
+  var prodSel = document.getElementById('prod-' + itemId);
+  var prod = prodSel ? prodSel.value : '';
+  var ok = cat !== '' && !(cat === 'combustivel' && !prod);
+  linha.querySelectorAll('.btn-mem, .btn-once').forEach(function (b) { b.disabled = !ok; });
 }
 
 // Apaga uma regra memorizada (só a regra; itens já classificados permanecem).
@@ -1087,15 +1120,23 @@ function classificar(itemId, modo) {
       window.location.reload();
       return;
     }
-    // Remove a linha do item; se a nota ficou sem itens, remove a nota.
-    var tbody = linha.parentNode;
-    var docRowBlock = linha.closest('.nota-itens');
+    // Remove o CARD do item; se a nota ficou sem itens, remove o card da nota.
+    // Atualiza o badge da nota e o contador total da aba Classificar.
+    var card = linha.closest('.cls-card');
     linha.remove();
-    if (tbody && tbody.querySelectorAll('tr').length === 0 && docRowBlock) {
-      var id = docRowBlock.id.replace('itens-', '');
-      var notaRow = document.querySelector('.nota-row[data-doc="' + id + '"]');
-      if (notaRow) notaRow.remove();
-      docRowBlock.remove();
+    if (card) {
+      var rest = card.querySelectorAll('.cls-item').length;
+      if (rest === 0) {
+        card.remove();
+      } else {
+        var badge = card.querySelector('.cls-head__badge');
+        if (badge) badge.textContent = rest + (rest > 1 ? ' itens a classificar' : ' item a classificar');
+      }
+    }
+    var tabBadge = document.querySelector('#tab-classificar .badge');
+    if (tabBadge) {
+      var nrest = parseInt(tabBadge.textContent, 10);
+      if (!isNaN(nrest)) tabBadge.textContent = Math.max(0, nrest - 1);
     }
   })
   .catch(function (e) {
