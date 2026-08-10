@@ -1,36 +1,47 @@
+{# Conteudo do modal de detalhe do CT-e (carregado por fetch ?partial=1).
+   Visual .mig; recebe doc (dfe_documentos), cte (dfe_cte, None se resumo) e
+   nfes (NF-e vinculadas). #}
 <style>
-  .cte-doc-wrap { max-width: 820px; margin: 0 auto; }
-  .cte-doc-wrap .box { background:#fff; border:1px solid #dee2e6; border-radius:.5rem;
-      padding:.7rem .9rem; margin-bottom:.6rem; }
-  .cte-doc-wrap .rot { font-size:.68rem; text-transform:uppercase; color:#6c757d; letter-spacing:.03em; }
-  .cte-doc-wrap .val { font-size:.95rem; }
-  .cte-doc-wrap .big { font-size:1.15rem; font-weight:700; }
-  .cte-doc-wrap .rota { font-size:1.02rem; font-weight:600; }
-  .cte-doc-wrap .cte-nfe { border:1px solid #e9ecef; border-radius:.5rem; padding:.5rem .7rem; margin-bottom:.4rem; }
-  .cte-doc-wrap .bs-ok { display:inline-block; border-radius:20px; padding:3px 12px; font-size:12px;
-      font-weight:500; background:#e6f4ea; color:#1e7e34; }
-  .cte-doc-wrap .bs-no { display:inline-block; border-radius:20px; padding:3px 12px; font-size:12px;
-      font-weight:500; background:#f1f3f5; color:#6c757d; }
+  .cte-doc{ max-width:640px; margin:0 auto; --line-2:#dde3ec; --muted:#6b7280; --blue-deep:#07569C;
+    --shadow:0 1px 3px rgba(16,45,80,.08),0 4px 12px rgba(16,45,80,.06); }
+  .cte-doc .box{ background:#fff; border:1px solid var(--line-2); border-radius:10px; box-shadow:var(--shadow);
+    padding:.6rem .8rem; margin-bottom:.55rem; }
+  .cte-doc .box.frete{ display:flex; justify-content:space-between; align-items:center; }
+  .cte-doc .rot{ font-size:.66rem; text-transform:uppercase; color:var(--muted); letter-spacing:.03em; font-weight:700; }
+  .cte-doc .val{ font-size:.92rem; color:#1f2937; }
+  .cte-doc .big{ font-size:1.25rem; font-weight:800; color:#27500a; }
+  .cte-doc .big.canc{ color:#9aa4b2; text-decoration:line-through; }
+  .cte-doc .rota{ font-size:1.02rem; font-weight:700; color:var(--blue-deep); }
+  .cte-doc .grid2{ display:grid; grid-template-columns:1fr 1fr; gap:.5rem; }
+  .cte-doc .grid3{ display:grid; grid-template-columns:1fr 1fr 1fr; gap:.5rem; }
+  .cte-doc .sit{ font-size:.72rem; font-weight:700; border-radius:999px; padding:.12rem .55rem; white-space:nowrap; }
+  .cte-doc .sit-ok{ background:#e6f1fb; color:#0c447c; } .cte-doc .sit-no{ background:#fcebeb; color:#a32d2d; }
+  .cte-doc .nfe{ border:1px solid #e9edf3; border-radius:8px; padding:.45rem .6rem; margin-bottom:.35rem;
+    display:flex; justify-content:space-between; align-items:center; gap:.5rem; }
+  .cte-doc .nfe:last-child{ margin-bottom:0; }
+  .cte-doc .bs-ok{ background:#eaf3de; color:#27500a; border-radius:999px; padding:.1rem .5rem; font-size:.72rem; font-weight:700; white-space:nowrap; }
+  .cte-doc .bs-no{ background:#f1f3f5; color:#6b7280; border-radius:999px; padding:.1rem .5rem; font-size:.72rem; font-weight:700; white-space:nowrap; }
+  .cte-doc .chave{ font-family:ui-monospace,Menlo,monospace; font-size:.74rem; color:#334155; word-break:break-all; }
+  .cte-doc .aviso{ background:#fff7e6; border:1px solid #f0d9b5; color:#8a5a00; border-radius:8px;
+    padding:.5rem .7rem; font-size:.82rem; margin-bottom:.55rem; }
 </style>
 
-<div class="cte-doc-wrap">
-  <div class="box d-flex justify-content-between align-items-start">
+{% set cancel = (doc.situacao in ['cancelada', 'denegada']) %}
+<div class="cte-doc">
+
+  {# Frete em destaque + situacao #}
+  <div class="box frete">
     <div>
-      <div class="big">CT-e nº {{ doc.numero }} · Série {{ doc.serie }}</div>
-      <div class="rot mt-1">Emissão</div>
-      <div class="val">{{ doc.dh_emissao.strftime('%d/%m/%Y %H:%M') if doc.dh_emissao else '—' }}</div>
-    </div>
-    <div class="text-end">
-      <div class="big text-success">{{ (doc.valor_total or (cte.vprest if cte else 0) or 0) | formatar_moeda }}</div>
       <div class="rot">Valor do frete</div>
+      <div class="big{% if cancel %} canc{% endif %}">{{ (doc.valor_total or (cte.vprest if cte else 0) or 0) | formatar_moeda }}</div>
     </div>
+    {% if cancel %}<span class="sit sit-no">{{ doc.situacao|upper }}</span>
+    {% else %}<span class="sit sit-ok">autorizada</span>{% endif %}
   </div>
 
   {% if doc.resumo %}
-  <div class="alert alert-warning py-2 small mb-2">
-    <i class="bi bi-hourglass-split"></i> Este CT-e chegou só como <b>resumo</b> — o XML completo
-    (rota, motorista, carga) entra numa próxima captura.
-  </div>
+  <div class="aviso"><i class="bi bi-hourglass-split"></i> Este CT-e chegou só como <b>resumo</b> — o XML completo
+    (rota, motorista, carga) entra numa próxima captura.</div>
   {% endif %}
 
   <div class="box">
@@ -45,24 +56,24 @@
   </div>
 
   <div class="box">
-    <div class="row g-2">
-      <div class="col-6"><div class="rot">Remetente</div><div class="val">{{ cte.rem_nome or '—' }}</div></div>
-      <div class="col-6"><div class="rot">Destinatário</div><div class="val">{{ cte.dest_nome or '—' }}</div></div>
+    <div class="grid2">
+      <div><div class="rot">Remetente</div><div class="val">{{ cte.rem_nome or '—' }}</div></div>
+      <div><div class="rot">Destinatário</div><div class="val">{{ cte.dest_nome or '—' }}</div></div>
     </div>
-    <div class="mt-2">
+    <div style="margin-top:.5rem">
       <div class="rot">Tomador do frete</div>
       <div class="val">{{ cte.toma_nome or '—' }}{% if cte.toma_cnpj %} · {{ cte.toma_cnpj }}{% endif %}</div>
     </div>
   </div>
 
   <div class="box">
-    <div class="row g-2">
-      <div class="col-4"><div class="rot">Carga (R$)</div><div class="val">{{ (cte.vcarga or 0) | formatar_moeda }}</div></div>
-      <div class="col-4"><div class="rot">Peso</div><div class="val">{{ cte.peso if cte.peso is not none else '—' }}</div></div>
-      <div class="col-4"><div class="rot">Unidades</div><div class="val">{{ cte.qtd_unid if cte.qtd_unid is not none else '—' }}</div></div>
+    <div class="grid3">
+      <div><div class="rot">Carga (R$)</div><div class="val">{{ (cte.vcarga or 0) | formatar_moeda }}</div></div>
+      <div><div class="rot">Peso</div><div class="val">{{ cte.peso if cte.peso is not none else '—' }}</div></div>
+      <div><div class="rot">Unidades</div><div class="val">{{ cte.qtd_unid if cte.qtd_unid is not none else '—' }}</div></div>
     </div>
-    {% if cte.prod_predom %}<div class="mt-2"><div class="rot">Produto predominante</div><div class="val">{{ cte.prod_predom }}</div></div>{% endif %}
-    {% if cte.cfop %}<div class="mt-2 small text-muted">CFOP {{ cte.cfop }}{% if cte.nat_op %} · {{ cte.nat_op }}{% endif %}</div>{% endif %}
+    {% if cte.prod_predom %}<div style="margin-top:.5rem"><div class="rot">Produto predominante</div><div class="val">{{ cte.prod_predom }}</div></div>{% endif %}
+    {% if cte.cfop %}<div style="margin-top:.4rem" class="small text-muted">CFOP {{ cte.cfop }}{% if cte.nat_op %} · {{ cte.nat_op }}{% endif %}</div>{% endif %}
   </div>
 
   {% if cte.motorista_nome or cte.placa or cte.rntrc %}
@@ -78,20 +89,24 @@
   {% endif %}
 
   <div class="box">
-    <div class="rot mb-1">NF-e vinculadas ({{ nfes|length }})</div>
+    <div class="rot" style="margin-bottom:.35rem">NF-e vinculadas ({{ nfes|length }})</div>
     {% for n in nfes %}
-    <div class="cte-nfe d-flex justify-content-between align-items-center">
+    <div class="nfe">
       <div style="min-width:0">
-        <div class="small" style="word-break:break-all">{{ n.chave_nfe }}</div>
-        {% if n.nfe_doc_id %}<div class="small text-muted">{{ n.nfe_emit or '' }}{% if n.nfe_numero %} · nº {{ n.nfe_numero }}{% endif %}{% if n.nfe_valor %} · {{ n.nfe_valor | formatar_moeda }}{% endif %}</div>{% endif %}
+        {% if n.nfe_doc_id %}
+          <div class="val">{{ n.nfe_emit or '' }}{% if n.nfe_numero %} · nº {{ n.nfe_numero }}{% endif %}{% if n.nfe_valor %} · {{ n.nfe_valor | formatar_moeda }}{% endif %}</div>
+          <div class="chave">{{ n.chave_nfe }}</div>
+        {% else %}
+          <div class="chave">{{ n.chave_nfe }}</div>
+        {% endif %}
       </div>
-      {% if n.nfe_doc_id %}<span class="bs-ok text-nowrap ms-2">Compra nossa</span>
-      {% else %}<span class="bs-no text-nowrap ms-2">não capturada</span>{% endif %}
+      {% if n.nfe_doc_id %}<span class="bs-ok">Compra nossa</span>
+      {% else %}<span class="bs-no">não capturada</span>{% endif %}
     </div>
     {% else %}
-    <div class="text-muted small">Nenhuma NF-e vinculada informada.</div>
+    <div class="val" style="color:#6b7280">Nenhuma NF-e vinculada informada.</div>
     {% endfor %}
   </div>
 
-  {% if doc.chave %}<div class="box"><div class="rot">Chave de acesso</div><div class="small" style="word-break:break-all">{{ doc.chave }}</div></div>{% endif %}
+  {% if doc.chave %}<div class="box"><div class="rot">Chave de acesso</div><div class="chave">{{ doc.chave }}</div></div>{% endif %}
 </div>

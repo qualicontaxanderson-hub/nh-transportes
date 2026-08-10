@@ -99,7 +99,7 @@ def index():
             SELECT d.id, d.chave, d.numero, d.serie, d.dh_emissao, d.emit_cnpj,
                    d.emit_nome, d.valor_total, d.situacao, d.resumo,
                    c.mun_ini, c.uf_ini, c.mun_fim, c.uf_fim, c.vprest,
-                   c.toma_nome, c.toma_cnpj,
+                   c.toma_nome, c.toma_cnpj, c.motorista_nome, c.placa,
                    COALESCE(emp.nome_fantasia, emp.razao_social) AS empresa_nome,
                    COALESCE(c.vprest, d.valor_total) AS frete,
                    (SELECT COUNT(*) FROM dfe_cte_nfe n WHERE n.documento_id = d.id) AS qt_nfe
