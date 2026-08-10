@@ -48,6 +48,19 @@
   </li>
 </ul>
 
+<style>
+  /* Accordion de regras no visual .mig (azul #1D63A5 quando aberto). */
+  .accordion-mig .accordion-button:not(.collapsed){
+    background:#1D63A5; color:#fff; box-shadow:none;
+  }
+  .accordion-mig .accordion-button:not(.collapsed) .text-muted{ color:#dbe7f3 !important; }
+  .accordion-mig .accordion-button:not(.collapsed)::after{ filter:brightness(0) invert(1); }
+  .accordion-mig .accordion-button:focus{ box-shadow:none; border-color:rgba(29,99,165,.35); }
+  .accordion-mig .accordion-button .badge.bg-secondary{
+    background:#e7eef6 !important; color:#1D63A5 !important;
+  }
+</style>
+
 <div class="tab-content">
 
   {# =================== ÁREA 1: CLASSIFICAR =================== #}
@@ -312,38 +325,69 @@
   <div class="tab-pane fade {% if aba == 'regras' %}show active{% endif %}"
        id="pane-regras" role="tabpanel">
     <p class="text-muted small">
-      Regras memorizadas (fornecedor + código do produto no XML → categoria/produto).
-      Toda nota nova que casar é classificada automaticamente. Apagar remove <strong>só a
-      regra</strong>; os itens já classificados por ela permanecem.
+      Regras memorizadas (fornecedor + código do produto no XML → categoria/produto),
+      agrupadas por <strong>fornecedor</strong>. Toda nota nova que casar é classificada
+      automaticamente. <strong>Editar</strong> corrige a regra (e opcionalmente as notas já
+      lançadas); <strong>apagar</strong> remove só a regra — os itens já classificados permanecem.
     </p>
     {% if not regras %}
-      <div class="alert alert-light border">Nenhuma regra memorizada ainda.</div>
+      <div class="alert alert-light border" id="regras-vazio">Nenhuma regra memorizada ainda.</div>
     {% else %}
-      <table class="table table-sm align-middle">
-        <thead class="table-light">
-          <tr>
-            <th>Fornecedor</th><th>cProd</th><th>Categoria</th><th>Produto</th>
-            <th>Criada em</th><th class="text-end">Ação</th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for r in regras %}
-          <tr id="regra-{{ r.id }}">
-            <td>{{ r.fornecedor_nome or '—' }}<br>
-                <small class="text-muted">{{ r.emit_cnpj }}</small></td>
-            <td><code>{{ r.cprod_fornecedor }}</code></td>
-            <td>{{ rot_categoria.get(r.categoria, r.categoria) }}</td>
-            <td>{{ r.produto_nome or '—' }}</td>
-            <td><small>{{ r.criado_em.strftime('%d/%m/%Y %H:%M') if r.criado_em else '—' }}</small></td>
-            <td class="text-end">
-              <button class="btn btn-sm btn-outline-danger" onclick="apagarRegra({{ r.id }})">
-                <i class="bi bi-trash"></i> Apagar
-              </button>
-            </td>
-          </tr>
-          {% endfor %}
-        </tbody>
-      </table>
+      <div class="accordion accordion-mig" id="accFornecedores">
+        {% for g in fornecedores_regras %}
+        <div class="accordion-item" data-cnpj="{{ g.emit_cnpj or '' }}">
+          <h2 class="accordion-header">
+            <button class="accordion-button collapsed" type="button"
+                    data-bs-toggle="collapse" data-bs-target="#forn-{{ loop.index }}"
+                    aria-expanded="false" aria-controls="forn-{{ loop.index }}">
+              <span class="d-flex w-100 align-items-center gap-2 pe-2">
+                <span class="fw-semibold text-truncate">{{ g.nome or '(sem nome)' }}</span>
+                <small class="text-muted d-none d-sm-inline">CNPJ {{ g.emit_cnpj or '—' }}</small>
+                <span class="badge bg-secondary ms-auto">
+                  <span class="regra-count">{{ g.regras|length }}</span> regra(s)</span>
+              </span>
+            </button>
+          </h2>
+          <div id="forn-{{ loop.index }}" class="accordion-collapse collapse"
+               data-bs-parent="#accFornecedores">
+            <div class="accordion-body p-0">
+              <table class="table table-sm align-middle mb-0">
+                <thead class="table-light">
+                  <tr>
+                    <th>cProd</th><th>Categoria</th><th>Produto</th>
+                    <th>Criada em</th><th class="text-end" style="width:120px">Ação</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for r in g.regras %}
+                  <tr id="regra-{{ r.id }}">
+                    <td><code>{{ r.cprod_fornecedor }}</code></td>
+                    <td class="cat-display">{{ rot_categoria.get(r.categoria, r.categoria) }}</td>
+                    <td class="prod-display">{{ r.produto_nome or '—' }}</td>
+                    <td><small>{{ r.criado_em.strftime('%d/%m/%Y %H:%M') if r.criado_em else '—' }}</small></td>
+                    <td class="text-end text-nowrap">
+                      <button class="btn btn-sm btn-outline-primary" title="Editar"
+                              onclick="abrirEditar(this)"
+                              data-regra="{{ r.id }}"
+                              data-forn="{{ g.nome or '(sem nome)' }}"
+                              data-cnpj="{{ g.emit_cnpj or '' }}"
+                              data-cprod="{{ r.cprod_fornecedor }}"
+                              data-cat="{{ r.categoria }}"
+                              data-prod="{{ r.produto_id or '' }}">
+                        <i class="bi bi-pencil"></i></button>
+                      <button class="btn btn-sm btn-outline-danger" title="Apagar"
+                              onclick="apagarRegra({{ r.id }})">
+                        <i class="bi bi-trash"></i></button>
+                    </td>
+                  </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
     {% endif %}
   </div>
 
@@ -427,6 +471,92 @@
     {% endif %}
   </div>
 </div>
+
+{# =================== MODAL: EDITAR REGRA (reusado por todas as regras) =================== #}
+<div class="modal fade" id="modalEditar" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="bi bi-pencil-square"></i> Editar regra</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="ed-regra-id">
+        <p class="mb-3 small">
+          <span class="text-muted">Fornecedor:</span> <strong id="ed-forn">—</strong>
+          <span class="text-muted">· CNPJ</span> <span id="ed-cnpj">—</span><br>
+          <span class="text-muted">cProd:</span> <code id="ed-cprod">—</code>
+        </p>
+
+        <div class="row g-2 mb-3">
+          <div class="col-sm-6">
+            <label class="form-label small mb-1">Categoria</label>
+            <select class="form-select form-select-sm" id="ed-cat" onchange="edToggleProduto()">
+              {% for val, rot in categorias %}
+              <option value="{{ val }}">{{ rot }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-sm-6" id="ed-prod-wrap">
+            <label class="form-label small mb-1">Produto (combustível)</label>
+            <select class="form-select form-select-sm" id="ed-prod">
+              <option value="">— produto —</option>
+              {% for p in produtos %}
+              <option value="{{ p.id }}">{{ p.nome }}</option>
+              {% endfor %}
+            </select>
+          </div>
+        </div>
+
+        <label class="form-label small mb-1">Aplicar a:</label>
+        <div class="border rounded p-2">
+          <div class="form-check">
+            <input class="form-check-input" type="radio" name="ed-alcance" id="ed-alc-tudo"
+                   value="tudo" onchange="edOnAlcance()">
+            <label class="form-check-label" for="ed-alc-tudo">
+              <strong>a) Alterar tudo cadastrado</strong><br>
+              <small class="text-muted">a regra + todas as notas já classificadas por ela
+              deste cProd (não mexe nas “só desta vez”).</small>
+            </label>
+          </div>
+          <div class="form-check mt-2">
+            <input class="form-check-input" type="radio" name="ed-alcance" id="ed-alc-uma"
+                   value="uma" onchange="edOnAlcance()">
+            <label class="form-check-label" for="ed-alc-uma">
+              <strong>b) Alterar somente uma nota</strong><br>
+              <small class="text-muted">a regra <strong>não</strong> muda — corrijo uma nota
+              específica (marcada “só desta vez”).</small>
+            </label>
+          </div>
+          <div class="form-check mt-2">
+            <input class="form-check-input" type="radio" name="ed-alcance" id="ed-alc-proximos"
+                   value="proximos" checked onchange="edOnAlcance()">
+            <label class="form-check-label" for="ed-alc-proximos">
+              <strong>c) Alterar somente para os próximos</strong><br>
+              <small class="text-muted">muda só a regra; as notas antigas ficam como estão.</small>
+            </label>
+          </div>
+        </div>
+
+        {# Lista de notas — só aparece na opção (b) #}
+        <div id="ed-notas-wrap" class="mt-3 d-none">
+          <label class="form-label small mb-1">Escolha a nota a corrigir:</label>
+          <div id="ed-notas" class="border rounded p-2" style="max-height:220px;overflow:auto">
+            <div class="text-muted small">Carregando…</div>
+          </div>
+        </div>
+
+        <div id="ed-erro" class="alert alert-danger py-1 px-2 mt-3 mb-0 d-none small"></div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+        <button type="button" class="btn btn-success" id="ed-salvar" onclick="salvarEdicao()">
+          <i class="bi bi-check-lg"></i> Salvar
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
 {% endblock %}
 
 {% block scripts %}
@@ -466,9 +596,139 @@ function apagarRegra(regraId) {
       return;
     }
     var tr = document.getElementById('regra-' + regraId);
-    if (tr) tr.remove();
+    var item = tr ? tr.closest('.accordion-item') : null;   // captura ANTES de remover
+    if (tr) tr.remove();                                    // MOTOR (inalterado)
+    // Manutenção do accordion (aditiva e guardada): atualiza contador do grupo,
+    // some com o grupo se esvaziou, e decrementa o badge total da aba.
+    if (item) {
+      var restantes = item.querySelectorAll('tbody tr[id^="regra-"]').length;
+      var badge = item.querySelector('.regra-count');
+      if (badge) badge.textContent = restantes;
+      if (restantes === 0) item.remove();
+    }
+    var tabBadge = document.querySelector('#tab-regras .badge');
+    if (tabBadge) {
+      var n = parseInt(tabBadge.textContent, 10);
+      if (!isNaN(n)) tabBadge.textContent = Math.max(0, n - 1);
+    }
   })
   .catch(function () { alert('Falha de rede ao apagar a regra.'); });
+}
+
+// =================== EDITAR REGRA (modal com 3 alcances) ===================
+var _edModal = null;
+function _edGet() {
+  if (!_edModal) _edModal = new bootstrap.Modal(document.getElementById('modalEditar'));
+  return _edModal;
+}
+// Abre o modal preenchido com os dados da regra (vindos dos data-* do botão).
+function abrirEditar(btn) {
+  var d = btn.dataset;
+  document.getElementById('ed-regra-id').value = d.regra;
+  document.getElementById('ed-forn').textContent  = d.forn || '(sem nome)';
+  document.getElementById('ed-cnpj').textContent  = d.cnpj || '—';
+  document.getElementById('ed-cprod').textContent = d.cprod || '—';
+  document.getElementById('ed-cat').value  = d.cat || '';
+  document.getElementById('ed-prod').value = d.prod || '';
+  // volta ao padrão: opção (c), sem lista de notas, sem erro.
+  document.getElementById('ed-alc-proximos').checked = true;
+  document.getElementById('ed-notas-wrap').classList.add('d-none');
+  var err = document.getElementById('ed-erro'); err.classList.add('d-none'); err.textContent = '';
+  edToggleProduto();
+  _edGet().show();
+}
+// Mostra/esconde o select de produto conforme a categoria (só combustível).
+function edToggleProduto() {
+  var cat = document.getElementById('ed-cat').value;
+  document.getElementById('ed-prod-wrap').style.display = (cat === 'combustivel') ? '' : 'none';
+}
+// Ao trocar o alcance: só (b) mostra a lista de notas (carregada lazy).
+function edOnAlcance() {
+  var alc = document.querySelector('input[name="ed-alcance"]:checked').value;
+  var wrap = document.getElementById('ed-notas-wrap');
+  if (alc === 'uma') { wrap.classList.remove('d-none'); carregarNotas(); }
+  else wrap.classList.add('d-none');
+}
+// Busca as notas do fornecedor+cProd desta regra (server-side, por regra_id).
+function carregarNotas() {
+  var regraId = document.getElementById('ed-regra-id').value;
+  var box = document.getElementById('ed-notas');
+  box.innerHTML = '<div class="text-muted small">Carregando…</div>';
+  fetch('{{ url_for("dfe_compras.listar_notas_regra") }}', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ regra_id: parseInt(regraId, 10) })
+  })
+  .then(function (r) { return r.json(); })
+  .then(function (j) {
+    if (!j.ok) { box.innerHTML = '<div class="text-danger small">' + (j.erro || 'falha') + '</div>'; return; }
+    if (!j.notas.length) { box.innerHTML = '<div class="text-muted small">Nenhuma nota encontrada.</div>'; return; }
+    box.innerHTML = j.notas.map(function (n) {
+      var atual = n.categoria
+        ? (n.categoria + (n.produto_nome ? '/' + n.produto_nome : '') +
+           (n.modo === 'so_desta_vez' ? ' · só desta vez' : ''))
+        : 'pendente';
+      var nf = 'NF ' + (n.numero || '—') + (n.serie ? '/' + n.serie : '');
+      return '<div class="form-check">' +
+        '<input class="form-check-input" type="radio" name="ed-item" ' +
+        'id="ed-item-' + n.item_id + '" value="' + n.item_id + '">' +
+        '<label class="form-check-label small" for="ed-item-' + n.item_id + '">' +
+        nf + ' · ' + n.data + ' · <span class="text-muted">atual: ' + atual + '</span></label></div>';
+    }).join('');
+  })
+  .catch(function () { box.innerHTML = '<div class="text-danger small">Falha de rede.</div>'; });
+}
+// Salva a edição conforme o alcance escolhido.
+function salvarEdicao() {
+  var regraId = parseInt(document.getElementById('ed-regra-id').value, 10);
+  var cat = document.getElementById('ed-cat').value;
+  var prodSel = document.getElementById('ed-prod');
+  var prod = prodSel.value;
+  var alcance = document.querySelector('input[name="ed-alcance"]:checked').value;
+  var err = document.getElementById('ed-erro');
+  function erro(msg) { err.textContent = msg; err.classList.remove('d-none'); }
+  err.classList.add('d-none');
+
+  if (cat === 'combustivel' && !prod) { erro('Combustível: escolha o produto.'); return; }
+  var itemId = null;
+  if (alcance === 'uma') {
+    var sel = document.querySelector('input[name="ed-item"]:checked');
+    if (!sel) { erro('Escolha a nota a corrigir.'); return; }
+    itemId = parseInt(sel.value, 10);
+  }
+
+  var btn = document.getElementById('ed-salvar');
+  btn.disabled = true;
+  fetch('{{ url_for("dfe_compras.editar_regra") }}', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ regra_id: regraId, categoria: cat, produto_id: prod,
+                           alcance: alcance, item_id: itemId })
+  })
+  .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+  .then(function (res) {
+    btn.disabled = false;
+    if (!res.ok || !res.j.ok) { erro(res.j && res.j.erro ? res.j.erro : 'falha ao salvar'); return; }
+    // (a)/(c) mudam a REGRA -> atualiza a linha na hora. (b) não mexe na regra.
+    if (res.j.regra_alterada) {
+      var tr = document.getElementById('regra-' + regraId);
+      if (tr) {
+        var catSel = document.getElementById('ed-cat');
+        tr.querySelector('.cat-display').textContent = catSel.options[catSel.selectedIndex].text;
+        tr.querySelector('.prod-display').textContent =
+          (cat === 'combustivel' && prod) ? prodSel.options[prodSel.selectedIndex].text : '—';
+        // mantém os data-* do botão editar sincronizados com o novo valor.
+        var eb = tr.querySelector('button[onclick="abrirEditar(this)"]');
+        if (eb) { eb.dataset.cat = cat; eb.dataset.prod = (cat === 'combustivel') ? prod : ''; }
+      }
+    }
+    _edGet().hide();
+    if (res.j.alcance === 'tudo' && res.j.tambem)
+      alert('Regra alterada e reaplicada a ' + res.j.tambem + ' nota(s) já lançada(s).');
+    else if (res.j.alcance === 'uma')
+      alert('Nota corrigida (a regra não foi alterada).');
+  })
+  .catch(function () { btn.disabled = false; erro('Falha de rede ao salvar.'); });
 }
 
 // Classifica um item via fetch (o base.html injeta o X-CSRFToken automaticamente).

@@ -224,6 +224,22 @@ def compras():
         )
         regras = cur.fetchall()
 
+        # Agrupa as regras por fornecedor (emit_cnpj) preservando a ordem
+        # (mesma tecnica usada para 'notas' acima). Cada grupo leva nome +
+        # a lista de regras; o template renderiza um accordion por fornecedor.
+        fornecedores_regras = []
+        _idxf = {}
+        for r in regras:
+            ck = r['emit_cnpj'] or ''
+            if ck not in _idxf:
+                _idxf[ck] = len(fornecedores_regras)
+                fornecedores_regras.append({
+                    'emit_cnpj': r['emit_cnpj'],
+                    'nome': r['fornecedor_nome'],
+                    'regras': [],
+                })
+            fornecedores_regras[_idxf[ck]]['regras'].append(r)
+
         # ---------- AREA 4: AGUARDANDO XML (resumos, resumo=1, sem itens) ----------
         # Notas que entraram so como resumo (resNFe): existem no banco mas ainda
         # SEM o XML completo (logo, sem itens para classificar). Aparecem aqui so
@@ -280,6 +296,7 @@ def compras():
             data_ini_default=data_ini_default,
             data_fim_default=data_fim_default,
             regras=regras,
+            fornecedores_regras=fornecedores_regras,
             resumos=resumos,
             aba=aba,
         )
@@ -309,6 +326,206 @@ def apagar_regra():
         cur.execute("DELETE FROM dfe_classificacao_regra WHERE id = %s", (regra_id,))
         conn.commit()
         return jsonify({'ok': True, 'apagou': cur.rowcount or 0})
+    except Exception as e:
+        conn.rollback()
+        return jsonify({'ok': False, 'erro': str(e)}), 500
+    finally:
+        cur.close()
+        conn.close()
+
+
+# ==========================================================================
+# ACAO: listar as notas (itens) de UMA regra -> fornecedor(emit_cnpj)+cProd.
+# Usada pelo modal de edicao na opcao "b) alterar somente uma nota": o usuario
+# escolhe qual item corrigir. O emit_cnpj/cprod vem SEMPRE da regra (server-side,
+# lido por regra_id) -- o cliente so manda o regra_id.
+# ==========================================================================
+@dfe_compras_bp.route('/compras/regras/notas', methods=['POST'])
+@login_required
+def listar_notas_regra():
+    dados = request.get_json(silent=True) or {}
+    try:
+        regra_id = int(dados.get('regra_id') or 0)
+    except (TypeError, ValueError):
+        regra_id = 0
+    if not regra_id:
+        return jsonify({'ok': False, 'erro': 'regra_id ausente'}), 400
+
+    conn = get_db_connection()
+    cur = conn.cursor(dictionary=True)
+    try:
+        cur.execute(
+            "SELECT emit_cnpj, cprod_fornecedor FROM dfe_classificacao_regra WHERE id = %s",
+            (regra_id,),
+        )
+        regra = cur.fetchone()
+        if not regra:
+            return jsonify({'ok': False, 'erro': 'regra não encontrada'}), 404
+
+        cur.execute(
+            """
+            SELECT i.id AS item_id, d.numero, d.serie, d.dh_emissao,
+                   i.categoria, i.classificado_modo, p.nome AS produto_nome
+              FROM dfe_itens i
+              JOIN dfe_documentos d ON d.id = i.documento_id
+              LEFT JOIN produto p ON p.id = i.classificado_produto_id
+             WHERE d.emit_cnpj = %s AND i.cprod_fornecedor = %s
+             ORDER BY d.dh_emissao DESC, d.id DESC
+            """,
+            (regra['emit_cnpj'], regra['cprod_fornecedor']),
+        )
+        itens = cur.fetchall()
+        notas = [{
+            'item_id': it['item_id'],
+            'numero': it['numero'],
+            'serie': it['serie'],
+            'data': it['dh_emissao'].strftime('%d/%m/%Y') if it['dh_emissao'] else '—',
+            'categoria': it['categoria'],
+            'modo': it['classificado_modo'],
+            'produto_nome': it['produto_nome'],
+        } for it in itens]
+        return jsonify({'ok': True, 'notas': notas})
+    except Exception as e:
+        return jsonify({'ok': False, 'erro': str(e)}), 500
+    finally:
+        cur.close()
+        conn.close()
+
+
+# ==========================================================================
+# ACAO: editar UMA regra memorizada (AJAX/JSON). O usuario escolhe o ALCANCE:
+#   'proximos' -> muda SO a regra (vale para capturas futuras).
+#   'tudo'     -> muda a regra E reclassifica os itens que ela criou
+#                 (classificado_modo='memorizado'); preserva 'so_desta_vez'.
+#   'uma'      -> NAO muda a regra; reclassifica SO o item escolhido (item_id),
+#                 marcando-o 'so_desta_vez' (protege da opcao 'tudo' futura).
+# emit_cnpj/cprod vem SEMPRE da regra (server-side) -> nao reclassifica alheio.
+# ==========================================================================
+@dfe_compras_bp.route('/compras/regras/editar', methods=['POST'])
+@login_required
+def editar_regra():
+    dados = request.get_json(silent=True) or {}
+    try:
+        regra_id = int(dados.get('regra_id') or 0)
+    except (TypeError, ValueError):
+        regra_id = 0
+    categoria = (dados.get('categoria') or '').strip()
+    alcance = (dados.get('alcance') or '').strip()  # 'tudo'|'uma'|'proximos'
+    produto_id_raw = dados.get('produto_id')
+
+    if not regra_id:
+        return jsonify({'ok': False, 'erro': 'regra_id ausente'}), 400
+    if categoria not in _CATEGORIAS_VALIDAS:
+        return jsonify({'ok': False, 'erro': 'categoria inválida'}), 400
+    if alcance not in ('tudo', 'uma', 'proximos'):
+        return jsonify({'ok': False, 'erro': 'alcance inválido'}), 400
+
+    # produto_id so vale (e e obrigatorio) para combustivel.
+    produto_id = None
+    if categoria == 'combustivel':
+        try:
+            produto_id = int(produto_id_raw) if produto_id_raw not in (None, '', '0') else None
+        except (TypeError, ValueError):
+            produto_id = None
+        if not produto_id:
+            return jsonify({'ok': False, 'erro': 'combustível exige selecionar o produto'}), 400
+
+    # 'uma' exige o item escolhido.
+    item_id = None
+    if alcance == 'uma':
+        try:
+            item_id = int(dados.get('item_id') or 0)
+        except (TypeError, ValueError):
+            item_id = 0
+        if not item_id:
+            return jsonify({'ok': False, 'erro': 'escolha a nota a corrigir'}), 400
+
+    conn = get_db_connection()
+    cur = conn.cursor(dictionary=True)
+    try:
+        # Trava: rele a regra pelo id -> usa emit_cnpj/cprod DO BANCO.
+        cur.execute(
+            "SELECT id, emit_cnpj, cprod_fornecedor FROM dfe_classificacao_regra WHERE id = %s",
+            (regra_id,),
+        )
+        regra = cur.fetchone()
+        if not regra:
+            return jsonify({'ok': False, 'erro': 'regra não encontrada'}), 404
+        emit_cnpj = regra['emit_cnpj']
+        cprod = regra['cprod_fornecedor']
+
+        tambem = 0
+        regra_alterada = False
+
+        if alcance in ('proximos', 'tudo'):
+            # (c) e parte de (a): atualiza a REGRA.
+            cur.execute(
+                "UPDATE dfe_classificacao_regra SET categoria = %s, produto_id = %s WHERE id = %s",
+                (categoria, produto_id, regra_id),
+            )
+            regra_alterada = True
+
+        if alcance == 'tudo':
+            # (a) reclassifica os itens que ESTA regra criou; preserva 'so_desta_vez'.
+            cur.execute(
+                """
+                UPDATE dfe_itens i
+                  JOIN dfe_documentos d ON d.id = i.documento_id
+                   SET i.categoria = %s,
+                       i.classificado_produto_id = %s,
+                       i.classificado_em = NOW(),
+                       i.classificado_modo = 'memorizado'
+                 WHERE d.emit_cnpj = %s
+                   AND i.cprod_fornecedor = %s
+                   AND i.classificado_modo = 'memorizado'
+                """,
+                (categoria, produto_id, emit_cnpj, cprod),
+            )
+            tambem = cur.rowcount or 0
+
+        elif alcance == 'uma':
+            # (b) regra INTACTA; reclassifica SO o item escolhido, marcando
+            # 'so_desta_vez'. O AND emit_cnpj/cprod confere que o item e deste
+            # fornecedor+cProd (impede reclassificar item alheio).
+            cur.execute(
+                """
+                UPDATE dfe_itens i
+                  JOIN dfe_documentos d ON d.id = i.documento_id
+                   SET i.categoria = %s,
+                       i.classificado_produto_id = %s,
+                       i.classificado_em = NOW(),
+                       i.classificado_modo = 'so_desta_vez'
+                 WHERE i.id = %s
+                   AND d.emit_cnpj = %s
+                   AND i.cprod_fornecedor = %s
+                """,
+                (categoria, produto_id, item_id, emit_cnpj, cprod),
+            )
+            tambem = cur.rowcount or 0
+            if not tambem:
+                conn.rollback()
+                return jsonify({'ok': False,
+                                'erro': 'nota não encontrada para este fornecedor/cProd'}), 404
+
+        conn.commit()
+
+        # Rotulo do produto para o JS atualizar a linha.
+        produto_nome = None
+        if produto_id:
+            cur.execute("SELECT nome FROM produto WHERE id = %s", (produto_id,))
+            row = cur.fetchone()
+            produto_nome = row['nome'] if row else None
+
+        return jsonify({
+            'ok': True,
+            'regra_id': regra_id,
+            'alcance': alcance,
+            'categoria': categoria,
+            'produto_id': produto_id,
+            'produto_nome': produto_nome,
+            'regra_alterada': regra_alterada,
+            'tambem': tambem,
+        })
     except Exception as e:
         conn.rollback()
         return jsonify({'ok': False, 'erro': str(e)}), 500
