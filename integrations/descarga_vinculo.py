@@ -350,6 +350,7 @@ def sugerir_notas(cur, descarga_id, janela_dias=JANELA_DIAS,
           AND doc.situacao = 'autorizado'
           AND doc.cliente_id = %s
           AND COALESCE(i.classificado_produto_id, i.produto_id) = %s
+          AND (i.categoria IS NULL OR i.categoria <> 'ignorar')
           AND ABS(DATEDIFF(DATE(doc.dh_emissao), %s)) <= %s
         ORDER BY doc.dh_emissao DESC, doc.id, i.n_item
         """,

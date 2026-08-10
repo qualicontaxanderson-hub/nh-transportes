@@ -32,6 +32,7 @@ CATEGORIAS = [
     ('despesa',     'Despesa'),
     ('ativo',       'Ativo Imobilizado'),
     ('produto',     'Produto/Lubrificante'),
+    ('ignorar',     'Desconsiderar / Ignorar'),
 ]
 _CATEGORIAS_VALIDAS = {c[0] for c in CATEGORIAS}
 
@@ -150,21 +151,27 @@ def compras():
 
         LIMITE = 500
 
-        # 1) TOTALIZADOR (todo o periodo, sem LIMITE): litros de combustivel + R$
-        #    (inclui despesas no R$) + nº de notas.
+        # 1) TOTALIZADOR (todo o periodo, sem LIMITE):
+        #    - litros: so combustivel (itens 'ignorar' nunca sao combustivel).
+        #    - R$ item-a-item: total da nota MENOS o valor dos itens 'ignorar'.
+        #    - notas: EXCLUI as totalmente ignoradas (HAVING: precisa ter ao
+        #      menos 1 item nao-ignorado). Nota mista conta (soma os nao-ignorados).
         cur.execute(
             f"""
-            SELECT COALESCE(SUM(sub.litros), 0)     AS litros,
-                   COALESCE(SUM(sub.nota_valor), 0) AS valor,
-                   COUNT(*)                         AS notas
+            SELECT COALESCE(SUM(sub.nota_valor - sub.val_ignorado), 0) AS valor,
+                   COALESCE(SUM(sub.litros), 0)                        AS litros,
+                   COUNT(*)                                            AS notas
             FROM (
                 SELECT d.id, d.valor_total AS nota_valor,
                        SUM(CASE WHEN i.categoria = 'combustivel'
-                                THEN i.quantidade ELSE 0 END) AS litros
+                                THEN i.quantidade ELSE 0 END) AS litros,
+                       SUM(CASE WHEN i.categoria = 'ignorar'
+                                THEN i.valor_total ELSE 0 END) AS val_ignorado
                 FROM dfe_documentos d
                 JOIN dfe_itens i ON i.documento_id = d.id
                 WHERE {where_sql}
                 GROUP BY d.id, d.valor_total
+                HAVING SUM(CASE WHEN i.categoria = 'ignorar' THEN 0 ELSE 1 END) > 0
             ) sub
             """,
             params,
@@ -292,16 +299,34 @@ def compras():
                     it['valor_show'] = float(it['item_valor'] or 0)
                     it['eta'] = (it['produto_id_cls'] == ETANOL_PRODUTO_ID)  # etanol invalido
 
-            # Token por item: combustivel -> nosso produto; senao -> categoria.
+            # ---- Itens IGNORADOS ('ignorar' = nota que nao e nossa) ----
+            # Marca cada item; calcula o valor ignorado e o liquido da nota
+            # (item a item). 'todos_ignorados' -> a nota fica fora dos totais.
+            n_ign = 0
+            val_ignorado = 0.0
+            for it in itens:
+                it['ignorado'] = (it['categoria'] == 'ignorar')
+                if it['ignorado']:
+                    n_ign += 1
+                    val_ignorado += float(it['item_valor'] or 0)
+            c['n_ignorados'] = n_ign
+            c['tem_ignorado'] = n_ign > 0
+            c['todos_ignorados'] = bool(itens) and n_ign == len(itens)
+            c['val_ignorado'] = val_ignorado
+            c['valor_liquido'] = float(c['nota_valor'] or 0) - val_ignorado
+
+            # Token por item (IGNORA os itens 'ignorar'): combustivel -> nosso
+            # produto; senao -> categoria.
             def _tok(it):
                 if it['categoria'] == 'combustivel':
                     return it['produto_nome'] or 'Combustível'
                 if it['categoria']:
                     return _rot.get(it['categoria'], it['categoria'])
                 return 'pendente'
-            tokens = list(dict.fromkeys(_tok(it) for it in itens))
+            tokens = list(dict.fromkeys(_tok(it) for it in itens if not it['ignorado']))
             c['n_produtos'] = len(tokens)
-            c['produto_label'] = tokens[0] if len(tokens) == 1 else ('%d produtos' % len(tokens))
+            c['produto_label'] = ((tokens[0] if len(tokens) == 1
+                                    else ('%d produtos' % len(tokens))) if tokens else '')
 
             # V.unit da LINHA FECHADA: so p/ nota de UM unico produto combustivel.
             # Etanol -> V.unit apurado; outro combustivel -> vUnCom declarado.
@@ -669,6 +694,11 @@ def classificar():
         return jsonify({'ok': False, 'erro': 'categoria inválida'}), 400
     if modo not in ('memorizar', 'so_desta_vez'):
         return jsonify({'ok': False, 'erro': 'modo inválido'}), 400
+    # "Ignorar" e decisao consciente nota a nota: NUNCA cria regra (uma regra de
+    # ignorar poderia sumir uma nota importante sem o usuario ver). So "so_desta_vez".
+    if categoria == 'ignorar' and modo == 'memorizar':
+        return jsonify({'ok': False,
+                        'erro': 'a categoria "Ignorar" não cria regra; use "Só desta vez"'}), 400
 
     # produto_id so vale para combustivel.
     produto_id = None

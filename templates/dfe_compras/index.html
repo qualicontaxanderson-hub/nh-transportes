@@ -35,16 +35,19 @@
         {%- elif 's10' in pn or 's-10' in pn -%}{% set tp = 's10' %}
         {%- else -%}{% set tp = 's500' %}{%- endif -%}
       {%- endif -%}
-      <div class="cmp-prod cmp-prod--{{ tp }}">
+      <div class="cmp-prod cmp-prod--{{ 'ign' if it.ignorado else tp }}">
         <div class="strip"></div>
         <div class="body">
           <div><code>{{ it.cprod_fornecedor or '—' }}</code>
             <span class="lbl">Fornecedor chama</span>
-            <span class="fc">{{ it.produto_xml or '—' }}</span></div>
+            <span class="fc">{{ it.produto_xml or '—' }}</span>
+            {% if it.ignorado %}<span class="badge-ign">Ignorada</span>{% endif %}</div>
           <div class="cls"><span class="lbl">Classificamos</span>
-            <b>{% if it.categoria %}{{ CATLBL.get(it.categoria, it.categoria) }}{% if it.produto_nome %} - {{ it.produto_nome }}{% endif %}{% else %}pendente{% endif %}</b></div>
+            <b>{% if it.ignorado %}Desconsiderar / Ignorar{% elif it.categoria %}{{ CATLBL.get(it.categoria, it.categoria) }}{% if it.produto_nome %} - {{ it.produto_nome }}{% endif %}{% else %}pendente{% endif %}</b></div>
           <div class="calc">
-            {% if it.categoria == 'combustivel' and it.quantidade %}
+            {% if it.ignorado %}
+              {{ (it.valor_show or 0) | formatar_moeda }} <span class="cmp-exc">· fora do total (item ignorado)</span>
+            {% elif it.categoria == 'combustivel' and it.quantidade %}
               {{ _litros(it.quantidade) }} {{ it.unidade or 'L' }} ·
               {% if it.preco_unit is not none %}<b>{{ _unit(it.preco_unit) }}</b>{% else %}—{% endif %}
               <span class="eq">= {{ (it.valor_show or 0) | formatar_moeda }}</span>
@@ -317,6 +320,12 @@
   #pane-consultar .cmp-prod .tag-rest{ background:#ecf3e5; color:#27500a; }
   /* Só no etanol: o unitário que a nota trazia (vUnCom), bem discreto. */
   #pane-consultar .cmp-prod .decl-orig{ font-size:.72rem; color:#9aa4b2; margin-left:.35rem; }
+  /* Item IGNORADO: faixa cinza, esmaecido, badge e "fora do total". */
+  #pane-consultar .cmp-prod--ign{ opacity:.72; }
+  #pane-consultar .cmp-prod--ign .strip{ background:#c4ccd6; }
+  #pane-consultar .cmp-exc{ color:#8a95a5; font-size:.76rem; }
+  #pane-consultar .badge-ign{ display:inline-block; font-size:.72rem; font-weight:700; border-radius:999px;
+    padding:.08rem .5rem; background:#eceef1; color:#6b7280; margin-left:.35rem; white-space:nowrap; }
   /* Caixinha de apuração do etanol (o "resto" do total). */
   #pane-consultar .cmp-apur{ background:#f6faf1; border:1px solid #dcebc9; border-radius:8px;
     margin:.5rem .7rem .1rem; padding:.45rem .6rem; font-size:.78rem; color:#3d5321; font-variant-numeric:tabular-nums; }
@@ -398,6 +407,7 @@
   #pane-classificar .btn-once{ background:#eef2f7; color:#42506a; }
   #pane-classificar .btn-once:hover:not(:disabled){ background:#e2e8f0; }
   #pane-classificar .btn-mem:disabled,#pane-classificar .btn-once:disabled{ opacity:.45; cursor:not-allowed; }
+  #pane-classificar .cls-ign-hint{ font-size:.76rem; color:#6b7280; margin-top:.4rem; }
   @media (max-width:767px){
     #pane-classificar .cls-controls{ flex-direction:column; align-items:stretch; }
     #pane-classificar .cls-controls .form-select{ width:100%; min-width:0; }
@@ -474,6 +484,8 @@
                             title="Classifica só este item, sem criar regra">Só desta vez</button>
                   </div>
                 </div>
+                <div class="cls-ign-hint" style="display:none"><i class="bi bi-info-circle"></i>
+                  “Ignorar” é decisão nota a nota — não cria regra. Por isso só “Só desta vez”.</div>
               </div>
             </div>
           </div>
@@ -592,10 +604,12 @@
               <div class="cmp-nf">NF nº {{ c.numero or '—' }}</div></td>
             <td class="muted text-truncate" style="max-width:130px">{{ c.empresa_nome or '—' }}</td>
             <td class="forn">{{ c.emit_nome or '(sem nome)' }}</td>
-            <td class="{{ 'prod-n' if c.n_produtos > 1 else 'prod-1' }}">{{ c.produto_label }}</td>
+            <td class="{{ 'prod-n' if c.n_produtos > 1 else 'prod-1' }}">
+              {% if c.todos_ignorados %}<span class="badge-ign">Ignorada</span>
+              {% else %}{{ c.produto_label }}{% if c.tem_ignorado %} <span class="badge-ign">{{ c.n_ignorados }} item ignorado</span>{% endif %}{% endif %}</td>
             <td class="num">{% if c.litros and c.litros|float > 0 %}{{ '{:,.0f}'.format(c.litros|float).replace(',', '.') }} L{% else %}—{% endif %}</td>
             <td class="num">{% if c.v_unit %}{{ '%.2f'|format(c.v_unit)|replace('.', ',') }}{% else %}—{% endif %}</td>
-            <td class="num">{{ (c.nota_valor or 0) | formatar_moeda }}</td>
+            <td class="num">{% if c.todos_ignorados %}<s class="text-muted">{{ (c.nota_valor or 0) | formatar_moeda }}</s>{% else %}{{ (c.valor_liquido or 0) | formatar_moeda }}{% endif %}</td>
             <td><span class="sit {{ 'sit-ok' if c.situacao_ok else 'sit-no' }}">{{ 'autorizada' if c.situacao_ok else c.situacao }}</span></td>
           </tr>
           <tr class="compra-det" id="compra-det-{{ c.doc_id }}" style="display:none">
@@ -623,10 +637,12 @@
           <span class="sit {{ 'sit-ok' if c.situacao_ok else 'sit-no' }}">{{ 'autorizada' if c.situacao_ok else c.situacao }}</span>
         </div>
         <div class="cmp-mcard__vals">
-          <span><span class="k">Produtos:</span> <b>{{ c.produto_label }}</b></span>
+          <span><span class="k">Produtos:</span>
+            {% if c.todos_ignorados %}<b><span class="badge-ign">Ignorada</span></b>
+            {% else %}<b>{{ c.produto_label }}</b>{% if c.tem_ignorado %} <span class="badge-ign">{{ c.n_ignorados }} ignorado</span>{% endif %}{% endif %}</span>
           <span><span class="k">Litros:</span> <b>{% if c.litros and c.litros|float > 0 %}{{ '{:,.0f}'.format(c.litros|float).replace(',', '.') }} L{% else %}—{% endif %}</b></span>
           <span><span class="k">V.unit:</span> <b>{% if c.v_unit %}{{ '%.2f'|format(c.v_unit)|replace('.', ',') }}{% else %}—{% endif %}</b></span>
-          <span><span class="k">Total:</span> <b>{{ (c.nota_valor or 0) | formatar_moeda }}</b></span>
+          <span><span class="k">Total:</span> <b>{% if c.todos_ignorados %}<s class="text-muted">{{ (c.nota_valor or 0) | formatar_moeda }}</s>{% else %}{{ (c.valor_liquido or 0) | formatar_moeda }}{% endif %}</b></span>
         </div>
         {{ cmp_detalhe(c) }}
       </div>
@@ -926,14 +942,22 @@ function toggleProduto(sel, itemId) {
 
 // Trava/destrava Memorizar e Só desta vez: só habilita com categoria escolhida
 // (e produto, se combustível). Espelha a validação do classificar().
+// "Ignorar" oculta o Memorizar (não cria regra) — só "Só desta vez", sem produto.
 function clsRefreshBtns(itemId) {
   var linha = document.getElementById('item-' + itemId);
   if (!linha) return;
   var cat = linha.querySelector('.sel-cat').value;
   var prodSel = document.getElementById('prod-' + itemId);
   var prod = prodSel ? prodSel.value : '';
-  var ok = cat !== '' && !(cat === 'combustivel' && !prod);
-  linha.querySelectorAll('.btn-mem, .btn-once').forEach(function (b) { b.disabled = !ok; });
+  var isIgn = (cat === 'ignorar');
+  var faltaProd = (cat === 'combustivel' && !prod);
+  var mem = linha.querySelector('.btn-mem');
+  var once = linha.querySelector('.btn-once');
+  var hint = linha.querySelector('.cls-ign-hint');
+  if (mem)  mem.style.display = isIgn ? 'none' : '';
+  if (hint) hint.style.display = isIgn ? '' : 'none';
+  if (mem)  mem.disabled  = !(cat !== '' && !isIgn && !faltaProd);
+  if (once) once.disabled = !(cat !== '' && !faltaProd);
 }
 
 // Apaga uma regra memorizada (só a regra; itens já classificados permanecem).
