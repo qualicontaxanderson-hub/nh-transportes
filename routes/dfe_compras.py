@@ -35,6 +35,11 @@ CATEGORIAS = [
 ]
 _CATEGORIAS_VALIDAS = {c[0] for c in CATEGORIAS}
 
+# Etanol (cadastro produto): o unitario da nota vem ERRADO. O valor real do
+# etanol e o "resto" do total da nota (total - os outros produtos, que vem
+# certos). So este produto recebe o tratamento; os demais usam o vUnCom.
+ETANOL_PRODUTO_ID = 1
+
 
 def _produtos(cur):
     """Lista de produtos para o dropdown de combustivel."""
@@ -207,7 +212,9 @@ def compras():
                 f"""
                 SELECT i.documento_id, i.n_item, i.produto_xml, i.cprod_fornecedor,
                        i.categoria, i.quantidade, i.unidade,
-                       i.valor_total AS item_valor, p.nome AS produto_nome
+                       i.valor_unitario, i.valor_total AS item_valor,
+                       i.classificado_produto_id AS produto_id_cls,
+                       p.nome AS produto_nome
                 FROM dfe_itens i
                 LEFT JOIN produto p ON p.id = i.classificado_produto_id
                 WHERE i.documento_id IN ({marc})
@@ -239,13 +246,51 @@ def compras():
                 for r in cur.fetchall():
                     ctes_por_chave.setdefault(r['chave_nfe'], []).append(r)
 
-        # Monta cada nota: itens, CT-e, rotulo "nosso produto" e V.unit.
+        # Monta cada nota: itens, CT-e, rotulo "nosso produto", apuracao do
+        # etanol e V.unit por item.
         _rot = dict(CATEGORIAS)
         for c in compras:
             itens = itens_por_doc.get(c['doc_id'], [])
             c['itens'] = itens
             c['ctes'] = ctes_por_chave.get(c['chave'], [])
             c['situacao_ok'] = (c['situacao'] == 'autorizado')
+
+            # ---- Apuracao do ETANOL pelo "resto" do total da nota ----
+            # valor_etanol = total_da_nota - Σ(valor_total dos itens NAO-etanol).
+            # V.unit_etanol = valor_etanol / Σ(litros de etanol). Se der negativo
+            # (outros > total: erro de dados), nao exibe numero (marca invalido).
+            eta_itens = [it for it in itens if it['produto_id_cls'] == ETANOL_PRODUTO_ID]
+            litros_eta = sum(float(it['quantidade'] or 0) for it in eta_itens)
+            valor_outros = sum(float(it['item_valor'] or 0) for it in itens
+                               if it['produto_id_cls'] != ETANOL_PRODUTO_ID)
+            c['tem_etanol'] = bool(eta_itens) and litros_eta > 0
+            c['eta_litros'] = litros_eta
+            c['eta_valor_outros'] = valor_outros
+            eta_valor = eta_vunit = None
+            eta_negativo = False
+            if c['tem_etanol']:
+                eta_valor = float(c['nota_valor'] or 0) - valor_outros
+                if eta_valor < 0:
+                    eta_negativo = True
+                    eta_valor = eta_vunit = None
+                else:
+                    eta_vunit = eta_valor / litros_eta
+            c['eta_valor'] = eta_valor
+            c['eta_vunit'] = eta_vunit
+            c['eta_negativo'] = eta_negativo
+
+            # ---- Por item: preco unitario e valor exibidos ----
+            # Etanol -> usa o V.unit apurado (e o valor rateado = litros*vunit);
+            # demais -> valor_unitario declarado e o proprio valor_total.
+            for it in itens:
+                if it['produto_id_cls'] == ETANOL_PRODUTO_ID and eta_vunit is not None:
+                    it['preco_unit'] = eta_vunit
+                    it['valor_show'] = float(it['quantidade'] or 0) * eta_vunit
+                    it['eta'] = True
+                else:
+                    it['preco_unit'] = float(it['valor_unitario']) if it['valor_unitario'] is not None else None
+                    it['valor_show'] = float(it['item_valor'] or 0)
+                    it['eta'] = (it['produto_id_cls'] == ETANOL_PRODUTO_ID)  # etanol invalido
 
             # Token por item: combustivel -> nosso produto; senao -> categoria.
             def _tok(it):
@@ -258,10 +303,17 @@ def compras():
             c['n_produtos'] = len(tokens)
             c['produto_label'] = tokens[0] if len(tokens) == 1 else ('%d produtos' % len(tokens))
 
-            # V.unit (R$/litro) so p/ combustivel com UM unico produto.
+            # V.unit da LINHA FECHADA: so p/ nota de UM unico produto combustivel.
+            # Etanol -> V.unit apurado; outro combustivel -> vUnCom declarado.
             litros = float(c['litros'] or 0)
             so_comb = bool(itens) and all(it['categoria'] == 'combustivel' for it in itens)
-            c['v_unit'] = (float(c['valor_comb'] or 0) / litros) if (len(tokens) == 1 and so_comb and litros) else None
+            if len(tokens) == 1 and so_comb and litros:
+                if c['tem_etanol']:
+                    c['v_unit'] = eta_vunit           # None se negativo -> "—"
+                else:
+                    c['v_unit'] = itens[0]['preco_unit'] or (float(c['valor_comb'] or 0) / litros)
+            else:
+                c['v_unit'] = None
 
         # ---------- AREA 3: REGRAS memorizadas (para ver/apagar) ----------
         cur.execute(
