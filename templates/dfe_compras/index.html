@@ -66,10 +66,12 @@
     <div class="cmp-blk__h"><i class="bi bi-truck"></i> Transporte (CT-e)</div>
     {% if c.ctes %}
       {% for t in c.ctes %}
-      <div class="cmp-cte">
+      <div class="cmp-cte{% if t.cte_situacao == 'cancelada' %} cmp-cte--canc{% endif %}">
         <div class="lin"><span class="k">Transportadora:</span> {{ t.transportadora or '—' }}</div>
         <div class="lin"><span class="k">CNPJ:</span> {{ t.transp_cnpj or '—' }}
-          <span class="sep">·</span> <span class="k">CT-e nº</span> {{ t.cte_numero or '—' }}</div>
+          <span class="sep">·</span> <span class="k">CT-e nº</span>
+          <span class="cmp-cte__id">{{ t.cte_numero or '—' }}</span>
+          {% if t.cte_situacao == 'cancelada' %}<span class="badge-canc">CANCELADO</span>{% endif %}</div>
         <div class="lin"><span class="k">Motorista:</span> {{ t.motorista_nome or '—' }}</div>
         <div class="lin"><span class="k">Placa:</span> {{ t.placa or '—' }}</div>
         <div class="lin"><span class="k">Rota:</span> {% if t.mun_ini or t.mun_fim %}{{ t.mun_ini or '?' }}/{{ t.uf_ini or '' }} → {{ t.mun_fim or '?' }}/{{ t.uf_fim or '' }}{% else %}—{% endif %}</div>
@@ -339,6 +341,14 @@
   #pane-consultar .cmp-cte .sep{ color:#c4ccd6; margin:0 .2rem; }
   #pane-consultar .cmp-cte .fr{ font-weight:800; color:#27500a; }
   #pane-consultar .cmp-cte-sem{ padding:.7rem; color:var(--muted); font-size:.85rem; font-style:italic; }
+  /* CT-e CANCELADO: esmaece + risca o número + badge vermelho (em cor cheia). */
+  #pane-consultar .cmp-cte--canc .lin{ color:#9aa4b2; }
+  #pane-consultar .cmp-cte--canc .k{ color:#b3bccb; }
+  #pane-consultar .cmp-cte--canc .cmp-cte__id{ text-decoration:line-through; }
+  #pane-consultar .cmp-cte--canc .fr{ color:#9aa4b2 !important; }
+  #pane-consultar .badge-canc{ background:#fcebeb; color:#a32d2d; font-weight:800; font-size:.68rem;
+    border-radius:5px; padding:.06rem .4rem; margin-left:.4rem; letter-spacing:.03em;
+    text-decoration:none; display:inline-block; }
   /* Empty */
   #pane-consultar .cmp-empty{ text-align:center; color:var(--muted); padding:2.5rem 1rem;
     background:#fff; border:1px solid var(--line-2); border-radius:12px; box-shadow:var(--shadow); }

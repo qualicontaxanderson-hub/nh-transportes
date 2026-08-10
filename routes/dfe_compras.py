@@ -237,7 +237,7 @@ def compras():
                 marc2 = ",".join(["%s"] * len(chaves))
                 cur.execute(
                     f"""
-                    SELECT n.chave_nfe, c.numero AS cte_numero,
+                    SELECT n.chave_nfe, c.numero AS cte_numero, c.situacao AS cte_situacao,
                            c.emit_nome AS transportadora, c.emit_cnpj AS transp_cnpj,
                            ct.vprest AS frete, ct.placa,
                            ct.motorista_nome, ct.motorista_cpf,
