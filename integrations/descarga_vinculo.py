@@ -91,57 +91,175 @@ def _ctes_por_chave(cur, chaves):
     return saida
 
 
-def perda_sobra_item(cur, item_id, descarga_extra=None):
-    """Perda/sobra de UM item de nota.
+def conjunto_de(cur, descarga_id=None, item_id=None):
+    """Componente conexo no grafo descargas <-> itens de nota.
 
-        perda_sobra = quanto ENTROU NO TANQUE - quantidade da nota
+    Os nos sao as descargas e os itens; as arestas sao as linhas de
+    descarga_nota. Uma descarga pode puxar duas notas, uma nota pode puxar
+    duas descargas, e isso encadeia — por isso e componente conexo e nao
+    "as notas desta descarga".
 
-    Negativo e PERDA, positivo e SOBRA.
+    Passar os dois argumentos junta um vinculo que ainda nao existe, o que
+    permite simular o fechamento antes de gravar.
 
-    "Quanto entrou no tanque" e a soma do total_descarga das descargas ligadas
-    a esta nota — o volume FISICO —, NAO a soma de descarga_nota.litros. Os
-    dois divergem quando o tanque recebeu mais do que a nota cobre: o Diesel
-    S10 recebeu 3.156 com nota de 3.000, e como o vinculo nao pode passar do
-    saldo da nota, o litros vinculado para em 3.000 e a sobra de 156 sumiria.
-    O que interessa e o que desceu no tanque.
-
-    `descarga_extra` soma a descarga do lancamento que ainda nao foi gravado
-    (e o que alimenta o aviso do modal antes de confirmar), sem contar duas
-    vezes se aquela descarga ja estiver ligada a este item.
+    Devolve (set de descarga_id, set de item_id). Converge em 1-2 voltas nos
+    casos reais; a flag `cresceu` garante a parada.
     """
-    cur.execute("SELECT quantidade FROM dfe_itens WHERE id = %s", (item_id,))
-    r = cur.fetchone()
-    if not r:
+    descargas = {descarga_id} if descarga_id else set()
+    itens = {item_id} if item_id else set()
+    while True:
+        cresceu = False
+        if descargas:
+            marc = ", ".join(["%s"] * len(descargas))
+            cur.execute(f"SELECT DISTINCT item_id FROM descarga_nota "
+                        f"WHERE descarga_id IN ({marc})", list(descargas))
+            novos = {r["item_id"] for r in cur.fetchall()} - itens
+            if novos:
+                itens |= novos
+                cresceu = True
+        if itens:
+            marc = ", ".join(["%s"] * len(itens))
+            cur.execute(f"SELECT DISTINCT descarga_id FROM descarga_nota "
+                        f"WHERE item_id IN ({marc})", list(itens))
+            novos = {r["descarga_id"] for r in cur.fetchall()} - descargas
+            if novos:
+                descargas |= novos
+                cresceu = True
+        if not cresceu:
+            return descargas, itens
+
+
+def perda_sobra_conjunto(cur, descarga_id=None, item_id=None, fechando_item=None):
+    """Perda/sobra de um CONJUNTO de descargas e notas ligadas entre si.
+
+        perda_sobra = SUM(total_descarga das descargas) - SUM(quantidade das notas)
+
+    Negativo e PERDA (entrou menos do que as notas dizem), positivo e SOBRA.
+
+    A regra e por conjunto, e nao por nota, porque so assim os tres formatos
+    cabem numa formula so:
+      1 nota -> varias descargas .. gasolina: 4.948+4.820 vs 10.000  = -232
+      varias notas -> 1 descarga .. diesel:   4.705 vs 3.000+2.000   = -295
+      1 para 1 .................. S10:        3.156 vs 3.000         = +156
+    Calculando por nota, o caso do meio contaria o recebido da descarga INTEIRO
+    para cada nota (+1.705 e +2.705, somando +4.410 de sobra inventada).
+
+    O numero so vale com o conjunto FECHADO: todo item dele precisa ter algum
+    vinculo integral. Enquanto faltar um, ainda pode entrar litro e qualquer
+    valor seria um falso alarme. `fechando_item` trata como fechado um item que
+    esta sendo fechado agora e ainda nao foi gravado.
+
+    `exibe_em` e a descarga do ULTIMO vinculo integral do conjunto: e nela que
+    o numero aparece. As outras nao repetem, senao a auditoria somaria a mesma
+    perda duas vezes.
+
+    NAO grava nada — o valor e sempre derivado, entao nao ha como desincronizar
+    quando o conjunto cresce.
+    """
+    descargas, itens = conjunto_de(cur, descarga_id, item_id)
+    if not descargas and not itens:
         return None
-    nota = _f(r["quantidade"]) or 0.0
 
-    cur.execute(
-        """
-        SELECT COALESCE(SUM(dp.total_descarga), 0) AS recebido
-        FROM descarga_nota dn
-        JOIN descargas_pendentes dp ON dp.id = dn.descarga_id
-        WHERE dn.item_id = %s
-        """,
-        (item_id,),
-    )
-    recebido = _f((cur.fetchone() or {}).get("recebido")) or 0.0
+    soma_d = 0.0
+    if descargas:
+        marc = ", ".join(["%s"] * len(descargas))
+        cur.execute(f"SELECT COALESCE(SUM(total_descarga), 0) AS s "
+                    f"FROM descargas_pendentes WHERE id IN ({marc})", list(descargas))
+        soma_d = _f((cur.fetchone() or {}).get("s")) or 0.0
 
-    if descarga_extra:
-        cur.execute(
-            """
-            SELECT dp.total_descarga,
-                   EXISTS (SELECT 1 FROM descarga_nota d2
-                            WHERE d2.item_id = %s AND d2.descarga_id = %s) AS ja_ligada
-            FROM descargas_pendentes dp WHERE dp.id = %s
-            """,
-            (item_id, descarga_extra, descarga_extra),
-        )
-        x = cur.fetchone()
-        if x and not x["ja_ligada"]:
-            recebido += _f(x["total_descarga"]) or 0.0
+    soma_n = 0.0
+    fechados = set()
+    exibe_em = None
+    if itens:
+        marc = ", ".join(["%s"] * len(itens))
+        cur.execute(f"SELECT COALESCE(SUM(quantidade), 0) AS s "
+                    f"FROM dfe_itens WHERE id IN ({marc})", list(itens))
+        soma_n = _f((cur.fetchone() or {}).get("s")) or 0.0
 
-    return {"nota": nota, "recebido": round(recebido, 3),
-            "perda_sobra": round(recebido - nota, 3)}
+        cur.execute(f"SELECT DISTINCT item_id FROM descarga_nota "
+                    f"WHERE item_id IN ({marc}) AND modo = 'integral'", list(itens))
+        fechados = {r["item_id"] for r in cur.fetchall()}
+
+        cur.execute(f"SELECT descarga_id FROM descarga_nota "
+                    f"WHERE item_id IN ({marc}) AND modo = 'integral' "
+                    f"ORDER BY id DESC LIMIT 1", list(itens))
+        linha = cur.fetchone()
+        exibe_em = linha["descarga_id"] if linha else None
+
+    if fechando_item:
+        fechados = fechados | {fechando_item}
+        if exibe_em is None:
+            exibe_em = descarga_id
+
+    return {
+        "descargas": descargas, "itens": itens,
+        "soma_descargas": round(soma_d, 3), "soma_notas": round(soma_n, 3),
+        "perda_sobra": round(soma_d - soma_n, 3),
+        "fechado": bool(itens) and itens <= fechados,
+        "exibe_em": exibe_em,
+    }
+
+
+def resumo_conjuntos(cur):
+    """Perda/sobra de TODOS os conjuntos de uma vez, para a LISTA.
+
+    Fazer BFS por linha da lista custaria N x 2 consultas. Aqui a tabela
+    descarga_nota inteira e carregada (dezenas de linhas) e os componentes sao
+    montados em memoria — 3 consultas no total, independente do tamanho da
+    pagina. Se um dia descarga_nota passar de dezenas de milhares de linhas,
+    vale voltar a este ponto.
+
+    Devolve {descarga_id: perda_sobra} SO para a descarga que exibe o numero
+    (a do ultimo vinculo integral de cada conjunto fechado).
+    """
+    cur.execute("SELECT id, descarga_id, item_id, modo FROM descarga_nota ORDER BY id")
+    arestas = cur.fetchall()
+    if not arestas:
+        return {}
+
+    viz = {}
+    for a in arestas:
+        viz.setdefault(('d', a["descarga_id"]), set()).add(('i', a["item_id"]))
+        viz.setdefault(('i', a["item_id"]), set()).add(('d', a["descarga_id"]))
+
+    fechados = {a["item_id"] for a in arestas if a["modo"] == 'integral'}
+    # ultimo vinculo integral de cada item (a lista ja vem ordenada por id)
+    ultimo = {}
+    for a in arestas:
+        if a["modo"] == 'integral':
+            ultimo[a["item_id"]] = a
+
+    cur.execute("SELECT id, total_descarga FROM descargas_pendentes "
+                "WHERE id IN (SELECT DISTINCT descarga_id FROM descarga_nota)")
+    tot_d = {r["id"]: _f(r["total_descarga"]) or 0.0 for r in cur.fetchall()}
+    cur.execute("SELECT id, quantidade FROM dfe_itens "
+                "WHERE id IN (SELECT DISTINCT item_id FROM descarga_nota)")
+    tot_i = {r["id"]: _f(r["quantidade"]) or 0.0 for r in cur.fetchall()}
+
+    saida, vistos = {}, set()
+    for no in viz:
+        if no in vistos:
+            continue
+        comp, fila = set(), [no]
+        while fila:
+            atual = fila.pop()
+            if atual in comp:
+                continue
+            comp.add(atual)
+            fila.extend(viz[atual] - comp)
+        vistos |= comp
+
+        itens = {n for t, n in comp if t == 'i'}
+        if not itens or not (itens <= fechados):
+            continue                      # conjunto aberto: nada a exibir
+        soma_d = sum(tot_d.get(n, 0.0) for t, n in comp if t == 'd')
+        soma_n = sum(tot_i.get(n, 0.0) for n in itens)
+        # quem exibe: a descarga do vinculo integral de maior id do conjunto
+        alvo = max((ultimo[i] for i in itens if i in ultimo),
+                   key=lambda a: a["id"], default=None)
+        if alvo:
+            saida[alvo["descarga_id"]] = round(soma_d - soma_n, 3)
+    return saida
 
 
 def sugerir_notas(cur, descarga_id, janela_dias=JANELA_DIAS,
@@ -354,19 +472,21 @@ def listar_vinculos(cur, descarga_id):
         """,
         (descarga_id,),
     )
+    # Consome o cursor ANTES de calcular o conjunto: perda_sobra_conjunto faz
+    # as proprias consultas e sobrescreveria este resultado.
+    linhas = cur.fetchall()
+    conj = perda_sobra_conjunto(cur, descarga_id=descarga_id)
     saida = []
-    for r in cur.fetchall():
+    for r in linhas:
         r = dict(r)
         r["litros"] = _f(r["litros"])
         r["item_litros"] = _f(r["item_litros"])
-        r["perda_sobra_l"] = _f(r["perda_sobra_l"])
-        # Nota aberta: mostra o numero provisorio, deixando claro que ainda
-        # pode mudar se entrar outro lancamento.
-        if r["modo"] != "integral":
-            prov = perda_sobra_item(cur, r["item_id"])
-            r["perda_sobra_prov"] = prov["perda_sobra"] if prov else None
-        else:
-            r["perda_sobra_prov"] = None
+        # O numero e do CONJUNTO, nao desta linha: aparece uma vez so, na
+        # descarga do ultimo vinculo integral, e so com o conjunto fechado.
+        r["perda_sobra_l"] = (conj["perda_sobra"]
+                              if (conj and conj["fechado"]
+                                  and conj["exibe_em"] == descarga_id) else None)
+        r["perda_sobra_prov"] = None
         saida.append(r)
     return saida
 
@@ -384,28 +504,24 @@ def vinculos_resumo(cur, descarga_ids):
                SUM(dn.modo = 'integral') AS fechadas,
                SUM(NOT EXISTS (SELECT 1 FROM descarga_nota f
                                 WHERE f.item_id = dn.item_id
-                                  AND f.modo = 'integral')) AS abertas,
-               -- perda/sobra: o que ENTROU NO TANQUE em todas as descargas
-               -- ligadas a esta nota (volume fisico, nao o litros vinculado,
-               -- que para no saldo da nota) menos a quantidade da nota.
-               SUM(COALESCE((SELECT SUM(dp2.total_descarga)
-                               FROM descarga_nota a
-                               JOIN descargas_pendentes dp2 ON dp2.id = a.descarga_id
-                              WHERE a.item_id = dn.item_id), 0)
-                   - i.quantidade) AS dif
+                                  AND f.modo = 'integral')) AS abertas
         FROM descarga_nota dn
         JOIN dfe_documentos doc ON doc.id = dn.documento_id
-        JOIN dfe_itens i        ON i.id  = dn.item_id
         WHERE dn.descarga_id IN ({marc})
         GROUP BY dn.descarga_id
         """,
         ids,
     )
-    return {r["descarga_id"]: {"n": r["n"], "litros": _f(r["litros"]) or 0.0,
+    base = {r["descarga_id"]: {"n": r["n"], "litros": _f(r["litros"]) or 0.0,
                                "numero": r["numero"], "fechadas": r["fechadas"] or 0,
-                               "abertas": r["abertas"] or 0,
-                               "dif": _f(r["dif"]) or 0.0}
+                               "abertas": r["abertas"] or 0, "dif": None}
             for r in cur.fetchall()}
+    # A perda/sobra vem dos CONJUNTOS, calculada de uma vez para toda a tabela
+    # (3 consultas), e so entra na descarga que exibe o numero.
+    for descarga_id, ps in resumo_conjuntos(cur).items():
+        if descarga_id in base:
+            base[descarga_id]["dif"] = ps
+    return base
 
 
 def registrar_vinculo(cur, descarga_id, item_id, litros, usuario_id=None,
@@ -482,36 +598,26 @@ def registrar_vinculo(cur, descarga_id, item_id, litros, usuario_id=None,
         raise ValueError("A nota %s só tem %.3f L de saldo (você pediu %.3f L)."
                          % (it["numero"] or "?", saldo_item, litros))
 
-    # Perda/sobra do FECHAMENTO: TUDO que a nota recebeu, somando todas as
-    # descargas ligadas a ela, contra a quantidade da nota.
-    # perda_sobra_item soma as linhas ja gravadas e acrescenta o lancamento
-    # atual (litros_extra), que ainda nao foi inserido.
-    perda_sobra = None
-    if modo == 'integral':
-        ps = perda_sobra_item(cur, item_id, descarga_extra=descarga_id)
-        perda_sobra = ps["perda_sobra"] if ps else None
-
+    # perda_sobra_l NAO e mais gravada. O numero passou a ser do CONJUNTO, que
+    # pode crescer depois deste lancamento (basta vincular outra nota a alguma
+    # descarga dele); gravar aqui congelaria um valor que amanha estaria
+    # errado. Agora e sempre derivado. A coluna fica no banco, sem uso.
     cur.execute(
         """
         INSERT INTO descarga_nota
             (descarga_id, documento_id, item_id, litros, modo, perda_sobra_l,
              observacao, criado_por)
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+        VALUES (%s, %s, %s, %s, %s, NULL, %s, %s)
         ON DUPLICATE KEY UPDATE
-            litros        = litros + VALUES(litros),
-            modo          = VALUES(modo),
-            perda_sobra_l = VALUES(perda_sobra_l),
-            observacao    = COALESCE(NULLIF(VALUES(observacao), ''), observacao)
+            litros     = litros + VALUES(litros),
+            modo       = VALUES(modo),
+            observacao = COALESCE(NULLIF(VALUES(observacao), ''), observacao)
         """,
-        (descarga_id, it["documento_id"], item_id, litros, modo, perda_sobra,
+        (descarga_id, it["documento_id"], item_id, litros, modo,
          (observacao or '').strip()[:255] or None, usuario_id),
     )
     estado = calcular_estado(cur, descarga_id, tolerancia_l=tolerancia_l)
     if estado is not None:
-        # NAO sobrescreve estado["perda_sobra"]: o de calcular_estado ja e o
-        # numero da descarga inteira (recebido - soma das notas), que e o que
-        # a tela mostra. Este aqui e o que ficou gravado nesta linha.
-        estado["perda_sobra_linha"] = perda_sobra
         estado["fechou_nota"] = (modo == 'integral')
         estado["nota_numero"] = it["numero"]
     return estado
@@ -601,23 +707,15 @@ def calcular_estado(cur, descarga_id, tolerancia_l=TOLERANCIA_L,
     #
     # So aparece com as notas FECHADAS: com alguma aberta ainda pode entrar
     # litro e o numero mudaria.
+    # Perda/sobra do CONJUNTO (descargas e notas ligadas entre si), derivada na
+    # hora — nunca gravada, entao nao ha como ficar velha quando o conjunto
+    # cresce. So aparece se o conjunto estiver fechado E se esta for a descarga
+    # do ultimo vinculo integral; nas outras do conjunto fica None, senao a
+    # mesma perda apareceria varias vezes.
     perda_sobra = None
-    if todas_fechadas:
-        cur.execute(
-            """
-            SELECT i.quantidade,
-                   COALESCE((SELECT SUM(dp2.total_descarga)
-                               FROM descarga_nota a
-                               JOIN descargas_pendentes dp2 ON dp2.id = a.descarga_id
-                              WHERE a.item_id = dn.item_id), 0) AS recebido_item
-            FROM descarga_nota dn
-            JOIN dfe_itens i ON i.id = dn.item_id
-            WHERE dn.descarga_id = %s
-            """,
-            (descarga_id,),
-        )
-        perda_sobra = round(sum((_f(x["recebido_item"]) or 0.0) - (_f(x["quantidade"]) or 0.0)
-                                for x in cur.fetchall()), 3)
+    conj = perda_sobra_conjunto(cur, descarga_id=descarga_id) if n_vinculos else None
+    if conj and conj["fechado"] and conj["exibe_em"] == descarga_id:
+        perda_sobra = conj["perda_sobra"]
 
     return {
         "descarga_id": r["id"],

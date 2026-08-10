@@ -294,8 +294,10 @@ def index():
             # integral) — nao a toda descarga da nota. Com a nota baixada em
             # duas viagens, mostrar nas duas duplicaria o numero: as duas
             # exibiriam -232 e a auditoria somaria -464.
+            # `dif` ja vem preenchido SO na descarga que exibe o numero do
+            # conjunto (a do ultimo vinculo integral); nas outras vem None.
             d['vinc_integral'] = bool(v and v['fechadas'])
-            d['vinc_dif'] = v['dif'] if d['vinc_integral'] else None
+            d['vinc_dif'] = v['dif'] if v else None
         dias_d = _totalizar(_agrupar_por_dia(descargas, 'dt'), 'total_descarga')
 
         # -------- Empresas p/ dropdown (uniao dos dois) --------
@@ -387,7 +389,7 @@ def _linha_descarga(cur, descarga_id, estado):
         'vinc_numero': res['numero'] if res else None,
         'vinc_falta': estado['falta'],
         'vinc_integral': integral,
-        'vinc_dif': res['dif'] if integral else None,
+        'vinc_dif': res['dif'] if res else None,
     }
     rotulo, classe = _rotulo_status(estado.get('status'), d['vinc_n'], integral)
     return {'acao_html': render_template('estoque/_acao_descarga.html', d=d),
