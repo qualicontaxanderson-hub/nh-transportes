@@ -279,6 +279,41 @@ def extrair_evento(root):
 
 
 # ==========================================================================
+# Extracao de um EVENTO de CT-e (procEventoCTe) -> dict. Espelho do de NF-e; a
+# unica diferenca e que a chave do documento vem em chCTe (nao chNFe). O campo
+# retornado continua "ch_nfe" de proposito: a coluna dfe_eventos.ch_nfe e
+# reaproveitada para guardar a chave do documento (NF-e OU CT-e).
+# ==========================================================================
+def extrair_evento_cte(root):
+    inf = cs._find(root, "infEvento")
+    idv = (inf.get("Id") or inf.get("id") or "") if inf is not None else ""
+    chave_evento = idv.strip() or None
+
+    ch_cte = _digitos(cs._text(inf, "chCTe")) if inf is not None else None
+    ch_cte = ch_cte if (ch_cte and len(ch_cte) == 44) else None
+    tp_evento = cs._text(inf, "tpEvento") if inf is not None else None
+    n_seq = _to_int(cs._text(inf, "nSeqEvento")) if inf is not None else None
+    org_cnpj = _digitos(cs._text(inf, "CNPJ")) if inf is not None else None
+    dh_txt, ano, mes = _parse_dh(cs._text(inf, "dhEvento") if inf is not None else None)
+
+    descricao = cs._text(root, "descEvento") or cs._text(root, "xEvento")
+    if descricao:
+        descricao = descricao[:160]
+
+    if not chave_evento:
+        if tp_evento and ch_cte and n_seq is not None:
+            chave_evento = f"ID{tp_evento}{ch_cte}{str(n_seq).zfill(2)}"
+        else:
+            raise ValueError("evento CT-e sem Id/chave identificavel")
+
+    return {
+        "chave_evento": chave_evento[:60], "ch_nfe": ch_cte, "tp_evento": tp_evento,
+        "n_seq": n_seq, "org_cnpj": org_cnpj, "descricao": descricao,
+        "dh_txt": dh_txt, "ano": ano, "mes": mes,
+    }
+
+
+# ==========================================================================
 # Extracao de um RESUMO de nota (resNFe) -> dict de cabecalho (sem itens).
 # O resNFe so traz: chNFe, CNPJ/CPF+xNome do emitente, dhEmi, tpNF, vNF e
 # cSitNFe. numero/serie/modelo saem da propria chave (posicoes fixas).
@@ -556,6 +591,12 @@ SQL_CANCELA_NOTA = (
     "UPDATE dfe_documentos SET situacao='cancelada' WHERE chave = %s"
 )
 
+# Cancelamento de CT-e: mesmo tpEvento (110111), mas o UPDATE marca o CT-e.
+# O AND tipo='CTe' e trava extra (a chave ja e unica por modelo 57).
+SQL_CANCELA_CTE = (
+    "UPDATE dfe_documentos SET situacao='cancelada' WHERE chave = %s AND tipo='CTe'"
+)
+
 # CT-e: specifics (1:1 com dfe_documentos) e NF-e vinculadas (N). Idempotentes.
 SQL_CTE_UPSERT = (
     "INSERT INTO dfe_cte (documento_id, cfop, nat_op, tp_cte, rem_cnpj, rem_nome, "
@@ -701,6 +742,33 @@ def gravar_evento(conn, cur, cliente_id, cnpj_cert, ev, xml_bytes, nsu, schema,
 
 
 # ==========================================================================
+# Gravacao de UM evento de CT-e (procEventoCTe). Espelho de gravar_evento; a
+# unica diferenca e que o cancelamento (110111) marca o CT-e (SQL_CANCELA_CTE,
+# tipo='CTe') em vez da nota. Reusa a mesma tabela dfe_eventos.
+# ==========================================================================
+def gravar_evento_cte(conn, cur, cliente_id, cnpj_cert, ev, xml_bytes, nsu, schema,
+                      agora, expira):
+    ano = ev["ano"] or agora.year
+    mes = ev["mes"] or agora.month
+    caminho = montar_caminho(cnpj_cert, ano, mes, ev["chave_evento"])
+    upload_xml(caminho, xml_bytes)
+
+    cur.execute(SQL_EVENTO_UPSERT, (
+        cliente_id, ev["chave_evento"], ev["ch_nfe"], ev["tp_evento"],
+        ev["n_seq"], ev["descricao"], ev["dh_txt"], nsu, schema,
+        ev["org_cnpj"], caminho, expira,
+    ))
+
+    cancelou = False
+    if ev["tp_evento"] == TP_CANCELAMENTO and ev["ch_nfe"]:
+        cur.execute(SQL_CANCELA_CTE, (ev["ch_nfe"],))   # <- so muda o UPDATE: tipo='CTe'
+        cancelou = cur.rowcount and cur.rowcount > 0
+
+    conn.commit()
+    return bool(cancelou)
+
+
+# ==========================================================================
 # Gravacao de UM resumo de nota (resNFe). So banco (sem Dropbox: o resNFe nao e
 # o XML da nota). resumo=1. Idempotente e nao rebaixa nota completa (SQL_RESUMO_UPSERT).
 # ==========================================================================
@@ -810,6 +878,12 @@ def processar_um_doc(conn, cur, cliente_id, cnpj_cert, d, agora, expira):
                              xml_bytes, nsu, schema, agora, expira)
         return "evento", 0, bool(canc)
 
+    if raiz == "procEventoCTe":
+        ev = extrair_evento_cte(root)
+        canc = gravar_evento_cte(conn, cur, cliente_id, cnpj_cert, ev,
+                                 xml_bytes, nsu, schema, agora, expira)
+        return "evento", 0, bool(canc)
+
     if raiz == "resNFe":
         res = extrair_resumo_nota(root)
         gravar_resumo_nota(conn, cur, cliente_id, cnpj_cert, res, nsu, schema)
@@ -827,7 +901,10 @@ def processar_um_doc(conn, cur, cliente_id, cnpj_cert, d, agora, expira):
         return "resumo_cte", 0, False
 
     # resEvento etc.: nao modelamos. Nao levanta (nao trava a fila); quem chama
-    # loga e segue. Nenhuma NOTA/CTe se perde por isto.
+    # loga e segue. Nenhuma NOTA/CTe se perde por isto. Loga a RAIZ real p/ pegar
+    # um evento com nome diferente do esperado (ex.: procEventoCTe grafado de
+    # outro jeito) -- assim um cancelamento nao passa despercebido de novo.
+    print("    [NSU %s] tipo nao modelado: raiz=%r -- seguindo." % (nsu, raiz))
     return "outro", 0, False
 
 
