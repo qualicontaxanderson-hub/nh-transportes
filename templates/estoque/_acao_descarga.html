@@ -29,4 +29,12 @@
 <button type="button" class="mig-btn-vinc js-vinc" data-descarga="{{ d.id }}">
   <i class="bi bi-link-45deg"></i> Vincular
 </button>
+{# Excluir: SO descarga manual e SO sem vinculo. ELS nunca mostra (e real). #}
+{% if d.origem == 'manual' %}
+<button type="button" class="mig-btn-del js-excluir" data-descarga="{{ d.id }}"
+        data-litros="{{ d.total_descarga | fmtnum(0) }}"
+        title="Excluir esta descarga manual">
+  <i class="bi bi-trash"></i>
+</button>
+{% endif %}
 {% endif %}

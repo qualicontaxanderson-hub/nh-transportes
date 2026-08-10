@@ -21,7 +21,7 @@ import unicodedata
 from datetime import date, datetime, timedelta
 from urllib.parse import urlencode
 
-from flask import Blueprint, jsonify, render_template, request
+from flask import Blueprint, current_app, jsonify, render_template, request
 from flask_login import current_user, login_required
 
 from integrations.descarga_vinculo import (calcular_estado, listar_vinculos,
@@ -382,8 +382,15 @@ def _linha_descarga(cur, descarga_id, estado):
     """
     res = vinculos_resumo(cur, [descarga_id]).get(descarga_id)
     integral = bool(res and res['fechadas'])
+    # origem: necessaria p/ o botao "Excluir" (so descarga manual) reaparecer
+    # logo apos desfazer o vinculo, sem F5. So_desta_vez: 1 SELECT barato.
+    cur.execute("SELECT origem, total_descarga FROM descargas_pendentes WHERE id = %s",
+                (descarga_id,))
+    _dp = cur.fetchone() or {}
     d = {
         'id': descarga_id,
+        'origem': _dp.get('origem'),
+        'total_descarga': _dp.get('total_descarga'),
         'vinc_n': res['n'] if res else 0,
         'vinc_litros': res['litros'] if res else 0.0,
         'vinc_numero': res['numero'] if res else None,
@@ -562,6 +569,50 @@ def descarga_manual():
             return jsonify({'ok': False,
                             'erro': 'Essa descarga já foi lançada.'}), 409
         return jsonify({'ok': False, 'erro': 'Falha ao lançar: %s' % e}), 500
+    finally:
+        cur.close()
+        conn.close()
+
+
+@estoque_bp.route('/estoque/descarga/<int:descarga_id>/excluir', methods=['POST'])
+@login_required
+def excluir_descarga(descarga_id):
+    """Exclui uma descarga lancada MANUALMENTE (produto ficou no caminhao, nao
+    desceu). So manual e so sem vinculo -- duas travas no servidor, nao confia
+    no front. Como nao ha vinculo em descarga_nota, o DELETE nao deixa orfao.
+    """
+    conn = get_db_connection()
+    cur = conn.cursor(dictionary=True)
+    try:
+        cur.execute("SELECT id, origem, total_descarga "
+                    "FROM descargas_pendentes WHERE id = %s", (descarga_id,))
+        d = cur.fetchone()
+        if not d:
+            return jsonify({'ok': False, 'erro': 'Descarga não encontrada.'}), 404
+
+        # TRAVA 1: so descargas manuais podem ser excluidas (as do ELS sao reais).
+        if d.get('origem') != 'manual':
+            return jsonify({'ok': False,
+                            'erro': 'Só descargas manuais podem ser excluídas.'}), 403
+
+        # TRAVA 2: nao pode ter vinculo com nota (desfaca o vinculo antes).
+        cur.execute("SELECT 1 FROM descarga_nota WHERE descarga_id = %s LIMIT 1",
+                    (descarga_id,))
+        if cur.fetchone():
+            return jsonify({'ok': False,
+                            'erro': 'Desfaça o vínculo com a(s) nota(s) antes de excluir.'}), 409
+
+        # DELETE com AND origem='manual' (belt-and-suspenders contra corrida).
+        cur.execute("DELETE FROM descargas_pendentes WHERE id = %s AND origem = 'manual'",
+                    (descarga_id,))
+        conn.commit()
+        current_app.logger.info('[estoque] descarga manual %s (%s L) excluida por user %s',
+                                 descarga_id, d.get('total_descarga'),
+                                 getattr(current_user, 'id', None))
+        return jsonify({'ok': True, 'id': descarga_id, 'apagou': cur.rowcount or 0})
+    except Exception as e:
+        conn.rollback()
+        return jsonify({'ok': False, 'erro': 'Falha ao excluir: %s' % e}), 500
     finally:
         cur.close()
         conn.close()

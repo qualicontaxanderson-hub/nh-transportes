@@ -733,6 +733,37 @@
           abrir(descId);   // remonta o modal com o estado novo
         })
         .catch(function (e) { u.disabled = false; alert('Não deu para desfazer: ' + (e.message || e)); });
+      return;
+    }
+
+    // Excluir descarga MANUAL (só manual + sem vínculo; travas no servidor).
+    var x = ev.target.closest('.js-excluir');
+    if (x) {
+      ev.preventDefault(); ev.stopPropagation();
+      var litros = x.getAttribute('data-litros') || '?';
+      if (!confirm('Excluir esta descarga manual de ' + litros +
+                   ' L?\nEsta ação não pode ser desfeita.')) return;
+      var xid = x.getAttribute('data-descarga');
+      x.disabled = true;
+      fetch('/estoque/descarga/' + xid + '/excluir',
+            {method: 'POST', headers: {'Content-Type': 'application/json'}})
+        .then(function (r) { return r.json().then(function (j) { return {ok: r.ok, j: j}; }); })
+        .then(function (res) {
+          if (!res.ok || !res.j.ok) {
+            x.disabled = false;
+            alert(res.j && res.j.erro ? res.j.erro : 'falha ao excluir');
+            return;
+          }
+          var lin = document.querySelector('.mig-dia__lin[data-descarga-id="' + xid + '"]');
+          if (lin) {
+            var dia = lin.closest('.mig-dia');
+            lin.remove();
+            // Dia esvaziou -> some o card do dia inteiro.
+            if (dia && dia.querySelectorAll('.mig-dia__lin').length === 0) dia.remove();
+          }
+        })
+        .catch(function () { x.disabled = false; alert('Falha de rede ao excluir.'); });
+      return;
     }
   });
 
