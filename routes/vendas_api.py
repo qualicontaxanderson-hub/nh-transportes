@@ -21,6 +21,7 @@ from flask import Blueprint, request, current_app, jsonify
 
 from extensions import csrf
 from utils.db import get_db_connection
+from integrations.vendas_produto import aplicar_depara_venda
 
 vendas_api_bp = Blueprint('vendas_api', __name__, url_prefix='')
 
@@ -201,6 +202,15 @@ def receber_vendas():
                                    + tuple(item.get(c) for c in _CAMPOS_ITEM)
                                    + _com_defaults(item, _ITEM_NOVOS))
                     cur.execute(_SQL_INSERT_ITEM, params_item)
+
+                # Resolve nosso produto_id (de-para cnpj+cprod -> fallback ANP).
+                # Se o robo ja mandou produto_id, aplica so nos itens NULL.
+                # Falha aqui NAO derruba a ingestao da nota.
+                try:
+                    aplicar_depara_venda(cur, venda_id)
+                except Exception as e_resolv:
+                    current_app.logger.warning(
+                        "[api/vendas] resolver produto_id falhou p/ chave=%s: %s", chave, e_resolv)
 
                 conn.commit()
                 ok.append(chave)

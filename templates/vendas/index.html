@@ -82,6 +82,9 @@
 <div id="vendas">
 <div class="d-flex justify-content-between align-items-center mb-3">
   <h3 class="mb-0"><i class="bi bi-receipt"></i> Vendas Migradas</h3>
+  <a href="{{ url_for('vendas.classificar') }}" class="btn btn-sm btn-outline-primary">
+    <i class="bi bi-tags"></i> Classificar produtos
+  </a>
 </div>
 
 {% set aba_ativa = 'vendas' %}

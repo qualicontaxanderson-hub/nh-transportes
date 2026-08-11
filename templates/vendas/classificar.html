@@ -1,0 +1,243 @@
+{% extends 'base.html' %}
+{% block title %}Classificar produtos — Vendas{% endblock %}
+
+{% block styles %}
+<style>
+  /* ===== /vendas/classificar no visual .mig (paleta hardcoded) ===== */
+  #vcls{ --line-2:#dde3ec; --surface-1:#f1f4f8; --muted:#6b7280; --blue:#1D63A5; --blue-deep:#07569C;
+    --shadow:0 1px 3px rgba(16,45,80,.08),0 4px 12px rgba(16,45,80,.06); }
+  #vcls .tabs{ display:flex; gap:.4rem; margin-bottom:1rem; flex-wrap:wrap; }
+  #vcls .tab{ padding:.35rem .85rem; font-size:.9rem; border:1px solid var(--line-2); border-radius:999px;
+    color:var(--muted); background:#fff; cursor:pointer; }
+  #vcls .tab.on{ background:var(--blue); border-color:var(--blue); color:#fff; }
+  #vcls .tab .n{ font-size:.72rem; background:#e6f1fb; color:#0c447c; border-radius:999px; padding:.02rem .4rem; margin-left:.3rem; }
+  #vcls .tab.on .n{ background:rgba(255,255,255,.25); color:#fff; }
+  #vcls .stats{ display:flex; gap:.75rem; margin-bottom:1rem; flex-wrap:wrap; }
+  #vcls .stat{ flex:1 1 150px; background:#fff; border:1px solid var(--line-2); border-radius:12px; box-shadow:var(--shadow); padding:.7rem 1rem; }
+  #vcls .stat .rot{ font-size:10.5px; text-transform:uppercase; color:var(--muted); font-weight:700; letter-spacing:.03em; }
+  #vcls .stat .val{ font-size:1.35rem; font-weight:800; font-variant-numeric:tabular-nums; }
+  #vcls .stat .blue{ color:var(--blue-deep); } #vcls .stat .green{ color:#27500a; } #vcls .stat .amber{ color:#b45309; }
+  /* Card de cprod a classificar */
+  #vcls .cprod{ background:#fff; border:1px solid var(--line-2); border-left:4px solid #d97706; border-radius:12px;
+    box-shadow:var(--shadow); padding:.7rem .85rem; margin-bottom:.6rem; display:flex; gap:.75rem; align-items:center; flex-wrap:wrap; }
+  #vcls .cprod__ico{ flex:0 0 auto; display:inline-grid; place-items:center; width:2.2rem; height:2.2rem; border-radius:10px; background:#fff3e0; color:#b45309; font-size:1.05rem; }
+  #vcls .cprod__main{ min-width:0; flex:1 1 240px; }
+  #vcls .cprod__top{ display:flex; align-items:center; gap:.5rem; flex-wrap:wrap; }
+  #vcls .cprod__desc{ font-weight:700; font-size:.95rem; }
+  #vcls .pill{ background:var(--surface-1); border:1px solid var(--line-2); border-radius:6px; padding:.03rem .4rem; font-family:ui-monospace,Menlo,monospace; font-size:.76rem; color:#334155; }
+  #vcls .cprod__meta{ font-size:.8rem; color:#42506a; margin-top:.2rem; }
+  #vcls .cprod__meta .sep{ color:#c4ccd6; margin:0 .2rem; }
+  #vcls .cprod__act{ flex:0 0 auto; display:flex; gap:.4rem; align-items:center; flex-wrap:wrap; }
+  #vcls select{ border:1px solid var(--line-2); border-radius:8px; padding:.35rem .5rem; font-size:.85rem; background:#fff; }
+  #vcls .btn2{ border:0; border-radius:8px; padding:.4rem .7rem; font-size:.83rem; font-weight:700; cursor:pointer; }
+  #vcls .btn-mem{ background:var(--blue); color:#fff; }
+  #vcls .btn-ghost{ background:#fff; border:1px solid var(--line-2); color:#42506a; }
+  #vcls .badge-anp{ font-size:.68rem; font-weight:700; border-radius:999px; padding:.06rem .5rem; background:#eef2f7; color:#42506a; }
+  /* Card de regra memorizada */
+  #vcls .grp-nome{ font-size:.85rem; text-transform:uppercase; letter-spacing:.04em; color:var(--muted); margin:18px 0 8px; font-weight:700; }
+  #vcls .regra{ background:#fff; border:1px solid var(--line-2); border-left:4px solid var(--blue); border-radius:12px;
+    box-shadow:var(--shadow); padding:.6rem .85rem; margin-bottom:.5rem; display:flex; gap:.6rem; align-items:center; flex-wrap:wrap; }
+  #vcls .regra__forn{ font-weight:700; font-size:.9rem; flex:1 1 200px; }
+  #vcls .regra__prod{ font-weight:800; color:#27500a; }
+  #vcls .regra__act{ display:flex; gap:.35rem; align-items:center; flex-wrap:wrap; }
+  #vcls .mini{ background:#fff; border:1px solid var(--line-2); color:#42506a; border-radius:7px; padding:.25rem .5rem; font-size:.78rem; cursor:pointer; }
+  #vcls .mini.del{ color:#a32d2d; }
+  #vcls .empty{ text-align:center; color:var(--muted); padding:2.5rem 1rem; background:#fff; border:1px solid var(--line-2); border-radius:12px; box-shadow:var(--shadow); }
+  #vcls .empty .bi{ font-size:1.6rem; display:block; margin-bottom:.4rem; opacity:.5; }
+  #vcls .hide{ display:none; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div id="vcls">
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h3 class="mb-0"><i class="bi bi-tags"></i> Classificar produtos — Vendas</h3>
+  <a href="{{ url_for('vendas.index') }}" class="btn btn-sm btn-outline-secondary">
+    <i class="bi bi-arrow-left"></i> Vendas
+  </a>
+</div>
+
+<div class="tabs">
+  <div class="tab on" data-alvo="classificar" onclick="vclsTab(this)">
+    <i class="bi bi-inboxes"></i> Classificar <span class="n">{{ pendentes|length }}</span>
+  </div>
+  <div class="tab" data-alvo="regras" onclick="vclsTab(this)">
+    <i class="bi bi-bookmark-check"></i> Regras <span class="n">{{ regras|length }}</span>
+  </div>
+</div>
+
+{# =================== ABA CLASSIFICAR =================== #}
+<section id="tab-classificar">
+  <div class="stats">
+    <div class="stat"><div class="rot">cprods sem regra</div><div class="val amber">{{ pendentes|length }}</div></div>
+    <div class="stat"><div class="rot">Itens afetados</div><div class="val blue">{{ itens_pend }}</div></div>
+    <div class="stat"><div class="rot">Litros</div><div class="val green">{{ '{:,.0f}'.format(litros_pend).replace(',', '.') }}</div></div>
+  </div>
+
+  {% if not pendentes %}
+    <div class="empty"><i class="bi bi-check2-circle"></i>
+      Nenhum cprod pendente — todas as vendas com <code>cprod</code> já têm regra no de-para.</div>
+  {% else %}
+    {% for p in pendentes %}
+    <div class="cprod" id="cp-{{ loop.index }}"
+         data-cnpj="{{ p.cnpj_emitente }}" data-cprod="{{ p.cprod }}">
+      <span class="cprod__ico"><i class="bi bi-question-circle"></i></span>
+      <div class="cprod__main">
+        <div class="cprod__top">
+          <span class="cprod__desc">{{ p.xprod or '(sem descrição)' }}</span>
+          <span class="pill">cprod {{ p.cprod }}</span>
+          {% if p.cod_anp %}<span class="badge-anp">ANP {{ p.cod_anp }}</span>{% endif %}
+        </div>
+        <div class="cprod__meta">
+          {{ p.emitente_nome }}
+          <span class="sep">·</span> {{ p.itens }} venda(s)
+          <span class="sep">·</span> {{ '{:,.0f}'.format(p.litros or 0).replace(',', '.') }} L
+        </div>
+      </div>
+      <div class="cprod__act">
+        <select>
+          <option value="">— escolher produto —</option>
+          {% for pr in produtos %}
+          <option value="{{ pr.id }}">{{ pr.nome }} ({{ pr.id }})</option>
+          {% endfor %}
+        </select>
+        <button class="btn2 btn-mem" onclick="vclsGravar(this,'memorizar')">
+          <i class="bi bi-save"></i> Memorizar</button>
+        <button class="btn2 btn-ghost" onclick="vclsGravar(this,'so_desta_vez')"
+                title="classifica só estas vendas, sem criar regra">Só desta vez</button>
+      </div>
+    </div>
+    {% endfor %}
+  {% endif %}
+</section>
+
+{# =================== ABA REGRAS =================== #}
+<section id="tab-regras" class="hide">
+  {% if not regras %}
+    <div class="empty"><i class="bi bi-bookmark"></i> Nenhuma regra memorizada ainda.</div>
+  {% else %}
+    {% for g in emitentes_regras %}
+    <div class="grp-nome">{{ g.nome }}</div>
+    {% for r in g.regras %}
+    <div class="regra" id="rg-{{ r.id }}" data-regra="{{ r.id }}">
+      <span class="pill">cprod {{ r.cprod }}</span>
+      <div class="regra__forn">{{ r.xprod or '(sem descrição)' }}</div>
+      <div class="regra__prod">→ <span class="rg-prod">{{ r.produto_nome or '—' }}</span> ({{ r.produto_id }})</div>
+      <div class="regra__act">
+        <select class="rg-sel">
+          {% for pr in produtos %}
+          <option value="{{ pr.id }}" {% if pr.id == r.produto_id %}selected{% endif %}>{{ pr.nome }} ({{ pr.id }})</option>
+          {% endfor %}
+        </select>
+        <button class="mini" onclick="vclsEditar({{ r.id }},'proximos')" title="vale só p/ próximas capturas">salvar</button>
+        <button class="mini" onclick="vclsEditar({{ r.id }},'tudo')" title="salva e reclassifica as vendas deste cprod">salvar + reclassificar</button>
+        <button class="mini del" onclick="vclsApagar({{ r.id }})">apagar</button>
+      </div>
+    </div>
+    {% endfor %}
+    {% endfor %}
+  {% endif %}
+</section>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  // Abas
+  window.vclsTab = function (el) {
+    var alvo = el.dataset.alvo;
+    document.getElementById('tab-classificar').classList.toggle('hide', alvo !== 'classificar');
+    document.getElementById('tab-regras').classList.toggle('hide', alvo !== 'regras');
+    document.querySelectorAll('#vcls .tab').forEach(function (t) { t.classList.remove('on'); });
+    el.classList.add('on');
+  };
+
+  function post(url, body) {
+    // base.html injeta o X-CSRFToken automaticamente no fetch.
+    return fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    }).then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); });
+  }
+
+  // ---- Classificar (Memorizar / Só desta vez) ----
+  window.vclsGravar = function (btn, modo) {
+    var card = btn.closest('.cprod');
+    var sel = card.querySelector('select');
+    var produto_id = sel.value;
+    if (!produto_id) { alert('Escolha o produto primeiro.'); return; }
+
+    var btns = card.querySelectorAll('button');
+    btns.forEach(function (b) { b.disabled = true; });
+
+    post('{{ url_for("vendas.classificar_gravar") }}', {
+      cnpj_emitente: card.dataset.cnpj,
+      cprod: card.dataset.cprod,
+      produto_id: produto_id,
+      modo: modo
+    }).then(function (res) {
+      if (!res.ok || !res.j.ok) {
+        alert('Erro: ' + ((res.j && res.j.erro) || 'falha ao gravar'));
+        btns.forEach(function (b) { b.disabled = false; });
+        return;
+      }
+      // some com o card (resolvido); atualiza contadores das abas.
+      card.style.transition = 'opacity .25s'; card.style.opacity = '0';
+      setTimeout(function () { card.remove(); vclsRecont(); }, 250);
+    }).catch(function () {
+      alert('Falha de rede.');
+      btns.forEach(function (b) { b.disabled = false; });
+    });
+  };
+
+  // ---- Editar regra ----
+  window.vclsEditar = function (regraId, alcance) {
+    var row = document.getElementById('rg-' + regraId);
+    var sel = row.querySelector('.rg-sel');
+    post('{{ url_for("vendas.editar_regra") }}', {
+      regra_id: regraId, produto_id: sel.value, alcance: alcance
+    }).then(function (res) {
+      if (!res.ok || !res.j.ok) { alert('Erro: ' + ((res.j && res.j.erro) || 'falha')); return; }
+      row.querySelector('.rg-prod').textContent = res.j.produto_nome || '—';
+      var extra = (alcance === 'tudo') ? (' · ' + res.j.tambem + ' venda(s) reclassificada(s)') : '';
+      flash(row, 'Salvo' + extra);
+    });
+  };
+
+  // ---- Apagar regra ----
+  window.vclsApagar = function (regraId) {
+    if (!confirm('Apagar esta regra? (não desfaz o produto já gravado nas vendas)')) return;
+    post('{{ url_for("vendas.apagar_regra") }}', { regra_id: regraId }).then(function (res) {
+      if (!res.ok || !res.j.ok) { alert('Erro: ' + ((res.j && res.j.erro) || 'falha')); return; }
+      var row = document.getElementById('rg-' + regraId);
+      if (row) { row.style.transition = 'opacity .25s'; row.style.opacity = '0'; setTimeout(function () { row.remove(); }, 250); }
+    });
+  };
+
+  function flash(row, msg) {
+    var tag = document.createElement('span');
+    tag.className = 'pill'; tag.style.color = '#27500a'; tag.style.borderColor = '#bfe3bf';
+    tag.textContent = msg;
+    row.querySelector('.regra__act').appendChild(tag);
+    setTimeout(function () { tag.remove(); }, 2500);
+  }
+
+  function vclsRecont() {
+    var n = document.querySelectorAll('#tab-classificar .cprod').length;
+    var chip = document.querySelector('#vcls .tab[data-alvo="classificar"] .n');
+    if (chip) chip.textContent = n;
+    if (n === 0) {
+      var sec = document.getElementById('tab-classificar');
+      if (!sec.querySelector('.empty')) {
+        var d = document.createElement('div');
+        d.className = 'empty';
+        d.innerHTML = '<i class="bi bi-check2-circle"></i> Tudo classificado.';
+        sec.appendChild(d);
+      }
+    }
+  }
+})();
+</script>
+{% endblock %}

@@ -17,7 +17,7 @@ import math
 from datetime import date, timedelta
 from urllib.parse import urlencode
 
-from flask import Blueprint, render_template, request, abort
+from flask import Blueprint, render_template, request, abort, jsonify
 from flask_login import login_required
 
 from utils.db import get_db_connection
@@ -204,6 +204,293 @@ def detalhe(venda_id):
         template = ('vendas/_detalhe_conteudo.html'
                     if request.args.get('partial') else 'vendas/detalhe.html')
         return render_template(template, nota=nota, itens=itens)
+    finally:
+        cur.close()
+        conn.close()
+
+
+# ==========================================================================
+# CLASSIFICAR: de-para de produto da venda (cnpj_emitente + cprod -> produto_id).
+# Espelha a Classificar de COMPRAS (routes/dfe_compras), SEM categoria (venda e
+# sempre produto) e com chave = cnpj_emitente (a venda nao tem cliente_id).
+#   AREA 1 "Classificar" -> cprods SEM regra no de-para, agrupados por
+#                           cnpj_emitente + cprod.  Memorizar / So desta vez.
+#   AREA 2 "Regras"       -> de-para memorizado (ver/editar/apagar).
+# ==========================================================================
+@vendas_bp.route('/classificar', methods=['GET'])
+@login_required
+def classificar():
+    conn = get_db_connection()
+    cur = conn.cursor(dictionary=True)
+    try:
+        cur.execute("SELECT id, nome FROM produto ORDER BY nome")
+        produtos = cur.fetchall()
+
+        # ---------- AREA 1: cprods SEM regra no de-para ----------
+        cur.execute(
+            """
+            SELECT v.cnpj_emitente,
+                   i.cprod,
+                   MAX(i.produto_xml) AS xprod,
+                   MAX(i.cod_anp)     AS cod_anp,
+                   COUNT(*)           AS itens,
+                   ROUND(SUM(CASE WHEN i.unidade = 'L'
+                                  THEN i.quantidade ELSE 0 END), 0) AS litros,
+                   MAX(COALESCE(cl.nome_fantasia, cl.razao_social,
+                                v.cnpj_emitente)) AS emitente_nome
+            FROM vendas_xml_itens i
+            JOIN vendas_xml v ON v.id = i.venda_id
+            LEFT JOIN vendas_xml_depara_produto dp
+                   ON dp.cnpj_emitente = v.cnpj_emitente
+                  AND dp.cprod = i.cprod
+                  AND dp.ativo = 1
+            LEFT JOIN clientes cl
+                   ON REPLACE(REPLACE(REPLACE(cl.cnpj, '.', ''), '/', ''), '-', '')
+                      = v.cnpj_emitente
+            WHERE dp.id IS NULL
+              AND i.cprod IS NOT NULL AND i.cprod <> ''
+            GROUP BY v.cnpj_emitente, i.cprod
+            ORDER BY litros DESC, itens DESC
+            """
+        )
+        pendentes = cur.fetchall()
+
+        # ---------- AREA 2: regras memorizadas (de-para) ----------
+        cur.execute(
+            """
+            SELECT dp.id, dp.cnpj_emitente, dp.cprod, dp.produto_id, dp.ativo,
+                   p.nome AS produto_nome,
+                   MAX(COALESCE(cl.nome_fantasia, cl.razao_social,
+                                dp.cnpj_emitente)) AS emitente_nome,
+                   (SELECT i.produto_xml
+                      FROM vendas_xml_itens i
+                      JOIN vendas_xml v ON v.id = i.venda_id
+                     WHERE v.cnpj_emitente = dp.cnpj_emitente
+                       AND i.cprod = dp.cprod
+                       AND i.produto_xml IS NOT NULL
+                     ORDER BY i.id DESC LIMIT 1) AS xprod
+            FROM vendas_xml_depara_produto dp
+            LEFT JOIN produto p ON p.id = dp.produto_id
+            LEFT JOIN clientes cl
+                   ON REPLACE(REPLACE(REPLACE(cl.cnpj, '.', ''), '/', ''), '-', '')
+                      = dp.cnpj_emitente
+            GROUP BY dp.id, dp.cnpj_emitente, dp.cprod, dp.produto_id, dp.ativo, p.nome
+            ORDER BY emitente_nome, dp.cprod
+            """
+        )
+        regras = cur.fetchall()
+
+        # Agrupa regras por emitente (accordion), preservando a ordem.
+        emitentes_regras = []
+        _idx = {}
+        for r in regras:
+            ck = r['cnpj_emitente'] or ''
+            if ck not in _idx:
+                _idx[ck] = len(emitentes_regras)
+                emitentes_regras.append({
+                    'cnpj_emitente': r['cnpj_emitente'],
+                    'nome': r['emitente_nome'],
+                    'regras': [],
+                })
+            emitentes_regras[_idx[ck]]['regras'].append(r)
+
+        litros_pend = sum(float(p['litros'] or 0) for p in pendentes)
+        itens_pend = sum(int(p['itens'] or 0) for p in pendentes)
+
+        return render_template(
+            'vendas/classificar.html',
+            produtos=produtos,
+            pendentes=pendentes,
+            regras=regras,
+            emitentes_regras=emitentes_regras,
+            litros_pend=litros_pend,
+            itens_pend=itens_pend,
+        )
+    finally:
+        cur.close()
+        conn.close()
+
+
+def _produto_valido(cur, produto_id):
+    """produto_id inteiro que existe em `produto`, ou None."""
+    try:
+        pid = int(produto_id) if produto_id not in (None, '', '0') else None
+    except (TypeError, ValueError):
+        return None
+    if not pid:
+        return None
+    cur.execute("SELECT id FROM produto WHERE id = %s", (pid,))
+    return pid if cur.fetchone() else None
+
+
+@vendas_bp.route('/classificar', methods=['POST'])
+@login_required
+def classificar_gravar():
+    """Memorizar (grava regra + retroativo) ou So-desta-vez (so retroativo).
+    Chave = cnpj_emitente + cprod (o grupo listado na aba)."""
+    dados = request.get_json(silent=True) or {}
+    cnpj = (dados.get('cnpj_emitente') or '').strip()
+    cprod = (dados.get('cprod') or '').strip()
+    modo = (dados.get('modo') or '').strip()  # 'memorizar' | 'so_desta_vez'
+
+    if not cnpj or not cprod:
+        return jsonify({'ok': False, 'erro': 'cnpj_emitente/cprod ausente'}), 400
+    if modo not in ('memorizar', 'so_desta_vez'):
+        return jsonify({'ok': False, 'erro': 'modo inválido'}), 400
+
+    conn = get_db_connection()
+    cur = conn.cursor(dictionary=True)
+    try:
+        produto_id = _produto_valido(cur, dados.get('produto_id'))
+        if not produto_id:
+            return jsonify({'ok': False, 'erro': 'escolha um produto válido'}), 400
+
+        # Trava: o par (cnpj_emitente, cprod) precisa existir nas vendas.
+        cur.execute(
+            """
+            SELECT 1 FROM vendas_xml_itens i
+            JOIN vendas_xml v ON v.id = i.venda_id
+            WHERE v.cnpj_emitente = %s AND i.cprod = %s LIMIT 1
+            """,
+            (cnpj, cprod),
+        )
+        if not cur.fetchone():
+            return jsonify({'ok': False, 'erro': 'cprod não encontrado nas vendas'}), 404
+
+        regra_gravada = False
+        if modo == 'memorizar':
+            cur.execute(
+                """
+                INSERT INTO vendas_xml_depara_produto (cnpj_emitente, cprod, produto_id, ativo)
+                VALUES (%s, %s, %s, 1)
+                ON DUPLICATE KEY UPDATE produto_id = VALUES(produto_id), ativo = 1
+                """,
+                (cnpj, cprod, produto_id),
+            )
+            regra_gravada = True
+
+        # Retroativo: preenche os itens iguais (null-safe -> so o que muda).
+        cur.execute(
+            """
+            UPDATE vendas_xml_itens i
+            JOIN vendas_xml v ON v.id = i.venda_id
+               SET i.produto_id = %s
+             WHERE v.cnpj_emitente = %s AND i.cprod = %s
+               AND NOT (i.produto_id <=> %s)
+            """,
+            (produto_id, cnpj, cprod, produto_id),
+        )
+        tambem = cur.rowcount or 0
+        conn.commit()
+
+        cur.execute("SELECT nome FROM produto WHERE id = %s", (produto_id,))
+        row = cur.fetchone()
+        return jsonify({
+            'ok': True,
+            'regra_gravada': regra_gravada,
+            'produto_id': produto_id,
+            'produto_nome': row['nome'] if row else None,
+            'tambem': tambem,
+        })
+    except Exception as e:
+        conn.rollback()
+        return jsonify({'ok': False, 'erro': str(e)}), 500
+    finally:
+        cur.close()
+        conn.close()
+
+
+@vendas_bp.route('/regras/editar', methods=['POST'])
+@login_required
+def editar_regra():
+    """Edita o produto de UMA regra do de-para. Alcance:
+       'proximos' -> muda so a regra (vale p/ capturas futuras).
+       'tudo'     -> muda a regra E reclassifica os itens desse cnpj+cprod.
+    cnpj_emitente/cprod vem SEMPRE da regra (server-side)."""
+    dados = request.get_json(silent=True) or {}
+    try:
+        regra_id = int(dados.get('regra_id') or 0)
+    except (TypeError, ValueError):
+        regra_id = 0
+    alcance = (dados.get('alcance') or '').strip()
+
+    if not regra_id:
+        return jsonify({'ok': False, 'erro': 'regra_id ausente'}), 400
+    if alcance not in ('proximos', 'tudo'):
+        return jsonify({'ok': False, 'erro': 'alcance inválido'}), 400
+
+    conn = get_db_connection()
+    cur = conn.cursor(dictionary=True)
+    try:
+        produto_id = _produto_valido(cur, dados.get('produto_id'))
+        if not produto_id:
+            return jsonify({'ok': False, 'erro': 'escolha um produto válido'}), 400
+
+        cur.execute(
+            "SELECT cnpj_emitente, cprod FROM vendas_xml_depara_produto WHERE id = %s",
+            (regra_id,),
+        )
+        regra = cur.fetchone()
+        if not regra:
+            return jsonify({'ok': False, 'erro': 'regra não encontrada'}), 404
+
+        cur.execute(
+            "UPDATE vendas_xml_depara_produto SET produto_id = %s WHERE id = %s",
+            (produto_id, regra_id),
+        )
+
+        tambem = 0
+        if alcance == 'tudo':
+            cur.execute(
+                """
+                UPDATE vendas_xml_itens i
+                JOIN vendas_xml v ON v.id = i.venda_id
+                   SET i.produto_id = %s
+                 WHERE v.cnpj_emitente = %s AND i.cprod = %s
+                   AND NOT (i.produto_id <=> %s)
+                """,
+                (produto_id, regra['cnpj_emitente'], regra['cprod'], produto_id),
+            )
+            tambem = cur.rowcount or 0
+        conn.commit()
+
+        cur.execute("SELECT nome FROM produto WHERE id = %s", (produto_id,))
+        row = cur.fetchone()
+        return jsonify({
+            'ok': True, 'regra_id': regra_id, 'alcance': alcance,
+            'produto_id': produto_id, 'produto_nome': row['nome'] if row else None,
+            'tambem': tambem,
+        })
+    except Exception as e:
+        conn.rollback()
+        return jsonify({'ok': False, 'erro': str(e)}), 500
+    finally:
+        cur.close()
+        conn.close()
+
+
+@vendas_bp.route('/regras/apagar', methods=['POST'])
+@login_required
+def apagar_regra():
+    """Apaga UMA regra do de-para. NAO desfaz o produto_id ja gravado nos itens
+    (igual ao comportamento da compra)."""
+    dados = request.get_json(silent=True) or {}
+    try:
+        regra_id = int(dados.get('regra_id') or 0)
+    except (TypeError, ValueError):
+        regra_id = 0
+    if not regra_id:
+        return jsonify({'ok': False, 'erro': 'regra_id ausente'}), 400
+
+    conn = get_db_connection()
+    cur = conn.cursor(dictionary=True)
+    try:
+        cur.execute("DELETE FROM vendas_xml_depara_produto WHERE id = %s", (regra_id,))
+        conn.commit()
+        return jsonify({'ok': True, 'apagou': cur.rowcount or 0})
+    except Exception as e:
+        conn.rollback()
+        return jsonify({'ok': False, 'erro': str(e)}), 500
     finally:
         cur.close()
         conn.close()
