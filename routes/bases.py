@@ -864,6 +864,26 @@ def index():
     context['mes_atual'] = f"{_meses_pt[hoje.month - 1]}/{hoje.year}"
     context['onda1'] = onda1
 
+    # Onda 1 — cards de ESTOQUE (Posto NH, cliente_id=1): saldo em tempo real +
+    # descargas de hoje. ISOLADO e seguro: qualquer erro -> cards vazios, nunca
+    # derruba a home. Reaproveita os helpers de routes.estoque.
+    tempo_real_cards = []
+    descargas_dia = {'linhas': [], 'total': 0.0}
+    try:
+        from routes.estoque import dados_tempo_real, descargas_hoje
+        _conn = get_db_connection()
+        _cur = _conn.cursor(dictionary=True)
+        try:
+            tempo_real_cards = dados_tempo_real(_cur, cliente_id=1)
+            descargas_dia = descargas_hoje(_cur, cliente_id=1)
+        finally:
+            _cur.close()
+            _conn.close()
+    except Exception:
+        current_app.logger.exception('[home] cards de estoque (onda1) falharam')
+    context['tempo_real_cards'] = tempo_real_cards
+    context['descargas_dia'] = descargas_dia
+
     return render_template('dashboard.html', **context)
 
 

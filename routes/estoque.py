@@ -884,6 +884,96 @@ def conciliacao():
 
 
 # ==========================================================================
+# HELPERS reutilizaveis (usados pela tela /estoque/tempo-real E pela home).
+#   Saldo agora = Abertura de hoje + Recebido hoje (descarga) - Vendas hoje,
+#   de UMA empresa, "hoje" = America/Sao_Paulo. SOMENTE LEITURA (recebe cursor).
+# ==========================================================================
+def dados_tempo_real(cur, cliente_id=1):
+    """Saldo agora (aproximado) dos 4 combustiveis de UMA empresa, hoje.
+    Retorna lista ORDENADA (Gasolina, Etanol, S-500, S-10) com nome/cor/abriu/
+    rec/ven/saldo. saldo=None quando nao ha leitura de ABERTURA hoje."""
+    hoje_s = hoje_brasilia().strftime('%Y-%m-%d')
+    ids_in = ",".join(str(i) for i in CONC_IDS)
+
+    cur.execute(
+        f"""SELECT produto_id AS pid, SUM(volume_atual) AS litros
+            FROM leitura_tanque_diaria
+            WHERE UPPER(TRIM(titulo)) = 'ABERTURA' AND produto_id IN ({ids_in})
+              AND DATE(data_leitura) = %s AND cliente_id = %s
+            GROUP BY produto_id""",
+        (hoje_s, cliente_id),
+    )
+    abertura = {r['pid']: float(r['litros'] or 0) for r in cur.fetchall()}
+
+    cur.execute(
+        f"""SELECT produto_id AS pid, SUM(total_descarga) AS litros
+            FROM descargas_pendentes
+            WHERE produto_id IN ({ids_in})
+              AND DATE(COALESCE(data_descarga, data_final, data_inicial)) = %s
+              AND cliente_id = %s
+            GROUP BY produto_id""",
+        (hoje_s, cliente_id),
+    )
+    recebido = {r['pid']: float(r['litros'] or 0) for r in cur.fetchall()}
+
+    cur.execute(
+        f"""SELECT i.produto_id AS pid, SUM(i.quantidade) AS litros
+            FROM vendas_xml_itens i
+            JOIN vendas_xml v ON v.id = i.venda_id
+            JOIN clientes cl
+              ON REPLACE(REPLACE(REPLACE(REPLACE(cl.cnpj, '.', ''), '/', ''), '-', ''), ' ', '')
+                 = v.cnpj_emitente
+            WHERE i.produto_id IN ({ids_in}) AND i.unidade = 'L'
+              AND v.situacao <> 'cancelada'
+              AND DATE(v.dh_emissao) = %s AND cl.id = %s
+            GROUP BY i.produto_id""",
+        (hoje_s, cliente_id),
+    )
+    vendas = {r['pid']: float(r['litros'] or 0) for r in cur.fetchall()}
+
+    out = []
+    for pid, info in sorted(CONC_PRODUTOS.items(), key=lambda kv: kv[1]['ordem']):
+        tem_ab = pid in abertura
+        ab = abertura.get(pid)
+        rec = recebido.get(pid, 0.0)
+        ven = vendas.get(pid, 0.0)
+        out.append({
+            'pid': pid, 'nome': info['nome'], 'cor': info['cor'],
+            'abriu': ab, 'rec': rec, 'ven': ven,
+            'saldo': (ab + rec - ven) if tem_ab else None,
+        })
+    return out
+
+
+def descargas_hoje(cur, cliente_id=1):
+    """Descargas recebidas HOJE (produto + litros) de UMA empresa. Para a home.
+    Retorna {'linhas': [{nome, cor, litros}], 'total': litros}."""
+    hoje_s = hoje_brasilia().strftime('%Y-%m-%d')
+    cur.execute(
+        """SELECT d.produto_id AS pid, MAX(d.produto_nome) AS produto_nome,
+                  SUM(d.total_descarga) AS litros
+           FROM descargas_pendentes d
+           WHERE DATE(COALESCE(d.data_descarga, d.data_final, d.data_inicial)) = %s
+             AND d.cliente_id = %s
+           GROUP BY d.produto_id
+           ORDER BY litros DESC""",
+        (hoje_s, cliente_id),
+    )
+    linhas = []
+    total = 0.0
+    for r in cur.fetchall():
+        info = CONC_PRODUTOS.get(r['pid'])
+        lit = float(r['litros'] or 0)
+        total += lit
+        linhas.append({
+            'nome': info['nome'] if info else (r['produto_nome'] or '—'),
+            'cor': info['cor'] if info else '#64748b',
+            'litros': lit,
+        })
+    return {'linhas': linhas, 'total': total}
+
+
+# ==========================================================================
 # ESTOQUE EM TEMPO REAL (saldo APROXIMADO de HOJE, por produto/empresa).
 #   Saldo agora = Abertura de hoje + Recebido hoje (descarga/e-mail) - Vendas hoje
 # O "Recebido" vem da DESCARGA (descargas_pendentes, e-mail/ELS), imediata; a
