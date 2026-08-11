@@ -945,34 +945,6 @@ def dados_tempo_real(cur, cliente_id=1):
     return out
 
 
-def descargas_hoje(cur, cliente_id=1):
-    """Descargas recebidas HOJE (produto + litros) de UMA empresa. Para a home.
-    Retorna {'linhas': [{nome, cor, litros}], 'total': litros}."""
-    hoje_s = hoje_brasilia().strftime('%Y-%m-%d')
-    cur.execute(
-        """SELECT d.produto_id AS pid, MAX(d.produto_nome) AS produto_nome,
-                  SUM(d.total_descarga) AS litros
-           FROM descargas_pendentes d
-           WHERE DATE(COALESCE(d.data_descarga, d.data_final, d.data_inicial)) = %s
-             AND d.cliente_id = %s
-           GROUP BY d.produto_id
-           ORDER BY litros DESC""",
-        (hoje_s, cliente_id),
-    )
-    linhas = []
-    total = 0.0
-    for r in cur.fetchall():
-        info = CONC_PRODUTOS.get(r['pid'])
-        lit = float(r['litros'] or 0)
-        total += lit
-        linhas.append({
-            'nome': info['nome'] if info else (r['produto_nome'] or '—'),
-            'cor': info['cor'] if info else '#64748b',
-            'litros': lit,
-        })
-    return {'linhas': linhas, 'total': total}
-
-
 # ==========================================================================
 # ESTOQUE EM TEMPO REAL (saldo APROXIMADO de HOJE, por produto/empresa).
 #   Saldo agora = Abertura de hoje + Recebido hoje (descarga/e-mail) - Vendas hoje
