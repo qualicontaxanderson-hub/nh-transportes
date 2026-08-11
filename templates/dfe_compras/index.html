@@ -328,6 +328,9 @@
   #pane-consultar .cmp-exc{ color:#8a95a5; font-size:.76rem; }
   #pane-consultar .badge-ign{ display:inline-block; font-size:.72rem; font-weight:700; border-radius:999px;
     padding:.08rem .5rem; background:#eceef1; color:#6b7280; margin-left:.35rem; white-space:nowrap; }
+  /* Selo "faltam X L pra descer": nota com saldo > 0 (some sozinho no saldo 0). */
+  #pane-consultar .selo-descer{ display:inline-block; font-size:.72rem; font-weight:700; border-radius:999px;
+    padding:.08rem .5rem; background:#fbf1de; color:#B45309; border:1px solid #f0dcae; margin-left:.35rem; white-space:nowrap; }
   /* Caixinha de apuração do etanol (o "resto" do total). */
   #pane-consultar .cmp-apur{ background:#f6faf1; border:1px solid #dcebc9; border-radius:8px;
     margin:.5rem .7rem .1rem; padding:.45rem .6rem; font-size:.78rem; color:#3d5321; font-variant-numeric:tabular-nums; }
@@ -616,7 +619,8 @@
             <td class="forn">{{ c.emit_nome or '(sem nome)' }}</td>
             <td class="{{ 'prod-n' if c.n_produtos > 1 else 'prod-1' }}">
               {% if c.todos_ignorados %}<span class="badge-ign">Ignorada</span>
-              {% else %}{{ c.produto_label }}{% if c.tem_ignorado %} <span class="badge-ign">{{ c.n_ignorados }} item ignorado</span>{% endif %}{% endif %}</td>
+              {% else %}{{ c.produto_label }}{% if c.tem_ignorado %} <span class="badge-ign">{{ c.n_ignorados }} item ignorado</span>{% endif %}{% endif %}
+              {% if c.saldo_descer %}<span class="selo-descer" title="comprou mas não desceu tudo"><i class="bi bi-hourglass-split"></i> faltam {{ '{:,.0f}'.format(c.saldo_descer).replace(',', '.') }} L pra descer</span>{% endif %}</td>
             <td class="num">{% if c.litros and c.litros|float > 0 %}{{ '{:,.0f}'.format(c.litros|float).replace(',', '.') }} L{% else %}—{% endif %}</td>
             <td class="num">{% if c.v_unit %}{{ '%.2f'|format(c.v_unit)|replace('.', ',') }}{% else %}—{% endif %}</td>
             <td class="num">{% if c.todos_ignorados %}<s class="text-muted">{{ (c.nota_valor or 0) | formatar_moeda }}</s>{% else %}{{ (c.valor_liquido or 0) | formatar_moeda }}{% endif %}</td>
@@ -649,7 +653,8 @@
         <div class="cmp-mcard__vals">
           <span><span class="k">Produtos:</span>
             {% if c.todos_ignorados %}<b><span class="badge-ign">Ignorada</span></b>
-            {% else %}<b>{{ c.produto_label }}</b>{% if c.tem_ignorado %} <span class="badge-ign">{{ c.n_ignorados }} ignorado</span>{% endif %}{% endif %}</span>
+            {% else %}<b>{{ c.produto_label }}</b>{% if c.tem_ignorado %} <span class="badge-ign">{{ c.n_ignorados }} ignorado</span>{% endif %}{% endif %}
+            {% if c.saldo_descer %}<span class="selo-descer"><i class="bi bi-hourglass-split"></i> faltam {{ '{:,.0f}'.format(c.saldo_descer).replace(',', '.') }} L pra descer</span>{% endif %}</span>
           <span><span class="k">Litros:</span> <b>{% if c.litros and c.litros|float > 0 %}{{ '{:,.0f}'.format(c.litros|float).replace(',', '.') }} L{% else %}—{% endif %}</b></span>
           <span><span class="k">V.unit:</span> <b>{% if c.v_unit %}{{ '%.2f'|format(c.v_unit)|replace('.', ',') }}{% else %}—{% endif %}</b></span>
           <span><span class="k">Total:</span> <b>{% if c.todos_ignorados %}<s class="text-muted">{{ (c.nota_valor or 0) | formatar_moeda }}</s>{% else %}{{ (c.valor_liquido or 0) | formatar_moeda }}{% endif %}</b></span>

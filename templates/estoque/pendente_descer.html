@@ -1,0 +1,136 @@
+{% extends 'base.html' %}
+{% block title %}Pendente pra Descer{% endblock %}
+
+{% block styles %}
+<style>
+  /* ===== /estoque/pendente-descer no visual .mig (paleta hardcoded) ===== */
+  #pend{ --line-2:#dde3ec; --surface-1:#f1f4f8; --muted:#6b7280; --blue:#1D63A5; --blue-deep:#07569C;
+    --shadow:0 1px 3px rgba(16,45,80,.08),0 4px 12px rgba(16,45,80,.06); --amber:#B45309; }
+  #pend .stats{ display:flex; gap:.75rem; margin-bottom:1rem; flex-wrap:wrap; }
+  #pend .stat{ flex:1 1 170px; background:#fff; border:1px solid var(--line-2); border-radius:12px; box-shadow:var(--shadow); padding:.7rem 1rem; }
+  #pend .stat .rot{ font-size:10.5px; text-transform:uppercase; color:var(--muted); font-weight:700; letter-spacing:.03em; }
+  #pend .stat .val{ font-size:1.35rem; font-weight:800; font-variant-numeric:tabular-nums; }
+  #pend .stat .blue{ color:var(--blue-deep); } #pend .stat .amber{ color:var(--amber); }
+  #pend .filtros{ background:#fff; border:1px solid var(--line-2); border-radius:12px; box-shadow:var(--shadow); padding:.7rem 1rem; margin-bottom:1rem; }
+  #pend .filtros>summary{ list-style:none; cursor:pointer; display:flex; align-items:center; gap:.5rem; font-weight:700; color:var(--blue-deep); }
+  #pend .filtros>summary::-webkit-details-marker{ display:none; }
+  #pend .filtros .selo{ font-size:.72rem; font-weight:700; background:#e6f1fb; color:#0c447c; border-radius:999px; padding:.12rem .55rem; }
+  #pend .filtros .chev{ transition:transform .2s; color:var(--muted); margin-left:auto; }
+  #pend .filtros[open] .chev{ transform:rotate(180deg); }
+  #pend .filtros__body{ margin-top:.8rem; display:grid; gap:.6rem; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); align-items:end; }
+  #pend .filtros__body label{ font-size:10.5px; text-transform:uppercase; color:var(--muted); font-weight:700; display:block; margin-bottom:2px; }
+  #pend .filtros__body select{ width:100%; border:1px solid var(--line-2); border-radius:8px; padding:.35rem .5rem; font-size:.85rem; }
+  #pend .filtros__btns{ display:flex; gap:.4rem; }
+
+  #pend .pend{ background:#fff; border:1px solid var(--line-2); border-left:4px solid var(--c,#64748b); border-radius:12px;
+    box-shadow:var(--shadow); padding:.75rem .9rem; margin-bottom:.6rem; display:flex; gap:.75rem; align-items:center; }
+  #pend .pend__main{ min-width:0; flex:1; }
+  #pend .pend__top{ display:flex; align-items:center; gap:.5rem; flex-wrap:wrap; }
+  #pend .pend__dot{ width:.7rem; height:.7rem; border-radius:50%; background:var(--c); flex:0 0 auto; }
+  #pend .pend__prod{ font-weight:800; font-size:1rem; }
+  #pend .pill{ background:var(--surface-1); border:1px solid var(--line-2); border-radius:6px; padding:.03rem .4rem; font-family:ui-monospace,Menlo,monospace; font-size:.76rem; color:#334155; }
+  #pend .tipo{ font-size:.68rem; font-weight:800; border-radius:5px; padding:.05rem .35rem; background:#eef2f7; color:#42506a; }
+  #pend .pend__emp{ font-size:.72rem; color:var(--muted); }
+  #pend .pend__meta{ font-size:.8rem; color:#42506a; margin-top:.3rem; line-height:1.5; }
+  #pend .pend__meta .sep{ color:#c4ccd6; margin:0 .3rem; }
+  #pend .pend__meta .mot{ font-weight:600; color:#1f2937; }
+  #pend .pend__meta .placa{ font-family:ui-monospace,Menlo,monospace; font-size:.74rem; background:#f1f3f5; border:1px solid var(--line-2); border-radius:4px; padding:0 .3rem; }
+  #pend .pend__meta .semcte{ color:#9aa4b2; }
+  #pend .pend__right{ flex:0 0 auto; text-align:right; }
+  #pend .pend__saldo{ font-size:1.4rem; font-weight:800; font-variant-numeric:tabular-nums; color:var(--amber); line-height:1.1; }
+  #pend .pend__rot{ font-size:.68rem; text-transform:uppercase; letter-spacing:.03em; color:var(--muted); font-weight:700; }
+  #pend .empty{ text-align:center; color:var(--muted); padding:2.5rem 1rem; background:#fff; border:1px solid var(--line-2); border-radius:12px; box-shadow:var(--shadow); }
+  #pend .empty .bi{ font-size:1.6rem; display:block; margin-bottom:.4rem; opacity:.5; }
+
+  @media (max-width:560px){
+    #pend .pend{ flex-wrap:wrap; }
+    #pend .pend__right{ text-align:left; width:100%; display:flex; justify-content:space-between; align-items:baseline;
+      border-top:1px solid var(--line-2); padding-top:.5rem; margin-top:.15rem; }
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div id="pend">
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h3 class="mb-0"><i class="bi bi-hourglass-split"></i> Pendente pra Descer</h3>
+  <a href="{{ url_for('estoque.index') }}" class="btn btn-sm btn-outline-secondary">
+    <i class="bi bi-box-seam"></i> Estoque
+  </a>
+</div>
+
+{% set aba_ativa = 'pendente' %}
+{% include 'includes/nav_migracoes.html' %}
+
+{# =================== TOTALIZADORES =================== #}
+<div class="stats">
+  <div class="stat"><div class="rot">Notas pendentes</div><div class="val blue">{{ totais.notas }}</div></div>
+  <div class="stat"><div class="rot">Litros pra descer</div><div class="val amber">{{ totais.litros | fmtnum(0) }}</div></div>
+</div>
+
+{# =================== FILTROS =================== #}
+<details class="filtros"{% if n_filtros %} open{% endif %}>
+  <summary>
+    <i class="bi bi-funnel"></i> Filtros
+    {% if n_filtros %}<span class="selo">{{ n_filtros }} ativo{{ 's' if n_filtros > 1 else '' }}</span>{% endif %}
+    <i class="bi bi-chevron-down chev"></i>
+  </summary>
+  <form method="GET" action="{{ url_for('estoque.pendente_descer') }}" class="filtros__body">
+    <div>
+      <label>Empresa</label>
+      <select name="empresa">
+        <option value="">Todas</option>
+        {% for e in empresas %}
+        <option value="{{ e.id }}" {% if empresa == e.id|string %}selected{% endif %}>{{ e.nome }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div>
+      <label>Produto</label>
+      <select name="produto">
+        <option value="">Todos os combustíveis</option>
+        {% for pid, info in produtos_opts %}
+        <option value="{{ pid }}" {% if produto == pid|string %}selected{% endif %}>{{ info.nome }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="filtros__btns">
+      <button type="submit" class="btn btn-sm btn-primary"><i class="bi bi-search"></i> Filtrar</button>
+      <a href="{{ url_for('estoque.pendente_descer') }}" class="btn btn-sm btn-outline-secondary">Limpar</a>
+    </div>
+  </form>
+</details>
+
+{# =================== LISTA =================== #}
+{% if not cards %}
+  <div class="empty"><i class="bi bi-check2-circle"></i>
+    Nada pendente{% if um_empresa %} nesta empresa{% endif %} — todas as notas de combustível desceram por completo.</div>
+{% else %}
+  {% for c in cards %}
+  <div class="pend" style="--c:{{ c.cor }}">
+    <div class="pend__main">
+      <div class="pend__top">
+        <span class="pend__dot"></span>
+        <span class="pend__prod">{{ c.nome }}</span>
+        <span class="pill">nº {{ c.numero }}/{{ c.serie }}</span>
+        <span class="tipo">NF-e</span>
+        {% if not um_empresa %}<span class="pend__emp">· {{ c.empresa_nome }}</span>{% endif %}
+      </div>
+      <div class="pend__meta">
+        {{ c.data.strftime('%d/%m/%Y') if c.data else '—' }}
+        <span class="sep">·</span>
+        {% if c.mot_nome %}<span class="mot">{{ c.mot_nome }}</span>{% if c.placa %} <span class="placa">{{ c.placa }}</span>{% endif %}{% if c.mais %} +{{ c.mais }}{% endif %}
+        {% else %}<span class="semcte">sem CT-e vinculado</span>{% endif %}
+        <span class="sep">·</span> nota {{ c.nota_litros | fmtnum(0) }} L
+        <span class="sep">·</span> já desceu {{ c.ja_desceu | fmtnum(0) }} L
+      </div>
+    </div>
+    <div class="pend__right">
+      <div class="pend__saldo">{{ c.saldo | fmtnum(0) }} L</div>
+      <div class="pend__rot">pra descer</div>
+    </div>
+  </div>
+  {% endfor %}
+{% endif %}
+</div>
+{% endblock %}

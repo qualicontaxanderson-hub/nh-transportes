@@ -998,3 +998,135 @@ def tempo_real():
     finally:
         cur.close()
         conn.close()
+
+
+# ==========================================================================
+# PENDENTE PRA DESCER: notas que compraram combustivel mas nao desceram tudo.
+#   saldo = dfe_itens.quantidade - SUM(descarga_nota.litros do item)
+#   descarta itens FECHADOS (existe descarga_nota.modo='integral') e
+#   categoria='ignorar'. Produto = COALESCE(classificado_produto_id, produto_id),
+#   so combustivel {1,2,4,5}, so NFe autorizado. Lista os com saldo > 0.
+# Motorista/placa vem do CT-e vinculado (dfe_cte_nfe -> dfe_cte); 1 nota pode
+# ter N CT-e -> mostra o principal + "+N".
+# ==========================================================================
+@estoque_bp.route('/estoque/pendente-descer', methods=['GET'])
+@login_required
+def pendente_descer():
+    empresa = (request.args.get('empresa') or '').strip()
+    produto = (request.args.get('produto') or '').strip()
+    pid_filtro = int(produto) if (produto.isdigit() and int(produto) in CONC_PRODUTOS) else None
+
+    conn = get_db_connection()
+    cur = conn.cursor(dictionary=True)
+    try:
+        # Empresas p/ dropdown: as que tem NF-e capturada.
+        cur.execute(
+            """
+            SELECT DISTINCT c.id, COALESCE(c.nome_fantasia, c.razao_social) AS nome
+            FROM clientes c
+            WHERE c.id IN (SELECT cliente_id FROM dfe_documentos
+                           WHERE tipo = 'NFe' AND cliente_id IS NOT NULL)
+            ORDER BY nome
+            """
+        )
+        empresas = cur.fetchall()
+        nome_emp = {e['id']: e['nome'] for e in empresas}
+
+        ids_in = ",".join(str(i) for i in CONC_IDS)
+
+        # ---- Itens de NF-e combustivel com SALDO > 0 (formula da Camada 2) ----
+        sql = f"""
+            SELECT doc.id AS documento_id, doc.chave, doc.numero, doc.serie,
+                   doc.dh_emissao, doc.cliente_id, doc.emit_nome,
+                   COALESCE(i.classificado_produto_id, i.produto_id) AS pid,
+                   i.quantidade AS nota_litros,
+                   COALESCE(v.litros, 0) AS ja_desceu,
+                   (i.quantidade - COALESCE(v.litros, 0)) AS saldo
+            FROM dfe_itens i
+            JOIN dfe_documentos doc ON doc.id = i.documento_id
+            LEFT JOIN (SELECT item_id, SUM(litros) AS litros
+                         FROM descarga_nota GROUP BY item_id) v
+                   ON v.item_id = i.id
+            WHERE doc.tipo = 'NFe' AND doc.situacao = 'autorizado'
+              AND COALESCE(i.classificado_produto_id, i.produto_id) IN ({ids_in})
+              AND (i.categoria IS NULL OR i.categoria <> 'ignorar')
+              AND NOT EXISTS (SELECT 1 FROM descarga_nota f
+                              WHERE f.item_id = i.id AND f.modo = 'integral')
+              AND (i.quantidade - COALESCE(v.litros, 0)) > 0.001
+        """
+        p = []
+        if empresa:
+            sql += " AND doc.cliente_id = %s"; p.append(empresa)
+        if pid_filtro:
+            sql += " AND COALESCE(i.classificado_produto_id, i.produto_id) = %s"
+            p.append(pid_filtro)
+        sql += " ORDER BY doc.dh_emissao DESC, doc.id DESC"
+        cur.execute(sql, p)
+        rows = cur.fetchall()
+
+        # ---- CT-e (motorista/placa) por chave da NF-e ----
+        ctes = {}
+        chaves = list({r['chave'] for r in rows if r['chave']})
+        if chaves:
+            marc = ",".join(["%s"] * len(chaves))
+            cur.execute(
+                f"""
+                SELECT n.chave_nfe, ct.motorista_nome, ct.placa
+                FROM dfe_cte_nfe n
+                JOIN dfe_documentos c ON c.id = n.documento_id AND c.tipo = 'CTe'
+                LEFT JOIN dfe_cte ct ON ct.documento_id = c.id
+                WHERE n.chave_nfe IN ({marc})
+                ORDER BY c.dh_emissao
+                """,
+                chaves,
+            )
+            for r in cur.fetchall():
+                ctes.setdefault(r['chave_nfe'], []).append(r)
+
+        cards = []
+        total_litros = 0.0
+        notas = set()
+        for r in rows:
+            info = CONC_PRODUTOS.get(r['pid'])
+            if not info:
+                continue
+            saldo = float(r['saldo'] or 0)
+            total_litros += saldo
+            notas.add(r['documento_id'])
+
+            # Motorista principal + "+N" (deduplica por nome).
+            mot_nome = placa = None
+            mais = 0
+            vistos = []
+            for x in ctes.get(r['chave'], []):
+                mn = (x.get('motorista_nome') or '').strip()
+                if mn and mn not in [s[0] for s in vistos]:
+                    vistos.append((mn, x.get('placa')))
+            if vistos:
+                mot_nome, placa = vistos[0]
+                mais = len(vistos) - 1
+
+            cards.append({
+                'empresa_nome': nome_emp.get(r['cliente_id'], '—'),
+                'pid': r['pid'], 'nome': info['nome'], 'cor': info['cor'],
+                'numero': r['numero'], 'serie': r['serie'],
+                'data': r['dh_emissao'], 'fornecedor': r['emit_nome'],
+                'mot_nome': mot_nome, 'placa': placa, 'mais': mais,
+                'nota_litros': float(r['nota_litros'] or 0),
+                'ja_desceu': float(r['ja_desceu'] or 0),
+                'saldo': saldo,
+            })
+
+        totais = {'notas': len(notas), 'litros': total_litros}
+        n_filtros = sum(1 for x in (empresa, produto) if x)
+
+        return render_template(
+            'estoque/pendente_descer.html',
+            cards=cards, totais=totais, empresas=empresas,
+            empresa=empresa, produto=produto, um_empresa=bool(empresa),
+            produtos_opts=sorted(CONC_PRODUTOS.items(), key=lambda kv: kv[1]['ordem']),
+            n_filtros=n_filtros,
+        )
+    finally:
+        cur.close()
+        conn.close()

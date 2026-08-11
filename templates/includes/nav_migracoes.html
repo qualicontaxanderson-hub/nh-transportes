@@ -5,7 +5,7 @@
      {% set aba_ativa = 'vendas' %}
      {% include 'includes/nav_migracoes.html' %}
 
-   Valores de aba_ativa: 'vendas' | 'compras' | 'ctes' | 'estoque' | 'conciliacao' | 'tempo_real'
+   Valores de aba_ativa: 'vendas' | 'compras' | 'ctes' | 'estoque' | 'conciliacao' | 'tempo_real' | 'pendente'
    A aba da tela atual fica destacada (azul #1D63A5) e NÃO é clicável.
 
    SOMENTE navegação — não altera dados, filtros nem queries.
@@ -30,7 +30,8 @@
     ('ctes',    'CT-e',    'bi-truck',                   url_for('dfe_ctes.index')),
     ('estoque', 'Estoque', 'bi-box-seam',                url_for('estoque.index')),
     ('conciliacao', 'Conciliação', 'bi-clipboard-data',  url_for('estoque.conciliacao')),
-    ('tempo_real', 'Tempo Real', 'bi-speedometer2',      url_for('estoque.tempo_real'))
+    ('tempo_real', 'Tempo Real', 'bi-speedometer2',      url_for('estoque.tempo_real')),
+    ('pendente', 'Pendente', 'bi-hourglass-split',       url_for('estoque.pendente_descer'))
 ] %}
 <ul class="nav nav-pills flex-nowrap overflow-auto mb-3 nav-migracoes">
   {% for _chave, _rotulo, _icone, _destino in _abas %}

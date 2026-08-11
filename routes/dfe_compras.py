@@ -212,6 +212,7 @@ def compras():
         # 4) CT-e vinculado por chave da NF-e (reusa o vinculo dfe_cte_nfe).
         itens_por_doc = {}
         ctes_por_chave = {}
+        saldo_descer_por_doc = {}
         if compras:
             ids = [c['doc_id'] for c in compras]
             marc = ",".join(["%s"] * len(ids))
@@ -253,6 +254,31 @@ def compras():
                 for r in cur.fetchall():
                     ctes_por_chave.setdefault(r['chave_nfe'], []).append(r)
 
+            # Selo "faltam X L pra descer": saldo por nota (mesma formula da
+            # Camada 2 usada na tela Pendente). So combustivel {1,2,4,5}, ignora
+            # itens fechados (modo='integral') e 'ignorar'. Aparece so quando > 0.
+            cur.execute(
+                f"""
+                SELECT i.documento_id AS doc_id,
+                       SUM(GREATEST(i.quantidade - COALESCE(v.litros, 0), 0)) AS saldo
+                FROM dfe_itens i
+                LEFT JOIN (SELECT item_id, SUM(litros) AS litros
+                             FROM descarga_nota GROUP BY item_id) v
+                       ON v.item_id = i.id
+                WHERE i.documento_id IN ({marc})
+                  AND COALESCE(i.classificado_produto_id, i.produto_id) IN (1, 2, 4, 5)
+                  AND (i.categoria IS NULL OR i.categoria <> 'ignorar')
+                  AND NOT EXISTS (SELECT 1 FROM descarga_nota f
+                                  WHERE f.item_id = i.id AND f.modo = 'integral')
+                GROUP BY i.documento_id
+                """,
+                ids,
+            )
+            for r in cur.fetchall():
+                s = float(r['saldo'] or 0)
+                if s > 0.001:
+                    saldo_descer_por_doc[r['doc_id']] = s
+
         # Monta cada nota: itens, CT-e, rotulo "nosso produto", apuracao do
         # etanol e V.unit por item.
         _rot = dict(CATEGORIAS)
@@ -260,6 +286,7 @@ def compras():
             itens = itens_por_doc.get(c['doc_id'], [])
             c['itens'] = itens
             c['ctes'] = ctes_por_chave.get(c['chave'], [])
+            c['saldo_descer'] = saldo_descer_por_doc.get(c['doc_id'])
             c['situacao_ok'] = (c['situacao'] == 'autorizado')
 
             # ---- Apuracao do ETANOL pelo "resto" do total da nota ----
