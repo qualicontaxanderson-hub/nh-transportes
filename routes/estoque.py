@@ -884,6 +884,58 @@ def conciliacao():
 
 
 # ==========================================================================
+# RELER E-MAILS de descarga (botao na aba Descargas). Rele LIDOS + nao-lidos
+# dos ultimos dias e captura os que faltam, SEM marcar como lido. Idempotente
+# (chave UNIQUE + gravar_descarga pula duplicadas). Usa o MESMO GET_LOCK do
+# scheduler p/ nao rodar concorrente com um tick da importacao.
+# ==========================================================================
+_RELER_DIAS = 3
+_ELS_LOCK = "els_email_import"
+
+
+@estoque_bp.route('/estoque/descargas/reler', methods=['POST'])
+@login_required
+def descargas_reler():
+    conn = get_db_connection()
+    cur = conn.cursor()
+    got = 0
+    try:
+        # Espera ate 5s pelo lock; se o scheduler estiver importando, avisa.
+        cur.execute("SELECT GET_LOCK(%s, 5)", (_ELS_LOCK,))
+        row = cur.fetchone()
+        got = row[0] if row else 0
+        if got != 1:
+            return jsonify({'ok': False,
+                            'erro': 'Importação em andamento; tente em instantes.'}), 409
+
+        from integrations.els_email import reprocessar
+        saida = reprocessar(dias=_RELER_DIAS)
+        if isinstance(saida, dict) and saida.get('erro'):
+            return jsonify({'ok': False, 'erro': saida['erro']}), 500
+
+        novas = int(saida.get('novas', 0))
+        if novas == 1:
+            msg = '1 nova descarga capturada'
+        elif novas > 1:
+            msg = '%d novas descargas capturadas' % novas
+        else:
+            msg = 'Nenhuma descarga nova'
+        return jsonify({'ok': True, 'novas': novas, 'msg': msg, 'detalhe': saida})
+    except Exception as e:
+        current_app.logger.exception('[estoque/reler] falha ao reler e-mails')
+        return jsonify({'ok': False, 'erro': 'Falha ao reler e-mails: %s' % e}), 500
+    finally:
+        try:
+            if got == 1:
+                cur.execute("SELECT RELEASE_LOCK(%s)", (_ELS_LOCK,))
+                cur.fetchall()
+        except Exception:
+            pass
+        cur.close()
+        conn.close()
+
+
+# ==========================================================================
 # HELPERS reutilizaveis (usados pela tela /estoque/tempo-real E pela home).
 #   Saldo agora = Abertura de hoje + Recebido hoje (descarga) - Vendas hoje,
 #   de UMA empresa, "hoje" = America/Sao_Paulo. SOMENTE LEITURA (recebe cursor).

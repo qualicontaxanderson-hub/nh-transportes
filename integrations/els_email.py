@@ -591,54 +591,115 @@ def gravar_descarga(cur, dc: Descarga, cliente_id):
 # Orquestração (chamada pelo scheduler)
 # ===========================================================================
 
+def _resumo_vazio():
+    return {"aberturas": 0, "leituras": 0, "descargas_vinculadas": 0,
+            "descargas_pendentes": 0, "duplicadas": 0, "ignorados": 0}
+
+
+def _processar_mensagens(cur, conn, mensagens, cliente_id):
+    """Loop de parse+gravar+commit de uma lista de mensagens (uid, assunto, texto).
+
+    NAO marca e-mails como lidos: quem chama decide (processar() marca;
+    reprocessar() nao). Retorna (resumo, ok_uids), onde ok_uids sao os e-mails
+    que passaram SEM excecao (gravados OU ignorados de proposito). Falhas caem no
+    except, dao rollback e NAO entram em ok_uids (ficam nao-lidos p/ reprocessar).
+    """
+    resumo = _resumo_vazio()
+    ok_uids = []
+    for uid, assunto, texto in mensagens:
+        tipo = detectar_tipo(assunto, texto)
+        try:
+            if tipo == "ABERTURA":
+                ab = parse_abertura(texto)
+                resumo["leituras"] += gravar_abertura(cur, ab, cliente_id)
+                resumo["aberturas"] += 1
+                conn.commit()
+            elif tipo == "DESCARGA":
+                dc = parse_descarga(texto)
+                if dc:
+                    st = gravar_descarga(cur, dc, cliente_id)
+                    if st == "vinculada":
+                        resumo["descargas_vinculadas"] += 1
+                    elif st == "pendente":
+                        resumo["descargas_pendentes"] += 1
+                    elif st == "duplicada":
+                        resumo["duplicadas"] += 1
+                    conn.commit()
+                else:
+                    resumo["ignorados"] += 1
+            else:
+                resumo["ignorados"] += 1
+            # Chegou aqui sem excecao (gravou/duplicada/ignorado deliberadamente).
+            ok_uids.append(uid)
+        except Exception:
+            conn.rollback()
+            _log.warning("[els] falha ao processar '%s'.", assunto, exc_info=True)
+    return resumo, ok_uids
+
+
 def processar(dias=1):
-    """Busca e-mails novos do ELS, roteia por tipo e grava. Retorna um resumo."""
+    """Busca e-mails NAO LIDOS do ELS, grava e MARCA como lidos. (scheduler)
+
+    Comportamento inalterado: le so os UNSEEN da janela e, ao fim, marca lidos
+    APENAS os UIDs que gravaram sem erro.
+    """
     ensure_tables()
     cliente_id = _cliente_id()
     if cliente_id is None:
         _log.warning("[els] ELS_CLIENTE_ID não configurado; abortando.")
         return {"erro": "ELS_CLIENTE_ID ausente"}
 
-    resumo = {"aberturas": 0, "leituras": 0, "descargas_vinculadas": 0,
-              "descargas_pendentes": 0, "ignorados": 0}
     mensagens = _buscar(cfg_dias=dias, apenas_nao_lidos=True)
     if not mensagens:
-        return resumo
+        return _resumo_vazio()
 
-    ok_uids = []  # so os e-mails gravados com sucesso -> marcados lidos no fim
     conn = get_db_connection()
     cur = conn.cursor(dictionary=True)
     try:
-        for uid, assunto, texto in mensagens:
-            tipo = detectar_tipo(assunto, texto)
-            try:
-                if tipo == "ABERTURA":
-                    ab = parse_abertura(texto)
-                    resumo["leituras"] += gravar_abertura(cur, ab, cliente_id)
-                    resumo["aberturas"] += 1
-                    conn.commit()
-                elif tipo == "DESCARGA":
-                    dc = parse_descarga(texto)
-                    if dc:
-                        st = gravar_descarga(cur, dc, cliente_id)
-                        if st == "vinculada":
-                            resumo["descargas_vinculadas"] += 1
-                        elif st == "pendente":
-                            resumo["descargas_pendentes"] += 1
-                        conn.commit()
-                    else:
-                        resumo["ignorados"] += 1
-                else:
-                    resumo["ignorados"] += 1
-                # Chegou aqui sem excecao (gravou ou foi ignorado deliberadamente):
-                # pode marcar como lido. Falhas caem no except e NAO marcam.
-                ok_uids.append(uid)
-            except Exception:
-                conn.rollback()
-                _log.warning("[els] falha ao processar '%s'.", assunto, exc_info=True)
+        resumo, ok_uids = _processar_mensagens(cur, conn, mensagens, cliente_id)
     finally:
         cur.close()
         conn.close()
     marcar_lidos(ok_uids)  # so os UIDs que gravaram; falhas ficam nao-lidas
     _log.info("[els] resumo: %s", resumo)
     return resumo
+
+
+def reprocessar(dias=3):
+    """Rele os e-mails do ELS (LIDOS + nao-lidos) dos ultimos `dias` e grava os
+    que faltam, SEM marcar como lidos (nao altera o estado da caixa).
+
+    Idempotente: descargas_pendentes.chave tem UNIQUE + gravar_descarga pula as
+    ja gravadas ('duplicada'). Serve para o botao "Reler e-mails" da tela de
+    Descargas — captura uma descarga cujo e-mail foi lido antes do scheduler.
+
+    Retorna {"novas", "duplicadas", "ignorados", "aberturas", "leituras"}.
+    """
+    ensure_tables()
+    cliente_id = _cliente_id()
+    if cliente_id is None:
+        _log.warning("[els] ELS_CLIENTE_ID não configurado; abortando reprocessar.")
+        return {"erro": "ELS_CLIENTE_ID ausente"}
+
+    mensagens = _buscar(cfg_dias=dias, apenas_nao_lidos=False)
+    if not mensagens:
+        return {"novas": 0, "duplicadas": 0, "ignorados": 0,
+                "aberturas": 0, "leituras": 0}
+
+    conn = get_db_connection()
+    cur = conn.cursor(dictionary=True)
+    try:
+        resumo, _ok_uids = _processar_mensagens(cur, conn, mensagens, cliente_id)
+    finally:
+        cur.close()
+        conn.close()
+    # PROPOSITO: NAO chamar marcar_lidos() — reler nao mexe no lido/nao-lido.
+    saida = {
+        "novas": resumo["descargas_pendentes"] + resumo["descargas_vinculadas"],
+        "duplicadas": resumo["duplicadas"],
+        "ignorados": resumo["ignorados"],
+        "aberturas": resumo["aberturas"],
+        "leituras": resumo["leituras"],
+    }
+    _log.info("[els] reprocessar(%sd): %s", dias, saida)
+    return saida

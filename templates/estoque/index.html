@@ -210,8 +210,13 @@
           <div class="mig-stat"><div class="rot">Descargas</div><div class="val">{{ totais.descargas }}</div></div>
           <div class="mig-stat"><div class="rot">Total (litros)</div><div class="val ok">{{ totais.litros | fmtnum(0) }} L</div></div>
         </div>
-        {# toolbar reservada p/ "Lancar descarga manual" (proxima camada) #}
-        <div class="mig-toolbar mb-3"></div>
+        {# toolbar: reler e-mails de descarga (lidos+nao-lidos, ultimos 3 dias) #}
+        <div class="mig-toolbar mb-3 d-flex align-items-center gap-2">
+          <button type="button" class="btn btn-sm btn-outline-primary" id="btnReler">
+            <i class="bi bi-arrow-repeat"></i> Reler e-mails (últimos 3 dias)
+          </button>
+          <span id="relerMsg" class="small text-muted"></span>
+        </div>
       </div>
 
       {# Um card por DIA, mesmo componente da aba Leituras: grade no desktop,
@@ -876,6 +881,36 @@
           'background:#fdecea;color:#8a2a1e"><i class="bi bi-exclamation-triangle"></i> ' +
           esc(e.message || e) + '</div>';
         btnMan.disabled = false; btnMan.textContent = 'Lançar descarga';
+      });
+  });
+
+  // Reler e-mails de descarga (lidos+nao-lidos, ultimos 3 dias). O base.html
+  // injeta o X-CSRFToken no fetch. Idempotente no servidor (chave UNIQUE).
+  var btnReler = document.getElementById('btnReler');
+  if (btnReler) btnReler.addEventListener('click', function () {
+    var msg = document.getElementById('relerMsg');
+    var original = btnReler.innerHTML;
+    btnReler.disabled = true;
+    btnReler.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Relendo…';
+    msg.className = 'small text-muted'; msg.textContent = '';
+    fetch('/estoque/descargas/reler', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: '{}' })
+      .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, d: d }; }); })
+      .then(function (res) {
+        if (!res.ok || !res.d.ok) throw new Error((res.d && res.d.erro) || 'falha');
+        if (res.d.novas > 0) {
+          msg.className = 'small text-success';
+          msg.textContent = '✓ ' + res.d.msg + ' — atualizando…';
+          setTimeout(recarregaNaAba, 800);   // recarrega na aba Descargas
+        } else {
+          msg.className = 'small text-muted';
+          msg.textContent = res.d.msg;
+          btnReler.disabled = false; btnReler.innerHTML = original;
+        }
+      })
+      .catch(function (e) {
+        msg.className = 'small text-danger';
+        msg.textContent = 'Erro: ' + esc(e.message || e);
+        btnReler.disabled = false; btnReler.innerHTML = original;
       });
   });
 
