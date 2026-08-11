@@ -1,0 +1,115 @@
+{% extends 'base.html' %}
+{% block title %}Estoque em Tempo Real{% endblock %}
+
+{% block styles %}
+<style>
+  /* ===== /estoque/tempo-real no visual .mig (paleta hardcoded) ===== */
+  #treal{ --line-2:#dde3ec; --surface-1:#f1f4f8; --muted:#6b7280; --blue:#1D63A5; --blue-deep:#07569C;
+    --shadow:0 1px 3px rgba(16,45,80,.08),0 4px 12px rgba(16,45,80,.06); --red:#a32d2d; --green:#27500a; }
+  #treal .head{ display:flex; align-items:center; gap:.6rem; flex-wrap:wrap; margin-bottom:.5rem; }
+  #treal .head .emp{ font-weight:800; color:var(--blue-deep); font-size:1rem; }
+  #treal .head .atual{ margin-left:auto; font-size:.76rem; color:var(--muted); }
+  #treal .head .atual b{ color:#42506a; font-variant-numeric:tabular-nums; }
+  #treal .aprox{ font-size:.76rem; color:var(--muted); background:#fff; border:1px solid var(--line-2); border-left:3px solid var(--blue);
+    border-radius:8px; padding:.4rem .6rem; margin-bottom:1rem; }
+  #treal .filtro{ background:#fff; border:1px solid var(--line-2); border-radius:10px; box-shadow:var(--shadow);
+    padding:.5rem .7rem; margin-bottom:1rem; display:flex; gap:.5rem; align-items:center; }
+  #treal .filtro label{ font-size:10.5px; text-transform:uppercase; color:var(--muted); font-weight:700; }
+  #treal .filtro select{ border:1px solid var(--line-2); border-radius:8px; padding:.35rem .5rem; font-size:.85rem; flex:1; }
+  #treal .filtro .btn-clean{ font-size:.8rem; }
+
+  #treal .prod{ background:#fff; border:1px solid var(--line-2); border-left:4px solid var(--c,#64748b); border-radius:12px;
+    box-shadow:var(--shadow); padding:.75rem .9rem; margin-bottom:.6rem; display:flex; gap:.75rem; align-items:center; }
+  #treal .prod__ico{ flex:0 0 auto; display:inline-grid; place-items:center; width:2.4rem; height:2.4rem; border-radius:10px;
+    background:var(--cbg); color:var(--c); font-size:1.15rem; }
+  #treal .prod__main{ min-width:0; flex:1; }
+  #treal .prod__top{ display:flex; align-items:center; gap:.5rem; flex-wrap:wrap; }
+  #treal .prod__nome{ font-weight:800; font-size:1rem; }
+  #treal .prod__tanque{ font-size:.72rem; font-family:ui-monospace,Menlo,monospace; background:var(--surface-1); border:1px solid var(--line-2); border-radius:6px; padding:.03rem .4rem; color:#334155; }
+  #treal .prod__emp{ font-size:.72rem; color:var(--muted); }
+  #treal .prod__meta{ font-size:.82rem; color:#42506a; margin-top:.25rem; }
+  #treal .prod__meta .rec{ color:var(--green); font-weight:700; } #treal .prod__meta .ven{ color:var(--red); font-weight:700; }
+  #treal .prod__meta .sep{ color:#c4ccd6; margin:0 .25rem; }
+  #treal .prod__aviso{ font-size:.76rem; color:#8a5a12; background:#fbf1de; border:1px solid #f0dcae; border-radius:6px; padding:.05rem .45rem; display:inline-block; margin-top:.25rem; }
+  #treal .prod__right{ flex:0 0 auto; text-align:right; }
+  #treal .prod__saldo{ font-size:1.5rem; font-weight:800; font-variant-numeric:tabular-nums; color:var(--c); line-height:1.1; }
+  #treal .prod__saldo.na{ color:var(--muted); }
+  #treal .prod__rot{ font-size:.68rem; text-transform:uppercase; letter-spacing:.03em; color:var(--muted); font-weight:700; }
+  #treal .empty{ text-align:center; color:var(--muted); padding:2.5rem 1rem; background:#fff; border:1px solid var(--line-2); border-radius:12px; box-shadow:var(--shadow); }
+  #treal .empty .bi{ font-size:1.6rem; display:block; margin-bottom:.4rem; opacity:.5; }
+
+  @media (max-width:560px){
+    #treal .prod{ flex-wrap:wrap; }
+    #treal .prod__right{ text-align:left; width:100%; display:flex; justify-content:space-between; align-items:baseline;
+      border-top:1px solid var(--line-2); padding-top:.5rem; margin-top:.15rem; }
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div id="treal">
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h3 class="mb-0"><i class="bi bi-speedometer2"></i> Estoque em Tempo Real</h3>
+  <a href="{{ url_for('estoque.index') }}" class="btn btn-sm btn-outline-secondary">
+    <i class="bi bi-box-seam"></i> Estoque
+  </a>
+</div>
+
+{% set aba_ativa = 'tempo_real' %}
+{% include 'includes/nav_migracoes.html' %}
+
+<div class="head">
+  <span class="emp"><i class="bi bi-speedometer2"></i>
+    {{ empresa_nome if um_empresa else 'Todas as empresas' }}</span>
+  <span class="atual">atualizado <b>{{ agora_hm }}</b></span>
+</div>
+
+<form method="GET" action="{{ url_for('estoque.tempo_real') }}" class="filtro">
+  <label>Empresa</label>
+  <select name="empresa" onchange="this.form.submit()">
+    <option value="">Todas</option>
+    {% for e in empresas %}
+    <option value="{{ e.id }}" {% if empresa == e.id|string %}selected{% endif %}>{{ e.nome }}</option>
+    {% endfor %}
+  </select>
+  {% if um_empresa %}<a href="{{ url_for('estoque.tempo_real') }}" class="btn btn-sm btn-outline-secondary btn-clean">Limpar</a>{% endif %}
+</form>
+
+<div class="aprox"><i class="bi bi-info-circle"></i> Saldo <b>aproximado</b>: abertura do dia + descargas do e-mail − vendas capturadas.
+  A descarga (e-mail) é imediata; a nota fiscal é vinculada depois.</div>
+
+{% if not cards %}
+  <div class="empty"><i class="bi bi-speedometer2"></i>
+    Nenhum combustível com movimento hoje{% if um_empresa %} nesta empresa{% endif %}. Assim que a leitura de abertura ou uma venda entrar, aparece aqui.</div>
+{% else %}
+  {% for c in cards %}
+  <div class="prod" style="--c:{{ c.cor }};--cbg:{{ c.cbg }}">
+    <span class="prod__ico"><i class="bi bi-fuel-pump"></i></span>
+    <div class="prod__main">
+      <div class="prod__top">
+        <span class="prod__nome">{{ c.nome }}</span>
+        {% if c.tanques %}<span class="prod__tanque">Tanque{{ 's' if ',' in c.tanques else '' }} {{ c.tanques }}</span>{% endif %}
+        {% if not um_empresa %}<span class="prod__emp">· {{ c.empresa_nome }}</span>{% endif %}
+      </div>
+      <div class="prod__meta">
+        {% if c.abriu is not none %}abriu {{ c.abriu | fmtnum(0) }}{% endif %}
+        {% if c.rec > 0 %}{% if c.abriu is not none %} <span class="sep">·</span> {% endif %}recebeu <span class="rec">+{{ c.rec | fmtnum(0) }}</span>{% endif %}
+        {% if c.abriu is not none or c.rec > 0 %} <span class="sep">·</span> {% endif %}vendeu <span class="ven">−{{ c.ven | fmtnum(0) }}</span>
+      </div>
+      {% if c.abriu is none %}
+      <div class="prod__aviso"><i class="bi bi-exclamation-triangle"></i> sem leitura de abertura hoje</div>
+      {% endif %}
+    </div>
+    <div class="prod__right">
+      {% if c.saldo is not none %}
+        <div class="prod__saldo">{{ c.saldo | fmtnum(0) }} L</div>
+      {% else %}
+        <div class="prod__saldo na">— L</div>
+      {% endif %}
+      <div class="prod__rot">saldo agora</div>
+    </div>
+  </div>
+  {% endfor %}
+{% endif %}
+</div>
+{% endblock %}

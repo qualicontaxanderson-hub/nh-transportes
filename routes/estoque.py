@@ -24,6 +24,8 @@ from urllib.parse import urlencode
 from flask import Blueprint, current_app, jsonify, render_template, request
 from flask_login import current_user, login_required
 
+from utils.fuso import BRASILIA, hoje_brasilia
+
 from integrations.descarga_vinculo import (calcular_estado, listar_vinculos,
                                            registrar_vinculo, remover_vinculo,
                                            sugerir_notas, vinculos_resumo)
@@ -649,12 +651,12 @@ def desfazer_vinculo(vinculo_id):
 # recebimento (a nota diz X, desceu Y).
 # Produto SEMPRE por produto_id (nunca cod_anp). So os 4 combustiveis.
 # ==========================================================================
-# produto_id -> (nome curto, cor, ordem de exibicao)
+# produto_id -> (nome curto, cor, tom de fundo do icone, ordem de exibicao)
 CONC_PRODUTOS = {
-    2: {'nome': 'Gasolina', 'cor': '#BA7517', 'ordem': 0},
-    1: {'nome': 'Etanol',   'cor': '#639922', 'ordem': 1},
-    4: {'nome': 'S-500',    'cor': '#185FA5', 'ordem': 2},
-    5: {'nome': 'S-10',     'cor': '#534AB7', 'ordem': 3},
+    2: {'nome': 'Gasolina', 'cor': '#BA7517', 'cbg': '#f7eede', 'ordem': 0},
+    1: {'nome': 'Etanol',   'cor': '#639922', 'cbg': '#eaf3dd', 'ordem': 1},
+    4: {'nome': 'S-500',    'cor': '#185FA5', 'cbg': '#e2edf7', 'ordem': 2},
+    5: {'nome': 'S-10',     'cor': '#534AB7', 'cbg': '#e9e7f6', 'ordem': 3},
 }
 CONC_IDS = (1, 2, 4, 5)
 _EPS_L = 0.5  # tolerancia p/ considerar recebido nota == descarga
@@ -870,6 +872,128 @@ def conciliacao():
             data_ini_default=data_ini, data_fim_default=data_fim,
             produtos_opts=sorted(CONC_PRODUTOS.items(), key=lambda kv: kv[1]['ordem']),
             n_filtros=n_filtros, um_empresa=bool(f['empresa']),
+        )
+    finally:
+        cur.close()
+        conn.close()
+
+
+# ==========================================================================
+# ESTOQUE EM TEMPO REAL (saldo APROXIMADO de HOJE, por produto/empresa).
+#   Saldo agora = Abertura de hoje + Recebido hoje (descarga/e-mail) - Vendas hoje
+# O "Recebido" vem da DESCARGA (descargas_pendentes, e-mail/ELS), imediata; a
+# nota fiscal e vinculada depois -> saldo aproximado, nao contabil.
+# "Hoje" = America/Sao_Paulo (mesmo criterio da Conciliacao).
+# ==========================================================================
+@estoque_bp.route('/estoque/tempo-real', methods=['GET'])
+@login_required
+def tempo_real():
+    empresa = (request.args.get('empresa') or '').strip()
+    hoje = hoje_brasilia()
+    hoje_s = hoje.strftime('%Y-%m-%d')
+    agora_hm = datetime.now(BRASILIA).strftime('%H:%M')
+
+    conn = get_db_connection()
+    cur = conn.cursor(dictionary=True)
+    try:
+        # Empresas p/ dropdown: as que tem leitura de tanque (as conciliaveis).
+        cur.execute(
+            """
+            SELECT DISTINCT c.id, COALESCE(c.nome_fantasia, c.razao_social) AS nome
+            FROM clientes c
+            WHERE c.id IN (SELECT cliente_id FROM leitura_tanque_diaria
+                           WHERE cliente_id IS NOT NULL)
+            ORDER BY nome
+            """
+        )
+        empresas = cur.fetchall()
+        nome_emp = {e['id']: e['nome'] for e in empresas}
+
+        ids_in = ",".join(str(i) for i in CONC_IDS)
+
+        # ---- 1) ABERTURA de hoje ----
+        sql_ab = f"""
+            SELECT l.cliente_id, l.produto_id AS pid, SUM(l.volume_atual) AS litros,
+                   GROUP_CONCAT(DISTINCT l.tanque ORDER BY l.tanque) AS tanques
+            FROM leitura_tanque_diaria l
+            WHERE UPPER(TRIM(l.titulo)) = 'ABERTURA'
+              AND l.produto_id IN ({ids_in})
+              AND DATE(l.data_leitura) = %s
+        """
+        p_ab = [hoje_s]
+        if empresa:
+            sql_ab += " AND l.cliente_id = %s"; p_ab.append(empresa)
+        sql_ab += " GROUP BY l.cliente_id, pid"
+        cur.execute(sql_ab, p_ab)
+        abertura = {(r['cliente_id'], r['pid']): {'litros': float(r['litros'] or 0),
+                                                  'tanques': r['tanques']}
+                    for r in cur.fetchall()}
+
+        # ---- 2) RECEBIDO hoje (descarga do e-mail) ----
+        sql_rec = f"""
+            SELECT d.cliente_id, d.produto_id AS pid, SUM(d.total_descarga) AS litros
+            FROM descargas_pendentes d
+            WHERE d.produto_id IN ({ids_in})
+              AND DATE(COALESCE(d.data_descarga, d.data_final, d.data_inicial)) = %s
+        """
+        p_rec = [hoje_s]
+        if empresa:
+            sql_rec += " AND d.cliente_id = %s"; p_rec.append(empresa)
+        sql_rec += " GROUP BY d.cliente_id, pid"
+        cur.execute(sql_rec, p_rec)
+        recebido = {(r['cliente_id'], r['pid']): float(r['litros'] or 0)
+                    for r in cur.fetchall()}
+
+        # ---- 3) VENDAS hoje (produto ja resolvido; ponte cnpj -> cliente_id) ----
+        sql_ven = f"""
+            SELECT cl.id AS cliente_id, i.produto_id AS pid, SUM(i.quantidade) AS litros
+            FROM vendas_xml_itens i
+            JOIN vendas_xml v ON v.id = i.venda_id
+            JOIN clientes cl
+              ON REPLACE(REPLACE(REPLACE(REPLACE(cl.cnpj, '.', ''), '/', ''), '-', ''), ' ', '')
+                 = v.cnpj_emitente
+            WHERE i.produto_id IN ({ids_in})
+              AND i.unidade = 'L'
+              AND v.situacao <> 'cancelada'
+              AND DATE(v.dh_emissao) = %s
+        """
+        p_ven = [hoje_s]
+        if empresa:
+            sql_ven += " AND cl.id = %s"; p_ven.append(empresa)
+        sql_ven += " GROUP BY cl.id, pid"
+        cur.execute(sql_ven, p_ven)
+        vendas = {(r['cliente_id'], r['pid']): float(r['litros'] or 0)
+                  for r in cur.fetchall()}
+
+        # ---- MONTAGEM: um card por (empresa, produto) com qualquer sinal hoje ----
+        chaves = set(abertura) | set(recebido) | set(vendas)
+        cards = []
+        for (cid, pid) in chaves:
+            info = CONC_PRODUTOS.get(pid)
+            if not info:
+                continue
+            ab = abertura.get((cid, pid))
+            rec = recebido.get((cid, pid), 0.0)
+            ven = vendas.get((cid, pid), 0.0)
+            tem_ab = ab is not None
+            saldo = (ab['litros'] + rec - ven) if tem_ab else None
+            cards.append({
+                'cliente_id': cid,
+                'empresa_nome': nome_emp.get(cid, '—'),
+                'pid': pid, 'nome': info['nome'], 'cor': info['cor'],
+                'cbg': info['cbg'], 'ordem': info['ordem'],
+                'tanques': ab['tanques'] if tem_ab else None,
+                'abriu': ab['litros'] if tem_ab else None,
+                'rec': rec, 'ven': ven, 'saldo': saldo,
+            })
+        cards.sort(key=lambda c: (c['empresa_nome'], c['ordem']))
+
+        return render_template(
+            'estoque/tempo_real.html',
+            cards=cards, empresas=empresas, empresa=empresa,
+            um_empresa=bool(empresa),
+            empresa_nome=(nome_emp.get(int(empresa)) if empresa.isdigit() else None),
+            agora_hm=agora_hm,
         )
     finally:
         cur.close()
