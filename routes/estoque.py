@@ -661,6 +661,11 @@ CONC_PRODUTOS = {
 CONC_IDS = (1, 2, 4, 5)
 _EPS_L = 0.5  # tolerancia p/ considerar recebido nota == descarga
 
+# Corte de data da tela "Pendente pra descer": so lista notas emitidas nesta
+# data em diante (as de julho/anteriores somem). Vale SO no pendente-descer
+# (o selo na Compras nao usa isto). Ajuste aqui se precisar mudar o corte.
+DATA_CORTE_PENDENTE = '2026-08-01'
+
 
 @estoque_bp.route('/estoque/conciliacao', methods=['GET'])
 @login_required
@@ -1048,13 +1053,14 @@ def pendente_descer():
                          FROM descarga_nota GROUP BY item_id) v
                    ON v.item_id = i.id
             WHERE doc.tipo = 'NFe' AND doc.situacao = 'autorizado'
+              AND DATE(doc.dh_emissao) >= %s
               AND COALESCE(i.classificado_produto_id, i.produto_id) IN ({ids_in})
               AND (i.categoria IS NULL OR i.categoria <> 'ignorar')
               AND NOT EXISTS (SELECT 1 FROM descarga_nota f
                               WHERE f.item_id = i.id AND f.modo = 'integral')
               AND (i.quantidade - COALESCE(v.litros, 0)) > 0.001
         """
-        p = []
+        p = [DATA_CORTE_PENDENTE]
         if empresa:
             sql += " AND doc.cliente_id = %s"; p.append(empresa)
         if pid_filtro:
