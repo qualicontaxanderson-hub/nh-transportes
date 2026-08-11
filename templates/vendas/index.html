@@ -3,38 +3,74 @@
 
 {% block styles %}
 <style>
-  .venda-row { cursor: pointer; }
-  .venda-card { cursor: pointer; }
-  .venda-card:active { background: #f4f8ff; }
-  .pag-nums .page-link { min-width: 2.1rem; text-align: center; }
-
-  /* Tabela desktop — visual leve e espaçado */
-  .tbl-vendas { font-size: 14px; color: #212529; background: #fff; --bs-table-bg: #fff; }
-  .tbl-vendas thead th {
-    padding: 12px; background: #fff; color: #6c757d; font-weight: 400;
-    border-top: 0; border-bottom: 1px solid #e9ecef;
+  /* ===== /vendas no visual .mig (paleta hardcoded: esta tela nao importa os
+     tokens do design system). SOMENTE a LISTA foi migrada — o modal/cupom
+     (_detalhe_conteudo.html) e o motor de PDF/WhatsApp ficam intactos. ===== */
+  #vendas{ --line-2:#dde3ec; --surface-1:#f1f4f8; --muted:#6b7280; --blue:#1D63A5; --blue-deep:#07569C;
+    --shadow:0 1px 3px rgba(16,45,80,.08),0 4px 12px rgba(16,45,80,.06); }
+  /* Totalizadores */
+  #vendas .venda-stats{ display:flex; gap:.75rem; margin-bottom:1rem; flex-wrap:wrap; }
+  #vendas .venda-stat{ flex:1 1 160px; background:#fff; border:1px solid var(--line-2); border-radius:12px;
+    box-shadow:var(--shadow); padding:.7rem 1rem; }
+  #vendas .venda-stat .rot{ font-size:10.5px; text-transform:uppercase; color:var(--muted); font-weight:700; letter-spacing:.03em; }
+  #vendas .venda-stat .val{ font-size:1.35rem; font-weight:800; font-variant-numeric:tabular-nums; }
+  #vendas .venda-stat .green{ color:#27500a; } #vendas .venda-stat .blue{ color:var(--blue-deep); }
+  #vendas .venda-stat .red{ color:#a32d2d; }
+  /* Filtro recolhido */
+  #vendas .venda-filtros{ background:#fff; border:1px solid var(--line-2); border-radius:12px; box-shadow:var(--shadow);
+    padding:.7rem 1rem; margin-bottom:1rem; }
+  #vendas .venda-filtros>summary{ list-style:none; cursor:pointer; display:flex; align-items:center; gap:.5rem;
+    font-weight:700; color:var(--blue-deep); }
+  #vendas .venda-filtros>summary::-webkit-details-marker{ display:none; }
+  #vendas .venda-filtros .selo{ font-size:.72rem; font-weight:700; background:#e6f1fb; color:#0c447c; border-radius:999px; padding:.12rem .55rem; }
+  #vendas .venda-filtros .chev{ transition:transform .2s; color:var(--muted); }
+  #vendas .venda-filtros[open] .chev{ transform:rotate(180deg); }
+  #vendas .venda-filtros__body{ margin-top:.8rem; display:grid; gap:.6rem; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); align-items:end; }
+  #vendas .venda-filtros__body label{ font-size:10.5px; text-transform:uppercase; color:var(--muted); font-weight:700; display:block; margin-bottom:2px; }
+  #vendas .venda-filtros__body input,#vendas .venda-filtros__body select{ width:100%; border:1px solid var(--line-2); border-radius:8px; padding:.35rem .5rem; font-size:.85rem; }
+  #vendas .venda-filtros__btns{ display:flex; gap:.4rem; }
+  /* Card de venda */
+  #vendas .venda{ background:#fff; border:1px solid var(--line-2); border-left:4px solid var(--blue); border-radius:12px;
+    box-shadow:var(--shadow); padding:.7rem .85rem; margin-bottom:.6rem; cursor:pointer; display:flex; gap:.75rem; align-items:center; }
+  #vendas .venda:hover{ background:#f7fafe; }
+  #vendas .venda__ico{ flex:0 0 auto; display:inline-grid; place-items:center; width:2.2rem; height:2.2rem; border-radius:10px;
+    background:#e6f1fb; color:var(--blue); font-size:1.05rem; }
+  #vendas .venda__main{ min-width:0; flex:1; }
+  #vendas .venda__top{ display:flex; align-items:center; gap:.5rem; flex-wrap:wrap; }
+  #vendas .venda__vend{ font-weight:700; font-size:.95rem; }
+  #vendas .pill{ background:var(--surface-1); border:1px solid var(--line-2); border-radius:6px; padding:.03rem .4rem;
+    font-family:ui-monospace,Menlo,monospace; font-size:.76rem; color:#334155; }
+  #vendas .tipo{ font-size:.68rem; font-weight:800; border-radius:5px; padding:.05rem .35rem; background:#eef2f7; color:#42506a; }
+  #vendas .venda__meta{ font-size:.8rem; color:#42506a; margin-top:.2rem; }
+  #vendas .venda__meta .sep{ color:#c4ccd6; margin:0 .2rem; }
+  #vendas .venda__itens{ font-size:.76rem; color:#6b7280; margin-top:.25rem; }
+  #vendas .venda__itens-full{ list-style:none; padding:0; margin:.35rem 0 0; border-top:1px solid var(--line-2);
+    padding-top:.35rem; font-size:.78rem; }
+  #vendas .venda__itens-full li{ display:flex; justify-content:space-between; gap:.5rem; }
+  #vendas .venda__itens-full .prod{ min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  #vendas .venda__itens-full .q{ color:#6b7280; }
+  #vendas .venda__right{ flex:0 0 auto; text-align:right; }
+  #vendas .venda__val{ font-weight:800; color:#27500a; font-variant-numeric:tabular-nums; white-space:nowrap; }
+  #vendas .receb{ display:inline-block; border-radius:20px; padding:2px 9px; font-size:11.5px; font-weight:600;
+    line-height:1.4; white-space:nowrap; margin-top:.2rem; }
+  #vendas .sit{ font-size:.72rem; font-weight:700; border-radius:999px; padding:.12rem .55rem; white-space:nowrap; }
+  #vendas .sit-ok{ background:#e6f1fb; color:#0c447c; } #vendas .sit-no{ background:#fcebeb; color:#a32d2d; }
+  /* Venda cancelada */
+  #vendas .venda--canc{ border-left-color:#c4ccd6; }
+  #vendas .venda--canc .venda__ico{ background:#eceef1; color:#9aa4b2; }
+  #vendas .venda--canc .venda__vend, #vendas .venda--canc .venda__meta{ color:#9aa4b2; }
+  #vendas .venda--canc .venda__num{ text-decoration:line-through; }
+  #vendas .venda--canc .venda__val{ color:#9aa4b2; text-decoration:line-through; }
+  #vendas .venda-empty{ text-align:center; color:var(--muted); padding:2.5rem 1rem; background:#fff;
+    border:1px solid var(--line-2); border-radius:12px; box-shadow:var(--shadow); }
+  #vendas .venda-empty .bi{ font-size:1.6rem; display:block; margin-bottom:.4rem; opacity:.5; }
+  @media (max-width:575px){
+    #vendas .venda{ flex-wrap:wrap; }
+    #vendas .venda__right{ text-align:left; width:100%; display:flex; justify-content:space-between; align-items:center; }
+    #vendas .receb{ margin-top:0; }
   }
-  .tbl-vendas tbody td {
-    padding: 7px 12px; border-top: 0; border-bottom: 1px solid #f1f3f5;
-    vertical-align: middle;
-  }
-  .tbl-vendas tbody tr:last-child td { border-bottom: 0; }
-  .tbl-vendas tbody tr.venda-row:hover td { background: #f8fafc; }
-
-  /* Badges pill suaves */
-  .badge-suave-ok, .badge-suave-cancel, .pill-contagem {
-    display: inline-block; border-radius: 20px; padding: 3px 12px;
-    font-size: 12px; font-weight: 500; border: 0; line-height: 1.4;
-  }
-  .badge-suave-ok     { background: #e6f4ea; color: #1e7e34; }
-  .badge-suave-cancel { background: #fdecea; color: #c0392b; }
-  .pill-contagem      { background: #f1f3f5; color: #6c757d; }
-
-  /* Badge da coluna Recebimento — pill compacto, uma linha só */
-  .badge-receb {
-    display: inline-block; border-radius: 20px; padding: 2px 9px;
-    font-size: 11.5px; font-weight: 600; line-height: 1.4; white-space: nowrap;
-  }
+  .pag-nums .page-link{ min-width:2.1rem; text-align:center; border-radius:8px !important; margin:0 2px; border-color:#dde3ec; color:#1D63A5; }
+  .pag-nums .page-item.active .page-link{ background:#1D63A5; border-color:#1D63A5; color:#fff; }
 </style>
 {% endblock %}
 
@@ -43,146 +79,77 @@
   'PIX APP':'#0d9488','PIX Manual':'#b45309','Débito APP':'#1d4ed8','Débito Manual':'#2563eb',
   'Crédito APP':'#7c3aed','Crédito Manual':'#8b5cf6','Dinheiro':'#059669','Cheque':'#475569',
   'Prazo':'#d97706','Transferência':'#0891b2','Combo':'#64748b','Outros':'#64748b'} %}
+<div id="vendas">
 <div class="d-flex justify-content-between align-items-center mb-3">
   <h3 class="mb-0"><i class="bi bi-receipt"></i> Vendas Migradas</h3>
-  <span class="pill-contagem">{{ totais.notas }} nota(s)</span>
 </div>
 
 {% set aba_ativa = 'vendas' %}
 {% include 'includes/nav_migracoes.html' %}
 
-{# =================== FILTROS (INALTERADO) =================== #}
-<form method="GET" action="/vendas" class="card card-body mb-3">
-  <div class="row g-2">
-    <div class="col-md-2">
-      <label class="form-label small mb-0">Data de</label>
-      <input type="date" name="data_ini" class="form-control form-control-sm"
-             value="{{ filtros.data_ini or data_ini_default }}">
-    </div>
-    <div class="col-md-2">
-      <label class="form-label small mb-0">Data até</label>
-      <input type="date" name="data_fim" class="form-control form-control-sm"
-             value="{{ filtros.data_fim or data_fim_default }}">
-    </div>
-    <div class="col-md-3">
-      <label class="form-label small mb-0">Vendedor</label>
-      <input type="text" name="vendedor" class="form-control form-control-sm"
-             value="{{ filtros.vendedor }}" placeholder="nome no XML">
-    </div>
-    <div class="col-md-2">
-      <label class="form-label small mb-0">Produto</label>
-      <input type="text" name="produto" class="form-control form-control-sm"
-             value="{{ filtros.produto }}" placeholder="descrição do item">
-    </div>
-    <div class="col-md-2">
-      <label class="form-label small mb-0">Forma pgto</label>
-      <input type="text" name="forma_pgto" class="form-control form-control-sm"
-             value="{{ filtros.forma_pgto }}" placeholder="ex.: Dinheiro">
-    </div>
-    <div class="col-md-1 d-flex align-items-end">
-      <button type="submit" class="btn btn-sm btn-primary w-100"><i class="bi bi-search"></i></button>
-    </div>
-    <div class="col-12">
-      <a href="/vendas" class="btn btn-sm btn-outline-secondary"><i class="bi bi-x-circle"></i> Limpar filtros</a>
-    </div>
-  </div>
-</form>
-
-{# =================== TOTAIS (INALTERADO) =================== #}
-<div class="d-flex gap-3 mb-3">
-  <div class="border rounded p-2 flex-fill text-center">
-    <div class="small text-muted">Notas</div>
-    <div class="fs-5 fw-bold">{{ totais.notas }}</div>
-  </div>
-  <div class="border rounded p-2 flex-fill text-center">
-    <div class="small text-muted">Valor total (autorizadas)</div>
-    <div class="fs-5 fw-bold text-success">{{ (totais.valor or 0) | formatar_moeda }}</div>
-  </div>
-  <div class="border rounded p-2 flex-fill text-center">
-    <div class="small text-muted">Canceladas</div>
-    <div class="fs-5 fw-bold {% if totais.canceladas %}text-danger{% endif %}">{{ totais.canceladas }}</div>
-  </div>
+{# =================== TOTALIZADORES =================== #}
+<div class="venda-stats">
+  <div class="venda-stat"><div class="rot">Notas</div><div class="val blue">{{ totais.notas }}</div></div>
+  <div class="venda-stat"><div class="rot">Valor (autorizadas)</div><div class="val green">{{ (totais.valor or 0) | formatar_moeda }}</div></div>
+  <div class="venda-stat"><div class="rot">Canceladas</div><div class="val {% if totais.canceladas %}red{% endif %}">{{ totais.canceladas }}</div></div>
 </div>
 
-{# =================== TABELA (desktop) =================== #}
-<div class="table-responsive d-none d-md-block">
-  <table class="table tbl-vendas align-middle">
-    <thead>
-      <tr>
-        <th>Data</th>
-        <th class="text-center">Modelo</th>
-        <th class="text-center">Tipo</th>
-        <th class="text-end">Número</th>
-        <th>Vendedor</th>
-        <th>Cliente</th>
-        <th class="text-end">Valor</th>
-        <th>Forma pgto</th>
-        <th>Recebimento</th>
-        <th>Situação</th>
-        <th style="width:34px"></th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for n in notas %}
-      {% set cancelada = (n.situacao == 'cancelada') %}
-      <tr class="venda-row {% if cancelada %}text-danger{% endif %}"
-          data-venda-id="{{ n.id }}"
-          data-venda-titulo="{{ 'NF-e' if n.modelo == 55 else 'NFC-e' }} nº {{ n.numero }}/{{ n.serie }}"
-          data-venda-cancelada="{{ '1' if cancelada else '0' }}">
-        <td>{{ n.dh_emissao.strftime('%d/%m/%Y %H:%M') if n.dh_emissao else '—' }}</td>
-        <td class="text-center">{{ n.modelo }}</td>
-        <td class="text-center">{% if n.modelo == 55 %}NF-e{% else %}NFC-e{% endif %}</td>
-        <td class="text-end">{{ n.numero }}/{{ n.serie }}</td>
-        <td>{{ n.vendedor_raw or '—' }}</td>
-        <td>{{ n.cliente_nome or '—' }}</td>
-        <td class="text-end">{{ (n.valor_total or 0) | formatar_moeda }}</td>
-        <td>{{ n.forma_pagamento or '—' }}</td>
-        <td>{% set c = cor_receb.get(n.recebimento, '#64748b') %}<span class="badge-receb" style="color:{{ c }};background:{{ c }}22">{{ n.recebimento }}</span></td>
-        <td>
-          {% if cancelada %}<span class="badge-suave-cancel">cancelada</span>
-          {% else %}<span class="badge-suave-ok">{{ n.situacao }}</span>{% endif %}
-        </td>
-        <td class="text-center"><i class="bi bi-chevron-right text-muted"></i></td>
-      </tr>
-      {% else %}
-      <tr><td colspan="11" class="text-center text-muted">Nenhuma venda encontrada.</td></tr>
-      {% endfor %}
-    </tbody>
-  </table>
-</div>
+{# =================== FILTROS (recolhido) =================== #}
+{% set filtros_ativos = [filtros.data_ini, filtros.data_fim, filtros.vendedor, filtros.produto, filtros.forma_pgto]|select|list|length %}
+<details class="venda-filtros"{% if filtros_ativos %} open{% endif %}>
+  <summary>
+    <i class="bi bi-funnel"></i> Filtros
+    {% if filtros_ativos %}<span class="selo">{{ filtros_ativos }} ativo{{ 's' if filtros_ativos > 1 else '' }}</span>{% endif %}
+    <i class="bi bi-chevron-down chev ms-auto"></i>
+  </summary>
+  <form method="GET" action="/vendas" class="venda-filtros__body">
+    <div><label>Data de</label><input type="date" name="data_ini" value="{{ filtros.data_ini or data_ini_default }}"></div>
+    <div><label>Data até</label><input type="date" name="data_fim" value="{{ filtros.data_fim or data_fim_default }}"></div>
+    <div><label>Vendedor</label><input type="text" name="vendedor" value="{{ filtros.vendedor }}" placeholder="nome no XML"></div>
+    <div><label>Produto</label><input type="text" name="produto" value="{{ filtros.produto }}" placeholder="descrição do item"></div>
+    <div><label>Forma pgto</label><input type="text" name="forma_pgto" value="{{ filtros.forma_pgto }}" placeholder="ex.: Dinheiro"></div>
+    <div class="venda-filtros__btns">
+      <button type="submit" class="btn btn-sm btn-primary"><i class="bi bi-search"></i> Filtrar</button>
+      <a href="/vendas" class="btn btn-sm btn-outline-secondary">Limpar</a>
+    </div>
+  </form>
+</details>
 
-{# =================== CARDS (mobile) =================== #}
-<div class="d-md-none">
+{# =================== LISTA (cards, web + mobile) =================== #}
+{% if not notas %}
+  <div class="venda-empty"><i class="bi bi-receipt"></i>
+    Nenhuma venda no período/filtro. Assim que a captura trouxer uma NF-e/NFC-e, ela aparece aqui.</div>
+{% else %}
   {% for n in notas %}
   {% set cancelada = (n.situacao == 'cancelada') %}
-  <div class="card mb-2 venda-card {% if cancelada %}border-danger{% endif %}"
+  {% set tipo = 'NF-e' if n.modelo == 55 else 'NFC-e' %}
+  {% set itens = itens_por_venda.get(n.id, []) %}
+  <div class="venda{% if cancelada %} venda--canc{% endif %}"
        data-venda-id="{{ n.id }}"
-       data-venda-titulo="{{ 'NF-e' if n.modelo == 55 else 'NFC-e' }} nº {{ n.numero }}/{{ n.serie }}"
+       data-venda-titulo="{{ tipo }} nº {{ n.numero }}/{{ n.serie }}"
        data-venda-cancelada="{{ '1' if cancelada else '0' }}">
-    <div class="card-body py-2">
-      <div class="d-flex justify-content-between">
-        <span class="small text-muted">{{ n.dh_emissao.strftime('%d/%m/%Y %H:%M') if n.dh_emissao else '—' }}</span>
-        {% if cancelada %}<span class="badge-suave-cancel">cancelada</span>
-        {% else %}<span class="badge-suave-ok">{{ n.situacao }}</span>{% endif %}
+    <span class="venda__ico"><i class="bi bi-receipt"></i></span>
+    <div class="venda__main">
+      <div class="venda__top">
+        <span class="venda__vend">{{ n.vendedor_raw or 'Sem vendedor' }}</span>
+        <span class="tipo">{{ tipo }}</span>
+        <span class="pill venda__num">nº {{ n.numero }}/{{ n.serie }}</span>
+        {% if cancelada %}<span class="sit sit-no">cancelada</span>
+        {% else %}<span class="sit sit-ok">{{ n.situacao }}</span>{% endif %}
       </div>
-      <div class="d-flex justify-content-between align-items-center">
-        <div class="me-2" style="min-width:0">
-          <div class="fw-semibold text-truncate">{{ n.vendedor_raw or 'Sem vendedor' }}</div>
-          {% if n.cliente_nome %}<div class="small text-muted text-truncate">{{ n.cliente_nome }}</div>{% endif %}
-        </div>
-        <div class="text-end text-nowrap">
-          <div class="fw-bold text-success">{{ (n.valor_total or 0) | formatar_moeda }}</div>
-          {% set c = cor_receb.get(n.recebimento, '#64748b') %}
-          <span class="badge-receb" style="color:{{ c }};background:{{ c }}22">{{ n.recebimento }}</span>
-        </div>
+      <div class="venda__meta">
+        {{ n.dh_emissao.strftime('%d/%m/%Y %H:%M') if n.dh_emissao else '—' }}
+        {% if n.cliente_nome %}<span class="sep">·</span> {{ n.cliente_nome }}{% endif %}
       </div>
-      {% set itens = itens_por_venda.get(n.id, []) %}
       {% if itens %}
-      <ul class="list-unstyled small mb-0 mt-1 border-top pt-1">
+      <div class="venda__itens d-none d-md-block">
+        {% for it in itens[:3] %}{{ it.produto_xml or '—' }}{% if not loop.last %} <span class="sep">·</span> {% endif %}{% endfor %}{% if itens|length > 3 %} <span class="sep">·</span> +{{ itens|length - 3 }}{% endif %}
+      </div>
+      <ul class="venda__itens-full d-md-none">
         {% for it in itens %}
-        <li class="d-flex justify-content-between">
-          <span class="text-truncate me-2">{{ it.produto_xml or '—' }}
-            <span class="text-muted">{{ it.quantidade }} {{ it.unidade or '' }} × {{ (it.valor_unitario or 0) | formatar_moeda }}</span>
+        <li>
+          <span class="prod">{{ it.produto_xml or '—' }}
+            <span class="q">{{ it.quantidade }} {{ it.unidade or '' }} × {{ (it.valor_unitario or 0) | formatar_moeda }}</span>
           </span>
           <span class="text-nowrap">{{ (it.valor_total or 0) | formatar_moeda }}</span>
         </li>
@@ -190,11 +157,14 @@
       </ul>
       {% endif %}
     </div>
+    <div class="venda__right">
+      <div class="venda__val">{{ (n.valor_total or 0) | formatar_moeda }}</div>
+      {% set c = cor_receb.get(n.recebimento, '#64748b') %}
+      <span class="receb" style="color:{{ c }};background:{{ c }}22">{{ n.recebimento }}</span>
+    </div>
   </div>
-  {% else %}
-  <div class="text-center text-muted py-4">Nenhuma venda encontrada.</div>
   {% endfor %}
-</div>
+{% endif %}
 
 {# =================== PAGINACAO =================== #}
 {% if total_paginas > 1 %}
@@ -227,7 +197,7 @@
 </nav>
 {% endif %}
 
-{# =================== MODAL DE DETALHE =================== #}
+{# =================== MODAL DE DETALHE (INTACTO: cupom/DANFE + PDF/WhatsApp) =================== #}
 <div class="modal fade" id="vendaModal" tabindex="-1" aria-hidden="true">
   <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable modal-fullscreen-sm-down">
     <div class="modal-content">
@@ -247,6 +217,7 @@
     </div>
   </div>
 </div>
+</div>{# /#vendas #}
 {% endblock %}
 
 {% block scripts %}
