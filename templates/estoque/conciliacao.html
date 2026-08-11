@@ -1,0 +1,220 @@
+{% extends 'base.html' %}
+{% block title %}Conciliação de Estoque{% endblock %}
+
+{% block styles %}
+<style>
+  /* ===== /estoque/conciliacao no visual .mig (paleta hardcoded) ===== */
+  #conc{ --line-2:#dde3ec; --surface-1:#f1f4f8; --muted:#6b7280; --blue:#1D63A5; --blue-deep:#07569C;
+    --shadow:0 1px 3px rgba(16,45,80,.08),0 4px 12px rgba(16,45,80,.06);
+    --red:#a32d2d; --red-bg:#fcebeb; --green:#27500a; --green-bg:#e8f3e0; }
+  #conc .legenda{ display:flex; gap:.8rem; flex-wrap:wrap; justify-content:center; font-size:.76rem; color:var(--muted); margin:0 0 12px; }
+  #conc .legenda span{ display:inline-flex; align-items:center; gap:.3rem; }
+  #conc .legenda i{ width:.7rem; height:.7rem; border-radius:50%; display:inline-block; }
+
+  /* Filtro recolhido */
+  #conc .filtros{ background:#fff; border:1px solid var(--line-2); border-radius:12px; box-shadow:var(--shadow); padding:.7rem 1rem; margin-bottom:1rem; }
+  #conc .filtros>summary{ list-style:none; cursor:pointer; display:flex; align-items:center; gap:.5rem; font-weight:700; color:var(--blue-deep); }
+  #conc .filtros>summary::-webkit-details-marker{ display:none; }
+  #conc .filtros .selo{ font-size:.72rem; font-weight:700; background:#e6f1fb; color:#0c447c; border-radius:999px; padding:.12rem .55rem; }
+  #conc .filtros .chev{ transition:transform .2s; color:var(--muted); margin-left:auto; }
+  #conc .filtros[open] .chev{ transform:rotate(180deg); }
+  #conc .filtros__body{ margin-top:.8rem; display:grid; gap:.6rem; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); align-items:end; }
+  #conc .filtros__body label{ font-size:10.5px; text-transform:uppercase; color:var(--muted); font-weight:700; display:block; margin-bottom:2px; }
+  #conc .filtros__body input,#conc .filtros__body select{ width:100%; border:1px solid var(--line-2); border-radius:8px; padding:.35rem .5rem; font-size:.85rem; }
+  #conc .filtros__btns{ display:flex; gap:.4rem; }
+
+  /* Alternador GLOBAL Nota|Descarga (SO no mobile) */
+  #conc .switcher{ display:none; }
+  #conc .seg{ display:inline-flex; border:1px solid var(--line-2); border-radius:999px; overflow:hidden; background:#fff; box-shadow:var(--shadow); }
+  #conc .seg button{ border:0; background:#fff; color:var(--muted); font-weight:700; font-size:.85rem; padding:.4rem 1.1rem; cursor:pointer; display:flex; align-items:center; gap:.35rem; }
+  #conc .seg button.on{ background:var(--blue); color:#fff; }
+
+  /* Cabeçalho do dia */
+  #conc .dia{ display:flex; align-items:center; gap:.6rem; margin:20px 0 10px; flex-wrap:wrap; }
+  #conc .dia__t{ font-size:1rem; font-weight:800; color:var(--blue-deep); text-transform:capitalize; }
+  #conc .dia__saldos{ margin-left:auto; display:flex; gap:.4rem; flex-wrap:wrap; }
+  #conc .saldo{ font-size:.74rem; font-weight:700; border-radius:999px; padding:.15rem .6rem; border:1px solid var(--line-2); background:#fff; }
+  #conc .saldo b{ font-variant-numeric:tabular-nums; }
+  #conc .saldo.neg b{ color:var(--red); } #conc .saldo.pos b{ color:var(--green); }
+
+  /* Card do produto */
+  #conc .prod{ background:#fff; border:1px solid var(--line-2); border-left:4px solid var(--c,#64748b); border-radius:12px;
+    box-shadow:var(--shadow); padding:.8rem .95rem; margin-bottom:.7rem; }
+  #conc .prod__head{ display:flex; align-items:center; gap:.5rem; margin-bottom:.6rem; flex-wrap:wrap; }
+  #conc .prod__dot{ width:.7rem; height:.7rem; border-radius:50%; background:var(--c); flex:0 0 auto; }
+  #conc .prod__nome{ font-weight:800; font-size:.98rem; }
+  #conc .prod__tanque{ font-size:.72rem; font-family:ui-monospace,Menlo,monospace; background:var(--surface-1); border:1px solid var(--line-2); border-radius:6px; padding:.03rem .4rem; color:#334155; }
+  #conc .prod__emp{ font-size:.72rem; color:var(--muted); }
+  #conc .prod__delta{ margin-left:auto; font-size:.72rem; font-weight:700; color:#8a5a12; background:#fbf1de; border:1px solid #f0dcae; border-radius:999px; padding:.1rem .5rem; }
+
+  /* Duas visões */
+  #conc .views{ display:grid; grid-template-columns:1fr 1fr; gap:.7rem; }
+  #conc .view{ border:1px solid var(--line-2); border-radius:10px; padding:.6rem .7rem; background:#fbfdff; }
+  #conc .view__t{ font-size:.68rem; text-transform:uppercase; letter-spacing:.04em; font-weight:800; color:var(--muted); display:flex; align-items:center; gap:.35rem; margin-bottom:.45rem; }
+  #conc .view__t .ic{ color:var(--blue); }
+  #conc .ln{ display:flex; justify-content:space-between; align-items:baseline; font-size:.84rem; padding:.12rem 0; }
+  #conc .ln .k{ color:#42506a; } #conc .ln .v{ font-variant-numeric:tabular-nums; font-weight:600; }
+  #conc .ln .v.rec{ color:var(--green); } #conc .ln .v.ven{ color:var(--red); }
+  #conc .ln.esp{ border-top:1px dashed #cbd5e1; margin-top:.25rem; padding-top:.3rem; }
+  #conc .ln.esp .k, #conc .ln.esp .v{ font-weight:800; color:#1f2937; }
+  #conc .ln.fin .v{ font-weight:800; }
+  #conc .badge{ display:block; text-align:center; margin-top:.5rem; font-size:.78rem; font-weight:800; border-radius:8px; padding:.25rem; }
+  #conc .badge.perda{ background:var(--red-bg); color:var(--red); }
+  #conc .badge.sobra{ background:var(--green-bg); color:var(--green); }
+  #conc .badge.zero{ background:#eef1f5; color:#42506a; }
+  #conc .badge.na{ background:#eef1f5; color:var(--muted); }
+
+  #conc .empty{ text-align:center; color:var(--muted); padding:2.5rem 1rem; background:#fff; border:1px solid var(--line-2); border-radius:12px; box-shadow:var(--shadow); }
+  #conc .empty .bi{ font-size:1.6rem; display:block; margin-bottom:.4rem; opacity:.5; }
+
+  /* ---- MOBILE: 1 visão por vez, controlada pelo alternador global ---- */
+  @media (max-width:600px){
+    #conc .switcher{ display:flex; justify-content:center; margin-bottom:1rem; position:sticky; top:.4rem; z-index:5; }
+    #conc .views{ grid-template-columns:1fr; }
+    #conc.show-nota .view--desc{ display:none; }
+    #conc.show-desc .view--nota{ display:none; }
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+{# ---------- macro de uma visão (Nota ou Descarga) ---------- #}
+{% macro conc_view(rot, icone, cls, ini, rec, ven, esp, fin, perda) %}
+<div class="view view--{{ cls }}">
+  <div class="view__t"><i class="bi {{ icone }} ic"></i> {{ rot }}</div>
+  <div class="ln"><span class="k">Inicial</span><span class="v">{{ '—' if ini is none else ini | fmtnum(0) }}</span></div>
+  <div class="ln"><span class="k">Recebido</span><span class="v rec">+{{ rec | fmtnum(0) }}</span></div>
+  <div class="ln"><span class="k">Vendas</span><span class="v ven">−{{ ven | fmtnum(0) }}</span></div>
+  <div class="ln esp"><span class="k">Esperado</span><span class="v">{{ '—' if esp is none else esp | fmtnum(0) }}</span></div>
+  <div class="ln fin"><span class="k">Final</span><span class="v">{{ '—' if fin is none else fin | fmtnum(0) }}</span></div>
+  {% if perda is none %}
+    {% if ini is none %}
+    <span class="badge na"><i class="bi bi-dash-circle"></i> Sem leitura inicial</span>
+    {% else %}
+    <span class="badge na"><i class="bi bi-dash-circle"></i> Final — (sem leitura de amanhã)</span>
+    {% endif %}
+  {% elif perda < 0 %}
+    <span class="badge perda"><i class="bi bi-arrow-down-right"></i> Perda {{ (-perda) | fmtnum(0) }} L</span>
+  {% elif perda > 0 %}
+    <span class="badge sobra"><i class="bi bi-arrow-up-right"></i> Sobra {{ perda | fmtnum(0) }} L</span>
+  {% else %}
+    <span class="badge zero"><i class="bi bi-check2"></i> Bateu (0 L)</span>
+  {% endif %}
+</div>
+{% endmacro %}
+
+<div id="conc" class="show-nota">
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h3 class="mb-0"><i class="bi bi-clipboard-data"></i> Conciliação de Estoque</h3>
+  <a href="{{ url_for('estoque.index') }}" class="btn btn-sm btn-outline-secondary">
+    <i class="bi bi-box-seam"></i> Estoque
+  </a>
+</div>
+
+{% set aba_ativa = 'conciliacao' %}
+{% include 'includes/nav_migracoes.html' %}
+
+<div class="legenda">
+  <span><i style="background:#BA7517"></i> Gasolina</span>
+  <span><i style="background:#639922"></i> Etanol</span>
+  <span><i style="background:#185FA5"></i> S-500</span>
+  <span><i style="background:#534AB7"></i> S-10</span>
+</div>
+
+{# =================== FILTROS =================== #}
+<details class="filtros"{% if n_filtros %} open{% endif %}>
+  <summary>
+    <i class="bi bi-funnel"></i> Filtros
+    {% if n_filtros %}<span class="selo">{{ n_filtros }} ativo{{ 's' if n_filtros > 1 else '' }}</span>{% endif %}
+    <i class="bi bi-chevron-down chev"></i>
+  </summary>
+  <form method="GET" action="{{ url_for('estoque.conciliacao') }}" class="filtros__body">
+    <div>
+      <label>Empresa</label>
+      <select name="empresa">
+        <option value="">Todas</option>
+        {% for e in empresas %}
+        <option value="{{ e.id }}" {% if filtros.empresa == e.id|string %}selected{% endif %}>{{ e.nome }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div>
+      <label>Produto</label>
+      <select name="produto">
+        <option value="">Todos os combustíveis</option>
+        {% for pid, info in produtos_opts %}
+        <option value="{{ pid }}" {% if filtros.produto == pid|string %}selected{% endif %}>{{ info.nome }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div><label>Data de</label><input type="date" name="data_ini" value="{{ filtros.data_ini or data_ini_default }}"></div>
+    <div><label>Data até</label><input type="date" name="data_fim" value="{{ filtros.data_fim or data_fim_default }}"></div>
+    <div class="filtros__btns">
+      <button type="submit" class="btn btn-sm btn-primary"><i class="bi bi-search"></i> Filtrar</button>
+      <a href="{{ url_for('estoque.conciliacao') }}" class="btn btn-sm btn-outline-secondary">Limpar</a>
+    </div>
+  </form>
+</details>
+
+{# alternador global (só aparece no mobile via CSS) #}
+<div class="switcher">
+  <div class="seg">
+    <button type="button" class="on" data-v="nota" onclick="concSwitch('nota', this)"><i class="bi bi-receipt"></i> Nota</button>
+    <button type="button" data-v="desc" onclick="concSwitch('desc', this)"><i class="bi bi-fuel-pump"></i> Descarga</button>
+  </div>
+</div>
+
+{# =================== DIAS =================== #}
+{% if not dias %}
+  <div class="empty"><i class="bi bi-clipboard-x"></i>
+    Nenhum dado no período/filtro. Ajuste as datas ou a empresa.</div>
+{% else %}
+  {% for d in dias %}
+  <div class="dia">
+    <span class="dia__t"><i class="bi bi-calendar3"></i> {{ d.rotulo }}</span>
+    <span class="dia__saldos">
+      <span class="saldo {{ 'neg' if (d.saldo_nota is not none and d.saldo_nota < 0) else ('pos' if d.saldo_nota else '') }}">
+        <i class="bi bi-receipt"></i> NOTA: <b>{{ '—' if d.saldo_nota is none else (('' if d.saldo_nota < 0 else '+') ~ (d.saldo_nota | fmtnum(0)) ~ ' L') }}</b>
+      </span>
+      <span class="saldo {{ 'neg' if (d.saldo_desc is not none and d.saldo_desc < 0) else ('pos' if d.saldo_desc else '') }}">
+        <i class="bi bi-fuel-pump"></i> DESCARGA: <b>{{ '—' if d.saldo_desc is none else (('' if d.saldo_desc < 0 else '+') ~ (d.saldo_desc | fmtnum(0)) ~ ' L') }}</b>
+      </span>
+    </span>
+  </div>
+
+  {% for c in d.cards %}
+  <div class="prod" style="--c:{{ c.cor }}">
+    <div class="prod__head">
+      <span class="prod__dot"></span>
+      <span class="prod__nome">{{ c.nome }}</span>
+      {% if c.tanques %}<span class="prod__tanque">Tanque{{ 's' if ',' in c.tanques else '' }} {{ c.tanques }}</span>{% endif %}
+      {% if not um_empresa %}<span class="prod__emp">· {{ c.empresa_nome }}</span>{% endif %}
+      {% if c.delta_rec is not none %}
+      <span class="prod__delta" title="diferença nota × descarga no recebido">
+        Δ recebimento: nota {{ '+' if c.delta_rec > 0 else '' }}{{ c.delta_rec | fmtnum(0) }} L vs descarga
+      </span>
+      {% endif %}
+    </div>
+    <div class="views">
+      {{ conc_view('Nota', 'bi-receipt', 'nota', c.ini, c.rec_nota, c.ven, c.esp_nota, c.fin, c.perda_nota) }}
+      {{ conc_view('Descarga', 'bi-fuel-pump', 'desc', c.ini, c.rec_desc, c.ven, c.esp_desc, c.fin, c.perda_desc) }}
+    </div>
+  </div>
+  {% endfor %}
+  {% endfor %}
+{% endif %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  // Alternador GLOBAL (mobile): troca a visão de TODOS os cards de uma vez.
+  window.concSwitch = function (v, btn) {
+    var box = document.getElementById('conc');
+    box.classList.toggle('show-nota', v === 'nota');
+    box.classList.toggle('show-desc', v === 'desc');
+    btn.parentNode.querySelectorAll('button').forEach(function (b) { b.classList.remove('on'); });
+    btn.classList.add('on');
+  };
+</script>
+{% endblock %}

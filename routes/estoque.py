@@ -638,3 +638,239 @@ def desfazer_vinculo(vinculo_id):
     finally:
         cur.close()
         conn.close()
+
+
+# ==========================================================================
+# CONCILIACAO de estoque (por dia + produto + empresa, em LITROS).
+#   Inicial + Recebido - Vendas = Esperado ; Perda/Sobra = Final - Esperado
+#   Final de hoje = Inicial (leitura ABERTURA) de amanha, mesmo cliente/produto.
+# Duas visoes: Recebido = NOTA (dfe) ou DESCARGA (descargas_pendentes). As duas
+# dividem Inicial, Vendas e Final; a diferenca no Recebido = perda/sobra do
+# recebimento (a nota diz X, desceu Y).
+# Produto SEMPRE por produto_id (nunca cod_anp). So os 4 combustiveis.
+# ==========================================================================
+# produto_id -> (nome curto, cor, ordem de exibicao)
+CONC_PRODUTOS = {
+    2: {'nome': 'Gasolina', 'cor': '#BA7517', 'ordem': 0},
+    1: {'nome': 'Etanol',   'cor': '#639922', 'ordem': 1},
+    4: {'nome': 'S-500',    'cor': '#185FA5', 'ordem': 2},
+    5: {'nome': 'S-10',     'cor': '#534AB7', 'ordem': 3},
+}
+CONC_IDS = (1, 2, 4, 5)
+_EPS_L = 0.5  # tolerancia p/ considerar recebido nota == descarga
+
+
+@estoque_bp.route('/estoque/conciliacao', methods=['GET'])
+@login_required
+def conciliacao():
+    f = {
+        'empresa':  (request.args.get('empresa') or '').strip(),
+        'produto':  (request.args.get('produto') or '').strip(),
+        'data_ini': (request.args.get('data_ini') or '').strip(),
+        'data_fim': (request.args.get('data_fim') or '').strip(),
+    }
+    hoje = date.today()
+    data_ini = f['data_ini'] or (hoje - timedelta(days=14)).strftime('%Y-%m-%d')
+    data_fim = f['data_fim'] or hoje.strftime('%Y-%m-%d')
+    # Final do ultimo dia = ABERTURA do dia seguinte -> leituras vao ate +1 dia.
+    data_fim_leitura = (datetime.strptime(data_fim, '%Y-%m-%d').date()
+                        + timedelta(days=1)).strftime('%Y-%m-%d')
+
+    # produto_id do filtro (se informado e valido).
+    pid_filtro = None
+    if f['produto']:
+        try:
+            pf = int(f['produto'])
+            if pf in CONC_PRODUTOS:
+                pid_filtro = pf
+        except (TypeError, ValueError):
+            pid_filtro = None
+
+    conn = get_db_connection()
+    cur = conn.cursor(dictionary=True)
+    try:
+        # Empresas p/ dropdown: as que tem leitura de tanque (as conciliaveis).
+        cur.execute(
+            """
+            SELECT DISTINCT c.id, COALESCE(c.nome_fantasia, c.razao_social) AS nome
+            FROM clientes c
+            WHERE c.id IN (SELECT cliente_id FROM leitura_tanque_diaria
+                           WHERE cliente_id IS NOT NULL)
+            ORDER BY nome
+            """
+        )
+        empresas = cur.fetchall()
+
+        ids_in = ",".join(str(i) for i in CONC_IDS)
+
+        # ---- 1) INICIAL/FINAL: leitura ABERTURA (volume_atual) ----
+        # Uma so consulta cobre inicial (dia) e final (dia+1). Range ate +1 dia.
+        sql_ini = f"""
+            SELECT l.cliente_id, DATE(l.data_leitura) AS dia, l.produto_id AS pid,
+                   SUM(l.volume_atual) AS litros,
+                   GROUP_CONCAT(DISTINCT l.tanque ORDER BY l.tanque) AS tanques
+            FROM leitura_tanque_diaria l
+            WHERE UPPER(TRIM(l.titulo)) = 'ABERTURA'
+              AND l.produto_id IN ({ids_in})
+              AND DATE(l.data_leitura) BETWEEN %s AND %s
+        """
+        p_ini = [data_ini, data_fim_leitura]
+        if f['empresa']:
+            sql_ini += " AND l.cliente_id = %s"; p_ini.append(f['empresa'])
+        if pid_filtro:
+            sql_ini += " AND l.produto_id = %s"; p_ini.append(pid_filtro)
+        sql_ini += " GROUP BY l.cliente_id, dia, pid"
+        cur.execute(sql_ini, p_ini)
+        leitura_map = {}   # (cid, dia, pid) -> {'litros', 'tanques'}
+        for r in cur.fetchall():
+            leitura_map[(r['cliente_id'], r['dia'], r['pid'])] = {
+                'litros': float(r['litros'] or 0), 'tanques': r['tanques']}
+
+        # ---- 2) VENDAS: por empresa (ponte cnpj), produto ja resolvido ----
+        sql_ven = f"""
+            SELECT cl.id AS cliente_id, DATE(v.dh_emissao) AS dia,
+                   i.produto_id AS pid, SUM(i.quantidade) AS litros
+            FROM vendas_xml_itens i
+            JOIN vendas_xml v ON v.id = i.venda_id
+            JOIN clientes cl
+              ON REPLACE(REPLACE(REPLACE(REPLACE(cl.cnpj, '.', ''), '/', ''), '-', ''), ' ', '')
+                 = v.cnpj_emitente
+            WHERE i.produto_id IN ({ids_in})
+              AND i.unidade = 'L'
+              AND v.situacao <> 'cancelada'
+              AND DATE(v.dh_emissao) BETWEEN %s AND %s
+        """
+        p_ven = [data_ini, data_fim]
+        if f['empresa']:
+            sql_ven += " AND cl.id = %s"; p_ven.append(f['empresa'])
+        if pid_filtro:
+            sql_ven += " AND i.produto_id = %s"; p_ven.append(pid_filtro)
+        sql_ven += " GROUP BY cl.id, dia, pid"
+        cur.execute(sql_ven, p_ven)
+        vendas_map = {(r['cliente_id'], r['dia'], r['pid']): float(r['litros'] or 0)
+                      for r in cur.fetchall()}
+
+        # ---- 3) RECEBIDO-NOTA: dfe_itens (COALESCE classificado, produto_id) ----
+        sql_rn = f"""
+            SELECT d.cliente_id, DATE(d.dh_emissao) AS dia,
+                   COALESCE(i.classificado_produto_id, i.produto_id) AS pid,
+                   SUM(i.quantidade) AS litros
+            FROM dfe_itens i
+            JOIN dfe_documentos d ON d.id = i.documento_id
+            WHERE d.tipo = 'NFe' AND d.situacao = 'autorizado'
+              AND (i.categoria IS NULL OR i.categoria <> 'ignorar')
+              AND COALESCE(i.classificado_produto_id, i.produto_id) IN ({ids_in})
+              AND DATE(d.dh_emissao) BETWEEN %s AND %s
+        """
+        p_rn = [data_ini, data_fim]
+        if f['empresa']:
+            sql_rn += " AND d.cliente_id = %s"; p_rn.append(f['empresa'])
+        if pid_filtro:
+            sql_rn += " AND COALESCE(i.classificado_produto_id, i.produto_id) = %s"
+            p_rn.append(pid_filtro)
+        sql_rn += " GROUP BY d.cliente_id, dia, pid"
+        cur.execute(sql_rn, p_rn)
+        recnota_map = {(r['cliente_id'], r['dia'], r['pid']): float(r['litros'] or 0)
+                       for r in cur.fetchall()}
+
+        # ---- 4) RECEBIDO-DESCARGA: descargas_pendentes ----
+        sql_rd = f"""
+            SELECT d.cliente_id,
+                   DATE(COALESCE(d.data_descarga, d.data_final, d.data_inicial)) AS dia,
+                   d.produto_id AS pid, SUM(d.total_descarga) AS litros
+            FROM descargas_pendentes d
+            WHERE d.produto_id IN ({ids_in})
+              AND DATE(COALESCE(d.data_descarga, d.data_final, d.data_inicial))
+                  BETWEEN %s AND %s
+        """
+        p_rd = [data_ini, data_fim]
+        if f['empresa']:
+            sql_rd += " AND d.cliente_id = %s"; p_rd.append(f['empresa'])
+        if pid_filtro:
+            sql_rd += " AND d.produto_id = %s"; p_rd.append(pid_filtro)
+        sql_rd += " GROUP BY d.cliente_id, dia, pid"
+        cur.execute(sql_rd, p_rd)
+        recdesc_map = {(r['cliente_id'], r['dia'], r['pid']): float(r['litros'] or 0)
+                       for r in cur.fetchall()}
+
+        # Nome das empresas (p/ card quando nao ha filtro de empresa).
+        nome_emp = {e['id']: e['nome'] for e in empresas}
+
+        # ---- MONTAGEM: chaves = tudo que tem leitura (no range pedido) OU
+        #      movimento (venda/nota/descarga). Final vem da leitura de dia+1. ----
+        d_ini = datetime.strptime(data_ini, '%Y-%m-%d').date()
+        d_fim = datetime.strptime(data_fim, '%Y-%m-%d').date()
+
+        chaves = set()
+        for (cid, dia, pid), _v in leitura_map.items():
+            if d_ini <= dia <= d_fim:            # leitura de dia+1 nao vira card sozinha
+                chaves.add((cid, dia, pid))
+        for m in (vendas_map, recnota_map, recdesc_map):
+            for (cid, dia, pid) in m:
+                if d_ini <= dia <= d_fim:
+                    chaves.add((cid, dia, pid))
+
+        dias_map = {}   # dia -> lista de cards
+        for (cid, dia, pid) in chaves:
+            info = CONC_PRODUTOS.get(pid)
+            if not info:
+                continue
+            li = leitura_map.get((cid, dia, pid))
+            lf = leitura_map.get((cid, dia + timedelta(days=1), pid))
+            ini = li['litros'] if li else None
+            fin = lf['litros'] if lf else None
+            ven = vendas_map.get((cid, dia, pid), 0.0)
+            rec_nota = recnota_map.get((cid, dia, pid), 0.0)
+            rec_desc = recdesc_map.get((cid, dia, pid), 0.0)
+
+            def _conta(rec):
+                if ini is None:
+                    return None, None
+                esp = ini + rec - ven
+                perda = (fin - esp) if fin is not None else None
+                return esp, perda
+
+            esp_n, perda_n = _conta(rec_nota)
+            esp_d, perda_d = _conta(rec_desc)
+
+            card = {
+                'cliente_id': cid,
+                'empresa_nome': nome_emp.get(cid, '—'),
+                'pid': pid, 'nome': info['nome'], 'cor': info['cor'],
+                'ordem': info['ordem'],
+                'tanques': (li or lf or {}).get('tanques'),
+                'ini': ini, 'fin': fin, 'ven': ven,
+                'rec_nota': rec_nota, 'rec_desc': rec_desc,
+                'esp_nota': esp_n, 'perda_nota': perda_n,
+                'esp_desc': esp_d, 'perda_desc': perda_d,
+                'delta_rec': (rec_nota - rec_desc)
+                             if abs(rec_nota - rec_desc) > _EPS_L else None,
+            }
+            dias_map.setdefault(dia, []).append(card)
+
+        # Ordena cards no dia (produto, depois empresa) e calcula saldo do dia.
+        dias = []
+        for dia in sorted(dias_map.keys(), reverse=True):
+            cards = sorted(dias_map[dia], key=lambda c: (c['ordem'], c['empresa_nome']))
+            perdas_n = [c['perda_nota'] for c in cards if c['perda_nota'] is not None]
+            perdas_d = [c['perda_desc'] for c in cards if c['perda_desc'] is not None]
+            dias.append({
+                'data': dia,
+                'rotulo': _rotulo_dia(dia),
+                'saldo_nota': (sum(perdas_n) if perdas_n else None),
+                'saldo_desc': (sum(perdas_d) if perdas_d else None),
+                'cards': cards,
+            })
+
+        n_filtros = sum(1 for k in ('empresa', 'produto', 'data_ini', 'data_fim') if f[k])
+
+        return render_template(
+            'estoque/conciliacao.html',
+            dias=dias, empresas=empresas, filtros=f,
+            data_ini_default=data_ini, data_fim_default=data_fim,
+            produtos_opts=sorted(CONC_PRODUTOS.items(), key=lambda kv: kv[1]['ordem']),
+            n_filtros=n_filtros, um_empresa=bool(f['empresa']),
+        )
+    finally:
+        cur.close()
+        conn.close()
