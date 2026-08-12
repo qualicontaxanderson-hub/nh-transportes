@@ -1,0 +1,320 @@
+{% extends 'base.html' %}
+{% block title %}Fornecedores × Compras DFe{% endblock %}
+
+{% block styles %}
+<style>
+  /* Escopado em #cfd -> não vaza pro resto dos relatórios. */
+  #cfd{ --line:#e8edf3; --line-2:#dde3ec; --muted:#6b7280; --ink:#1f2937;
+        --blue:#1D63A5; --blue-deep:#07569C; --surface-1:#f1f4f8;
+        --ok:#27500a; --ok-bg:#eaf3de; --pend:#8a5a00; --pend-bg:#fbefd8;
+        --danger:#a32d2d; --danger-bg:#fcebeb;
+        --shadow:0 1px 3px rgba(16,45,80,.08),0 4px 12px rgba(16,45,80,.06); }
+
+  #cfd .page-hero{ background:linear-gradient(135deg,#1D63A5 0%,#154070 100%);
+    border-radius:.75rem; padding:1.1rem 1.2rem; margin-bottom:1rem; color:#fff; }
+  #cfd .page-hero .hero-icon{ width:2.6rem; height:2.6rem; background:rgba(255,255,255,.15);
+    border-radius:.6rem; display:flex; align-items:center; justify-content:center;
+    font-size:1.3rem; flex-shrink:0; }
+
+  /* Totalizadores */
+  #cfd .stats{ display:flex; gap:.6rem; flex-wrap:wrap; margin-bottom:1rem; }
+  #cfd .stat{ flex:1 1 150px; background:#fff; border:1px solid var(--line-2);
+    border-radius:12px; box-shadow:var(--shadow); padding:.65rem .9rem; }
+  #cfd .stat .rot{ font-size:10.5px; text-transform:uppercase; letter-spacing:.03em;
+    color:var(--muted); font-weight:700; }
+  #cfd .stat .val{ font-size:1.25rem; font-weight:800; font-variant-numeric:tabular-nums;
+    line-height:1.3; }
+  #cfd .stat .val.blue{ color:var(--blue-deep); } #cfd .stat .val.green{ color:var(--ok); }
+  #cfd .stat .val.red{ color:var(--danger); } #cfd .stat .val.amber{ color:var(--pend); }
+
+  /* Card do fornecedor */
+  #cfd .forn{ background:#fff; border:1px solid var(--line-2); border-radius:12px;
+    box-shadow:var(--shadow); margin-bottom:.7rem; overflow:hidden; }
+  #cfd .forn__head{ display:flex; align-items:flex-start; justify-content:space-between;
+    gap:.5rem; padding:.6rem .8rem; background:var(--surface-1);
+    border-bottom:1px solid var(--line-2); cursor:pointer; }
+  #cfd .forn__nome{ font-weight:700; font-size:.9rem; line-height:1.25; min-width:0; }
+  #cfd .forn__cnpj{ font-size:.72rem; color:var(--muted); font-variant-numeric:tabular-nums; }
+  #cfd .selo{ flex:0 0 auto; text-align:right; }
+  #cfd .selo .v{ font-weight:800; font-size:.95rem; font-variant-numeric:tabular-nums;
+    white-space:nowrap; line-height:1.2; }
+  #cfd .selo .r{ font-size:10px; text-transform:uppercase; letter-spacing:.03em;
+    font-weight:700; color:var(--muted); }
+  #cfd .selo--cred .v{ color:var(--ok); }
+  #cfd .selo--deve .v{ color:var(--danger); }
+  #cfd .selo--zero .v{ color:var(--muted); }
+
+  /* Resumo de 3 números */
+  #cfd .forn__nums{ display:flex; gap:.5rem 1rem; flex-wrap:wrap; padding:.5rem .8rem;
+    font-size:.82rem; border-bottom:1px solid var(--line); }
+  #cfd .forn__nums .k{ color:var(--muted); }
+  #cfd .forn__nums b{ font-variant-numeric:tabular-nums; }
+
+  /* Linha do tempo */
+  #cfd .lin{ display:grid; grid-template-columns:auto 1fr auto; gap:.1rem .6rem;
+    align-items:center; padding:.5rem .8rem; border-top:1px solid var(--line); }
+  #cfd .lin:first-of-type{ border-top:0; }
+  #cfd .lin__ico{ grid-row:1 / span 2; width:28px; height:28px; border-radius:9px;
+    display:inline-grid; place-items:center; font-size:.85rem; }
+  #cfd .lin--pg .lin__ico{ background:var(--ok-bg); color:var(--ok); }
+  #cfd .lin--nf .lin__ico{ background:#e6f1fb; color:var(--blue); }
+  #cfd .lin__t{ grid-column:2; grid-row:1; font-weight:600; font-size:.84rem;
+    display:flex; align-items:center; gap:.35rem; flex-wrap:wrap; }
+  #cfd .lin__m{ grid-column:2; grid-row:2; font-size:11.5px; color:var(--muted);
+    overflow:hidden; text-overflow:ellipsis; }
+  #cfd .lin__v{ grid-column:3; grid-row:1; text-align:right; font-weight:700;
+    font-variant-numeric:tabular-nums; white-space:nowrap; font-size:.86rem; }
+  #cfd .lin--pg .lin__v{ color:var(--ok); }
+  #cfd .lin--nf .lin__v{ color:var(--danger); }
+  #cfd .lin__s{ grid-column:3; grid-row:2; text-align:right; font-size:11px;
+    color:var(--muted); font-variant-numeric:tabular-nums; white-space:nowrap; }
+  #cfd .data{ font-variant-numeric:tabular-nums; color:var(--muted); font-weight:600;
+    font-size:11.5px; }
+  #cfd .tag{ font-size:10px; font-weight:700; border-radius:5px; padding:.05rem .35rem;
+    background:var(--pend-bg); color:var(--pend); }
+  #cfd .ant{ padding:.45rem .8rem; font-size:11.5px; color:var(--muted);
+    background:#fbfdff; border-bottom:1px solid var(--line); }
+  #cfd .ant b{ color:var(--ink); font-variant-numeric:tabular-nums; }
+
+  /* Órfãs / avisos */
+  #cfd .orfa{ display:flex; align-items:center; gap:.6rem; padding:.55rem .8rem;
+    border-top:1px solid var(--line); }
+  #cfd .orfa:first-of-type{ border-top:0; }
+  #cfd .orfa__n{ min-width:0; flex:1; }
+  #cfd .orfa__nome{ font-weight:600; font-size:.85rem; }
+  #cfd .orfa__cnpj{ font-size:11.5px; color:var(--muted); font-variant-numeric:tabular-nums; }
+  #cfd .orfa__v{ flex:0 0 auto; text-align:right; font-weight:700;
+    font-variant-numeric:tabular-nums; font-size:.86rem; }
+  #cfd .bloco{ background:#fff; border:1px solid var(--line-2); border-radius:12px;
+    box-shadow:var(--shadow); margin-bottom:1rem; overflow:hidden; }
+  #cfd .bloco__h{ padding:.55rem .8rem; background:var(--pend-bg); color:var(--pend);
+    font-weight:700; font-size:.85rem; border-bottom:1px solid #f0dcae; }
+  #cfd .bloco__p{ padding:.5rem .8rem; font-size:11.5px; color:var(--muted); }
+  #cfd .vazio{ text-align:center; color:var(--muted); padding:2.2rem 1rem; background:#fff;
+    border:1px solid var(--line-2); border-radius:12px; box-shadow:var(--shadow); }
+  #cfd .vazio .bi{ font-size:1.6rem; display:block; margin-bottom:.4rem; opacity:.5; }
+  #cfd .chev{ transition:transform .2s; }
+  #cfd .forn.aberto .chev{ transform:rotate(180deg); }
+</style>
+{% endblock %}
+
+{% block content %}
+<div id="cfd">
+
+  <nav aria-label="breadcrumb" class="mb-2">
+    <ol class="breadcrumb small mb-0">
+      <li class="breadcrumb-item"><a href="{{ url_for('index') }}" class="text-decoration-none">Dashboard</a></li>
+      <li class="breadcrumb-item">Relatórios</li>
+      <li class="breadcrumb-item active">Fornecedores × Compras DFe</li>
+    </ol>
+  </nav>
+
+  <div class="page-hero d-flex align-items-center gap-3 flex-wrap">
+    <div class="hero-icon"><i class="bi bi-file-earmark-check"></i></div>
+    <div class="flex-grow-1" style="min-width:0">
+      <h4 class="mb-0 fw-bold">Fornecedores × Compras DFe</h4>
+      <p class="mb-0 opacity-75 small">A dívida sai da nota que a SEFAZ entregou; o pagamento, do OFX que você concilia</p>
+    </div>
+  </div>
+
+  {# ---------- Avisos de cadastro (furam o cruzamento) ---------- #}
+  {% if duplicados %}
+  <div class="alert alert-danger py-2 small">
+    <b><i class="bi bi-exclamation-octagon"></i> CNPJ repetido no cadastro de fornecedores.</b>
+    A mesma nota entra uma vez para cada cadastro e o total infla. Corrija antes de confiar nos números:
+    <ul class="mb-0 mt-1">
+      {% for d in duplicados %}<li>{{ d.cnpj }} — {{ d.nomes }}</li>{% endfor %}
+    </ul>
+  </div>
+  {% endif %}
+
+  {% if sem_cnpj %}
+  <div class="alert alert-warning py-2 small mb-3">
+    <b><i class="bi bi-exclamation-triangle"></i> {{ sem_cnpj|length }} fornecedor(es) sem CNPJ no cadastro.</b>
+    Sem CNPJ não há como casar com nota nenhuma — as compras deles nunca vão aparecer aqui:
+    {{ sem_cnpj[:6] | map(attribute='razao_social') | join(', ') }}{% if sem_cnpj|length > 6 %} e mais {{ sem_cnpj|length - 6 }}{% endif %}.
+  </div>
+  {% endif %}
+
+  {# ---------- Filtros ---------- #}
+  <div class="card shadow-sm mb-3">
+    <div class="card-body py-2 px-3">
+      <form method="get" id="form-filtros">
+        <div class="row g-2 align-items-end">
+          <div class="col-6 col-md-2">
+            <label class="form-label small fw-semibold mb-1">Data início</label>
+            <input type="date" name="data_inicio" value="{{ data_inicio }}" class="form-control form-control-sm">
+          </div>
+          <div class="col-6 col-md-2">
+            <label class="form-label small fw-semibold mb-1">Data fim</label>
+            <input type="date" name="data_fim" value="{{ data_fim }}" class="form-control form-control-sm">
+          </div>
+          <div class="col-12 col-md-3">
+            <label class="form-label small fw-semibold mb-1">Empresa</label>
+            <select name="cliente_ids[]" class="form-select form-select-sm" multiple size="3">
+              {% for e in empresas %}
+              <option value="{{ e.id }}" {% if e.id|string in cliente_ids %}selected{% endif %}>{{ e.nome }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-12 col-md-3">
+            <label class="form-label small fw-semibold mb-1">Fornecedor</label>
+            <select name="fornecedor_ids[]" class="form-select form-select-sm" multiple size="3">
+              {% for f in fornecedores %}
+              <option value="{{ f.id }}" {% if f.id|string in fornecedor_ids %}selected{% endif %}>{{ f.razao_social }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-12 col-md-2 d-flex gap-2">
+            <button type="submit" class="btn btn-primary btn-sm flex-fill">
+              <i class="bi bi-search"></i> Filtrar
+            </button>
+            <a href="{{ url_for('conf_fornecedores_dfe.conf_fornecedores_dfe') }}"
+               class="btn btn-outline-secondary btn-sm"><i class="bi bi-x-circle"></i></a>
+          </div>
+        </div>
+        <div class="mt-2 d-flex gap-1 flex-wrap">
+          <span class="text-muted small me-1 align-self-center">Período:</span>
+          <button type="button" class="btn btn-outline-secondary btn-sm periodo-btn" data-p="mes">Mês atual</button>
+          <button type="button" class="btn btn-outline-secondary btn-sm periodo-btn" data-p="ant">Mês anterior</button>
+          <button type="button" class="btn btn-outline-secondary btn-sm periodo-btn" data-p="ano">Ano atual</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  {# ---------- Totalizadores ---------- #}
+  <div class="stats">
+    <div class="stat"><div class="rot">Comprado (notas)</div>
+      <div class="val blue">{{ totais.comprado | formatar_moeda }}</div></div>
+    <div class="stat"><div class="rot">Pago (OFX)</div>
+      <div class="val green">{{ totais.pago | formatar_moeda }}</div></div>
+    <div class="stat"><div class="rot">Saldo acumulado</div>
+      <div class="val {{ 'green' if totais.saldo >= 0 else 'red' }}">{{ totais.saldo | formatar_moeda }}</div></div>
+    <div class="stat"><div class="rot">Nota sem fornecedor</div>
+      <div class="val {{ 'amber' if totais.orfas else '' }}">{{ totais.orfas | formatar_moeda }}</div></div>
+  </div>
+
+  <p class="small text-muted">
+    <i class="bi bi-info-circle"></i> Saldo <b>positivo</b> = pagamos e a nota ainda não veio (adiantado);
+    <b>negativo</b> = a nota veio e ainda não pagamos. O saldo é acumulado — o que ficou de trás entra
+    como <i>saldo anterior</i>, então adiantamento não vira diferença falsa a cada período.
+  </p>
+
+  {# ---------- Notas sem fornecedor cadastrado ---------- #}
+  {% if orfas %}
+  <div class="bloco">
+    <div class="bloco__h"><i class="bi bi-question-circle"></i>
+      Notas sem fornecedor no cadastro ({{ orfas|length }})</div>
+    <div class="bloco__p">
+      A SEFAZ entregou estas notas, mas o CNPJ do emitente não está em <b>fornecedores</b>.
+      Enquanto não cadastrar, essa compra não entra em conferência nenhuma.
+    </div>
+    {% for o in orfas %}
+    <div class="orfa">
+      <div class="orfa__n">
+        <div class="orfa__nome">{{ o.emit_nome or '(sem nome)' }}</div>
+        <div class="orfa__cnpj">CNPJ {{ o.emit_cnpj or '—' }} · {{ o.notas }} nota{{ '' if o.notas == 1 else 's' }}
+          · última {{ o.ultima.strftime('%d/%m/%Y') if o.ultima else '—' }}</div>
+      </div>
+      <div class="orfa__v">{{ o.total | formatar_moeda }}</div>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  {# ---------- Fornecedores ---------- #}
+  {% if not dados %}
+    <div class="vazio"><i class="bi bi-inbox"></i>
+      Nenhum movimento no período — nem nota da SEFAZ, nem pagamento conciliado.</div>
+  {% else %}
+    {% for d in dados %}
+    {% set cred = d.saldo_final > 0.005 %}
+    {% set deve = d.saldo_final < -0.005 %}
+    <div class="forn" id="forn-{{ d.fornecedor_id }}">
+      <div class="forn__head" onclick="cfdToggle(this)">
+        <div style="min-width:0">
+          <div class="forn__nome">{{ d.nome }}</div>
+          <div class="forn__cnpj">CNPJ {{ d.cnpj or '—' }}</div>
+        </div>
+        <div class="selo {{ 'selo--cred' if cred else ('selo--deve' if deve else 'selo--zero') }}">
+          <div class="v">{{ d.saldo_final | formatar_moeda }}</div>
+          <div class="r">{{ 'adiantado' if cred else ('a pagar' if deve else 'quitado') }}
+            <i class="bi bi-chevron-down chev"></i></div>
+        </div>
+      </div>
+
+      <div class="forn__nums">
+        <span><span class="k">Comprado:</span> <b>{{ d.comprado | formatar_moeda }}</b></span>
+        <span><span class="k">Pago:</span> <b>{{ d.pago | formatar_moeda }}</b></span>
+        <span><span class="k">Diferença no período:</span>
+          <b>{{ (d.pago - d.comprado) | formatar_moeda }}</b></span>
+      </div>
+
+      <div class="forn__corpo" style="display:none">
+        {% if d.saldo_anterior|abs > 0.005 %}
+        <div class="ant">Saldo anterior a {{ data_inicio[8:10] }}/{{ data_inicio[5:7] }}/{{ data_inicio[0:4] }}:
+          <b>{{ d.saldo_anterior | formatar_moeda }}</b></div>
+        {% endif %}
+
+        {% if not d.linhas %}
+          <div class="ant">Sem nota e sem pagamento no período — só o saldo de trás.</div>
+        {% endif %}
+
+        {% for l in d.linhas %}
+        <div class="lin lin--{{ 'pg' if l.tipo == 'pagamento' else 'nf' }}">
+          <span class="lin__ico">
+            <i class="bi {{ 'bi-cash-coin' if l.tipo == 'pagamento' else 'bi-receipt' }}"></i></span>
+          <div class="lin__t">
+            <span class="data">{{ l.data.strftime('%d/%m') }}</span>
+            {{ l.rotulo }}
+            {% if l.resumo %}<span class="tag" title="entrou como resumo; o XML completo ainda não chegou">resumo</span>{% endif %}
+          </div>
+          <div class="lin__m">{{ l.detalhe or '—' }}</div>
+          <div class="lin__v">{{ '+' if l.tipo == 'pagamento' else '−' }}{{ l.valor | formatar_moeda }}</div>
+          <div class="lin__s">saldo {{ l.saldo | formatar_moeda }}</div>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+    {% endfor %}
+  {% endif %}
+</div>
+
+<script>
+// Abre/fecha o detalhe do fornecedor (fechado por padrão: a lista fica legível
+// no celular e quem interessa é o selo do saldo).
+function cfdToggle(el) {
+  var card = el.closest('.forn');
+  var corpo = card.querySelector('.forn__corpo');
+  var aberto = corpo.style.display !== 'none';
+  corpo.style.display = aberto ? 'none' : 'block';
+  card.classList.toggle('aberto', !aberto);
+}
+
+// Períodos rápidos: preenche as datas e envia.
+document.querySelectorAll('#cfd .periodo-btn').forEach(function (b) {
+  b.addEventListener('click', function () {
+    var hoje = new Date(), ini, fim;
+    if (b.dataset.p === 'mes') {
+      ini = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
+      fim = hoje;
+    } else if (b.dataset.p === 'ant') {
+      ini = new Date(hoje.getFullYear(), hoje.getMonth() - 1, 1);
+      fim = new Date(hoje.getFullYear(), hoje.getMonth(), 0);
+    } else {
+      ini = new Date(hoje.getFullYear(), 0, 1);
+      fim = hoje;
+    }
+    var iso = function (d) {
+      return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') +
+             '-' + String(d.getDate()).padStart(2, '0');
+    };
+    var f = document.getElementById('form-filtros');
+    f.querySelector('[name=data_inicio]').value = iso(ini);
+    f.querySelector('[name=data_fim]').value = iso(fim);
+    f.submit();
+  });
+});
+</script>
+{% endblock %}
